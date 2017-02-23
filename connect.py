@@ -1,31 +1,41 @@
 #!/usr/bin/env python
-# Try to work with Python 2 and 3 for now.
 
 from __future__ import print_function
 
 from subprocess import check_output
 from json import loads
 
+# Try to work with Python 2 and 3:
+try:
+    unicode
+except NameError:
+    unicode = str
 
-def get_services():
+
+def _get_services():
     """Return iterable of (name, namespace, ip, port)."""
     services_json = check_output(["kubectl", "get", "service", "-o", "json"])
-    services_json = loads(services_json)
+    services_json = loads(unicode(services_json, "utf-8"))
     for service in services_json["items"]:
         # XXX will break for some kinds of services... brittle!
+        # XXX multiple ports
         yield (service["metadata"]["name"], service["metadata"]["namespace"],
                service["spec"]["clusterIP"], service["spec"]["ports"][0]["port"])
+
+
+def get_services(namespace="default"):
+    """Return iterable of (name, ip, port), sorted."""
+    for name, ns, ip, port in sorted(_get_services()):
+        if ns == namespace:
+            yield name, ip, port
 
 
 def get_env_variables(services):
     """Generate environment variables that match kubernetes."""
     # XXX need to transform to localhost or container IP. And ensure uniqueness
     # of ports.
-    for name, namespace, ip, port in services:
+    for name, ip, port in services:
         port = str(port)
-        # XXX hardcoding default namespace is not quite right
-        if namespace != "default":
-            continue
         name = name.replace("-", "_").upper()
         # XXX will be wrong for UDP
         full_address = "tcp://{}:{}".format(ip, port)
