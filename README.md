@@ -31,7 +31,7 @@ kubectl runs something on pod that forwards ports from there to matching port on
 
 ## Design attempt #2: kubectl port-forward only
 
-1. Get environment variables from remote pod to local machine.
+1. Set environment variables that match k8s environment.
 2. For each Service, create a tunnel using `kubectl exec` of proxy on remote side (localhost:1234 to service-ip:5100).
 3. For each Service, use `kubectl port-forward` in a local container to forward from localhost:1234 to 1234 on the remote container.
-4. Run DNS server with entries populated  `kubectl get service`?
+4. Use `docker run --add-host` option to add host entries for the services? or use a DNS server.
