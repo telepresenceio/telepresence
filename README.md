@@ -1,6 +1,9 @@
 # Telepresence: local container in a remote kubernetes cluster
 
-## Step 1: access to remote cluster from local container, including DNS
+
+## Design attempt #1: OpenVPN
+
+### Step 1: access to remote cluster from local container, including DNS
 
 OpenVPN server in kubernetes pod.
 OpenVPN listens on tcp 1194.
@@ -12,11 +15,23 @@ OpenVPN client on laptop's docker is started using client cert, connects to 1194
 
 Business logic container starts with "--net container:vpn".
 
-## Step 2: access to local container from remote cluster
+### Step 2: access to local container from remote cluster
 
 kubectl runs something on pod that forwards ports from there to matching port on local docker vpn client.
 
 
-## Step 3: environment variables from remote pod available to local container
+### Step 3: environment variables from remote pod available to local container
 
-## Step 4: documentation
+
+### Results
+
+* OpenVPN is very difficult to work with.
+* IP ranges conflict (e.g. minikube's Docker has same IP range as Docker on my laptop).
+* Very complicated.
+
+## Design attempt #2: kubectl port-forward only
+
+1. Get environment variables from remote pod to local machine.
+2. For each Service, create a tunnel using `kubectl exec` of proxy on remote side (localhost:1234 to service-ip:5100).
+3. For each Service, use `kubectl port-forward` in a local container to forward from localhost:1234 to 1234 on the remote container.
+4. Run DNS server with entries populated  `kubectl get service`?
