@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 # Run remote pod:
 kubectl apply -f remotepod.yaml
 sleep 10 # Wait for pod to deploy
