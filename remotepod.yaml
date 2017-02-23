@@ -5,7 +5,8 @@ metadata:
 spec:
   containers:
   - name: telepresence
-    image: datawire/remote-telepresence:latest
+    image: datawire/remote-telepresence:dev
+    imagePullPolicy: IfNotPresent
     securityContext:
       capabilities:
         add:
