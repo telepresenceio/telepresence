@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: telepresence
+spec:
+  containers:
+  - name: telepresence
+    image: datawire/remote-telepresence:latest
+    securityContext:
+      capabilities:
+        add:
+        - NET_ADMIN
