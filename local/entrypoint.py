@@ -3,15 +3,12 @@
 from subprocess import Popen, STDOUT
 from sys import argv
 
-from connect import get_services
-
-
 processes = []
-local_port = 2000
-for name, ip, port in get_services():
-    # XXX this is missing code to map service to its pods, since port-forward is for a *pod*.
-    p = Popen(["kubectl", "port-forward", name, "{}:{}".format(local_port, port)])
-    local_port += 1
+for port in range(2000, 2020):
+    # XXX need to map service name to port# somehow
+    # XXX what if there is more than 20 services
+    p = Popen(["kubectl", "port-forward", name, str(port)])
     processes.append(p)
+
 for p in processes:
     p.wait()
