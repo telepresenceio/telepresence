@@ -5,4 +5,4 @@ set -x
 kubectl apply -f remotepod.yaml
 sleep 10 # Wait for pod to deploy
 
-sudo docker run --rm --name=k8s-vpn --user $(id -u itamarst) -v $HOME/.kube:/config/.kube:ro -v $HOME/.minikube:$HOME/.minikube:ro datawire/local-telepresence
+sudo docker run --rm --name=k8s-vpn --user $(id -u itamarst) -v $HOME/.kube:/opt/.kube:ro -v $HOME/.minikube:$HOME/.minikube:ro datawire/local-telepresence

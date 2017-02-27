@@ -7,7 +7,6 @@ RUN set -e && \
     chmod +x /usr/local/bin/kubectl
 
 ADD ./entrypoint.py /usr/local/bin/entrypoint.py
-ADD ./connect.py /usr/local/bin/connect.py
 
 RUN ["chmod", "+x", "/usr/local/bin/entrypoint.py"]
 

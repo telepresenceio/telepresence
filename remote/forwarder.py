@@ -26,7 +26,7 @@ def listen():
 
 
 def main():
-    listen(reactor)
+    listen()
     reactor.run()
 
 
