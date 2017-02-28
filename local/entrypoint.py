@@ -64,18 +64,26 @@ def write_etc_hosts():
             hosts.write("127.0.0.1 {}\n".format(name))
             hosts.write("127.0.0.1 {}.{}.svc.cluster.local\n".format(name, namespace))
 
+
+processes = []
+
 # 1. write /etc/hosts
 write_etc_hosts()
+# 2. forward remote port to here:
+processes.append(Popen([
+    "nc", "-lk", "-p", "22", "-e", "/usr/local/bin/remote-ssh.sh"]))
+processes.append(Popen([
+    "sshpass", "-phello", "ssh", "-oStrictHostKeyChecking=no", "root@localhost",
+    "-R", "8000:127.0.0.1:8000", "-N"]))
+
 # 2. write k8s.env
 setuid(int(argv[1]))
 write_env()
 # 3. start proxies
-processes = []
 for port in range(2000, 2020):
     # XXX need to map service name to port# somehow
     # XXX what if there is more than 20 services
     p = Popen(["kubectl", "port-forward", "telepresence", str(port)])
     processes.append(p)
-
 for p in processes:
     p.wait()
