@@ -1,7 +1,10 @@
 #!/usr/bin/python3
 
+from json import loads
+from os import setuid
 from subprocess import Popen, STDOUT, check_output
 from sys import argv
+
 
 
 def _get_service_keys(environment):
@@ -49,7 +52,24 @@ def write_env():
             f.write("{}={}\n".format(key, value))
     print("Please pass --env-file=k8s.env to docker run.")
 
+
+def write_etc_hosts():
+    """Update /etc/hosts with records that match k8s DNS entries for services."""
+    services_json = loads(str(
+        check_output(["kubectl", "get", "service", "-o", "json"]), "utf-8"))
+    with open("/etc/hosts", "a") as hosts:
+        for service in services_json["items"]:
+            name = service["metadata"]["name"]
+            namespace = service["metadata"]["namespace"]
+            hosts.write("127.0.0.1 {}\n".format(name))
+            hosts.write("127.0.0.1 {}.{}.svc.cluster.local\n".format(name, namespace))
+
+# 1. write /etc/hosts
+write_etc_hosts()
+# 2. write k8s.env
+setuid(int(argv[1]))
 write_env()
+# 3. start proxies
 processes = []
 for port in range(2000, 2020):
     # XXX need to map service name to port# somehow

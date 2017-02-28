@@ -12,4 +12,4 @@ RUN ["chmod", "+x", "/usr/local/bin/entrypoint.py"]
 
 ENV HOME=/opt
 
-CMD ["/usr/local/bin/entrypoint.py"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.py"]
