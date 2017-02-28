@@ -8,9 +8,9 @@ services, since they will all be accessible from a pod running this proxy.
 
 from os import environ
 
+from twisted.application.service import Application
 from twisted.internet import reactor, endpoints
 from twisted.protocols.portforward import ProxyFactory
-
 
 def listen():
     i = 0
@@ -20,15 +20,11 @@ def listen():
         # XXX also check for TCPness.
         host = environ[key]
         port = int(environ[key[:-4] + "PORT"])
-        endpoints.TCP4ServerEndpoint(reactor, 2000 + i).listen(
-            ProxyFactory(host, port))
+        service = endpoints.TCP4ServerEndpoint(reactor, 2000 + i)
+        service.listen(ProxyFactory(host, port))
+        print("Connecting port {} to {}:{} ({})".format(2000 + i, host, port, key))
         i += 1
 
-
-def main():
-    listen()
-    reactor.run()
-
-
-if __name__ == '__main__':
-    main()
+print("Listening...")
+listen()
+application = Application("go")
