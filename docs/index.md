@@ -39,15 +39,33 @@ graph TD
 ## How to use Telepresence
 
 Let's assume you have a web service which listens on port 8080, and has a Dockerfile which gets built to an image called `examplecom/yourservice`.
-Your Kubernetes configuration for the service looks something like this:
+
+Your Kubernetes configuration will typically have a `Service`:
 
 ```yaml
 
 ```
 
+You will also have a `Deployment` that actually runs your code:
 
+```yaml
+```
 
-### Local development with Docker
+In order to run Telepresence you will need to do three things:
+
+1. Replace your production `Deployment` with a custom `Deployment` that runs the Telepresence proxy.
+2. Run the Telepresence client locally in Docker.
+3. Run your own code in its own Docker container, hooked up to the Telepresence client.
+
+Let's go through these steps one by one.
+
+### 1. Run the Telepresence proxy in Kubernetes
+
+### 2. Run the local Telepresence client on your machine
+
+### 3. Run your code locally in a container
+
+### 4. Better local development with Docker
 
 To make Telepresence even more useful, you might want to use a custom Dockerfile setup that allows for code changes to be reflected immediately upon editing.
 
@@ -57,9 +75,9 @@ Here are some tutorials for various languages and frameworks:
 * [Python with Flask](http://matthewminer.com/2015/01/25/docker-dev-environment-for-web-app.html)
 * [Node](http://fostertheweb.com/2016/02/nodemon-inside-docker-container/)
 
-## Help us make Telepresence work better for you
+## Help us improve Telepresence!
 
-We are considering various improvements to `telepresence`, including:
+We are considering various improvements to Telepresence, including:
 
 * [Removing need for Kubernetes credentials](https://github.com/datawire/telepresence/issues/2)
 * [Allowing running code locally without a container](https://github.com/datawire/telepresence/issues/1)
