@@ -1,7 +1,4 @@
 <!DOCTYPE html>
-<!--
-
--->
 <html>
 
   <head>
@@ -11,10 +8,14 @@
     <meta name="description" content="{{ site.title | default: site.github.repository_name }} : {{ site.description | default: site.github.project_tagline }}">
 
     <link rel="stylesheet" type="text/css" media="screen" href="{{ '/assets/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
-    <link href="https://cdn.rawgit.com/knsv/mermaid/7.0.0/dist/mermaid.css" rel="stylesheet">
-    <script src="https://cdn.rawgit.com/knsv/mermaid/7.0.0/dist/mermaid.min.js"></script>
-    <script>mermaid.initialize({startOnLoad:true});</script>
-
+    <link href="/resources/mermaid.css" rel="stylesheet">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+    <script src="/resources/mermaid.min.js"></script>
+    <script>mermaid.initialize({
+       startOnLoad: true,
+       cloneCssStyles: false,
+     });
+    </script>
     <title>{{ site.title | default: site.github.repository_name }}</title>
   </head>
 
