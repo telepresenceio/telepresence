@@ -144,16 +144,13 @@ A new environment file named `yourcode-deployment.env` was generated.
 
 ### 3. Run your code locally in a container
 
-You can now run your own code locally inside Docker, attaching it to the network stack of the Telepresence client:
+You can now run your own code locally inside Docker, attaching it to the network stack of the Telepresence client and using the environment variables Telepresence client extracted:
 
 ```console
-$ docker run --rm
-             --net=container:yourcode-deployment \ 
-             --env-file=yourcode-deployment.env\
+$ docker run --net=container:yourcode-deployment \ 
+             --env-file=yourcode-deployment.env \
              examplecom/yourcode:latest
 ```
-
-XXX passing in env file is kinda meh... maybe generate Compose file when you run `telepresence` command?
 
 Your code is now connected to the remote Kubernetes cluster.
 
@@ -188,6 +185,8 @@ Currently unsupported:
 * TCP connections, environment variables, DNS records for `Service` instances created *after* Telepresence is started.
 * SRV DNS records matching `Services`, e.g. `_http._tcp.redis-master.default`.
 * UDP messages in any direction.
+* For proxied addresses, only one destination per specific port number is currently supported.
+  E.g. you can't proxy `remote1.example.com:5432` and `remote2.example.com:5432` at the same time.
 
 ## Help us improve Telepresence!
 
@@ -195,8 +194,9 @@ We are considering various improvements to Telepresence, including:
 
 * [Removing need for Kubernetes credentials](https://github.com/datawire/telepresence/issues/2)
 * [Allowing running code locally without a container](https://github.com/datawire/telepresence/issues/1)
+* Implementing any of the unsupported features mentioned above.
 
-Please add comments to these tickets if you are interested in these features, and [file a new issue](https://github.com/datawire/telepresence/issues/new) if you find any bugs or have any feature requests.
+Please add comments to relevant tickets if you are interested in these features, or [file a new issue](https://github.com/datawire/telepresence/issues/new) if there is no existing ticket for a desired feature or bug report.
 
 ## Alternatives
 
