@@ -1,2 +1,2 @@
 #!/bin/sh
-kubectl exec -i telepresence nc localhost 22
+kubectl exec -i $1 nc localhost 22

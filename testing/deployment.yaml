@@ -1,0 +1,16 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: yourcode-deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: yourcode
+    spec:
+      containers:
+      - name: yourcode
+        image: datawire/telepresence-remote:dev
+        ports:
+        - containerPort: 8080

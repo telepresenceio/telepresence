@@ -9,4 +9,4 @@ build-local:
 	cd local && docker build . -t datawire/local-telepresence
 
 build-remote:
-	cd remote && docker build . -t datawire/remote-telepresence:dev
+	cd remote && docker build . -t datawire/telepresence-remote:dev
