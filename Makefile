@@ -22,6 +22,7 @@ virtualenv:
 bumpversion: virtualenv
 	virtualenv/bin/pip install bumpversion
 	virtualenv/bin/bumpversion --verbose --list minor
+	@echo "Please run: git push origin master --tags"
 
 release: build
 	docker push datawire/telepresence-local:$(VERSION)
