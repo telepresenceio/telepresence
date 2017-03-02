@@ -8,6 +8,8 @@ Should be written to support Python 2 and Python 3 for ease of distribution.
 
 from __future__ import print_function
 
+VERSION = "0.0"
+
 import argparse
 import os
 import os.path
@@ -54,7 +56,7 @@ def main():
         # Mount local directory, where env file will be written out:
         "-v", os.getcwd() + ":/output",
         # Name of container:
-        "datawire/telepresence-local",
+        "datawire/telepresence-local:" + VERSION,
         # Arguments: <uid>, <deployment-name>, <port1>, <port2>, ...
         str(os.getuid()), args.deployment_name
     ] + [str(port) for port in args.expose])
