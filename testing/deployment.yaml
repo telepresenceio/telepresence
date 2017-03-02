@@ -11,6 +11,6 @@ spec:
     spec:
       containers:
       - name: yourcode
-        image: datawire/telepresence-remote:dev
+        image: datawire/telepresence-k8s:dev
         ports:
         - containerPort: 8080

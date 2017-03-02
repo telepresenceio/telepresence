@@ -111,7 +111,7 @@ spec:
     spec:
       containers:
       - name: yourcode
-        image: datawire/telepresence-remote:0.1  # <-- new image
+        image: datawire/telepresence-k8s:0.1  # <-- new image
         ports:
         - containerPort: 8080
       - env:
