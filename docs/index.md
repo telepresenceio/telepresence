@@ -137,17 +137,13 @@ Services `thing1` and `thing2` will be available to your code automatically so n
 You can do so with the following command line:
 
 ```console
-$ docker run --rm --name=yourcode-deployment  -v $HOME/.kube:/opt/.kube:ro -v $HOME/.minikube:$HOME/.minikube:ro -v $PWD:/output datawire/local-telepresence --uid $UID --proxy somewhere.someplace.cloud.example.com:5432 --expose 8080 yourcode-deployment
-```
-
-XXX potential simplified version:
-
-```console
 $ telepresence --proxy somewhere.someplace.cloud.example.com:5432 \
                --expose 8080 \
                yourcode-deployment
 A new environment file named `yourcode-deployment.env` was generated.
 ```
+
+(XXX --proxy is not yet supported)
 
 ### 3. Run your code locally in a container
 
