@@ -1,0 +1,68 @@
+#!/usr/bin/env python
+
+"""
+Telepresence CLI tool, a thin wrapper around the datawire/telepresence-local Docker image.
+
+Should be written to support Python 2 and Python 3 for ease of distribution.
+"""
+
+from __future__ import print_function
+
+import argparse
+import os
+import os.path
+from subprocess import check_output
+
+parser = argparse.ArgumentParser()
+parser.add_argument("deployment_name",
+                    metavar="DEPLOYMENT-NAME",
+                    help=("The name of the Kubernetes Deployment where the " +
+                          "datawire/telepresence-k8s image is running."))
+parser.add_argument("--expose", type=int, action='append', default=[],
+                    help=("Port number in local container that will be " +
+                          "exposed to Kubernetes."))
+
+def need_sudo():
+    docker_path = "/var/run/docker.sock"
+    if (os.path.exists(docker_path) and
+        not os.access(docker_path, os.W_OK)):
+        return True
+    return False
+
+
+def main():
+    minikube_path = os.path.expanduser("~/.minikube")
+    kube_path = os.path.expanduser("~/.kube")
+    args = parser.parse_args()
+
+    docker_cmd = [
+        "docker", "run",
+        # Delete when exited:
+        "--rm",
+        # Name matches Deployment name:
+        "--name={}".format(args.deployment_name),
+        # Mount .kube so we have access to kubectl configuration:
+        "-v", kube_path + ":/opt/.kube:ro",
+    ]
+
+    if os.path.exists(minikube_path):
+        docker_cmd.extend([
+            # Mount minikube directory, if available, for CA certificates:
+            "-v", "{}:{}:ro".format(minikube_path, minikube_path),
+        ])
+    docker_cmd.extend([
+        # Mount local directory, where env file will be written out:
+        "-v", os.getcwd() + ":/output",
+        # Name of container:
+        "datawire/telepresence-local",
+        # Arguments: <uid>, <deployment-name>, <port1>, <port2>, ...
+        str(os.getuid()), args.deployment_name
+    ] + [str(port) for port in args.expose])
+    if need_sudo():
+        docker_cmd.insert(0, "sudo")
+    check_output(docker_cmd)
+    print("Wrote Docker environment file to './{}.env'.".format(args.deployment_name))
+
+
+if __name__ == '__main__':
+    main()
