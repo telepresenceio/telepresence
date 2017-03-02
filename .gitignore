@@ -1,2 +1,2 @@
-# Generated files
-k8s.env
+virtualenv/
+*.env
