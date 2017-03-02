@@ -8,10 +8,10 @@ default:
 build: build-local build-remote
 
 build-local:
-	cd local && docker build . -t datawire/telepresence-local
+	cd local && docker build . -t datawire/telepresence-local:$(VERSION)
 
 build-remote:
-	cd remote && docker build . -t datawire/telepresence-k8s:dev
+	cd remote && docker build . -t datawire/telepresence-k8s:$(VERSION)
 
 virtualenv:
 	virtualenv virtualenv
