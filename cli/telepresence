@@ -11,7 +11,7 @@ from __future__ import print_function
 import argparse
 import os
 import os.path
-from subprocess import check_output
+from subprocess import Popen
 
 parser = argparse.ArgumentParser()
 parser.add_argument("deployment_name",
@@ -60,9 +60,8 @@ def main():
     ] + [str(port) for port in args.expose])
     if need_sudo():
         docker_cmd.insert(0, "sudo")
-    check_output(docker_cmd)
-    print("Wrote Docker environment file to './{}.env'.".format(args.deployment_name))
-
+    p = Popen(docker_cmd)
+    p.wait()
 
 if __name__ == '__main__':
     main()

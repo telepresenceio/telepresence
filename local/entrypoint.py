@@ -3,8 +3,8 @@
 from json import loads
 from os import setuid
 from subprocess import Popen, STDOUT, check_output
-from sys import argv
-
+from sys import argv, stdout
+import time
 
 
 def _get_service_keys(environment):
@@ -46,8 +46,8 @@ def get_env_variables(pod_name):
         yield port_name + "_HOST", ip
 
 
-def write_env(pod_name):
-    with open("/output/k8s.env", "w") as f:
+def write_env(pod_name, deployment_name):
+    with open("/output/{}.env".format(deployment_name), "w") as f:
         for key, value in get_env_variables(pod_name):
             f.write("{}={}\n".format(key, value))
     print("Please pass --env-file=k8s.env to docker run.")
@@ -75,15 +75,35 @@ def get_pod_name(deployment_name):
     raise RuntimeError("Telepresence pod not found for Deployment '{}'.".format(
         deployment_name))
 
+
+def print_status(deployment_name, ports):
+    message = """
+An environment file named {}.env has been written out to $PWD.
+
+You can now run your own code locally and have it be exposed within Kubernetes, e.g.:
+
+  docker run --net=container:{} \\
+             --env-file={}.env \\
+             --rm -i -t busybox""".format(deployment_name, deployment_name,
+                                          deployment_name)
+    if ports:
+        message += " nc -l -p {}".format(ports[0])
+
+    print(message + "\n")
+    stdout.flush()
+
+
 processes = []
-pod_name = get_pod_name(argv[2])
+deployment_name = argv[2]
+pod_name = get_pod_name(deployment_name)
+ports = argv[3:]
 
 # 1. write /etc/hosts
 write_etc_hosts()
 # 2. forward remote port to here, by tunneling via remote SSH server:
 processes.append(Popen(["kubectl", "port-forward", pod_name, "22"]))
-import time; time.sleep(2) # XXX lag until port 22 is open; replace with retry loop
-for port_number in argv[3:]:
+time.sleep(2) # XXX lag until port 22 is open; replace with retry loop
+for port_number in ports:
     processes.append(Popen([
         "sshpass", "-phello",
         "ssh", "-q",
@@ -92,12 +112,15 @@ for port_number in argv[3:]:
 
 # 2. write k8s.env
 setuid(int(argv[1]))
-write_env(pod_name)
+write_env(pod_name, deployment_name)
 # 3. start proxies
 for port in range(2000, 2020):
     # XXX need to map service name to port# somehow
     # XXX what if there is more than 20 services
     p = Popen(["kubectl", "port-forward", pod_name, str(port)])
     processes.append(p)
+
+time.sleep(5)
+print_status(deployment_name, ports)
 for p in processes:
     p.wait()
