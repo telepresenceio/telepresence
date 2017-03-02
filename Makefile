@@ -1,9 +1,12 @@
-.PHONY: default build build-local build-remote
+.PHONY: default build build-local build-remote bumpversion release
 
 VERSION=0.0
 
 default:
-	echo "Run 'make build' to build Docker image."
+	@echo "To release:"
+	@echo "1. 'make bumpversion'"
+	@echo "2. do git push as instructed by bumpversion"
+	@echo "3. 'make release'"
 
 build: build-local build-remote
 
@@ -16,6 +19,10 @@ build-remote:
 virtualenv:
 	virtualenv virtualenv
 
-release: virtualenv
+bumpversion: virtualenv
 	virtualenv/bin/pip install bumpversion
 	virtualenv/bin/bumpversion --verbose --list minor
+
+release: build
+	docker push datawire/telepresence-local:$(VERSION)
+	docker push datawire/telepresence-k8s:$(VERSION)
