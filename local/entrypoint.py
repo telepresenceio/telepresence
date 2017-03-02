@@ -80,13 +80,15 @@ pod_name = get_pod_name(argv[2])
 
 # 1. write /etc/hosts
 write_etc_hosts()
-# 2. forward remote port to here:
-processes.append(Popen([
-    "nc", "-lk", "-p", "22", "-e", "/usr/local/bin/remote-ssh.sh", pod_name]))
+# 2. forward remote port to here, by tunneling via remote SSH server:
+processes.append(Popen(["kubectl", "port-forward", pod_name, "22"]))
+import time; time.sleep(2) # XXX lag until port 22 is open; replace with retry loop
 for port_number in argv[3:]:
     processes.append(Popen([
-        "sshpass", "-phello", "ssh", "-oStrictHostKeyChecking=no", "root@localhost",
-        "-R", "{}:127.0.0.1:{}".format(port_number, port_number), "-N"]))
+        "sshpass", "-phello",
+        "ssh", "-q",
+        "-oStrictHostKeyChecking=no", "root@localhost",
+        "-R", "*:{}:127.0.0.1:{}".format(port_number, port_number), "-N"]))
 
 # 2. write k8s.env
 setuid(int(argv[1]))
