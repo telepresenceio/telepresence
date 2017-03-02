@@ -115,7 +115,6 @@ setuid(int(argv[1]))
 write_env(pod_name, deployment_name)
 # 3. start proxies
 for port in range(2000, 2020):
-    # XXX need to map service name to port# somehow
     # XXX what if there is more than 20 services
     p = Popen(["kubectl", "port-forward", pod_name, str(port)])
     processes.append(p)
