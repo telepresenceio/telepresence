@@ -1,5 +1,12 @@
 #!/usr/bin/python3
 
+"""
+THIS IS A PROTOTYPE.
+
+As a result the code is quite awful. Next up is rewriting it with tests and
+abstractions.
+"""
+
 from json import loads
 from os import setuid, environ
 from subprocess import Popen, STDOUT, check_output
@@ -65,10 +72,9 @@ def write_env(pod_name, deployment_name):
     with open("/output/{}.env".format(deployment_name), "w") as f:
         for key, value in get_env_variables(pod_name).items():
             f.write("{}={}\n".format(key, value))
-    print("Please pass --env-file=k8s.env to docker run.")
 
 
-def write_etc_hosts():
+def write_etc_hosts(additional_hosts):
     """Update /etc/hosts with records that match k8s DNS entries for services."""
     services_json = loads(str(
         check_output(["kubectl", "get", "service", "-o", "json"]), "utf-8"))
@@ -78,6 +84,8 @@ def write_etc_hosts():
             namespace = service["metadata"]["namespace"]
             hosts.write("127.0.0.1 {}\n".format(name))
             hosts.write("127.0.0.1 {}.{}.svc.cluster.local\n".format(name, namespace))
+        for host in additional_hosts:
+            hosts.write("127.0.0.1 {}\n".format(host))
 
 
 def get_pod_name(deployment_name):
@@ -108,12 +116,13 @@ You can now run your own code locally and have it be exposed within Kubernetes, 
     stdout.flush()
 
 
-def main(uid, deployment_name, ports, custom_proxied_hosts):
+def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
     processes = []
     pod_name = get_pod_name(deployment_name)
-    proxied_ports = set(range(2000, 2020)) | set(map(int, ports))
+    proxied_ports = set(range(2000, 2020)) | set(map(int, local_exposed_ports))
     proxied_ports.add(22)
-    for port in [int(s.split(":", 1)[1]) for s in custom_proxied_hosts]:
+    custom_ports = [int(s.split(":", 1)[1]) for s in custom_proxied_hosts]
+    for port in custom_ports:
         if port in proxied_ports:
             exit(("OOPS: Can't proxy port {} more than once. "
                   "Currently mapped ports: {}.This error is due "
@@ -124,28 +133,35 @@ def main(uid, deployment_name, ports, custom_proxied_hosts):
             proxied_ports.add(int(port))
 
     # 1. write /etc/hosts
-    write_etc_hosts()
+    write_etc_hosts([s.split(":", 1)[0] for s in custom_proxied_hosts])
     # 2. forward remote port to here, by tunneling via remote SSH server:
     processes.append(Popen(["kubectl", "port-forward", pod_name, "22"]))
     time.sleep(2) # XXX lag until port 22 is open; replace with retry loop
-    for port_number in ports:
+    for port_number in local_exposed_ports:
         processes.append(Popen([
             "sshpass", "-phello",
             "ssh", "-q",
             "-oStrictHostKeyChecking=no", "root@localhost",
             "-R", "*:{}:127.0.0.1:{}".format(port_number, port_number), "-N"]))
 
-    # 2. write k8s.env
+    # 3. start proxies for custom-mapped hosts:
+    for host, port in [s.split(":", 1) for s in custom_proxied_hosts]:
+        processes.append(Popen([
+            "sshpass", "-phello",
+            "ssh", "-q",
+            "-oStrictHostKeyChecking=no", "root@localhost",
+            "-L", "{}:{}:{}".format(port, host, port), "-N"]))
+    # 4. write docker envfile
     setuid(uid)
     write_env(pod_name, deployment_name)
-    # 3. start proxies
+    # 5. start proxies for Services:
+    # XXX maybe just do everything via SSH, now that we have it?
     for port in range(2000, 2020):
         # XXX what if there is more than 20 services
         p = Popen(["kubectl", "port-forward", pod_name, str(port)])
         processes.append(p)
-
     time.sleep(5)
-    print_status(deployment_name, ports)
+    print_status(deployment_name, local_exposed_ports)
     for p in processes:
         p.wait()
 
