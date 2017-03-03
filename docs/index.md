@@ -42,6 +42,28 @@ graph LR
 (Future versions may allow you to run your code locally directly, without a local container.
 [Let us know](https://github.com/datawire/telepresence/issues/1) if this a feature you want.)
 
+## Installing
+
+You will need the following available on your machine:
+
+* Docker.
+* Python (2 or 3). This should be available on any Linux or OS X machine.
+* Access to your Kubernetes cluster, with local credentials on your machine.
+  You can do test this by running `kubectl get pod` - if this works you're all set.
+
+In order to install, run the following command:
+
+```
+curl -L https://github.com/datawire/telepresence/raw/{{ site.data.version.version }}/cli/telepresence -o telepresence
+chmod +x telepresence
+```
+
+Then move telepresence to somewhere in your `$PATH`, e.g.:
+
+```
+mv telepresence /usr/local/bin
+```
+
 ## How to use Telepresence
 
 Continuing the example above, your Kubernetes configuration will typically have a `Service`:
