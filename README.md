@@ -7,6 +7,7 @@ Telepresence allows you to run your code locally while still:
 2. Giving your code access to cloud resources like AWS RDS or Google PubSub.
 3. Allowing Kubernetes to access your code as if it were in a normal pod within the cluster.
 
-* **[Documentation - start here!](https://datawire.github.io/telepresence)**
-* License: Apache 2.0
+**[Documentation - start here!](https://datawire.github.io/telepresence)**
+
+Telepresence is licensed under the Apache 2.0 License.
 
