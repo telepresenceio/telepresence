@@ -168,8 +168,6 @@ $ telepresence --proxy somewhere.someplace.cloud.example.com:5432 \
 A new environment file named `yourcode-deployment.env` was generated.
 ```
 
-(XXX --proxy is not yet supported)
-
 ### 3. Run your code locally in a container
 
 You can now run your own code locally inside Docker, attaching it to the network stack of the Telepresence client and using the environment variables Telepresence client extracted:
@@ -204,7 +202,7 @@ Telepresence currently proxies the following:
 * TCP connections to other `Service` instances that existed when the proxy was supported.
 * Any additional environment variables that a normal pod would have, with the exception of a few environment variables that are different in the local environment.
   E.g. UID and HOME.
-* XXX NOT YET TCP connections to specific hostname/port combinations specified on the command line.
+* TCP connections to specific hostname/port combinations specified on the command line.
   Typically this would be used for cloud resources, e.g. a AWS RDS database.
 * TCP connections *from* Kubernetes to your local code, for ports specified on the command line.
 
