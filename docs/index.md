@@ -5,6 +5,9 @@ Telepresence allows you to run your code locally while still:
 2. Giving your code access to cloud resources like AWS RDS or Google PubSub.
 3. Allowing Kubernetes to access your code as if it were in a normal pod within the cluster.
 
+**IMPORTANT:** Telepresence is currently in the prototyping stage, and we expect it to change rapidly based on user feedback.
+Please [file bugs and feature requests](https://github.com/datawire/telepresence/issues)!
+
 ## Theory of operation
 
 Let's assume you have a web service which listens on port 8080, and has a Dockerfile which gets built to an image called `examplecom/yourcode`.
