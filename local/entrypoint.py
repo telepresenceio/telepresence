@@ -108,33 +108,35 @@ You can now run your own code locally and have it be exposed within Kubernetes, 
     stdout.flush()
 
 
-processes = []
-deployment_name = argv[2]
-pod_name = get_pod_name(deployment_name)
-ports = argv[3:]
+def main(uid, deployment_name, ports, proxied_hosts):
+    processes = []
+    pod_name = get_pod_name(deployment_name)
+    # 1. write /etc/hosts
+    write_etc_hosts()
+    # 2. forward remote port to here, by tunneling via remote SSH server:
+    processes.append(Popen(["kubectl", "port-forward", pod_name, "22"]))
+    time.sleep(2) # XXX lag until port 22 is open; replace with retry loop
+    for port_number in ports:
+        processes.append(Popen([
+            "sshpass", "-phello",
+            "ssh", "-q",
+            "-oStrictHostKeyChecking=no", "root@localhost",
+            "-R", "*:{}:127.0.0.1:{}".format(port_number, port_number), "-N"]))
 
-# 1. write /etc/hosts
-write_etc_hosts()
-# 2. forward remote port to here, by tunneling via remote SSH server:
-processes.append(Popen(["kubectl", "port-forward", pod_name, "22"]))
-time.sleep(2) # XXX lag until port 22 is open; replace with retry loop
-for port_number in ports:
-    processes.append(Popen([
-        "sshpass", "-phello",
-        "ssh", "-q",
-        "-oStrictHostKeyChecking=no", "root@localhost",
-        "-R", "*:{}:127.0.0.1:{}".format(port_number, port_number), "-N"]))
+    # 2. write k8s.env
+    setuid(uid)
+    write_env(pod_name, deployment_name)
+    # 3. start proxies
+    for port in range(2000, 2020):
+        # XXX what if there is more than 20 services
+        p = Popen(["kubectl", "port-forward", pod_name, str(port)])
+        processes.append(p)
 
-# 2. write k8s.env
-setuid(int(argv[1]))
-write_env(pod_name, deployment_name)
-# 3. start proxies
-for port in range(2000, 2020):
-    # XXX what if there is more than 20 services
-    p = Popen(["kubectl", "port-forward", pod_name, str(port)])
-    processes.append(p)
+    time.sleep(5)
+    print_status(deployment_name, ports)
+    for p in processes:
+        p.wait()
 
-time.sleep(5)
-print_status(deployment_name, ports)
-for p in processes:
-    p.wait()
+
+if __name__ == '__main__':
+    main(int(argv[1]), argv[2], argv[3].split(","), argv[4].split(","))

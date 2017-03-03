@@ -23,6 +23,9 @@ parser.add_argument("deployment_name",
 parser.add_argument("--expose", type=int, action='append', default=[],
                     help=("Port number in local container that will be " +
                           "exposed to Kubernetes."))
+parser.add_argument("--proxy", action='append', default=[],
+                    help="<host>:<port> that will be proxied via Kubernetes.")
+
 
 def need_sudo():
     docker_path = "/var/run/docker.sock"
@@ -57,9 +60,10 @@ def main():
         "-v", os.getcwd() + ":/output",
         # Name of container:
         "datawire/telepresence-local:" + VERSION,
-        # Arguments: <uid>, <deployment-name>, <port1>, <port2>, ...
-        str(os.getuid()), args.deployment_name
-    ] + [str(port) for port in args.expose])
+        # Arguments: <uid>, <deployment-name>, <port1,port2>, <proxy1,proxy2>...
+        str(os.getuid()), args.deployment_name, ",".join(map(str, ports.expose)),
+        ",".join(args.proxy)
+    ])
     if need_sudo():
         docker_cmd.insert(0, "sudo")
     p = Popen(docker_cmd)
