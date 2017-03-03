@@ -8,7 +8,7 @@ Should be written to support Python 2 and Python 3 for ease of distribution.
 
 from __future__ import print_function
 
-VERSION = "0.1"
+VERSION = "0.2"
 
 import argparse
 import os
