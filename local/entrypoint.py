@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 from json import loads
-from os import setuid
+from os import setuid, environ
 from subprocess import Popen, STDOUT, check_output
 from sys import argv, stdout
 import time
@@ -10,6 +10,8 @@ import time
 def _get_service_keys(environment):
     # XXX duplicated in remote-telepresence
     # XXX also check for TCPness.
+    # Order matters for service_keys, need it to be consistent with port
+    # forwarding order in remote container.
     result = [key for key in environment if key.endswith("_SERVICE_HOST")]
     result.sort(key=lambda s: s[:-len("_SERVICE_HOST")])
     return result
@@ -26,29 +28,42 @@ def get_remote_env(pod_name):
 
 def get_env_variables(pod_name):
     """Generate environment variables that match kubernetes."""
+    remote_env = get_remote_env(pod_name)
+    filter_keys = set()
+    result = {}
     # XXX we're recreating the port generation logic
     i = 0
-    for i, service_key in enumerate(_get_service_keys(get_remote_env(pod_name))):
+    for i, service_key in enumerate(_get_service_keys(remote_env)):
         port = str(2000 + i)
         ip = "127.0.0.1"
         # XXX bad abstraction
         name = service_key[:-len("_SERVICE_HOST")]
+        # XXX ugh
+        filter_prefix = "{}_PORT_{}_TCP".format(name, remote_env[name + "_SERVICE_PORT"])
+        filter_keys |= set([filter_prefix + s for s in ("", "_PROTO", "_PORT", "_ADDR")])
         # XXX will be wrong for UDP
         full_address = "tcp://{}:{}".format(ip, port)
-        yield name + "_SERVICE_HOST", ip
-        yield name + "_SERVICE_PORT", port
-        yield name + "_PORT", full_address
+        result[name + "_SERVICE_HOST"] = ip
+        result[name + "_SERVICE_PORT"] = port
+        result[name + "_PORT"] = full_address
         port_name = name + "_PORT_" + port + "_TCP"
-        yield port_name, full_address
+        result[port_name] = full_address
         # XXX will break for UDP
-        yield port_name + "_PROTO", "tcp"
-        yield port_name + "_PORT", port
-        yield port_name + "_HOST", ip
+        result[port_name + "_PROTO"] = "tcp"
+        result[port_name + "_PORT"] = port
+        result[port_name + "_ADDR"] = ip
+    for key, value in remote_env.items():
+        # We don't want env variables that are service addresses (did those
+        # above) nor those that are already present in this container.
+        # XXX we're getting env variables from telepresence that are image-specific, not coming from the Deployment. figure out way to differentiate.
+        if key not in result and key not in environ and key not in filter_keys:
+            result[key] = value
+    return result
 
 
 def write_env(pod_name, deployment_name):
     with open("/output/{}.env".format(deployment_name), "w") as f:
-        for key, value in get_env_variables(pod_name):
+        for key, value in get_env_variables(pod_name).items():
             f.write("{}={}\n".format(key, value))
     print("Please pass --env-file=k8s.env to docker run.")
 
