@@ -3,7 +3,7 @@
 from json import loads
 from os import setuid, environ
 from subprocess import Popen, STDOUT, check_output
-from sys import argv, stdout
+from sys import argv, stdout, exit
 import time
 
 
@@ -108,9 +108,21 @@ You can now run your own code locally and have it be exposed within Kubernetes, 
     stdout.flush()
 
 
-def main(uid, deployment_name, ports, proxied_hosts):
+def main(uid, deployment_name, ports, custom_proxied_hosts):
     processes = []
     pod_name = get_pod_name(deployment_name)
+    proxied_ports = set(range(2000, 2020)) | set(map(int, ports))
+    proxied_ports.add(22)
+    for port in [int(s.split(":", 1)[1]) for s in custom_proxied_hosts]:
+        if port in proxied_ports:
+            exit(("OOPS: Can't proxy port {} more than once. "
+                  "Currently mapped ports: {}.This error is due "
+                  "to a limitation in Telepresence, see "
+                  "https://github.com/datawire/telepresence/issues/6").format(
+                      port, proxied_ports))
+        else:
+            proxied_ports.add(int(port))
+
     # 1. write /etc/hosts
     write_etc_hosts()
     # 2. forward remote port to here, by tunneling via remote SSH server:

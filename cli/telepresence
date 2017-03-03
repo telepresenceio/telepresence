@@ -61,7 +61,7 @@ def main():
         # Name of container:
         "datawire/telepresence-local:" + VERSION,
         # Arguments: <uid>, <deployment-name>, <port1,port2>, <proxy1,proxy2>...
-        str(os.getuid()), args.deployment_name, ",".join(map(str, ports.expose)),
+        str(os.getuid()), args.deployment_name, ",".join(map(str, args.expose)),
         ",".join(args.proxy)
     ])
     if need_sudo():
