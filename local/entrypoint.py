@@ -105,10 +105,8 @@ An environment file named {}.env has been written out to $PWD.
 
 You can now run your own code locally and have it be exposed within Kubernetes, e.g.:
 
-  docker run --net=container:{} \\
-             --env-file={}.env \\
-             --rm -i -t busybox""".format(deployment_name, deployment_name,
-                                          deployment_name)
+  telepresence run-local --deployment {} \\
+               --rm -i -t busybox""".format(deployment_name, deployment_name)
     if ports:
         message += " nc -l -p {}".format(ports[0])
 
