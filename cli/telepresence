@@ -11,28 +11,62 @@ from __future__ import print_function
 import argparse
 import os
 import os.path
+from random import randint
 from subprocess import Popen
 
 VERSION = "0.3"
 
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    "deployment_name",
-    metavar="DEPLOYMENT-NAME",
-    help=("The name of the Kubernetes Deployment where the " +
-          "datawire/telepresence-k8s image is running."))
-parser.add_argument(
-    "--expose",
-    type=int,
-    action='append',
-    default=[],
-    help=("Port number in local container that will be " +
-          "exposed to Kubernetes."))
-parser.add_argument(
-    "--proxy",
-    action='append',
-    default=[],
-    help="<host>:<port> that will be proxied via Kubernetes.")
+
+def parse_args():
+    """Create a new ArgumentParser and parse sys.argv."""
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(title="Subcommands")
+    start_parser = subparsers.add_parser(
+        "start", help="Start the proxy to the remote Kubernetes cluster.")
+    group_deployment = start_parser.add_mutually_exclusive_group(required=True)
+    group_deployment.add_argument(
+        "--deployment",
+        nargs=1,
+        help=("The name of the Kubernetes Deployment where the " +
+              "datawire/telepresence-k8s image is running."))
+    group_deployment.add_argument(
+        '--new-deployment',
+        action="store_const",
+        const=None,
+        dest="deployment",
+        help=("Create a new Deployment in Kubernetes where the "
+              "datawire/telepresence-k8s image will run."))
+    start_parser.add_argument(
+        "--expose",
+        type=int,
+        action='append',
+        default=[],
+        help=("Port number in local container that will be " +
+              "exposed to Kubernetes."))
+    start_parser.add_argument(
+        "--proxy",
+        action='append',
+        default=[],
+        help="<host>:<port> that will be proxied via Kubernetes.")
+    runlocal_parser = subparsers.add_parser(
+        "run-local",
+        help=(
+            "Run a command locally in Docker in a way that is "
+            "exposed to remote Kubernetes. Accepts `docker run` "
+            "command-line arguments."
+        ))
+    runlocal_parser.add_argument(
+        "--deployment",
+        nargs=1, required=True,
+        help=("The name of the Kubernetes Deployment where the " +
+              "datawire/telepresence-k8s image is running."))
+    runlocal_parser.add_argument(
+        "docker_run_args",
+        metavar="DOCKER-RUN-ARGUMENTS",
+        nargs=argparse.REMAINDER,
+        help=("All remaininding arguments, to be passed to "
+              "`docker run`, e.g. '-i -t alpine:3.5 /bin/sh'."))
+    return parser.parse_args()
 
 
 def need_sudo():
@@ -45,7 +79,10 @@ def need_sudo():
 def main():
     minikube_path = os.path.expanduser("~/.minikube")
     kube_path = os.path.expanduser("~/.kube")
-    args = parser.parse_args()
+    args = parse_args()
+
+    # XXX if new-deployment, kubectl apply a new deployment...
+    # "deployment-" + str(randint()),
 
     docker_cmd = [
         "docker",
