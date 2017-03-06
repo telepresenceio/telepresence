@@ -10,7 +10,7 @@ Please [file bugs and feature requests](https://github.com/datawire/telepresence
 
 ## Theory of operation
 
-Let's assume you have a web service which listens on port 8080, and has a Dockerfile which gets built to an image called `examplecom/yourcode`.
+Let's assume you have a web service which listens on port 8080, and has a Dockerfile which gets built to an image called `examplecom/servicename`.
 Your service depends on other Kubernetes `Service` instances (`thing1` and `thing2`), and on a cloud database.
 
 The Kubernetes production environment looks like this:
@@ -18,8 +18,8 @@ The Kubernetes production environment looks like this:
 <div class="mermaid">
 graph LR
   subgraph Kubernetes in Cloud
-    code["k8s.Pod: yourcode"]
-    s1["k8s.Service: yourcode"]-->code
+    code["k8s.Pod: servicename"]
+    s1["k8s.Service: servicename"]-->code
     code-->s2["k8s.Service: thing1"]
     code-->s3["k8s.Service: thing2"]
     code-->c1>"Cloud Database (AWS RDS)"]
@@ -31,11 +31,11 @@ Currently Telepresence works by running your code locally in a Docker container,
 <div class="mermaid">
 graph LR
   subgraph Laptop
-    code["yourcode, in container"]---client[Telepresence client]
+    code["servicename, in container"]---client[Telepresence client]
   end
   subgraph Kubernetes in Cloud
     client-.-proxy["k8s.Pod: Telepresence proxy"]
-    s1["k8s.Service: yourcode"]-->proxy
+    s1["k8s.Service: servicename"]-->proxy
     proxy-->s2["k8s.Service: thing1"]
     proxy-->s3["k8s.Service: thing2"]
     proxy-->c1>"Cloud Database (AWS RDS)"]
@@ -75,14 +75,14 @@ Continuing the example above, your Kubernetes configuration will typically have 
 apiVersion: v1
 kind: Service
 metadata:
-  name: yourcode-service
+  name: servicename-service
 spec:
   ports:
     - port: 8080
       protocol: TCP
       targetPort: 8080
   selector:
-    name: yourcode
+    name: servicename
 ```
 
 You will also have a `Deployment` that actually runs your code, with labels that match the `Service` `selector`:
@@ -91,17 +91,17 @@ You will also have a `Deployment` that actually runs your code, with labels that
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: yourcode-deployment
+  name: servicename-deployment
 spec:
   replicas: 3
   template:
     metadata:
       labels:
-        name: yourcode
+        name: servicename
     spec:
       containers:
-      - name: yourcode
-        image: examplecom/yourcode:1.0.2
+      - name: servicename
+        image: examplecom/servicename:1.0.2
         ports:
         - containerPort: 8080
       - env:
@@ -126,16 +126,16 @@ It should only have 1 replica, and it will use a different image, but it should 
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: yourcode-deployment
+  name: servicename-deployment
 spec:
   replicas: 1  # <-- only one replica
   template:
     metadata:
       labels:
-        name: yourcode
+        name: servicename
     spec:
       containers:
-      - name: yourcode
+      - name: servicename
         image: datawire/telepresence-k8s:{{ site.data.version.version }}  # <-- new image
         ports:
         - containerPort: 8080
@@ -156,7 +156,7 @@ You want to do the following:
 
 1. Expose port 8080 in your code to Kuberentes.
 2. Proxy `somewhere.someplace.cloud.example.com` port 5432 via Kubernetes, since it's probably not accessible outside of your cluster.
-3. Connect specifically to the `yourcode-deployment` pod you created above, in case there are multiple Telepresence users in the cluster.
+3. Connect specifically to the `servicename-deployment` pod you created above, in case there are multiple Telepresence users in the cluster.
 
 Services `thing1` and `thing2` will be available to your code automatically so no special parameters are needed for them.
 You can do so with the following command line:
@@ -164,8 +164,8 @@ You can do so with the following command line:
 ```console
 $ telepresence --proxy somewhere.someplace.cloud.example.com:5432 \
                --expose 8080 \
-               yourcode-deployment
-A new environment file named `yourcode-deployment.env` was generated.
+               servicename-deployment
+A new environment file named `servicename-deployment.env` was generated.
 ```
 
 ### 3. Run your code locally in a container
@@ -173,9 +173,9 @@ A new environment file named `yourcode-deployment.env` was generated.
 You can now run your own code locally inside Docker, attaching it to the network stack of the Telepresence client and using the environment variables Telepresence client extracted:
 
 ```console
-$ docker run --net=container:yourcode-deployment \ 
-             --env-file=yourcode-deployment.env \
-             examplecom/yourcode:latest
+$ docker run --net=container:servicename-deployment \ 
+             --env-file=servicename-deployment.env \
+             examplecom/servicename:latest
 ```
 
 Your code is now connected to the remote Kubernetes cluster.
