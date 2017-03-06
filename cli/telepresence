@@ -1,36 +1,43 @@
 #!/usr/bin/env python
-
 """
-Telepresence CLI tool, a thin wrapper around the datawire/telepresence-local Docker image.
+Telepresence CLI tool, a thin wrapper around the
+datawire/telepresence-local Docker image.
 
 Should be written to support Python 2 and Python 3 for ease of distribution.
 """
 
 from __future__ import print_function
 
-VERSION = "0.3"
-
 import argparse
 import os
 import os.path
 from subprocess import Popen
 
+VERSION = "0.3"
+
 parser = argparse.ArgumentParser()
-parser.add_argument("deployment_name",
-                    metavar="DEPLOYMENT-NAME",
-                    help=("The name of the Kubernetes Deployment where the " +
-                          "datawire/telepresence-k8s image is running."))
-parser.add_argument("--expose", type=int, action='append', default=[],
-                    help=("Port number in local container that will be " +
-                          "exposed to Kubernetes."))
-parser.add_argument("--proxy", action='append', default=[],
-                    help="<host>:<port> that will be proxied via Kubernetes.")
+parser.add_argument(
+    "deployment_name",
+    metavar="DEPLOYMENT-NAME",
+    help=("The name of the Kubernetes Deployment where the " +
+          "datawire/telepresence-k8s image is running."))
+parser.add_argument(
+    "--expose",
+    type=int,
+    action='append',
+    default=[],
+    help=("Port number in local container that will be " +
+          "exposed to Kubernetes."))
+parser.add_argument(
+    "--proxy",
+    action='append',
+    default=[],
+    help="<host>:<port> that will be proxied via Kubernetes.")
 
 
 def need_sudo():
     docker_path = "/var/run/docker.sock"
-    if (os.path.exists(docker_path) and
-        not os.access(docker_path, os.W_OK)):
+    if (os.path.exists(docker_path) and not os.access(docker_path, os.W_OK)):
         return True
     return False
 
@@ -41,33 +48,41 @@ def main():
     args = parser.parse_args()
 
     docker_cmd = [
-        "docker", "run",
+        "docker",
+        "run",
         # Delete when exited:
         "--rm",
         # Name matches Deployment name:
         "--name={}".format(args.deployment_name),
         # Mount .kube so we have access to kubectl configuration:
-        "-v", kube_path + ":/opt/.kube:ro",
+        "-v",
+        kube_path + ":/opt/.kube:ro",
     ]
 
     if os.path.exists(minikube_path):
         docker_cmd.extend([
             # Mount minikube directory, if available, for CA certificates:
-            "-v", "{}:{}:ro".format(minikube_path, minikube_path),
+            "-v",
+            "{}:{}:ro".format(minikube_path, minikube_path),
         ])
     docker_cmd.extend([
         # Mount local directory, where env file will be written out:
-        "-v", os.getcwd() + ":/output",
+        "-v",
+        os.getcwd() + ":/output",
         # Name of container:
         "datawire/telepresence-local:" + VERSION,
-        # Arguments: <uid>, <deployment-name>, <port1,port2>, <proxy1,proxy2>...
-        str(os.getuid()), args.deployment_name, ",".join(map(str, args.expose)),
+        # Arguments: <uid>, <deployment-name>
+        str(os.getuid()),
+        args.deployment_name,
+        # Arguments: <port1,port2>, <proxy1,proxy2>...
+        ",".join(map(str, args.expose)),
         ",".join(args.proxy)
     ])
     if need_sudo():
         docker_cmd.insert(0, "sudo")
     p = Popen(docker_cmd)
     p.wait()
+
 
 if __name__ == '__main__':
     main()
