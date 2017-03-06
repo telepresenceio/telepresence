@@ -73,27 +73,26 @@ Let's try Telepresence out quickly.
 First, we'll connect to the Kubernetes cluster:
 
 ```console
-$ telepresence start --new-deployment --expose 8080
+host$ telepresence start --new-deployment --expose 8080
 Generated new deployment 'deployment-12343'.
 ```
 
 Given that deployment name we can run Docker commands locally that are exposed to the remote cluster.
 We'll do it with a shell, so we can try different things.
-`telepresence run-local` is a thin wrapper around `docker run`, so we can use standard `docker run` arguments:
+`telepresence run-local` is a thin wrapper around `docker run`, so we can use standard `docker run` arguments.
+
+We'll start a container using the `alpine` image.
+As you can see below, environment variables are set similar to those set in Kubernetes pods to point at a `Service`.
+We can send a request to that service and it will get proxied, and we can also use hostnames:
 
 ```console
-host$ telepresence run-local --deployment deployment-12343 -i -t alpine /bin/sh
-container1234$ env
+host$ telepresence run-local --deployment deployment-12343 \
+      -i -t alpine /bin/sh  # <-- arguments passed to `docker run`
+localcontainer$ env
 KUBERNETES_SERVICE_HOST=127.0.0.1
 KUBERNETES_SERVICE_PORT=60001
-```
-
-As you can see, environment variables are set similar to those set in Kubernetes pods to point at a `Service`.
-We can send a request to that service and it will get proxied:
-
-```console
-container1234$ apk add --no-cache curl  # install curl
-container1234$ curl -k -v "https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}/"
+localcontainer$ apk add --no-cache curl  # install curl
+localcontainer$ curl -k -v "https://127.0.0.1:60001/"
 > GET / HTTP/1.1
 > User-Agent: curl/7.38.0
 > Host: 10.0.0.1
@@ -105,26 +104,46 @@ container1234$ curl -k -v "https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVI
 < Date: Mon, 06 Mar 2017 19:19:44 GMT
 < Content-Length: 13
 Unauthorized
+localcontainer$ curl -k "https://kubernetes.default.svc.cluster.local/"
+Unauthorized
+localcontainer$ exit
+host$
 ```
 
 We've sent a request to the Kubernetes API service, and we could similarly talk to any `Service` in the remote Kubernetes cluster, even though the container is running locally.
 
-We can also use hostnames:
+Finally, since we exposed port 8080 on the remote cluster, we can run a local server (within the container) that listens on port 8080 and it will be exposed via port 8080 inside the Kubernetes pods we've created.
+Let's say we have a server `myserver.py` in the local directory.
+We can mount the current directory as a Docker volume, and run that server on port 8080:
 
 ```console
-container1234$ curl -k "https://kubernetes.default.svc.cluster.local/"
-Unauthorized
+host$ telepresence run-local --deployment deployment-12343 \
+      -v $PWD:/code -i -t alpine /bin/sh   # <-- passed to `docker run`
+localcontainer$ ls /code
+myserver.py
+requirements.txt
+localcontainer$ apk add --no-cache python3
+localcontainer$ pip3 install -r /code/requirements.txt
+localcontainer$ python3 /code/myserver.py --port=8080
 ```
 
-Finally, since we exposed port 8080 on the remote cluster, we can run a local server (within the container) that listens on port 8080 and it will be exposed via port 8080 inside the Kubernetes pods we've created:
+At this point the code will be accessible from inside the Kubernetes cluster:
 
-```console
-container1234$ nc -l -p 8080
-```
+<div class="mermaid">
+graph TD
+  subgraph Laptop
+    code["myserver.py on port 8080, in container"]---client[Telepresence client]
+  end
+  subgraph Kubernetes in Cloud
+    client-.-proxy["k8s.Pod: Telepresence proxy, listening on port 8080"]
+  end
+</div>
 
-## How to use Telepresence
+## In-depth usage
 
-Continuing the example above, your Kubernetes configuration will typically have a `Service`:
+Let's look in a bit more detail at using Telepresence.
+
+Your Kubernetes configuration will typically have a `Service`:
 
 ```yaml
 apiVersion: v1
@@ -231,6 +250,14 @@ You can now run your own code locally inside Docker, attaching it to the network
 $ docker run --net=container:servicename-deployment \ 
              --env-file=servicename-deployment.env \
              examplecom/servicename:latest
+```
+
+Or, you can use the simpler Telepresence wrapper for `docker run`:
+
+```console
+$ telepresence run-local --deployment servicename-deployment \
+               # `docker run` arguments: \
+               examplecom/servicename:latest
 ```
 
 Your code is now connected to the remote Kubernetes cluster.
