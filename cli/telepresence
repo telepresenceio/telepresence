@@ -12,7 +12,7 @@ import argparse
 import os
 import os.path
 from random import randint
-from subprocess import Popen, check_call
+from subprocess import check_call
 from time import sleep
 
 VERSION = "0.3"
@@ -55,7 +55,6 @@ def parse_args():
               "command-line arguments."))
     runlocal_parser.add_argument(
         "--deployment",
-        nargs=1,
         required=True,
         help=("The name of the Kubernetes Deployment where the " +
               "datawire/telepresence-k8s image is running."))
@@ -68,11 +67,12 @@ def parse_args():
     return parser.parse_args()
 
 
-def need_sudo():
+def docker_command():
     docker_path = "/var/run/docker.sock"
     if (os.path.exists(docker_path) and not os.access(docker_path, os.W_OK)):
-        return True
-    return False
+        return ["sudo", "docker"]
+    else:
+        return ["docker"]
 
 
 def start_command(args):
@@ -94,8 +94,7 @@ def start_command(args):
     minikube_path = os.path.expanduser("~/.minikube")
     kube_path = os.path.expanduser("~/.kube")
 
-    docker_cmd = [
-        "docker",
+    docker_cmd = docker_command() + [
         "run",
         # Delete when exited:
         "--rm",
@@ -125,14 +124,17 @@ def start_command(args):
         ",".join(map(str, args.expose)),
         ",".join(args.proxy)
     ])
-    if need_sudo():
-        docker_cmd.insert(0, "sudo")
-    p = Popen(docker_cmd)
-    p.wait()
+    check_call(docker_cmd)
 
 
 def run_local_command(args):
     """`telepresence run-local`."""
+    command = docker_command() + [
+        "run", "--rm",
+        "--net=container:" + args.deployment,
+        "--env-file={}.env".format(args.deployment),
+    ] + args.docker_run_args
+    check_call(command)
 
 
 def main():
