@@ -167,4 +167,5 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
 
 
 if __name__ == '__main__':
-    main(int(argv[1]), argv[2], argv[3].split(","), argv[4].split(","))
+    main(int(argv[1]), argv[2], argv[3].split(",") if argv[3] else [],
+         argv[4].split(",") if argv[4] else [])
