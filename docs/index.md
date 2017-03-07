@@ -73,10 +73,11 @@ Let's try Telepresence out quickly.
 The basic way of using the command line tool is `telepresence <args> -- <args for docker run>`.
 A local container you specify in the second set of arguments will be run in a way that makes it similar to the remote Kubernetes cluster.
 
+When running `telepresence` you need a Kubernetes `Deployment` to run the proxy, so we'll use `--new-deployment quickstart` to create one.
 To begin with, environment variables will match those in the remote deployment, including Kubernetes `Service` addresses:
 
 ```console
-host$ telepresence --new-deployment -- --rm alpine env
+host$ telepresence --new-deployment quickstart -- --rm alpine env
 KUBERNETES_SERVICE_HOST=127.0.0.1
 KUBERNETES_SERVICE_PORT=60001
 ...
@@ -85,7 +86,7 @@ We can send a request to the Kubernetes API service and it will get proxied, and
 (You'll get "unauthorized" in the response because you haven't provided credentials.)
 
 ```console
-host$ telepresence --new-deployment -- --rm -i -t alpine /bin/sh
+host$ telepresence --new-deployment quickstart -- --rm -i -t alpine /bin/sh
 localcontainer$ apk add --no-cache curl  # install curl
 localcontainer$ curl -k -v \
     "https://{KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}/"
@@ -114,7 +115,7 @@ We can mount the current directory as a Docker volume, and run a webserver on po
 
 ```console
 host$ echo "hello!" > file.txt
-host$ telepresence --new-deployment -- \
+host$ telepresence --new-deployment quickstart -- \
       -v $PWD:/files -i -t python:3-slim /bin/sh   # <-- passed to `docker run`
 localcontainer$ cd /files
 localcontainer$ ls
@@ -140,14 +141,14 @@ In a different terminal we figure out the name of the pod running our Telepresen
 
 ```console
 $ kubectl get pod
-NAME                                 READY     STATUS         RESTARTS   AGE
-deployment-12343-3572484030-7k4bk    1/1       Running        0          1m
+NAME                           READY     STATUS         RESTARTS   AGE
+quickstart-3572484030-7k4bk    1/1       Running        0          1m
 ```
 
-Now we port forward local port 1234 to port 8080 on that pod:
+Now we port forward local port 1234 to port 8080 on that pod (make sure to change the command-line to match the pod name in your output):
 
 ```console
-$ kubectl port-forward deployment-12343-3572484030-7k4bk 1234:8080 &
+$ kubectl port-forward quickstart-3572484030-7k4bk 1234:8080 &
 ```
 
 And now we can send requests, via the remote Kubernetes cluster, back to our local code:

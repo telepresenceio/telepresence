@@ -32,9 +32,7 @@ def parse_args():
               "datawire/telepresence-k8s image is running."))
     group_deployment.add_argument(
         '--new-deployment',
-        action="store_const",
-        const=None,
-        dest="deployment",
+        dest="new_deployment",
         help=("Create a new Deployment in Kubernetes where the "
               "datawire/telepresence-k8s image will run."))
     parser.add_argument(
@@ -75,18 +73,22 @@ def stop_proxy(container_id):
 def start_proxy(args):
     """`telepresence start`."""
     if args.deployment is None:
-        # This implies --new-deployment, so we generate a new name and then
-        # start the Deployment:
-        args.deployment = "deployment-" + str(randint(1, 999999))
+        # This implies --new-deployment:
+        args.deployment = args.new_deployment
+
+        def remove_existing_deployment():
+            check_output(["kubectl", "delete", "--ignore-not-found",
+                          "service,deployment", args.deployment])
+        atexit.register(remove_existing_deployment)
+        remove_existing_deployment()
         command = [
-            "kubectl", "run", "--generator", "deployment/v1beta1",
+            "kubectl", "run", "--generator", "deployment/v1beta1", "--expose",
             args.deployment, "--image=datawire/telepresence-k8s:" + VERSION
         ]
         for port in args.expose:
             command.append("--port={}".format(port))
-        check_call(command)
+        check_output(command)
         sleep(5) # XXX oh god
-        # XXX cleanup Deployment at shutdown?
 
     home_path = os.path.expanduser("~")
     docker_cmd = docker_command() + [
