@@ -82,11 +82,13 @@ def start_proxy(args):
         atexit.register(remove_existing_deployment)
         remove_existing_deployment()
         command = [
-            "kubectl", "run", "--generator", "deployment/v1beta1", "--expose",
+            "kubectl", "run", "--generator", "deployment/v1beta1",
             args.deployment, "--image=datawire/telepresence-k8s:" + VERSION
         ]
         for port in args.expose:
             command.append("--port={}".format(port))
+        if args.expose:
+            command.append("--expose")
         check_output(command)
         sleep(5) # XXX oh god
 
