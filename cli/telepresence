@@ -85,7 +85,7 @@ def start_command(args):
     if args.deployment is None:
         # This implies --new-deployment, so we generate a new name and then
         # start the Deployment:
-        args.deployment = "deployment-" + str(randint(1, 9999999999))
+        args.deployment = "deployment-" + str(randint(1, 999999))
         command = [
             "kubectl", "run", "--generator", "deployment/v1beta1",
             args.deployment, "--image=datawire/telepresence-k8s:" + VERSION
