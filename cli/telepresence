@@ -18,7 +18,7 @@ from subprocess import check_call, check_output, Popen
 from tempfile import mkdtemp
 from time import sleep
 
-VERSION = "0.5"
+VERSION = "0.6"
 
 
 def parse_args():
