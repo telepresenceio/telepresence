@@ -9,11 +9,13 @@ Should be written to support Python 2 and Python 3 for ease of distribution.
 from __future__ import print_function
 
 import argparse
+import atexit
 import os
 import os.path
 import sys
 from random import randint
-from subprocess import check_call
+from subprocess import check_call, check_output, Popen
+from tempfile import mkdtemp
 from time import sleep
 
 VERSION = "0.5"
@@ -23,54 +25,35 @@ def parse_args():
     """Create a new ArgumentParser and parse sys.argv."""
     parser = argparse.ArgumentParser()
     parser.add_argument('--version', action='version', version=VERSION)
-    subparsers = parser.add_subparsers(title="Subcommands", dest="command")
-    start_parser = subparsers.add_parser(
-        "start", help="Start the proxy to the remote Kubernetes cluster.")
-    group_deployment = start_parser.add_mutually_exclusive_group(required=True)
+    group_deployment = parser.add_mutually_exclusive_group(required=True)
     group_deployment.add_argument(
         "--deployment",
         help=("The name of the Kubernetes Deployment where the " +
               "datawire/telepresence-k8s image is running."))
     group_deployment.add_argument(
         '--new-deployment',
-        action="store_const",
-        const=None,
-        dest="deployment",
+        dest="new_deployment",
         help=("Create a new Deployment in Kubernetes where the "
               "datawire/telepresence-k8s image will run."))
-    start_parser.add_argument(
+    parser.add_argument(
         "--expose",
         type=int,
         action='append',
         default=[],
         help=("Port number in local container that will be " +
               "exposed to Kubernetes."))
-    start_parser.add_argument(
+    parser.add_argument(
         "--proxy",
         action='append',
         default=[],
         help="<host>:<port> that will be proxied via Kubernetes.")
-    runlocal_parser = subparsers.add_parser(
-        "run-local",
-        help=("Run a command locally in Docker in a way that is "
-              "exposed to remote Kubernetes. Accepts `docker run` "
-              "command-line arguments."))
-    runlocal_parser.add_argument(
-        "--deployment",
-        required=True,
-        help=("The name of the Kubernetes Deployment where the " +
-              "datawire/telepresence-k8s image is running."))
-    runlocal_parser.add_argument(
+    parser.add_argument(
         "docker_run_args",
         metavar="DOCKER-RUN-ARGUMENTS",
         nargs=argparse.REMAINDER,
         help=("All remaininding arguments, to be passed to "
               "`docker run`, e.g. '-i -t alpine:3.5 /bin/sh'."))
-    arguments = sys.argv[1:]
-    # XXX argparse sucks, need to switch to different library
-    if len(arguments) > 3 and arguments[:2] == ["run-local", "--deployment"]:
-        arguments.insert(3, "--")
-    return parser.parse_args(args=arguments)
+    return parser.parse_args()
 
 
 def docker_command():
@@ -81,29 +64,39 @@ def docker_command():
         return ["docker"]
 
 
-def start_command(args):
+def stop_proxy(container_id):
+    if sys.stderr.isatty():
+        print("Shutting proxy down...", file=sys.stderr)
+    check_output(docker_command() + ["stop", container_id])
+
+
+def start_proxy(args):
     """`telepresence start`."""
     if args.deployment is None:
-        # This implies --new-deployment, so we generate a new name and then
-        # start the Deployment:
-        args.deployment = "deployment-" + str(randint(1, 999999))
+        # This implies --new-deployment:
+        args.deployment = args.new_deployment
+
+        def remove_existing_deployment():
+            check_output(["kubectl", "delete", "--ignore-not-found",
+                          "service,deployment", args.deployment])
+        atexit.register(remove_existing_deployment)
+        remove_existing_deployment()
         command = [
-            "kubectl", "run", "--generator", "deployment/v1beta1",
+            "kubectl", "run", "--generator", "deployment/v1beta1", "--expose",
             args.deployment, "--image=datawire/telepresence-k8s:" + VERSION
         ]
         for port in args.expose:
             command.append("--port={}".format(port))
-        check_call(command)
+        check_output(command)
         sleep(5) # XXX oh god
-        # XXX cleanup Deployment at shutdown?
 
     home_path = os.path.expanduser("~")
     docker_cmd = docker_command() + [
         "run",
+        # Run in background:
+        "--detach",
         # Delete when exited:
         "--rm",
-        # Name matches Deployment name:
-        "--name={}".format(args.deployment),
         # Mount $HOME so we have access to kubectl configuration:
         "-v", home_path + ":/opt:ro",
         # Minikube looks in absolute path for home, so also mount in way that
@@ -111,10 +104,12 @@ def start_command(args):
         "-v", "{}:{}:ro".format(home_path, home_path),
     ]
 
+    tempdir = mkdtemp()
+
     docker_cmd.extend([
         # Mount local directory, where env file will be written out:
         "-v",
-        os.getcwd() + ":/output",
+        tempdir + ":/output",
         # Name of container:
         "datawire/telepresence-local:" + VERSION,
         # Arguments: <uid>, <deployment-name>
@@ -124,29 +119,33 @@ def start_command(args):
         ",".join(map(str, args.expose)),
         ",".join(args.proxy)
     ])
-    check_call(docker_cmd)
+    container_id = check_output(docker_cmd).strip()
+    atexit.register(stop_proxy, container_id)
+    return tempdir, container_id
 
 
-def run_local_command(args):
+def run_local_command(args, tempdir, container_id):
     """`telepresence run-local`."""
     # XXX argparse sucks need to switch to something else
     if args.docker_run_args and args.docker_run_args[0] == "--":
         args.docker_run_args.pop(0)
+    # Wait for proxy container to write out env file, indicating we're good to
+    # go:
+    out_env = os.path.join(tempdir, "out.env")
+    while not os.path.exists(out_env):
+        sleep(1)
     command = docker_command() + [
         "run",
-        "--net=container:" + args.deployment,
-        "--env-file={}.env".format(args.deployment),
+        "--net=container:" + container_id,
+        "--env-file={}".format(out_env)
     ] + args.docker_run_args
-    check_call(command)
+    Popen(command).wait()
 
 
 def main():
     args = parse_args()
-
-    if args.command == "start":
-        start_command(args)
-    elif args.command == "run-local":
-        run_local_command(args)
+    tempdir, container_id = start_proxy(args)
+    run_local_command(args, tempdir, container_id)
 
 
 if __name__ == '__main__':

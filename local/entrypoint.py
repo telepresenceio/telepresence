@@ -8,8 +8,8 @@ abstractions.
 """
 
 from json import loads
-from os import setuid, environ
-from subprocess import Popen, STDOUT, check_output
+from os import setuid, environ, rename
+from subprocess import Popen, check_output
 from sys import argv, stdout, exit
 import time
 
@@ -68,10 +68,11 @@ def get_env_variables(pod_name):
     return result
 
 
-def write_env(pod_name, deployment_name):
-    with open("/output/{}.env".format(deployment_name), "w") as f:
+def write_env(pod_name):
+    with open("/output/out.env.tmp", "w") as f:
         for key, value in get_env_variables(pod_name).items():
             f.write("{}={}\n".format(key, value))
+    rename("/output/out.env.tmp", "/output/out.env")
 
 
 def write_etc_hosts(additional_hosts):
@@ -149,17 +150,16 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
             "ssh", "-q",
             "-oStrictHostKeyChecking=no", "root@localhost",
             "-L", "{}:{}:{}".format(port, host, port), "-N"]))
-    # 4. write docker envfile
-    setuid(uid)
-    write_env(pod_name, deployment_name)
-    # 5. start proxies for Services:
+    # 4. start proxies for Services:
     # XXX maybe just do everything via SSH, now that we have it?
     for port in range(2000, 2020):
         # XXX what if there is more than 20 services
         p = Popen(["kubectl", "port-forward", pod_name, str(port)])
         processes.append(p)
     time.sleep(5)
-    print_status(deployment_name, local_exposed_ports)
+    # 5. write docker envfile, which tells CLI we're ready:
+    setuid(uid)
+    write_env(pod_name)
     for p in processes:
         p.wait()
 
