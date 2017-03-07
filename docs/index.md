@@ -124,7 +124,7 @@ localcontainer$ python3 -m http.server 8080
 Serving HTTP on 0.0.0.0 port 8080 ...
 ```
 
-At this point the code will be accessible from inside the Kubernetes cluster:
+If you leave the `telepresence` process running your code will be accessible from inside the Kubernetes cluster:
 
 <div class="mermaid">
 graph TD
@@ -136,29 +136,15 @@ graph TD
   end
 </div>
 
-Let's send a request to the remote pod.
-In a different terminal we figure out the name of the pod running our Telepresence proxy:
+Let's send a request to the remote pod to demonstrate that.
+In a different terminal we can run a pod on the Kubernetes cluster and see that it can access the code running on your personal computer, via the Telepresence-created `Service` named `quickstart`:
 
 ```console
-$ kubectl get pod
-NAME                           READY     STATUS         RESTARTS   AGE
-quickstart-3572484030-7k4bk    1/1       Running        0          1m
-```
-
-Now we port forward local port 1234 to port 8080 on that pod (make sure to change the command-line to match the pod name in your output):
-
-```console
-$ kubectl port-forward quickstart-3572484030-7k4bk 1234:8080 &
-```
-
-And now we can send requests, via the remote Kubernetes cluster, back to our local code:
-
-```console
-$ curl http://localhost:1234/file.txt
+$ kubectl run --attach -i -t test --generator=job/v1 --image=alpine --restart Never --command /bin/sh
+k8s-pod# apk add --no-cache curl
+k8s-pod# curl http://quickstart.default.svc.cluster.local:8080/file.txt
 hello!
 ```
-
-More usefully, if you have a `Service` configured to point at the pod running the proxy you will be able to access your local code from other places in the Kubernetes cluster.
 
 ## In-depth usage
 
