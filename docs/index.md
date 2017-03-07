@@ -81,7 +81,7 @@ Given that deployment name we can run Docker commands locally that are exposed t
 We'll do it with a shell, so we can try different things.
 `telepresence run-local` is a thin wrapper around `docker run`, so we can use standard `docker run` arguments.
 
-We'll start a container using the `alpine` image.
+In a different terminal we'll start a container using the `alpine` image.
 As you can see below, environment variables are set similar to those set in Kubernetes pods to point at a `Service`.
 We can send a request to that service and it will get proxied, and we can also use hostnames:
 
@@ -113,18 +113,18 @@ host$
 We've sent a request to the Kubernetes API service, and we could similarly talk to any `Service` in the remote Kubernetes cluster, even though the container is running locally.
 
 Finally, since we exposed port 8080 on the remote cluster, we can run a local server (within the container) that listens on port 8080 and it will be exposed via port 8080 inside the Kubernetes pods we've created.
-Let's say we have a server `myserver.py` in the local directory.
-We can mount the current directory as a Docker volume, and run that server on port 8080:
+Let's say we want to serve some static files from your local machine:
+We can mount the current directory as a Docker volume, and run a webserver on port 8080:
 
 ```console
+host$ echo "hello!" > file.txt
 host$ telepresence run-local --deployment deployment-12343 \
-      -v $PWD:/code -i -t alpine /bin/sh   # <-- passed to `docker run`
-localcontainer$ ls /code
-myserver.py
-requirements.txt
-localcontainer$ apk add --no-cache python3
-localcontainer$ pip3 install -r /code/requirements.txt
-localcontainer$ python3 /code/myserver.py --port=8080
+      -v $PWD:/files -i -t python:3-slim /bin/sh   # <-- passed to `docker run`
+localcontainer$ cd /files
+localcontainer$ ls
+file.txt
+localcontainer$ python3 -m http.server 8080
+Serving HTTP on 0.0.0.0 port 8080 ...
 ```
 
 At this point the code will be accessible from inside the Kubernetes cluster:
@@ -138,6 +138,30 @@ graph TD
     client-.-proxy["k8s.Pod: Telepresence proxy, listening on port 8080"]
   end
 </div>
+
+Let's send a request to the remote pod.
+In a different terminal we figure out the name of the pod running our Telepresence proxy:
+
+```console
+$ kubectl get pod
+NAME                                 READY     STATUS         RESTARTS   AGE
+deployment-12343-3572484030-7k4bk    1/1       Running        0          1m
+```
+
+Now we port forward local port 1234 to port 8080 on that pod:
+
+```console
+$ kubectl port-forward deployment-12343-3572484030-7k4bk 1234:8080 &
+```
+
+And now we can send requests, via the remote Kubernetes cluster, back to our local code:
+
+```console
+$ curl http://localhost:1234/file.txt
+hello!
+```
+
+More usefully, if you have a `Service` configured to point at the pod running the proxy you will be able to access your local code from other places in the Kubernetes cluster.
 
 ## In-depth usage
 
