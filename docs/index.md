@@ -67,9 +67,107 @@ Then move telepresence to somewhere in your `$PATH`, e.g.:
 mv telepresence /usr/local/bin
 ```
 
-## How to use Telepresence
+## Quickstart
 
-Continuing the example above, your Kubernetes configuration will typically have a `Service`:
+Let's try Telepresence out quickly.
+First, we'll connect to the Kubernetes cluster:
+
+```console
+host$ telepresence start --new-deployment --expose 8080
+Generated new deployment 'deployment-12343'.
+```
+
+Given that deployment name we can run Docker commands locally that are exposed to the remote cluster.
+We'll do it with a shell, so we can try different things.
+`telepresence run-local` is a thin wrapper around `docker run`, so we can use standard `docker run` arguments.
+
+In a different terminal we'll start a container using the `alpine` image.
+As you can see below, environment variables are set similar to those set in Kubernetes pods to point at a `Service`.
+We can send a request to that service and it will get proxied, and we can also use hostnames:
+
+```console
+host$ telepresence run-local --deployment deployment-12343 \
+      -i -t alpine /bin/sh  # <-- arguments passed to `docker run`
+localcontainer$ env
+KUBERNETES_SERVICE_HOST=127.0.0.1
+KUBERNETES_SERVICE_PORT=60001
+localcontainer$ apk add --no-cache curl  # install curl
+localcontainer$ curl -k -v "https://127.0.0.1:60001/"
+> GET / HTTP/1.1
+> User-Agent: curl/7.38.0
+> Host: 10.0.0.1
+> Accept: */*
+> 
+< HTTP/1.1 401 Unauthorized
+< Content-Type: text/plain; charset=utf-8
+< X-Content-Type-Options: nosniff
+< Date: Mon, 06 Mar 2017 19:19:44 GMT
+< Content-Length: 13
+Unauthorized
+localcontainer$ curl -k "https://kubernetes.default.svc.cluster.local/"
+Unauthorized
+localcontainer$ exit
+host$
+```
+
+We've sent a request to the Kubernetes API service, and we could similarly talk to any `Service` in the remote Kubernetes cluster, even though the container is running locally.
+
+Finally, since we exposed port 8080 on the remote cluster, we can run a local server (within the container) that listens on port 8080 and it will be exposed via port 8080 inside the Kubernetes pods we've created.
+Let's say we want to serve some static files from your local machine:
+We can mount the current directory as a Docker volume, and run a webserver on port 8080:
+
+```console
+host$ echo "hello!" > file.txt
+host$ telepresence run-local --deployment deployment-12343 \
+      -v $PWD:/files -i -t python:3-slim /bin/sh   # <-- passed to `docker run`
+localcontainer$ cd /files
+localcontainer$ ls
+file.txt
+localcontainer$ python3 -m http.server 8080
+Serving HTTP on 0.0.0.0 port 8080 ...
+```
+
+At this point the code will be accessible from inside the Kubernetes cluster:
+
+<div class="mermaid">
+graph TD
+  subgraph Laptop
+    code["myserver.py on port 8080, in container"]---client[Telepresence client]
+  end
+  subgraph Kubernetes in Cloud
+    client-.-proxy["k8s.Pod: Telepresence proxy, listening on port 8080"]
+  end
+</div>
+
+Let's send a request to the remote pod.
+In a different terminal we figure out the name of the pod running our Telepresence proxy:
+
+```console
+$ kubectl get pod
+NAME                                 READY     STATUS         RESTARTS   AGE
+deployment-12343-3572484030-7k4bk    1/1       Running        0          1m
+```
+
+Now we port forward local port 1234 to port 8080 on that pod:
+
+```console
+$ kubectl port-forward deployment-12343-3572484030-7k4bk 1234:8080 &
+```
+
+And now we can send requests, via the remote Kubernetes cluster, back to our local code:
+
+```console
+$ curl http://localhost:1234/file.txt
+hello!
+```
+
+More usefully, if you have a `Service` configured to point at the pod running the proxy you will be able to access your local code from other places in the Kubernetes cluster.
+
+## In-depth usage
+
+Let's look in a bit more detail at using Telepresence.
+
+Your Kubernetes configuration will typically have a `Service`:
 
 ```yaml
 apiVersion: v1
@@ -154,7 +252,7 @@ $ kubectl apply -f telepresence-deployment.yaml
 
 You want to do the following:
 
-1. Expose port 8080 in your code to Kuberentes.
+1. Expose port 8080 in your code to Kubernetes.
 2. Proxy `somewhere.someplace.cloud.example.com` port 5432 via Kubernetes, since it's probably not accessible outside of your cluster.
 3. Connect specifically to the `servicename-deployment` pod you created above, in case there are multiple Telepresence users in the cluster.
 
@@ -162,9 +260,9 @@ Services `thing1` and `thing2` will be available to your code automatically so n
 You can do so with the following command line:
 
 ```console
-$ telepresence --proxy somewhere.someplace.cloud.example.com:5432 \
-               --expose 8080 \
-               servicename-deployment
+$ telepresence start --deployment servicename-deployment \
+               --proxy somewhere.someplace.cloud.example.com:5432 \
+               --expose 8080
 A new environment file named `servicename-deployment.env` was generated.
 ```
 
@@ -176,6 +274,14 @@ You can now run your own code locally inside Docker, attaching it to the network
 $ docker run --net=container:servicename-deployment \ 
              --env-file=servicename-deployment.env \
              examplecom/servicename:latest
+```
+
+Or, you can use the simpler Telepresence wrapper for `docker run`:
+
+```console
+$ telepresence run-local --deployment servicename-deployment \
+               # `docker run` arguments: \
+               examplecom/servicename:latest
 ```
 
 Your code is now connected to the remote Kubernetes cluster.
@@ -213,6 +319,7 @@ Currently unsupported:
 * UDP messages in any direction.
 * For proxied addresses, only one destination per specific port number is currently supported.
   E.g. you can't proxy `remote1.example.com:5432` and `remote2.example.com:5432` at the same time.
+* Access to volumes, including those for `Secret` and `ConfigMap` Kubernetes objects.
 
 ## Help us improve Telepresence!
 
