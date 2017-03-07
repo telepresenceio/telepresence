@@ -97,26 +97,20 @@ def start_command(args):
         sleep(5) # XXX oh god
         # XXX cleanup Deployment at shutdown?
 
-    minikube_path = os.path.expanduser("~/.minikube")
-    kube_path = os.path.expanduser("~/.kube")
-
+    home_path = os.path.expanduser("~")
     docker_cmd = docker_command() + [
         "run",
         # Delete when exited:
         "--rm",
         # Name matches Deployment name:
         "--name={}".format(args.deployment),
-        # Mount .kube so we have access to kubectl configuration:
-        "-v",
-        kube_path + ":/opt/.kube:ro",
+        # Mount $HOME so we have access to kubectl configuration:
+        "-v", home_path + ":/opt:ro",
+        # Minikube looks in absolute path for home, so also mount in way that
+        # matches host path:
+        "-v", "{}:{}:ro".format(home_path, home_path),
     ]
 
-    if os.path.exists(minikube_path):
-        docker_cmd.extend([
-            # Mount minikube directory, if available, for CA certificates:
-            "-v",
-            "{}:{}:ro".format(minikube_path, minikube_path),
-        ])
     docker_cmd.extend([
         # Mount local directory, where env file will be written out:
         "-v",
