@@ -52,7 +52,7 @@ You will need the following available on your machine:
 * Docker.
 * Python (2 or 3). This should be available on any Linux or OS X machine.
 * Access to your Kubernetes cluster, with local credentials on your machine.
-  You can do test this by running `kubectl get pod` - if this works you're all set.
+  You can do this test by running `kubectl get pod` - if this works you're all set.
 
 In order to install, run the following command:
 
