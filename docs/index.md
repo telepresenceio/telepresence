@@ -83,7 +83,8 @@ We'll do it with a shell, so we can try different things.
 
 In a different terminal we'll start a container using the `alpine` image.
 As you can see below, environment variables are set similar to those set in Kubernetes pods to point at a `Service`.
-We can send a request to that service and it will get proxied, and we can also use hostnames:
+We can send a request to the Kubernetes API service and it will get proxied, and we can also use hostnames.
+(You'll get "unauthorized" in the response because you haven't provided credentials.)
 
 ```console
 host$ telepresence run-local --deployment deployment-12343 \
@@ -92,7 +93,7 @@ localcontainer$ env
 KUBERNETES_SERVICE_HOST=127.0.0.1
 KUBERNETES_SERVICE_PORT=60001
 localcontainer$ apk add --no-cache curl  # install curl
-localcontainer$ curl -k -v "https://127.0.0.1:60001/"
+localcontainer$ curl -k -v "https://{KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}/"
 > GET / HTTP/1.1
 > User-Agent: curl/7.38.0
 > Host: 10.0.0.1
@@ -110,7 +111,7 @@ localcontainer$ exit
 host$
 ```
 
-We've sent a request to the Kubernetes API service, and we could similarly talk to any `Service` in the remote Kubernetes cluster, even though the container is running locally.
+We've sent a request to the Kubernetes API service, but we could similarly talk to any `Service` in the remote Kubernetes cluster, even though the container is running locally.
 
 Finally, since we exposed port 8080 on the remote cluster, we can run a local server (within the container) that listens on port 8080 and it will be exposed via port 8080 inside the Kubernetes pods we've created.
 Let's say we want to serve some static files from your local machine:
@@ -132,7 +133,7 @@ At this point the code will be accessible from inside the Kubernetes cluster:
 <div class="mermaid">
 graph TD
   subgraph Laptop
-    code["myserver.py on port 8080, in container"]---client[Telepresence client]
+    code["python HTTP server on port 8080, in container"]---client[Telepresence client]
   end
   subgraph Kubernetes in Cloud
     client-.-proxy["k8s.Pod: Telepresence proxy, listening on port 8080"]
