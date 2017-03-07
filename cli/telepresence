@@ -9,10 +9,12 @@ Should be written to support Python 2 and Python 3 for ease of distribution.
 from __future__ import print_function
 
 import argparse
+import atexit
 import os
 import os.path
+import sys
 from random import randint
-from subprocess import check_call
+from subprocess import check_call, check_output, Popen
 from tempfile import mkdtemp
 from time import sleep
 
@@ -64,7 +66,13 @@ def docker_command():
         return ["docker"]
 
 
-def start_command(args):
+def stop_proxy(container_id):
+    if sys.stderr.isatty():
+        print("Shutting proxy down...", file=sys.stderr)
+    check_output(docker_command() + ["stop", container_id])
+
+
+def start_proxy(args):
     """`telepresence start`."""
     if args.deployment is None:
         # This implies --new-deployment, so we generate a new name and then
@@ -83,10 +91,10 @@ def start_command(args):
     home_path = os.path.expanduser("~")
     docker_cmd = docker_command() + [
         "run",
+        # Run in background:
+        "--detach",
         # Delete when exited:
         "--rm",
-        # Name matches Deployment name:
-        "--name={}".format(args.deployment),
         # Mount $HOME so we have access to kubectl configuration:
         "-v", home_path + ":/opt:ro",
         # Minikube looks in absolute path for home, so also mount in way that
@@ -109,11 +117,12 @@ def start_command(args):
         ",".join(map(str, args.expose)),
         ",".join(args.proxy)
     ])
-    check_call(docker_cmd)
-    return tempdir
+    container_id = check_output(docker_cmd).strip()
+    atexit.register(stop_proxy, container_id)
+    return tempdir, container_id
 
 
-def run_local_command(args, tempdir):
+def run_local_command(args, tempdir, container_id):
     """`telepresence run-local`."""
     # XXX argparse sucks need to switch to something else
     if args.docker_run_args and args.docker_run_args[0] == "--":
@@ -125,16 +134,16 @@ def run_local_command(args, tempdir):
         sleep(1)
     command = docker_command() + [
         "run",
-        "--net=container:" + args.deployment,
+        "--net=container:" + container_id,
         "--env-file={}".format(out_env)
     ] + args.docker_run_args
-    check_call(command)
+    Popen(command).wait()
 
 
 def main():
     args = parse_args()
-    tempdir = start_command(args)
-    run_local_command(args, tempdir)
+    tempdir, container_id = start_proxy(args)
+    run_local_command(args, tempdir, container_id)
 
 
 if __name__ == '__main__':
