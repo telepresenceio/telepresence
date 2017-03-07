@@ -11,6 +11,7 @@ from __future__ import print_function
 import argparse
 import os
 import os.path
+import sys
 from random import randint
 from subprocess import check_call
 from time import sleep
@@ -64,7 +65,11 @@ def parse_args():
         nargs=argparse.REMAINDER,
         help=("All remaininding arguments, to be passed to "
               "`docker run`, e.g. '-i -t alpine:3.5 /bin/sh'."))
-    return parser.parse_args()
+    arguments = sys.argv[1:]
+    # XXX argparse sucks, need to switch to different library
+    if len(arguments) > 3 and arguments[:2] == ["run-local", "--deployment"]:
+        arguments.insert(3, "--")
+    return parser.parse_args(args=arguments)
 
 
 def docker_command():
@@ -129,8 +134,11 @@ def start_command(args):
 
 def run_local_command(args):
     """`telepresence run-local`."""
+    # XXX argparse sucks need to switch to something else
+    if args.docker_run_args and args.docker_run_args[0] == "--":
+        args.docker_run_args.pop(0)
     command = docker_command() + [
-        "run", "--rm",
+        "run",
         "--net=container:" + args.deployment,
         "--env-file={}.env".format(args.deployment),
     ] + args.docker_run_args
