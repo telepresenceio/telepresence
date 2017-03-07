@@ -16,7 +16,7 @@ from random import randint
 from subprocess import check_call
 from time import sleep
 
-VERSION = "0.4"
+VERSION = "0.5"
 
 
 def parse_args():
