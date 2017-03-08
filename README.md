@@ -11,4 +11,4 @@ Telepresence is part of the [Blackbird Project](https://www.datawire.io/blackbir
 
 **[Documentation - start here!](https://datawire.github.io/telepresence)**
 
-**[Discuss Telepresence on Slack](http://blackbird-oss.herokuapp.com/)
+[Discuss Telepresence on Slack](http://blackbird-oss.herokuapp.com/)
