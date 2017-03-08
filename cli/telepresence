@@ -73,6 +73,8 @@ def stop_proxy(container_id):
 
 def start_proxy(args):
     """`telepresence start`."""
+    if sys.stderr.isatty():
+        print("Starting proxy...", file=sys.stderr)
     if args.deployment is None:
         # This implies --new-deployment:
         args.deployment = args.new_deployment
@@ -137,6 +139,8 @@ def run_local_command(args, tempdir, container_id):
     out_env = os.path.join(tempdir, "out.env")
     while not os.path.exists(out_env):
         sleep(1)
+    if sys.stderr.isatty():
+        print("Starting local container...", file=sys.stderr)
     command = docker_command() + [
         "run",
         "--net=container:" + container_id,
