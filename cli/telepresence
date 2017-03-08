@@ -30,7 +30,7 @@ else:
     unicode = str
 
 
-__version__ = "0.6"
+__version__ = "0.7"
 
 
 def parse_args():
