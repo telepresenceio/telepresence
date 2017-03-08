@@ -179,7 +179,7 @@ Let's send a request to the remote pod to demonstrate that.
 In a different terminal we can run a pod on the Kubernetes cluster and see that it can access the code running on your personal computer, via the Telepresence-created `Service` named `quickstart`:
 
 ```console
-$ kubectl run --attach -i -t test --generator=job/v1 \
+$ kubectl run --attach -i -t test --generator=job/v1 --rm \
           --image=alpine --restart Never --command /bin/sh
 k8s-pod# apk add --no-cache curl
 k8s-pod# curl http://quickstart.default.svc.cluster.local:8080/file.txt
