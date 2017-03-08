@@ -13,18 +13,30 @@ import atexit
 import os
 import os.path
 import sys
-from random import randint
-from subprocess import check_call, check_output, Popen
+from functools import wraps
+from subprocess import check_output, Popen
 from tempfile import mkdtemp
 from time import sleep
+from traceback import print_exc
+import webbrowser
+if sys.version_info.major == 2:
+    from urllib import quote_plus
+    from StringIO import StringIO
+    input = raw_input
+else:
+    # Python 3
+    from io import StringIO
+    from urllib.parse import quote_plus
+    unicode = str
 
-VERSION = "0.6"
+
+__version__ = "0.6"
 
 
 def parse_args():
     """Create a new ArgumentParser and parse sys.argv."""
     parser = argparse.ArgumentParser()
-    parser.add_argument('--version', action='version', version=VERSION)
+    parser.add_argument('--version', action='version', version=__version__)
     group_deployment = parser.add_mutually_exclusive_group(required=True)
     group_deployment.add_argument(
         "--deployment",
@@ -86,7 +98,7 @@ def start_proxy(args):
         remove_existing_deployment()
         command = [
             "kubectl", "run", "--generator", "deployment/v1beta1",
-            args.deployment, "--image=datawire/telepresence-k8s:" + VERSION
+            args.deployment, "--image=datawire/telepresence-k8s:" + __version__
         ]
         for port in args.expose:
             command.append("--port={}".format(port))
@@ -116,7 +128,7 @@ def start_proxy(args):
         "-v",
         tempdir + ":/output",
         # Name of container:
-        "datawire/telepresence-local:" + VERSION,
+        "datawire/telepresence-local:" + __version__,
         # Arguments: <uid>, <deployment-name>
         str(os.getuid()),
         args.deployment,
@@ -149,10 +161,72 @@ def run_local_command(args, tempdir, container_id):
     Popen(command).wait()
 
 
+BUG_REPORT_TEMPLATE = u"""\
+### What were you trying to do?
+
+(please tell us)
+
+### What did you expect to happen?
+
+(please tell us)
+
+### What happened instead?
+
+(please tell us - the traceback is automatically included, see below)
+
+### Automatically included information
+
+Command line: `{}`
+Version: `{}`
+Python version: `{}`
+OS: `{}`
+Traceback:
+
+```
+{}
+```
+"""
+
+
+def handle_unexpected_errors(f):
+    """Decorator that catches unexpected errors."""
+
+    @wraps(f)
+    def call_f(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except KeyboardInterrupt:
+            raise SystemExit(0)
+        except Exception as e:
+            errorf = StringIO()
+            print_exc(file=errorf)
+            error = errorf.getvalue()
+            print(
+                "\nLooks like there's a bug in our code. Sorry about that!\n\n"
+                "Here's the traceback:\n\n" + error + "\n")
+            if input(
+                    "Would you like to file an issue in our issue tracker?"
+                    " We'd really appreciate the help improving our product. [Y/n]: ",
+                    ).lower() in ("y", ""):
+                url = "https://github.com/datawire/telepresence/issues/new?body="
+                body = quote_plus(BUG_REPORT_TEMPLATE.format(
+                    sys.argv, __version__, sys.version,
+                    unicode(check_output(["uname", "-a"]), "utf-8"), error))
+                webbrowser.open_new(url + body)
+            else:
+                raise SystemExit(1)
+
+    return call_f
+
+
 def main():
     args = parse_args()
-    tempdir, container_id = start_proxy(args)
-    run_local_command(args, tempdir, container_id)
+
+    @handle_unexpected_errors
+    def go():
+        tempdir, container_id = start_proxy(args)
+        run_local_command(args, tempdir, container_id)
+    go()
 
 
 if __name__ == '__main__':
