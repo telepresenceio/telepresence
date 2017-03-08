@@ -39,6 +39,7 @@ def test_fromcluster():
     Start webserver that serves files from this directory. Run HTTP query
     against it on the Kubernetes cluster, compare to real file.
     """
+    # XXX leaking docker processes, try to figure out why
     p = Popen(
         [
             "telepresence", "--new-deployment", "fromclustertests", "--expose",
@@ -55,3 +56,4 @@ def test_fromcluster():
     ])
     assert result == (DIRECTORY / "test_endtoend.py").read_bytes()
     p.kill()
+    p.wait()
