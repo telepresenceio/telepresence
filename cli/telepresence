@@ -136,7 +136,7 @@ def start_proxy(args):
         ",".join(map(str, args.expose)),
         ",".join(args.proxy)
     ])
-    container_id = check_output(docker_cmd).strip()
+    container_id = unicode(check_output(docker_cmd).strip(), "utf-8")
     atexit.register(stop_proxy, container_id)
     return tempdir, container_id
 
