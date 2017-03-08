@@ -74,10 +74,12 @@ The basic way of using the command line tool is `telepresence (--deployment name
 This will connect you to a remote Kubernetes cluster via a `Deployment` (an existing or new one) and run a local Docker container that is proxied into the remote clsuter.
 
 To get started we'll use `--new-deployment quickstart` to create a new `Deployment` and matching `Service`.
-The Docker container you run will get environment variables that match those in the remote deployment, including Kubernetes `Service` addresses:
+The Docker container you run will get environment variables that match those in the remote deployment, including Kubernetes `Service` addresses.
+We can see this by running the `env` command inside an Alpine Linux image:
 
 ```console
-host$ telepresence --new-deployment quickstart --docker-run --rm alpine env
+host$ telepresence --new-deployment quickstart --docker-run \
+      --rm alpine env
 KUBERNETES_SERVICE_HOST=127.0.0.1
 KUBERNETES_SERVICE_PORT=60001
 ...
@@ -90,7 +92,7 @@ host$ telepresence --new-deployment quickstart --docker-run \
       --rm -i -t alpine /bin/sh
 localcontainer$ apk add --no-cache curl  # install curl
 localcontainer$ curl -k -v \
-    "https://{KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}/"
+    "https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}/"
 > GET / HTTP/1.1
 > User-Agent: curl/7.38.0
 > Host: 10.0.0.1
@@ -102,7 +104,7 @@ localcontainer$ curl -k -v \
 < Date: Mon, 06 Mar 2017 19:19:44 GMT
 < Content-Length: 13
 Unauthorized
-localcontainer$ curl -k "https://kubernetes.default.svc.cluster.local/"
+localcontainer$ curl -k "https://kubernetes.default.svc.cluster.local:${KUBERNETES_SERVICE_PORT}/"
 Unauthorized
 localcontainer$ exit
 host$
@@ -111,12 +113,12 @@ host$
 You've sent a request to the Kubernetes API service, but you could similarly talk to any `Service` in the remote Kubernetes cluster, even though the container is running locally.
 
 Finally, since we exposed port 8080 on the remote cluster, we can run a local server (within the container) that listens on port 8080 and it will be exposed via port 8080 inside the Kubernetes pods we've created.
-Let's say we want to serve some static files from your local machine:
-We can mount the current directory as a Docker volume, and run a webserver on port 8080:
+Let's say we want to serve some static files from your local machine.
+We can mount the current directory as a Docker volume, run a webserver on port 8080, and pass `--expose 8080` to Telepresence so it knows it needs to expose that port to the Kubernetes cluster:
 
 ```console
 host$ echo "hello!" > file.txt
-host$ telepresence --new-deployment quickstart --docker-run \
+host$ telepresence --new-deployment quickstart --expose 8080 --docker-run \
       -v $PWD:/files -i -t python:3-slim /bin/sh
 localcontainer$ cd /files
 localcontainer$ ls
@@ -141,7 +143,8 @@ Let's send a request to the remote pod to demonstrate that.
 In a different terminal we can run a pod on the Kubernetes cluster and see that it can access the code running on your personal computer, via the Telepresence-created `Service` named `quickstart`:
 
 ```console
-$ kubectl run --attach -i -t test --generator=job/v1 --image=alpine --restart Never --command /bin/sh
+$ kubectl run --attach -i -t test --generator=job/v1 \
+          --image=alpine --restart Never --command /bin/sh
 k8s-pod# apk add --no-cache curl
 k8s-pod# curl http://quickstart.default.svc.cluster.local:8080/file.txt
 hello!
