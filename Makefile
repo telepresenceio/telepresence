@@ -1,4 +1,4 @@
-.PHONY: default build build-local build-remote bumpversion release
+.PHONY: default build build-local build-remote bumpversion release test
 
 VERSION=0.7
 
@@ -17,12 +17,21 @@ build-remote:
 	cd remote && docker build . -t datawire/telepresence-k8s:$(VERSION)
 
 virtualenv:
-	virtualenv virtualenv
+	virtualenv --python=python3 virtualenv
+	virtualenv/bin/pip install -r dev-requirements.txt
 
 bumpversion: virtualenv
-	virtualenv/bin/pip install bumpversion
 	virtualenv/bin/bumpversion --verbose --list minor
 	@echo "Please run: git push origin master --tags"
+
+test: virtualenv
+	@echo "IMPORTANT: this will change kubectl context to minikube!\n\n"
+	cd local && sudo docker build . -q -t datawire/telepresence-local:$(VERSION)
+	eval $(shell minikube docker-env) && \
+		cd remote && \
+		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
+	kubectl config set-context minikube
+	virtualenv/bin/py.test tests
 
 release: build
 	docker push datawire/telepresence-local:$(VERSION)
