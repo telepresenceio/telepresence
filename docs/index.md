@@ -105,11 +105,13 @@ mv telepresence /usr/local/bin
 
 ## Quickstart
 
-Let's try Telepresence out quickly.
-The basic way of using the command line tool is `telepresence (--deployment name | --new-deployment name) --docker-run <args for docker run>`.
-This will connect you to a remote Kubernetes cluster via a `Deployment` (an existing or new one) and run a local Docker container that is proxied into the remote clsuter.
+We'll start out by using Telepresence with a newly created Kubernetes `Deployment`, just so it's clearer what is going on.
+In the next section we'll discuss using Telepresence with an existing `Deployment` - you can [skip ahead](#in-depth-usage) if you want.
 
-To get started we'll use `--new-deployment quickstart` to create a new `Deployment` and matching `Service`.
+To get started we'll use `telepresence --new-deployment quickstart` to create a new `Deployment` and matching `Service`.
+The client will connect to the remote Kubernetes cluster via that `Deployment` and then run a local Docker container that is proxied into the remote cluster.
+You'll also use the `--docker-run` argument to specify how that local container should be created: these arguments will match those passed to `docker run`.
+
 The Docker container you run will get environment variables that match those in the remote deployment, including Kubernetes `Service` addresses.
 We can see this by running the `env` command inside an Alpine Linux image:
 
@@ -188,7 +190,7 @@ hello!
 
 ## In-depth usage
 
-Let's look in a bit more detail at using Telepresence.
+Let's look in a bit more detail at using Telepresence when you have an existing `Deployment`.
 
 Your Kubernetes configuration will typically have a `Service`:
 
