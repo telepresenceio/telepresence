@@ -55,7 +55,11 @@ class EndToEndTests(TestCase):
                 "{}:/code".format(DIRECTORY), "--rm", "-w", "/code",
                 "python:3.5-slim", "python3", "-m", "http.server", "8080"
             ], )
-        self.addCleanup(p.terminate)
+
+        def cleanup():
+            p.terminate()
+            p.wait()
+        self.addCleanup(cleanup)
         time.sleep(30)
         result = check_output([
             'kubectl', 'run', '--attach', 'testing123', '--generator=job/v1',

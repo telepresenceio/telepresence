@@ -12,6 +12,7 @@ import argparse
 import atexit
 import os
 import os.path
+import signal
 import sys
 from functools import wraps
 from subprocess import check_output, Popen
@@ -69,18 +70,24 @@ def parse_args():
     return parser.parse_args()
 
 
-def docker_command():
+def maybe_sudo(args):
     docker_path = "/var/run/docker.sock"
-    if (os.path.exists(docker_path) and not os.access(docker_path, os.W_OK)):
-        return ["sudo", "docker"]
+    if (os.path.exists(docker_path) and
+        not os.access(docker_path, os.W_OK)):
+        return ["sudo"] + args
     else:
-        return ["docker"]
+        return args
 
 
 def stop_proxy(container_id):
     if sys.stderr.isatty():
         print("Shutting proxy down...", file=sys.stderr)
-    check_output(docker_command() + ["stop", container_id])
+    stop_container(container_id)
+
+
+def stop_container(container_id):
+    if container_id in check_output(maybe_sudo(["docker", "ps", "-q", "--no-trunc"])):
+        check_output(maybe_sudo(["docker", "stop", container_id]))
 
 
 def start_proxy(args):
@@ -108,8 +115,8 @@ def start_proxy(args):
         sleep(5)  # XXX oh god
 
     home_path = os.path.expanduser("~")
-    docker_cmd = docker_command() + [
-        "run",
+    docker_cmd = maybe_sudo([
+        "docker", "run",
         # Run in background:
         "--detach",
         # Delete when exited:
@@ -119,7 +126,7 @@ def start_proxy(args):
         # Minikube looks in absolute path for home, so also mount in way that
         # matches host path:
         "-v", "{}:{}:ro".format(home_path, home_path),
-    ]
+    ])
 
     tempdir = mkdtemp()
 
@@ -153,17 +160,23 @@ def run_local_command(args, tempdir, container_id):
         sleep(1)
     if sys.stderr.isatty():
         print("Starting local container...", file=sys.stderr)
-    command = docker_command() + [
-        "run",
+    command = maybe_sudo([
+        "docker", "run",
+        # Use network namespace of telepresence-local container:
         "--net=container:" + container_id,
-        "--env-file={}".format(out_env)
-    ] + args.docker_run_args
+        # Use environment variables written out from telepresence-local, to
+        # match Kubernets:
+        "--env-file={}".format(out_env),
+        # Set a label so we can easily find this container later:
+        "--label", "telepresence-container=" + container_id,
+    ]) + args.docker_run_args
     p = Popen(command)
 
     def terminate_if_alive():
-        p.poll()
-        if p.returncode is None:
-            p.terminate()
+        cid = unicode(check_output(maybe_sudo([
+            "docker", "ps", "-q", "--filter",
+            "label=telepresence-container=" + container_id])), "utf-8").strip()
+        stop_container(cid)
     atexit.register(terminate_if_alive)
     p.wait()
 
@@ -230,6 +243,12 @@ def handle_unexpected_errors(f):
 
 
 def main():
+    # Make SIGTERM do clean shutdown (in particular, we want atexit functions
+    # to be called):
+    def shutdown(signum, frame):
+        raise SystemExit(0)
+    signal.signal(signal.SIGTERM, shutdown)
+
     args = parse_args()
 
     @handle_unexpected_errors
