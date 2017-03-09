@@ -22,7 +22,7 @@ import webbrowser
 if sys.version_info.major == 2:
     from urllib import quote_plus
     from StringIO import StringIO
-    input = raw_input
+    input = __builtins__.raw_input
 else:
     # Python 3
     from io import StringIO
@@ -105,7 +105,7 @@ def start_proxy(args):
         if args.expose:
             command.append("--expose")
         check_output(command)
-        sleep(5) # XXX oh god
+        sleep(5)  # XXX oh god
 
     home_path = os.path.expanduser("~")
     docker_cmd = docker_command() + [
@@ -206,9 +206,12 @@ def handle_unexpected_errors(f):
                 "Here's the traceback:\n\n" + error + "\n")
             if input(
                     "Would you like to file an issue in our issue tracker?"
-                    " We'd really appreciate the help improving our product. [Y/n]: ",
+                    " We'd really appreciate the help improving our product. "
+                    "[Y/n]: ",
                     ).lower() in ("y", ""):
-                url = "https://github.com/datawire/telepresence/issues/new?body="
+                url = (
+                    "https://github.com/datawire/telepresence/issues/new?body="
+                )
                 body = quote_plus(BUG_REPORT_TEMPLATE.format(
                     sys.argv, __version__, sys.version,
                     unicode(check_output(["uname", "-a"]), "utf-8"), error))
