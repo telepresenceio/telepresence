@@ -2,6 +2,7 @@
 End-to-end tests.
 """
 
+from unittest import TestCase
 from pathlib import Path
 from subprocess import check_output, Popen
 import time
@@ -20,40 +21,47 @@ def run(filename, extra_telepresence_args=[]):
         ]), "utf-8")
 
 
-def test_tocluster():
+class EndToEndTests(TestCase):
     """
-    Tests of communication to the cluster.
+    End-to-end tests.
 
-    Python script is run using telepresence --docker-run, and output is checked
-    for the string "SUCCESS!" indicating the checks passed. The script
-    shouldn't use code py.test would detect as a test.
+    Only reason I'm using this is that I can't figure equivalent of addCleanup
+    in py.test.
     """
-    result = run("tocluster.py")
-    assert "SUCCESS!" in result
 
+    def test_tocluster(self):
+        """
+        Tests of communication to the cluster.
 
-def test_fromcluster():
-    """
-    Tests of communication from the cluster.
+        Python script is run using telepresence --docker-run, and output is
+        checked for the string "SUCCESS!" indicating the checks passed. The
+        script shouldn't use code py.test would detect as a test.
+        """
+        result = run("tocluster.py")
+        assert "SUCCESS!" in result
 
-    Start webserver that serves files from this directory. Run HTTP query
-    against it on the Kubernetes cluster, compare to real file.
-    """
-    # XXX leaking docker processes, try to figure out why
-    p = Popen(
-        [
-            "telepresence", "--new-deployment", "fromclustertests", "--expose",
-            "8080", "--docker-run", "-v", "{}:/code".format(DIRECTORY), "--rm",
-            "-w", "/code", "python:3.5-slim", "python3", "-m", "http.server",
-            "8080"
-        ], )
-    time.sleep(30)
-    result = check_output([
-        'kubectl', 'run', '--attach', 'testing123', '--generator=job/v1',
-        "--quiet", '--rm', '--image=alpine', '--restart', 'Never', '--command',
-        '--', '/bin/sh', '-c', "apk add --no-cache --quiet curl && " +
-        "curl http://fromclustertests.default.svc.cluster.local:8080/test_endtoend.py"
-    ])
-    assert result == (DIRECTORY / "test_endtoend.py").read_bytes()
-    p.kill()
-    p.wait()
+    def test_fromcluster(self):
+        """
+        Tests of communication from the cluster.
+
+        Start webserver that serves files from this directory. Run HTTP query
+        against it on the Kubernetes cluster, compare to real file.
+        """
+        # XXX leaking docker processes, try to figure out why
+        p = Popen(
+            [
+                "telepresence", "--new-deployment", "fromclustertests",
+                "--expose", "8080", "--docker-run", "-v",
+                "{}:/code".format(DIRECTORY), "--rm", "-w", "/code",
+                "python:3.5-slim", "python3", "-m", "http.server", "8080"
+            ], )
+        self.addCleanup(p.kill)
+        time.sleep(30)
+        result = check_output([
+            'kubectl', 'run', '--attach', 'testing123', '--generator=job/v1',
+            "--quiet", '--rm', '--image=alpine', '--restart', 'Never',
+            '--command', '--', '/bin/sh', '-c',
+            "apk add --no-cache --quiet curl && " +
+            "curl http://fromclustertests:8080/test_endtoend.py"
+        ])
+        assert result == (DIRECTORY / "test_endtoend.py").read_bytes()
