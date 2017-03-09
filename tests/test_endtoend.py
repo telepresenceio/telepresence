@@ -26,11 +26,19 @@ class EndToEndTests(TestCase):
         checked for the string "SUCCESS!" indicating the checks passed. The
         script shouldn't use code py.test would detect as a test.
         """
-        result = str(check_output([
-            "telepresence", "--new-deployment", "tests",
-            "--docker-run", "-v", "{}:/code".format(DIRECTORY), "--rm",
-            "python:3.5-slim", "python", "/code/tocluster.py",
-        ]), "utf-8")
+        result = str(
+            check_output([
+                "telepresence",
+                "--new-deployment",
+                "tests",
+                "--docker-run",
+                "-v",
+                "{}:/code".format(DIRECTORY),
+                "--rm",
+                "python:3.5-slim",
+                "python",
+                "/code/tocluster.py",
+            ]), "utf-8")
         assert "SUCCESS!" in result
 
     def test_fromcluster(self):
@@ -52,6 +60,7 @@ class EndToEndTests(TestCase):
         def cleanup():
             p.terminate()
             p.wait()
+
         self.addCleanup(cleanup)
         time.sleep(30)
         result = check_output([
@@ -68,17 +77,32 @@ class EndToEndTests(TestCase):
         Tests of communicating with existing Deployment.
         """
         name = "testing-{}".format(time.time()).replace(".", "-")
-        version = str(check_output(["telepresence", "--version"], stderr=STDOUT), "utf-8").strip()
+        version = str(
+            check_output(["telepresence", "--version"], stderr=STDOUT),
+            "utf-8").strip()
         check_output([
-            "kubectl", "run", "--generator", "deployment/v1beta1",
-            name, "--image=datawire/telepresence-k8s:" + version,
+            "kubectl",
+            "run",
+            "--generator",
+            "deployment/v1beta1",
+            name,
+            "--image=datawire/telepresence-k8s:" + version,
             '--env="MYENV=hello"',
         ])
-        self.addCleanup(check_output, ["kubectl", "delete", "deployment", name])
-        result = str(check_output([
-            "telepresence", "--deployment", name,
-            "--docker-run", "-v", "{}:/code".format(DIRECTORY), "--rm",
-            "python:3.5-slim", "python", "/code/tocluster.py",
-            "MYENV=hello",
-        ]), "utf-8")
+        self.addCleanup(check_output,
+                        ["kubectl", "delete", "deployment", name])
+        result = str(
+            check_output([
+                "telepresence",
+                "--deployment",
+                name,
+                "--docker-run",
+                "-v",
+                "{}:/code".format(DIRECTORY),
+                "--rm",
+                "python:3.5-slim",
+                "python",
+                "/code/tocluster.py",
+                "MYENV=hello",
+            ]), "utf-8")
         assert "SUCCESS!" in result
