@@ -7,6 +7,7 @@ This module will be run inside a container. To indicate success it will print
 
 import os
 import ssl
+import sys
 from urllib.request import urlopen
 from urllib.error import HTTPError
 
@@ -47,6 +48,15 @@ def check_env():
     assert os.environ[prefix + "_ADDR"] == host
 
 
+def check_custom_env():
+    # Check custom environment variables
+    for env in sys.argv[1:]:
+        key, value = env.split("=", 1)
+        assert os.environ[key] == value
+
+
 check_env()
+
+check_custom_env()
 
 print("SUCCESS!")
