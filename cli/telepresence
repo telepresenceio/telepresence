@@ -159,7 +159,12 @@ def run_local_command(args, tempdir, container_id):
         "--env-file={}".format(out_env)
     ] + args.docker_run_args
     p = Popen(command)
-    atexit.register(p.kill)
+
+    def terminate_if_alive():
+        p.poll()
+        if p.returncode is None:
+            p.terminate()
+    atexit.register(terminate_if_alive)
     p.wait()
 
 
