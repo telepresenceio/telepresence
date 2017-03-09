@@ -4,21 +4,10 @@ End-to-end tests.
 
 from unittest import TestCase
 from pathlib import Path
-from subprocess import check_output, Popen
+from subprocess import check_output, Popen, STDOUT
 import time
 
 DIRECTORY = Path(__file__).absolute().parent
-
-
-def run(filename, extra_telepresence_args=[]):
-    """Run a Python file using Telepresence."""
-    return str(
-        check_output([
-            "telepresence", "--new-deployment", "tests"
-        ] + extra_telepresence_args + [
-            "--docker-run", "-v", "{}:/code".format(DIRECTORY), "--rm",
-            "python:3.5-slim", "python", "/code/" + filename
-        ]), "utf-8")
 
 
 class EndToEndTests(TestCase):
@@ -37,7 +26,11 @@ class EndToEndTests(TestCase):
         checked for the string "SUCCESS!" indicating the checks passed. The
         script shouldn't use code py.test would detect as a test.
         """
-        result = run("tocluster.py")
+        result = str(check_output([
+            "telepresence", "--new-deployment", "tests",
+            "--docker-run", "-v", "{}:/code".format(DIRECTORY), "--rm",
+            "python:3.5-slim", "python", "/code/tocluster.py",
+        ]), "utf-8")
         assert "SUCCESS!" in result
 
     def test_fromcluster(self):
@@ -69,3 +62,23 @@ class EndToEndTests(TestCase):
             "curl http://fromclustertests:8080/test_endtoend.py"
         ])
         assert result == (DIRECTORY / "test_endtoend.py").read_bytes()
+
+    def test_existingdeployment(self):
+        """
+        Tests of communicating with existing Deployment.
+        """
+        name = "testing-{}".format(time.time()).replace(".", "-")
+        version = str(check_output(["telepresence", "--version"], stderr=STDOUT), "utf-8").strip()
+        check_output([
+            "kubectl", "run", "--generator", "deployment/v1beta1",
+            name, "--image=datawire/telepresence-k8s:" + version,
+            '--env="MYENV=hello"',
+        ])
+        self.addCleanup(check_output, ["kubectl", "delete", "deployment", name])
+        result = str(check_output([
+            "telepresence", "--deployment", name,
+            "--docker-run", "-v", "{}:/code".format(DIRECTORY), "--rm",
+            "python:3.5-slim", "python", "/code/tocluster.py",
+            "MYENV=hello",
+        ]), "utf-8")
+        assert "SUCCESS!" in result
