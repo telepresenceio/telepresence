@@ -30,7 +30,6 @@ else:
     from urllib.parse import quote_plus
     unicode = str
 
-
 __version__ = "0.7"
 
 
@@ -61,7 +60,8 @@ def parse_args():
         default=[],
         help="<host>:<port> that will be proxied via Kubernetes.")
     parser.add_argument(
-        "--docker-run", dest="docker_run_args",
+        "--docker-run",
+        dest="docker_run_args",
         required=True,
         metavar="DOCKER-RUN-ARGUMENTS",
         nargs=argparse.REMAINDER,
@@ -72,8 +72,7 @@ def parse_args():
 
 def maybe_sudo(args):
     docker_path = "/var/run/docker.sock"
-    if (os.path.exists(docker_path) and
-        not os.access(docker_path, os.W_OK)):
+    if (os.path.exists(docker_path) and not os.access(docker_path, os.W_OK)):
         return ["sudo"] + args
     else:
         return args
@@ -86,7 +85,8 @@ def stop_proxy(container_id):
 
 
 def stop_container(container_id):
-    if container_id in check_output(maybe_sudo(["docker", "ps", "-q", "--no-trunc"])):
+    if container_id in check_output(
+            maybe_sudo(["docker", "ps", "-q", "--no-trunc"])):
         check_output(maybe_sudo(["docker", "stop", container_id]))
 
 
@@ -99,8 +99,11 @@ def start_proxy(args):
         args.deployment = args.new_deployment
 
         def remove_existing_deployment():
-            check_output(["kubectl", "delete", "--ignore-not-found",
-                          "service,deployment", args.deployment])
+            check_output([
+                "kubectl", "delete", "--ignore-not-found",
+                "service,deployment", args.deployment
+            ])
+
         atexit.register(remove_existing_deployment)
         remove_existing_deployment()
         command = [
@@ -116,16 +119,19 @@ def start_proxy(args):
 
     home_path = os.path.expanduser("~")
     docker_cmd = maybe_sudo([
-        "docker", "run",
+        "docker",
+        "run",
         # Run in background:
         "--detach",
         # Delete when exited:
         "--rm",
         # Mount $HOME so we have access to kubectl configuration:
-        "-v", home_path + ":/opt:ro",
+        "-v",
+        home_path + ":/opt:ro",
         # Minikube looks in absolute path for home, so also mount in way that
         # matches host path:
-        "-v", "{}:{}:ro".format(home_path, home_path),
+        "-v",
+        "{}:{}:ro".format(home_path, home_path),
     ])
 
     tempdir = mkdtemp()
@@ -161,22 +167,28 @@ def run_local_command(args, tempdir, container_id):
     if sys.stderr.isatty():
         print("Starting local container...", file=sys.stderr)
     command = maybe_sudo([
-        "docker", "run",
+        "docker",
+        "run",
         # Use network namespace of telepresence-local container:
         "--net=container:" + container_id,
         # Use environment variables written out from telepresence-local, to
         # match Kubernets:
         "--env-file={}".format(out_env),
         # Set a label so we can easily find this container later:
-        "--label", "telepresence-container=" + container_id,
+        "--label",
+        "telepresence-container=" + container_id,
     ]) + args.docker_run_args
     p = Popen(command)
 
     def terminate_if_alive():
-        cid = unicode(check_output(maybe_sudo([
-            "docker", "ps", "-q", "--filter",
-            "label=telepresence-container=" + container_id])), "utf-8").strip()
+        cid = unicode(
+            check_output(
+                maybe_sudo([
+                    "docker", "ps", "-q", "--filter",
+                    "label=telepresence-container=" + container_id
+                ])), "utf-8").strip()
         stop_container(cid)
+
     atexit.register(terminate_if_alive)
     p.wait()
 
@@ -227,14 +239,15 @@ def handle_unexpected_errors(f):
             if input(
                     "Would you like to file an issue in our issue tracker?"
                     " We'd really appreciate the help improving our product. "
-                    "[Y/n]: ",
-                    ).lower() in ("y", ""):
+                    "[Y/n]: ", ).lower() in ("y", ""):
                 url = (
                     "https://github.com/datawire/telepresence/issues/new?body="
                 )
-                body = quote_plus(BUG_REPORT_TEMPLATE.format(
-                    sys.argv, __version__, sys.version,
-                    unicode(check_output(["uname", "-a"]), "utf-8"), error))
+                body = quote_plus(
+                    BUG_REPORT_TEMPLATE.format(
+                        sys.argv, __version__, sys.version,
+                        unicode(check_output(["uname", "-a"]),
+                                "utf-8"), error))
                 webbrowser.open_new(url + body)
             else:
                 raise SystemExit(1)
@@ -247,6 +260,7 @@ def main():
     # to be called):
     def shutdown(signum, frame):
         raise SystemExit(0)
+
     signal.signal(signal.SIGTERM, shutdown)
 
     args = parse_args()
@@ -255,6 +269,7 @@ def main():
     def go():
         tempdir, container_id = start_proxy(args)
         run_local_command(args, tempdir, container_id)
+
     go()
 
 
