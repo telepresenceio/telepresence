@@ -115,6 +115,17 @@ You can now run your own code locally and have it be exposed within Kubernetes, 
     stdout.flush()
 
 
+def ssh(args):
+    """Connect to remote pod via SSH.
+
+    Returns Popen object.
+    """
+    return Popen([
+        "sshpass", "-phello",
+        "ssh", "-q",
+        "-oStrictHostKeyChecking=no", "root@localhost", "-N"] + args)
+
+
 def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
     processes = []
     pod_name = get_pod_name(deployment_name)
@@ -131,33 +142,33 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
         else:
             proxied_ports.add(int(port))
 
-    # 1. write /etc/hosts
+    # write /etc/hosts
     write_etc_hosts([s.split(":", 1)[0] for s in custom_proxied_hosts])
-    # 2. forward remote port to here, by tunneling via remote SSH server:
-    processes.append(Popen(["kubectl", "port-forward", pod_name, "22"]))
-    time.sleep(2) # XXX lag until port 22 is open; replace with retry loop
-    for port_number in local_exposed_ports:
-        processes.append(Popen([
-            "sshpass", "-phello",
-            "ssh", "-q",
-            "-oStrictHostKeyChecking=no", "root@localhost",
-            "-R", "*:{}:127.0.0.1:{}".format(port_number, port_number), "-N"]))
 
-    # 3. start proxies for custom-mapped hosts:
+    # forward remote port to here, by tunneling via remote SSH server:
+    processes.append(Popen(["kubectl", "port-forward", pod_name, "22"]))
+    time.sleep(2)  # XXX lag until port 22 is open; replace with retry loop
+    for port_number in local_exposed_ports:
+        processes.append(ssh(
+            ["-R", "*:{}:127.0.0.1:{}".format(port_number, port_number)]))
+
+    # start SOCKS proxy, for telepresence --run:
+    processes.append(ssh(["-D", "0.0.0.0:50000"]))
+
+    # start proxies for custom-mapped hosts:
     for host, port in [s.split(":", 1) for s in custom_proxied_hosts]:
-        processes.append(Popen([
-            "sshpass", "-phello",
-            "ssh", "-q",
-            "-oStrictHostKeyChecking=no", "root@localhost",
-            "-L", "{}:{}:{}".format(port, host, port), "-N"]))
-    # 4. start proxies for Services:
+        processes.append(ssh([
+            "-L", "{}:{}:{}".format(port, host, port)]))
+
+    # start proxies for Services:
     # XXX maybe just do everything via SSH, now that we have it?
     for port in range(2000, 2020):
         # XXX what if there is more than 20 services
         p = Popen(["kubectl", "port-forward", pod_name, str(port)])
         processes.append(p)
     time.sleep(5)
-    # 5. write docker envfile, which tells CLI we're ready:
+    #
+    # write docker envfile, which tells CLI we're ready:
     setuid(uid)
     write_env(pod_name)
     for p in processes:

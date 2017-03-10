@@ -59,14 +59,21 @@ def parse_args():
         action='append',
         default=[],
         help="<host>:<port> that will be proxied via Kubernetes.")
-    parser.add_argument(
+    group_run = parser.add_mutually_exclusive_group(required=True)
+    group_run.add_argument(
         "--docker-run",
         dest="docker_run_args",
-        required=True,
         metavar="DOCKER-RUN-ARGUMENTS",
         nargs=argparse.REMAINDER,
-        help=("All remaininding arguments, to be passed to "
+        help=("All remaininding arguments will be passed to "
               "`docker run`, e.g. '-i -t alpine:3.5 /bin/sh'."))
+    group_run.add_argument(
+        "--run",
+        dest="run_args",
+        metavar="RUN-ARGUMENTS",
+        nargs=argparse.REMAINDER,
+        help=("All remaininding arguments will be run as local command, "
+              "e.g. 'nc -l -p 8080'."))
     return parser.parse_args()
 
 
@@ -118,6 +125,8 @@ def start_proxy(args):
         sleep(5)  # XXX oh god
 
     home_path = os.path.expanduser("~")
+    tempdir = mkdtemp()
+
     docker_cmd = maybe_sudo([
         "docker",
         "run",
@@ -134,7 +143,12 @@ def start_proxy(args):
         "{}:{}:ro".format(home_path, home_path),
     ])
 
-    tempdir = mkdtemp()
+    if args.run_args is not None:
+        # We're using a local command, which means it will be using a SOCKS
+        # proxy, so expose the local SOCKS port to the host machine:
+        docker_cmd.extend([
+            "-p", "50000:50000",
+        ])
 
     docker_cmd.extend([
         # Mount local directory, where env file will be written out:
@@ -154,16 +168,27 @@ def start_proxy(args):
     return tempdir, container_id
 
 
-def run_local_command(args, tempdir, container_id):
-    """`telepresence run-local`."""
+def run_local_command(args, out_env, container_id):
+    """--run support, run command locally."""
+    with open(out_env, "r") as f:
+        env = os.environ.copy()
+        env.update(
+            dict(line.split("=", 1) for line in f.read().splitlines()))
+    p = Popen(["tsocks", "-p", "50000"] + args.run_args,
+              env=env)
+
+    def terminate_if_alive():
+        if p.poll() is not None:
+            p.terminate()
+    atexit.register(terminate_if_alive)
+    p.wait()
+
+
+def run_docker_command(args, out_env, container_id):
+    """--run-docker support, run command via Docker."""
     # XXX argparse sucks need to switch to something else
     if args.docker_run_args and args.docker_run_args[0] == "--":
         args.docker_run_args.pop(0)
-    # Wait for proxy container to write out env file, indicating we're good to
-    # go:
-    out_env = os.path.join(tempdir, "out.env")
-    while not os.path.exists(out_env):
-        sleep(1)
     if sys.stderr.isatty():
         print("Starting local container...", file=sys.stderr)
     command = maybe_sudo([
@@ -268,7 +293,15 @@ def main():
     @handle_unexpected_errors
     def go():
         tempdir, container_id = start_proxy(args)
-        run_local_command(args, tempdir, container_id)
+        # Wait for proxy container to write out env file, indicating we're good
+        # to go:
+        out_env = os.path.join(tempdir, "out.env")
+        while not os.path.exists(out_env):
+            sleep(1)
+        if args.docker_run_args is not None:
+            run_docker_command(args, tempdir, container_id)
+        else:
+            run_local_command(args, tempdir, container_id)
 
     go()
 
