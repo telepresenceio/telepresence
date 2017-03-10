@@ -69,7 +69,7 @@ This means an even faster development cycle.
 <div class="mermaid">
 graph TD
   subgraph Laptop
-    code["Source code for servicename"]==>local["servicename, in container"]
+    code["Source code for servicename"]==>local["servicename, running locally"]
     local---client[Telepresence client]
   end
   subgraph Kubernetes in Cloud
@@ -89,6 +89,11 @@ You will need the following available on your machine:
 * Python (2 or 3). This should be available on any Linux or OS X machine.
 * Access to your Kubernetes cluster, with local credentials on your machine.
   You can do this test by running `kubectl get pod` - if this works you're all set.
+* If you want to run your code outside of a Docker container you will also need `torsocks`.
+  
+  On Ubuntu: `sudo apt-get install --no-install-recommends torsocks`
+  
+  On OS X: `brew install torsocks`
 
 In order to install, run the following command:
 
@@ -113,7 +118,7 @@ The client will connect to the remote Kubernetes cluster via that `Deployment` a
 You'll also use the `--docker-run` argument to specify how that local container should be created: these arguments will match those passed to `docker run`.
 
 The Docker container you run will get environment variables that match those in the remote deployment, including Kubernetes `Service` addresses.
-We can see this by running the `env` command inside an Alpine Linux image:
+We can see this by running the `env` command inside an Alpine Linux image in a Docker container:
 
 ```console
 host$ telepresence --new-deployment quickstart --docker-run \
@@ -122,6 +127,16 @@ KUBERNETES_SERVICE_HOST=127.0.0.1
 KUBERNETES_SERVICE_PORT=60001
 ...
 ```
+
+You can also run a local process, outside a Docker container:
+
+```console
+host$ telepresence --new-deployment quickstart --run env
+KUBERNETES_SERVICE_HOST=127.0.0.1
+KUBERNETES_SERVICE_PORT=60001
+...
+```
+
 You can send a request to the Kubernetes API service and it will get proxied, and you can also use the special hostnames Kubernetes creates for `Services`.
 (You'll get "unauthorized" in the response because you haven't provided credentials.)
 
@@ -352,3 +367,9 @@ Some alternatives to Telepresence:
   It also won't help you access cloud resources, you will need to emulate them.
 * Pushing your code to the remote Kubernetes cluster.
   This is a somewhat slow process, and you won't be able to do the quick debug cycle you get from running code locally.
+
+## Changelog
+
+### v0.8
+
+* Added support for `telepresence --run`.
