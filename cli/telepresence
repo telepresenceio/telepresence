@@ -40,40 +40,56 @@ def parse_args():
     group_deployment = parser.add_mutually_exclusive_group(required=True)
     group_deployment.add_argument(
         "--deployment",
-        help=("The name of the Kubernetes Deployment where the " +
-              "datawire/telepresence-k8s image is running."))
+        help=(
+            "The name of the Kubernetes Deployment where the " +
+            "datawire/telepresence-k8s image is running."
+        )
+    )
     group_deployment.add_argument(
         '--new-deployment',
         dest="new_deployment",
-        help=("Create a new Deployment in Kubernetes where the "
-              "datawire/telepresence-k8s image will run."))
+        help=(
+            "Create a new Deployment in Kubernetes where the "
+            "datawire/telepresence-k8s image will run."
+        )
+    )
     parser.add_argument(
         "--expose",
         type=int,
         action='append',
         default=[],
-        help=("Port number in local container that will be " +
-              "exposed to Kubernetes."))
+        help=(
+            "Port number in local container that will be " +
+            "exposed to Kubernetes."
+        )
+    )
     parser.add_argument(
         "--proxy",
         action='append',
         default=[],
-        help="<host>:<port> that will be proxied via Kubernetes.")
+        help="<host>:<port> that will be proxied via Kubernetes."
+    )
     group_run = parser.add_mutually_exclusive_group(required=True)
     group_run.add_argument(
         "--docker-run",
         dest="docker_run_args",
         metavar="DOCKER-RUN-ARGUMENTS",
         nargs=argparse.REMAINDER,
-        help=("All remaininding arguments will be passed to "
-              "`docker run`, e.g. '-i -t alpine:3.5 /bin/sh'."))
+        help=(
+            "All remaininding arguments will be passed to "
+            "`docker run`, e.g. '-i -t alpine:3.5 /bin/sh'."
+        )
+    )
     group_run.add_argument(
         "--run",
         dest="run_args",
         metavar="RUN-ARGUMENTS",
         nargs=argparse.REMAINDER,
-        help=("All remaininding arguments will be run as local command, "
-              "e.g. 'nc -l -p 8080'."))
+        help=(
+            "All remaininding arguments will be run as local command, "
+            "e.g. 'nc -l -p 8080'."
+        )
+    )
     return parser.parse_args()
 
 
@@ -93,7 +109,8 @@ def stop_proxy(container_id):
 
 def stop_container(container_id):
     if container_id in check_output(
-            maybe_sudo(["docker", "ps", "-q", "--no-trunc"])):
+        maybe_sudo(["docker", "ps", "-q", "--no-trunc"])
+    ):
         check_output(maybe_sudo(["docker", "stop", container_id]))
 
 
@@ -211,7 +228,9 @@ def run_docker_command(args, out_env, container_id):
                 maybe_sudo([
                     "docker", "ps", "-q", "--filter",
                     "label=telepresence-container=" + container_id
-                ])), "utf-8").strip()
+                ])
+            ), "utf-8"
+        ).strip()
         stop_container(cid)
 
     atexit.register(terminate_if_alive)
@@ -260,19 +279,22 @@ def handle_unexpected_errors(f):
             error = errorf.getvalue()
             print(
                 "\nLooks like there's a bug in our code. Sorry about that!\n\n"
-                "Here's the traceback:\n\n" + error + "\n")
+                "Here's the traceback:\n\n" + error + "\n"
+            )
             if input(
-                    "Would you like to file an issue in our issue tracker?"
-                    " We'd really appreciate the help improving our product. "
-                    "[Y/n]: ", ).lower() in ("y", ""):
+                "Would you like to file an issue in our issue tracker?"
+                " We'd really appreciate the help improving our product. "
+                "[Y/n]: ",
+            ).lower() in ("y", ""):
                 url = (
                     "https://github.com/datawire/telepresence/issues/new?body="
                 )
                 body = quote_plus(
                     BUG_REPORT_TEMPLATE.format(
                         sys.argv, __version__, sys.version,
-                        unicode(check_output(["uname", "-a"]),
-                                "utf-8"), error))
+                        unicode(check_output(["uname", "-a"]), "utf-8"), error
+                    )
+                )
                 webbrowser.open_new(url + body)
             else:
                 raise SystemExit(1)
@@ -301,8 +323,9 @@ def main():
         if args.docker_run_args is not None:
             run_docker_command(args, out_env, container_id)
         else:
-            run_local_command(args,
-                              os.path.join(tempdir, "local.env"), container_id)
+            run_local_command(
+                args, os.path.join(tempdir, "local.env"), container_id
+            )
 
     go()
 

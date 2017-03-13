@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-
 """
 THIS IS A PROTOTYPE.
 
@@ -37,9 +36,13 @@ def get_env_variables(pod_name):
     """Generate environment variables that match kubernetes."""
     remote_env = get_remote_env(pod_name)
     filter_keys = set()
-    in_docker_result = {}  # ips proxied via docker, so need to modify addresses
-    socks_result = {key: value for (key, value) in remote_env.items()
-                    if key not in environ}  # ips proxied via SOCKS, no modification
+    # ips proxied via docker, so need to modify addresses:
+    in_docker_result = {}
+    # ips proxied via SOCKS, no modification:
+    socks_result = {
+        key: value
+        for (key, value) in remote_env.items() if key not in environ
+    }
     # XXX we're recreating the port generation logic
     i = 0
     for i, service_key in enumerate(_get_service_keys(remote_env)):
@@ -48,8 +51,12 @@ def get_env_variables(pod_name):
         # XXX bad abstraction
         name = service_key[:-len("_SERVICE_HOST")]
         # XXX ugh
-        filter_prefix = "{}_PORT_{}_TCP".format(name, remote_env[name + "_SERVICE_PORT"])
-        filter_keys |= set([filter_prefix + s for s in ("", "_PROTO", "_PORT", "_ADDR")])
+        filter_prefix = "{}_PORT_{}_TCP".format(
+            name, remote_env[name + "_SERVICE_PORT"]
+        )
+        filter_keys |= set(
+            [filter_prefix + s for s in ("", "_PROTO", "_PORT", "_ADDR")]
+        )
         # XXX will be wrong for UDP
         full_address = "tcp://{}:{}".format(ip, port)
         in_docker_result[name + "_SERVICE_HOST"] = ip
@@ -84,27 +91,37 @@ def write_env(pod_name):
 
 def write_etc_hosts(additional_hosts):
     """Update /etc/hosts with records that match k8s DNS entries for services."""
-    services_json = loads(str(
-        check_output(["kubectl", "get", "service", "-o", "json"]), "utf-8"))
+    services_json = loads(
+        str(
+            check_output(["kubectl", "get", "service", "-o", "json"]), "utf-8"
+        )
+    )
     with open("/etc/hosts", "a") as hosts:
         for service in services_json["items"]:
             name = service["metadata"]["name"]
             namespace = service["metadata"]["namespace"]
             hosts.write("127.0.0.1 {}\n".format(name))
-            hosts.write("127.0.0.1 {}.{}.svc.cluster.local\n".format(name, namespace))
+            hosts.write(
+                "127.0.0.1 {}.{}.svc.cluster.local\n".format(name, namespace)
+            )
         for host in additional_hosts:
             hosts.write("127.0.0.1 {}\n".format(host))
 
 
 def get_pod_name(deployment_name):
     """Given the deployment name, return the name of its pod."""
-    pods = [line.split()[0] for line in
-            str(check_output(["kubectl", "get", "pod"]), "utf-8").splitlines()]
+    pods = [
+        line.split()[0]
+        for line in str(check_output(["kubectl", "get", "pod"]), "utf-8")
+        .splitlines()
+    ]
     for pod in pods:
         if pod.startswith(deployment_name + "-"):
             return pod
-    raise RuntimeError("Telepresence pod not found for Deployment '{}'.".format(
-        deployment_name))
+    raise RuntimeError(
+        "Telepresence pod not found for Deployment '{}'.".
+        format(deployment_name)
+    )
 
 
 def print_status(deployment_name, ports):
@@ -128,9 +145,9 @@ def ssh(args):
     Returns Popen object.
     """
     return Popen([
-        "sshpass", "-phello",
-        "ssh", "-q",
-        "-oStrictHostKeyChecking=no", "root@localhost", "-N"] + args)
+        "sshpass", "-phello", "ssh", "-q", "-oStrictHostKeyChecking=no",
+        "root@localhost", "-N"
+    ] + args)
 
 
 def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
@@ -141,11 +158,12 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
     custom_ports = [int(s.split(":", 1)[1]) for s in custom_proxied_hosts]
     for port in custom_ports:
         if port in proxied_ports:
-            exit(("OOPS: Can't proxy port {} more than once. "
-                  "Currently mapped ports: {}.This error is due "
-                  "to a limitation in Telepresence, see "
-                  "https://github.com/datawire/telepresence/issues/6").format(
-                      port, proxied_ports))
+            exit((
+                "OOPS: Can't proxy port {} more than once. "
+                "Currently mapped ports: {}.This error is due "
+                "to a limitation in Telepresence, see "
+                "https://github.com/datawire/telepresence/issues/6"
+            ).format(port, proxied_ports))
         else:
             proxied_ports.add(int(port))
 
@@ -156,16 +174,16 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
     processes.append(Popen(["kubectl", "port-forward", pod_name, "22"]))
     time.sleep(2)  # XXX lag until port 22 is open; replace with retry loop
     for port_number in local_exposed_ports:
-        processes.append(ssh(
-            ["-R", "*:{}:127.0.0.1:{}".format(port_number, port_number)]))
+        processes.append(
+            ssh(["-R", "*:{}:127.0.0.1:{}".format(port_number, port_number)])
+        )
 
     # start SOCKS proxy, for telepresence --run:
     processes.append(ssh(["-D", "0.0.0.0:50000"]))
 
     # start proxies for custom-mapped hosts:
     for host, port in [s.split(":", 1) for s in custom_proxied_hosts]:
-        processes.append(ssh([
-            "-L", "{}:{}:{}".format(port, host, port)]))
+        processes.append(ssh(["-L", "{}:{}:{}".format(port, host, port)]))
 
     # start proxies for Services:
     # XXX maybe just do everything via SSH, now that we have it?
@@ -183,5 +201,7 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
 
 
 if __name__ == '__main__':
-    main(int(argv[1]), argv[2], argv[3].split(",") if argv[3] else [],
-         argv[4].split(",") if argv[4] else [])
+    main(
+        int(argv[1]), argv[2], argv[3].split(",")
+        if argv[3] else [], argv[4].split(",") if argv[4] else []
+    )
