@@ -283,7 +283,7 @@ def handle_unexpected_errors(f):
             )
             if sys.stdout.isatty() and input(
                 "Would you like to file an issue in our issue tracker?"
-                " We'd really appreciate the help improving our product. "
+                " This would help us fix the bug and improve Telepresence: "
                 "[Y/n]: ",
             ).lower() in ("y", ""):
                 url = (
