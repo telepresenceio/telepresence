@@ -194,7 +194,7 @@ def run_local_command(args, out_env, container_id):
     p = Popen(["tsocks", "-p", "50000"] + args.run_args, env=env)
 
     def terminate_if_alive():
-        if p.poll() is not None:
+        if p.poll() is None:
             p.terminate()
 
     atexit.register(terminate_if_alive)
