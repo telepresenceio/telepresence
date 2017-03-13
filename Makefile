@@ -19,6 +19,7 @@ build-remote:
 virtualenv:
 	virtualenv --python=python3 virtualenv
 	virtualenv/bin/pip install -r dev-requirements.txt
+	virtualenv/bin/pip install -r remote/requirements.txt
 
 bumpversion: virtualenv
 	virtualenv/bin/bumpversion --verbose --list minor
@@ -31,7 +32,7 @@ test: virtualenv
 		cd remote && \
 		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
 	kubectl config set-context minikube
-	env PATH=$(PWD)/cli/:$(PATH) virtualenv/bin/py.test tests
+	env PATH=$(PWD)/cli/:$(PATH) virtualenv/bin/py.test tests remote/test_socks.py
 
 release: build
 	docker push datawire/telepresence-local:$(VERSION)
