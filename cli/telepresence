@@ -165,7 +165,7 @@ def start_proxy(args):
         # proxy, so expose the local SOCKS port to the host machine:
         docker_cmd.extend([
             "-p",
-            "50000:50000",
+            "9050:9050",
         ])
 
     docker_cmd.extend([
@@ -191,7 +191,7 @@ def run_local_command(args, out_env, container_id):
     with open(out_env, "r") as f:
         env = os.environ.copy()
         env.update(dict(line.split("=", 1) for line in f.read().splitlines()))
-    p = Popen(["tsocks", "-p", "50000"] + args.run_args, env=env)
+    p = Popen(["torsocks"] + args.run_args, env=env)
 
     def terminate_if_alive():
         if p.poll() is None:

@@ -164,7 +164,7 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
         )
 
     # start SOCKS proxy, for telepresence --run:
-    processes.append(ssh(["-D", "0.0.0.0:50000"]))
+    processes.append(ssh(["-D", "0.0.0.0:9050"]))
 
     # start proxies for custom-mapped hosts:
     for host, port in [s.split(":", 1) for s in custom_proxied_hosts]:
