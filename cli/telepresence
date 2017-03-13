@@ -191,6 +191,7 @@ def run_local_command(args, out_env, container_id):
     with open(out_env, "r") as f:
         env = os.environ.copy()
         env.update(dict(line.split("=", 1) for line in f.read().splitlines()))
+        env["PS1"] = "[TELEPRESENCE] " + env.get("PS1", "$ ")
     p = Popen(["torsocks"] + args.run_args, env=env)
 
     def terminate_if_alive():
