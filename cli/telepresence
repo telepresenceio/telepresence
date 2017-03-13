@@ -281,7 +281,7 @@ def handle_unexpected_errors(f):
                 "\nLooks like there's a bug in our code. Sorry about that!\n\n"
                 "Here's the traceback:\n\n" + error + "\n"
             )
-            if input(
+            if sys.stdout.isatty() and input(
                 "Would you like to file an issue in our issue tracker?"
                 " We'd really appreciate the help improving our product. "
                 "[Y/n]: ",
