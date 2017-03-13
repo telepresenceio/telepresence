@@ -147,7 +147,8 @@ def start_proxy(args):
         # We're using a local command, which means it will be using a SOCKS
         # proxy, so expose the local SOCKS port to the host machine:
         docker_cmd.extend([
-            "-p", "50000:50000",
+            "-p",
+            "50000:50000",
         ])
 
     docker_cmd.extend([
@@ -172,14 +173,13 @@ def run_local_command(args, out_env, container_id):
     """--run support, run command locally."""
     with open(out_env, "r") as f:
         env = os.environ.copy()
-        env.update(
-            dict(line.split("=", 1) for line in f.read().splitlines()))
-    p = Popen(["tsocks", "-p", "50000"] + args.run_args,
-              env=env)
+        env.update(dict(line.split("=", 1) for line in f.read().splitlines()))
+    p = Popen(["tsocks", "-p", "50000"] + args.run_args, env=env)
 
     def terminate_if_alive():
         if p.poll() is not None:
             p.terminate()
+
     atexit.register(terminate_if_alive)
     p.wait()
 
@@ -295,13 +295,14 @@ def main():
         tempdir, container_id = start_proxy(args)
         # Wait for proxy container to write out env file, indicating we're good
         # to go:
-        out_env = os.path.join(tempdir, "out.env")
+        out_env = os.path.join(tempdir, "docker.env")
         while not os.path.exists(out_env):
             sleep(1)
         if args.docker_run_args is not None:
-            run_docker_command(args, tempdir, container_id)
+            run_docker_command(args, out_env, container_id)
         else:
-            run_local_command(args, tempdir, container_id)
+            run_local_command(args,
+                              os.path.join(tempdir, "local.env"), container_id)
 
     go()
 

@@ -37,7 +37,9 @@ def get_env_variables(pod_name):
     """Generate environment variables that match kubernetes."""
     remote_env = get_remote_env(pod_name)
     filter_keys = set()
-    result = {}
+    in_docker_result = {}  # ips proxied via docker, so need to modify addresses
+    socks_result = {key: value for (key, value) in remote_env.items()
+                    if key not in environ}  # ips proxied via SOCKS, no modification
     # XXX we're recreating the port generation logic
     i = 0
     for i, service_key in enumerate(_get_service_keys(remote_env)):
@@ -50,29 +52,34 @@ def get_env_variables(pod_name):
         filter_keys |= set([filter_prefix + s for s in ("", "_PROTO", "_PORT", "_ADDR")])
         # XXX will be wrong for UDP
         full_address = "tcp://{}:{}".format(ip, port)
-        result[name + "_SERVICE_HOST"] = ip
-        result[name + "_SERVICE_PORT"] = port
-        result[name + "_PORT"] = full_address
+        in_docker_result[name + "_SERVICE_HOST"] = ip
+        in_docker_result[name + "_SERVICE_PORT"] = port
+        in_docker_result[name + "_PORT"] = full_address
         port_name = name + "_PORT_" + port + "_TCP"
-        result[port_name] = full_address
+        in_docker_result[port_name] = full_address
         # XXX will break for UDP
-        result[port_name + "_PROTO"] = "tcp"
-        result[port_name + "_PORT"] = port
-        result[port_name + "_ADDR"] = ip
+        in_docker_result[port_name + "_PROTO"] = "tcp"
+        in_docker_result[port_name + "_PORT"] = port
+        in_docker_result[port_name + "_ADDR"] = ip
     for key, value in remote_env.items():
         # We don't want env variables that are service addresses (did those
         # above) nor those that are already present in this container.
         # XXX we're getting env variables from telepresence that are image-specific, not coming from the Deployment. figure out way to differentiate.
-        if key not in result and key not in environ and key not in filter_keys:
-            result[key] = value
-    return result
+        if key not in in_docker_result and key not in environ and key not in filter_keys:
+            in_docker_result[key] = value
+    return in_docker_result, socks_result
 
 
 def write_env(pod_name):
-    with open("/output/out.env.tmp", "w") as f:
-        for key, value in get_env_variables(pod_name).items():
+    for_docker_env, for_local_env = get_env_variables(pod_name)
+    with open("/output/unproxied.env.tmp", "w") as f:
+        for key, value in for_local_env.items():
             f.write("{}={}\n".format(key, value))
-    rename("/output/out.env.tmp", "/output/out.env")
+    rename("/output/unproxied.env.tmp", "/output/unproxed.env")
+    with open("/output/docker.env.tmp", "w") as f:
+        for key, value in for_docker_env.items():
+            f.write("{}={}\n".format(key, value))
+    rename("/output/docker.env.tmp", "/output/docker.env")
 
 
 def write_etc_hosts(additional_hosts):
