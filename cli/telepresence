@@ -324,7 +324,7 @@ def main():
             run_docker_command(args, out_env, container_id)
         else:
             run_local_command(
-                args, os.path.join(tempdir, "local.env"), container_id
+                args, os.path.join(tempdir, "unproxied.env"), container_id
             )
 
     go()

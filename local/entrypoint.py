@@ -82,7 +82,7 @@ def write_env(pod_name):
     with open("/output/unproxied.env.tmp", "w") as f:
         for key, value in for_local_env.items():
             f.write("{}={}\n".format(key, value))
-    rename("/output/unproxied.env.tmp", "/output/unproxed.env")
+    rename("/output/unproxied.env.tmp", "/output/unproxied.env")
     with open("/output/docker.env.tmp", "w") as f:
         for key, value in for_docker_env.items():
             f.write("{}={}\n".format(key, value))
