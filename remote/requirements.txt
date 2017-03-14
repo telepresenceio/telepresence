@@ -1,2 +1,2 @@
 Twisted
-socks5
+socks5==0.2.1

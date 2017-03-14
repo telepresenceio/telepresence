@@ -115,84 +115,17 @@ class SOCKSv5(protocol.Protocol):
             response_data = self.statemachine.send(response_event)
             self.transport.write(response_data)
             return
-        if event == "":
-            # ...
-
-        if self.otherConn:
-            self.otherConn.write(data)
-            return
-        self.buf = self.buf + data
-        completeBuffer = self.buf
-        if b"\000" in self.buf[8:]:
-            head, self.buf = self.buf[:8], self.buf[8:]
-            version, code, port = struct.unpack("!BBH", head[:4])
-            user, self.buf = self.buf.split(b"\000", 1)
-            if head[4:7] == b"\000\000\000" and head[7:8] != b"\000":
-                # An IP address of the form 0.0.0.X, where X is non-zero,
-                # signifies that this is a SOCKSv4a packet.
-                # If the complete packet hasn't been received, restore the
-                # buffer and wait for it.
-                if b"\000" not in self.buf:
-                    self.buf = completeBuffer
-                    return
-                server, self.buf = self.buf.split(b"\000", 1)
-                d = self.reactor.resolve(server)
-                d.addCallback(self._dataReceived2, user,
-                              version, code, port)
-                d.addErrback(lambda result, self = self: self.makeReply(91))
-                return
-            else:
-                server = socket.inet_ntoa(head[4:8])
-
-            self._dataReceived2(server, user, version, code, port)
-
-
-    def _dataReceived2(self, server, user, version, code, port):
-        """
-        The second half of the SOCKS connection setup. For a SOCKSv5 packet this
-        is after the server address has been extracted from the header. For a
-        SOCKSv5a packet this is after the host name has been resolved.
-
-        @type server: L{str}
-        @param server: The IP address of the destination, represented as a
-            dotted quad.
-
-        @type user: L{str}
-        @param user: The username associated with the connection.
-
-        @type version: L{int}
-        @param version: The SOCKS protocol version number.
-
-        @type code: L{int}
-        @param code: The comand code. 1 means establish a TCP/IP stream
-            connection, and 2 means establish a TCP/IP port binding.
-
-        @type port: L{int}
-        @param port: The port number associated with the connection.
-        """
-        assert version == 4, "Bad version code: %s" % version
-        if not self.authorize(code, server, port, user):
-            self.makeReply(91)
-            return
-        if code == 1: # CONNECT
-            d = self.connectClass(server, port, SOCKSv5Outgoing, self)
-            d.addErrback(lambda result, self = self: self.makeReply(91))
-        elif code == 2: # BIND
-            raise NotImplementedError("NO BIND, SORRY")
-        else:
-            raise RuntimeError("Bad Connect Code: %s" % (code,))
-        assert self.buf == b"", "hmm, still stuff in buffer... %s" % repr(
-            self.buf)
+        if event == "Request":
+            if event.someting == REQ_COMMAND["CONNECT"]:
+                d = self.connectClass(server, port, SOCKSv5Outgoing, self)
+                d.addErrback(lambda result, self = self: self.makeReply(Response())
+            elif event.someting == REQ_COMMAND["RESOLVE"]:
+                self.makeReply
 
 
     def connectionLost(self, reason):
         if self.otherConn:
             self.otherConn.transport.loseConnection()
-
-
-    def authorize(self,code,server,port,user):
-        log.msg("code %s connection to %s:%s (user %s) authorized" % (code,server,port,user))
-        return 1
 
 
     def connectClass(self, host, port, klass, *args):
@@ -204,9 +137,10 @@ class SOCKSv5(protocol.Protocol):
         return defer.succeed(serv.getHost()[1:])
 
 
-    def makeReply(self,reply,version=0,port=0,ip="0.0.0.0"):
-        self.transport.write(struct.pack("!BBH",version,reply,port)+socket.inet_aton(ip))
-        if reply!=90: self.transport.loseConnection()
+    def makeReply(self, response):
+        self.transport.write(self.statemachine.send(response))
+        if response.status != RESP_STATUS["SUCCESS"]:
+            self.transport.loseConnection()
 
 
     def write(self,data):
