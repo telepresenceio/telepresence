@@ -12,5 +12,3 @@ Telepresence allows you to run your code locally while still:
 3. Allowing Kubernetes to access your code as if it were in a normal pod within the cluster.
 
 Telepresence is part of the [Blackbird Project](https://www.datawire.io/blackbird/), and licensed under the Apache 2.0 License.
-
-[Discuss Telepresence on Slack](http://blackbird-oss.herokuapp.com/)
