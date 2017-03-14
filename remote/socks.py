@@ -2,10 +2,10 @@
 # See LICENSE for details.
 
 """
-Implementation of the SOCKSv4 protocol.
+Implementation of the SOCKSv5 protocol.
 
-In additional to SOCKSv4A this also implements the Tor SOCKS protocol extension
-for DNS lookups.
+In additional to standard SOCKSv5 this also implements the Tor SOCKS protocol
+extension for DNS lookups.
 """
 
 # python imports
@@ -18,8 +18,14 @@ import time
 from twisted.internet import reactor, protocol, defer
 from twisted.python import log
 
+# other imports
+from socks5 import GreetingResponse, GreetingRequest, Request, Response
+from socks5 import AUTH_TYPE, RESP_STATUS, REQ_COMMAND
+from socks5 import Connection
+REQ_COMMAND["RESOLVE"] = 0xF0
 
-class SOCKSv4Outgoing(protocol.Protocol):
+
+class SOCKSv5Outgoing(protocol.Protocol):
     def __init__(self, socks):
         self.socks=socks
 
@@ -44,7 +50,7 @@ class SOCKSv4Outgoing(protocol.Protocol):
 
 
 
-class SOCKSv4Incoming(protocol.Protocol):
+class SOCKSv5Incoming(protocol.Protocol):
     def __init__(self,socks):
         self.socks=socks
         self.socks.otherConn=self
@@ -64,9 +70,9 @@ class SOCKSv4Incoming(protocol.Protocol):
 
 
 
-class SOCKSv4(protocol.Protocol):
+class SOCKSv5(protocol.Protocol):
     """
-    An implementation of the SOCKSv4 protocol.
+    An implementation of the SOCKSv5 protocol.
 
     @type logging: L{str} or L{None}
     @ivar logging: If not L{None}, the name of the logfile to which connection
@@ -76,9 +82,9 @@ class SOCKSv4(protocol.Protocol):
     @ivar reactor: The reactor used to create connections.
 
     @type buf: L{str}
-    @ivar buf: Part of a SOCKSv4 connection request.
+    @ivar buf: Part of a SOCKSv5 connection request.
 
-    @type otherConn: C{SOCKSv4Incoming}, C{SOCKSv4Outgoing} or L{None}
+    @type otherConn: C{SOCKSv5Incoming}, C{SOCKSv5Outgoing} or L{None}
     @ivar otherConn: Until the connection has been established, C{otherConn} is
         L{None}. After that, it is the proxy-to-destination protocol instance
         along which the client's connection is being forwarded.
@@ -89,7 +95,8 @@ class SOCKSv4(protocol.Protocol):
 
 
     def connectionMade(self):
-        self.buf = b""
+        self.statemachine = Connection(our_role="server")
+        self.statemachine.initiate_connection()
         self.otherConn = None
 
 
@@ -98,8 +105,19 @@ class SOCKSv4(protocol.Protocol):
         Called whenever data is received.
 
         @type data: L{bytes}
-        @param data: Part or all of a SOCKSv4 packet.
+        @param data: Part or all of a SOCKSv5 packet.
         """
+        event = self.statemachine.recv(data)
+        if event == "NeedMoreData":
+            return
+        if event == "GreetingRequest":
+            response_event = GreetingResponse(AUTH_TYPE["NO_AUTH"])
+            response_data = self.statemachine.send(response_event)
+            self.transport.write(response_data)
+            return
+        if event == "":
+            # ...
+
         if self.otherConn:
             self.otherConn.write(data)
             return
@@ -131,9 +149,9 @@ class SOCKSv4(protocol.Protocol):
 
     def _dataReceived2(self, server, user, version, code, port):
         """
-        The second half of the SOCKS connection setup. For a SOCKSv4 packet this
+        The second half of the SOCKS connection setup. For a SOCKSv5 packet this
         is after the server address has been extracted from the header. For a
-        SOCKSv4a packet this is after the host name has been resolved.
+        SOCKSv5a packet this is after the host name has been resolved.
 
         @type server: L{str}
         @param server: The IP address of the destination, represented as a
@@ -157,12 +175,10 @@ class SOCKSv4(protocol.Protocol):
             self.makeReply(91)
             return
         if code == 1: # CONNECT
-            d = self.connectClass(server, port, SOCKSv4Outgoing, self)
+            d = self.connectClass(server, port, SOCKSv5Outgoing, self)
             d.addErrback(lambda result, self = self: self.makeReply(91))
         elif code == 2: # BIND
-            d = self.listenClass(0, SOCKSv4IncomingFactory, self, server)
-            d.addCallback(lambda x,
-                          self = self: self.makeReply(90, 0, x[1], x[0]))
+            raise NotImplementedError("NO BIND, SORRY")
         else:
             raise RuntimeError("Bad Connect Code: %s" % (code,))
         assert self.buf == b"", "hmm, still stuff in buffer... %s" % repr(
@@ -220,9 +236,9 @@ class SOCKSv4(protocol.Protocol):
 
 
 
-class SOCKSv4Factory(protocol.Factory):
+class SOCKSv5Factory(protocol.Factory):
     """
-    A factory for a SOCKSv4 proxy.
+    A factory for a SOCKSv5 proxy.
 
     Constructor accepts one argument, a log file name.
     """
@@ -231,11 +247,11 @@ class SOCKSv4Factory(protocol.Factory):
 
 
     def buildProtocol(self, addr):
-        return SOCKSv4(self.logging, reactor)
+        return SOCKSv5(self.logging, reactor)
 
 
 
-class SOCKSv4IncomingFactory(protocol.Factory):
+class SOCKSv5IncomingFactory(protocol.Factory):
     """
     A utility class for building protocols for incoming connections.
     """
@@ -248,7 +264,7 @@ class SOCKSv4IncomingFactory(protocol.Factory):
         if addr[0] == self.ip:
             self.ip = ""
             self.socks.makeReply(90, 0)
-            return SOCKSv4Incoming(self.socks)
+            return SOCKSv5Incoming(self.socks)
         elif self.ip == "":
             return None
         else:

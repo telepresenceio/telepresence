@@ -2,8 +2,8 @@
 # See LICENSE for details.
 
 """
-Tests for L{twisted.protocol.socks}, an implementation of the SOCKSv4 and
-SOCKSv4a protocols.
+Tests for L{socks}, an implementation of the SOCKSv5 protocol with Tor
+extension.
 """
 
 import struct, socket
@@ -59,11 +59,11 @@ class FakeResolverReactor:
 
 
 
-class SOCKSv4Driver(socks.SOCKSv4):
-    # last SOCKSv4Outgoing instantiated
+class SOCKSv5Driver(socks.SOCKSv5):
+    # last SOCKSv5Outgoing instantiated
     driver_outgoing = None
 
-    # last SOCKSv4IncomingFactory instantiated
+    # last SOCKSv5IncomingFactory instantiated
     driver_listen = None
 
     def connectClass(self, host, port, klass, *args):
@@ -88,10 +88,10 @@ class SOCKSv4Driver(socks.SOCKSv4):
 
 class ConnectTests(unittest.TestCase):
     """
-    Tests for SOCKS and SOCKSv4a connect requests using the L{SOCKSv4} protocol.
+    Tests for SOCKSv5 connect requests using the L{SOCKSv5} protocol.
     """
     def setUp(self):
-        self.sock = SOCKSv4Driver()
+        self.sock = SOCKSv5Driver()
         self.sock.transport = StringTCPTransport()
         self.sock.connectionMade()
         self.sock.reactor = FakeResolverReactor({b"localhost":"127.0.0.1"})
@@ -130,14 +130,11 @@ class ConnectTests(unittest.TestCase):
         self.sock.connectionLost('fake reason')
 
 
-    def test_socks4aSuccessfulResolution(self):
+    def test_socks5SuccessfulResolution(self):
         """
-        If the destination IP address has zeros for the first three octets and
-        non-zero for the fourth octet, the client is attempting a v4a
-        connection.  A hostname is specified after the user ID string and the
-        server connects to the address that hostname resolves to.
+        Socks5 also supports hostname-based connections.
 
-        @see: U{http://en.wikipedia.org/wiki/SOCKS#SOCKS_4a_protocol}
+        @see: U{http://en.wikipedia.org/wiki/SOCKS#SOCKS_5_protocol}
         """
         # send the domain name "localhost" to be resolved
         clientRequest = (
@@ -177,9 +174,9 @@ class ConnectTests(unittest.TestCase):
         self.sock.connectionLost('fake reason')
 
 
-    def test_socks4aFailedResolution(self):
+    def test_socks5FailedResolution(self):
         """
-        Failed hostname resolution on a SOCKSv4a packet results in a 91 error
+        Failed hostname resolution on a SOCKSv5 packet results in a 91 error
         response and the connection getting closed.
         """
         # send the domain name "failinghost" to be resolved
@@ -204,6 +201,38 @@ class ConnectTests(unittest.TestCase):
         # A failed resolution causes the transport to drop the connection.
         self.assertTrue(self.sock.transport.stringTCPTransport_closing)
         self.assertIsNone(self.sock.driver_outgoing)
+
+
+    def test_socks5TorStyleResolution(self):
+        """
+        Support Tor-style name resolution: a new command that just does
+        hostname->IP resolution.
+
+        See https://gitweb.torproject.org/torsocks.git/tree/doc/socks/socks-extensions.txt#n40 for details.
+        """
+        # send the domain name "localhost" to be resolved
+        clientRequest = (
+            struct.pack('!BBH', 4, 1, 34)
+            + socket.inet_aton('0.0.0.1')
+            + b'fooBAZ\0'
+            + b'localhost\0')
+
+        # Deliver the bytes one by one to exercise the protocol's buffering
+        # logic. FakeResolverReactor's resolve method is invoked to "resolve"
+        # the hostname.
+        for byte in iterbytes(clientRequest):
+            self.sock.dataReceived(byte)
+
+        sent = self.sock.transport.value()
+        self.sock.transport.clear()
+
+        # Verify that the server responded with the address which will be
+        # connected to.
+        self.assertEqual(
+            sent,
+            struct.pack('!BBH', 0, 90, 34) + socket.inet_aton('127.0.0.1'))
+        self.assertFalse(self.sock.transport.stringTCPTransport_closing)
+        self.assertIsNotNone(self.sock.driver_outgoing)
 
 
     def test_accessDenied(self):
@@ -253,252 +282,3 @@ class ConnectTests(unittest.TestCase):
 
         # now close it from the client side
         self.sock.connectionLost('fake reason')
-
-
-
-class BindTests(unittest.TestCase):
-    """
-    Tests for SOCKS and SOCKSv4a bind requests using the L{SOCKSv4} protocol.
-    """
-    def setUp(self):
-        self.sock = SOCKSv4Driver()
-        self.sock.transport = StringTCPTransport()
-        self.sock.connectionMade()
-        self.sock.reactor = FakeResolverReactor({b"localhost":"127.0.0.1"})
-
-##     def tearDown(self):
-##         # TODO ensure the listen port is closed
-##         listen = self.sock.driver_listen
-##         if listen is not None:
-##             self.assert_(incoming.transport.stringTCPTransport_closing,
-##                     "Incoming SOCKS connections need to be closed.")
-
-    def test_simple(self):
-        self.sock.dataReceived(
-            struct.pack('!BBH', 4, 2, 34)
-            + socket.inet_aton('1.2.3.4')
-            + b'fooBAR'
-            + b'\0')
-        sent = self.sock.transport.value()
-        self.sock.transport.clear()
-        self.assertEqual(sent,
-                         struct.pack('!BBH', 0, 90, 1234)
-                         + socket.inet_aton('6.7.8.9'))
-        self.assertFalse(self.sock.transport.stringTCPTransport_closing)
-        self.assertIsNotNone(self.sock.driver_listen)
-
-        # connect
-        incoming = self.sock.driver_listen.buildProtocol(('1.2.3.4', 5345))
-        self.assertIsNotNone(incoming)
-        incoming.transport = StringTCPTransport()
-        incoming.connectionMade()
-
-        # now we should have the second reply packet
-        sent = self.sock.transport.value()
-        self.sock.transport.clear()
-        self.assertEqual(sent,
-                         struct.pack('!BBH', 0, 90, 0)
-                         + socket.inet_aton('0.0.0.0'))
-        self.assertFalse(self.sock.transport.stringTCPTransport_closing)
-
-        # pass some data through
-        self.sock.dataReceived(b'hello, world')
-        self.assertEqual(incoming.transport.value(),
-                         b'hello, world')
-
-        # the other way around
-        incoming.dataReceived(b'hi there')
-        self.assertEqual(self.sock.transport.value(), b'hi there')
-
-        self.sock.connectionLost('fake reason')
-
-
-    def test_socks4a(self):
-        """
-        If the destination IP address has zeros for the first three octets and
-        non-zero for the fourth octet, the client is attempting a v4a
-        connection.  A hostname is specified after the user ID string and the
-        server connects to the address that hostname resolves to.
-
-        @see: U{http://en.wikipedia.org/wiki/SOCKS#SOCKS_4a_protocol}
-        """
-        # send the domain name "localhost" to be resolved
-        clientRequest = (
-            struct.pack('!BBH', 4, 2, 34)
-            + socket.inet_aton('0.0.0.1')
-            + b'fooBAZ\0'
-            + b'localhost\0')
-
-        # Deliver the bytes one by one to exercise the protocol's buffering
-        # logic. FakeResolverReactor's resolve method is invoked to "resolve"
-        # the hostname.
-        for byte in iterbytes(clientRequest):
-            self.sock.dataReceived(byte)
-
-        sent = self.sock.transport.value()
-        self.sock.transport.clear()
-
-        # Verify that the server responded with the address which will be
-        # connected to.
-        self.assertEqual(
-            sent,
-            struct.pack('!BBH', 0, 90, 1234) + socket.inet_aton('6.7.8.9'))
-        self.assertFalse(self.sock.transport.stringTCPTransport_closing)
-        self.assertIsNotNone(self.sock.driver_listen)
-
-        # connect
-        incoming = self.sock.driver_listen.buildProtocol(('127.0.0.1', 5345))
-        self.assertIsNotNone(incoming)
-        incoming.transport = StringTCPTransport()
-        incoming.connectionMade()
-
-        # now we should have the second reply packet
-        sent = self.sock.transport.value()
-        self.sock.transport.clear()
-        self.assertEqual(sent,
-                         struct.pack('!BBH', 0, 90, 0)
-                         + socket.inet_aton('0.0.0.0'))
-        self.assertIsNot(
-            self.sock.transport.stringTCPTransport_closing, None)
-
-        # Deliver some data from the output connection and verify it is
-        # passed along to the incoming side.
-        self.sock.dataReceived(b'hi there')
-        self.assertEqual(incoming.transport.value(), b'hi there')
-
-        # the other way around
-        incoming.dataReceived(b'hi there')
-        self.assertEqual(self.sock.transport.value(), b'hi there')
-
-        self.sock.connectionLost('fake reason')
-
-
-    def test_socks4aFailedResolution(self):
-        """
-        Failed hostname resolution on a SOCKSv4a packet results in a 91 error
-        response and the connection getting closed.
-        """
-        # send the domain name "failinghost" to be resolved
-        clientRequest = (
-            struct.pack('!BBH', 4, 2, 34)
-            + socket.inet_aton('0.0.0.1')
-            + b'fooBAZ\0'
-            + b'failinghost\0')
-
-        # Deliver the bytes one by one to exercise the protocol's buffering
-        # logic. FakeResolverReactor's resolve method is invoked to "resolve"
-        # the hostname.
-        for byte in iterbytes(clientRequest):
-            self.sock.dataReceived(byte)
-
-        # Verify that the server responds with a 91 error.
-        sent = self.sock.transport.value()
-        self.assertEqual(
-            sent,
-            struct.pack('!BBH', 0, 91, 0) + socket.inet_aton('0.0.0.0'))
-
-        # A failed resolution causes the transport to drop the connection.
-        self.assertTrue(self.sock.transport.stringTCPTransport_closing)
-        self.assertIsNone(self.sock.driver_outgoing)
-
-
-    def test_accessDenied(self):
-        self.sock.authorize = lambda code, server, port, user: 0
-        self.sock.dataReceived(
-            struct.pack('!BBH', 4, 2, 4242)
-            + socket.inet_aton('10.2.3.4')
-            + b'fooBAR'
-            + b'\0')
-        self.assertEqual(self.sock.transport.value(),
-                         struct.pack('!BBH', 0, 91, 0)
-                         + socket.inet_aton('0.0.0.0'))
-        self.assertTrue(self.sock.transport.stringTCPTransport_closing)
-        self.assertIsNone(self.sock.driver_listen)
-
-
-    def test_eofRemote(self):
-        self.sock.dataReceived(
-            struct.pack('!BBH', 4, 2, 34)
-            + socket.inet_aton('1.2.3.4')
-            + b'fooBAR'
-            + b'\0')
-        sent = self.sock.transport.value()
-        self.sock.transport.clear()
-
-        # connect
-        incoming = self.sock.driver_listen.buildProtocol(('1.2.3.4', 5345))
-        self.assertIsNotNone(incoming)
-        incoming.transport = StringTCPTransport()
-        incoming.connectionMade()
-
-        # now we should have the second reply packet
-        sent = self.sock.transport.value()
-        self.sock.transport.clear()
-        self.assertEqual(sent,
-                         struct.pack('!BBH', 0, 90, 0)
-                         + socket.inet_aton('0.0.0.0'))
-        self.assertFalse(self.sock.transport.stringTCPTransport_closing)
-
-        # pass some data through
-        self.sock.dataReceived(b'hello, world')
-        self.assertEqual(incoming.transport.value(),
-                         b'hello, world')
-
-        # now close it from the server side
-        incoming.transport.loseConnection()
-        incoming.connectionLost('fake reason')
-
-
-    def test_eofLocal(self):
-        self.sock.dataReceived(
-            struct.pack('!BBH', 4, 2, 34)
-            + socket.inet_aton('1.2.3.4')
-            + b'fooBAR'
-            + b'\0')
-        sent = self.sock.transport.value()
-        self.sock.transport.clear()
-
-        # connect
-        incoming = self.sock.driver_listen.buildProtocol(('1.2.3.4', 5345))
-        self.assertIsNotNone(incoming)
-        incoming.transport = StringTCPTransport()
-        incoming.connectionMade()
-
-        # now we should have the second reply packet
-        sent = self.sock.transport.value()
-        self.sock.transport.clear()
-        self.assertEqual(sent,
-                         struct.pack('!BBH', 0, 90, 0)
-                         + socket.inet_aton('0.0.0.0'))
-        self.assertFalse(self.sock.transport.stringTCPTransport_closing)
-
-        # pass some data through
-        self.sock.dataReceived(b'hello, world')
-        self.assertEqual(incoming.transport.value(),
-                         b'hello, world')
-
-        # now close it from the client side
-        self.sock.connectionLost('fake reason')
-
-
-    def test_badSource(self):
-        self.sock.dataReceived(
-            struct.pack('!BBH', 4, 2, 34)
-            + socket.inet_aton('1.2.3.4')
-            + b'fooBAR'
-            + b'\0')
-        sent = self.sock.transport.value()
-        self.sock.transport.clear()
-
-        # connect from WRONG address
-        incoming = self.sock.driver_listen.buildProtocol(('1.6.6.6', 666))
-        self.assertIsNone(incoming)
-
-        # Now we should have the second reply packet and it should
-        # be a failure. The connection should be closing.
-        sent = self.sock.transport.value()
-        self.sock.transport.clear()
-        self.assertEqual(sent,
-                         struct.pack('!BBH', 0, 91, 0)
-                         + socket.inet_aton('0.0.0.0'))
-        self.assertTrue(self.sock.transport.stringTCPTransport_closing)
