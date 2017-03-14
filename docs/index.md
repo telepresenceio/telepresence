@@ -6,7 +6,8 @@ Telepresence allows you to run your code locally while still:
 3. Allowing Kubernetes to access your code as if it were in a normal pod within the cluster.
 
 **IMPORTANT:** Telepresence is currently in the prototyping stage, and we expect it to change rapidly based on user feedback.
-Please [file bugs and feature requests](https://github.com/datawire/telepresence/issues) or come [talk to us on Slack](http://blackbird-oss.herokuapp.com/).
+
+Please [file bugs and feature requests](https://github.com/datawire/telepresence/issues) or come [talk to us on Gitter](http://gitter.im/datawire/telepresence).
 
 ## Telepresence makes development faster
 
