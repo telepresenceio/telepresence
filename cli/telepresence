@@ -83,7 +83,8 @@ def parse_args():
     parser.add_argument('--version', action='version', version=__version__)
     parser.add_argument(
         "--logfile", default="./telepresence.log",
-        help="The path to write logs to. '-' means stdout.")
+        help=("The path to write logs to. '-' means stdout, "
+              "default is './telepresence.log'."))
     group_deployment = parser.add_mutually_exclusive_group(required=True)
     group_deployment.add_argument(
         "--deployment",
