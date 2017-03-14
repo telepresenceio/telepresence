@@ -130,6 +130,7 @@ def stop_proxy(runner, container_id):
     if sys.stderr.isatty():
         print("Shutting proxy down...", file=sys.stderr)
     stop_container(runner, container_id)
+    runner.get_output(maybe_sudo(["docker", "rm", container_id]))
 
 
 def stop_container(runner, container_id):
@@ -171,8 +172,6 @@ def start_proxy(runner, args):
         "run",
         # Run in background:
         "--detach",
-        # Delete when exited:
-        "--rm",
         # Mount $HOME so we have access to kubectl configuration:
         "-v",
         home_path + ":/opt:ro",
