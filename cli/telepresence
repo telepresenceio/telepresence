@@ -268,52 +268,72 @@ Traceback:
 ```
 {}
 ```
+
+Logs:
+
+```
+{}
+```
 """
 
 
-def handle_unexpected_errors(f):
+class handle_unexpected_errors(object):
     """Decorator that catches unexpected errors."""
 
-    def safe_output(args):
-        try:
-            return unicode(check_output(args), "utf-8").strip()
-        except CalledProcessError as e:
-            return "(error: {})".format(e)
+    def __init__(self, logfile):
+        self.logfile = logfile
 
-    @wraps(f)
-    def call_f(*args, **kwargs):
-        try:
-            return f(*args, **kwargs)
-        except SystemExit:
-            raise
-        except KeyboardInterrupt:
-            raise SystemExit(0)
-        except Exception as e:
-            errorf = StringIO()
-            print_exc(file=errorf)
-            error = errorf.getvalue()
-            print(
-                "\nLooks like there's a bug in our code. Sorry about that!\n\n"
-                "Here's the traceback:\n\n" + error + "\n")
-            if input(
-                    "Would you like to file an issue in our issue tracker?"
-                    " We'd really appreciate the help improving our product. "
-                    "[Y/n]: ", ).lower() in ("y", ""):
-                url = (
-                    "https://github.com/datawire/telepresence/issues/new?body="
-                )
-                body = quote_plus(
-                    BUG_REPORT_TEMPLATE.format(
-                        sys.argv, __version__, sys.version,
-                        safe_output(["kubectl", "version", "--short", "--client"]),
-                        safe_output(maybe_sudo(["docker", "version"])),
-                        safe_output(["uname", "-a"]),
-                        error))
-                webbrowser.open_new(url + body)
-            else:
-                raise SystemExit(1)
+    def __call__(self, f):
+        def safe_output(args):
+            try:
+                return unicode(check_output(args), "utf-8").strip()
+            except CalledProcessError as e:
+                return "(error: {})".format(e)
 
-    return call_f
+        @wraps(f)
+        def call_f(*args, **kwargs):
+            try:
+                return f(*args, **kwargs)
+            except SystemExit:
+                raise
+            except KeyboardInterrupt:
+                raise SystemExit(0)
+            except Exception as e:
+                logs = "Not available"
+                if self.logfile != "-" and os.path.exists(self.logfile):
+                    try:
+                        with open(self.logfile, "r") as logfile:
+                            logs = logfile.read()
+                    except Exception as e:
+                        logs += "error ({})".format(e)
+                errorf = StringIO()
+                print_exc(file=errorf)
+                error = errorf.getvalue()
+                print(
+                    "\nLooks like there's a bug in our code. Sorry about that!"
+                    "You may able to find more details in the logs "
+                    "(which are written to telepresence.log by default).\n\n"
+                    "Here's the traceback:\n\n" + error + "\n")
+                if input(
+                        "Would you like to file an issue in our issue tracker?"
+                        " We'd really appreciate the help improving our "
+                        "product. [Y/n]: ", ).lower() in ("y", ""):
+                    url = (
+                        "https://github.com/datawire/telepresence/issues/new?body="
+                    )
+                    body = quote_plus(
+                        # Overly long URLs won't work:
+                        BUG_REPORT_TEMPLATE.format(
+                            sys.argv, __version__, sys.version,
+                            safe_output(["kubectl", "version", "--short", "--client"]),
+                            safe_output(maybe_sudo(["docker", "version"])),
+                            safe_output(["uname", "-a"]),
+                            error, logs)[:4000])
+                    webbrowser.open_new(url + body)
+                else:
+                    raise SystemExit(1)
+
+        return call_f
 
 
 def main():
@@ -327,7 +347,7 @@ def main():
     args = parse_args()
     runner = Runner.open(args.logfile)
 
-    @handle_unexpected_errors
+    @handle_unexpected_errors(args.logfile)
     def go():
         # Make sure we can access Kubernetes:
         try:
