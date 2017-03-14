@@ -6,7 +6,8 @@ Telepresence allows you to run your code locally while still:
 3. Allowing Kubernetes to access your code as if it were in a normal pod within the cluster.
 
 **IMPORTANT:** Telepresence is currently in the prototyping stage, and we expect it to change rapidly based on user feedback.
-Please [file bugs and feature requests](https://github.com/datawire/telepresence/issues) or come [talk to us on Slack](http://blackbird-oss.herokuapp.com/).
+
+Please [file bugs and feature requests](https://github.com/datawire/telepresence/issues) or come [talk to us on Gitter](http://gitter.im/datawire/telepresence).
 
 ## Telepresence makes development faster
 
@@ -367,9 +368,25 @@ Some alternatives to Telepresence:
   It also won't help you access cloud resources, you will need to emulate them.
 * Pushing your code to the remote Kubernetes cluster.
   This is a somewhat slow process, and you won't be able to do the quick debug cycle you get from running code locally.
-
+  
 ## Changelog
 
-### v0.8
+### 0.9 (unreleased)
 
-* Added support for `telepresence --run`.
+Features:
+
+* Added support for `telepresence --run`, allowing using local processes rather than just Docker containers.
+  ([#1](https://github.com/datawire/telepresence/issues/1))
+
+### 0.8 (March 14, 2017)
+
+Features:
+
+* Basic logging of what Telepresence is doing, for easier debugging.
+* Check for Kubernetes and Docker on startup, so problems are caught earlier.
+* Better error reporting on crashes. ([#19](https://github.com/datawire/telepresence/issues/19))
+
+Bugfixes:
+
+* Fixed bug where combination of `--rm` and `--detach` broke Telepresence on versions of Docker older than 1.13. Thanks to Jean-Paul Calderone for reporting the problem. ([#18](https://github.com/datawire/telepresence/issues/18))
+
