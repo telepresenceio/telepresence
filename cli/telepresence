@@ -277,9 +277,14 @@ def main():
 
     @handle_unexpected_errors
     def go():
-        raise RuntimeError()
         tempdir, container_id = start_proxy(args)
         run_local_command(args, tempdir, container_id)
+        # Make sure we can access Kubernetes:
+        try:
+            check_output(["kubectl", "cluster-info"])
+        except CalledProcessError as e:
+            sys.stderr.write("Error access Kubernetes: {}\n".format(e))
+            raise SystemExit(1)
 
     go()
 
