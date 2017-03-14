@@ -355,7 +355,7 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
-### 0.8 (unreleased)
+### 0.8
 
 Features:
 
