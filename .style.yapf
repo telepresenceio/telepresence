@@ -1,0 +1,3 @@
+[style]
+DEDENT_CLOSING_BRACKETS = true
+COALESCE_BRACKETS = true
