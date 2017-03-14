@@ -360,4 +360,5 @@ Some alternatives to Telepresence:
 Features:
 
 * Basic logging of what Telepresence is doing, for easier debugging.
+* Check for Kubernetes and Docker on startup, so problems are caught earlier.
 * Better error reporting on crashes ([issue #19](https://github.com/datawire/telepresence/issues/19).
