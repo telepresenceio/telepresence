@@ -362,3 +362,7 @@ Features:
 * Basic logging of what Telepresence is doing, for easier debugging.
 * Check for Kubernetes and Docker on startup, so problems are caught earlier.
 * Better error reporting on crashes ([issue #19](https://github.com/datawire/telepresence/issues/19).
+
+Bugfixes:
+
+* Fixed bug where combination of `--rm` and `--detach` broke Telepresence on versions of Docker older than 1.13. Thanks to Jean-Paul Calderone for reporting the problem. ([issue #18](https://github.com/datawire/telepresence/issues/18)
