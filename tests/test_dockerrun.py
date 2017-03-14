@@ -10,6 +10,11 @@ import time
 DIRECTORY = Path(__file__).absolute().parent
 
 
+def random_name():
+    """Return a new name each time."""
+    return "testing-{}".format(time.time()).replace(".", "-")
+
+
 class EndToEndTests(TestCase):
     """
     End-to-end tests.
@@ -63,19 +68,20 @@ class EndToEndTests(TestCase):
         self.addCleanup(cleanup)
         time.sleep(30)
         result = check_output([
-            'kubectl', 'run', '--attach', 'testing123', '--generator=job/v1',
+            'kubectl', 'run', '--attach', random_name(),
+            '--generator=job/v1',
             "--quiet", '--rm', '--image=alpine', '--restart', 'Never',
             '--command', '--', '/bin/sh', '-c',
             "apk add --no-cache --quiet curl && " +
-            "curl http://fromclustertests:8080/test_endtoend.py"
+            "curl http://fromclustertests:8080/__init__.py"
         ])
-        assert result == (DIRECTORY / "test_endtoend.py").read_bytes()
+        assert result == (DIRECTORY / "__init__.py").read_bytes()
 
     def test_existingdeployment(self):
         """
         Tests of communicating with existing Deployment.
         """
-        name = "testing-{}".format(time.time()).replace(".", "-")
+        name = random_name()
         version = str(
             check_output(["telepresence", "--version"], stderr=STDOUT),
             "utf-8").strip()
