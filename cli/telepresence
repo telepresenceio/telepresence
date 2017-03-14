@@ -15,7 +15,7 @@ import os.path
 import signal
 import sys
 from functools import wraps
-from subprocess import check_output, Popen
+from subprocess import check_output, Popen, CalledProcessError
 from tempfile import mkdtemp
 from time import sleep
 from traceback import print_exc
@@ -211,6 +211,8 @@ BUG_REPORT_TEMPLATE = u"""\
 Command line: `{}`
 Version: `{}`
 Python version: `{}`
+kubectl version: `{}`
+Docker version: `{}`
 OS: `{}`
 Traceback:
 
@@ -222,6 +224,12 @@ Traceback:
 
 def handle_unexpected_errors(f):
     """Decorator that catches unexpected errors."""
+
+    def safe_output(args):
+        try:
+            return unicode(check_output(args), "utf-8").strip()
+        except CalledProcessError as e:
+            return "(error: {})".format(e)
 
     @wraps(f)
     def call_f(*args, **kwargs):
@@ -246,6 +254,8 @@ def handle_unexpected_errors(f):
                 body = quote_plus(
                     BUG_REPORT_TEMPLATE.format(
                         sys.argv, __version__, sys.version,
+                        safe_output(["kubectl", "version", "--short", "--client"]),
+                        safe_output(maybe_sudo(["docker", "version"])),
                         unicode(check_output(["uname", "-a"]),
                                 "utf-8"), error))
                 webbrowser.open_new(url + body)
@@ -267,6 +277,7 @@ def main():
 
     @handle_unexpected_errors
     def go():
+        raise RuntimeError()
         tempdir, container_id = start_proxy(args)
         run_local_command(args, tempdir, container_id)
 
