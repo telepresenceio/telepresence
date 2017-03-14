@@ -2,3 +2,4 @@ virtualenv/
 *.env
 .cache
 __pycache__
+telepresence.log

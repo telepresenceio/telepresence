@@ -15,7 +15,7 @@ import os.path
 import signal
 import sys
 from functools import wraps
-from subprocess import check_output, Popen, CalledProcessError
+from subprocess import check_output, Popen, CalledProcessError, check_call
 from tempfile import mkdtemp
 from time import sleep
 from traceback import print_exc
@@ -33,10 +33,57 @@ else:
 __version__ = "0.7"
 
 
+class Runner(object):
+    """Context for running subprocesses."""
+
+    def __init__(self, logfile):
+        """
+        :param logfile: file-like object to write logs to.
+        """
+        self.logfile = logfile
+
+    @classmethod
+    def open(cls, logfile_path):
+        """
+        :return: File-like object for the given logfile path.
+        """
+        if logfile_path == "-":
+            return cls(sys.stdout)
+        else:
+            # Wipe existing logfile, and use line buffering so data gets
+            # written out immediately.
+            return cls(open(logfile_path, "w", buffering=1))
+
+    def write(self, message):
+        """Write a message to the log."""
+        self.logfile.write(message)
+        self.logfile.flush()
+
+    def check_call(self, *args, **kwargs):
+        """Run a subprocess, make sure it exited with 0."""
+        self.write("Running: {}\n".format(args))
+        check_call(*args, stdout=self.logfile, stderr=self.logfile, **kwargs)
+
+    def get_output(self, *args, **kwargs):
+        """Return (stripped) command result as unicode string."""
+        self.write("Running: {}\n".format(args))
+        return unicode(
+            check_output(*args, stderr=self.logfile, **kwargs).strip(),
+            "utf-8")
+
+    def popen(self, *args, **kwargs):
+        """Return Popen object."""
+        self.write("Running: {}\n".format(args))
+        return Popen(*args, stderr=self.logfile, **kwargs)
+
+
 def parse_args():
     """Create a new ArgumentParser and parse sys.argv."""
     parser = argparse.ArgumentParser()
     parser.add_argument('--version', action='version', version=__version__)
+    parser.add_argument(
+        "--logfile", default="./telepresence.log",
+        help="The path to write logs to. '-' means stdout.")
     group_deployment = parser.add_mutually_exclusive_group(required=True)
     group_deployment.add_argument(
         "--deployment",
@@ -78,19 +125,19 @@ def maybe_sudo(args):
         return args
 
 
-def stop_proxy(container_id):
+def stop_proxy(runner, container_id):
     if sys.stderr.isatty():
         print("Shutting proxy down...", file=sys.stderr)
-    stop_container(container_id)
+    stop_container(runner, container_id)
 
 
-def stop_container(container_id):
-    if container_id in check_output(
+def stop_container(runner, container_id):
+    if container_id in runner.get_output(
             maybe_sudo(["docker", "ps", "-q", "--no-trunc"])):
-        check_output(maybe_sudo(["docker", "stop", container_id]))
+        runner.get_output(maybe_sudo(["docker", "stop", container_id]))
 
 
-def start_proxy(args):
+def start_proxy(runner, args):
     """`telepresence start`."""
     if sys.stderr.isatty():
         print("Starting proxy...", file=sys.stderr)
@@ -99,7 +146,7 @@ def start_proxy(args):
         args.deployment = args.new_deployment
 
         def remove_existing_deployment():
-            check_output([
+            runner.get_output([
                 "kubectl", "delete", "--ignore-not-found",
                 "service,deployment", args.deployment
             ])
@@ -114,7 +161,7 @@ def start_proxy(args):
             command.append("--port={}".format(port))
         if args.expose:
             command.append("--expose")
-        check_output(command)
+        runner.get_output(command)
         sleep(5)  # XXX oh god
 
     home_path = os.path.expanduser("~")
@@ -149,12 +196,12 @@ def start_proxy(args):
         ",".join(map(str, args.expose)),
         ",".join(args.proxy)
     ])
-    container_id = unicode(check_output(docker_cmd).strip(), "utf-8")
-    atexit.register(stop_proxy, container_id)
+    container_id = runner.get_output(docker_cmd).strip()
+    atexit.register(stop_proxy, runner, container_id)
     return tempdir, container_id
 
 
-def run_local_command(args, tempdir, container_id):
+def run_local_command(runner, args, tempdir, container_id):
     """`telepresence run-local`."""
     # XXX argparse sucks need to switch to something else
     if args.docker_run_args and args.docker_run_args[0] == "--":
@@ -178,16 +225,17 @@ def run_local_command(args, tempdir, container_id):
         "--label",
         "telepresence-container=" + container_id,
     ]) + args.docker_run_args
+    # Don't want to capture stderr here, since user may want to interact with
+    # this container, so we don't use runner.popen:
     p = Popen(command)
 
     def terminate_if_alive():
-        cid = unicode(
-            check_output(
-                maybe_sudo([
-                    "docker", "ps", "-q", "--filter",
-                    "label=telepresence-container=" + container_id
-                ])), "utf-8").strip()
-        stop_container(cid)
+        cid = runner.get_output(
+            maybe_sudo([
+                "docker", "ps", "-q", "--filter",
+                "label=telepresence-container=" + container_id
+            ])).strip()
+        stop_container(runner, cid)
 
     atexit.register(terminate_if_alive)
     p.wait()
@@ -235,6 +283,8 @@ def handle_unexpected_errors(f):
     def call_f(*args, **kwargs):
         try:
             return f(*args, **kwargs)
+        except SystemExit:
+            raise
         except KeyboardInterrupt:
             raise SystemExit(0)
         except Exception as e:
@@ -256,8 +306,8 @@ def handle_unexpected_errors(f):
                         sys.argv, __version__, sys.version,
                         safe_output(["kubectl", "version", "--short", "--client"]),
                         safe_output(maybe_sudo(["docker", "version"])),
-                        unicode(check_output(["uname", "-a"]),
-                                "utf-8"), error))
+                        safe_output(["uname", "-a"]),
+                        error))
                 webbrowser.open_new(url + body)
             else:
                 raise SystemExit(1)
@@ -274,17 +324,18 @@ def main():
     signal.signal(signal.SIGTERM, shutdown)
 
     args = parse_args()
+    runner = Runner.open(args.logfile)
 
     @handle_unexpected_errors
     def go():
-        tempdir, container_id = start_proxy(args)
-        run_local_command(args, tempdir, container_id)
         # Make sure we can access Kubernetes:
         try:
             check_output(["kubectl", "cluster-info"])
         except CalledProcessError as e:
             sys.stderr.write("Error access Kubernetes: {}\n".format(e))
             raise SystemExit(1)
+        tempdir, container_id = start_proxy(runner, args)
+        run_local_command(runner, args, tempdir, container_id)
 
     go()
 

@@ -352,3 +352,12 @@ Some alternatives to Telepresence:
   It also won't help you access cloud resources, you will need to emulate them.
 * Pushing your code to the remote Kubernetes cluster.
   This is a somewhat slow process, and you won't be able to do the quick debug cycle you get from running code locally.
+  
+## Changelog
+
+### 0.8 (unreleased)
+
+Features:
+
+* Basic logging of what Telepresence is doing, for easier debugging.
+* Better error reporting on crashes ([issue #19](https://github.com/datawire/telepresence/issues/19).
