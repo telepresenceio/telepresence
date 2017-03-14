@@ -332,7 +332,13 @@ def main():
         try:
             check_output(["kubectl", "cluster-info"])
         except CalledProcessError as e:
-            sys.stderr.write("Error access Kubernetes: {}\n".format(e))
+            sys.stderr.write("Error accessing Kubernetes: {}\n".format(e))
+            raise SystemExit(1)
+        # Make sure we can access Docker:
+        try:
+            check_output(maybe_sudo(["docker", "version"]))
+        except CalledProcessError as e:
+            sys.stderr.write("Error running Docker: {}\n".format(e))
             raise SystemExit(1)
         tempdir, container_id = start_proxy(runner, args)
         run_local_command(runner, args, tempdir, container_id)
