@@ -362,6 +362,13 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
+### 0.10 (March 15, 2017)
+
+Bug fixes:
+
+* Fixed race condition the first time Telepresence is run against a cluster.
+  ([#33](https://github.com/datawire/telepresence/issues/33))
+
 ### 0.9 (March 15, 2017)
 
 Features:
