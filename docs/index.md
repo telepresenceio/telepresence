@@ -246,7 +246,7 @@ In order to run Telepresence you will need to do three things:
 
 Let's go through these steps one by one.
 
-### 1. Run the Telepresence proxy in Kubernetes
+### Run the Telepresence proxy in Kubernetes
 
 Instead of running the production `Deployment` above, you will need to run a different one that runs the Telepresence proxy instead.
 It should only have 1 replica, and it will use a different image, but it should have the same environment variables since you want those available to your local code.
@@ -279,7 +279,7 @@ You should apply this file to your cluster:
 $ kubectl apply -f telepresence-deployment.yaml
 ```
 
-### 2. Run the local Telepresence client on your machine
+### Run the local Telepresence client on your machine
 
 You want to do the following:
 
@@ -302,7 +302,7 @@ $ telepresence --deployment servicename-deployment \
 You are now running your own code locally inside Docker, attaching it to the network stack of the Telepresence client and using the environment variables Telepresence client extracted.
 Your code is connected to the remote Kubernetes cluster.
 
-### 4. (Optional) Better local development with Docker
+### (Optional) Better local development with Docker
 
 To make Telepresence even more useful, you might want to use a custom Dockerfile setup that allows for code changes to be reflected immediately upon editing.
 
