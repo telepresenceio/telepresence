@@ -321,7 +321,7 @@ Telepresence currently proxies the following:
   These will be modified with new values based on the proxying logic, but that should be transparent to the application.
 * The standard [DNS entries for services](https://kubernetes.io/docs/user-guide/services/#dns).
   E.g. `redis-master` and `redis-master.default.svc.cluster.local` will resolve to a working IP address.
-* TCP connections to other `Service` instances that existed when the proxy was supported.
+* TCP connections to other `Service` instances that existed when the proxy was started.
 * Any additional environment variables that a normal pod would have, with the exception of a few environment variables that are different in the local environment.
   E.g. UID and HOME.
 * TCP connections to specific hostname/port combinations specified on the command line.
@@ -361,7 +361,7 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
-### 0.9 (unreleased)
+### 0.9 (March 15, 2017)
 
 Features:
 
