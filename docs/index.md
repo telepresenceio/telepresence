@@ -336,6 +336,7 @@ Currently unsupported:
 * For proxied addresses, only one destination per specific port number is currently supported.
   E.g. you can't proxy `remote1.example.com:5432` and `remote2.example.com:5432` at the same time.
 * Access to volumes, including those for `Secret` and `ConfigMap` Kubernetes objects.
+* `/var/run/secrets/kubernetes.io` credentials (used to the [access the Kubernetes( API](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#accessing-the-api-from-a-pod)).
 
 ## Help us improve Telepresence!
 
