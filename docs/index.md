@@ -356,6 +356,13 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
+### 0.9 (unreleased)
+
+Features:
+
+* Telepresence now detects unsupported Docker configurations and complain.
+  ([#26](https://github.com/datawire/telepresence/issues/26))
+
 ### 0.8 (March 14, 2017)
 
 Features:
