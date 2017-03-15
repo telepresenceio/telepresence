@@ -118,8 +118,9 @@ Let's start a `Service` and `Deployment` in Kubernetes, and wait until it's up a
 ```console
 host$ kubectl run --expose helloworld --image=nginx:alpine --port=80
 # ... wait 30 seconds, make sure pod is in Running state:
-host$ $ kubectl get pod | grep helloworld
-helloworld-1333052153-63kkw    1/1       Running      0       33s
+host$ kubectl get pod --selector=run=helloworld
+NAME                          READY     STATUS    RESTARTS   AGE
+helloworld-1333052153-63kkw   1/1       Running   0          33s
 ```
 
 The Docker container you run will get environment variables that match those in the remote deployment, including Kubernetes `Service` addresses.
