@@ -70,7 +70,7 @@ This means an even faster development cycle.
 <div class="mermaid">
 graph TD
   subgraph Laptop
-    code["Source code for servicename"]==>local["servicename, running locally"]
+    code["Source code for servicename"]==>local["servicename, in container"]
     local---client[Telepresence client]
   end
   subgraph Kubernetes in Cloud
@@ -90,11 +90,6 @@ You will need the following available on your machine:
 * Python (2 or 3). This should be available on any Linux or OS X machine.
 * Access to your Kubernetes cluster, with local credentials on your machine.
   You can do this test by running `kubectl get pod` - if this works you're all set.
-* If you want to run your code outside of a Docker container you will also need `torsocks`.
-  
-  On Ubuntu: `sudo apt-get install --no-install-recommends torsocks`
-  
-  On OS X: `brew install torsocks`
 
 In order to install, run the following command:
 
@@ -118,60 +113,55 @@ To get started we'll use `telepresence --new-deployment quickstart` to create a 
 The client will connect to the remote Kubernetes cluster via that `Deployment` and then run a local Docker container that is proxied into the remote cluster.
 You'll also use the `--docker-run` argument to specify how that local container should be created: these arguments will match those passed to `docker run`.
 
+Let's start a `Service` and `Deployment` in Kubernetes, and wait until it's up and running:
+
+```console
+host$ kubectl run --expose helloworld --image=nginx:alpine --port=80
+# ... wait 30 seconds, make sure pod is in Running state:
+host$ $ kubectl get pod | grep helloworld
+helloworld-1333052153-63kkw    1/1       Running      0       33s
+```
+
 The Docker container you run will get environment variables that match those in the remote deployment, including Kubernetes `Service` addresses.
-We can see this by running the `env` command inside an Alpine Linux image in a Docker container:
+We can now see this by running the `env` command inside an Alpine Linux image:
 
 ```console
 host$ telepresence --new-deployment quickstart --docker-run \
-      --rm alpine env
-KUBERNETES_SERVICE_HOST=127.0.0.1
-KUBERNETES_SERVICE_PORT=60001
-...
+      --rm alpine env | grep HELLOWORLD_SERVICE
+HELLOWORLD_SERVICE_HOST=127.0.0.1
+HELLOWORLD_SERVICE_PORT=2002
 ```
 
-You can also run a local process, outside a Docker container:
-
-```console
-host$ telepresence --new-deployment quickstart --run env
-KUBERNETES_SERVICE_HOST=127.0.0.1
-KUBERNETES_SERVICE_PORT=60001
-...
-```
-
-You can send a request to the Kubernetes API service and it will get proxied, and you can also use the special hostnames Kubernetes creates for `Services`.
-(You'll get "unauthorized" in the response because you haven't provided credentials.)
+You can send a request to this new service and it will get proxied, and you can also use the special hostnames Kubernetes creates for `Services`:
 
 ```console
 host$ telepresence --new-deployment quickstart --docker-run \
       --rm -i -t alpine /bin/sh
 localcontainer$ apk add --no-cache curl  # install curl
-localcontainer$ curl -k -v \
-    "https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}/"
-> GET / HTTP/1.1
-> User-Agent: curl/7.38.0
-> Host: 10.0.0.1
-> Accept: */*
-> 
-< HTTP/1.1 401 Unauthorized
-< Content-Type: text/plain; charset=utf-8
-< X-Content-Type-Options: nosniff
-< Date: Mon, 06 Mar 2017 19:19:44 GMT
-< Content-Length: 13
-Unauthorized
-localcontainer$ curl -k "https://kubernetes.default.svc.cluster.local:${KUBERNETES_SERVICE_PORT}/"
-Unauthorized
+localcontainer$ curl "http://${HELLOWORLD_SERVICE_HOST}:${HELLOWORLD_SERVICE_PORT}/"
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+...
+localcontainer$ curl "http://helloworld:${HELLOWORLD_SERVICE_PORT}/"
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+...
 localcontainer$ exit
 host$
 ```
 
-You've sent a request to the Kubernetes API service, but you could similarly talk to any `Service` in the remote Kubernetes cluster, even though the container is running locally.
+So far you've seen how your local container can access the remote Kubernetes cluster's services.
 
-Finally, since we exposed port 8080 on the remote cluster, we can run a local server (within the container) that listens on port 8080 and it will be exposed via port 8080 inside the Kubernetes pods we've created.
-Let's say we want to serve some static files from your local machine.
-We can mount the current directory as a Docker volume, run a webserver on port 8080, and pass `--expose 8080` to Telepresence so it knows it needs to expose that port to the Kubernetes cluster:
+You can also run a local server (within the local container) that listens on port 8080 and it will be exposed and available inside the Kubernetes cluster.
+Let's say you want to serve some static files from your local machine.
+You can mount the current directory as a Docker volume, run a webserver on port 8080, and pass `--expose 8080` to Telepresence so it knows it needs to expose that port to the Kubernetes cluster:
 
 ```console
-host$ echo "hello!" > file.txt
+host$ echo "hello world" > file.txt
 host$ telepresence --new-deployment quickstart --expose 8080 --docker-run \
       -v $PWD:/files -i -t python:3-slim /bin/sh
 localcontainer$ cd /files
@@ -201,7 +191,7 @@ $ kubectl run --attach -i -t test --generator=job/v1 --rm \
           --image=alpine --restart Never --command /bin/sh
 k8s-pod# apk add --no-cache curl
 k8s-pod# curl http://quickstart.default.svc.cluster.local:8080/file.txt
-hello!
+hello world
 ```
 
 ## In-depth usage
@@ -331,7 +321,7 @@ Telepresence currently proxies the following:
   These will be modified with new values based on the proxying logic, but that should be transparent to the application.
 * The standard [DNS entries for services](https://kubernetes.io/docs/user-guide/services/#dns).
   E.g. `redis-master` and `redis-master.default.svc.cluster.local` will resolve to a working IP address.
-* TCP connections to other `Service` instances that existed when the proxy was supported.
+* TCP connections to other `Service` instances that existed when the proxy was started.
 * Any additional environment variables that a normal pod would have, with the exception of a few environment variables that are different in the local environment.
   E.g. UID and HOME.
 * TCP connections to specific hostname/port combinations specified on the command line.
@@ -371,12 +361,19 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
-### 0.9 (unreleased)
+### 0.9 (March 15, 2017)
 
 Features:
 
-* Added support for `telepresence --run`, allowing using local processes rather than just Docker containers.
-  ([#1](https://github.com/datawire/telepresence/issues/1))
+* Telepresence now detects unsupported Docker configurations and complain.
+  ([#26](https://github.com/datawire/telepresence/issues/26))
+* Better logging from Docker processes, for easier debugging.
+  ([#29](https://github.com/datawire/telepresence/issues/29))
+
+Bug fixes:
+
+* Fix problem on OS X where Telepresence failed to work due to inability to share default location of temporary files.
+  ([#25](https://github.com/datawire/telepresence/issues/25))
 
 ### 0.8 (March 14, 2017)
 
@@ -386,7 +383,6 @@ Features:
 * Check for Kubernetes and Docker on startup, so problems are caught earlier.
 * Better error reporting on crashes. ([#19](https://github.com/datawire/telepresence/issues/19))
 
-Bugfixes:
+Bug fixes:
 
 * Fixed bug where combination of `--rm` and `--detach` broke Telepresence on versions of Docker older than 1.13. Thanks to Jean-Paul Calderone for reporting the problem. ([#18](https://github.com/datawire/telepresence/issues/18))
-

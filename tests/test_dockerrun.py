@@ -31,6 +31,11 @@ class EndToEndTests(TestCase):
         checked for the string "SUCCESS!" indicating the checks passed. The
         script shouldn't use code py.test would detect as a test.
         """
+        def get_docker_ps():
+            return set(check_output(["sudo", "docker", "ps", "-q"]).strip().split())
+
+        docker_processes = get_docker_ps()
+
         result = str(
             check_output([
                 "telepresence",
@@ -45,6 +50,8 @@ class EndToEndTests(TestCase):
                 "/code/tocluster.py",
             ]), "utf-8")
         assert "SUCCESS!" in result
+        # Shouldn't leave any Docker processes behind:
+        assert get_docker_ps() == docker_processes
 
     def test_fromcluster(self):
         """

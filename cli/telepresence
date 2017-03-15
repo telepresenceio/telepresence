@@ -17,7 +17,7 @@ import sys
 from functools import wraps
 from subprocess import check_output, Popen, CalledProcessError, check_call
 from tempfile import mkdtemp
-from time import sleep
+from time import sleep, time
 from traceback import print_exc
 import webbrowser
 if sys.version_info.major == 2:
@@ -30,7 +30,12 @@ else:
     from urllib.parse import quote_plus
     unicode = str
 
-__version__ = "0.8"
+__version__ = "0.9"
+
+
+def random_name():
+    """Return a random name for a container."""
+    return "telepresence-{}-{}".format(time(), os.getpid()).replace(".", "-")
 
 
 class Runner(object):
@@ -74,7 +79,7 @@ class Runner(object):
     def popen(self, *args, **kwargs):
         """Return Popen object."""
         self.write("Running: {}\n".format(args))
-        return Popen(*args, stderr=self.logfile, **kwargs)
+        return Popen(*args, stderr=self.logfile, stdout=self.logfile, **kwargs)
 
 
 def parse_args():
@@ -156,8 +161,7 @@ def maybe_sudo(args):
 def stop_proxy(runner, container_id):
     if sys.stderr.isatty():
         print("Shutting proxy down...", file=sys.stderr)
-    stop_container(runner, container_id)
-    runner.get_output(maybe_sudo(["docker", "rm", container_id]))
+    runner.get_output(maybe_sudo(["docker", "stop", container_id]))
 
 
 def stop_container(runner, container_id):
@@ -195,13 +199,19 @@ def start_proxy(runner, args):
         sleep(5)  # XXX oh god
 
     home_path = os.path.expanduser("~")
-    tempdir = mkdtemp()
+    # On OS X /tmp is shareable via Docker, but default location of temporary
+    # files is not (https://docs.docker.com/docker-for-mac/osxfs/):
+    tempdir = mkdtemp(dir="/tmp")
+    container_id = random_name()
 
     docker_cmd = maybe_sudo([
         "docker",
         "run",
-        # Run in background:
-        "--detach",
+        # Cleanup on shutdown:
+        "--rm",
+        # Name so we can identify it:
+        "--name",
+        container_id,
         # Mount $HOME so we have access to kubectl configuration:
         "-v",
         home_path + ":/opt:ro",
@@ -232,9 +242,9 @@ def start_proxy(runner, args):
         ",".join(map(str, args.expose)),
         ",".join(args.proxy)
     ])
-    container_id = runner.get_output(docker_cmd).strip()
+    p = runner.popen(docker_cmd)
     atexit.register(stop_proxy, runner, container_id)
-    return tempdir, container_id
+    return tempdir, container_id, p
 
 
 def run_local_command(runner, args, out_env, container_id):
@@ -283,7 +293,9 @@ def run_docker_command(runner, args, out_env, container_id):
                 "label=telepresence-container=" + container_id
             ])
         ).strip()
-        stop_container(runner, cid)
+        # May have already exited, in which case cid is empty:
+        if cid:
+            stop_container(runner, cid)
 
     atexit.register(terminate_if_alive)
     p.wait()
@@ -406,13 +418,23 @@ def main():
         except CalledProcessError as e:
             sys.stderr.write("Error accessing Kubernetes: {}\n".format(e))
             raise SystemExit(1)
+        # Make sure we're using local Docker:
+        if "DOCKER_HOST" in os.environ:
+            sys.stderr.write(
+                "You appear to be using a remote Docker server ({}), "
+                "but only a local Docker is supported. This may because "
+                "you have run  `minikube docker-env` or otherwise set the "
+                "DOCKER_HOST environment variable.\n".
+                format(os.environ["DOCKER_HOST"])
+            )
+            raise SystemExit(1)
         # Make sure we can access Docker:
         try:
             check_output(maybe_sudo(["docker", "version"]))
         except CalledProcessError as e:
             sys.stderr.write("Error running Docker: {}\n".format(e))
             raise SystemExit(1)
-        tempdir, container_id = start_proxy(runner, args)
+        tempdir, container_id, proxy_popen = start_proxy(runner, args)
         # Wait for proxy container to write out env file, indicating we're good
         # to go:
         out_env = os.path.join(tempdir, "docker.env")
@@ -424,6 +446,7 @@ def main():
             run_local_command(
                 runner, args, os.path.join(tempdir, "unproxied.env"), container_id
             )
+
     go()
 
 
