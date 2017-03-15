@@ -123,11 +123,11 @@ helloworld-1333052153-63kkw    1/1       Running      0       33s
 ```
 
 The Docker container you run will get environment variables that match those in the remote deployment, including Kubernetes `Service` addresses.
-We can now see this by running the `env` command inside an Alpine Linux image:
+We can now see this by running the `env` command inside a Docker image:
 
 ```console
 host$ telepresence --new-deployment quickstart --docker-run \
-      --rm alpine env | grep HELLOWORLD_SERVICE
+      --rm busybox env | grep HELLOWORLD_SERVICE
 HELLOWORLD_SERVICE_HOST=127.0.0.1
 HELLOWORLD_SERVICE_PORT=2002
 ```
@@ -136,15 +136,14 @@ You can send a request to this new service and it will get proxied, and you can 
 
 ```console
 host$ telepresence --new-deployment quickstart --docker-run \
-      --rm -i -t alpine /bin/sh
-localcontainer$ apk add --no-cache curl  # install curl
-localcontainer$ curl "http://${HELLOWORLD_SERVICE_HOST}:${HELLOWORLD_SERVICE_PORT}/"
+      --rm -i -t busybox /bin/sh
+localcontainer$ wget -qO- "http://${HELLOWORLD_SERVICE_HOST}:${HELLOWORLD_SERVICE_PORT}/"
 <!DOCTYPE html>
 <html>
 <head>
 <title>Welcome to nginx!</title>
 ...
-localcontainer$ curl "http://helloworld:${HELLOWORLD_SERVICE_PORT}/"
+localcontainer$ wget -qO- "http://helloworld:${HELLOWORLD_SERVICE_PORT}/"
 <!DOCTYPE html>
 <html>
 <head>
@@ -188,9 +187,8 @@ In a different terminal we can run a pod on the Kubernetes cluster and see that 
 
 ```console
 $ kubectl run --attach -i -t test --generator=job/v1 --rm \
-          --image=alpine --restart Never --command /bin/sh
-k8s-pod# apk add --no-cache curl
-k8s-pod# curl http://quickstart.default.svc.cluster.local:8080/file.txt
+          --image=busybox --restart Never --command /bin/sh
+k8s-pod# wget -qO- http://quickstart.default.svc.cluster.local:8080/file.txt
 hello world
 ```
 
