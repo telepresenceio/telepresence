@@ -31,7 +31,7 @@ test: virtualenv
 		cd remote && \
 		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
 	kubectl config set-context minikube
-	env PATH=$(PWD)/cli/:$(PATH) virtualenv/bin/py.test tests
+	env PATH=$(PWD)/cli/:$(PATH) virtualenv/bin/py.test -s --fulltrace tests
 
 release: build
 	docker push datawire/telepresence-local:$(VERSION)

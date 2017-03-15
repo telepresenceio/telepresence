@@ -1,3 +1,4 @@
 bumpversion==0.5.3
 flake8
 pytest
+yapf

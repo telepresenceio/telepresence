@@ -128,9 +128,25 @@ You can now run your own code locally and have it be exposed within Kubernetes, 
     stdout.flush()
 
 
+def wait_for_pod(pod_name):
+    for i in range(30):
+        phase = str(
+            check_output([
+                "kubectl", "get", "pod", pod_name, "-o",
+                "jsonpath={.status.phase}"
+            ]), "utf-8"
+        ).strip()
+        if phase == "Running":
+            return
+        time.sleep(1)
+    raise RuntimeError("Pod isn't starting: {}".format(phase))
+
+
 def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
     processes = []
     pod_name = get_pod_name(deployment_name)
+    # Wait for pod to be running:
+    wait_for_pod(pod_name)
     proxied_ports = set(range(2000, 2020)) | set(map(int, local_exposed_ports))
     proxied_ports.add(22)
     custom_ports = [int(s.split(":", 1)[1]) for s in custom_proxied_hosts]
