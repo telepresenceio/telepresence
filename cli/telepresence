@@ -151,7 +151,7 @@ def maybe_sudo(args):
 def stop_proxy(runner, container_id):
     if sys.stderr.isatty():
         print("Shutting proxy down...", file=sys.stderr)
-    stop_container(runner, container_id)
+    runner.get_output(maybe_sudo(["docker", "stop", container_id]))
 
 
 def stop_container(runner, container_id):
