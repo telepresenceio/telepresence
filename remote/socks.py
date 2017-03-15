@@ -32,7 +32,7 @@ class SOCKSv5Outgoing(protocol.Protocol):
 
     def connectionMade(self):
         peer = self.transport.getPeer()
-        self.socks.makeReply(90, 0, port=peer.port, ip=peer.host)
+        self.socks.makeReply(Response(0, 1, peer.host, peer.port))
         self.socks.otherConn=self
 
 
@@ -45,29 +45,7 @@ class SOCKSv5Outgoing(protocol.Protocol):
 
 
     def write(self,data):
-        self.socks.log(self,data)
         self.transport.write(data)
-
-
-
-class SOCKSv5Incoming(protocol.Protocol):
-    def __init__(self,socks):
-        self.socks=socks
-        self.socks.otherConn=self
-
-
-    def connectionLost(self, reason):
-        self.socks.transport.loseConnection()
-
-
-    def dataReceived(self,data):
-        self.socks.write(data)
-
-
-    def write(self, data):
-        self.socks.log(self,data)
-        self.transport.write(data)
-
 
 
 class SOCKSv5(protocol.Protocol):
@@ -107,20 +85,34 @@ class SOCKSv5(protocol.Protocol):
         @type data: L{bytes}
         @param data: Part or all of a SOCKSv5 packet.
         """
+        print("RECEIVED:", repr(data))
+        if self.otherConn is not None:
+            self.otherConn.write(data)
+            return
+
         event = self.statemachine.recv(data)
         if event == "NeedMoreData":
             return
         if event == "GreetingRequest":
             response_event = GreetingResponse(AUTH_TYPE["NO_AUTH"])
             response_data = self.statemachine.send(response_event)
-            self.transport.write(response_data)
+            self.write(response_data)
             return
+
+        def got_error(e):
+            log.err(e)
+            self.makeReply(
+                Response(1, event.atyp, event.addr, event.port))
         if event == "Request":
-            if event.someting == REQ_COMMAND["CONNECT"]:
-                d = self.connectClass(server, port, SOCKSv5Outgoing, self)
-                d.addErrback(lambda result, self = self: self.makeReply(Response())
-            elif event.someting == REQ_COMMAND["RESOLVE"]:
-                self.makeReply
+            if event.cmd == REQ_COMMAND["CONNECT"]:
+                d = self.connectClass(str(event.addr), event.port, SOCKSv5Outgoing, self)
+                d.addErrback(got_error)
+            elif event.cmd == REQ_COMMAND["RESOLVE"]:
+                def write_response(addr):
+                    self.write(b"\5\0\0\1" + socket.inet_aton(addr))
+                    self.transport.loseConnection()
+                self.reactor.resolve(event.addr).addCallback(write_response).addErrback(
+                    got_error)
 
 
     def connectionLost(self, reason):
@@ -138,36 +130,14 @@ class SOCKSv5(protocol.Protocol):
 
 
     def makeReply(self, response):
-        self.transport.write(self.statemachine.send(response))
+        self.write(self.statemachine.send(response))
         if response.status != RESP_STATUS["SUCCESS"]:
             self.transport.loseConnection()
 
 
     def write(self,data):
-        self.log(self,data)
+        print("SENT:", repr(data))
         self.transport.write(data)
-
-
-    def log(self,proto,data):
-        if not self.logging: return
-        peer = self.transport.getPeer()
-        their_peer = self.otherConn.transport.getPeer()
-        f=open(self.logging,"a")
-        f.write("%s\t%s:%d %s %s:%d\n"%(time.ctime(),
-                                        peer.host,peer.port,
-                                        ((proto==self and '<') or '>'),
-                                        their_peer.host,their_peer.port))
-        while data:
-            p,data=data[:16],data[16:]
-            f.write(string.join(map(lambda x:'%02X'%ord(x),p),' ')+' ')
-            f.write((16-len(p))*3*' ')
-            for c in p:
-                if len(repr(c))>3: f.write('.')
-                else: f.write(c)
-            f.write('\n')
-        f.write('\n')
-        f.close()
-
 
 
 class SOCKSv5Factory(protocol.Factory):
@@ -176,32 +146,12 @@ class SOCKSv5Factory(protocol.Factory):
 
     Constructor accepts one argument, a log file name.
     """
-    def __init__(self, log):
-        self.logging = log
-
-
     def buildProtocol(self, addr):
-        return SOCKSv5(self.logging, reactor)
+        return SOCKSv5(reactor)
 
 
-
-class SOCKSv5IncomingFactory(protocol.Factory):
-    """
-    A utility class for building protocols for incoming connections.
-    """
-    def __init__(self, socks, ip):
-        self.socks = socks
-        self.ip = ip
-
-
-    def buildProtocol(self, addr):
-        if addr[0] == self.ip:
-            self.ip = ""
-            self.socks.makeReply(90, 0)
-            return SOCKSv5Incoming(self.socks)
-        elif self.ip == "":
-            return None
-        else:
-            self.socks.makeReply(91, 0)
-            self.ip = ""
-            return None
+if __name__ == '__main__':
+    from twisted.python.failure import startDebugMode
+    startDebugMode()
+    reactor.listenTCP(9050, SOCKSv5Factory())
+    reactor.run()
