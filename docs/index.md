@@ -363,6 +363,7 @@ Features:
 * Telepresence now detects unsupported Docker configurations and complain.
   ([#26](https://github.com/datawire/telepresence/issues/26))
 * Better logging from Docker processes, for easier debugging.
+  ([#29](https://github.com/datawire/telepresence/issues/29))
 
 ### 0.8 (March 14, 2017)
 
