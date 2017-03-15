@@ -118,16 +118,17 @@ Let's start a `Service` and `Deployment` in Kubernetes, and wait until it's up a
 ```console
 host$ kubectl run --expose helloworld --image=nginx:alpine --port=80
 # ... wait 30 seconds, make sure pod is in Running state:
-host$ $ kubectl get pod | grep helloworld
-helloworld-1333052153-63kkw    1/1       Running      0       33s
+host$ kubectl get pod --selector=run=helloworld
+NAME                          READY     STATUS    RESTARTS   AGE
+helloworld-1333052153-63kkw   1/1       Running   0          33s
 ```
 
 The Docker container you run will get environment variables that match those in the remote deployment, including Kubernetes `Service` addresses.
-We can now see this by running the `env` command inside an Alpine Linux image:
+We can now see this by running the `env` command inside a Docker image:
 
 ```console
 host$ telepresence --new-deployment quickstart --docker-run \
-      --rm alpine env | grep HELLOWORLD_SERVICE
+      --rm busybox env | grep HELLOWORLD_SERVICE
 HELLOWORLD_SERVICE_HOST=127.0.0.1
 HELLOWORLD_SERVICE_PORT=2002
 ```
@@ -136,15 +137,14 @@ You can send a request to this new service and it will get proxied, and you can 
 
 ```console
 host$ telepresence --new-deployment quickstart --docker-run \
-      --rm -i -t alpine /bin/sh
-localcontainer$ apk add --no-cache curl  # install curl
-localcontainer$ curl "http://${HELLOWORLD_SERVICE_HOST}:${HELLOWORLD_SERVICE_PORT}/"
+      --rm -i -t busybox /bin/sh
+localcontainer$ wget -qO- "http://${HELLOWORLD_SERVICE_HOST}:${HELLOWORLD_SERVICE_PORT}/"
 <!DOCTYPE html>
 <html>
 <head>
 <title>Welcome to nginx!</title>
 ...
-localcontainer$ curl "http://helloworld:${HELLOWORLD_SERVICE_PORT}/"
+localcontainer$ wget -qO- "http://helloworld:${HELLOWORLD_SERVICE_PORT}/"
 <!DOCTYPE html>
 <html>
 <head>
@@ -188,9 +188,8 @@ In a different terminal we can run a pod on the Kubernetes cluster and see that 
 
 ```console
 $ kubectl run --attach -i -t test --generator=job/v1 --rm \
-          --image=alpine --restart Never --command /bin/sh
-k8s-pod# apk add --no-cache curl
-k8s-pod# curl http://quickstart.default.svc.cluster.local:8080/file.txt
+          --image=busybox --restart Never --command /bin/sh
+k8s-pod# wget -qO- http://quickstart.default.svc.cluster.local:8080/file.txt
 hello world
 ```
 
@@ -246,7 +245,7 @@ In order to run Telepresence you will need to do three things:
 
 Let's go through these steps one by one.
 
-### 1. Run the Telepresence proxy in Kubernetes
+### Run the Telepresence proxy in Kubernetes
 
 Instead of running the production `Deployment` above, you will need to run a different one that runs the Telepresence proxy instead.
 It should only have 1 replica, and it will use a different image, but it should have the same environment variables since you want those available to your local code.
@@ -279,7 +278,7 @@ You should apply this file to your cluster:
 $ kubectl apply -f telepresence-deployment.yaml
 ```
 
-### 2. Run the local Telepresence client on your machine
+### Run the local Telepresence client on your machine
 
 You want to do the following:
 
@@ -302,7 +301,7 @@ $ telepresence --deployment servicename-deployment \
 You are now running your own code locally inside Docker, attaching it to the network stack of the Telepresence client and using the environment variables Telepresence client extracted.
 Your code is connected to the remote Kubernetes cluster.
 
-### 4. (Optional) Better local development with Docker
+### (Optional) Better local development with Docker
 
 To make Telepresence even more useful, you might want to use a custom Dockerfile setup that allows for code changes to be reflected immediately upon editing.
 
@@ -336,6 +335,7 @@ Currently unsupported:
 * For proxied addresses, only one destination per specific port number is currently supported.
   E.g. you can't proxy `remote1.example.com:5432` and `remote2.example.com:5432` at the same time.
 * Access to volumes, including those for `Secret` and `ConfigMap` Kubernetes objects.
+* `/var/run/secrets/kubernetes.io` credentials (used to the [access the Kubernetes( API](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#accessing-the-api-from-a-pod)).
 
 ## Help us improve Telepresence!
 
