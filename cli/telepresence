@@ -208,7 +208,9 @@ def start_proxy(runner, args):
         "{}:{}:ro".format(home_path, home_path),
     ])
 
-    tempdir = mkdtemp()
+    # On OS X /tmp is shareable via Docker, but default location of temporary
+    # files is not (https://docs.docker.com/docker-for-mac/osxfs/):
+    tempdir = mkdtemp(dir="/tmp")
 
     docker_cmd.extend([
         # Mount local directory, where env file will be written out:

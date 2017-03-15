@@ -365,6 +365,11 @@ Features:
 * Better logging from Docker processes, for easier debugging.
   ([#29](https://github.com/datawire/telepresence/issues/29))
 
+Bug fixes:
+
+* Fix problem on OS X where Telepresence failed to work due to inability to share default location of temporary files.
+  ([#25](https://github.com/datawire/telepresence/issues/25))
+
 ### 0.8 (March 14, 2017)
 
 Features:
@@ -373,6 +378,6 @@ Features:
 * Check for Kubernetes and Docker on startup, so problems are caught earlier.
 * Better error reporting on crashes. ([#19](https://github.com/datawire/telepresence/issues/19))
 
-Bugfixes:
+Bug fixes:
 
 * Fixed bug where combination of `--rm` and `--detach` broke Telepresence on versions of Docker older than 1.13. Thanks to Jean-Paul Calderone for reporting the problem. ([#18](https://github.com/datawire/telepresence/issues/18))
