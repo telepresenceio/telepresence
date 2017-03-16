@@ -149,6 +149,9 @@ def wait_for_pod(pod_name):
     raise RuntimeError("Pod isn't starting: {}".format(phase))
 
 
+SOCKS_PORT = 9050
+
+
 def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
     processes = []
     pod_name = get_pod_name(deployment_name)
@@ -156,6 +159,7 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
     wait_for_pod(pod_name)
     proxied_ports = set(range(2000, 2020)) | set(map(int, local_exposed_ports))
     proxied_ports.add(22)
+    proxied_ports.add(SOCKS_PORT)
     custom_ports = [int(s.split(":", 1)[1]) for s in custom_proxied_hosts]
     for port in custom_ports:
         if port in proxied_ports:
@@ -179,8 +183,10 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
             ssh(["-R", "*:{}:127.0.0.1:{}".format(port_number, port_number)])
         )
 
-    # start SOCKS proxy, for telepresence --run:
-    processes.append(ssh(["-D", "0.0.0.0:9050"]))
+    # start tunnel to remote SOCKS proxy, for telepresence --run:
+    processes.append(
+        ssh(["-L", "{}:127.0.0.1:{}".format(SOCKS_PORT, SOCKS_PORT)])
+    )
 
     # start proxies for custom-mapped hosts:
     for host, port in [s.split(":", 1) for s in custom_proxied_hosts]:

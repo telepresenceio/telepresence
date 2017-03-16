@@ -12,6 +12,9 @@ from twisted.application.service import Application
 from twisted.internet import reactor, endpoints
 from twisted.protocols.portforward import ProxyFactory
 
+import socks
+
+
 def _get_service_keys(environment):
     # XXX duplicated in local-telepresence
     # XXX also check for TCPness.
@@ -21,6 +24,7 @@ def _get_service_keys(environment):
 
 
 def listen():
+    reactor.listenTCP(9050, SOCKSv5Factory())
     for i, key in enumerate(_get_service_keys(os.environ)):
         host = os.environ[key]
         port = int(os.environ[key[:-4] + "PORT"])

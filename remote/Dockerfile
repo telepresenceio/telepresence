@@ -5,4 +5,5 @@ RUN sed -i 's/without-password/yes/' /etc/ssh/sshd_config && \
     echo "ClientAliveInterval 1\nGatewayPorts yes\n" >> /etc/ssh/sshd_config && \
     sh -c 'echo -n "hello\nhello\n" | passwd'
 
-CMD /etc/init.d/ssh start && twistd -n -y ./forwarder.py
+CMD /etc/init.d/ssh start && \
+    env PYTHONPATH=/usr/src/app twistd -n -y ./forwarder.py
