@@ -86,6 +86,7 @@ graph TD
 
 You will need the following available on your machine:
 
+* OS X or Linux.
 * Docker.
 * Python (2 or 3). This should be available on any Linux or OS X machine.
 * Access to your Kubernetes cluster, with local credentials on your machine.
@@ -103,6 +104,8 @@ Then move telepresence to somewhere in your `$PATH`, e.g.:
 ```
 mv telepresence /usr/local/bin
 ```
+
+> **Need help?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
 
 ## Quickstart
 
@@ -132,6 +135,8 @@ host$ telepresence --new-deployment quickstart --docker-run \
 HELLOWORLD_SERVICE_HOST=127.0.0.1
 HELLOWORLD_SERVICE_PORT=2002
 ```
+
+> **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
 
 You can send a request to this new service and it will get proxied, and you can also use the special hostnames Kubernetes creates for `Services`:
 
@@ -192,6 +197,8 @@ $ kubectl run --attach -i -t test --generator=job/v1 --rm \
 k8s-pod# wget -qO- http://quickstart.default.svc.cluster.local:8080/file.txt
 hello world
 ```
+
+> **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
 
 ## In-depth usage
 
@@ -298,6 +305,8 @@ $ telepresence --deployment servicename-deployment \
                --docker-run \
                examplecom/servicename:localsnapshot
 ```
+
+> **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
 
 You are now running your own code locally inside Docker, attaching it to the network stack of the Telepresence client and using the environment variables Telepresence client extracted.
 Your code is connected to the remote Kubernetes cluster.
