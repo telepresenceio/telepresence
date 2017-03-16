@@ -124,7 +124,7 @@ helloworld-1333052153-63kkw   1/1       Running   0          33s
 ```
 
 The Docker container you run will get environment variables that match those in the remote deployment, including Kubernetes `Service` addresses.
-We can now see this by running the `env` command inside a Docker image:
+We can now see this by running the `env` command inside a Docker image; this may take a little long run the first time, since Kubernetes needs to download the server-side image:
 
 ```console
 host$ telepresence --new-deployment quickstart --docker-run \
@@ -361,6 +361,12 @@ Some alternatives to Telepresence:
   This is a somewhat slow process, and you won't be able to do the quick debug cycle you get from running code locally.
   
 ## Changelog
+
+### 0.13 (March 16, 2017)
+
+Bug fixes:
+
+* Increase time out for pods to start up; sometimes it takes more than 30 seconds due to time to download image.
 
 ### 0.12 (March 16, 2017)
 

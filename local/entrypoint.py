@@ -167,7 +167,7 @@ def wait_for_ssh():
 
 
 def wait_for_pod(pod_name):
-    for i in range(30):
+    for i in range(120):
         phase = str(
             check_output([
                 "kubectl", "get", "pod", pod_name, "-o",
