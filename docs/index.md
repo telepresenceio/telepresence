@@ -213,7 +213,8 @@ spec:
     name: servicename
 ```
 
-You will also have a `Deployment` that actually runs your code, with labels that match the `Service` `selector`:
+You will also have a `Deployment` that actually runs your code, with labels that match the `Service` `selector`.
+Let's assume your existing deployment uses a database at `somewhere.someplace.cloud.example.com` port 5432, so you pass that information to the container as an environment variable:
 
 ```yaml
 apiVersion: extensions/v1beta1
