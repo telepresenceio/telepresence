@@ -26,6 +26,7 @@ bumpversion: virtualenv
 
 test: virtualenv
 	@echo "IMPORTANT: this will change kubectl context to minikube!\n\n"
+	virtualenv/bin/flake8 local/*.py remote/*.py cli/telepresence
 	cd local && sudo docker build . -q -t datawire/telepresence-local:$(VERSION)
 	eval $(shell minikube docker-env) && \
 		cd remote && \

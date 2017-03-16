@@ -12,6 +12,7 @@ from twisted.application.service import Application
 from twisted.internet import reactor, endpoints
 from twisted.protocols.portforward import ProxyFactory
 
+
 def _get_service_keys(environment):
     # XXX duplicated in local-telepresence
     # XXX also check for TCPness.
@@ -26,7 +27,10 @@ def listen():
         port = int(os.environ[key[:-4] + "PORT"])
         service = endpoints.TCP4ServerEndpoint(reactor, 2000 + i)
         service.listen(ProxyFactory(host, port))
-        print("Connecting port {} to {}:{} ({})".format(2000 + i, host, port, key))
+        print(
+            "Connecting port {} to {}:{} ({})".
+            format(2000 + i, host, port, key)
+        )
 
 
 print("Listening...")

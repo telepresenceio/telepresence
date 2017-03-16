@@ -362,6 +362,13 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
+### 0.11 (March 16, 2017)
+
+Bug fixes:
+
+* Fixed race condition that impacted `--expose`.
+  ([#40](https://github.com/datawire/telepresence/issues/40))
+
 ### 0.10 (March 15, 2017)
 
 Bug fixes:
