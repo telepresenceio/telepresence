@@ -86,6 +86,7 @@ graph TD
 
 You will need the following available on your machine:
 
+* OS X or Linux.
 * Docker.
 * Python (2 or 3). This should be available on any Linux or OS X machine.
 * Access to your Kubernetes cluster, with local credentials on your machine.
@@ -103,6 +104,8 @@ Then move telepresence to somewhere in your `$PATH`, e.g.:
 ```
 mv telepresence /usr/local/bin
 ```
+
+> **Need help?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
 
 ## Quickstart
 
@@ -124,7 +127,7 @@ helloworld-1333052153-63kkw   1/1       Running   0          33s
 ```
 
 The Docker container you run will get environment variables that match those in the remote deployment, including Kubernetes `Service` addresses.
-We can now see this by running the `env` command inside a Docker image:
+We can now see this by running the `env` command inside a Docker image; this may take a little long run the first time, since Kubernetes needs to download the server-side image:
 
 ```console
 host$ telepresence --new-deployment quickstart --docker-run \
@@ -132,6 +135,8 @@ host$ telepresence --new-deployment quickstart --docker-run \
 HELLOWORLD_SERVICE_HOST=127.0.0.1
 HELLOWORLD_SERVICE_PORT=2002
 ```
+
+> **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
 
 You can send a request to this new service and it will get proxied, and you can also use the special hostnames Kubernetes creates for `Services`:
 
@@ -193,6 +198,8 @@ k8s-pod# wget -qO- http://quickstart.default.svc.cluster.local:8080/file.txt
 hello world
 ```
 
+> **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
+
 ## In-depth usage
 
 Let's look in a bit more detail at using Telepresence when you have an existing `Deployment`.
@@ -213,7 +220,8 @@ spec:
     name: servicename
 ```
 
-You will also have a `Deployment` that actually runs your code, with labels that match the `Service` `selector`:
+You will also have a `Deployment` that actually runs your code, with labels that match the `Service` `selector`.
+Let's assume your existing deployment uses a database at `somewhere.someplace.cloud.example.com` port 5432, so you pass that information to the container as an environment variable:
 
 ```yaml
 apiVersion: extensions/v1beta1
@@ -298,6 +306,8 @@ $ telepresence --deployment servicename-deployment \
                examplecom/servicename:localsnapshot
 ```
 
+> **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
+
 You are now running your own code locally inside Docker, attaching it to the network stack of the Telepresence client and using the environment variables Telepresence client extracted.
 Your code is connected to the remote Kubernetes cluster.
 
@@ -360,6 +370,26 @@ Some alternatives to Telepresence:
   This is a somewhat slow process, and you won't be able to do the quick debug cycle you get from running code locally.
   
 ## Changelog
+
+### 0.13 (March 16, 2017)
+
+Bug fixes:
+
+* Increase time out for pods to start up; sometimes it takes more than 30 seconds due to time to download image.
+
+### 0.12 (March 16, 2017)
+
+Bug fixes:
+
+* Better way to find matching pod for a Deployment.
+  ([#43](https://github.com/datawire/telepresence/issues/43))
+
+### 0.11 (March 16, 2017)
+
+Bug fixes:
+
+* Fixed race condition that impacted `--expose`.
+  ([#40](https://github.com/datawire/telepresence/issues/40))
 
 ### 0.10 (March 15, 2017)
 

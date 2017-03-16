@@ -1,6 +1,6 @@
 .PHONY: default build build-local build-remote bumpversion release test
 
-VERSION=0.10
+VERSION=0.13
 
 default:
 	@echo "To release:"
@@ -27,6 +27,7 @@ bumpversion: virtualenv
 
 test: virtualenv
 	@echo "IMPORTANT: this will change kubectl context to minikube!\n\n"
+	virtualenv/bin/flake8 local/*.py remote/*.py cli/telepresence
 	cd local && sudo docker build . -q -t datawire/telepresence-local:$(VERSION)
 	eval $(shell minikube docker-env) && \
 		cd remote && \

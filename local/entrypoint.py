@@ -8,8 +8,8 @@ abstractions.
 
 from json import loads
 from os import setuid, environ, rename
-from subprocess import Popen, check_output
-from sys import argv, stdout, exit
+from subprocess import Popen, check_output, check_call, CalledProcessError
+from sys import argv, exit
 import time
 
 
@@ -70,11 +70,14 @@ def get_env_variables(pod_name):
         in_docker_result[port_name + "_ADDR"] = ip
     for key, value in remote_env.items():
         # We don't want env variables that are service addresses (did those
-        # above) nor those that are already present in this container.
-        # XXX we're getting env variables from telepresence that are image-specific, not coming from the Deployment. figure out way to differentiate.
+        # above) nor those that are already present in this container. XXX
+        # we're getting env variables from telepresence that are
+        # image-specific, not coming from the Deployment. figure out way to
+        # differentiate.
         if key not in in_docker_result and key not in environ and key not in filter_keys:
             in_docker_result[key] = value
     return in_docker_result, socks_result
+
 
 
 def write_env(pod_name):
@@ -90,7 +93,9 @@ def write_env(pod_name):
 
 
 def write_etc_hosts(additional_hosts):
-    """Update /etc/hosts with records that match k8s DNS entries for services."""
+    """
+    Update /etc/hosts with records that match k8s DNS entries for services.
+    """
     services_json = loads(
         str(
             check_output(["kubectl", "get", "service", "-o", "json"]), "utf-8"
@@ -110,14 +115,49 @@ def write_etc_hosts(additional_hosts):
 
 def get_pod_name(deployment_name):
     """Given the deployment name, return the name of its pod."""
-    pods = [
-        line.split()[0]
-        for line in str(check_output(["kubectl", "get", "pod"]), "utf-8")
-        .splitlines()
-    ]
+    expected_metadata = loads(
+        str(
+            check_output([
+                "kubectl",
+                "get",
+                "deployment",
+                "-o",
+                "json",
+                deployment_name,
+                "--export",
+            ]), "utf-8"
+        )
+    )["spec"]["template"]["metadata"]
+    print("Expected metadata for pods: {}".format(expected_metadata))
+    pods = loads(
+        str(
+            check_output(["kubectl", "get", "pod", "-o", "json", "--export"]),
+            "utf-8"
+        )
+    )["items"]
+
     for pod in pods:
-        if pod.startswith(deployment_name + "-"):
-            return pod
+        name = pod["metadata"]["name"]
+        phase = pod["status"]["phase"]
+        print(
+            "Checking {} (phase {})...".
+            format(pod["metadata"].get("labels"), phase)
+        )
+        if not set(expected_metadata.get("labels", {}).items()).issubset(
+            set(pod["metadata"].get("labels", {}).items())
+        ):
+            print("Labels don't match.")
+            continue
+        if (name.startswith(deployment_name + "-")
+            and
+            pod["metadata"]["namespace"] == expected_metadata.get(
+                "namespace", "default")
+            and
+            phase in (
+                "Pending", "Running"
+        )):
+            print("Looks like we've found our pod!")
+            return name
     raise RuntimeError(
         "Telepresence pod not found for Deployment '{}'.".
         format(deployment_name)
@@ -135,8 +175,22 @@ def ssh(args):
     ] + args)
 
 
-def wait_for_pod(pod_name):
+def wait_for_ssh():
     for i in range(30):
+        try:
+            check_call([
+                "sshpass", "-phello", "ssh", "-q",
+                "-oStrictHostKeyChecking=no", "root@localhost", "/bin/true"
+            ])
+        except CalledProcessError:
+            time.sleep(1)
+        else:
+            return
+    raise RuntimeError("SSH isn't starting.")
+
+
+def wait_for_pod(pod_name):
+    for i in range(120):
         phase = str(
             check_output([
                 "kubectl", "get", "pod", pod_name, "-o",
@@ -177,7 +231,8 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
 
     # forward remote port to here, by tunneling via remote SSH server:
     processes.append(Popen(["kubectl", "port-forward", pod_name, "22"]))
-    time.sleep(2)  # XXX lag until port 22 is open; replace with retry loop
+    wait_for_ssh()
+
     for port_number in local_exposed_ports:
         processes.append(
             ssh(["-R", "*:{}:127.0.0.1:{}".format(port_number, port_number)])

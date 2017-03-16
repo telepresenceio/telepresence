@@ -30,7 +30,7 @@ else:
     from urllib.parse import quote_plus
     unicode = str
 
-__version__ = "0.10"
+__version__ = "0.13"
 
 
 def random_name():
@@ -212,6 +212,8 @@ def start_proxy(runner, args):
         # Name so we can identify it:
         "--name",
         container_id,
+        # XXX Run with TTY, for some reason need this to capture stdout
+        "-t",
         # Mount $HOME so we have access to kubectl configuration:
         "-v",
         home_path + ":/opt:ro",
@@ -379,7 +381,8 @@ class handle_unexpected_errors(object):
                     "product. [Y/n]: ",
                 ).lower() in ("y", ""):
                     url = (
-                        "https://github.com/datawire/telepresence/issues/new?body="
+                        "https://github.com/datawire/telepresence/issues/" +
+                        "new?body="
                     )
                     body = quote_plus(
                         # Overly long URLs won't work:
