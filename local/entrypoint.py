@@ -103,14 +103,29 @@ def write_etc_hosts(additional_hosts):
 
 def get_pod_name(deployment_name):
     """Given the deployment name, return the name of its pod."""
-    pods = [
-        line.split()[0]
-        for line in str(check_output(["kubectl", "get", "pod"]), "utf-8")
-        .splitlines()
-    ]
+    expected_metadata = loads(
+        str(
+            check_output([
+                "kubectl", "get", "deployment", "-o", "json", deployment_name
+            ]), "utf-8"
+        )
+    )["spec"]["template"]["metadata"]
+    pods = loads(
+        str(check_output(["kubectl", "get", "pod", "-o", "json"]), "utf-8")
+    )["items"]
+
     for pod in pods:
-        if pod.startswith(deployment_name + "-"):
-            return pod
+        name = pod["metadata"]["name"]
+        phase = pod["status"]["phase"]
+        print("Checking {} (phase {})...".format(name, phase))
+        if (pod["metadata"]["name"] == expected_metadata["name"] and
+            pod["metadata"]["namespace"] == expected_metadata["namespace"] and
+            pod["metadata"]["labels"] == expected_metadata["labels"] and
+            phase in (
+                "Pending", "Running"
+        )):
+            print("Looks like we've found our pod!")
+            return name
     raise RuntimeError(
         "Telepresence pod not found for Deployment '{}'.".
         format(deployment_name)

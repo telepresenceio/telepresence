@@ -362,6 +362,13 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
+### 0.12 (March 16, 2017)
+
+Bug fixes:
+
+* Better way to find matching pod for a Deployment.
+  ([#43](https://github.com/datawire/telepresence/issues/43))
+
 ### 0.11 (March 16, 2017)
 
 Bug fixes:
