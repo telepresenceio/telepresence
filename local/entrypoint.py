@@ -106,21 +106,41 @@ def get_pod_name(deployment_name):
     expected_metadata = loads(
         str(
             check_output([
-                "kubectl", "get", "deployment", "-o", "json", deployment_name
+                "kubectl",
+                "get",
+                "deployment",
+                "-o",
+                "json",
+                deployment_name,
+                "--export",
             ]), "utf-8"
         )
     )["spec"]["template"]["metadata"]
+    print("Expected metadata for pods: {}".format(expected_metadata))
     pods = loads(
-        str(check_output(["kubectl", "get", "pod", "-o", "json"]), "utf-8")
+        str(
+            check_output(["kubectl", "get", "pod", "-o", "json", "--export"]),
+            "utf-8"
+        )
     )["items"]
 
     for pod in pods:
         name = pod["metadata"]["name"]
         phase = pod["status"]["phase"]
-        print("Checking {} (phase {})...".format(name, phase))
-        if (pod["metadata"]["name"] == expected_metadata["name"] and
-            pod["metadata"]["namespace"] == expected_metadata["namespace"] and
-            pod["metadata"]["labels"] == expected_metadata["labels"] and
+        print(
+            "Checking {} (phase {})...".
+            format(pod["metadata"].get("labels"), phase)
+        )
+        if not set(expected_metadata.get("labels", {}).items()).issubset(
+            set(pod["metadata"].get("labels", {}).items())
+        ):
+            print("Labels don't match.")
+            continue
+        if (name.startswith(deployment_name + "-")
+            and
+            pod["metadata"]["namespace"] == expected_metadata.get(
+                "namespace", "default")
+            and
             phase in (
                 "Pending", "Running"
         )):
