@@ -8,8 +8,8 @@ abstractions.
 
 from json import loads
 from os import setuid, environ, rename
-from subprocess import Popen, check_output
-from sys import argv, stdout, exit
+from subprocess import Popen, check_output, check_call, CalledProcessError
+from sys import argv, exit
 import time
 
 
@@ -64,8 +64,10 @@ def get_env_variables(pod_name):
         result[port_name + "_ADDR"] = ip
     for key, value in remote_env.items():
         # We don't want env variables that are service addresses (did those
-        # above) nor those that are already present in this container.
-        # XXX we're getting env variables from telepresence that are image-specific, not coming from the Deployment. figure out way to differentiate.
+        # above) nor those that are already present in this container. XXX
+        # we're getting env variables from telepresence that are
+        # image-specific, not coming from the Deployment. figure out way to
+        # differentiate.
         if key not in result and key not in environ and key not in filter_keys:
             result[key] = value
     return result
@@ -79,7 +81,9 @@ def write_env(pod_name):
 
 
 def write_etc_hosts(additional_hosts):
-    """Update /etc/hosts with records that match k8s DNS entries for services."""
+    """
+    Update /etc/hosts with records that match k8s DNS entries for services.
+    """
     services_json = loads(
         str(
             check_output(["kubectl", "get", "service", "-o", "json"]), "utf-8"
@@ -113,19 +117,18 @@ def get_pod_name(deployment_name):
     )
 
 
-def print_status(deployment_name, ports):
-    message = """
-An environment file named {}.env has been written out to $PWD.
-
-You can now run your own code locally and have it be exposed within Kubernetes, e.g.:
-
-  telepresence run-local --deployment {} \\
-               --rm -i -t busybox""".format(deployment_name, deployment_name)
-    if ports:
-        message += " nc -l -p {}".format(ports[0])
-
-    print(message + "\n")
-    stdout.flush()
+def wait_for_ssh():
+    for i in range(30):
+        try:
+            check_call([
+                "sshpass", "-phello", "ssh", "-q",
+                "-oStrictHostKeyChecking=no", "root@localhost", "/bin/true"
+            ])
+        except CalledProcessError:
+            time.sleep(1)
+        else:
+            return
+    raise RuntimeError("SSH isn't starting.")
 
 
 def wait_for_pod(pod_name):
@@ -165,7 +168,8 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
     write_etc_hosts([s.split(":", 1)[0] for s in custom_proxied_hosts])
     # 2. forward remote port to here, by tunneling via remote SSH server:
     processes.append(Popen(["kubectl", "port-forward", pod_name, "22"]))
-    time.sleep(2)  # XXX lag until port 22 is open; replace with retry loop
+    wait_for_ssh()
+
     for port_number in local_exposed_ports:
         processes.append(
             Popen([
