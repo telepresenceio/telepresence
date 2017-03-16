@@ -103,14 +103,49 @@ def write_etc_hosts(additional_hosts):
 
 def get_pod_name(deployment_name):
     """Given the deployment name, return the name of its pod."""
-    pods = [
-        line.split()[0]
-        for line in str(check_output(["kubectl", "get", "pod"]), "utf-8")
-        .splitlines()
-    ]
+    expected_metadata = loads(
+        str(
+            check_output([
+                "kubectl",
+                "get",
+                "deployment",
+                "-o",
+                "json",
+                deployment_name,
+                "--export",
+            ]), "utf-8"
+        )
+    )["spec"]["template"]["metadata"]
+    print("Expected metadata for pods: {}".format(expected_metadata))
+    pods = loads(
+        str(
+            check_output(["kubectl", "get", "pod", "-o", "json", "--export"]),
+            "utf-8"
+        )
+    )["items"]
+
     for pod in pods:
-        if pod.startswith(deployment_name + "-"):
-            return pod
+        name = pod["metadata"]["name"]
+        phase = pod["status"]["phase"]
+        print(
+            "Checking {} (phase {})...".
+            format(pod["metadata"].get("labels"), phase)
+        )
+        if not set(expected_metadata.get("labels", {}).items()).issubset(
+            set(pod["metadata"].get("labels", {}).items())
+        ):
+            print("Labels don't match.")
+            continue
+        if (name.startswith(deployment_name + "-")
+            and
+            pod["metadata"]["namespace"] == expected_metadata.get(
+                "namespace", "default")
+            and
+            phase in (
+                "Pending", "Running"
+        )):
+            print("Looks like we've found our pod!")
+            return name
     raise RuntimeError(
         "Telepresence pod not found for Deployment '{}'.".
         format(deployment_name)

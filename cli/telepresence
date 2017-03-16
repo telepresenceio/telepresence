@@ -199,6 +199,8 @@ def start_proxy(runner, args):
         # Name so we can identify it:
         "--name",
         container_id,
+        # XXX Run with TTY, for some reason need this to capture stdout
+        "-t",
         # Mount $HOME so we have access to kubectl configuration:
         "-v",
         home_path + ":/opt:ro",
