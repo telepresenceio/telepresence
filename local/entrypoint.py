@@ -240,7 +240,7 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
 
     # start tunnel to remote SOCKS proxy, for telepresence --run:
     processes.append(
-        ssh(["-L", "{}:127.0.0.1:{}".format(SOCKS_PORT, SOCKS_PORT)])
+        ssh(["-L", "*:{}:127.0.0.1:{}".format(SOCKS_PORT, SOCKS_PORT)])
     )
 
     # start proxies for custom-mapped hosts:
