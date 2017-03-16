@@ -16,7 +16,7 @@ import signal
 import sys
 from functools import wraps
 from subprocess import check_output, Popen, CalledProcessError, check_call
-from tempfile import mkdtemp
+from tempfile import mkdtemp, NamedTemporaryFile
 from time import sleep, time
 from traceback import print_exc
 import webbrowser
@@ -249,15 +249,30 @@ def start_proxy(runner, args):
     return tempdir, container_id, p
 
 
+TORSOCKS_CONFIG = """
+# Allow process to listen on ports:
+AllowInbound 1
+"""
+
 def run_local_command(runner, args, out_env, container_id):
     """--run support, run command locally."""
     with open(out_env, "r") as f:
         env = os.environ.copy()
         env.update(dict(line.split("=", 1) for line in f.read().splitlines()))
         env["PS1"] = "[TELEPRESENCE] " + env.get("PS1", "$ ")
+    # Create custom torsocks.conf, since some options we want (in particular,
+    # port) aren't accessible via env variables in older versions of torconf:
+    conffile = NamedTemporaryFile(delete=False)
+    conffile.write(TORSOCKS_CONFIG)
+    conffile.flush()
+    conffile.close()
+    env["TORSOCKS_CONF_FILE"] = conffile.name
+    # Don't use runner.popen() since we want to give program access to current
+    # stdout and stderr if it wants it.
     p = Popen(["torsocks"] + args.run_args, env=env)
 
     def terminate_if_alive():
+        os.remove(conffile.name)
         if p.poll() is None:
             p.terminate()
 
