@@ -4,7 +4,7 @@ End-to-end tests for running directly in the operating system.
 
 from unittest import TestCase
 from pathlib import Path
-from subprocess import check_output, Popen, STDOUT
+from subprocess import check_output, Popen
 import time
 
 DIRECTORY = Path(__file__).absolute().parent
@@ -29,7 +29,7 @@ class EndToEndTests(TestCase):
                 "--new-deployment",
                 "tests",
                 "--run",
-                "python",
+                "python3",
                 "tocluster.py",
             ], cwd=str(DIRECTORY)), "utf-8")
         assert "SUCCESS!" in result
@@ -44,7 +44,7 @@ class EndToEndTests(TestCase):
         p = Popen(
             [
                 "telepresence", "--new-deployment", "fromclustertests",
-                "--expose", "8080", "--run"
+                "--expose", "8080", "--run",
                 "python3", "-m", "http.server", "8080"
             ], cwd=str(DIRECTORY))
 
