@@ -1,6 +1,6 @@
 .PHONY: default build build-local build-remote bumpversion release test
 
-VERSION=0.9
+VERSION=0.10
 
 default:
 	@echo "To release:"
@@ -32,7 +32,7 @@ test: virtualenv
 		cd remote && \
 		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
 	kubectl config set-context minikube
-	env PATH=$(PWD)/cli/:$(PATH) virtualenv/bin/py.test tests remote/test_socks.py
+	env PATH=$(PWD)/cli/:$(PATH) virtualenv/bin/py.test -s --fulltrace tests remote/test_socks.py
 
 release: build
 	docker push datawire/telepresence-local:$(VERSION)
