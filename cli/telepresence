@@ -30,7 +30,7 @@ else:
     from urllib.parse import quote_plus
     unicode = str
 
-__version__ = "0.11"
+__version__ = "0.12"
 
 
 def random_name():
