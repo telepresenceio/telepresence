@@ -3,16 +3,10 @@ End-to-end tests for running inside a Docker container.
 """
 
 from unittest import TestCase
-from pathlib import Path
 from subprocess import check_output, Popen, STDOUT
 import time
 
-DIRECTORY = Path(__file__).absolute().parent
-
-
-def random_name():
-    """Return a new name each time."""
-    return "testing-{}".format(time.time()).replace(".", "-")
+from .utils import DIRECTORY, random_name
 
 
 class EndToEndTests(TestCase):

@@ -3,11 +3,10 @@ End-to-end tests for running directly in the operating system.
 """
 
 from unittest import TestCase
-from pathlib import Path
 from subprocess import check_output, Popen
 import time
 
-DIRECTORY = Path(__file__).absolute().parent
+from .utils import DIRECTORY, random_name
 
 
 class EndToEndTests(TestCase):
@@ -27,7 +26,7 @@ class EndToEndTests(TestCase):
             check_output([
                 "telepresence",
                 "--new-deployment",
-                "tests",
+                random_name(),
                 "--run",
                 "python3",
                 "tocluster.py",
@@ -41,9 +40,10 @@ class EndToEndTests(TestCase):
         Start webserver that serves files from this directory. Run HTTP query
         against it on the Kubernetes cluster, compare to real file.
         """
+        name = random_name()
         p = Popen(
             [
-                "telepresence", "--new-deployment", "fromclustertests",
+                "telepresence", "--new-deployment", name,
                 "--expose", "8080", "--run",
                 "python3", "-m", "http.server", "8080"
             ], cwd=str(DIRECTORY))
@@ -55,10 +55,10 @@ class EndToEndTests(TestCase):
         self.addCleanup(cleanup)
         time.sleep(30)
         result = check_output([
-            'kubectl', 'run', '--attach', 'testing123', '--generator=job/v1',
+            'kubectl', 'run', '--attach', random_name(), '--generator=job/v1',
             "--quiet", '--rm', '--image=alpine', '--restart', 'Never',
             '--command', '--', '/bin/sh', '-c',
             "apk add --no-cache --quiet curl && " +
-            "curl http://fromclustertests:8080/test_endtoend.py"
+            "curl http://{}:8080/__init__.py".format(name)
         ])
-        assert result == (DIRECTORY / "test_endtoend.py").read_bytes()
+        assert result == (DIRECTORY / "__init__.py").read_bytes()
