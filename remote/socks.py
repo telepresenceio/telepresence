@@ -15,16 +15,12 @@ for RESOLVE extension.
 
 # python imports
 import socket
+import struct
 
 # twisted imports
 from twisted.internet import reactor, protocol, defer
 from twisted.python import log
-
-# other imports
-from socks5 import GreetingResponse, Response
-from socks5 import AUTH_TYPE, RESP_STATUS, REQ_COMMAND
-from socks5 import Connection
-REQ_COMMAND["RESOLVE"] = 0xF0
+from twisted.protocols.stateful import StatefulProtocol
 
 
 class SOCKSv5Outgoing(protocol.Protocol):
@@ -32,11 +28,9 @@ class SOCKSv5Outgoing(protocol.Protocol):
         self.socks = socks
 
     def connectionMade(self):
-        peer = self.transport.getPeer()
-        # XXX This is wrong, should be local side's host and port!
-        # https://github.com/mike820324/socks5/issues/16
-        self.socks.makeReply(Response(0, 1, peer.host, peer.port))
         self.socks.otherConn = self
+        peer = self.transport.getPeer()
+        self.socks._write_response(0, peer.host, peer.port)
 
     def connectionLost(self, reason):
         self.socks.transport.loseConnection()
@@ -48,7 +42,16 @@ class SOCKSv5Outgoing(protocol.Protocol):
         self.transport.write(data)
 
 
-class SOCKSv5(protocol.Protocol):
+class Request(object):
+    """A SOCKSv5 request."""
+
+    def __init__(self, command, host, port):
+        self.command = command
+        self.host = host
+        self.port = port
+
+
+class SOCKSv5(StatefulProtocol):
     """
     An implementation of the SOCKSv5 protocol.
 
@@ -73,9 +76,8 @@ class SOCKSv5(protocol.Protocol):
         self.reactor = reactor
 
     def connectionMade(self):
-        self.statemachine = Connection(our_role="server")
-        self.statemachine.initiate_connection()
         self.otherConn = None
+        self.command = None
 
     def dataReceived(self, data):
         """
@@ -86,37 +88,86 @@ class SOCKSv5(protocol.Protocol):
         """
         print("RECEIVED:", repr(data))
         if self.otherConn is not None:
+            # We're in proxying mode now:
             self.otherConn.write(data)
             return
+        StatefulProtocol.dataReceived(self, data)
 
-        event = self.statemachine.recv(data)
-        if event == "NeedMoreData":
+    def getInitialState(self):
+        """Starting point for parsing state machine."""
+        return self._parse_handshake_start, 2
+
+    def _parse_handshake_start(self, data):
+        assert data[0] == 5
+        length = data[1]
+        return self._parse_handshake_auth, length
+
+    def _parse_handshake_auth(self, data):
+        # NO_AUTH response
+        self.write(b"\x05\x00")
+        return self._parse_request_start, 4
+
+    def _parse_request_start(self, data):
+        assert data[0] == 5
+        assert data[2] == 0
+        command = data[1]
+        addr_type = data[3]
+        if command == 1:
+            self.command = "CONNECT"
+        elif command == 240:  # \xF0
+            self.command = "RESOLVE"
+        else:
+            # Unsupported command response
+            self._write_response(7, "0.0.0.0", 0)
             return
-        if event == "GreetingRequest":
-            response_event = GreetingResponse(AUTH_TYPE["NO_AUTH"])
-            response_data = self.statemachine.send(response_event)
-            self.write(response_data)
-            return
 
-        def got_error(e):
-            log.err(e)
-            self.makeReply(Response(1, event.atyp, event.addr, event.port))
+        if addr_type == 1:
+            return self._parse_request_ipv4, 6
+        if addr_type == 2:
+            return self._parse_request_domainname_start, 1
+        else:
+            # XXX IPv6 currently unsupported
+            self._write_response(7, "0.0.0.0", 0)
 
-        if event == "Request":
-            if event.cmd == REQ_COMMAND["CONNECT"]:
-                d = self.connectClass(
-                    str(event.addr), event.port, SOCKSv5Outgoing, self
-                )
-                d.addErrback(got_error)
-            elif event.cmd == REQ_COMMAND["RESOLVE"]:
+    def _parse_request_ipv4(self, data):
+        host = socket.inet_ntoa(data[:4])
+        port = struct.unpack("!H", data[4:6])[0]
+        self._done_parsing(host, port)
 
-                def write_response(addr):
-                    self.write(b"\5\0\0\1" + socket.inet_aton(addr))
-                    self.transport.loseConnection()
+    def _parse_request_domainname_start(self, data):
+        length = data[0]
+        return self._parse_request_domainname(self, data), length + 2
 
-                self.reactor.resolve(
-                    event.addr
-                ).addCallback(write_response).addErrback(got_error)
+    def _parse_request_domainname(self, data):
+        host = data[:-2]
+        port = struct.unpack("!H", data[-2:])[0]
+        self._done_parsing(host, port)
+
+    def _handle_error(self, error):
+        """Handle errors in connecting or resolving."""
+        log.err(error)
+        self._write_response(1, "0.0.0.0", 0)
+
+    def _write_response(self, code, host, port):
+        self.write(
+            struct.pack("!BBBB", 5, code, 0, 1) +
+            socket.inet_aton(host) +
+            struct.pack("!H", port))
+        if code != 0:
+            self.transport.loseConnection()
+
+    def _done_parsing(self, host, port):
+        if self.command == "CONNECT":
+            d = self.connectClass(str(host), port, SOCKSv5Outgoing, self)
+            d.addErrback(self._handle_error)
+        elif self.command == "RESOLVE":
+            def write_response(addr):
+                self.write(b"\5\0\0\1" + socket.inet_aton(addr))
+                self.transport.loseConnection()
+
+            self.reactor.resolve(
+                str(host)
+            ).addCallback(write_response).addErrback(self._handle_error)
 
     def connectionLost(self, reason):
         if self.otherConn:
@@ -129,11 +180,6 @@ class SOCKSv5(protocol.Protocol):
     def listenClass(self, port, klass, *args):
         serv = reactor.listenTCP(port, klass(*args))
         return defer.succeed(serv.getHost()[1:])
-
-    def makeReply(self, response):
-        self.write(self.statemachine.send(response))
-        if response.status != RESP_STATUS["SUCCESS"]:
-            self.transport.loseConnection()
 
     def write(self, data):
         print("SENT:", repr(data))

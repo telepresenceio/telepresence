@@ -62,3 +62,5 @@ class EndToEndTests(TestCase):
             "curl http://{}:8080/__init__.py".format(name)
         ])
         assert result == (DIRECTORY / "__init__.py").read_bytes()
+
+    # XXX write test for IP-based routing, not just DNS-based routing!

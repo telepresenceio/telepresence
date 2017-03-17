@@ -19,6 +19,7 @@ import socks
 
 
 class StringTCPTransport(proto_helpers.StringTransport):
+    disconnecting = False
     stringTCPTransport_closing = False
     peer = None
 
@@ -32,7 +33,7 @@ class StringTCPTransport(proto_helpers.StringTransport):
 
     def loseConnection(self):
         self.stringTCPTransport_closing = True
-
+        self.disconnecting = True
 
 
 class FakeResolverReactor:
@@ -70,13 +71,16 @@ class SOCKSv5Driver(socks.SOCKSv5):
 
     def connectClass(self, host, port, klass, *args):
         # fake it
-        proto = klass(*args)
-        proto.transport = StringTCPTransport()
-        proto.transport.peer = address.IPv4Address('TCP', host, port)
-        proto.connectionMade()
-        self.driver_outgoing = proto
-        return defer.succeed(proto)
-
+        def got_ip(ip):
+            proto = klass(*args)
+            transport = StringTCPTransport()
+            transport.peer = address.IPv4Address('TCP', ip, port)
+            proto.makeConnection(transport)
+            self.driver_outgoing = proto
+            return proto
+        d = self.reactor.resolve(host)
+        d.addCallback(got_ip)
+        return d
 
     def listenClass(self, port, klass, *args):
         # fake it
@@ -94,10 +98,10 @@ class ConnectTests(unittest.TestCase):
     """
     def setUp(self):
         self.sock = SOCKSv5Driver()
-        self.sock.transport = StringTCPTransport()
-        self.sock.connectionMade()
-        self.sock.reactor = FakeResolverReactor({b"localhost":"127.0.0.1"})
-
+        transport = StringTCPTransport()
+        self.sock.makeConnection(transport)
+        self.sock.reactor = FakeResolverReactor({"example.com": "5.6.7.8",
+                                                 "1.2.3.4": "1.2.3.4"})
 
     def tearDown(self):
         outgoing = self.sock.driver_outgoing
@@ -113,6 +117,19 @@ class ConnectTests(unittest.TestCase):
         self.sock.transport.clear()
         self.assertEqual(reply, struct.pack("!BB", 5, 0))
 
+    def assert_dataflow(self):
+        """
+        Data flows between client connection and proxied outgoing connection.
+        """
+        # pass some data through
+        self.sock.dataReceived(b'hello, world')
+        self.assertEqual(self.sock.driver_outgoing.transport.value(),
+                         b'hello, world')
+
+        # the other way around
+        self.sock.driver_outgoing.dataReceived(b'hi there')
+        self.assertEqual(self.sock.transport.value(), b'hi there')
+
     def test_simple(self):
         """The server proxies an outgoing connection to an IPv4 address."""
         self.assert_handshake()
@@ -124,6 +141,35 @@ class ConnectTests(unittest.TestCase):
             struct.pack("!H", 34))
         reply = self.sock.transport.value()
         self.sock.transport.clear()
+        self.assertEqual(reply,
+                         struct.pack('!BBBB', 5, 0, 0, 1)
+                         + socket.inet_aton('2.3.4.5') +
+                         struct.pack("!H", 42))
+        self.assertFalse(self.sock.transport.stringTCPTransport_closing)
+        self.assertIsNotNone(self.sock.driver_outgoing)
+        self.assertEqual(self.sock.driver_outgoing.transport.getPeer(),
+                         address.IPv4Address('TCP', '1.2.3.4', 34))
+
+        self.assert_dataflow()
+
+        self.sock.connectionLost('fake reason')
+        self.assertTrue(self.sock.driver_outgoing.transport.stringTCPTransport_closing)
+
+    def test_socks5ConnectSuccessfulResolution(self):
+        """
+        Socks5 also supports hostname-based connections.
+
+        @see: U{http://en.wikipedia.org/wiki/SOCKS#SOCKS_5_protocol}
+        """
+        self.assert_handshake()
+        # The CONNECT command to an IPv4 address, host 1.2.3.4 port 34:
+        # VER = 5, CMD = 1 (CONNECT), ATYP = 3 (DOMAINNAME)
+        self.sock.dataReceived(
+            struct.pack('!BBBB', 5, 1, 0, 3)
+            + struct.pack("!B", len(b"example.com")) + b"example.com" +
+            struct.pack("!H", 3401))
+        reply = self.sock.transport.value()
+        self.sock.transport.clear()
         # Due to https://github.com/mike820324/socks5/issues/16 making wrong
         # assert here; in practice doesn't impact torsocks I assume:
         #self.assertEqual(reply,
@@ -132,72 +178,17 @@ class ConnectTests(unittest.TestCase):
         #                 struct.pack("!H", 42))
         self.assertEqual(reply,
                          struct.pack('!BBBB', 5, 0, 0, 1)
-                         + socket.inet_aton('1.2.3.4') +
-                         struct.pack("!H", 34))
-        self.assertFalse(self.sock.transport.stringTCPTransport_closing)
-        self.assertIsNotNone(self.sock.driver_outgoing)
-        self.assertEqual(self.sock.driver_outgoing.transport.getPeer(),
-                         address.IPv4Address('TCP', '1.2.3.4', 34))
+                         + socket.inet_aton('5.6.7.8') +
+                         struct.pack("!H", 3401))
 
-        # pass some data through
-        self.sock.dataReceived(b'hello, world')
-        self.assertEqual(self.sock.driver_outgoing.transport.value(),
-                         b'hello, world')
+        self.assert_dataflow()
 
-        # the other way around
-        self.sock.driver_outgoing.dataReceived(b'hi there')
-        self.assertEqual(self.sock.transport.value(), b'hi there')
+        self.sock.driver_outgoing.connectionLost('fake reason')
+        self.assertTrue(self.sock.transport.stringTCPTransport_closing)
 
-        self.sock.connectionLost('fake reason')
-        self.assertTrue(self.sock.driver_outgoing.transport.stringTCPTransport_closing)
-
-    def test_socks5SuccessfulResolution(self):
+    def test_socks5ConnectFailedResolution(self):
         """
-        Socks5 also supports hostname-based connections.
-
-        @see: U{http://en.wikipedia.org/wiki/SOCKS#SOCKS_5_protocol}
-        """
-        # send the domain name "localhost" to be resolved
-        clientRequest = (
-            struct.pack('!BBH', 4, 1, 34)
-            + socket.inet_aton('0.0.0.1')
-            + b'fooBAZ\0'
-            + b'localhost\0')
-
-        # Deliver the bytes one by one to exercise the protocol's buffering
-        # logic. FakeResolverReactor's resolve method is invoked to "resolve"
-        # the hostname.
-        for byte in iterbytes(clientRequest):
-            self.sock.dataReceived(byte)
-
-        sent = self.sock.transport.value()
-        self.sock.transport.clear()
-
-        # Verify that the server responded with the address which will be
-        # connected to.
-        self.assertEqual(
-            sent,
-            struct.pack('!BBH', 0, 90, 34) + socket.inet_aton('127.0.0.1'))
-        self.assertFalse(self.sock.transport.stringTCPTransport_closing)
-        self.assertIsNotNone(self.sock.driver_outgoing)
-
-        # Pass some data through and verify it is forwarded to the outgoing
-        # connection.
-        self.sock.dataReceived(b'hello, world')
-        self.assertEqual(
-            self.sock.driver_outgoing.transport.value(), b'hello, world')
-
-        # Deliver some data from the output connection and verify it is
-        # passed along to the incoming side.
-        self.sock.driver_outgoing.dataReceived(b'hi there')
-        self.assertEqual(self.sock.transport.value(), b'hi there')
-
-        self.sock.connectionLost('fake reason')
-
-
-    def test_socks5FailedResolution(self):
-        """
-        Failed hostname resolution on a SOCKSv5 packet results in a 91 error
+        Failed hostname resolution on a SOCKSv5 packet results in an error
         response and the connection getting closed.
         """
         # send the domain name "failinghost" to be resolved
