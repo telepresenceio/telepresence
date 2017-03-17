@@ -206,7 +206,7 @@ def wait_for_pod(pod_name):
 SOCKS_PORT = 9050
 
 
-def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
+def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts, expose_host):
     processes = []
     pod_name = get_pod_name(deployment_name)
     # Wait for pod to be running:
@@ -235,7 +235,7 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
 
     for port_number in local_exposed_ports:
         processes.append(
-            ssh(["-R", "*:{}:127.0.0.1:{}".format(port_number, port_number)])
+            ssh(["-R", "*:{}:{}:{}".format(port_number, expose_host, port_number)])
         )
 
     # start tunnel to remote SOCKS proxy, for telepresence --run:
@@ -265,5 +265,6 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
 if __name__ == '__main__':
     main(
         int(argv[1]), argv[2], argv[3].split(",")
-        if argv[3] else [], argv[4].split(",") if argv[4] else []
+        if argv[3] else [], argv[4].split(",") if argv[4] else [],
+        argv[5]
     )

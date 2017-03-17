@@ -13,6 +13,7 @@ import atexit
 import os
 import os.path
 import signal
+import socket
 import sys
 from functools import wraps
 from subprocess import check_output, Popen, CalledProcessError, check_call
@@ -36,6 +37,15 @@ __version__ = "0.13"
 def random_name():
     """Return a random name for a container."""
     return "telepresence-{}-{}".format(time(), os.getpid()).replace(".", "-")
+
+
+def get_ip():
+    """IP for this machine."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 53))
+    result = s.getsockname()[0]
+    s.close()
+    return result
 
 
 class Runner(object):
@@ -230,6 +240,14 @@ def start_proxy(runner, args):
             "-p",
             "9050:9050",
         ])
+        # We want the exposed host to be the external machine, not the Docker
+        # container:
+        expose_host = get_ip()
+    else:
+        # We're running our local process inside Docker, so we're exposing
+        # Docker container's IP (which is 127.0.0.1 since this will run in a
+        # container):
+        expose_host = "127.0.0.1"
 
     docker_cmd.extend([
         # Mount local directory, where env file will be written out:
@@ -240,9 +258,10 @@ def start_proxy(runner, args):
         # Arguments: <uid>, <deployment-name>
         str(os.getuid()),
         args.deployment,
-        # Arguments: <port1,port2>, <proxy1,proxy2>...
+        # Arguments: <port1,port2>, <proxy1,proxy2>, <expose_host>
         ",".join(map(str, args.expose)),
-        ",".join(args.proxy)
+        ",".join(args.proxy),
+        expose_host,
     ])
     p = runner.popen(docker_cmd)
     atexit.register(stop_proxy, runner, container_id)
@@ -253,6 +272,7 @@ TORSOCKS_CONFIG = """
 # Allow process to listen on ports:
 AllowInbound 1
 """
+
 
 def run_local_command(runner, args, out_env, container_id):
     """--run support, run command locally."""
