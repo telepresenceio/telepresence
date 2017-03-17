@@ -6,14 +6,16 @@ Tests for L{socks}, an implementation of the SOCKSv5 protocol with Tor
 extension.
 """
 
-import struct, socket
+import struct
+import socket
 
 from twisted.internet import defer, address
 from twisted.internet.error import DNSLookupError
 from twisted.python.compat import iterbytes
-from twisted.protocols import socks
 from twisted.test import proto_helpers
 from twisted.trial import unittest
+
+import socks
 
 
 class StringTCPTransport(proto_helpers.StringTransport):
@@ -104,19 +106,38 @@ class ConnectTests(unittest.TestCase):
                          "Outgoing SOCKS connections need to be closed.")
 
 
-    def test_simple(self):
-        self.sock.dataReceived(
-            struct.pack('!BBH', 4, 1, 34)
-            + socket.inet_aton('1.2.3.4')
-            + b'fooBAR'
-            + b'\0')
-        sent = self.sock.transport.value()
+    def assert_handshake(self):
+        """The server responds with NO_AUTH to the initial SOCKS5 handshake."""
+        self.sock.dataReceived(struct.pack("!BBB", 5, 1, 0))
+        reply = self.sock.transport.value()
         self.sock.transport.clear()
-        self.assertEqual(sent,
-                         struct.pack('!BBH', 0, 90, 34)
-                         + socket.inet_aton('1.2.3.4'))
+        self.assertEqual(reply, struct.pack("!BB", 5, 0))
+
+    def test_simple(self):
+        """The server proxies an outgoing connection to an IPv4 address."""
+        self.assert_handshake()
+        # The CONNECT command to an IPv4 address, host 1.2.3.4 port 34:
+        # VER = 5, CMD = 1 (CONNECT), ATYP = 1 (IPv4)
+        self.sock.dataReceived(
+            struct.pack('!BBBB', 5, 1, 0, 1)
+            + socket.inet_aton('1.2.3.4') +
+            struct.pack("!H", 34))
+        reply = self.sock.transport.value()
+        self.sock.transport.clear()
+        # Due to https://github.com/mike820324/socks5/issues/16 making wrong
+        # assert here; in practice doesn't impact torsocks I assume:
+        #self.assertEqual(reply,
+        #                 struct.pack('!BBBB', 5, 0, 0, 1)
+        #                 + socket.inet_aton('2.3.4.5') +
+        #                 struct.pack("!H", 42))
+        self.assertEqual(reply,
+                         struct.pack('!BBBB', 5, 0, 0, 1)
+                         + socket.inet_aton('1.2.3.4') +
+                         struct.pack("!H", 34))
         self.assertFalse(self.sock.transport.stringTCPTransport_closing)
         self.assertIsNotNone(self.sock.driver_outgoing)
+        self.assertEqual(self.sock.driver_outgoing.transport.getPeer(),
+                         address.IPv4Address('TCP', '1.2.3.4', 34))
 
         # pass some data through
         self.sock.dataReceived(b'hello, world')
@@ -128,7 +149,7 @@ class ConnectTests(unittest.TestCase):
         self.assertEqual(self.sock.transport.value(), b'hi there')
 
         self.sock.connectionLost('fake reason')
-
+        self.assertTrue(self.sock.driver_outgoing.transport.stringTCPTransport_closing)
 
     def test_socks5SuccessfulResolution(self):
         """

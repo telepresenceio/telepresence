@@ -5,6 +5,12 @@ Implementation of the SOCKSv5 protocol.
 
 In additional to standard SOCKSv5 this also implements the Tor SOCKS protocol
 extension for DNS lookups.
+
+References:
+
+https://www.ietf.org/rfc/rfc1928.txt
+https://github.com/dgoulet/torsocks/blob/master/doc/socks/socks-extensions.txt
+for RESOLVE extension.
 """
 
 # python imports
@@ -27,6 +33,8 @@ class SOCKSv5Outgoing(protocol.Protocol):
 
     def connectionMade(self):
         peer = self.transport.getPeer()
+        # XXX This is wrong, should be local side's host and port!
+        # https://github.com/mike820324/socks5/issues/16
         self.socks.makeReply(Response(0, 1, peer.host, peer.port))
         self.socks.otherConn = self
 
