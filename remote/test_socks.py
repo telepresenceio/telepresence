@@ -49,7 +49,7 @@ class FakeResolverReactor:
         self.names = names
 
 
-    def resolve(self, hostname):
+    def lookupAddress(self, hostname):
         """
         Resolve a hostname by looking it up in the C{names} dictionary.
         """
@@ -57,8 +57,7 @@ class FakeResolverReactor:
             return defer.succeed(self.names[hostname])
         except KeyError:
             return defer.fail(
-                DNSLookupError("FakeResolverReactor couldn't find " +
-                                hostname.decode("utf-8")))
+                DNSLookupError("FakeResolverReactor couldn't find {}".format(hostname)))
 
 
 
@@ -78,7 +77,7 @@ class SOCKSv5Driver(socks.SOCKSv5):
             proto.makeConnection(transport)
             self.driver_outgoing = proto
             return proto
-        d = self.reactor.resolve(host)
+        d = self.reactor.lookupAddress(host)
         d.addCallback(got_ip)
         return d
 
@@ -102,13 +101,6 @@ class ConnectTests(unittest.TestCase):
         self.sock.makeConnection(transport)
         self.sock.reactor = FakeResolverReactor({"example.com": "5.6.7.8",
                                                  "1.2.3.4": "1.2.3.4"})
-
-    def tearDown(self):
-        outgoing = self.sock.driver_outgoing
-        if outgoing is not None:
-            self.assertTrue(outgoing.transport.stringTCPTransport_closing,
-                         "Outgoing SOCKS connections need to be closed.")
-
 
     def assert_handshake(self):
         """The server responds with NO_AUTH to the initial SOCKS5 handshake."""
@@ -170,16 +162,10 @@ class ConnectTests(unittest.TestCase):
             struct.pack("!H", 3401))
         reply = self.sock.transport.value()
         self.sock.transport.clear()
-        # Due to https://github.com/mike820324/socks5/issues/16 making wrong
-        # assert here; in practice doesn't impact torsocks I assume:
-        #self.assertEqual(reply,
-        #                 struct.pack('!BBBB', 5, 0, 0, 1)
-        #                 + socket.inet_aton('2.3.4.5') +
-        #                 struct.pack("!H", 42))
         self.assertEqual(reply,
                          struct.pack('!BBBB', 5, 0, 0, 1)
-                         + socket.inet_aton('5.6.7.8') +
-                         struct.pack("!H", 3401))
+                         + socket.inet_aton('2.3.4.5') +
+                         struct.pack("!H", 42))
 
         self.assert_dataflow()
 

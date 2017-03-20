@@ -28,9 +28,14 @@ class SOCKSv5Outgoing(protocol.Protocol):
         self.socks = socks
 
     def connectionMade(self):
+        # First thing, make sure SOCKS connection knows about us, so events get
+        # handed to us:
         self.socks.otherConn = self
-        peer = self.transport.getPeer()
-        self.socks._write_response(0, peer.host, peer.port)
+        # Next, tell SOCKS client it can now proceed to send data via the
+        # server to this connection. Per the RFC, we return the bind host and
+        # port.
+        host = self.transport.getHost()
+        self.socks._write_response(0, host.host, host.port)
 
     def connectionLost(self, reason):
         self.socks.transport.loseConnection()
@@ -123,7 +128,7 @@ class SOCKSv5(StatefulProtocol):
 
         if addr_type == 1:
             return self._parse_request_ipv4, 6
-        if addr_type == 2:
+        if addr_type == 3:
             return self._parse_request_domainname_start, 1
         else:
             # XXX IPv6 currently unsupported
@@ -136,7 +141,7 @@ class SOCKSv5(StatefulProtocol):
 
     def _parse_request_domainname_start(self, data):
         length = data[0]
-        return self._parse_request_domainname(self, data), length + 2
+        return self._parse_request_domainname, length + 2
 
     def _parse_request_domainname(self, data):
         host = data[:-2]
@@ -157,6 +162,7 @@ class SOCKSv5(StatefulProtocol):
             self.transport.loseConnection()
 
     def _done_parsing(self, host, port):
+        host = str(host, "utf-8")
         if self.command == "CONNECT":
             d = self.connectClass(str(host), port, SOCKSv5Outgoing, self)
             d.addErrback(self._handle_error)
@@ -165,8 +171,8 @@ class SOCKSv5(StatefulProtocol):
                 self.write(b"\5\0\0\1" + socket.inet_aton(addr))
                 self.transport.loseConnection()
 
-            self.reactor.resolve(
-                str(host)
+            self.reactor.lookupAddress(
+                host,
             ).addCallback(write_response).addErrback(self._handle_error)
 
     def connectionLost(self, reason):
