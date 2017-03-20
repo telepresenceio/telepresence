@@ -118,7 +118,7 @@ def write_etc_hosts(additional_hosts):
 
 def get_pod_name(deployment_name):
     """Given the deployment name, return the name of its pod."""
-    expected_metadata = loads(
+    deployment = loads(
         str(
             check_output([
                 "kubectl",
@@ -130,7 +130,8 @@ def get_pod_name(deployment_name):
                 "--export",
             ]), "utf-8"
         )
-    )["spec"]["template"]["metadata"]
+    )
+    expected_metadata = ["spec"]["template"]["metadata"]
     print("Expected metadata for pods: {}".format(expected_metadata))
     pods = loads(
         str(
@@ -152,7 +153,7 @@ def get_pod_name(deployment_name):
             continue
         if (name.startswith(deployment_name + "-")
             and
-            pod["metadata"]["namespace"] == expected_metadata.get(
+            pod["metadata"]["namespace"] == deployment["metadata"].get(
                 "namespace", "default")
             and
             phase in (
