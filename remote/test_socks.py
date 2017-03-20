@@ -109,22 +109,8 @@ class ConnectTests(unittest.TestCase):
         self.sock.transport.clear()
         self.assertEqual(reply, struct.pack("!BB", 5, 0))
 
-    def assert_dataflow(self):
-        """
-        Data flows between client connection and proxied outgoing connection.
-        """
-        # pass some data through
-        self.sock.dataReceived(b'hello, world')
-        self.assertEqual(self.sock.driver_outgoing.transport.value(),
-                         b'hello, world')
-
-        # the other way around
-        self.sock.driver_outgoing.dataReceived(b'hi there')
-        self.assertEqual(self.sock.transport.value(), b'hi there')
-
-    def test_simple(self):
-        """The server proxies an outgoing connection to an IPv4 address."""
-        self.assert_handshake()
+    def assert_connect(self):
+        """The server responds to CONNECT with successful result."""
         # The CONNECT command to an IPv4 address, host 1.2.3.4 port 34:
         # VER = 5, CMD = 1 (CONNECT), ATYP = 1 (IPv4)
         self.sock.dataReceived(
@@ -142,6 +128,23 @@ class ConnectTests(unittest.TestCase):
         self.assertEqual(self.sock.driver_outgoing.transport.getPeer(),
                          address.IPv4Address('TCP', '1.2.3.4', 34))
 
+    def assert_dataflow(self):
+        """
+        Data flows between client connection and proxied outgoing connection.
+        """
+        # pass some data through
+        self.sock.dataReceived(b'hello, world')
+        self.assertEqual(self.sock.driver_outgoing.transport.value(),
+                         b'hello, world')
+
+        # the other way around
+        self.sock.driver_outgoing.dataReceived(b'hi there')
+        self.assertEqual(self.sock.transport.value(), b'hi there')
+
+    def test_simple(self):
+        """The server proxies an outgoing connection to an IPv4 address."""
+        self.assert_handshake()
+        self.assert_connect()
         self.assert_dataflow()
 
         self.sock.connectionLost('fake reason')
@@ -201,75 +204,22 @@ class ConnectTests(unittest.TestCase):
 
         See https://gitweb.torproject.org/torsocks.git/tree/doc/socks/socks-extensions.txt#n40 for details.
         """
-        # send the domain name "localhost" to be resolved
-        clientRequest = (
-            struct.pack('!BBH', 4, 1, 34)
-            + socket.inet_aton('0.0.0.1')
-            + b'fooBAZ\0'
-            + b'localhost\0')
-
-        # Deliver the bytes one by one to exercise the protocol's buffering
-        # logic. FakeResolverReactor's resolve method is invoked to "resolve"
-        # the hostname.
-        for byte in iterbytes(clientRequest):
-            self.sock.dataReceived(byte)
-
-        sent = self.sock.transport.value()
-        self.sock.transport.clear()
-
-        # Verify that the server responded with the address which will be
-        # connected to.
-        self.assertEqual(
-            sent,
-            struct.pack('!BBH', 0, 90, 34) + socket.inet_aton('127.0.0.1'))
-        self.assertFalse(self.sock.transport.stringTCPTransport_closing)
-        self.assertIsNotNone(self.sock.driver_outgoing)
-
-
-    def test_accessDenied(self):
-        self.sock.authorize = lambda code, server, port, user: 0
-        self.sock.dataReceived(
-            struct.pack('!BBH', 4, 1, 4242)
-            + socket.inet_aton('10.2.3.4')
-            + b'fooBAR'
-            + b'\0')
-        self.assertEqual(self.sock.transport.value(),
-                         struct.pack('!BBH', 0, 91, 0)
-                         + socket.inet_aton('0.0.0.0'))
-        self.assertTrue(self.sock.transport.stringTCPTransport_closing)
-        self.assertIsNone(self.sock.driver_outgoing)
-
+        pass  # XXX
 
     def test_eofRemote(self):
-        self.sock.dataReceived(
-            struct.pack('!BBH', 4, 1, 34)
-            + socket.inet_aton('1.2.3.4')
-            + b'fooBAR'
-            + b'\0')
-        self.sock.transport.clear()
-
-        # pass some data through
-        self.sock.dataReceived(b'hello, world')
-        self.assertEqual(self.sock.driver_outgoing.transport.value(),
-                         b'hello, world')
+        """If the outgoing connection closes the client connection closes."""
+        self.assert_handshake()
+        self.assert_connect()
 
         # now close it from the server side
-        self.sock.driver_outgoing.transport.loseConnection()
         self.sock.driver_outgoing.connectionLost('fake reason')
+        self.assertTrue(self.sock.transport.stringTCPTransport_closing)
 
 
     def test_eofLocal(self):
-        self.sock.dataReceived(
-            struct.pack('!BBH', 4, 1, 34)
-            + socket.inet_aton('1.2.3.4')
-            + b'fooBAR'
-            + b'\0')
-        self.sock.transport.clear()
+        """If the client connection closes the outgoing connection closes."""
+        self.assert_handshake()
+        self.assert_connect()
 
-        # pass some data through
-        self.sock.dataReceived(b'hello, world')
-        self.assertEqual(self.sock.driver_outgoing.transport.value(),
-                         b'hello, world')
-
-        # now close it from the client side
         self.sock.connectionLost('fake reason')
+        self.assertTrue(self.sock.driver_outgoing.transport.stringTCPTransport_closing)
