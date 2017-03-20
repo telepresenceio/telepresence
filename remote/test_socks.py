@@ -177,29 +177,22 @@ class ConnectTests(unittest.TestCase):
         Failed hostname resolution on a SOCKSv5 packet results in an error
         response and the connection getting closed.
         """
-        # send the domain name "failinghost" to be resolved
-        clientRequest = (
-            struct.pack('!BBH', 4, 1, 34)
-            + socket.inet_aton('0.0.0.1')
-            + b'fooBAZ\0'
-            + b'failinghost\0')
-
-        # Deliver the bytes one by one to exercise the protocol's buffering
-        # logic. FakeResolverReactor's resolve method is invoked to "resolve"
-        # the hostname.
-        for byte in iterbytes(clientRequest):
-            self.sock.dataReceived(byte)
-
-        # Verify that the server responds with a 91 error.
-        sent = self.sock.transport.value()
+        self.assert_handshake()
+        self.sock.dataReceived(
+            struct.pack('!BBBB', 5, 1, 0, 3)
+            + struct.pack("!B", len(b"unknown")) + b"unknown" +
+            struct.pack("!H", 3401))
+        reply = self.sock.transport.value()
+        self.sock.transport.clear()
         self.assertEqual(
-            sent,
-            struct.pack('!BBH', 0, 91, 0) + socket.inet_aton('0.0.0.0'))
+            reply,
+            struct.pack('!BBBB', 5, 4, 0, 1) + socket.inet_aton('0.0.0.0') +
+            struct.pack("!H", 0))
 
         # A failed resolution causes the transport to drop the connection.
         self.assertTrue(self.sock.transport.stringTCPTransport_closing)
         self.assertIsNone(self.sock.driver_outgoing)
-
+        self.assertEqual(len(self.flushLoggedErrors(DNSLookupError)), 1)
 
     def test_socks5TorStyleResolution(self):
         """

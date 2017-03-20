@@ -21,6 +21,7 @@ import struct
 from twisted.internet import reactor, protocol, defer
 from twisted.python import log
 from twisted.protocols.stateful import StatefulProtocol
+from twisted.internet.error import ConnectionRefusedError, DNSLookupError
 
 
 class SOCKSv5Outgoing(protocol.Protocol):
@@ -148,10 +149,15 @@ class SOCKSv5(StatefulProtocol):
         port = struct.unpack("!H", data[-2:])[0]
         self._done_parsing(host, port)
 
-    def _handle_error(self, error):
+    def _handle_error(self, failure):
         """Handle errors in connecting or resolving."""
-        log.err(error)
-        self._write_response(1, "0.0.0.0", 0)
+        log.err(failure)
+        error_code = 1
+        if failure.check(DNSLookupError):
+            error_code = 4
+        if failure.check(ConnectionRefusedError):
+            error_code = 5
+        self._write_response(error_code, "0.0.0.0", 0)
 
     def _write_response(self, code, host, port):
         self.write(
