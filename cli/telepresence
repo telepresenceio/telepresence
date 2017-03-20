@@ -134,7 +134,8 @@ def parse_args():
         "--proxy",
         action='append',
         default=[],
-        help="<host>:<port> that will be proxied via Kubernetes."
+        help=("<host>:<port> that will be proxied via Kubernetes. "
+              "This is unnecessary when using --run."),
     )
     group_run = parser.add_mutually_exclusive_group(required=True)
     group_run.add_argument(
@@ -260,7 +261,8 @@ def start_proxy(runner, args):
         args.deployment,
         # Arguments: <port1,port2>, <proxy1,proxy2>, <expose_host>
         ",".join(map(str, args.expose)),
-        ",".join(args.proxy),
+        # We don't need to do special proxying when using SOCKS-based --run:
+        ",".join(args.proxy if args.run is None else []),
         expose_host,
     ])
     p = runner.popen(docker_cmd)
