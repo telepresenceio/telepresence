@@ -1,6 +1,6 @@
 .PHONY: default build build-local build-remote bumpversion release test
 
-VERSION=0.15
+VERSION=0.16
 
 default:
 	@echo "To release:"
