@@ -375,6 +375,7 @@ Logs:
 
 class handle_unexpected_errors(object):
     """Decorator that catches unexpected errors."""
+
     def __init__(self, logfile):
         self.logfile = logfile
 
@@ -482,7 +483,8 @@ def main():
             run_docker_command(runner, args, out_env, container_id)
         else:
             run_local_command(
-                runner, args, os.path.join(tempdir, "unproxied.env"), container_id
+                runner, args,
+                os.path.join(tempdir, "unproxied.env"), container_id
             )
 
     go()

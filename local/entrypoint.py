@@ -74,10 +74,13 @@ def get_env_variables(pod_name):
         # we're getting env variables from telepresence that are
         # image-specific, not coming from the Deployment. figure out way to
         # differentiate.
-        if key not in in_docker_result and key not in environ and key not in filter_keys:
+        ok = (
+            key not in in_docker_result and key not in environ and
+            key not in filter_keys
+        )
+        if ok:
             in_docker_result[key] = value
     return in_docker_result, socks_result
-
 
 
 def write_env(pod_name):
@@ -143,9 +146,8 @@ def get_pod_name(deployment_name):
             "Checking {} (phase {})...".
             format(pod["metadata"].get("labels"), phase)
         )
-        if not set(expected_metadata.get("labels", {}).items()).issubset(
-            set(pod["metadata"].get("labels", {}).items())
-        ):
+        if not set(expected_metadata.get("labels", {}).items()
+                   ).issubset(set(pod["metadata"].get("labels", {}).items())):
             print("Labels don't match.")
             continue
         if (name.startswith(deployment_name + "-")
@@ -206,7 +208,10 @@ def wait_for_pod(pod_name):
 SOCKS_PORT = 9050
 
 
-def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts, expose_host):
+def main(
+    uid, deployment_name, local_exposed_ports, custom_proxied_hosts,
+    expose_host
+):
     processes = []
     pod_name = get_pod_name(deployment_name)
     # Wait for pod to be running:
@@ -235,7 +240,10 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts, expose
 
     for port_number in local_exposed_ports:
         processes.append(
-            ssh(["-R", "*:{}:{}:{}".format(port_number, expose_host, port_number)])
+            ssh([
+                "-R",
+                "*:{}:{}:{}".format(port_number, expose_host, port_number)
+            ])
         )
 
     # start tunnel to remote SOCKS proxy, for telepresence --run:
@@ -265,6 +273,5 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts, expose
 if __name__ == '__main__':
     main(
         int(argv[1]), argv[2], argv[3].split(",")
-        if argv[3] else [], argv[4].split(",") if argv[4] else [],
-        argv[5]
+        if argv[3] else [], argv[4].split(",") if argv[4] else [], argv[5]
     )
