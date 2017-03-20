@@ -4,6 +4,7 @@ Telepresence allows you to run your code locally while still:
 1. Giving your code access to Services in a remote Kubernetes cluster.
 2. Giving your code access to cloud resources like AWS RDS or Google PubSub.
 3. Allowing Kubernetes to access your code as if it were in a normal pod within the cluster.
+4. Your code can run either as a normal process, or as a local docker container.
 
 **IMPORTANT:** Telepresence is currently in the prototyping stage, and we expect it to change rapidly based on user feedback.
 
@@ -58,19 +59,12 @@ graph TD
 
 ### Telepresence: a fast development/live test cycle
 
-Telepresence works by running your code *locally* in a Docker container, and forwarding requests to/from the remote Kubernetes cluster.
-
-(Future versions may allow you to run your code locally directly, without a local container.
-[Let us know](https://github.com/datawire/telepresence/issues/1) if this a feature you want.)
-
-This means development is fast: you only have to change your code and rebuild your Docker image.
-Even better, you can use a development-oriented Docker image or configuration, with live reloads of code changes or the ability to attach a debugger.
-This means an even faster development cycle.
+Telepresence works by running your code *locally*, as a normal local process, and then forwarding forwarding requests to/from the remote Kubernetes cluster.
 
 <div class="mermaid">
 graph TD
   subgraph Laptop
-    code["Source code for servicename"]==>local["servicename, in container"]
+    code["Source code for servicename"]==>local["local process"]
     local---client[Telepresence client]
   end
   subgraph Kubernetes in Cloud
@@ -81,6 +75,12 @@ graph TD
     proxy---c1>"Cloud Database (AWS RDS)"]
   end
 </div>
+
+This means development is fast: you only have to change your code and restart your process.
+Many web frameworks also do automatic code reload, in which case you won't even need to restart.
+
+You can also run your code in a Docker container, which means you just need to rebuild a local image and restart to test it out.
+Even better, you can use a development-oriented Docker image or configuration, with live reloads of code changes or the ability to attach a debugger.
 
 ## Installing
 
@@ -105,6 +105,20 @@ Then move telepresence to somewhere in your `$PATH`, e.g.:
 mv telepresence /usr/local/bin
 ```
 
+If you want to proxy normal local processes, rather than just local Docker containers, you'll also need to install a tool called `torsocks`.
+
+On OS X:
+
+```console
+$ brew install torsocks
+```
+
+On Ubuntu:
+
+```console
+$ sudo apt install --no-install-recommends torsocks
+```
+
 > **Need help?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
 
 ## Quickstart
@@ -114,7 +128,7 @@ In the next section we'll discuss using Telepresence with an existing `Deploymen
 
 To get started we'll use `telepresence --new-deployment quickstart` to create a new `Deployment` and matching `Service`.
 The client will connect to the remote Kubernetes cluster via that `Deployment` and then run a local Docker container that is proxied into the remote cluster.
-You'll also use the `--docker-run` argument to specify how that local container should be created: these arguments will match those passed to `docker run`.
+You'll then use the `--run-shell` argument to start a shell that is proxied to the remote Kubernetes cluster.
 
 Let's start a `Service` and `Deployment` in Kubernetes, and wait until it's up and running:
 
@@ -126,19 +140,38 @@ NAME                          READY     STATUS    RESTARTS   AGE
 helloworld-1333052153-63kkw   1/1       Running   0          33s
 ```
 
-The Docker container you run will get environment variables that match those in the remote deployment, including Kubernetes `Service` addresses.
-We can now see this by running the `env` command inside a Docker image; this may take a little long run the first time, since Kubernetes needs to download the server-side image:
+The local process you will run via `telepresence` will get environment variables that match those in the remote deployment, including Kubernetes `Service` addresses.
+It will be able to access these addresses inside Kubernetes, as well as use Kubernetes custom DNS records for `Service` instances.
+
+Note that starting `telepresence` the first time may take a little while, since Kubernetes needs to download the server-side image.
 
 ```console
-host$ telepresence --new-deployment quickstart --docker-run \
-      --rm busybox env | grep HELLOWORLD_SERVICE
-HELLOWORLD_SERVICE_HOST=127.0.0.1
-HELLOWORLD_SERVICE_PORT=2002
+host$ telepresence --new-deployment quickstart --run-shell
+(TELEPRESENCE)host$ env | grep HELLOWORLD_SERVICE
+HELLOWORLD_SERVICE_HOST=10.0.0.3
+HELLOWORLD_SERVICE_PORT=443
+(TELEPRESENCE)host$ curl "http://${HELLOWORLD_SERVICE_HOST}:${HELLOWORLD_SERVICE_PORT}/"
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+...
+(TELEPRESENCE)host$ curl "http://helloworld:${HELLOWORLD_SERVICE_PORT}/"
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+...
+(TELEPRESENCE)host$ exit
 ```
 
 > **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
 
-You can send a request to this new service and it will get proxied, and you can also use the special hostnames Kubernetes creates for `Services`:
+### Proxying Docker containers
+
+Just like `telepresence` can proxy local processes, it can also proxy a local Docker container by using the `--docker-run` argument, followed by arguments that specify how that local container should be created: these arguments will match those passed to `docker run`.
+
+For example, we can run a shell inside a container running the `busybox` Docker image:
 
 ```console
 host$ telepresence --new-deployment quickstart --docker-run \
@@ -149,19 +182,15 @@ localcontainer$ wget -qO- "http://${HELLOWORLD_SERVICE_HOST}:${HELLOWORLD_SERVIC
 <head>
 <title>Welcome to nginx!</title>
 ...
-localcontainer$ wget -qO- "http://helloworld:${HELLOWORLD_SERVICE_PORT}/"
-<!DOCTYPE html>
-<html>
-<head>
-<title>Welcome to nginx!</title>
-...
-localcontainer$ exit
-host$
 ```
 
-So far you've seen how your local container can access the remote Kubernetes cluster's services.
+> **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
 
-You can also run a local server (within the local container) that listens on port 8080 and it will be exposed and available inside the Kubernetes cluster.
+### Proxying from Kubernetes to your local process or container
+
+So far you've seen how local processes and local containers can access the remote Kubernetes cluster's services.
+
+You can also run a local server (either in a local process or a a local container) that listens on port 8080 and it will be exposed and available inside the Kubernetes cluster.
 Let's say you want to serve some static files from your local machine.
 You can mount the current directory as a Docker volume, run a webserver on port 8080, and pass `--expose 8080` to Telepresence so it knows it needs to expose that port to the Kubernetes cluster:
 
@@ -197,6 +226,11 @@ $ kubectl run --attach -i -t test --generator=job/v1 --rm \
 k8s-pod# wget -qO- http://quickstart.default.svc.cluster.local:8080/file.txt
 hello world
 ```
+
+Similarly, you can listen on a port inside a process started via `--run-shell`.
+
+**Important:** Your server needs to listen on all interfaces, not just `127.0.0.1`, e.g. by listening to interface `0.0.0.0`.
+Otherwise it won't be exposed to the remote server.
 
 > **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
 

@@ -3,7 +3,7 @@ End-to-end tests for running directly in the operating system.
 """
 
 from unittest import TestCase
-from subprocess import check_output, Popen
+from subprocess import check_output, Popen, PIPE
 import time
 
 from .utils import DIRECTORY, random_name
@@ -23,14 +23,18 @@ class EndToEndTests(TestCase):
         script shouldn't use code py.test would detect as a test.
         """
         result = str(
-            check_output([
-                "telepresence",
-                "--new-deployment",
-                random_name(),
-                "--run",
-                "python3",
-                "tocluster.py",
-            ], cwd=str(DIRECTORY)), "utf-8")
+            check_output(
+                args=[
+                    "telepresence",
+                    "--new-deployment",
+                    random_name(),
+                    "--run-shell",
+                ],
+                cwd=str(DIRECTORY),
+                input=b"python3 tocluster.py\n"
+            ),
+            "utf-8",
+        )
         assert "SUCCESS!" in result
 
     def test_fromcluster(self):
@@ -42,11 +46,19 @@ class EndToEndTests(TestCase):
         """
         name = random_name()
         p = Popen(
-            [
-                "telepresence", "--new-deployment", name,
-                "--expose", "8080", "--run",
-                "python3", "-m", "http.server", "8080"
-            ], cwd=str(DIRECTORY))
+            args=[
+                "telepresence",
+                "--new-deployment",
+                name,
+                "--expose",
+                "8080",
+                "--run-shell",
+            ],
+            stdin=PIPE,
+            cwd=str(DIRECTORY)
+        )
+        p.stdin.write(b"python3 -m http.server 8080\n")
+        p.stdin.flush()
 
         def cleanup():
             p.terminate()
