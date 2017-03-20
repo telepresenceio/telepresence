@@ -389,7 +389,6 @@ Currently unsupported:
 We are considering various improvements to Telepresence, including:
 
 * [Removing need for Kubernetes credentials](https://github.com/datawire/telepresence/issues/2)
-* [Allowing running code locally without a container](https://github.com/datawire/telepresence/issues/1)
 * Implementing any of the unsupported features mentioned above.
 
 Please add comments to relevant tickets if you are interested in these features, or [file a new issue](https://github.com/datawire/telepresence/issues/new) if there is no existing ticket for a desired feature or bug report.
@@ -407,6 +406,13 @@ Some alternatives to Telepresence:
   This is a somewhat slow process, and you won't be able to do the quick debug cycle you get from running code locally.
   
 ## Changelog
+
+### 0.14 (March 20, 2017)
+
+Features:
+
+* Added `--run-shell`, which allows proxying against local processes.
+  ([#1](https://github.com/datawire/telepresence/issues/1))
 
 ### 0.13 (March 16, 2017)
 
