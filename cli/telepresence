@@ -134,8 +134,10 @@ def parse_args():
         "--proxy",
         action='append',
         default=[],
-        help=("<host>:<port> that will be proxied via Kubernetes. "
-              "This is unnecessary when using --run."),
+        help=(
+            "<host>:<port> that will be proxied via Kubernetes. "
+            "This is unnecessary when using --run."
+        ),
     )
     group_run = parser.add_mutually_exclusive_group(required=True)
     group_run.add_argument(
@@ -291,8 +293,11 @@ def run_local_command(runner, args, out_env, container_id):
     env["TORSOCKS_CONF_FILE"] = tor_conffile.name
     # Don't use runner.popen() since we want to give program access to current
     # stdout and stderr if it wants it.
-    env["PROMPT_COMMAND"] = 'PS1="\e[1m@{}\e[0m|$PS1";unset PROMPT_COMMAND'.format(
-        runner.get_output(["kubectl", "config", "current-context"]).strip())
+    env["PROMPT_COMMAND"] = (
+        'PS1="\e[1m@{}\e[0m|$PS1";unset PROMPT_COMMAND'.format(
+            runner.get_output(["kubectl", "config", "current-context"]).strip()
+        )
+    )
     p = Popen(["torsocks", "/bin/bash", "-i", "-l"], env=env)
 
     def terminate_if_alive():
@@ -477,6 +482,13 @@ def main():
         except CalledProcessError as e:
             sys.stderr.write("Error running Docker: {}\n".format(e))
             raise SystemExit(1)
+        # Make sure we have torsocks:
+        if args.runshell:
+            try:
+                check_output(maybe_sudo(["torsocks", "true"]))
+            except CalledProcessError as e:
+                sys.stderr.write("Error running torsocks: {}\n".format(e))
+                raise SystemExit(1)
         tempdir, container_id, proxy_popen = start_proxy(runner, args)
         # Wait for proxy container to write out env file, indicating we're good
         # to go:
