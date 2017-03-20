@@ -238,7 +238,7 @@ def start_proxy(runner, args):
         # proxy, so expose the local SOCKS port to the host machine:
         docker_cmd.extend([
             "-p",
-            "9050:9050",
+            ":9050",
         ])
         # We want the exposed host to be the external machine, not the Docker
         # container:
@@ -253,7 +253,7 @@ def start_proxy(runner, args):
         # Mount local directory, where env file will be written out:
         "-v",
         tempdir + ":/output",
-        # Name of container:
+        # Name of image:
         "datawire/telepresence-local:" + __version__,
         # Arguments: <uid>, <deployment-name>
         str(os.getuid()),
@@ -271,11 +271,17 @@ def start_proxy(runner, args):
 TORSOCKS_CONFIG = """
 # Allow process to listen on ports:
 AllowInbound 1
+TorPort {}
 """
 
 
 def run_local_command(runner, args, out_env, container_id):
     """--run support, run command locally."""
+    socks_port = int(
+        runner.get_output(
+            maybe_sudo(["docker", "port", container_id, "9050/tcp"])
+        ).split(":")[-1]
+    )
     with open(out_env, "r") as f:
         env = os.environ.copy()
         env.update(dict(line.split("=", 1) for line in f.read().splitlines()))
@@ -283,7 +289,7 @@ def run_local_command(runner, args, out_env, container_id):
     # Create custom torsocks.conf, since some options we want (in particular,
     # port) aren't accessible via env variables in older versions of torconf:
     conffile = NamedTemporaryFile(delete=False)
-    conffile.write(TORSOCKS_CONFIG)
+    conffile.write(TORSOCKS_CONFIG.format(socks_port))
     conffile.flush()
     conffile.close()
     env["TORSOCKS_CONF_FILE"] = conffile.name
@@ -483,8 +489,10 @@ def main():
             run_docker_command(runner, args, out_env, container_id)
         else:
             run_local_command(
-                runner, args,
-                os.path.join(tempdir, "unproxied.env"), container_id
+                runner,
+                args,
+                os.path.join(tempdir, "unproxied.env"),
+                container_id,
             )
 
     go()
