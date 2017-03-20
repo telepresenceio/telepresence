@@ -190,7 +190,7 @@ class SOCKSv5(StatefulProtocol):
                 self.write(b"\5\4\0\0")
                 self.transport.loseConnection()
 
-            self.reactor.lookupAddress(
+            self.reactor.resolve(
                 host,
             ).addCallback(write_response).addErrback(write_error)
 

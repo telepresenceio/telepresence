@@ -46,7 +46,7 @@ class FakeResolverReactor:
         """
         self.names = names
 
-    def lookupAddress(self, hostname):
+    def resolve(self, hostname):
         """
         Resolve a hostname by looking it up in the C{names} dictionary.
         """
@@ -77,7 +77,7 @@ class SOCKSv5Driver(socks.SOCKSv5):
             self.driver_outgoing = proto
             return proto
 
-        d = self.reactor.lookupAddress(host)
+        d = self.reactor.resolve(host)
         d.addCallback(got_ip)
         return d
 
