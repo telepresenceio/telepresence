@@ -484,6 +484,9 @@ def main():
             raise SystemExit(1)
         # Make sure we have torsocks:
         if args.runshell:
+            if not sys.platform.startswith("linux"):
+                sys.stderr.write("--run currently only works on Linux.\n")
+                raise SystemExit(1)
             try:
                 check_output(maybe_sudo(["torsocks", "true"]))
             except CalledProcessError as e:
