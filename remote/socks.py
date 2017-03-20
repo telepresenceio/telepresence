@@ -180,9 +180,14 @@ class SOCKSv5(StatefulProtocol):
                 self.write(b"\5\0\0\1" + socket.inet_aton(addr))
                 self.transport.loseConnection()
 
+            def write_error(e):
+                log.err(e)
+                self.write(b"\5\4\0\0")
+                self.transport.loseConnection()
+
             self.reactor.lookupAddress(
                 host,
-            ).addCallback(write_response).addErrback(self._handle_error)
+            ).addCallback(write_response).addErrback(write_error)
 
     def connectionLost(self, reason):
         if self.otherConn:

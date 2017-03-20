@@ -157,54 +157,33 @@ class ConnectTests(unittest.TestCase):
         @see: U{http://en.wikipedia.org/wiki/SOCKS#SOCKS_5_protocol}
         """
         self.assert_handshake()
-        # The CONNECT command to an IPv4 address, host 1.2.3.4 port 34:
-        # VER = 5, CMD = 1 (CONNECT), ATYP = 3 (DOMAINNAME)
         self.sock.dataReceived(
-            struct.pack('!BBBB', 5, 1, 0, 3)
+            struct.pack('!BBBB', 5, 0xf0, 0, 3)
             + struct.pack("!B", len(b"example.com")) + b"example.com" +
             struct.pack("!H", 3401))
         reply = self.sock.transport.value()
         self.sock.transport.clear()
         self.assertEqual(reply,
                          struct.pack('!BBBB', 5, 0, 0, 1)
-                         + socket.inet_aton('2.3.4.5') +
-                         struct.pack("!H", 42))
-
-        self.assert_dataflow()
-
-        self.sock.driver_outgoing.connectionLost('fake reason')
+                         + socket.inet_aton('5.6.7.8'))
         self.assertTrue(self.sock.transport.stringTCPTransport_closing)
 
-    def test_socks5ConnectFailedResolution(self):
+    def test_socks5TorStyleFailedResolution(self):
         """
-        Failed hostname resolution on a SOCKSv5 packet results in an error
-        response and the connection getting closed.
+        A Tor-style name resolution when resolution fails.
         """
         self.assert_handshake()
         self.sock.dataReceived(
-            struct.pack('!BBBB', 5, 1, 0, 3)
+            struct.pack('!BBBB', 5, 0xf0, 0, 3)
             + struct.pack("!B", len(b"unknown")) + b"unknown" +
             struct.pack("!H", 3401))
         reply = self.sock.transport.value()
         self.sock.transport.clear()
         self.assertEqual(
             reply,
-            struct.pack('!BBBB', 5, 4, 0, 1) + socket.inet_aton('0.0.0.0') +
-            struct.pack("!H", 0))
-
-        # A failed resolution causes the transport to drop the connection.
+            struct.pack('!BBBB', 5, 4, 0, 0))
         self.assertTrue(self.sock.transport.stringTCPTransport_closing)
-        self.assertIsNone(self.sock.driver_outgoing)
         self.assertEqual(len(self.flushLoggedErrors(DNSLookupError)), 1)
-
-    def test_socks5TorStyleResolution(self):
-        """
-        Support Tor-style name resolution: a new command that just does
-        hostname->IP resolution.
-
-        See https://gitweb.torproject.org/torsocks.git/tree/doc/socks/socks-extensions.txt#n40 for details.
-        """
-        pass  # XXX
 
     def test_eofRemote(self):
         """If the outgoing connection closes the client connection closes."""
