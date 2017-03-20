@@ -104,9 +104,17 @@ class ConnectTests(unittest.TestCase):
             "1.2.3.4": "1.2.3.4"
         })
 
+    def deliver_data(self, protocol, data):
+        """
+        Deliver bytes one by one, to ensure parser can deal with unchunked
+        data.
+        """
+        for byte in iterbytes(data):
+            protocol.dataReceived(byte)
+
     def assert_handshake(self):
         """The server responds with NO_AUTH to the initial SOCKS5 handshake."""
-        self.sock.dataReceived(struct.pack("!BBB", 5, 1, 0))
+        self.deliver_data(self.sock, struct.pack("!BBB", 5, 1, 0))
         reply = self.sock.transport.value()
         self.sock.transport.clear()
         self.assertEqual(reply, struct.pack("!BB", 5, 0))
@@ -115,7 +123,8 @@ class ConnectTests(unittest.TestCase):
         """The server responds to CONNECT with successful result."""
         # The CONNECT command to an IPv4 address, host 1.2.3.4 port 34:
         # VER = 5, CMD = 1 (CONNECT), ATYP = 1 (IPv4)
-        self.sock.dataReceived(
+        self.deliver_data(
+            self.sock,
             struct.pack('!BBBB', 5, 1, 0, 1) + socket.inet_aton('1.2.3.4') +
             struct.pack("!H", 34)
         )
@@ -138,7 +147,7 @@ class ConnectTests(unittest.TestCase):
         Data flows between client connection and proxied outgoing connection.
         """
         # pass some data through
-        self.sock.dataReceived(b'hello, world')
+        self.deliver_data(self.sock, b'hello, world')
         self.assertEqual(
             self.sock.driver_outgoing.transport.value(), b'hello, world'
         )
@@ -165,7 +174,8 @@ class ConnectTests(unittest.TestCase):
         @see: U{http://en.wikipedia.org/wiki/SOCKS#SOCKS_5_protocol}
         """
         self.assert_handshake()
-        self.sock.dataReceived(
+        self.deliver_data(
+            self.sock,
             struct.pack('!BBBB', 5, 0xf0, 0, 3) + struct.pack(
                 "!B", len(b"example.com")
             ) + b"example.com" + struct.pack("!H", 3401)
@@ -183,9 +193,11 @@ class ConnectTests(unittest.TestCase):
         A Tor-style name resolution when resolution fails.
         """
         self.assert_handshake()
-        self.sock.dataReceived(
-            struct.pack('!BBBB', 5, 0xf0, 0, 3) + struct.
-            pack("!B", len(b"unknown")) + b"unknown" + struct.pack("!H", 3401)
+        self.deliver_data(
+            self.sock,
+            struct.pack('!BBBB', 5, 0xf0, 0, 3) + struct.pack(
+                "!B", len(b"unknown")
+            ) + b"unknown" + struct.pack("!H", 3401)
         )
         reply = self.sock.transport.value()
         self.sock.transport.clear()
