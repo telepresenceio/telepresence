@@ -286,17 +286,17 @@ def run_local_command(runner, args, out_env, container_id):
         env["PS1"] = "[TELEPRESENCE] " + env.get("PS1", "$ ")
     # Create custom torsocks.conf, since some options we want (in particular,
     # port) aren't accessible via env variables in older versions of torconf:
-    conffile = NamedTemporaryFile(delete=False)
-    conffile.write(TORSOCKS_CONFIG.format(socks_port))
-    conffile.flush()
-    conffile.close()
-    env["TORSOCKS_CONF_FILE"] = conffile.name
+    with NamedTemporaryFile(delete=False) as tor_conffile:
+        tor_conffile.write(TORSOCKS_CONFIG.format(socks_port))
+    env["TORSOCKS_CONF_FILE"] = tor_conffile.name
     # Don't use runner.popen() since we want to give program access to current
     # stdout and stderr if it wants it.
-    p = Popen(["torsocks", "/bin/bash"], env=env)
+    env["PROMPT_COMMAND"] = 'PS1="\e[1m@{}\e[0m|$PS1";unset PROMPT_COMMAND'.format(
+        runner.get_output(["kubectl", "config", "current-context"]).strip())
+    p = Popen(["torsocks", "/bin/bash", "-i", "-l"], env=env)
 
     def terminate_if_alive():
-        os.remove(conffile.name)
+        os.remove(tor_conffile.name)
         if p.poll() is None:
             p.terminate()
 

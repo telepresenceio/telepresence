@@ -130,9 +130,12 @@ To get started we'll use `telepresence --new-deployment quickstart` to create a 
 The client will connect to the remote Kubernetes cluster via that `Deployment` and then run a local Docker container that is proxied into the remote cluster.
 You'll then use the `--run-shell` argument to start a shell that is proxied to the remote Kubernetes cluster.
 
-Let's start a `Service` and `Deployment` in Kubernetes, and wait until it's up and running:
+Let's start a `Service` and `Deployment` in Kubernetes, and wait until it's up and running.
+We'll check the current Kubernetes context and then start a new pod:
 
 ```console
+host$ kubectl config current-context
+yourcluster
 host$ kubectl run --expose helloworld --image=nginx:alpine --port=80
 # ... wait 30 seconds, make sure pod is in Running state:
 host$ kubectl get pod --selector=run=helloworld
@@ -147,22 +150,22 @@ Note that starting `telepresence` the first time may take a little while, since 
 
 ```console
 host$ telepresence --new-deployment quickstart --run-shell
-(TELEPRESENCE)host$ env | grep HELLOWORLD_SERVICE
+@yourcluster|host$ env | grep HELLOWORLD_SERVICE
 HELLOWORLD_SERVICE_HOST=10.0.0.3
 HELLOWORLD_SERVICE_PORT=443
-(TELEPRESENCE)host$ curl "http://${HELLOWORLD_SERVICE_HOST}:${HELLOWORLD_SERVICE_PORT}/"
+@yourcluster|host$ curl "http://${HELLOWORLD_SERVICE_HOST}:${HELLOWORLD_SERVICE_PORT}/"
 <!DOCTYPE html>
 <html>
 <head>
 <title>Welcome to nginx!</title>
 ...
-(TELEPRESENCE)host$ curl "http://helloworld:${HELLOWORLD_SERVICE_PORT}/"
+@yourcluster|host$ curl "http://helloworld:${HELLOWORLD_SERVICE_PORT}/"
 <!DOCTYPE html>
 <html>
 <head>
 <title>Welcome to nginx!</title>
 ...
-(TELEPRESENCE)host$ exit
+@yourcluster|host$ exit
 ```
 
 > **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
