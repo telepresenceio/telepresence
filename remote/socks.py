@@ -16,12 +16,15 @@ for RESOLVE extension.
 # python imports
 import socket
 import struct
+import os
 
 # twisted imports
 from twisted.internet import reactor, protocol
 from twisted.python import log
 from twisted.protocols.stateful import StatefulProtocol
 from twisted.internet.error import ConnectionRefusedError, DNSLookupError
+
+DEBUG = "DEBUG_SOCKS" in os.environ
 
 
 class SOCKSv5Outgoing(protocol.Protocol):
@@ -85,7 +88,8 @@ class SOCKSv5(StatefulProtocol):
         @type data: L{bytes}
         @param data: Part or all of a SOCKSv5 packet.
         """
-        print("RECEIVED:", repr(data))
+        if DEBUG:
+            print("RECEIVED:", repr(data))
         if self.otherConn is not None:
             # We're in proxying mode now:
             self.otherConn.write(data)
@@ -199,7 +203,8 @@ class SOCKSv5(StatefulProtocol):
                                       *args).connectTCP(host, port)
 
     def write(self, data):
-        print("SENT:", repr(data))
+        if DEBUG:
+            print("SENT:", repr(data))
         self.transport.write(data)
 
 
@@ -215,6 +220,7 @@ class SOCKSv5Factory(protocol.Factory):
 
 
 if __name__ == '__main__':
+    DEBUG = True
     from twisted.python.failure import startDebugMode
     startDebugMode()
     reactor.listenTCP(9050, SOCKSv5Factory())
