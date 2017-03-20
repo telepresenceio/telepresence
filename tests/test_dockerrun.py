@@ -1,13 +1,12 @@
 """
-End-to-end tests.
+End-to-end tests for running inside a Docker container.
 """
 
 from unittest import TestCase
-from pathlib import Path
 from subprocess import check_output, Popen, STDOUT
 import time
 
-DIRECTORY = Path(__file__).absolute().parent
+from .utils import DIRECTORY, random_name
 
 
 class EndToEndTests(TestCase):
@@ -55,7 +54,6 @@ class EndToEndTests(TestCase):
         Start webserver that serves files from this directory. Run HTTP query
         against it on the Kubernetes cluster, compare to real file.
         """
-        # XXX leaking docker processes, try to figure out why
         p = Popen(
             [
                 "telepresence", "--new-deployment", "fromclustertests",
@@ -71,19 +69,20 @@ class EndToEndTests(TestCase):
         self.addCleanup(cleanup)
         time.sleep(30)
         result = check_output([
-            'kubectl', 'run', '--attach', 'testing123', '--generator=job/v1',
+            'kubectl', 'run', '--attach', random_name(),
+            '--generator=job/v1',
             "--quiet", '--rm', '--image=alpine', '--restart', 'Never',
             '--command', '--', '/bin/sh', '-c',
             "apk add --no-cache --quiet curl && " +
-            "curl http://fromclustertests:8080/test_endtoend.py"
+            "curl http://fromclustertests:8080/__init__.py"
         ])
-        assert result == (DIRECTORY / "test_endtoend.py").read_bytes()
+        assert result == (DIRECTORY / "__init__.py").read_bytes()
 
     def test_existingdeployment(self):
         """
         Tests of communicating with existing Deployment.
         """
-        name = "testing-{}".format(time.time()).replace(".", "-")
+        name = random_name()
         version = str(
             check_output(["telepresence", "--version"], stderr=STDOUT),
             "utf-8").strip()

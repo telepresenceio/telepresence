@@ -36,7 +36,13 @@ def get_env_variables(pod_name):
     """Generate environment variables that match kubernetes."""
     remote_env = get_remote_env(pod_name)
     filter_keys = set()
-    result = {}
+    # ips proxied via docker, so need to modify addresses:
+    in_docker_result = {}
+    # ips proxied via SOCKS, no modification:
+    socks_result = {
+        key: value
+        for (key, value) in remote_env.items() if key not in environ
+    }
     # XXX we're recreating the port generation logic
     i = 0
     for i, service_key in enumerate(_get_service_keys(remote_env)):
@@ -53,31 +59,40 @@ def get_env_variables(pod_name):
         )
         # XXX will be wrong for UDP
         full_address = "tcp://{}:{}".format(ip, port)
-        result[name + "_SERVICE_HOST"] = ip
-        result[name + "_SERVICE_PORT"] = port
-        result[name + "_PORT"] = full_address
+        in_docker_result[name + "_SERVICE_HOST"] = ip
+        in_docker_result[name + "_SERVICE_PORT"] = port
+        in_docker_result[name + "_PORT"] = full_address
         port_name = name + "_PORT_" + port + "_TCP"
-        result[port_name] = full_address
+        in_docker_result[port_name] = full_address
         # XXX will break for UDP
-        result[port_name + "_PROTO"] = "tcp"
-        result[port_name + "_PORT"] = port
-        result[port_name + "_ADDR"] = ip
+        in_docker_result[port_name + "_PROTO"] = "tcp"
+        in_docker_result[port_name + "_PORT"] = port
+        in_docker_result[port_name + "_ADDR"] = ip
     for key, value in remote_env.items():
         # We don't want env variables that are service addresses (did those
         # above) nor those that are already present in this container. XXX
         # we're getting env variables from telepresence that are
         # image-specific, not coming from the Deployment. figure out way to
         # differentiate.
-        if key not in result and key not in environ and key not in filter_keys:
-            result[key] = value
-    return result
+        ok = (
+            key not in in_docker_result and key not in environ and
+            key not in filter_keys
+        )
+        if ok:
+            in_docker_result[key] = value
+    return in_docker_result, socks_result
 
 
 def write_env(pod_name):
-    with open("/output/out.env.tmp", "w") as f:
-        for key, value in get_env_variables(pod_name).items():
+    for_docker_env, for_local_env = get_env_variables(pod_name)
+    with open("/output/unproxied.env.tmp", "w") as f:
+        for key, value in for_local_env.items():
             f.write("{}={}\n".format(key, value))
-    rename("/output/out.env.tmp", "/output/out.env")
+    rename("/output/unproxied.env.tmp", "/output/unproxied.env")
+    with open("/output/docker.env.tmp", "w") as f:
+        for key, value in for_docker_env.items():
+            f.write("{}={}\n".format(key, value))
+    rename("/output/docker.env.tmp", "/output/docker.env")
 
 
 def write_etc_hosts(additional_hosts):
@@ -131,9 +146,8 @@ def get_pod_name(deployment_name):
             "Checking {} (phase {})...".
             format(pod["metadata"].get("labels"), phase)
         )
-        if not set(expected_metadata.get("labels", {}).items()).issubset(
-            set(pod["metadata"].get("labels", {}).items())
-        ):
+        if not set(expected_metadata.get("labels", {}).items()
+                   ).issubset(set(pod["metadata"].get("labels", {}).items())):
             print("Labels don't match.")
             continue
         if (name.startswith(deployment_name + "-")
@@ -150,6 +164,17 @@ def get_pod_name(deployment_name):
         "Telepresence pod not found for Deployment '{}'.".
         format(deployment_name)
     )
+
+
+def ssh(args):
+    """Connect to remote pod via SSH.
+
+    Returns Popen object.
+    """
+    return Popen([
+        "sshpass", "-phello", "ssh", "-q", "-oStrictHostKeyChecking=no",
+        "root@localhost", "-N"
+    ] + args)
 
 
 def wait_for_ssh():
@@ -180,13 +205,20 @@ def wait_for_pod(pod_name):
     raise RuntimeError("Pod isn't starting: {}".format(phase))
 
 
-def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
+SOCKS_PORT = 9050
+
+
+def main(
+    uid, deployment_name, local_exposed_ports, custom_proxied_hosts,
+    expose_host
+):
     processes = []
     pod_name = get_pod_name(deployment_name)
     # Wait for pod to be running:
     wait_for_pod(pod_name)
     proxied_ports = set(range(2000, 2020)) | set(map(int, local_exposed_ports))
     proxied_ports.add(22)
+    proxied_ports.add(SOCKS_PORT)
     custom_ports = [int(s.split(":", 1)[1]) for s in custom_proxied_hosts]
     for port in custom_ports:
         if port in proxied_ports:
@@ -199,38 +231,39 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
         else:
             proxied_ports.add(int(port))
 
-    # 1. write /etc/hosts
+    # write /etc/hosts
     write_etc_hosts([s.split(":", 1)[0] for s in custom_proxied_hosts])
-    # 2. forward remote port to here, by tunneling via remote SSH server:
+
+    # forward remote port to here, by tunneling via remote SSH server:
     processes.append(Popen(["kubectl", "port-forward", pod_name, "22"]))
     wait_for_ssh()
 
     for port_number in local_exposed_ports:
         processes.append(
-            Popen([
-                "sshpass", "-phello", "ssh", "-q",
-                "-oStrictHostKeyChecking=no", "root@localhost", "-R",
-                "*:{}:127.0.0.1:{}".format(port_number, port_number), "-N"
+            ssh([
+                "-R",
+                "*:{}:{}:{}".format(port_number, expose_host, port_number)
             ])
         )
 
-    # 3. start proxies for custom-mapped hosts:
+    # start tunnel to remote SOCKS proxy, for telepresence --run:
+    processes.append(
+        ssh(["-L", "*:{}:127.0.0.1:{}".format(SOCKS_PORT, SOCKS_PORT)])
+    )
+
+    # start proxies for custom-mapped hosts:
     for host, port in [s.split(":", 1) for s in custom_proxied_hosts]:
-        processes.append(
-            Popen([
-                "sshpass", "-phello", "ssh", "-q",
-                "-oStrictHostKeyChecking=no", "root@localhost", "-L",
-                "{}:{}:{}".format(port, host, port), "-N"
-            ])
-        )
-    # 4. start proxies for Services:
+        processes.append(ssh(["-L", "{}:{}:{}".format(port, host, port)]))
+
+    # start proxies for Services:
     # XXX maybe just do everything via SSH, now that we have it?
     for port in range(2000, 2020):
         # XXX what if there is more than 20 services
         p = Popen(["kubectl", "port-forward", pod_name, str(port)])
         processes.append(p)
     time.sleep(5)
-    # 5. write docker envfile, which tells CLI we're ready:
+    #
+    # write docker envfile, which tells CLI we're ready:
     setuid(uid)
     write_env(pod_name)
     for p in processes:
@@ -240,5 +273,5 @@ def main(uid, deployment_name, local_exposed_ports, custom_proxied_hosts):
 if __name__ == '__main__':
     main(
         int(argv[1]), argv[2], argv[3].split(",")
-        if argv[3] else [], argv[4].split(",") if argv[4] else []
+        if argv[3] else [], argv[4].split(",") if argv[4] else [], argv[5]
     )

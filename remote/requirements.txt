@@ -1,1 +1,2 @@
 Twisted
+socks5==0.2.1
