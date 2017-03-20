@@ -18,13 +18,15 @@ import socket
 import struct
 
 # twisted imports
-from twisted.internet import reactor, protocol, defer
+from twisted.internet import reactor, protocol
 from twisted.python import log
 from twisted.protocols.stateful import StatefulProtocol
 from twisted.internet.error import ConnectionRefusedError, DNSLookupError
 
 
 class SOCKSv5Outgoing(protocol.Protocol):
+    """Connection from the proxy server to the final destination."""
+
     def __init__(self, socks):
         self.socks = socks
 
@@ -46,15 +48,6 @@ class SOCKSv5Outgoing(protocol.Protocol):
 
     def write(self, data):
         self.transport.write(data)
-
-
-class Request(object):
-    """A SOCKSv5 request."""
-
-    def __init__(self, command, host, port):
-        self.command = command
-        self.host = host
-        self.port = port
 
 
 class SOCKSv5(StatefulProtocol):
@@ -104,16 +97,19 @@ class SOCKSv5(StatefulProtocol):
         return self._parse_handshake_start, 2
 
     def _parse_handshake_start(self, data):
+        """Parse the first two bytes of the handshake request."""
         assert data[0] == 5
         length = data[1]
         return self._parse_handshake_auth, length
 
     def _parse_handshake_auth(self, data):
+        """Parse the authentication methods bytes of the handshake request."""
         # NO_AUTH response
         self.write(b"\x05\x00")
         return self._parse_request_start, 4
 
     def _parse_request_start(self, data):
+        """Parse the start of the request."""
         assert data[0] == 5
         assert data[2] == 0
         command = data[1]
@@ -136,16 +132,22 @@ class SOCKSv5(StatefulProtocol):
             self._write_response(7, "0.0.0.0", 0)
 
     def _parse_request_ipv4(self, data):
+        """Parse the rest of the request if address type is IPv4."""
         host = socket.inet_ntoa(data[:4])
         port = struct.unpack("!H", data[4:6])[0]
         self._done_parsing(host, port)
 
     def _parse_request_domainname_start(self, data):
+        """
+        Parse the domain length part of the request if address type is a domain
+        name.
+        """
         length = data[0]
         return self._parse_request_domainname, length + 2
 
     def _parse_request_domainname(self, data):
-        host = data[:-2]
+        """Parse the rest of the request if address type is a domain name."""
+        host = str(data[:-2], "utf-8")
         port = struct.unpack("!H", data[-2:])[0]
         self._done_parsing(host, port)
 
@@ -160,6 +162,7 @@ class SOCKSv5(StatefulProtocol):
         self._write_response(error_code, "0.0.0.0", 0)
 
     def _write_response(self, code, host, port):
+        """Send a response to the client."""
         self.write(
             struct.pack("!BBBB", 5, code, 0, 1) +
             socket.inet_aton(host) +
@@ -168,7 +171,7 @@ class SOCKSv5(StatefulProtocol):
             self.transport.loseConnection()
 
     def _done_parsing(self, host, port):
-        host = str(host, "utf-8")
+        """Called when the request is completely finished parsing."""
         if self.command == "CONNECT":
             d = self.connectClass(str(host), port, SOCKSv5Outgoing, self)
             d.addErrback(self._handle_error)
@@ -188,10 +191,6 @@ class SOCKSv5(StatefulProtocol):
     def connectClass(self, host, port, klass, *args):
         return protocol.ClientCreator(reactor, klass, *args
                                       ).connectTCP(host, port)
-
-    def listenClass(self, port, klass, *args):
-        serv = reactor.listenTCP(port, klass(*args))
-        return defer.succeed(serv.getHost()[1:])
 
     def write(self, data):
         print("SENT:", repr(data))
