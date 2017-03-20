@@ -164,9 +164,9 @@ class SOCKSv5(StatefulProtocol):
     def _write_response(self, code, host, port):
         """Send a response to the client."""
         self.write(
-            struct.pack("!BBBB", 5, code, 0, 1) +
-            socket.inet_aton(host) +
-            struct.pack("!H", port))
+            struct.pack("!BBBB", 5, code, 0, 1) + socket.inet_aton(host) +
+            struct.pack("!H", port)
+        )
         if code != 0:
             self.transport.loseConnection()
 
@@ -176,6 +176,7 @@ class SOCKSv5(StatefulProtocol):
             d = self.connectClass(str(host), port, SOCKSv5Outgoing, self)
             d.addErrback(self._handle_error)
         elif self.command == "RESOLVE":
+
             def write_response(addr):
                 self.write(b"\5\0\0\1" + socket.inet_aton(addr))
                 self.transport.loseConnection()
@@ -194,8 +195,8 @@ class SOCKSv5(StatefulProtocol):
             self.otherConn.transport.loseConnection()
 
     def connectClass(self, host, port, klass, *args):
-        return protocol.ClientCreator(reactor, klass, *args
-                                      ).connectTCP(host, port)
+        return protocol.ClientCreator(reactor, klass,
+                                      *args).connectTCP(host, port)
 
     def write(self, data):
         print("SENT:", repr(data))
