@@ -9,7 +9,6 @@ export PATH=/home/travis/google-cloud-sdk/bin:$PATH
 
 gcloud --quiet version
 gcloud --quiet components update
-gcloud --quiet components beta update
 gcloud --quiet components update kubectl
 gcloud auth activate-service-account --key-file gcloud-service-key.json
 
