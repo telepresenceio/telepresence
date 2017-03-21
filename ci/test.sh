@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 virtualenv/bin/flake8 local/*.py remote/*.py cli/telepresence
 cli/telepresence --version
 cli/telepresence --help
