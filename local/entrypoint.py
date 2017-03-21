@@ -131,7 +131,7 @@ def get_pod_name(deployment_name):
             ]), "utf-8"
         )
     )
-    expected_metadata = ["spec"]["template"]["metadata"]
+    expected_metadata = deployment["spec"]["template"]["metadata"]
     print("Expected metadata for pods: {}".format(expected_metadata))
     pods = loads(
         str(
