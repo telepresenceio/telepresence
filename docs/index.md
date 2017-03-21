@@ -410,6 +410,20 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
+### 0.17 (Unreleased)
+
+Bug fixes:
+
+* Fix problem with tmux and wrapping when using `--run-shell`. Thanks to Jean-Paul Calderone for the bug report.
+  ([#51](https://github.com/datawire/telepresence/issues/51))
+
+### 0.16 (March 20, 2017)
+
+Bug fixes:
+
+* Disable `--run-shell` on OS X, hopefully temporarily, since it has issues with System Integrity Protection.
+* Fix Python 3 support for running `telepresence`.
+
 ### 0.14 (March 20, 2017)
 
 Features:
