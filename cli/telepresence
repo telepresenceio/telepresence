@@ -37,6 +37,7 @@ __version__ = "0.16"
 # Test runs can override version so we use specific custom Docker images:
 if os.environ.get("TELEPRESENCE_VERSION") is not None:
     __version__ = os.environ["TELEPRESENCE_VERSION"]
+REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
 
 def random_name():
@@ -203,7 +204,8 @@ def start_proxy(runner, args):
         remove_existing_deployment()
         command = [
             "kubectl", "run", "--generator", "deployment/v1beta1",
-            args.deployment, "--image=datawire/telepresence-k8s:" + __version__
+            args.deployment, "--image={}/telepresence-k8s:{}".format(
+                REGISTRY, __version__),
         ]
         for port in args.expose:
             command.append("--port={}".format(port))
@@ -258,7 +260,7 @@ def start_proxy(runner, args):
         "-v",
         tempdir + ":/output",
         # Name of image:
-        "datawire/telepresence-local:" + __version__,
+        "{}/telepresence-local:".format(REGISTRY, __version__),
         # Arguments: <uid>, <deployment-name>
         str(os.getuid()),
         args.deployment,

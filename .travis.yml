@@ -28,4 +28,6 @@ install:
   # Push Docker images to 
   - 
 script:
-  - ./ci/test.sh
+  - env TELEPRESENCE_VERSION=${make version} \
+        TELEPRESENCE_REGISTRY=gcr.io/${PROJECT_NAME} \
+        ./ci/test.sh
