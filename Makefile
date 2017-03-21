@@ -1,6 +1,6 @@
 .PHONY: default build build-local build-remote bumpversion release test
 
-VERSION=0.16
+VERSION=$(shell git describe --tags)
 
 default:
 	@echo "To release:"
@@ -32,7 +32,7 @@ local-test: virtualenv
 		cd remote && \
 		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
 	kubectl config set-context minikube
-  ci/test.sh
+  env TELEPRESENCE_VERSION=$(VERSION) ci/test.sh
 
 release: build
 	docker push datawire/telepresence-local:$(VERSION)
