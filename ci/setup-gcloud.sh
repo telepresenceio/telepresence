@@ -9,7 +9,7 @@ gcloud --quiet version
 gcloud --quiet components update
 gcloud --quiet components beta update
 gcloud --quiet components update kubectl
-gcloud auth activate-service-account --key-file ${HOME}/gcloud-service-key.json
+gcloud auth activate-service-account --key-file gcloud-service-key.json
 
 gcloud --quiet config set project $PROJECT_NAME
 gcloud --quiet config set container/cluster $CLUSTER_NAME
