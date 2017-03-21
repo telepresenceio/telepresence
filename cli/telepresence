@@ -67,7 +67,9 @@ class Runner(object):
         else:
             # Wipe existing logfile, and use line buffering so data gets
             # written out immediately.
-            return cls(open(logfile_path, "w", buffering=1))
+            if os.path.exists(logfile_path):
+                os.remove(logfile_path)
+            return cls(open(logfile_path, "a", buffering=1))
 
     def write(self, message):
         """Write a message to the log."""
@@ -291,6 +293,8 @@ def run_local_command(runner, args, out_env, container_id):
     with NamedTemporaryFile(mode="w+", delete=False) as tor_conffile:
         tor_conffile.write(TORSOCKS_CONFIG.format(socks_port))
     env["TORSOCKS_CONF_FILE"] = tor_conffile.name
+    if runner.logfile is not sys.stdout:
+        env["TORSOCKS_LOG_FILE_PATH"] = runner.logfile.name
     # Don't use runner.popen() since we want to give program access to current
     # stdout and stderr if it wants it.
     env["PROMPT_COMMAND"] = (

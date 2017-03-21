@@ -422,6 +422,9 @@ Bug fixes:
   ([#52](https://github.com/datawire/telepresence/issues/52))
 * Use the Deployment's namespace, not the Deployment's spec namespace since that may not have a namespace set.
   Thanks to Jean-Paul Calderone for the patch.
+* Hide torsocks messages.
+  Thanks to Jean-Paul Calderone for the bug report.
+  ([#50](https://github.com/datawire/telepresence/issues/50))
 
 ### 0.16 (March 20, 2017)
 
