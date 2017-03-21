@@ -1,8 +1,8 @@
 sudo: false
+dist: trusty
 language: python
 python:
-  # XXX also want to test CLI with python2
-  - "3.5"
+  - "2.7"
 
 services:
   - docker
