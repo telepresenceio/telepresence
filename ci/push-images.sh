@@ -9,5 +9,5 @@ docker tag datawire/telepresence-k8s:${TELEPRESENCE_VERSION} \
 
 # Push to Google Docker registry:
 export TELEPRESENCE_VERSION=$(make version)
-gcloud docker -- push gcr.io/${PROJECT_NAME}/telepresence-local:${TELEPRESENCE_VERSION}
-gcloud docker -- push gcr.io/${PROJECT_NAME}/telepresence-k8s:${TELEPRESENCE_VERSION}
+$HOME/google-cloud-sdk/bin/gcloud docker -- push gcr.io/${PROJECT_NAME}/telepresence-local:${TELEPRESENCE_VERSION}
+$HOME/google-cloud-sdk/bin/gcloud docker -- push gcr.io/${PROJECT_NAME}/telepresence-k8s:${TELEPRESENCE_VERSION}
