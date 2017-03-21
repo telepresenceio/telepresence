@@ -1,4 +1,4 @@
-.PHONY: default build build-local build-remote bumpversion release test
+.PHONY: default build build-local build-remote bumpversion release local-test
 
 VERSION=$(shell git describe --tags)
 
