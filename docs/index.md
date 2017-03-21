@@ -410,7 +410,7 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
-### 0.17 (Unreleased)
+### 0.17 (March 21, 2017)
 
 Bug fixes:
 
