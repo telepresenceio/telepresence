@@ -260,7 +260,7 @@ def start_proxy(runner, args):
         "-v",
         tempdir + ":/output",
         # Name of image:
-        "{}/telepresence-local:".format(REGISTRY, __version__),
+        "{}/telepresence-local:{}".format(REGISTRY, __version__),
         # Arguments: <uid>, <deployment-name>
         str(os.getuid()),
         args.deployment,
