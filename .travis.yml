@@ -12,6 +12,7 @@ cache:
   directories:
     - "$HOME/google-cloud-sdk/"
 
+# Environment variables:
 env:
   global:
     - PROJECT_NAME=datawireio
