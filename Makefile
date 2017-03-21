@@ -8,6 +8,9 @@ default:
 	@echo "2. do git push as instructed by bumpversion"
 	@echo "3. 'make release'"
 
+version:
+	@echo $(VERSION)
+
 build: build-local build-remote
 
 build-local:
@@ -32,7 +35,7 @@ local-test: virtualenv
 		cd remote && \
 		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
 	kubectl config set-context minikube
-  env TELEPRESENCE_VERSION=$(VERSION) ci/test.sh
+	env TELEPRESENCE_VERSION=$(VERSION) ci/test.sh
 
 release: build
 	docker push datawire/telepresence-local:$(VERSION)
