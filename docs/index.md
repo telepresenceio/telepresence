@@ -420,6 +420,8 @@ Bug fixes:
 * Fix problem with non-login shells, e.g. with gnome-terminal.
   Thanks to Jean-Paul Calderone for the bug report.
   ([#52](https://github.com/datawire/telepresence/issues/52))
+* Use the Deployment's namespace, not the Deployment's spec namespace since that may not have a namespace set.
+  Thanks to Jean-Paul Calderone for the patch.
 
 ### 0.16 (March 20, 2017)
 
