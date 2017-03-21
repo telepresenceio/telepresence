@@ -5,8 +5,11 @@ End-to-end tests for running inside a Docker container.
 from unittest import TestCase
 from subprocess import check_output, Popen, STDOUT
 import time
+import os
 
 from .utils import DIRECTORY, random_name
+
+REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
 
 class EndToEndTests(TestCase):
@@ -92,7 +95,8 @@ class EndToEndTests(TestCase):
             "--generator",
             "deployment/v1beta1",
             name,
-            "--image=datawire/telepresence-k8s:" + version,
+            "--image={}/telepresence-k8s:{}".format(
+                REGISTRY, version),
             '--env="MYENV=hello"',
         ])
         self.addCleanup(check_output,
