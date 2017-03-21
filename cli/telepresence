@@ -298,7 +298,7 @@ def run_local_command(runner, args, out_env, container_id):
             runner.get_output(["kubectl", "config", "current-context"]).strip()
         )
     )
-    p = Popen(["torsocks", "/bin/bash", "-i", "-l"], env=env)
+    p = Popen(["torsocks", "/bin/bash", "-i"], env=env)
 
     def terminate_if_alive():
         os.remove(tor_conffile.name)

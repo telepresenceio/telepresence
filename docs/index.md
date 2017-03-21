@@ -414,8 +414,12 @@ Some alternatives to Telepresence:
 
 Bug fixes:
 
-* Fix problem with tmux and wrapping when using `--run-shell`. Thanks to Jean-Paul Calderone for the bug report.
+* Fix problem with tmux and wrapping when using `--run-shell`.
+  Thanks to Jean-Paul Calderone for the bug report.
   ([#51](https://github.com/datawire/telepresence/issues/51))
+* Fix problem with non-login shells, e.g. with gnome-terminal.
+  Thanks to Jean-Paul Calderone for the bug report.
+  ([#52](https://github.com/datawire/telepresence/issues/52))
 
 ### 0.16 (March 20, 2017)
 
