@@ -1,4 +1,3 @@
-sudo: false
 dist: trusty
 language: python
 python:
@@ -29,6 +28,8 @@ before_install:
   - openssl aes-256-cbc -K $encrypted_6168b41c1bb0_key -iv $encrypted_6168b41c1bb0_iv -in gcloud-service-key.json.enc -out gcloud-service-key.json -d
   # Make sure gcloud is installed:
   - ./ci/setup-gcloud.sh
+  # Make sure torsocks is installed:
+  - ./ci/build-torsocks.sh
 
 install:
   # Push Docker images to Google Container Registry:
