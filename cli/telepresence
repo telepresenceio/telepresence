@@ -499,8 +499,8 @@ def main():
                 sys.stderr.write("--run currently only works on Linux.\n")
                 raise SystemExit(1)
             try:
-                check_output(maybe_sudo(["torsocks", "true"]))
-            except CalledProcessError as e:
+                check_output(["torsocks", "true"])
+            except (CalledProcessError, OSError, IOError) as e:
                 sys.stderr.write("Error running torsocks: {}\n".format(e))
                 raise SystemExit(1)
         tempdir, container_id, proxy_popen = start_proxy(runner, args)
