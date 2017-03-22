@@ -36,7 +36,7 @@ install:
   
 script:
   - make virtualenv
-  - env TELEPRESENCE_VERSION=$(make version) \
-        TELEPRESENCE_REGISTRY=gcr.io/${PROJECT_NAME} \
-        PATH=$HOME/google-cloud-sdk/bin:$PATH \
-        ./ci/test.sh
+  - export TELEPRESENCE_VERSION=$(make version)
+  - export TELEPRESENCE_REGISTRY=gcr.io/${PROJECT_NAME}
+  - export PATH=$HOME/google-cloud-sdk/bin:$PATH
+  - ./ci/test.sh
