@@ -37,7 +37,7 @@ class EndToEndTests(TestCase):
             check_output([
                 "telepresence",
                 "--new-deployment",
-                "tests",
+                random_name(),
                 "--docker-run",
                 "-v",
                 "{}:/code".format(DIRECTORY),
@@ -57,9 +57,10 @@ class EndToEndTests(TestCase):
         Start webserver that serves files from this directory. Run HTTP query
         against it on the Kubernetes cluster, compare to real file.
         """
+        name = random_name()
         p = Popen(
             [
-                "telepresence", "--new-deployment", "fromclustertests",
+                "telepresence", "--new-deployment", name,
                 "--expose", "8080", "--docker-run", "-v",
                 "{}:/code".format(DIRECTORY), "--rm", "-w", "/code",
                 "python:3.5-slim", "python3", "-m", "http.server", "8080"
@@ -77,7 +78,7 @@ class EndToEndTests(TestCase):
             "--quiet", '--rm', '--image=alpine', '--restart', 'Never',
             '--command', '--', '/bin/sh', '-c',
             "apk add --no-cache --quiet curl && " +
-            "curl http://fromclustertests:8080/__init__.py"
+            "curl http://{}:8080/__init__.py".format(name)
         ])
         assert result == (DIRECTORY / "__init__.py").read_bytes()
 
