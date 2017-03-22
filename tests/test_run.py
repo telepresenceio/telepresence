@@ -65,7 +65,7 @@ class EndToEndTests(TestCase):
             p.wait()
 
         self.addCleanup(cleanup)
-        time.sleep(30)
+        time.sleep(60)
         result = check_output([
             'kubectl', 'run', '--attach', random_name(), '--generator=job/v1',
             "--quiet", '--rm', '--image=alpine', '--restart', 'Never',
