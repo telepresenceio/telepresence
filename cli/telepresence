@@ -33,7 +33,7 @@ else:
 
 # Don't modify next line without modifying corresponding line in
 # .bumpversion.cfg:
-__version__ = "0.16"
+__version__ = "0.17"
 # Test runs can override version so we use specific custom Docker images:
 if os.environ.get("TELEPRESENCE_VERSION") is not None:
     __version__ = os.environ["TELEPRESENCE_VERSION"]
@@ -73,7 +73,9 @@ class Runner(object):
         else:
             # Wipe existing logfile, and use line buffering so data gets
             # written out immediately.
-            return cls(open(logfile_path, "w", buffering=1))
+            if os.path.exists(logfile_path):
+                os.remove(logfile_path)
+            return cls(open(logfile_path, "a", buffering=1))
 
     def write(self, message):
         """Write a message to the log."""
@@ -298,14 +300,16 @@ def run_local_command(runner, args, out_env, container_id):
     with NamedTemporaryFile(mode="w+", delete=False) as tor_conffile:
         tor_conffile.write(TORSOCKS_CONFIG.format(socks_port))
     env["TORSOCKS_CONF_FILE"] = tor_conffile.name
+    if runner.logfile is not sys.stdout:
+        env["TORSOCKS_LOG_FILE_PATH"] = runner.logfile.name
     # Don't use runner.popen() since we want to give program access to current
     # stdout and stderr if it wants it.
     env["PROMPT_COMMAND"] = (
-        'PS1="\e[1m@{}\e[0m|$PS1";unset PROMPT_COMMAND'.format(
+        'PS1="@{}|$PS1";unset PROMPT_COMMAND'.format(
             runner.get_output(["kubectl", "config", "current-context"]).strip()
         )
     )
-    p = Popen(["torsocks", "/bin/bash", "-i", "-l"], env=env)
+    p = Popen(["torsocks", "/bin/bash", "-i"], env=env)
 
     def terminate_if_alive():
         os.remove(tor_conffile.name)

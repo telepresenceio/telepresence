@@ -410,6 +410,29 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
+### 0.17 (March 21, 2017)
+
+Bug fixes:
+
+* Fix problem with tmux and wrapping when using `--run-shell`.
+  Thanks to Jean-Paul Calderone for the bug report.
+  ([#51](https://github.com/datawire/telepresence/issues/51))
+* Fix problem with non-login shells, e.g. with gnome-terminal.
+  Thanks to Jean-Paul Calderone for the bug report.
+  ([#52](https://github.com/datawire/telepresence/issues/52))
+* Use the Deployment's namespace, not the Deployment's spec namespace since that may not have a namespace set.
+  Thanks to Jean-Paul Calderone for the patch.
+* Hide torsocks messages.
+  Thanks to Jean-Paul Calderone for the bug report.
+  ([#50](https://github.com/datawire/telepresence/issues/50))
+
+### 0.16 (March 20, 2017)
+
+Bug fixes:
+
+* Disable `--run-shell` on OS X, hopefully temporarily, since it has issues with System Integrity Protection.
+* Fix Python 3 support for running `telepresence`.
+
 ### 0.14 (March 20, 2017)
 
 Features:
