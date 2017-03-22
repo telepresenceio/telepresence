@@ -35,6 +35,6 @@ install:
   - ./ci/push-images.sh
   
 script:
-  - env TELEPRESENCE_VERSION=${make version} \
+  - env TELEPRESENCE_VERSION=$(make version) \
         TELEPRESENCE_REGISTRY=gcr.io/${PROJECT_NAME} \
         ./ci/test.sh
