@@ -411,7 +411,7 @@ Some alternatives to Telepresence:
 
 Bug fixes:
 
-* Support `--run-shell` on OS X.
+* Support `--run-shell` on OS X, allowing local processes to be proxied.
 
 ### 0.17 (March 21, 2017)
 
