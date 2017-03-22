@@ -17,19 +17,30 @@ import socket
 import sys
 from functools import wraps
 from subprocess import check_output, Popen, CalledProcessError, check_call
-from tempfile import mkdtemp, NamedTemporaryFile
+from tempfile import mkdtemp, mkstemp, NamedTemporaryFile
 from time import sleep, time
 from traceback import print_exc
 import webbrowser
+
+import dpath
+import yaml
+import pprint
+
 if sys.version_info.major == 2:
     from urllib import quote_plus
     from StringIO import StringIO
     input = __builtins__.raw_input
+
+    def fdopen(fd, mode):
+        return os.fdopen(fd, mode)
 else:
     # Python 3
     from io import StringIO
     from urllib.parse import quote_plus
     unicode = str
+
+    def fdopen(fd, mode):
+        return os.fdopen(fd, mode, encoding="utf-8")
 
 __version__ = "0.17"
 
@@ -122,6 +133,15 @@ def parse_args():
             "datawire/telepresence-k8s image will run."
         )
     )
+    group_deployment.add_argument(
+        '--deployment-file', '-f',
+        dest="deployment_file",
+        help=(
+            "Use an existing Kubernetes deployment file to control "
+            "where the datawire/telepresence-k8s image will run."
+        )
+    )
+
     parser.add_argument(
         "--expose",
         type=int,
@@ -181,35 +201,118 @@ def stop_container(runner, container_id):
     ):
         runner.get_output(maybe_sudo(["docker", "stop", container_id]))
 
+def dpath_get(obj, glob, default=None):
+    try:
+        return dpath.util.get(obj, glob)
+    except KeyError:
+        return default
+
+def dpath_set(obj, glob, value):
+    return dpath.util.new(obj, glob, value)
+
+def adapt_existing_deployment(yaml_path):
+    yaml_file = open(yaml_path, "r")
+    dep = yaml.safe_load(yaml_file.read())
+
+    # print("read YAML:")
+    # pprint.pprint(dep)
+
+    name = dpath_get(dep, "/metadata/name")
+    image = dpath_get(dep, "/spec/template/spec/containers/0/image")
+
+    # print("Adapting existing deployment %s:" % yaml_path)
+    # print("  Name:    %s" % name)
+    # print("  Image:   %s" % image)
+
+    if not name or not image:
+        raise Exception("need name and image in %s" % yaml_path)
+
+    dpath_set(dep, "/spec/replicas", 1)
+    dpath_set(dep, "/spec/template/spec/containers/0/image",
+                   "datawire/telepresence-k8s:%s" % __version__)
+
+    new_dep_fd, new_dep_path = mkstemp(suffix=".yaml")
+    new_dep_file = fdopen(new_dep_fd, "w")
+
+    yaml.safe_dump(dep, stream=new_dep_file, encoding="utf-8")
+
+    # print("  New dep: %s" % new_dep_path)
+    # print("")
+    # pprint.pprint(dep)
+
+    return (name, image, new_dep_path)
+
+def create_remover(runner, name, types):
+    def remove_existing_deployment():
+        runner.get_output([
+            "kubectl", "delete", "--ignore-not-found",
+            ",".join(types), name
+        ])
+
+    return remove_existing_deployment
 
 def start_proxy(runner, args):
     """`telepresence start`."""
     if sys.stderr.isatty():
         print("Starting proxy...", file=sys.stderr)
-    if args.deployment is None:
-        # This implies --new-deployment:
-        args.deployment = args.new_deployment
 
-        def remove_existing_deployment():
-            runner.get_output([
-                "kubectl", "delete", "--ignore-not-found",
-                "service,deployment", args.deployment
-            ])
+    deployment_name = None
+    deployment_image = None
+    command = None
+    remover = None
 
-        atexit.register(remove_existing_deployment)
-        remove_existing_deployment()
+    # Have they given a deployment file?
+    if args.deployment_file:
+        # Yes. Synthesize our version of it...
+
+        try:
+            deployment_name, deployment_image, deployment_path = adapt_existing_deployment(args.deployment_file)
+        except:
+            raise     
+
+        # ...and build our command.
+        command = [
+            "kubectl", "apply", "-f", deployment_path
+        ]
+
+        remover = create_remover(runner, deployment_name, [ 'deployment' ])
+    elif args.new_deployment:
+        deployment_name = args.new_deployment
+
         command = [
             "kubectl", "run", "--generator", "deployment/v1beta1",
-            args.deployment, "--image=datawire/telepresence-k8s:" + __version__
+            deployment_name, "--image=datawire/telepresence-k8s:" + __version__
         ]
+
+        remover = create_remover(runner, deployment_name, [ 'service', 'deployment' ])
+
+        # Yup. Append port-forwarding stuff...
         for port in args.expose:
             command.append("--port={}".format(port))
         if args.expose:
             command.append("--expose")
+
+    elif args.deployment:
+        # Save the deployment name...
+        deployment_name = args.deployment
+
+        # ...but we needn't run any deployment command.
+
+    # Do we have something to run here?
+
+    if command:
+        # Do what cleanup we must, and set it for atexit...
+        if remover:
+            atexit.register(remover)
+            remover()
+
+        # ...and then off we go.
         runner.get_output(command)
         sleep(5)  # XXX oh god
 
+    # OK. Now it's on to the local stuff. Start with snaring our home directory.
     home_path = os.path.expanduser("~")
+
     # On OS X /tmp is shareable via Docker, but default location of temporary
     # files is not (https://docs.docker.com/docker-for-mac/osxfs/):
     tempdir = mkdtemp(dir="/tmp")
@@ -258,7 +361,7 @@ def start_proxy(runner, args):
         "datawire/telepresence-local:" + __version__,
         # Arguments: <uid>, <deployment-name>
         str(os.getuid()),
-        args.deployment,
+        deployment_name,
         # Arguments: <port1,port2>, <proxy1,proxy2>, <expose_host>
         ",".join(map(str, args.expose)),
         # We don't need to do special proxying when using SOCKS-based --run:
@@ -419,7 +522,7 @@ class handle_unexpected_errors(object):
                 print_exc(file=errorf)
                 error = errorf.getvalue()
                 print(
-                    "\nLooks like there's a bug in our code. Sorry about that!"
+                    "\nLooks like there's a bug in our code. Sorry about that! "
                     "You may able to find more details in the logs "
                     "(which are written to telepresence.log by default).\n\n"
                     "Here's the traceback:\n\n" + error + "\n"
