@@ -1,4 +1,8 @@
 language: python
+dist: trusty
+python:
+  - "2.7"
+
 os:
   - linux
   - osx
@@ -13,14 +17,6 @@ cache:
 
 # Environment variables:
 env:
-  matrix:
-    - os: linux
-      dist: trusty
-      language: python
-      python:
-        - "2.7"
-    - os: osx
-      language: generic
   global:
     - PROJECT_NAME=datawireio
     - CLUSTER_NAME=telepresence-testing
