@@ -1,12 +1,15 @@
-.PHONY: default build build-local build-remote bumpversion release test
+.PHONY: default build build-local build-remote bumpversion release local-test
 
-VERSION=0.17
+VERSION=$(shell git describe --tags)
 
 default:
 	@echo "To release:"
 	@echo "1. 'make bumpversion'"
 	@echo "2. do git push as instructed by bumpversion"
 	@echo "3. 'make release'"
+
+version:
+	@echo $(VERSION)
 
 build: build-local build-remote
 
@@ -25,15 +28,14 @@ bumpversion: virtualenv
 	virtualenv/bin/bumpversion --verbose --list minor
 	@echo "Please run: git push origin master --tags"
 
-test: virtualenv
+local-test: virtualenv
 	@echo "IMPORTANT: this will change kubectl context to minikube!\n\n"
-	virtualenv/bin/flake8 local/*.py remote/*.py cli/telepresence
 	cd local && sudo docker build . -q -t datawire/telepresence-local:$(VERSION)
 	eval $(shell minikube docker-env) && \
 		cd remote && \
 		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
 	kubectl config set-context minikube
-	env PATH=$(PWD)/cli/:$(PATH) virtualenv/bin/py.test -s --fulltrace tests remote/test_socks.py
+	env TELEPRESENCE_VERSION=$(VERSION) ci/test.sh
 
 release: build
 	docker push datawire/telepresence-local:$(VERSION)
