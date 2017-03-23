@@ -410,6 +410,13 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
+### 0.18 (unreleased)
+
+Features:
+
+* Kubernetes-side Docker image is now smaller.
+  ([#61](https://github.com/datawire/telepresence/issues/61))
+
 ### 0.17 (March 21, 2017)
 
 Bug fixes:
