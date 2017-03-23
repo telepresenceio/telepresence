@@ -80,7 +80,7 @@ class EndToEndTests(TestCase):
             "--quiet", '--rm', '--image=alpine', '--restart', 'Never',
             '--command', '--', '/bin/sh', '-c',
             "apk add --no-cache --quiet curl && " +
-            "curl http://{}:8080/__init__.py".format(name)
+            "curl --silent http://{}:8080/__init__.py".format(name)
         ])
         assert result == (DIRECTORY / "__init__.py").read_bytes()
 
