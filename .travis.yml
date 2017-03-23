@@ -1,5 +1,5 @@
 language: python
-dist: trusty
+sudo: required
 
 os:
   - linux
@@ -12,6 +12,13 @@ services:
 cache:
   directories:
     - "$HOME/google-cloud-sdk/"
+
+matrix:
+  include:
+    - os: linux
+      dist: trusty
+    - os: osx
+      language: generic
 
 # Environment variables:
 env:
