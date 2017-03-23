@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
 if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
-    brew update
     brew install torsocks;
 fi
 if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
