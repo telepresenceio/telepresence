@@ -33,7 +33,7 @@ class EndToEndTests(TestCase):
             cwd=str(DIRECTORY),
             stdin=PIPE,
         )
-        p.stdin.write(b"python3 tocluster.\y\n")
+        p.stdin.write(b"python3 tocluster\n")
         p.stdin.flush()
         p.stdin.close()
         exit_code = p.wait()
