@@ -25,8 +25,6 @@ env:
 
 
 before_install:
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install python; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install python3; fi
   # Record some debugging info:
   - python --version
