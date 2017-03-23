@@ -16,7 +16,7 @@ import signal
 import socket
 import sys
 from functools import wraps
-from shutil import rmtree
+from shutil import rmtree, copy2
 from subprocess import check_output, Popen, CalledProcessError, check_call
 from tempfile import mkdtemp, NamedTemporaryFile
 from time import sleep, time
@@ -206,9 +206,12 @@ def start_proxy(runner, args):
         atexit.register(remove_existing_deployment)
         remove_existing_deployment()
         command = [
-            "kubectl", "run", "--generator", "deployment/v1beta1",
-            args.deployment, "--image={}/telepresence-k8s:{}".format(
-                REGISTRY, __version__),
+            "kubectl",
+            "run",
+            "--generator",
+            "deployment/v1beta1",
+            args.deployment,
+            "--image={}/telepresence-k8s:{}".format(REGISTRY, __version__),
         ]
         for port in args.expose:
             command.append("--port={}".format(port))
@@ -305,6 +308,7 @@ def sip_workaround():
             copy2(os.path.join(directory, file), bin_dir)
     # Return new $PATH
     return ":".join(paths)
+
 
 def run_local_command(runner, args, out_env, container_id):
     """--run support, run command locally."""
