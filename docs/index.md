@@ -417,6 +417,12 @@ Features:
 * Kubernetes-side Docker image is now smaller.
   ([#61](https://github.com/datawire/telepresence/issues/61))
 
+Bug fixes:
+  
+* When using `--run-shell`, allow access to the local host.
+  Thanks to Jean-Paul Calderone for the bug report.
+  ([#58](https://github.com/datawire/telepresence/issues/58))
+
 ### 0.17 (March 21, 2017)
 
 Bug fixes:

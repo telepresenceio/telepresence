@@ -4,6 +4,7 @@ End-to-end tests for running directly in the operating system.
 
 from unittest import TestCase
 from subprocess import check_output, Popen, PIPE
+import atexit
 import time
 
 from .utils import DIRECTORY, random_name
@@ -27,7 +28,8 @@ class EndToEndTests(TestCase):
                 "telepresence",
                 "--new-deployment",
                 random_name(),
-                "--logfile", "-",
+                "--logfile",
+                "-",
                 "--run-shell",
             ],
             cwd=str(DIRECTORY),
@@ -54,7 +56,8 @@ class EndToEndTests(TestCase):
                 name,
                 "--expose",
                 "12345",
-                "--logfile", "-",
+                "--logfile",
+                "-",
                 "--run-shell",
             ],
             stdin=PIPE,
@@ -77,5 +80,31 @@ class EndToEndTests(TestCase):
             "curl --silent http://{}:12345/__init__.py".format(name)
         ])
         assert result == (DIRECTORY / "__init__.py").read_bytes()
+
+    def test_loopback(self):
+        """The shell run by telepresence can access localhost."""
+        p = Popen(["python3", "-m", "http.server", "12346"],
+                  cwd=str(DIRECTORY))
+        atexit.register(p.terminate)
+
+        name = random_name()
+        p = Popen(
+            args=[
+                "telepresence",
+                "--new-deployment",
+                name,
+                "--run-shell",
+            ],
+            stdin=PIPE,
+            stdout=PIPE,
+            cwd=str(DIRECTORY)
+        )
+        result, _ = p.communicate(
+            b"curl --silent http://localhost:12346/test_run.py\n"
+        )
+        # We're loading this file via curl, so it should have the string
+        # "cuttlefish" which is in this comment and unlikely to appear by
+        # accident.
+        assert b"cuttlefish" in result
 
     # XXX write test for IP-based routing, not just DNS-based routing!
