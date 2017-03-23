@@ -22,20 +22,22 @@ class EndToEndTests(TestCase):
         checked for the string "SUCCESS!" indicating the checks passed. The
         script shouldn't use code py.test would detect as a test.
         """
-        result = str(
-            check_output(
-                args=[
-                    "telepresence",
-                    "--new-deployment",
-                    random_name(),
-                    "--run-shell",
-                ],
-                cwd=str(DIRECTORY),
-                input=b"python3 tocluster.py\n"
-            ),
-            "utf-8",
+        p = Popen(
+            args=[
+                "telepresence",
+                "--new-deployment",
+                random_name(),
+                "--logfile", "-",
+                "--run-shell",
+            ],
+            cwd=str(DIRECTORY),
+            stdin=PIPE,
         )
-        assert "SUCCESS!" in result
+        p.stdin.write(b"python3 tocluster\n")
+        p.stdin.flush()
+        p.stdin.close()
+        exit_code = p.wait()
+        assert exit_code == 0
 
     def test_fromcluster(self):
         """
@@ -51,13 +53,14 @@ class EndToEndTests(TestCase):
                 "--new-deployment",
                 name,
                 "--expose",
-                "8080",
+                "12345",
+                "--logfile", "-",
                 "--run-shell",
             ],
             stdin=PIPE,
             cwd=str(DIRECTORY)
         )
-        p.stdin.write(b"python3 -m http.server 8080\n")
+        p.stdin.write(b"python3 -m http.server 12345\n")
         p.stdin.flush()
 
         def cleanup():
@@ -65,13 +68,13 @@ class EndToEndTests(TestCase):
             p.wait()
 
         self.addCleanup(cleanup)
-        time.sleep(30)
+        time.sleep(60)
         result = check_output([
             'kubectl', 'run', '--attach', random_name(), '--generator=job/v1',
             "--quiet", '--rm', '--image=alpine', '--restart', 'Never',
             '--command', '--', '/bin/sh', '-c',
             "apk add --no-cache --quiet curl && " +
-            "curl http://{}:8080/__init__.py".format(name)
+            "curl --silent http://{}:12345/__init__.py".format(name)
         ])
         assert result == (DIRECTORY / "__init__.py").read_bytes()
 

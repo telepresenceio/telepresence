@@ -105,7 +105,7 @@ Then move telepresence to somewhere in your `$PATH`, e.g.:
 mv telepresence /usr/local/bin
 ```
 
-If you want to proxy normal local processes, rather than just local Docker containers, you'll also need to install a tool called `torsocks`.
+If you want to proxy normal local processes, rather than just local Docker containers, you'll also need to install a tool called `torsocks` (v2.1.0 or later).
 
 On OS X:
 
@@ -113,7 +113,7 @@ On OS X:
 $ brew install torsocks
 ```
 
-On Ubuntu:
+On Ubuntu 16.04 or later:
 
 ```console
 $ sudo apt install --no-install-recommends torsocks
@@ -407,11 +407,13 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
-### 0.18 (Unreleased)
+### 0.18 (unreleased)
 
-Bug fixes:
+Features:
 
 * Support `--run-shell` on OS X, allowing local processes to be proxied.
+* Kubernetes-side Docker image is now smaller.
+  ([#61](https://github.com/datawire/telepresence/issues/61))
 
 ### 0.17 (March 21, 2017)
 
