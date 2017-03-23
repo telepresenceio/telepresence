@@ -1,10 +1,6 @@
 language: python
 sudo: required
 
-os:
-  - linux
-  - osx
-
 services:
   - docker
 
