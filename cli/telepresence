@@ -280,6 +280,9 @@ def start_proxy(runner, args):
 TORSOCKS_CONFIG = """
 # Allow process to listen on ports:
 AllowInbound 1
+# Allow process to connect to localhost:
+AllowOutboundLocalhost 1
+# Connect to custom port for SOCKS server:
 TorPort {}
 """
 
