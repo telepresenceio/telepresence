@@ -3,7 +3,7 @@ End-to-end tests for running directly in the operating system.
 """
 
 from unittest import TestCase
-from subprocess import check_output, Popen, PIPE
+from subprocess import check_output, Popen, PIPE, run
 import time
 
 from .utils import DIRECTORY, random_name
@@ -22,20 +22,18 @@ class EndToEndTests(TestCase):
         checked for the string "SUCCESS!" indicating the checks passed. The
         script shouldn't use code py.test would detect as a test.
         """
-        result = str(
-            check_output(
-                args=[
-                    "telepresence",
-                    "--new-deployment",
-                    random_name(),
-                    "--run-shell",
-                ],
-                cwd=str(DIRECTORY),
-                input=b"python3 tocluster.py\n"
-            ),
-            "utf-8",
+        run(
+            args=[
+                "telepresence",
+                "--new-deployment",
+                random_name(),
+                "--logfile", "-",
+                "--run-shell",
+            ],
+            cwd=str(DIRECTORY),
+            input=b"python3 tocluster.py\n",
+            check=True,
         )
-        assert "SUCCESS!" in result
 
     def test_fromcluster(self):
         """
@@ -51,13 +49,14 @@ class EndToEndTests(TestCase):
                 "--new-deployment",
                 name,
                 "--expose",
-                "8080",
+                "12345",
+                "--logfile", "-",
                 "--run-shell",
             ],
             stdin=PIPE,
             cwd=str(DIRECTORY)
         )
-        p.stdin.write(b"python3 -m http.server 8080\n")
+        p.stdin.write(b"python3 -m http.server 12345\n")
         p.stdin.flush()
 
         def cleanup():
@@ -71,7 +70,7 @@ class EndToEndTests(TestCase):
             "--quiet", '--rm', '--image=alpine', '--restart', 'Never',
             '--command', '--', '/bin/sh', '-c',
             "apk add --no-cache --quiet curl && " +
-            "curl http://{}:8080/__init__.py".format(name)
+            "curl http://{}:12345/__init__.py".format(name)
         ])
         assert result == (DIRECTORY / "__init__.py").read_bytes()
 
