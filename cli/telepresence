@@ -31,7 +31,13 @@ else:
     from urllib.parse import quote_plus
     unicode = str
 
+# Don't modify next line without modifying corresponding line in
+# .bumpversion.cfg:
 __version__ = "0.17"
+# Test runs can override version so we use specific custom Docker images:
+if os.environ.get("TELEPRESENCE_VERSION") is not None:
+    __version__ = os.environ["TELEPRESENCE_VERSION"]
+REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
 
 def random_name():
@@ -200,7 +206,8 @@ def start_proxy(runner, args):
         remove_existing_deployment()
         command = [
             "kubectl", "run", "--generator", "deployment/v1beta1",
-            args.deployment, "--image=datawire/telepresence-k8s:" + __version__
+            args.deployment, "--image={}/telepresence-k8s:{}".format(
+                REGISTRY, __version__),
         ]
         for port in args.expose:
             command.append("--port={}".format(port))
@@ -255,7 +262,7 @@ def start_proxy(runner, args):
         "-v",
         tempdir + ":/output",
         # Name of image:
-        "datawire/telepresence-local:" + __version__,
+        "{}/telepresence-local:{}".format(REGISTRY, __version__),
         # Arguments: <uid>, <deployment-name>
         str(os.getuid()),
         args.deployment,
@@ -302,7 +309,7 @@ def run_local_command(runner, args, out_env, container_id):
             runner.get_output(["kubectl", "config", "current-context"]).strip()
         )
     )
-    p = Popen(["torsocks", "/bin/bash", "-i"], env=env)
+    p = Popen(["torsocks", "/bin/bash"], env=env)
 
     def terminate_if_alive():
         os.remove(tor_conffile.name)
@@ -467,7 +474,7 @@ def main():
         # Make sure we can access Kubernetes:
         try:
             check_output(["kubectl", "cluster-info"])
-        except CalledProcessError as e:
+        except (CalledProcessError, OSError, IOError) as e:
             sys.stderr.write("Error accessing Kubernetes: {}\n".format(e))
             raise SystemExit(1)
         # Make sure we're using local Docker:
@@ -483,7 +490,7 @@ def main():
         # Make sure we can access Docker:
         try:
             check_output(maybe_sudo(["docker", "version"]))
-        except CalledProcessError as e:
+        except (CalledProcessError, OSError, IOError) as e:
             sys.stderr.write("Error running Docker: {}\n".format(e))
             raise SystemExit(1)
         # Make sure we have torsocks:
@@ -492,8 +499,8 @@ def main():
                 sys.stderr.write("--run currently only works on Linux.\n")
                 raise SystemExit(1)
             try:
-                check_output(maybe_sudo(["torsocks", "true"]))
-            except CalledProcessError as e:
+                check_output(["torsocks", "true"])
+            except (CalledProcessError, OSError, IOError) as e:
                 sys.stderr.write("Error running torsocks: {}\n".format(e))
                 raise SystemExit(1)
         tempdir, container_id, proxy_popen = start_proxy(runner, args)

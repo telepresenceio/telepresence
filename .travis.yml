@@ -1,0 +1,45 @@
+dist: trusty
+language: python
+python:
+  - "2.7"
+
+services:
+  - docker
+
+# Cache gcloud SDK across runs:
+cache:
+  directories:
+    - "$HOME/google-cloud-sdk/"
+
+# Environment variables:
+env:
+  global:
+    - PROJECT_NAME=datawireio
+    - CLUSTER_NAME=telepresence-testing
+    - CLOUDSDK_COMPUTE_ZONE=us-central1-a
+
+
+before_install:
+  # Record some debugging info:
+  - python --version
+  - python2 --version
+  - python3 --version
+  # Decrypt the service key:
+  - openssl aes-256-cbc -K $encrypted_6168b41c1bb0_key -iv $encrypted_6168b41c1bb0_iv -in gcloud-service-key.json.enc -out gcloud-service-key.json -d
+  # Make sure gcloud is installed:
+  - ./ci/setup-gcloud.sh
+  # Make sure torsocks is installed:
+  - ./ci/build-torsocks.sh
+
+install:
+  # Push Docker images to Google Container Registry:
+  - ./ci/push-images.sh
+  
+script:
+  - make virtualenv
+  - export TELEPRESENCE_VERSION=$(make version)
+  - export TELEPRESENCE_REGISTRY=gcr.io/${PROJECT_NAME}
+  - export PATH=$HOME/google-cloud-sdk/bin:$PATH
+  # Magic incantation to make kubectl work, because apparently gcloud can't do that correctly (see https://github.com/kubernetes/kubernetes/issues/30617)
+  - export GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/gcloud-service-key.json
+  - ./ci/test.sh
