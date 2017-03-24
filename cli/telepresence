@@ -342,7 +342,9 @@ def run_local_command(runner, args, out_env, container_id):
             runner.get_output(["kubectl", "config", "current-context"]).strip()
         )
     )
-    p = Popen(["torsocks", "/bin/bash"], env=env)
+    # Make sure we use "bash", no "/bin/bash", so we get the copied version on
+    # OS X:
+    p = Popen(["torsocks", "bash"], env=env)
 
     def terminate_if_alive():
         os.remove(tor_conffile.name)
