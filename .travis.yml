@@ -1,5 +1,7 @@
+dist: trusty
 language: python
-sudo: required
+python:
+  - "2.7"
 
 services:
   - docker
@@ -8,13 +10,6 @@ services:
 cache:
   directories:
     - "$HOME/google-cloud-sdk/"
-
-matrix:
-  include:
-    - os: linux
-      dist: trusty
-    - os: osx
-      language: generic
 
 # Environment variables:
 env:
@@ -25,7 +20,6 @@ env:
 
 
 before_install:
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install python3; fi
   # Record some debugging info:
   - python --version
   - python2 --version
