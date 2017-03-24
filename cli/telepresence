@@ -16,7 +16,7 @@ import signal
 import socket
 import sys
 from functools import wraps
-from shutil import rmtree, copy
+from shutil import rmtree, copy, which
 from subprocess import check_output, Popen, CalledProcessError, check_call
 from tempfile import mkdtemp, NamedTemporaryFile
 from time import sleep, time
@@ -533,10 +533,8 @@ def main():
             raise SystemExit(1)
         # Make sure we have torsocks:
         if args.runshell:
-            try:
-                check_output(["torsocks", "true"])
-            except (CalledProcessError, OSError, IOError) as e:
-                sys.stderr.write("Error running torsocks: {}\n".format(e))
+            if which("torsocks") is None:
+                sys.stderr.write("Please install torsocks (v2.1 or later)\n")
                 raise SystemExit(1)
         tempdir, container_id, proxy_popen = start_proxy(runner, args)
         # Wait for proxy container to write out env file, indicating we're good
