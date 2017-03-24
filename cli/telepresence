@@ -14,9 +14,10 @@ import os
 import os.path
 import signal
 import socket
+import stat
 import sys
 from functools import wraps
-from shutil import rmtree, copy2
+from shutil import rmtree, copy
 from subprocess import check_output, Popen, CalledProcessError, check_call
 from tempfile import mkdtemp, NamedTemporaryFile
 from time import sleep, time
@@ -305,7 +306,8 @@ def sip_workaround():
     atexit.register(rmtree, bin_dir)
     for directory in protected:
         for file in os.listdir(directory):
-            copy2(os.path.join(directory, file), bin_dir)
+            copy(os.path.join(directory, file), bin_dir)
+            os.chmod(os.path.join(directory, file), 0o775)
     # Return new $PATH
     return ":".join(paths)
 
