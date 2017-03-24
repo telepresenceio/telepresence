@@ -460,7 +460,7 @@ class handle_unexpected_errors(object):
                 error = errorf.getvalue()
                 print(
                     "\nLooks like there's a bug in our code. Sorry about that!"
-                    "You may able to find more details in the logs "
+                    " You may able to find more details in the logs "
                     "(which are written to telepresence.log by default).\n\n"
                     "Here's the traceback:\n\n" + error + "\n"
                 )
