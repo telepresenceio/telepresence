@@ -5,7 +5,7 @@ if [ ! -d "$HOME/google-cloud-sdk/bin" ]; then
     export CLOUDSDK_CORE_DISABLE_PROMPTS=1;
     curl https://sdk.cloud.google.com | bash;
 fi
-export PATH=/home/travis/google-cloud-sdk/bin:$PATH
+export PATH=~/google-cloud-sdk/bin:$PATH
 
 gcloud --quiet version
 gcloud --quiet components update

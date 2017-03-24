@@ -16,6 +16,7 @@ import signal
 import socket
 import sys
 from functools import wraps
+from shutil import rmtree, copy
 from subprocess import check_output, Popen, CalledProcessError, check_call
 from tempfile import mkdtemp, NamedTemporaryFile
 from time import sleep, time
@@ -205,9 +206,12 @@ def start_proxy(runner, args):
         atexit.register(remove_existing_deployment)
         remove_existing_deployment()
         command = [
-            "kubectl", "run", "--generator", "deployment/v1beta1",
-            args.deployment, "--image={}/telepresence-k8s:{}".format(
-                REGISTRY, __version__),
+            "kubectl",
+            "run",
+            "--generator",
+            "deployment/v1beta1",
+            args.deployment,
+            "--image={}/telepresence-k8s:{}".format(REGISTRY, __version__),
         ]
         for port in args.expose:
             command.append("--port={}".format(port))
@@ -284,6 +288,32 @@ TorPort {}
 """
 
 
+def sip_workaround():
+    """
+    Workaround System Integrity Protection.
+
+    Newer OS X don't allow injecting libraries into binaries in /bin, /sbin and
+    /usr. We therefore make a copy of them and modify $PATH to point at their
+    new location. It's only ~100MB so this should be pretty fast!
+    """
+    protected = {"/bin", "/sbin", "/usr/sbin", "/usr/bin"}
+    # Remove protected paths from $PATH:
+    paths = [p for p in os.environ["PATH"].split(":") if p not in protected]
+    # Add temp dir
+    bin_dir = mkdtemp()
+    paths.insert(0, bin_dir)
+    atexit.register(rmtree, bin_dir)
+    for directory in protected:
+        for file in os.listdir(directory):
+            try:
+                copy(os.path.join(directory, file), bin_dir)
+            except IOError:
+                continue
+            os.chmod(os.path.join(bin_dir, file), 0o775)
+    # Return new $PATH
+    return ":".join(paths)
+
+
 def run_local_command(runner, args, out_env, container_id):
     """--run support, run command locally."""
     socks_port = int(
@@ -295,6 +325,8 @@ def run_local_command(runner, args, out_env, container_id):
         env = os.environ.copy()
         env.update(dict(line.split("=", 1) for line in f.read().splitlines()))
         env["PS1"] = "[TELEPRESENCE] " + env.get("PS1", "$ ")
+    if sys.platform == "darwin":
+        env["PATH"] = sip_workaround()
     # Create custom torsocks.conf, since some options we want (in particular,
     # port) aren't accessible via env variables in older versions of torconf:
     with NamedTemporaryFile(mode="w+", delete=False) as tor_conffile:
@@ -309,7 +341,9 @@ def run_local_command(runner, args, out_env, container_id):
             runner.get_output(["kubectl", "config", "current-context"]).strip()
         )
     )
-    p = Popen(["torsocks", "/bin/bash"], env=env)
+    # Make sure we use "bash", no "/bin/bash", so we get the copied version on
+    # OS X:
+    p = Popen(["torsocks", "bash"], env=env)
 
     def terminate_if_alive():
         os.remove(tor_conffile.name)
@@ -427,7 +461,7 @@ class handle_unexpected_errors(object):
                 error = errorf.getvalue()
                 print(
                     "\nLooks like there's a bug in our code. Sorry about that!"
-                    "You may able to find more details in the logs "
+                    " You may able to find more details in the logs "
                     "(which are written to telepresence.log by default).\n\n"
                     "Here's the traceback:\n\n" + error + "\n"
                 )
@@ -495,9 +529,6 @@ def main():
             raise SystemExit(1)
         # Make sure we have torsocks:
         if args.runshell:
-            if not sys.platform.startswith("linux"):
-                sys.stderr.write("--run currently only works on Linux.\n")
-                raise SystemExit(1)
             try:
                 check_output(["torsocks", "true"])
             except (CalledProcessError, OSError, IOError) as e:

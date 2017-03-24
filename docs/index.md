@@ -130,9 +130,6 @@ To get started we'll use `telepresence --new-deployment quickstart` to create a 
 The client will connect to the remote Kubernetes cluster via that `Deployment` and then run a local Docker container that is proxied into the remote cluster.
 You'll then use the `--run-shell` argument to start a shell that is proxied to the remote Kubernetes cluster.
 
-**IMPORTANT:** `--run-shell` currently doesn't work on OS X.
-Use the `--docker-run` command instead, [documented below](#proxying-docker-containers).
-
 Let's start a `Service` and `Deployment` in Kubernetes, and wait until it's up and running.
 We'll check the current Kubernetes context and then start a new pod:
 
@@ -414,6 +411,7 @@ Some alternatives to Telepresence:
 
 Features:
 
+* Support `--run-shell` on OS X, allowing local processes to be proxied.
 * Kubernetes-side Docker image is now smaller.
   ([#61](https://github.com/datawire/telepresence/issues/61))
 
