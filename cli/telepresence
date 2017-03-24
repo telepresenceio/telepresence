@@ -8,19 +8,22 @@ Should be written to support Python 2 and Python 3 for ease of distribution.
 
 from __future__ import print_function
 
+import sys
+
 import argparse
 import atexit
+import collections
 import os
 import os.path
 import signal
 import socket
-import sys
+import webbrowser
+
 from functools import wraps
 from subprocess import check_output, Popen, CalledProcessError, check_call
 from tempfile import mkdtemp, mkstemp, NamedTemporaryFile
 from time import sleep, time
 from traceback import print_exc
-import webbrowser
 
 import dpath
 import yaml
@@ -134,10 +137,11 @@ def parse_args():
         )
     )
     group_deployment.add_argument(
-        '--deployment-file', '-f',
-        dest="deployment_file",
+        '--kubernetes-file', '-f',
+        action='append',
+        dest="k8s_resources",
         help=(
-            "Use an existing Kubernetes deployment file to control "
+            "Use an existing Kubernetes resource file to control "
             "where the datawire/telepresence-k8s image will run."
         )
     )
@@ -210,104 +214,189 @@ def dpath_get(obj, glob, default=None):
 def dpath_set(obj, glob, value):
     return dpath.util.new(obj, glob, value)
 
-def adapt_existing_deployment(yaml_path):
-    yaml_file = open(yaml_path, "r")
-    dep = yaml.safe_load(yaml_file.read())
+class Deployment(object):
+    """
+    This is the thing that collects all the information we're going
+    to use to actually deploy stuff to Kubernetes and run the proxy.
+    'Deployment' is probably a crappy name, actually...
+    """
 
-    # print("read YAML:")
-    # pprint.pprint(dep)
+    def __init__(self, runner):
+        self.name = None
+        self.runner = runner
 
-    name = dpath_get(dep, "/metadata/name")
-    image = dpath_get(dep, "/spec/template/spec/containers/0/image")
+        self.managed_resources = {
+            'deployment': [],
+            'service': [],
+            'other': []
+        }
 
-    # print("Adapting existing deployment %s:" % yaml_path)
-    # print("  Name:    %s" % name)
-    # print("  Image:   %s" % image)
+        self.exposed_ports = []
 
-    if not name or not image:
-        raise Exception("need name and image in %s" % yaml_path)
+    def write_adapted_resource(self, resource, mods):
+        for path, value in mods:
+            dpath_set(resource, path, value)
 
-    dpath_set(dep, "/spec/replicas", 1)
-    dpath_set(dep, "/spec/template/spec/containers/0/image",
-                   "datawire/telepresence-k8s:%s" % __version__)
+        adapted_fd, adapted_path = mkstemp(suffix=".yaml")
+        adapted_file = fdopen(adapted_fd, "w")
 
-    new_dep_fd, new_dep_path = mkstemp(suffix=".yaml")
-    new_dep_file = fdopen(new_dep_fd, "w")
+        yaml.safe_dump(resource, stream=adapted_file, encoding="utf-8")
 
-    yaml.safe_dump(dep, stream=new_dep_file, encoding="utf-8")
+        return adapted_path
 
-    # print("  New dep: %s" % new_dep_path)
-    # print("")
-    # pprint.pprint(dep)
+    def add_managed_resource(self, name, kind, starter, stopper):
+        if (kind == 'deployment') and not self.name:
+            self.name = name
 
-    return (name, image, new_dep_path)
+        print("%s: add %s\n%s\n%s\n%s" % (self.name, kind, name, starter, stopper))
 
-def create_remover(runner, name, types):
-    def remove_existing_deployment():
-        runner.get_output([
-            "kubectl", "delete", "--ignore-not-found",
-            ",".join(types), name
-        ])
+        self.managed_resources[kind].append( (name, starter, stopper) )
 
-    return remove_existing_deployment
+    def add_exposed_port(self, name, port):
+        self.exposed_ports.append((name, port))
 
-def start_proxy(runner, args):
-    """`telepresence start`."""
-    if sys.stderr.isatty():
-        print("Starting proxy...", file=sys.stderr)
+    def add_k8s_resource(self, resource_path):
+        """Load up a Kubernetes resource from a file."""
+        # We don't know if this resource is JSON or YAML, but fortunately
+        # PyYAML can load both. [ :) ]
 
-    deployment_name = None
-    deployment_image = None
-    command = None
-    remover = None
+        resource = yaml.safe_load(open(resource_path, "r").read())
 
-    # Have they given a deployment file?
-    if args.deployment_file:
-        # Yes. Synthesize our version of it...
+        # What exactly did we get back? We need it to be a dictionary.
+        if not isinstance(resource, collections.Mapping):
+            raise Exception("resource path %s does not specify an actual Kubernetes resource" % resource_path)
 
-        try:
-            deployment_name, deployment_image, deployment_path = adapt_existing_deployment(args.deployment_file)
-        except:
-            raise     
+        # OK, so far so good. What is this thing?
+        resource_type = dpath_get(resource, "kind")
 
-        # ...and build our command.
-        command = [
-            "kubectl", "apply", "-f", deployment_path
-        ]
+        if resource_type is None:
+            raise Exception("resource path %s has no kind" % resource_path)
 
-        remover = create_remover(runner, deployment_name, [ 'deployment' ])
+        resource_name = dpath_get(resource, "/metadata/name")
+
+        if resource_name is None:
+            raise Exception("resource path %s has no name" % resource_path)
+
+        if resource_type == 'Deployment':
+            # It's a deployment. Remember it!
+            #
+            # XXX labels??
+
+            adapted_path = self.write_adapted_resource(
+                resource,
+                [
+                    ( "/spec/replicas", 1 ),
+                    ( "/spec/template/spec/containers/0/image",
+                      "datawire/telepresence-k8s:%s" % __version__ )
+                ]
+            )
+
+            self.add_managed_resource(
+                resource_name,
+                "deployment",
+                [ "kubectl", "apply", "-f", adapted_path ],
+                [ "kubectl", "delete", "--ignore-not-found", "-f", adapted_path ]
+            )
+
+        elif resource_type == 'Service':
+            # It's a service. Remember it!
+            #
+            # XXX labels??
+
+            ports = dpath_get(resource, "/spec/ports")
+
+            if not ports:
+                raise Exception("service resource %s has no ports" % resource_path)
+
+            self.add_managed_resource(
+                resource_name,
+                "service",
+                [ "kubectl", "apply", "-f", resource_path ],
+                [ "kubectl", "delete", "--ignore-not-found", "-f", resource_path ]
+            )
+
+            for port in ports:
+                exposed_port = port.get('targetPort', None)
+
+                if exposed_port is None:
+                    exposed_port = port.get('port', None)
+
+                if exposed_port is not None:
+                    self.add_exposed_port(resource_name, exposed_port)
+                else:
+                    raise Exception("Service %s at %s has no port to expose?" %
+                                    (resource_name, resource_path))
+
+        else:
+            self.add_managed_resource(
+                resource_name,
+                "other",
+                [ "kubectl", "apply", "-f", resource_path ],
+                [ "kubectl", "delete", "--ignore-not-found", "-f", resource_path ]
+            )
+
+    def start(self):
+        print("...starting K8s things")
+        self.run_things(1)
+
+    def stop(self):
+        print("...stopping K8s things")
+        self.run_things(2)
+
+    def run_things(self, which):
+        for rtype in [ 'deployment', 'service', 'other' ]:
+            for thing in self.managed_resources[rtype]:
+                print("%s %s: %s" % (rtype, thing[0], thing[which]))
+                self.runner.get_output(thing[which])
+
+def deployment_for_args(runner, args):
+    deployment = Deployment(runner)
+
+    # If they've given any deployment files, load those up.
+    if args.k8s_resources:
+        for path in args.k8s_resources:
+            deployment.add_k8s_resource(path)
     elif args.new_deployment:
         deployment_name = args.new_deployment
 
-        command = [
+        starter = [
             "kubectl", "run", "--generator", "deployment/v1beta1",
             deployment_name, "--image=datawire/telepresence-k8s:" + __version__
         ]
 
-        remover = create_remover(runner, deployment_name, [ 'service', 'deployment' ])
+        stopper = [ 
+            "kubectl", "delete", "--ignore-not-found", "service,deployment", deployment_name
+        ]
 
-        # Yup. Append port-forwarding stuff...
         for port in args.expose:
-            command.append("--port={}".format(port))
-        if args.expose:
-            command.append("--expose")
+            deployment.add_exposed_port('cmdline', port)
+            starter.append("--port={}".format(port))
 
+        if args.expose:
+            starter.append("--expose")
+
+        deployment.add_managed_resource(deployment_name, starter, stopper)
     elif args.deployment:
         # Save the deployment name...
         deployment_name = args.deployment
 
         # ...but we needn't run any deployment command.
+        starter = [ "echo", "Using existing deployment %s" % deployment_name ]
+        stopper = [ "echo", "Not stopping existing deployment %s" % deployment_name ]
 
-    # Do we have something to run here?
+        deployment.add_managed_resource(deployment_name, starter, stopper)
 
-    if command:
-        # Do what cleanup we must, and set it for atexit...
-        if remover:
-            atexit.register(remover)
-            remover()
+    return deployment
 
-        # ...and then off we go.
-        runner.get_output(command)
+def start_proxy(runner, deployment, args):
+    """`telepresence start`."""
+    if sys.stderr.isatty():
+        print("Starting proxy...", file=sys.stderr)
+
+    if deployment:
+        atexit.register(deployment.stop)
+        deployment.stop()
+        deployment.start()
         sleep(5)  # XXX oh god
 
     # OK. Now it's on to the local stuff. Start with snaring our home directory.
@@ -361,17 +450,20 @@ def start_proxy(runner, args):
         "datawire/telepresence-local:" + __version__,
         # Arguments: <uid>, <deployment-name>
         str(os.getuid()),
-        deployment_name,
+        deployment.name,
         # Arguments: <port1,port2>, <proxy1,proxy2>, <expose_host>
-        ",".join(map(str, args.expose)),
+        ",".join([ "%s" % x[1] for x in deployment.exposed_ports ]),
         # We don't need to do special proxying when using SOCKS-based --run:
         ",".join([] if args.runshell else args.proxy),
         expose_host,
     ])
+
+    print("docker cmd %s" % docker_cmd)
+
     p = runner.popen(docker_cmd)
+
     atexit.register(stop_proxy, runner, container_id)
     return tempdir, container_id, p
-
 
 TORSOCKS_CONFIG = """
 # Allow process to listen on ports:
@@ -599,12 +691,18 @@ def main():
             except CalledProcessError as e:
                 sys.stderr.write("Error running torsocks: {}\n".format(e))
                 raise SystemExit(1)
-        tempdir, container_id, proxy_popen = start_proxy(runner, args)
+
+        deployment = deployment_for_args(runner, args)
+
+        tempdir, container_id, proxy_popen = start_proxy(runner, deployment, args)
+
         # Wait for proxy container to write out env file, indicating we're good
         # to go:
         out_env = os.path.join(tempdir, "docker.env")
         while not os.path.exists(out_env):
+            print("no %s, sleeping" % out_env)
             sleep(1)
+
         if args.docker_run_args is not None:
             run_docker_command(runner, args, out_env, container_id)
         else:
