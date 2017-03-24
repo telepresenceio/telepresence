@@ -13,6 +13,7 @@ import sys
 import argparse
 import atexit
 import collections
+import copy
 import os
 import os.path
 import signal
@@ -28,6 +29,9 @@ from traceback import print_exc
 import dpath
 import yaml
 import pprint
+
+# LOCAL_IMAGE_NAME = "datawire/telepresence-local:" + __version__,
+LOCAL_IMAGE_NAME = "telepresence:flynn-0.17"
 
 if sys.version_info.major == 2:
     from urllib import quote_plus
@@ -233,10 +237,15 @@ class Deployment(object):
 
         self.exposed_ports = []
 
-    def write_adapted_resource(self, resource, mods):
-        for path, value in mods:
-            dpath_set(resource, path, value)
+    def get_adapted_resource(self, resource, mods):
+        adapted_resource = copy.deepcopy(resource)
 
+        for path, value in mods:
+            dpath_set(adapted_resource, path, value)
+
+        return adapted_resource
+
+    def write_resource(self, resource, mods):
         adapted_fd, adapted_path = mkstemp(suffix=".yaml")
         adapted_file = fdopen(adapted_fd, "w")
 
@@ -260,80 +269,141 @@ class Deployment(object):
         # We don't know if this resource is JSON or YAML, but fortunately
         # PyYAML can load both. [ :) ]
 
-        resource = yaml.safe_load(open(resource_path, "r").read())
+        resources = yaml.safe_load_all(open(resource_path, "r").read())
 
-        # What exactly did we get back? We need it to be a dictionary.
-        if not isinstance(resource, collections.Mapping):
-            raise Exception("resource path %s does not specify an actual Kubernetes resource" % resource_path)
+        # As what kind of thing will we add this?
+        resource_file_type = None
 
-        # OK, so far so good. What is this thing?
-        resource_type = dpath_get(resource, "kind")
+        # Some resources (like deployments) will need to be adapted for us.
+        adapted_resources = []
 
-        if resource_type is None:
-            raise Exception("resource path %s has no kind" % resource_path)
+        # We might not need to actually write these out...
+        must_save_adapted_resources = False
 
-        resource_name = dpath_get(resource, "/metadata/name")
+        for resource in resources:
+            # What exactly did we get back? We need it to be a dictionary.
+            if not isinstance(resource, collections.Mapping):
+                raise Exception("resource path %s does not specify an actual Kubernetes resource" % resource_path)
 
-        if resource_name is None:
-            raise Exception("resource path %s has no name" % resource_path)
+            # OK, so far so good. What is this thing?
+            resource_type = dpath_get(resource, "kind")
 
-        if resource_type == 'Deployment':
-            # It's a deployment. Remember it!
-            #
-            # XXX labels??
+            if resource_type is None:
+                raise Exception("resource path %s has no kind" % resource_path)
 
-            adapted_path = self.write_adapted_resource(
-                resource,
-                [
-                    ( "/spec/replicas", 1 ),
-                    ( "/spec/template/spec/containers/0/image",
-                      "datawire/telepresence-k8s:%s" % __version__ )
-                ]
-            )
+            resource_name = dpath_get(resource, "/metadata/name")
 
-            self.add_managed_resource(
-                resource_name,
-                "deployment",
-                [ "kubectl", "apply", "-f", adapted_path ],
-                [ "kubectl", "delete", "--ignore-not-found", "-f", adapted_path ]
-            )
+            if resource_name is None:
+                raise Exception("resource path %s has no name" % resource_path)
 
-        elif resource_type == 'Service':
-            # It's a service. Remember it!
-            #
-            # XXX labels??
+            if resource_type == 'Deployment':
+                # It's a deployment, which means that we'll add this file as a
+                # deployment.
 
-            ports = dpath_get(resource, "/spec/ports")
+                resource_file_type = 'deployment'
 
-            if not ports:
-                raise Exception("service resource %s has no ports" % resource_path)
+                # XXX labels??
 
-            self.add_managed_resource(
-                resource_name,
-                "service",
-                [ "kubectl", "apply", "-f", resource_path ],
-                [ "kubectl", "delete", "--ignore-not-found", "-f", resource_path ]
-            )
+                adapted_resource = self.get_adapted_resource(
+                    resource,
+                    [
+                        ( "/spec/replicas", 1 ),
+                        ( "/spec/template/spec/containers/0/image",
+                          "datawire/telepresence-k8s:%s" % __version__ )
+                    ]
+                )
 
-            for port in ports:
-                exposed_port = port.get('targetPort', None)
+                adapted_resources.append(adapted_resource)
 
-                if exposed_port is None:
-                    exposed_port = port.get('port', None)
+                # Remember that we've actually changed something.
+                must_save_adapted_resources = True
 
-                if exposed_port is not None:
-                    self.add_exposed_port(resource_name, exposed_port)
-                else:
-                    raise Exception("Service %s at %s has no port to expose?" %
-                                    (resource_name, resource_path))
+            elif resource_type == 'Service':
+                # It's a service. Only add it as a service, though, if we shouldn't
+                # already add it as a deployment.
 
-        else:
-            self.add_managed_resource(
-                resource_name,
-                "other",
-                [ "kubectl", "apply", "-f", resource_path ],
-                [ "kubectl", "delete", "--ignore-not-found", "-f", resource_path ]
-            )
+                if resource_file_type != 'deployment':
+                    resource_file_type = 'service'
+
+                # XXX labels??
+
+                ports = dpath_get(resource, "/spec/ports")
+
+                if not ports:
+                    raise Exception("service resource %s has no ports" % resource_path)
+
+                adapted_resources.append(resource)
+
+                for port in ports:
+                    exposed_port = port.get('targetPort', None)
+
+                    if exposed_port is None:
+                        exposed_port = port.get('port', None)
+
+                    if exposed_port is not None:
+                        self.add_exposed_port(resource_name, exposed_port)
+                    else:
+                        raise Exception("Service %s at %s has no port to expose?" %
+                                        (resource_name, resource_path))
+
+            else:
+                # We don't know what this is. Set the type to 'other' only if it's not
+                # already set.
+
+                if not resource_file_type:
+                    resource_file_type = 'other'
+
+                adapted_resources.append(resource)
+
+                # adapted_path = self.write_adapted_resource(
+                #     resource,
+
+                # self.add_managed_resource(
+                #     resource_name,
+                #     "deployment",
+                #     [ "kubectl", "apply", "-f", adapted_path ],
+                #     [ "kubectl", "delete", "--ignore-not-found", "-f", adapted_path ]
+                # )
+
+                # self.add_managed_resource(
+                #     resource_name,
+                #     "service",
+                #     [ "kubectl", "apply", "-f", resource_path ],
+                #     [ "kubectl", "delete", "--ignore-not-found", "-f", resource_path ]
+                # )
+
+                # self.add_managed_resource(
+                #     resource_name,
+                #     "other",
+                #     [ "kubectl", "apply", "-f", resource_path ],
+                #     [ "kubectl", "delete", "--ignore-not-found", "-f", resource_path ]
+                # )
+
+        # OK, once here, we should know how to add this, and have a list of
+        # adapted resources ready to go. Assume for the moment that we didn't
+        # actually change anything...
+
+        adapted_path = resource_path
+
+        # ...and then actually check. Must we write out the adapted resources?
+
+        if must_save_adapted_resources:
+            # Yes. Hit it.
+
+            adapted_fd, adapted_path = mkstemp(suffix=".yaml")
+            adapted_file = fdopen(adapted_fd, "w")
+
+            yaml.safe_dump_all(adapted_resources, stream=adapted_file,
+                               encoding="utf-8")
+
+        # Once that's done, add this resource to our stuff to manage.
+
+        self.add_managed_resource(
+            resource_name,
+            resource_file_type,
+            [ "kubectl", "apply", "-f", adapted_path ],
+            [ "kubectl", "delete", "--ignore-not-found", "-f", adapted_path ]
+        )
 
     def start(self):
         print("...starting K8s things")
@@ -447,7 +517,7 @@ def start_proxy(runner, deployment, args):
         "-v",
         tempdir + ":/output",
         # Name of image:
-        "datawire/telepresence-local:" + __version__,
+        LOCAL_IMAGE_NAME,
         # Arguments: <uid>, <deployment-name>
         str(os.getuid()),
         deployment.name,
