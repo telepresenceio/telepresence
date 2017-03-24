@@ -284,6 +284,9 @@ def start_proxy(runner, args):
 TORSOCKS_CONFIG = """
 # Allow process to listen on ports:
 AllowInbound 1
+# Allow process to connect to localhost:
+AllowOutboundLocalhost 1
+# Connect to custom port for SOCKS server:
 TorPort {}
 """
 
@@ -351,7 +354,8 @@ def run_local_command(runner, args, out_env, container_id):
             p.terminate()
 
     atexit.register(terminate_if_alive)
-    p.wait()
+    exit_code = p.wait()
+    sys.exit(exit_code)
 
 
 def run_docker_command(runner, args, out_env, container_id):
