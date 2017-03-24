@@ -407,7 +407,7 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
-### 0.18 (unreleased)
+### 0.18 (March 24, 2017)
 
 Features:
 
