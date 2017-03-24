@@ -407,6 +407,12 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
+### 0.19 (March 24, 2017)
+
+Bug fixes:
+
+* Fixed another issue with `--run-shell` on OS X.
+
 ### 0.18 (March 24, 2017)
 
 Features:
