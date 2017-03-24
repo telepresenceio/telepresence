@@ -14,7 +14,6 @@ import os
 import os.path
 import signal
 import socket
-import stat
 import sys
 from functools import wraps
 from shutil import rmtree, copy
