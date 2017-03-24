@@ -320,7 +320,8 @@ def run_local_command(runner, args, out_env, container_id):
             p.terminate()
 
     atexit.register(terminate_if_alive)
-    p.wait()
+    exit_code = p.wait()
+    sys.exit(exit_code)
 
 
 def run_docker_command(runner, args, out_env, container_id):
