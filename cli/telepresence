@@ -307,7 +307,7 @@ def sip_workaround():
     for directory in protected:
         for file in os.listdir(directory):
             copy(os.path.join(directory, file), bin_dir)
-            os.chmod(os.path.join(directory, file), 0o775)
+            os.chmod(os.path.join(bin_dir, file), 0o775)
     # Return new $PATH
     return ":".join(paths)
 
