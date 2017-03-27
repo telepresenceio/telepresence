@@ -132,8 +132,13 @@ Next, we need to deploy an externally visible load balancer.
 % kubectl create -f frontend-service.yaml
 ```
 
-Now, we need to get the IP addresses of our Redis cluster and our load balancer.
+Now, we're going to start the local Telepresence client, and connect it to the proxy that's running in the Kubernetes cluster.
 
+```
+telepresence --deployment telepresence-deployment --expose 80 --docker-run --rm -i -t gcr.io/google_samples/gb-frontend:v4
+```
+
+It's time to check out our app in the browser. Let's look up the IP address of our external load balancer:
 
 ```
 % kubectl get services
@@ -143,20 +148,14 @@ redis-master   10.7.248.117   <none>           6379/TCP       5d
 redis-slave    10.7.245.58    <none>           6379/TCP       5d
 ```
 
-We see that the Redis master is running on port 6379. We're going to start the local Telepresence client, and connect it to the proxy that's running in the Kubernetes cluster. Substitute the actual port of your Redis master in the command below.
-
-```
-telepresence --new-deployment php --proxy redis-master:REDIS_PORT --expose 80 --docker-run --rm -i -t gcr.io/google_samples/gb-frontend:v4
-```
-
-Now, in your browser, go to the external IP address of your load balancer (in the above example, 104.196.217.24). You should see the Guestbook application running. Typing into the submit box will show how your message is persisting to the Redis cluster.
+Go to the external IP address of your load balancer (in the above example, 104.196.217.24). You should see the Guestbook application running. Typing into the submit box will show how your message is persisting to the Redis cluster.
 
 ### Editing your code
 
 But what if you want to actually edit the code that's running? No problem. Using Docker, we can mount our local filesystem directly into our container. Stop the telepresence process. Find the full path to the `examples/guestbook` directory on your computer. Restart the telepresence process with the `--volume` option and pass in the full path to your local directory. This will mount the local directory into your container at `/var/www/html`:
 
 ```
-telepresence --new-deployment php --proxy redis-master:REDIS_PORT --expose 80 --docker-run --rm -i -t --volume=EXAMPLE_DIR_PATH:/var/www/html/:ro  gcr.io/google_samples/gb-frontend:v4
+telepresence --deployment telepresence-deployment --expose 80 --docker-run --rm -i -t --volume=EXAMPLE_DIR_PATH:/var/www/html/:ro  gcr.io/google_samples/gb-frontend:v4
 ```
 
 Try editing `index.html` and renaming the Submit button to Go. Hit reload, and you'll immediately see your changes reflected live.
