@@ -441,6 +441,8 @@ Some alternatives to Telepresence:
 Bug fixes:
 
 * Telepresence only copies environment variables explicitly configured in the `Deployment`, rather than copying all environment variables.
+* If there is more than one container Telepresence copies the environment variables from the one running the `datawire/telepresence-k8s` image, rather than the first one.
+  ([#38](https://github.com/datawire/telepresence/issues/38))
 
 ### 0.19 (March 24, 2017)
 
