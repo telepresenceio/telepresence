@@ -49,7 +49,10 @@ def _get_service_names(environment):
 def get_remote_env(remote_info):
     """Get the environment variables in the remote pod."""
     env = str(
-        check_output(["kubectl", "exec", remote_info.pod_name, "env"]), "utf-8"
+        check_output([
+            "kubectl", "exec", remote_info.pod_name, "--container",
+            remote_info.container_config["name"], "env"
+        ]), "utf-8"
     )
     result = {}
     for line in env.splitlines():
