@@ -11,6 +11,30 @@ from .utils import DIRECTORY, random_name
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
+EXISTING_DEPLOYMENT = """\
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {name}
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: {name}
+    spec:
+      containers:
+      # Extra container at start to demonstrate we can handle multiple
+      # containers
+      - name: getintheway
+        image: nginx:alpine
+      - name: {name}
+        image: {registry}/telepresence-k8s:{version}
+        env:
+        - name: MYENV
+          value: hello
+"""
+
 
 class EndToEndTests(TestCase):
     """
@@ -39,7 +63,8 @@ class EndToEndTests(TestCase):
             "telepresence",
             "--new-deployment",
             random_name(),
-            "--logfile", "-",
+            "--logfile",
+            "-",
             "--docker-run",
             "-v",
             "{}:/code".format(DIRECTORY),
@@ -92,15 +117,18 @@ class EndToEndTests(TestCase):
         version = str(
             check_output(["telepresence", "--version"], stderr=STDOUT), "utf-8"
         ).strip()
-        check_output([
-            "kubectl",
-            "run",
-            "--generator",
-            "deployment/v1beta1",
-            name,
-            "--image={}/telepresence-k8s:{}".format(REGISTRY, version),
-            '--env="MYENV=hello"',
-        ])
+        deployment = EXISTING_DEPLOYMENT.format(
+            name=name, registry=REGISTRY, version=version
+        )
+        check_output(
+            args=[
+                "kubectl",
+                "apply",
+                "-f",
+                "-",
+            ],
+            input=deployment.encode("utf-8")
+        )
         self.addCleanup(
             check_output, ["kubectl", "delete", "deployment", name]
         )

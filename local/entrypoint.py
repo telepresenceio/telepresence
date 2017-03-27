@@ -13,6 +13,25 @@ from sys import argv, exit
 import time
 
 
+class RemoteInfo(object):
+    """Information about the remote setup.
+
+    :ivar deployment_name: The name of the Deployment object.
+    :ivar pod_name: The name of the pod created by the Deployment.
+    :ivar deployment_config: The decoded k8s object (i.e. JSON/YAML).
+    :ivar container_config: The container within the Deployment JSON.
+    """
+
+    def __init__(self, deployment_name, pod_name, deployment_config):
+        self.deployment_name = deployment_name
+        self.pod_name = pod_name
+        self.deployment_config = deployment_config
+        cs = deployment_config["spec"]["template"]["spec"]["containers"]
+        self.container_config = [
+            c for c in cs if "telepresence-k8s" in c["image"]
+        ][0]
+
+
 def _get_service_names(environment):
     """Return names of Services, as used in env variable names."""
     # XXX duplicated in remote-telepresence
@@ -27,9 +46,14 @@ def _get_service_names(environment):
     return result
 
 
-def get_remote_env(pod_name):
+def get_remote_env(remote_info):
     """Get the environment variables in the remote pod."""
-    env = str(check_output(["kubectl", "exec", pod_name, "env"]), "utf-8")
+    env = str(
+        check_output([
+            "kubectl", "exec", remote_info.pod_name, "--container",
+            remote_info.container_config["name"], "env"
+        ]), "utf-8"
+    )
     result = {}
     for line in env.splitlines():
         key, value = line.split("=", 1)
@@ -37,23 +61,14 @@ def get_remote_env(pod_name):
     return result
 
 
-def get_deployment_set_keys(deployment_name):
+def get_deployment_set_keys(remote_info):
     """Get the set of environment variables names set by the Deployment."""
-    deployment = loads(
-        str(
-            check_output([
-                "kubectl", "get", "deployment", "-o", "json", deployment_name
-            ]), "utf-8"
-        )
+    return set(
+        [var["name"] for var in remote_info.container_config.get("env", [])]
     )
-    container = [
-        c for c in deployment["spec"]["template"]["spec"]["containers"]
-        if "telepresence-k8s" in c["image"]
-    ][0]
-    return set([var["name"] for var in container.get("env", [])])
 
 
-def get_env_variables(pod_name, deployment_name):
+def get_env_variables(remote_info):
     """
     Generate environment variables that match kubernetes.
 
@@ -63,8 +78,8 @@ def get_env_variables(pod_name, deployment_name):
     For Docker we make modified versions of the Servic env variables. For
     non-Docker (SOCKS) we just copy the Service env variables as is.
     """
-    remote_env = get_remote_env(pod_name)
-    deployment_set_keys = get_deployment_set_keys(deployment_name)
+    remote_env = get_remote_env(remote_info)
+    deployment_set_keys = get_deployment_set_keys(remote_info)
     service_names = _get_service_names(remote_env)
     # ips proxied via docker, so need to modify addresses:
     in_docker_result = {}
@@ -101,10 +116,8 @@ def get_env_variables(pod_name, deployment_name):
     return in_docker_result, socks_result
 
 
-def write_env(pod_name, deployment_name):
-    for_docker_env, for_local_env = get_env_variables(
-        pod_name, deployment_name
-    )
+def write_env(remote_info):
+    for_docker_env, for_local_env = get_env_variables(remote_info)
     with open("/output/unproxied.env.tmp", "w") as f:
         for key, value in for_local_env.items():
             f.write("{}={}\n".format(key, value))
@@ -136,8 +149,8 @@ def write_etc_hosts(additional_hosts):
             hosts.write("127.0.0.1 {}\n".format(host))
 
 
-def get_pod_name(deployment_name):
-    """Given the deployment name, return the name of its pod."""
+def get_remote_info(deployment_name):
+    """Given the deployment name, return a RemoteInfo object."""
     deployment = loads(
         str(
             check_output([
@@ -180,7 +193,8 @@ def get_pod_name(deployment_name):
                 "Pending", "Running"
         )):
             print("Looks like we've found our pod!")
-            return name
+            return RemoteInfo(deployment_name, name, deployment)
+
     raise RuntimeError(
         "Telepresence pod not found for Deployment '{}'.".
         format(deployment_name)
@@ -212,11 +226,11 @@ def wait_for_ssh():
     raise RuntimeError("SSH isn't starting.")
 
 
-def wait_for_pod(pod_name):
+def wait_for_pod(remote_info):
     for i in range(120):
         phase = str(
             check_output([
-                "kubectl", "get", "pod", pod_name, "-o",
+                "kubectl", "get", "pod", remote_info.pod_name, "-o",
                 "jsonpath={.status.phase}"
             ]), "utf-8"
         ).strip()
@@ -234,9 +248,9 @@ def main(
     expose_host
 ):
     processes = []
-    pod_name = get_pod_name(deployment_name)
+    remote_info = get_remote_info(deployment_name)
     # Wait for pod to be running:
-    wait_for_pod(pod_name)
+    wait_for_pod(remote_info)
     proxied_ports = set(range(2000, 2020)) | set(map(int, local_exposed_ports))
     proxied_ports.add(22)
     proxied_ports.add(SOCKS_PORT)
@@ -256,7 +270,9 @@ def main(
     write_etc_hosts([s.split(":", 1)[0] for s in custom_proxied_hosts])
 
     # forward remote port to here, by tunneling via remote SSH server:
-    processes.append(Popen(["kubectl", "port-forward", pod_name, "22"]))
+    processes.append(
+        Popen(["kubectl", "port-forward", remote_info.pod_name, "22"])
+    )
     wait_for_ssh()
 
     for port_number in local_exposed_ports:
@@ -280,13 +296,13 @@ def main(
     # XXX maybe just do everything via SSH, now that we have it?
     for port in range(2000, 2020):
         # XXX what if there is more than 20 services
-        p = Popen(["kubectl", "port-forward", pod_name, str(port)])
+        p = Popen(["kubectl", "port-forward", remote_info.pod_name, str(port)])
         processes.append(p)
     time.sleep(5)
     #
     # write docker envfile, which tells CLI we're ready:
     setuid(uid)
-    write_env(pod_name, deployment_name)
+    write_env(remote_info)
     for p in processes:
         p.wait()
 
