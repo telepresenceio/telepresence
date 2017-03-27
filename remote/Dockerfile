@@ -15,5 +15,10 @@ COPY forwarder.py /usr/src/app
 COPY socks.py /usr/src/app
 COPY . /usr/src/app
 
+# This is set on the remote pod, both for information purposes but also for use
+# by some of the end-to-end tests. Don't delete this without modifying
+# corresponding test:
+ENV TELEPRESENCE_PROXY=1
+
 CMD /usr/sbin/sshd -f /etc/ssh/sshd_config && \
     env PYTHONPATH=/usr/src/app twistd -n -y ./forwarder.py

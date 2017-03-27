@@ -57,10 +57,14 @@ def check_env():
     assert os.environ[prefix + "_PROTO"] == "tcp"
     assert os.environ[prefix + "_PORT"] == port
     assert os.environ[prefix + "_ADDR"] == host
+    # This env variable is set in the remote pod itself, but we don't expect it
+    # to be copied to local setup since it's not set explicitly on the
+    # Deployment:
+    assert "TELEPRESENCE_PROXY" not in os.environ
 
 
 def check_custom_env():
-    # Check custom environment variables
+    # Check custom environment variables are copied:
     for env in sys.argv[1:]:
         key, value = env.split("=", 1)
         assert os.environ[key] == value
