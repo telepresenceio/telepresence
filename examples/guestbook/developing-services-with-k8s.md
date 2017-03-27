@@ -48,7 +48,7 @@ Move telepresence to somewhere on your $PATH, e.g.,:
 mv telepresence /usr/local/bin
 ```
 
-Finally, this tutorial uses a number of Kubernetes configuration files. To save some typing, you can optionally clone the telepresence GitHub repository:
+Finally, this tutorial uses a number of Kubernetes configuration files. To save some typing, you can optionally clone the [telepresence GitHub](https://github.com/datawire/telepresence/) repository:
 
 ```
 % git clone https://github.com/datawire/telepresence.git
