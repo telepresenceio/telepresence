@@ -37,13 +37,21 @@ Next, we're going to want to install the `gcloud` and `kubectl` commands. Follow
 % sudo gcloud components update kubectl
 ```
 
-Finally, we need to install Telepresence, which will proxy your locally running service to GKE.
+We need to install Telepresence, which will proxy your locally running service to GKE.
 
 ```
 % brew install torsocks
 % curl
 % chmod +x
 ```
+
+Finally, this tutorial uses a number of Kubernetes configuration files. To save some typing, you can optionally clone the telepresence GitHub repository:
+
+```
+% git clone https://github.com/datawire/telepresence.git
+```
+
+All example files are in the `examples/guestbook` directory.
 
 ### Setting up Kubernetes in Google Container Engine
 
@@ -54,7 +62,7 @@ To set up a Kubernetes cluster in GKE, go to https://console.cloud.google.com, c
 The following gcloud command will create a small 2 node cluster in the us-central1-a region:
 
 ```
-gcloud container --project "PROJECT" clusters create "EXAMPLE_NAME" --zone "us-central1-a" --machine-type "n1-standard-1" --image-type "GCI" --disk-size "100" --scopes "https://www.googleapis.com/auth/compute","https://www.googleapis.com/auth/devstorage.read_only","https://www.googleapis.com/auth/logging.write","https://www.googleapis.com/auth/monitoring","https://www.googleapis.com/auth/servicecontrol","https://www.googleapis.com/auth/service.management.readonly","https://www.googleapis.com/auth/trace.append" --num-nodes "2" --network "default" --enable-cloud-logging --enable-cloud-monitoring
+% gcloud container --project "PROJECT" clusters create "EXAMPLE_NAME" --zone "us-central1-a" --machine-type "n1-standard-1" --image-type "GCI" --disk-size "100" --scopes "https://www.googleapis.com/auth/compute","https://www.googleapis.com/auth/devstorage.read_only","https://www.googleapis.com/auth/logging.write","https://www.googleapis.com/auth/monitoring","https://www.googleapis.com/auth/servicecontrol","https://www.googleapis.com/auth/service.management.readonly","https://www.googleapis.com/auth/trace.append" --num-nodes "2" --network "default" --enable-cloud-logging --enable-cloud-monitoring
 ```
 
 ## Installing the Guestbook application
@@ -94,13 +102,13 @@ redis-slave-132015689-v06md    1/1       Running   0          1d
 We're going to run the Guestbook PHP frontend locally, so the first step is to download the Docker image.
 
 ```
-docker pull gcr.io/google_samples/gb-frontend:v4
+% docker pull gcr.io/google_samples/gb-frontend:v4
 ```
 
 You can quickly run the frontend service:
 
 ```
-docker run -it --publish=8080:80 gcr.io/google_samples/gb-frontend:v4
+% docker run -it --publish=8080:80 gcr.io/google_samples/gb-frontend:v4
 ```
 
 The `--publish` option maps the container's port 80 to the host's port 8080. Visit `localhost:8080` in your browser, and you'll see the Guestbook application. You won't be able to add a Guestbook entry, because we haven't connected the PHP application to Redis yet. Exit your Docker process by typing `Ctrl-C`.
@@ -109,24 +117,47 @@ The `--publish` option maps the container's port 80 to the host's port 8080. Vis
 
 We're now going to use [Telepresence](https://datawire.github.io/telepresence) to create a virtual network between your local machine and the remote Kubernetes cluster. This way, the PHP application will be able to talk to remote cloud resources, and vice versa.
 
-First, we need to figure out the IP address of Redis:
+We'll start by deploying the Telepresence proxy onto the Kubernetes cluster.
+
+```
+% kubectl create -f telepresence-deployment.yaml
+```
+
+Next, we need to deploy an externally visible load balancer.
+
+```
+% kubectl create -f frontend-service.yaml
+```
+
+Now, we need to get the IP addresses of our Redis cluster and our load balancer.
+
 
 ```
 % kubectl get services
-NAME           CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE
-redis-master   10.7.248.117   <none>        6379/TCP   1d
-redis-slave    10.7.245.58    <none>        6379/TCP   1d
+NAME           CLUSTER-IP     EXTERNAL-IP      PORT(S)        AGE
+frontend       10.7.252.209   104.196.217.24   80:30563/TCP   25m
+redis-master   10.7.248.117   <none>           6379/TCP       5d
+redis-slave    10.7.245.58    <none>           6379/TCP       5d
 ```
 
-We see that the Redis master is running on `10.7.248.117` on port 6379. Now, let's fire up Telepresence. Substitute the IP address and port of your Redis instance into the command below.
+We see that the Redis master is running on `10.7.248.117` on port 6379. We're going to start the local Telepresence client, and connect it to the proxy that's running in the Kubernetes cluster.
 
 ```
-telepresence --new-deployment php --proxy REDIS_IP:REDIS_PORT --expose 80 --docker-run --rm -i -t -publish=8080:80 --volume=/users/richard/dw/tel/:/var/www/html/:ro  gcr.io/google_samples/gb-frontend:v4
+telepresence --new-deployment php --proxy REDIS_IP:REDIS_PORT --expose 80 --docker-run --rm -i -t gcr.io/google_samples/gb-frontend:v4
 ```
 
+Now, in your browser, go to the external IP address of your load balancer (in the above example, 104.196.217.24). You should see the Guestbook application running. Typing into the submit box will show how your message is persisting to the Redis cluster.
 
+### Editing your code
 
+But what if you want to actually edit the code that's running? No problem. Using Docker, we can mount our local filesystem directly into our container. Stop the telepresence process. Find the full path to the `examples/guestbook` directory on your computer. Restart the telepresence process with the `--volume` option and pass in the full path to your local directory. This will mount the local directory into your container at `/var/www/html`:
 
-kubectl get pod
-pick the pod matching deployment name
-kubectl port-forward <pod> 8080:80
+```
+telepresence --new-deployment php --proxy REDIS_IP:REDIS_PORT --expose 80 --docker-run --rm -i -t --volume=EXAMPLE_DIR_PATH:/var/www/html/:ro  gcr.io/google_samples/gb-frontend:v4
+```
+
+Try editing `index.html` and renaming the Submit button to Go. Hit reload, and you'll immediately see your changes reflected live.
+
+### Behind the scenes
+
+What's going on behind the scenes? Your incoming request goes to the load balancer. The load balancer is configured to route requests (via a [label](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/)) to the Telepresence proxy. The Telepresence proxy sends those requests to the local Telepresence client.
