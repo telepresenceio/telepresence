@@ -8,8 +8,17 @@ This module will be run inside a container. To indicate success it will print
 import os
 import ssl
 import sys
+from traceback import print_exception
 from urllib.request import urlopen
 from urllib.error import HTTPError
+
+
+def handle_error(type, value, traceback):
+    print_exception(type, value, traceback, file=sys.stderr)
+    raise SystemExit(3)
+
+
+sys.excepthook = handle_error
 
 
 def check_kubernetes_api_url(url):
