@@ -13,13 +13,17 @@ from sys import argv, exit
 import time
 
 
-def _get_service_keys(environment):
+def _get_service_names(environment):
+    """Return names of Services, as used in env variable names."""
     # XXX duplicated in remote-telepresence
     # XXX also check for TCPness.
     # Order matters for service_keys, need it to be consistent with port
     # forwarding order in remote container.
-    result = [key for key in environment if key.endswith("_SERVICE_HOST")]
-    result.sort(key=lambda s: s[:-len("_SERVICE_HOST")])
+    result = [
+        key[:-len("_SERVICE_HOST")] for key in environment
+        if key.endswith("_SERVICE_HOST")
+    ]
+    result.sort()
     return result
 
 
@@ -61,15 +65,14 @@ def get_env_variables(pod_name, deployment_name):
     """
     remote_env = get_remote_env(pod_name)
     deployment_set_keys = get_deployment_set_keys(deployment_name)
+    service_names = _get_service_names(remote_env)
     # ips proxied via docker, so need to modify addresses:
     in_docker_result = {}
     # XXX we're recreating the port generation logic
     i = 0
-    for i, service_key in enumerate(_get_service_keys(remote_env)):
+    for i, name in enumerate(service_names):
         port = str(2000 + i)
         ip = "127.0.0.1"
-        # XXX bad abstraction
-        name = service_key[:-len("_SERVICE_HOST")]
         # XXX will be wrong for UDP
         full_address = "tcp://{}:{}".format(ip, port)
         in_docker_result[name + "_SERVICE_HOST"] = ip
@@ -83,13 +86,18 @@ def get_env_variables(pod_name, deployment_name):
         in_docker_result[port_name + "_ADDR"] = ip
     socks_result = {}
     for key, value in remote_env.items():
-        if key in in_docker_result:
-            # Service env variable:
-            socks_result[key] = value
         if key in deployment_set_keys:
-            # Deployment template variable:
+            # Copy over Deployment-set env variables:
             in_docker_result[key] = value
             socks_result[key] = value
+        for service_name in service_names:
+            # Copy over Service env variables to SOCKS variant:
+            if key.startswith(service_name + "_") and (
+                key.endswith("_ADDR") or key.endswith("_PORT") or
+                key.endswith("_PROTO") or key.endswith("_HOST") or
+                key.endswith("_TCP")
+            ):
+                socks_result[key] = value
     return in_docker_result, socks_result
 
 
