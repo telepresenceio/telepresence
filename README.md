@@ -4,7 +4,7 @@
 
 ## Demo
 
-<script type="text/javascript" src="https://asciinema.org/a/109183.js" id="asciicast-109183" async></script>
+[![asciicast](https://asciinema.org/a/109183.png)](https://asciinema.org/a/109183)
 
 ## Telepresence: local code in a remote Kubernetes cluster
 
