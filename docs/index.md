@@ -364,7 +364,34 @@ Here are some tutorials for various languages and frameworks:
 
 ## What Telepresence proxies
 
-Telepresence currently proxies the following:
+### `--run-shell`
+
+Telepresence currently proxies the following when using `--run-shell`:
+
+* The [special environment variables](https://kubernetes.io/docs/user-guide/services/#environment-variables) that expose the addresses of `Service` instances.
+  E.g. `REDIS_MASTER_SERVICE_HOST`.
+* The standard [DNS entries for services](https://kubernetes.io/docs/user-guide/services/#dns).
+  E.g. `redis-master` and `redis-master.default.svc.cluster.local` will resolve to a working IP address.
+  These will work regardless of whether they existed when the proxy started.
+* TCP connections to other `Service` instances, whether or not they existed when the proxy was started.
+* Any additional environment variables that a normal pod would have, with the exception of a few environment variables that are different in the local environment.
+  E.g. UID and HOME.
+* TCP connections to any hostname/port; all but `localhost` will be routed via Kubernetes.
+  Typically this is useful for accessing cloud resources, e.g. a AWS RDS database.
+* TCP connections *from* Kubernetes to your local code, for ports specified on the command line.
+
+Currently unsupported:
+
+* Environment variables for `Service` instances created *after* Telepresence is started.
+  This is the behavior of pods in general, of course.
+* SRV DNS records matching `Services`, e.g. `_http._tcp.redis-master.default`.
+* UDP messages in any direction.
+* `/var/run/secrets/kubernetes.io` credentials (used to the [access the Kubernetes( API](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#accessing-the-api-from-a-pod)).
+
+### `--docker-run`
+
+In general `--docker-run` doesn't proxy quite as much as `--run-shell`.
+Telepresence currently proxies the following when using `--docker-run`:
 
 * The [special environment variables](https://kubernetes.io/docs/user-guide/services/#environment-variables) that expose the addresses of `Service` instances.
   E.g. `REDIS_MASTER_SERVICE_HOST`.
