@@ -374,8 +374,7 @@ Telepresence currently proxies the following when using `--run-shell`:
   E.g. `redis-master` and `redis-master.default.svc.cluster.local` will resolve to a working IP address.
   These will work regardless of whether they existed when the proxy started.
 * TCP connections to other `Service` instances, whether or not they existed when the proxy was started.
-* Any additional environment variables that a normal pod would have, with the exception of a few environment variables that are different in the local environment.
-  E.g. UID and HOME.
+* Any additional environment variables that the `Deployment` explicitly configured for the pod.
 * TCP connections to any hostname/port; all but `localhost` will be routed via Kubernetes.
   Typically this is useful for accessing cloud resources, e.g. a AWS RDS database.
 * TCP connections *from* Kubernetes to your local code, for ports specified on the command line.
@@ -399,8 +398,7 @@ Telepresence currently proxies the following when using `--docker-run`:
 * The standard [DNS entries for services](https://kubernetes.io/docs/user-guide/services/#dns).
   E.g. `redis-master` and `redis-master.default.svc.cluster.local` will resolve to a working IP address.
 * TCP connections to other `Service` instances that existed when the proxy was started.
-* Any additional environment variables that a normal pod would have, with the exception of a few environment variables that are different in the local environment.
-  E.g. UID and HOME.
+* Any additional environment variables that the `Deployment` explicitly configured for the pod.
 * TCP connections to specific hostname/port combinations specified on the command line.
   Typically this would be used for cloud resources, e.g. a AWS RDS database.
 * TCP connections *from* Kubernetes to your local code, for ports specified on the command line.
@@ -437,6 +435,12 @@ Some alternatives to Telepresence:
   This is a somewhat slow process, and you won't be able to do the quick debug cycle you get from running code locally.
   
 ## Changelog
+
+### 0.20 (unreleased)
+
+Bug fixes:
+
+* Telepresence only copies environment variables explicitly configured in the `Deployment`, rather than copying all environment variables.
 
 ### 0.19 (March 24, 2017)
 
