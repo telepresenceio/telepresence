@@ -8,7 +8,13 @@ abstractions.
 
 from json import loads
 from os import chown, rename
-from subprocess import Popen, check_output, check_call, CalledProcessError
+from subprocess import (
+    Popen,
+    check_output,
+    check_call,
+    CalledProcessError,
+    TimeoutExpired,
+)
 from sys import argv, exit
 import time
 
@@ -295,8 +301,19 @@ def connect(
         p = Popen(["kubectl", "port-forward", remote_info.pod_name, str(port)])
         processes.append(p)
 
-    time.sleep(5)
     return processes
+
+
+def killall(processes):
+    for p in processes:
+        if p.exitcode is None:
+            p.terminate()
+    for p in processes:
+        try:
+            p.wait(timeout=1)
+        except TimeoutExpired:
+            p.kill()
+            p.wait()
 
 
 def main(
@@ -330,9 +347,20 @@ def main(
     )
 
     # write docker envfile, which tells CLI we're ready:
+    time.sleep(5)
     write_env(remote_info, uid)
-    for p in processes:
-        p.wait()
+
+    # Now, poll processes; if one dies kill them all and restart them:
+    while True:
+        for p in processes:
+            code = p.poll()
+            if code is not None:
+                killall(processes)
+                processes = connect(
+                    remote_info, local_exposed_ports, expose_host,
+                    custom_proxied_hosts
+                )
+                break
 
 
 if __name__ == '__main__':
