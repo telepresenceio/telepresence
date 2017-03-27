@@ -281,7 +281,7 @@ spec:
         image: examplecom/servicename:1.0.2
         ports:
         - containerPort: 8080
-      - env:
+        env:
         - name: YOUR_DATABASE_HOST
           value: somewhere.someplace.cloud.example.com
 ```
@@ -316,7 +316,7 @@ spec:
         image: datawire/telepresence-k8s:{{ site.data.version.version }}  # <-- new image
         ports:
         - containerPort: 8080
-      - env:
+        env:
         - name: YOUR_DATABASE_HOST
           value: somewhere.someplace.cloud.example.com
 ```
