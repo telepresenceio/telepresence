@@ -10,6 +10,10 @@ Telepresence allows you to run your code locally while still:
 
 Please [file bugs and feature requests](https://github.com/datawire/telepresence/issues) or come [talk to us on Gitter](http://gitter.im/datawire/telepresence).
 
+## Demo
+
+<script type="text/javascript" src="https://asciinema.org/a/109183.js" id="asciicast-109183" async></script>
+
 ## Telepresence makes development faster
 
 Let's assume you have a web service which listens on port 8080, and has a Dockerfile which gets built to an image called `examplecom/servicename`.
