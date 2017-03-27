@@ -207,8 +207,17 @@ def ssh(args):
     Returns Popen object.
     """
     return Popen([
-        "sshpass", "-phello", "ssh", "-q", "-oStrictHostKeyChecking=no",
-        "root@localhost", "-N"
+        # Password is hello (see remote/Dockerfile):
+        "sshpass", "-phello", "ssh",
+        # SSH with no warnings:
+        "-q",
+        # Don't validate host key:
+        "-oStrictHostKeyChecking=no",
+        # Ping once a second; after three retries will disconnect:
+        "-oServerAliveInterval=1",
+        # No shell:
+        "-N"
+        "root@localhost",
     ] + args)
 
 
