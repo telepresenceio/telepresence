@@ -14,7 +14,7 @@ One of the areas of complexity is setting up a productive development environmen
 * [Google Container Engine](https://cloud.google.com/container-engine/)
 * [Docker](https://www.docker.com)
 * [Telepresence](https://www.datawire.io/telepresence/)
-* PHP and Redis
+* [PHP](http://www.php.net/) and [Redis](https://redis.io/)
 
 ## Prerequisites and setup
 
@@ -165,6 +165,10 @@ Note: If you're on Mac OS X and this doesn't work, make sure that your directory
 ### Behind the scenes
 
 What's going on behind the scenes? Your incoming request goes to the load balancer. The load balancer is configured to route requests (via a [label](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/)) to the Telepresence proxy. The Telepresence proxy sends those requests to the local Telepresence client.
+
+### `run-shell`
+
+Telepresence also has an additional option, `--run-shell`, which will spawn a separate shell process that proxies to the remote cluster. If you have a full local development environment, this is a great option since you can use your full set of tools without integrating it with Docker. In this tutorial, we used Docker to avoid setting up a PHP toolchain.
 
 ## Additional Resources
 
