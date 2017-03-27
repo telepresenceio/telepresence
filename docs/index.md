@@ -10,6 +10,10 @@ Telepresence allows you to run your code locally while still:
 
 Please [file bugs and feature requests](https://github.com/datawire/telepresence/issues) or come [talk to us on Gitter](http://gitter.im/datawire/telepresence).
 
+## Demo
+
+<script type="text/javascript" src="https://asciinema.org/a/109183.js" id="asciicast-109183" async></script>
+
 ## Telepresence makes development faster
 
 Let's assume you have a web service which listens on port 8080, and has a Dockerfile which gets built to an image called `examplecom/servicename`.
@@ -105,7 +109,7 @@ Then move telepresence to somewhere in your `$PATH`, e.g.:
 mv telepresence /usr/local/bin
 ```
 
-If you want to proxy normal local processes, rather than just local Docker containers, you'll also need to install a tool called `torsocks`.
+If you want to proxy normal local processes, rather than just local Docker containers, you'll also need to install a tool called `torsocks` (v2.1.0 or later).
 
 On OS X:
 
@@ -113,7 +117,7 @@ On OS X:
 $ brew install torsocks
 ```
 
-On Ubuntu:
+On Ubuntu 16.04 or later:
 
 ```console
 $ sudo apt install --no-install-recommends torsocks
@@ -129,9 +133,6 @@ In the next section we'll discuss using Telepresence with an existing `Deploymen
 To get started we'll use `telepresence --new-deployment quickstart` to create a new `Deployment` and matching `Service`.
 The client will connect to the remote Kubernetes cluster via that `Deployment` and then run a local Docker container that is proxied into the remote cluster.
 You'll then use the `--run-shell` argument to start a shell that is proxied to the remote Kubernetes cluster.
-
-**IMPORTANT:** `--run-shell` currently doesn't work on OS X.
-Use the `--docker-run` command instead, [documented below](#proxying-docker-containers).
 
 Let's start a `Service` and `Deployment` in Kubernetes, and wait until it's up and running.
 We'll check the current Kubernetes context and then start a new pod:
@@ -280,7 +281,7 @@ spec:
         image: examplecom/servicename:1.0.2
         ports:
         - containerPort: 8080
-      - env:
+        env:
         - name: YOUR_DATABASE_HOST
           value: somewhere.someplace.cloud.example.com
 ```
@@ -315,7 +316,7 @@ spec:
         image: datawire/telepresence-k8s:{{ site.data.version.version }}  # <-- new image
         ports:
         - containerPort: 8080
-      - env:
+        env:
         - name: YOUR_DATABASE_HOST
           value: somewhere.someplace.cloud.example.com
 ```
@@ -363,7 +364,33 @@ Here are some tutorials for various languages and frameworks:
 
 ## What Telepresence proxies
 
-Telepresence currently proxies the following:
+### `--run-shell`
+
+Telepresence currently proxies the following when using `--run-shell`:
+
+* The [special environment variables](https://kubernetes.io/docs/user-guide/services/#environment-variables) that expose the addresses of `Service` instances.
+  E.g. `REDIS_MASTER_SERVICE_HOST`.
+* The standard [DNS entries for services](https://kubernetes.io/docs/user-guide/services/#dns).
+  E.g. `redis-master` and `redis-master.default.svc.cluster.local` will resolve to a working IP address.
+  These will work regardless of whether they existed when the proxy started.
+* TCP connections to other `Service` instances, whether or not they existed when the proxy was started.
+* Any additional environment variables that the `Deployment` explicitly configured for the pod.
+* TCP connections to any hostname/port; all but `localhost` will be routed via Kubernetes.
+  Typically this is useful for accessing cloud resources, e.g. a AWS RDS database.
+* TCP connections *from* Kubernetes to your local code, for ports specified on the command line.
+
+Currently unsupported:
+
+* Environment variables for `Service` instances created *after* Telepresence is started.
+  This is the behavior of pods in general, of course.
+* SRV DNS records matching `Services`, e.g. `_http._tcp.redis-master.default`.
+* UDP messages in any direction.
+* `/var/run/secrets/kubernetes.io` credentials (used to the [access the Kubernetes( API](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#accessing-the-api-from-a-pod)).
+
+### `--docker-run`
+
+In general `--docker-run` doesn't proxy quite as much as `--run-shell`.
+Telepresence currently proxies the following when using `--docker-run`:
 
 * The [special environment variables](https://kubernetes.io/docs/user-guide/services/#environment-variables) that expose the addresses of `Service` instances.
   E.g. `REDIS_MASTER_SERVICE_HOST`.
@@ -371,8 +398,7 @@ Telepresence currently proxies the following:
 * The standard [DNS entries for services](https://kubernetes.io/docs/user-guide/services/#dns).
   E.g. `redis-master` and `redis-master.default.svc.cluster.local` will resolve to a working IP address.
 * TCP connections to other `Service` instances that existed when the proxy was started.
-* Any additional environment variables that a normal pod would have, with the exception of a few environment variables that are different in the local environment.
-  E.g. UID and HOME.
+* Any additional environment variables that the `Deployment` explicitly configured for the pod.
 * TCP connections to specific hostname/port combinations specified on the command line.
   Typically this would be used for cloud resources, e.g. a AWS RDS database.
 * TCP connections *from* Kubernetes to your local code, for ports specified on the command line.
@@ -409,6 +435,32 @@ Some alternatives to Telepresence:
   This is a somewhat slow process, and you won't be able to do the quick debug cycle you get from running code locally.
   
 ## Changelog
+
+### 0.20 (unreleased)
+
+Bug fixes:
+
+* Telepresence only copies environment variables explicitly configured in the `Deployment`, rather than copying all environment variables.
+
+### 0.19 (March 24, 2017)
+
+Bug fixes:
+
+* Fixed another issue with `--run-shell` on OS X.
+
+### 0.18 (March 24, 2017)
+
+Features:
+
+* Support `--run-shell` on OS X, allowing local processes to be proxied.
+* Kubernetes-side Docker image is now smaller.
+  ([#61](https://github.com/datawire/telepresence/issues/61))
+
+Bug fixes:
+  
+* When using `--run-shell`, allow access to the local host.
+  Thanks to Jean-Paul Calderone for the bug report.
+  ([#58](https://github.com/datawire/telepresence/issues/58))
 
 ### 0.17 (March 21, 2017)
 

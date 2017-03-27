@@ -21,6 +21,7 @@ import socket
 import webbrowser
 
 from functools import wraps
+from shutil import rmtree, copy
 from subprocess import check_output, Popen, CalledProcessError, check_call
 from tempfile import mkdtemp, mkstemp, NamedTemporaryFile
 from time import sleep, time
@@ -49,7 +50,15 @@ else:
     def fdopen(fd, mode):
         return os.fdopen(fd, mode, encoding="utf-8")
 
-__version__ = "0.17"
+# Don't modify next line without modifying corresponding line in
+# .bumpversion.cfg:
+__version__ = "0.19"
+
+# Test runs can override version so we use specific custom Docker images:
+if os.environ.get("TELEPRESENCE_VERSION") is not None:
+    __version__ = os.environ["TELEPRESENCE_VERSION"]
+
+REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
 
 def random_name():
@@ -309,7 +318,7 @@ class Deployment(object):
                     [
                         ( "/spec/replicas", 1 ),
                         ( "/spec/template/spec/containers/0/image",
-                          "datawire/telepresence-k8s:%s" % __version__ )
+                          "%s/telepresence-k8s:%s" % (REGISTRY, __version__ ))
                     ]
                 )
 
@@ -431,7 +440,7 @@ def deployment_for_args(runner, args):
 
         starter = [
             "kubectl", "run", "--generator", "deployment/v1beta1",
-            deployment_name, "--image=datawire/telepresence-k8s:" + __version__
+            deployment_name, "--image=%s/telepresence-k8s:" % (REGISTRY, __version__)
         ]
 
         stopper = [ 
@@ -538,8 +547,37 @@ def start_proxy(runner, deployment, args):
 TORSOCKS_CONFIG = """
 # Allow process to listen on ports:
 AllowInbound 1
+# Allow process to connect to localhost:
+AllowOutboundLocalhost 1
+# Connect to custom port for SOCKS server:
 TorPort {}
 """
+
+
+def sip_workaround():
+    """
+    Workaround System Integrity Protection.
+
+    Newer OS X don't allow injecting libraries into binaries in /bin, /sbin and
+    /usr. We therefore make a copy of them and modify $PATH to point at their
+    new location. It's only ~100MB so this should be pretty fast!
+    """
+    protected = {"/bin", "/sbin", "/usr/sbin", "/usr/bin"}
+    # Remove protected paths from $PATH:
+    paths = [p for p in os.environ["PATH"].split(":") if p not in protected]
+    # Add temp dir
+    bin_dir = mkdtemp()
+    paths.insert(0, bin_dir)
+    atexit.register(rmtree, bin_dir)
+    for directory in protected:
+        for file in os.listdir(directory):
+            try:
+                copy(os.path.join(directory, file), bin_dir)
+            except IOError:
+                continue
+            os.chmod(os.path.join(bin_dir, file), 0o775)
+    # Return new $PATH
+    return ":".join(paths)
 
 
 def run_local_command(runner, args, out_env, container_id):
@@ -553,6 +591,8 @@ def run_local_command(runner, args, out_env, container_id):
         env = os.environ.copy()
         env.update(dict(line.split("=", 1) for line in f.read().splitlines()))
         env["PS1"] = "[TELEPRESENCE] " + env.get("PS1", "$ ")
+    if sys.platform == "darwin":
+        env["PATH"] = sip_workaround()
     # Create custom torsocks.conf, since some options we want (in particular,
     # port) aren't accessible via env variables in older versions of torconf:
     with NamedTemporaryFile(mode="w+", delete=False) as tor_conffile:
@@ -567,7 +607,9 @@ def run_local_command(runner, args, out_env, container_id):
             runner.get_output(["kubectl", "config", "current-context"]).strip()
         )
     )
-    p = Popen(["torsocks", "/bin/bash", "-i"], env=env)
+    # Make sure we use "bash", no "/bin/bash", so we get the copied version on
+    # OS X:
+    p = Popen(["torsocks", "bash"], env=env)
 
     def terminate_if_alive():
         os.remove(tor_conffile.name)
@@ -575,7 +617,8 @@ def run_local_command(runner, args, out_env, container_id):
             p.terminate()
 
     atexit.register(terminate_if_alive)
-    p.wait()
+    exit_code = p.wait()
+    sys.exit(exit_code)
 
 
 def run_docker_command(runner, args, out_env, container_id):
@@ -613,7 +656,8 @@ def run_docker_command(runner, args, out_env, container_id):
             stop_container(runner, cid)
 
     atexit.register(terminate_if_alive)
-    p.wait()
+    exit_code = p.wait()
+    sys.exit(exit_code)
 
 
 BUG_REPORT_TEMPLATE = u"""\
@@ -684,8 +728,8 @@ class handle_unexpected_errors(object):
                 print_exc(file=errorf)
                 error = errorf.getvalue()
                 print(
-                    "\nLooks like there's a bug in our code. Sorry about that! "
-                    "You may able to find more details in the logs "
+                    "\nLooks like there's a bug in our code. Sorry about that!"
+                    " You may able to find more details in the logs "
                     "(which are written to telepresence.log by default).\n\n"
                     "Here's the traceback:\n\n" + error + "\n"
                 )
@@ -732,7 +776,7 @@ def main():
         # Make sure we can access Kubernetes:
         try:
             check_output(["kubectl", "cluster-info"])
-        except CalledProcessError as e:
+        except (CalledProcessError, OSError, IOError) as e:
             sys.stderr.write("Error accessing Kubernetes: {}\n".format(e))
             raise SystemExit(1)
         # Make sure we're using local Docker:
@@ -748,18 +792,15 @@ def main():
         # Make sure we can access Docker:
         try:
             check_output(maybe_sudo(["docker", "version"]))
-        except CalledProcessError as e:
+        except (CalledProcessError, OSError, IOError) as e:
             sys.stderr.write("Error running Docker: {}\n".format(e))
             raise SystemExit(1)
         # Make sure we have torsocks:
         if args.runshell:
-            if not sys.platform.startswith("linux"):
-                sys.stderr.write("--run currently only works on Linux.\n")
-                raise SystemExit(1)
             try:
-                check_output(maybe_sudo(["torsocks", "true"]))
+                check_output(["which", "torsocks"])
             except CalledProcessError as e:
-                sys.stderr.write("Error running torsocks: {}\n".format(e))
+                sys.stderr.write("Please install torsocks (v2.1 or later)\n")
                 raise SystemExit(1)
 
         deployment = deployment_for_args(runner, args)

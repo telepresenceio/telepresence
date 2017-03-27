@@ -7,23 +7,28 @@ abstractions.
 """
 
 from json import loads
-from os import setuid, environ, rename
+from os import setuid, rename
 from subprocess import Popen, check_output, check_call, CalledProcessError
 from sys import argv, exit
 import time
 
 
-def _get_service_keys(environment):
+def _get_service_names(environment):
+    """Return names of Services, as used in env variable names."""
     # XXX duplicated in remote-telepresence
     # XXX also check for TCPness.
     # Order matters for service_keys, need it to be consistent with port
     # forwarding order in remote container.
-    result = [key for key in environment if key.endswith("_SERVICE_HOST")]
-    result.sort(key=lambda s: s[:-len("_SERVICE_HOST")])
+    result = [
+        key[:-len("_SERVICE_HOST")] for key in environment
+        if key.endswith("_SERVICE_HOST")
+    ]
+    result.sort()
     return result
 
 
 def get_remote_env(pod_name):
+    """Get the environment variables in the remote pod."""
     env = str(check_output(["kubectl", "exec", pod_name, "env"]), "utf-8")
     result = {}
     for line in env.splitlines():
@@ -32,31 +37,42 @@ def get_remote_env(pod_name):
     return result
 
 
-def get_env_variables(pod_name):
-    """Generate environment variables that match kubernetes."""
+def get_deployment_set_keys(deployment_name):
+    """Get the set of environment variables names set by the Deployment."""
+    deployment = loads(
+        str(
+            check_output([
+                "kubectl", "get", "deployment", "-o", "json", deployment_name
+            ]), "utf-8"
+        )
+    )
+    container = [
+        c for c in deployment["spec"]["template"]["spec"]["containers"]
+        if "telepresence-k8s" in c["image"]
+    ][0]
+    return set([var["name"] for var in container.get("env", [])])
+
+
+def get_env_variables(pod_name, deployment_name):
+    """
+    Generate environment variables that match kubernetes.
+
+    For both Docker and non-Docker we copy environment variables explicitly set
+    in the Deployment template.
+
+    For Docker we make modified versions of the Servic env variables. For
+    non-Docker (SOCKS) we just copy the Service env variables as is.
+    """
     remote_env = get_remote_env(pod_name)
-    filter_keys = set()
+    deployment_set_keys = get_deployment_set_keys(deployment_name)
+    service_names = _get_service_names(remote_env)
     # ips proxied via docker, so need to modify addresses:
     in_docker_result = {}
-    # ips proxied via SOCKS, no modification:
-    socks_result = {
-        key: value
-        for (key, value) in remote_env.items() if key not in environ
-    }
     # XXX we're recreating the port generation logic
     i = 0
-    for i, service_key in enumerate(_get_service_keys(remote_env)):
+    for i, name in enumerate(service_names):
         port = str(2000 + i)
         ip = "127.0.0.1"
-        # XXX bad abstraction
-        name = service_key[:-len("_SERVICE_HOST")]
-        # XXX ugh
-        filter_prefix = "{}_PORT_{}_TCP".format(
-            name, remote_env[name + "_SERVICE_PORT"]
-        )
-        filter_keys |= set(
-            [filter_prefix + s for s in ("", "_PROTO", "_PORT", "_ADDR")]
-        )
         # XXX will be wrong for UDP
         full_address = "tcp://{}:{}".format(ip, port)
         in_docker_result[name + "_SERVICE_HOST"] = ip
@@ -68,23 +84,27 @@ def get_env_variables(pod_name):
         in_docker_result[port_name + "_PROTO"] = "tcp"
         in_docker_result[port_name + "_PORT"] = port
         in_docker_result[port_name + "_ADDR"] = ip
+    socks_result = {}
     for key, value in remote_env.items():
-        # We don't want env variables that are service addresses (did those
-        # above) nor those that are already present in this container. XXX
-        # we're getting env variables from telepresence that are
-        # image-specific, not coming from the Deployment. figure out way to
-        # differentiate.
-        ok = (
-            key not in in_docker_result and key not in environ and
-            key not in filter_keys
-        )
-        if ok:
+        if key in deployment_set_keys:
+            # Copy over Deployment-set env variables:
             in_docker_result[key] = value
+            socks_result[key] = value
+        for service_name in service_names:
+            # Copy over Service env variables to SOCKS variant:
+            if key.startswith(service_name + "_") and (
+                key.endswith("_ADDR") or key.endswith("_PORT") or
+                key.endswith("_PROTO") or key.endswith("_HOST") or
+                key.endswith("_TCP")
+            ):
+                socks_result[key] = value
     return in_docker_result, socks_result
 
 
-def write_env(pod_name):
-    for_docker_env, for_local_env = get_env_variables(pod_name)
+def write_env(pod_name, deployment_name):
+    for_docker_env, for_local_env = get_env_variables(
+        pod_name, deployment_name
+    )
     with open("/output/unproxied.env.tmp", "w") as f:
         for key, value in for_local_env.items():
             f.write("{}={}\n".format(key, value))
@@ -266,7 +286,7 @@ def main(
     #
     # write docker envfile, which tells CLI we're ready:
     setuid(uid)
-    write_env(pod_name)
+    write_env(pod_name, deployment_name)
     for p in processes:
         p.wait()
 
