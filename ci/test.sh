@@ -3,5 +3,5 @@ set -e
 virtualenv/bin/flake8 local/*.py remote/*.py cli/telepresence
 cli/telepresence --version
 cli/telepresence --help
-[ -z TELEPRESENCE_TESTS ] && TELEPRESENCE_TESTS="tests remote/test_socks.py"
+[ -z $TELEPRESENCE_TESTS ] && export TELEPRESENCE_TESTS="tests remote/test_socks.py"
 env PATH=$PWD/cli/:$PATH virtualenv/bin/py.test -v -s --fulltrace $TELEPRESENCE_TESTS
