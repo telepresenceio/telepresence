@@ -32,7 +32,7 @@ spec:
         image: {registry}/telepresence-k8s:{version}
         env:
         - name: MYENV
-          value: value
+          value: hello
 """
 
 

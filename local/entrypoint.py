@@ -117,9 +117,7 @@ def get_env_variables(remote_info):
 
 
 def write_env(remote_info):
-    for_docker_env, for_local_env = get_env_variables(
-        remote_info.pod_name, remote_info.deployment_name
-    )
+    for_docker_env, for_local_env = get_env_variables(remote_info)
     with open("/output/unproxied.env.tmp", "w") as f:
         for key, value in for_local_env.items():
             f.write("{}={}\n".format(key, value))
