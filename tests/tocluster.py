@@ -94,7 +94,7 @@ def main():
     # make sure exceptions cause exit:
     sys.excepthook = handle_error
 
-    if sys.argv[1] == "--disconnect":
+    if len(sys.argv) > 2 and sys.argv[1] == "--disconnect":
         del sys.argv[1]
         disconnect()
 
