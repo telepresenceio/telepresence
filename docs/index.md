@@ -436,7 +436,7 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
-### 0.21 (unreleased)
+### 0.21 (March 28, 2017)
 
 Bug fixes:
 
