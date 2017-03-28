@@ -200,13 +200,17 @@ def get_remote_info(deployment_name):
         format(deployment_name)
     )
 
+def popen_command(argv):
+    time.sleep(1)
+    print("popen: %s" % argv)
+    return Popen(argv)
 
 def ssh(args):
     """Connect to remote pod via SSH.
 
     Returns Popen object.
     """
-    return Popen([
+    return popen_command([
         "sshpass", "-phello", "ssh", "-q", "-oStrictHostKeyChecking=no",
         "root@localhost", "-N"
     ] + args)
@@ -271,7 +275,7 @@ def main(
 
     # forward remote port to here, by tunneling via remote SSH server:
     processes.append(
-        Popen(["kubectl", "port-forward", remote_info.pod_name, "22"])
+        popen_command(["kubectl", "port-forward", remote_info.pod_name, "22"])
     )
     wait_for_ssh()
 
