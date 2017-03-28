@@ -31,9 +31,6 @@ import dpath
 import yaml
 import pprint
 
-# LOCAL_IMAGE_NAME = "datawire/telepresence-local:" + __version__,
-LOCAL_IMAGE_NAME = "telepresence:flynn-0.17"
-
 if sys.version_info.major == 2:
     from urllib import quote_plus
     from StringIO import StringIO
@@ -58,8 +55,13 @@ __version__ = "0.19"
 if os.environ.get("TELEPRESENCE_VERSION") is not None:
     __version__ = os.environ["TELEPRESENCE_VERSION"]
 
+LOCAL_VERSION = os.environ.get("TELEPRESENCE_LOCAL_VERSION", __version__)
+K8S_VERSION = os.environ.get("TELEPRESENCE_K8S_VERSION", __version__)
+
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
+LOCAL_IMAGE_NAME = "%s/telepresence-local:%s" % (REGISTRY, LOCAL_VERSION)
+K8S_IMAGE_NAME = "%s/telepresence-k8s:%s" % (REGISTRY, K8S_VERSION)
 
 def random_name():
     """Return a random name for a container."""
@@ -318,7 +320,7 @@ class Deployment(object):
                     [
                         ( "/spec/replicas", 1 ),
                         ( "/spec/template/spec/containers/0/image",
-                          "%s/telepresence-k8s:%s" % (REGISTRY, __version__ ))
+                          K8S_IMAGE_NAME )
                     ]
                 )
 
@@ -440,7 +442,7 @@ def deployment_for_args(runner, args):
 
         starter = [
             "kubectl", "run", "--generator", "deployment/v1beta1",
-            deployment_name, "--image=%s/telepresence-k8s:" % (REGISTRY, __version__)
+            deployment_name, "--image=%s" % K8S_IMAGE_NAME
         ]
 
         stopper = [ 
