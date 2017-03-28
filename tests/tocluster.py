@@ -70,33 +70,9 @@ def check_custom_env():
         assert os.environ[key] == value
 
 
-def disconnect():
-    # Kill off sshd server process the SSH client is talking to, forcing
-    # disconnection:
-    env = os.environ.copy()
-    # Don't want torsocks messing with kubectl:
-    for name in ["LD_PRELOAD", "DYLD_INSERT_LIBRARIES"]:
-        if name in env:
-            del env[name]
-    # We can't tell if this succeeded, sadly, since it kills ssh session used
-    # by kubectl exec!
-    run([
-        "kubectl", "exec",
-        "--container=" + os.environ["TELEPRESENCE_CONTAINER"],
-        os.environ["TELEPRESENCE_POD"], "--", "/bin/sh", "-c",
-        r"kill $(ps xa | grep 'sshd: root' | " +
-        r"sed 's/ *\([0-9][0-9]*\).*/\1/')"
-    ],
-        env=env)
-
-
 def main():
     # make sure exceptions cause exit:
     sys.excepthook = handle_error
-
-    if len(sys.argv) > 2 and sys.argv[1] == "--disconnect":
-        del sys.argv[1]
-        disconnect()
 
     # run tests
     host, port = check_urls()

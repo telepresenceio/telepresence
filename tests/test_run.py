@@ -121,10 +121,11 @@ class EndToEndTests(TestCase):
             cwd=str(DIRECTORY),
             stdin=PIPE,
         )
-        p.stdin.write(b"python3 tocluster.py --disconnect\n")
+        p.stdin.write(b"python3 disconnect.py\n")
         p.stdin.flush()
         p.stdin.close()
         exit_code = p.wait()
+        # Exit code 3 means proxy exited:
         assert exit_code == 3
 
     # XXX write test for IP-based routing, not just DNS-based routing!
