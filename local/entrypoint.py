@@ -36,6 +36,7 @@ class RemoteInfo(object):
         self.container_config = [
             c for c in cs if "telepresence-k8s" in c["image"]
         ][0]
+        self.container_name = self.container_config["name"]
 
 
 def _get_service_names(environment):
@@ -57,7 +58,7 @@ def get_remote_env(remote_info):
     env = str(
         check_output([
             "kubectl", "exec", remote_info.pod_name, "--container",
-            remote_info.container_config["name"], "env"
+            remote_info.container_name, "env"
         ]), "utf-8"
     )
     result = {}
@@ -226,7 +227,7 @@ def ssh(args):
         # Ping once a second; after three retries will disconnect:
         "-oServerAliveInterval=1",
         # No shell:
-        "-N"
+        "-N",
         "root@localhost",
     ] + args)
 
@@ -355,7 +356,9 @@ def main(
         for p in processes:
             code = p.poll()
             if code is not None:
+                print("A subprocess died, killing all processes...")
                 killall(processes)
+                print("Restarting all processes...")
                 processes = connect(
                     remote_info, local_exposed_ports, expose_host,
                     custom_proxied_hosts
