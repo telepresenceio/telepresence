@@ -179,8 +179,7 @@ def maybe_sudo(args):
 def stop_proxy(runner, container_name):
     container_id = runner.get_output(
         maybe_sudo([
-            "docker", "ps", "-q", "--filter",
-            "name=" + container_name
+            "docker", "ps", "-q", "--filter", "name=" + container_name
         ])
     ).strip()
     if container_id:
@@ -330,16 +329,20 @@ def wait_for_exit(runner, process, container_name):
         exit_code = process.poll()
         if exit_code is not None:
             sys.exit(exit_code)
-        alive = runner.get_output(
-            maybe_sudo([
-                "docker", "ps", "-q", "--filter",
-                "name=" + container_name
-            ])
+        alive = unicode(
+            check_output(
+                maybe_sudo([
+                    "docker", "ps", "-q", "--filter", "name=" + container_name
+                ])
+            ), "utf-8"
         ).strip()
         if not alive:
             if sys.stderr.isatty:
-                print("Proxy to Kubernetes exited. This is typically due to a"
-                      " lost connection.", file=sys.stderr)
+                print(
+                    "Proxy to Kubernetes exited. This is typically due to a"
+                    " lost connection.",
+                    file=sys.stderr
+                )
             sys.exit(3)
         sleep(0.1)
 
@@ -410,7 +413,7 @@ def run_docker_command(runner, args, out_env, proxy_container_name):
     def terminate_if_alive():
         cid = runner.get_output(
             maybe_sudo([
-                "docker", "ps", "-q", "--notrunc", "--filter",
+                "docker", "ps", "-q", "--no-trunc", "--filter",
                 "label=telepresence-container=" + proxy_container_name
             ])
         ).strip()
