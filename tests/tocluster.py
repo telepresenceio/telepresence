@@ -6,9 +6,12 @@ This module will be run inside a container. To indicate success it will print
 """
 
 import os
+import ssl
 import sys
-from subprocess import run, check_output
+from subprocess import run
 from traceback import print_exception
+from urllib.request import urlopen
+from urllib.error import HTTPError
 
 
 def handle_error(type, value, traceback):
@@ -19,8 +22,15 @@ def handle_error(type, value, traceback):
 def check_kubernetes_api_url(url):
     # XXX Perhaps we can have a more robust test by starting our own service.
     print("Retrieving " + url)
-    assert str(check_output(["curl", "-k", "--max-time", "3", url]), "utf-8"
-               ).strip() == "Unauthorized"
+    context = ssl._create_unverified_context()
+    try:
+        urlopen(url, timeout=5, context=context)
+    except HTTPError as e:
+        # Unauthorized (401) is default response code for Kubernetes API
+        # server.
+        if e.code == 401:
+            return
+        raise
 
 
 def check_urls():
