@@ -307,7 +307,7 @@ def connect(
 
 def killall(processes):
     for p in processes:
-        if p.exitcode is None:
+        if p.poll() is None:
             p.terminate()
     for p in processes:
         try:
