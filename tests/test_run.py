@@ -107,8 +107,8 @@ class EndToEndTests(TestCase):
         # accident.
         assert b"cuttlefish" in result
 
-    def test_reconnect(self):
-        """Telepresence reconnects if the connection is lost."""
+    def test_disconnect(self):
+        """Telepresence exits if the connection is lost."""
         p = Popen(
             args=[
                 "telepresence",
@@ -125,6 +125,6 @@ class EndToEndTests(TestCase):
         p.stdin.flush()
         p.stdin.close()
         exit_code = p.wait()
-        assert exit_code == 0
+        assert exit_code == 3
 
     # XXX write test for IP-based routing, not just DNS-based routing!
