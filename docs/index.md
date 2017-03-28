@@ -385,6 +385,7 @@ Currently unsupported:
   This is the behavior of pods in general, of course.
 * SRV DNS records matching `Services`, e.g. `_http._tcp.redis-master.default`.
 * UDP messages in any direction.
+* Access to volumes, including those for `Secret` and `ConfigMap` Kubernetes objects.
 * `/var/run/secrets/kubernetes.io` credentials (used to the [access the Kubernetes( API](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#accessing-the-api-from-a-pod)).
 
 ### `--docker-run`
@@ -408,8 +409,6 @@ Currently unsupported:
 * TCP connections, environment variables, DNS records for `Service` instances created *after* Telepresence is started.
 * SRV DNS records matching `Services`, e.g. `_http._tcp.redis-master.default`.
 * UDP messages in any direction.
-* For proxied addresses, only one destination per specific port number is currently supported.
-  E.g. you can't proxy `remote1.example.com:5432` and `remote2.example.com:5432` at the same time.
 * Access to volumes, including those for `Secret` and `ConfigMap` Kubernetes objects.
 * `/var/run/secrets/kubernetes.io` credentials (used to the [access the Kubernetes( API](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#accessing-the-api-from-a-pod)).
 
@@ -443,6 +442,10 @@ Bug fixes:
 * Telepresence exits when connection is lost to the Kubernetes cluster, rather than hanging.
 * Telepresence notices when the proxy container exits and shuts down.
   ([#24](https://github.com/datawire/telepresence/issues/24))
+* `--docker-run` now works with hard-coded ports.
+  ([#68](https://github.com/datawire/telepresence/issues/68))
+* `--proxy` can now proxy multiple destinations with the same port number.
+  ([#6](https://github.com/datawire/telepresence/issues/6))
 
 ### 0.20 (March 27, 2017)
 
