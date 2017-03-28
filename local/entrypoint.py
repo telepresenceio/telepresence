@@ -214,7 +214,6 @@ def get_remote_info(deployment_name):
     )
 
 def popen_command(argv):
-    time.sleep(1)
     print("popen: %s" % argv)
     return Popen(argv)
 
