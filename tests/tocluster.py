@@ -8,6 +8,7 @@ This module will be run inside a container. To indicate success it will print
 import os
 import ssl
 import sys
+from subprocess import run
 from traceback import print_exception
 from urllib.request import urlopen
 from urllib.error import HTTPError
@@ -16,9 +17,6 @@ from urllib.error import HTTPError
 def handle_error(type, value, traceback):
     print_exception(type, value, traceback, file=sys.stderr)
     raise SystemExit(3)
-
-
-sys.excepthook = handle_error
 
 
 def check_kubernetes_api_url(url):
@@ -35,21 +33,23 @@ def check_kubernetes_api_url(url):
         raise
 
 
-host = os.environ["KUBERNETES_SERVICE_HOST"]
-port = os.environ["KUBERNETES_SERVICE_PORT"]
-# Check environment variable based service lookup:
-check_kubernetes_api_url("https://{}:{}/".format(
-    host,
-    port,
-))
-# Check hostname lookup, both partial and full:
-check_kubernetes_api_url("https://kubernetes:{}/".format(port))
-check_kubernetes_api_url(
-    "https://kubernetes.default.svc.cluster.local:{}/".format(port)
-)
+def check_urls():
+    host = os.environ["KUBERNETES_SERVICE_HOST"]
+    port = os.environ["KUBERNETES_SERVICE_PORT"]
+    # Check environment variable based service lookup:
+    check_kubernetes_api_url("https://{}:{}/".format(
+        host,
+        port,
+    ))
+    # Check hostname lookup, both partial and full:
+    check_kubernetes_api_url("https://kubernetes:{}/".format(port))
+    check_kubernetes_api_url(
+        "https://kubernetes.default.svc.cluster.local:{}/".format(port)
+    )
+    return host, port
 
 
-def check_env():
+def check_env(host, port):
     # Check that other environment variable variants were created correctly:
     assert os.environ["KUBERNETES_PORT"] == "tcp://{}:{}".format(host, port)
     prefix = "KUBERNETES_PORT_{}_TCP".format(port)
@@ -70,9 +70,18 @@ def check_custom_env():
         assert os.environ[key] == value
 
 
-check_env()
+def main():
+    # make sure exceptions cause exit:
+    sys.excepthook = handle_error
 
-check_custom_env()
+    # run tests
+    host, port = check_urls()
+    check_env(host, port)
+    check_custom_env()
 
-# Exit successfully:
-sys.exit(0)
+    # Exit successfully:
+    sys.exit(0)
+
+
+if __name__ == '__main__':
+    main()

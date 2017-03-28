@@ -107,4 +107,25 @@ class EndToEndTests(TestCase):
         # accident.
         assert b"cuttlefish" in result
 
+    def test_disconnect(self):
+        """Telepresence exits if the connection is lost."""
+        p = Popen(
+            args=[
+                "telepresence",
+                "--new-deployment",
+                random_name(),
+                "--logfile",
+                "-",
+                "--run-shell",
+            ],
+            cwd=str(DIRECTORY),
+            stdin=PIPE,
+        )
+        p.stdin.write(b"python3 disconnect.py\n")
+        p.stdin.flush()
+        p.stdin.close()
+        exit_code = p.wait()
+        # Exit code 3 means proxy exited:
+        assert exit_code == 3
+
     # XXX write test for IP-based routing, not just DNS-based routing!
