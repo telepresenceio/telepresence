@@ -6,11 +6,9 @@ This module will be run inside a container. To indicate success it will print
 """
 
 import os
-import ssl
 import sys
+from subprocess import run, check_output
 from traceback import print_exception
-from urllib.request import urlopen
-from urllib.error import HTTPError
 
 
 def handle_error(type, value, traceback):
@@ -21,15 +19,8 @@ def handle_error(type, value, traceback):
 def check_kubernetes_api_url(url):
     # XXX Perhaps we can have a more robust test by starting our own service.
     print("Retrieving " + url)
-    context = ssl._create_unverified_context()
-    try:
-        urlopen(url, timeout=5, context=context)
-    except HTTPError as e:
-        # Unauthorized (401) is default response code for Kubernetes API
-        # server.
-        if e.code == 401:
-            return
-        raise
+    assert str(check_output(["curl", "-k", "--max-time", "3", url]), "utf-8"
+               ).strip() == "Unauthorized"
 
 
 def check_urls():
@@ -69,9 +60,33 @@ def check_custom_env():
         assert os.environ[key] == value
 
 
+def disconnect():
+    # Kill off sshd server process the SSH client is talking to, forcing
+    # disconnection:
+    env = os.environ.copy()
+    # Don't want torsocks messing with kubectl:
+    for name in ["LD_PRELOAD", "DYLD_INSERT_LIBRARIES"]:
+        if name in env:
+            del env[name]
+    # We can't tell if this succeeded, sadly, since it kills ssh session used
+    # by kubectl exec!
+    run([
+        "kubectl", "exec",
+        "--container=" + os.environ["TELEPRESENCE_CONTAINER"],
+        os.environ["TELEPRESENCE_POD"], "--", "/bin/sh", "-c",
+        r"kill $(ps xa | grep 'sshd: root' | " +
+        r"sed 's/ *\([0-9][0-9]*\).*/\1/')"
+    ],
+        env=env)
+
+
 def main():
     # make sure exceptions cause exit:
     sys.excepthook = handle_error
+
+    if sys.argv[1] == "--disconnect":
+        del sys.argv[1]
+        disconnect()
 
     # run tests
     host, port = check_urls()

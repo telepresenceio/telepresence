@@ -120,6 +120,10 @@ def get_env_variables(remote_info):
                 key.endswith("_TCP")
             ):
                 socks_result[key] = value
+    # Tell local process about the remote setup, useful for testing and
+    # debugging:
+    socks_result["TELEPRESENCE_POD"] = remote_info.pod_name
+    socks_result["TELEPRESENCE_CONTAINER"] = remote_info.container_name
     return in_docker_result, socks_result
 
 
@@ -358,12 +362,9 @@ def main(
             if code is not None:
                 print("A subprocess died, killing all processes...")
                 killall(processes)
-                print("Restarting all processes...")
-                processes = connect(
-                    remote_info, local_exposed_ports, expose_host,
-                    custom_proxied_hosts
-                )
-                break
+                # Unfortunatly torsocks doesn't deal well with connections
+                # being lost, so best we can do is shut down.
+                raise SystemExit(3)
 
 
 if __name__ == '__main__':

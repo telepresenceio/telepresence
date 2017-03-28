@@ -107,4 +107,24 @@ class EndToEndTests(TestCase):
         # accident.
         assert b"cuttlefish" in result
 
+    def test_reconnect(self):
+        """Telepresence reconnects if the connection is lost."""
+        p = Popen(
+            args=[
+                "telepresence",
+                "--new-deployment",
+                random_name(),
+                "--logfile",
+                "-",
+                "--run-shell",
+            ],
+            cwd=str(DIRECTORY),
+            stdin=PIPE,
+        )
+        p.stdin.write(b"python3 tocluster.py --disconnect\n")
+        p.stdin.flush()
+        p.stdin.close()
+        exit_code = p.wait()
+        assert exit_code == 0
+
     # XXX write test for IP-based routing, not just DNS-based routing!
