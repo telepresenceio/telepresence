@@ -176,10 +176,16 @@ def maybe_sudo(args):
         return args
 
 
-def stop_proxy(runner, container_id):
-    if sys.stderr.isatty():
-        print("Shutting proxy down...", file=sys.stderr)
-    runner.get_output(maybe_sudo(["docker", "stop", container_id]))
+def stop_proxy(runner, container_name):
+    container_id = runner.get_output(
+        maybe_sudo([
+            "docker", "ps", "-q", "--filter", "name=" + container_name
+        ])
+    ).strip()
+    if container_id:
+        if sys.stderr.isatty():
+            print("Shutting proxy down...", file=sys.stderr)
+        runner.get_output(maybe_sudo(["docker", "stop", container_id]))
 
 
 def stop_container(runner, container_id):
@@ -317,11 +323,35 @@ def sip_workaround():
     return ":".join(paths)
 
 
-def run_local_command(runner, args, out_env, container_id):
+def wait_for_exit(runner, process, container_name):
+    """Given Popen and container ID, wait for one of them to die."""
+    while True:
+        exit_code = process.poll()
+        if exit_code is not None:
+            sys.exit(exit_code)
+        alive = unicode(
+            check_output(
+                maybe_sudo([
+                    "docker", "ps", "-q", "--filter", "name=" + container_name
+                ])
+            ), "utf-8"
+        ).strip()
+        if not alive:
+            if sys.stderr.isatty:
+                print(
+                    "Proxy to Kubernetes exited. This is typically due to a"
+                    " lost connection.",
+                    file=sys.stderr
+                )
+            sys.exit(3)
+        sleep(0.1)
+
+
+def run_local_command(runner, args, out_env, proxy_container_name):
     """--run support, run command locally."""
     socks_port = int(
         runner.get_output(
-            maybe_sudo(["docker", "port", container_id, "9050/tcp"])
+            maybe_sudo(["docker", "port", proxy_container_name, "9050/tcp"])
         ).split(":")[-1]
     )
     with open(out_env, "r") as f:
@@ -354,11 +384,10 @@ def run_local_command(runner, args, out_env, container_id):
             p.terminate()
 
     atexit.register(terminate_if_alive)
-    exit_code = p.wait()
-    sys.exit(exit_code)
+    wait_for_exit(runner, p, proxy_container_name)
 
 
-def run_docker_command(runner, args, out_env, container_id):
+def run_docker_command(runner, args, out_env, proxy_container_name):
     """--run-docker support, run command via Docker."""
     # XXX argparse sucks need to switch to something else
     if args.docker_run_args and args.docker_run_args[0] == "--":
@@ -369,13 +398,13 @@ def run_docker_command(runner, args, out_env, container_id):
         "docker",
         "run",
         # Use network namespace of telepresence-local container:
-        "--net=container:" + container_id,
+        "--net=container:" + proxy_container_name,
         # Use environment variables written out from telepresence-local, to
         # match Kubernets:
         "--env-file={}".format(out_env),
         # Set a label so we can easily find this container later:
         "--label",
-        "telepresence-container=" + container_id,
+        "telepresence-container=" + proxy_container_name,
     ]) + args.docker_run_args
     # Don't want to capture stderr here, since user may want to interact with
     # this container, so we don't use runner.popen:
@@ -384,8 +413,8 @@ def run_docker_command(runner, args, out_env, container_id):
     def terminate_if_alive():
         cid = runner.get_output(
             maybe_sudo([
-                "docker", "ps", "-q", "--filter",
-                "label=telepresence-container=" + container_id
+                "docker", "ps", "-q", "--no-trunc", "--filter",
+                "label=telepresence-container=" + proxy_container_name
             ])
         ).strip()
         # May have already exited, in which case cid is empty:
@@ -393,8 +422,7 @@ def run_docker_command(runner, args, out_env, container_id):
             stop_container(runner, cid)
 
     atexit.register(terminate_if_alive)
-    exit_code = p.wait()
-    sys.exit(exit_code)
+    wait_for_exit(runner, p, proxy_container_name)
 
 
 BUG_REPORT_TEMPLATE = u"""\
@@ -539,20 +567,20 @@ def main():
             except CalledProcessError as e:
                 sys.stderr.write("Please install torsocks (v2.1 or later)\n")
                 raise SystemExit(1)
-        tempdir, container_id, proxy_popen = start_proxy(runner, args)
+        tempdir, proxy_container_name, proxy_popen = start_proxy(runner, args)
         # Wait for proxy container to write out env file, indicating we're good
         # to go:
         out_env = os.path.join(tempdir, "docker.env")
         while not os.path.exists(out_env):
             sleep(1)
         if args.docker_run_args is not None:
-            run_docker_command(runner, args, out_env, container_id)
+            run_docker_command(runner, args, out_env, proxy_container_name)
         else:
             run_local_command(
                 runner,
                 args,
                 os.path.join(tempdir, "unproxied.env"),
-                container_id,
+                proxy_container_name,
             )
 
     go()

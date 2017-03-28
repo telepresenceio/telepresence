@@ -7,8 +7,14 @@ abstractions.
 """
 
 from json import loads
-from os import setuid, rename
-from subprocess import Popen, check_output, check_call, CalledProcessError
+from os import chown, rename
+from subprocess import (
+    Popen,
+    check_output,
+    check_call,
+    CalledProcessError,
+    TimeoutExpired,
+)
 from sys import argv, exit
 import time
 
@@ -30,6 +36,7 @@ class RemoteInfo(object):
         self.container_config = [
             c for c in cs if "telepresence-k8s" in c["image"]
         ][0]
+        self.container_name = self.container_config["name"]
 
 
 def _get_service_names(environment):
@@ -51,7 +58,7 @@ def get_remote_env(remote_info):
     env = str(
         check_output([
             "kubectl", "exec", remote_info.pod_name, "--container",
-            remote_info.container_config["name"], "env"
+            remote_info.container_name, "env"
         ]), "utf-8"
     )
     result = {}
@@ -113,18 +120,24 @@ def get_env_variables(remote_info):
                 key.endswith("_TCP")
             ):
                 socks_result[key] = value
+    # Tell local process about the remote setup, useful for testing and
+    # debugging:
+    socks_result["TELEPRESENCE_POD"] = remote_info.pod_name
+    socks_result["TELEPRESENCE_CONTAINER"] = remote_info.container_name
     return in_docker_result, socks_result
 
 
-def write_env(remote_info):
+def write_env(remote_info, uid):
     for_docker_env, for_local_env = get_env_variables(remote_info)
     with open("/output/unproxied.env.tmp", "w") as f:
         for key, value in for_local_env.items():
             f.write("{}={}\n".format(key, value))
+    chown("/output/unproxied.env.tmp", uid, uid)
     rename("/output/unproxied.env.tmp", "/output/unproxied.env")
     with open("/output/docker.env.tmp", "w") as f:
         for key, value in for_docker_env.items():
             f.write("{}={}\n".format(key, value))
+    chown("/output/docker.env.tmp", uid, uid)
     rename("/output/docker.env.tmp", "/output/docker.env")
 
 
@@ -211,8 +224,19 @@ def ssh(args):
     Returns Popen object.
     """
     return popen_command([
-        "sshpass", "-phello", "ssh", "-q", "-oStrictHostKeyChecking=no",
-        "root@localhost", "-N"
+        # Password is hello (see remote/Dockerfile):
+        "sshpass",
+        "-phello",
+        "ssh",
+        # SSH with no warnings:
+        "-q",
+        # Don't validate host key:
+        "-oStrictHostKeyChecking=no",
+        # Ping once a second; after three retries will disconnect:
+        "-oServerAliveInterval=1",
+        # No shell:
+        "-N",
+        "root@localhost",
     ] + args)
 
 
@@ -247,6 +271,60 @@ def wait_for_pod(remote_info):
 SOCKS_PORT = 9050
 
 
+def connect(
+    remote_info, local_exposed_ports, expose_host, custom_proxied_hosts
+):
+    """
+    Start all the processes that handle remote proxying.
+
+    Return list of Popen instances.
+    """
+    processes = []
+    # forward remote port to here, by tunneling via remote SSH server:
+    processes.append(
+        popen_command(["kubectl", "port-forward", remote_info.pod_name, "22"])
+    )
+    wait_for_ssh()
+
+    for port_number in local_exposed_ports:
+        processes.append(
+            ssh([
+                "-R",
+                "*:{}:{}:{}".format(port_number, expose_host, port_number)
+            ])
+        )
+
+    # start tunnel to remote SOCKS proxy, for telepresence --run:
+    processes.append(
+        ssh(["-L", "*:{}:127.0.0.1:{}".format(SOCKS_PORT, SOCKS_PORT)])
+    )
+
+    # start proxies for custom-mapped hosts:
+    for host, port in [s.split(":", 1) for s in custom_proxied_hosts]:
+        processes.append(ssh(["-L", "{}:{}:{}".format(port, host, port)]))
+
+    # start proxies for Services:
+    for port in range(2000, 2020):
+        # XXX what if there is more than 20 services
+        processes.append(
+            ssh(["-L", "*:{}:127.0.0.1:{}".format(port, port)])
+        )
+
+    return processes
+
+
+def killall(processes):
+    for p in processes:
+        if p.poll() is None:
+            p.terminate()
+    for p in processes:
+        try:
+            p.wait(timeout=1)
+        except TimeoutExpired:
+            p.kill()
+            p.wait()
+
+
 def main(
     uid, deployment_name, local_exposed_ports, custom_proxied_hosts,
     expose_host
@@ -273,43 +351,24 @@ def main(
     # write /etc/hosts
     write_etc_hosts([s.split(":", 1)[0] for s in custom_proxied_hosts])
 
-    # forward remote port to here, by tunneling via remote SSH server:
-    processes.append(
-        popen_command(["kubectl", "port-forward", remote_info.pod_name, "22"])
+    processes = connect(
+        remote_info, local_exposed_ports, expose_host, custom_proxied_hosts
     )
-    wait_for_ssh()
-
-    for port_number in local_exposed_ports:
-        processes.append(
-            ssh([
-                "-R",
-                "*:{}:{}:{}".format(port_number, expose_host, port_number)
-            ])
-        )
-
-    # start tunnel to remote SOCKS proxy, for telepresence --run:
-    processes.append(
-        ssh(["-L", "*:{}:127.0.0.1:{}".format(SOCKS_PORT, SOCKS_PORT)])
-    )
-
-    # start proxies for custom-mapped hosts:
-    for host, port in [s.split(":", 1) for s in custom_proxied_hosts]:
-        processes.append(ssh(["-L", "{}:{}:{}".format(port, host, port)]))
-
-    # start proxies for Services:
-    # XXX maybe just do everything via SSH, now that we have it?
-    for port in range(2000, 2020):
-        processes.append(
-            ssh(["-L", "*:{}:127.0.0.1:{}".format(port, port)])
-        )
-
-    time.sleep(5)
 
     # write docker envfile, which tells CLI we're ready:
-    setuid(uid)
-    write_env(remote_info)
-    for p in processes:
-        p.wait()
+    time.sleep(5)
+    write_env(remote_info, uid)
+
+    # Now, poll processes; if one dies kill them all and restart them:
+    while True:
+        for p in processes:
+            code = p.poll()
+            if code is not None:
+                print("A subprocess died, killing all processes...")
+                killall(processes)
+                # Unfortunatly torsocks doesn't deal well with connections
+                # being lost, so best we can do is shut down.
+                raise SystemExit(3)
 
 
 if __name__ == '__main__':
