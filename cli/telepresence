@@ -317,6 +317,25 @@ def sip_workaround():
     return ":".join(paths)
 
 
+def wait_for_exit(runner, process, container_id):
+    """Given Popen and container ID, wait for one of them to die."""
+    while True:
+        exit_code = process.poll()
+        if exit_code is not None:
+            sys.exit(exit_code)
+        alive = runner.get_output(
+            maybe_sudo([
+                "docker", "ps", "-q", "--filter",
+                "name=" + container_id
+            ])
+        ).strip()
+        if not alive:
+            print("Proxy to Kubernetes exited. This is typically due to a lost"
+                  " connection.", file=sys.stderr)
+            sys.exit(1)
+        sleep(0.1)
+
+
 def run_local_command(runner, args, out_env, container_id):
     """--run support, run command locally."""
     socks_port = int(
@@ -354,8 +373,7 @@ def run_local_command(runner, args, out_env, container_id):
             p.terminate()
 
     atexit.register(terminate_if_alive)
-    exit_code = p.wait()
-    sys.exit(exit_code)
+    wait_for_exit(runner, p, container_id)
 
 
 def run_docker_command(runner, args, out_env, container_id):
@@ -393,8 +411,7 @@ def run_docker_command(runner, args, out_env, container_id):
             stop_container(runner, cid)
 
     atexit.register(terminate_if_alive)
-    exit_code = p.wait()
-    sys.exit(exit_code)
+    wait_for_exit(runner, p, container_id)
 
 
 BUG_REPORT_TEMPLATE = u"""\
