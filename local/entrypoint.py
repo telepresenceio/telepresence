@@ -299,11 +299,12 @@ def main(
     # start proxies for Services:
     # XXX maybe just do everything via SSH, now that we have it?
     for port in range(2000, 2020):
-        # XXX what if there is more than 20 services
-        p = Popen(["kubectl", "port-forward", remote_info.pod_name, str(port)])
-        processes.append(p)
+        processes.append(
+            ssh(["-L", "*:{}:127.0.0.1:{}".format(port, port)])
+        )
+
     time.sleep(5)
-    #
+
     # write docker envfile, which tells CLI we're ready:
     setuid(uid)
     write_env(remote_info)
