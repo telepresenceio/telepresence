@@ -13,13 +13,13 @@ import sys
 import argparse
 import atexit
 import collections
-import copy
 import os
 import os.path
 import signal
 import socket
 import webbrowser
 
+from copy import deepcopy
 from functools import wraps
 from shutil import rmtree, copy
 from subprocess import check_output, Popen, CalledProcessError, check_call
@@ -247,7 +247,7 @@ class Deployment(object):
         self.exposed_ports = []
 
     def get_adapted_resource(self, resource, mods):
-        adapted_resource = copy.deepcopy(resource)
+        adapted_resource = deepcopy(resource)
 
         for path, value in mods:
             dpath_set(adapted_resource, path, value)
