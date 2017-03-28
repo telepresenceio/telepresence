@@ -2,6 +2,7 @@
 End-to-end tests for running inside a Docker container.
 """
 
+import atexit
 from unittest import TestCase
 from subprocess import check_output, Popen, STDOUT, check_call
 import time
@@ -146,4 +147,45 @@ class EndToEndTests(TestCase):
             "python",
             "/code/tocluster.py",
             "MYENV=hello",
+        ])
+
+    def test_proxy(self):
+        """Telepresence proxies connections set with --proxy."""
+        ipify_name = random_name()
+
+        def cleanup():
+            check_call(["kubectl", "delete", "--ignore-not-found",
+                        "service,deployment", ipify_name])
+
+        cleanup()
+        atexit.register(cleanup)
+
+        check_output([
+            "kubectl",
+            "run",
+            "--generator",
+            "deployment/v1beta1",
+            ipify_name,
+            "--image=osixia/ipify-api",
+            "--port=3000",
+            "--expose",
+        ])
+        time.sleep(30)  # kubernetes is speedy
+
+        check_call([
+            "telepresence",
+            "--new-deployment",
+            random_name(),
+            "--logfile",
+            "-",
+            "--proxy",
+            "analiaswedefine:3000",
+            "--docker-run",
+            "-v",
+            "{}:/code".format(DIRECTORY),
+            "--rm",
+            "python:3.5-slim",
+            "python",
+            "/code/proxy.py",
+            ipify_name,
         ])

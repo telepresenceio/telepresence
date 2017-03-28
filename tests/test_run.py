@@ -10,6 +10,26 @@ import time
 from .utils import DIRECTORY, random_name
 
 
+def run_script_test(script):
+    """Run a script with Telepresence."""
+    p = Popen(
+        args=[
+            "telepresence",
+            "--new-deployment",
+            random_name(),
+            "--logfile",
+            "-",
+            "--run-shell",
+        ],
+        cwd=str(DIRECTORY),
+        stdin=PIPE,
+    )
+    p.stdin.write(b"python3 %.py\n" % (script,))
+    p.stdin.flush()
+    p.stdin.close()
+    return p.wait()
+
+
 class EndToEndTests(TestCase):
     """
     End-to-end tests.
@@ -23,22 +43,7 @@ class EndToEndTests(TestCase):
         checked for the string "SUCCESS!" indicating the checks passed. The
         script shouldn't use code py.test would detect as a test.
         """
-        p = Popen(
-            args=[
-                "telepresence",
-                "--new-deployment",
-                random_name(),
-                "--logfile",
-                "-",
-                "--run-shell",
-            ],
-            cwd=str(DIRECTORY),
-            stdin=PIPE,
-        )
-        p.stdin.write(b"python3 tocluster.py\n")
-        p.stdin.flush()
-        p.stdin.close()
-        exit_code = p.wait()
+        exit_code = run_script_test(b"tocluster.py")
         assert exit_code == 0
 
     def test_fromcluster(self):
@@ -109,23 +114,13 @@ class EndToEndTests(TestCase):
 
     def test_disconnect(self):
         """Telepresence exits if the connection is lost."""
-        p = Popen(
-            args=[
-                "telepresence",
-                "--new-deployment",
-                random_name(),
-                "--logfile",
-                "-",
-                "--run-shell",
-            ],
-            cwd=str(DIRECTORY),
-            stdin=PIPE,
-        )
-        p.stdin.write(b"python3 disconnect.py\n")
-        p.stdin.flush()
-        p.stdin.close()
-        exit_code = p.wait()
-        # Exit code 3 means proxy exited:
+        exit_code = run_script_test(b"disconnect.py")
+        # Exit code 3 means proxy exited prematurely:
         assert exit_code == 3
+
+    def test_proxy(self):
+        """Telepresence proxies all connections via the cluster."""
+        exit_code = run_script_test(b"proxy.py")
+        assert exit_code == 0
 
     # XXX write test for IP-based routing, not just DNS-based routing!

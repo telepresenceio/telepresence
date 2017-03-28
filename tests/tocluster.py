@@ -8,7 +8,6 @@ This module will be run inside a container. To indicate success it will print
 import os
 import ssl
 import sys
-from subprocess import run
 from traceback import print_exception
 from urllib.request import urlopen
 from urllib.error import HTTPError
