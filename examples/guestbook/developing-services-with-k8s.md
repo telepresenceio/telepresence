@@ -54,7 +54,7 @@ Finally, this tutorial uses a number of Kubernetes configuration files. To save 
 % git clone https://github.com/datawire/telepresence.git
 ```
 
-All example files are in the `examples/guestbook` directory.
+All example files are in the [`examples/guestbook`](https://github.com/datawire/telepresence/tree/master/examples/guestbook) directory.
 
 ### Setting up Kubernetes in Google Container Engine
 
@@ -81,7 +81,7 @@ To get started, we need to authenticate to our cluster:
 
 ### Setting up Redis
 
-Now, let's install a Redis cluster in our Kubernetes cluster. Each of these deployment files are in the [`examples/guestbook`](https://github.com/datawire/telepresence/tree/examples/examples/guestbook) directory of the Telepresence repository. (TODO: FIX URL WHEN PR IS MERGED)
+Now, let's install Redis in our Kubernetes cluster. We'll need to set up the Redis master deployment ([config](https://github.com/datawire/telepresence/blob/master/examples/guestbook/redis-master-deployment.yaml)), the Redis master service ([config](https://github.com/datawire/telepresence/blob/master/examples/guestbook/redis-master-service.yaml)), the Redis slave deployment ([config](https://github.com/datawire/telepresence/blob/master/examples/guestbook/redis-slave-deployment.yaml)), and the Redis slave service ([config](https://github.com/datawire/telepresence/blob/master/examples/guestbook/redis-slave-service.yaml)). If you don't want to download each of these files manually, these files are in the [`examples/guestbook`](https://github.com/datawire/telepresence/tree/master/examples/guestbook) directory of the Telepresence repository.
 
 ```
 % kubectl create -f redis-master-deployment.yaml
@@ -120,13 +120,13 @@ The `--publish` option maps the container's port 80 to the host's port 8080. Vis
 
 We're now going to use [Telepresence](https://datawire.github.io/telepresence) to create a virtual network between your local machine and the remote Kubernetes cluster. This way, the PHP application will be able to talk to remote cloud resources, and vice versa.
 
-We'll start by deploying the Telepresence proxy onto the Kubernetes cluster.
+We'll start by deploying the Telepresence proxy onto the Kubernetes cluster using the [`telepresence-deployment.yaml`](https://github.com/datawire/telepresence/blob/master/examples/guestbook/telepresence-deployment.yaml) deployment file.
 
 ```
 % kubectl create -f telepresence-deployment.yaml
 ```
 
-Next, we need to deploy an externally visible load balancer.
+Next, we need to deploy an externally visible load balancer. The [`frontend-service.yaml`](https://github.com/datawire/telepresence/blob/master/examples/guestbook/frontend-service.yaml) uses a selector for `app:guestbook` and `tier:backend`. We've cleverly used these labels in the `telepresence-deployment.yaml`, so the load balancer will talk directly to our proxy.
 
 ```
 % kubectl create -f frontend-service.yaml
@@ -164,7 +164,7 @@ Note: If you're on Mac OS X and this doesn't work, make sure that your directory
 
 ### Behind the scenes
 
-What's going on behind the scenes? Your incoming request goes to the load balancer. The load balancer is configured to route requests (via a [label](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/)) to the Telepresence proxy. The Telepresence proxy sends those requests to the local Telepresence client.
+What's going on behind the scenes? Your incoming request goes to the load balancer. The load balancer, as mentioned above, looks for the Telepresence proxy based on the `app:guestbook` and `tier:backend` labels. The proxy, which is running in the cloud Kubernetes environment, then sends those requests to the local Telepresence client, which passes the request to the PHP application.
 
 ### `run-shell`
 
