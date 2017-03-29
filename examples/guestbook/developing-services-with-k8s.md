@@ -162,7 +162,7 @@ But what if you want to actually edit the code that's running? No problem. Using
 
 Try editing `index.html` and renaming the Submit button to Go. Hit reload, and you'll immediately see your changes reflected live.
 
-Note: If you're on Mac OS X and this doesn't work, make sure that your directory is enabled in the Docker file sharing menu. Also, note that the path is case-sensitive.
+Note: If you're on Mac OS X and this doesn't work, make sure that your directory is enabled in the Docker file sharing menu in the upper right hand side. Also, note that the path is case-sensitive.
 
 ### Behind the scenes
 
