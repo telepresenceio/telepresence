@@ -79,47 +79,23 @@ def get_deployment_set_keys(remote_info):
     )
 
 
-def get_env_variables(remote_info, service_name_to_local_ip):
+def get_env_variables(remote_info):
     """
     Generate environment variables that match kubernetes.
-
-    For both Docker and non-Docker we copy environment variables explicitly set
-    in the Deployment template.
-
-    For Docker we make modified versions of the Servic env variables. For
-    non-Docker (SOCKS) we just copy the Service env variables as is.
     """
     remote_env = remote_info.pod_environment
     deployment_set_keys = get_deployment_set_keys(remote_info)
     service_names = remote_info.service_names
     # Tell local process about the remote setup, useful for testing and
     # debugging:
-    shared_env = {
+    socks_result = {
         "TELEPRESENCE_POD": remote_info.pod_name,
         "TELEPRESENCE_CONTAINER": remote_info.container_name
     }
     # ips proxied via socks, can copy addresses unmodified:
-    socks_result = shared_env.copy()
-    # ips proxied via docker, so need to modify addresses:
-    in_docker_result = shared_env.copy()
-    for name in service_names:
-        port = remote_info.pod_environment[name + "_SERVICE_PORT"]
-        ip = service_name_to_local_ip[name]
-        # XXX will be wrong for UDP
-        full_address = "tcp://{}:{}".format(ip, port)
-        in_docker_result[name + "_SERVICE_HOST"] = ip
-        in_docker_result[name + "_SERVICE_PORT"] = port
-        in_docker_result[name + "_PORT"] = full_address
-        port_name = name + "_PORT_" + port + "_TCP"
-        in_docker_result[port_name] = full_address
-        # XXX will break for UDP
-        in_docker_result[port_name + "_PROTO"] = "tcp"
-        in_docker_result[port_name + "_PORT"] = port
-        in_docker_result[port_name + "_ADDR"] = ip
     for key, value in remote_env.items():
         if key in deployment_set_keys:
             # Copy over Deployment-set env variables:
-            in_docker_result[key] = value
             socks_result[key] = value
         for service_name in service_names:
             # Copy over Service env variables to SOCKS variant:
@@ -129,47 +105,18 @@ def get_env_variables(remote_info, service_name_to_local_ip):
                 key.endswith("_TCP")
             ):
                 socks_result[key] = value
-    return in_docker_result, socks_result
+    return socks_result
 
 
-def write_env(remote_info, uid, service_name_to_local_ip):
-    for_docker_env, for_local_env = get_env_variables(
-        remote_info, service_name_to_local_ip
+def write_env(remote_info, uid):
+    for_local_env = get_env_variables(
+        remote_info
     )
     with open("/output/unproxied.env.tmp", "w") as f:
         for key, value in for_local_env.items():
             f.write("{}={}\n".format(key, value))
     chown("/output/unproxied.env.tmp", uid, uid)
     rename("/output/unproxied.env.tmp", "/output/unproxied.env")
-    with open("/output/docker.env.tmp", "w") as f:
-        for key, value in for_docker_env.items():
-            f.write("{}={}\n".format(key, value))
-    chown("/output/docker.env.tmp", uid, uid)
-    rename("/output/docker.env.tmp", "/output/docker.env")
-
-
-def write_etc_hosts(service_name_to_local_ip, custom_hostport_to_local_ip):
-    """
-    Update /etc/hosts with records that match k8s DNS entries for services.
-    """
-    # XXX we're assuming default namespace, which may not be right...
-    services_json = loads(
-        str(
-            check_output(["kubectl", "get", "service", "-o", "json"]), "utf-8"
-        )
-    )
-    with open("/etc/hosts", "a") as hosts:
-        for service in services_json["items"]:
-            # XXX use ip from service_name_to_local_ip
-            name = service["metadata"]["name"]
-            namespace = service["metadata"]["namespace"]
-            ip = service_name_to_local_ip[name.upper().replace("-", "_")]
-            hosts.write("{} {}\n".format(ip, name))
-            hosts.write(
-                "{} {}.{}.svc.cluster.local\n".format(ip, name, namespace)
-            )
-        for (host, _), ip in custom_hostport_to_local_ip.items():
-            hosts.write("{} {}\n".format(ip, host))
 
 
 def get_remote_info(deployment_name):
@@ -281,8 +228,6 @@ def connect(
     remote_info,
     local_exposed_ports,
     expose_host,
-    service_name_to_local_ip,
-    custom_hostport_to_local_ip,
 ):
     """
     Start all the processes that handle remote proxying.
@@ -297,6 +242,7 @@ def connect(
     wait_for_ssh()
 
     for port_number in local_exposed_ports:
+        # XXX really only need to bind to external port...
         processes.append(
             ssh([
                 "-R",
@@ -309,24 +255,6 @@ def connect(
     processes.append(
         ssh(["-L", "*:{}:127.0.0.1:{}".format(SOCKS_PORT, SOCKS_PORT)])
     )
-
-    # start proxies for custom-mapped hosts:
-    for (host, port), ip in custom_hostport_to_local_ip.items():
-        processes.append(
-            ssh(["-L", "{}:{}:{}:{}".format(ip, port, host, port)])
-        )
-
-    # start proxies for Services:
-    for service_name in remote_info.service_names:
-        dest_host = remote_info.pod_environment[service_name + "_SERVICE_HOST"]
-        dest_port = remote_info.pod_environment[service_name + "_SERVICE_PORT"]
-        local_ip = service_name_to_local_ip[service_name]
-        processes.append(
-            ssh([
-                "-L", "{}:{}:{}:{}".
-                format(local_ip, dest_port, dest_host, dest_port)
-            ])
-        )
 
     return processes
 
@@ -344,51 +272,23 @@ def killall(processes):
 
 
 def main(
-    uid, deployment_name, local_exposed_ports, custom_proxied_hosts,
+    uid, deployment_name, local_exposed_ports,
     expose_host
 ):
     remote_info = get_remote_info(deployment_name)
 
-    def add_ip(index):
-        ip = "127.0.0.{}".format(index + 2)
-        check_call([
-            "ifconfig", "lo:{}".format(index), ip, "netmask", "255.0.0.0", "up"
-        ])
-        return ip
-
-    # Add a loopback interface for each remote Service, so it can have a
-    # distinct IP and each destination can set whatever port it wants. Not
-    # actually needed in SOCKS mode, so eventually should disable it in that
-    # case:
-    service_name_to_local_ip = {}
-    for i, service_name in enumerate(remote_info.service_names):
-        service_name_to_local_ip[service_name] = add_ip(i)
-
-    # And add a loopback interface for every custom-proxied host:port:
-    custom_hostport_to_local_ip = {}
-    for custom_hostport in [
-        tuple(s.split(":", 1)) for s in custom_proxied_hosts
-    ]:
-        i += 1
-        custom_hostport_to_local_ip[custom_hostport] = add_ip(i)
-
     # Wait for pod to be running:
     wait_for_pod(remote_info)
-
-    # write /etc/hosts
-    write_etc_hosts(service_name_to_local_ip, custom_hostport_to_local_ip)
 
     processes = connect(
         remote_info,
         local_exposed_ports,
         expose_host,
-        service_name_to_local_ip,
-        custom_hostport_to_local_ip,
     )
 
     # write docker envfile, which tells CLI we're ready:
     time.sleep(5)
-    write_env(remote_info, uid, service_name_to_local_ip)
+    write_env(remote_info, uid)
 
     # Now, poll processes; if one dies kill them all and restart them:
     while True:
@@ -405,5 +305,5 @@ def main(
 if __name__ == '__main__':
     main(
         int(argv[1]), argv[2], argv[3].split(",")
-        if argv[3] else [], argv[4].split(",") if argv[4] else [], argv[5]
+        if argv[3] else [], argv[4]
     )

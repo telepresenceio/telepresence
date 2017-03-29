@@ -6,8 +6,35 @@ from unittest import TestCase
 from subprocess import check_output, Popen, PIPE
 import atexit
 import time
+import os
 
-from .utils import DIRECTORY, random_name, run_nginx
+from .utils import DIRECTORY, random_name, run_nginx, telepresence_version
+
+REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
+
+EXISTING_DEPLOYMENT = """\
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {name}
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: {name}
+    spec:
+      containers:
+      # Extra container at start to demonstrate we can handle multiple
+      # containers
+      - name: getintheway
+        image: nginx:alpine
+      - name: {name}
+        image: {registry}/telepresence-k8s:{version}
+        env:
+        - name: MYENV
+          value: hello
+"""
 
 
 def run_script_test(script):
@@ -126,5 +153,44 @@ class EndToEndTests(TestCase):
             b"proxy.py %s" % (nginx_name.encode("utf-8"), )
         )
         assert exit_code == 0
+
+    def test_existingdeployment(self):
+        """
+        Tests of communicating with existing Deployment.
+        """
+        # Create a Deployment outside of Telepresence:
+        name = random_name()
+        deployment = EXISTING_DEPLOYMENT.format(
+            name=name, registry=REGISTRY, version=telepresence_version()
+        )
+        check_output(
+            args=[
+                "kubectl",
+                "apply",
+                "-f",
+                "-",
+            ],
+            input=deployment.encode("utf-8")
+        )
+        self.addCleanup(
+            check_output, ["kubectl", "delete", "deployment", name]
+        )
+
+        p = Popen(
+            args=[
+                "telepresence",
+                "--deployment",
+                name,
+                "--logfile",
+                "-",
+                "--run-shell",
+            ],
+            cwd=str(DIRECTORY),
+            stdin=PIPE,
+        )
+        p.stdin.write(b"python3 tocluster.py MYENV=hello\n")
+        p.stdin.flush()
+        p.stdin.close()
+        assert 0 == p.wait()
 
     # XXX write test for IP-based routing, not just DNS-based routing!
