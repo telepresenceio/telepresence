@@ -37,13 +37,10 @@ spec:
 """
 
 
-def run_script_test(script):
+def run_script_test(telepresence_args, local_command):
     """Run a script with Telepresence."""
     p = Popen(
-        args=[
-            "telepresence",
-            "--new-deployment",
-            random_name(),
+        args=["telepresence"] + telepresence_args + [
             "--logfile",
             "-",
             "--run-shell",
@@ -51,10 +48,14 @@ def run_script_test(script):
         cwd=str(DIRECTORY),
         stdin=PIPE,
     )
-    p.stdin.write(b"python3 %s\n" % (script, ))
+    p.stdin.write(local_command + b"\n")
     p.stdin.flush()
     p.stdin.close()
     return p.wait()
+
+
+p = Popen(["python3", "-m", "http.server", "12346"], cwd=str(DIRECTORY))
+atexit.register(p.terminate)
 
 
 class EndToEndTests(TestCase):
@@ -70,7 +71,12 @@ class EndToEndTests(TestCase):
         checked for the string "SUCCESS!" indicating the checks passed. The
         script shouldn't use code py.test would detect as a test.
         """
-        exit_code = run_script_test(b"tocluster.py")
+        nginx_name = run_nginx("default")
+        time.sleep(30)  # kubernetes is speedy
+        exit_code = run_script_test(
+            ["--new-deployment", random_name()],
+            b"python3 tocluster.py {} default".format(nginx_name),
+        )
         assert exit_code == 0
 
     def test_fromcluster(self):
@@ -115,10 +121,6 @@ class EndToEndTests(TestCase):
 
     def test_loopback(self):
         """The shell run by telepresence can access localhost."""
-        p = Popen(["python3", "-m", "http.server", "12346"],
-                  cwd=str(DIRECTORY))
-        atexit.register(p.terminate)
-
         name = random_name()
         p = Popen(
             args=[
@@ -141,7 +143,10 @@ class EndToEndTests(TestCase):
 
     def test_disconnect(self):
         """Telepresence exits if the connection is lost."""
-        exit_code = run_script_test(b"disconnect.py")
+        exit_code = run_script_test(
+            ["--new-deployment", random_name()],
+            b"python3 disconnect.py"
+        )
         # Exit code 3 means proxy exited prematurely:
         assert exit_code == 3
 
@@ -150,7 +155,8 @@ class EndToEndTests(TestCase):
         nginx_name = run_nginx()
         time.sleep(30)  # kubernetes is speedy
         exit_code = run_script_test(
-            b"proxy.py %s" % (nginx_name.encode("utf-8"), )
+            ["--new-deployment", random_name()],
+            b"python3 proxy.py %s" % (nginx_name.encode("utf-8"), )
         )
         assert exit_code == 0
 
@@ -176,21 +182,10 @@ class EndToEndTests(TestCase):
             check_output, ["kubectl", "delete", "deployment", name]
         )
 
-        p = Popen(
-            args=[
-                "telepresence",
-                "--deployment",
-                name,
-                "--logfile",
-                "-",
-                "--run-shell",
-            ],
-            cwd=str(DIRECTORY),
-            stdin=PIPE,
+        exit_code = run_script_test(
+            ["--deployment", name],
+            b"python3 tocluster.py MYENV=hello"
         )
-        p.stdin.write(b"python3 tocluster.py MYENV=hello\n")
-        p.stdin.flush()
-        p.stdin.close()
-        assert 0 == p.wait()
+        assert 0 == exit_code
 
     # XXX write test for IP-based routing, not just DNS-based routing!
