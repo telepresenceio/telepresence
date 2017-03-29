@@ -160,7 +160,7 @@ class EndToEndTests(TestCase):
             "--logfile",
             "-",
             "--proxy",
-            "analiaswedefine:3000",
+            "analiaswedefine:80",
             "--docker-run",
             "-v",
             "{}:/code".format(DIRECTORY),
