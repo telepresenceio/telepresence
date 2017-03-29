@@ -114,6 +114,7 @@ class EndToEndTests(TestCase):
         """
         Tests of communicating with existing Deployment.
         """
+        # Create a Deployment outside of Telepresence:
         name = random_name()
         deployment = EXISTING_DEPLOYMENT.format(
             name=name, registry=REGISTRY, version=telepresence_version()
@@ -130,6 +131,8 @@ class EndToEndTests(TestCase):
         self.addCleanup(
             check_output, ["kubectl", "delete", "deployment", name]
         )
+
+        # Run tocluster.py tests against it:
         check_call([
             "telepresence",
             "--deployment",
@@ -147,7 +150,10 @@ class EndToEndTests(TestCase):
         ])
 
     def test_proxy(self):
-        """Telepresence proxies connections set with --proxy."""
+        """Telepresence proxies connections set with --proxy.
+
+        See proxy.py for explanation how this works.
+        """
         nginx_name = run_nginx()
 
         # The telepresence-local image is handy insofar as it has kubectl and
