@@ -249,6 +249,8 @@ def start_proxy(runner, args):
         # matches host path:
         "-v",
         "{}:{}:ro".format(home_path, home_path),
+        # Need extra permissions to create new interfaces:
+        "--cap-add=NET_ADMIN",
     ])
 
     if args.runshell:

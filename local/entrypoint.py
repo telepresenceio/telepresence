@@ -79,7 +79,7 @@ def get_deployment_set_keys(remote_info):
     )
 
 
-def get_env_variables(remote_info):
+def get_env_variables(remote_info, service_name_to_local_ip):
     """
     Generate environment variables that match kubernetes.
 
@@ -102,11 +102,9 @@ def get_env_variables(remote_info):
     socks_result = shared_env.copy()
     # ips proxied via docker, so need to modify addresses:
     in_docker_result = shared_env.copy()
-    # XXX we're recreating the port generation logic
-    i = 0
-    for i, name in enumerate(service_names):
-        port = str(2000 + i)
-        ip = "127.0.0.1"
+    for name in service_names:
+        port = remote_info.pod_environment[name + "_SERVICE_PORT"]
+        ip = service_name_to_local_ip[name]
         # XXX will be wrong for UDP
         full_address = "tcp://{}:{}".format(ip, port)
         in_docker_result[name + "_SERVICE_HOST"] = ip
@@ -134,8 +132,10 @@ def get_env_variables(remote_info):
     return in_docker_result, socks_result
 
 
-def write_env(remote_info, uid):
-    for_docker_env, for_local_env = get_env_variables(remote_info)
+def write_env(remote_info, uid, service_name_to_local_ip):
+    for_docker_env, for_local_env = get_env_variables(
+        remote_info, service_name_to_local_ip
+    )
     with open("/output/unproxied.env.tmp", "w") as f:
         for key, value in for_local_env.items():
             f.write("{}={}\n".format(key, value))
@@ -148,10 +148,11 @@ def write_env(remote_info, uid):
     rename("/output/docker.env.tmp", "/output/docker.env")
 
 
-def write_etc_hosts(additional_hosts):
+def write_etc_hosts(additional_hosts, service_name_to_local_ip):
     """
     Update /etc/hosts with records that match k8s DNS entries for services.
     """
+    # XXX we're assuming default namespace, which may not be right...
     services_json = loads(
         str(
             check_output(["kubectl", "get", "service", "-o", "json"]), "utf-8"
@@ -159,11 +160,13 @@ def write_etc_hosts(additional_hosts):
     )
     with open("/etc/hosts", "a") as hosts:
         for service in services_json["items"]:
+            # XXX use ip from service_name_to_local_ip
             name = service["metadata"]["name"]
             namespace = service["metadata"]["namespace"]
-            hosts.write("127.0.0.1 {}\n".format(name))
+            ip = service_name_to_local_ip[name.upper().replace("-", "_")]
+            hosts.write("{} {}\n".format(ip, name))
             hosts.write(
-                "127.0.0.1 {}.{}.svc.cluster.local\n".format(name, namespace)
+                "{} {}.{}.svc.cluster.local\n".format(ip, name, namespace)
             )
         for host in additional_hosts:
             hosts.write("127.0.0.1 {}\n".format(host))
@@ -315,8 +318,8 @@ def connect(
 
     # start proxies for Services:
     for service_name in remote_info.service_names:
-        dest_host = remote_info.environment[service_name + "_SERVICE_HOST"]
-        dest_port = remote_info.environment[service_name + "_SERVICE_PORT"]
+        dest_host = remote_info.pod_environment[service_name + "_SERVICE_HOST"]
+        dest_port = remote_info.pod_environment[service_name + "_SERVICE_PORT"]
         local_ip = service_name_to_local_ip[service_name]
         processes.append(
             ssh([
@@ -366,7 +369,8 @@ def main(
     wait_for_pod(remote_info)
 
     # write /etc/hosts
-    write_etc_hosts([s.split(":", 1)[0] for s in custom_proxied_hosts])
+    write_etc_hosts([s.split(":", 1)[0] for s in custom_proxied_hosts],
+                    service_name_to_local_ip)
 
     processes = connect(
         remote_info,
@@ -378,7 +382,7 @@ def main(
 
     # write docker envfile, which tells CLI we're ready:
     time.sleep(5)
-    write_env(remote_info, uid)
+    write_env(remote_info, uid, service_name_to_local_ip)
 
     # Now, poll processes; if one dies kill them all and restart them:
     while True:
