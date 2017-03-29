@@ -38,7 +38,7 @@ Next, we're going to want to install the `gcloud` and `kubectl` commands. Follow
 We need to install Telepresence, which will proxy your locally running service to GKE.
 
 ```
-% curl -L https://github.com/datawire/telepresence/raw/0.19/cli/telepresence -o telepresence
+% curl -L https://github.com/datawire/telepresence/raw/0.21/cli/telepresence -o telepresence
 % chmod +x telepresence
 ```
 
@@ -135,7 +135,7 @@ Next, we need to deploy an externally visible load balancer.
 Now, we're going to start the local Telepresence client, and connect it to the proxy that's running in the Kubernetes cluster.
 
 ```
-telepresence --deployment telepresence-deployment --expose 80 --docker-run --rm -i -t gcr.io/google_samples/gb-frontend:v4
+telepresence --deployment telepresence-deployment --expose 80 --proxy redis-master:6379 --docker-run --rm -i -t gcr.io/google_samples/gb-frontend:v4
 ```
 
 It's time to check out our app in the browser. Let's look up the IP address of our external load balancer:
@@ -155,7 +155,7 @@ Go to the external IP address of your load balancer (in the above example, 104.1
 But what if you want to actually edit the code that's running? No problem. Using Docker, we can mount our local filesystem directly into our container. Stop the telepresence process. Find the full path to the `examples/guestbook` directory on your computer. Restart the telepresence process with the `--volume` option and pass in the full path to your local directory. This will mount the local directory into your container at `/var/www/html`:
 
 ```
-telepresence --deployment telepresence-deployment --expose 80 --docker-run --rm -i -t --volume=EXAMPLE_DIR_PATH:/var/www/html/:ro  gcr.io/google_samples/gb-frontend:v4
+telepresence --deployment telepresence-deployment --expose 80 --proxy redis-master:6379 --docker-run --rm -i -t --volume=EXAMPLE_DIR_PATH:/var/www/html/:ro  gcr.io/google_samples/gb-frontend:v4
 ```
 
 Try editing `index.html` and renaming the Submit button to Go. Hit reload, and you'll immediately see your changes reflected live.
