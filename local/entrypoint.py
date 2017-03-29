@@ -148,7 +148,7 @@ def write_env(remote_info, uid, service_name_to_local_ip):
     rename("/output/docker.env.tmp", "/output/docker.env")
 
 
-def write_etc_hosts(additional_hosts, service_name_to_local_ip):
+def write_etc_hosts(service_name_to_local_ip, custom_hostport_to_local_ip):
     """
     Update /etc/hosts with records that match k8s DNS entries for services.
     """
@@ -168,8 +168,8 @@ def write_etc_hosts(additional_hosts, service_name_to_local_ip):
             hosts.write(
                 "{} {}.{}.svc.cluster.local\n".format(ip, name, namespace)
             )
-        for host in additional_hosts:
-            hosts.write("127.0.0.1 {}\n".format(host))
+        for (host, _), ip in custom_hostport_to_local_ip.items():
+            hosts.write("{} {}\n".format(ip, host))
 
 
 def get_remote_info(deployment_name):
@@ -281,8 +281,8 @@ def connect(
     remote_info,
     local_exposed_ports,
     expose_host,
-    custom_proxied_hosts,
     service_name_to_local_ip,
+    custom_hostport_to_local_ip,
 ):
     """
     Start all the processes that handle remote proxying.
@@ -304,17 +304,17 @@ def connect(
             ])
         )
 
-    # start tunnel to remote SOCKS proxy, for telepresence --run. XXX instead
-    # of doing this we should instead create ExternalName Services
-    # (https://kubernetes.io/docs/user-guide/services/#services-without-selectors)
-    # and then we can rely on the normal Service proxying support.
+    # start tunnel to remote SOCKS proxy, for telepresence --run.
+    # XXX really only need to bind to external port...
     processes.append(
         ssh(["-L", "*:{}:127.0.0.1:{}".format(SOCKS_PORT, SOCKS_PORT)])
     )
 
     # start proxies for custom-mapped hosts:
-    for host, port in [s.split(":", 1) for s in custom_proxied_hosts]:
-        processes.append(ssh(["-L", "{}:{}:{}".format(port, host, port)]))
+    for (host, port), ip in custom_hostport_to_local_ip.items():
+        processes.append(
+            ssh(["-L", "{}:{}:{}:{}".format(ip, port, host, port)])
+        )
 
     # start proxies for Services:
     for service_name in remote_info.service_names:
@@ -347,11 +347,14 @@ def main(
     uid, deployment_name, local_exposed_ports, custom_proxied_hosts,
     expose_host
 ):
-    processes = []
-    # XXX add ExternalName Services for custom proxied hosts here, so they show
-    # up when we get remote info.
-
     remote_info = get_remote_info(deployment_name)
+
+    def add_ip(index):
+        ip = "127.0.0.{}".format(index + 2)
+        check_call([
+            "ifconfig", "lo:{}".format(index), ip, "netmask", "255.0.0.0", "up"
+        ])
+        return ip
 
     # Add a loopback interface for each remote Service, so it can have a
     # distinct IP and each destination can set whatever port it wants. Not
@@ -359,25 +362,28 @@ def main(
     # case:
     service_name_to_local_ip = {}
     for i, service_name in enumerate(remote_info.service_names):
-        ip = "127.0.0.{}".format(i + 2)
-        check_call(
-            ["ifconfig", "lo:{}".format(i), ip, "netmask", "255.0.0.0", "up"]
-        )
-        service_name_to_local_ip[service_name] = ip
+        service_name_to_local_ip[service_name] = add_ip(i)
+
+    # And add a loopback interface for every custom-proxied host:port:
+    custom_hostport_to_local_ip = {}
+    for custom_hostport in [
+        tuple(s.split(":", 1)) for s in custom_proxied_hosts
+    ]:
+        i += 1
+        custom_hostport_to_local_ip[custom_hostport] = add_ip(i)
 
     # Wait for pod to be running:
     wait_for_pod(remote_info)
 
     # write /etc/hosts
-    write_etc_hosts([s.split(":", 1)[0] for s in custom_proxied_hosts],
-                    service_name_to_local_ip)
+    write_etc_hosts(service_name_to_local_ip, custom_hostport_to_local_ip)
 
     processes = connect(
         remote_info,
         local_exposed_ports,
         expose_host,
-        custom_proxied_hosts,
         service_name_to_local_ip,
+        custom_hostport_to_local_ip,
     )
 
     # write docker envfile, which tells CLI we're ready:
