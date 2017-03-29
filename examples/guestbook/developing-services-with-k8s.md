@@ -138,6 +138,8 @@ Now, we're going to start the local Telepresence client, and connect it to the p
 % telepresence --deployment telepresence-deployment --expose 80 --proxy redis-master:6379 --docker-run --rm -i -t gcr.io/google_samples/gb-frontend:v4
 ```
 
+Note that `--proxy` is a workaround for a bug in 0.21; in the next release the `--proxy` argument will not be necessary.
+
 It's time to check out our app in the browser. Let's look up the IP address of our external load balancer:
 
 ```
