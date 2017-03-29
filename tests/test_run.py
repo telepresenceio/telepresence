@@ -143,10 +143,8 @@ class EndToEndTests(TestCase):
 
     def test_disconnect(self):
         """Telepresence exits if the connection is lost."""
-        exit_code = run_script_test(
-            ["--new-deployment", random_name()],
-            b"python3 disconnect.py"
-        )
+        exit_code = run_script_test(["--new-deployment", random_name()],
+                                    b"python3 disconnect.py")
         # Exit code 3 means proxy exited prematurely:
         assert exit_code == 3
 
@@ -154,16 +152,18 @@ class EndToEndTests(TestCase):
         """Telepresence proxies all connections via the cluster."""
         nginx_name = run_nginx()
         time.sleep(30)  # kubernetes is speedy
-        exit_code = run_script_test(
-            ["--new-deployment", random_name()],
-            b"python3 proxy.py %s" % (nginx_name.encode("utf-8"), )
-        )
+        exit_code = run_script_test(["--new-deployment", random_name()],
+                                    b"python3 proxy.py %s" %
+                                    (nginx_name.encode("utf-8"), ))
         assert exit_code == 0
 
     def test_existingdeployment(self):
         """
         Tests of communicating with existing Deployment.
         """
+        nginx_name = run_nginx("default")
+        time.sleep(30)  # kubernetes is speedy
+
         # Create a Deployment outside of Telepresence:
         name = random_name()
         deployment = EXISTING_DEPLOYMENT.format(
@@ -184,7 +184,7 @@ class EndToEndTests(TestCase):
 
         exit_code = run_script_test(
             ["--deployment", name],
-            b"python3 tocluster.py MYENV=hello"
+            b"python3 tocluster.py {} default MYENV=hello".format(nginx_name)
         )
         assert 0 == exit_code
 
