@@ -88,8 +88,14 @@ def get_env_variables(remote_info):
     remote_env = get_remote_env(remote_info)
     deployment_set_keys = get_deployment_set_keys(remote_info)
     service_names = _get_service_names(remote_env)
+    # Tell local process about the remote setup, useful for testing and
+    # debugging:
+    shared_env = {"TELEPRESENCE_POD": remote_info.pod_name,
+                  "TELEPRESENCE_CONTAINER": remote_info.container_name}
+    # ips proxied via socks, can copy addresses unmodified:
+    socks_result = shared_env.copy()
     # ips proxied via docker, so need to modify addresses:
-    in_docker_result = {}
+    in_docker_result = shared_env.copy()
     # XXX we're recreating the port generation logic
     i = 0
     for i, name in enumerate(service_names):
@@ -106,7 +112,6 @@ def get_env_variables(remote_info):
         in_docker_result[port_name + "_PROTO"] = "tcp"
         in_docker_result[port_name + "_PORT"] = port
         in_docker_result[port_name + "_ADDR"] = ip
-    socks_result = {}
     for key, value in remote_env.items():
         if key in deployment_set_keys:
             # Copy over Deployment-set env variables:
@@ -120,10 +125,6 @@ def get_env_variables(remote_info):
                 key.endswith("_TCP")
             ):
                 socks_result[key] = value
-    # Tell local process about the remote setup, useful for testing and
-    # debugging:
-    socks_result["TELEPRESENCE_POD"] = remote_info.pod_name
-    socks_result["TELEPRESENCE_CONTAINER"] = remote_info.container_name
     return in_docker_result, socks_result
 
 
