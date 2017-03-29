@@ -4,11 +4,11 @@ End-to-end tests for running inside a Docker container.
 
 import atexit
 from unittest import TestCase
-from subprocess import check_output, Popen, STDOUT, check_call
+from subprocess import check_output, Popen, check_call
 import time
 import os
 
-from .utils import DIRECTORY, random_name
+from .utils import DIRECTORY, random_name, telepresence_version, run_nginx
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
@@ -115,11 +115,8 @@ class EndToEndTests(TestCase):
         Tests of communicating with existing Deployment.
         """
         name = random_name()
-        version = str(
-            check_output(["telepresence", "--version"], stderr=STDOUT), "utf-8"
-        ).strip()
         deployment = EXISTING_DEPLOYMENT.format(
-            name=name, registry=REGISTRY, version=version
+            name=name, registry=REGISTRY, version=telepresence_version()
         )
         check_output(
             args=[
@@ -151,27 +148,11 @@ class EndToEndTests(TestCase):
 
     def test_proxy(self):
         """Telepresence proxies connections set with --proxy."""
-        ipify_name = random_name()
+        nginx_name = run_nginx()
 
-        def cleanup():
-            check_call(["kubectl", "delete", "--ignore-not-found",
-                        "service,deployment", ipify_name])
-
-        cleanup()
-        atexit.register(cleanup)
-
-        check_output([
-            "kubectl",
-            "run",
-            "--generator",
-            "deployment/v1beta1",
-            ipify_name,
-            "--image=osixia/ipify-api",
-            "--port=3000",
-            "--expose",
-        ])
-        time.sleep(30)  # kubernetes is speedy
-
+        # The telepresence-local image is handy insofar as it has kubectl and
+        # python3. We override its entroypoint, though.
+        home = os.path.expanduser("~")
         check_call([
             "telepresence",
             "--new-deployment",
@@ -183,9 +164,15 @@ class EndToEndTests(TestCase):
             "--docker-run",
             "-v",
             "{}:/code".format(DIRECTORY),
+            "-v",
+            home + ":/opt",
+            "-v",
+            home + ":" + home,
             "--rm",
-            "python:3.5-slim",
-            "python",
+            "--entrypoint=python3",
+            "{}/telepresence-local:{}".format(
+                REGISTRY, telepresence_version()
+            ),
             "/code/proxy.py",
-            ipify_name,
+            nginx_name,
         ])

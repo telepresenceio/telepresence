@@ -7,7 +7,7 @@ from subprocess import check_output, Popen, PIPE
 import atexit
 import time
 
-from .utils import DIRECTORY, random_name
+from .utils import DIRECTORY, random_name, run_nginx
 
 
 def run_script_test(script):
@@ -24,7 +24,7 @@ def run_script_test(script):
         cwd=str(DIRECTORY),
         stdin=PIPE,
     )
-    p.stdin.write(b"python3 %.py\n" % (script,))
+    p.stdin.write(b"python3 %s\n" % (script, ))
     p.stdin.flush()
     p.stdin.close()
     return p.wait()
@@ -120,7 +120,10 @@ class EndToEndTests(TestCase):
 
     def test_proxy(self):
         """Telepresence proxies all connections via the cluster."""
-        exit_code = run_script_test(b"proxy.py")
+        nginx_name = run_nginx()
+        exit_code = run_script_test(
+            b"proxy.py %s" % (nginx_name.encode("utf-8"), )
+        )
         assert exit_code == 0
 
     # XXX write test for IP-based routing, not just DNS-based routing!
