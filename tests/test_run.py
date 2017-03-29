@@ -4,7 +4,6 @@ End-to-end tests for running directly in the operating system.
 
 from unittest import TestCase
 from subprocess import check_output, Popen, PIPE
-import atexit
 import time
 import os
 
@@ -17,6 +16,7 @@ apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   name: {name}
+  namespace: {namespace}
 spec:
   replicas: 1
   template:
@@ -54,10 +54,6 @@ def run_script_test(telepresence_args, local_command):
     return p.wait()
 
 
-p = Popen(["python3", "-m", "http.server", "12346"], cwd=str(DIRECTORY))
-atexit.register(p.terminate)
-
-
 class EndToEndTests(TestCase):
     """
     End-to-end tests.
@@ -66,10 +62,6 @@ class EndToEndTests(TestCase):
     def test_tocluster(self):
         """
         Tests of communication to the cluster.
-
-        Python script is run using telepresence --run, and output is
-        checked for the string "SUCCESS!" indicating the checks passed. The
-        script shouldn't use code py.test would detect as a test.
         """
         nginx_name = run_nginx("default")
         time.sleep(30)  # kubernetes is speedy
@@ -79,19 +71,28 @@ class EndToEndTests(TestCase):
         )
         assert exit_code == 0
 
-    def test_fromcluster(self):
+    def test_tocluster_with_namespace(self):
         """
-        Tests of communication from the cluster.
+        Tests of communication to the cluster with non-default namespace.
+        """
+        namespace = random_name()
+        nginx_name = run_nginx(namespace)
+        time.sleep(30)  # kubernetes is speedy
+        exit_code = run_script_test(
+            ["--new-deployment", random_name(), "--namespace", namespace],
+            b"python3 tocluster.py {} {}".format(nginx_name, namespace),
+        )
+        assert exit_code == 0
+
+    def fromcluster(self, telepresence_args, url):
+        """
+        Test of communication from the cluster.
 
         Start webserver that serves files from this directory. Run HTTP query
         against it on the Kubernetes cluster, compare to real file.
         """
-        name = random_name()
         p = Popen(
-            args=[
-                "telepresence",
-                "--new-deployment",
-                name,
+            args=["telepresence"] + telepresence_args + [
                 "--expose",
                 "12345",
                 "--logfile",
@@ -115,12 +116,37 @@ class EndToEndTests(TestCase):
             "--quiet", '--rm', '--image=alpine', '--restart', 'Never',
             '--command', '--', '/bin/sh', '-c',
             "apk add --no-cache --quiet curl && " +
-            "curl --silent http://{}:12345/__init__.py".format(name)
+            "curl --silent http://{}:12345/__init__.py".format(url)
         ])
         assert result == (DIRECTORY / "__init__.py").read_bytes()
 
+    def test_fromcluster(self):
+        """
+        Communicate from the cluster to Telepresence, with default namespace.
+        """
+        service_name = random_name()
+        self.fromcluster(
+            ["--new-deployment", service_name],
+            service_name,
+        )
+
+    def test_fromcluster_with_namespace(self):
+        """
+        Communicate from the cluster to Telepresence, with custom namespace.
+        """
+        namespace = random_name()
+        service_name = random_name()
+        self.fromcluster(
+            ["--new-deployment", service_name, "--namespace", namespace],
+            "{}.{}.svc.default.local".format(service_name, namespace),
+        )
+
     def test_loopback(self):
         """The shell run by telepresence can access localhost."""
+        p = Popen(["python3", "-m", "http.server", "12346"],
+                  cwd=str(DIRECTORY))
+        self.addCleanup(p.terminate)
+
         name = random_name()
         p = Popen(
             args=[
@@ -157,17 +183,17 @@ class EndToEndTests(TestCase):
                                     (nginx_name.encode("utf-8"), ))
         assert exit_code == 0
 
-    def test_existingdeployment(self):
-        """
-        Tests of communicating with existing Deployment.
-        """
+    def existingdeployment(self, namespace):
         nginx_name = run_nginx("default")
         time.sleep(30)  # kubernetes is speedy
 
         # Create a Deployment outside of Telepresence:
         name = random_name()
         deployment = EXISTING_DEPLOYMENT.format(
-            name=name, registry=REGISTRY, version=telepresence_version()
+            name=name,
+            registry=REGISTRY,
+            version=telepresence_version(),
+            namespace=namespace,
         )
         check_output(
             args=[
@@ -182,10 +208,26 @@ class EndToEndTests(TestCase):
             check_output, ["kubectl", "delete", "deployment", name]
         )
 
+        args = ["--deployment", name]
+        if namespace != "default":
+            args.extend(["--namespace", namespace])
         exit_code = run_script_test(
-            ["--deployment", name],
-            b"python3 tocluster.py {} default MYENV=hello".format(nginx_name)
+            args, b"python3 tocluster.py {} {} MYENV=hello".format(
+                nginx_name, namespace
+            )
         )
         assert 0 == exit_code
+
+    def test_existingdeployment(self):
+        """
+        Tests of communicating with existing Deployment.
+        """
+        self.existingdeployment("default")
+
+    def test_existingdeployment_custom_namespace(self):
+        """
+        Tests of communicating with existing Deployment in a custom namespace.
+        """
+        self.existingdeployment(random_name())
 
     # XXX write test for IP-based routing, not just DNS-based routing!
