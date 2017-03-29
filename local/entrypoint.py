@@ -213,13 +213,16 @@ def get_remote_info(deployment_name):
         format(deployment_name)
     )
 
+def popen_command(argv):
+    print("popen: %s" % argv)
+    return Popen(argv)
 
 def ssh(args):
     """Connect to remote pod via SSH.
 
     Returns Popen object.
     """
-    return Popen([
+    return popen_command([
         # Password is hello (see remote/Dockerfile):
         "sshpass",
         "-phello",
@@ -278,7 +281,7 @@ def connect(
     processes = []
     # forward remote port to here, by tunneling via remote SSH server:
     processes.append(
-        Popen(["kubectl", "port-forward", remote_info.pod_name, "22"])
+        popen_command(["kubectl", "port-forward", remote_info.pod_name, "22"])
     )
     wait_for_ssh()
 
@@ -300,11 +303,11 @@ def connect(
         processes.append(ssh(["-L", "{}:{}:{}".format(port, host, port)]))
 
     # start proxies for Services:
-    # XXX maybe just do everything via SSH, now that we have it?
     for port in range(2000, 2020):
         # XXX what if there is more than 20 services
-        p = Popen(["kubectl", "port-forward", remote_info.pod_name, str(port)])
-        processes.append(p)
+        processes.append(
+            ssh(["-L", "*:{}:127.0.0.1:{}".format(port, port)])
+        )
 
     return processes
 
