@@ -155,6 +155,7 @@ class EndToEndTests(TestCase):
         See proxy.py for explanation how this works.
         """
         nginx_name = run_nginx()
+        time.sleep(30)  # kubernetes is speedy
 
         # The telepresence-local image is handy insofar as it has kubectl and
         # python3. We override its entroypoint, though.

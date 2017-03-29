@@ -121,6 +121,7 @@ class EndToEndTests(TestCase):
     def test_proxy(self):
         """Telepresence proxies all connections via the cluster."""
         nginx_name = run_nginx()
+        time.sleep(30)  # kubernetes is speedy
         exit_code = run_script_test(
             b"proxy.py %s" % (nginx_name.encode("utf-8"), )
         )

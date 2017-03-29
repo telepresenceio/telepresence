@@ -45,5 +45,4 @@ def run_nginx():
         "--port=80",
         "--expose",
     ])
-    time.sleep(30)  # kubernetes is speedy
     return nginx_name
