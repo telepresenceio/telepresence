@@ -436,6 +436,14 @@ Some alternatives to Telepresence:
   
 ## Changelog
 
+### 0.21 (March 28, 2017)
+
+Bug fixes:
+
+* Telepresence exits when connection is lost to the Kubernetes cluster, rather than hanging.
+* Telepresence notices when the proxy container exits and shuts down.
+  ([#24](https://github.com/datawire/telepresence/issues/24))
+
 ### 0.20 (March 27, 2017)
 
 Bug fixes:
