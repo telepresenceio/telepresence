@@ -1,0 +1,32 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: telepresence-deployment
+  labels:
+    app: guestbook
+    tier: backend
+spec:
+  # this replicas value is default
+  # modify it according to your case
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: guestbook
+        tier: backend
+    spec:
+      containers:
+      - name: php-redis
+        image: datawire/telepresence-k8s:0.19
+        ports:
+          - containerPort:8080
+        env:
+        - name: GET_HOSTS_FROM
+          value: dns
+          # If your cluster config does not include a dns service, then to
+          # instead access environment variables to find service host
+          # info, comment out the 'value: dns' line above, and uncomment the
+          # line below.
+          # value: env
+        ports:
+        - containerPort: 80
