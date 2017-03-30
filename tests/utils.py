@@ -39,7 +39,7 @@ def run_nginx(namespace):
     check_output([
         "kubectl",
         "run",
-        "--namepace",
+        "--namespace",
         namespace,
         "--generator",
         "deployment/v1beta1",

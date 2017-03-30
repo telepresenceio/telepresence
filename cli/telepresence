@@ -130,6 +130,10 @@ def parse_args():
         )
     )
     parser.add_argument(
+        "--namespace",
+        default="default",
+        help="The Kubernetes namespace to use. Defaults to 'default'.")
+    parser.add_argument(
         "--expose",
         type=int,
         action='append',

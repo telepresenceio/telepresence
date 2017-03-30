@@ -48,7 +48,7 @@ def run_script_test(telepresence_args, local_command):
         cwd=str(DIRECTORY),
         stdin=PIPE,
     )
-    p.stdin.write(local_command + b"\n")
+    p.stdin.write(bytes(local_command, "ascii") + b"\n")
     p.stdin.flush()
     p.stdin.close()
     return p.wait()
@@ -67,7 +67,7 @@ class EndToEndTests(TestCase):
         time.sleep(30)  # kubernetes is speedy
         exit_code = run_script_test(
             ["--new-deployment", random_name()],
-            b"python3 tocluster.py {} default".format(nginx_name),
+            "python3 tocluster.py {} default".format(nginx_name),
         )
         assert exit_code == 0
 
@@ -80,11 +80,11 @@ class EndToEndTests(TestCase):
         time.sleep(30)  # kubernetes is speedy
         exit_code = run_script_test(
             ["--new-deployment", random_name(), "--namespace", namespace],
-            b"python3 tocluster.py {} {}".format(nginx_name, namespace),
+            "python3 tocluster.py {} {}".format(nginx_name, namespace),
         )
         assert exit_code == 0
 
-    def fromcluster(self, telepresence_args, url):
+    def fromcluster(self, telepresence_args, url, namespace):
         """
         Test of communication from the cluster.
 
@@ -114,7 +114,7 @@ class EndToEndTests(TestCase):
         result = check_output([
             'kubectl', 'run', '--attach', random_name(), '--generator=job/v1',
             "--quiet", '--rm', '--image=alpine', '--restart', 'Never',
-            '--command', '--', '/bin/sh', '-c',
+            "--namespace", namespace, '--command', '--', '/bin/sh', '-c',
             "apk add --no-cache --quiet curl && " +
             "curl --silent http://{}:12345/__init__.py".format(url)
         ])
@@ -128,6 +128,7 @@ class EndToEndTests(TestCase):
         self.fromcluster(
             ["--new-deployment", service_name],
             service_name,
+            "default",
         )
 
     def test_fromcluster_with_namespace(self):
@@ -139,6 +140,7 @@ class EndToEndTests(TestCase):
         self.fromcluster(
             ["--new-deployment", service_name, "--namespace", namespace],
             "{}.{}.svc.default.local".format(service_name, namespace),
+            namespace,
         )
 
     def test_loopback(self):
@@ -170,7 +172,7 @@ class EndToEndTests(TestCase):
     def test_disconnect(self):
         """Telepresence exits if the connection is lost."""
         exit_code = run_script_test(["--new-deployment", random_name()],
-                                    b"python3 disconnect.py")
+                                    "python3 disconnect.py")
         # Exit code 3 means proxy exited prematurely:
         assert exit_code == 3
 
@@ -179,7 +181,7 @@ class EndToEndTests(TestCase):
         nginx_name = run_nginx()
         time.sleep(30)  # kubernetes is speedy
         exit_code = run_script_test(["--new-deployment", random_name()],
-                                    b"python3 proxy.py %s" %
+                                    "python3 proxy.py %s" %
                                     (nginx_name.encode("utf-8"), ))
         assert exit_code == 0
 
@@ -205,14 +207,17 @@ class EndToEndTests(TestCase):
             input=deployment.encode("utf-8")
         )
         self.addCleanup(
-            check_output, ["kubectl", "delete", "deployment", name]
+            check_output, [
+                "kubectl", "delete", "deployment", name, "--namespace=" +
+                namespace
+            ]
         )
 
         args = ["--deployment", name]
         if namespace != "default":
             args.extend(["--namespace", namespace])
         exit_code = run_script_test(
-            args, b"python3 tocluster.py {} {} MYENV=hello".format(
+            args, "python3 tocluster.py {} {} MYENV=hello".format(
                 nginx_name, namespace
             )
         )
