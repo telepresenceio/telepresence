@@ -177,10 +177,13 @@ def get_remote_info(deployment_name, namespace):
                    ).issubset(set(pod["metadata"].get("labels", {}).items())):
             print("Labels don't match.")
             continue
+        # Metadata for Deployment will hopefully have a namespace. If not, fall
+        # back to one we were given. If we weren't given one, best we can do is
+        # choose "default".
         if (name.startswith(deployment_name + "-")
             and
             pod["metadata"]["namespace"] == deployment["metadata"].get(
-                "namespace", "default")
+                "namespace", namespace or "default")
             and
             phase in (
                 "Pending", "Running"
