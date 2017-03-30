@@ -147,7 +147,12 @@ class EndToEndTests(TestCase):
         """The shell run by telepresence can access localhost."""
         p = Popen(["python3", "-m", "http.server", "12346"],
                   cwd=str(DIRECTORY))
-        self.addCleanup(p.terminate)
+
+        def cleanup():
+            p.terminate()
+            p.wait()
+
+        self.addCleanup(cleanup)
 
         name = random_name()
         p = Popen(
