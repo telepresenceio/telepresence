@@ -328,6 +328,14 @@ $ telepresence --deployment servicename-deployment \
 You are now running your own code locally, attaching it to the network stack of the Telepresence client and using the environment variables Telepresence client extracted.
 Your code is connected to the remote Kubernetes cluster.
 
+### Kubernetes namespaces
+
+If you want to proxy to a Deployment in a non-default namespace you can pass the `--namespace` argument to Telepresence:
+
+```console
+$ telepresence --namespace yournamespace --deployment yourservice --run-shell
+```
+
 ## What Telepresence proxies
 
 Telepresence currently proxies the following when using `--run-shell`:
