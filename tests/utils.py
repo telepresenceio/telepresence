@@ -22,13 +22,14 @@ def telepresence_version():
     ).strip()
 
 
-def run_nginx():
+def run_nginx(namespace):
     """Run nginx in Kuberentes; return Service name."""
     nginx_name = random_name()
 
     def cleanup():
         check_call([
             "kubectl", "delete", "--ignore-not-found",
+            "--namespace", namespace,
             "service,deployment", nginx_name
         ])
 
@@ -38,6 +39,8 @@ def run_nginx():
     check_output([
         "kubectl",
         "run",
+        "--namespace",
+        namespace,
         "--generator",
         "deployment/v1beta1",
         nginx_name,
