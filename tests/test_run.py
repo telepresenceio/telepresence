@@ -127,7 +127,8 @@ class EndToEndTests(TestCase):
             stdin=PIPE,
             cwd=str(DIRECTORY)
         )
-        p.stdin.write(b"exec python3 -m http.server %s\n" % (port,))
+        p.stdin.write(("exec python3 -m http.server %s\n" %
+                       (port, )).encode("ascii"))
         p.stdin.flush()
 
         def cleanup():
