@@ -168,7 +168,7 @@ class EndToEndTests(TestCase):
         service_name = random_name()
         self.fromcluster(
             ["--new-deployment", service_name, "--namespace", namespace],
-            "{}.{}.svc.default.local".format(service_name, namespace),
+            "{}.{}.svc.cluster.local".format(service_name, namespace),
             namespace,
             12347,
         )
