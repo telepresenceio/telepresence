@@ -109,9 +109,7 @@ def get_env_variables(remote_info):
 
 
 def write_env(remote_info, uid):
-    for_local_env = get_env_variables(
-        remote_info
-    )
+    for_local_env = get_env_variables(remote_info)
     with open("/output/unproxied.env.tmp", "w") as f:
         for key, value in for_local_env.items():
             f.write("{}={}\n".format(key, value))
@@ -209,16 +207,28 @@ def wait_for_ssh():
 
 def wait_for_pod(remote_info):
     for i in range(120):
-        phase = str(
-            check_output([
-                "kubectl", "get", "pod", remote_info.pod_name, "-o",
-                "jsonpath={.status.phase}"
-            ]), "utf-8"
-        ).strip()
-        if phase == "Running":
-            return
+        try:
+            pod = loads(
+                str(
+                    check_output([
+                        "kubectl", "get", "pod", remote_info.pod_name, "-o",
+                        "json"
+                    ]), "utf-8"
+                )
+            )
+        except CalledProcessError:
+            time.sleep(1)
+            continue
+        if pod["status"]["phase"] == "Running":
+            for container in pod["status"]["containerStatuses"]:
+                if container["name"] == remote_info.container_name and (
+                    container["ready"]
+                ):
+                    return
         time.sleep(1)
-    raise RuntimeError("Pod isn't starting: {}".format(phase))
+    raise RuntimeError(
+        "Pod isn't starting or can't be found: {}".format(pod["status"])
+    )
 
 
 SOCKS_PORT = 9050
@@ -271,10 +281,7 @@ def killall(processes):
             p.wait()
 
 
-def main(
-    uid, deployment_name, local_exposed_ports,
-    expose_host
-):
+def main(uid, deployment_name, local_exposed_ports, expose_host):
     remote_info = get_remote_info(deployment_name)
 
     # Wait for pod to be running:
@@ -303,7 +310,4 @@ def main(
 
 
 if __name__ == '__main__':
-    main(
-        int(argv[1]), argv[2], argv[3].split(",")
-        if argv[3] else [], argv[4]
-    )
+    main(int(argv[1]), argv[2], argv[3].split(",") if argv[3] else [], argv[4])

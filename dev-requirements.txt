@@ -3,3 +3,4 @@ flake8
 autoflake
 pytest
 yapf
+pylint
