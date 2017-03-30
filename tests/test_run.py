@@ -109,7 +109,7 @@ class EndToEndTests(TestCase):
         )
         assert exit_code == 0
 
-    def fromcluster(self, telepresence_args, url, namespace):
+    def fromcluster(self, telepresence_args, url, namespace, port):
         """
         Test of communication from the cluster.
 
@@ -119,7 +119,7 @@ class EndToEndTests(TestCase):
         p = Popen(
             args=["telepresence"] + telepresence_args + [
                 "--expose",
-                "12345",
+                str(port),
                 "--logfile",
                 "-",
                 "--run-shell",
@@ -127,13 +127,14 @@ class EndToEndTests(TestCase):
             stdin=PIPE,
             cwd=str(DIRECTORY)
         )
-        p.stdin.write(b"exec python3 -m http.server 12345\n")
+        p.stdin.write(b"exec python3 -m http.server %s\n" % (port,))
         p.stdin.flush()
 
         def cleanup():
             p.stdin.close()
             p.terminate()
             p.wait()
+            time.sleep(5)  # may take a second before http server shuts down
 
         self.addCleanup(cleanup)
         time.sleep(60)
@@ -142,7 +143,7 @@ class EndToEndTests(TestCase):
             "--quiet", '--rm', '--image=alpine', '--restart', 'Never',
             "--namespace", namespace, '--command', '--', '/bin/sh', '-c',
             "apk add --no-cache --quiet curl && " +
-            "curl --silent http://{}:12345/__init__.py".format(url)
+            "curl --silent http://{}:{}/__init__.py".format(url, port)
         ])
         assert result == (DIRECTORY / "__init__.py").read_bytes()
 
@@ -155,6 +156,7 @@ class EndToEndTests(TestCase):
             ["--new-deployment", service_name],
             service_name,
             "default",
+            12345,
         )
 
     def test_fromcluster_with_namespace(self):
@@ -167,6 +169,7 @@ class EndToEndTests(TestCase):
             ["--new-deployment", service_name, "--namespace", namespace],
             "{}.{}.svc.default.local".format(service_name, namespace),
             namespace,
+            12347,
         )
 
     def test_loopback(self):
@@ -212,8 +215,7 @@ class EndToEndTests(TestCase):
         nginx_name = run_nginx("default")
         time.sleep(30)  # kubernetes is speedy
         exit_code = run_script_test(["--new-deployment", random_name()],
-                                    "python3 proxy.py %s" %
-                                    (nginx_name.encode("utf-8"), ))
+                                    "python3 proxy.py " + nginx_name)
         assert exit_code == 0
 
     def existingdeployment(self, namespace):
