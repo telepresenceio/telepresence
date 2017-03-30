@@ -354,8 +354,11 @@ def run_local_command(runner, args, out_env, proxy_container_name):
     p = Popen(["torsocks", "bash"], env=env)
 
     def terminate_if_alive():
+        print("Shutting down local shell...", file=runner.logfile)
         os.remove(tor_conffile.name)
+        os.remove(out_env)
         if p.poll() is None:
+            print("Killing local shell...", file=runner.logfile)
             p.terminate()
 
     atexit.register(terminate_if_alive)
