@@ -1,9 +1,10 @@
 #!/usr/bin/python3
 """
-THIS IS A PROTOTYPE.
+Code that runs the proxy inside a local Docker container (for now; might
+want to move it into the parent CLI process).
 
-As a result the code is quite awful. Next up is rewriting it with tests and
-abstractions.
+This is a work in progress. The code is being cleaned up as bugs and
+features are implemented.
 """
 
 from json import loads
@@ -23,6 +24,7 @@ class RemoteInfo(object):
     """
     Information about the remote setup.
 
+    :ivar namespace str: The Kubernetes namespace.
     :ivar deployment_name str: The name of the Deployment object.
     :ivar pod_name str: The name of the pod created by the Deployment.
     :ivar deployment_config dict: The decoded k8s object (i.e. JSON/YAML).
@@ -32,7 +34,10 @@ class RemoteInfo(object):
         Telepresence pod.
     """
 
-    def __init__(self, deployment_name, pod_name, deployment_config):
+    def __init__(
+        self, namespace, deployment_name, pod_name, deployment_config
+    ):
+        self.namespace = namespace
         self.deployment_name = deployment_name
         self.pod_name = pod_name
         self.deployment_config = deployment_config
@@ -43,7 +48,9 @@ class RemoteInfo(object):
         self.container_name = self.container_config["name"]
         # Wait for pod to be running before we can get environment:
         wait_for_pod(self)
-        self.pod_environment = _get_remote_env(pod_name, self.container_name)
+        self.pod_environment = _get_remote_env(
+            namespace, pod_name, self.container_name
+        )
         self.service_names = _get_service_names(self.pod_environment)
 
 
@@ -60,11 +67,12 @@ def _get_service_names(environment):
     return result
 
 
-def _get_remote_env(pod_name, container_name):
+def _get_remote_env(namespace, pod_name, container_name):
     """Get the environment variables in the remote pod."""
     env = str(
         check_output([
-            "kubectl", "exec", pod_name, "--container", container_name, "env"
+            "kubectl", "exec", "--namespace", namespace, pod_name,
+            "--container", container_name, "env"
         ]), "utf-8"
     )
     result = {}
@@ -119,7 +127,7 @@ def write_env(remote_info, uid):
     rename("/output/unproxied.env.tmp", "/output/unproxied.env")
 
 
-def get_remote_info(deployment_name):
+def get_remote_info(deployment_name, namespace):
     """Given the deployment name, return a RemoteInfo object."""
     deployment = loads(
         str(
@@ -127,6 +135,8 @@ def get_remote_info(deployment_name):
                 "kubectl",
                 "get",
                 "deployment",
+                "--namespace",
+                namespace,
                 "-o",
                 "json",
                 deployment_name,
@@ -138,8 +148,10 @@ def get_remote_info(deployment_name):
     print("Expected metadata for pods: {}".format(expected_metadata))
     pods = loads(
         str(
-            check_output(["kubectl", "get", "pod", "-o", "json", "--export"]),
-            "utf-8"
+            check_output([
+                "kubectl", "get", "pod", "--namespace", namespace, "-o",
+                "json", "--export"
+            ]), "utf-8"
         )
     )["items"]
 
@@ -156,14 +168,13 @@ def get_remote_info(deployment_name):
             continue
         if (name.startswith(deployment_name + "-")
             and
-            pod["metadata"]["namespace"] == deployment["metadata"].get(
-                "namespace", "default")
+            pod["metadata"]["namespace"] == namespace
             and
             phase in (
                 "Pending", "Running"
         )):
             print("Looks like we've found our pod!")
-            return RemoteInfo(deployment_name, name, deployment)
+            return RemoteInfo(namespace, deployment_name, name, deployment)
 
     raise RuntimeError(
         "Telepresence pod not found for Deployment '{}'.".
@@ -213,8 +224,8 @@ def wait_for_pod(remote_info):
             pod = loads(
                 str(
                     check_output([
-                        "kubectl", "get", "pod", remote_info.pod_name, "-o",
-                        "json"
+                        "kubectl", "get", "pod", "--namespace", remote_info.
+                        namespace, remote_info.pod_name, "-o", "json"
                     ]), "utf-8"
                 )
             )
@@ -249,7 +260,10 @@ def connect(
     processes = []
     # forward remote port to here, by tunneling via remote SSH server:
     processes.append(
-        Popen(["kubectl", "port-forward", remote_info.pod_name, "22"])
+        Popen([
+            "kubectl", "port-forward", "--namespace", remote_info.namespace,
+            remote_info.pod_name, "22"
+        ])
     )
     wait_for_ssh()
 
@@ -283,8 +297,8 @@ def killall(processes):
             p.wait()
 
 
-def main(uid, deployment_name, local_exposed_ports, expose_host):
-    remote_info = get_remote_info(deployment_name)
+def main(uid, deployment_name, local_exposed_ports, expose_host, namespace):
+    remote_info = get_remote_info(deployment_name, namespace)
 
     processes = connect(
         remote_info,
@@ -309,4 +323,7 @@ def main(uid, deployment_name, local_exposed_ports, expose_host):
 
 
 if __name__ == '__main__':
-    main(int(argv[1]), argv[2], argv[3].split(",") if argv[3] else [], argv[4])
+    main(
+        int(argv[1]), argv[2], argv[3].split(",")
+        if argv[3] else [], argv[4], argv[5]
+    )
