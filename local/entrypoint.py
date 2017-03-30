@@ -41,6 +41,8 @@ class RemoteInfo(object):
             c for c in cs if "telepresence-k8s" in c["image"]
         ][0]
         self.container_name = self.container_config["name"]
+        # Wait for pod to be running before we can get environment:
+        wait_for_pod(self)
         self.pod_environment = _get_remote_env(pod_name, self.container_name)
         self.service_names = _get_service_names(self.pod_environment)
 
@@ -283,9 +285,6 @@ def killall(processes):
 
 def main(uid, deployment_name, local_exposed_ports, expose_host):
     remote_info = get_remote_info(deployment_name)
-
-    # Wait for pod to be running:
-    wait_for_pod(remote_info)
 
     processes = connect(
         remote_info,
