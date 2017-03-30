@@ -127,10 +127,11 @@ class EndToEndTests(TestCase):
             stdin=PIPE,
             cwd=str(DIRECTORY)
         )
-        p.stdin.write(b"python3 -m http.server 12345\n")
+        p.stdin.write(b"exec python3 -m http.server 12345\n")
         p.stdin.flush()
 
         def cleanup():
+            p.stdin.close()
             p.terminate()
             p.wait()
 
@@ -216,7 +217,7 @@ class EndToEndTests(TestCase):
         assert exit_code == 0
 
     def existingdeployment(self, namespace):
-        nginx_name = run_nginx("default")
+        nginx_name = run_nginx(namespace)
         time.sleep(30)  # kubernetes is speedy
 
         # Create a Deployment outside of Telepresence:
