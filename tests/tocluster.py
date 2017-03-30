@@ -8,7 +8,6 @@ This module will be run inside a container. To indicate success it will print
 import os
 import ssl
 import sys
-from subprocess import run
 from traceback import print_exception
 from urllib.request import urlopen
 from urllib.error import HTTPError
@@ -19,9 +18,9 @@ def handle_error(type, value, traceback):
     raise SystemExit(3)
 
 
-def check_kubernetes_api_url(url):
+def check_kubernetes_api_url(url, how):
     # XXX Perhaps we can have a more robust test by starting our own service.
-    print("Retrieving " + url)
+    print("Retrieving URL created with {}: {}".format(url, how))
     context = ssl._create_unverified_context()
     try:
         urlopen(url, timeout=5, context=context)
@@ -37,15 +36,21 @@ def check_urls():
     host = os.environ["KUBERNETES_SERVICE_HOST"]
     port = os.environ["KUBERNETES_SERVICE_PORT"]
     # Check environment variable based service lookup:
-    check_kubernetes_api_url("https://{}:{}/".format(
-        host,
-        port,
-    ))
-    # Check hostname lookup, both partial and full:
-    check_kubernetes_api_url("https://kubernetes:{}/".format(port))
     check_kubernetes_api_url(
-        "https://kubernetes.default.svc.cluster.local:{}/".format(port)
+        "https://{}:{}/".format(
+            host,
+            port,
+        ), "env variables"
     )
+    # Check hostname lookup, both partial and full:
+    check_kubernetes_api_url(
+        "https://kubernetes:{}/".format(port), "service name"
+    )
+    check_kubernetes_api_url(
+        "https://kubernetes.default.svc.cluster.local:{}/".format(port),
+        "full service name",
+    )
+    check_kubernetes_api_url("https://kubernetes:443/", "hardcoded port")
     return host, port
 
 

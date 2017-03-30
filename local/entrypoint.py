@@ -15,17 +15,21 @@ from subprocess import (
     CalledProcessError,
     TimeoutExpired,
 )
-from sys import argv, exit
+from sys import argv
 import time
 
 
 class RemoteInfo(object):
-    """Information about the remote setup.
+    """
+    Information about the remote setup.
 
-    :ivar deployment_name: The name of the Deployment object.
-    :ivar pod_name: The name of the pod created by the Deployment.
-    :ivar deployment_config: The decoded k8s object (i.e. JSON/YAML).
-    :ivar container_config: The container within the Deployment JSON.
+    :ivar deployment_name str: The name of the Deployment object.
+    :ivar pod_name str: The name of the pod created by the Deployment.
+    :ivar deployment_config dict: The decoded k8s object (i.e. JSON/YAML).
+    :ivar container_config dict: The container within the Deployment JSON.
+    :ivar container_name str: The name of the container.
+    :ivar pod_environment dict: Environment variables in the remote
+        Telepresence pod.
     """
 
     def __init__(self, deployment_name, pod_name, deployment_config):
@@ -37,12 +41,15 @@ class RemoteInfo(object):
             c for c in cs if "telepresence-k8s" in c["image"]
         ][0]
         self.container_name = self.container_config["name"]
+        # Wait for pod to be running before we can get environment:
+        wait_for_pod(self)
+        self.pod_environment = _get_remote_env(pod_name, self.container_name)
+        self.service_names = _get_service_names(self.pod_environment)
 
 
 def _get_service_names(environment):
     """Return names of Services, as used in env variable names."""
-    # XXX duplicated in remote-telepresence
-    # XXX also check for TCPness.
+    # XXX need to check for TCPness.
     # Order matters for service_keys, need it to be consistent with port
     # forwarding order in remote container.
     result = [
@@ -53,12 +60,11 @@ def _get_service_names(environment):
     return result
 
 
-def get_remote_env(remote_info):
+def _get_remote_env(pod_name, container_name):
     """Get the environment variables in the remote pod."""
     env = str(
         check_output([
-            "kubectl", "exec", remote_info.pod_name, "--container",
-            remote_info.container_name, "env"
+            "kubectl", "exec", pod_name, "--container", container_name, "env"
         ]), "utf-8"
     )
     result = {}
@@ -78,39 +84,20 @@ def get_deployment_set_keys(remote_info):
 def get_env_variables(remote_info):
     """
     Generate environment variables that match kubernetes.
-
-    For both Docker and non-Docker we copy environment variables explicitly set
-    in the Deployment template.
-
-    For Docker we make modified versions of the Servic env variables. For
-    non-Docker (SOCKS) we just copy the Service env variables as is.
     """
-    remote_env = get_remote_env(remote_info)
+    remote_env = remote_info.pod_environment
     deployment_set_keys = get_deployment_set_keys(remote_info)
-    service_names = _get_service_names(remote_env)
-    # ips proxied via docker, so need to modify addresses:
-    in_docker_result = {}
-    # XXX we're recreating the port generation logic
-    i = 0
-    for i, name in enumerate(service_names):
-        port = str(2000 + i)
-        ip = "127.0.0.1"
-        # XXX will be wrong for UDP
-        full_address = "tcp://{}:{}".format(ip, port)
-        in_docker_result[name + "_SERVICE_HOST"] = ip
-        in_docker_result[name + "_SERVICE_PORT"] = port
-        in_docker_result[name + "_PORT"] = full_address
-        port_name = name + "_PORT_" + port + "_TCP"
-        in_docker_result[port_name] = full_address
-        # XXX will break for UDP
-        in_docker_result[port_name + "_PROTO"] = "tcp"
-        in_docker_result[port_name + "_PORT"] = port
-        in_docker_result[port_name + "_ADDR"] = ip
-    socks_result = {}
+    service_names = remote_info.service_names
+    # Tell local process about the remote setup, useful for testing and
+    # debugging:
+    socks_result = {
+        "TELEPRESENCE_POD": remote_info.pod_name,
+        "TELEPRESENCE_CONTAINER": remote_info.container_name
+    }
+    # ips proxied via socks, can copy addresses unmodified:
     for key, value in remote_env.items():
         if key in deployment_set_keys:
             # Copy over Deployment-set env variables:
-            in_docker_result[key] = value
             socks_result[key] = value
         for service_name in service_names:
             # Copy over Service env variables to SOCKS variant:
@@ -120,46 +107,16 @@ def get_env_variables(remote_info):
                 key.endswith("_TCP")
             ):
                 socks_result[key] = value
-    # Tell local process about the remote setup, useful for testing and
-    # debugging:
-    socks_result["TELEPRESENCE_POD"] = remote_info.pod_name
-    socks_result["TELEPRESENCE_CONTAINER"] = remote_info.container_name
-    return in_docker_result, socks_result
+    return socks_result
 
 
 def write_env(remote_info, uid):
-    for_docker_env, for_local_env = get_env_variables(remote_info)
+    for_local_env = get_env_variables(remote_info)
     with open("/output/unproxied.env.tmp", "w") as f:
         for key, value in for_local_env.items():
             f.write("{}={}\n".format(key, value))
     chown("/output/unproxied.env.tmp", uid, uid)
     rename("/output/unproxied.env.tmp", "/output/unproxied.env")
-    with open("/output/docker.env.tmp", "w") as f:
-        for key, value in for_docker_env.items():
-            f.write("{}={}\n".format(key, value))
-    chown("/output/docker.env.tmp", uid, uid)
-    rename("/output/docker.env.tmp", "/output/docker.env")
-
-
-def write_etc_hosts(additional_hosts):
-    """
-    Update /etc/hosts with records that match k8s DNS entries for services.
-    """
-    services_json = loads(
-        str(
-            check_output(["kubectl", "get", "service", "-o", "json"]), "utf-8"
-        )
-    )
-    with open("/etc/hosts", "a") as hosts:
-        for service in services_json["items"]:
-            name = service["metadata"]["name"]
-            namespace = service["metadata"]["namespace"]
-            hosts.write("127.0.0.1 {}\n".format(name))
-            hosts.write(
-                "127.0.0.1 {}.{}.svc.cluster.local\n".format(name, namespace)
-            )
-        for host in additional_hosts:
-            hosts.write("127.0.0.1 {}\n".format(host))
 
 
 def get_remote_info(deployment_name):
@@ -252,23 +209,37 @@ def wait_for_ssh():
 
 def wait_for_pod(remote_info):
     for i in range(120):
-        phase = str(
-            check_output([
-                "kubectl", "get", "pod", remote_info.pod_name, "-o",
-                "jsonpath={.status.phase}"
-            ]), "utf-8"
-        ).strip()
-        if phase == "Running":
-            return
+        try:
+            pod = loads(
+                str(
+                    check_output([
+                        "kubectl", "get", "pod", remote_info.pod_name, "-o",
+                        "json"
+                    ]), "utf-8"
+                )
+            )
+        except CalledProcessError:
+            time.sleep(1)
+            continue
+        if pod["status"]["phase"] == "Running":
+            for container in pod["status"]["containerStatuses"]:
+                if container["name"] == remote_info.container_name and (
+                    container["ready"]
+                ):
+                    return
         time.sleep(1)
-    raise RuntimeError("Pod isn't starting: {}".format(phase))
+    raise RuntimeError(
+        "Pod isn't starting or can't be found: {}".format(pod["status"])
+    )
 
 
 SOCKS_PORT = 9050
 
 
 def connect(
-    remote_info, local_exposed_ports, expose_host, custom_proxied_hosts
+    remote_info,
+    local_exposed_ports,
+    expose_host,
 ):
     """
     Start all the processes that handle remote proxying.
@@ -283,6 +254,7 @@ def connect(
     wait_for_ssh()
 
     for port_number in local_exposed_ports:
+        # XXX really only need to bind to external port...
         processes.append(
             ssh([
                 "-R",
@@ -290,21 +262,11 @@ def connect(
             ])
         )
 
-    # start tunnel to remote SOCKS proxy, for telepresence --run:
+    # start tunnel to remote SOCKS proxy, for telepresence --run.
+    # XXX really only need to bind to external port...
     processes.append(
         ssh(["-L", "*:{}:127.0.0.1:{}".format(SOCKS_PORT, SOCKS_PORT)])
     )
-
-    # start proxies for custom-mapped hosts:
-    for host, port in [s.split(":", 1) for s in custom_proxied_hosts]:
-        processes.append(ssh(["-L", "{}:{}:{}".format(port, host, port)]))
-
-    # start proxies for Services:
-    # XXX maybe just do everything via SSH, now that we have it?
-    for port in range(2000, 2020):
-        # XXX what if there is more than 20 services
-        p = Popen(["kubectl", "port-forward", remote_info.pod_name, str(port)])
-        processes.append(p)
 
     return processes
 
@@ -321,34 +283,13 @@ def killall(processes):
             p.wait()
 
 
-def main(
-    uid, deployment_name, local_exposed_ports, custom_proxied_hosts,
-    expose_host
-):
-    processes = []
+def main(uid, deployment_name, local_exposed_ports, expose_host):
     remote_info = get_remote_info(deployment_name)
-    # Wait for pod to be running:
-    wait_for_pod(remote_info)
-    proxied_ports = set(range(2000, 2020)) | set(map(int, local_exposed_ports))
-    proxied_ports.add(22)
-    proxied_ports.add(SOCKS_PORT)
-    custom_ports = [int(s.split(":", 1)[1]) for s in custom_proxied_hosts]
-    for port in custom_ports:
-        if port in proxied_ports:
-            exit((
-                "OOPS: Can't proxy port {} more than once. "
-                "Currently mapped ports: {}.This error is due "
-                "to a limitation in Telepresence, see "
-                "https://github.com/datawire/telepresence/issues/6"
-            ).format(port, proxied_ports))
-        else:
-            proxied_ports.add(int(port))
-
-    # write /etc/hosts
-    write_etc_hosts([s.split(":", 1)[0] for s in custom_proxied_hosts])
 
     processes = connect(
-        remote_info, local_exposed_ports, expose_host, custom_proxied_hosts
+        remote_info,
+        local_exposed_ports,
+        expose_host,
     )
 
     # write docker envfile, which tells CLI we're ready:
@@ -368,7 +309,4 @@ def main(
 
 
 if __name__ == '__main__':
-    main(
-        int(argv[1]), argv[2], argv[3].split(",")
-        if argv[3] else [], argv[4].split(",") if argv[4] else [], argv[5]
-    )
+    main(int(argv[1]), argv[2], argv[3].split(",") if argv[3] else [], argv[4])

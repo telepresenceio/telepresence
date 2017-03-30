@@ -140,30 +140,11 @@ def parse_args():
         )
     )
     parser.add_argument(
-        "--proxy",
-        action='append',
-        default=[],
-        help=(
-            "<host>:<port> that will be proxied via Kubernetes. "
-            "This is unnecessary when using --run."
-        ),
-    )
-    group_run = parser.add_mutually_exclusive_group(required=True)
-    group_run.add_argument(
         "--run-shell",
         dest="runshell",
         action="store_true",
+        required=True,
         help="Run a local shell that will be proxied to/from Kubernetes.",
-    )
-    group_run.add_argument(
-        "--docker-run",
-        dest="docker_run_args",
-        metavar="DOCKER-RUN-ARGUMENTS",
-        nargs=argparse.REMAINDER,
-        help=(
-            "All remaininding arguments will be passed to "
-            "`docker run`, e.g. '-i -t alpine:3.5 /bin/sh'."
-        )
     )
     return parser.parse_args()
 
@@ -251,21 +232,15 @@ def start_proxy(runner, args):
         "{}:{}:ro".format(home_path, home_path),
     ])
 
-    if args.runshell:
-        # We're using a local command, which means it will be using a SOCKS
-        # proxy, so expose the local SOCKS port to the host machine:
-        docker_cmd.extend([
-            "-p",
-            ":9050",
-        ])
-        # We want the exposed host to be the external machine, not the Docker
-        # container:
-        expose_host = get_ip()
-    else:
-        # We're running our local process inside Docker, so we're exposing
-        # Docker container's IP (which is 127.0.0.1 since this will run in a
-        # container):
-        expose_host = "127.0.0.1"
+    # We're using a local command, which means it will be using a SOCKS
+    # proxy, so expose the local SOCKS port to the host machine:
+    docker_cmd.extend([
+        "-p",
+        ":9050",
+    ])
+    # We want the exposed host to be the external machine, not the Docker
+    # container:
+    expose_host = get_ip()
 
     docker_cmd.extend([
         # Mount local directory, where env file will be written out:
@@ -276,10 +251,8 @@ def start_proxy(runner, args):
         # Arguments: <uid>, <deployment-name>
         str(os.getuid()),
         args.deployment,
-        # Arguments: <port1,port2>, <proxy1,proxy2>, <expose_host>
+        # Arguments: <port1,port2>, <expose_host>
         ",".join(map(str, args.expose)),
-        # We don't need to do special proxying when using SOCKS-based --run:
-        ",".join([] if args.runshell else args.proxy),
         expose_host,
     ])
     p = runner.popen(docker_cmd)
@@ -382,44 +355,6 @@ def run_local_command(runner, args, out_env, proxy_container_name):
         os.remove(tor_conffile.name)
         if p.poll() is None:
             p.terminate()
-
-    atexit.register(terminate_if_alive)
-    wait_for_exit(runner, p, proxy_container_name)
-
-
-def run_docker_command(runner, args, out_env, proxy_container_name):
-    """--run-docker support, run command via Docker."""
-    # XXX argparse sucks need to switch to something else
-    if args.docker_run_args and args.docker_run_args[0] == "--":
-        args.docker_run_args.pop(0)
-    if sys.stderr.isatty():
-        print("Starting local container...", file=sys.stderr)
-    command = maybe_sudo([
-        "docker",
-        "run",
-        # Use network namespace of telepresence-local container:
-        "--net=container:" + proxy_container_name,
-        # Use environment variables written out from telepresence-local, to
-        # match Kubernets:
-        "--env-file={}".format(out_env),
-        # Set a label so we can easily find this container later:
-        "--label",
-        "telepresence-container=" + proxy_container_name,
-    ]) + args.docker_run_args
-    # Don't want to capture stderr here, since user may want to interact with
-    # this container, so we don't use runner.popen:
-    p = Popen(command)
-
-    def terminate_if_alive():
-        cid = runner.get_output(
-            maybe_sudo([
-                "docker", "ps", "-q", "--no-trunc", "--filter",
-                "label=telepresence-container=" + proxy_container_name
-            ])
-        ).strip()
-        # May have already exited, in which case cid is empty:
-        if cid:
-            stop_container(runner, cid)
 
     atexit.register(terminate_if_alive)
     wait_for_exit(runner, p, proxy_container_name)
@@ -561,27 +496,23 @@ def main():
             sys.stderr.write("Error running Docker: {}\n".format(e))
             raise SystemExit(1)
         # Make sure we have torsocks:
-        if args.runshell:
-            try:
-                check_output(["which", "torsocks"])
-            except CalledProcessError as e:
-                sys.stderr.write("Please install torsocks (v2.1 or later)\n")
-                raise SystemExit(1)
+        try:
+            check_output(["which", "torsocks"])
+        except CalledProcessError as e:
+            sys.stderr.write("Please install torsocks (v2.1 or later)\n")
+            raise SystemExit(1)
         tempdir, proxy_container_name, proxy_popen = start_proxy(runner, args)
         # Wait for proxy container to write out env file, indicating we're good
         # to go:
-        out_env = os.path.join(tempdir, "docker.env")
+        out_env = os.path.join(tempdir, "unproxied.env")
         while not os.path.exists(out_env):
             sleep(1)
-        if args.docker_run_args is not None:
-            run_docker_command(runner, args, out_env, proxy_container_name)
-        else:
-            run_local_command(
-                runner,
-                args,
-                os.path.join(tempdir, "unproxied.env"),
-                proxy_container_name,
-            )
+        run_local_command(
+            runner,
+            args,
+            os.path.join(tempdir, "unproxied.env"),
+            proxy_container_name,
+        )
 
     go()
 
