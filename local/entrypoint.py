@@ -20,6 +20,15 @@ from sys import argv
 import time
 
 
+def kubectl(namespace, args):
+    """Return command-line for running kubectl."""
+    result = ["kubectl"]
+    if namespace is not None:
+        result.extend(["--namespace", namespace])
+    result += args
+    return result
+
+
 class RemoteInfo(object):
     """
     Information about the remote setup.
@@ -70,10 +79,12 @@ def _get_service_names(environment):
 def _get_remote_env(namespace, pod_name, container_name):
     """Get the environment variables in the remote pod."""
     env = str(
-        check_output([
-            "kubectl", "exec", "--namespace", namespace, pod_name,
-            "--container", container_name, "env"
-        ]), "utf-8"
+        check_output(
+            kubectl(
+                namespace,
+                ["exec", pod_name, "--container", container_name, "env"]
+            )
+        ), "utf-8"
     )
     result = {}
     for line in env.splitlines():
@@ -131,27 +142,27 @@ def get_remote_info(deployment_name, namespace):
     """Given the deployment name, return a RemoteInfo object."""
     deployment = loads(
         str(
-            check_output([
-                "kubectl",
-                "get",
-                "deployment",
-                "--namespace",
-                namespace,
-                "-o",
-                "json",
-                deployment_name,
-                "--export",
-            ]), "utf-8"
+            check_output(
+                kubectl(
+                    namespace, [
+                        "get",
+                        "deployment",
+                        "-o",
+                        "json",
+                        deployment_name,
+                        "--export",
+                    ]
+                )
+            ), "utf-8"
         )
     )
     expected_metadata = deployment["spec"]["template"]["metadata"]
     print("Expected metadata for pods: {}".format(expected_metadata))
     pods = loads(
         str(
-            check_output([
-                "kubectl", "get", "pod", "--namespace", namespace, "-o",
-                "json", "--export"
-            ]), "utf-8"
+            check_output(
+                kubectl(namespace, ["get", "pod", "-o", "json", "--export"])
+            ), "utf-8"
         )
     )["items"]
 
@@ -168,7 +179,8 @@ def get_remote_info(deployment_name, namespace):
             continue
         if (name.startswith(deployment_name + "-")
             and
-            pod["metadata"]["namespace"] == namespace
+            pod["metadata"]["namespace"] == deployment["metadata"].get(
+                "namespace", "default")
             and
             phase in (
                 "Pending", "Running"
@@ -223,10 +235,12 @@ def wait_for_pod(remote_info):
         try:
             pod = loads(
                 str(
-                    check_output([
-                        "kubectl", "get", "pod", "--namespace", remote_info.
-                        namespace, remote_info.pod_name, "-o", "json"
-                    ]), "utf-8"
+                    check_output(
+                        kubectl(
+                            remote_info.namespace,
+                            ["get", "pod", remote_info.pod_name, "-o", "json"]
+                        )
+                    ), "utf-8"
                 )
             )
         except CalledProcessError:
@@ -260,10 +274,12 @@ def connect(
     processes = []
     # forward remote port to here, by tunneling via remote SSH server:
     processes.append(
-        Popen([
-            "kubectl", "port-forward", "--namespace", remote_info.namespace,
-            remote_info.pod_name, "22"
-        ])
+        Popen(
+            kubectl(
+                remote_info.namespace,
+                ["port-forward", remote_info.pod_name, "22"]
+            )
+        )
     )
     wait_for_ssh()
 
@@ -324,6 +340,6 @@ def main(uid, deployment_name, local_exposed_ports, expose_host, namespace):
 
 if __name__ == '__main__':
     main(
-        int(argv[1]), argv[2], argv[3].split(",")
-        if argv[3] else [], argv[4], argv[5]
+        int(argv[1]), argv[2], argv[3].split(",") if argv[3] else [], argv[4],
+        loads(argv[5])
     )

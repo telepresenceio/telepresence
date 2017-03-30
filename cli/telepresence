@@ -10,6 +10,7 @@ from __future__ import print_function
 
 import argparse
 import atexit
+import json
 import os
 import os.path
 import signal
@@ -131,8 +132,10 @@ def parse_args():
     )
     parser.add_argument(
         "--namespace",
-        default="default",
-        help="The Kubernetes namespace to use. Defaults to 'default'.")
+        default=None,
+        help=("The Kubernetes namespace to use. Defaults to kubectl's default"
+              " for the current context, which is usually 'default'.")
+    )
     parser.add_argument(
         "--expose",
         type=int,
@@ -180,6 +183,15 @@ def stop_container(runner, container_id):
         runner.get_output(maybe_sudo(["docker", "stop", container_id]))
 
 
+def kubectl(namespace, args):
+    """Return command-line for running kubectl."""
+    result = ["kubectl"]
+    if namespace is not None:
+        result.extend(["--namespace", namespace])
+    result += args
+    return result
+
+
 def start_proxy(runner, args):
     """`telepresence start`."""
     if sys.stderr.isatty():
@@ -189,24 +201,26 @@ def start_proxy(runner, args):
         args.deployment = args.new_deployment
 
         def remove_existing_deployment():
-            runner.get_output([
-                "kubectl", "delete", "--ignore-not-found",
-                "--namespace", args.namespace,
-                "service,deployment", args.deployment
-            ])
+            runner.get_output(
+                kubectl(
+                    args.namespace, [
+                        "delete", "--ignore-not-found", "service,deployment",
+                        args.deployment
+                    ]
+                )
+            )
 
         atexit.register(remove_existing_deployment)
         remove_existing_deployment()
-        command = [
-            "kubectl",
-            "run",
-            "--namespace",
-            args.namespace,
-            "--generator",
-            "deployment/v1beta1",
-            args.deployment,
-            "--image={}/telepresence-k8s:{}".format(REGISTRY, __version__),
-        ]
+        command = kubectl(
+            args.namespace, [
+                "run",
+                "--generator",
+                "deployment/v1beta1",
+                args.deployment,
+                "--image={}/telepresence-k8s:{}".format(REGISTRY, __version__),
+            ]
+        )
         for port in args.expose:
             command.append("--port={}".format(port))
         if args.expose:
@@ -255,7 +269,7 @@ def start_proxy(runner, args):
         # Arguments: <port1,port2>, <expose_host>, namespace
         ",".join(map(str, args.expose)),
         expose_host,
-        args.namespace
+        json.dumps(args.namespace)
     ])
     p = runner.popen(docker_cmd)
     atexit.register(stop_proxy, runner, container_id)
