@@ -378,6 +378,11 @@ Some alternatives to Telepresence:
 
 ### 0.22 (unreleased)
 
+Features:
+
+* Telepresence can now interact with any Kubernetes namespace, not just the default one.
+  ([#74](https://github.com/datawire/telepresence/issues/74))
+
 Backwards incompatible changes:
 
 * Running Docker containers locally (`--docker-run`) is no longer supported.
