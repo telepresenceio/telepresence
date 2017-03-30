@@ -36,6 +36,13 @@ spec:
           value: hello
 """
 
+NAMESPACE_YAML = """\
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {}
+"""
+
 
 def run_script_test(telepresence_args, local_command):
     """Run a script with Telepresence."""
@@ -59,6 +66,24 @@ class EndToEndTests(TestCase):
     End-to-end tests.
     """
 
+    def create_namespace(self):
+        """Create a new namespace, return its name."""
+        name = random_name()
+        yaml = NAMESPACE_YAML.format(name).encode("utf-8")
+        check_output(
+            args=[
+                "kubectl",
+                "apply",
+                "-f",
+                "-",
+            ],
+            input=yaml,
+        )
+        self.addCleanup(
+            lambda: check_output(["kubectl", "delete", "namespace", name])
+        )
+        return name
+
     def test_tocluster(self):
         """
         Tests of communication to the cluster.
@@ -75,7 +100,7 @@ class EndToEndTests(TestCase):
         """
         Tests of communication to the cluster with non-default namespace.
         """
-        namespace = random_name()
+        namespace = self.create_namespace()
         nginx_name = run_nginx(namespace)
         time.sleep(30)  # kubernetes is speedy
         exit_code = run_script_test(
@@ -135,7 +160,7 @@ class EndToEndTests(TestCase):
         """
         Communicate from the cluster to Telepresence, with custom namespace.
         """
-        namespace = random_name()
+        namespace = self.create_namespace()
         service_name = random_name()
         self.fromcluster(
             ["--new-deployment", service_name, "--namespace", namespace],
@@ -183,7 +208,7 @@ class EndToEndTests(TestCase):
 
     def test_proxy(self):
         """Telepresence proxies all connections via the cluster."""
-        nginx_name = run_nginx()
+        nginx_name = run_nginx("default")
         time.sleep(30)  # kubernetes is speedy
         exit_code = run_script_test(["--new-deployment", random_name()],
                                     "python3 proxy.py %s" %
@@ -213,8 +238,8 @@ class EndToEndTests(TestCase):
         )
         self.addCleanup(
             check_output, [
-                "kubectl", "delete", "deployment", name, "--namespace=" +
-                namespace
+                "kubectl", "delete", "deployment", name,
+                "--namespace=" + namespace
             ]
         )
 
@@ -238,6 +263,6 @@ class EndToEndTests(TestCase):
         """
         Tests of communicating with existing Deployment in a custom namespace.
         """
-        self.existingdeployment(random_name())
+        self.existingdeployment(self.create_namespace())
 
     # XXX write test for IP-based routing, not just DNS-based routing!
