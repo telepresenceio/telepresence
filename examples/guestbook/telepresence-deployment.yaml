@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: php-redis
-        image: datawire/telepresence-k8s:0.21
+        image: datawire/telepresence-k8s:0.22
         ports:
           - containerPort:8080
         env:
@@ -29,4 +29,4 @@ spec:
           # line below.
           # value: env
         ports:
-        - containerPort: 80
+        - containerPort: 8080
