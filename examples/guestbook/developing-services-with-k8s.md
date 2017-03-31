@@ -38,7 +38,7 @@ Next, we're going to want to install the `gcloud` and `kubectl` commands. Follow
 We need to install Telepresence, which will proxy your locally running service to GKE.
 
 ```
-% curl -L https://github.com/datawire/telepresence/raw/0.21/cli/telepresence -o telepresence
+% curl -L https://github.com/datawire/telepresence/raw/0.22/cli/telepresence -o telepresence
 % chmod +x telepresence
 ```
 
@@ -147,15 +147,13 @@ Now, we're going to start the local Telepresence client, which will spawn a spec
 % telepresence --deployment telepresence-deployment --expose 8080 --run-shell
 ```
 
-In this special shell, change to the `examples/guestbook` directory, and start the frontend application.
-
-We'll start our frontend application. We'll need to know the directory where Predis is installed. You can figure this out by typing:
+In this special shell, change to the `examples/guestbook` directory, and start the frontend application. We'll need to know the directory where Predis is installed. You can figure this out by typing:
 
 ```
 % pear config-get php_dir
 ```
 
-Now, in the `examples/guestbook` directory, type:
+Now, in the `examples/guestbook` directory, start PHP:
 
 ```
 php -d include_path="PATH_TO_PEAR_DIR" -S 0.0.0.0:8080
@@ -175,23 +173,11 @@ Go to the external IP address of your load balancer (in the above example, 104.1
 
 ### Editing your code
 
-But what if you want to actually edit the code that's running? No problem. Using Docker, we can mount our local filesystem directly into our container. Stop the telepresence process. Find the full path to the `examples/guestbook` directory on your computer. Restart the telepresence process with the `--volume` option and pass in the full path to your local directory. This will mount the local directory into your container at `/var/www/html`:
-
-```
-% telepresence --deployment telepresence-deployment --expose 80 --proxy redis-master:6379 --docker-run --rm -i -t --volume=EXAMPLE_DIR_PATH:/var/www/html/:ro  gcr.io/google_samples/gb-frontend:v4
-```
-
-Try editing `index.html` and renaming the Submit button to Go. Hit reload, and you'll immediately see your changes reflected live.
-
-Note: If you're on Mac OS X and this doesn't work, make sure that your directory is enabled in the Docker file sharing menu in the upper right hand side. Also, note that the path is case-sensitive.
+Now, open `index.html` from your shell and try renaming the Submit button to Go. Hit reload, and you'll immediately see your changes reflected live.
 
 ### Behind the scenes
 
 What's going on behind the scenes? Your incoming request goes to the load balancer. The load balancer, as mentioned above, looks for the Telepresence proxy based on the `app:guestbook` and `tier:backend` labels. The proxy, which is running in the cloud Kubernetes environment, then sends those requests to the local Telepresence client, which passes the request to the PHP application.
-
-### `run-shell`
-
-Telepresence also has an additional option, `--run-shell`, which will spawn a separate shell process that proxies to the remote cluster. If you have a full local development environment, this is a great option since you can use your full set of tools without integrating it with Docker. In this tutorial, we used Docker to avoid setting up a PHP toolchain.
 
 ## Additional Resources
 
