@@ -48,6 +48,15 @@ Move telepresence to somewhere on your $PATH, e.g.,:
 mv telepresence /usr/local/bin
 ```
 
+We'll also need to configure a local development environment for PHP. The Guestbook application is fairly simple, but it does depend on the Predis library. We'll need to install the [PEAR package manager](https://pear.php.net/manual/en/installation.getting.php), and then install the Predis library.
+
+```
+% curl -O https://pear.php.net/go-pear.phar
+% php go-pear.par
+% pear channel-discover pear.nrk.io   # You may need to add pear to your path
+% pear install nrk/Predis
+```
+
 Finally, this tutorial uses a number of Kubernetes configuration files. To save some typing, clone the [telepresence GitHub](https://github.com/datawire/telepresence/) repository:
 
 ```
@@ -132,13 +141,25 @@ Next, we need to deploy an externally visible load balancer. The [`frontend-serv
 % kubectl create -f frontend-service.yaml
 ```
 
-Now, we're going to start the local Telepresence client, and connect it to the proxy that's running in the Kubernetes cluster.
+Now, we're going to start the local Telepresence client, which will spawn a special shell which connects to the proxy in the remote Kubernetes cluster.
 
 ```
-% telepresence --deployment telepresence-deployment --expose 80 --proxy redis-master:6379 --docker-run --rm -i -t gcr.io/google_samples/gb-frontend:v4
+% telepresence --deployment telepresence-deployment --expose 8080 --run-shell
 ```
 
-Note that `--proxy` is a workaround for a bug in 0.21; in the next release the `--proxy` argument will not be necessary.
+In this special shell, change to the `examples/guestbook` directory, and start the frontend application.
+
+We'll start our frontend application. We'll need to know the directory where Predis is installed. You can figure this out by typing:
+
+```
+% pear config-get php_dir
+```
+
+Now, in the `examples/guestbook` directory, type:
+
+```
+php -d include_path="PATH_TO_PEAR_DIR" -S 0.0.0.0:8080
+```
 
 It's time to check out our app in the browser. Let's look up the IP address of our external load balancer:
 
