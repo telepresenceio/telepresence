@@ -27,9 +27,44 @@ from tempfile import mkdtemp, mkstemp, NamedTemporaryFile
 from time import sleep, time
 from traceback import print_exc
 
-import dpath
-import yaml
-import pprint
+try:
+    import yaml
+
+    def resource_reader(path):
+        return yaml.safe_load_all(open(path, "r"))
+
+    def resource_writer(resources):
+        fd, path = mkstemp(suffix=".yaml")
+        file = fdopen(fd, "w")
+
+        yaml.safe_dump_all(resources, stream=file,
+                           encoding="utf-8")
+
+        return path
+
+except ModuleNotFoundError:
+    import json
+
+    def resource_reader(path):
+        try:
+            resource = json.load(open(path, "r"))
+        except json.decoder.JSONDecodeError:
+            raise Exception("Cannot read JSON from " + path + "\n" +
+                            "If it is YAML, please install PyYAML and try again.")
+
+        return [ resource ]
+
+    def resource_writer(resources):
+        if len(resources) > 1:
+            raise Exception("Cannot use multiple-resource files with JSON\n" +
+                            "You will need to install PyYAML and use YAML.")
+
+        fd, path = mkstemp(suffix=".json")
+        file = fdopen(fd, "w")
+
+        json.dump(resources[0], file)
+
+        return path
 
 if sys.version_info.major == 2:
     from urllib import quote_plus
@@ -61,6 +96,7 @@ REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
 LOCAL_IMAGE_NAME = "%s/telepresence-local:%s" % (REGISTRY, LOCAL_VERSION)
 K8S_IMAGE_NAME = "%s/telepresence-k8s:%s" % (REGISTRY, K8S_VERSION)
+
 
 def random_name():
     """Return a random name for a container."""
@@ -225,14 +261,55 @@ def stop_container(runner, container_id):
     ):
         runner.get_output(maybe_sudo(["docker", "stop", container_id]))
 
-def dpath_get(obj, glob, default=None):
-    try:
-        return dpath.util.get(obj, glob)
-    except KeyError:
-        return default
 
-def dpath_set(obj, glob, value):
-    return dpath.util.new(obj, glob, value)
+def dpath_get(obj, keypath, default=None):
+    el = obj
+
+    if len(keypath) > 1:
+        for key in keypath[:-1]:
+            if not key in el:
+                return default
+
+            el = el[key]
+
+    return el.get(keypath[-1], default)
+
+
+def dpath_set(obj, keypath, value):
+    el = obj
+
+    if len(keypath) > 1:
+        for i in range(len(keypath) - 1):
+            key = keypath[i]
+            nextkey = keypath[i + 1]    # always legal for range(len - 1)
+
+            print("want %s in %s" % (key, el))
+
+            if isinstance(key, int):
+                print("-- key is int, len(el) is %d" % len(el))
+
+                if len(el) < key:
+                    while len(el) < key:
+                        el.append(None)
+
+                    if isinstance(nextkey, int):
+                        print("-- set to []")
+                        el.append([])
+                    else:
+                        print("-- set to {}")
+                        el.append({})
+            elif not key in el:
+                if isinstance(nextkey, int):
+                    print("-- set to []")
+                    el[key] = []
+                else:
+                    print("-- set to {}")
+                    el[key] = {}
+
+            el = el[key]
+
+    print("set %s to %s in %s" % (keypath[-1], value, el))
+    el[keypath[-1]] = value
 
 class Deployment(object):
     """
@@ -261,21 +338,14 @@ class Deployment(object):
 
         return adapted_resource
 
-    def write_resource(self, resource, mods):
-        adapted_fd, adapted_path = mkstemp(suffix=".yaml")
-        adapted_file = fdopen(adapted_fd, "w")
-
-        yaml.safe_dump(resource, stream=adapted_file, encoding="utf-8")
-
-        return adapted_path
-
     def add_managed_resource(self, name, kind, starter, stopper):
         if (kind == 'deployment') and not self.name:
             self.name = name
 
-        print("%s: add %s\n%s\n%s\n%s" % (self.name, kind, name, starter, stopper))
+        print("%s: add %s\n%s\n%s\n%s" %
+              (self.name, kind, name, starter, stopper))
 
-        self.managed_resources[kind].append( (name, starter, stopper) )
+        self.managed_resources[kind].append((name, starter, stopper))
 
     def add_exposed_port(self, name, port):
         self.exposed_ports.append((name, port))
@@ -285,7 +355,7 @@ class Deployment(object):
         # We don't know if this resource is JSON or YAML, but fortunately
         # PyYAML can load both. [ :) ]
 
-        resources = yaml.safe_load_all(open(resource_path, "r").read())
+        resources = resource_reader(resource_path)
 
         # As what kind of thing will we add this?
         resource_file_type = None
@@ -299,15 +369,15 @@ class Deployment(object):
         for resource in resources:
             # What exactly did we get back? We need it to be a dictionary.
             if not isinstance(resource, collections.Mapping):
-                raise Exception("resource path %s does not specify an actual Kubernetes resource" % resource_path)
+                raise Exception("resource path %s does not specify an actual Kubernetes resource" % resource_path)  # noqa: E501
 
             # OK, so far so good. What is this thing?
-            resource_type = dpath_get(resource, "kind")
+            resource_type = dpath_get(resource, [ "kind" ])
 
             if resource_type is None:
                 raise Exception("resource path %s has no kind" % resource_path)
 
-            resource_name = dpath_get(resource, "/metadata/name")
+            resource_name = dpath_get(resource, [ "metadata", "name" ])
 
             if resource_name is None:
                 raise Exception("resource path %s has no name" % resource_path)
@@ -323,9 +393,9 @@ class Deployment(object):
                 adapted_resource = self.get_adapted_resource(
                     resource,
                     [
-                        ( "/spec/replicas", 1 ),
-                        ( "/spec/template/spec/containers/0/image",
-                          K8S_IMAGE_NAME )
+                        (["spec", "replicas"], 1),
+                        (["spec", "template", "spec", "containers", 0, "image"],
+                         K8S_IMAGE_NAME)
                     ]
                 )
 
@@ -335,18 +405,20 @@ class Deployment(object):
                 must_save_adapted_resources = True
 
             elif resource_type == 'Service':
-                # It's a service. Only add it as a service, though, if we shouldn't
-                # already add it as a deployment.
+                # It's a service. Only add it as a service, though, if we
+                # shouldn't already add it as a deployment.
 
                 if resource_file_type != 'deployment':
                     resource_file_type = 'service'
 
                 # XXX labels??
 
-                ports = dpath_get(resource, "/spec/ports")
+                ports = dpath_get(resource, [ "spec", "ports" ])
 
                 if not ports:
-                    raise Exception("service resource %s has no ports" % resource_path)
+                    raise Exception(
+                        "service resource %s has no ports" % resource_path
+                    )
 
                 adapted_resources.append(resource)
 
@@ -359,41 +431,19 @@ class Deployment(object):
                     if exposed_port is not None:
                         self.add_exposed_port(resource_name, exposed_port)
                     else:
-                        raise Exception("Service %s at %s has no port to expose?" %
-                                        (resource_name, resource_path))
+                        raise Exception(
+                            "Service %s at %s has no port to expose?" %
+                            (resource_name, resource_path)
+                        )
 
             else:
-                # We don't know what this is. Set the type to 'other' only if it's not
-                # already set.
+                # We don't know what this is. Set the type to 'other' only
+                # if it's not already set.
 
                 if not resource_file_type:
                     resource_file_type = 'other'
 
                 adapted_resources.append(resource)
-
-                # adapted_path = self.write_adapted_resource(
-                #     resource,
-
-                # self.add_managed_resource(
-                #     resource_name,
-                #     "deployment",
-                #     [ "kubectl", "apply", "-f", adapted_path ],
-                #     [ "kubectl", "delete", "--ignore-not-found", "-f", adapted_path ]
-                # )
-
-                # self.add_managed_resource(
-                #     resource_name,
-                #     "service",
-                #     [ "kubectl", "apply", "-f", resource_path ],
-                #     [ "kubectl", "delete", "--ignore-not-found", "-f", resource_path ]
-                # )
-
-                # self.add_managed_resource(
-                #     resource_name,
-                #     "other",
-                #     [ "kubectl", "apply", "-f", resource_path ],
-                #     [ "kubectl", "delete", "--ignore-not-found", "-f", resource_path ]
-                # )
 
         # OK, once here, we should know how to add this, and have a list of
         # adapted resources ready to go. Assume for the moment that we didn't
@@ -405,20 +455,15 @@ class Deployment(object):
 
         if must_save_adapted_resources:
             # Yes. Hit it.
-
-            adapted_fd, adapted_path = mkstemp(suffix=".yaml")
-            adapted_file = fdopen(adapted_fd, "w")
-
-            yaml.safe_dump_all(adapted_resources, stream=adapted_file,
-                               encoding="utf-8")
+            adapted_path = resource_writer(adapted_resources)
 
         # Once that's done, add this resource to our stuff to manage.
 
         self.add_managed_resource(
             resource_name,
             resource_file_type,
-            [ "kubectl", "apply", "-f", adapted_path ],
-            [ "kubectl", "delete", "--ignore-not-found", "-f", adapted_path ]
+            ["kubectl", "apply", "-f", adapted_path],
+            ["kubectl", "delete", "--ignore-not-found", "-f", adapted_path]
         )
 
     def start(self):
@@ -430,10 +475,11 @@ class Deployment(object):
         self.run_things(2)
 
     def run_things(self, which):
-        for rtype in [ 'deployment', 'service', 'other' ]:
+        for rtype in ['deployment', 'service', 'other']:
             for thing in self.managed_resources[rtype]:
                 print("%s %s: %s" % (rtype, thing[0], thing[which]))
                 self.runner.get_output(thing[which])
+
 
 def deployment_for_args(runner, args):
     deployment = Deployment(runner)
@@ -443,15 +489,16 @@ def deployment_for_args(runner, args):
         for path in args.k8s_resources:
             deployment.add_k8s_resource(path)
     elif args.new_deployment:
-        deployment_name = args.new_deployment
+        dep_name = args.new_deployment
 
         starter = [
             "kubectl", "run", "--generator", "deployment/v1beta1",
-            deployment_name, "--image=%s" % K8S_IMAGE_NAME
+            dep_name, "--image=%s" % K8S_IMAGE_NAME
         ]
 
-        stopper = [ 
-            "kubectl", "delete", "--ignore-not-found", "service,deployment", deployment_name
+        stopper = [
+            "kubectl", "delete", "--ignore-not-found",
+            "service,deployment", dep_name
         ]
 
         for port in args.expose:
@@ -461,18 +508,19 @@ def deployment_for_args(runner, args):
         if args.expose:
             starter.append("--expose")
 
-        deployment.add_managed_resource(deployment_name, starter, stopper)
+        deployment.add_managed_resource(dep_name, starter, stopper)
     elif args.deployment:
         # Save the deployment name...
-        deployment_name = args.deployment
+        dep_name = args.deployment
 
         # ...but we needn't run any deployment command.
-        starter = [ "echo", "Using existing deployment %s" % deployment_name ]
-        stopper = [ "echo", "Not stopping existing deployment %s" % deployment_name ]
+        starter = ["echo", "Using existing deployment %s" % dep_name]
+        stopper = ["echo", "Not stopping existing deployment %s" % dep_name]
 
-        deployment.add_managed_resource(deployment_name, starter, stopper)
+        deployment.add_managed_resource(dep_name, starter, stopper)
 
     return deployment
+
 
 def start_proxy(runner, deployment, args):
     """`telepresence start`."""
@@ -485,7 +533,8 @@ def start_proxy(runner, deployment, args):
         deployment.start()
         sleep(5)  # XXX oh god
 
-    # OK. Now it's on to the local stuff. Start with snaring our home directory.
+    # OK. Now it's on to the local stuff. Start with snaring our home
+    # directory.
     home_path = os.path.expanduser("~")
 
     # On OS X /tmp is shareable via Docker, but default location of temporary
@@ -538,7 +587,7 @@ def start_proxy(runner, deployment, args):
         str(os.getuid()),
         deployment.name,
         # Arguments: <port1,port2>, <proxy1,proxy2>, <expose_host>
-        ",".join([ "%s" % x[1] for x in deployment.exposed_ports ]),
+        ",".join([str(x[1]) for x in deployment.exposed_ports]),
         # We don't need to do special proxying when using SOCKS-based --run:
         ",".join([] if args.runshell else args.proxy),
         expose_host,
@@ -550,6 +599,7 @@ def start_proxy(runner, deployment, args):
 
     atexit.register(stop_proxy, runner, container_id)
     return tempdir, container_id, p
+
 
 TORSOCKS_CONFIG = """
 # Allow process to listen on ports:
@@ -834,7 +884,7 @@ def main():
 
         deployment = deployment_for_args(runner, args)
 
-        tempdir, proxy_container_name, proxy_popen = start_proxy(runner, deployment, args)
+        tempdir, proxy_container_name, proxy_popen = start_proxy(runner, deployment, args)  # noqa: E501
 
         # Wait for proxy container to write out env file, indicating we're good
         # to go:
