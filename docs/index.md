@@ -219,7 +219,7 @@ Otherwise it won't be exposed to the remote server.
 
 > **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
 
-## In-depth usage
+## Using existing Deployments
 
 Let's look in a bit more detail at using Telepresence when you have an existing `Deployment`.
 
@@ -328,6 +328,8 @@ $ telepresence --deployment servicename-deployment \
 You are now running your own code locally, attaching it to the network stack of the Telepresence client and using the environment variables Telepresence client extracted.
 Your code is connected to the remote Kubernetes cluster.
 
+## Other features and functionality
+
 ### Kubernetes namespaces
 
 If you want to proxy to a Deployment in a non-default namespace you can pass the `--namespace` argument to Telepresence:
@@ -335,6 +337,34 @@ If you want to proxy to a Deployment in a non-default namespace you can pass the
 ```console
 $ telepresence --namespace yournamespace --deployment yourservice --run-shell
 ```
+
+### Accessing the pod from your process
+
+In general Telepresence proxies all IPs and DNS lookups via the remote proxy pod.
+There is one exception, however.
+
+`localhost` and `127.0.0.1` will end up accessing the host machine, the machine where you run `telepresence`, *not* the pod as is usually the case.
+This mostly is a problem in cases where you are running multiple containers in a pod and you need your process to access a different container in the same pod.
+
+The solution is to access the pod via its IP, rather than at `127.0.0.1`.
+You can have the pod IP configured as an environment variable `$MY_POD_IP` in the Deployment using the Kubernetes [Downward API](https://kubernetes.io/docs/tasks/configure-pod-container/environment-variable-expose-pod-information/):
+
+```yaml
+apiVersion: extensions/v1beta1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+      - name: servicename
+        image: datawire/telepresence-k8s:{{ site.data.version.version }}
+        env:
+        - name: MY_POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+```
+
 
 ## What Telepresence proxies
 
