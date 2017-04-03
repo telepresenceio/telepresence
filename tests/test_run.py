@@ -89,7 +89,6 @@ class EndToEndTests(TestCase):
         Tests of communication to the cluster.
         """
         nginx_name = run_nginx("default")
-        time.sleep(30)  # kubernetes is speedy
         exit_code = run_script_test(
             ["--new-deployment", random_name()],
             "python3 tocluster.py {} default".format(nginx_name),
@@ -102,7 +101,6 @@ class EndToEndTests(TestCase):
         """
         namespace = self.create_namespace()
         nginx_name = run_nginx(namespace)
-        time.sleep(30)  # kubernetes is speedy
         exit_code = run_script_test(
             ["--new-deployment", random_name(), "--namespace", namespace],
             "python3 tocluster.py {} {}".format(nginx_name, namespace),
@@ -214,14 +212,12 @@ class EndToEndTests(TestCase):
     def test_proxy(self):
         """Telepresence proxies all connections via the cluster."""
         nginx_name = run_nginx("default")
-        time.sleep(30)  # kubernetes is speedy
         exit_code = run_script_test(["--new-deployment", random_name()],
                                     "python3 proxy.py " + nginx_name)
         assert exit_code == 0
 
     def existingdeployment(self, namespace):
         nginx_name = run_nginx(namespace)
-        time.sleep(30)  # kubernetes is speedy
 
         # Create a Deployment outside of Telepresence:
         name = random_name()

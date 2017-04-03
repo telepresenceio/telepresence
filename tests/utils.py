@@ -3,11 +3,11 @@
 import atexit
 from pathlib import Path
 import time
-from subprocess import check_output, STDOUT, check_call
+from subprocess import check_output, STDOUT, check_call, CalledProcessError
 
 DIRECTORY = Path(__file__).absolute().parent
-REVISION = str(check_output(["git", "rev-parse", "--short", "HEAD"]), "utf-8"
-               ).strip()
+REVISION = str(check_output(["git", "rev-parse", "--short", "HEAD"]),
+               "utf-8").strip()
 
 
 def random_name():
@@ -28,9 +28,8 @@ def run_nginx(namespace):
 
     def cleanup():
         check_call([
-            "kubectl", "delete", "--ignore-not-found",
-            "--namespace", namespace,
-            "service,deployment", nginx_name
+            "kubectl", "delete", "--ignore-not-found", "--namespace",
+            namespace, "service,deployment", nginx_name
         ])
 
     cleanup()
@@ -48,4 +47,18 @@ def run_nginx(namespace):
         "--port=80",
         "--expose",
     ])
-    return nginx_name
+    for i in range(120):
+        try:
+            available = int(
+                check_output([
+                    "kubectl", "get", "deployment", nginx_name, "-o",
+                    'jsonpath={.status.availableReplicas}'
+                ])
+            )
+        except CalledProcessError:
+            available = 0
+        if available > 0:
+            return nginx_name
+        else:
+            time.sleep(1)
+    raise RuntimeError("nginx never started")
