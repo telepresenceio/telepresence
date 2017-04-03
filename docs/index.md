@@ -414,6 +414,13 @@ Some alternatives to Telepresence:
 
 ## Changelog
 
+### 0.23 (unreleased)
+
+Bug fixes:
+
+* Telepresence no longer uses lots of CPU busy-looping.
+  Thanks to Jean-Paul Calderone for the bug report.
+
 ### 0.22 (March 30, 2017)
 
 Features:

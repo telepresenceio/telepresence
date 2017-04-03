@@ -331,6 +331,7 @@ def main(uid, deployment_name, local_exposed_ports, expose_host, namespace):
 
     # Now, poll processes; if one dies kill them all and restart them:
     while True:
+        time.sleep(0.1)
         for p in processes:
             code = p.poll()
             if code is not None:
