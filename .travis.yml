@@ -6,7 +6,7 @@ python:
 services:
   - docker
 
-# Cache gcloud SDK across runs:
+# Cache gcloud SDK across runs; this requires master to have builds:
 cache:
   directories:
     - "$HOME/google-cloud-sdk/"
@@ -18,6 +18,10 @@ env:
     - CLUSTER_NAME=telepresence-testing
     - CLOUDSDK_COMPUTE_ZONE=us-central1-a
 
+# Only build master:
+branches:
+  only:
+    - master
 
 before_install:
   # Record some debugging info:
