@@ -107,22 +107,6 @@ redis-slave-132015689-dpp46    1/1       Running   0          1d
 redis-slave-132015689-v06md    1/1       Running   0          1d
 ```
 
-### Setting up the Guestbook frontend
-
-We're going to run the Guestbook PHP frontend locally, so the first step is to download the Docker image.
-
-```
-% docker pull gcr.io/google_samples/gb-frontend:v4
-```
-
-You can quickly run the frontend service:
-
-```
-% docker run -it --publish=8080:80 gcr.io/google_samples/gb-frontend:v4
-```
-
-The `--publish` option maps the container's port 80 to the host's port 8080. Visit `localhost:8080` in your browser, and you'll see the Guestbook application. You won't be able to add a Guestbook entry, because we haven't connected the PHP application to Redis yet. Exit your Docker process by typing `Ctrl-C`.
-
 ### Connecting the Guestbook frontend to Redis
 
 We're now going to use [Telepresence](https://datawire.github.io/telepresence) to create a virtual network between your local machine and the remote Kubernetes cluster. This way, the PHP application will be able to talk to remote cloud resources, and vice versa.
