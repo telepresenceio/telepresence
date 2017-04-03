@@ -3,7 +3,7 @@ End-to-end tests for running directly in the operating system.
 """
 
 from unittest import TestCase
-from subprocess import check_output, Popen, PIPE
+from subprocess import check_output, Popen, PIPE, CalledProcessError
 import time
 import os
 
@@ -123,6 +123,7 @@ class EndToEndTests(TestCase):
                 "--run-shell",
             ],
             stdin=PIPE,
+            stderr=PIPE,
             cwd=str(DIRECTORY)
         )
         p.stdin.write(("exec python3 -m http.server %s\n" %
@@ -136,15 +137,23 @@ class EndToEndTests(TestCase):
             time.sleep(5)  # may take a second before http server shuts down
 
         self.addCleanup(cleanup)
-        time.sleep(60)
-        result = check_output([
-            'kubectl', 'run', '--attach', random_name(), '--generator=job/v1',
-            "--quiet", '--rm', '--image=alpine', '--restart', 'Never',
-            "--namespace", namespace, '--command', '--', '/bin/sh', '-c',
-            "apk add --no-cache --quiet curl && " +
-            "curl --silent http://{}:{}/__init__.py".format(url, port)
-        ])
-        assert result == (DIRECTORY / "__init__.py").read_bytes()
+
+        for i in range(120):
+            try:
+                result = check_output([
+                    'kubectl', 'run', '--attach', random_name(),
+                    '--generator=job/v1', "--quiet", '--rm', '--image=alpine',
+                    '--restart', 'Never', "--namespace", namespace,
+                    '--command', '--', '/bin/sh', '-c',
+                    "apk add --no-cache --quiet curl && " +
+                    "curl --silent http://{}:{}/__init__.py".format(url, port)
+                ])
+                assert result == (DIRECTORY / "__init__.py").read_bytes()
+                return
+            except CalledProcessError:
+                time.sleep(1)
+                continue
+        raise RuntimeError("failed to connect to local HTTP server")
 
     def test_fromcluster(self):
         """
