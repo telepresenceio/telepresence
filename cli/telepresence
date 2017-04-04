@@ -133,8 +133,10 @@ def parse_args():
     parser.add_argument(
         "--namespace",
         default=None,
-        help=("The Kubernetes namespace to use. Defaults to kubectl's default"
-              " for the current context, which is usually 'default'.")
+        help=(
+            "The Kubernetes namespace to use. Defaults to kubectl's default"
+            " for the current context, which is usually 'default'."
+        )
     )
     parser.add_argument(
         "--expose",
@@ -268,7 +270,8 @@ def start_proxy(runner, args):
     # merge CLI and the proxy into one process:
     if "KUBECONFIG" in os.environ:
         docker_cmd.extend([
-            "-e", "KUBECONFIG=" + os.environ["KUBECONFIG"],
+            "-e",
+            "KUBECONFIG=" + os.environ["KUBECONFIG"],
         ])
 
     docker_cmd.extend([
