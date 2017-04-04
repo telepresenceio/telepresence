@@ -476,7 +476,7 @@ class handle_unexpected_errors(object):
                         "And here are the last few lines of the logfile "
                         "(see {} for the complete logs):\n\n".format(
                             self.logfile
-                        ) + "\n".join(logs.splitlines()[-10:]) + "\n"
+                        ) + "\n".join(logs.splitlines()[-20:]) + "\n"
                     )
 
                 if input(
