@@ -420,6 +420,8 @@ Bug fixes:
 
 * The `KUBECONFIG` environment variable will now be respected, so long as it points at a path inside your home directory.
   ([#84](https://github.com/datawire/telepresence/issues/84))
+* Errors on startup are noticed, fixing issues with hanging indefinitely in the "Starting proxy..." phase.
+  ([#83](https://github.com/datawire/telepresence/issues/83))
 
 ### 0.23 (April 3, 2017)
 
