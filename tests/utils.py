@@ -3,16 +3,20 @@
 import atexit
 from pathlib import Path
 import time
+import os
 from subprocess import check_output, STDOUT, check_call, CalledProcessError
 
 DIRECTORY = Path(__file__).absolute().parent
 REVISION = str(check_output(["git", "rev-parse", "--short", "HEAD"]),
                "utf-8").strip()
+START_TIME = time.time()
 
 
 def random_name():
     """Return a new name each time."""
-    return "testing-{}-{}".format(REVISION, time.time()).replace(".", "-")
+    return "testing-{}-{}-{}".format(
+        REVISION, time.time() - START_TIME, os.getpid()
+    ).replace(".", "-")
 
 
 def telepresence_version():
