@@ -553,6 +553,11 @@ def main():
         out_env = os.path.join(tempdir, "unproxied.env")
         while not os.path.exists(out_env):
             sleep(1)
+            if proxy_popen.poll() is not None:
+                raise RuntimeError(
+                    "Proxy exited unexpectedly with error code {}.".
+                    format(proxy_popen.poll())
+                )
         run_local_command(
             runner,
             args,
