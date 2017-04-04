@@ -261,6 +261,17 @@ def start_proxy(runner, args):
         # Mount local directory, where env file will be written out:
         "-v",
         tempdir + ":/output",
+    ])
+
+    # Pass on KUBECONFIG env variable, since it impacts how kubectl behaves;
+    # this will be less hacky (and less likely to break on exotic paths) if we
+    # merge CLI and the proxy into one process:
+    if "KUBECONFIG" in os.environ:
+        docker_cmd.extend([
+            "-e", "KUBECONFIG=" + os.environ["KUBECONFIG"],
+        ])
+
+    docker_cmd.extend([
         # Name of image:
         "{}/telepresence-local:{}".format(REGISTRY, __version__),
         # Arguments: <uid>, <deployment-name>

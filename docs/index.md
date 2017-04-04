@@ -414,6 +414,13 @@ Some alternatives to Telepresence:
 
 ## Changelog
 
+### 0.24 (unreleased)
+
+Bug fixes:
+
+* The `KUBECONFIG` environment variable will now be respected, so long as it points at a path inside your home directory.
+  ([#84](https://github.com/datawire/telepresence/issues/84))
+
 ### 0.23 (April 3, 2017)
 
 Bug fixes:
