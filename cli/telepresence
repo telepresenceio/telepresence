@@ -133,8 +133,10 @@ def parse_args():
     parser.add_argument(
         "--namespace",
         default=None,
-        help=("The Kubernetes namespace to use. Defaults to kubectl's default"
-              " for the current context, which is usually 'default'.")
+        help=(
+            "The Kubernetes namespace to use. Defaults to kubectl's default"
+            " for the current context, which is usually 'default'."
+        )
     )
     parser.add_argument(
         "--expose",
@@ -268,7 +270,8 @@ def start_proxy(runner, args):
     # merge CLI and the proxy into one process:
     if "KUBECONFIG" in os.environ:
         docker_cmd.extend([
-            "-e", "KUBECONFIG=" + os.environ["KUBECONFIG"],
+            "-e",
+            "KUBECONFIG=" + os.environ["KUBECONFIG"],
         ])
 
     docker_cmd.extend([
@@ -425,6 +428,18 @@ Logs:
 """
 
 
+def read_logs(logfile):
+    """Read logfile, return string."""
+    logs = "Not available"
+    if logfile != "-" and os.path.exists(logfile):
+        try:
+            with open(logfile, "r") as logfile:
+                logs = logfile.read()
+        except Exception as e:
+            logs += ", error ({})".format(e)
+    return logs
+
+
 class handle_unexpected_errors(object):
     """Decorator that catches unexpected errors."""
 
@@ -447,22 +462,23 @@ class handle_unexpected_errors(object):
             except KeyboardInterrupt:
                 raise SystemExit(0)
             except Exception as e:
-                logs = "Not available"
-                if self.logfile != "-" and os.path.exists(self.logfile):
-                    try:
-                        with open(self.logfile, "r") as logfile:
-                            logs = logfile.read()
-                    except Exception as e:
-                        logs += "error ({})".format(e)
+                logs = read_logs(self.logfile)
                 errorf = StringIO()
                 print_exc(file=errorf)
                 error = errorf.getvalue()
                 print(
                     "\nLooks like there's a bug in our code. Sorry about that!"
-                    " You may able to find more details in the logs "
-                    "(which are written to telepresence.log by default).\n\n"
+                    "\n\n"
                     "Here's the traceback:\n\n" + error + "\n"
                 )
+                if self.logfile != "-":
+                    print(
+                        "And here are the last few lines of the logfile "
+                        "(see {} for the complete logs):\n\n".format(
+                            self.logfile
+                        ) + "\n".join(logs.splitlines()[-20:]) + "\n"
+                    )
+
                 if input(
                     "Would you like to file an issue in our issue tracker?"
                     " We'd really appreciate the help improving our "
@@ -480,7 +496,7 @@ class handle_unexpected_errors(object):
                                 "kubectl", "version", "--short", "--client"
                             ]),
                             safe_output(maybe_sudo(["docker", "version"])),
-                            safe_output(["uname", "-a"]), error, logs
+                            safe_output(["uname", "-a"]), error, logs[-1000:]
                         )[:4000]
                     )
                     webbrowser.open_new(url + body)
@@ -537,6 +553,11 @@ def main():
         out_env = os.path.join(tempdir, "unproxied.env")
         while not os.path.exists(out_env):
             sleep(1)
+            if proxy_popen.poll() is not None:
+                raise RuntimeError(
+                    "Proxy exited unexpectedly with error code {}.".
+                    format(proxy_popen.poll())
+                )
         run_local_command(
             runner,
             args,
