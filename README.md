@@ -1,5 +1,6 @@
 # [Documentation - start here!](https://datawire.github.io/telepresence)
 
+[![Build Status](https://travis-ci.org/datawire/telepresence.svg?branch=master)](https://travis-ci.org/datawire/telepresence)
 [![Join the chat at https://gitter.im/datawire/telepresence](https://badges.gitter.im/datawire/telepresence.svg)](https://gitter.im/datawire/telepresence?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 ## Demo

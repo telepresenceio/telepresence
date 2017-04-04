@@ -3,7 +3,7 @@ End-to-end tests for running directly in the operating system.
 """
 
 from unittest import TestCase
-from subprocess import check_output, Popen, PIPE
+from subprocess import check_output, Popen, PIPE, CalledProcessError
 import time
 import os
 
@@ -89,7 +89,6 @@ class EndToEndTests(TestCase):
         Tests of communication to the cluster.
         """
         nginx_name = run_nginx("default")
-        time.sleep(30)  # kubernetes is speedy
         exit_code = run_script_test(
             ["--new-deployment", random_name()],
             "python3 tocluster.py {} default".format(nginx_name),
@@ -102,7 +101,6 @@ class EndToEndTests(TestCase):
         """
         namespace = self.create_namespace()
         nginx_name = run_nginx(namespace)
-        time.sleep(30)  # kubernetes is speedy
         exit_code = run_script_test(
             ["--new-deployment", random_name(), "--namespace", namespace],
             "python3 tocluster.py {} {}".format(nginx_name, namespace),
@@ -125,6 +123,7 @@ class EndToEndTests(TestCase):
                 "--run-shell",
             ],
             stdin=PIPE,
+            stderr=PIPE,
             cwd=str(DIRECTORY)
         )
         p.stdin.write(("exec python3 -m http.server %s\n" %
@@ -138,15 +137,23 @@ class EndToEndTests(TestCase):
             time.sleep(5)  # may take a second before http server shuts down
 
         self.addCleanup(cleanup)
-        time.sleep(60)
-        result = check_output([
-            'kubectl', 'run', '--attach', random_name(), '--generator=job/v1',
-            "--quiet", '--rm', '--image=alpine', '--restart', 'Never',
-            "--namespace", namespace, '--command', '--', '/bin/sh', '-c',
-            "apk add --no-cache --quiet curl && " +
-            "curl --silent http://{}:{}/__init__.py".format(url, port)
-        ])
-        assert result == (DIRECTORY / "__init__.py").read_bytes()
+
+        for i in range(120):
+            try:
+                result = check_output([
+                    'kubectl', 'run', '--attach', random_name(),
+                    '--generator=job/v1', "--quiet", '--rm', '--image=alpine',
+                    '--restart', 'Never', "--namespace", namespace,
+                    '--command', '--', '/bin/sh', '-c',
+                    "apk add --no-cache --quiet curl && " +
+                    "curl --silent http://{}:{}/__init__.py".format(url, port)
+                ])
+                assert result == (DIRECTORY / "__init__.py").read_bytes()
+                return
+            except CalledProcessError:
+                time.sleep(1)
+                continue
+        raise RuntimeError("failed to connect to local HTTP server")
 
     def test_fromcluster(self):
         """
@@ -214,14 +221,12 @@ class EndToEndTests(TestCase):
     def test_proxy(self):
         """Telepresence proxies all connections via the cluster."""
         nginx_name = run_nginx("default")
-        time.sleep(30)  # kubernetes is speedy
         exit_code = run_script_test(["--new-deployment", random_name()],
                                     "python3 proxy.py " + nginx_name)
         assert exit_code == 0
 
     def existingdeployment(self, namespace):
         nginx_name = run_nginx(namespace)
-        time.sleep(30)  # kubernetes is speedy
 
         # Create a Deployment outside of Telepresence:
         name = random_name()

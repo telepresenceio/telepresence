@@ -5,4 +5,5 @@ virtualenv/bin/pylint -E local/entrypoint.py
 cli/telepresence --version
 cli/telepresence --help
 [ -z "$TELEPRESENCE_TESTS" ] && export TELEPRESENCE_TESTS="tests remote/test_socks.py"
-env PATH=$PWD/cli/:$PATH virtualenv/bin/py.test -v -s --fulltrace $TELEPRESENCE_TESTS
+env PATH=$PWD/cli/:$PATH virtualenv/bin/py.test \
+    -v -n 4 --timeout 180 --timeout-method thread --fulltrace $TELEPRESENCE_TESTS
