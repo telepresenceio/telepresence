@@ -49,15 +49,14 @@ def run_nginx(namespace):
     ])
     for i in range(120):
         try:
-            available = int(
-                check_output([
+            available = check_output([
                     "kubectl", "get", "deployment", nginx_name, "-o",
                     'jsonpath={.status.availableReplicas}'
                 ])
-            )
         except CalledProcessError:
-            available = 0
-        if available > 0:
+            available = None
+        print("nginx available replicas: {}".format(available))
+        if available == b"1":
             return nginx_name
         else:
             time.sleep(1)
