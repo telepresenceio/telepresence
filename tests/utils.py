@@ -50,9 +50,9 @@ def run_nginx(namespace):
     for i in range(120):
         try:
             available = check_output([
-                    "kubectl", "get", "deployment", nginx_name, "-o",
-                    'jsonpath={.status.availableReplicas}'
-                ])
+                "kubectl", "get", "deployment", nginx_name, "--namespace",
+                namespace, "-o", 'jsonpath={.status.availableReplicas}'
+            ])
         except CalledProcessError:
             available = None
         print("nginx available replicas: {}".format(available))
