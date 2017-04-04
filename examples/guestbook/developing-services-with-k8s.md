@@ -1,4 +1,4 @@
-# Developing microservices locally with Google Container Engine (Kubernetes)
+# Locally developing microservices with Google Container Engine
 
 The [guestbook](https://cloud.google.com/container-engine/docs/tutorials/guestbook) tutorial for Kubernetes shows how to get a simple PHP and Redis application running in Kubernetes, but doesn't explain how you can actually *change* the code. We'll show you how to set up a fast, productive development environment for coding on Kubernetes. In particular, we'll show how you can make changes locally on your laptop, and see those changes reflected instantly on your externally exposed IP.
 
@@ -40,14 +40,27 @@ Next, we're going to want to install the `gcloud` and `kubectl` commands. Follow
 We need to install Telepresence, which will proxy your locally running service to GKE.
 
 ```
-% curl -L https://github.com/datawire/telepresence/raw/0.22/cli/telepresence -o telepresence
+% curl -L https://github.com/datawire/telepresence/raw/0.23/cli/telepresence -o telepresence
 % chmod +x telepresence
 ```
 
 Move telepresence to somewhere on your $PATH, e.g.,:
 
 ```
-mv telepresence /usr/local/bin
+% mv telepresence /usr/local/bin
+```
+
+
+You'll also need to install `torsocks`. On Mac OS X:
+
+```
+% brew install torsocks
+```
+
+Or, if you're on Ubuntu:
+
+```
+% sudo apt install --no-install-recommends torsocks
 ```
 
 We'll also need to configure a local development environment for PHP. The Guestbook application is fairly simple, but it does depend on the Predis library. We'll need to install the [PEAR package manager](https://pear.php.net/manual/en/installation.getting.php), and then install the Predis library.
@@ -155,7 +168,9 @@ Go to the external IP address of your load balancer (in the above example, 104.1
 
 ### Editing your code
 
-Now, open `index.html` from your shell and try renaming the Submit button to Go. Hit reload, and you'll immediately see your changes reflected live.
+Now, open `index.html` from your shell and try renaming the Submit button to Go. Save, hit reload. BEHOLD! You'll immediately see your changes reflected live on the external IP address.
+
+Terminate the PHP process, and type `exit` to terminate the Telepresence proxy.
 
 ### Behind the scenes
 
