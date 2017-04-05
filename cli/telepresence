@@ -18,7 +18,9 @@ import socket
 import sys
 from functools import wraps
 from shutil import rmtree, copy
-from subprocess import check_output, Popen, CalledProcessError, check_call
+from subprocess import (
+    check_output, Popen, CalledProcessError, check_call, TimeoutExpired,
+)
 from tempfile import mkdtemp, NamedTemporaryFile
 from time import sleep, time
 from traceback import print_exc
@@ -178,13 +180,6 @@ def stop_proxy(runner, container_name):
         runner.get_output(maybe_sudo(["docker", "stop", container_id]))
 
 
-def stop_container(runner, container_id):
-    if container_id in runner.get_output(
-        maybe_sudo(["docker", "ps", "-q", "--no-trunc"])
-    ):
-        runner.get_output(maybe_sudo(["docker", "stop", container_id]))
-
-
 def kubectl(namespace, args):
     """Return command-line for running kubectl."""
     result = ["kubectl"]
@@ -194,8 +189,285 @@ def kubectl(namespace, args):
     return result
 
 
+class RemoteInfo(object):
+    """
+    Information about the remote setup.
+
+    :ivar namespace str: The Kubernetes namespace.
+    :ivar deployment_name str: The name of the Deployment object.
+    :ivar pod_name str: The name of the pod created by the Deployment.
+    :ivar deployment_config dict: The decoded k8s object (i.e. JSON/YAML).
+    :ivar container_config dict: The container within the Deployment JSON.
+    :ivar container_name str: The name of the container.
+    :ivar pod_environment dict: Environment variables in the remote
+        Telepresence pod.
+    """
+
+    def __init__(
+        self, namespace, deployment_name, pod_name, deployment_config
+    ):
+        self.namespace = namespace
+        self.deployment_name = deployment_name
+        self.pod_name = pod_name
+        self.deployment_config = deployment_config
+        cs = deployment_config["spec"]["template"]["spec"]["containers"]
+        self.container_config = [
+            c for c in cs if "telepresence-k8s" in c["image"]
+        ][0]
+        self.container_name = self.container_config["name"]
+        # Wait for pod to be running before we can get environment:
+        wait_for_pod(self)
+        self.pod_environment = _get_remote_env(
+            namespace, pod_name, self.container_name
+        )
+        self.service_names = _get_service_names(self.pod_environment)
+
+
+def _get_service_names(environment):
+    """Return names of Services, as used in env variable names."""
+    # Order matters for service_keys, need it to be consistent with port
+    # forwarding order in remote container.
+    result = [
+        key[:-len("_SERVICE_HOST")] for key in environment
+        if key.endswith("_SERVICE_HOST")
+    ]
+    result.sort()
+    return result
+
+
+def _get_remote_env(namespace, pod_name, container_name):
+    """Get the environment variables in the remote pod."""
+    env = str(
+        check_output(
+            kubectl(
+                namespace,
+                ["exec", pod_name, "--container", container_name, "env"]
+            )
+        ), "utf-8"
+    )
+    result = {}
+    for line in env.splitlines():
+        key, value = line.split("=", 1)
+        result[key] = value
+    return result
+
+
+def get_deployment_set_keys(remote_info):
+    """Get the set of environment variables names set by the Deployment."""
+    return set(
+        [var["name"] for var in remote_info.container_config.get("env", [])]
+    )
+
+
+def get_env_variables(remote_info):
+    """
+    Generate environment variables that match kubernetes.
+    """
+    remote_env = remote_info.pod_environment
+    deployment_set_keys = get_deployment_set_keys(remote_info)
+    service_names = remote_info.service_names
+    # Tell local process about the remote setup, useful for testing and
+    # debugging:
+    socks_result = {
+        "TELEPRESENCE_POD": remote_info.pod_name,
+        "TELEPRESENCE_CONTAINER": remote_info.container_name
+    }
+    # ips proxied via socks, can copy addresses unmodified:
+    for key, value in remote_env.items():
+        if key in deployment_set_keys:
+            # Copy over Deployment-set env variables:
+            socks_result[key] = value
+        for service_name in service_names:
+            # Copy over Service env variables to SOCKS variant:
+            if key.startswith(service_name + "_") and (
+                key.endswith("_ADDR") or key.endswith("_PORT") or
+                key.endswith("_PROTO") or key.endswith("_HOST") or
+                key.endswith("_TCP")
+            ):
+                socks_result[key] = value
+    return socks_result
+
+
+def get_remote_info(deployment_name, namespace):
+    """Given the deployment name, return a RemoteInfo object."""
+    deployment = json.loads(
+        str(
+            check_output(
+                kubectl(
+                    namespace, [
+                        "get",
+                        "deployment",
+                        "-o",
+                        "json",
+                        deployment_name,
+                        "--export",
+                    ]
+                )
+            ), "utf-8"
+        )
+    )
+    expected_metadata = deployment["spec"]["template"]["metadata"]
+    print("Expected metadata for pods: {}".format(expected_metadata))
+    pods = json.loads(
+        str(
+            check_output(
+                kubectl(namespace, ["get", "pod", "-o", "json", "--export"])
+            ), "utf-8"
+        )
+    )["items"]
+
+    for pod in pods:
+        name = pod["metadata"]["name"]
+        phase = pod["status"]["phase"]
+        print(
+            "Checking {} (phase {})...".
+            format(pod["metadata"].get("labels"), phase)
+        )
+        if not set(expected_metadata.get("labels", {}).items()
+                   ).issubset(set(pod["metadata"].get("labels", {}).items())):
+            print("Labels don't match.")
+            continue
+        # Metadata for Deployment will hopefully have a namespace. If not, fall
+        # back to one we were given. If we weren't given one, best we can do is
+        # choose "default".
+        if (name.startswith(deployment_name + "-")
+            and
+            pod["metadata"]["namespace"] == deployment["metadata"].get(
+                "namespace", namespace or "default")
+            and
+            phase in (
+                "Pending", "Running"
+        )):
+            print("Looks like we've found our pod!")
+            return RemoteInfo(namespace, deployment_name, name, deployment)
+
+    raise RuntimeError(
+        "Telepresence pod not found for Deployment '{}'.".
+        format(deployment_name)
+    )
+
+
+def ssh(args):
+    """Connect to remote pod via SSH.
+
+    Returns Popen object.
+    """
+    return Popen([
+        # Password is hello (see remote/Dockerfile):
+        "sshpass",
+        "-phello",
+        "ssh",
+        # SSH with no warnings:
+        "-q",
+        # Don't validate host key:
+        "-oStrictHostKeyChecking=no",
+        # Ping once a second; after three retries will disconnect:
+        "-oServerAliveInterval=1",
+        # No shell:
+        "-N",
+        "root@localhost",
+    ] + args)
+
+
+def wait_for_ssh():
+    for i in range(30):
+        try:
+            check_call([
+                "sshpass", "-phello", "ssh", "-q",
+                "-oStrictHostKeyChecking=no", "root@localhost", "/bin/true"
+            ])
+        except CalledProcessError:
+            sleep(1)
+        else:
+            return
+    raise RuntimeError("SSH isn't starting.")
+
+
+def wait_for_pod(remote_info):
+    for i in range(120):
+        try:
+            pod = json.loads(
+                str(
+                    check_output(
+                        kubectl(
+                            remote_info.namespace,
+                            ["get", "pod", remote_info.pod_name, "-o", "json"]
+                        )
+                    ), "utf-8"
+                )
+            )
+        except CalledProcessError:
+            sleep(1)
+            continue
+        if pod["status"]["phase"] == "Running":
+            for container in pod["status"]["containerStatuses"]:
+                if container["name"] == remote_info.container_name and (
+                    container["ready"]
+                ):
+                    return
+        sleep(1)
+    raise RuntimeError(
+        "Pod isn't starting or can't be found: {}".format(pod["status"])
+    )
+
+
+SOCKS_PORT = 9050
+
+
+def connect(
+    remote_info,
+    local_exposed_ports,
+    expose_host,
+):
+    """
+    Start all the processes that handle remote proxying.
+
+    Return list of Popen instances.
+    """
+    processes = []
+    # forward remote port to here, by tunneling via remote SSH server:
+    processes.append(
+        Popen(
+            kubectl(
+                remote_info.namespace,
+                ["port-forward", remote_info.pod_name, "22"]
+            )
+        )
+    )
+    wait_for_ssh()
+
+    for port_number in local_exposed_ports:
+        processes.append(
+            ssh([
+                "-R",
+                "127.0.0.1:{}:{}:{}".format(port_number, expose_host,
+                                            port_number)
+            ])
+        )
+
+    # start tunnel to remote SOCKS proxy, for telepresence --run.
+    # XXX need to use local port we detected some other way!
+    processes.append(
+        ssh(["-L", "127.0.0.1:9099:127.0.0.1:9050"]),
+    )
+
+    return processes
+
+
+def killall(processes):
+    for p in processes:
+        if p.poll() is None:
+            p.terminate()
+    for p in processes:
+        try:
+            p.wait(timeout=1)
+        except TimeoutExpired:
+            p.kill()
+            p.wait()
+
+
 def start_proxy(runner, args):
-    """`telepresence start`."""
+    """Start the kubectl port-forward and SSH clients that do the proxying."""
     if sys.stderr.isatty():
         print("Starting proxy...", file=sys.stderr)
     if args.deployment is None:
@@ -228,66 +500,24 @@ def start_proxy(runner, args):
         if args.expose:
             command.append("--expose")
         runner.get_output(command)
-        sleep(5)  # XXX oh god
 
-    home_path = os.path.expanduser("~")
-    # On OS X /tmp is shareable via Docker, but default location of temporary
-    # files is not (https://docs.docker.com/docker-for-mac/osxfs/):
-    tempdir = mkdtemp(dir="/tmp")
-    container_id = random_name()
     # We want the exposed host to be the external machine, not the Docker
     # container:
     expose_host = get_ip()
 
-    docker_cmd = maybe_sudo([
-        "docker",
-        "run",
-        # Cleanup on shutdown:
-        "--rm",
-        # Name so we can identify it:
-        "--name",
-        container_id,
-        # XXX Run with TTY, for some reason need this to capture stdout
-        "-t",
-        # Mount $HOME so we have access to kubectl configuration:
-        "-v",
-        home_path + ":/opt:ro",
-        # Minikube looks in absolute path for home, so also mount in way that
-        # matches host path:
-        "-v",
-        "{}:{}:ro".format(home_path, home_path),
-        # We're using a local command, which means it will be using a SOCKS
-        # proxy, so expose the local SOCKS port to the host machine:
-        "-p",
-        ":9050",
-        # Mount local directory, where env file will be written out:
-        "-v",
-        tempdir + ":/output",
-    ])
+    remote_info = get_remote_info(args.deployment, args.namespace)
 
-    # Pass on KUBECONFIG env variable, since it impacts how kubectl behaves;
-    # this will be less hacky (and less likely to break on exotic paths) if we
-    # merge CLI and the proxy into one process:
-    if "KUBECONFIG" in os.environ:
-        docker_cmd.extend([
-            "-e",
-            "KUBECONFIG=" + os.environ["KUBECONFIG"],
-        ])
-
-    docker_cmd.extend([
-        # Name of image:
-        "{}/telepresence-local:{}".format(REGISTRY, __version__),
-        # Arguments: <uid>, <deployment-name>
-        str(os.getuid()),
-        args.deployment,
-        # Arguments: <port1,port2>, <expose_host>, namespace
-        ",".join(map(str, args.expose)),
+    processes = connect(
+        remote_info,
+        args.expose,
         expose_host,
-        json.dumps(args.namespace)
-    ])
-    p = runner.popen(docker_cmd)
-    atexit.register(stop_proxy, runner, container_id)
-    return tempdir, container_id, p
+    )
+    sleep(5)  # wait for SSH to go live
+
+    # Get environment variables from remote pod:
+    env = get_env_variables(remote_info)
+
+    return processes, env
 
 
 TORSOCKS_CONFIG = """
@@ -326,41 +556,32 @@ def sip_workaround():
     return ":".join(paths)
 
 
-def wait_for_exit(runner, process, container_name):
-    """Given Popen and container ID, wait for one of them to die."""
+def wait_for_exit(runner, processes):
+    """Given Popens, wait for one of them to die."""
     while True:
-        exit_code = process.poll()
-        if exit_code is not None:
-            sys.exit(exit_code)
-        alive = unicode(
-            check_output(
-                maybe_sudo([
-                    "docker", "ps", "-q", "--filter", "name=" + container_name
-                ])
-            ), "utf-8"
-        ).strip()
-        if not alive:
-            if sys.stderr.isatty:
-                print(
-                    "Proxy to Kubernetes exited. This is typically due to a"
-                    " lost connection.",
-                    file=sys.stderr
-                )
-            sys.exit(3)
         sleep(0.1)
+        for p in processes:
+            code = p.poll()
+            if code is not None:
+                print("A subprocess died, killing all processes...")
+                killall(processes)
+                # Unfortunatly torsocks doesn't deal well with connections
+                # being lost, so best we can do is shut down.
+                if sys.stderr.isatty:
+                    print(
+                        "Proxy to Kubernetes exited. This is typically due to"
+                        " a lost connection.",
+                        file=sys.stderr
+                    )
+                raise SystemExit(3)
 
 
-def run_local_command(runner, args, out_env, proxy_container_name):
+def run_local_command(runner, args, env_overrides, subprocesses):
     """--run support, run command locally."""
-    socks_port = int(
-        runner.get_output(
-            maybe_sudo(["docker", "port", proxy_container_name, "9050/tcp"])
-        ).split(":")[-1]
-    )
-    with open(out_env, "r") as f:
-        env = os.environ.copy()
-        env.update(dict(line.split("=", 1) for line in f.read().splitlines()))
-        env["PS1"] = "[TELEPRESENCE] " + env.get("PS1", "$ ")
+    socks_port = 9099  # XXX find a free port!
+    env = os.environ.copy()
+    env.update(env_overrides)
+    env["PS1"] = "[TELEPRESENCE] " + env.get("PS1", "$ ")
     if sys.platform == "darwin":
         env["PATH"] = sip_workaround()
     # Create custom torsocks.conf, since some options we want (in particular,
@@ -384,13 +605,13 @@ def run_local_command(runner, args, out_env, proxy_container_name):
     def terminate_if_alive():
         print("Shutting down local shell...", file=runner.logfile)
         os.remove(tor_conffile.name)
-        os.remove(out_env)
         if p.poll() is None:
             print("Killing local shell...", file=runner.logfile)
             p.terminate()
+        killall(subprocesses)
 
     atexit.register(terminate_if_alive)
-    wait_for_exit(runner, p, proxy_container_name)
+    wait_for_exit(runner, subprocesses)
 
 
 BUG_REPORT_TEMPLATE = u"""\
@@ -547,22 +768,13 @@ def main():
         except CalledProcessError as e:
             sys.stderr.write("Please install torsocks (v2.1 or later)\n")
             raise SystemExit(1)
-        tempdir, proxy_container_name, proxy_popen = start_proxy(runner, args)
-        # Wait for proxy container to write out env file, indicating we're good
-        # to go:
-        out_env = os.path.join(tempdir, "unproxied.env")
-        while not os.path.exists(out_env):
-            sleep(1)
-            if proxy_popen.poll() is not None:
-                raise RuntimeError(
-                    "Proxy exited unexpectedly with error code {}.".
-                    format(proxy_popen.poll())
-                )
+        tempdir, proxy_container_name, subprocesses, env = start_proxy(runner,
+                                                                       args)
         run_local_command(
             runner,
             args,
-            os.path.join(tempdir, "unproxied.env"),
-            proxy_container_name,
+            env,
+            subprocesses,
         )
 
     go()
