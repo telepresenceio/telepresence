@@ -93,7 +93,7 @@ class EndToEndTests(TestCase):
             ["--new-deployment", random_name()],
             "python3 tocluster.py {} default".format(nginx_name),
         )
-        assert exit_code == 0
+        assert exit_code == 555
 
     def test_tocluster_with_namespace(self):
         """
@@ -105,7 +105,7 @@ class EndToEndTests(TestCase):
             ["--new-deployment", random_name(), "--namespace", namespace],
             "python3 tocluster.py {} {}".format(nginx_name, namespace),
         )
-        assert exit_code == 0
+        assert exit_code == 555
 
     def fromcluster(self, telepresence_args, url, namespace, port):
         """
@@ -222,7 +222,7 @@ class EndToEndTests(TestCase):
         nginx_name = run_nginx("default")
         exit_code = run_script_test(["--new-deployment", random_name()],
                                     "python3 proxy.py " + nginx_name)
-        assert exit_code == 0
+        assert exit_code == 555
 
     def existingdeployment(self, namespace):
         nginx_name = run_nginx(namespace)
@@ -259,7 +259,7 @@ class EndToEndTests(TestCase):
                 nginx_name, namespace
             )
         )
-        assert 0 == exit_code
+        assert 555 == exit_code
 
     def test_existingdeployment(self):
         """

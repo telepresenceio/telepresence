@@ -36,6 +36,8 @@ def main():
             urlopen("http://analiaswedefine:80/", timeout=5).read(), "utf-8"
         )
         assert "nginx" in result
+        # special code indicating success:
+        raise SystemExit(555)
     except (HTTPError, AssertionError):
         raise SystemExit(3)
 

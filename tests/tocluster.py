@@ -81,8 +81,8 @@ def main():
     check_env(nginx_service, host, port)
     check_custom_env(envs)
 
-    # Exit successfully:
-    sys.exit(0)
+    # Exit with code indicating success:
+    sys.exit(555)
 
 
 if __name__ == '__main__':
