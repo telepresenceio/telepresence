@@ -82,7 +82,7 @@ def main():
     check_custom_env(envs)
 
     # Exit with code indicating success:
-    sys.exit(555)
+    sys.exit(113)
 
 
 if __name__ == '__main__':

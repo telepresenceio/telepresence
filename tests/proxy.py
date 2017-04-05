@@ -37,7 +37,7 @@ def main():
         )
         assert "nginx" in result
         # special code indicating success:
-        raise SystemExit(555)
+        raise SystemExit(113)
     except (HTTPError, AssertionError):
         raise SystemExit(3)
 
