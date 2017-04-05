@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 Telepresence CLI tool, a thin wrapper around the
 datawire/telepresence-local Docker image.
@@ -20,6 +20,7 @@ from functools import wraps
 from shutil import rmtree, copy
 from subprocess import (
     check_output, Popen, CalledProcessError, check_call, TimeoutExpired,
+    STDOUT,
 )
 from tempfile import mkdtemp, NamedTemporaryFile
 from time import sleep, time
@@ -49,13 +50,19 @@ def random_name():
     return "telepresence-{}-{}".format(time(), os.getpid()).replace(".", "-")
 
 
-def get_ip():
-    """IP for this machine."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(("8.8.8.8", 53))
-    result = s.getsockname()[0]
-    s.close()
-    return result
+def find_free_port():
+    """
+    Find a port that isn't in use.
+
+    XXX race condition-prone.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SO_REUSEADDR)
+    try:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+    finally:
+        s.close()
 
 
 class Runner(object):
@@ -158,26 +165,6 @@ def parse_args():
         help="Run a local shell that will be proxied to/from Kubernetes.",
     )
     return parser.parse_args()
-
-
-def maybe_sudo(args):
-    docker_path = "/var/run/docker.sock"
-    if (os.path.exists(docker_path) and not os.access(docker_path, os.W_OK)):
-        return ["sudo"] + args
-    else:
-        return args
-
-
-def stop_proxy(runner, container_name):
-    container_id = runner.get_output(
-        maybe_sudo([
-            "docker", "ps", "-q", "--filter", "name=" + container_name
-        ])
-    ).strip()
-    if container_id:
-        if sys.stderr.isatty():
-            print("Shutting proxy down...", file=sys.stderr)
-        runner.get_output(maybe_sudo(["docker", "stop", container_id]))
 
 
 def kubectl(namespace, args):
@@ -365,7 +352,7 @@ def ssh(args):
         "-oServerAliveInterval=1",
         # No shell:
         "-N",
-        "root@localhost",
+        "root@localhost:3022",  # XXX use the randomly assigned port
     ] + args)
 
 
@@ -374,7 +361,9 @@ def wait_for_ssh():
         try:
             check_call([
                 "sshpass", "-phello", "ssh", "-q",
-                "-oStrictHostKeyChecking=no", "root@localhost", "/bin/true"
+                # XXX use the randomly assinged port
+                "-oStrictHostKeyChecking=no", "root@localhost:3022",
+                "/bin/true"
             ])
         except CalledProcessError:
             sleep(1)
@@ -417,7 +406,6 @@ SOCKS_PORT = 9050
 def connect(
     remote_info,
     local_exposed_ports,
-    expose_host,
 ):
     """
     Start all the processes that handle remote proxying.
@@ -430,18 +418,19 @@ def connect(
         Popen(
             kubectl(
                 remote_info.namespace,
-                ["port-forward", remote_info.pod_name, "22"]
+                # XXX use a different port each time
+                ["port-forward", remote_info.pod_name, "3022:22"]
             )
         )
     )
+    atexit.register(killall, processes)
     wait_for_ssh()
 
     for port_number in local_exposed_ports:
         processes.append(
             ssh([
                 "-R",
-                "127.0.0.1:{}:{}:{}".format(port_number, expose_host,
-                                            port_number)
+                "*:{}:127.0.0.1:{}".format(port_number, port_number)
             ])
         )
 
@@ -501,16 +490,11 @@ def start_proxy(runner, args):
             command.append("--expose")
         runner.get_output(command)
 
-    # We want the exposed host to be the external machine, not the Docker
-    # container:
-    expose_host = get_ip()
-
     remote_info = get_remote_info(args.deployment, args.namespace)
 
     processes = connect(
         remote_info,
         args.expose,
-        expose_host,
     )
     sleep(5)  # wait for SSH to go live
 
@@ -608,7 +592,6 @@ def run_local_command(runner, args, env_overrides, subprocesses):
         if p.poll() is None:
             print("Killing local shell...", file=runner.logfile)
             p.terminate()
-        killall(subprocesses)
 
     atexit.register(terminate_if_alive)
     wait_for_exit(runner, subprocesses)
@@ -633,7 +616,6 @@ Command line: `{}`
 Version: `{}`
 Python version: `{}`
 kubectl version: `{}`
-Docker version: `{}`
 OS: `{}`
 Traceback:
 
@@ -716,7 +698,6 @@ class handle_unexpected_errors(object):
                             safe_output([
                                 "kubectl", "version", "--short", "--client"
                             ]),
-                            safe_output(maybe_sudo(["docker", "version"])),
                             safe_output(["uname", "-a"]), error, logs[-1000:]
                         )[:4000]
                     )
@@ -746,19 +727,11 @@ def main():
         except (CalledProcessError, OSError, IOError) as e:
             sys.stderr.write("Error accessing Kubernetes: {}\n".format(e))
             raise SystemExit(1)
-        # Make sure we're using local Docker:
-        if "DOCKER_HOST" in os.environ:
-            sys.stderr.write(
-                "You appear to be using a remote Docker server ({}), "
-                "but only a local Docker is supported. This may because "
-                "you have run  `minikube docker-env` or otherwise set the "
-                "DOCKER_HOST environment variable.\n".
-                format(os.environ["DOCKER_HOST"])
-            )
-            raise SystemExit(1)
-        # Make sure we can access Docker:
+        # Make sure we can run openssh:
         try:
-            check_output(maybe_sudo(["docker", "version"]))
+            version = check_output(["ssh", "-V"], stderr=STDOUT)
+            if not version.startswith(b"OpenSSH"):
+                raise IOError("ssh is not OpenSSH client, apparently.")
         except (CalledProcessError, OSError, IOError) as e:
             sys.stderr.write("Error running Docker: {}\n".format(e))
             raise SystemExit(1)
