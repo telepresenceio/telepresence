@@ -116,7 +116,16 @@ class Runner(object):
 
 def parse_args():
     """Create a new ArgumentParser and parse sys.argv."""
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Telepresence: local development proxied to a remote Kubernetes "
+            "cluster.\n\n"
+            "Documentation: http://telepresence.io\n"
+            "Real-time help: https://gitter.im/datawire/telepresence\n"
+            "Issue tracker: https://github.com/datawire/telepresence/issues\n"
+        )
+    )
     parser.add_argument('--version', action='version', version=__version__)
     parser.add_argument(
         "--logfile",
