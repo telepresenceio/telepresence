@@ -419,13 +419,13 @@ Some alternatives to Telepresence:
 
 ## Changelog
 
-### 0.25 (April 5, 2017)
+#### 0.25 (April 5, 2017)
 
 Features:
 
 * Docker is no longer required to run Telepresence.
 
-### 0.24 (April 5, 2017)
+#### 0.24 (April 5, 2017)
 
 Bug fixes:
 
@@ -434,14 +434,14 @@ Bug fixes:
 * Errors on startup are noticed, fixing issues with hanging indefinitely in the "Starting proxy..." phase.
   ([#83](https://github.com/datawire/telepresence/issues/83))
 
-### 0.23 (April 3, 2017)
+#### 0.23 (April 3, 2017)
 
 Bug fixes:
 
 * Telepresence no longer uses lots of CPU busy-looping.
   Thanks to Jean-Paul Calderone for the bug report.
 
-### 0.22 (March 30, 2017)
+#### 0.22 (March 30, 2017)
 
 Features:
 
@@ -454,7 +454,7 @@ Backwards incompatible changes:
   This feature will be reintroduced in the future, with a different implementation, if there is user interest.
   [Add comments here](https://github.com/datawire/telepresence/issues/76) if you're interested.
 
-### 0.21 (March 28, 2017)
+#### 0.21 (March 28, 2017)
   
 Bug fixes:
 
@@ -462,7 +462,7 @@ Bug fixes:
 * Telepresence notices when the proxy container exits and shuts down.
   ([#24](https://github.com/datawire/telepresence/issues/24))
 
-### 0.20 (March 27, 2017)
+#### 0.20 (March 27, 2017)
 
 Bug fixes:
 
@@ -470,13 +470,13 @@ Bug fixes:
 * If there is more than one container Telepresence copies the environment variables from the one running the `datawire/telepresence-k8s` image, rather than the first one.
   ([#38](https://github.com/datawire/telepresence/issues/38))
 
-### 0.19 (March 24, 2017)
+#### 0.19 (March 24, 2017)
 
 Bug fixes:
 
 * Fixed another issue with `--run-shell` on OS X.
 
-### 0.18 (March 24, 2017)
+#### 0.18 (March 24, 2017)
 
 Features:
 
@@ -490,7 +490,7 @@ Bug fixes:
   Thanks to Jean-Paul Calderone for the bug report.
   ([#58](https://github.com/datawire/telepresence/issues/58))
 
-### 0.17 (March 21, 2017)
+#### 0.17 (March 21, 2017)
 
 Bug fixes:
 
@@ -506,48 +506,48 @@ Bug fixes:
   Thanks to Jean-Paul Calderone for the bug report.
   ([#50](https://github.com/datawire/telepresence/issues/50))
 
-### 0.16 (March 20, 2017)
+#### 0.16 (March 20, 2017)
 
 Bug fixes:
 
 * Disable `--run-shell` on OS X, hopefully temporarily, since it has issues with System Integrity Protection.
 * Fix Python 3 support for running `telepresence`.
 
-### 0.14 (March 20, 2017)
+#### 0.14 (March 20, 2017)
 
 Features:
 
 * Added `--run-shell`, which allows proxying against local processes.
   ([#1](https://github.com/datawire/telepresence/issues/1))
 
-### 0.13 (March 16, 2017)
+#### 0.13 (March 16, 2017)
 
 Bug fixes:
 
 * Increase time out for pods to start up; sometimes it takes more than 30 seconds due to time to download image.
 
-### 0.12 (March 16, 2017)
+#### 0.12 (March 16, 2017)
 
 Bug fixes:
 
 * Better way to find matching pod for a Deployment.
   ([#43](https://github.com/datawire/telepresence/issues/43))
 
-### 0.11 (March 16, 2017)
+#### 0.11 (March 16, 2017)
 
 Bug fixes:
 
 * Fixed race condition that impacted `--expose`.
   ([#40](https://github.com/datawire/telepresence/issues/40))
 
-### 0.10 (March 15, 2017)
+#### 0.10 (March 15, 2017)
 
 Bug fixes:
 
 * Fixed race condition the first time Telepresence is run against a cluster.
   ([#33](https://github.com/datawire/telepresence/issues/33))
 
-### 0.9 (March 15, 2017)
+#### 0.9 (March 15, 2017)
 
 Features:
 
@@ -561,7 +561,7 @@ Bug fixes:
 * Fix problem on OS X where Telepresence failed to work due to inability to share default location of temporary files.
   ([#25](https://github.com/datawire/telepresence/issues/25))
 
-### 0.8 (March 14, 2017)
+#### 0.8 (March 14, 2017)
 
 Features:
 
