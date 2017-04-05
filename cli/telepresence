@@ -408,7 +408,7 @@ def connect(
     processes = []
     # forward remote port to here, by tunneling via remote SSH server:
     processes.append(
-        Popen(
+        runner.popen(
             kubectl(
                 remote_info.namespace,
                 # XXX use a different port each time
