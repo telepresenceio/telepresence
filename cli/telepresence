@@ -20,7 +20,7 @@ from functools import wraps
 from shutil import rmtree, copy
 from subprocess import (
     check_output, Popen, CalledProcessError, check_call, TimeoutExpired,
-    STDOUT,
+    STDOUT, DEVNULL
 )
 from tempfile import mkdtemp, NamedTemporaryFile
 from time import sleep, time
@@ -96,19 +96,22 @@ class Runner(object):
     def check_call(self, *args, **kwargs):
         """Run a subprocess, make sure it exited with 0."""
         self.write("Running: {}\n".format(args))
-        check_call(*args, stdout=self.logfile, stderr=self.logfile, **kwargs)
+        check_call(*args, stdin=DEVNULL, stdout=self.logfile,
+                   stderr=self.logfile, **kwargs)
 
     def get_output(self, *args, **kwargs):
         """Return (stripped) command result as unicode string."""
         self.write("Running: {}\n".format(args))
         return unicode(
-            check_output(*args, stderr=self.logfile, **kwargs).strip(), "utf-8"
+            check_output(*args, stdin=DEVNULL, stderr=self.logfile,
+                         **kwargs).strip(), "utf-8"
         )
 
     def popen(self, *args, **kwargs):
         """Return Popen object."""
         self.write("Running: {}\n".format(args))
-        return Popen(*args, stderr=self.logfile, stdout=self.logfile, **kwargs)
+        return Popen(*args, stdin=DEVNULL,
+                     stderr=self.logfile, stdout=self.logfile, **kwargs)
 
 
 def parse_args():
@@ -191,7 +194,8 @@ class RemoteInfo(object):
     """
 
     def __init__(
-        self, namespace, deployment_name, pod_name, deployment_config
+            self, runner, namespace, deployment_name, pod_name,
+            deployment_config
     ):
         self.namespace = namespace
         self.deployment_name = deployment_name
@@ -205,7 +209,7 @@ class RemoteInfo(object):
         # Wait for pod to be running before we can get environment:
         wait_for_pod(self)
         self.pod_environment = _get_remote_env(
-            namespace, pod_name, self.container_name
+            runner, namespace, pod_name, self.container_name
         )
         self.service_names = _get_service_names(self.pod_environment)
 
@@ -222,16 +226,14 @@ def _get_service_names(environment):
     return result
 
 
-def _get_remote_env(namespace, pod_name, container_name):
+def _get_remote_env(runner, namespace, pod_name, container_name):
     """Get the environment variables in the remote pod."""
-    env = str(
-        check_output(
+    env = runner.get_output(
             kubectl(
                 namespace,
                 ["exec", pod_name, "--container", container_name, "env"]
             )
-        ), "utf-8"
-    )
+        )
     result = {}
     for line in env.splitlines():
         key, value = line.split("=", 1)
@@ -275,11 +277,10 @@ def get_env_variables(remote_info):
     return socks_result
 
 
-def get_remote_info(deployment_name, namespace):
+def get_remote_info(runner, deployment_name, namespace):
     """Given the deployment name, return a RemoteInfo object."""
     deployment = json.loads(
-        str(
-            check_output(
+        runner.get_output(
                 kubectl(
                     namespace, [
                         "get",
@@ -290,17 +291,14 @@ def get_remote_info(deployment_name, namespace):
                         "--export",
                     ]
                 )
-            ), "utf-8"
-        )
+            )
     )
     expected_metadata = deployment["spec"]["template"]["metadata"]
     print("Expected metadata for pods: {}".format(expected_metadata))
     pods = json.loads(
-        str(
-            check_output(
+        runner.get_output(
                 kubectl(namespace, ["get", "pod", "-o", "json", "--export"])
-            ), "utf-8"
-        )
+            )
     )["items"]
 
     for pod in pods:
@@ -326,7 +324,8 @@ def get_remote_info(deployment_name, namespace):
                 "Pending", "Running"
         )):
             print("Looks like we've found our pod!")
-            return RemoteInfo(namespace, deployment_name, name, deployment)
+            return RemoteInfo(runner, namespace, deployment_name, name,
+                              deployment)
 
     raise RuntimeError(
         "Telepresence pod not found for Deployment '{}'.".
@@ -334,12 +333,12 @@ def get_remote_info(deployment_name, namespace):
     )
 
 
-def ssh(args):
+def ssh(runner, args):
     """Connect to remote pod via SSH.
 
     Returns Popen object.
     """
-    return Popen([
+    return runner.popen([
         # Password is hello (see remote/Dockerfile):
         "sshpass",
         "-phello",
@@ -352,17 +351,20 @@ def ssh(args):
         "-oServerAliveInterval=1",
         # No shell:
         "-N",
-        "root@localhost:3022",  # XXX use the randomly assigned port
+        # XXX use the randomly assigned port
+        "-p", "3022",
+        "root@localhost",
     ] + args)
 
 
-def wait_for_ssh():
+def wait_for_ssh(runner):
     for i in range(30):
         try:
-            check_call([
+            runner.check_call([
                 "sshpass", "-phello", "ssh", "-q",
                 # XXX use the randomly assinged port
-                "-oStrictHostKeyChecking=no", "root@localhost:3022",
+                "-p", "3022",
+                "-oStrictHostKeyChecking=no", "root@localhost",
                 "/bin/true"
             ])
         except CalledProcessError:
@@ -404,8 +406,9 @@ SOCKS_PORT = 9050
 
 
 def connect(
-    remote_info,
-    local_exposed_ports,
+        runner,
+        remote_info,
+        local_exposed_ports,
 ):
     """
     Start all the processes that handle remote proxying.
@@ -424,11 +427,11 @@ def connect(
         )
     )
     atexit.register(killall, processes)
-    wait_for_ssh()
+    wait_for_ssh(runner)
 
     for port_number in local_exposed_ports:
         processes.append(
-            ssh([
+            ssh(runner, [
                 "-R",
                 "*:{}:127.0.0.1:{}".format(port_number, port_number)
             ])
@@ -437,7 +440,7 @@ def connect(
     # start tunnel to remote SOCKS proxy, for telepresence --run.
     # XXX need to use local port we detected some other way!
     processes.append(
-        ssh(["-L", "127.0.0.1:9099:127.0.0.1:9050"]),
+        ssh(runner, ["-L", "127.0.0.1:9099:127.0.0.1:9050"]),
     )
 
     return processes
@@ -490,9 +493,10 @@ def start_proxy(runner, args):
             command.append("--expose")
         runner.get_output(command)
 
-    remote_info = get_remote_info(args.deployment, args.namespace)
+    remote_info = get_remote_info(runner, args.deployment, args.namespace)
 
     processes = connect(
+        runner,
         remote_info,
         args.expose,
     )
@@ -540,14 +544,20 @@ def sip_workaround():
     return ":".join(paths)
 
 
-def wait_for_exit(runner, processes):
+def wait_for_exit(runner, shell_process, processes):
     """Given Popens, wait for one of them to die."""
     while True:
         sleep(0.1)
+        if shell_process.poll() is not None:
+            # Shell exited, we're done. Automatic shutdown cleanup will kill
+            # subprocesses.
+            raise SystemExit(shell_process.poll())
         for p in processes:
             code = p.poll()
             if code is not None:
-                print("A subprocess died, killing all processes...")
+                if sys.stderr.isatty:
+                    print("A subprocess died, killing all processes...",
+                          file=sys.stderr)
                 killall(processes)
                 # Unfortunatly torsocks doesn't deal well with connections
                 # being lost, so best we can do is shut down.
@@ -594,7 +604,7 @@ def run_local_command(runner, args, env_overrides, subprocesses):
             p.terminate()
 
     atexit.register(terminate_if_alive)
-    wait_for_exit(runner, subprocesses)
+    wait_for_exit(runner, p, subprocesses)
 
 
 BUG_REPORT_TEMPLATE = u"""\
@@ -723,13 +733,13 @@ def main():
     def go():
         # Make sure we can access Kubernetes:
         try:
-            check_output(["kubectl", "cluster-info"])
+            runner.get_output(["kubectl", "cluster-info"])
         except (CalledProcessError, OSError, IOError) as e:
             sys.stderr.write("Error accessing Kubernetes: {}\n".format(e))
             raise SystemExit(1)
         # Make sure we can run openssh:
         try:
-            version = check_output(["ssh", "-V"], stderr=STDOUT)
+            version = check_output(["ssh", "-V"], stdin=DEVNULL, stderr=STDOUT)
             if not version.startswith(b"OpenSSH"):
                 raise IOError("ssh is not OpenSSH client, apparently.")
         except (CalledProcessError, OSError, IOError) as e:
@@ -737,12 +747,11 @@ def main():
             raise SystemExit(1)
         # Make sure we have torsocks:
         try:
-            check_output(["which", "torsocks"])
+            runner.get_output(["which", "torsocks"])
         except CalledProcessError as e:
             sys.stderr.write("Please install torsocks (v2.1 or later)\n")
             raise SystemExit(1)
-        tempdir, proxy_container_name, subprocesses, env = start_proxy(runner,
-                                                                       args)
+        subprocesses, env = start_proxy(runner, args)
         run_local_command(
             runner,
             args,
