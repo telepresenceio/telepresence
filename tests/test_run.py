@@ -134,7 +134,6 @@ class EndToEndTests(TestCase):
             p.stdin.close()
             p.terminate()
             p.wait()
-            time.sleep(5)  # may take a second before http server shuts down
 
         self.addCleanup(cleanup)
 
