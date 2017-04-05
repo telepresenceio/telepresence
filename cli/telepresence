@@ -284,7 +284,7 @@ def get_remote_info(runner, deployment_name, namespace):
             )
     )
     expected_metadata = deployment["spec"]["template"]["metadata"]
-    print("Expected metadata for pods: {}".format(expected_metadata))
+    runner.write("Expected metadata for pods: {}\n".format(expected_metadata))
     pods = json.loads(
         runner.get_output(
                 kubectl(namespace, ["get", "pod", "-o", "json", "--export"])
@@ -294,13 +294,13 @@ def get_remote_info(runner, deployment_name, namespace):
     for pod in pods:
         name = pod["metadata"]["name"]
         phase = pod["status"]["phase"]
-        print(
-            "Checking {} (phase {})...".
+        runner.write(
+            "Checking {} (phase {})...\n".
             format(pod["metadata"].get("labels"), phase)
         )
         if not set(expected_metadata.get("labels", {}).items()
                    ).issubset(set(pod["metadata"].get("labels", {}).items())):
-            print("Labels don't match.")
+            runner.write("Labels don't match.\n")
             continue
         # Metadata for Deployment will hopefully have a namespace. If not, fall
         # back to one we were given. If we weren't given one, best we can do is
@@ -313,7 +313,7 @@ def get_remote_info(runner, deployment_name, namespace):
             phase in (
                 "Pending", "Running"
         )):
-            print("Looks like we've found our pod!")
+            runner.write("Looks like we've found our pod!\n")
             return RemoteInfo(runner, namespace, deployment_name, name,
                               deployment)
 
@@ -546,8 +546,7 @@ def wait_for_exit(runner, shell_process, processes):
             code = p.poll()
             if code is not None:
                 if sys.stderr.isatty:
-                    print("A subprocess died, killing all processes...",
-                          file=sys.stderr)
+                    runner.write("A subprocess died, killing all processes...\n")
                 killall(processes)
                 # Unfortunatly torsocks doesn't deal well with connections
                 # being lost, so best we can do is shut down.
@@ -587,10 +586,10 @@ def run_local_command(runner, args, env_overrides, subprocesses):
     p = Popen(["torsocks", "bash"], env=env)
 
     def terminate_if_alive():
-        print("Shutting down local shell...", file=runner.logfile)
+        runner.write("Shutting down local shell...\n")
         os.remove(tor_conffile.name)
         if p.poll() is None:
-            print("Killing local shell...", file=runner.logfile)
+            runner.write("Killing local shell...\n")
             p.terminate()
 
     atexit.register(terminate_if_alive)
