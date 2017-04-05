@@ -1,7 +1,8 @@
 #!/bin/bash
 set -e
 
-export TELEPRESENCE_VERSION=$(make version)
+export TELEPRESENCE_VERSION
+TELEPRESENCE_VERSION=$(make version)
 
 # Build local image, tag, then push to GCR:
 make build-local && \
