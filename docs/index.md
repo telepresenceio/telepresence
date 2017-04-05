@@ -219,7 +219,7 @@ k8s-pod# wget -qO- http://quickstart.default.svc.cluster.local:8080/file.txt
 hello world
 ```
 
-**Important:** Your server needs to listen on all interfaces, not just `127.0.0.1`, e.g. by listening to interface `0.0.0.0`.
+**Important:** Your server needs to be listening on localhost, i.e. `127.0.0.1`.
 Otherwise it won't be exposed to the remote server.
 
 > **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
