@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 virtualenv/bin/flake8 local/*.py remote/*.py cli/telepresence
-virtualenv/bin/pylint -E local/entrypoint.py
+virtualenv/bin/pylint -E cli/telepresence
 cli/telepresence --version
 cli/telepresence --help
 [ -z "$TELEPRESENCE_TESTS" ] && export TELEPRESENCE_TESTS="-n 4 tests remote/test_socks.py"

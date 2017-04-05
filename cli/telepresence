@@ -2,11 +2,7 @@
 """
 Telepresence CLI tool, a thin wrapper around the
 datawire/telepresence-local Docker image.
-
-Should be written to support Python 2 and Python 3 for ease of distribution.
 """
-
-from __future__ import print_function
 
 import argparse
 import atexit
@@ -26,15 +22,9 @@ from tempfile import mkdtemp, NamedTemporaryFile
 from time import sleep, time
 from traceback import print_exc
 import webbrowser
-if sys.version_info.major == 2:
-    from urllib import quote_plus
-    from StringIO import StringIO
-    input = __builtins__.raw_input
-else:
-    # Python 3
-    from io import StringIO
-    from urllib.parse import quote_plus
-    unicode = str
+from io import StringIO
+from urllib.parse import quote_plus
+unicode = str
 
 # Don't modify next line without modifying corresponding line in
 # .bumpversion.cfg:
