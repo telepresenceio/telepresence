@@ -1,4 +1,5 @@
 language: python
+sudo: required
 
 # Run on Linux and OS X:
 matrix:
