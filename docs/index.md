@@ -421,9 +421,17 @@ Some alternatives to Telepresence:
 
 #### 0.25 (April 5, 2017)
 
+Backwards incompatible changes:
+
+* New requirements: openssh client and Python 3 must be installed for Telepresence to work.
+  Docker is no longer required.
+
 Features:
 
 * Docker is no longer required to run Telepresence.
+  ([#78](https://github.com/datawire/telepresence/issues/78))
+* Local servers just have to listen on localhost (127.0.0.1) in order to be accessible to Kubernetes; previously they had to listen on all interfaces.
+  ([#77](https://github.com/datawire/telepresence/issues/77))
 
 #### 0.24 (April 5, 2017)
 
