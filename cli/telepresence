@@ -405,9 +405,6 @@ def wait_for_pod(runner, remote_info):
     )
 
 
-SOCKS_PORT = 9050
-
-
 def connect(
     runner,
     remote_info,
@@ -444,12 +441,15 @@ def connect(
         )
 
     # start tunnel to remote SOCKS proxy, for telepresence --run.
-    # XXX need to use local port we detected some other way!
+    socks_port = find_free_port()
     processes.append(
-        ssh(runner, ssh_port, ["-L", "127.0.0.1:9099:127.0.0.1:9050"]),
+        ssh(
+            runner, ssh_port,
+            ["-L", "127.0.0.1:{}:127.0.0.1:9050".format(socks_port)]
+        ),
     )
 
-    return processes
+    return processes, socks_port
 
 
 def killall(processes):
@@ -501,17 +501,17 @@ def start_proxy(runner, args):
 
     remote_info = get_remote_info(runner, args.deployment, args.namespace)
 
-    processes = connect(
+    processes, socks_port = connect(
         runner,
         remote_info,
         args.expose,
     )
-    sleep(5)  # wait for SSH to go live
+    sleep(5)  # wait for SSH proxies to go live
 
     # Get environment variables from remote pod:
     env = get_env_variables(remote_info)
 
-    return processes, env
+    return processes, env, socks_port
 
 
 TORSOCKS_CONFIG = """
@@ -577,9 +577,8 @@ def wait_for_exit(runner, shell_process, processes):
                 raise SystemExit(3)
 
 
-def run_local_command(runner, args, env_overrides, subprocesses):
+def run_local_command(runner, args, env_overrides, subprocesses, socks_port):
     """--run support, run command locally."""
-    socks_port = 9099  # XXX find a free port!
     env = os.environ.copy()
     env.update(env_overrides)
     env["PS1"] = "[TELEPRESENCE] " + env.get("PS1", "$ ")
@@ -746,6 +745,7 @@ def main():
             raise SystemExit(1)
         # Make sure we can run openssh:
         try:
+            runner.write("Running 'ssh -V'...")
             version = check_output(["ssh", "-V"], stdin=DEVNULL, stderr=STDOUT)
             if not version.startswith(b"OpenSSH"):
                 raise IOError("ssh is not OpenSSH client, apparently.")
@@ -758,13 +758,8 @@ def main():
         except CalledProcessError as e:
             sys.stderr.write("Please install torsocks (v2.1 or later)\n")
             raise SystemExit(1)
-        subprocesses, env = start_proxy(runner, args)
-        run_local_command(
-            runner,
-            args,
-            env,
-            subprocesses,
-        )
+        subprocesses, env, socks_port = start_proxy(runner, args)
+        run_local_command(runner, args, env, subprocesses, socks_port)
 
     go()
 
