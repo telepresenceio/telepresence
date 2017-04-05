@@ -40,8 +40,9 @@ before_install:
   - ./ci/build-torsocks.sh
 
 install:
-  # Push Docker images to Google Container Registry:
-  - ./ci/push-images.sh
+  # Push Docker images to Google Container Registry; on OS X we don't bother, we
+  # just hope that the parallel Linux job finished building and pushing first...
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./ci/push-images.sh; fi
   
 script:
   - make virtualenv
