@@ -5,7 +5,7 @@ Telepresence allows you to run your code locally as a normal process while still
 2. Giving your code access to cloud resources like AWS RDS or Google PubSub.
 3. Allowing Kubernetes to access your code as if it were in a normal pod within the cluster.
 
-**IMPORTANT:** Telepresence is currently in the prototyping stage, and we expect it to change rapidly based on user feedback.
+**IMPORTANT:** Telepresence is currently in initial stages of development, so we expect it to change rapidly based on user feedback.
 
 Please [file bugs and feature requests](https://github.com/datawire/telepresence/issues) or come [talk to us on Gitter](http://gitter.im/datawire/telepresence).
 
@@ -87,12 +87,29 @@ Many web frameworks also do automatic code reload, in which case you won't even 
 You will need the following available on your machine:
 
 * OS X or Linux.
-* Docker.
-* Python (2 or 3). This should be available on any Linux or OS X machine.
+* Python 3. This should be installed by default on up-to-date Linux distributions.
 * Access to your Kubernetes cluster, with local credentials on your machine.
   You can do this test by running `kubectl get pod` - if this works you're all set.
 
-In order to install, run the following command:
+Start by installing the necessary dependencies, in particular Python 3 and `torsocks`.
+
+* On OS X:
+
+  ```
+  brew install python3 torsocks
+  ```
+* On Ubuntu 16.04 or later:
+
+  ```
+  sudo apt install --no-install-recommends torsocks python3
+  ```
+* On Fedora:
+
+  ```
+  dnf install python3 torsocks
+  ```
+
+Then download Telepresence by running the following commands:
 
 ```
 curl -L https://github.com/datawire/telepresence/raw/{{ site.data.version.version }}/cli/telepresence -o telepresence
@@ -102,22 +119,10 @@ chmod +x telepresence
 Then move telepresence to somewhere in your `$PATH`, e.g.:
 
 ```
+sudo 
 mv telepresence /usr/local/bin
 ```
 
-You'll also need to install a tool called `torsocks` (v2.1.0 or later).
-
-On OS X:
-
-```console
-$ brew install torsocks
-```
-
-On Ubuntu 16.04 or later:
-
-```console
-$ sudo apt install --no-install-recommends torsocks
-```
 
 > **Need help?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
 
@@ -413,6 +418,12 @@ Some alternatives to Telepresence:
   This is a somewhat slow process, and you won't be able to do the quick debug cycle you get from running code locally.
 
 ## Changelog
+
+### 0.25 (April 5, 2017)
+
+Features:
+
+* Docker is no longer required to run Telepresence.
 
 ### 0.24 (April 5, 2017)
 
