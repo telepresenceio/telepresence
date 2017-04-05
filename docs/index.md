@@ -87,11 +87,11 @@ Many web frameworks also do automatic code reload, in which case you won't even 
 You will need the following available on your machine:
 
 * OS X or Linux.
-* Python 3. This should be installed by default on up-to-date Linux distributions.
+* Python 3, OpenSSH client and `torsocks`, `kubectl`.
 * Access to your Kubernetes cluster, with local credentials on your machine.
   You can do this test by running `kubectl get pod` - if this works you're all set.
 
-Start by installing the necessary dependencies, in particular Python 3 and `torsocks`.
+Start by installing the necessary dependencies:
 
 * On OS X:
 
@@ -101,12 +101,12 @@ Start by installing the necessary dependencies, in particular Python 3 and `tors
 * On Ubuntu 16.04 or later:
 
   ```
-  sudo apt install --no-install-recommends torsocks python3
+  sudo apt install --no-install-recommends torsocks python3 openssh-client
   ```
 * On Fedora:
 
   ```
-  dnf install python3 torsocks
+  dnf install python3 torsocks openssh-clients
   ```
 
 Then download Telepresence by running the following commands:
