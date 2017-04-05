@@ -47,7 +47,7 @@ def find_free_port():
     XXX race condition-prone.
     """
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.setsockopt(socket.SO_REUSEADDR)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
@@ -342,7 +342,7 @@ def get_remote_info(runner, deployment_name, namespace):
     )
 
 
-def ssh(runner, args):
+def ssh(runner, ssh_port, args):
     """Connect to remote pod via SSH.
 
     Returns Popen object.
@@ -359,26 +359,18 @@ def ssh(runner, args):
         "-oServerAliveInterval=1",
         # No shell:
         "-N",
-        # XXX use the randomly assigned port
         "-p",
-        "3022",
+        str(ssh_port),
         "root@localhost",
     ] + args)
 
 
-def wait_for_ssh(runner):
+def wait_for_ssh(runner, ssh_port):
     for i in range(30):
         try:
             runner.check_call([
-                "ssh",
-                "-q",
-                # XXX use the randomly assinged port
-                "-p",
-                "3022",
-                "-oStrictHostKeyChecking=no",
-                "-oUserKnownHostsFile=/dev/null",
-                "root@localhost",
-                "/bin/true"
+                "ssh", "-q", "-p", str(ssh_port), "-oStrictHostKeyChecking=no",
+                "-oUserKnownHostsFile=/dev/null", "root@localhost", "/bin/true"
             ])
         except CalledProcessError:
             sleep(1)
@@ -429,23 +421,26 @@ def connect(
     Return list of Popen instances.
     """
     processes = []
+    ssh_port = find_free_port()
+
     # forward remote port to here, by tunneling via remote SSH server:
     processes.append(
         runner.popen(
             kubectl(
-                remote_info.namespace,
-                # XXX use a different port each time
-                ["port-forward", remote_info.pod_name, "3022:22"]
+                remote_info.namespace, [
+                    "port-forward", remote_info.pod_name,
+                    "{}:22".format(ssh_port)
+                ]
             )
         )
     )
     atexit.register(killall, processes)
-    wait_for_ssh(runner)
+    wait_for_ssh(runner, ssh_port)
 
     for port_number in local_exposed_ports:
         processes.append(
             ssh(
-                runner,
+                runner, ssh_port,
                 ["-R", "*:{}:127.0.0.1:{}".format(port_number, port_number)]
             )
         )
@@ -453,7 +448,7 @@ def connect(
     # start tunnel to remote SOCKS proxy, for telepresence --run.
     # XXX need to use local port we detected some other way!
     processes.append(
-        ssh(runner, ["-L", "127.0.0.1:9099:127.0.0.1:9050"]),
+        ssh(runner, ssh_port, ["-L", "127.0.0.1:9099:127.0.0.1:9050"]),
     )
 
     return processes
