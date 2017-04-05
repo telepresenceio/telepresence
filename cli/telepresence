@@ -102,12 +102,12 @@ class Runner(object):
                          **kwargs).strip(), "utf-8"
         )
 
-    def popen(self, *args, **kwargs):
+    def popen(self, *args, stdin=DEVNULL, **kwargs):
         """Return Popen object."""
         self.write("Running: {}\n".format(args))
         return Popen(
             *args,
-            stdin=DEVNULL,
+            stdin=stdin,
             stderr=self.logfile,
             stdout=self.logfile,
             **kwargs
@@ -348,14 +348,13 @@ def ssh(runner, args):
     Returns Popen object.
     """
     return runner.popen([
-        # Password is hello (see remote/Dockerfile):
-        "sshpass",
-        "-phello",
         "ssh",
         # SSH with no warnings:
         "-q",
         # Don't validate host key:
         "-oStrictHostKeyChecking=no",
+        # Don't store host key:
+        "-oUserKnownHostsFile=/dev/null",
         # Ping once a second; after three retries will disconnect:
         "-oServerAliveInterval=1",
         # No shell:
@@ -371,14 +370,13 @@ def wait_for_ssh(runner):
     for i in range(30):
         try:
             runner.check_call([
-                "sshpass",
-                "-phello",
                 "ssh",
                 "-q",
                 # XXX use the randomly assinged port
                 "-p",
                 "3022",
                 "-oStrictHostKeyChecking=no",
+                "-oUserKnownHostsFile=/dev/null",
                 "root@localhost",
                 "/bin/true"
             ])

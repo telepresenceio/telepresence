@@ -4,10 +4,10 @@ RUN mkdir -p /usr/src/app
 WORKDIR /usr/src/app
 COPY requirements.txt /usr/src/app
 
-RUN apk add --no-cache netcat-openbsd openssh gcc libc-dev && \
+RUN apk add --no-cache openssh gcc libc-dev && \
     ssh-keygen -A && \
-    echo -e "ClientAliveInterval 1\nGatewayPorts yes\nPermitRootLogin yes\n" >> /etc/ssh/sshd_config && \
-    echo -e "hello\nhello\n" | passwd root && \
+    echo -e "ClientAliveInterval 1\nGatewayPorts yes\nPermitRootLogin yes\nPermitEmptyPasswords yes\n" >> /etc/ssh/sshd_config && \
+    passwd -d root && \
     pip install --no-cache-dir -r requirements.txt && \
     apk del -r gcc libc-dev
 
