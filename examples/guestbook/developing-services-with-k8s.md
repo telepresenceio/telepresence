@@ -7,7 +7,7 @@ The [guestbook](https://cloud.google.com/container-engine/docs/tutorials/guestbo
 * [Kubernetes](https://kubernetes.io)
 * [Google Container Engine](https://cloud.google.com/container-engine/)
 * [Docker](https://www.docker.com)
-* [Telepresence](https://www.datawire.io/telepresence/)
+* [Telepresence](http://www.telepresence.io)
 * [PHP](http://www.php.net/) and [Redis](https://redis.io/)
 
 ## Prerequisites and setup
@@ -40,7 +40,7 @@ Next, we're going to want to install the `gcloud` and `kubectl` commands. Follow
 We need to install Telepresence, which will proxy your locally running service to GKE.
 
 ```
-% curl -L https://github.com/datawire/telepresence/raw/0.23/cli/telepresence -o telepresence
+% curl -L https://github.com/datawire/telepresence/raw/0.26/cli/telepresence -o telepresence
 % chmod +x telepresence
 ```
 
@@ -122,7 +122,7 @@ redis-slave-132015689-v06md    1/1       Running   0          1d
 
 ### Connecting the Guestbook frontend to Redis
 
-We're now going to use [Telepresence](https://datawire.github.io/telepresence) to create a virtual network between your local machine and the remote Kubernetes cluster. This way, the PHP application will be able to talk to remote cloud resources, and vice versa.
+We're now going to use [Telepresence](http://www.telepresence.io) to create a virtual network between your local machine and the remote Kubernetes cluster. This way, the PHP application will be able to talk to remote cloud resources, and vice versa.
 
 We'll start by deploying the Telepresence proxy onto the Kubernetes cluster using the [`telepresence-deployment.yaml`](https://github.com/datawire/telepresence/blob/master/examples/guestbook/telepresence-deployment.yaml) deployment file.
 
