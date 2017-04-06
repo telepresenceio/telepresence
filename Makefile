@@ -32,5 +32,5 @@ minikube-test: virtualenv
 	kubectl config set-context minikube
 	env TELEPRESENCE_VERSION=$(VERSION) ci/test.sh
 
-release: build
+release: build-remote
 	docker push datawire/telepresence-k8s:$(VERSION)
