@@ -419,7 +419,7 @@ Some alternatives to Telepresence:
 
 ## Changelog
 
-#### 0.25 (April 5, 2017)
+#### 0.25 (April 6, 2017)
 
 Backwards incompatible changes:
 
