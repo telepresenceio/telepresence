@@ -1,10 +1,13 @@
-dist: trusty
 language: python
-python:
-  - "2.7"
+sudo: required
 
-services:
-  - docker
+# Run on Linux and OS X:
+matrix:
+  include:
+    - os: linux
+      dist: trusty
+    - os: osx
+      language: generic
 
 # Cache gcloud SDK across runs; this requires master to have builds:
 cache:
@@ -18,12 +21,13 @@ env:
     - CLUSTER_NAME=telepresence-testing
     - CLOUDSDK_COMPUTE_ZONE=us-central1-a
 
-# Only build master:
+# Only build master branch (all PRs will be built):
 branches:
   only:
     - master
 
 before_install:
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install python3; fi
   # Record some debugging info:
   - python --version
   - python2 --version
@@ -36,8 +40,9 @@ before_install:
   - ./ci/build-torsocks.sh
 
 install:
-  # Push Docker images to Google Container Registry:
-  - ./ci/push-images.sh
+  # Push Docker images to Google Container Registry; on OS X we don't bother, we
+  # just hope that the parallel Linux job finished building and pushing first...
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./ci/push-images.sh; fi
   
 script:
   - make virtualenv

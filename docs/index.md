@@ -5,7 +5,7 @@ Telepresence allows you to run your code locally as a normal process while still
 2. Giving your code access to cloud resources like AWS RDS or Google PubSub.
 3. Allowing Kubernetes to access your code as if it were in a normal pod within the cluster.
 
-**IMPORTANT:** Telepresence is currently in the prototyping stage, and we expect it to change rapidly based on user feedback.
+**IMPORTANT:** Telepresence is currently in initial stages of development, so we expect it to change rapidly based on user feedback.
 
 Please [file bugs and feature requests](https://github.com/datawire/telepresence/issues) or come [talk to us on Gitter](http://gitter.im/datawire/telepresence).
 
@@ -87,12 +87,29 @@ Many web frameworks also do automatic code reload, in which case you won't even 
 You will need the following available on your machine:
 
 * OS X or Linux.
-* Docker.
-* Python (2 or 3). This should be available on any Linux or OS X machine.
+* Python 3, OpenSSH client and `torsocks`, `kubectl`.
 * Access to your Kubernetes cluster, with local credentials on your machine.
   You can do this test by running `kubectl get pod` - if this works you're all set.
 
-In order to install, run the following command:
+Start by installing the necessary dependencies:
+
+* On OS X:
+
+  ```
+  brew install python3 torsocks
+  ```
+* On Ubuntu 16.04 or later:
+
+  ```
+  sudo apt install --no-install-recommends torsocks python3 openssh-client
+  ```
+* On Fedora:
+
+  ```
+  dnf install python3 torsocks openssh-clients
+  ```
+
+Then download Telepresence by running the following commands:
 
 ```
 curl -L https://github.com/datawire/telepresence/raw/{{ site.data.version.version }}/cli/telepresence -o telepresence
@@ -102,22 +119,10 @@ chmod +x telepresence
 Then move telepresence to somewhere in your `$PATH`, e.g.:
 
 ```
+sudo 
 mv telepresence /usr/local/bin
 ```
 
-You'll also need to install a tool called `torsocks` (v2.1.0 or later).
-
-On OS X:
-
-```console
-$ brew install torsocks
-```
-
-On Ubuntu 16.04 or later:
-
-```console
-$ sudo apt install --no-install-recommends torsocks
-```
 
 > **Need help?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
 
@@ -214,7 +219,7 @@ k8s-pod# wget -qO- http://quickstart.default.svc.cluster.local:8080/file.txt
 hello world
 ```
 
-**Important:** Your server needs to listen on all interfaces, not just `127.0.0.1`, e.g. by listening to interface `0.0.0.0`.
+**Important:** Your server needs to be listening on localhost, i.e. `127.0.0.1`.
 Otherwise it won't be exposed to the remote server.
 
 > **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
@@ -414,7 +419,21 @@ Some alternatives to Telepresence:
 
 ## Changelog
 
-### 0.24 (April 5, 2017)
+#### 0.25 (April 5, 2017)
+
+Backwards incompatible changes:
+
+* New requirements: openssh client and Python 3 must be installed for Telepresence to work.
+  Docker is no longer required.
+
+Features:
+
+* Docker is no longer required to run Telepresence.
+  ([#78](https://github.com/datawire/telepresence/issues/78))
+* Local servers just have to listen on localhost (127.0.0.1) in order to be accessible to Kubernetes; previously they had to listen on all interfaces.
+  ([#77](https://github.com/datawire/telepresence/issues/77))
+
+#### 0.24 (April 5, 2017)
 
 Bug fixes:
 
@@ -423,14 +442,14 @@ Bug fixes:
 * Errors on startup are noticed, fixing issues with hanging indefinitely in the "Starting proxy..." phase.
   ([#83](https://github.com/datawire/telepresence/issues/83))
 
-### 0.23 (April 3, 2017)
+#### 0.23 (April 3, 2017)
 
 Bug fixes:
 
 * Telepresence no longer uses lots of CPU busy-looping.
   Thanks to Jean-Paul Calderone for the bug report.
 
-### 0.22 (March 30, 2017)
+#### 0.22 (March 30, 2017)
 
 Features:
 
@@ -443,7 +462,7 @@ Backwards incompatible changes:
   This feature will be reintroduced in the future, with a different implementation, if there is user interest.
   [Add comments here](https://github.com/datawire/telepresence/issues/76) if you're interested.
 
-### 0.21 (March 28, 2017)
+#### 0.21 (March 28, 2017)
   
 Bug fixes:
 
@@ -451,7 +470,7 @@ Bug fixes:
 * Telepresence notices when the proxy container exits and shuts down.
   ([#24](https://github.com/datawire/telepresence/issues/24))
 
-### 0.20 (March 27, 2017)
+#### 0.20 (March 27, 2017)
 
 Bug fixes:
 
@@ -459,13 +478,13 @@ Bug fixes:
 * If there is more than one container Telepresence copies the environment variables from the one running the `datawire/telepresence-k8s` image, rather than the first one.
   ([#38](https://github.com/datawire/telepresence/issues/38))
 
-### 0.19 (March 24, 2017)
+#### 0.19 (March 24, 2017)
 
 Bug fixes:
 
 * Fixed another issue with `--run-shell` on OS X.
 
-### 0.18 (March 24, 2017)
+#### 0.18 (March 24, 2017)
 
 Features:
 
@@ -479,7 +498,7 @@ Bug fixes:
   Thanks to Jean-Paul Calderone for the bug report.
   ([#58](https://github.com/datawire/telepresence/issues/58))
 
-### 0.17 (March 21, 2017)
+#### 0.17 (March 21, 2017)
 
 Bug fixes:
 
@@ -495,48 +514,48 @@ Bug fixes:
   Thanks to Jean-Paul Calderone for the bug report.
   ([#50](https://github.com/datawire/telepresence/issues/50))
 
-### 0.16 (March 20, 2017)
+#### 0.16 (March 20, 2017)
 
 Bug fixes:
 
 * Disable `--run-shell` on OS X, hopefully temporarily, since it has issues with System Integrity Protection.
 * Fix Python 3 support for running `telepresence`.
 
-### 0.14 (March 20, 2017)
+#### 0.14 (March 20, 2017)
 
 Features:
 
 * Added `--run-shell`, which allows proxying against local processes.
   ([#1](https://github.com/datawire/telepresence/issues/1))
 
-### 0.13 (March 16, 2017)
+#### 0.13 (March 16, 2017)
 
 Bug fixes:
 
 * Increase time out for pods to start up; sometimes it takes more than 30 seconds due to time to download image.
 
-### 0.12 (March 16, 2017)
+#### 0.12 (March 16, 2017)
 
 Bug fixes:
 
 * Better way to find matching pod for a Deployment.
   ([#43](https://github.com/datawire/telepresence/issues/43))
 
-### 0.11 (March 16, 2017)
+#### 0.11 (March 16, 2017)
 
 Bug fixes:
 
 * Fixed race condition that impacted `--expose`.
   ([#40](https://github.com/datawire/telepresence/issues/40))
 
-### 0.10 (March 15, 2017)
+#### 0.10 (March 15, 2017)
 
 Bug fixes:
 
 * Fixed race condition the first time Telepresence is run against a cluster.
   ([#33](https://github.com/datawire/telepresence/issues/33))
 
-### 0.9 (March 15, 2017)
+#### 0.9 (March 15, 2017)
 
 Features:
 
@@ -550,7 +569,7 @@ Bug fixes:
 * Fix problem on OS X where Telepresence failed to work due to inability to share default location of temporary files.
   ([#25](https://github.com/datawire/telepresence/issues/25))
 
-### 0.8 (March 14, 2017)
+#### 0.8 (March 14, 2017)
 
 Features:
 

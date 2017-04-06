@@ -26,4 +26,4 @@ def disconnect():
 if __name__ == '__main__':
     disconnect()
     time.sleep(10)
-    raise SystemExit(666)  # test expects 3
+    raise SystemExit(66)  # test expects 3

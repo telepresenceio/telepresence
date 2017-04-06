@@ -15,6 +15,11 @@ from urllib.error import HTTPError
 
 
 def main():
+    env = os.environ.copy()
+    # Don't want torsocks messing with kubectl:
+    for name in ["LD_PRELOAD", "DYLD_INSERT_LIBRARIES"]:
+        if name in env:
+            del env[name]
     # Add alias analiaswedefine that points at nginx Service:
     check_call([
         "kubectl",
@@ -29,13 +34,15 @@ def main():
             r"""echo -e "\n$(host -t A {} | sed 's/.* \([.0-9]*\)/\1/')""" +
             r''' analiaswedefine\n" >> /etc/hosts; tail /etc/hosts'''
         ).format(sys.argv[1]),
-    ])
+    ], env=env)
 
     try:
         result = str(
             urlopen("http://analiaswedefine:80/", timeout=5).read(), "utf-8"
         )
         assert "nginx" in result
+        # special code indicating success:
+        raise SystemExit(113)
     except (HTTPError, AssertionError):
         raise SystemExit(3)
 
