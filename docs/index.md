@@ -26,6 +26,8 @@ The result is that your local process has a similar environment to the remote Ku
 
 <script type="text/javascript" src="https://asciinema.org/a/109183.js" id="asciicast-109183" async></script>
 
+(The Privacy Badger browser extensions may hide the above; you can [see the demo here](https://asciinema.org/a/109183) too.)
+
 ## Why Telepresence: faster development, full control
 
 Let's assume you have a web service which listens on port 8080, and has a Dockerfile which gets built to an image called `examplecom/servicename`.
@@ -405,6 +407,11 @@ To workaround these limitations you can do the following in your development env
 
 * Use `gccgo` instead of `go build`.
 * Do `export GODEBUG=netdns=cgo` to [force Go to use the standard DNS lookup mechanism](https://golang.org/pkg/net/#hdr-Name_Resolution) rather than its own internal one.
+
+### Docker containers
+
+A container run via `docker run` will not inherit the outgoing functionality of the Telepresence shell.
+If you want to use Telepresence to proxy a containerized application you should run Telepresence *inside* the container.
 
 ### What Telepresence proxies
 
