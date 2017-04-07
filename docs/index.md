@@ -383,7 +383,30 @@ spec:
 ```
 
 
-## What Telepresence proxies
+## Limitations, caveats and workarounds
+
+### Incompatible programs
+
+Because of the mechanism Telepresence uses to intercept networking calls:
+
+* suid binaries won't work inside a Telepresence shell.
+* Statically linked binaries won't work.
+* Custom DNS resolvers that parse `/etc/resolv.conf` and do DNS lookups themselves won't work.
+
+However, this only impacts outgoing connections.
+Incoming proxying (from Kubernetes) will still work with these binaries.
+
+### Golang
+
+Programs written with the Go programming language will not work by default, because Go uses a custom system call implementation and has its own DNS resolver.
+Again, this only impacts outgoing connections, incoming connections will still work.
+
+To workaround these limitations you can do the following in your development environment (there is no need to change anything for production):
+
+* Use `gccgo` instead of `go build`.
+* Do `export GODEBUG=netdns=cgo` to [force Go to use the standard DNS lookup mechanism](https://golang.org/pkg/net/#hdr-Name_Resolution) rather than its own internal one.
+
+### What Telepresence proxies
 
 Telepresence currently proxies the following when using `--run-shell`:
 
