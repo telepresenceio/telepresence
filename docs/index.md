@@ -26,7 +26,7 @@ The result is that your local process has a similar environment to the remote Ku
 
 <script type="text/javascript" src="https://asciinema.org/a/109183.js" id="asciicast-109183" async></script>
 
-## Telepresence makes development faster
+## Why Telepresence: faster development, full control
 
 Let's assume you have a web service which listens on port 8080, and has a Dockerfile which gets built to an image called `examplecom/servicename`.
 Your service depends on other Kubernetes `Service` instances (`thing1` and `thing2`), and on a cloud database.
@@ -44,7 +44,7 @@ graph LR
   end
 </div>
 
-### Status quo: a slow development/live test cycle
+### The slow status quo
 
 If you need that cloud database and those two services to directly test your software, you will need to do the following to test a change:
 
@@ -73,7 +73,7 @@ graph TD
   end
 </div>
 
-### Telepresence: a fast development/live test cycle
+### A fast development cycle with Telepresence
 
 Telepresence works by running your code *locally*, as a normal local process, and then forwarding forwarding requests to/from the remote Kubernetes cluster.
 
@@ -141,8 +141,10 @@ mv telepresence /usr/local/bin
 
 ## Quickstart
 
+### Proxying from your local process to Kubernetes
+
 We'll start out by using Telepresence with a newly created Kubernetes `Deployment`, just so it's clearer what is going on.
-In the next section we'll discuss using Telepresence with an existing `Deployment` - you can [skip ahead](#in-depth-usage) if you want.
+In the next section we'll discuss using Telepresence with an existing `Deployment` - you can [skip ahead](#using-existing-deployments) if you want.
 
 To get started we'll use `telepresence --new-deployment quickstart` to create a new `Deployment` and matching `Service`.
 The client will connect to the remote Kubernetes cluster via that `Deployment`.
@@ -237,7 +239,9 @@ Otherwise it won't be exposed to the remote server.
 
 > **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
 
-## Using existing Deployments
+## Other features and functionality
+
+### Using existing Deployments
 
 Let's look in a bit more detail at using Telepresence when you have an existing `Deployment`.
 
@@ -290,9 +294,7 @@ In order to run Telepresence you will need to do three things:
 
 Let's go through these steps one by one.
 
-### Run the Telepresence proxy in Kubernetes
-
-Instead of running the production `Deployment` above, you will need to run a different one that runs the Telepresence proxy instead.
+First, instead of running the production `Deployment` above, you will need to run a different one that runs the Telepresence proxy instead.
 It should only have 1 replica, and it will use a different image, but it should have the same environment variables since you want those available to your local code.
 
 ```yaml
@@ -323,8 +325,7 @@ You should apply this file to your cluster:
 $ kubectl apply -f telepresence-deployment.yaml
 ```
 
-### Run the local Telepresence client on your machine
-
+Next, you need to run the local Telepresence client on your machine.
 You want to do the following:
 
 1. Expose port 8080 in your code to Kubernetes.
@@ -345,8 +346,6 @@ $ telepresence --deployment servicename-deployment \
 
 You are now running your own code locally, attaching it to the network stack of the Telepresence client and using the environment variables Telepresence client extracted.
 Your code is connected to the remote Kubernetes cluster.
-
-## Other features and functionality
 
 ### Kubernetes namespaces
 
@@ -414,7 +413,6 @@ We are considering various improvements to Telepresence, including:
 
 * [Supporting running local Docker containers, not just local processes](https://github.com/datawire/telepresence/issues/76)
 * [Removing need for Kubernetes credentials](https://github.com/datawire/telepresence/issues/2)
-* Implementing any of the unsupported features mentioned above.
 
 Please add comments to relevant tickets if you are interested in these features, or [file a new issue](https://github.com/datawire/telepresence/issues/new) if there is no existing ticket for a desired feature or bug report.
 
