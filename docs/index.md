@@ -1,15 +1,28 @@
+## Introduction
+
 Have you ever wanted the quick development cycle of local code while still having your code run within a remote Kubernetes cluster?
-Telepresence allows you to run your code locally as a normal process while still:
+Telepresence gives you a local development environment for your Kubernetes service while still:
 
 1. Giving your code access to Services in a remote Kubernetes cluster.
-2. Giving your code access to cloud resources like AWS RDS or Google PubSub.
+2. Giving your code access to cloud resources like AWS RDS or Google PubSub, even if they're only accessible from within your cluster.
 3. Allowing Kubernetes to access your code as if it were in a normal pod within the cluster.
 
 **IMPORTANT:** Telepresence is currently in initial stages of development, so we expect it to change rapidly based on user feedback.
 
 Please [file bugs and feature requests](https://github.com/datawire/telepresence/issues) or come [talk to us on Gitter](http://gitter.im/datawire/telepresence).
 
-## Demo
+### How it works
+
+Telepresence works by building a two-way network proxy (bootstrapped using `kubectl port-forward`) between a custom pod running inside a remote Kubernetes cluster and a process running on your development machine.
+The custom pod is substituted for your normal pod that would run in production.
+
+Environment variables from the remote pod are made available to your local process.
+In addition, the local process has its networking transparently overridden such that DNS calls and TCP connections are routed over the proxy to the remote Kubernetes cluster.
+This is implemented using `LD_PRELOAD`/`DYLD_INSERT_LIBRARIES` mechanism on Linux/OSX, where a shared library can be injected into a process and override library calls.
+
+The result is that your local process has a similar environment to the remote Kubernetes cluster, while still being fully under your local control.
+
+### Demo
 
 <script type="text/javascript" src="https://asciinema.org/a/109183.js" id="asciicast-109183" async></script>
 
@@ -419,7 +432,7 @@ Some alternatives to Telepresence:
 
 ## Changelog
 
-#### 0.25 (April 5, 2017)
+#### 0.26 (April 6, 2017)
 
 Backwards incompatible changes:
 
@@ -432,6 +445,8 @@ Features:
   ([#78](https://github.com/datawire/telepresence/issues/78))
 * Local servers just have to listen on localhost (127.0.0.1) in order to be accessible to Kubernetes; previously they had to listen on all interfaces.
   ([#77](https://github.com/datawire/telepresence/issues/77))
+
+0.25 failed the release process due to some sort of mysterious mistake.
 
 #### 0.24 (April 5, 2017)
 
