@@ -796,6 +796,20 @@ class handle_unexpected_errors(object):
         return call_f
 
 
+def require_command(runner, command, message=None):
+    if message is None:
+        message = "Please install " + command
+    try:
+        runner.get_output(["which", command])
+    except CalledProcessError as e:
+        sys.stderr.write(message + "\n")
+        sys.stderr.write(
+            "See the documentation at http://telepresence.io "
+            "for more details.\n"
+        )
+        raise SystemExit(1)
+
+
 def main():
     # Make SIGTERM do clean shutdown (in particular, we want atexit functions
     # to be called):
@@ -820,16 +834,24 @@ def main():
             runner.write("Running 'ssh -V'...")
             version = check_output(["ssh", "-V"], stdin=DEVNULL, stderr=STDOUT)
             if not version.startswith(b"OpenSSH"):
-                raise IOError("ssh is not OpenSSH client, apparently.")
+                raise SystemExit(
+                    "'ssh' is not the OpenSSH client, apparently."
+                )
         except (CalledProcessError, OSError, IOError) as e:
-            sys.stderr.write("Error running Docker: {}\n".format(e))
+            sys.stderr.write("Error running ssh: {}\n".format(e))
             raise SystemExit(1)
-        # Make sure we have torsocks:
-        try:
-            runner.get_output(["which", "torsocks"])
-        except CalledProcessError as e:
-            sys.stderr.write("Please install torsocks (v2.1 or later)\n")
-            raise SystemExit(1)
+        # Other requirements:
+        require_command(
+            runner, "torsocks", "Please install torsocks (v2.1 or later)"
+        )
+        require_command(runner, "sshfs")
+        if sys.platform.startswith("linux"):
+            require_command(runner, "proot")
+        if sys.platform == "darwin":
+            require_command(
+                runner, "bindfs", "Please install bindfs "
+                "(brew install homebrew/fuse/bindfs)"
+            )
         subprocesses, env, socks_port, ssh_port, remote_info = start_proxy(
             runner, args
         )
