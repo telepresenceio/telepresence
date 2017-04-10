@@ -198,12 +198,15 @@ class RemoteInfo(object):
     :ivar deployment_config dict: The decoded k8s object (i.e. JSON/YAML).
     :ivar container_config dict: The container within the Deployment JSON.
     :ivar container_name str: The name of the container.
-    :ivar pod_environment dict: Environment variables in the remote
-        Telepresence pod.
     """
 
     def __init__(
-        self, runner, namespace, deployment_name, pod_name, deployment_config
+        self,
+        runner,
+        namespace,
+        deployment_name,
+        pod_name,
+        deployment_config,
     ):
         self.namespace = namespace
         self.deployment_name = deployment_name
@@ -214,12 +217,6 @@ class RemoteInfo(object):
             c for c in cs if "telepresence-k8s" in c["image"]
         ][0]
         self.container_name = self.container_config["name"]
-        # Wait for pod to be running before we can get environment:
-        wait_for_pod(runner, self)
-        self.pod_environment = _get_remote_env(
-            runner, namespace, pod_name, self.container_name
-        )
-        self.service_names = _get_service_names(self.pod_environment)
 
 
 def _get_service_names(environment):
@@ -256,13 +253,17 @@ def get_deployment_set_keys(remote_info):
     )
 
 
-def get_env_variables(remote_info):
+def get_env_variables(runner, remote_info):
     """
     Generate environment variables that match kubernetes.
     """
-    remote_env = remote_info.pod_environment
+    # Get the environment:
+    remote_env = _get_remote_env(
+        runner, remote_info.namespace, remote_info.pod_name,
+        remote_info.container_name
+    )
+    service_names = _get_service_names(remote_env)
     deployment_set_keys = get_deployment_set_keys(remote_info)
-    service_names = remote_info.service_names
     # Tell local process about the remote setup, useful for testing and
     # debugging:
     socks_result = {
@@ -332,9 +333,16 @@ def get_remote_info(runner, deployment_name, namespace):
                 "Pending", "Running"
         )):
             runner.write("Looks like we've found our pod!\n")
-            return RemoteInfo(
-                runner, namespace, deployment_name, name, deployment
+            remote_info = RemoteInfo(
+                runner,
+                namespace,
+                deployment_name,
+                name,
+                deployment,
             )
+            # Wait for pod to be running:
+            wait_for_pod(runner, remote_info)
+            return remote_info
 
     raise RuntimeError(
         "Telepresence pod not found for Deployment '{}'.".
@@ -508,8 +516,8 @@ def start_proxy(runner, args):
     )
     sleep(5)  # wait for SSH proxies to go live
 
-    # Get environment variables from remote pod:
-    env = get_env_variables(remote_info)
+    # Get the environment variables we want to copy from the remote pod:
+    env = get_env_variables(runner, remote_info)
 
     return processes, env, socks_port
 
