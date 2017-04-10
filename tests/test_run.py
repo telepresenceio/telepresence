@@ -17,6 +17,8 @@ kind: Deployment
 metadata:
   name: {name}
   namespace: {namespace}
+  labels:
+    hello: monkeys
 spec:
   replicas: 1
   template:
@@ -34,6 +36,16 @@ spec:
         env:
         - name: MYENV
           value: hello
+        volumeMounts:
+        - name: podinfo
+          mountPath: /podinfo
+      volumes:
+      - name: podinfo
+        downwardAPI:
+          items:
+            - path: "labels"
+              fieldRef:
+                fieldPath: metadata.labels
 """
 
 NAMESPACE_YAML = """\
@@ -224,7 +236,7 @@ class EndToEndTests(TestCase):
                                     "python3 proxy.py " + nginx_name)
         assert exit_code == 113
 
-    def existingdeployment(self, namespace):
+    def existingdeployment(self, namespace, script):
         nginx_name = run_nginx(namespace)
 
         # Create a Deployment outside of Telepresence:
@@ -255,8 +267,8 @@ class EndToEndTests(TestCase):
         if namespace != "default":
             args.extend(["--namespace", namespace])
         exit_code = run_script_test(
-            args, "python3 tocluster.py {} {} MYENV=hello".format(
-                nginx_name, namespace
+            args, "python3 {} {} {} MYENV=hello".format(
+                script, nginx_name, namespace
             )
         )
         assert 113 == exit_code
@@ -265,12 +277,16 @@ class EndToEndTests(TestCase):
         """
         Tests of communicating with existing Deployment.
         """
-        self.existingdeployment("default")
+        self.existingdeployment("default", "tocluster.py")
 
     def test_existingdeployment_custom_namespace(self):
         """
         Tests of communicating with existing Deployment in a custom namespace.
         """
-        self.existingdeployment(self.create_namespace())
+        self.existingdeployment(self.create_namespace(), "tocluster.py")
 
-    # XXX write test for IP-based routing, not just DNS-based routing!
+    def test_volumes(self):
+        """
+        Volumes are accessible locally.
+        """
+        self.existingdeployment("default", "volumes.py")

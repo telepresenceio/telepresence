@@ -2,7 +2,7 @@
 Tests that accessing remote cluster from local container.
 
 This module will be run inside a container. To indicate success it will exit
-with code 0.
+with code 113.
 """
 
 import os
