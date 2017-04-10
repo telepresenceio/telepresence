@@ -10,10 +10,14 @@ import sys
 def main():
     # Explicit volumes are exposed:
     with open("/podinfo/labels") as f:
-        assert 'hello="monkeys"' in f.read()
+        data = f.read()
+        print(data)
+        assert 'hello="monkeys"' in data
     # Implicitly added account volume is there too:
     with open("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt") as f:
-        assert f.read().startswith("-----BEGIN CERT")
+        data = f.read()
+        print(data)
+        assert data.startswith("-----BEGIN CERT")
     # Exit with code indicating success:
     sys.exit(113)
 

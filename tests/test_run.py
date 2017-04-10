@@ -17,14 +17,13 @@ kind: Deployment
 metadata:
   name: {name}
   namespace: {namespace}
-  labels:
-    hello: monkeys
 spec:
   replicas: 1
   template:
     metadata:
       labels:
         name: {name}
+        hello: monkeys  # <-- used by volumes test
     spec:
       containers:
       # Extra container at start to demonstrate we can handle multiple

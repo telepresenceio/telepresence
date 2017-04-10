@@ -217,6 +217,10 @@ class RemoteInfo(object):
             c for c in cs if "telepresence-k8s" in c["image"]
         ][0]
         self.container_name = self.container_config["name"]
+        self.volume_mounts = [
+            volume["mountPath"]
+            for volume in self.container_config.get("volumeMounts", [])
+        ] + ["/var/run/secrets/kubernetes.io/serviceaccount"]
 
     def remote_telepresence_version(self):
         """Return the version used by the remote Telepresence container."""
@@ -470,7 +474,7 @@ def connect(
         ),
     )
 
-    return processes, socks_port
+    return processes, socks_port, ssh_port
 
 
 def killall(processes):
@@ -522,7 +526,7 @@ def start_proxy(runner, args):
 
     remote_info = get_remote_info(runner, args.deployment, args.namespace)
 
-    processes, socks_port = connect(
+    processes, socks_port, ssh_port = connect(
         runner,
         remote_info,
         args.expose,
@@ -532,7 +536,7 @@ def start_proxy(runner, args):
     # Get the environment variables we want to copy from the remote pod:
     env = get_env_variables(runner, remote_info)
 
-    return processes, env, socks_port
+    return processes, env, socks_port, ssh_port, remote_info
 
 
 TORSOCKS_CONFIG = """
@@ -598,7 +602,47 @@ def wait_for_exit(runner, shell_process, processes):
                 raise SystemExit(3)
 
 
-def run_local_command(runner, args, env_overrides, subprocesses, socks_port):
+def run_torsocks_linux(runner, remote_info, ssh_port, env):
+    """
+    Run torsocks on Linux with volume mounts.
+
+    Theory of operation:
+
+    sshfs is used to mount remote system locally. proot is used to 'bind mount'
+    the approriate paths locall.
+    """
+    mount_dir = mkdtemp()
+    runner.get_output([
+        "sshfs",
+        "-p",
+        str(ssh_port),
+        # Don't validate host key:
+        "-o",
+        "StrictHostKeyChecking=no",
+        # Don't store host key:
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+        "root@localhost:/",
+        mount_dir
+    ])
+
+    command = ["torsocks", "proot"] + sum([[
+        "-b",
+        "{}:{}".format(os.path.join(mount_dir, mount_path[1:]), mount_path)
+    ] for mount_path in remote_info.volume_mounts], []) + ["bash"]
+    return Popen(command, env=env), [mount_dir]
+
+
+def run_torsocks_osx(runner, remote_info, ssh_port, env):
+    # Make sure we use "bash", no "/bin/bash", so we get the copied version on
+    # OS X:
+    pass
+
+
+def run_local_command(
+    runner, remote_info, args, env_overrides, subprocesses, socks_port,
+    ssh_port
+):
     """--run support, run command locally."""
     env = os.environ.copy()
     env.update(env_overrides)
@@ -619,9 +663,12 @@ def run_local_command(runner, args, env_overrides, subprocesses, socks_port):
             runner.get_output(["kubectl", "config", "current-context"]).strip()
         )
     )
-    # Make sure we use "bash", no "/bin/bash", so we get the copied version on
-    # OS X:
-    p = Popen(["torsocks", "bash"], env=env)
+    if sys.platform.startswith("linux"):
+        p, mount_dirs = run_torsocks_linux(runner, remote_info, ssh_port, env)
+    elif sys.platform == "darwin":
+        p, mount_dirs = run_torsocks_osx(runner, remote_info, ssh_port, env)
+    else:
+        raise RuntimeError("Unknown platform: " + sys.platform)
 
     def terminate_if_alive():
         runner.write("Shutting down local shell...\n")
@@ -629,6 +676,10 @@ def run_local_command(runner, args, env_overrides, subprocesses, socks_port):
         if p.poll() is None:
             runner.write("Killing local shell...\n")
             p.terminate()
+            p.wait()
+        for mount_dir in mount_dirs:
+            runner.get_output(["umount", mount_dir])
+            os.rmdir(mount_dir)
 
     atexit.register(terminate_if_alive)
     wait_for_exit(runner, p, subprocesses)
@@ -779,8 +830,12 @@ def main():
         except CalledProcessError as e:
             sys.stderr.write("Please install torsocks (v2.1 or later)\n")
             raise SystemExit(1)
-        subprocesses, env, socks_port = start_proxy(runner, args)
-        run_local_command(runner, args, env, subprocesses, socks_port)
+        subprocesses, env, socks_port, ssh_port, remote_info = start_proxy(
+            runner, args
+        )
+        run_local_command(
+            runner, remote_info, args, env, subprocesses, socks_port, ssh_port
+        )
 
     go()
 
