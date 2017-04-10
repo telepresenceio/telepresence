@@ -1,11 +1,14 @@
 ## Introduction
 
 Have you ever wanted the quick development cycle of local code while still having your code run within a remote Kubernetes cluster?
-Telepresence gives you a local development environment for your Kubernetes service while still:
+Telepresence allows you to develop locally, running your code on your machine, while still making your code appear as if it is running in Kubernetes.
 
-1. Giving your code access to Services in a remote Kubernetes cluster.
-2. Giving your code access to cloud resources like AWS RDS or Google PubSub, even if they're only accessible from within your cluster.
-3. Allowing Kubernetes to access your code as if it were in a normal pod within the cluster.
+1. **Your local process can talk to Kubernetes `Services` and cloud databases.**
+   Your local process can access `Services` in the remote Kubernetes cluster, as well as cloud resources like AWS RDS even if they're in a private VPC.
+2. Your local process has **the same environment variables and Kubernetes volumes** as the real pod.
+   That means you can use `Secret`, `ConfigMap`, Downward API etc. even as your code runs locally.
+3. **The Kubernetes cluster can talk to your local process.**
+   Other `Services`, your `LoadBalancer` or your `Ingress` can send queries to the local process you are running.
 
 **IMPORTANT:** Telepresence is currently in initial stages of development, so we expect it to change rapidly based on user feedback.
 
@@ -19,6 +22,8 @@ The custom pod is substituted for your normal pod that would run in production.
 Environment variables from the remote pod are made available to your local process.
 In addition, the local process has its networking transparently overridden such that DNS calls and TCP connections are routed over the proxy to the remote Kubernetes cluster.
 This is implemented using `LD_PRELOAD`/`DYLD_INSERT_LIBRARIES` mechanism on Linux/OSX, where a shared library can be injected into a process and override library calls.
+
+Volumes are proxied using [sshfs](https://github.com/libfuse/sshfs) and some clever bind mounting tricks ([bindfs](https://bindfs.org) on OS X, bind mounts on Linux.)
 
 The result is that your local process has a similar environment to the remote Kubernetes cluster, while still being fully under your local control.
 
@@ -349,6 +354,13 @@ $ telepresence --deployment servicename-deployment \
 You are now running your own code locally, attaching it to the network stack of the Telepresence client and using the environment variables Telepresence client extracted.
 Your code is connected to the remote Kubernetes cluster.
 
+### Environment variables and volumes
+
+Environment variables set in the `Deployment` pod template (as in the example above) will be available to your local process.
+
+Likewise, volumes configured in the `Deployment` pod template will also be transparently available to your local process: no extra work needed.
+This is mostly intended for read-only volumes like `Secret` and `ConfigMap`, you probably don't want a local database writing to a remote volume.
+
 ### Kubernetes namespaces
 
 If you want to proxy to a Deployment in a non-default namespace you can pass the `--namespace` argument to Telepresence:
@@ -427,15 +439,13 @@ Telepresence currently proxies the following when using `--run-shell`:
 * TCP connections to any hostname/port; all but `localhost` will be routed via Kubernetes.
   Typically this is useful for accessing cloud resources, e.g. a AWS RDS database.
 * TCP connections *from* Kubernetes to your local code, for ports specified on the command line.
+* Access to volumes, including those for `Secret` and `ConfigMap` Kubernetes objects.
+* `/var/run/secrets/kubernetes.io` credentials (used to the [access the Kubernetes( API](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#accessing-the-api-from-a-pod)).
 
 Currently unsupported:
 
-* Environment variables for `Service` instances created *after* Telepresence is started.
-  This is the behavior of pods in general, of course.
 * SRV DNS records matching `Services`, e.g. `_http._tcp.redis-master.default`.
 * UDP messages in any direction.
-* Access to volumes, including those for `Secret` and `ConfigMap` Kubernetes objects.
-* `/var/run/secrets/kubernetes.io` credentials (used to the [access the Kubernetes( API](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#accessing-the-api-from-a-pod)).
 
 ## Help us improve Telepresence!
 
@@ -459,6 +469,13 @@ Some alternatives to Telepresence:
   This is a somewhat slow process, and you won't be able to do the quick debug cycle you get from running code locally.
 
 ## Changelog
+
+#### 0.27 (unreleased)
+
+Features:
+
+* Remote volumes are now accessible by the local process.
+  ([#78](https://github.com/datawire/telepresence/issues/78))
 
 #### 0.26 (April 6, 2017)
 
