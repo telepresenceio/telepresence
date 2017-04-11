@@ -6,6 +6,10 @@ Given a path on the command line, create symlink from
 
 E.g. /podinfo means a symlink will be created from
 /export/telepresence-root/podinfo to /podinfo.
+
+/var, /tmp and /etc are actually symlinks to /private/var etc. on OS X. A union
+mount of a symlink and a directory just has the directory overwrite the symlink
+completely, so we instead do those as /private/var etc.
 """
 
 import sys
@@ -13,6 +17,8 @@ import os
 
 
 def main(path):
+    if os.path.split(path)[1] in ("var", "etc", "tmp"):
+        path = "/private" + path
     full_path = os.path.join("/export/telepresence-root", path[1:])
     parent_path = os.path.dirname(full_path)
     if not os.path.exists(parent_path):
