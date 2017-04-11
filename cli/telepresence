@@ -662,6 +662,8 @@ def run_torsocks_osx(runner, remote_info, ssh_port, env):
         )
     runner.check_call([
         "sshfs",
+        "-p",
+        str(ssh_port),
         # Union mount on to the bind mount:
         "-o",
         "union",
