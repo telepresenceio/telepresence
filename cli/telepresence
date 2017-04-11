@@ -633,22 +633,6 @@ def run_torsocks_linux(runner, remote_info, ssh_port, env):
     return Popen(command, env=env), [mount_dir]
 
 
-# chroot to bind-mounted directory, then switch back to user id and current
-# directory:
-CHROOT_SCRIPT = """\
-#!/usr/bin/env python3
-
-import os
-import sys
-
-os.chdir(os.path.join(sys.argv[1], sys.argv[3]))
-os.chroot(sys.argv[1])
-os.setuid(int(sys.argv[2]))
-
-os.execv("/usr/local/bin/torsocks", ["bash"])
-"""
-
-
 def run_torsocks_osx(runner, remote_info, ssh_port, env):
     """
     Assume we have two volumes, /path/to/volume1 and /volume2. On the remote
@@ -696,14 +680,13 @@ def run_torsocks_osx(runner, remote_info, ssh_port, env):
         "root@localhost:/export",
         temp_dir
     ])
-    with NamedTemporaryFile("w", delete=False) as chroot_script:
-        chroot_script.write(CHROOT_SCRIPT)
-    os.chmod(chroot_script.name, 0o755)
+    with NamedTemporaryFile("w", delete=False) as f:
+        f.write("cd '{}'\n".format(os.getcwd()))
     # Make sure we use "bash", no "/bin/bash", so we get the copied version on
     # OS X:
     command = [
-        "/usr/bin/sudo", chroot_script.name, root_dir, str(os.getuid()),
-        os.getcwd(),
+        "/usr/bin/sudo", "/usr/sbin/chroot", "-u", str(os.getuid()), root_dir,
+        "torsocks", "bash", "--init-file", f.name
     ]
     return Popen(command, env=env), [temp_dir, root_dir]
 
