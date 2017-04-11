@@ -647,6 +647,7 @@ def run_torsocks_osx(runner, remote_info, ssh_port, env):
     subdirectory, so we're forced to use the "telepresence-root" prefix trick
     to get the two mounts together.
     """
+    env["PATH"] = sip_workaround()
     temp_dir = mkdtemp()
     root_dir = os.path.join(temp_dir, "telepresence-root")
     os.makedirs(root_dir)
@@ -694,9 +695,6 @@ def run_local_command(
     """--run support, run command locally."""
     env = os.environ.copy()
     env.update(env_overrides)
-    env["PS1"] = "[TELEPRESENCE] " + env.get("PS1", "$ ")
-    if sys.platform == "darwin":
-        env["PATH"] = sip_workaround()
     # Create custom torsocks.conf, since some options we want (in particular,
     # port) aren't accessible via env variables in older versions of torconf:
     with NamedTemporaryFile(mode="w+", delete=False) as tor_conffile:
