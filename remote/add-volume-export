@@ -17,13 +17,14 @@ import os
 
 
 def main(path):
+    target_path = path
     if path.split("/")[1] in ("var", "etc", "tmp"):
         path = "/private" + path
     full_path = os.path.join("/export/telepresence-root", path[1:])
     parent_path = os.path.dirname(full_path)
     if not os.path.exists(parent_path):
         os.makedirs(parent_path)
-    os.symlink(path, full_path)
+    os.symlink(target_path, full_path)
 
 
 if __name__ == '__main__':
