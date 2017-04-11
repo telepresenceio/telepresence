@@ -644,7 +644,7 @@ import sys
 os.chroot(sys.argv[1])
 os.setuid(int(sys.argv[2]))
 os.chdir(sys.argv[3])
-os.execve("/usr/local/bin/torsocks", "bash")
+os.execv("/usr/local/bin/torsocks", "bash")
 """
 
 
