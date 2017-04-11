@@ -16,7 +16,7 @@ COPY socks.py /usr/src/app
 COPY add-volume-export /bin
 RUN chmod +x /bin/add-volume-export
 COPY . /usr/src/app
-RUN mkdir /export/telepresence-root
+RUN mkdir -p /export/telepresence-root
 
 # This is set on the remote pod, both for information purposes but also for use
 # by some of the end-to-end tests. Don't delete this without modifying
