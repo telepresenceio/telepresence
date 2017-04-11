@@ -654,7 +654,7 @@ def run_torsocks_osx(runner, remote_info, ssh_port, env):
     for remote_volume_path in remote_info.volume_mounts:
         runner.check_call(
             kubectl(
-                remote_info.namespace, [
+                "exec", remote_info.namespace, [
                     remote_info.pod_name, "--container", remote_info.
                     container_name, "add-volume-export", remote_volume_path
                 ]
