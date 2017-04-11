@@ -684,7 +684,7 @@ def run_torsocks_osx(runner, remote_info, ssh_port, env):
         "/usr/bin/sudo", "/usr/sbin/chroot", "-u", str(os.getuid()), root_dir,
         "torsocks", "bash", "--init-file", f.name
     ]
-    return Popen(command, env=env), [root_dir, temp_dir]
+    return Popen(command, env=env), [temp_dir, root_dir]
 
 
 def run_local_command(
