@@ -668,6 +668,9 @@ def run_torsocks_osx(runner, remote_info, ssh_port, env):
         # Allow root to access the mount:
         "-o",
         "allow_root",
+        # Follow symlinks, important since that's how we do "bind mounting":
+        "-o",
+        "follow_symlinks",
         # Union mount on to the bind mount:
         "-o",
         "union",
