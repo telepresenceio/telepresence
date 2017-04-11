@@ -116,7 +116,7 @@ You will then need to install the necessary additional dependencies:
 * On OS X:
 
   ```
-  brew install python3 torsocks
+  brew install python3 torsocks sshfs bindfs
   ```
 * On Ubuntu 16.04 or later:
 
