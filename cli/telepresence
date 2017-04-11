@@ -650,7 +650,7 @@ def run_torsocks_osx(runner, remote_info, ssh_port, env):
     temp_dir = mkdtemp()
     root_dir = os.path.join(temp_dir, "telepresence-root")
     os.makedirs(root_dir)
-    runner.check_call(["binfs", "/", root_dir])
+    runner.check_call(["bindfs", "/", root_dir])
     for remote_volume_path in remote_info.volume_mounts:
         runner.check_call(
             kubectl(
