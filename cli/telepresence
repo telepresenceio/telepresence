@@ -681,6 +681,9 @@ def run_torsocks_osx(runner, remote_info, ssh_port, env):
         "sshfs",
         "-p",
         str(ssh_port),
+        # Allow root to access the mount:
+        "-o",
+        "allow_root",
         # Union mount on to the bind mount:
         "-o",
         "union",
