@@ -677,7 +677,7 @@ def run_torsocks_osx(runner, remote_info, ssh_port, env):
         temp_dir
     ])
     with NamedTemporaryFile("w", delete=False) as f:
-        f.write("chdir '{}'\n".format(os.getcwd()))
+        f.write("cd '{}'\n".format(os.getcwd()))
     # Make sure we use "bash", no "/bin/bash", so we get the copied version on
     # OS X:
     command = [
