@@ -17,7 +17,7 @@ import os
 
 
 def main(path):
-    if os.path.split(path)[1] in ("var", "etc", "tmp"):
+    if path.split("/")[1] in ("var", "etc", "tmp"):
         path = "/private" + path
     full_path = os.path.join("/export/telepresence-root", path[1:])
     parent_path = os.path.dirname(full_path)
