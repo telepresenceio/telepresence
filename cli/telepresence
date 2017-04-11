@@ -641,15 +641,21 @@ def run_torsocks_osx(runner, remote_info, ssh_port, env):
     - /export/telepresence-root/path/to/volume1
     - /export/telepresence-root/volume2
 
-    Locally we bound mount / to <tempdir>/telepresence-root/, and then sshfs is
-    used to mount remote:/export to <tempdir> with a union mount. We can't just
-    do this directly because you can't have two FUSE mounts in same
-    subdirectory, so we're forced to use the "telepresence-root" prefix trick
-    to get the two mounts together.
+    Locally we bound mount / to <tempdir>/prefix/telepresence-root/, and then
+    sshfs is used to mount remote:/export to <tempdir>/prefix with a union
+    mount. We can't just do this directly because you can't have two FUSE
+    mounts in same subdirectory, so we're forced to use the "telepresence-root"
+    prefix trick to get the three mounts together.
+
+    /var, /tmp and /etc are symlinks in OS X to /private/var etc.. For some
+    reason OS X caches existing symlink so stuff we add to /private/var isn't
+    available at /var, so recreate symlinks remotely and union mount that to
+    <tempdir>.
     """
     env["PATH"] = sip_workaround()
-    temp_dir = mkdtemp()
-    root_dir = os.path.join(temp_dir, "telepresence-root")
+    temp_dir = mkdtemp()  # union mount the final bindfs, with /var,/tmp,/etc
+    prefix_dir = os.path.join(temp_dir, "prefix")  # union mount sshfs
+    root_dir = os.path.join(prefix_dir, "telepresence-root")  # bindfs of /
     os.makedirs(root_dir)
     runner.check_call(["bindfs", "/", root_dir])
     for remote_volume_path in remote_info.volume_mounts:
@@ -681,8 +687,19 @@ def run_torsocks_osx(runner, remote_info, ssh_port, env):
         "-o",
         "UserKnownHostsFile=/dev/null",
         "root@localhost:/export",
-        temp_dir
+        prefix_dir
     ])
+    # Override /var -> /private/var symlinks with versions that respect files
+    # in sshfs:
+    symlink_fs = mkdtemp()
+    for name in ("var", "tmp", "etc"):
+        os.symlink(
+            os.path.join(symlink_fs, "prefix", "telepresence-root", name),
+            "/private/var",
+            target_is_directory=True
+        )
+    runner.check_call(["bindfs", "-o", "union", symlink_fs, temp_dir])
+
     with NamedTemporaryFile("w", delete=False) as f:
         f.write("cd '{}'\n".format(os.getcwd()))
     # Make sure we use "bash", no "/bin/bash", so we get the copied version on
@@ -691,7 +708,7 @@ def run_torsocks_osx(runner, remote_info, ssh_port, env):
         "/usr/bin/sudo", "/usr/sbin/chroot", "-u", str(os.getuid()), root_dir,
         "torsocks", "bash", "--init-file", f.name
     ]
-    return Popen(command, env=env), [temp_dir, root_dir]
+    return Popen(command, env=env), [temp_dir, prefix_dir, root_dir]
 
 
 def run_local_command(
