@@ -681,8 +681,8 @@ def run_torsocks_osx(runner, remote_info, ssh_port, env):
     # Make sure we use "bash", no "/bin/bash", so we get the copied version on
     # OS X:
     command = [
-        "sudo", "chroot", "--user", str(os.getuid()), "torsocks", "bash",
-        "--init-file", f.name
+        "/usr/bin/sudo", "/usr/sbin/chroot", "--user", str(os.getuid()),
+        "torsocks", "bash", "--init-file", f.name
     ]
     return Popen(command, env=env), [root_dir, temp_dir]
 
