@@ -692,10 +692,11 @@ def run_torsocks_osx(runner, remote_info, ssh_port, env):
     # Override /var -> /private/var symlinks with versions that respect files
     # in sshfs:
     symlink_fs = mkdtemp()
+    os.makedirs(os.path.join(symlink_fs, "prefix", "telepresence-root"))
     for name in ("var", "tmp", "etc"):
         os.symlink(
             os.path.join(symlink_fs, "prefix", "telepresence-root", name),
-            "/private/var",
+            "/private/" + name,
             target_is_directory=True
         )
     runner.check_call(["bindfs", "-o", "union", symlink_fs, temp_dir])
