@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+
+"""
+Given a path on the command line, create symlink from
+/export/telepresence-root/<path> to <path>.
+
+E.g. /podinfo means a symlink will be created from
+/export/telepresence-root/podinfo to /podinfo.
+"""
+
+import sys
+import os
+
+
+def main(path):
+    full_path = os.path.join("/export/telepresence-root", path[1:])
+    parent_path = os.path.dirname(full_path)
+    if not os.path.exists(parent_path):
+        os.makedirs(parent_path)
+    os.symlink(path, full_path)
+
+
+if __name__ == '__main__':
+    main(sys.argv[1])
