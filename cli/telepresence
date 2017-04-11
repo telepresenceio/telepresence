@@ -641,10 +641,11 @@ CHROOT_SCRIPT = """\
 import os
 import sys
 
+os.chdir(os.path.join(sys.argv[1], sys.argv[3]))
 os.chroot(sys.argv[1])
 os.setuid(int(sys.argv[2]))
-os.chdir(sys.argv[3])
-os.execv("/usr/local/bin/torsocks", "bash")
+
+os.execv("/usr/local/bin/torsocks", ["bash"])
 """
 
 
