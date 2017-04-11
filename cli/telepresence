@@ -725,7 +725,6 @@ def run_local_command(
             p.wait()
         for mount_dir in mount_dirs:
             runner.get_output(["umount", mount_dir])
-            os.rmdir(mount_dir)
 
     atexit.register(terminate_if_alive)
     wait_for_exit(runner, p, subprocesses)
