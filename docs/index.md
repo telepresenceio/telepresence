@@ -481,6 +481,12 @@ Features:
   Thanks to Svend Sorenson for the patch.
   ([#3](https://github.com/datawire/telepresence/issues/3))
 
+Bug fixes:
+
+* Telepresence no longer breaks if compression is enabled in `~/.ssh/config`.
+  Thanks to Svend Sorenson for the bug report.
+  ([#97](https://github.com/datawire/telepresence/issues/97))
+
 #### 0.26 (April 6, 2017)
 
 Backwards incompatible changes:
