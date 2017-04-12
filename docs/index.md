@@ -349,6 +349,20 @@ $ telepresence --deployment servicename-deployment \
 You are now running your own code locally, attaching it to the network stack of the Telepresence client and using the environment variables Telepresence client extracted.
 Your code is connected to the remote Kubernetes cluster.
 
+### kubectl context
+
+By default Telepresence uses whatever the current context is for `kubectl`.
+If you want to choose a specific context you can use the `--context` option to `telepresence`.
+For example:
+
+```console
+$ telepresence --context minikube --new-deployment myservice --run-shell
+```
+
+You can choose any context listed in `kubectl config get-contexts`.
+
+If you've [set a namespace for the context](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/#setting-the-namespace-preference) then that namespace will be used to find/create the `Deployment`, but you can also choose a namespace explicitly, as shown in the next section.
+
 ### Kubernetes namespaces
 
 If you want to proxy to a Deployment in a non-default namespace you can pass the `--namespace` argument to Telepresence:
@@ -383,7 +397,6 @@ spec:
             fieldRef:
               fieldPath: status.podIP
 ```
-
 
 ## Limitations, caveats and workarounds
 
@@ -459,6 +472,14 @@ Some alternatives to Telepresence:
   This is a somewhat slow process, and you won't be able to do the quick debug cycle you get from running code locally.
 
 ## Changelog
+
+#### 0.27 (unreleased)
+
+Features:
+
+* `--context` option allows choosing a `kubectl` context.
+  Thanks to Svend Sorenson for the patch.
+  ([#3](https://github.com/datawire/telepresence/issues/3))
 
 #### 0.26 (April 6, 2017)
 
