@@ -23,7 +23,7 @@ Environment variables from the remote pod are made available to your local proce
 In addition, the local process has its networking transparently overridden such that DNS calls and TCP connections are routed over the proxy to the remote Kubernetes cluster.
 This is implemented using `LD_PRELOAD`/`DYLD_INSERT_LIBRARIES` mechanism on Linux/OSX, where a shared library can be injected into a process and override library calls.
 
-Volumes are proxied using [sshfs](https://github.com/libfuse/sshfs) and some clever bind mounting tricks ([bindfs](https://bindfs.org) on OS X, bind mounts on Linux.)
+Volumes are proxied using [sshfs](https://github.com/libfuse/sshfs), with their location available to the container as an environment variable.
 
 The result is that your local process has a similar environment to the remote Kubernetes cluster, while still being fully under your local control.
 
@@ -116,22 +116,17 @@ You will then need to install the necessary additional dependencies:
 * On OS X:
 
   ```
-  brew install python3 torsocks sshfs bindfs
+  brew install python3 torsocks sshfs
   ```
 * On Ubuntu 16.04 or later:
 
   ```
-  sudo apt install --no-install-recommends torsocks python3 openssh-client sshfs proot
+  apt install --no-install-recommends torsocks python3 openssh-client sshfs
   ```
 * On Fedora:
 
   ```
-  dnf install python3 torsocks openssh-clients sshfs libtalloc-devel
-  wget https://github.com/proot-me/PRoot/archive/v5.1.0.tar.gz
-  tar xzf v5.1.0.tar.gz
-  cd PRoot-5.1.0/src
-  make
-  sudo make install
+  dnf install python3 torsocks openssh-clients sshfs
   ```
 
 Then download Telepresence by running the following commands:
@@ -144,8 +139,7 @@ chmod +x telepresence
 Then move telepresence to somewhere in your `$PATH`, e.g.:
 
 ```
-sudo 
-mv telepresence /usr/local/bin
+sudo mv telepresence /usr/local/bin
 ```
 
 
@@ -359,12 +353,38 @@ $ telepresence --deployment servicename-deployment \
 You are now running your own code locally, attaching it to the network stack of the Telepresence client and using the environment variables Telepresence client extracted.
 Your code is connected to the remote Kubernetes cluster.
 
-### Environment variables and volumes
+### Environment variables
 
 Environment variables set in the `Deployment` pod template (as in the example above) will be available to your local process.
 
-Likewise, volumes configured in the `Deployment` pod template will also be transparently available to your local process: no extra work needed.
+### Volumes
+
+Volumes configured in the `Deployment` pod template will also be made your local process.
 This is mostly intended for read-only volumes like `Secret` and `ConfigMap`, you probably don't want a local database writing to a remote volume.
+
+Volume support requires a small amount of work on your part.
+The root directory where all the volumes can be found will be set to the `TELEPRESENCE_ROOT` environment variable in the shell run by `telepresence`.
+You will then need to use that env variable as the root for volume paths you are opening.
+
+For example, let's say you have a volume that mounts a file called `/app/secrets`.
+Normally you would just open it in your code like so:
+
+
+```python
+secret_file = open("/app/secrets")
+```
+
+In order to support volume proxying by Telepresence, you will need to change
+your code (note that this is not the most succinct way to express this, it's more verbose in order to be clear to non-Python programmers):
+
+```python
+volume_root = "/"
+if "TELEPRESENCE_ROOT" in os.environ:
+    volume_root = os.environ["TELEPRESENCE_ROOT"]
+secret_file = open(os.path.join(volume_root, "app/secrets"))
+```
+
+By falling back to `/` when the environment variable is not set your code will continue to work in its normal Kubernetes setting.
 
 ### kubectl context
 

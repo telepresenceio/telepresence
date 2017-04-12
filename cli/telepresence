@@ -227,10 +227,6 @@ class RemoteInfo(object):
             c for c in cs if "telepresence-k8s" in c["image"]
         ][0]
         self.container_name = self.container_config["name"]
-        self.volume_mounts = [
-            volume["mountPath"]
-            for volume in self.container_config.get("volumeMounts", [])
-        ] + ["/var/run/secrets/kubernetes.io/serviceaccount"]
 
     def remote_telepresence_version(self):
         """Return the version used by the remote Telepresence container."""
@@ -616,14 +612,9 @@ def wait_for_exit(runner, shell_process, processes):
                 raise SystemExit(3)
 
 
-def run_torsocks_linux(runner, remote_info, ssh_port, env):
+def mount_remote_volumes(runner, remote_info, ssh_port):
     """
-    Run torsocks on Linux with volume mounts.
-
-    Theory of operation:
-
-    sshfs is used to mount remote system locally. proot is used to 'bind mount'
-    the approriate paths locall.
+    sshfs is used to mount the remote system locally.
     """
     mount_dir = mkdtemp()
     runner.check_call([
@@ -639,105 +630,7 @@ def run_torsocks_linux(runner, remote_info, ssh_port, env):
         "root@localhost:/",
         mount_dir
     ])
-
-    command = ["torsocks", "proot"] + sum([[
-        "-b",
-        "{}:{}".format(os.path.join(mount_dir, mount_path[1:]), mount_path)
-    ] for mount_path in remote_info.volume_mounts], []) + ["bash"]
-    return Popen(command, env=env), [mount_dir]
-
-
-def run_torsocks_osx(runner, remote_info, ssh_port, env):
-    """
-    Assume we have two volumes, /path/to/volume1 and /volume2. On the remote
-    container we build up a structure like so:
-
-    - /export/telepresence-root/path/to/volume1
-    - /export/telepresence-root/volume2
-
-    Locally we bound mount / to <tempdir>/prefix/telepresence-root/, and then
-    sshfs is used to mount remote:/export to <tempdir>/prefix with a union
-    mount. We can't just do this directly because you can't have two FUSE
-    mounts in same subdirectory, so we're forced to use the "telepresence-root"
-    prefix trick to get the three mounts together.
-
-    /var, /tmp and /etc are symlinks in OS X to /private/var etc.. For some
-    reason OS X caches existing symlink so stuff we add to /private/var isn't
-    available at /var, so recreate symlinks remotely and union mount that to
-    <tempdir>.
-    """
-    env["PATH"] = sip_workaround()
-    temp_dir = mkdtemp()  # union mount the final bindfs, with /var,/tmp,/etc
-    prefix_dir = os.path.join(temp_dir, "prefix")  # union mount sshfs
-    root_dir = os.path.join(prefix_dir, "telepresence-root")  # bindfs of /
-    os.makedirs(root_dir)
-    runner.check_call(["bindfs", "/", root_dir])
-    for remote_volume_path in remote_info.volume_mounts:
-        runner.check_call(
-            kubectl(
-                remote_info.namespace, [
-                    "exec", remote_info.pod_name, "--container", remote_info.
-                    container_name, "add-volume-export", remote_volume_path
-                ]
-            )
-        )
-    runner.check_call([
-        "sshfs",
-        "-p",
-        str(ssh_port),
-        # Allow root to access the mount:
-        "-o",
-        "allow_root",
-        # Follow symlinks, important since that's how we do "bind mounting":
-        "-o",
-        "follow_symlinks",
-        # Union mount on to the bind mount:
-        "-o",
-        "union",
-        # Don't validate host key:
-        "-o",
-        "StrictHostKeyChecking=no",
-        # Don't store host key:
-        "-o",
-        "UserKnownHostsFile=/dev/null",
-        "root@localhost:/export",
-        prefix_dir
-    ])
-    # Override /var -> /private/var symlinks with versions that respect files
-    # in sshfs:
-    symlink_fs = mkdtemp()
-    os.makedirs(os.path.join(symlink_fs, "prefix", "telepresence-root"))
-    for name in ("var", "tmp", "etc"):
-        os.symlink(
-            "/private/" + name,
-            os.path.join(symlink_fs, "prefix", "telepresence-root", name),
-            target_is_directory=True
-        )
-    runner.check_call(["bindfs", "-o", "union", symlink_fs, temp_dir])
-
-    with NamedTemporaryFile("w", delete=False) as f:
-        f.write("cd '{}'\n".format(os.getcwd()))
-    # Make sure we use "bash", no "/bin/bash", so we get the copied version on
-    # OS X:
-    command = [
-        "/usr/bin/sudo",
-        # preserve the environment:
-        "-E",
-        "/usr/sbin/chroot",
-        # Switch back to current user and group
-        "-u",
-        str(os.getuid()),
-        "-g",
-        "staff",
-        # chroot into new root dir:
-        root_dir,
-        # run torsocks:
-        "torsocks",
-        "bash",
-        "--init-file",
-        f.name
-    ]
-    return Popen(command, env=env), [temp_dir, prefix_dir, root_dir]
+    return mount_dir
 
 
 def run_local_command(
@@ -762,12 +655,13 @@ def run_local_command(
             runner.get_output(["kubectl", "config", "current-context"]).strip()
         )
     )
-    if sys.platform.startswith("linux"):
-        p, mount_dirs = run_torsocks_linux(runner, remote_info, ssh_port, env)
-    elif sys.platform == "darwin":
-        p, mount_dirs = run_torsocks_osx(runner, remote_info, ssh_port, env)
-    else:
-        raise RuntimeError("Unknown platform: " + sys.platform)
+    # Make sure we use "bash", no "/bin/bash", so we get the copied version on
+    # OS X:
+    if sys.platform == "darwin":
+        env["PATH"] = sip_workaround()
+    mount_dir = mount_remote_volumes(runner, remote_info, ssh_port)
+    env["TELEPRESENCE_ROOT"] = mount_dir
+    p = Popen(["torsocks", "bash"], env=env)
 
     def terminate_if_alive():
         runner.write("Shutting down local shell...\n")
@@ -776,8 +670,8 @@ def run_local_command(
             runner.write("Killing local shell...\n")
             p.terminate()
             p.wait()
-        for mount_dir in mount_dirs:
-            runner.get_output(["umount", mount_dir])
+        runner.get_output(["umount", mount_dir])
+        os.rmdir(mount_dir)
 
     atexit.register(terminate_if_alive)
     wait_for_exit(runner, p, subprocesses)
@@ -943,13 +837,6 @@ def main():
             runner, "torsocks", "Please install torsocks (v2.1 or later)"
         )
         require_command(runner, "sshfs")
-        if sys.platform.startswith("linux"):
-            require_command(runner, "proot")
-        if sys.platform == "darwin":
-            require_command(
-                runner, "bindfs", "Please install bindfs "
-                "(brew install homebrew/fuse/bindfs)"
-            )
         subprocesses, env, socks_port, ssh_port, remote_info = start_proxy(
             runner, args
         )

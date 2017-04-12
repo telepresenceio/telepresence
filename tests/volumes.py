@@ -5,16 +5,21 @@ This module will be run inside a container. To indicate success it will exit
 with code 113.
 """
 import sys
+import os
 
 
 def main():
+    root = os.environ["TELEPRESENCE_ROOT"]
     # Explicit volumes are exposed:
-    with open("/podinfo/labels") as f:
+    with open(os.path.join(root, "podinfo/labels")) as f:
         data = f.read()
         print(data)
         assert 'hello="monkeys"' in data
     # Implicitly added account volume is there too:
-    with open("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt") as f:
+    with open(
+        os.path.
+        join(root, "var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+    ) as f:
         data = f.read()
         print(data)
         assert data.startswith("-----BEGIN CERT")
