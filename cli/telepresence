@@ -28,7 +28,7 @@ unicode = str
 
 # Don't modify next line without modifying corresponding line in
 # .bumpversion.cfg:
-__version__ = "0.26"
+__version__ = "0.27"
 # Test runs can override version so we use specific custom Docker images:
 if os.environ.get("TELEPRESENCE_VERSION") is not None:
     __version__ = os.environ["TELEPRESENCE_VERSION"]
@@ -152,6 +152,14 @@ def parse_args():
         )
     )
     parser.add_argument(
+        "--context",
+        default=None,
+        help=(
+            "The Kubernetes context to use. Defaults to current kubectl"
+            " context."
+        )
+    )
+    parser.add_argument(
         "--namespace",
         default=None,
         help=(
@@ -179,9 +187,11 @@ def parse_args():
     return parser.parse_args()
 
 
-def kubectl(namespace, args):
+def kubectl(context, namespace, args):
     """Return command-line for running kubectl."""
     result = ["kubectl"]
+    if context is not None:
+        result.extend(["--context", context])
     if namespace is not None:
         result.extend(["--namespace", namespace])
     result += args
@@ -239,11 +249,11 @@ def _get_service_names(environment):
     return result
 
 
-def _get_remote_env(runner, namespace, pod_name, container_name):
+def _get_remote_env(runner, context, namespace, pod_name, container_name):
     """Get the environment variables in the remote pod."""
     env = runner.get_output(
         kubectl(
-            namespace,
+            context, namespace,
             ["exec", pod_name, "--container", container_name, "env"]
         )
     )
@@ -261,13 +271,13 @@ def get_deployment_set_keys(remote_info):
     )
 
 
-def get_env_variables(runner, remote_info):
+def get_env_variables(runner, remote_info, context):
     """
     Generate environment variables that match kubernetes.
     """
     # Get the environment:
     remote_env = _get_remote_env(
-        runner, remote_info.namespace, remote_info.pod_name,
+        runner, context, remote_info.namespace, remote_info.pod_name,
         remote_info.container_name
     )
     service_names = _get_service_names(remote_env)
@@ -294,12 +304,12 @@ def get_env_variables(runner, remote_info):
     return socks_result
 
 
-def get_remote_info(runner, deployment_name, namespace):
+def get_remote_info(runner, deployment_name, context, namespace):
     """Given the deployment name, return a RemoteInfo object."""
     deployment = json.loads(
         runner.get_output(
             kubectl(
-                namespace, [
+                context, namespace, [
                     "get",
                     "deployment",
                     "-o",
@@ -314,7 +324,8 @@ def get_remote_info(runner, deployment_name, namespace):
     runner.write("Expected metadata for pods: {}\n".format(expected_metadata))
     pods = json.loads(
         runner.get_output(
-            kubectl(namespace, ["get", "pod", "-o", "json", "--export"])
+            kubectl(context, namespace,
+                    ["get", "pod", "-o", "json", "--export"])
         )
     )["items"]
 
@@ -358,7 +369,7 @@ def get_remote_info(runner, deployment_name, namespace):
                     remote_info.remote_telepresence_version(), __version__
                 ))
             # Wait for pod to be running:
-            wait_for_pod(runner, remote_info)
+            wait_for_pod(runner, remote_info, context)
             return remote_info
 
     raise RuntimeError(
@@ -404,13 +415,13 @@ def wait_for_ssh(runner, ssh_port):
     raise RuntimeError("SSH isn't starting.")
 
 
-def wait_for_pod(runner, remote_info):
+def wait_for_pod(runner, remote_info, context):
     for i in range(120):
         try:
             pod = json.loads(
                 runner.get_output(
                     kubectl(
-                        remote_info.namespace,
+                        context, remote_info.namespace,
                         ["get", "pod", remote_info.pod_name, "-o", "json"]
                     )
                 )
@@ -434,6 +445,7 @@ def connect(
     runner,
     remote_info,
     local_exposed_ports,
+    context,
 ):
     """
     Start all the processes that handle remote proxying.
@@ -447,7 +459,7 @@ def connect(
     processes.append(
         runner.popen(
             kubectl(
-                remote_info.namespace, [
+                context, remote_info.namespace, [
                     "port-forward", remote_info.pod_name,
                     "{}:22".format(ssh_port)
                 ]
@@ -500,7 +512,7 @@ def start_proxy(runner, args):
         def remove_existing_deployment():
             runner.get_output(
                 kubectl(
-                    args.namespace, [
+                    args.context, args.namespace, [
                         "delete", "--ignore-not-found", "service,deployment",
                         args.deployment
                     ]
@@ -510,7 +522,7 @@ def start_proxy(runner, args):
         atexit.register(remove_existing_deployment)
         remove_existing_deployment()
         command = kubectl(
-            args.namespace, [
+            args.context, args.namespace, [
                 "run",
                 "--generator",
                 "deployment/v1beta1",
@@ -524,17 +536,19 @@ def start_proxy(runner, args):
             command.append("--expose")
         runner.get_output(command)
 
-    remote_info = get_remote_info(runner, args.deployment, args.namespace)
+    remote_info = get_remote_info(runner, args.deployment,
+                                  args.context, args.namespace)
 
     processes, socks_port, ssh_port = connect(
         runner,
         remote_info,
         args.expose,
+        args.context,
     )
     sleep(5)  # wait for SSH proxies to go live
 
     # Get the environment variables we want to copy from the remote pod:
-    env = get_env_variables(runner, remote_info)
+    env = get_env_variables(runner, remote_info, args.context)
 
     return processes, env, socks_port, ssh_port, remote_info
 
@@ -744,6 +758,7 @@ def run_local_command(
     # stdout and stderr if it wants it.
     env["PROMPT_COMMAND"] = (
         'PS1="@{}|$PS1";unset PROMPT_COMMAND'.format(
+            args.context or
             runner.get_output(["kubectl", "config", "current-context"]).strip()
         )
     )

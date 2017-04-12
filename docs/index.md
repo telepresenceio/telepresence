@@ -366,6 +366,20 @@ Environment variables set in the `Deployment` pod template (as in the example ab
 Likewise, volumes configured in the `Deployment` pod template will also be transparently available to your local process: no extra work needed.
 This is mostly intended for read-only volumes like `Secret` and `ConfigMap`, you probably don't want a local database writing to a remote volume.
 
+### kubectl context
+
+By default Telepresence uses whatever the current context is for `kubectl`.
+If you want to choose a specific context you can use the `--context` option to `telepresence`.
+For example:
+
+```console
+$ telepresence --context minikube --new-deployment myservice --run-shell
+```
+
+You can choose any context listed in `kubectl config get-contexts`.
+
+If you've [set a namespace for the context](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/#setting-the-namespace-preference) then that namespace will be used to find/create the `Deployment`, but you can also choose a namespace explicitly, as shown in the next section.
+
 ### Kubernetes namespaces
 
 If you want to proxy to a Deployment in a non-default namespace you can pass the `--namespace` argument to Telepresence:
@@ -400,7 +414,6 @@ spec:
             fieldRef:
               fieldPath: status.podIP
 ```
-
 
 ## Limitations, caveats and workarounds
 
@@ -475,12 +488,26 @@ Some alternatives to Telepresence:
 
 ## Changelog
 
-#### 0.27 (unreleased)
+#### 0.28 (unreleased)
 
 Features:
 
 * Remote volumes are now accessible by the local process.
   ([#78](https://github.com/datawire/telepresence/issues/78))
+
+#### 0.27 (April 12, 2017)
+
+Features:
+
+* `--context` option allows choosing a `kubectl` context.
+  Thanks to Svend Sorenson for the patch.
+  ([#3](https://github.com/datawire/telepresence/issues/3))
+
+Bug fixes:
+
+* Telepresence no longer breaks if compression is enabled in `~/.ssh/config`.
+  Thanks to Svend Sorenson for the bug report.
+  ([#97](https://github.com/datawire/telepresence/issues/97))
 
 #### 0.26 (April 6, 2017)
 
