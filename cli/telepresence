@@ -482,7 +482,7 @@ def connect(
         ),
     )
 
-    return processes, socks_port
+    return processes, socks_port, ssh_port
 
 
 def killall(processes):
@@ -535,7 +535,7 @@ def start_proxy(runner, args):
     remote_info = get_remote_info(runner, args.deployment,
                                   args.context, args.namespace)
 
-    processes, socks_port = connect(
+    processes, socks_port, ssh_port = connect(
         runner,
         remote_info,
         args.expose,
@@ -546,7 +546,7 @@ def start_proxy(runner, args):
     # Get the environment variables we want to copy from the remote pod:
     env = get_env_variables(runner, remote_info, args.context)
 
-    return processes, env, socks_port
+    return processes, env, socks_port, ssh_port, remote_info
 
 
 TORSOCKS_CONFIG = """
@@ -612,13 +612,34 @@ def wait_for_exit(runner, shell_process, processes):
                 raise SystemExit(3)
 
 
-def run_local_command(runner, args, env_overrides, subprocesses, socks_port):
+def mount_remote_volumes(runner, remote_info, ssh_port):
+    """
+    sshfs is used to mount the remote system locally.
+    """
+    mount_dir = mkdtemp()
+    runner.check_call([
+        "sshfs",
+        "-p",
+        str(ssh_port),
+        # Don't validate host key:
+        "-o",
+        "StrictHostKeyChecking=no",
+        # Don't store host key:
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+        "root@localhost:/",
+        mount_dir
+    ])
+    return mount_dir
+
+
+def run_local_command(
+    runner, remote_info, args, env_overrides, subprocesses, socks_port,
+    ssh_port
+):
     """--run support, run command locally."""
     env = os.environ.copy()
     env.update(env_overrides)
-    env["PS1"] = "[TELEPRESENCE] " + env.get("PS1", "$ ")
-    if sys.platform == "darwin":
-        env["PATH"] = sip_workaround()
     # Create custom torsocks.conf, since some options we want (in particular,
     # port) aren't accessible via env variables in older versions of torconf:
     with NamedTemporaryFile(mode="w+", delete=False) as tor_conffile:
@@ -636,6 +657,10 @@ def run_local_command(runner, args, env_overrides, subprocesses, socks_port):
     )
     # Make sure we use "bash", no "/bin/bash", so we get the copied version on
     # OS X:
+    if sys.platform == "darwin":
+        env["PATH"] = sip_workaround()
+    mount_dir = mount_remote_volumes(runner, remote_info, ssh_port)
+    env["TELEPRESENCE_ROOT"] = mount_dir
     p = Popen(["torsocks", "bash"], env=env)
 
     def terminate_if_alive():
@@ -644,6 +669,9 @@ def run_local_command(runner, args, env_overrides, subprocesses, socks_port):
         if p.poll() is None:
             runner.write("Killing local shell...\n")
             p.terminate()
+            p.wait()
+        runner.get_output(["umount", mount_dir])
+        os.rmdir(mount_dir)
 
     atexit.register(terminate_if_alive)
     wait_for_exit(runner, p, subprocesses)
@@ -760,6 +788,20 @@ class handle_unexpected_errors(object):
         return call_f
 
 
+def require_command(runner, command, message=None):
+    if message is None:
+        message = "Please install " + command
+    try:
+        runner.get_output(["which", command])
+    except CalledProcessError as e:
+        sys.stderr.write(message + "\n")
+        sys.stderr.write(
+            "See the documentation at http://telepresence.io "
+            "for more details.\n"
+        )
+        raise SystemExit(1)
+
+
 def main():
     # Make SIGTERM do clean shutdown (in particular, we want atexit functions
     # to be called):
@@ -784,18 +826,23 @@ def main():
             runner.write("Running 'ssh -V'...")
             version = check_output(["ssh", "-V"], stdin=DEVNULL, stderr=STDOUT)
             if not version.startswith(b"OpenSSH"):
-                raise IOError("ssh is not OpenSSH client, apparently.")
+                raise SystemExit(
+                    "'ssh' is not the OpenSSH client, apparently."
+                )
         except (CalledProcessError, OSError, IOError) as e:
-            sys.stderr.write("Error running Docker: {}\n".format(e))
+            sys.stderr.write("Error running ssh: {}\n".format(e))
             raise SystemExit(1)
-        # Make sure we have torsocks:
-        try:
-            runner.get_output(["which", "torsocks"])
-        except CalledProcessError as e:
-            sys.stderr.write("Please install torsocks (v2.1 or later)\n")
-            raise SystemExit(1)
-        subprocesses, env, socks_port = start_proxy(runner, args)
-        run_local_command(runner, args, env, subprocesses, socks_port)
+        # Other requirements:
+        require_command(
+            runner, "torsocks", "Please install torsocks (v2.1 or later)"
+        )
+        require_command(runner, "sshfs")
+        subprocesses, env, socks_port, ssh_port, remote_info = start_proxy(
+            runner, args
+        )
+        run_local_command(
+            runner, remote_info, args, env, subprocesses, socks_port, ssh_port
+        )
 
     go()
 

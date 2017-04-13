@@ -1,11 +1,14 @@
 ## Introduction
 
 Have you ever wanted the quick development cycle of local code while still having your code run within a remote Kubernetes cluster?
-Telepresence gives you a local development environment for your Kubernetes service while still:
+Telepresence allows you to develop locally, running your code on your machine, while still making your code appear as if it is running in Kubernetes.
 
-1. Giving your code access to Services in a remote Kubernetes cluster.
-2. Giving your code access to cloud resources like AWS RDS or Google PubSub, even if they're only accessible from within your cluster.
-3. Allowing Kubernetes to access your code as if it were in a normal pod within the cluster.
+1. **Your local process can talk to Kubernetes `Services` and cloud databases.**
+   Your local process can access `Services` in the remote Kubernetes cluster, as well as cloud resources like AWS RDS even if they're in a private VPC.
+2. Your local process has **the same environment variables and Kubernetes volumes** as the real pod.
+   That means you can use `Secret`, `ConfigMap`, Downward API etc. even as your code runs locally.
+3. **The Kubernetes cluster can talk to your local process.**
+   Other `Services`, your `LoadBalancer` or your `Ingress` can send queries to the local process you are running.
 
 **IMPORTANT:** Telepresence is currently in initial stages of development, so we expect it to change rapidly based on user feedback.
 
@@ -19,6 +22,8 @@ The custom pod is substituted for your normal pod that would run in production.
 Environment variables from the remote pod are made available to your local process.
 In addition, the local process has its networking transparently overridden such that DNS calls and TCP connections are routed over the proxy to the remote Kubernetes cluster.
 This is implemented using `LD_PRELOAD`/`DYLD_INSERT_LIBRARIES` mechanism on Linux/OSX, where a shared library can be injected into a process and override library calls.
+
+Volumes are proxied using [sshfs](https://github.com/libfuse/sshfs), with their location available to the container as an environment variable.
 
 The result is that your local process has a similar environment to the remote Kubernetes cluster, while still being fully under your local control.
 
@@ -102,26 +107,27 @@ Many web frameworks also do automatic code reload, in which case you won't even 
 You will need the following available on your machine:
 
 * OS X or Linux.
-* Python 3, OpenSSH client and `torsocks`, `kubectl`.
+* `kubectl` command line tool.
 * Access to your Kubernetes cluster, with local credentials on your machine.
   You can do this test by running `kubectl get pod` - if this works you're all set.
 
-Start by installing the necessary dependencies:
+You will then need to install the necessary additional dependencies:
 
 * On OS X:
 
   ```
-  brew install python3 torsocks
+  brew cask install osxfuse
+  brew install python3 torsocks homebrew/fuse/sshfs
   ```
 * On Ubuntu 16.04 or later:
 
   ```
-  sudo apt install --no-install-recommends torsocks python3 openssh-client
+  apt install --no-install-recommends torsocks python3 openssh-client sshfs
   ```
 * On Fedora:
 
   ```
-  dnf install python3 torsocks openssh-clients
+  dnf install python3 torsocks openssh-clients sshfs
   ```
 
 Then download Telepresence by running the following commands:
@@ -134,8 +140,7 @@ chmod +x telepresence
 Then move telepresence to somewhere in your `$PATH`, e.g.:
 
 ```
-sudo 
-mv telepresence /usr/local/bin
+sudo mv telepresence /usr/local/bin
 ```
 
 
@@ -349,6 +354,64 @@ $ telepresence --deployment servicename-deployment \
 You are now running your own code locally, attaching it to the network stack of the Telepresence client and using the environment variables Telepresence client extracted.
 Your code is connected to the remote Kubernetes cluster.
 
+### Environment variables
+
+Environment variables set in the `Deployment` pod template (as in the example above) will be available to your local process.
+
+### Volumes
+
+Volumes configured in the `Deployment` pod template will also be made your local process.
+This is mostly intended for read-only volumes like `Secret` and `ConfigMap`, you probably don't want a local database writing to a remote volume.
+
+Volume support requires a small amount of work on your part.
+The root directory where all the volumes can be found will be set to the `TELEPRESENCE_ROOT` environment variable in the shell run by `telepresence`.
+You will then need to use that env variable as the root for volume paths you are opening.
+
+For example, all Kubernetes containers have a volume mounted at `/var/run/secrets` with the service account details.
+Those files are accessible from Telepresence:
+
+```console
+$ cli/telepresence --new-deployment myservice --run-shell
+Starting proxy...
+@minikube|$ echo $TELEPRESENCE_ROOT
+/tmp/tmpk_svwt_5
+@minikube|$ ls $TELEPRESENCE_ROOT/var/run/secrets/kubernetes.io/serviceaccount/
+ca.crt  namespace  token
+```
+
+Of course, the files are available at a different path than they are on the actual production Kubernetes environment.
+
+One way to deal with that is to modify your application's code slightly.
+For example, let's say you have a volume that mounts a file called `/app/secrets`.
+Normally you would just open it in your code like so:
+
+
+```python
+secret_file = open("/app/secrets")
+```
+
+In order to support volume proxying by Telepresence, you will need to change
+your code (note that this is not the most succinct way to express this, it's more verbose in order to be clear to non-Python programmers):
+
+```python
+volume_root = "/"
+if "TELEPRESENCE_ROOT" in os.environ:
+    volume_root = os.environ["TELEPRESENCE_ROOT"]
+secret_file = open(os.path.join(volume_root, "app/secrets"))
+```
+
+By falling back to `/` when the environment variable is not set your code will continue to work in its normal Kubernetes setting.
+
+Another way you can do this is by using the [proot](http://proot-me.github.io/) utility on Linux, which allows you to do fake bind mounts without being root.
+For example, presuming you've installed `proot` (`apt install proot` on Ubuntu), in the following example we bind `$TELEPRESENCE_ROOT/var/run/secrets` to `/var/run/secrets`.
+That means code doesn't need to be modified as the paths are in the expected location:
+
+```console
+@minikube|$ proot -b $TELEPRESENCE_ROOT/var/run/secrets/:/var/run/secrets bash
+$ ls /var/run/secrets/kubernetes.io/serviceaccount/
+ca.crt  namespace  token
+```
+
 ### kubectl context
 
 By default Telepresence uses whatever the current context is for `kubectl`.
@@ -440,15 +503,13 @@ Telepresence currently proxies the following when using `--run-shell`:
 * TCP connections to any hostname/port; all but `localhost` will be routed via Kubernetes.
   Typically this is useful for accessing cloud resources, e.g. a AWS RDS database.
 * TCP connections *from* Kubernetes to your local code, for ports specified on the command line.
+* Access to volumes, including those for `Secret` and `ConfigMap` Kubernetes objects.
+* `/var/run/secrets/kubernetes.io` credentials (used to the [access the Kubernetes( API](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#accessing-the-api-from-a-pod)).
 
 Currently unsupported:
 
-* Environment variables for `Service` instances created *after* Telepresence is started.
-  This is the behavior of pods in general, of course.
 * SRV DNS records matching `Services`, e.g. `_http._tcp.redis-master.default`.
 * UDP messages in any direction.
-* Access to volumes, including those for `Secret` and `ConfigMap` Kubernetes objects.
-* `/var/run/secrets/kubernetes.io` credentials (used to the [access the Kubernetes( API](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#accessing-the-api-from-a-pod)).
 
 ## Help us improve Telepresence!
 
@@ -472,6 +533,13 @@ Some alternatives to Telepresence:
   This is a somewhat slow process, and you won't be able to do the quick debug cycle you get from running code locally.
 
 ## Changelog
+
+#### 0.28 (unreleased)
+
+Features:
+
+* Remote volumes are now accessible by the local process.
+  ([#78](https://github.com/datawire/telepresence/issues/78))
 
 #### 0.27 (April 12, 2017)
 
