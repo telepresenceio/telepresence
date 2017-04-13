@@ -534,6 +534,12 @@ Some alternatives to Telepresence:
 
 ## Changelog
 
+#### 0.29 (April 13, 2017)
+
+Bug fixes:
+
+* Fix surprising error about `umount` when shutting down on Linux.
+
 #### 0.28 (April 13, 2017)
 
 Features:
