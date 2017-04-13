@@ -27,7 +27,7 @@ branches:
     - master
 
 before_install:
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install python3 sshfs; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install python3 homebrew/fuse/sshfs; fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt install sshfs; fi
   # Record some debugging info:
   - python --version
