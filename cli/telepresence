@@ -670,7 +670,10 @@ def run_local_command(
             runner.write("Killing local shell...\n")
             p.terminate()
             p.wait()
-        runner.get_output(["umount", mount_dir])
+        if sys.platform.startswith("linux"):
+            runner.get_output(["fusermount", "-u", mount_dir])
+        else:
+            runner.get_output(["umount", mount_dir])
         os.rmdir(mount_dir)
 
     atexit.register(terminate_if_alive)
