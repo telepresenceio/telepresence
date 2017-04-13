@@ -7,7 +7,7 @@
 
 [![asciicast](https://asciinema.org/a/109183.png)](https://asciinema.org/a/109183)
 
-## Telepresence: local code in a remote Kubernetes cluster
+## Telepresence: local development against a remote Kubernetes cluster
 
 Have you ever wanted the quick development cycle of local code while still having your code run within a remote Kubernetes cluster?
 Telepresence allows you to run your code locally while still:
