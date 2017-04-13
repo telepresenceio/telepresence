@@ -116,6 +116,7 @@ You will then need to install the necessary additional dependencies:
 * On OS X:
 
   ```
+  brew cask install osxfuse
   brew install python3 torsocks homebrew/fuse/sshfs
   ```
 * On Ubuntu 16.04 or later:
