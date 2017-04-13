@@ -534,7 +534,7 @@ Some alternatives to Telepresence:
 
 ## Changelog
 
-#### 0.28 (unreleased)
+#### 0.28 (April 13, 2017)
 
 Features:
 
