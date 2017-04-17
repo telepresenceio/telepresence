@@ -648,10 +648,12 @@ form {
     color: #1eaedb; }
   .menu .item:first-child {
     margin-left: 0; }
+  .menu.basic .header {
+    text-transform: uppercase;
+  }
   .menu.basic .item {
     letter-spacing: .1rem;
-    text-transform: uppercase;
-    font-size: 1.2rem;
+    font-size: 1.6rem;
     font-weight: 400; }
     .menu.basic .item.header {
       font-weight: 700; }
@@ -661,7 +663,7 @@ form {
       border-bottom: none;
       border-top: 1px solid #EEE; }
   .menu.vertical {
-    width: 15rem; }
+    width: 20rem; }
     .menu.vertical.fluid {
       width: 100% !important; }
     .menu.vertical .item {

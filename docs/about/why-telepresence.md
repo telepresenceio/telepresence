@@ -5,6 +5,14 @@ title: "Why Telepresence?"
 categories: about
 ---
 
+<link rel="stylesheet" href="{{ "/css/mermaid.css" | prepend: site.baseurl }}">
+<script src="{{ "/js/mermaid.min.js" | prepend: site.baseurl }}"></script>
+<script>mermaid.initialize({
+   startOnLoad: true,
+   cloneCssStyles: false,
+ });
+</script>
+
 Let's assume you have a web service which listens on port 8080, and has a Dockerfile which gets built to an image called `examplecom/servicename`.
 Your service depends on other Kubernetes `Service` instances (`thing1` and `thing2`), and on a cloud database.
 

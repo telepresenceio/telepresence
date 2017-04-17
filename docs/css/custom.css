@@ -38,19 +38,13 @@ pre[class*="language-"] {
 .hero .logo {
     text-align: center;
     margin-top: 3rem;
-    opacity: 0;
-    -webkit-animation-name: logo;
-    animation-name: logo;
-    -webkit-animation-duration: 3s;
-    animation-duration: 3s;
-    -webkit-animation-fill-mode: forwards;
-    animation-fill-mode: forwards;
 }
+
 .hero .logo span {
     color: #696969;
 }
 .hero .logo img {
-    width: 100px
+    width: 200px
 }
 .hero h1 {
     color: #525252;
