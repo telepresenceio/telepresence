@@ -10,7 +10,13 @@ twitter_username: datawire
 github_username:  datawire
 
 # use this to define the categories of your documentation
-category-list: [getting-started, pages, site, developers, extra]
+category-list:
+  - "about"
+  - "getting-started"
+  - "features"
+  - "limitations-and-workarounds"
+  - "additional-information"
+
 # optionally you can define icon for each category (for the sidebar)
 # Doc42 uses Font Awesome
 category-icons: [gear, cube, dashboard, code, expand]
