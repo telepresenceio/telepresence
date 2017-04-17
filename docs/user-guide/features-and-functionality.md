@@ -3,7 +3,6 @@ layout: doc
 weight: 1
 title: "Features and Functionality"
 categories: user-guide
-permalink: /user-guide/features-and-functionality
 ---
 
 ### Using existing Deployments

@@ -3,7 +3,6 @@ layout: doc
 weight: 1
 title: "Changelog"
 categories: additional-information
-permalink: /additional-information/changelog
 ---
 
 #### 0.29 (April 13, 2017)

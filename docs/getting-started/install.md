@@ -3,7 +3,6 @@ layout: doc
 weight: 1
 title: "Installing Telepresence"
 categories: getting-started
-permalink: /getting-started/install
 ---
 
 You will need the following available on your machine:

@@ -3,7 +3,6 @@ layout: doc
 weight: 2
 title: "Limitations and Workarounds"
 categories: user-guide
-permalink: /user-guide/limitations-and-workarounds
 ---
 
 ### Incompatible programs

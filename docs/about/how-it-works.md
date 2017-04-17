@@ -3,7 +3,6 @@ layout: doc
 weight: 2
 title: "How it works"
 categories: about
-permalink: /about/how-it-works
 ---
 
 Telepresence works by building a two-way network proxy (bootstrapped using `kubectl port-forward`) between a custom pod running inside a remote Kubernetes cluster and a process running on your development machine.

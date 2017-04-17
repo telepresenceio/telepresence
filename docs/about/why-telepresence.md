@@ -3,7 +3,6 @@ layout: doc
 weight: 1
 title: "Why Telepresence?"
 categories: about
-permalink: /about/why-telepresence
 ---
 
 Let's assume you have a web service which listens on port 8080, and has a Dockerfile which gets built to an image called `examplecom/servicename`.

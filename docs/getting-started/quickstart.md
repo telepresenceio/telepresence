@@ -3,7 +3,6 @@ layout: doc
 weight: 2
 title: "Quickstart"
 categories: getting-started
-permalink: /getting-started/quickstart
 ---
 
 ### Proxying from your local process to Kubernetes
