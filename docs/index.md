@@ -1,3 +1,7 @@
+---
+layout: doc
+---
+
 ## Introduction
 
 Have you ever wanted the quick development cycle of local code while still having your code run within a remote Kubernetes cluster?
