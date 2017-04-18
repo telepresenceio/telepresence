@@ -1,3 +1,24 @@
-theme: jekyll-theme-slate
 title: Telepresence
-show_downloads: false
+email: itamar@telepresence.io
+author: "Datawire.io"
+description: "Telepresence: a local development environment for a remote Kubernetes cluster"
+keywords: "Telepresence, Kubernetes, microservices"
+
+baseurl: ""
+url: "http://telepresence.io" # the base hostname & protocol for your site
+twitter_username: datawire
+github_username:  datawire
+
+# use this to define the categories of your documentation
+category-list:
+  - "about"
+  - "getting-started"
+  - "user-guide"
+  - "additional-information"
+
+# optionally you can define icon for each category (for the sidebar)
+# Doc42 uses Font Awesome
+category-icons: [question-circle, play, code, expand]
+
+# Build settings
+markdown: kramdown
