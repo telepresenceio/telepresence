@@ -43,6 +43,3 @@ Then move telepresence to somewhere in your `$PATH`, e.g.:
 ```
 sudo mv telepresence /usr/local/bin
 ```
-
-
-> **Need help?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).

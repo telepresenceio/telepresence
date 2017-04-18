@@ -97,5 +97,3 @@ $ kubectl run --attach -i -t test --generator=job/v1 --rm \
 k8s-pod# wget -qO- http://quickstart.default.svc.cluster.local:8080/file.txt
 hello world
 ```
-
-> **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).

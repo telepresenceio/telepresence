@@ -5,6 +5,8 @@ title: "Features and Functionality"
 categories: user-guide
 ---
 
+If you haven't read the Quickstart yet you should [start by reading that first](/getting-started/quickstart.html).
+
 ### Using existing Deployments
 
 Let's look in a bit more detail at using Telepresence when you have an existing `Deployment`.
