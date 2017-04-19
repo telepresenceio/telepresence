@@ -12,14 +12,19 @@ You will need the following available on your machine:
 * Access to your Kubernetes cluster, with local credentials on your machine.
   You can do this test by running `kubectl get pod` - if this works you're all set.
 
-You will then need to install the necessary additional dependencies:
+### OS X
 
-* On OS X:
+On OS X you can install Telepresence by running the following:
 
-  ```
-  brew cask install osxfuse
-  brew install python3 torsocks homebrew/fuse/sshfs
-  ```
+```
+brew cask install osxfuse
+brew install datawire/blackbird/telepresence
+```
+
+### Linux
+
+First, install the prerequisites:
+
 * On Ubuntu 16.04 or later:
 
   ```

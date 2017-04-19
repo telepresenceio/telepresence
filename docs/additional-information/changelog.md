@@ -5,6 +5,12 @@ title: "Changelog"
 categories: additional-information
 ---
 
+#### 0.30 (April 19, 2017)
+
+Features:
+
+* Telepresence can now be installed via Homebrew on OS X.
+
 #### 0.29 (April 13, 2017)
 
 Bug fixes:
