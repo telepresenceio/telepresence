@@ -26,8 +26,7 @@ The corresponding commands to run in order are:
 ```
 make bumpversion
 git push origin master --tags
-sudo make release
+make release
 ```
 
-The `sudo` is necessary to do the Docker commands.
 Note that the release automation has only been tested on Ubuntu 16.04.

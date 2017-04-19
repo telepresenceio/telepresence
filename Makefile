@@ -12,7 +12,7 @@ version:
 	@echo $(VERSION)
 
 build-remote:
-	cd remote && docker build . -t datawire/telepresence-k8s:$(VERSION)
+	cd remote && sudo docker build . -t datawire/telepresence-k8s:$(VERSION)
 
 virtualenv:
 	virtualenv --python=python3 virtualenv
@@ -34,5 +34,5 @@ minikube-test: virtualenv
 
 release: build-remote
 	env TELEPRESENCE_VERSION=$(VERSION) ci/confirm-release.sh
-	docker push datawire/telepresence-k8s:$(VERSION)
+	sudo docker push datawire/telepresence-k8s:$(VERSION)
 	env TELEPRESENCE_VERSION=$(VERSION) ci/homebrew-package.sh
