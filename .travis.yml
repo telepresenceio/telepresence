@@ -40,8 +40,6 @@ before_install:
   - ./ci/setup-gcloud.sh
   # Make sure torsocks is installed:
   - ./ci/build-torsocks.sh
-  # Store the SSH key used to push to github.com/datawire/homebrew-blackbird
-  - sh -c 'echo $HOMEBREW_KEY > ci/homebrew.rsa'
 
 install:
   # Push Docker images to Google Container Registry; on OS X we don't bother, we
@@ -56,11 +54,3 @@ script:
   # Magic incantation to make kubectl work, because apparently gcloud can't do that correctly (see https://github.com/kubernetes/kubernetes/issues/30617)
   - export GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/gcloud-service-key.json
   - ./ci/test.sh
-
-# If a commit is tagged, indicating a new release, update the Homebrew packaging with the new version:
-deploy:
-  provider: script
-  script: if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./ci/homebrew-package.sh; fi
-  on:
-    tags: true
-    branch: master
