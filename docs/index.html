@@ -5,12 +5,19 @@ permalink: /
 ---
 
 <header class="hero">
-    <div class="logo">
-      <img src="{{site.baseurl}}/images/logo.png" width="10%">
-        <h1>Telepresence</h1>
-        <h4>Local development against a remote Kubernetes cluster</h4>
-    </div>
+  <div class="logo">
+  <h4><img src="{{site.baseurl}}/images/logo.png" style="width: 2em; vertical-align: middle;">&nbsp; Telepresence: Local development against a remote Kubernetes cluster</h4>
+  </div>
 </header>
+
+<div class="container">
+  <p>Have you ever wanted the quick development cycle of local code while still having your code run within a remote Kubernetes cluster?
+    <b>Telepresence allows you to develop locally, running your code on your machine, while still making your code appear as if it is running in Kubernetes.</b></p>
+
+  <p>That includes <b>transparent access to the remote network</b>, environment variables that match the remote Pod, and even access to Kubernetes volumes.</p>
+
+  <p style="text-align: center;">Telepresence is sponsored by Project Blackbird, helping you <a href="https://datawire.io">deploy microservices on Kubernetes in AWS</a> <img src="{{site.baseurl}}/images/blackbird.png" style="width: 4em; vertical-align: middle; align: right;"></p>
+</div>
 
 <div class="container">
   {% for cat in site.category-list %}
@@ -33,16 +40,6 @@ permalink: /
     {% endfor %}
 </div>
 <div class="container">
-    <div>
       <center><script type="text/javascript" src="https://asciinema.org/a/109183.js" id="asciicast-109183" async></script></center>
-
-      <p>Have you ever wanted the quick development cycle of local code while still having your code run within a remote Kubernetes cluster?
-        Telepresence allows you to develop locally, running your code on your machine, while still making your code appear as if it is running in Kubernetes.</p>
-      <ul>
-        <li>Your local process can talk to Kubernetes <tt>Services</tt> and cloud databases like AWS RDS even if they're in a private VPC.</li>
-        <li>Your local process has the same environment variables and Kubernetes volumes as the real pod.</li>
-        <li>The Kubernetes cluster can talk to your local process, which means other <tt>Services</tt>, your <tt>LoadBalancer</tt> or your <tt>Ingress</tt> can send queries to the local process you are running.</li>
-      </ul>
-    </div>
 
 </div>
