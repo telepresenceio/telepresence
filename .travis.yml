@@ -40,8 +40,8 @@ before_install:
   - ./ci/setup-gcloud.sh
   # Make sure torsocks is installed:
   - ./ci/build-torsocks.sh
-  # Decrypt the SSH key used to push to github.com/datawire/homebrew-blackbird
-  - openssl aes-256-cbc -K $encrypted_6168b41c1bb0_key -iv $encrypted_6168b41c1bb0_iv -in ci/homebrew.rsa.enc -out ci/homebrew.rsa -d
+  # Store the SSH key used to push to github.com/datawire/homebrew-blackbird
+  - sh -c 'echo $HOMEBREW_KEY > ci/homebrew.rsa'
 
 install:
   # Push Docker images to Google Container Registry; on OS X we don't bother, we
