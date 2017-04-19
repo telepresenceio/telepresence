@@ -33,4 +33,6 @@ minikube-test: virtualenv
 	env TELEPRESENCE_VERSION=$(VERSION) ci/test.sh
 
 release: build-remote
+	env TELEPRESENCE_VERSION=$(VERSION) ci/confirm-release.sh
 	docker push datawire/telepresence-k8s:$(VERSION)
+	env TELEPRESENCE_VERSION=$(VERSION) ci/homebrew-package.sh
