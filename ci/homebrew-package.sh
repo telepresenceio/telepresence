@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Load SSH key:
+# Load SSH key (a deployment key configured at https://github.com/datawire/homebrew-blackbird/settings/keys):
 eval "$(ssh-agent)"
 ssh-add ci/homebrew.rsa
 
