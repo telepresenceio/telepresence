@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from shutil import rmtree
 from subprocess import run
 from pathlib import Path
 
@@ -27,7 +28,10 @@ def build_package(builder_image, package_type, version, dependencies):
 
 
 def main():
-    run(["rm", "-f", str(THIS_DIRECTORY / "out" / "*")], check=True)
+    out = THIS_DIRECTORY / "out"
+    if out.exists():
+        rmtree(str(out))
+    out.mkdir()
     build_package("alanfranz/fwd-ubuntu-xenial:latest", "deb",
                   "0.32", ["torsocks", "python3", "openssh-client", "sshfs"])
 
