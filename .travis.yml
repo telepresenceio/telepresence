@@ -20,6 +20,8 @@ env:
     - PROJECT_NAME=datawireio
     - CLUSTER_NAME=telepresence-testing
     - CLOUDSDK_COMPUTE_ZONE=us-central1-a
+    # BINTRAY_API_KEY:
+    - secure: "APyxStzdizPacDg5k7WTsoSSS5ZEIEKa7emsfVe25RqduSCNeG2pCrCCSvhLVW2TsKlg64H9AuKKncbiGur22j8m+CrJYDVg2EudQb44yY3q5jUKzoSohFkJFy+YE6rS/bRu1qdwkAffmNBNN6UhXw2dY0xOeh45wHoSX5jvcguNqiIj1ZHuiv8aEj5EMA0RvSAkZNb+CxBZOOnSZwRehOCCQX7QRBosGDy12kpZSXoHgTWj5J7bJVprifWMC+ygHW/PBLJn/lFLVtFnZR9YpItt07ALbRiRDw5nA5Bifxg8whtgu20ECOMWBB8vI+r05pqGR3vnJTs0cJikGqvdpsImQYAyGHbXHjQctXeY8T+vZM7aq4kF8Sei1QEpxL4DA8VC9limGbqeb6ZMm2zkes3rdhZaoG+MlGJiF93/7OIc2wZkJJwD+SXjOlnvgHuZzb4P3i/SR5ZMdqxS71tyDsh/kcYxsPdQbk1v9MyPP7EizKq3bfoxwh+rVbR9jua5uqYBb1FvOy8aptm5513zVUSp8QJwNJW38cqFn3i3Y2TEfdEXNQ9Ki7gah+RJz0GtOjV/wCnOJIEGiqBru+iafObJ8HrfjQl4OCxYL7LhEKjYYoef+sy6WZQiBey5ryNI/YOWkWaPyy3vqBisz6YhFypAlPvU2cfqA+KRcYfWFgg="
 
 # Only build master branch (all PRs will be built):
 branches:
