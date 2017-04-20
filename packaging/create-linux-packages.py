@@ -55,10 +55,17 @@ def main():
     if out.exists():
         rmtree(str(out))
     out.mkdir()
-    for ubuntu_distro in ["xenial", "yakkety"]:
+    for ubuntu_distro in ["xenial", "yakkety", "zesty"]:
         distro_out = out / ubuntu_distro
         distro_out.mkdir()
-        build_package("alanfranz/fwd-ubuntu-{}:latest".format(ubuntu_distro),
+        image = "alanfranz/fwd-ubuntu-{}:latest".format(ubuntu_distro)
+        # At the moment we need custom image for zesty. This will be
+        # unnecessary once
+        # https://github.com/alanfranz/fpm-within-docker/pull/1 is merged:
+        if ubuntu_distro == "zesty":
+            image = "datawire/fpm-within-docker:zesty"
+
+        build_package(image,
                       "deb",
                       "0.32",
                       distro_out,
