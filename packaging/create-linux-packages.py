@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 
+"""
+Create Ubuntu and Fedora packages in out/.
+
+Usage:
+create-linux-packages.py <release-version>
+"""
+
+import sys
 from shutil import rmtree
 from subprocess import run
 from pathlib import Path
@@ -38,9 +46,10 @@ def test_package(distro_image, package_directory, install_command):
     :param install_command str: "deb" or "rpm".
     """
     if install_command == "deb":
-        install = ("apt-get -q update && "
-                   "apt-get -q -y --no-install-recommends install gdebi-core && "
-                   "gdebi -n /packages/*.deb")
+        install = (
+            "apt-get -q update && "
+            "apt-get -q -y --no-install-recommends install gdebi-core && "
+            "gdebi -n /packages/*.deb")
     elif install_command == "rpm":
         install = "dnf -y install /packages/*.rpm"
     run(["sudo", "docker", "run", "--rm",
@@ -50,7 +59,7 @@ def test_package(distro_image, package_directory, install_command):
         check=True)
 
 
-def main():
+def main(version):
     out = THIS_DIRECTORY / "out"
     if out.exists():
         rmtree(str(out))
@@ -67,7 +76,7 @@ def main():
 
         build_package(image,
                       "deb",
-                      "0.32",
+                      version,
                       distro_out,
                       ["torsocks", "python3", "openssh-client", "sshfs"])
         test_package("ubuntu:" + ubuntu_distro, distro_out, "deb")
@@ -76,11 +85,11 @@ def main():
         distro_out.mkdir()
         build_package("alanfranz/fwd-fedora-{}:latest".format(fedora_distro),
                       "rpm",
-                      "0.32",
+                      version,
                       distro_out,
                       ["python3", "torsocks", "openssh-clients", "sshfs"])
         test_package("fedora:" + fedora_distro, distro_out, "rpm")
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1])
