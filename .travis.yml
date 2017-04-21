@@ -20,11 +20,14 @@ env:
     - PROJECT_NAME=datawireio
     - CLUSTER_NAME=telepresence-testing
     - CLOUDSDK_COMPUTE_ZONE=us-central1-a
+    # PACKAGECLOUD_CONFIG:
+    - secure: "FNkwOIWkGZt7oOM6HSt1/5BSRzxzYqXOu9Imdb9TEHtAEsohFcnHGIWZn5D2OpaIZfT5oiZCzd/GcTv7dgBZfDTe85j4rzmp17PJ03L8cWBuA358n5pcbnh+VWuHD5ngmgdvnCE4vuv0efif2wZL1kSBD7PFB3BSOiddYulcSr4vSbFIvXATJPGST002gE0eLzJp8QPWwskPDuS1zuuqFtdroUrZLeMdhS64d9YD0pkuOCiO01LAUt/Ra06asS3l0UpfiQpSpb/iBIoE44xz4bT/wHXN4vnEL0BNW26kU258HR4ZyOVFkxiWqN12/KGyYCcwifdEcdK/ls8oxMGcFls7MUbl6q4bNJAuwfOH/EoSlxNwR+rQiDvGSCe6ZXaB5U+kUB4dRgb3EgLRxQVVtNEyY52VhH8LB+Ye3Al2ivCQOnqloVuFUOOLBVl6G5gnfej8fHAyDY+HvteNIyAUexaACAlMI8/Oynhq9bsw5IeAbQAHIOyg0Sl1v0L//E0Ny8vVkZPTS82sklWtUUCbGL2ZCQm9l8m4OXLDLPc1F1IEBhJlZRUQfq9M+wkOn6NEGa2VLYD7w/9jQQuIFRYryggCTIPQSaAqoOZoDLv4mo+vpJ2SrQQuJMgvaVdqt9h0RQFnnwvYYa2E3hkyKT1CmilqH44Hjjv+vIT8Rq5XmEA="
 
-# Only build master branch (all PRs will be built):
+# Only build master branch and tags of form 0.1 or 1.0.2 (all PRs will be built):
 branches:
   only:
     - master
+    - /^\d+\.\d+(\.\d+)?$/
 
 # Install various dependencies:
 before_install:
@@ -40,6 +43,8 @@ before_install:
   - ./ci/setup-gcloud.sh
   # Make sure torsocks is installed:
   - ./ci/build-torsocks.sh
+  # Store the packagecloud config:
+  - sh -c 'echo $PACKAGECLOUD_CONFIG > ~/.packagecloud'
 
 install:
   # Push Docker images to Google Container Registry; on OS X we don't bother, we
@@ -54,3 +59,11 @@ script:
   # Magic incantation to make kubectl work, because apparently gcloud can't do that correctly (see https://github.com/kubernetes/kubernetes/issues/30617)
   - export GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/gcloud-service-key.json
   - ./ci/test.sh
+
+# If a commit is tagged, release the software:
+#deploy:
+#  provider: script
+#  script: if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ci/release.sh; fi
+#  on:
+#    tags: true
+#    branch: master
