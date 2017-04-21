@@ -21,30 +21,25 @@ brew cask install osxfuse
 brew install datawire/blackbird/telepresence
 ```
 
-### Linux
+### Ubuntu 16.04 or later
 
-First, install the prerequisites:
-
-* On Ubuntu 16.04 or later:
-
-  ```
-  apt install --no-install-recommends torsocks python3 openssh-client sshfs
-  ```
-* On Fedora:
-
-  ```
-  dnf install python3 torsocks openssh-clients sshfs
-  ```
-
-Then download Telepresence by running the following commands:
+Run the following to install Telepresence:
 
 ```
-curl -L https://github.com/datawire/telepresence/raw/{{ site.data.version.version }}/cli/telepresence -o telepresence
-chmod +x telepresence
+curl -s https://packagecloud.io/install/repositories/datawireio/telepresence/script.deb.sh | sudo bash
+apt install --no-install-recommends telepresence
 ```
 
-Then move telepresence to somewhere in your `$PATH`, e.g.:
+### Fedora 25
+
+Run the following:
 
 ```
-sudo mv telepresence /usr/local/bin
+curl -s https://packagecloud.io/install/repositories/datawireio/telepresence/script.rpm.sh | sudo bash
+dnf install telepresence
 ```
+
+### Other platforms
+
+Don't see your favorite platform?
+[Let us know](https://github.com/datawire/telepresence/issues/new) and we'll try to add it. 
