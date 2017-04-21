@@ -52,7 +52,8 @@ class Uploader(object):
 
 def main(version):
     uploader = Uploader(version)
-    for release in ["xenial", "yakkety", "zesty"]:
+    # zesty is not supported by packagecloud yet, I've filed a support ticket:
+    for release in ["xenial", "yakkety"]:
         uploader.upload_ubuntu(release)
     uploader.upload_fedora("25")
 

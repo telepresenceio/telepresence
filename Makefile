@@ -36,3 +36,5 @@ release: build-remote
 	env TELEPRESENCE_VERSION=$(VERSION) packaging/confirm-release.sh
 	sudo docker push datawire/telepresence-k8s:$(VERSION)
 	env TELEPRESENCE_VERSION=$(VERSION) packaging/homebrew-package.sh
+  packaging/upload-linux-packages.py $(VERSION)
+	packaging/create-linux-packages.py $(VERSION)
