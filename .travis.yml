@@ -20,8 +20,8 @@ env:
     - PROJECT_NAME=datawireio
     - CLUSTER_NAME=telepresence-testing
     - CLOUDSDK_COMPUTE_ZONE=us-central1-a
-    # BINTRAY_API_KEY:
-    - secure: "APyxStzdizPacDg5k7WTsoSSS5ZEIEKa7emsfVe25RqduSCNeG2pCrCCSvhLVW2TsKlg64H9AuKKncbiGur22j8m+CrJYDVg2EudQb44yY3q5jUKzoSohFkJFy+YE6rS/bRu1qdwkAffmNBNN6UhXw2dY0xOeh45wHoSX5jvcguNqiIj1ZHuiv8aEj5EMA0RvSAkZNb+CxBZOOnSZwRehOCCQX7QRBosGDy12kpZSXoHgTWj5J7bJVprifWMC+ygHW/PBLJn/lFLVtFnZR9YpItt07ALbRiRDw5nA5Bifxg8whtgu20ECOMWBB8vI+r05pqGR3vnJTs0cJikGqvdpsImQYAyGHbXHjQctXeY8T+vZM7aq4kF8Sei1QEpxL4DA8VC9limGbqeb6ZMm2zkes3rdhZaoG+MlGJiF93/7OIc2wZkJJwD+SXjOlnvgHuZzb4P3i/SR5ZMdqxS71tyDsh/kcYxsPdQbk1v9MyPP7EizKq3bfoxwh+rVbR9jua5uqYBb1FvOy8aptm5513zVUSp8QJwNJW38cqFn3i3Y2TEfdEXNQ9Ki7gah+RJz0GtOjV/wCnOJIEGiqBru+iafObJ8HrfjQl4OCxYL7LhEKjYYoef+sy6WZQiBey5ryNI/YOWkWaPyy3vqBisz6YhFypAlPvU2cfqA+KRcYfWFgg="
+    # PACKAGECLOUD_CONFIG:
+    - secure: "FNkwOIWkGZt7oOM6HSt1/5BSRzxzYqXOu9Imdb9TEHtAEsohFcnHGIWZn5D2OpaIZfT5oiZCzd/GcTv7dgBZfDTe85j4rzmp17PJ03L8cWBuA358n5pcbnh+VWuHD5ngmgdvnCE4vuv0efif2wZL1kSBD7PFB3BSOiddYulcSr4vSbFIvXATJPGST002gE0eLzJp8QPWwskPDuS1zuuqFtdroUrZLeMdhS64d9YD0pkuOCiO01LAUt/Ra06asS3l0UpfiQpSpb/iBIoE44xz4bT/wHXN4vnEL0BNW26kU258HR4ZyOVFkxiWqN12/KGyYCcwifdEcdK/ls8oxMGcFls7MUbl6q4bNJAuwfOH/EoSlxNwR+rQiDvGSCe6ZXaB5U+kUB4dRgb3EgLRxQVVtNEyY52VhH8LB+Ye3Al2ivCQOnqloVuFUOOLBVl6G5gnfej8fHAyDY+HvteNIyAUexaACAlMI8/Oynhq9bsw5IeAbQAHIOyg0Sl1v0L//E0Ny8vVkZPTS82sklWtUUCbGL2ZCQm9l8m4OXLDLPc1F1IEBhJlZRUQfq9M+wkOn6NEGa2VLYD7w/9jQQuIFRYryggCTIPQSaAqoOZoDLv4mo+vpJ2SrQQuJMgvaVdqt9h0RQFnnwvYYa2E3hkyKT1CmilqH44Hjjv+vIT8Rq5XmEA="
 
 # Only build master branch (all PRs will be built):
 branches:
@@ -42,6 +42,8 @@ before_install:
   - ./ci/setup-gcloud.sh
   # Make sure torsocks is installed:
   - ./ci/build-torsocks.sh
+  # Store the packagecloud config:
+  - sh -c 'echo $PACKAGECLOUD_CONFIG > ~/.packagecloud'
 
 install:
   # Push Docker images to Google Container Registry; on OS X we don't bother, we
