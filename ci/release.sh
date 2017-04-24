@@ -18,5 +18,8 @@ chmod 600 packaging/homebrew.rsa
 eval $(ssh-agent)
 ssh-add packaging/homebrew.rsa
 
+# Install package cloud CLI:
+sudo gem install package_cloud
+
 # Run the release:
 make release
