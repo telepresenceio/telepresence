@@ -118,6 +118,7 @@ def parse_args():
     """Create a new ArgumentParser and parse sys.argv."""
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        allow_abbrev=False,  # can make adding changes not backwards compatible
         description=(
             "Telepresence: local development proxied to a remote Kubernetes "
             "cluster.\n\n"
@@ -320,8 +321,9 @@ def get_remote_info(runner, deployment_name, context, namespace):
     runner.write("Expected metadata for pods: {}\n".format(expected_metadata))
     pods = json.loads(
         runner.get_output(
-            kubectl(context, namespace,
-                    ["get", "pod", "-o", "json", "--export"])
+            kubectl(
+                context, namespace, ["get", "pod", "-o", "json", "--export"]
+            )
         )
     )["items"]
 
@@ -532,8 +534,9 @@ def start_proxy(runner, args):
             command.append("--expose")
         runner.get_output(command)
 
-    remote_info = get_remote_info(runner, args.deployment,
-                                  args.context, args.namespace)
+    remote_info = get_remote_info(
+        runner, args.deployment, args.context, args.namespace
+    )
 
     processes, socks_port, ssh_port = connect(
         runner,
@@ -805,6 +808,20 @@ def require_command(runner, command, message=None):
         raise SystemExit(1)
 
 
+FEEDBACK_QUESTION = """
+Would you like to file an issue with your question?
+We'll try to answer quickly, and then improve the documentation going forward.
+File an issue: [N/y] """
+
+
+def ask_for_feedback():
+    """Ask user if they want to provide feedback."""
+    if input(FEEDBACK_QUESTION) == "y":
+        webbrowser.open_new(
+            "https://github.com/datawire/telepresence/issues/new"
+        )
+
+
 def main():
     # Make SIGTERM do clean shutdown (in particular, we want atexit functions
     # to be called):
@@ -813,7 +830,14 @@ def main():
 
     signal.signal(signal.SIGTERM, shutdown)
 
-    args = parse_args()
+    try:
+        args = parse_args()
+    except SystemExit as e:
+        if sys.stdin.isatty() and e.code == 0 and sys.argv[1:] in (["-h"],
+                                                                   ["--help"]):
+            ask_for_feedback()
+        raise
+
     runner = Runner.open(args.logfile)
 
     @handle_unexpected_errors(args.logfile)
