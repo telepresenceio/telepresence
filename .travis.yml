@@ -65,7 +65,8 @@ script:
 # If a commit is tagged, release the software:
 deploy:
   provider: script
-  script: if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ci/release.sh; fi
+  skip_cleanup: true
+  script: ci/release.sh
   on:
     tags: true
     branch: master
