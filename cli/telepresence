@@ -620,20 +620,34 @@ def mount_remote_volumes(runner, remote_info, ssh_port):
     sshfs is used to mount the remote system locally.
     """
     mount_dir = mkdtemp()
-    runner.check_call([
-        "sshfs",
-        "-p",
-        str(ssh_port),
-        # Don't validate host key:
-        "-o",
-        "StrictHostKeyChecking=no",
-        # Don't store host key:
-        "-o",
-        "UserKnownHostsFile=/dev/null",
-        "root@localhost:/",
-        mount_dir
-    ])
-    return mount_dir
+    try:
+        runner.check_call([
+            "sshfs",
+            "-p",
+            str(ssh_port),
+            # Don't validate host key:
+            "-o",
+            "StrictHostKeyChecking=no",
+            # Don't store host key:
+            "-o",
+            "UserKnownHostsFile=/dev/null",
+            "root@localhost:/",
+            mount_dir
+        ])
+        mounted = True
+    except CalledProcessError:
+        print(
+            "Mounting remote volumes failed, they will be unavailable"
+            " in this session. This is a known issue when running inside"
+            " Docker or on Windows Subystem for Linux. See"
+            " https://github.com/datawire/telepresence/issues/115 for"
+            " details. If you are not running in those environments"
+            " then please report a bug, attaching telepresence.log to"
+            " the bug report.",
+            file=sys.stderr
+        )
+        mounted = False
+    return mount_dir, mounted
 
 
 def run_local_command(
@@ -662,7 +676,7 @@ def run_local_command(
     # OS X:
     if sys.platform == "darwin":
         env["PATH"] = sip_workaround()
-    mount_dir = mount_remote_volumes(runner, remote_info, ssh_port)
+    mount_dir, mounted = mount_remote_volumes(runner, remote_info, ssh_port)
     env["TELEPRESENCE_ROOT"] = mount_dir
     p = Popen(["torsocks", "bash"], env=env)
 
@@ -673,10 +687,11 @@ def run_local_command(
             runner.write("Killing local shell...\n")
             p.terminate()
             p.wait()
-        if sys.platform.startswith("linux"):
-            runner.get_output(["fusermount", "-u", mount_dir])
-        else:
-            runner.get_output(["umount", mount_dir])
+        if mounted:
+            if sys.platform.startswith("linux"):
+                runner.get_output(["fusermount", "-u", mount_dir])
+            else:
+                runner.get_output(["umount", mount_dir])
         os.rmdir(mount_dir)
 
     atexit.register(terminate_if_alive)
