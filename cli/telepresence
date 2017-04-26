@@ -525,6 +525,7 @@ def start_proxy(runner, args):
                 "--generator",
                 "deployment/v1beta1",
                 "--limits=memory=256Mi",
+                "--requests=memory=64Mi",
                 args.deployment,
                 "--image={}/telepresence-k8s:{}".format(REGISTRY, __version__),
             ]

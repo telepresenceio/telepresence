@@ -49,6 +49,7 @@ def run_nginx(namespace):
         nginx_name,
         "--image=nginx:alpine",
         "--limits=memory=128M",
+        "--requests=memory=64M",
         "--port=80",
         "--expose",
     ])
