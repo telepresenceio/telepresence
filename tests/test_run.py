@@ -30,6 +30,9 @@ spec:
       # containers
       - name: getintheway
         image: nginx:alpine
+        resources:
+          limits:
+            memory: "64M"
       - name: {name}
         image: {registry}/telepresence-k8s:{version}
         env:
@@ -38,6 +41,11 @@ spec:
         volumeMounts:
         - name: podinfo
           mountPath: /podinfo
+        resources:
+          requests:
+            memory: "64M"
+          limits:
+            memory: "128M"
       volumes:
       - name: podinfo
         downwardAPI:
