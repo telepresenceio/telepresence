@@ -38,6 +38,9 @@ spec:
         volumeMounts:
         - name: podinfo
           mountPath: /podinfo
+        resources:
+          limits:
+            memory: "128M"
       volumes:
       - name: podinfo
         downwardAPI:

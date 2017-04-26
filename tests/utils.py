@@ -48,6 +48,7 @@ def run_nginx(namespace):
         "deployment/v1beta1",
         nginx_name,
         "--image=nginx:alpine",
+        "--limits=memory=128M",
         "--port=80",
         "--expose",
     ])
