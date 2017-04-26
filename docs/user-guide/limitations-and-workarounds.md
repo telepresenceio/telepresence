@@ -29,7 +29,8 @@ To workaround these limitations you can do the following in your development env
 ### Docker containers
 
 A container run via `docker run` will not inherit the outgoing functionality of the Telepresence shell.
-If you want to use Telepresence to proxy a containerized application you should run Telepresence *inside* the container.
+If you want to use Telepresence to proxy a containerized application you should install and run Telepresence inside the container itself.
+
 
 ### What Telepresence proxies
 
