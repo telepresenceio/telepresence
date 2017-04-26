@@ -5,7 +5,7 @@
 
 ## Demo
 
-[![asciicast](https://asciinema.org/a/109183.png)](https://asciinema.org/a/109183)
+[![asciicast](https://asciinema.org/a/117761.png)](https://asciinema.org/a/117761)
 
 ## Telepresence: local development against a remote Kubernetes cluster
 
