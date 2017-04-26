@@ -11,8 +11,8 @@
   },
   "stdout": [
     [
-      0.325649,
-      "devlaptop$ "
+      0.125649,
+      "\u001b[01;32mdevlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -20,7 +20,7 @@
     ],
     [
       8.9e-05,
-      "devlaptop$ "
+      "\u001b[01;32mdevlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -36,11 +36,11 @@
     ],
     [
       0.003042,
-      "devlaptop$ "
+      "\u001b[01;32mdevlaptop$\u001b[00m "
     ],
     [
       1.317081,
-      "# I'll start a Telepresence proxy in the Kubernetes cluster:\r\ndevlaptop$ "
+      "# I'll start a Telepresence proxy in the Kubernetes cluster:\r\n\u001b[01;32mdevlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -52,7 +52,7 @@
     ],
     [
       4.4e-05,
-      "devlaptop$ "
+      "\u001b[01;32mdevlaptop$\u001b[00m "
     ],
     [
       1.606491,
@@ -60,7 +60,7 @@
     ],
     [
       0.000132,
-      "devlaptop$ "
+      "\u001b[01;32mdevlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -72,7 +72,7 @@
     ],
     [
       0.004174,
-      "devlaptop$ "
+      "\u001b[01;32mdevlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -80,7 +80,7 @@
     ],
     [
       2.4e-05,
-      "devlaptop$ "
+      "\u001b[01;32mdevlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -92,7 +92,7 @@
     ],
     [
       2.0,
-      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -100,7 +100,7 @@
     ],
     [
       6.4e-05,
-      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -108,7 +108,7 @@
     ],
     [
       0.000442,
-      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -124,7 +124,7 @@
     ],
     [
       0.000454,
-      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -132,7 +132,7 @@
     ],
     [
       0.000164,
-      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -148,11 +148,11 @@
     ],
     [
       0.007073,
-      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
     ],
     [
       2.0,
-      "# Now the web server on my laptop is exposed via the Kubernetes cluster:\r\n@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+      "# Now the web server on my laptop is exposed via the Kubernetes cluster:\r\n\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -168,7 +168,7 @@
     ],
     [
       0.000802,
-      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -176,7 +176,7 @@
     ],
     [
       0.000166,
-      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -188,11 +188,11 @@
     ],
     [
       0.003438,
-      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
     ],
     [
       2.0,
-      "# I have access to the environment variables from the remote Kubernetes pods:\r\n@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+      "# I have access to the environment variables from the remote Kubernetes pods:\r\n\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -204,7 +204,7 @@
     ],
     [
       0.001812,
-      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
     ],
     [
       2.0,
@@ -212,7 +212,7 @@
     ],
     [
       5.4e-05,
-      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
     ],
     [
       1.559696,
@@ -220,7 +220,7 @@
     ],
     [
       0.101717,
-      "devlaptop$ "
+      "\u001b[01;32mdevlaptop$\u001b[00m "
     ],
     [
       2.0,
