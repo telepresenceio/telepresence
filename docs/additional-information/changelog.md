@@ -5,6 +5,13 @@ title: "Changelog"
 categories: additional-information
 ---
 
+#### 0.41 (April 26, 2017)
+
+Bug fixes:
+
+* Telepresence now sets a RAM limit on its Kubernetes pods.
+* Telepresence Kubernetes pod exits faster.
+
 #### 0.30 (April 19, 2017)
 
 Features:
