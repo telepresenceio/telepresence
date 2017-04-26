@@ -12,7 +12,7 @@
   "stdout": [
     [
       0.125649,
-      "\u001b[01;32mdevlaptop$\u001b[00m "
+      "\u001b[32mdevlaptop$\u001b[0m "
     ],
     [
       1.0,
@@ -20,7 +20,7 @@
     ],
     [
         0.1,
-      "\u001b[01;32mdevlaptop$\u001b[00m "
+      "\u001b[32mdevlaptop$\u001b[0m "
     ],
     [
       3.0,
@@ -36,11 +36,11 @@
     ],
     [
       0.003042,
-      "\u001b[01;32mdevlaptop$\u001b[00m "
+      "\u001b[32mdevlaptop$\u001b[0m "
     ],
     [
       1.317081,
-      "\u001b[01;34m# I'll start a Telepresence proxy in the Kubernetes cluster:\r\n\u001b[00m\u001b[01;32mdevlaptop$\u001b[00m "
+      "\u001b[01;34m# I'll start a Telepresence proxy in the Kubernetes cluster:\r\n\u001b[00m\u001b[32mdevlaptop$\u001b[0m "
     ],
     [
       3.0,
@@ -52,7 +52,7 @@
     ],
     [
       4.4e-05,
-      "\u001b[01;32mdevlaptop$\u001b[00m "
+      "\u001b[32mdevlaptop$\u001b[0m "
     ],
     [
       1.606491,
@@ -60,7 +60,7 @@
     ],
     [
       0.000132,
-      "\u001b[01;32mdevlaptop$\u001b[00m "
+      "\u001b[32mdevlaptop$\u001b[0m "
     ],
     [
       3.0,
@@ -72,7 +72,7 @@
     ],
     [
       0.004174,
-      "\u001b[01;32mdevlaptop$\u001b[00m "
+      "\u001b[32mdevlaptop$\u001b[0m "
     ],
     [
       3.0,
@@ -80,7 +80,7 @@
     ],
     [
       2.4e-05,
-      "\u001b[01;32mdevlaptop$\u001b[00m "
+      "\u001b[32mdevlaptop$\u001b[0m "
     ],
     [
       3.0,
@@ -92,7 +92,7 @@
     ],
     [
       3.0,
-      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
+      "\u001b[32m@gke_cluster|devlaptop$\u001b[0m "
     ],
     [
       1.0,
@@ -100,7 +100,7 @@
     ],
     [
       6.4e-05,
-      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
+      "\u001b[32m@gke_cluster|devlaptop$\u001b[0m "
     ],
     [
       3.0,
@@ -108,7 +108,7 @@
     ],
     [
       0.000442,
-      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
+      "\u001b[32m@gke_cluster|devlaptop$\u001b[0m "
     ],
     [
       3.0,
@@ -124,7 +124,7 @@
     ],
     [
       0.000454,
-      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
+      "\u001b[32m@gke_cluster|devlaptop$\u001b[0m "
     ],
     [
       3.0,
@@ -132,7 +132,7 @@
     ],
     [
       0.000164,
-      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
+      "\u001b[32m@gke_cluster|devlaptop$\u001b[0m "
     ],
     [
       3.0,
@@ -148,7 +148,7 @@
     ],
     [
       0.007073,
-      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
+      "\u001b[32m@gke_cluster|devlaptop$\u001b[0m "
     ],
     [
       3.0,
@@ -156,7 +156,7 @@
     ],
       [
           0.01,
-          "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
+          "\u001b[32m@gke_cluster|devlaptop$\u001b[0m "
       ],
     [
       3.0,
@@ -168,7 +168,7 @@
     ],
     [
       0.000802,
-      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
+      "\u001b[32m@gke_cluster|devlaptop$\u001b[0m "
     ],
     [
       3.0,
@@ -176,7 +176,7 @@
     ],
     [
       0.000166,
-      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
+      "\u001b[32m@gke_cluster|devlaptop$\u001b[0m "
     ],
     [
       3.0,
@@ -188,11 +188,11 @@
     ],
     [
       0.003438,
-      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
+      "\u001b[32m@gke_cluster|devlaptop$\u001b[0m "
     ],
     [
       3.0,
-      "\u001b[01;34m# I have access to the same environment variables as the real Kubernetes pod:\r\n\u001b[00m\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
+      "\u001b[01;34m# I have access to the same environment variables as the real Kubernetes pod:\r\n\u001b[00m\u001b[32m@gke_cluster|devlaptop$\u001b[0m "
     ],
     [
       3.0,
@@ -204,7 +204,7 @@
     ],
     [
       0.001812,
-      "\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
+      "\u001b[32m@gke_cluster|devlaptop$\u001b[0m "
     ],
     [
       3.0,
