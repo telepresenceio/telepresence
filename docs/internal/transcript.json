@@ -1,0 +1,230 @@
+{
+  "duration": 50.007685,
+  "command": null,
+  "width": 94,
+  "height": 24,
+  "title": "Telepresence",
+  "version": 1,
+  "env": {
+    "TERM": "dumb",
+    "SHELL": "/bin/bash"
+  },
+  "stdout": [
+    [
+      0.325649,
+      "devlaptop$ "
+    ],
+    [
+      2.0,
+      "# Let's say I have an nginx server running in Kubernetes:\r\n"
+    ],
+    [
+      8.9e-05,
+      "devlaptop$ "
+    ],
+    [
+      2.0,
+      "kubectl run --expose --port 80 mynginx --image=nginx\r\n"
+    ],
+    [
+      1.36526,
+      "service \"mynginx\" created\r\n"
+    ],
+    [
+      0.002227,
+      "deployment \"mynginx\" created\r\n"
+    ],
+    [
+      0.003042,
+      "devlaptop$ "
+    ],
+    [
+      1.317081,
+      "# I'll start a Telepresence proxy in the Kubernetes cluster:\r\ndevlaptop$ "
+    ],
+    [
+      2.0,
+      "kubectl run --port 8080 myserver --image=datawire/telepresence-k8s:0.41\r\n"
+    ],
+    [
+      1.136451,
+      "deployment \"myserver\" created\r\n"
+    ],
+    [
+      4.4e-05,
+      "devlaptop$ "
+    ],
+    [
+      1.606491,
+      "# I'll expose it to the Internet:\r\n"
+    ],
+    [
+      0.000132,
+      "devlaptop$ "
+    ],
+    [
+      2.0,
+      "kubectl expose deployment myserver --type=LoadBalancer --name=myserver\r\n"
+    ],
+    [
+      0.551129,
+      "service \"myserver\" exposed\r\n"
+    ],
+    [
+      0.004174,
+      "devlaptop$ "
+    ],
+    [
+      2.0,
+      "# Next, I'll start a shell session whose contents will be proxied to Kubernetes:\r\n"
+    ],
+    [
+      2.4e-05,
+      "devlaptop$ "
+    ],
+    [
+      2.0,
+      "telepresence --deployment myserver --expose 8080 --run-shell\r\n"
+    ],
+    [
+      0.503863,
+      "Starting proxy...\r\n"
+    ],
+    [
+      2.0,
+      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+    ],
+    [
+      2.0,
+      "# I will start a local web server on port 8080:\r\n"
+    ],
+    [
+      6.4e-05,
+      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+    ],
+    [
+      2.0,
+      "echo \"hello from my laptop\" > demo.txt\r\n"
+    ],
+    [
+      0.000442,
+      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+    ],
+    [
+      2.0,
+      "python3 -m http.server 8080 > /dev/null &\r\n"
+    ],
+    [
+      0.002088,
+      "[1] 22323"
+    ],
+    [
+      0.000247,
+      "\r\n"
+    ],
+    [
+      0.000454,
+      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+    ],
+    [
+      2.0,
+      "# Now let's find out the external IP for our service:\r\n"
+    ],
+    [
+      0.000164,
+      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+    ],
+    [
+      2.0,
+      "kubectl get service myserver\r\n"
+    ],
+    [
+      0.498007,
+      "NAME       CLUSTER-IP     EXTERNAL-IP       PORT(S)          AGE\r\n"
+    ],
+    [
+      0.000177,
+      "myserver   10.3.242.226   104.197.103.123   8080:30022/TCP   50s\r\n"
+    ],
+    [
+      0.007073,
+      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+    ],
+    [
+      2.0,
+      "# Now the web server on my laptop is exposed via the Kubernetes cluster:\r\n@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+    ],
+    [
+      2.0,
+      "curl -s http://104.197.103.123:30022/demo.txt\r\n"
+    ],
+    [
+      0.235116,
+      "127.0.0.1 - - [26/Apr/2017 14:01:01] \"GET /demo.txt HTTP/1.1\" 200 -\r\n"
+    ],
+    [
+      0.059496,
+      "hello from my laptop\r\n"
+    ],
+    [
+      0.000802,
+      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+    ],
+    [
+      2.0,
+      "# Remember that nginx service I started? I can access it from my local shell:\r\n"
+    ],
+    [
+      0.000166,
+      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+    ],
+    [
+      2.0,
+      "curl -s http://mynginx | grep title\r\n"
+    ],
+    [
+      0.501961,
+      "<title>Welcome to nginx!</title>\r\n"
+    ],
+    [
+      0.003438,
+      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+    ],
+    [
+      2.0,
+      "# I have access to the environment variables from the remote Kubernetes pods:\r\n@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+    ],
+    [
+      2.0,
+      "curl -s http://$MYNGINX_SERVICE_HOST | grep title\r\n"
+    ],
+    [
+      0.216231,
+      "<title>Welcome to nginx!</title>\r\n"
+    ],
+    [
+      0.001812,
+      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+    ],
+    [
+      2.0,
+      "# And there's even support for volumes! For more info visit http://telepresence.io\r\n"
+    ],
+    [
+      5.4e-05,
+      "@gke_datawireio_us-central1-a_telepresence-testing|devlaptop$ "
+    ],
+    [
+      1.559696,
+      "exit\r\nexit\r\n"
+    ],
+    [
+      0.101717,
+      "devlaptop$ "
+    ],
+    [
+      2.0,
+      "exit\r\n"
+    ]
+  ]
+}

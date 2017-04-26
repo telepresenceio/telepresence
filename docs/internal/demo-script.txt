@@ -1,0 +1,20 @@
+# Let's say I have an nginx server running in Kubernetes:
+kubectl run --expose --port 80 mynginx --image=nginx
+# I'll start a Telepresence proxy in the Kubernetes cluster:
+kubectl run --port 8080 myserver --image=datawire/telepresence-k8s:0.41
+# I'll expose it to the Internet:
+kubectl expose deployment myserver --type=LoadBalancer --name=myserver
+# Next, I'll start a shell session whose contents will be proxied to Kubernetes:
+telepresence --deployment myserver --expose 8080 --run-shell
+# I will start a local web server on port 8080:
+echo "hello from my laptop" > demo.txt
+python3 -m http.server 8080 > /dev/null &
+# Now let's find out the external IP for our service:
+kubectl get service myserver,
+# Now the web server on my laptop is exposed via the Kubernetes cluster:
+curl http:///demo.txt
+# Remember that nginx service I started? I can access it from my local shell:
+curl -s http://mynginx | grep title
+# I have access to the environment variables from the remote Kubernetes pods:
+curl -s http://$MYNGINX_SERVICE_HOST | grep title
+# And there's even support for volumes! For more info visit http://telepresence.io
