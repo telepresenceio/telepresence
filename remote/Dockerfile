@@ -26,4 +26,4 @@ COPY . /usr/src/app
 ENV TELEPRESENCE_PROXY=1
 
 CMD /usr/sbin/sshd -f /etc/ssh/sshd_config && \
-    env PYTHONPATH=/usr/src/app twistd -n -y ./forwarder.py
+    exec env PYTHONPATH=/usr/src/app twistd -n -y ./forwarder.py
