@@ -16,7 +16,7 @@
     ],
     [
       1.0,
-      "# Let's say I have an nginx server running in Kubernetes:\r\n"
+      "\u001b[01;34m# Let's say I have an nginx server running in Kubernetes:\r\n\u001b[00m"
     ],
     [
         0.1,
@@ -40,7 +40,7 @@
     ],
     [
       1.317081,
-      "# I'll start a Telepresence proxy in the Kubernetes cluster:\r\n\u001b[01;32mdevlaptop$\u001b[00m "
+      "\u001b[01;34m# I'll start a Telepresence proxy in the Kubernetes cluster:\r\n\u001b[00m\u001b[01;32mdevlaptop$\u001b[00m "
     ],
     [
       3.0,
@@ -56,7 +56,7 @@
     ],
     [
       1.606491,
-      "# I'll expose it to the Internet:\r\n"
+      "\u001b[01;34m# I'll expose it to the Internet:\r\n\u001b[00m"
     ],
     [
       0.000132,
@@ -76,7 +76,7 @@
     ],
     [
       3.0,
-      "# Next, I'll start a shell session whose contents will be proxied to Kubernetes:\r\n"
+      "\u001b[01;34m# Next, I'll start a shell session whose contents will be proxied to Kubernetes:\r\n\u001b[00m"
     ],
     [
       2.4e-05,
@@ -96,7 +96,7 @@
     ],
     [
       1.0,
-      "# I will start a local web server on port 8080:\r\n"
+      "\u001b[01;34m# I will start a local web server on port 8080:\r\n\u001b[00m"
     ],
     [
       6.4e-05,
@@ -128,7 +128,7 @@
     ],
     [
       3.0,
-      "# Now let's find out the external IP for our service:\r\n"
+      "\u001b[01;34m# Now let's find out the external IP for our service:\r\n\u001b[00m"
     ],
     [
       0.000164,
@@ -152,7 +152,7 @@
     ],
     [
       3.0,
-        "# The web server on my laptop is exposed via the Kubernetes cluster:\r\n"
+        "\u001b[01;34m# The web server on my laptop is exposed via the Kubernetes cluster:\r\n\u001b[00m"
     ],
       [
           0.01,
@@ -172,7 +172,7 @@
     ],
     [
       3.0,
-      "# I can also transparently connect from my laptop to Services in the cluster:\r\n"
+      "\u001b[01;34m# I can also transparently connect from my laptop to Services in the cluster:\r\n\u001b[00m"
     ],
     [
       0.000166,
@@ -192,7 +192,7 @@
     ],
     [
       3.0,
-      "# I have access to the same environment variables as the real Kubernetes pod:\r\n\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
+      "\u001b[01;34m# I have access to the same environment variables as the real Kubernetes pod:\r\n\u001b[00m\u001b[01;32m@gke_cluster|devlaptop$\u001b[00m "
     ],
     [
       3.0,
@@ -208,7 +208,7 @@
     ],
     [
       3.0,
-      "# And there's even support for volumes! For more info visit http://telepresence.io\r\n"
+      "\u001b[01;34m# And there's even support for volumes! For more info visit http://telepresence.io\r\n\u001b[00m"
     ]
   ]
 }
