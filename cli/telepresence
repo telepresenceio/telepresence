@@ -854,6 +854,8 @@ def main():
                                                                    ["--help"]):
             ask_for_feedback()
         raise
+    if args.logfile != "-":
+        args.logfile = os.path.abspath(args.logfile)
 
     runner = Runner.open(args.logfile)
 

@@ -5,6 +5,13 @@ title: "Changelog"
 categories: additional-information
 ---
 
+#### 0.42 (unreleased)
+
+Bug fixes:
+
+* Log files are written to original path, not wherever you happen to `cd` to.
+  ([#120](https://github.com/datawire/telepresence/issues/120))
+
 #### 0.41 (April 26, 2017)
 
 Features:
