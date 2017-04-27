@@ -94,11 +94,13 @@ class Runner(object):
             **kwargs
         )
 
-    def get_output(self, *args, **kwargs):
+    def get_output(self, *args, stderr=None, **kwargs):
         """Return (stripped) command result as unicode string."""
+        if stderr is None:
+            stderr = self.logfile
         self.write("Running: {}\n".format(args))
         return unicode(
-            check_output(*args, stdin=DEVNULL, stderr=self.logfile,
+            check_output(*args, stdin=DEVNULL, stderr=stderr,
                          **kwargs).strip(), "utf-8"
         )
 
@@ -224,9 +226,13 @@ class RemoteInfo(object):
         self.pod_name = pod_name
         self.deployment_config = deployment_config
         cs = deployment_config["spec"]["template"]["spec"]["containers"]
-        self.container_config = [
-            c for c in cs if "telepresence-k8s" in c["image"]
-        ][0]
+        containers = [c for c in cs if "telepresence-k8s" in c["image"]]
+        if not containers:
+            raise SystemExit(
+                "Could not find container with image "
+                "'datawire/telepresence-k8s' in pod {}.".format(pod_name)
+            )
+        self.container_config = containers[0]
         self.container_name = self.container_config["name"]
 
     def remote_telepresence_version(self):
@@ -303,20 +309,28 @@ def get_env_variables(runner, remote_info, context):
 
 def get_remote_info(runner, deployment_name, context, namespace):
     """Given the deployment name, return a RemoteInfo object."""
-    deployment = json.loads(
-        runner.get_output(
-            kubectl(
-                context, namespace, [
-                    "get",
-                    "deployment",
-                    "-o",
-                    "json",
-                    deployment_name,
-                    "--export",
-                ]
+    try:
+        deployment = json.loads(
+            runner.get_output(
+                kubectl(
+                    context, namespace, [
+                        "get",
+                        "deployment",
+                        "-o",
+                        "json",
+                        deployment_name,
+                        "--export",
+                    ]
+                ),
+                stderr=STDOUT
             )
         )
-    )
+    except CalledProcessError as e:
+        raise SystemExit(
+            "Failed to find Deployment '{}': {}".
+            format(deployment_name, str(e.stdout, "utf-8"))
+        )
+
     expected_metadata = deployment["spec"]["template"]["metadata"]
     runner.write("Expected metadata for pods: {}\n".format(expected_metadata))
     pods = json.loads(
