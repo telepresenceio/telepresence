@@ -18,6 +18,21 @@ permalink: /
 </div>
 
 <div class="container">
+  <h5>
+  <ul class="fa-ul">
+  <li><i class="fa-li fa fa-fighter-jet"></i><strong>Fast development:</strong> no more waiting for your whole deployment pipeline to finish just to try a small change!</li>
+  <li><i class="fa-li fa fa-wrench"></i><strong>Use your own tools:</strong> edit and run your code locally, just as you would any other application.</li>
+  <li><i class="fa-li fa fa-magic"></i><strong>Realistic environment:</strong>
+    transparent access to a remote Kubernetes environment, including other microservices and cloud resources like AWS RDS. Your code can also read the same enviornment variables and volumes a normal Kubernetes pod would have.</li>
+  </ul></h5>
+</div>
+
+<div class="container">
+  <h5><br><strong>How it works:</strong><br>Telepresence substitutes a proxy image for your normal container in the Kubernetes cluster. Your local code gets transparent access to the Kubernetes network by using <a href="https://www.datawire.io/code-injection-on-linux-and-macos/">LD_PRELOAD</a> to hijack TCP connections and reroute them through that proxy pod, bootstrapping off of <tt>kubectl port-forward</tt>. Volumes are proxied using <tt>sshfs</tt>.</h5>
+</div>
+
+<div class="container">
+  <h5></h5>
   <center><script type="text/javascript" src="https://asciinema.org/a/117761.js" id="asciicast-117761" async></script></center>
 
 </div>
