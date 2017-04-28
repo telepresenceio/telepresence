@@ -23,11 +23,17 @@
                   {% endif %}
 
                 {%else%}
-                    <a class="item" href="{{site.baseurl}}{{ p.url }}">{{ p.title }}</a>
-                {% endif %}
-              {% endif %}
-            {% endfor %}
-        {% endfor %}
+                      <a class="item" href="{{site.baseurl}}{{ p.url }}">{{ p.title }}</a>
+                      {% endif %}
+                      {% endif %}
+                      {% endfor %}
+                      {% endfor %}
+    </div>{% endfor %}
+    <div class="items">
+      <div class="icon item header">
+        <i class="fa fa-external-link"></i>EXTERNAL LINKS
+      </div>
+      <a class="item" href="https://cloud.google.com/community/tutorials/developing-services-with-k8s">Telepresence on GCE</a>
+      <a class="item" href="https://www.datawire.io/guide/deployment/development-environments-microservices/">Microservice development environments</a>
     </div>
-    {% endfor %}
 </nav>
