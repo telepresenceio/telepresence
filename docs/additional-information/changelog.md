@@ -9,6 +9,8 @@ categories: additional-information
 
 Bug fixes:
 
+* `~/.bashrc` is no longer loaded by the Telepresence shell, to ensure it doesn't break when e.g. `kubectl` is run there. Thanks to discopalevo for the bug report.
+  ([#126](https://github.com/datawire/telepresence/issues/126))
 * Log files are written to original path, not wherever you happen to `cd` to.
   ([#120](https://github.com/datawire/telepresence/issues/120))
 
