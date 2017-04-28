@@ -1,3 +1,6 @@
+gems:
+  - jekyll-redirect-from
+
 title: Telepresence
 email: itamar@telepresence.io
 author: "Datawire.io"
@@ -12,13 +15,12 @@ github_username:  datawire
 # use this to define the categories of your documentation
 category-list:
   - "about"
-  - "getting-started"
   - "user-guide"
   - "additional-information"
 
 # optionally you can define icon for each category (for the sidebar)
 # Doc42 uses Font Awesome
-category-icons: [question-circle, play, code, expand]
+category-icons: [question-circle, code, expand]
 
 # Build settings
 markdown: kramdown

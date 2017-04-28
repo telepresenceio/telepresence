@@ -1,6 +1,6 @@
 ---
 layout: doc
-weight: 2
+weight: 3
 title: "Limitations and Workarounds"
 categories: user-guide
 ---
