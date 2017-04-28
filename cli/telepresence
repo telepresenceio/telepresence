@@ -680,7 +680,10 @@ def run_local_command(
         env["PATH"] = sip_workaround()
     mount_dir, mounted = mount_remote_volumes(runner, remote_info, ssh_port)
     env["TELEPRESENCE_ROOT"] = mount_dir
-    p = Popen(["torsocks", "bash"], env=env)
+    # We skip .bashrc since it might e.g. have kubectl running to get bash
+    # autocomplete, and Go programs don't like DYLD on macOS at least (see
+    # https://github.com/datawire/telepresence/issues/125).
+    p = Popen(["torsocks", "bash", "--norc"], env=env)
 
     def terminate_if_alive():
         runner.write("Shutting down local shell...\n")
