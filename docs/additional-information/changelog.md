@@ -13,6 +13,8 @@ Bug fixes:
   ([#126](https://github.com/datawire/telepresence/issues/126))
 * Log files are written to original path, not wherever you happen to `cd` to.
   ([#120](https://github.com/datawire/telepresence/issues/120))
+* Better error messages when a custom Deployment is missing or misconfigured.
+  ([#121](https://github.com/datawire/telepresence/issues/121))
 
 #### 0.41 (April 26, 2017)
 
