@@ -1,11 +1,11 @@
 ---
 layout: doc
-weight: 1
+weight: 2
 title: "Features and Functionality"
 categories: user-guide
 ---
 
-If you haven't read the Quickstart yet you should [start by reading that first](/getting-started/quickstart.html).
+If you haven't read the Getting Started guide yet you should [read that first](/user-guide/getting-started.html).
 
 ### Using existing Deployments
 

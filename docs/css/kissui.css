@@ -451,12 +451,16 @@ input[type="submit"]:focus, input[type="reset"]:focus, input[type="button"]:focu
 
 .button.primary {
   color: #fff;
-  background-color: #33c3f0;
-  border-color: #33c3f0; }
+  background-color: #ff5367;
+  border-color: #ff5367;
+  text-shadow:
+    -1px 1px 0 #cf0019,
+     1px 1px 0 #cf0019;
+}
   .button.primary:hover, .button.primary:focus {
     color: #fff;
-    background-color: #1eaedb;
-    border-color: #1eaedb; }
+    background-color: #cf0019;
+    border-color: #cf0019; }
 
 button .button.primary {
   color: #fff;

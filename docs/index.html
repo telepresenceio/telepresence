@@ -6,41 +6,38 @@ permalink: /
 
 <header class="hero">
   <div class="logo">
-  <img src="{{site.baseurl}}/images/logo.png" style="width: 100px;">
-  <h4>&nbsp; Telepresence: Local development against a remote Kubernetes cluster</h4>
+  <img src="{{site.baseurl}}/images/logo.png" style="width: 200px;">
+  <h3>Telepresence</h3>
+  <h4>Fast, realistic local development for Kubernetes microservices</h4>
   </div>
 </header>
 
 <div class="container">
-  <p>Have you ever wanted the quick development cycle of local code while still having your code run within a remote Kubernetes cluster?
-    <b>Telepresence allows you to develop locally, running your code on your machine, while still making your code appear as if it is running in Kubernetes.</b></p>
-
-  <p>That includes <b>transparent access to the remote network</b>, environment variables that match the remote Pod, and even access to Kubernetes volumes.</p>
-
-  <p style="text-align: center;">Telepresence is sponsored by Project Blackbird, helping you <a href="https://datawire.io">deploy microservices on Kubernetes in AWS</a> <img src="{{site.baseurl}}/images/blackbird.png" style="width: 4em; vertical-align: middle; align: right;"></p>
+  <center><a class="button primary" href="/user-guide/getting-started.html"><span style="font-size: 200%;">Get started</span></a></center>
+  <br><br>
 </div>
 
 <div class="container">
-  {% for cat in site.category-list %}
-  <div class="four wide columns  basic vertical menu">
-    <div class="items">
-        <div class="icon item header">
-            <i class="fa fa-{{site.category-icons[forloop.index0]}}"></i>{{ cat | replace: "-", " " }}
-        </div>
-        {% assign pages = site.pages | sort:"weight"  %}
-
-        {% for p in pages %}
-            {% for pc in p.categories %}
-              {% if pc == cat %}
-        <a class="item" href="{{site.baseurl}}{{ p.url }}">{{ p.title }}</a>
-        {% endif %}
-        {% endfor %}
-        {% endfor %}
-    </div>
-    </div>
-    {% endfor %}
+  <h5>
+  <ul class="fa-ul">
+  <li><i class="fa-li fa fa-fighter-jet"></i><strong>Fast development:</strong> no more waiting for your whole deployment pipeline to finish just to try a small change!</li>
+  <li><i class="fa-li fa fa-wrench"></i><strong>Use your own tools:</strong> edit and run your code locally, just as you would any other application.</li>
+  <li><i class="fa-li fa fa-magic"></i><strong>Realistic environment:</strong>
+    transparent access to a remote Kubernetes environment, including other microservices and cloud resources like AWS RDS. Your code can also read the same enviornment variables and volumes a normal Kubernetes pod would have.</li>
+  </ul></h5>
 </div>
+
 <div class="container">
+  <h5><br><strong>How it works:</strong><br>Telepresence substitutes a proxy image for your normal container in the Kubernetes cluster. Your local code gets transparent access to the Kubernetes network by using <a href="https://www.datawire.io/code-injection-on-linux-and-macos/">LD_PRELOAD</a> to hijack TCP connections and reroute them through that proxy pod, bootstrapping off of <tt>kubectl port-forward</tt>. Volumes are proxied using <tt>sshfs</tt>.</h5>
+</div>
+
+<div class="container">
+  <h5></h5>
   <center><script type="text/javascript" src="https://asciinema.org/a/117761.js" id="asciicast-117761" async></script></center>
 
+</div>
+
+
+<div class="container">
+  <p style="text-align: center;">Telepresence is sponsored by Project Blackbird, helping you <a href="https://datawire.io">deploy microservices on Kubernetes in AWS</a> <img src="{{site.baseurl}}/images/blackbird.png" style="width: 4em; vertical-align: middle; align: right;"></p>
 </div>
