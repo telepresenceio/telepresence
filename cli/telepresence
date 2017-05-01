@@ -414,21 +414,23 @@ def ssh(runner, ssh_port, args):
 
 
 def wait_for_ssh(runner, ssh_port):
-    for i in range(30):
+    start = time()
+    while time() - start < 30:
         try:
             runner.check_call([
                 "ssh", "-q", "-p", str(ssh_port), "-oStrictHostKeyChecking=no",
                 "-oUserKnownHostsFile=/dev/null", "root@localhost", "/bin/true"
             ])
         except CalledProcessError:
-            sleep(1)
+            sleep(0.25)
         else:
             return
     raise RuntimeError("SSH isn't starting.")
 
 
 def wait_for_pod(runner, remote_info, context):
-    for i in range(120):
+    start = time()
+    while time() - start < 120:
         try:
             pod = json.loads(
                 runner.get_output(
@@ -439,7 +441,7 @@ def wait_for_pod(runner, remote_info, context):
                 )
             )
         except CalledProcessError:
-            sleep(1)
+            sleep(0.25)
             continue
         if pod["status"]["phase"] == "Running":
             for container in pod["status"]["containerStatuses"]:
@@ -447,7 +449,7 @@ def wait_for_pod(runner, remote_info, context):
                     container["ready"]
                 ):
                     return
-        sleep(1)
+        sleep(0.25)
     raise RuntimeError(
         "Pod isn't starting or can't be found: {}".format(pod["status"])
     )
@@ -560,10 +562,16 @@ def start_proxy(runner, args):
         args.expose,
         args.context,
     )
-    sleep(5)  # wait for SSH proxies to go live
 
-    # Get the environment variables we want to copy from the remote pod:
-    env = get_env_variables(runner, remote_info, args.context)
+    # Get the environment variables we want to copy from the remote pod; it may
+    # take a few seconds for the SSH proxies to get going:
+    start = time()
+    while time() - 5 < start:
+        try:
+            env = get_env_variables(runner, remote_info, args.context)
+            break
+        except CalledProcessError:
+            sleep(0.25)
 
     return processes, env, socks_port, ssh_port, remote_info
 

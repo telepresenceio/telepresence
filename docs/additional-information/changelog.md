@@ -5,6 +5,12 @@ title: "Changelog"
 categories: additional-information
 ---
 
+#### 0.43 (unreleased)
+
+Features:
+
+* `telepresence` starts up much faster by polling more frequently and reducing unnecessary sleeps.
+
 #### 0.42 (April 28, 2017)
 
 Bug fixes:
