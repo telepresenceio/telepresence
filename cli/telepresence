@@ -566,7 +566,7 @@ def start_proxy(runner, args):
     # Get the environment variables we want to copy from the remote pod; it may
     # take a few seconds for the SSH proxies to get going:
     start = time()
-    while time() - 5 < start:
+    while time() - start < 5:
         try:
             env = get_env_variables(runner, remote_info, args.context)
             break
