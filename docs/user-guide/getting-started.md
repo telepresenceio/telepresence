@@ -124,24 +124,24 @@ HELLOWORLD_SERVICE_PORT=443
 So far you've seen how local processes can access the remote Kubernetes cluster's services.
 
 You can also run a local server that listens on port 8080 and it will be exposed and available inside the Kubernetes cluster.
-Just pass `--expose 8080` to Telepresence so it knows it needs to expose that port to the Kubernetes cluster:
+Just pass `--expose 8080` to Telepresence so it knows it needs to expose that port to the Kubernetes cluster.
+We'll also use `--run` instead of `--run-shell` so we can just run the server directly:
 
 ```console
 host$ echo "hello world" > file.txt
-host$ telepresence --new-deployment quickstart --expose 8080 --run-shell
-@yourcluster|host$ ls
-file.txt
-@yourcluster|host$ python2 -m SimpleHTTPServer 8080
+host$ telepresence --new-deployment quickstart --expose 8080 \
+      --run python3 -m http.server 8080
 Serving HTTP on 0.0.0.0 port 8080 ...
 ```
 
-If you only have Python 3 on your computer you can instead do:
+If you only have Python 2 on your computer you can instead do:
 
 ```console
-@yourcluster|host$ python3 -m http.server 8080
+host$ telepresence --new-deployment quickstart --expose 8080 \
+      --run python2 -m SimpleHTTPServer 8080
 ```
 
-If you leave the `telepresence` process running your code will be accessible from inside the Kubernetes cluster:
+As long as you leave the HTTP server running inside `telepresence` it will be accessible from inside the Kubernetes cluster:
 
 <div class="mermaid">
 graph TD
