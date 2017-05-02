@@ -29,7 +29,7 @@ minikube-test: virtualenv
 	eval $(shell minikube docker-env) && \
 		cd remote && \
 		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
-	kubectl config set-context minikube
+	kubectl config use-context minikube
 	env TELEPRESENCE_VERSION=$(VERSION) ci/test.sh
 
 release: build-remote
