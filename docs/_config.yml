@@ -9,7 +9,7 @@ keywords: "Telepresence, Kubernetes, microservices"
 
 baseurl: ""
 url: "http://telepresence.io" # the base hostname & protocol for your site
-twitter_username: datawire
+twitter_username: datawireio
 github_username:  datawire
 
 # use this to define the categories of your documentation

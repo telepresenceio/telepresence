@@ -160,7 +160,7 @@ class EndToEndTests(TestCase):
             try:
                 result = check_output([
                     'kubectl', 'run', '--attach', random_name(),
-                    '--generator=job/v1', "--quiet", '--rm', '--image=alpine',
+                    "--quiet", '--rm', '--image=alpine',
                     '--restart', 'Never', "--namespace", namespace,
                     '--command', '--', '/bin/sh', '-c',
                     "apk add --no-cache --quiet curl && " +
