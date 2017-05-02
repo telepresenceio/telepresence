@@ -98,14 +98,12 @@ You want to do the following:
 2. Connect specifically to the `servicename-deployment` pod you created above, in case there are multiple Telepresence users in the cluster.
 3. Run a local process in the above setup.
 
-Services `thing1` and `thing2` will be available to your code automatically so no special parameters are needed for them.
-You can do so with the following command line, which uses `--deployment` instead of `--new-deployment` since there is an existing `Deployment` object:
+You can do so with the following command line, which uses `--deployment` to indicate the name of the `Deployment` object whose pod is running `telepresence/datawire-k8e`:
 
 ```console
 $ telepresence --deployment servicename-deployment \
                --expose 8080 \
-               --run-shell
-@yourcluster|$ python servicename.py --port=8080 
+               --run python servicename.py --port=8080 
 ```
 
 > **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
@@ -113,9 +111,64 @@ $ telepresence --deployment servicename-deployment \
 You are now running your own code locally, attaching it to the network stack of the Telepresence client and using the environment variables Telepresence client extracted.
 Your code is connected to the remote Kubernetes cluster.
 
+### Creating a new Deployment
+
+If you just want to create a new `Deployment` running the Telepresence proxy, `telepresence` can do that for you with the `--new-deployment` option:
+
+```console
+$ telepresence --new-deployment example --run-shell
+```
+
+### Access to the Kubernetes network environment
+
+The locally running process wrapped by `telepresence` has access to everything that a normal Kubernetes pod would have access to.
+That means `Service` instances, their corresponding DNS entries, and any cloud resources your could normally access from Kubernetes.
+
+To see this in action, let's start a `Service` and `Deployment` called `"helloworld"` in Kubernetes, and wait until it's up and running.
+We'll check the current Kubernetes context and then start a new pod:
+
+```console
+$ kubectl run --expose helloworld --image=nginx:alpine --port=80
+```
+
+Wait 30 seconds and make sure a new pod is available in `Running` state:
+
+```console
+$ kubectl get pod --selector=run=helloworld
+NAME                          READY     STATUS    RESTARTS   AGE
+helloworld-1333052153-63kkw   1/1       Running   0          33s
+```
+
+Now you can send queries to the new `Service` as if you were running inside Kubernetes:
+
+```console
+$ telepresence --new-deployment quickstart \
+               --run curl http://helloworld.default.svc.cluster.local
+<!DOCTYPE html>
+<html>
+<head>
+<title>Welcome to nginx!</title>
+...
+```
+
+> **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
+
 ### Environment variables
 
-Environment variables set in the `Deployment` pod template (as in the example above) will be available to your local process.
+Environment variables set in the `Deployment` pod template will be available to your local process.
+You also have access to all the environment variables Kubernetes sets automatically.
+For example, here you can see the environment variables that get added for each `Service`:
+
+```console
+$ telepresence --new-deployment example --run env | grep KUBERNETES
+KUBERNETES_PORT=tcp://10.0.0.1:443
+KUBERNETES_SERVICE_PORT=443
+KUBERNETES_PORT_443_TCP_ADDR=10.0.0.1
+KUBERNETES_PORT_443_TCP_PORT=443
+KUBERNETES_PORT_443_TCP_PROTO=tcp
+KUBERNETES_PORT_443_TCP=tcp://10.0.0.1:443
+KUBERNETES_SERVICE_HOST=10.0.0.1
+```
 
 ### Volumes
 

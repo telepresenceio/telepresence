@@ -79,66 +79,54 @@ To get started we'll use `telepresence`'s  `--new-deployment` option, which will
 The client will connect to the remote Kubernetes cluster via that `Deployment`.
 We'll also use the `--run-shell` argument to start a shell that is proxied to the remote Kubernetes cluster.
 
-Let's start a `Service` and `Deployment` in Kubernetes, and wait until it's up and running.
-We'll check the current Kubernetes context and then start a new pod:
+
+### Using Telepresence for the first time
+
+**Important:** Note that starting `telepresence` the first time may take a little while, since Kubernetes needs to download the server-side image.
+
+Telepresence proxies networking from your local process to Kubernetes, as well as environment variables and volumes.
+To begin with, however, we'll try out another feature: Telepresence allows you to forward traffic from Kubernetes to a local process.
+
+Imagine you're developing a local process.
+To simplify the example we'll just use a simple HTTP server:
 
 ```console
-host$ kubectl config current-context
-yourcluster
-host$ kubectl run --expose helloworld --image=nginx:alpine --port=80
-# ... wait 30 seconds, make sure pod is in Running state:
-host$ kubectl get pod --selector=run=helloworld
-NAME                          READY     STATUS    RESTARTS   AGE
-helloworld-1333052153-63kkw   1/1       Running   0          33s
-```
-
-The local process you will run via `telepresence` will get environment variables that match those in the remote deployment, including Kubernetes `Service` addresses.
-It will be able to access these addresses inside Kubernetes, as well as use Kubernetes custom DNS records for `Service` instances.
-
-Note that starting `telepresence` the first time may take a little while, since Kubernetes needs to download the server-side image.
-
-```console
-host$ telepresence --new-deployment quickstart --run-shell
-@yourcluster|host$ env | grep HELLOWORLD_SERVICE
-HELLOWORLD_SERVICE_HOST=10.0.0.3
-HELLOWORLD_SERVICE_PORT=443
-@yourcluster|host$ curl "http://${HELLOWORLD_SERVICE_HOST}:${HELLOWORLD_SERVICE_PORT}/"
-<!DOCTYPE html>
-<html>
-<head>
-<title>Welcome to nginx!</title>
-...
-@yourcluster|host$ curl "http://helloworld:${HELLOWORLD_SERVICE_PORT}/"
-<!DOCTYPE html>
-<html>
-<head>
-<title>Welcome to nginx!</title>
-...
-@yourcluster|host$ exit
-```
-
-> **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
-
-### Proxying from Kubernetes to your local process
-
-So far you've seen how local processes can access the remote Kubernetes cluster's services.
-
-You can also run a local server that listens on port 8080 and it will be exposed and available inside the Kubernetes cluster.
-Just pass `--expose 8080` to Telepresence so it knows it needs to expose that port to the Kubernetes cluster.
-We'll also use `--run` instead of `--run-shell` so we can just run the server directly:
-
-```console
-host$ echo "hello world" > file.txt
-host$ telepresence --new-deployment quickstart --expose 8080 \
-      --run python3 -m http.server 8080
-Serving HTTP on 0.0.0.0 port 8080 ...
+$ echo "hello from your laptop" > file.txt
+$ python3 -m http.server 8081 &
+[1] 2324
+$ curl http://localhost:8081/file.txt
+hello from your laptop
+$ kill %1
 ```
 
 If you only have Python 2 on your computer you can instead do:
 
 ```console
-host$ telepresence --new-deployment quickstart --expose 8080 \
-      --run python2 -m SimpleHTTPServer 8080
+$ python2 -m SimpleHTTPServer 8080 &
+```
+
+We want to expose this local process so that it gets traffic from Kubernetes.
+To do so we need to:
+
+1. Run a Telepresence proxy pod in the remote cluster.
+2. Start up the local `telepresence` CLI on your local machine, telling it to run the web server.
+
+First, let's start the Telepresence proxy:
+
+```console
+$ kubectl run --port 8080 myserver --image=datawire/telepresence-k8s:{{ data.version.version }}
+```
+
+Then we'll expose it to the Internet:
+
+```console
+$ kubectl expose deployment myserver --type=LoadBalancer --name=myserver
+```
+
+And now we run the local Telepresence client:
+
+```console
+$ telepresence --deployment myserver --run python3 -m http.server 8080 &
 ```
 
 As long as you leave the HTTP server running inside `telepresence` it will be accessible from inside the Kubernetes cluster:
@@ -153,12 +141,30 @@ graph TD
   end
 </div>
 
-Let's send a request to the remote pod to demonstrate that.
-In a different terminal we can run a pod on the Kubernetes cluster and see that it can access the code running on your personal computer, via the Telepresence-created `Service` named `quickstart`:
+We can now send queries via the public address of the `Service` we created, and they'll hit the web server running on your laptop:
+
+If your cluster is in the cloud you can find the address of the `Service` like this:
 
 ```console
-$ kubectl run --attach -i -t test --generator=job/v1 --rm \
-          --image=busybox --restart Never --command /bin/sh
-k8s-pod# wget -qO- http://quickstart.default.svc.cluster.local:8080/file.txt
-hello world
+$ kubectl get service myserver
+NAME       CLUSTER-IP     EXTERNAL-IP       PORT(S)          AGE
+myserver   10.3.242.226   104.197.103.123   8080:30022/TCP   5d
 ```
+
+In this case it's `http://104.197.103.123:30022`.
+
+On `minikube` you should instead do:
+
+```console
+$ minikube service list | grep myserver
+| default     | myserver             | http://192.168.99.100:30994 |
+```
+
+Once you know the address you can send it a query and it will get routed to your locally running server:
+
+```console
+$ curl http://104.197.103.13:30022/file.txt
+hello from your laptop
+```
+
+Telepresence can do much more than this, of course, which we'll cover in the [next section](/user-guide/features-and-functionality/) of the documentation.
