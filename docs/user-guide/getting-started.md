@@ -75,9 +75,9 @@ Don't see your favorite platform?
 We'll start out by using Telepresence with a newly created Kubernetes `Deployment`, just so it's clearer what is going on.
 In the next section we'll discuss using Telepresence with an existing `Deployment` - you can [skip ahead](#using-existing-deployments) if you want.
 
-To get started we'll use `telepresence --new-deployment quickstart` to create a new `Deployment` and matching `Service`.
+To get started we'll use `telepresence`'s  `--new-deployment` option, which will create a new `Deployment` and matching `Service`.
 The client will connect to the remote Kubernetes cluster via that `Deployment`.
-You'll then use the `--run-shell` argument to start a shell that is proxied to the remote Kubernetes cluster.
+We'll also use the `--run-shell` argument to start a shell that is proxied to the remote Kubernetes cluster.
 
 Let's start a `Service` and `Deployment` in Kubernetes, and wait until it's up and running.
 We'll check the current Kubernetes context and then start a new pod:
