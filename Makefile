@@ -1,4 +1,4 @@
-.PHONY: default build-remote bumpversion release minikube-test
+.PHONY: default build-remote bumpversion release minikube-test build-remote-minikube
 
 VERSION=$(shell git describe --tags)
 
@@ -23,12 +23,14 @@ bumpversion: virtualenv
 	virtualenv/bin/bumpversion --verbose --list minor
 	@echo "Please run: git push origin master --tags"
 
-# Run tests in minikube:
-minikube-test: virtualenv
-	@echo "IMPORTANT: this will change kubectl context to minikube!\n\n"
+build-remote-minikube:
 	eval $(shell minikube docker-env) && \
 		cd remote && \
 		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
+
+# Run tests in minikube:
+minikube-test: virtualenv
+	@echo "IMPORTANT: this will change kubectl context to minikube!\n\n"
 	kubectl config use-context minikube
 	env TELEPRESENCE_VERSION=$(VERSION) ci/test.sh
 
