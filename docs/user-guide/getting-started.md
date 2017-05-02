@@ -70,24 +70,13 @@ Don't see your favorite platform?
 [Let us know](https://github.com/datawire/telepresence/issues/new) and we'll try to add it. 
 
 
-### Proxying from your local process to Kubernetes
-
-We'll start out by using Telepresence with a newly created Kubernetes `Deployment`, just so it's clearer what is going on.
-In the next section we'll discuss using Telepresence with an existing `Deployment` - you can [skip ahead](#using-existing-deployments) if you want.
-
-To get started we'll use `telepresence`'s  `--new-deployment` option, which will create a new `Deployment` and matching `Service`.
-The client will connect to the remote Kubernetes cluster via that `Deployment`.
-We'll also use the `--run-shell` argument to start a shell that is proxied to the remote Kubernetes cluster.
-
-
 ### Using Telepresence for the first time
 
 **Important:** Note that starting `telepresence` the first time may take a little while, since Kubernetes needs to download the server-side image.
 
-Telepresence proxies networking from your local process to Kubernetes, as well as environment variables and volumes.
-To begin with, however, we'll try out another feature: Telepresence allows you to forward traffic from Kubernetes to a local process.
+We'll start by trying out one specific feature: Telepresence allows you to forward traffic from Kubernetes to a local process.
 
-Imagine you're developing a local process.
+Imagine you're developing a service locally.
 To simplify the example we'll just use a simple HTTP server:
 
 ```console
@@ -99,12 +88,6 @@ hello from your laptop
 $ kill %1
 ```
 
-If you only have Python 2 on your computer you can instead do:
-
-```console
-$ python2 -m SimpleHTTPServer 8080 &
-```
-
 We want to expose this local process so that it gets traffic from Kubernetes.
 To do so we need to:
 
@@ -114,7 +97,7 @@ To do so we need to:
 First, let's start the Telepresence proxy:
 
 ```console
-$ kubectl run --port 8080 myserver --image=datawire/telepresence-k8s:{{ data.version.version }}
+$ kubectl run --port 8080 myserver --image=datawire/telepresence-k8s:{{ site.data.version.version }}
 ```
 
 Then we'll expose it to the Internet:
@@ -123,10 +106,15 @@ Then we'll expose it to the Internet:
 $ kubectl expose deployment myserver --type=LoadBalancer --name=myserver
 ```
 
-And now we run the local Telepresence client:
+**Important:** you're about to expose a web server on your laptop to the Internet.
+This is pretty cool, but also pretty dangerous!
+Make sure there are no files in the current directory that you don't want shared with the whole world.
+
+We run the local Telepresence client:
 
 ```console
-$ telepresence --deployment myserver --run python3 -m http.server 8080 &
+$ telepresence --deployment myserver --expose 8080 \
+  --run python3 -m http.server 8080 &
 ```
 
 As long as you leave the HTTP server running inside `telepresence` it will be accessible from inside the Kubernetes cluster:
@@ -151,13 +139,14 @@ NAME       CLUSTER-IP     EXTERNAL-IP       PORT(S)          AGE
 myserver   10.3.242.226   104.197.103.123   8080:30022/TCP   5d
 ```
 
-In this case it's `http://104.197.103.123:30022`.
+If you see `<pending>` under EXTERNAL-IP wait a few seconds and try again.
+In this case the `Service` is exposed at `http://104.197.103.123:30022`.
 
 On `minikube` you should instead do:
 
 ```console
-$ minikube service list | grep myserver
-| default     | myserver             | http://192.168.99.100:30994 |
+$ minikube service --url myserver
+http://192.168.99.100:30994
 ```
 
 Once you know the address you can send it a query and it will get routed to your locally running server:
@@ -165,6 +154,12 @@ Once you know the address you can send it a query and it will get routed to your
 ```console
 $ curl http://104.197.103.13:30022/file.txt
 hello from your laptop
+```
+
+Finally, let's kill Telepresence locally so you don't have to worry about security:
+
+```console
+$ killall telepresence
 ```
 
 Telepresence can do much more than this, of course, which we'll cover in the [next section](/user-guide/features-and-functionality/) of the documentation.
