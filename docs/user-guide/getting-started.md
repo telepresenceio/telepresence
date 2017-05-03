@@ -80,6 +80,8 @@ Imagine you're developing a service locally.
 To simplify the example we'll just use a simple HTTP server:
 
 ```console
+$ mkdir /tmp/telepresence-test
+$ cd /tmp/telepresence-test
 $ echo "hello from your laptop" > file.txt
 $ python3 -m http.server 8081 &
 [1] 2324
@@ -97,13 +99,15 @@ To do so we need to:
 First, let's start the Telepresence proxy:
 
 ```console
-$ kubectl run --port 8080 myserver --image=datawire/telepresence-k8s:{{ site.data.version.version }}
+$ kubectl run --port 8080 myserver \
+  --image=datawire/telepresence-k8s:{{ site.data.version.version }}
 ```
 
 Then we'll expose it to the Internet:
 
 ```console
-$ kubectl expose deployment myserver --type=LoadBalancer --name=myserver
+$ kubectl expose deployment myserver \
+  --type=LoadBalancer --name=myserver
 ```
 
 **Important:** you're about to expose a web server on your laptop to the Internet.
@@ -140,26 +144,29 @@ myserver   10.3.242.226   104.197.103.123   8080:30022/TCP   5d
 ```
 
 If you see `<pending>` under EXTERNAL-IP wait a few seconds and try again.
-In this case the `Service` is exposed at `http://104.197.103.123:30022`.
+In this case the `Service` is exposed at `http://104.197.103.123:8080/`.
 
-On `minikube` you should instead do:
+On `minikube` you should instead do this to find the URL:
 
 ```console
 $ minikube service --url myserver
-http://192.168.99.100:30994
+http://192.168.99.100:12345/
 ```
 
 Once you know the address you can send it a query and it will get routed to your locally running server:
 
 ```console
-$ curl http://104.197.103.13:30022/file.txt
+$ curl http://104.197.103.13:8080/file.txt
 hello from your laptop
 ```
 
-Finally, let's kill Telepresence locally so you don't have to worry about security:
+Finally, let's kill Telepresence locally so you don't have to worry about other people accessing your local web server:
 
 ```console
-$ killall telepresence
+$ fg
+telepresence --deployment myserver --expose 8080 --run python3 -m http.server 8080
+^C
+Keyboard interrupt received, exiting.
 ```
 
 Telepresence can do much more than this, of course, which we'll cover in the [next section](/user-guide/features-and-functionality/) of the documentation.
