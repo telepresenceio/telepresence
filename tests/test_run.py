@@ -85,6 +85,20 @@ class EndToEndTests(TestCase):
     End-to-end tests.
     """
 
+    def test_run_directly(self):
+        """--run runs the command directly."""
+        nginx_name = run_nginx("default")
+        p = Popen(
+            args=[
+                "telepresence", "--new-deployment", random_name(),
+                "--logfile", "-", "--run", "python3", "tocluster.py",
+                nginx_name, "default"
+            ],
+            cwd=str(DIRECTORY),
+        )
+        exit_code = p.wait()
+        assert exit_code == 113
+
     def create_namespace(self):
         """Create a new namespace, return its name."""
         name = random_name()
@@ -159,11 +173,10 @@ class EndToEndTests(TestCase):
         for i in range(120):
             try:
                 result = check_output([
-                    'kubectl', 'run', '--attach', random_name(),
-                    "--quiet", '--rm', '--image=alpine',
-                    '--restart', 'Never', "--namespace", namespace,
-                    '--command', '--', '/bin/sh', '-c',
-                    "apk add --no-cache --quiet curl && " +
+                    'kubectl', 'run', '--attach', random_name(), "--quiet",
+                    '--rm', '--image=alpine', '--restart', 'Never',
+                    "--namespace", namespace, '--command', '--', '/bin/sh',
+                    '-c', "apk add --no-cache --quiet curl && " +
                     "curl --silent http://{}:{}/__init__.py".format(url, port)
                 ])
                 assert result == (DIRECTORY / "__init__.py").read_bytes()

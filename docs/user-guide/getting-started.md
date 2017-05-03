@@ -75,9 +75,9 @@ Don't see your favorite platform?
 We'll start out by using Telepresence with a newly created Kubernetes `Deployment`, just so it's clearer what is going on.
 In the next section we'll discuss using Telepresence with an existing `Deployment` - you can [skip ahead](#using-existing-deployments) if you want.
 
-To get started we'll use `telepresence --new-deployment quickstart` to create a new `Deployment` and matching `Service`.
+To get started we'll use `telepresence`'s  `--new-deployment` option, which will create a new `Deployment` and matching `Service`.
 The client will connect to the remote Kubernetes cluster via that `Deployment`.
-You'll then use the `--run-shell` argument to start a shell that is proxied to the remote Kubernetes cluster.
+We'll also use the `--run-shell` argument to start a shell that is proxied to the remote Kubernetes cluster.
 
 Let's start a `Service` and `Deployment` in Kubernetes, and wait until it's up and running.
 We'll check the current Kubernetes context and then start a new pod:
@@ -124,24 +124,24 @@ HELLOWORLD_SERVICE_PORT=443
 So far you've seen how local processes can access the remote Kubernetes cluster's services.
 
 You can also run a local server that listens on port 8080 and it will be exposed and available inside the Kubernetes cluster.
-Just pass `--expose 8080` to Telepresence so it knows it needs to expose that port to the Kubernetes cluster:
+Just pass `--expose 8080` to Telepresence so it knows it needs to expose that port to the Kubernetes cluster.
+We'll also use `--run` instead of `--run-shell` so we can just run the server directly:
 
 ```console
 host$ echo "hello world" > file.txt
-host$ telepresence --new-deployment quickstart --expose 8080 --run-shell
-@yourcluster|host$ ls
-file.txt
-@yourcluster|host$ python2 -m SimpleHTTPServer 8080
+host$ telepresence --new-deployment quickstart --expose 8080 \
+      --run python3 -m http.server 8080
 Serving HTTP on 0.0.0.0 port 8080 ...
 ```
 
-If you only have Python 3 on your computer you can instead do:
+If you only have Python 2 on your computer you can instead do:
 
 ```console
-@yourcluster|host$ python3 -m http.server 8080
+host$ telepresence --new-deployment quickstart --expose 8080 \
+      --run python2 -m SimpleHTTPServer 8080
 ```
 
-If you leave the `telepresence` process running your code will be accessible from inside the Kubernetes cluster:
+As long as you leave the HTTP server running inside `telepresence` it will be accessible from inside the Kubernetes cluster:
 
 <div class="mermaid">
 graph TD

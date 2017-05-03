@@ -9,6 +9,7 @@ categories: additional-information
 
 Features:
 
+* `--run` lets you run a command directly as an alternative to running a shell, e.g. `telepresence --new-deployment test --run python3 myapp.py`.
 * `telepresence` starts up much faster by polling more frequently and reducing unnecessary sleeps.
 
 #### 0.42 (April 28, 2017)

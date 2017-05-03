@@ -180,13 +180,20 @@ def parse_args():
             "exposed to Kubernetes."
         )
     )
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         "--run-shell",
         dest="runshell",
         action="store_true",
-        required=True,
         help="Run a local shell that will be proxied to/from Kubernetes.",
     )
+    group.add_argument(
+        "--run",
+        metavar=("COMMAND", "ARG"),
+        dest="run",
+        nargs=argparse.REMAINDER,
+        help=("Run the specified command arguments, e.g. "
+              "'--run python myapp.py'."))
     return parser.parse_args()
 
 
@@ -678,7 +685,7 @@ def run_local_command(
     runner, remote_info, args, env_overrides, subprocesses, socks_port,
     ssh_port
 ):
-    """--run support, run command locally."""
+    """--run-shell/--run support, run command locally."""
     env = os.environ.copy()
     env.update(env_overrides)
     # Create custom torsocks.conf, since some options we want (in particular,
@@ -702,10 +709,14 @@ def run_local_command(
         env["PATH"] = sip_workaround()
     mount_dir, mounted = mount_remote_volumes(runner, remote_info, ssh_port)
     env["TELEPRESENCE_ROOT"] = mount_dir
-    # We skip .bashrc since it might e.g. have kubectl running to get bash
-    # autocomplete, and Go programs don't like DYLD on macOS at least (see
-    # https://github.com/datawire/telepresence/issues/125).
-    p = Popen(["torsocks", "bash", "--norc"], env=env)
+    if args.run is None:
+        # We skip .bashrc since it might e.g. have kubectl running to get bash
+        # autocomplete, and Go programs don't like DYLD on macOS at least (see
+        # https://github.com/datawire/telepresence/issues/125).
+        command = ["bash", "--norc"]
+    else:
+        command = args.run
+    p = Popen(["torsocks"] + command, env=env)
 
     def terminate_if_alive():
         runner.write("Shutting down local shell...\n")
