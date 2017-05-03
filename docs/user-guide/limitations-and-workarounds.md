@@ -18,13 +18,18 @@ Incoming proxying (from Kubernetes) will still work with these binaries.
 
 ### Golang
 
-Programs written with the Go programming language will not work by default, because Go uses a custom system call implementation and has its own DNS resolver.
-Again, this only impacts outgoing connections, incoming connections will still work.
+Programs written with the Go programming language will not work by default.
+
+Go uses a custom system call implementation and has its own DNS resolver.
+This causes connections *to* Kubernetes not to work with the current networking implementation.
+Incoming connections will still work.
 
 To workaround these limitations you can do the following in your development environment (there is no need to change anything for production):
 
 * Use `gccgo` instead of `go build`.
 * Do `export GODEBUG=netdns=cgo` to [force Go to use the standard DNS lookup mechanism](https://golang.org/pkg/net/#hdr-Name_Resolution) rather than its own internal one.
+
+Alternatively, if you only care about incoming connections just run the Go program in another shell in parallel to `telepresence`.
 
 ### Docker containers
 
