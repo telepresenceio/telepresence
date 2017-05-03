@@ -5,7 +5,7 @@ title: "Changelog"
 categories: additional-information
 ---
 
-#### 0.43 (unreleased)
+#### 0.43 (May 3, 2017)
 
 Features:
 
