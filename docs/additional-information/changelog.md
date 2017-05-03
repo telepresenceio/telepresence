@@ -13,6 +13,9 @@ Bug fixes:
    Thanks to Victor Gdalevich for the bug report.
    ([#136](https://github.com/datawire/telepresence/issues/136))
 * `telepresence` automatic bug reporting code is triggered by errors during parsing command line arguments.
+* If namespace was set using `kubectl config set-context` it will no longer cause Telepresence to break.
+  Thanks to spiddy for the bug report.
+  ([#133](https://github.com/datawire/telepresence/issues/133))
 
 #### 0.43 (May 3, 2017)
 
