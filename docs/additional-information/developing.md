@@ -24,3 +24,10 @@ The corresponding commands to run in order are:
 make bumpversion
 git push origin master --tags
 ```
+
+You should also make sure that the changelog is up-to-date with appropriate release date.
+
+
+### Development caveats
+
+Currently docs are published off master, so you can't merge new features to master without immediately doing a release.
