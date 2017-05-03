@@ -5,6 +5,15 @@ title: "Changelog"
 categories: additional-information
 ---
 
+#### 0.44 (unreleased)
+
+Bug fixes:
+
+* `telepresence` fails with a better error if a too-old version of Python is used.
+   Thanks to Victor Gdalevich for the bug report.
+   ([#136](https://github.com/datawire/telepresence/issues/136))
+* `telepresence` automatic bug reporting code is triggered by errors during parsing command line arguments.
+
 #### 0.43 (May 3, 2017)
 
 Features:
