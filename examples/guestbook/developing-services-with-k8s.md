@@ -37,7 +37,7 @@ We're going to want to install the `gcloud` and `kubectl` command line tools. Fo
 We need to install Telepresence, which will proxy your locally running service to GKE.
 
 ```
-% curl -L https://github.com/datawire/telepresence/raw/0.43/cli/telepresence -o telepresence
+% curl -L https://github.com/datawire/telepresence/raw/0.44/cli/telepresence -o telepresence
 % chmod +x telepresence
 ```
 
