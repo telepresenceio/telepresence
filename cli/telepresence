@@ -566,7 +566,7 @@ def connect(
             kubectl(
                 context, remote_info.namespace, [
                     "port-forward", remote_info.pod_name,
-                    "{}:22".format(ssh_port)
+                    "{}:2022".format(ssh_port)
                 ]
             )
         )
