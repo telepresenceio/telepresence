@@ -283,11 +283,11 @@ def parse_args():
 
 def kubectl(context, namespace, args):
     """Return command-line for running kubectl."""
+    assert context is not None
+    assert namespace is not None
     result = ["kubectl"]
-    if context is not None:
-        result.extend(["--context", context])
-    if namespace is not None:
-        result.extend(["--namespace", namespace])
+    result.extend(["--context", context])
+    result.extend(["--namespace", namespace])
     result += args
     return result
 
@@ -400,6 +400,8 @@ def get_env_variables(runner, remote_info, context):
 
 def get_remote_info(runner, deployment_name, context, namespace):
     """Given the deployment name, return a RemoteInfo object."""
+    assert context is not None
+    assert namespace is not None
     try:
         deployment = json.loads(
             runner.get_output(
@@ -449,7 +451,7 @@ def get_remote_info(runner, deployment_name, context, namespace):
         if (name.startswith(deployment_name + "-")
             and
             pod["metadata"]["namespace"] == deployment["metadata"].get(
-                "namespace", namespace or "default")
+                "namespace", namespace)
             and
             phase in (
                 "Pending", "Running"
@@ -610,6 +612,24 @@ def start_proxy(runner, args):
     """Start the kubectl port-forward and SSH clients that do the proxying."""
     if sys.stderr.isatty():
         print("Starting proxy...", file=sys.stderr)
+
+    # Figure out explicit namespace and context:
+    kubectl_config = json.loads(
+        runner.get_output(["kubectl", "config", "view", "-o", "json"]))
+    # First, figure out the context:
+    if args.context is None:
+        # We're using the current context:
+        args.context = kubectl_config["current-context"]
+    # Then, figure out the namespace:
+    if args.namespace is None:
+        # We're using the namespace for the given context, which if unset is
+        # "default".
+        for context_setting in kubectl_config["contexts"]:
+            if context_setting["name"] == args.context:
+                args.namespace = context_setting["context"].get(
+                    "namespace", "default")
+                break
+
     if args.deployment is None:
         # This implies --new-deployment:
         args.deployment = args.new_deployment
