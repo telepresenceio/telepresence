@@ -37,6 +37,37 @@ if os.environ.get("TELEPRESENCE_VERSION") is not None:
     __version__ = os.environ["TELEPRESENCE_VERSION"]
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
+# This is a copy of the file in remote/id_rsa:
+PRIVATE_RSA_KEY = b"""\
+-----BEGIN RSA PRIVATE KEY-----
+MIIEpQIBAAKCAQEA1/PNIB2ldDI7f/zGxpQSBXh5F3gs2xq6XMBGkkwWryqMqfMO
+j96h+FpeYmH+c932gR6XgZLTowsaTqF8M0xO0TQq4wGnX/Q5HMZlAhrq3pLb+Sjv
+6g7JQAooMmh76NimTdeDIqMBQgB4oDd4WyaLqv9Pzv1VaWFixY+Leb8lncN6C6Yb
+riSXT4PaHvf2U6AI7yInPOdGCBHCeYDL2MXSxP84D4E7tWcvLHvgZcnK+bFwDQEZ
+1F8C4VAxXR/VWXO77eLiLZddQl01HZtowjMqJoeZ5Bjvmp6r8kVGj1oOkSQdf9HG
+dKaCQZvbOxzCvvGarrLVXQS+/YT1RCLXCa58UwIDAQABAoIBAQCxOmPY/Juh3evY
+4QHdTP3xQWrXqQffFXNm1WHVhN6FCX2BqHkF96ej475cLaIfQ0WfuBSNAYvw3hbL
++1mr2+8/X/nmbaAIbq1EgUm6TY799TbUqBUlWNcvWGae4AL5GHx7m+gCUBajLTHS
+A1QiMmMjhf7gmCY1ovflvSWxV/8uFhF3UU9XMdEfbUQICTtG0ol5q3P0hL3wb7Xq
+9gR++3s4mlUQIXLRzRii0JsjNC3BWAZ49tkTjumr//iwxqkUnLkWUladC/qidTAa
+XcZzkEpxBN73Wqa4dlVux3ScUuqh3PN0yihnO/RZ9gkF+dH6WMFy6YTKCcDenGcd
+5QrAP5GBAoGBAPnyHB2KgXbeMrHFsYcj4j6kVEafbBUrROwInV1DJ1gqNv7ljKwI
+8zExXjnldUSY3MJgL4j+R/2ImKg2tPJuhyyZGyRuEUJe+0FIxKbJiSh5ZgeIC+fg
+QrV4Z27zOGtAKvd+qep7U/QUlEbb00gzNe5Phzdcpw8kXqLk8tGztuDBAoGBAN0u
+5s7vWLPjH8h8s0SXfT9TyAUfQ+GOQKwuZVTPi2uPD6YYxADKkWyI4c/Q+hTaNDYH
+3+9hgFedDHvB63N7g9CWGafikkburGfYo0ECujCBY1nI6V/+820bJjTrgGJzyGhe
+wIosB9DftOKAo5DKtbhNFqW88AYoo9dECGSx4U4TAoGBALy0HKP0+Q+MbEupDQIR
+hnNyz6nOHOTSmSN20ZAi7iZzILhLCGyuCSV/tzsQ0PtsSWd7BQhxqlpw8Yg2XWCX
+L/js0wArFV69pQZB8S5XA/WJyg0vmoWC2/p0H+s1N8hJVucqOxCr8dNaYiQpPRfK
+ihIU+upCSmJ1O/nRzr2h6BVBAoGAW9CtZTd8BeiBeBMzw4RzLIeV33J0Fjyb4h28
+WLFy+apAX72mF4H/TiOgQUlJlsBhrhAkyFUcFsKNvQ3ptF2QgVTdv5BREnrfPJh0
+ZHdCXQJJAKtjHUNTP3ZmrM8Z00Sm65RxrqnKcM18ZA3sWB2dw6zUeuZsaNIT+Tc3
+mL0yftsCgYEAixjj9vjV2PVaiUdY9oSIN6dGKBDRAo6spdd7scszbiNaMvIulCFt
+tb2kRtUVaxcOGDG3VhGDbmnpH0wzVDvXdEBGzH2LH/7/2LWZ5Zly+iCtdpNa/afC
+vHKsWr/r9LljHBJaIvq2n37uc05T1nv4ca8YPFLLbfz6m58TD+SB/4E=
+-----END RSA PRIVATE KEY-----
+"""
+
 
 def random_name():
     """Return a random name for a container."""
@@ -143,6 +174,7 @@ class Runner(object):
         :param logfile: file-like object to write logs to.
         """
         self.logfile = logfile
+        self.tempdir = mkdtemp()
 
     @classmethod
     def open(cls, logfile_path):
@@ -490,7 +522,9 @@ def ssh(runner, ssh_port, args):
         "ssh",
         # SSH with no warnings:
         "-q",
-        "-i", "/home/itamarst/Datawire/telepresence/remote/id_rsa",
+        # Private key:
+        "-i",
+        runner.tempdir + "/id_rsa",
         # Don't validate host key:
         "-oStrictHostKeyChecking=no",
         # Don't store host key:
@@ -511,7 +545,7 @@ def wait_for_ssh(runner, ssh_port):
         try:
             runner.check_call([
                 "ssh", "-q", "-p", str(ssh_port), "-oStrictHostKeyChecking=no",
-                "-i", "/home/itamarst/Datawire/telepresence/remote/id_rsa",
+                "-i", runner.tempdir + "/id_rsa",
                 "-oUserKnownHostsFile=/dev/null", "main@localhost", "/bin/true"
             ])
         except CalledProcessError:
@@ -740,7 +774,10 @@ def mount_remote_volumes(runner, remote_info, ssh_port):
     try:
         runner.check_call([
             "sshfs",
-            "-o", "IdentityFile=/home/itamarst/Datawire/telepresence/remote/id_rsa",
+            # Private key to use:
+            "-o",
+            "IdentityFile={}/id_rsa".format(runner.tempdir),
+            # Port to use:
             "-p",
             str(ssh_port),
             # Don't validate host key:
@@ -929,9 +966,17 @@ def main():
             runner, "torsocks", "Please install torsocks (v2.1 or later)"
         )
         require_command(runner, "sshfs")
+
+        # Write out the private key for accessing remote SSH server:
+        with open(runner.tempdir + "/id_rsa", "wb") as f:
+            f.write(PRIVATE_RSA_KEY)
+        os.chmod(runner.tempdir + "/id_rsa", 0o600)
+
+        # Start the proxy:
         subprocesses, env, socks_port, ssh_port, remote_info = start_proxy(
             runner, args
         )
+        # Run the local command:
         run_local_command(
             runner, remote_info, args, env, subprocesses, socks_port, ssh_port
         )
