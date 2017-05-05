@@ -13,7 +13,7 @@ Bug fixes:
   This will make support for OpenShift Origin easier, as well as other environments that don't want containers running as root.
   Thanks to Eli Young for the feature request.
 
-#### 0.44 (unreleased)
+#### 0.44 (May 4, 2017)
 
 Bug fixes:
 
@@ -21,6 +21,9 @@ Bug fixes:
    Thanks to Victor Gdalevich for the bug report.
    ([#136](https://github.com/datawire/telepresence/issues/136))
 * `telepresence` automatic bug reporting code is triggered by errors during parsing command line arguments.
+* If namespace was set using `kubectl config set-context` it will no longer cause Telepresence to break.
+  Thanks to spiddy for the bug report.
+  ([#133](https://github.com/datawire/telepresence/issues/133))
 
 #### 0.43 (May 3, 2017)
 
