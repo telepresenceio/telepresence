@@ -490,6 +490,7 @@ def ssh(runner, ssh_port, args):
         "ssh",
         # SSH with no warnings:
         "-q",
+        "-i", "/home/itamarst/Datawire/telepresence/remote/id_rsa",
         # Don't validate host key:
         "-oStrictHostKeyChecking=no",
         # Don't store host key:
@@ -500,7 +501,7 @@ def ssh(runner, ssh_port, args):
         "-N",
         "-p",
         str(ssh_port),
-        "root@localhost",
+        "main@localhost",
     ] + args)
 
 
@@ -510,7 +511,8 @@ def wait_for_ssh(runner, ssh_port):
         try:
             runner.check_call([
                 "ssh", "-q", "-p", str(ssh_port), "-oStrictHostKeyChecking=no",
-                "-oUserKnownHostsFile=/dev/null", "root@localhost", "/bin/true"
+                "-i", "/home/itamarst/Datawire/telepresence/remote/id_rsa",
+                "-oUserKnownHostsFile=/dev/null", "main@localhost", "/bin/true"
             ])
         except CalledProcessError:
             sleep(0.25)
@@ -738,6 +740,7 @@ def mount_remote_volumes(runner, remote_info, ssh_port):
     try:
         runner.check_call([
             "sshfs",
+            "-o", "IdentityFile=/home/itamarst/Datawire/telepresence/remote/id_rsa",
             "-p",
             str(ssh_port),
             # Don't validate host key:
@@ -746,7 +749,7 @@ def mount_remote_volumes(runner, remote_info, ssh_port):
             # Don't store host key:
             "-o",
             "UserKnownHostsFile=/dev/null",
-            "root@localhost:/",
+            "main@localhost:/",
             mount_dir
         ])
         mounted = True
