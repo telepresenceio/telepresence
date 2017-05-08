@@ -5,7 +5,7 @@ title: "Changelog"
 categories: additional-information
 ---
 
-#### 0.45 (unreleased)
+#### 0.45 (May 8, 2017)
 
 Bug fixes:
 
