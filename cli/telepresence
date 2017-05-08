@@ -502,7 +502,7 @@ def ssh(runner, ssh_port, args):
         "-N",
         "-p",
         str(ssh_port),
-        "root@localhost",
+        "telepresence@localhost",
     ] + args)
 
 
@@ -512,7 +512,8 @@ def wait_for_ssh(runner, ssh_port):
         try:
             runner.check_call([
                 "ssh", "-q", "-p", str(ssh_port), "-oStrictHostKeyChecking=no",
-                "-oUserKnownHostsFile=/dev/null", "root@localhost", "/bin/true"
+                "-oUserKnownHostsFile=/dev/null", "telepresence@localhost",
+                "/bin/true"
             ])
         except CalledProcessError:
             sleep(0.25)
@@ -568,7 +569,7 @@ def connect(
             kubectl(
                 context, remote_info.namespace, [
                     "port-forward", remote_info.pod_name,
-                    "{}:22".format(ssh_port)
+                    "{}:8022".format(ssh_port)
                 ]
             )
         )
@@ -615,7 +616,8 @@ def start_proxy(runner, args):
 
     # Figure out explicit namespace and context:
     kubectl_config = json.loads(
-        runner.get_output(["kubectl", "config", "view", "-o", "json"]))
+        runner.get_output(["kubectl", "config", "view", "-o", "json"])
+    )
     # First, figure out the context:
     if args.context is None:
         # We're using the current context:
@@ -627,7 +629,8 @@ def start_proxy(runner, args):
         for context_setting in kubectl_config["contexts"]:
             if context_setting["name"] == args.context:
                 args.namespace = context_setting["context"].get(
-                    "namespace", "default")
+                    "namespace", "default"
+                )
                 break
 
     if args.deployment is None:
@@ -766,7 +769,7 @@ def mount_remote_volumes(runner, remote_info, ssh_port):
             # Don't store host key:
             "-o",
             "UserKnownHostsFile=/dev/null",
-            "root@localhost:/",
+            "telepresence@localhost:/",
             mount_dir
         ])
         mounted = True

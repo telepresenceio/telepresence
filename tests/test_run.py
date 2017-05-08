@@ -249,13 +249,6 @@ class EndToEndTests(TestCase):
         # Exit code 3 means proxy exited prematurely:
         assert exit_code == 3
 
-    def test_proxy(self):
-        """Telepresence proxies all connections via the cluster."""
-        nginx_name = run_nginx("default")
-        exit_code = run_script_test(["--new-deployment", random_name()],
-                                    "python3 proxy.py " + nginx_name)
-        assert exit_code == 113
-
     def existingdeployment(self, namespace, script):
         nginx_name = run_nginx(namespace)
 
