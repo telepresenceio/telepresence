@@ -303,3 +303,17 @@ class EndToEndTests(TestCase):
         Volumes are accessible locally.
         """
         self.existingdeployment("default", "volumes.py")
+
+    def test_unsupportedtools(self):
+        """
+        Unsupported command line tools like ping fail nicely.
+        """
+        p = Popen(
+            args=[
+                "telepresence", "--new-deployment", random_name(),
+                "--logfile", "-", "--run", "python3", "unsupportedcli.py",
+            ],
+            cwd=str(DIRECTORY),
+        )
+        exit_code = p.wait()
+        assert exit_code == 113

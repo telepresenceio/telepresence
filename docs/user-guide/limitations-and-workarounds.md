@@ -13,6 +13,8 @@ Because of the mechanism Telepresence uses to intercept networking calls:
 * Statically linked binaries won't work.
 * Custom DNS resolvers that parse `/etc/resolv.conf` and do DNS lookups themselves won't work.
 
+Thus command line tools like `ping`, `nslookup`, `dig`, `host` and `traceroute` won't work either because they do lower-level DNS or are suid.
+
 However, this only impacts outgoing connections.
 Incoming proxying (from Kubernetes) will still work with these binaries.
 

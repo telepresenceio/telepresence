@@ -14,6 +14,8 @@ Bug fixes:
   Thanks to Eli Young for the patch.
 * Increased connection timeout from 3 seconds to 10 seconds, in the hopes of reducing spurious disconnects.
   ([#88](https://github.com/datawire/telepresence/issues/88))
+* Common commands that won't work under Telepresence, like `ping` and `nslookup`, will now fail with an appropriate error messages.
+  ([#139](https://github.com/datawire/telepresence/issues/139))
 
 #### 0.44 (May 4, 2017)
 

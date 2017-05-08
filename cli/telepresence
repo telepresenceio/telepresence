@@ -789,6 +789,29 @@ def mount_remote_volumes(runner, remote_info, ssh_port):
     return mount_dir, mounted
 
 
+NICE_FAILURE = """\
+#!/bin/sh
+echo {} is not supported under Telepresence.
+echo See \
+http://www.telepresence.io/user-guide/limitations-and-workarounds.html \
+for details.
+exit 55
+"""
+
+
+def get_unsupported_tools():
+    """
+    Create replacement command-line tools that just error out, in a nice way.
+    """
+    unsupported_bin = mkdtemp()
+    for command in ["ping", "nslookup", "dig", "host", "traceroute"]:
+        path = unsupported_bin + "/" + command
+        with open(path, "w") as f:
+            f.write(NICE_FAILURE.format(command))
+        os.chmod(path, 0o755)
+    return unsupported_bin
+
+
 def run_local_command(
     runner, remote_info, args, env_overrides, subprocesses, socks_port,
     ssh_port
@@ -811,12 +834,14 @@ def run_local_command(
             runner.get_output(["kubectl", "config", "current-context"]).strip()
         )
     )
-    # Make sure we use "bash", no "/bin/bash", so we get the copied version on
-    # OS X:
     if sys.platform == "darwin":
         env["PATH"] = sip_workaround()
+    # Inject replacements for unsupported tools like ping:
+    env["PATH"] = get_unsupported_tools() + ":" + env["PATH"]
     mount_dir, mounted = mount_remote_volumes(runner, remote_info, ssh_port)
     env["TELEPRESENCE_ROOT"] = mount_dir
+    # Make sure we use "bash", no "/bin/bash", so we get the copied version on
+    # OS X:
     if args.run is None:
         # We skip .bashrc since it might e.g. have kubectl running to get bash
         # autocomplete, and Go programs don't like DYLD on macOS at least (see
