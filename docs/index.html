@@ -27,6 +27,21 @@ permalink: /
     </ul></h5>
 </div>
 
+<div style="margin: auto; width: 25%;">
+  <h5><em>Telepresence is under active development; subscribe to get updates and announcements:</em></h5>
+  <!--[if lte IE 8]>
+    <script charset="utf-8" type="text/javascript" src="https://js.hsforms.net/forms/v2-legacy.js"></script>
+  <![endif]-->
+  <script charset="utf-8" type="text/javascript" src="https://js.hsforms.net/forms/v2.js"></script>
+  <script>
+   hbspt.forms.create({
+     css: '',
+     portalId: '485087',
+     formId: '956287a4-7614-486b-91bd-28c9a91949cb'
+   });
+  </script>
+</div>
+
 <div class="container">
   <h5><br><strong>How it works:</strong><br>Telepresence substitutes a proxy image for your normal container in the Kubernetes cluster. Your local code gets transparent access to the Kubernetes network by using <a href="https://www.datawire.io/code-injection-on-linux-and-macos/">LD_PRELOAD</a> to hijack TCP connections and reroute them through that proxy pod, bootstrapping off of <tt>kubectl port-forward</tt>. Volumes are proxied using <tt>sshfs</tt>.</h5>
 </div>
