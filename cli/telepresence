@@ -512,7 +512,8 @@ def wait_for_ssh(runner, ssh_port):
         try:
             runner.check_call([
                 "ssh", "-q", "-p", str(ssh_port), "-oStrictHostKeyChecking=no",
-                "-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "/bin/true"
+                "-oUserKnownHostsFile=/dev/null", "telepresence@localhost",
+                "/bin/true"
             ])
         except CalledProcessError:
             sleep(0.25)
@@ -615,7 +616,8 @@ def start_proxy(runner, args):
 
     # Figure out explicit namespace and context:
     kubectl_config = json.loads(
-        runner.get_output(["kubectl", "config", "view", "-o", "json"]))
+        runner.get_output(["kubectl", "config", "view", "-o", "json"])
+    )
     # First, figure out the context:
     if args.context is None:
         # We're using the current context:
@@ -627,7 +629,8 @@ def start_proxy(runner, args):
         for context_setting in kubectl_config["contexts"]:
             if context_setting["name"] == args.context:
                 args.namespace = context_setting["context"].get(
-                    "namespace", "default")
+                    "namespace", "default"
+                )
                 break
 
     if args.deployment is None:
