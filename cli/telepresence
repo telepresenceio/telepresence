@@ -496,8 +496,9 @@ def ssh(runner, ssh_port, args):
         "-oStrictHostKeyChecking=no",
         # Don't store host key:
         "-oUserKnownHostsFile=/dev/null",
-        # Ping once a second; after three retries will disconnect:
+        # Ping once a second; after ten retries will disconnect:
         "-oServerAliveInterval=1",
+        "-oServerAliveCountMax=10",
         # No shell:
         "-N",
         "-p",
