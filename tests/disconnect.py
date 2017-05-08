@@ -17,7 +17,7 @@ def disconnect():
         "kubectl", "exec",
         "--container=" + os.environ["TELEPRESENCE_CONTAINER"],
         os.environ["TELEPRESENCE_POD"], "--", "/bin/sh", "-c",
-        r"kill $(ps xa | grep 'sshd: root' | " +
+        r"kill $(ps xa | grep 'sshd: ' | " +
         r"sed 's/ *\([0-9][0-9]*\).*/\1/')"
     ],
         env=env)
