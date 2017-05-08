@@ -11,7 +11,7 @@ Bug fixes:
 
 * The Kubernetes-side container used by Telepresence no longer runs as root.
   This will make support for OpenShift Origin easier, as well as other environments that don't want containers running as root.
-  Thanks to Eli Young for the feature request.
+  Thanks to Eli Young for the patch.
 
 #### 0.44 (May 4, 2017)
 
