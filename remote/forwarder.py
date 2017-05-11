@@ -30,14 +30,19 @@ class LocalResolver(object):
     application running in the pod would get if they ran `gethostbyname()` or
     the like. This is a superset of what a DNS query would return!
     """
+
+    def __init__(self):
+        # The default Twisted client.Resolver *almost* does what we want...
+        # except it doesn't support ndots! So we manually deal with A records
+        # and pass the rest on to client.Resolver.
+        self.fallback = client.Resolver(resolv='/etc/resolv.conf')
+
     def _got_ip(self, query, ip):
         """
         Generate the response to a query, given an IP.
         """
         name = query.name.name
-        answer = dns.RRHeader(
-            name=name,
-            payload=dns.Record_A(address=ip))
+        answer = dns.RRHeader(name=name, payload=dns.Record_A(address=ip))
         answers = [answer]
         authority = []
         additional = []
@@ -46,22 +51,22 @@ class LocalResolver(object):
     def query(self, query, timeout=None):
         if query.type == dns.A:
             d = reactor.resolve(query.name.name)
-            d.addCallbacks(lambda ip: self._got_ip(query, ip),
-                           lambda f: error.DomainError(str(f)))
+            d.addCallback(
+                lambda ip: self._got_ip(query, ip)
+            ).addErrback(
+                lambda f: defer.fail(error.DomainError(str(f)))
+            )
             return d
-        else:
-            # this will cause fallback to the next Resolver in the chain:
+        elif query.type == dns.AAAA:
+            # Can't do IPv6, just fail fast:
             return defer.fail(error.DomainError())
+        else:
+            return self.fallback.query(query, timeout=timeout)
 
 
 def listen():
     reactor.listenTCP(9050, socks.SOCKSv5Factory())
-    # The default Twisted client.Resolver *almost* does what we want... except
-    # it doesn't support ndots! So we manually deal with A records and pass the
-    # rest on to client.Resolver.
-    factory = server.DNSServerFactory(
-        clients=[LocalResolver(), client.Resolver(resolv='/etc/resolv.conf')]
-    )
+    factory = server.DNSServerFactory(clients=[LocalResolver()])
     protocol = dns.DNSDatagramProtocol(controller=factory)
 
     reactor.listenUDP(9053, protocol)
