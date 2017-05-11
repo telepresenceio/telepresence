@@ -872,7 +872,7 @@ def run_local_command(
             # sshuttle tproxy mode seems to have issues:
             sshuttle_method = "nat"
         subprocesses.append(
-            Popen([
+            runner.popen([
                 "sshuttle-telepresence",
                 "-v",
                 "--dns",
@@ -882,7 +882,7 @@ def run_local_command(
                 "ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null",
                 "-r",
                 "telepresence@localhost:" + str(ssh_port),
-                "--auto-nets",
+                "10.0.0.0/8",
             ])
         )
         p = Popen(command, env=env)

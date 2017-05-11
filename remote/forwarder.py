@@ -30,21 +30,7 @@ class LocalResolver(object):
     application running in the pod would get if they ran `gethostbyname()` or
     the like. This is a superset of what a DNS query would return!
     """
-    _pattern = 'workstation'
-    _network = '172.0.2'
-
-    def _dynamicResponseRequired(self, query):
-        """
-        Check the query to determine if a dynamic response is required.
-        """
-        if query.type == dns.A:
-            labels = query.name.name.split('.')
-            if labels[0].startswith(self._pattern):
-                return True
-
-        return False
-
-    def _got_ip(self, ip, query):
+    def _got_ip(self, query, ip):
         """
         Generate the response to a query, given an IP.
         """
@@ -60,7 +46,8 @@ class LocalResolver(object):
     def query(self, query, timeout=None):
         if query.type == dns.A:
             d = reactor.resolve(query.name.name)
-            d.addCallback(self._got_ip, query)
+            d.addCallbacks(lambda ip: self._got_ip(query, ip),
+                           lambda f: error.DomainError(str(f)))
             return d
         else:
             # this will cause fallback to the next Resolver in the chain:
