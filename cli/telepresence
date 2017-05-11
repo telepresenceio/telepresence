@@ -104,9 +104,9 @@ class handle_unexpected_errors(object):
                 if self.logfile != "-":
                     print(
                         "And here are the last few lines of the logfile "
-                        "(see {} for the complete logs):\n\n".format(
-                            self.logfile
-                        ) + "\n".join(logs.splitlines()[-20:]) + "\n"
+                        "(see {} for the complete logs):\n\n".
+                        format(self.logfile) +
+                        "\n".join(logs.splitlines()[-20:]) + "\n"
                     )
 
                 if input(
@@ -217,6 +217,17 @@ def parse_args():
         help=(
             "The path to write logs to. '-' means stdout, "
             "default is './telepresence.log'."
+        )
+    )
+    parser.add_argument(
+        "--method",
+        required=True,
+        choices=["inject-tcp", "vpn-tcp"],
+        help=(
+            "inject-tcp: inject process-specific shared "
+            "library that proxies TCP to the remote cluster.\n"
+            "vpn-tcp: all local processes can route TCP "
+            "traffic to the remote cluster."
         )
     )
     group_deployment = parser.add_mutually_exclusive_group(required=True)
@@ -360,9 +371,9 @@ def _get_remote_env(runner, context, namespace, pod_name, container_name):
 
 def get_deployment_set_keys(remote_info):
     """Get the set of environment variables names set by the Deployment."""
-    return set(
-        [var["name"] for var in remote_info.container_config.get("env", [])]
-    )
+    return set([
+        var["name"] for var in remote_info.container_config.get("env", [])
+    ])
 
 
 def get_env_variables(runner, remote_info, context):
@@ -799,12 +810,15 @@ exit 55
 """
 
 
-def get_unsupported_tools():
+def get_unsupported_tools(dns_supported):
     """
     Create replacement command-line tools that just error out, in a nice way.
     """
+    commands = ["ping", "traceroute"]
+    if not dns_supported:
+        commands += ["nslookup", "dig", "host"]
     unsupported_bin = mkdtemp()
-    for command in ["ping", "nslookup", "dig", "host", "traceroute"]:
+    for command in commands:
         path = unsupported_bin + "/" + command
         with open(path, "w") as f:
             f.write(NICE_FAILURE.format(command))
@@ -834,10 +848,11 @@ def run_local_command(
             runner.get_output(["kubectl", "config", "current-context"]).strip()
         )
     )
-    if sys.platform == "darwin":
+    if sys.platform == "darwin" and args.method == "inject-tcp":
         env["PATH"] = sip_workaround()
     # Inject replacements for unsupported tools like ping:
-    env["PATH"] = get_unsupported_tools() + ":" + env["PATH"]
+    env["PATH"] = get_unsupported_tools(args.method != "inject-tcp"
+                                        ) + ":" + env["PATH"]
     mount_dir, mounted = mount_remote_volumes(runner, remote_info, ssh_port)
     env["TELEPRESENCE_ROOT"] = mount_dir
     # Make sure we use "bash", no "/bin/bash", so we get the copied version on
@@ -849,7 +864,32 @@ def run_local_command(
         command = ["bash", "--norc"]
     else:
         command = args.run
-    p = Popen(["torsocks"] + command, env=env)
+    if args.method == "inject-tcp":
+        p = Popen(["torsocks"] + command, env=env)
+    elif args.method == "vpn-tcp":
+        sshuttle_method = "auto"
+        if sys.platform.startswith("linux"):
+            # sshuttle tproxy mode seems to have issues:
+            sshuttle_method = "nat"
+        subprocesses.append(
+            Popen([
+                "sshuttle-telepresence",
+                "-v",
+                "--dns",
+                "--method",
+                sshuttle_method,
+                "-e",
+                "ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null",
+                "-r",
+                "telepresence@localhost:" + str(ssh_port),
+                "--auto-nets",
+            ])
+        )
+        p = Popen(command, env=env)
+    else:
+        raise RuntimeError(
+            "GADZOOKS, A BUG: unknown proxying method " + args.method
+        )
 
     def terminate_if_alive():
         runner.write("Shutting down local shell...\n")

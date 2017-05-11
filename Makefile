@@ -1,6 +1,7 @@
 .PHONY: default build-remote bumpversion release minikube-test build-remote-minikube
 
 VERSION=$(shell git describe --tags)
+SHELL:=/bin/bash
 
 default:
 	@echo "See http://www.telepresence.io/additional-information/developing.html"
@@ -27,6 +28,10 @@ build-remote-minikube:
 	eval $(shell minikube docker-env) && \
 		cd remote && \
 		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
+
+run-minikube: virtualenv/bin/sshuttle-telepresence
+	source virtualenv/bin/activate && \
+		env TELEPRESENCE_VERSION=$(VERSION) cli/telepresence --method=vpn-tcp --new-deployment test --run-shell
 
 # Run tests in minikube:
 minikube-test: virtualenv build-remote-minikube
