@@ -3,10 +3,7 @@
 VERSION=$(shell git describe --tags)
 
 default:
-	@echo "To release:"
-	@echo "1. 'make bumpversion'"
-	@echo "2. do git push as instructed by bumpversion"
-	@echo "3. 'make release'"
+	@echo "See http://www.telepresence.io/additional-information/developing.html"
 
 version:
 	@echo $(VERSION)
@@ -18,6 +15,9 @@ virtualenv:
 	virtualenv --python=python3 virtualenv
 	virtualenv/bin/pip install -r dev-requirements.txt
 	virtualenv/bin/pip install -r remote/requirements.txt
+
+virtualenv/bin/sshuttle-telepresence:
+	packaging/build-sshuttle.py
 
 bumpversion: virtualenv
 	virtualenv/bin/bumpversion --verbose --list minor

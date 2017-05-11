@@ -6,3 +6,4 @@ pytest-xdist
 pytest-timeout
 yapf
 pylint
+pex
