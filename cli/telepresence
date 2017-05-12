@@ -21,6 +21,7 @@ from subprocess import (
 from tempfile import mkdtemp, NamedTemporaryFile
 from time import sleep, time
 from traceback import print_exc
+from uuid import uuid4
 import webbrowser
 from io import StringIO
 from urllib.parse import quote_plus
@@ -638,12 +639,14 @@ def start_proxy(runner, args):
         # This implies --new-deployment:
         args.deployment = args.new_deployment
 
+        run_id = str(uuid4())
+
         def remove_existing_deployment():
             runner.get_output(
                 kubectl(
                     args.context, args.namespace, [
-                        "delete", "--ignore-not-found", "service,deployment",
-                        args.deployment
+                        "delete", "--ignore-not-found", "all",
+                        "--selector=telepresence=" + run_id,
                     ]
                 )
             )
@@ -653,12 +656,13 @@ def start_proxy(runner, args):
         command = kubectl(
             args.context, args.namespace, [
                 "run",
-                "--generator",
-                "deployment/v1beta1",
+                # This will result in using Deployment:
+                "--restart=Always",
                 "--limits=memory=256Mi",
                 "--requests=memory=64Mi",
                 args.deployment,
                 "--image={}/telepresence-k8s:{}".format(REGISTRY, __version__),
+                "--labels=telepresence=" + run_id,
             ]
         )
         for port in args.expose:
