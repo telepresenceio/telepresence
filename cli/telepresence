@@ -124,6 +124,7 @@ class handle_unexpected_errors(object):
                         BUG_REPORT_TEMPLATE.format(
                             sys.argv, __version__, sys.version,
                             safe_output([
+                                # XXX
                                 "kubectl", "version", "--short", "--client"
                             ]),
                             safe_output(["uname", "-a"]), error, logs[-1000:]
@@ -286,7 +287,8 @@ def kubectl(context, namespace, args):
     """Return command-line for running kubectl."""
     assert context is not None
     assert namespace is not None
-    result = ["kubectl"]
+    # XXX
+    result = ["oc"]
     result.extend(["--context", context])
     result.extend(["--namespace", namespace])
     result += args
@@ -412,7 +414,8 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
     try:
         get_deployment = [
             "get",
-            "deployment",
+            # XXX
+            "deploymentconfig",
             "-o",
             "json",
             "--export",
@@ -445,6 +448,7 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
 
     expected_metadata = deployment["spec"]["template"]["metadata"]
     runner.write("Expected metadata for pods: {}\n".format(expected_metadata))
+    sleep(5)
     pods = json.loads(
         runner.get_output(
             kubectl(
@@ -452,7 +456,6 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
             )
         )
     )["items"]
-
     for pod in pods:
         name = pod["metadata"]["name"]
         phase = pod["status"]["phase"]
@@ -636,7 +639,8 @@ def start_proxy(runner, args):
 
     # Figure out explicit namespace and context:
     kubectl_config = json.loads(
-        runner.get_output(["kubectl", "config", "view", "-o", "json"])
+        # XXX
+        runner.get_output(["oc", "config", "view", "-o", "json"])
     )
     # First, figure out the context:
     if args.context is None:
@@ -863,7 +867,8 @@ def run_local_command(
     env["PROMPT_COMMAND"] = (
         'PS1="@{}|$PS1";unset PROMPT_COMMAND'.format(
             args.context or
-            runner.get_output(["kubectl", "config", "current-context"]).strip()
+            # XXX
+            runner.get_output(["oc", "config", "current-context"]).strip()
         )
     )
     if sys.platform == "darwin":
@@ -987,7 +992,8 @@ def main():
     def go():
         # Make sure we can access Kubernetes:
         try:
-            runner.get_output(["kubectl", "cluster-info"])
+            # XXX
+            runner.get_output(["oc", "status"])
         except (CalledProcessError, OSError, IOError) as e:
             sys.stderr.write("Error accessing Kubernetes: {}\n".format(e))
             raise SystemExit(1)
