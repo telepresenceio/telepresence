@@ -5,6 +5,13 @@ title: "Changelog"
 categories: additional-information
 ---
 
+#### 0.46 (unreleased)
+
+Bug fixes:
+
+* Pods created with `--new-deployment` are now looked up using a unique ID, preventing issues where a pod from a previous run was mistakenly used.
+  ([#94](https://github.com/datawire/telepresence/issues/94))
+
 #### 0.45 (May 8, 2017)
 
 Bug fixes:

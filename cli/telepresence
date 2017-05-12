@@ -21,6 +21,7 @@ from subprocess import (
 from tempfile import mkdtemp, NamedTemporaryFile
 from time import sleep, time
 from traceback import print_exc
+from uuid import uuid4
 import webbrowser
 from io import StringIO
 from urllib.parse import quote_plus
@@ -104,9 +105,9 @@ class handle_unexpected_errors(object):
                 if self.logfile != "-":
                     print(
                         "And here are the last few lines of the logfile "
-                        "(see {} for the complete logs):\n\n".format(
-                            self.logfile
-                        ) + "\n".join(logs.splitlines()[-20:]) + "\n"
+                        "(see {} for the complete logs):\n\n".
+                        format(self.logfile) +
+                        "\n".join(logs.splitlines()[-20:]) + "\n"
                     )
 
                 if input(
@@ -360,9 +361,9 @@ def _get_remote_env(runner, context, namespace, pod_name, container_name):
 
 def get_deployment_set_keys(remote_info):
     """Get the set of environment variables names set by the Deployment."""
-    return set(
-        [var["name"] for var in remote_info.container_config.get("env", [])]
-    )
+    return set([
+        var["name"] for var in remote_info.container_config.get("env", [])
+    ])
 
 
 def get_env_variables(runner, remote_info, context):
@@ -398,26 +399,44 @@ def get_env_variables(runner, remote_info, context):
     return socks_result
 
 
-def get_remote_info(runner, deployment_name, context, namespace):
-    """Given the deployment name, return a RemoteInfo object."""
+def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
+    """
+    Given the deployment name, return a RemoteInfo object.
+
+    If this is a Deployment we created, the run_id is laso passed in - this is
+    the uuid we set for the telepresence label. Otherwise run_id is None and
+    the Deployment name must be used to locate the Deployment.
+    """
     assert context is not None
     assert namespace is not None
     try:
-        deployment = json.loads(
-            runner.get_output(
-                kubectl(
-                    context, namespace, [
-                        "get",
-                        "deployment",
-                        "-o",
-                        "json",
-                        deployment_name,
-                        "--export",
-                    ]
-                ),
-                stderr=STDOUT
+        get_deployment = [
+            "get",
+            "deployment",
+            "-o",
+            "json",
+            "--export",
+        ]
+        if run_id is None:
+            deployment = json.loads(
+                runner.get_output(
+                    kubectl(
+                        context, namespace, get_deployment + [deployment_name]
+                    ),
+                    stderr=STDOUT
+                )
             )
-        )
+        else:
+            # When using a selector we get a list of objects, not just one:
+            deployment = json.loads(
+                runner.get_output(
+                    kubectl(
+                        context, namespace, get_deployment +
+                        ["--selector=telepresence=" + run_id]
+                    ),
+                    stderr=STDOUT
+                )
+            )["items"][0]
     except CalledProcessError as e:
         raise SystemExit(
             "Failed to find Deployment '{}': {}".
@@ -634,16 +653,22 @@ def start_proxy(runner, args):
                 )
                 break
 
+    run_id = None
+
     if args.deployment is None:
         # This implies --new-deployment:
         args.deployment = args.new_deployment
+
+        run_id = str(uuid4())
 
         def remove_existing_deployment():
             runner.get_output(
                 kubectl(
                     args.context, args.namespace, [
-                        "delete", "--ignore-not-found", "service,deployment",
-                        args.deployment
+                        "delete",
+                        "--ignore-not-found",
+                        "all",
+                        "--selector=telepresence=" + run_id,
                     ]
                 )
             )
@@ -651,14 +676,17 @@ def start_proxy(runner, args):
         atexit.register(remove_existing_deployment)
         remove_existing_deployment()
         command = kubectl(
-            args.context, args.namespace, [
+            args.context,
+            args.namespace,
+            [
                 "run",
-                "--generator",
-                "deployment/v1beta1",
+                # This will result in using Deployment:
+                "--restart=Always",
                 "--limits=memory=256Mi",
                 "--requests=memory=64Mi",
                 args.deployment,
                 "--image={}/telepresence-k8s:{}".format(REGISTRY, __version__),
+                "--labels=telepresence=" + run_id,
             ]
         )
         for port in args.expose:
@@ -668,7 +696,11 @@ def start_proxy(runner, args):
         runner.get_output(command)
 
     remote_info = get_remote_info(
-        runner, args.deployment, args.context, args.namespace
+        runner,
+        args.deployment,
+        args.context,
+        args.namespace,
+        run_id=run_id,
     )
 
     processes, socks_port, ssh_port = connect(
