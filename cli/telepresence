@@ -177,7 +177,7 @@ class Runner(object):
 
     def check_call(self, *args, **kwargs):
         """Run a subprocess, make sure it exited with 0."""
-        self.write("Running: {}\n".format(args))
+        self.write("Running: {}... ".format(args))
         check_call(
             *args,
             stdin=DEVNULL,
@@ -185,20 +185,23 @@ class Runner(object):
             stderr=self.logfile,
             **kwargs
         )
+        self.write(" ran!\n")
 
     def get_output(self, *args, stderr=None, **kwargs):
         """Return (stripped) command result as unicode string."""
         if stderr is None:
             stderr = self.logfile
-        self.write("Running: {}\n".format(args))
-        return unicode(
+        self.write("Running: {}...".format(args))
+        result = unicode(
             check_output(*args, stdin=DEVNULL, stderr=stderr,
                          **kwargs).strip(), "utf-8"
         )
+        self.write(" ran!\n")
+        return result
 
     def popen(self, *args, stdin=DEVNULL, **kwargs):
         """Return Popen object."""
-        self.write("Running: {}\n".format(args))
+        self.write("Running: {}...".format(args))
         return Popen(
             *args,
             stdin=stdin,

@@ -188,11 +188,13 @@ class EndToEndTests(TestCase):
                     '--rm', '--image=alpine', '--restart', 'Never',
                     "--namespace", namespace, '--command', '--', '/bin/sh',
                     '-c', "apk add --no-cache --quiet curl && " +
-                    "curl --silent http://{}:{}/__init__.py".format(url, port)
+                    "curl --silent --max-time 3 " +
+                    "http://{}:{}/__init__.py".format(url, port)
                 ])
                 assert result == (DIRECTORY / "__init__.py").read_bytes()
                 return
-            except CalledProcessError:
+            except CalledProcessError as e:
+                print("curl failed, retrying ({})".format(e))
                 time.sleep(1)
                 continue
         raise RuntimeError("failed to connect to local HTTP server")
@@ -206,7 +208,7 @@ class EndToEndTests(TestCase):
             ["--new-deployment", service_name],
             service_name,
             current_namespace(),
-            12345,
+            12349,
         )
 
     def test_fromcluster_with_namespace(self):
