@@ -10,6 +10,12 @@ DIRECTORY = Path(__file__).absolute().parent
 REVISION = str(check_output(["git", "rev-parse", "--short", "HEAD"]),
                "utf-8").strip()
 START_TIME = time.time()
+OPENSHIFT = os.environ.get('TELEPRESENCE_OPENSHIFT')
+
+if OPENSHIFT:
+    KUBECTL = "oc"
+else:
+    KUBECTL = "kubectl"
 
 
 def random_name():
@@ -29,8 +35,7 @@ def telepresence_version():
 def run_nginx(namespace=None):
     """Run nginx in Kuberentes; return Service name."""
     nginx_name = random_name()
-    # XXX OPENSHIFTY
-    kubectl = ["oc"]
+    kubectl = [KUBECTL]
     if namespace is not None:
         kubectl.extend(["--namespace", namespace])
 
@@ -80,7 +85,7 @@ def current_namespace():
     """Return the current Kubernetes namespace."""
     return str(
         check_output([
-            "kubectl", "config", "view", "--minify=true",
+            KUBECTL, "config", "view", "--minify=true",
             "-o=jsonpath={.contexts[0].context.namespace}"
         ]).strip(), "ascii"
     ) or "default"

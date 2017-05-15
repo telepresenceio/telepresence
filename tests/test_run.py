@@ -8,15 +8,13 @@ import time
 import os
 
 from .utils import (
-    DIRECTORY, random_name, run_nginx, telepresence_version, current_namespace
+    DIRECTORY, random_name, run_nginx, telepresence_version, current_namespace,
+    OPENSHIFT, KUBECTL,
 )
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
-# XXX OPENSHIFTY
 EXISTING_DEPLOYMENT = """\
-apiVersion: v1
-kind: DeploymentConfig
 metadata:
   name: {name}
   namespace: {namespace}
@@ -56,6 +54,17 @@ spec:
             - path: "labels"
               fieldRef:
                 fieldPath: metadata.labels
+"""
+
+if OPENSHIFT:
+    EXISTING_DEPLOYMENT = """\
+apiVersion: v1
+kind: DeploymentConfig
+""" + EXISTING_DEPLOYMENT
+else:
+    EXISTING_DEPLOYMENT = """\
+apiVersion: apps/v1beta1
+kind: Deployment
 """
 
 NAMESPACE_YAML = """\
@@ -109,14 +118,15 @@ class EndToEndTests(TestCase):
         exit_code = p.wait()
         assert exit_code == 113
 
-    @skip(os.environ.get('TELEPRESENCE_OPENSHIFT'))
+    # OpenShift Online doesn't do namespaces:
+    @skip(OPENSHIFT)
     def create_namespace(self):
         """Create a new namespace, return its name."""
         name = random_name()
         yaml = NAMESPACE_YAML.format(name).encode("utf-8")
         check_output(
             args=[
-                "kubectl",
+                KUBECTL,
                 "apply",
                 "-f",
                 "-",
@@ -124,7 +134,7 @@ class EndToEndTests(TestCase):
             input=yaml,
         )
         self.addCleanup(
-            lambda: check_output(["kubectl", "delete", "namespace", name])
+            lambda: check_output([KUBECTL, "delete", "namespace", name])
         )
         return name
 
@@ -153,6 +163,9 @@ class EndToEndTests(TestCase):
         )
         assert exit_code == 113
 
+    # OpenShift doesn't allow root, which this version of the test needs:
+    # (This could be fixed.)
+    @skip(OPENSHIFT)
     def fromcluster(self, telepresence_args, url, namespace, port):
         """
         Test of communication from the cluster.
@@ -279,17 +292,19 @@ class EndToEndTests(TestCase):
         )
         check_output(
             args=[
-                # XXXX OPENSHIFTY
-                "oc",
+                KUBECTL,
                 "apply",
                 "-f",
                 "-",
             ],
             input=deployment.encode("utf-8")
         )
+        deployment_type = "deployment"
+        if OPENSHIFT:
+            deployment_type = "deploymentconfig"
         self.addCleanup(
             check_output, [
-                "kubectl", "delete", "deployment", name,
+                KUBECTL, "delete", deployment_type, name,
                 "--namespace=" + namespace
             ]
         )

@@ -42,7 +42,7 @@ def check_urls(nginx_service, namespace):
         ),
         "full service name",
     )
-    check_nginx_url("http://{}:80/".format(nginx_service), "hardcoded port")
+    check_nginx_url("http://{}:8080/".format(nginx_service), "hardcoded port")
     return host, port
 
 
