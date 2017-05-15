@@ -63,9 +63,10 @@ kind: DeploymentConfig
 """ + EXISTING_DEPLOYMENT
 else:
     EXISTING_DEPLOYMENT = """\
-apiVersion: apps/v1beta1
+apiVersion: extensions/v1beta1
 kind: Deployment
-"""
+""" + EXISTING_DEPLOYMENT
+
 
 NAMESPACE_YAML = """\
 apiVersion: v1
