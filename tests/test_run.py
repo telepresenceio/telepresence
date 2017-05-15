@@ -2,7 +2,7 @@
 End-to-end tests for running directly in the operating system.
 """
 
-from unittest import TestCase, skip
+from unittest import TestCase, skipIf
 from subprocess import check_output, Popen, PIPE, CalledProcessError
 import time
 import os
@@ -118,8 +118,7 @@ class EndToEndTests(TestCase):
         exit_code = p.wait()
         assert exit_code == 113
 
-    # OpenShift Online doesn't do namespaces:
-    @skip(OPENSHIFT)
+    @skipIf(OPENSHIFT, "OpenShift Online doesn't do namespaces")
     def create_namespace(self):
         """Create a new namespace, return its name."""
         name = random_name()
@@ -163,9 +162,8 @@ class EndToEndTests(TestCase):
         )
         assert exit_code == 113
 
-    # OpenShift doesn't allow root, which this version of the test needs:
-    # (This could be fixed.)
-    @skip(OPENSHIFT)
+    @skipIf(OPENSHIFT, "OpenShift doesn't allow root, which the tests need "
+            "(at the moment, this is fixable)")
     def fromcluster(self, telepresence_args, url, namespace, port):
         """
         Test of communication from the cluster.
@@ -277,9 +275,8 @@ class EndToEndTests(TestCase):
         # Exit code 3 means proxy exited prematurely:
         assert exit_code == 3
 
-    # OpenShift Online free version has insufficient resources to schedule
-    # stuff, I think...
-    @skip(OPENSHIFT)
+    @skipIf(OPENSHIFT, "OpenShift Online free version has insufficient quota "
+            "to schedule stuff, I think.")
     def existingdeployment(self, namespace, script):
         if namespace is None:
             namespace = current_namespace()
