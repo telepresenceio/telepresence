@@ -465,7 +465,7 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
 
     expected_metadata = deployment["spec"]["template"]["metadata"]
     runner.write("Expected metadata for pods: {}\n".format(expected_metadata))
-    sleep(30)  # XXX need to loop, not hard code sleep
+    sleep(60)  # XXX need to loop, not hard code sleep
     pods = json.loads(
         runner.get_output(
             kubectl(

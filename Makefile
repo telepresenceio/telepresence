@@ -35,6 +35,9 @@ minikube-test: virtualenv build-remote-minikube
 	kubectl config use-context minikube
 	env TELEPRESENCE_VERSION=$(VERSION) ci/test.sh
 
+# Run tests relevant to OpenShift:
+openshift-tests: virtualenv
+	env TELEPRESENCE_OPENSHIFT=1 ci/test.sh
 
 ## Release ##
 

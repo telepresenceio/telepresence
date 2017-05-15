@@ -2,7 +2,7 @@
 End-to-end tests for running directly in the operating system.
 """
 
-from unittest import TestCase
+from unittest import TestCase, skip
 from subprocess import check_output, Popen, PIPE, CalledProcessError
 import time
 import os
@@ -13,9 +13,10 @@ from .utils import (
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
+# XXX OPENSHIFTY
 EXISTING_DEPLOYMENT = """\
-apiVersion: extensions/v1beta1
-kind: Deployment
+apiVersion: v1
+kind: DeploymentConfig
 metadata:
   name: {name}
   namespace: {namespace}
@@ -31,10 +32,10 @@ spec:
       # Extra container at start to demonstrate we can handle multiple
       # containers
       - name: getintheway
-        image: nginx:alpine
+        image: openshift/hello-openshift
         resources:
           limits:
-            memory: "64M"
+            memory: "150Mi"
       - name: {name}
         image: {registry}/telepresence-k8s:{version}
         env:
@@ -45,9 +46,9 @@ spec:
           mountPath: /podinfo
         resources:
           requests:
-            memory: "64M"
+            memory: "150Mi"
           limits:
-            memory: "128M"
+            memory: "150Mi"
       volumes:
       - name: podinfo
         downwardAPI:
@@ -108,6 +109,7 @@ class EndToEndTests(TestCase):
         exit_code = p.wait()
         assert exit_code == 113
 
+    @skip(os.environ.get('TELEPRESENCE_OPENSHIFT'))
     def create_namespace(self):
         """Create a new namespace, return its name."""
         name = random_name()
@@ -277,7 +279,8 @@ class EndToEndTests(TestCase):
         )
         check_output(
             args=[
-                "kubectl",
+                # XXXX OPENSHIFTY
+                "oc",
                 "apply",
                 "-f",
                 "-",

@@ -5,6 +5,8 @@ virtualenv/bin/flake8 local/*.py remote/*.py cli/telepresence
 if [ "$(uname)" == "Linux" ]; then virtualenv/bin/pylint -f parseable -E cli/telepresence; fi
 cli/telepresence --version
 echo | cli/telepresence --help
-[ -z "$TELEPRESENCE_TESTS" ] && export TELEPRESENCE_TESTS="-n 4"
+if [ -z "$TELEPRESENCE_TESTS" ]; then
+    [ -z "TELEPRESENCE_OPENSHIFT" ] && export TELEPRESENCE_TESTS="-n 4";
+fi
 env PATH="$PWD/cli/:$PATH" virtualenv/bin/py.test -v \
     --timeout 360 --timeout-method thread --fulltrace $TELEPRESENCE_TESTS tests remote/test_socks.py

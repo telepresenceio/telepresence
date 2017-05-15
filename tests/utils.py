@@ -29,7 +29,7 @@ def telepresence_version():
 def run_nginx(namespace=None):
     """Run nginx in Kuberentes; return Service name."""
     nginx_name = random_name()
-    # XXX
+    # XXX OPENSHIFTY
     kubectl = ["oc"]
     if namespace is not None:
         kubectl.extend(["--namespace", namespace])
@@ -52,9 +52,8 @@ def run_nginx(namespace=None):
             nginx_name,
             "--labels=telepresence=" + nginx_name,
             "--image=openshift/hello-openshift",
-            # XXX
-            #"--limits=memory=128M",
-            #"--requests=memory=64M",
+            "--limits=memory=256Mi",
+            "--requests=memory=150Mi",
             "--port=8080",
             "--expose",
         ]
@@ -63,7 +62,6 @@ def run_nginx(namespace=None):
         try:
             available = check_output(
                 kubectl + [
-                    # XXX
                     "get", "pods", nginx_name, "-o",
                     'jsonpath={.status.phase}'
                 ]
