@@ -29,14 +29,17 @@ def telepresence_version():
 def run_nginx(namespace=None):
     """Run nginx in Kuberentes; return Service name."""
     nginx_name = random_name()
-    kubectl = ["kubectl"]
+    # XXX
+    kubectl = ["oc"]
     if namespace is not None:
         kubectl.extend(["--namespace", namespace])
 
     def cleanup():
         check_call(
-            kubectl +
-            ["delete", "--ignore-not-found", "service,deployment", nginx_name]
+            kubectl + [
+                "delete", "--ignore-not-found", "all",
+                "--selector=telepresence=" + nginx_name
+            ]
         )
 
     cleanup()
@@ -45,13 +48,14 @@ def run_nginx(namespace=None):
     check_output(
         kubectl + [
             "run",
-            "--generator",
-            "deployment/v1beta1",
+            "--restart=Never",
             nginx_name,
-            "--image=nginx:alpine",
-            "--limits=memory=128M",
-            "--requests=memory=64M",
-            "--port=80",
+            "--labels=telepresence=" + nginx_name,
+            "--image=openshift/hello-openshift",
+            # XXX
+            #"--limits=memory=128M",
+            #"--requests=memory=64M",
+            "--port=8080",
             "--expose",
         ]
     )
@@ -59,14 +63,15 @@ def run_nginx(namespace=None):
         try:
             available = check_output(
                 kubectl + [
-                    "get", "deployment", nginx_name, "-o",
-                    'jsonpath={.status.availableReplicas}'
+                    # XXX
+                    "get", "pods", nginx_name, "-o",
+                    'jsonpath={.status.phase}'
                 ]
             )
         except CalledProcessError:
             available = None
-        print("nginx available replicas: {}".format(available))
-        if available == b"1":
+        print("webserver phase: {}".format(available))
+        if available == b"Running":
             return nginx_name
         else:
             time.sleep(1)

@@ -19,7 +19,8 @@ def handle_error(type, value, traceback):
 def check_nginx_url(url, how):
     print("Retrieving URL created with {}: {}".format(url, how))
     result = str(urlopen(url, timeout=5).read(), "utf-8")
-    assert "nginx" in result
+    print("Got {} from webserver.".format(repr(result)))
+    assert "Hello" in result
 
 
 def check_urls(nginx_service, namespace):

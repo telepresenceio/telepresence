@@ -13,7 +13,7 @@ import signal
 import socket
 import sys
 from functools import wraps
-from shutil import rmtree, copy
+from shutil import rmtree, copy, which
 from subprocess import (
     check_output, Popen, CalledProcessError, check_call, TimeoutExpired,
     STDOUT, DEVNULL
@@ -465,7 +465,7 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
 
     expected_metadata = deployment["spec"]["template"]["metadata"]
     runner.write("Expected metadata for pods: {}\n".format(expected_metadata))
-    sleep(5)
+    sleep(30)  # XXX need to loop, not hard code sleep
     pods = json.loads(
         runner.get_output(
             kubectl(
@@ -1005,7 +1005,8 @@ def main():
     if args.logfile != "-":
         args.logfile = os.path.abspath(args.logfile)
 
-    runner = Runner.open(args.logfile, "kubectl")
+    # XXX need better way of choosing, see github
+    runner = Runner.open(args.logfile, "oc" if which("oc") else "kubectl")
 
     @handle_unexpected_errors(args.logfile)
     def go():
