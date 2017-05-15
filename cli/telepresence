@@ -122,12 +122,19 @@ class handle_unexpected_errors(object):
                     body = quote_plus(
                         # Overly long URLs won't work:
                         BUG_REPORT_TEMPLATE.format(
-                            sys.argv, __version__, sys.version,
+                            sys.argv,
+                            __version__,
+                            sys.version,
                             safe_output([
                                 # XXX
-                                "kubectl", "version", "--short", "--client"
+                                "kubectl",
+                                "version",
+                                "--short",
+                                "--client"
                             ]),
-                            safe_output(["uname", "-a"]), error, logs[-1000:]
+                            safe_output(["uname", "-a"]),
+                            error,
+                            logs[-1000:]
                         )[:4000]
                     )
                     webbrowser.open_new(url + body)
@@ -140,25 +147,28 @@ class handle_unexpected_errors(object):
 class Runner(object):
     """Context for running subprocesses."""
 
-    def __init__(self, logfile):
+    def __init__(self, logfile, kubectl_cmd):
         """
         :param logfile: file-like object to write logs to.
+        :param kubectl_cmd: Command to run for kubectl, either "kubectl" or
+            "oc" (for OpenShift Origin).
         """
         self.logfile = logfile
+        self.kubectl_cmd = kubectl_cmd
 
     @classmethod
-    def open(cls, logfile_path):
+    def open(cls, logfile_path, kubectl_cmd):
         """
         :return: File-like object for the given logfile path.
         """
         if logfile_path == "-":
-            return cls(sys.stdout)
+            return cls(sys.stdout, kubectl_cmd)
         else:
             # Wipe existing logfile, and use line buffering so data gets
             # written out immediately.
             if os.path.exists(logfile_path):
                 os.remove(logfile_path)
-            return cls(open(logfile_path, "a", buffering=1))
+            return cls(open(logfile_path, "a", buffering=1), kubectl_cmd)
 
     def write(self, message):
         """Write a message to the log."""
@@ -283,12 +293,9 @@ def parse_args():
     return parser.parse_args()
 
 
-def kubectl(context, namespace, args):
+def kubectl(runner, context, namespace, args):
     """Return command-line for running kubectl."""
-    assert context is not None
-    assert namespace is not None
-    # XXX
-    result = ["oc"]
+    result = [runner.kubectl_cmd]
     result.extend(["--context", context])
     result.extend(["--namespace", namespace])
     result += args
@@ -300,6 +307,7 @@ class RemoteInfo(object):
     Information about the remote setup.
 
     :ivar namespace str: The Kubernetes namespace.
+    :ivar context str: The Kubernetes context.
     :ivar deployment_name str: The name of the Deployment object.
     :ivar pod_name str: The name of the pod created by the Deployment.
     :ivar deployment_config dict: The decoded k8s object (i.e. JSON/YAML).
@@ -310,11 +318,13 @@ class RemoteInfo(object):
     def __init__(
         self,
         runner,
+        context,
         namespace,
         deployment_name,
         pod_name,
         deployment_config,
     ):
+        self.context = context
         self.namespace = namespace
         self.deployment_name = deployment_name
         self.pod_name = pod_name
@@ -350,7 +360,7 @@ def _get_remote_env(runner, context, namespace, pod_name, container_name):
     """Get the environment variables in the remote pod."""
     env = runner.get_output(
         kubectl(
-            context, namespace,
+            runner, context, namespace,
             ["exec", pod_name, "--container", container_name, "env"]
         )
     )
@@ -411,11 +421,14 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
     """
     assert context is not None
     assert namespace is not None
+    deployment_type = "deployment"
+    if runner.kubectl_cmd == "oc":
+        # OpenShift Origin uses DeploymentConfig instead:
+        deployment_type = "deploymentconfig"
     try:
         get_deployment = [
             "get",
-            # XXX
-            "deploymentconfig",
+            deployment_type,
             "-o",
             "json",
             "--export",
@@ -424,7 +437,8 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
             deployment = json.loads(
                 runner.get_output(
                     kubectl(
-                        context, namespace, get_deployment + [deployment_name]
+                        runner, context, namespace, get_deployment +
+                        [deployment_name]
                     ),
                     stderr=STDOUT
                 )
@@ -434,7 +448,7 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
             deployment = json.loads(
                 runner.get_output(
                     kubectl(
-                        context, namespace, get_deployment +
+                        runner, context, namespace, get_deployment +
                         ["--selector=telepresence=" + run_id]
                     ),
                     stderr=STDOUT
@@ -452,7 +466,8 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
     pods = json.loads(
         runner.get_output(
             kubectl(
-                context, namespace, ["get", "pod", "-o", "json", "--export"]
+                runner, context, namespace,
+                ["get", "pod", "-o", "json", "--export"]
             )
         )
     )["items"]
@@ -481,6 +496,7 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
             runner.write("Looks like we've found our pod!\n")
             remote_info = RemoteInfo(
                 runner,
+                context,
                 namespace,
                 deployment_name,
                 name,
@@ -496,7 +512,7 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
                     remote_info.remote_telepresence_version(), __version__
                 ))
             # Wait for pod to be running:
-            wait_for_pod(runner, remote_info, context)
+            wait_for_pod(runner, remote_info)
             return remote_info
 
     raise RuntimeError(
@@ -545,14 +561,14 @@ def wait_for_ssh(runner, ssh_port):
     raise RuntimeError("SSH isn't starting.")
 
 
-def wait_for_pod(runner, remote_info, context):
+def wait_for_pod(runner, remote_info):
     start = time()
     while time() - start < 120:
         try:
             pod = json.loads(
                 runner.get_output(
                     kubectl(
-                        context, remote_info.namespace,
+                        runner, remote_info.context, remote_info.namespace,
                         ["get", "pod", remote_info.pod_name, "-o", "json"]
                     )
                 )
@@ -590,7 +606,7 @@ def connect(
     processes.append(
         runner.popen(
             kubectl(
-                context, remote_info.namespace, [
+                runner, context, remote_info.namespace, [
                     "port-forward", remote_info.pod_name,
                     "{}:8022".format(ssh_port)
                 ]
@@ -639,8 +655,7 @@ def start_proxy(runner, args):
 
     # Figure out explicit namespace and context:
     kubectl_config = json.loads(
-        # XXX
-        runner.get_output(["oc", "config", "view", "-o", "json"])
+        runner.get_output([runner.kubectl_cmd, "config", "view", "-o", "json"])
     )
     # First, figure out the context:
     if args.context is None:
@@ -668,7 +683,7 @@ def start_proxy(runner, args):
         def remove_existing_deployment():
             runner.get_output(
                 kubectl(
-                    args.context, args.namespace, [
+                    runner, args.context, args.namespace, [
                         "delete",
                         "--ignore-not-found",
                         "all",
@@ -680,6 +695,7 @@ def start_proxy(runner, args):
         atexit.register(remove_existing_deployment)
         remove_existing_deployment()
         command = kubectl(
+            runner,
             args.context,
             args.namespace,
             [
@@ -866,9 +882,9 @@ def run_local_command(
     # stdout and stderr if it wants it.
     env["PROMPT_COMMAND"] = (
         'PS1="@{}|$PS1";unset PROMPT_COMMAND'.format(
-            args.context or
-            # XXX
-            runner.get_output(["oc", "config", "current-context"]).strip()
+            args.context or runner.get_output([
+                runner.kubectl_cmd, "config", "current-context"
+            ]).strip()
         )
     )
     if sys.platform == "darwin":
@@ -986,14 +1002,17 @@ def main():
     if args.logfile != "-":
         args.logfile = os.path.abspath(args.logfile)
 
-    runner = Runner.open(args.logfile)
+    runner = Runner.open(args.logfile, "kubectl")
 
     @handle_unexpected_errors(args.logfile)
     def go():
         # Make sure we can access Kubernetes:
         try:
-            # XXX
-            runner.get_output(["oc", "status"])
+            if runner.kubectl_cmd == "oc":
+                status_command = "status"
+            else:
+                status_command = "cluster-info"
+            runner.get_output([runner.kubectl_cmd, status_command])
         except (CalledProcessError, OSError, IOError) as e:
             sys.stderr.write("Error accessing Kubernetes: {}\n".format(e))
             raise SystemExit(1)
