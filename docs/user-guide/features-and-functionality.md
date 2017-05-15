@@ -272,3 +272,11 @@ spec:
             fieldRef:
               fieldPath: status.podIP
 ```
+
+### OpenShift Origin
+
+If you have `oc` installed OpenShift Origin should work the same way as Kubernetes does.
+Note, however, that:
+
+* OpenShift uses `DeploymentConfig` rather than `Deployment` objects.
+* OpenShift will not run containers as root, so you can't listen on ports <1024.
