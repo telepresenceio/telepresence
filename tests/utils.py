@@ -80,4 +80,4 @@ def current_namespace():
             "kubectl", "config", "view", "--minify=true",
             "-o=jsonpath={.contexts[0].context.namespace}"
         ]).strip(), "ascii"
-    )
+    ) or "default"
