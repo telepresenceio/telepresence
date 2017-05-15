@@ -277,6 +277,9 @@ class EndToEndTests(TestCase):
         # Exit code 3 means proxy exited prematurely:
         assert exit_code == 3
 
+    # OpenShift Online free version has insufficient resources to schedule
+    # stuff, I think...
+    @skip(OPENSHIFT)
     def existingdeployment(self, namespace, script):
         if namespace is None:
             namespace = current_namespace()
