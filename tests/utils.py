@@ -26,39 +26,43 @@ def telepresence_version():
     ).strip()
 
 
-def run_nginx(namespace):
+def run_nginx(namespace=None):
     """Run nginx in Kuberentes; return Service name."""
     nginx_name = random_name()
+    kubectl = ["kubectl"]
+    if namespace is not None:
+        kubectl.extend(["--namespace", namespace])
 
     def cleanup():
-        check_call([
-            "kubectl", "delete", "--ignore-not-found", "--namespace",
-            namespace, "service,deployment", nginx_name
-        ])
+        check_call(
+            kubectl +
+            ["delete", "--ignore-not-found", "service,deployment", nginx_name]
+        )
 
     cleanup()
     atexit.register(cleanup)
 
-    check_output([
-        "kubectl",
-        "run",
-        "--namespace",
-        namespace,
-        "--generator",
-        "deployment/v1beta1",
-        nginx_name,
-        "--image=nginx:alpine",
-        "--limits=memory=128M",
-        "--requests=memory=64M",
-        "--port=80",
-        "--expose",
-    ])
+    check_output(
+        kubectl + [
+            "run",
+            "--generator",
+            "deployment/v1beta1",
+            nginx_name,
+            "--image=nginx:alpine",
+            "--limits=memory=128M",
+            "--requests=memory=64M",
+            "--port=80",
+            "--expose",
+        ]
+    )
     for i in range(120):
         try:
-            available = check_output([
-                "kubectl", "get", "deployment", nginx_name, "--namespace",
-                namespace, "-o", 'jsonpath={.status.availableReplicas}'
-            ])
+            available = check_output(
+                kubectl + [
+                    "get", "deployment", nginx_name, "-o",
+                    'jsonpath={.status.availableReplicas}'
+                ]
+            )
         except CalledProcessError:
             available = None
         print("nginx available replicas: {}".format(available))
@@ -67,3 +71,13 @@ def run_nginx(namespace):
         else:
             time.sleep(1)
     raise RuntimeError("nginx never started")
+
+
+def current_namespace():
+    """Return the current Kubernetes namespace."""
+    return str(
+        check_output([
+            "kubectl", "config", "view", "--minify=true",
+            "-o=jsonpath={.contexts[0].context.namespace}"
+        ]).strip(), "ascii"
+    )

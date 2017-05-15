@@ -7,7 +7,9 @@ from subprocess import check_output, Popen, PIPE, CalledProcessError
 import time
 import os
 
-from .utils import DIRECTORY, random_name, run_nginx, telepresence_version
+from .utils import (
+    DIRECTORY, random_name, run_nginx, telepresence_version, current_namespace
+)
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
@@ -87,12 +89,19 @@ class EndToEndTests(TestCase):
 
     def test_run_directly(self):
         """--run runs the command directly."""
-        nginx_name = run_nginx("default")
+        nginx_name = run_nginx()
         p = Popen(
             args=[
-                "telepresence", "--new-deployment", random_name(),
-                "--logfile", "-", "--run", "python3", "tocluster.py",
-                nginx_name, "default"
+                "telepresence",
+                "--new-deployment",
+                random_name(),
+                "--logfile",
+                "-",
+                "--run",
+                "python3",
+                "tocluster.py",
+                nginx_name,
+                current_namespace(),
             ],
             cwd=str(DIRECTORY),
         )
@@ -121,10 +130,12 @@ class EndToEndTests(TestCase):
         """
         Tests of communication to the cluster.
         """
-        nginx_name = run_nginx("default")
+        nginx_name = run_nginx()
         exit_code = run_script_test(
             ["--new-deployment", random_name()],
-            "python3 tocluster.py {} default".format(nginx_name),
+            "python3 tocluster.py {} {}".format(
+                nginx_name, current_namespace()
+            ),
         )
         assert exit_code == 113
 
@@ -194,7 +205,7 @@ class EndToEndTests(TestCase):
         self.fromcluster(
             ["--new-deployment", service_name],
             service_name,
-            "default",
+            current_namespace(),
             12345,
         )
 
@@ -250,6 +261,8 @@ class EndToEndTests(TestCase):
         assert exit_code == 3
 
     def existingdeployment(self, namespace, script):
+        if namespace is None:
+            namespace = current_namespace()
         nginx_name = run_nginx(namespace)
 
         # Create a Deployment outside of Telepresence:
@@ -276,12 +289,12 @@ class EndToEndTests(TestCase):
             ]
         )
 
-        args = ["--deployment", name]
-        if namespace != "default":
-            args.extend(["--namespace", namespace])
+        args = ["--deployment", name, "--namespace", namespace]
         exit_code = run_script_test(
             args, "python3 {} {} {} MYENV=hello".format(
-                script, nginx_name, namespace
+                script,
+                nginx_name,
+                namespace,
             )
         )
         assert 113 == exit_code
@@ -290,7 +303,7 @@ class EndToEndTests(TestCase):
         """
         Tests of communicating with existing Deployment.
         """
-        self.existingdeployment("default", "tocluster.py")
+        self.existingdeployment(None, "tocluster.py")
 
     def test_existingdeployment_custom_namespace(self):
         """
@@ -302,7 +315,7 @@ class EndToEndTests(TestCase):
         """
         Volumes are accessible locally.
         """
-        self.existingdeployment("default", "volumes.py")
+        self.existingdeployment(None, "volumes.py")
 
     def test_unsupportedtools(self):
         """
@@ -310,8 +323,14 @@ class EndToEndTests(TestCase):
         """
         p = Popen(
             args=[
-                "telepresence", "--new-deployment", random_name(),
-                "--logfile", "-", "--run", "python3", "unsupportedcli.py",
+                "telepresence",
+                "--new-deployment",
+                random_name(),
+                "--logfile",
+                "-",
+                "--run",
+                "python3",
+                "unsupportedcli.py",
             ],
             cwd=str(DIRECTORY),
         )
