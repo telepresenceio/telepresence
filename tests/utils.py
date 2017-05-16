@@ -10,6 +10,12 @@ DIRECTORY = Path(__file__).absolute().parent
 REVISION = str(check_output(["git", "rev-parse", "--short", "HEAD"]),
                "utf-8").strip()
 START_TIME = time.time()
+OPENSHIFT = os.environ.get('TELEPRESENCE_OPENSHIFT')
+
+if OPENSHIFT:
+    KUBECTL = "oc"
+else:
+    KUBECTL = "kubectl"
 
 
 def random_name():
@@ -26,44 +32,60 @@ def telepresence_version():
     ).strip()
 
 
-def run_nginx(namespace):
+def run_nginx(namespace=None):
     """Run nginx in Kuberentes; return Service name."""
     nginx_name = random_name()
+    kubectl = [KUBECTL]
+    if namespace is not None:
+        kubectl.extend(["--namespace", namespace])
 
     def cleanup():
-        check_call([
-            "kubectl", "delete", "--ignore-not-found", "--namespace",
-            namespace, "service,deployment", nginx_name
-        ])
+        check_call(
+            kubectl + [
+                "delete", "--ignore-not-found", "all",
+                "--selector=telepresence=" + nginx_name
+            ]
+        )
 
     cleanup()
     atexit.register(cleanup)
 
-    check_output([
-        "kubectl",
-        "run",
-        "--namespace",
-        namespace,
-        "--generator",
-        "deployment/v1beta1",
-        nginx_name,
-        "--image=nginx:alpine",
-        "--limits=memory=128M",
-        "--requests=memory=64M",
-        "--port=80",
-        "--expose",
-    ])
+    check_output(
+        kubectl + [
+            "run",
+            "--restart=Never",
+            nginx_name,
+            "--labels=telepresence=" + nginx_name,
+            "--image=openshift/hello-openshift",
+            "--limits=memory=256Mi",
+            "--requests=memory=150Mi",
+            "--port=8080",
+            "--expose",
+        ]
+    )
     for i in range(120):
         try:
-            available = check_output([
-                "kubectl", "get", "deployment", nginx_name, "--namespace",
-                namespace, "-o", 'jsonpath={.status.availableReplicas}'
-            ])
+            available = check_output(
+                kubectl + [
+                    "get", "pods", nginx_name, "-o",
+                    'jsonpath={.status.phase}'
+                ]
+            )
         except CalledProcessError:
             available = None
-        print("nginx available replicas: {}".format(available))
-        if available == b"1":
+        print("webserver phase: {}".format(available))
+        if available == b"Running":
             return nginx_name
         else:
             time.sleep(1)
     raise RuntimeError("nginx never started")
+
+
+def current_namespace():
+    """Return the current Kubernetes namespace."""
+    return str(
+        check_output([
+            KUBECTL, "config", "view", "--minify=true",
+            "-o=jsonpath={.contexts[0].context.namespace}"
+        ]).strip(), "ascii"
+    ) or "default"

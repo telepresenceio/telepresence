@@ -9,21 +9,21 @@ default:
 version:
 	@echo $(VERSION)
 
-build-remote:
-	cd remote && sudo docker build . -t datawire/telepresence-k8s:$(VERSION)
+
+## Setup dependencies ##
 
 virtualenv:
 	virtualenv --python=python3 virtualenv
 	virtualenv/bin/pip install -r dev-requirements.txt
 	virtualenv/bin/pip install -r remote/requirements.txt
 
-virtualenv/bin/sshuttle-telepresence:
-	packaging/build-sshuttle.py
+## Development ##
 
-bumpversion: virtualenv
-	virtualenv/bin/bumpversion --verbose --list minor
-	@echo "Please run: git push origin master --tags"
+# Build Docker image inside local Docker:
+build-remote:
+	cd remote && sudo docker build . -t datawire/telepresence-k8s:$(VERSION)
 
+# Build Docker image inside minikube Docker:
 build-remote-minikube:
 	eval $(shell minikube docker-env) && \
 		cd remote && \
@@ -39,6 +39,18 @@ minikube-test: virtualenv build-remote-minikube
 	kubectl config use-context minikube
 	env TELEPRESENCE_VERSION=$(VERSION) ci/test.sh
 
+# Run tests relevant to OpenShift:
+openshift-tests: virtualenv
+	env TELEPRESENCE_OPENSHIFT=1 ci/test.sh
+
+## Release ##
+
+# This is run by developer and triggers release process in CI:
+bumpversion: virtualenv
+	virtualenv/bin/bumpversion --verbose --list minor
+	@echo "Please run: git push origin master --tags"
+
+# Will be run in Travis CI on tagged commits
 release: build-remote
 	sudo docker push datawire/telepresence-k8s:$(VERSION)
 	env TELEPRESENCE_VERSION=$(VERSION) packaging/homebrew-package.sh
