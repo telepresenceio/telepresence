@@ -7,6 +7,12 @@ categories: additional-information
 
 #### 0.46 (unreleased)
 
+Features:
+
+* Preliminary support for OpenShift Origin.
+  Thanks to Eli Young for lots of help figuring out the necessary steps.
+  ([#132](https://github.com/datawire/telepresence/issues/132))
+
 Bug fixes:
 
 * Pods created with `--new-deployment` are now looked up using a unique ID, preventing issues where a pod from a previous run was mistakenly used.

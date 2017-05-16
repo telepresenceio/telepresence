@@ -2,18 +2,19 @@
 End-to-end tests for running directly in the operating system.
 """
 
-from unittest import TestCase
+from unittest import TestCase, skipIf
 from subprocess import check_output, Popen, PIPE, CalledProcessError
 import time
 import os
 
-from .utils import DIRECTORY, random_name, run_nginx, telepresence_version
+from .utils import (
+    DIRECTORY, random_name, run_nginx, telepresence_version, current_namespace,
+    OPENSHIFT, KUBECTL,
+)
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
 EXISTING_DEPLOYMENT = """\
-apiVersion: extensions/v1beta1
-kind: Deployment
 metadata:
   name: {name}
   namespace: {namespace}
@@ -29,10 +30,10 @@ spec:
       # Extra container at start to demonstrate we can handle multiple
       # containers
       - name: getintheway
-        image: nginx:alpine
+        image: openshift/hello-openshift
         resources:
           limits:
-            memory: "64M"
+            memory: "150Mi"
       - name: {name}
         image: {registry}/telepresence-k8s:{version}
         env:
@@ -43,9 +44,9 @@ spec:
           mountPath: /podinfo
         resources:
           requests:
-            memory: "64M"
+            memory: "150Mi"
           limits:
-            memory: "128M"
+            memory: "150Mi"
       volumes:
       - name: podinfo
         downwardAPI:
@@ -54,6 +55,18 @@ spec:
               fieldRef:
                 fieldPath: metadata.labels
 """
+
+if OPENSHIFT:
+    EXISTING_DEPLOYMENT = """\
+apiVersion: v1
+kind: DeploymentConfig
+""" + EXISTING_DEPLOYMENT
+else:
+    EXISTING_DEPLOYMENT = """\
+apiVersion: extensions/v1beta1
+kind: Deployment
+""" + EXISTING_DEPLOYMENT
+
 
 NAMESPACE_YAML = """\
 apiVersion: v1
@@ -87,25 +100,33 @@ class EndToEndTests(TestCase):
 
     def test_run_directly(self):
         """--run runs the command directly."""
-        nginx_name = run_nginx("default")
+        nginx_name = run_nginx()
         p = Popen(
             args=[
-                "telepresence", "--new-deployment", random_name(),
-                "--logfile", "-", "--run", "python3", "tocluster.py",
-                nginx_name, "default"
+                "telepresence",
+                "--new-deployment",
+                random_name(),
+                "--logfile",
+                "-",
+                "--run",
+                "python3",
+                "tocluster.py",
+                nginx_name,
+                current_namespace(),
             ],
             cwd=str(DIRECTORY),
         )
         exit_code = p.wait()
         assert exit_code == 113
 
+    @skipIf(OPENSHIFT, "OpenShift Online doesn't do namespaces")
     def create_namespace(self):
         """Create a new namespace, return its name."""
         name = random_name()
         yaml = NAMESPACE_YAML.format(name).encode("utf-8")
         check_output(
             args=[
-                "kubectl",
+                KUBECTL,
                 "apply",
                 "-f",
                 "-",
@@ -113,7 +134,7 @@ class EndToEndTests(TestCase):
             input=yaml,
         )
         self.addCleanup(
-            lambda: check_output(["kubectl", "delete", "namespace", name])
+            lambda: check_output([KUBECTL, "delete", "namespace", name])
         )
         return name
 
@@ -121,10 +142,12 @@ class EndToEndTests(TestCase):
         """
         Tests of communication to the cluster.
         """
-        nginx_name = run_nginx("default")
+        nginx_name = run_nginx()
         exit_code = run_script_test(
             ["--new-deployment", random_name()],
-            "python3 tocluster.py {} default".format(nginx_name),
+            "python3 tocluster.py {} {}".format(
+                nginx_name, current_namespace()
+            ),
         )
         assert exit_code == 113
 
@@ -140,6 +163,8 @@ class EndToEndTests(TestCase):
         )
         assert exit_code == 113
 
+    @skipIf(OPENSHIFT, "OpenShift doesn't allow root, which the tests need "
+            "(at the moment, this is fixable)")
     def fromcluster(self, telepresence_args, url, namespace, port):
         """
         Test of communication from the cluster.
@@ -177,11 +202,13 @@ class EndToEndTests(TestCase):
                     '--rm', '--image=alpine', '--restart', 'Never',
                     "--namespace", namespace, '--command', '--', '/bin/sh',
                     '-c', "apk add --no-cache --quiet curl && " +
-                    "curl --silent http://{}:{}/__init__.py".format(url, port)
+                    "curl --silent --max-time 3 " +
+                    "http://{}:{}/__init__.py".format(url, port)
                 ])
                 assert result == (DIRECTORY / "__init__.py").read_bytes()
                 return
-            except CalledProcessError:
+            except CalledProcessError as e:
+                print("curl failed, retrying ({})".format(e))
                 time.sleep(1)
                 continue
         raise RuntimeError("failed to connect to local HTTP server")
@@ -194,8 +221,8 @@ class EndToEndTests(TestCase):
         self.fromcluster(
             ["--new-deployment", service_name],
             service_name,
-            "default",
-            12345,
+            current_namespace(),
+            12349,
         )
 
     def test_fromcluster_with_namespace(self):
@@ -249,7 +276,11 @@ class EndToEndTests(TestCase):
         # Exit code 3 means proxy exited prematurely:
         assert exit_code == 3
 
+    @skipIf(OPENSHIFT, "OpenShift Online free version has insufficient quota "
+            "to schedule stuff, I think.")
     def existingdeployment(self, namespace, script):
+        if namespace is None:
+            namespace = current_namespace()
         nginx_name = run_nginx(namespace)
 
         # Create a Deployment outside of Telepresence:
@@ -262,26 +293,29 @@ class EndToEndTests(TestCase):
         )
         check_output(
             args=[
-                "kubectl",
+                KUBECTL,
                 "apply",
                 "-f",
                 "-",
             ],
             input=deployment.encode("utf-8")
         )
+        deployment_type = "deployment"
+        if OPENSHIFT:
+            deployment_type = "deploymentconfig"
         self.addCleanup(
             check_output, [
-                "kubectl", "delete", "deployment", name,
+                KUBECTL, "delete", deployment_type, name,
                 "--namespace=" + namespace
             ]
         )
 
-        args = ["--deployment", name]
-        if namespace != "default":
-            args.extend(["--namespace", namespace])
+        args = ["--deployment", name, "--namespace", namespace]
         exit_code = run_script_test(
             args, "python3 {} {} {} MYENV=hello".format(
-                script, nginx_name, namespace
+                script,
+                nginx_name,
+                namespace,
             )
         )
         assert 113 == exit_code
@@ -290,7 +324,7 @@ class EndToEndTests(TestCase):
         """
         Tests of communicating with existing Deployment.
         """
-        self.existingdeployment("default", "tocluster.py")
+        self.existingdeployment(None, "tocluster.py")
 
     def test_existingdeployment_custom_namespace(self):
         """
@@ -302,7 +336,7 @@ class EndToEndTests(TestCase):
         """
         Volumes are accessible locally.
         """
-        self.existingdeployment("default", "volumes.py")
+        self.existingdeployment(None, "volumes.py")
 
     def test_unsupportedtools(self):
         """
@@ -310,8 +344,14 @@ class EndToEndTests(TestCase):
         """
         p = Popen(
             args=[
-                "telepresence", "--new-deployment", random_name(),
-                "--logfile", "-", "--run", "python3", "unsupportedcli.py",
+                "telepresence",
+                "--new-deployment",
+                random_name(),
+                "--logfile",
+                "-",
+                "--run",
+                "python3",
+                "unsupportedcli.py",
             ],
             cwd=str(DIRECTORY),
         )

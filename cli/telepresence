@@ -11,9 +11,10 @@ import os
 import os.path
 import signal
 import socket
+import ssl
 import sys
 from functools import wraps
-from shutil import rmtree, copy
+from shutil import rmtree, copy, which
 from subprocess import (
     check_output, Popen, CalledProcessError, check_call, TimeoutExpired,
     STDOUT, DEVNULL
@@ -21,6 +22,8 @@ from subprocess import (
 from tempfile import mkdtemp, NamedTemporaryFile
 from time import sleep, time
 from traceback import print_exc
+from urllib.error import HTTPError
+from urllib.request import urlopen
 from uuid import uuid4
 import webbrowser
 from io import StringIO
@@ -81,7 +84,7 @@ class handle_unexpected_errors(object):
         def safe_output(args):
             try:
                 return unicode(check_output(args), "utf-8").strip()
-            except CalledProcessError as e:
+            except Exception as e:
                 return "(error: {})".format(e)
 
         @wraps(f)
@@ -126,6 +129,7 @@ class handle_unexpected_errors(object):
                             safe_output([
                                 "kubectl", "version", "--short", "--client"
                             ]),
+                            safe_output(["oc", "version"]),
                             safe_output(["uname", "-a"]), error, logs[-1000:]
                         )[:4000]
                     )
@@ -139,25 +143,29 @@ class handle_unexpected_errors(object):
 class Runner(object):
     """Context for running subprocesses."""
 
-    def __init__(self, logfile):
+    def __init__(self, logfile, kubectl_cmd):
         """
         :param logfile: file-like object to write logs to.
+        :param kubectl_cmd: Command to run for kubectl, either "kubectl" or
+            "oc" (for OpenShift Origin).
         """
         self.logfile = logfile
+        self.kubectl_cmd = kubectl_cmd
+        self.write("Using {} for logging.".format(self.kubectl_cmd))
 
     @classmethod
-    def open(cls, logfile_path):
+    def open(cls, logfile_path, kubectl_cmd):
         """
         :return: File-like object for the given logfile path.
         """
         if logfile_path == "-":
-            return cls(sys.stdout)
+            return cls(sys.stdout, kubectl_cmd)
         else:
             # Wipe existing logfile, and use line buffering so data gets
             # written out immediately.
             if os.path.exists(logfile_path):
                 os.remove(logfile_path)
-            return cls(open(logfile_path, "a", buffering=1))
+            return cls(open(logfile_path, "a", buffering=1), kubectl_cmd)
 
     def write(self, message):
         """Write a message to the log."""
@@ -166,7 +174,7 @@ class Runner(object):
 
     def check_call(self, *args, **kwargs):
         """Run a subprocess, make sure it exited with 0."""
-        self.write("Running: {}\n".format(args))
+        self.write("Running: {}... ".format(args))
         check_call(
             *args,
             stdin=DEVNULL,
@@ -174,20 +182,23 @@ class Runner(object):
             stderr=self.logfile,
             **kwargs
         )
+        self.write(" ran!\n")
 
     def get_output(self, *args, stderr=None, **kwargs):
         """Return (stripped) command result as unicode string."""
         if stderr is None:
             stderr = self.logfile
-        self.write("Running: {}\n".format(args))
-        return unicode(
+        self.write("Running: {}...".format(args))
+        result = unicode(
             check_output(*args, stdin=DEVNULL, stderr=stderr,
                          **kwargs).strip(), "utf-8"
         )
+        self.write(" ran!\n")
+        return result
 
     def popen(self, *args, stdin=DEVNULL, **kwargs):
         """Return Popen object."""
-        self.write("Running: {}\n".format(args))
+        self.write("Running: {}...".format(args))
         return Popen(
             *args,
             stdin=stdin,
@@ -282,11 +293,9 @@ def parse_args():
     return parser.parse_args()
 
 
-def kubectl(context, namespace, args):
+def kubectl(runner, context, namespace, args):
     """Return command-line for running kubectl."""
-    assert context is not None
-    assert namespace is not None
-    result = ["kubectl"]
+    result = [runner.kubectl_cmd]
     result.extend(["--context", context])
     result.extend(["--namespace", namespace])
     result += args
@@ -298,6 +307,7 @@ class RemoteInfo(object):
     Information about the remote setup.
 
     :ivar namespace str: The Kubernetes namespace.
+    :ivar context str: The Kubernetes context.
     :ivar deployment_name str: The name of the Deployment object.
     :ivar pod_name str: The name of the pod created by the Deployment.
     :ivar deployment_config dict: The decoded k8s object (i.e. JSON/YAML).
@@ -308,11 +318,13 @@ class RemoteInfo(object):
     def __init__(
         self,
         runner,
+        context,
         namespace,
         deployment_name,
         pod_name,
         deployment_config,
     ):
+        self.context = context
         self.namespace = namespace
         self.deployment_name = deployment_name
         self.pod_name = pod_name
@@ -348,7 +360,7 @@ def _get_remote_env(runner, context, namespace, pod_name, container_name):
     """Get the environment variables in the remote pod."""
     env = runner.get_output(
         kubectl(
-            context, namespace,
+            runner, context, namespace,
             ["exec", pod_name, "--container", container_name, "env"]
         )
     )
@@ -409,10 +421,14 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
     """
     assert context is not None
     assert namespace is not None
+    deployment_type = "deployment"
+    if runner.kubectl_cmd == "oc":
+        # OpenShift Origin uses DeploymentConfig instead:
+        deployment_type = "deploymentconfig"
     try:
         get_deployment = [
             "get",
-            "deployment",
+            deployment_type,
             "-o",
             "json",
             "--export",
@@ -421,7 +437,8 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
             deployment = json.loads(
                 runner.get_output(
                     kubectl(
-                        context, namespace, get_deployment + [deployment_name]
+                        runner, context, namespace, get_deployment +
+                        [deployment_name]
                     ),
                     stderr=STDOUT
                 )
@@ -431,7 +448,7 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
             deployment = json.loads(
                 runner.get_output(
                     kubectl(
-                        context, namespace, get_deployment +
+                        runner, context, namespace, get_deployment +
                         ["--selector=telepresence=" + run_id]
                     ),
                     stderr=STDOUT
@@ -445,56 +462,63 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
 
     expected_metadata = deployment["spec"]["template"]["metadata"]
     runner.write("Expected metadata for pods: {}\n".format(expected_metadata))
-    pods = json.loads(
-        runner.get_output(
-            kubectl(
-                context, namespace, ["get", "pod", "-o", "json", "--export"]
-            )
-        )
-    )["items"]
 
-    for pod in pods:
-        name = pod["metadata"]["name"]
-        phase = pod["status"]["phase"]
-        runner.write(
-            "Checking {} (phase {})...\n".
-            format(pod["metadata"].get("labels"), phase)
-        )
-        if not set(expected_metadata.get("labels", {}).items()
-                   ).issubset(set(pod["metadata"].get("labels", {}).items())):
-            runner.write("Labels don't match.\n")
-            continue
-        # Metadata for Deployment will hopefully have a namespace. If not, fall
-        # back to one we were given. If we weren't given one, best we can do is
-        # choose "default".
-        if (name.startswith(deployment_name + "-")
-            and
-            pod["metadata"]["namespace"] == deployment["metadata"].get(
-                "namespace", namespace)
-            and
-            phase in (
-                "Pending", "Running"
-        )):
-            runner.write("Looks like we've found our pod!\n")
-            remote_info = RemoteInfo(
-                runner,
-                namespace,
-                deployment_name,
-                name,
-                deployment,
+    start = time()
+    while time() - start < 60:
+        pods = json.loads(
+            runner.get_output(
+                kubectl(
+                    runner, context, namespace,
+                    ["get", "pod", "-o", "json", "--export"]
+                )
             )
-            # Ensure remote container is running same version as we are:
-            if remote_info.remote_telepresence_version() != __version__:
-                raise SystemExit((
-                    "The remote datawire/telepresence-k8s container is " +
-                    "running version {}, but this tool is version {}. " +
-                    "Please make sure both are running the same version."
-                ).format(
-                    remote_info.remote_telepresence_version(), __version__
-                ))
-            # Wait for pod to be running:
-            wait_for_pod(runner, remote_info, context)
-            return remote_info
+        )["items"]
+        for pod in pods:
+            name = pod["metadata"]["name"]
+            phase = pod["status"]["phase"]
+            runner.write(
+                "Checking {} (phase {})...\n".
+                format(pod["metadata"].get("labels"), phase)
+            )
+            if not set(expected_metadata.get("labels", {}).items(
+            )).issubset(set(pod["metadata"].get("labels", {}).items())):
+                runner.write("Labels don't match.\n")
+                continue
+            # Metadata for Deployment will hopefully have a namespace. If not,
+            # fall back to one we were given. If we weren't given one, best we
+            # can do is choose "default".
+            if (name.startswith(deployment_name + "-")
+                and
+                pod["metadata"]["namespace"] == deployment["metadata"].get(
+                    "namespace", namespace)
+                and
+                phase in (
+                    "Pending", "Running"
+            )):
+                runner.write("Looks like we've found our pod!\n")
+                remote_info = RemoteInfo(
+                    runner,
+                    context,
+                    namespace,
+                    deployment_name,
+                    name,
+                    deployment,
+                )
+                # Ensure remote container is running same version as we are:
+                if remote_info.remote_telepresence_version() != __version__:
+                    raise SystemExit((
+                        "The remote datawire/telepresence-k8s container is " +
+                        "running version {}, but this tool is version {}. " +
+                        "Please make sure both are running the same version."
+                    ).format(
+                        remote_info.remote_telepresence_version(), __version__
+                    ))
+                # Wait for pod to be running:
+                wait_for_pod(runner, remote_info)
+                return remote_info
+
+        # Didn't find pod...
+        sleep(1)
 
     raise RuntimeError(
         "Telepresence pod not found for Deployment '{}'.".
@@ -542,14 +566,14 @@ def wait_for_ssh(runner, ssh_port):
     raise RuntimeError("SSH isn't starting.")
 
 
-def wait_for_pod(runner, remote_info, context):
+def wait_for_pod(runner, remote_info):
     start = time()
     while time() - start < 120:
         try:
             pod = json.loads(
                 runner.get_output(
                     kubectl(
-                        context, remote_info.namespace,
+                        runner, remote_info.context, remote_info.namespace,
                         ["get", "pod", remote_info.pod_name, "-o", "json"]
                     )
                 )
@@ -587,7 +611,7 @@ def connect(
     processes.append(
         runner.popen(
             kubectl(
-                context, remote_info.namespace, [
+                runner, context, remote_info.namespace, [
                     "port-forward", remote_info.pod_name,
                     "{}:8022".format(ssh_port)
                 ]
@@ -636,7 +660,7 @@ def start_proxy(runner, args):
 
     # Figure out explicit namespace and context:
     kubectl_config = json.loads(
-        runner.get_output(["kubectl", "config", "view", "-o", "json"])
+        runner.get_output([runner.kubectl_cmd, "config", "view", "-o", "json"])
     )
     # First, figure out the context:
     if args.context is None:
@@ -664,7 +688,7 @@ def start_proxy(runner, args):
         def remove_existing_deployment():
             runner.get_output(
                 kubectl(
-                    args.context, args.namespace, [
+                    runner, args.context, args.namespace, [
                         "delete",
                         "--ignore-not-found",
                         "all",
@@ -676,6 +700,7 @@ def start_proxy(runner, args):
         atexit.register(remove_existing_deployment)
         remove_existing_deployment()
         command = kubectl(
+            runner,
             args.context,
             args.namespace,
             [
@@ -862,8 +887,9 @@ def run_local_command(
     # stdout and stderr if it wants it.
     env["PROMPT_COMMAND"] = (
         'PS1="@{}|$PS1";unset PROMPT_COMMAND'.format(
-            args.context or
-            runner.get_output(["kubectl", "config", "current-context"]).strip()
+            args.context or runner.get_output([
+                runner.kubectl_cmd, "config", "current-context"
+            ]).strip()
         )
     )
     if sys.platform == "darwin":
@@ -920,6 +946,7 @@ Command line: `{}`
 Version: `{}`
 Python version: `{}`
 kubectl version: `{}`
+oc version: `{}`
 OS: `{}`
 Traceback:
 
@@ -963,6 +990,26 @@ def ask_for_feedback():
         )
 
 
+def kubectl_or_oc():
+    """Figure out if we're using "kubectl" or "oc"."""
+    if which("oc") is None:
+        return "kubectl"
+    server = str(check_output([
+        "oc", "config", "view", "--minify=true",
+        "-o=jsonpath={.clusters[0].cluster.server}"
+    ]), "utf-8")
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    try:
+        with urlopen(server + "/version/openshift", context=ctx) as u:
+            u.read()
+    except HTTPError:
+        return "kubectl"
+    else:
+        return "oc"
+
+
 def main():
     # Make SIGTERM do clean shutdown (in particular, we want atexit functions
     # to be called):
@@ -981,13 +1028,17 @@ def main():
     if args.logfile != "-":
         args.logfile = os.path.abspath(args.logfile)
 
-    runner = Runner.open(args.logfile)
+    runner = Runner.open(args.logfile, kubectl_or_oc())
 
     @handle_unexpected_errors(args.logfile)
     def go():
         # Make sure we can access Kubernetes:
         try:
-            runner.get_output(["kubectl", "cluster-info"])
+            if runner.kubectl_cmd == "oc":
+                status_command = "status"
+            else:
+                status_command = "cluster-info"
+            runner.get_output([runner.kubectl_cmd, status_command])
         except (CalledProcessError, OSError, IOError) as e:
             sys.stderr.write("Error accessing Kubernetes: {}\n".format(e))
             raise SystemExit(1)
