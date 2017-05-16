@@ -50,6 +50,7 @@ class LocalResolver(object):
 
     def query(self, query, timeout=None):
         if query.type == dns.A:
+            print("A query: {}".format(query.name.name))
             d = reactor.resolve(query.name.name)
             d.addCallback(
                 lambda ip: self._got_ip(query, ip)
