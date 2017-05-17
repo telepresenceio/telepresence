@@ -10,7 +10,7 @@ import os
 from .utils import (
     DIRECTORY,
     random_name,
-    run_nginx,
+    run_webserver,
     telepresence_version,
     current_namespace,
     OPENSHIFT,
@@ -104,7 +104,7 @@ class EndToEndTests(TestCase):
 
     def test_run_directly(self):
         """--run runs the command directly."""
-        nginx_name = run_nginx()
+        webserver_name = run_webserver()
         p = Popen(
             args=[
                 "telepresence",
@@ -115,7 +115,7 @@ class EndToEndTests(TestCase):
                 "--run",
                 "python3",
                 "tocluster.py",
-                nginx_name,
+                webserver_name,
                 current_namespace(),
             ],
             cwd=str(DIRECTORY),
@@ -146,11 +146,11 @@ class EndToEndTests(TestCase):
         """
         Tests of communication to the cluster.
         """
-        nginx_name = run_nginx()
+        webserver_name = run_webserver()
         exit_code = run_script_test(
             ["--new-deployment", random_name()],
             "python3 tocluster.py {} {}".format(
-                nginx_name, current_namespace()
+                webserver_name, current_namespace()
             ),
         )
         assert exit_code == 113
@@ -160,10 +160,10 @@ class EndToEndTests(TestCase):
         Tests of communication to the cluster with non-default namespace.
         """
         namespace = self.create_namespace()
-        nginx_name = run_nginx(namespace)
+        webserver_name = run_webserver(namespace)
         exit_code = run_script_test(
             ["--new-deployment", random_name(), "--namespace", namespace],
-            "python3 tocluster.py {} {}".format(nginx_name, namespace),
+            "python3 tocluster.py {} {}".format(webserver_name, namespace),
         )
         assert exit_code == 113
 
@@ -289,7 +289,7 @@ class EndToEndTests(TestCase):
     def existingdeployment(self, namespace, script):
         if namespace is None:
             namespace = current_namespace()
-        nginx_name = run_nginx(namespace)
+        webserver_name = run_webserver(namespace)
 
         # Create a Deployment outside of Telepresence:
         name = random_name()
@@ -325,7 +325,7 @@ class EndToEndTests(TestCase):
         exit_code = run_script_test(
             args, "python3 {} {} {} MYENV=hello".format(
                 script,
-                nginx_name,
+                webserver_name,
                 namespace,
             )
         )
@@ -368,3 +368,15 @@ class EndToEndTests(TestCase):
         )
         exit_code = p.wait()
         assert exit_code == 113
+
+    def test_swapdeployment(self):
+        """
+        --swap-deployment swaps out Telepresence pod and then swaps it back on
+        exit.
+        """
+
+    def test_swapdeployment_explicit_container(self):
+        """
+        --swap-deployment <dep>:<container> swaps out the given container.
+        """
+        raise NotImplementedError()
