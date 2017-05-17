@@ -8,8 +8,13 @@ import time
 import os
 
 from .utils import (
-    DIRECTORY, random_name, run_nginx, telepresence_version, current_namespace,
-    OPENSHIFT, KUBECTL,
+    DIRECTORY,
+    random_name,
+    run_nginx,
+    telepresence_version,
+    current_namespace,
+    OPENSHIFT,
+    KUBECTL,
 )
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
@@ -34,8 +39,8 @@ spec:
         resources:
           limits:
             memory: "150Mi"
-      - name: {name}
-        image: {registry}/telepresence-k8s:{version}
+      - name: {container_name}
+        image: {image}
         env:
         - name: MYENV
           value: hello
@@ -66,7 +71,6 @@ else:
 apiVersion: extensions/v1beta1
 kind: Deployment
 """ + EXISTING_DEPLOYMENT
-
 
 NAMESPACE_YAML = """\
 apiVersion: v1
@@ -163,8 +167,10 @@ class EndToEndTests(TestCase):
         )
         assert exit_code == 113
 
-    @skipIf(OPENSHIFT, "OpenShift doesn't allow root, which the tests need "
-            "(at the moment, this is fixable)")
+    @skipIf(
+        OPENSHIFT, "OpenShift doesn't allow root, which the tests need "
+        "(at the moment, this is fixable)"
+    )
     def fromcluster(self, telepresence_args, url, namespace, port):
         """
         Test of communication from the cluster.
@@ -276,8 +282,10 @@ class EndToEndTests(TestCase):
         # Exit code 3 means proxy exited prematurely:
         assert exit_code == 3
 
-    @skipIf(OPENSHIFT, "OpenShift Online free version has insufficient quota "
-            "to schedule stuff, I think.")
+    @skipIf(
+        OPENSHIFT, "OpenShift Online free version has insufficient quota "
+        "to schedule stuff, I think."
+    )
     def existingdeployment(self, namespace, script):
         if namespace is None:
             namespace = current_namespace()
@@ -285,10 +293,13 @@ class EndToEndTests(TestCase):
 
         # Create a Deployment outside of Telepresence:
         name = random_name()
+        image = "{}/telepresence-k8s:{}".format(
+            REGISTRY, telepresence_version()
+        )
         deployment = EXISTING_DEPLOYMENT.format(
             name=name,
-            registry=REGISTRY,
-            version=telepresence_version(),
+            container_name=name,
+            image=image,
             namespace=namespace,
         )
         check_output(
