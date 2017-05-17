@@ -6,6 +6,7 @@ Kubernetes cluster.
 
 import argparse
 import atexit
+from copy import deepcopy
 import json
 import os
 import os.path
@@ -40,6 +41,7 @@ __version__ = "0.46"
 if os.environ.get("TELEPRESENCE_VERSION") is not None:
     __version__ = os.environ["TELEPRESENCE_VERSION"]
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
+TELEPRESENCE_IMAGE = "{}/telepresence-k8s:{}".format(REGISTRY, __version__)
 
 
 def random_name():
@@ -248,6 +250,17 @@ def parse_args():
             "on exit."
         )
     )
+    group_deployment.add_argument(
+        "--swap-deployment",
+        dest="swap_deployment",
+        meta="DEPLOYMENT[:CONTAINER]",
+        help=(
+            "Swap out an existing deployment with the Telepresence proxy, "
+            "swap back on exit. If there are multiple containers in the pod "
+            "then add the optional container name to indicate which container"
+            " to use."
+        )
+    )
     parser.add_argument(
         "--context",
         default=None,
@@ -412,11 +425,12 @@ def get_env_variables(runner, remote_info, context):
     return socks_result
 
 
-def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
-    """
-    Given the deployment name, return a RemoteInfo object.
+def get_deployment_json(
+    runner, deployment_name, context, namespace, run_id=None
+):
+    """Get the decoded JSON for a deployment.
 
-    If this is a Deployment we created, the run_id is laso passed in - this is
+    If this is a Deployment we created, the run_id is also passed in - this is
     the uuid we set for the telepresence label. Otherwise run_id is None and
     the Deployment name must be used to locate the Deployment.
     """
@@ -435,7 +449,7 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
             "--export",
         ]
         if run_id is None:
-            deployment = json.loads(
+            return json.loads(
                 runner.get_output(
                     kubectl(
                         runner, context, namespace, get_deployment +
@@ -446,7 +460,7 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
             )
         else:
             # When using a selector we get a list of objects, not just one:
-            deployment = json.loads(
+            return json.loads(
                 runner.get_output(
                     kubectl(
                         runner, context, namespace, get_deployment +
@@ -461,6 +475,18 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
             format(deployment_name, str(e.stdout, "utf-8"))
         )
 
+
+def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
+    """
+    Given the deployment name, return a RemoteInfo object.
+
+    If this is a Deployment we created, the run_id is also passed in - this is
+    the uuid we set for the telepresence label. Otherwise run_id is None and
+    the Deployment name must be used to locate the Deployment.
+    """
+    deployment = get_deployment_json(
+        runner, deployment_name, namespace, run_id=run_id
+    )
     expected_metadata = deployment["spec"]["template"]["metadata"]
     runner.write("Expected metadata for pods: {}\n".format(expected_metadata))
 
@@ -683,7 +709,7 @@ def create_new_deployment(runner, args):
             "--limits=memory=256Mi",
             "--requests=memory=64Mi",
             args.deployment,
-            "--image={}/telepresence-k8s:{}".format(REGISTRY, __version__),
+            "--image=" + TELEPRESENCE_IMAGE,
             "--labels=telepresence=" + run_id,
         ]
     )
@@ -693,6 +719,43 @@ def create_new_deployment(runner, args):
         command.append("--expose")
     runner.get_output(command)
     return args.new_deployment
+
+
+def swap_deployment(runner, args):
+    """Swap out an existing Deployment, return its name."""
+    deployment_name, *container_name = args.swap_deployment.split(":", 1)
+    if container_name:
+        container_name = container_name[0]
+    deployment_json = get_deployment_json(
+        runner, deployment_name, args.context, args.namespace
+    )
+
+    def apply_json(json_config):
+        runner.check_call(
+            kubectl(
+                runner, args.context, args.namespace, ["apply", "-f", "-"]
+            ),
+            input=json.dumps(json_config)
+        )
+
+    atexit.register(apply_json, deployment_json)
+
+    # If no container name was given, just use the first one:
+    if not container_name:
+        container_name = deployment_json["spec"]["containers"][0]["name"]
+
+    new_deployment_json = deepcopy(deployment_json)
+    new_deployment_json["replicas"] = 1
+    for container in new_deployment_json["spec"]["containers"]:
+        if container["name"] == container_name:
+            container["image"] = TELEPRESENCE_IMAGE
+            apply_json(new_deployment_json)
+            return deployment_name
+
+    raise RuntimeError(
+        "Couldn't find container {} in deployment {}.".
+        format(deployment_name, container_name)
+    )
 
 
 def start_proxy(runner, args):
@@ -724,6 +787,10 @@ def start_proxy(runner, args):
     if args.new_deployment is not None:
         # This implies --new-deployment:
         args.deployment = create_new_deployment(runner, args)
+
+    if args.swap_deployment is not None:
+        # This implies --swap-deployment
+        args.deployment = swap_deployment(runner, args)
 
     remote_info = get_remote_info(
         runner,
@@ -999,10 +1066,12 @@ def kubectl_or_oc():
     """Figure out if we're using "kubectl" or "oc"."""
     if which("oc") is None:
         return "kubectl"
-    server = str(check_output([
-        "oc", "config", "view", "--minify=true",
-        "-o=jsonpath={.clusters[0].cluster.server}"
-    ]), "utf-8")
+    server = str(
+        check_output([
+            "oc", "config", "view", "--minify=true",
+            "-o=jsonpath={.clusters[0].cluster.server}"
+        ]), "utf-8"
+    )
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
