@@ -235,8 +235,8 @@ def parse_args():
     group_deployment.add_argument(
         "--deployment",
         help=(
-            "The name of the Kubernetes Deployment where the " +
-            "datawire/telepresence-k8s image is running."
+            "The name of an existing Kubernetes Deployment where the " +
+            "datawire/telepresence-k8s image is already running."
         )
     )
     group_deployment.add_argument(
@@ -244,7 +244,8 @@ def parse_args():
         dest="new_deployment",
         help=(
             "Create a new Deployment in Kubernetes where the "
-            "datawire/telepresence-k8s image will run."
+            "datawire/telepresence-k8s image will run. It will be deleted "
+            "on exit."
         )
     )
     parser.add_argument(
@@ -653,6 +654,47 @@ def killall(processes):
             p.wait()
 
 
+def create_new_deployment(runner, args):
+    """Create a new Deployment, return its name."""
+    run_id = str(uuid4())
+
+    def remove_existing_deployment():
+        runner.get_output(
+            kubectl(
+                runner, args.context, args.namespace, [
+                    "delete",
+                    "--ignore-not-found",
+                    "all",
+                    "--selector=telepresence=" + run_id,
+                ]
+            )
+        )
+
+    atexit.register(remove_existing_deployment)
+    remove_existing_deployment()
+    command = kubectl(
+        runner,
+        args.context,
+        args.namespace,
+        [
+            "run",
+            # This will result in using Deployment:
+            "--restart=Always",
+            "--limits=memory=256Mi",
+            "--requests=memory=64Mi",
+            args.deployment,
+            "--image={}/telepresence-k8s:{}".format(REGISTRY, __version__),
+            "--labels=telepresence=" + run_id,
+        ]
+    )
+    for port in args.expose:
+        command.append("--port={}".format(port))
+    if args.expose:
+        command.append("--expose")
+    runner.get_output(command)
+    return args.new_deployment
+
+
 def start_proxy(runner, args):
     """Start the kubectl port-forward and SSH clients that do the proxying."""
     if sys.stderr.isatty():
@@ -679,46 +721,9 @@ def start_proxy(runner, args):
 
     run_id = None
 
-    if args.deployment is None:
+    if args.new_deployment is not None:
         # This implies --new-deployment:
-        args.deployment = args.new_deployment
-
-        run_id = str(uuid4())
-
-        def remove_existing_deployment():
-            runner.get_output(
-                kubectl(
-                    runner, args.context, args.namespace, [
-                        "delete",
-                        "--ignore-not-found",
-                        "all",
-                        "--selector=telepresence=" + run_id,
-                    ]
-                )
-            )
-
-        atexit.register(remove_existing_deployment)
-        remove_existing_deployment()
-        command = kubectl(
-            runner,
-            args.context,
-            args.namespace,
-            [
-                "run",
-                # This will result in using Deployment:
-                "--restart=Always",
-                "--limits=memory=256Mi",
-                "--requests=memory=64Mi",
-                args.deployment,
-                "--image={}/telepresence-k8s:{}".format(REGISTRY, __version__),
-                "--labels=telepresence=" + run_id,
-            ]
-        )
-        for port in args.expose:
-            command.append("--port={}".format(port))
-        if args.expose:
-            command.append("--expose")
-        runner.get_output(command)
+        args.deployment = create_new_deployment(runner, args)
 
     remote_info = get_remote_info(
         runner,
