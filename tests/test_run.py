@@ -390,7 +390,7 @@ class EndToEndTests(TestCase):
             "--image=openshift/hello-openshift", "--replicas=2",
             "--env=HELLO=there",
         ])
-        args = ["--swap-deployment", name],
+        args = ["--swap-deployment", name]
         exit_code = run_script_test(
             args, "python3 tocluster.py {} {} HELLO=there".format(
                 webserver_name,
@@ -445,7 +445,7 @@ class EndToEndTests(TestCase):
             ]
         )
 
-        args = ["--swap-deployment", "{}:{}".format(name, container_name)],
+        args = ["--swap-deployment", "{}:{}".format(name, container_name)]
         exit_code = run_script_test(
             args, "python3 volumes.py {} {}".format(
                 webserver_name,

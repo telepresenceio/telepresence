@@ -17,8 +17,8 @@ import sys
 from functools import wraps
 from shutil import rmtree, copy, which
 from subprocess import (
-    check_output, Popen, CalledProcessError, check_call, TimeoutExpired,
-    STDOUT, DEVNULL
+    check_output, Popen, CalledProcessError, run, TimeoutExpired, STDOUT,
+    DEVNULL
 )
 from tempfile import mkdtemp, NamedTemporaryFile
 from time import sleep, time
@@ -174,14 +174,14 @@ class Runner(object):
         self.logfile.write(message)
         self.logfile.flush()
 
-    def check_call(self, *args, **kwargs):
+    def check_call(self, *args, stdin=DEVNULL, **kwargs):
         """Run a subprocess, make sure it exited with 0."""
         self.write("Running: {}... ".format(args))
-        check_call(
+        run(
             *args,
-            stdin=DEVNULL,
             stdout=self.logfile,
             stderr=self.logfile,
+            check=True,
             **kwargs
         )
         self.write(" ran!\n")
@@ -235,13 +235,6 @@ def parse_args():
     )
     group_deployment = parser.add_mutually_exclusive_group(required=True)
     group_deployment.add_argument(
-        "--deployment",
-        help=(
-            "The name of an existing Kubernetes Deployment where the " +
-            "datawire/telepresence-k8s image is already running."
-        )
-    )
-    group_deployment.add_argument(
         '--new-deployment',
         dest="new_deployment",
         help=(
@@ -253,12 +246,19 @@ def parse_args():
     group_deployment.add_argument(
         "--swap-deployment",
         dest="swap_deployment",
-        meta="DEPLOYMENT[:CONTAINER]",
+        metavar="DEPLOYMENT[:CONTAINER]",
         help=(
             "Swap out an existing deployment with the Telepresence proxy, "
             "swap back on exit. If there are multiple containers in the pod "
             "then add the optional container name to indicate which container"
             " to use."
+        )
+    )
+    group_deployment.add_argument(
+        "--deployment",
+        help=(
+            "The name of an existing Kubernetes Deployment where the " +
+            "datawire/telepresence-k8s image is already running."
         )
     )
     parser.add_argument(
@@ -485,7 +485,7 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
     the Deployment name must be used to locate the Deployment.
     """
     deployment = get_deployment_json(
-        runner, deployment_name, namespace, run_id=run_id
+        runner, deployment_name, context, namespace, run_id=run_id
     )
     expected_metadata = deployment["spec"]["template"]["metadata"]
     runner.write("Expected metadata for pods: {}\n".format(expected_metadata))
@@ -735,18 +735,21 @@ def swap_deployment(runner, args):
             kubectl(
                 runner, args.context, args.namespace, ["apply", "-f", "-"]
             ),
-            input=json.dumps(json_config)
+            input=json.dumps(json_config).encode("utf-8")
         )
 
     atexit.register(apply_json, deployment_json)
 
     # If no container name was given, just use the first one:
     if not container_name:
-        container_name = deployment_json["spec"]["containers"][0]["name"]
+        container_name = deployment_json["spec"]["template"]["spec"][
+            "containers"
+        ][0]["name"]
 
     new_deployment_json = deepcopy(deployment_json)
-    new_deployment_json["replicas"] = 1
-    for container in new_deployment_json["spec"]["containers"]:
+    new_deployment_json["spec"]["replicas"] = 1
+    for container in new_deployment_json["spec"]["template"]["spec"
+                                                             ]["containers"]:
         if container["name"] == container_name:
             container["image"] = TELEPRESENCE_IMAGE
             apply_json(new_deployment_json)
