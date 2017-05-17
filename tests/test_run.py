@@ -2,8 +2,15 @@
 End-to-end tests for running directly in the operating system.
 """
 
+import json
 from unittest import TestCase, skipIf
-from subprocess import check_output, Popen, PIPE, CalledProcessError
+from subprocess import (
+    check_output,
+    Popen,
+    PIPE,
+    CalledProcessError,
+    check_call,
+)
 import time
 import os
 
@@ -24,7 +31,7 @@ metadata:
   name: {name}
   namespace: {namespace}
 spec:
-  replicas: 1
+  replicas: {replicas}
   template:
     metadata:
       labels:
@@ -66,11 +73,13 @@ if OPENSHIFT:
 apiVersion: v1
 kind: DeploymentConfig
 """ + EXISTING_DEPLOYMENT
+    DEPLOYMENT_TYPE = "deploymentconfig"
 else:
     EXISTING_DEPLOYMENT = """\
 apiVersion: extensions/v1beta1
 kind: Deployment
 """ + EXISTING_DEPLOYMENT
+    DEPLOYMENT_TYPE = "deployment"
 
 NAMESPACE_YAML = """\
 apiVersion: v1
@@ -301,6 +310,7 @@ class EndToEndTests(TestCase):
             container_name=name,
             image=image,
             namespace=namespace,
+            replicas="1",
         )
         check_output(
             args=[
@@ -311,12 +321,9 @@ class EndToEndTests(TestCase):
             ],
             input=deployment.encode("utf-8")
         )
-        deployment_type = "deployment"
-        if OPENSHIFT:
-            deployment_type = "deploymentconfig"
         self.addCleanup(
             check_output, [
-                KUBECTL, "delete", deployment_type, name,
+                KUBECTL, "delete", DEPLOYMENT_TYPE, name,
                 "--namespace=" + namespace
             ]
         )
@@ -374,9 +381,75 @@ class EndToEndTests(TestCase):
         --swap-deployment swaps out Telepresence pod and then swaps it back on
         exit.
         """
+        webserver_name = run_webserver()
+
+        # Create a non-Telepresence deployment:
+        name = random_name()
+        check_call([
+            KUBECTL, "run", name, "--restart=Always",
+            "--image=openshift/hello-openshift", "--replicas=2",
+            "--env=HELLO=there",
+        ])
+        args = ["--swap-deployment", name],
+        exit_code = run_script_test(
+            args, "python3 tocluster.py {} {} HELLO=there".format(
+                webserver_name,
+                current_namespace(),
+            )
+        )
+        assert 113 == exit_code
+        deployment = json.loads(
+            str(
+                check_output([
+                    KUBECTL, "get", DEPLOYMENT_TYPE, name, "-o", "json",
+                    "--export"
+                ]), "utf-8"
+            )
+        )
+        # We swapped back:
+        assert deployment["replicas"] == 2
+        assert deployment["spec"]["containers"
+                                  ][0]["image"] == "openshift/hello-openshift"
 
     def test_swapdeployment_explicit_container(self):
         """
         --swap-deployment <dep>:<container> swaps out the given container.
         """
-        raise NotImplementedError()
+        webserver_name = run_webserver()
+
+        # Create a non-Telepresence Deployment with multiple containers:
+        name = random_name()
+        container_name = random_name()
+        deployment = EXISTING_DEPLOYMENT.format(
+            name=name,
+            container_name=container_name,
+            image="openshift/hello-openshift",
+            namespace=current_namespace(),
+            replicas=2
+        )
+        check_output(
+            args=[
+                KUBECTL,
+                "apply",
+                "-f",
+                "-",
+            ],
+            input=deployment.encode("utf-8")
+        )
+        self.addCleanup(
+            check_output, [
+                KUBECTL,
+                "delete",
+                DEPLOYMENT_TYPE,
+                name,
+            ]
+        )
+
+        args = ["--swap-deployment", "{}:{}".format(name, container_name)],
+        exit_code = run_script_test(
+            args, "python3 volumes.py {} {}".format(
+                webserver_name,
+                current_namespace(),
+            )
+        )
+        assert 113 == exit_code
