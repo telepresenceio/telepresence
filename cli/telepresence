@@ -17,8 +17,8 @@ import sys
 from functools import wraps
 from shutil import rmtree, copy, which
 from subprocess import (
-    check_output, Popen, CalledProcessError, run, TimeoutExpired, STDOUT,
-    DEVNULL
+    check_output, Popen, CalledProcessError, check_call, TimeoutExpired,
+    STDOUT, DEVNULL
 )
 from tempfile import mkdtemp, NamedTemporaryFile
 from time import sleep, time
@@ -177,11 +177,10 @@ class Runner(object):
     def check_call(self, *args, stdin=DEVNULL, **kwargs):
         """Run a subprocess, make sure it exited with 0."""
         self.write("Running: {}... ".format(args))
-        run(
+        check_call(
             *args,
             stdout=self.logfile,
             stderr=self.logfile,
-            check=True,
             **kwargs
         )
         self.write(" ran!\n")
