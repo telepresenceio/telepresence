@@ -877,10 +877,9 @@ def wait_for_exit(runner, shell_process, processes):
         for p in processes:
             code = p.poll()
             if code is not None:
-                if sys.stderr.isatty:
-                    runner.write(
-                        "A subprocess died, killing all processes...\n"
-                    )
+                runner.write(
+                    "A subprocess died, killing all processes...\n"
+                )
                 killall(processes)
                 # Unfortunatly torsocks doesn't deal well with connections
                 # being lost, so best we can do is shut down.
