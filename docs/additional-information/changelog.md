@@ -5,6 +5,13 @@ title: "Changelog"
 categories: additional-information
 ---
 
+#### 0.47 (unreleased)
+
+Features:
+
+* `--swap-deployment` allows replacing an existing Deployment with Telepresence, and then swapping back on exiting the `telepresence` command line.
+  ([#9](https://github.com/datawire/telepresence/issues/9))
+
 #### 0.46 (May 16, 2017)
 
 Features:
