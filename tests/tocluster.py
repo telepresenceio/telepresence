@@ -42,7 +42,9 @@ def check_urls(webserver_service, namespace):
         ),
         "full service name",
     )
-    check_webserver_url("http://{}:8080/".format(webserver_service), "hardcoded port")
+    check_webserver_url(
+        "http://{}:8080/".format(webserver_service), "hardcoded port"
+    )
     return host, port
 
 
