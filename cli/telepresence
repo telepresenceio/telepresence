@@ -181,6 +181,7 @@ class Runner(object):
             *args,
             stdout=self.logfile,
             stderr=self.logfile,
+            stdin=stdin,
             **kwargs
         )
         self.write(" ran!\n")
