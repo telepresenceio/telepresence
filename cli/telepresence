@@ -708,7 +708,7 @@ def create_new_deployment(runner, args):
             "--restart=Always",
             "--limits=memory=256Mi",
             "--requests=memory=64Mi",
-            args.deployment,
+            args.new_deployment,
             "--image=" + TELEPRESENCE_IMAGE,
             "--labels=telepresence=" + run_id,
         ]
@@ -718,11 +718,13 @@ def create_new_deployment(runner, args):
     if args.expose:
         command.append("--expose")
     runner.get_output(command)
-    return args.new_deployment
+    return args.new_deployment, run_id
 
 
 def swap_deployment(runner, args):
     """Swap out an existing Deployment, return its name."""
+    run_id = str(uuid4())
+
     deployment_name, *container_name = args.swap_deployment.split(":", 1)
     if container_name:
         container_name = container_name[0]
@@ -748,12 +750,17 @@ def swap_deployment(runner, args):
 
     new_deployment_json = deepcopy(deployment_json)
     new_deployment_json["spec"]["replicas"] = 1
+    new_deployment_json["metadata"].setdefault("labels",
+                                               {})["telepresence"] = run_id
+    new_deployment_json["spec"]["template"]["metadata"].setdefault(
+        "labels", {}
+    )["telepresence"] = run_id
     for container in new_deployment_json["spec"]["template"]["spec"
                                                              ]["containers"]:
         if container["name"] == container_name:
             container["image"] = TELEPRESENCE_IMAGE
             apply_json(new_deployment_json)
-            return deployment_name
+            return deployment_name, run_id
 
     raise RuntimeError(
         "Couldn't find container {} in deployment {}.".
@@ -789,11 +796,11 @@ def start_proxy(runner, args):
 
     if args.new_deployment is not None:
         # This implies --new-deployment:
-        args.deployment = create_new_deployment(runner, args)
+        args.deployment, run_id = create_new_deployment(runner, args)
 
     if args.swap_deployment is not None:
         # This implies --swap-deployment
-        args.deployment = swap_deployment(runner, args)
+        args.deployment, run_id = swap_deployment(runner, args)
 
     remote_info = get_remote_info(
         runner,

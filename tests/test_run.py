@@ -386,17 +386,23 @@ class EndToEndTests(TestCase):
         # Create a non-Telepresence deployment:
         name = random_name()
         check_call([
-            KUBECTL, "run", name, "--restart=Always",
-            "--image=openshift/hello-openshift", "--replicas=2",
+            KUBECTL,
+            "run",
+            name,
+            "--restart=Always",
+            "--image=openshift/hello-openshift",
+            "--replicas=2",
             "--env=HELLO=there",
         ])
-        args = ["--swap-deployment", name]
-        exit_code = run_script_test(
-            args, "python3 tocluster.py {} {} HELLO=there".format(
-                webserver_name,
-                current_namespace(),
-            )
+        p = Popen(
+            args=[
+                "telepresence", "--swap-deployment", name, "--logfile", "-",
+                "--run", "python3", "tocluster.py", webserver_name,
+                current_namespace(), "HELLO=there"
+            ],
+            cwd=str(DIRECTORY),
         )
+        exit_code = p.wait()
         assert 113 == exit_code
         deployment = json.loads(
             str(
@@ -407,9 +413,10 @@ class EndToEndTests(TestCase):
             )
         )
         # We swapped back:
-        assert deployment["replicas"] == 2
-        assert deployment["spec"]["containers"
-                                  ][0]["image"] == "openshift/hello-openshift"
+        assert deployment["spec"]["replicas"] == 2
+        assert deployment["spec"]["template"]["spec"]["containers"][0][
+            "image"
+        ] == "openshift/hello-openshift"
 
     def test_swapdeployment_explicit_container(self):
         """
@@ -445,11 +452,13 @@ class EndToEndTests(TestCase):
             ]
         )
 
-        args = ["--swap-deployment", "{}:{}".format(name, container_name)]
-        exit_code = run_script_test(
-            args, "python3 volumes.py {} {}".format(
-                webserver_name,
-                current_namespace(),
-            )
+        p = Popen(
+            args=[
+                "telepresence", "--swap-deployment",
+                "{}:{}".format(name, container_name), "--logfile", "-",
+                "--run", "python3", "volumes.py"
+            ],
+            cwd=str(DIRECTORY),
         )
+        exit_code = p.wait()
         assert 113 == exit_code
