@@ -422,8 +422,6 @@ class EndToEndTests(TestCase):
         """
         --swap-deployment <dep>:<container> swaps out the given container.
         """
-        webserver_name = run_webserver()
-
         # Create a non-Telepresence Deployment with multiple containers:
         name = random_name()
         container_name = random_name()
