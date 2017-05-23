@@ -27,7 +27,7 @@ spec:
     name: servicename
 ```
 
-You will also have a `Deployment` that actually runs your code, with labels that match the `Service` `selector`.
+You will also have a `Deployment` that runs your code, with labels that match the `Service` `selector`.
 Let's assume your existing deployment uses a database at `somewhere.someplace.cloud.example.com` port 5432, so you pass that information to the container as an environment variable:
 
 ```yaml
@@ -52,7 +52,7 @@ spec:
           value: somewhere.someplace.cloud.example.com
 ```
 
-In order to run Telepresence you will need to do three things:
+To run Telepresence you will need to do three things:
 
 1. Replace your production `Deployment` with a custom `Deployment` that runs the Telepresence proxy.
 2. Run the Telepresence client locally.
@@ -122,7 +122,7 @@ $ telepresence --new-deployment example --run-shell
 ### Access to the Kubernetes network environment
 
 The locally running process wrapped by `telepresence` has access to everything that a normal Kubernetes pod would have access to.
-That means `Service` instances, their corresponding DNS entries, and any cloud resources your could normally access from Kubernetes.
+That means `Service` instances, their corresponding DNS entries, and any cloud resources you can normally access from Kubernetes.
 
 To see this in action, let's start a `Service` and `Deployment` called `"helloworld"` in Kubernetes, and wait until it's up and running.
 We'll check the current Kubernetes context and then start a new pod:
@@ -173,7 +173,7 @@ KUBERNETES_SERVICE_HOST=10.0.0.1
 ### Volumes
 
 Volumes configured in the `Deployment` pod template will also be made your local process.
-This is mostly intended for read-only volumes like `Secret` and `ConfigMap`, you probably don't want a local database writing to a remote volume.
+This will work better with read-only volumes with small files like `Secret` and `ConfigMap`; a local database server writing to a remote volume will be slow.
 
 Volume support requires a small amount of work on your part.
 The root directory where all the volumes can be found will be set to the `TELEPRESENCE_ROOT` environment variable in the shell run by `telepresence`.
@@ -191,9 +191,9 @@ Starting proxy...
 ca.crt  namespace  token
 ```
 
-Of course, the files are available at a different path than they are on the actual production Kubernetes environment.
+The files are available at a different path than they are on the actual production Kubernetes environment.
 
-One way to deal with that is to modify your application's code slightly.
+One way to deal with that is to change your application's code slightly.
 For example, let's say you have a volume that mounts a file called `/app/secrets`.
 Normally you would just open it in your code like so:
 
@@ -202,8 +202,7 @@ Normally you would just open it in your code like so:
 secret_file = open("/app/secrets")
 ```
 
-In order to support volume proxying by Telepresence, you will need to change
-your code (note that this is not the most succinct way to express this, it's more verbose in order to be clear to non-Python programmers):
+To support volume proxying by Telepresence, you will need to change your code, for example:
 
 ```python
 volume_root = "/"
@@ -248,11 +247,11 @@ $ telepresence --namespace yournamespace --deployment yourservice --run-shell
 
 ### Accessing the pod from your process
 
-In general Telepresence proxies all IPs and DNS lookups via the remote proxy pod.
+Telepresence proxies all IPs and DNS lookups via the remote proxy pod.
 There is one exception, however.
 
-`localhost` and `127.0.0.1` will end up accessing the host machine, the machine where you run `telepresence`, *not* the pod as is usually the case.
-This mostly is a problem in cases where you are running multiple containers in a pod and you need your process to access a different container in the same pod.
+`localhost` and `127.0.0.1` will end up accessing the host machine—the machine where you run `telepresence`—*not* the pod.
+This can be a problem in cases where you are running multiple containers in a pod and you need your process to access a different container in the same pod.
 
 The solution is to access the pod via its IP, rather than at `127.0.0.1`.
 You can have the pod IP configured as an environment variable `$MY_POD_IP` in the Deployment using the Kubernetes [Downward API](https://kubernetes.io/docs/tasks/configure-pod-container/environment-variable-expose-pod-information/):

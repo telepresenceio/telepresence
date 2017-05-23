@@ -23,7 +23,7 @@ You will need the following available on your machine:
 
 On OS X you can install Telepresence by running the following:
 
-```
+```shell
 brew cask install osxfuse
 brew install datawire/blackbird/telepresence
 ```
@@ -32,7 +32,7 @@ brew install datawire/blackbird/telepresence
 
 Run the following to install Telepresence:
 
-```
+```shell
 curl -s https://packagecloud.io/install/repositories/datawireio/telepresence/script.deb.sh | sudo bash
 sudo apt install --no-install-recommends telepresence
 ```
@@ -41,7 +41,7 @@ sudo apt install --no-install-recommends telepresence
 
 Run the following:
 
-```
+```shell
 curl -s https://packagecloud.io/install/repositories/datawireio/telepresence/script.rpm.sh | sudo bash
 sudo dnf install telepresence
 ```
@@ -72,7 +72,7 @@ Don't see your favorite platform?
 
 ### Using Telepresence for the first time
 
-**Important:** Note that starting `telepresence` the first time may take a little while, since Kubernetes needs to download the server-side image.
+**Important:** Starting `telepresence` the first time may take a little while, since Kubernetes needs to download the server-side image.
 
 We'll start by trying out one specific feature: Telepresence allows you to forward traffic from Kubernetes to a local process.
 
@@ -169,4 +169,4 @@ telepresence --deployment myserver --expose 8080 --run python3 -m http.server 80
 Keyboard interrupt received, exiting.
 ```
 
-Telepresence can do much more than this, of course, which we'll cover in the [next section](/user-guide/features-and-functionality/) of the documentation.
+Telepresence can do much more than this, which we'll cover in the [next section](/user-guide/features-and-functionality/) of the documentation.
