@@ -623,7 +623,8 @@ form {
 .menu {
   list-style: none;
   margin-bottom: 0; }
-  .menu .item {
+
+.menu .item {
     float: left;
     margin-bottom: 0;
     line-height: 6.5rem;
@@ -657,8 +658,7 @@ form {
     text-transform: uppercase;
   }
   .menu.basic .item {
-    letter-spacing: .1rem;
-    font-size: 1.6rem;
+    font-size: 1.4rem;
     font-weight: 400; }
     .menu.basic .item.header {
       font-weight: 700; }

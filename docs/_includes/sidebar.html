@@ -10,7 +10,7 @@
         {% for p in pages %}
             {% for pc in p.categories %}
               {% if pc == cat %}
-                {% if page.permalink == p.url %} 
+                {% if page.url == p.url %} 
                   {% if page.table-of-content != nil %}
                       <div class="secondary items">
                           <div class="active item header">{{ p.title }}</div>
