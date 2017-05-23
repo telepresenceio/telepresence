@@ -14,13 +14,13 @@ github_username:  datawire
 
 # use this to define the categories of your documentation
 category-list:
-  - "about"
+  - "tutorials"
   - "user-guide"
   - "additional-information"
 
 # optionally you can define icon for each category (for the sidebar)
 # Doc42 uses Font Awesome
-category-icons: [question-circle, code, expand]
+category-icons: [code, question-circle, expand]
 
 # Build settings
 markdown: kramdown
