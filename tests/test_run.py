@@ -2,14 +2,26 @@
 End-to-end tests for running directly in the operating system.
 """
 
+import json
 from unittest import TestCase, skipIf
-from subprocess import check_output, Popen, PIPE, CalledProcessError
+from subprocess import (
+    check_output,
+    Popen,
+    PIPE,
+    CalledProcessError,
+    check_call,
+)
 import time
 import os
 
 from .utils import (
-    DIRECTORY, random_name, run_nginx, telepresence_version, current_namespace,
-    OPENSHIFT, KUBECTL,
+    DIRECTORY,
+    random_name,
+    run_webserver,
+    telepresence_version,
+    current_namespace,
+    OPENSHIFT,
+    KUBECTL,
 )
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
@@ -19,7 +31,7 @@ metadata:
   name: {name}
   namespace: {namespace}
 spec:
-  replicas: 1
+  replicas: {replicas}
   template:
     metadata:
       labels:
@@ -34,8 +46,8 @@ spec:
         resources:
           limits:
             memory: "150Mi"
-      - name: {name}
-        image: {registry}/telepresence-k8s:{version}
+      - name: {container_name}
+        image: {image}
         env:
         - name: MYENV
           value: hello
@@ -61,12 +73,13 @@ if OPENSHIFT:
 apiVersion: v1
 kind: DeploymentConfig
 """ + EXISTING_DEPLOYMENT
+    DEPLOYMENT_TYPE = "deploymentconfig"
 else:
     EXISTING_DEPLOYMENT = """\
 apiVersion: extensions/v1beta1
 kind: Deployment
 """ + EXISTING_DEPLOYMENT
-
+    DEPLOYMENT_TYPE = "deployment"
 
 NAMESPACE_YAML = """\
 apiVersion: v1
@@ -100,7 +113,7 @@ class EndToEndTests(TestCase):
 
     def test_run_directly(self):
         """--run runs the command directly."""
-        nginx_name = run_nginx()
+        webserver_name = run_webserver()
         p = Popen(
             args=[
                 "telepresence",
@@ -111,7 +124,7 @@ class EndToEndTests(TestCase):
                 "--run",
                 "python3",
                 "tocluster.py",
-                nginx_name,
+                webserver_name,
                 current_namespace(),
             ],
             cwd=str(DIRECTORY),
@@ -142,11 +155,11 @@ class EndToEndTests(TestCase):
         """
         Tests of communication to the cluster.
         """
-        nginx_name = run_nginx()
+        webserver_name = run_webserver()
         exit_code = run_script_test(
             ["--new-deployment", random_name()],
             "python3 tocluster.py {} {}".format(
-                nginx_name, current_namespace()
+                webserver_name, current_namespace()
             ),
         )
         assert exit_code == 113
@@ -156,15 +169,17 @@ class EndToEndTests(TestCase):
         Tests of communication to the cluster with non-default namespace.
         """
         namespace = self.create_namespace()
-        nginx_name = run_nginx(namespace)
+        webserver_name = run_webserver(namespace)
         exit_code = run_script_test(
             ["--new-deployment", random_name(), "--namespace", namespace],
-            "python3 tocluster.py {} {}".format(nginx_name, namespace),
+            "python3 tocluster.py {} {}".format(webserver_name, namespace),
         )
         assert exit_code == 113
 
-    @skipIf(OPENSHIFT, "OpenShift doesn't allow root, which the tests need "
-            "(at the moment, this is fixable)")
+    @skipIf(
+        OPENSHIFT, "OpenShift doesn't allow root, which the tests need "
+        "(at the moment, this is fixable)"
+    )
     def fromcluster(self, telepresence_args, url, namespace, port):
         """
         Test of communication from the cluster.
@@ -276,20 +291,26 @@ class EndToEndTests(TestCase):
         # Exit code 3 means proxy exited prematurely:
         assert exit_code == 3
 
-    @skipIf(OPENSHIFT, "OpenShift Online free version has insufficient quota "
-            "to schedule stuff, I think.")
+    @skipIf(
+        OPENSHIFT, "OpenShift Online free version has insufficient quota "
+        "to schedule stuff, I think."
+    )
     def existingdeployment(self, namespace, script):
         if namespace is None:
             namespace = current_namespace()
-        nginx_name = run_nginx(namespace)
+        webserver_name = run_webserver(namespace)
 
         # Create a Deployment outside of Telepresence:
         name = random_name()
+        image = "{}/telepresence-k8s:{}".format(
+            REGISTRY, telepresence_version()
+        )
         deployment = EXISTING_DEPLOYMENT.format(
             name=name,
-            registry=REGISTRY,
-            version=telepresence_version(),
+            container_name=name,
+            image=image,
             namespace=namespace,
+            replicas="1",
         )
         check_output(
             args=[
@@ -300,12 +321,9 @@ class EndToEndTests(TestCase):
             ],
             input=deployment.encode("utf-8")
         )
-        deployment_type = "deployment"
-        if OPENSHIFT:
-            deployment_type = "deploymentconfig"
         self.addCleanup(
             check_output, [
-                KUBECTL, "delete", deployment_type, name,
+                KUBECTL, "delete", DEPLOYMENT_TYPE, name,
                 "--namespace=" + namespace
             ]
         )
@@ -314,7 +332,7 @@ class EndToEndTests(TestCase):
         exit_code = run_script_test(
             args, "python3 {} {} {} MYENV=hello".format(
                 script,
-                nginx_name,
+                webserver_name,
                 namespace,
             )
         )
@@ -357,3 +375,93 @@ class EndToEndTests(TestCase):
         )
         exit_code = p.wait()
         assert exit_code == 113
+
+    def test_swapdeployment(self):
+        """
+        --swap-deployment swaps out Telepresence pod and then swaps it back on
+        exit.
+        """
+        webserver_name = run_webserver()
+
+        # Create a non-Telepresence deployment:
+        name = random_name()
+        check_call([
+            KUBECTL,
+            "run",
+            name,
+            "--restart=Always",
+            "--image=openshift/hello-openshift",
+            "--replicas=2",
+            "--env=HELLO=there",
+        ])
+        self.addCleanup(check_call, [KUBECTL, "delete", DEPLOYMENT_TYPE, name])
+        p = Popen(
+            args=[
+                "telepresence", "--swap-deployment", name, "--logfile", "-",
+                "--run", "python3", "tocluster.py", webserver_name,
+                current_namespace(), "HELLO=there"
+            ],
+            cwd=str(DIRECTORY),
+        )
+        exit_code = p.wait()
+        assert 113 == exit_code
+        deployment = json.loads(
+            str(
+                check_output([
+                    KUBECTL, "get", DEPLOYMENT_TYPE, name, "-o", "json",
+                    "--export"
+                ]), "utf-8"
+            )
+        )
+        # We swapped back:
+        assert deployment["spec"]["replicas"] == 2
+        assert deployment["spec"]["template"]["spec"]["containers"][0][
+            "image"
+        ] == "openshift/hello-openshift"
+
+    @skipIf(
+        OPENSHIFT, "OpenShift Online free version has insufficient quota "
+        "to schedule stuff, I think."
+    )
+    def test_swapdeployment_explicit_container(self):
+        """
+        --swap-deployment <dep>:<container> swaps out the given container.
+        """
+        # Create a non-Telepresence Deployment with multiple containers:
+        name = random_name()
+        container_name = random_name()
+        deployment = EXISTING_DEPLOYMENT.format(
+            name=name,
+            container_name=container_name,
+            image="openshift/hello-openshift",
+            namespace=current_namespace(),
+            replicas=2
+        )
+        check_output(
+            args=[
+                KUBECTL,
+                "apply",
+                "-f",
+                "-",
+            ],
+            input=deployment.encode("utf-8")
+        )
+        self.addCleanup(
+            check_output, [
+                KUBECTL,
+                "delete",
+                DEPLOYMENT_TYPE,
+                name,
+            ]
+        )
+
+        p = Popen(
+            args=[
+                "telepresence", "--swap-deployment",
+                "{}:{}".format(name, container_name), "--logfile", "-",
+                "--run", "python3", "volumes.py"
+            ],
+            cwd=str(DIRECTORY),
+        )
+        exit_code = p.wait()
+        assert 113 == exit_code

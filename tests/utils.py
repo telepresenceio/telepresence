@@ -32,9 +32,9 @@ def telepresence_version():
     ).strip()
 
 
-def run_nginx(namespace=None):
-    """Run nginx in Kuberentes; return Service name."""
-    nginx_name = random_name()
+def run_webserver(namespace=None):
+    """Run webserver in Kuberentes; return Service name."""
+    webserver_name = random_name()
     kubectl = [KUBECTL]
     if namespace is not None:
         kubectl.extend(["--namespace", namespace])
@@ -43,7 +43,7 @@ def run_nginx(namespace=None):
         check_call(
             kubectl + [
                 "delete", "--ignore-not-found", "all",
-                "--selector=telepresence=" + nginx_name
+                "--selector=telepresence=" + webserver_name
             ]
         )
 
@@ -54,8 +54,8 @@ def run_nginx(namespace=None):
         kubectl + [
             "run",
             "--restart=Never",
-            nginx_name,
-            "--labels=telepresence=" + nginx_name,
+            webserver_name,
+            "--labels=telepresence=" + webserver_name,
             "--image=openshift/hello-openshift",
             "--limits=memory=256Mi",
             "--requests=memory=150Mi",
@@ -67,7 +67,7 @@ def run_nginx(namespace=None):
         try:
             available = check_output(
                 kubectl + [
-                    "get", "pods", nginx_name, "-o",
+                    "get", "pods", webserver_name, "-o",
                     'jsonpath={.status.phase}'
                 ]
             )
@@ -75,10 +75,10 @@ def run_nginx(namespace=None):
             available = None
         print("webserver phase: {}".format(available))
         if available == b"Running":
-            return nginx_name
+            return webserver_name
         else:
             time.sleep(1)
-    raise RuntimeError("nginx never started")
+    raise RuntimeError("webserver never started")
 
 
 def current_namespace():
