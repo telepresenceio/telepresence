@@ -1,7 +1,7 @@
 ---
 layout: doc
 weight: 2
-title: "Getting started with OpenShift"
+title: "Get started with OpenShift"
 categories: tutorials
 ---
 
