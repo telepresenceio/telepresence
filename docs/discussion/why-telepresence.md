@@ -79,3 +79,7 @@ graph TD
 
 This means development is fast: you only have to change your code and restart your process.
 Many web frameworks also do automatic code reload, in which case you won't even need to restart.
+
+### Other options
+
+For more discussion of the solution space for local development see the article [Development Environments for Microservices](https://www.datawire.io/guide/deployment/development-environments-microservices/).

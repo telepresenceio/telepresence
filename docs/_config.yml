@@ -16,11 +16,12 @@ github_username:  datawire
 category-list:
   - "tutorials"
   - "discussion"
+  - "howto"
   - "reference"
 
 # optionally you can define icon for each category (for the sidebar)
 # Doc42 uses Font Awesome
-category-icons: [code, question-circle, expand]
+category-icons: [code, question-circle, code, expand]
 
 # Build settings
 markdown: kramdown
