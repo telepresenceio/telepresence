@@ -17,8 +17,8 @@ import sys
 from functools import wraps
 from shutil import rmtree, copy, which
 from subprocess import (
-    check_output, Popen, CalledProcessError, run, TimeoutExpired,
-    STDOUT, DEVNULL
+    check_output, Popen, CalledProcessError, run, TimeoutExpired, STDOUT,
+    DEVNULL
 )
 from tempfile import mkdtemp, NamedTemporaryFile
 from time import sleep, time
@@ -883,9 +883,7 @@ def wait_for_exit(runner, shell_process, processes):
         for p in processes:
             code = p.poll()
             if code is not None:
-                runner.write(
-                    "A subprocess died, killing all processes...\n"
-                )
+                runner.write("A subprocess died, killing all processes...\n")
                 killall(processes)
                 # Unfortunatly torsocks doesn't deal well with connections
                 # being lost, so best we can do is shut down.
