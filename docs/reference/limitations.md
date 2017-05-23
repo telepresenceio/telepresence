@@ -1,7 +1,7 @@
 ---
 layout: doc
 weight: 4
-title: "Limitations and workarounds"
+title: "Limitations & workarounds"
 categories: reference
 ---
 
