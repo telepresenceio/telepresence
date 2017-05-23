@@ -16,7 +16,7 @@ categories: discussion
 Let's assume you have a web service which listens on port 8080, and has a Dockerfile which gets built to an image called `examplecom/servicename`.
 Your service depends on other Kubernetes `Service` instances (`thing1` and `thing2`), and on a cloud database.
 
-The Kubernetes production environment looks like this:
+The Kubernetes staging environment looks like this:
 
 <div class="mermaid">
 graph LR
@@ -36,7 +36,7 @@ If you need that cloud database and those two services to directly test your sof
 1. Change your code.
 2. Build a Docker image.
 3. Push the Docker image to a Docker registry in the cloud.
-4. Update the Kubernetes cluster to use your new image.
+4. Update the staging Kubernetes cluster to use your new image.
 5. Wait for the image to download.
 
 This is slow.
@@ -60,7 +60,7 @@ graph TD
 
 ### A fast development cycle with Telepresence
 
-Telepresence works by running your code *locally*, as a normal local process, and then forwarding forwarding requests to/from the remote Kubernetes cluster.
+Telepresence works by running your code *locally*, as a normal local process, and then forwarding requests to/from the Kubernetes cluster.
 
 <div class="mermaid">
 graph TD

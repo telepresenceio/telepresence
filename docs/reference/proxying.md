@@ -88,7 +88,7 @@ Starting proxy...
 ca.crt  namespace  token
 ```
 
-The files are available at a different path than they are on the actual production Kubernetes environment.
+The files are available at a different path than they are on the actual Kubernetes environment.
 
 One way to deal with that is to change your application's code slightly.
 For example, let's say you have a volume that mounts a file called `/app/secrets`.

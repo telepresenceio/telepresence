@@ -23,8 +23,9 @@ If this interests you please leave a comment or vote on the [VPN issue in GitHub
 
 ### How it works
 
-Telepresence works by building a two-way network proxy (bootstrapped using `kubectl port-forward`) between a custom pod running inside a remote Kubernetes cluster and a process running on your development machine.
+Telepresence works by building a two-way network proxy (bootstrapped using `kubectl port-forward`) between a custom pod running inside a remote (or local) Kubernetes cluster and a process running on your development machine.
 The custom pod is substituted for your normal pod that would run in production.
+Typically you'd want to do this to a testing or staging cluster, not your production cluster.
 
 Environment variables from the remote pod are made available to your local process.
 In addition, the local process has its networking transparently overridden such that DNS calls and TCP connections are routed over the proxy to the remote Kubernetes cluster.
