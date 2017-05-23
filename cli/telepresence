@@ -493,7 +493,7 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
     runner.write("Expected metadata for pods: {}\n".format(expected_metadata))
 
     start = time()
-    while time() - start < 60:
+    while time() - start < 120:
         pods = json.loads(
             runner.get_output(
                 kubectl(

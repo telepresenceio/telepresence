@@ -419,6 +419,10 @@ class EndToEndTests(TestCase):
             "image"
         ] == "openshift/hello-openshift"
 
+    @skipIf(
+        OPENSHIFT, "OpenShift Online free version has insufficient quota "
+        "to schedule stuff, I think."
+    )
     def test_swapdeployment_explicit_container(self):
         """
         --swap-deployment <dep>:<container> swaps out the given container.
