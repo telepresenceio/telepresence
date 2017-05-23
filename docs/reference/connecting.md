@@ -5,10 +5,12 @@ title: "Connecting to the cluster"
 categories: reference
 ---
 
+### Setting up the proxy
+
 To use Telepresence with a cluster (Kubernetes or OpenShift, local or remote) you need to run a proxy inside the cluster.
 There are three ways of doing so.
 
-### Creating a new deployment.
+#### Creating a new deployment.
 
 By using the `--new-deployment` option `telepresence` can create a new deployment for you.
 It will be deleted when the local `telepresence` process exits.
@@ -23,7 +25,7 @@ This will create two Kubernetes objects, a `Deployment` and a `Service`, both na
 
 If `telepresence` crashes badly enough (e.g. you used `kill -9`) you will need to manually delete the `Deployment` and `Service` that Telepresence created.
 
-### Swapping out an existing deployment
+#### Swapping out an existing deployment
 
 If you already have your code running in the cluster you can use the `--swap-deployment` option to replace the existing deployment with the Telepresence proxy.
 When the `telepresence` process exits it restores the earlier state of the `Deployment` (or `DeploymentConfig` on OpenShift).
@@ -41,7 +43,7 @@ $ telepresence --swap-deployment myserver:containername --run-shell
 If `telepresence` crashes badly enough (e.g. you used `kill -9`) you will need to manually restore the `Deployment`.
 
 
-### Running Telepresence manually
+#### Running Telepresence manually
 
 You can also choose to run the Telepresence manually by starting a `Deployment` that runs the proxy in a pod.
 
@@ -77,3 +79,28 @@ $ telepresence --deployment myservice --run-shell
 ```
 
 Telepresence will leave the deployment untouched when it exits.
+
+
+### Kubernetes contexts and namespaces
+
+### kubectl context
+
+By default Telepresence uses whatever the current context is for `kubectl`.
+If you want to choose a specific context you can use the `--context` option to `telepresence`.
+For example:
+
+```console
+$ telepresence --context minikube --new-deployment myservice --run-shell
+```
+
+You can choose any context listed in `kubectl config get-contexts`.
+
+If you've [set a namespace for the context](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/#setting-the-namespace-preference) then that namespace will be used to find/create the `Deployment`, but you can also choose a namespace explicitly, as shown in the next section.
+
+### Kubernetes namespaces
+
+If you want to proxy to a Deployment in a non-default namespace you can pass the `--namespace` argument to Telepresence:
+
+```console
+$ telepresence --namespace yournamespace --deployment yourservice --run-shell
+```

@@ -1,7 +1,7 @@
 ---
 layout: doc
 weight: 1
-title: "Getting Started with Kubernetes"
+title: "Getting started with Kubernetes"
 categories: tutorials
 ---
 
