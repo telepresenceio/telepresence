@@ -394,6 +394,7 @@ class EndToEndTests(TestCase):
             "--replicas=2",
             "--env=HELLO=there",
         ])
+        self.addCleanup(check_call, [KUBECTL, "delete", DEPLOYMENT_TYPE, name])
         p = Popen(
             args=[
                 "telepresence", "--swap-deployment", name, "--logfile", "-",
