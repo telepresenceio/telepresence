@@ -1,3 +1,3 @@
 ---
-redirect_to: "/user-guide/getting-started.html"
+redirect_to: "/tutorials/kubernetes.html"
 ---

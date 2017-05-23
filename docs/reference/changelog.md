@@ -1,11 +1,11 @@
 ---
 layout: doc
-weight: 1
+weight: 5
 title: "Changelog"
-categories: additional-information
+categories: reference
 ---
 
-#### 0.47 (unreleased)
+#### 0.47 (May 23, 2017)
 
 Features:
 
