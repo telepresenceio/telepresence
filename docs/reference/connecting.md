@@ -10,7 +10,7 @@ categories: reference
 To use Telepresence with a cluster (Kubernetes or OpenShift, local or remote) you need to run a proxy inside the cluster.
 There are three ways of doing so.
 
-#### Creating a new deployment.
+#### Creating a new deployment
 
 By using the `--new-deployment` option `telepresence` can create a new deployment for you.
 It will be deleted when the local `telepresence` process exits.
