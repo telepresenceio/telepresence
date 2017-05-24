@@ -34,9 +34,9 @@ You will need the following available on your machine:
 
 > **On `minikube` you should instead** do this to find the URL:
 > 
->  ```console
->  $ minikube service --url hello-world
->  http://192.168.99.100:12345/
->  ```
+> ```console
+> $ minikube service --url hello-world
+> http://192.168.99.100:12345/
+> ```
 
 {% include getting-started-part-2.md cluster="Kubernetes" command="kubectl" deployment="Deployment" %}
