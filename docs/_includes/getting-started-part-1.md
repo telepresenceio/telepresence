@@ -52,14 +52,13 @@ Don't see your favorite platform?
 ### Using Telepresence for the first time
 
 We'll start by trying out one specific feature: Telepresence allows you to forward traffic from {{ include.cluster }} to a local process.
-Typically you'll have a version of your service already running the real code in your production server:
+Typically you'll have a version of your service already running the real code in your production server.
+You should start a `{{ include.deployment }}` and publicly exposed `Service` like this:
 
 ```console
 $ {{ include.command }} run hello-world --image=datawire/hello-world --port=8000
-$ {{ include.command }} expose deployment hello-world \
-                        --type=LoadBalancer --name=hello-world
+$ {{ include.command }} expose {{ include.deployment | downcase }} hello-world --type=LoadBalancer --name=hello-world
 ```
 
-This starts up a `{{ include.deployment }}` and publicly exposed `Service`.
 
 

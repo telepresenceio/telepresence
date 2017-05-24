@@ -21,21 +21,21 @@ You will need the following available on your machine:
 
 {% include getting-started-part-1.md cluster="Kubernetes" command="kubectl" deployment="Deployment" %}
 
-If your cluster is in the cloud you can find the address of the `Service` like this:
+If your cluster is in the cloud you can find the address of the resulting `Service` like this:
 
 ```console
-$ kubectl get service myserver
-NAME       CLUSTER-IP     EXTERNAL-IP       PORT(S)          AGE
-myserver   10.3.242.226   104.197.103.123   8080:30022/TCP   5d
+$ kubectl get service hello-world
+NAME          CLUSTER-IP     EXTERNAL-IP       PORT(S)          AGE
+hello-world   10.3.242.226   104.197.103.123   8000:30022/TCP   5d
 ```
 
 If you see `<pending>` under EXTERNAL-IP wait a few seconds and try again.
-In this case the `Service` is exposed at `http://104.197.103.123:8080/`.
+In this case the `Service` is exposed at `http://104.197.103.123:8000/`.
 
 On `minikube` you should instead do this to find the URL:
 
 ```console
-$ minikube service --url myserver
+$ minikube service --url hello-world
 http://192.168.99.100:12345/
 ```
 
