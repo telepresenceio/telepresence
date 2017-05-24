@@ -539,9 +539,6 @@ label > .label-body {
   margin-left: .5rem;
   font-weight: normal; }
 
-ul {
-  list-style: circle inside; }
-
 ol {
   list-style: decimal inside;
   padding-left: 0;
