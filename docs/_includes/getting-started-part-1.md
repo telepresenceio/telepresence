@@ -51,64 +51,15 @@ Don't see your favorite platform?
 
 ### Using Telepresence for the first time
 
-**Important:** Starting `telepresence` the first time may take a little while, since {{ include.cluster }} needs to download the server-side image.
-
 We'll start by trying out one specific feature: Telepresence allows you to forward traffic from {{ include.cluster }} to a local process.
-Imagine you're developing a service locally.
-To simplify the example we'll just use a simple HTTP server:
+Typically you'll have a version of your service already running the real code in your production server:
 
 ```console
-$ mkdir /tmp/telepresence-test
-$ cd /tmp/telepresence-test
-$ echo "hello from your laptop" > file.txt
-$ python3 -m http.server 8081 &
-[1] 2324
-$ curl http://localhost:8081/file.txt
-hello from your laptop
-$ kill %1
+$ {{ include.command }} run hello-world --image=datawire/hello-world --port=8000
+$ {{ include.command }} expose deployment hello-world \
+                        --type=LoadBalancer --name=hello-world
 ```
 
-We want to expose this local process so that it gets traffic from {{ include.cluster }}.
-To do so we need to:
+This starts up a `{{ include.deployment }}` and publicly exposed `Service`.
 
-1. Run a Telepresence proxy pod in the remote cluster.
-2. Start up the local `telepresence` CLI on your local machine, telling it to run the web server.
 
-First, let's start the Telepresence proxy:
-
-```console
-$ {{ include.command }} run --port 8080 myserver \
-  --image=datawire/telepresence-k8s:{{ site.data.version.version }}
-```
-
-Then we'll expose it to the Internet:
-
-```console
-$ {{ include.command }} expose deployment myserver \
-  --type=LoadBalancer --name=myserver
-```
-
-**Important:** you're about to expose a web server on your laptop to the Internet.
-This is pretty cool, but also pretty dangerous!
-Make sure there are no files in the current directory that you don't want shared with the whole world.
-
-We run the local Telepresence client:
-
-```console
-$ telepresence --deployment myserver --expose 8080 \
-  --run python3 -m http.server 8080 &
-```
-
-As long as you leave the HTTP server running inside `telepresence` it will be accessible from inside the {{ include.cluster }} cluster:
-
-<div class="mermaid">
-graph TD
-  subgraph Laptop
-    code["python HTTP server on port 8080"]---client[Telepresence client]
-  end
-  subgraph {{ include.cluster }} in Cloud
-    client-.-proxy["k8s.Pod: Telepresence proxy, listening on port 8080"]
-  end
-</div>
-
-We can now send queries via the public address of the `Service` we created, and they'll hit the web server running on your laptop:

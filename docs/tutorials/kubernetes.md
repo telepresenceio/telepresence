@@ -19,7 +19,7 @@ You will need the following available on your machine:
 * Access to your Kubernetes cluster, with local credentials on your machine.
   You can test this by running `kubectl get pod` - if this works you're all set.
 
-{% include getting-started-part-1.md cluster="Kubernetes" command="kubectl" %}
+{% include getting-started-part-1.md cluster="Kubernetes" command="kubectl" deployment="Deployment" %}
 
 If your cluster is in the cloud you can find the address of the `Service` like this:
 
@@ -39,4 +39,4 @@ $ minikube service --url myserver
 http://192.168.99.100:12345/
 ```
 
-{% include getting-started-part-2.md %}
+{% include getting-started-part-2.md cluster="Kubernetes" command="kubectl" deployment="Deployment" %}

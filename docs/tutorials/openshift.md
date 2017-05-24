@@ -19,10 +19,10 @@ You will need the following available on your machine:
 * Access to your OpenShift cluster, with local credentials on your machine.
   You can test this by running `oc get pod` - if this works you're all set.
 
-{% include getting-started-part-1.md cluster="OpenShift" command="oc" %}
+{% include getting-started-part-1.md cluster="OpenShift" command="oc" deployment="DeploymentConfig" %}
 
 To find the address of the `Service` run:
 
 ... XXX ...
 
-{% include getting-started-part-2.md %}
+{% include getting-started-part-2.md cluster="OpenShift" command="oc" deployment="DeploymentConfig" %}
