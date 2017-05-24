@@ -5,12 +5,24 @@ title: "Get started with OpenShift"
 categories: tutorials
 ---
 
-A full tutorial will be coming soon.
-In the meantime, you can try the Kubernetes tutorial, with the following differences:
+<link rel="stylesheet" href="{{ "/css/mermaid.css" | prepend: site.baseurl }}">
+<script src="{{ "/js/mermaid.min.js" | prepend: site.baseurl }}"></script>
+<script>mermaid.initialize({
+   startOnLoad: true,
+   cloneCssStyles: false,
+ });
+</script>
 
-* You need `oc` installed rather than `kubectl`.
+You will need the following available on your machine:
 
-Note also that:
+* `oc` command line tool (here's the [installation instructions](https://docs.openshift.org/latest/cli_reference/get_started_cli.html)).
+* Access to your OpenShift cluster, with local credentials on your machine.
+  You can test this by running `oc get pod` - if this works you're all set.
 
-* OpenShift uses `DeploymentConfig` rather than `Deployment` objects.
-* OpenShift will not run containers as root, so you can't listen on ports <1024.
+{% include getting-started-part-1.md cluster="OpenShift" command="oc" %}
+
+To find the address of the `Service` run:
+
+... XXX ...
+
+{% include getting-started-part-2.md %}
