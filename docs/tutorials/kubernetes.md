@@ -21,6 +21,13 @@ You will need the following available on your machine:
 
 {% include getting-started-part-1.md cluster="Kubernetes" command="kubectl" deployment="Deployment" %}
 
+You should start a `{{ include.deployment }}` and publicly exposed `Service` like this:
+
+```console
+$ {{ include.command }} run hello-world --image=datawire/hello-world --port=8000
+$ {{ include.command }} expose {{ include.deployment | downcase }} hello-world --type=LoadBalancer --name=hello-world
+```
+
 > **If your cluster is in the cloud** you can find the address of the resulting `Service` like this:
 >
 > ```console
@@ -40,3 +47,9 @@ You will need the following available on your machine:
 > ```
 
 {% include getting-started-part-2.md cluster="Kubernetes" command="kubectl" deployment="Deployment" %}
+
+```console
+$ kubectl delete deployment,service hello-world
+```
+
+Telepresence can do much more than this: see the reference section of the documentation, on the left, for details.

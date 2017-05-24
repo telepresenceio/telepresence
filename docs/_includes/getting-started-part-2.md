@@ -111,9 +111,3 @@ Hello, world!
 ```
 
 Now it's time to clean up the service:
-
-```console
-$ {{ include.command }} delete {{ include.deployment | downcase }},service hello-world
-```
-
-Telepresence can do much more than this: see the reference section of the documentation, on the left, for details.
