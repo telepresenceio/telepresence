@@ -1,13 +1,13 @@
 Once you know the address you can store its value (don't forget to replace this with the real address!):
 
 ```console
-$ export HELLOWORLD=104.197.103.13:8000
+$ export HELLOWORLD=http://104.197.103.13:8000
 ```
 
 And you send it a query and it will be served by the code running in your cluster:
 
 ```console
-$ curl http://$HELLOWORLD/
+$ curl $HELLOWORLD/
 Hello, world!
 ```
 
@@ -71,10 +71,19 @@ graph RL
   end
 </div>
 
-We can now send queries via the public address of the `Service` we created, and they'll hit the web server running on your laptop instead of the original code that was running there before:
+We can now send queries via the public address of the `Service` we created, and they'll hit the web server running on your laptop instead of the original code that was running there before.
+Wait a few seconds for the Telepresence proxy to startup; you can check its status by doing:
 
 ```console
-$ curl http://$HELLOWORLD/file.txt
+$ {{ include.command }} get pod | grep hello-world
+hello-world-2169952455-874dd   1/1       Running       0          1m
+hello-world-3842688117-0bzzv   1/1       Terminating   0          4m
+```
+
+Once you see that the new pod is in `Running` state you can use the new proxy to connect to the web server on your laptop:
+
+```console
+$ curl $HELLOWORLD/file.txt
 hello from your laptop
 ```
 
@@ -87,10 +96,17 @@ telepresence --swap-deployment hello-world --expose 8000 --run python3 -m http.s
 Keyboard interrupt received, exiting.
 ```
 
-Now if we wait a few seconds the old code will be swapped back in:
+Now if we wait a few seconds the old code will be swapped back in.
+Again, you can check status of swap back by running:
 
 ```console
-$ curl http://$HELLOWORLD/file.txt
+$ {{ include.command }} get pod | grep hello-world
+```
+
+When the new pod is back to `Running` state you can see that everything is back to normal:
+
+```console
+$ curl $HELLOWORLD/file.txt
 Hello, world!
 ```
 
