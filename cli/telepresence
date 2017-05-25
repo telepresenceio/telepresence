@@ -348,7 +348,7 @@ class RemoteInfo(object):
         cs = deployment_config["spec"]["template"]["spec"]["containers"]
         containers = [c for c in cs if "telepresence-k8s" in c["image"]]
         if not containers:
-            raise SystemExit(
+            raise RuntimeError(
                 "Could not find container with image "
                 "'datawire/telepresence-k8s' in pod {}.".format(pod_name)
             )
@@ -428,7 +428,7 @@ def get_env_variables(runner, remote_info, context):
 
 
 def get_deployment_json(
-    runner, deployment_name, context, namespace, run_id=None
+    runner, deployment_name, context, namespace, deployment_type, run_id=None
 ):
     """Get the decoded JSON for a deployment.
 
@@ -438,10 +438,6 @@ def get_deployment_json(
     """
     assert context is not None
     assert namespace is not None
-    deployment_type = "deployment"
-    if runner.kubectl_cmd == "oc":
-        # OpenShift Origin uses DeploymentConfig instead:
-        deployment_type = "deploymentconfig"
     try:
         get_deployment = [
             "get",
@@ -478,7 +474,9 @@ def get_deployment_json(
         )
 
 
-def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
+def get_remote_info(
+    runner, deployment_name, context, namespace, deployment_type, run_id=None
+):
     """
     Given the deployment name, return a RemoteInfo object.
 
@@ -487,7 +485,12 @@ def get_remote_info(runner, deployment_name, context, namespace, run_id=None):
     the Deployment name must be used to locate the Deployment.
     """
     deployment = get_deployment_json(
-        runner, deployment_name, context, namespace, run_id=run_id
+        runner,
+        deployment_name,
+        context,
+        namespace,
+        deployment_type,
+        run_id=run_id
     )
     expected_metadata = deployment["spec"]["template"]["metadata"]
     runner.write("Expected metadata for pods: {}\n".format(expected_metadata))
@@ -724,14 +727,21 @@ def create_new_deployment(runner, args):
 
 
 def swap_deployment(runner, args):
-    """Swap out an existing Deployment, return its name."""
+    """Swap out an existing Deployment, return its name.
+
+    Native Kubernetes version.
+    """
     run_id = str(uuid4())
 
     deployment_name, *container_name = args.swap_deployment.split(":", 1)
     if container_name:
         container_name = container_name[0]
     deployment_json = get_deployment_json(
-        runner, deployment_name, args.context, args.namespace
+        runner,
+        deployment_name,
+        args.context,
+        args.namespace,
+        "deployment",
     )
 
     def apply_json(json_config):
@@ -764,8 +774,89 @@ def swap_deployment(runner, args):
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
             container["imagePullPolicy"] = "IfNotPresent"
-
             apply_json(new_deployment_json)
+            return deployment_name, run_id
+
+    raise RuntimeError(
+        "Couldn't find container {} in deployment {}.".
+        format(deployment_name, container_name)
+    )
+
+
+def swap_deployment_openshift(runner, args):
+    """
+    Swap out an existing DeploymentConfig, return its name.
+
+    In practice OpenShift doesn't seem to do the right thing when a
+    DeploymentConfig is updated. In particular, we need to disable the image
+    trigger so that we can use the new image, but the replicationcontroller
+    then continues to deploy the existing image.
+
+    So instead we use a different approach than for Kubernetes, replacing the
+    current ReplicationController with one that uses the Telepresence image,
+    then restores it. We delete the pods to force the RC to do its thing.
+    """
+    run_id = str(uuid4())
+    deployment_name, *container_name = args.swap_deployment.split(":", 1)
+    if container_name:
+        container_name = container_name[0]
+    rcs = runner.get_output(
+        kubectl(
+            runner, args.context, args.namespace, [
+                "get", "rc", "-o", "name", "--selector",
+                "openshift.io/deployment-config.name=" + deployment_name
+            ]
+        )
+    )
+    rc_name = sorted(
+        rcs.split(), key=lambda n: int(n.split("-")[-1])
+    )[0].split("/", 1)[1]
+    rc_json = json.loads(
+        runner.get_output(
+            kubectl(
+                runner, args.context, args.namespace,
+                ["get", "rc", "-o", "json", "--export", rc_name]
+            ),
+            stderr=STDOUT
+        )
+    )
+
+    def apply_json(json_config):
+        runner.check_call(
+            kubectl(
+                runner, args.context, args.namespace, ["apply", "-f", "-"]
+            ),
+            input=json.dumps(json_config).encode("utf-8")
+        )
+        # Now that we've updated the replication controller, delete pods to
+        # make sure changes get applied:
+        runner.check_call(
+            kubectl(
+                runner, args.context, args.namespace,
+                ["delete", "pod", "--selector", "deployment=" + rc_name]
+            )
+        )
+
+    atexit.register(apply_json, rc_json)
+
+    # If no container name was given, just use the first one:
+    if not container_name:
+        container_name = rc_json["spec"]["template"]["spec"]["containers"
+                                                             ][0]["name"]
+
+    new_rc_json = deepcopy(rc_json)
+    new_rc_json["spec"]["replicas"] = 1
+    new_rc_json["metadata"].setdefault("labels", {})["telepresence"] = run_id
+    new_rc_json["spec"]["template"]["metadata"].setdefault(
+        "labels", {}
+    )["telepresence"] = run_id
+    for container in new_rc_json["spec"]["template"]["spec"]["containers"]:
+        if container["name"] == container_name:
+            container["image"] = TELEPRESENCE_IMAGE
+            # Not strictly necessary for real use, but tests break without this
+            # since we don't upload test images to Docker Hub:
+            container["imagePullPolicy"] = "IfNotPresent"
+            apply_json(new_rc_json)
             return deployment_name, run_id
 
     raise RuntimeError(
@@ -806,13 +897,27 @@ def start_proxy(runner, args):
 
     if args.swap_deployment is not None:
         # This implies --swap-deployment
-        args.deployment, run_id = swap_deployment(runner, args)
+        if runner.kubectl_cmd == "oc":
+            args.deployment, run_id = swap_deployment_openshift(runner, args)
+        else:
+            args.deployment, run_id = swap_deployment(runner, args)
+
+    deployment_type = "deployment"
+    if runner.kubectl_cmd == "oc":
+        # OpenShift Origin uses DeploymentConfig instead, but for swapping we
+        # mess with RweplicationController instead because mutating DC doesn't
+        # work:
+        if args.swap_deployment:
+            deployment_type = "rc"
+        else:
+            deployment_type = "deploymentconfig"
 
     remote_info = get_remote_info(
         runner,
         args.deployment,
         args.context,
         args.namespace,
+        deployment_type,
         run_id=run_id,
     )
 
