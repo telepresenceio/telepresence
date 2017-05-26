@@ -379,10 +379,8 @@ class EndToEndTests(TestCase):
     def test_swapdeployment(self):
         """
         --swap-deployment swaps out Telepresence pod and then swaps it back on
-        exit.
+        exit, when original pod was created with `kubectl run` or `oc run`.
         """
-        webserver_name = run_webserver()
-
         # Create a non-Telepresence deployment:
         name = random_name()
         check_call([
@@ -392,9 +390,36 @@ class EndToEndTests(TestCase):
             "--restart=Always",
             "--image=openshift/hello-openshift",
             "--replicas=2",
+            "--labels=telepresence-test=" + name,
             "--env=HELLO=there",
         ])
         self.addCleanup(check_call, [KUBECTL, "delete", DEPLOYMENT_TYPE, name])
+        self.assert_swapdeployment(name, 2, "telepresence-test=" + name)
+
+    @skipIf(not OPENSHIFT, "Only runs on OpenShift")
+    def test_swapdeployment_ocnewapp(self):
+        """
+        --swap-deployment works on pods created via `oc new-app`.
+        """
+        name = random_name()
+        check_call([
+            "oc",
+            "new-app",
+            "--name=" + name,
+            "--docker-image=openshift/hello-openshift",
+            "--env=HELLO=there",
+        ])
+        self.addCleanup(
+            check_call, ["oc", "delete", "dc,imagestream,service", name]
+        )
+        self.assert_swapdeployment(name, 1, "app=" + name)
+
+    def assert_swapdeployment(self, name, replicas, selector):
+        """
+        --swap-deployment swaps out Telepresence pod and then swaps it back on
+        exit.
+        """
+        webserver_name = run_webserver()
         p = Popen(
             args=[
                 "telepresence", "--swap-deployment", name, "--logfile", "-",
@@ -414,10 +439,27 @@ class EndToEndTests(TestCase):
             )
         )
         # We swapped back:
-        assert deployment["spec"]["replicas"] == 2
-        assert deployment["spec"]["template"]["spec"]["containers"][0][
-            "image"
-        ] == "openshift/hello-openshift"
+        assert deployment["spec"]["replicas"] == replicas
+
+        # Ensure pods swap back too:
+        start = time.time()
+        while time.time() - start < 60:
+            pods = json.loads(
+                str(
+                    check_output([
+                        KUBECTL, "get", "pod", "--selector=" + selector, "-o",
+                        "json", "--export"
+                    ]), "utf-8"
+                )
+            )["items"]
+            if [
+                pod["spec"]["containers"][0]["image"]
+                .startswith("openshift/hello-openshift") for pod in pods
+            ] == [True] * len(pods):
+                print("Found openshift!")
+                return
+            time.sleep(1)
+        assert False, "Didn't switch back to openshift"
 
     @skipIf(
         OPENSHIFT, "OpenShift Online free version has insufficient quota "

@@ -5,6 +5,12 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.48 (May 25, 2017)
+
+Bug fixes:
+
+* `--swap-deployment` now works in more cases on OpenShift, in particular when `oc new-app` was used.
+
 #### 0.47 (May 23, 2017)
 
 Features:

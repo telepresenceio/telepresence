@@ -190,7 +190,6 @@ html {
 
 body {
   font-size: 1.5em;
-  line-height: 1.6;
   font-weight: 400;
   font-family: "Source Sans Pro", "Open Sans", "Helvetica Neue", "Helvetica", Arial, sans-serif;
   color: #4D5054;
@@ -399,7 +398,6 @@ button {
   font-weight: 600;
   line-height: 38px;
   letter-spacing: .1rem;
-  text-transform: uppercase;
   text-decoration: none;
   white-space: nowrap;
   background-color: transparent;
@@ -418,7 +416,6 @@ input[type="submit"], input[type="reset"], input[type="button"] {
   font-weight: 600;
   line-height: 38px;
   letter-spacing: .1rem;
-  text-transform: uppercase;
   text-decoration: none;
   white-space: nowrap;
   background-color: transparent;
@@ -540,16 +537,10 @@ label > .label-body {
   margin-left: .5rem;
   font-weight: normal; }
 
-ul {
-  list-style: circle inside; }
-
 ol {
-  list-style: decimal inside;
-  padding-left: 0;
   margin-top: 0; }
 
 ul {
-  padding-left: 0;
   margin-top: 0; }
   ul ul, ul ol {
     margin: 1.5rem 0 1.5rem 3rem;
