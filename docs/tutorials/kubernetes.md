@@ -21,11 +21,11 @@ You will need the following available on your machine:
 
 {% include getting-started-part-1.md cluster="Kubernetes" command="kubectl" deployment="Deployment" %}
 
-You should start a `{{ include.deployment }}` and publicly exposed `Service` like this:
+You should start a `Deployment` and publicly exposed `Service` like this:
 
 ```console
-$ {{ include.command }} run hello-world --image=datawire/hello-world --port=8000
-$ {{ include.command }} expose {{ include.deployment | downcase }} hello-world --type=LoadBalancer --name=hello-world
+$ kubectl run hello-world --image=datawire/hello-world --port=8000
+$ kubectl expose deployment hello-world --type=LoadBalancer --name=hello-world
 ```
 
 > **If your cluster is in the cloud** you can find the address of the resulting `Service` like this:
