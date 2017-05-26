@@ -55,4 +55,4 @@ If you do wait a minute and try again.
 $ oc delete dc,service,route,imagestream hello-world
 ```
 
-Telepresence can do much more than this: see the reference section of the documentation, on the left, for details.
+Telepresence can do much more than this: see the reference section of the documentation, on the top-left, for details.

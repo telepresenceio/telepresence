@@ -52,4 +52,4 @@ $ {{ include.command }} expose {{ include.deployment | downcase }} hello-world -
 $ kubectl delete deployment,service hello-world
 ```
 
-Telepresence can do much more than this: see the reference section of the documentation, on the left, for details.
+Telepresence can do much more than this: see the reference section of the documentation, on the top-left, for details.
