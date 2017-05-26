@@ -19,8 +19,7 @@ You will need the following available on your machine:
 * Access to your OpenShift cluster, with local credentials on your machine.
   You can test this by running `oc get pod` - if this works you're all set.
 
-**Important**: I have had no luck using OpenShift Online.
-While this may have been user error on my part, if you don't have a testing OpenShift cluster available I recommend using [minishift](https://docs.openshift.org/latest/minishift/index.html).
+**Note**: if you don't have a testing OpenShift cluster available we recommend using [minishift](https://docs.openshift.org/latest/minishift/index.html) over a free OpenShift Online account, since the latter only has limited resources available.
 
 {% include getting-started-part-1.md cluster="OpenShift" command="oc" deployment="DeploymentConfig" %}
 
