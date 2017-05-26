@@ -110,4 +110,11 @@ $ curl $HELLOWORLD/file.txt
 Hello, world!
 ```
 
+<hr>
+
+> **What you've learned:** Telepresence lets you replace an existing deployment with a proxy that reroutes traffic to a local process on your machine.
+> This allows you to easily debug issues by running your code locally, while still giving your local process full access to your staging or testing cluster.
+
+<hr> 
+
 Now it's time to clean up the service:
