@@ -10,7 +10,7 @@
         {% for p in pages %}
             {% for pc in p.categories %}
               {% if pc == cat %}
-                {% if page.permalink == p.url %} 
+                {% if page.url == p.url %} 
                   {% if page.table-of-content != nil %}
                       <div class="secondary items">
                           <div class="active item header">{{ p.title }}</div>
@@ -29,11 +29,4 @@
                       {% endfor %}
                       {% endfor %}
     </div>{% endfor %}
-    <div class="items">
-      <div class="icon item header">
-        <i class="fa fa-external-link"></i>EXTERNAL LINKS
-      </div>
-      <a class="item" href="https://cloud.google.com/community/tutorials/developing-services-with-k8s">Telepresence on GKE</a>
-      <a class="item" href="https://www.datawire.io/guide/deployment/development-environments-microservices/">Microservice development environments</a>
-    </div>
 </nav>

@@ -1,11 +1,24 @@
 ---
 layout: doc
-weight: 1
+weight: 5
 title: "Changelog"
-categories: additional-information
+categories: reference
 ---
 
-#### 0.46 (unreleased)
+#### 0.48 (May 25, 2017)
+
+Bug fixes:
+
+* `--swap-deployment` now works in more cases on OpenShift, in particular when `oc new-app` was used.
+
+#### 0.47 (May 23, 2017)
+
+Features:
+
+* `--swap-deployment` allows replacing an existing Deployment with Telepresence, and then swapping back on exiting the `telepresence` command line.
+  ([#9](https://github.com/datawire/telepresence/issues/9))
+
+#### 0.46 (May 16, 2017)
 
 Features:
 

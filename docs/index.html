@@ -13,16 +13,20 @@ permalink: /
 </header>
 
 <div class="container">
-  <center><a class="button primary" href="/user-guide/getting-started.html"><span style="font-size: 200%;">Get started</span></a></center>
+    <center>
+        <a class="button primary" href="/tutorials/kubernetes.html"><span style="font-size: 200%;">Get started with KUBERNETES</span></a><br>
+        <br>
+        <a class="button primary" href="/tutorials/openshift.html"><span style="font-size: 200%;">Get started with OPENSHIFT</span></a>
+    </center>
   <br><br>
 </div>
 
 <div class="container">
   <h5>
     <ul class="fa-ul">
-      <li><i class="fa-li fa fa-fighter-jet"></i><strong>Fast dev cycle:</strong> no more waiting for your whole deployment pipeline to finish just to try a small change! A local process on your laptop is exposed via a Service in your Kubernetes cluster (minikube or a cluster in the cloud.)</li>
+      <li><i class="fa-li fa fa-fighter-jet"></i><strong>Fast dev cycle:</strong> no more waiting for your whole deployment pipeline to finish just to try a small change! A local process on your laptop is exposed via a Service in your Kubernetes or OpenShift staging cluster (a local minikube or a cluster in the cloud.)</li>
       <li><i class="fa-li fa fa-external-link-square"></i><strong>Realistic environment:</strong>
-        transparently access other microservices in a remote Kubernetes cluster, as well as cloud resources like AWS RDS. Your code can also read the same environment variables and volumes a normal Kubernetes pod would have.</li>
+        transparently access other microservices in a Kubernetes or OpenShift cluster, as well as cloud resources like AWS RDS. Your code can also read the same environment variables and volumes a normal Kubernetes pod would have.</li>
       <li><i class="fa-li fa fa-wrench"></i><strong>Use your own tools:</strong> edit, run and debug your code locally, just as you would any other application.</li>
     </ul></h5>
 </div>
@@ -49,7 +53,7 @@ permalink: /
 <div class="container">
   <h5><br><strong>Get started in 3 minutes:</strong><br>
     <ol>
-      <li><a href="/user-guide/getting-started.html">Install locally</a> with Homebrew, apt or dnf.</li>
+      <li><a href="/tutorials/kubernetes.html">Install locally</a> with Homebrew, apt or dnf.</li>
       <li>Run <tt>telepresence --new-deployment test --run-shell</tt>.</li>
       <li>You now have a shell that proxies network connections to Kubernetes!</li>
     </ol><br>

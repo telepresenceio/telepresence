@@ -16,39 +16,41 @@ def handle_error(type, value, traceback):
     raise SystemExit(3)
 
 
-def check_nginx_url(url, how):
+def check_webserver_url(url, how):
     print("Retrieving URL created with {}: {}".format(url, how))
     result = str(urlopen(url, timeout=5).read(), "utf-8")
     print("Got {} from webserver.".format(repr(result)))
     assert "Hello" in result
 
 
-def check_urls(nginx_service, namespace):
-    service_env = nginx_service.upper().replace("-", "_")
+def check_urls(webserver_service, namespace):
+    service_env = webserver_service.upper().replace("-", "_")
     host = os.environ[service_env + "_SERVICE_HOST"]
     port = os.environ[service_env + "_SERVICE_PORT"]
     # Check environment variable based service lookup:
-    check_nginx_url("http://{}:{}/".format(
+    check_webserver_url("http://{}:{}/".format(
         host,
         port,
     ), "env variables")
     # Check hostname lookup, both partial and full:
-    check_nginx_url(
-        "http://{}:{}/".format(nginx_service, port), "service name"
+    check_webserver_url(
+        "http://{}:{}/".format(webserver_service, port), "service name"
     )
-    check_nginx_url(
+    check_webserver_url(
         "http://{}.{}.svc.cluster.local:{}/".format(
-            nginx_service, namespace, port
+            webserver_service, namespace, port
         ),
         "full service name",
     )
-    check_nginx_url("http://{}:8080/".format(nginx_service), "hardcoded port")
+    check_webserver_url(
+        "http://{}:8080/".format(webserver_service), "hardcoded port"
+    )
     return host, port
 
 
-def check_env(nginx_service, host, port):
+def check_env(webserver_service, host, port):
     # Check that other environment variable variants were created correctly:
-    service_env = nginx_service.upper().replace("-", "_")
+    service_env = webserver_service.upper().replace("-", "_")
     assert os.environ[service_env +
                       "_PORT"] == "tcp://{}:{}".format(host, port)
     prefix = service_env + "_PORT_{}_TCP".format(port)
@@ -73,13 +75,13 @@ def main():
     # make sure exceptions cause exit:
     sys.excepthook = handle_error
 
-    nginx_service = sys.argv[1]
+    webserver_service = sys.argv[1]
     namespace = sys.argv[2]
     envs = sys.argv[3:]
 
     # run tests
-    host, port = check_urls(nginx_service, namespace)
-    check_env(nginx_service, host, port)
+    host, port = check_urls(webserver_service, namespace)
+    check_env(webserver_service, host, port)
     check_custom_env(envs)
 
     # Exit with code indicating success:
