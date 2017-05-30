@@ -291,10 +291,6 @@ class EndToEndTests(TestCase):
         # Exit code 3 means proxy exited prematurely:
         assert exit_code == 3
 
-    @skipIf(
-        OPENSHIFT, "OpenShift Online free version has insufficient quota "
-        "to schedule stuff, I think."
-    )
     def existingdeployment(self, namespace, script):
         if namespace is None:
             namespace = current_namespace()
@@ -461,10 +457,6 @@ class EndToEndTests(TestCase):
             time.sleep(1)
         assert False, "Didn't switch back to openshift"
 
-    @skipIf(
-        OPENSHIFT, "OpenShift Online free version has insufficient quota "
-        "to schedule stuff, I think."
-    )
     def test_swapdeployment_explicit_container(self):
         """
         --swap-deployment <dep>:<container> swaps out the given container.
