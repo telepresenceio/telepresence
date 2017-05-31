@@ -1197,6 +1197,9 @@ def run_local_command(
     if args.method == "inject-tcp":
         p = Popen(["torsocks"] + command, env=env)
     elif args.method == "vpn-tcp":
+        # Make sure we have sudo credentials by doing a small sudo in advance
+        # of sshuttle using it:
+        Popen(["sudo", "true"]).wait()
         sshuttle_method = "auto"
         if sys.platform.startswith("linux"):
             # sshuttle tproxy mode seems to have issues:
