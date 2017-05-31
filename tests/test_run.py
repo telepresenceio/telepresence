@@ -25,7 +25,7 @@ from .utils import (
 )
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
-TELEPRESENCE_METHOD = os.environ.get("TELEPRESENCE_METHOD", "inject-tcp")
+TELEPRESENCE_METHOD = os.environ["TELEPRESENCE_METHOD"]  # inject-tcp/vpn-tcp
 
 EXISTING_DEPLOYMENT = """\
 metadata:
