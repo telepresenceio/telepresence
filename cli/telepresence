@@ -296,8 +296,24 @@ def parse_args():
         action='append',
         default=[],
         help=(
-            "Port number in local container that will be " +
-            "exposed to Kubernetes."
+            "Local port number that will be exposed to Kubernetes. Should"
+            " match port exposed in the existing Deployment if using "
+            "--deployment or --swap-deployment."
+        )
+    )
+    parser.add_argument(
+        "--also-proxy",
+        dest="also_proxy",
+        action='append',
+        default=[],
+        help=(
+            "If you are using --method=vpn-tcp, use this to add additional "
+            "remote IPs or hostnames to proxy. Kubernetes service and pods "
+            "are proxied automatically, so you only need to list cloud "
+            "resources, e.g. the hostname of a AWS RDS. "
+            "When using --method=inject-tcp "
+            "this option is unnecessary as all outgoing communication in "
+            "the run subprocess will be proxied."
         )
     )
     group = parser.add_mutually_exclusive_group()
@@ -1073,16 +1089,46 @@ def get_unsupported_tools(dns_supported):
     return unsupported_bin
 
 
-def get_k8s_cidrs(runner, service_address):
-    """
-    Given the IP address of a service, figure out IP ranges used by Kubernetes.
+# Script to dump resolved IPs to stdout as JSON list:
+_GET_IPS_PY = """
+import socket, sys, json
 
-    We assume /16 for the services, and extract pod ranges from API.
+result = []
+for host in sys.argv[1:]:
+    result.append(socket.gethostbyname(host))
+sys.stdout.write(json.dumps(result))
+sys.stdout.flush()
+"""
+
+
+def get_proxy_cidrs(runner, args, remote_info, service_address):
+    """
+    Figure out which IP ranges to route via sshuttle.
+
+    1. Given the IP address of a service, figure out IP ranges used by
+       Kubernetes services. We assume /16 for the services.
+    2. Extract pod ranges from API.
+    3. Any hostnames/IPs given by the user using --also-proxy.
 
     See https://github.com/kubernetes/kubernetes/issues/25533 for eventual
     long-term solution for service CIDR.
     """
-    result = set()
+    # Run script to convert --also-proxy hostnames to IPs, doing name
+    # resolution inside Kubernetes, so we get cloud-local IP addresses for
+    # cloud resources:
+    result = set(
+        [ip + "/32" for ip in json.loads(
+            runner.get_output(
+                kubectl(
+                    runner, args.context, args.namespace, [
+                        "exec", remote_info.pod_name, "--", "python3", "-c",
+                        _GET_IPS_PY
+                    ] + args.also_proxy
+                )
+            )
+        )]
+    )
+
     nodes = json.loads(
         runner.get_output([runner.kubectl_cmd, "get", "nodes", "-o", "json"])
     )["items"]
@@ -1157,7 +1203,9 @@ def run_local_command(
                 ),
                 "-r",
                 "telepresence@localhost:" + str(ssh_port),
-            ] + get_k8s_cidrs(runner, env["KUBERNETES_SERVICE_HOST"]))
+            ] + get_proxy_cidrs(
+                runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
+            ))
         )
         p = Popen(command, env=env)
     else:
