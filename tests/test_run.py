@@ -25,6 +25,7 @@ from .utils import (
 )
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
+TELEPRESENCE_METHOD = os.environ.get("TELEPRESENCE_METHOD", "inject-tcp")
 
 EXISTING_DEPLOYMENT = """\
 metadata:
@@ -95,6 +96,8 @@ def run_script_test(telepresence_args, local_command):
         args=["telepresence"] + telepresence_args + [
             "--logfile",
             "-",
+            "--method",
+            TELEPRESENCE_METHOD,
             "--run-shell",
         ],
         cwd=str(DIRECTORY),
@@ -117,6 +120,8 @@ class EndToEndTests(TestCase):
         p = Popen(
             args=[
                 "telepresence",
+                "--method",
+                TELEPRESENCE_METHOD,
                 "--new-deployment",
                 random_name(),
                 "--logfile",
@@ -193,6 +198,8 @@ class EndToEndTests(TestCase):
                 str(port),
                 "--logfile",
                 "-",
+                "--method",
+                TELEPRESENCE_METHOD,
                 "--run-shell",
             ],
             stdin=PIPE,
@@ -268,6 +275,8 @@ class EndToEndTests(TestCase):
         p = Popen(
             args=[
                 "telepresence",
+                "--method",
+                TELEPRESENCE_METHOD,
                 "--new-deployment",
                 name,
                 "--run-shell",
@@ -359,6 +368,8 @@ class EndToEndTests(TestCase):
         p = Popen(
             args=[
                 "telepresence",
+                "--method",
+                TELEPRESENCE_METHOD,
                 "--new-deployment",
                 random_name(),
                 "--logfile",
@@ -419,6 +430,7 @@ class EndToEndTests(TestCase):
         p = Popen(
             args=[
                 "telepresence", "--swap-deployment", name, "--logfile", "-",
+                "--method", TELEPRESENCE_METHOD,
                 "--run", "python3", "tocluster.py", webserver_name,
                 current_namespace(), "HELLO=there"
             ],
@@ -493,6 +505,7 @@ class EndToEndTests(TestCase):
             args=[
                 "telepresence", "--swap-deployment",
                 "{}:{}".format(name, container_name), "--logfile", "-",
+                "--method", TELEPRESENCE_METHOD,
                 "--run", "python3", "volumes.py"
             ],
             cwd=str(DIRECTORY),
