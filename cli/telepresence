@@ -1090,7 +1090,9 @@ def get_k8s_cidrs(runner, service_address):
         result.add(node["spec"]["podCIDR"])
     # Convert IP address, e.g. '10.3.241.23', into 16 bit range, in this
     # case '10.3.0.0/16':
-    service_cidr = ".".join(service_address.split(".")[:2] + ["0", "0"]) + "/16"
+    service_cidr = (
+        ".".join(service_address.split(".")[:2] + ["0", "0"]) + "/16"
+    )
     result.add(service_cidr)
     return list(result)
 
