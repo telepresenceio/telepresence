@@ -5,9 +5,15 @@ CLI tools like ping fail nicely.
 """
 
 import sys
+import os
 from subprocess import check_call, CalledProcessError
 
-for command in ["ping", "nslookup", "host", "traceroute", "dig"]:
+commands = ["ping", "traceroute"]
+if os.environ["TELEPRESENCE_METHOD"] == "inject-tcp":
+    commands.extend(["nslookup", "host", "dig"])
+
+
+for command in commands:
     try:
         check_call([command, "arg1"])
     except CalledProcessError as e:

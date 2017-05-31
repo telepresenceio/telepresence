@@ -35,12 +35,13 @@ def check_urls(webserver_service, namespace):
     check_webserver_url(
         "http://{}:{}/".format(webserver_service, port), "service name"
     )
-    check_webserver_url(
-        "http://{}.{}.svc.cluster.local:{}/".format(
-            webserver_service, namespace, port
-        ),
-        "full service name",
-    )
+    if os.environ["TELEPRESENCE_METHOD"] == "inject-tcp":
+        check_webserver_url(
+            "http://{}.{}.svc.cluster.local:{}/".format(
+                webserver_service, namespace, port
+            ),
+            "full service name",
+        )
     check_webserver_url(
         "http://{}:8080/".format(webserver_service), "hardcoded port"
     )
