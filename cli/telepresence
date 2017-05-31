@@ -1122,7 +1122,8 @@ def get_proxy_cidrs(runner, args, remote_info, service_address):
             runner.get_output(
                 kubectl(
                     runner, args.context, args.namespace, [
-                        "exec", remote_info.pod_name, "--", "python3", "-c",
+                        "exec", "--container=" + remote_info.container_name,
+                        remote_info.pod_name, "--", "python3", "-c",
                         _GET_IPS_PY
                     ] + args.also_proxy
                 )
