@@ -1113,11 +1113,12 @@ def get_proxy_cidrs(runner, args, remote_info, service_address):
     See https://github.com/kubernetes/kubernetes/issues/25533 for eventual
     long-term solution for service CIDR.
     """
+
     # Run script to convert --also-proxy hostnames to IPs, doing name
     # resolution inside Kubernetes, so we get cloud-local IP addresses for
     # cloud resources:
-    result = set(
-        [ip + "/32" for ip in json.loads(
+    def resolve_ips():
+        return json.loads(
             runner.get_output(
                 kubectl(
                     runner, args.context, args.namespace, [
@@ -1126,8 +1127,18 @@ def get_proxy_cidrs(runner, args, remote_info, service_address):
                     ] + args.also_proxy
                 )
             )
-        )]
-    )
+        )
+
+    try:
+        result = set([ip + "/32" for ip in resolve_ips()])
+    except CalledProcessError as e:
+        runner.write(str(e))
+        raise SystemExit(
+            "We failed to do a DNS lookup inside Kubernetes for the "
+            "hostname(s) you listed in "
+            "--also-proxy ({}). Maybe you mistyped one of them?".
+            format(", ".join(args.also_proxy))
+        )
 
     nodes = json.loads(
         runner.get_output([runner.kubectl_cmd, "get", "nodes", "-o", "json"])
