@@ -1073,6 +1073,28 @@ def get_unsupported_tools(dns_supported):
     return unsupported_bin
 
 
+def get_k8s_cidrs(runner, service_address):
+    """
+    Given the IP address of a service, figure out IP ranges used by Kubernetes.
+
+    We assume /16 for the services, and extract pod ranges from API.
+
+    See https://github.com/kubernetes/kubernetes/issues/25533 for eventual
+    long-term solution for service CIDR.
+    """
+    result = set()
+    nodes = json.loads(
+        runner.get_output([runner.kubectl_cmd, "get", "nodes", "-o", "json"])
+    )["items"]
+    for node in nodes:
+        result.add(node["spec"]["podCIDR"])
+    # Convert IP address, e.g. '10.3.241.23', into 16 bit range, in this
+    # case '10.3.0.0/16':
+    service_cidr = ".".join(service_address.split(".")[:2] + ["0", "0"]) + "/16"
+    result.add(service_cidr)
+    return list(result)
+
+
 def run_local_command(
     runner, remote_info, args, env_overrides, subprocesses, socks_port,
     ssh_port
@@ -1127,11 +1149,13 @@ def run_local_command(
                 "--method",
                 sshuttle_method,
                 "-e",
-                "ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null",
+                (
+                    "ssh -oStrictHostKeyChecking=no " +
+                    "-oUserKnownHostsFile=/dev/null"
+                ),
                 "-r",
                 "telepresence@localhost:" + str(ssh_port),
-                "10.0.0.0/8",
-            ])
+            ] + get_k8s_cidrs(runner, env["KUBERNETES_SERVICE_HOST"]))
         )
         p = Popen(command, env=env)
     else:
