@@ -11,11 +11,19 @@ sshuttle in order to make forwarded DNS queries work in way that matches
 clients within a k8s pod.
 """
 
+import socket
+
 from twisted.application.service import Application
 from twisted.internet import reactor, defer
+from twisted.internet.threads import deferToThread
 from twisted.names import client, dns, error, server
 
 import socks
+
+
+def resolve(hostname):
+    """Do A record lookup, return list of IPs."""
+    return socket.gethostbyname_ex(hostname)[2]
 
 
 class LocalResolver(object):
@@ -37,31 +45,34 @@ class LocalResolver(object):
         # and pass the rest on to client.Resolver.
         self.fallback = client.Resolver(resolv='/etc/resolv.conf')
 
-    def _got_ip(self, query, ip):
+    def _got_ips(self, query, ips, record_type):
         """
         Generate the response to a query, given an IP.
         """
         name = query.name.name
-        answer = dns.RRHeader(name=name, payload=dns.Record_A(address=ip))
-        answers = [answer]
+        print("Result for {} is {}".format(name, ips))
+        answers = [
+            dns.RRHeader(name=name, payload=record_type(address=ip))
+            for ip in ips
+        ]
         authority = []
         additional = []
         return answers, authority, additional
 
+    def _got_error(self, failure):
+        print(failure)
+        return defer.fail(error.DomainError(str(failure)))
+
     def query(self, query, timeout=None):
         if query.type == dns.A:
             print("A query: {}".format(query.name.name))
-            d = reactor.resolve(query.name.name)
+            d = deferToThread(resolve, query.name.name)
             d.addCallback(
-                lambda ip: self._got_ip(query, ip)
-            ).addErrback(
-                lambda f: defer.fail(error.DomainError(str(f)))
-            )
+                lambda ips: self._got_ips(query, ips, dns.Record_A)
+            ).addErrback(self._got_error)
             return d
-        elif query.type == dns.AAAA:
-            # Can't do IPv6, just fail fast:
-            return defer.fail(error.DomainError())
         else:
+            print("{} query:".format(query.type, query.name.name))
             return self.fallback.query(query, timeout=timeout)
 
 
