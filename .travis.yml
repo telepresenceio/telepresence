@@ -49,12 +49,14 @@ before_install:
   - ./ci/setup-gcloud.sh
   # Make sure torsocks is installed:
   - ./ci/build-torsocks.sh
+  # Make sure sshuttle-telepresence is built:
+  - source ./virtualenv/bin/activate && ./packaging/build-sshuttle.py
 
 install:
   # Push Docker images to Google Container Registry; on OS X we don't bother, we
   # just hope that the parallel Linux job finished building and pushing first...
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./ci/push-images.sh; fi
-  
+
 script:
   - make virtualenv
   - export TELEPRESENCE_VERSION=$(make version)
