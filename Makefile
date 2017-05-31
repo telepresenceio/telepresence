@@ -29,19 +29,21 @@ build-remote-minikube:
 		cd remote && \
 		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
 
-run-minikube: virtualenv/bin/sshuttle-telepresence
+run-minikube:
 	source virtualenv/bin/activate && \
-		env TELEPRESENCE_VERSION=$(VERSION) cli/telepresence --method=vpn-tcp --new-deployment test --run-shell
+		env TELEPRESENCE_VERSION=$(VERSION) cli/telepresence --method=inject-tcp --new-deployment test --run-shell
 
 # Run tests in minikube:
 minikube-test: virtualenv build-remote-minikube
 	@echo "IMPORTANT: this will change kubectl context to minikube!\n\n"
 	kubectl config use-context minikube
-	env TELEPRESENCE_VERSION=$(VERSION) ci/test.sh
+	source virtualenv/bin/activate && \
+		env TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_METHOD=inject-tcp ci/test.sh
 
 # Run tests relevant to OpenShift:
 openshift-tests: virtualenv
-	env TELEPRESENCE_OPENSHIFT=1 ci/test.sh
+	source virtualenv/bin/activate && \
+		env TELEPRESENCE_OPENSHIFT=1 TELEPRESENCE_METHOD=inject-tcp ci/test.sh
 
 ## Release ##
 
