@@ -1224,7 +1224,17 @@ def run_local_command(
                 runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
             ))
         )
-        sleep(10)  # wait for sshuttle to start up :(
+        # sshuttle will take a while to startup. we can detect it being up when
+        # DNS resolution of services starts working:
+        start = time()
+        while time() - start < 10:
+            try:
+                socket.gethostbyname("kubernetes.default")
+            except socket.gaierror:
+                sleep(0.1)
+            else:
+                sleep(1)  # just in case there's more to startup
+                break
         p = Popen(command, env=env)
     else:
         raise RuntimeError(
