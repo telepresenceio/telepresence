@@ -17,6 +17,10 @@ virtualenv:
 	virtualenv/bin/pip install -r dev-requirements.txt
 	virtualenv/bin/pip install -r remote/requirements.txt
 
+virtualenv/bin/sshuttle-telepresence: virtualenv
+	source virtualenv/bin/activate && packaging/build-sshuttle.py
+
+
 ## Development ##
 
 # Build Docker image inside local Docker:
