@@ -1145,7 +1145,9 @@ def get_proxy_cidrs(runner, args, remote_info, service_address):
         runner.get_output([runner.kubectl_cmd, "get", "nodes", "-o", "json"])
     )["items"]
     for node in nodes:
-        result.add(node["spec"]["podCIDR"])
+        pod_cidr = node["spec"].get("podCIDR")
+        if pod_cidr is not None:
+            result.add(pod_cidr)
     # Convert IP address, e.g. '10.3.241.23', into 16 bit range, in this
     # case '10.3.0.0/16':
     service_cidr = (
