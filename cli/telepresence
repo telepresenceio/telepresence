@@ -1222,7 +1222,7 @@ def run_local_command(
                 runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
             ))
         )
-        sleep(4)  # wait for sshuttle to start up :(
+        sleep(10)  # wait for sshuttle to start up :(
         p = Popen(command, env=env)
     else:
         raise RuntimeError(
