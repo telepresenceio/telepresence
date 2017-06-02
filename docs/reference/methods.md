@@ -10,9 +10,16 @@ categories: reference
 Telepresence has two different proxying methods; you will need to choose one of them.
 
 1. `--method inject-tcp` works by injecting a shared library into the subprocess run by Telepresence using `--run` and `--run-shell`.
-2. XXX
+2. `--method vpn-tcp` works by using a program called [sshuttle](https://shuttle.readthedocs.io) to open a VPN-like connection to the Kubernetes cluster.
 
-XXXX write more
+Here are some guidelines for choosing which method to use:
+
+* If you are using Go, use `vpn-tcp`.
+* If you are using a custom DNS resolver (i.e. not the `gethostbyname` standard API call) use `vpn-tcp`.
+* If you are using `minikube`, `minishift`, or otherwise running a local cluster, use `inject-tcp` (we hope to remove this limitation eventually, see [the relevant ticket](https://github.com/datawire/telepresence/issues/160) for details.)
+* In all other cases, try `inject-tcp` and if it causes problems switch to `vpn-tcp`.
+
+You can read about the specific limitations of each method below, and read about the differences in what they proxy in the documentation of [what gets proxied](/reference/proxying.html).
 
 ### Limitations: `--method vpn-tcp`
 
