@@ -1142,19 +1142,35 @@ def get_proxy_cidrs(runner, args, remote_info, service_address):
             format(", ".join(args.also_proxy))
         )
 
-    nodes = json.loads(
-        runner.get_output([runner.kubectl_cmd, "get", "nodes", "-o", "json"])
-    )["items"]
-    for node in nodes:
-        pod_cidr = node["spec"].get("podCIDR")
-        if pod_cidr is not None:
-            result.add(pod_cidr)
-    # Convert IP address, e.g. '10.3.241.23', into 16 bit range, in this
-    # case '10.3.0.0/16':
-    service_cidr = (
-        ".".join(service_address.split(".")[:2] + ["0", "0"]) + "/16"
-    )
-    result.add(service_cidr)
+    def ip_to_16range(ip):
+        # Convert IP address, e.g. '10.3.241.23', into 16 bit range, in this
+        # case '10.3.0.0/16':
+        return ".".join(ip.split(".")[:2] + ["0", "0"]) + "/16"
+
+    # Get pod IPs from nodes if possible, otherwise use pod IPs as heuristic:
+    try:
+        nodes = json.loads(
+            runner.
+            get_output([runner.kubectl_cmd, "get", "nodes", "-o", "json"])
+        )["items"]
+    except CalledProcessError as e:
+        runner.write("Failed to get nodes: {}".format(e))
+        # Fallback to using pod IPs:
+        pods = json.loads(
+            runner.
+            get_output([runner.kubectl_cmd, "get", "pods", "-o", "json"])
+        )["items"]
+        for pod in pods:
+            result.add(ip_to_16range(pod["status"]["podIP"]))
+    else:
+        for node in nodes:
+            pod_cidr = node["spec"].get("podCIDR")
+            if pod_cidr is not None:
+                result.add(pod_cidr)
+
+    # Add service IP range, based on heuristic:
+    result.add(ip_to_16range(service_address))
+
     return list(result)
 
 
