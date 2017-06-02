@@ -17,7 +17,7 @@ It will be deleted when the local `telepresence` process exits.
 For example:
 
 ```console
-$ telepresence --new-deployment myserver --run-shell
+$ telepresence -m inject-tcp --new-deployment myserver --run-shell
 ```
 
 This will create two Kubernetes objects, a `Deployment` and a `Service`, both named `myserver`.
@@ -31,13 +31,13 @@ If you already have your code running in the cluster you can use the `--swap-dep
 When the `telepresence` process exits it restores the earlier state of the `Deployment` (or `DeploymentConfig` on OpenShift).
 
 ```console
-$ telepresence --swap-deployment myserver --run-shell
+$ telepresence -m inject-tcp --swap-deployment myserver --run-shell
 ```
 
 If you have more than one container in the pods created by the deployment you can also specify the container name:
 
 ```console
-$ telepresence --swap-deployment myserver:containername --run-shell
+$ telepresence -m inject-tcp --swap-deployment myserver:containername --run-shell
 ```
 
 If `telepresence` crashes badly enough (e.g. you used `kill -9`) you will need to manually restore the `Deployment`.
@@ -75,7 +75,7 @@ $ kubectl apply -f telepresence-deployment.yaml
 Next, you need to run the local Telepresence client on your machine, using `--deployment` to indicate the name of the `Deployment` object whose pod is running `telepresence/datawire-k8s`:
 
 ```console
-$ telepresence --deployment myservice --run-shell
+$ telepresence -m inject-tcp --deployment myservice --run-shell
 ```
 
 Telepresence will leave the deployment untouched when it exits.
@@ -90,7 +90,7 @@ If you want to choose a specific context you can use the `--context` option to `
 For example:
 
 ```console
-$ telepresence --context minikube --new-deployment myservice --run-shell
+$ telepresence --context minikube  -m inject-tcp -n myservice --run-shell
 ```
 
 You can choose any context listed in `kubectl config get-contexts`.
@@ -102,5 +102,5 @@ If you've [set a namespace for the context](https://kubernetes.io/docs/concepts/
 If you want to proxy to a Deployment in a non-default namespace you can pass the `--namespace` argument to Telepresence:
 
 ```console
-$ telepresence --namespace yournamespace --deployment yourservice --run-shell
+$ telepresence --namespace yournamespace -m inject-tcp -d yourservice --run-shell
 ```

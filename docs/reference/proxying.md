@@ -27,7 +27,7 @@ The resulting `Service` will have three DNS records you can use:
 1. `helloworld`, from a pod in the `default` namespace.
 2. `helloworld.default` anywhere in the Kubernetes cluster.
 3. `helloworld.default.svc.cluster.local` anywhere in the Kubernetes cluster.
-   This last record will not work when using `telepresence` with `--method=vpn-tcp` (see [the relevant ticket](https://github.com/datawire/telepresence/issues/161) for details.)
+   This last form will not work when using `telepresence` with `--method=vpn-tcp` (see [the relevant ticket](https://github.com/datawire/telepresence/issues/161) for details.)
 
 We'll check the current Kubernetes context and then start a new pod:
 
@@ -74,7 +74,7 @@ You also have access to all the environment variables Kubernetes sets automatica
 For example, here you can see the environment variables that get added for each `Service`:
 
 ```console
-$ telepresence --new-deployment example --run env | grep KUBERNETES
+$ telepresence -m inject-tcp -n example --run env | grep KUBERNETES
 KUBERNETES_PORT=tcp://10.0.0.1:443
 KUBERNETES_SERVICE_PORT=443
 KUBERNETES_PORT_443_TCP_ADDR=10.0.0.1
@@ -97,7 +97,7 @@ For example, all Kubernetes containers have a volume mounted at `/var/run/secret
 Those files are accessible from Telepresence:
 
 ```console
-$ cli/telepresence --new-deployment myservice --run-shell
+$ telepresence -m inject-tcp -n myservice --run-shell
 Starting proxy...
 @minikube|$ echo $TELEPRESENCE_ROOT
 /tmp/tmpk_svwt_5

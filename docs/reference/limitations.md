@@ -7,7 +7,7 @@ categories: reference
 
 ### Method-specific limitations
 
-For method-specific limitations see the documentation on the [available proxying methods](/references/methods.html).
+For method-specific limitations see the documentation on the [available proxying methods](/reference/methods.html).
 
 ### General limitations
 

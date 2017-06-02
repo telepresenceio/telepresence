@@ -5,7 +5,7 @@ kubectl run --port 8080 myserver --image=datawire/telepresence-k8s:0.41
 # I'll expose it to the Internet:
 kubectl expose deployment myserver --type=LoadBalancer --name=myserver
 # Next, I'll start a shell session whose contents will be proxied to Kubernetes:
-telepresence --deployment myserver --expose 8080 --run-shell
+telepresence --method inject-tcp --deployment myserver --expose 8080 --run-shell
 # I will start a local web server on port 8080:
 echo "hello from my laptop" > demo.txt
 python3 -m http.server 8080 > /dev/null &

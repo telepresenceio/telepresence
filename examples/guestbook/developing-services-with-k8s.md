@@ -136,7 +136,7 @@ Next, we need to deploy an externally visible load balancer. The [`frontend-serv
 Now, we're going to start the local Telepresence client, which will spawn a special shell which connects to the proxy in the remote Kubernetes cluster.
 
 ```
-% telepresence --deployment telepresence-deployment --expose 8080 --run-shell
+% telepresence --method inject-tcp --deployment telepresence-deployment --expose 8080 --run-shell
 ```
 
 In this special shell, change to the `examples/guestbook` directory, and start the frontend application as follows. We'll need to know the directory where Predis is installed. You can figure this out by typing:

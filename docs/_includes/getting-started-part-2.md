@@ -91,7 +91,7 @@ Finally, let's kill Telepresence locally so you don't have to worry about other 
 
 ```console
 $ fg
-telepresence --swap-deployment hello-world --expose 8000 --run python3 -m http.server 8000
+telepresence --method inject-tcp --swap-deployment hello-world --expose 8000 --run python3 -m http.server 8000
 ^C
 Keyboard interrupt received, exiting.
 ```
