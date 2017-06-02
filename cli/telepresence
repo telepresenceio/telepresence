@@ -906,6 +906,14 @@ def start_proxy(runner, args):
     if args.context is None:
         # We're using the current context:
         args.context = kubectl_config["current-context"]
+
+    # minikube breaks DNS because DNS gets captured, sent to minikube, which
+    # sends it back to DNS server set by host, resulting in loop...
+    if args.context == "minikube" and args.method == "vpn-tcp":
+        raise SystemExit(
+            "vpn-tcp method doesn't work with minikube.\n"
+            "See https://github.com/datawire/telepresence/issues/160")
+
     # Then, figure out the namespace:
     if args.namespace is None:
         # We're using the namespace for the given context, which if unset is
