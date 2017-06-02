@@ -244,7 +244,8 @@ def parse_args():
             "inject-tcp: inject process-specific shared "
             "library that proxies TCP to the remote cluster.\n"
             "vpn-tcp: all local processes can route TCP "
-            "traffic to the remote cluster."
+            "traffic to the remote cluster.\n\nFor more details see "
+            "http://www.telepresence.io/reference/methods.html"
         )
     )
     group_deployment = parser.add_mutually_exclusive_group(required=True)
