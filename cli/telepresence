@@ -237,6 +237,7 @@ def parse_args():
     )
     parser.add_argument(
         "--method",
+        "-m",
         required=True,
         choices=["inject-tcp", "vpn-tcp"],
         help=(
@@ -249,6 +250,7 @@ def parse_args():
     group_deployment = parser.add_mutually_exclusive_group(required=True)
     group_deployment.add_argument(
         '--new-deployment',
+        "-n",
         dest="new_deployment",
         help=(
             "Create a new Deployment in Kubernetes where the "
@@ -258,6 +260,7 @@ def parse_args():
     )
     group_deployment.add_argument(
         "--swap-deployment",
+        "-s",
         dest="swap_deployment",
         metavar="DEPLOYMENT[:CONTAINER]",
         help=(
@@ -269,6 +272,7 @@ def parse_args():
     )
     group_deployment.add_argument(
         "--deployment",
+        "-d",
         help=(
             "The name of an existing Kubernetes Deployment where the " +
             "datawire/telepresence-k8s image is already running."
