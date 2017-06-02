@@ -21,7 +21,14 @@ $ telepresence --expose 8080 --new-deployment example \
 The locally running process wrapped by `telepresence` has access to everything that a normal Kubernetes pod would have access to.
 That means `Service` instances, their corresponding DNS entries, and any cloud resources you can normally access from Kubernetes.
 
-To see this in action, let's start a `Service` and `Deployment` called `"helloworld"` in Kubernetes, and wait until it's up and running.
+To see this in action, let's start a `Service` and `Deployment` called `"helloworld"` in Kubernetes in the default namespace `"default"`, and wait until it's up and running.
+The resulting `Service` will have three DNS records you can use:
+
+1. `helloworld`, from a pod in the `default` namespace.
+2. `helloworld.default` anywhere in the Kubernetes cluster.
+3. `helloworld.default.svc.cluster.local` anywhere in the Kubernetes cluster.
+   This last record will not work when using `telepresence` with `--method=vpn-tcp` (see [the relevant ticket](https://github.com/datawire/telepresence/issues/161) for details.)
+
 We'll check the current Kubernetes context and then start a new pod:
 
 ```console
@@ -40,7 +47,7 @@ Now you can send queries to the new `Service` as if you were running inside Kube
 
 ```console
 $ telepresence --new-deployment quickstart \
-               --run curl http://helloworld.default.svc.cluster.local
+               --run curl http://helloworld.default
 <!DOCTYPE html>
 <html>
 <head>
@@ -49,6 +56,16 @@ $ telepresence --new-deployment quickstart \
 ```
 
 > **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
+
+### Networking access to cloud resources
+
+When using `--method=inject-tcp`, the subprocess run by `telepresence` will have *all* of its traffic routed via the cluster.
+That means transparent access to cloud resources like databases that are accessible from the Kubernetes cluster's private network or VPC.
+It also means public servers like `google.com` will be routed via the cluster, but again only for the subprocess run by `telepresence` via `--run` or `--run-shell`.
+
+When using `--method=vpn-tcp` *all* processes on the machine running `telepresence` will have access to the Kubernetes cluster.
+Cloud resources will only be routed via the cluster if you explicitly specify them using `--also-proxy <hostname>`.
+Access to public websites should not be affected or changed in any way.
 
 ### Environment variables
 
@@ -122,22 +139,43 @@ ca.crt  namespace  token
 
 ### The complete list: what Telepresence proxies
 
-Telepresence currently proxies the following:
+#### `--method inject-tcp`
+
+When using `--method inject-tcp`, Telepresence currently proxies the following:
 
 * The [special environment variables](https://kubernetes.io/docs/user-guide/services/#environment-variables) that expose the addresses of `Service` instances.
   E.g. `REDIS_MASTER_SERVICE_HOST`.
 * The standard [DNS entries for services](https://kubernetes.io/docs/user-guide/services/#dns).
   E.g. `redis-master` and `redis-master.default.svc.cluster.local` will resolve to a working IP address.
   These will work regardless of whether they existed when the proxy started.
-* TCP connections to other `Service` instances, whether or not they existed when the proxy was started.
+* TCP connections to other `Service` instances, regardless of whether they existed when the proxy was started.
 * Any environment variables that the `Deployment` explicitly configured for the pod.
 * TCP connections to any hostname/port; all but `localhost` will be routed via Kubernetes.
   Typically this is useful for accessing cloud resources, e.g. a AWS RDS database.
-* TCP connections *from* Kubernetes to your local code, for ports specified on the command line.
+* TCP connections *from* Kubernetes to your local machine, for ports specified on the command line using `--expose`
 * Access to volumes, including those for `Secret` and `ConfigMap` Kubernetes objects.
 * `/var/run/secrets/kubernetes.io` credentials (used to the [access the Kubernetes( API](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#accessing-the-api-from-a-pod)).
 
 Currently unsupported:
 
 * SRV DNS records matching `Services`, e.g. `_http._tcp.redis-master.default`.
+* UDP messages in any direction.
+
+#### `--method vpn-tcp`
+
+When using `--method vpn-tcp`, Telepresence currently proxies the following:
+
+* The [special environment variables](https://kubernetes.io/docs/user-guide/services/#environment-variables) that expose the addresses of `Service` instances.
+  E.g. `REDIS_MASTER_SERVICE_HOST`.
+* The standard [DNS entries for services](https://kubernetes.io/docs/user-guide/services/#dns).
+  E.g. `redis-master` and `redis-master.default`, but not those ending with `.local`. 
+* Any environment variables that the `Deployment` explicitly configured for the pod.
+* TCP connections to any `Service` in the cluster regardless of when they were started, as well as to any hosts explicitly listed with `--also-proxy`.
+* TCP connections *from* Kubernetes to your local machine, for ports specified on the command line using `--expose`.
+* Access to volumes, including those for `Secret` and `ConfigMap` Kubernetes objects.
+* `/var/run/secrets/kubernetes.io` credentials (used to the [access the Kubernetes( API](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#accessing-the-api-from-a-pod)).
+
+Currently unsupported:
+
+* Fully qualified Kubernetes DNS names that end with `.local`, e.g. `redis-master.default.svc.cluster.local` (see [the relevant ticket](https://github.com/datawire/telepresence/issues/161) for details.)
 * UDP messages in any direction.
