@@ -11,10 +11,13 @@ class Telepresence < Formula
   depends_on "sshfs"
 
   def install
+    system "make", "virtualenv/bin/sshuttle-telepresence"
     bin.install "cli/telepresence"
+    bin.install "virtualenv/bin/sshuttle-telepresence"
   end
 
   test do
     system "telepresence", "--help"
+    system "sshuttle-telepresence", "--version"
   end
 end

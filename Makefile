@@ -57,7 +57,7 @@ bumpversion: virtualenv
 	@echo "Please run: git push origin master --tags"
 
 # Will be run in Travis CI on tagged commits
-release: build-remote
+release: build-remote virtualenv/bin/sshuttle-telepresence
 	sudo docker push datawire/telepresence-k8s:$(VERSION)
 	env TELEPRESENCE_VERSION=$(VERSION) packaging/homebrew-package.sh
 	packaging/create-linux-packages.py $(VERSION)
