@@ -118,6 +118,7 @@ def listen():
     reactor.listenUDP(9053, protocol)
 
 
+reactor.suggestThreadPoolSize(50)
 print("Listening...")
 listen()
 application = Application("go")
