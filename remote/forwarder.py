@@ -80,6 +80,9 @@ class LocalResolver(object):
             parts = query.name.name.split(b".")
             if parts[0] == b"hellotelepresence" and not self.suffix:
                 self.suffix = parts[1:]
+                print(
+                    "Set DNS suffix we filter out to: {}".format(self.suffix)
+                )
             if parts == [b"hellotelepresence"] + self.suffix:
                 return self._got_ips(query, [b"127.0.0.1"], dns.Record_A)
             if parts[-len(self.suffix):] == self.suffix:
