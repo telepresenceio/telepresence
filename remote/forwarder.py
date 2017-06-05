@@ -111,11 +111,13 @@ class LocalResolver(object):
             ).addErrback(self._got_error)
             return d
         elif query.type == dns.AAAA:
-            # Kubernetes can't do IPv6:
-            return self._got_ips(real_name, [], dns.Record_AAAA)
+            # Kubernetes can't do IPv6, and if we return empty result OS X
+            # gives up, so never return anything:
+            return defer.Deferred()
         elif query.type == dns.A6:
-            # Kubernetes can't do IPv6:
-            return self._got_ips(real_name, [], dns.Record_A6)
+            # Kubernetes can't do IPv6, and if we return empty result OS X
+            # gives up, so never return anything:
+            return defer.Deferred()
         else:
             print("{} query:".format(query.type, query.name.name))
             return self.fallback.query(query, timeout=timeout)
