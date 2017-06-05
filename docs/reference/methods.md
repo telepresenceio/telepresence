@@ -28,7 +28,7 @@ For example, if you're developing in Go you'll want to stick to this method.
 
 This method does have some limitations of its own, however:
 
-1. Fully qualified Kubernetes domains like `yourservice.default.svc.cluster.local` won't resolve correctly.
+1. Fully qualified Kubernetes domains like `yourservice.default.svc.cluster.local` won't resolve correctly on Linux.
    `yourservice` and `yourservice.default` will resolve correctly, however.
    See [the relevant ticket](https://github.com/datawire/telepresence/issues/161) for details.
 2. `minikube`, `minishift` and other ways of running Kubernetes on your local machine won't work: non-Kubernetes DNS lookups will fail.
