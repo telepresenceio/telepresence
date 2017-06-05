@@ -12,6 +12,7 @@ clients within a k8s pod.
 """
 
 import socket
+from copy import deepcopy
 
 from twisted.application.service import Application
 from twisted.internet import reactor, defer
@@ -79,11 +80,23 @@ class LocalResolver(object):
             parts = query.name.name.split(b".")
             if parts[0] == b"hellotelepresence" and not self.suffix:
                 self.suffix = parts[1:]
+            if parts == [b"hellotelepresence"] + self.suffix:
                 return self._got_ips(query, [b"127.0.0.1"], dns.Record_A)
             if parts[-len(self.suffix):] == self.suffix:
-                parts = parts[:-len(self.suffix)]
-                query.name.name = b".".join(parts)
-                print("Updated A query: {}".format(query.name.name))
+                new_query = deepcopy(query)
+                new_query.name.name = b".".join(parts[:-len(self.suffix)])
+                print("Updated A query: {}".format(new_query.name.name))
+
+                def failed(f):
+                    print(
+                        "Failed to lookup {}, falling back to {}".
+                        format(new_query.name.name, query.name.name)
+                    )
+                    return self.fallback.query(query, timeout=timeout)
+
+                return self.query(
+                    new_query, timeout=timeout
+                ).addErrback(failed)
 
             d = deferToThread(resolve, query.name.name)
             d.addCallback(lambda ips: self._got_ips(query, ips, dns.Record_A)
