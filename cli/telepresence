@@ -1260,15 +1260,16 @@ def run_local_command(
         # which then allows the DNS proxy to detect the suffix domain and
         # filter it out.
         start = time()
-        while time() - start < 30:
+        while time() - start < 10:
             try:
-                if socket.gethostbyname("hellotelepresence") == "127.0.0.1":
-                    sleep(1)  # just in case there's more to startup
-                    break
-            except socket.gaierror:
+                runner.check_call(["host", "-t", "A", "hellotelepresence"])
+                sleep(1)  # just in case there's more to startup
+                break
+            except CalledProcessError:
                 sleep(0.1)
             else:
                 sleep(0.1)
+        runner.check_call(["host", "-t", "A", "hellotelepresence"])
         p = Popen(command, env=env)
     else:
         raise RuntimeError(
