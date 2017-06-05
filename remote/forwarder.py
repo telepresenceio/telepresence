@@ -115,14 +115,14 @@ class LocalResolver(object):
             return d
         elif query.type == dns.AAAA:
             # Kubernetes can't do IPv6, and if we return empty result OS X
-            # gives up, so never return anything:
-            print("AAAA query, dropping on floor: {}".format(query.name.name))
-            return defer.Deferred()
-        elif query.type == dns.A6:
-            # Kubernetes can't do IPv6, and if we return empty result OS X
-            # gives up, so never return anything:
-            print("A6 query, dropping on floor: {}".format(query.name.name))
-            return defer.Deferred()
+            # gives up, so never return anything IPv6y. Instead return A
+            # records to pacify OS X.
+            print(
+                "AAAA query, sending back A instead: {}".
+                format(query.name.name)
+            )
+            query.type = dns.A
+            return self.query(query, timeout=timeout, real_name=real_name)
         else:
             print("{} query:".format(query.type, query.name.name))
             return self.fallback.query(query, timeout=timeout)
