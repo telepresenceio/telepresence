@@ -105,6 +105,12 @@ class LocalResolver(object):
             d.addCallback(lambda ips: self._got_ips(query, ips, dns.Record_A)
                           ).addErrback(self._got_error)
             return d
+        elif query.type == dns.AAAA:
+            # Kubernetes can't do IPv6:
+            return self._got_ips(query, [], dns.Record_AAAA)
+        elif query.type == dns.A6:
+            # Kubernetes can't do IPv6:
+            return self._got_ips(query, [], dns.Record_A6)
         else:
             print("{} query:".format(query.type, query.name.name))
             return self.fallback.query(query, timeout=timeout)
