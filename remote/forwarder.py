@@ -86,7 +86,10 @@ class LocalResolver(object):
         if parts[-len(self.suffix):] == self.suffix:
             new_query = deepcopy(query)
             new_query.name.name = b".".join(parts[:-len(self.suffix)])
-            print("Updated A query: {}".format(new_query.name.name))
+            print(
+                "Updated query of type {} from {} to {}".
+                format(query.type, query.name.name, new_query.name.name)
+            )
 
             def failed(f):
                 print(
@@ -113,10 +116,12 @@ class LocalResolver(object):
         elif query.type == dns.AAAA:
             # Kubernetes can't do IPv6, and if we return empty result OS X
             # gives up, so never return anything:
+            print("AAAA query, dropping on floor: {}".format(query.name.name))
             return defer.Deferred()
         elif query.type == dns.A6:
             # Kubernetes can't do IPv6, and if we return empty result OS X
             # gives up, so never return anything:
+            print("A6 query, dropping on floor: {}".format(query.name.name))
             return defer.Deferred()
         else:
             print("{} query:".format(query.type, query.name.name))
