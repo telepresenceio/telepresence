@@ -1262,10 +1262,10 @@ def run_local_command(
         start = time()
         while time() - start < 10:
             try:
-                runner.check_call(["host", "-t", "A", "hellotelepresence"])
-                sleep(1)  # just in case there's more to startup
-                break
-            except CalledProcessError:
+                if socket.gethostbyname("telepresence") == "127.0.0.1":
+                    sleep(1)  # just in case there's more to startup
+                    break
+            except socket.gaierror:
                 sleep(0.1)
             else:
                 sleep(0.1)
