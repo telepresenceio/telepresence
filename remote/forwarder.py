@@ -44,6 +44,9 @@ class LocalResolver(object):
         # except it doesn't support ndots! So we manually deal with A records
         # and pass the rest on to client.Resolver.
         self.fallback = client.Resolver(resolv='/etc/resolv.conf')
+        # Suffix set by resolv.conf search/domain line, which we remove once we
+        # figure out what it is.
+        self.suffix = []
 
     def _got_ips(self, query, ips, record_type):
         """
@@ -66,10 +69,25 @@ class LocalResolver(object):
     def query(self, query, timeout=None):
         if query.type == dns.A:
             print("A query: {}".format(query.name.name))
+
+            # We use a special marker hostname, which is always sent by
+            # telepresence, to figure out the search suffix set by the client
+            # machine's resolv.conf. We then remove it since it masks our
+            # ability to add the Kubernetes suffixes. E.g. if DHCP sets 'search
+            # wework.com' we want to lookup 'kubernetes' if we get
+            # 'kubernetes.wework.com'.
+            parts = query.name.name.split(b".")
+            if parts[0] == b"hellotelepresence" and not self.suffix:
+                self.suffix = parts[1:]
+                return self._got_ips(query, [b"127.0.0.1"], dns.Record_A)
+            if parts[-len(self.suffix):] == self.suffix:
+                parts = parts[:-len(self.suffix)]
+                query.name.name = b".".join(parts)
+                print("Updated A query: {}".format(query.name.name))
+
             d = deferToThread(resolve, query.name.name)
-            d.addCallback(
-                lambda ips: self._got_ips(query, ips, dns.Record_A)
-            ).addErrback(self._got_error)
+            d.addCallback(lambda ips: self._got_ips(query, ips, dns.Record_A)
+                          ).addErrback(self._got_error)
             return d
         else:
             print("{} query:".format(query.type, query.name.name))
