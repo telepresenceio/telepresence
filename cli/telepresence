@@ -917,7 +917,8 @@ def start_proxy(runner, args):
     if args.context == "minikube" and args.method == "vpn-tcp":
         raise SystemExit(
             "vpn-tcp method doesn't work with minikube.\n"
-            "See https://github.com/datawire/telepresence/issues/160")
+            "See https://github.com/datawire/telepresence/issues/160"
+        )
 
     # Then, figure out the namespace:
     if args.namespace is None:
@@ -1254,22 +1255,39 @@ def run_local_command(
                 runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
             ))
         )
+
         # sshuttle will take a while to startup. We can detect it being up when
         # DNS resolution of services starts working. We use a specific single
         # segment so any search/domain statements in resolv.conf are applied,
         # which then allows the DNS proxy to detect the suffix domain and
         # filter it out.
+        def get_hellotelepresence():
+            # On Macs I suspect there is per-process caching and OS-level
+            # caching, so clear out caches by having separate process calls and
+            # explicit caching:
+            try:
+                runner.get_output([
+                    "python3", "-c",
+                    "import socket; socket.gethostbyname('hellotelepresence')"
+                ])
+            except CalledProcessError:
+                if sys.platform == "darwin":
+                    runner.get_output([
+                        "sudo", "killall", "-HUP", "mDNSResponder"
+                    ])
+                raise
+
         start = time()
         while time() - start < 10:
             try:
-                if socket.gethostbyname("telepresence") == "127.0.0.1":
-                    sleep(1)  # just in case there's more to startup
-                    break
-            except socket.gaierror:
+                get_hellotelepresence()
+                sleep(1)  # just in case there's more to startup
+                break
+            except CalledProcessError:
                 sleep(0.1)
             else:
                 sleep(0.1)
-        runner.check_call(["host", "-t", "A", "hellotelepresence"])
+        get_hellotelepresence()
         p = Popen(command, env=env)
     else:
         raise RuntimeError(
