@@ -82,7 +82,7 @@ class LocalResolver(object):
             self.suffix = parts[1:]
             print("Set DNS suffix we filter out to: {}".format(self.suffix))
         if parts == [b"hellotelepresence"] + self.suffix:
-            return self._got_ips(real_name, [b"127.0.0.1"], dns.Record_A)
+            return self._got_ips(real_name, ["127.0.0.1"], dns.Record_A)
         if parts[-len(self.suffix):] == self.suffix:
             new_query = deepcopy(query)
             new_query.name.name = b".".join(parts[:-len(self.suffix)])
