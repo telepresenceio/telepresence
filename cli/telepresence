@@ -235,9 +235,23 @@ def parse_args():
             "default is './telepresence.log'."
         )
     )
+    parser.add_argument(
+        "--method",
+        "-m",
+        required=True,
+        choices=["inject-tcp", "vpn-tcp"],
+        help=(
+            "inject-tcp: inject process-specific shared "
+            "library that proxies TCP to the remote cluster.\n"
+            "vpn-tcp: all local processes can route TCP "
+            "traffic to the remote cluster.\n\nFor more details see "
+            "http://www.telepresence.io/reference/methods.html"
+        )
+    )
     group_deployment = parser.add_mutually_exclusive_group(required=True)
     group_deployment.add_argument(
         '--new-deployment',
+        "-n",
         dest="new_deployment",
         help=(
             "Create a new Deployment in Kubernetes where the "
@@ -247,6 +261,7 @@ def parse_args():
     )
     group_deployment.add_argument(
         "--swap-deployment",
+        "-s",
         dest="swap_deployment",
         metavar="DEPLOYMENT[:CONTAINER]",
         help=(
@@ -258,6 +273,7 @@ def parse_args():
     )
     group_deployment.add_argument(
         "--deployment",
+        "-d",
         help=(
             "The name of an existing Kubernetes Deployment where the " +
             "datawire/telepresence-k8s image is already running."
@@ -285,8 +301,25 @@ def parse_args():
         action='append',
         default=[],
         help=(
-            "Port number in local container that will be " +
-            "exposed to Kubernetes."
+            "Local port number that will be exposed to Kubernetes. Should"
+            " match port exposed in the existing Deployment if using "
+            "--deployment or --swap-deployment."
+        )
+    )
+    parser.add_argument(
+        "--also-proxy",
+        metavar="CLOUD_HOSTNAME",
+        dest="also_proxy",
+        action='append',
+        default=[],
+        help=(
+            "If you are using --method=vpn-tcp, use this to add additional "
+            "remote IPs or hostnames to proxy. Kubernetes service and pods "
+            "are proxied automatically, so you only need to list cloud "
+            "resources, e.g. the hostname of a AWS RDS. "
+            "When using --method=inject-tcp "
+            "this option is unnecessary as all outgoing communication in "
+            "the run subprocess will be proxied."
         )
     )
     group = parser.add_mutually_exclusive_group()
@@ -878,6 +911,15 @@ def start_proxy(runner, args):
     if args.context is None:
         # We're using the current context:
         args.context = kubectl_config["current-context"]
+
+    # minikube breaks DNS because DNS gets captured, sent to minikube, which
+    # sends it back to DNS server set by host, resulting in loop...
+    if args.context == "minikube" and args.method == "vpn-tcp":
+        raise SystemExit(
+            "vpn-tcp method doesn't work with minikube.\n"
+            "See https://github.com/datawire/telepresence/issues/160"
+        )
+
     # Then, figure out the namespace:
     if args.namespace is None:
         # We're using the namespace for the given context, which if unset is
@@ -1046,17 +1088,104 @@ exit 55
 """
 
 
-def get_unsupported_tools():
+def get_unsupported_tools(dns_supported):
     """
     Create replacement command-line tools that just error out, in a nice way.
     """
+    commands = ["ping", "traceroute"]
+    if not dns_supported:
+        commands += ["nslookup", "dig", "host"]
     unsupported_bin = mkdtemp()
-    for command in ["ping", "nslookup", "dig", "host", "traceroute"]:
+    for command in commands:
         path = unsupported_bin + "/" + command
         with open(path, "w") as f:
             f.write(NICE_FAILURE.format(command))
         os.chmod(path, 0o755)
     return unsupported_bin
+
+
+# Script to dump resolved IPs to stdout as JSON list:
+_GET_IPS_PY = """
+import socket, sys, json
+
+result = []
+for host in sys.argv[1:]:
+    result.append(socket.gethostbyname(host))
+sys.stdout.write(json.dumps(result))
+sys.stdout.flush()
+"""
+
+
+def get_proxy_cidrs(runner, args, remote_info, service_address):
+    """
+    Figure out which IP ranges to route via sshuttle.
+
+    1. Given the IP address of a service, figure out IP ranges used by
+       Kubernetes services. We assume /16 for the services.
+    2. Extract pod ranges from API.
+    3. Any hostnames/IPs given by the user using --also-proxy.
+
+    See https://github.com/kubernetes/kubernetes/issues/25533 for eventual
+    long-term solution for service CIDR.
+    """
+
+    # Run script to convert --also-proxy hostnames to IPs, doing name
+    # resolution inside Kubernetes, so we get cloud-local IP addresses for
+    # cloud resources:
+    def resolve_ips():
+        return json.loads(
+            runner.get_output(
+                kubectl(
+                    runner, args.context, args.namespace, [
+                        "exec", "--container=" + remote_info.container_name,
+                        remote_info.pod_name, "--", "python3", "-c",
+                        _GET_IPS_PY
+                    ] + args.also_proxy
+                )
+            )
+        )
+
+    try:
+        result = set([ip + "/32" for ip in resolve_ips()])
+    except CalledProcessError as e:
+        runner.write(str(e))
+        raise SystemExit(
+            "We failed to do a DNS lookup inside Kubernetes for the "
+            "hostname(s) you listed in "
+            "--also-proxy ({}). Maybe you mistyped one of them?".
+            format(", ".join(args.also_proxy))
+        )
+
+    def ip_to_16range(ip):
+        # Convert IP address, e.g. '10.3.241.23', into 16 bit range, in this
+        # case '10.3.0.0/16':
+        return ".".join(ip.split(".")[:2] + ["0", "0"]) + "/16"
+
+    # Get pod IPs from nodes if possible, otherwise use pod IPs as heuristic:
+    try:
+        nodes = json.loads(
+            runner.
+            get_output([runner.kubectl_cmd, "get", "nodes", "-o", "json"])
+        )["items"]
+    except CalledProcessError as e:
+        runner.write("Failed to get nodes: {}".format(e))
+        # Fallback to using pod IPs:
+        pods = json.loads(
+            runner.
+            get_output([runner.kubectl_cmd, "get", "pods", "-o", "json"])
+        )["items"]
+        for pod in pods:
+            result.add(ip_to_16range(pod["status"]["podIP"]))
+    else:
+        for node in nodes:
+            pod_cidr = node["spec"].get("podCIDR")
+            if pod_cidr is not None:
+                result.add(pod_cidr)
+
+    # Add service IP range, based on heuristic:
+    result.add(ip_to_16range(service_address))
+
+    return list(result)
 
 
 def run_local_command(
@@ -1082,10 +1211,11 @@ def run_local_command(
             ]).strip()
         )
     )
-    if sys.platform == "darwin":
+    if sys.platform == "darwin" and args.method == "inject-tcp":
         env["PATH"] = sip_workaround()
     # Inject replacements for unsupported tools like ping:
-    env["PATH"] = get_unsupported_tools() + ":" + env["PATH"]
+    env["PATH"] = get_unsupported_tools(args.method != "inject-tcp"
+                                        ) + ":" + env["PATH"]
     mount_dir, mounted = mount_remote_volumes(runner, remote_info, ssh_port)
     env["TELEPRESENCE_ROOT"] = mount_dir
     # Make sure we use "bash", no "/bin/bash", so we get the copied version on
@@ -1097,7 +1227,72 @@ def run_local_command(
         command = ["bash", "--norc"]
     else:
         command = args.run
-    p = Popen(["torsocks"] + command, env=env)
+    if args.method == "inject-tcp":
+        p = Popen(["torsocks"] + command, env=env)
+    elif args.method == "vpn-tcp":
+        # Make sure we have sudo credentials by doing a small sudo in advance
+        # of sshuttle using it:
+        Popen(["sudo", "true"]).wait()
+        sshuttle_method = "auto"
+        if sys.platform.startswith("linux"):
+            # sshuttle tproxy mode seems to have issues:
+            sshuttle_method = "nat"
+        subprocesses.append(
+            runner.popen([
+                "sshuttle-telepresence",
+                "-v",
+                "--dns",
+                "--method",
+                sshuttle_method,
+                "-e",
+                (
+                    "ssh -oStrictHostKeyChecking=no " +
+                    "-oUserKnownHostsFile=/dev/null"
+                ),
+                "-r",
+                "telepresence@localhost:" + str(ssh_port),
+            ] + get_proxy_cidrs(
+                runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
+            ))
+        )
+
+        # sshuttle will take a while to startup. We can detect it being up when
+        # DNS resolution of services starts working. We use a specific single
+        # segment so any search/domain statements in resolv.conf are applied,
+        # which then allows the DNS proxy to detect the suffix domain and
+        # filter it out.
+        def get_hellotelepresence():
+            # On Macs I suspect there is per-process caching and OS-level
+            # caching, so clear out caches by having separate process calls and
+            # explicit caching:
+            try:
+                runner.get_output([
+                    "python3", "-c",
+                    "import socket; socket.gethostbyname('hellotelepresence')"
+                ])
+            except CalledProcessError:
+                if sys.platform == "darwin":
+                    runner.get_output([
+                        "sudo", "killall", "-HUP", "mDNSResponder"
+                    ])
+                raise
+
+        start = time()
+        while time() - start < 10:
+            try:
+                get_hellotelepresence()
+                sleep(1)  # just in case there's more to startup
+                break
+            except CalledProcessError:
+                sleep(0.1)
+            else:
+                sleep(0.1)
+        get_hellotelepresence()
+        p = Popen(command, env=env)
+    else:
+        raise RuntimeError(
+            "GADZOOKS, A BUG: unknown proxying method " + args.method
+        )
 
     def terminate_if_alive():
         runner.write("Shutting down local shell...\n")

@@ -13,6 +13,9 @@ set -e
 trap 'chown -R --reference /build-inside/build-package.sh /out/' EXIT
 
 # Package only includes /usr/bin/telepresence:
+mkdir /tmp/build
+cp /source/cli/telepresence /tmp/build
+cp /source/virtualenv/bin/sshuttle-telepresence /tmp/build
 cd /out
 fpm -t "$PACKAGE_TYPE" \
     --name telepresence \
@@ -20,6 +23,6 @@ fpm -t "$PACKAGE_TYPE" \
     --description "Local development for a remote Kubernetes cluster." \
     ${@/#/--depends } \
     --prefix /usr/bin \
-    --chdir /source/cli \
+    --chdir /tmp/build \
     --input-type dir \
-    telepresence
+    telepresence sshuttle-telepresence

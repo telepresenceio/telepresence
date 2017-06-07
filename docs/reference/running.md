@@ -12,7 +12,7 @@ There are two ways you can have Telepresence run your local process.
 `--run` takes one or more arguments and runs the resulting command, e.g. to run `ruby myserver.rb` you can do:
 
 ```console
-$ telepresence --new-deployment example --run ruby myserver.rb
+$ telepresence -m inject-tcp -n example --run ruby myserver.rb
 ```
 
 This process will have access to the environment variables, outgoing proxying and volumes proxied by Telepresence.
@@ -22,7 +22,7 @@ This process will have access to the environment variables, outgoing proxying an
 `--run-shell` takes no arguments, it simply runs a `bash` process:
 
 ```console
-$ telepresence --new-deployment example --run-shell
+$ telepresence -m inject-tcp -n example --run-shell
 @minikube|$
 ```
 

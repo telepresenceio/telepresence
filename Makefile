@@ -1,6 +1,7 @@
 .PHONY: default build-remote bumpversion release minikube-test build-remote-minikube
 
 VERSION=$(shell git describe --tags)
+SHELL:=/bin/bash
 
 default:
 	@echo "See http://www.telepresence.io/additional-information/developing.html"
@@ -16,6 +17,9 @@ virtualenv:
 	virtualenv/bin/pip install -r dev-requirements.txt
 	virtualenv/bin/pip install -r remote/requirements.txt
 
+virtualenv/bin/sshuttle-telepresence: virtualenv
+	source virtualenv/bin/activate && packaging/build-sshuttle.py
+
 
 ## Development ##
 
@@ -29,15 +33,21 @@ build-remote-minikube:
 		cd remote && \
 		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
 
+run-minikube:
+	source virtualenv/bin/activate && \
+		env TELEPRESENCE_VERSION=$(VERSION) cli/telepresence --method=inject-tcp --new-deployment test --run-shell
+
 # Run tests in minikube:
 minikube-test: virtualenv build-remote-minikube
 	@echo "IMPORTANT: this will change kubectl context to minikube!\n\n"
 	kubectl config use-context minikube
-	env TELEPRESENCE_VERSION=$(VERSION) ci/test.sh
+	source virtualenv/bin/activate && \
+		env TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_METHOD=inject-tcp ci/test.sh
 
 # Run tests relevant to OpenShift:
 openshift-tests: virtualenv
-	env TELEPRESENCE_OPENSHIFT=1 ci/test.sh
+	source virtualenv/bin/activate && \
+		env TELEPRESENCE_OPENSHIFT=1 TELEPRESENCE_METHOD=inject-tcp ci/test.sh
 
 ## Release ##
 
@@ -47,7 +57,7 @@ bumpversion: virtualenv
 	@echo "Please run: git push origin master --tags"
 
 # Will be run in Travis CI on tagged commits
-release: build-remote
+release: build-remote virtualenv/bin/sshuttle-telepresence
 	sudo docker push datawire/telepresence-k8s:$(VERSION)
 	env TELEPRESENCE_VERSION=$(VERSION) packaging/homebrew-package.sh
 	packaging/create-linux-packages.py $(VERSION)

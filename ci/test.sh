@@ -6,7 +6,10 @@ if [ "$(uname)" == "Linux" ]; then virtualenv/bin/pylint -f parseable -E cli/tel
 cli/telepresence --version
 echo | cli/telepresence --help
 if [ -z "$TELEPRESENCE_TESTS" ]; then
-    [ -z "$TELEPRESENCE_OPENSHIFT" ] && export TELEPRESENCE_TESTS="-n 4";
+    # Don't want parallism for OpenShift (causes problems with OpenShift
+    # Online's limited free plan) and don't want parallism for VPN-y method
+    # since should only have one running a time.
+    [ -z "$TELEPRESENCE_OPENSHIFT" ] && [ "$TELEPRESENCE_METHOD" != "vpn-tcp" ] && export TELEPRESENCE_TESTS="-n 4";
 fi
 env PATH="$PWD/cli/:$PATH" virtualenv/bin/py.test -v \
     --timeout 360 --timeout-method thread --fulltrace $TELEPRESENCE_TESTS tests remote/test_socks.py

@@ -5,6 +5,14 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.49 (unreleased)
+
+Features:
+
+* **Backwards incompatible change:** Telepresence now supports a alternative to `LD_PRELOAD`, a VPN-like connection using [sshuttle](http://sshuttle.readthedocs.io/en/stable/). As a result the `telepresence` command line now has an extra required argument `--method`.
+  ([#128](https://github.com/datawire/telepresence/issues/128))
+* Added shortcuts for a number of the command line arguments.
+
 #### 0.48 (May 25, 2017)
 
 Bug fixes:
