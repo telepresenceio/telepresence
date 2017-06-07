@@ -11,7 +11,7 @@ class Telepresence < Formula
   depends_on "sshfs"
 
   def install
-    system "make", "virtualenv/bin/sshuttle-telepresence"
+    system "env", "PATH=#{ENV['PATH']}:/usr/local/bin", "make", "virtualenv/bin/sshuttle-telepresence"
     bin.install "cli/telepresence"
     bin.install "virtualenv/bin/sshuttle-telepresence"
   end
