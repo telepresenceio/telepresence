@@ -5,14 +5,18 @@ title: "Changelog"
 categories: reference
 ---
 
-#### 0.50 (unreleased)
+#### 0.50 (June 8, 2017)
 
 Bug fixes:
 
 * If no `current-context` is set in the Kubernetes config, then give a nice
   error message indicating the need for passing `--context` option to
-  `telepresence`. Thanks to Brandon Philips for the bug report.
+  `telepresence`.
+  Thanks to Brandon Philips for the bug report.
   ([#164](https://github.com/datawire/telepresence/issues/164))
+* `oc` will not be used unless we're sure we're talking to an OpenShift server. This is useful for Kubernetes users who happen to have a `oc` binary that isn't the OpenShift client.
+  Thanks to Brandon Philips for the bug report.
+  ([#165](https://github.com/datawire/telepresence/issues/165))
 
 #### 0.49 (June 7, 2017)
 

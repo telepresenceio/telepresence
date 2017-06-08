@@ -1346,6 +1346,8 @@ def kubectl_or_oc(server):
     """Figure out if we're using "kubectl" or "oc"."""
     if which("oc") is None:
         return "kubectl"
+    # We've got oc, and possibly kubectl as well. We only want oc for OpenShift
+    # servers, so check for an OpenShift API endpoint:
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
@@ -1377,8 +1379,16 @@ def main():
     @handle_unexpected_errors(args.logfile)
     def go():
         # We don't quite know yet if we want kubectl or oc (if someone has both
-        # it depends on the context), so until we know the context just guess:
-        prelim_command = "kubectl" if not which("oc") else "oc"
+        # it depends on the context), so until we know the context just guess.
+        # We prefer kubectl over oc insofar as (1) kubectl commands we do in
+        # this prelim setup stage don't require oc and (2) sometimes oc is a
+        # different binary unrelated to OpenShift.
+        if which("kubectl"):
+            prelim_command = "kubectl"
+        elif which("oc"):
+            prelim_command = "oc"
+        else:
+            raise SystemExit("Found neither 'kubectl' nor 'oc' in your $PATH.")
 
         # Make sure we have a Kubernetes context set either on command line or
         # in kubeconfig:
