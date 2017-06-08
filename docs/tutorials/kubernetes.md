@@ -13,6 +13,8 @@ categories: tutorials
  });
 </script>
 
+{% include getting-started-part-0.md cluster="Kubernetes" command="kubectl" %}
+
 You will need the following available on your machine:
 
 * `kubectl` command line tool (here's the [installation instructions](https://kubernetes.io/docs/tasks/tools/install-kubectl/)).

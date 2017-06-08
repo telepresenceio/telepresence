@@ -13,6 +13,8 @@ categories: tutorials
  });
 </script>
 
+{% include getting-started-part-0.md cluster="OpenShift" command="oc" %}
+
 You will need the following available on your machine:
 
 * `oc` command line tool (here's the [installation instructions](https://docs.openshift.org/latest/cli_reference/get_started_cli.html)).
