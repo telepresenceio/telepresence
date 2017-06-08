@@ -1431,8 +1431,10 @@ def main():
         if args.logfile != "-":
             args.logfile = os.path.abspath(args.logfile)
         runner = Runner.open(args.logfile, kubectl_or_oc(server))
-        runner.write("Context: {}, namespace: {}, kubectl_command: {}\n".format(
-            args.context, args.namespace, runner.kubectl_cmd))
+        runner.write(
+            "Context: {}, namespace: {}, kubectl_command: {}\n".
+            format(args.context, args.namespace, runner.kubectl_cmd)
+        )
 
         # minikube breaks DNS because DNS gets captured, sent to minikube,
         # which sends it back to DNS server set by host, resulting in loop...
