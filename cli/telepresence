@@ -153,7 +153,6 @@ class Runner(object):
         """
         self.logfile = logfile
         self.kubectl_cmd = kubectl_cmd
-        self.write("Using {} for logging.".format(self.kubectl_cmd))
 
     @classmethod
     def open(cls, logfile_path, kubectl_cmd):
@@ -903,20 +902,6 @@ def start_proxy(runner, args):
     if sys.stderr.isatty():
         print("Starting proxy...", file=sys.stderr)
 
-    # Figure out explicit namespace (we do context earlier):
-    kubectl_config = json.loads(
-        runner.get_output([runner.kubectl_cmd, "config", "view", "-o", "json"])
-    )
-    if args.namespace is None:
-        # We're using the namespace for the given context, which if unset is
-        # "default".
-        for context_setting in kubectl_config["contexts"]:
-            if context_setting["name"] == args.context:
-                args.namespace = context_setting["context"].get(
-                    "namespace", "default"
-                )
-                break
-
     run_id = None
 
     if args.new_deployment is not None:
@@ -1357,16 +1342,10 @@ def ask_for_feedback():
         )
 
 
-def kubectl_or_oc():
+def kubectl_or_oc(server):
     """Figure out if we're using "kubectl" or "oc"."""
     if which("oc") is None:
         return "kubectl"
-    server = str(
-        check_output([
-            "oc", "config", "view", "--minify=true",
-            "-o=jsonpath={.clusters[0].cluster.server}"
-        ]), "utf-8"
-    )
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
@@ -1397,25 +1376,53 @@ def main():
 
     @handle_unexpected_errors(args.logfile)
     def go():
-        # Log file path should be absolute since some processes may run in
-        # different directories:
-        if args.logfile != "-":
-            args.logfile = os.path.abspath(args.logfile)
-            runner = Runner.open(args.logfile, kubectl_or_oc())
+        # We don't quite know yet if we want kubectl or oc (if someone has both
+        # it depends on the context), so until we know the context just guess:
+        prelim_command = "kubectl" if not which("oc") else "oc"
 
         # Make sure we have a Kubernetes context set either on command line or
         # in kubeconfig:
         if args.context is None:
             try:
-                args.context = runner.get_output([
-                    runner.kubectl_cmd, "config", "current-context"
-                ]).strip()
+                args.context = str(
+                    check_output([prelim_command, "config", "current-context"],
+                                 stderr=STDOUT), "utf-8"
+                ).strip()
             except CalledProcessError:
                 raise SystemExit(
                     "No current-context set. "
                     "Please use the --context option to explicitly set the "
                     "context."
                 )
+
+        # Figure out explicit namespace if its not specified, and the server
+        # address (we use the server address to determine for good whether we
+        # want oc or kubectl):
+        kubectl_config = json.loads(
+            str(
+                check_output([prelim_command, "config", "view", "-o", "json"]),
+                "utf-8"
+            )
+        )
+        for context_setting in kubectl_config["contexts"]:
+            if context_setting["name"] == args.context:
+                if args.namespace is None:
+                    args.namespace = context_setting["context"].get(
+                        "namespace", "default"
+                    )
+                cluster = context_setting["context"]["cluster"]
+                break
+        for cluster_setting in kubectl_config["clusters"]:
+            if cluster_setting["name"] == cluster:
+                server = cluster_setting["cluster"]["server"]
+
+        # Log file path should be absolute since some processes may run in
+        # different directories:
+        if args.logfile != "-":
+            args.logfile = os.path.abspath(args.logfile)
+        runner = Runner.open(args.logfile, kubectl_or_oc(server))
+        runner.write("Context: {}, namespace: {}, kubectl_command: {}\n".format(
+            args.context, args.namespace, runner.kubectl_cmd))
 
         # minikube breaks DNS because DNS gets captured, sent to minikube,
         # which sends it back to DNS server set by host, resulting in loop...

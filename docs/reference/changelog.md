@@ -5,6 +5,15 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.50 (unreleased)
+
+Bug fixes:
+
+* If no `current-context` is set in the Kubernetes config, then give a nice
+  error message indicating the need for passing `--context` option to
+  `telepresence`. Thanks to Brandon Philips for the bug report.
+  ([#164](https://github.com/datawire/telepresence/issues/164))
+
 #### 0.49 (June 7, 2017)
 
 Features:
