@@ -1,6 +1,6 @@
 ---
 layout: doc
-weight: 3
+weight: 4
 title: "Get started with OpenShift"
 categories: tutorials
 ---
