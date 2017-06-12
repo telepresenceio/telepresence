@@ -13,15 +13,35 @@ categories: tutorials
  });
 </script>
 
-{% include getting-started-part-0.md cluster="OpenShift" command="oc" %}
+## A short introduction: accessing the cluster
 
-You will need the following available on your machine:
+1. Install Telepresence (see below).
+2. Run a service in the cluster:
 
-* `oc` command line tool (here's the [installation instructions](https://docs.openshift.org/latest/cli_reference/get_started_cli.html)).
-* Access to your OpenShift cluster, with local credentials on your machine.
-  You can test this by running `oc get pod` - if this works you're all set.
+   ```console
+   $ oc run myservice --image=datawire/hello-world --port=8000 --expose
+   $ oc get service myservice
+   NAME        CLUSTER-IP   EXTERNAL-IP   PORT(S)    AGE
+   myservice   10.0.0.12    <none>        8000/TCP   1m
+   ```
 
-**Note**: if you don't have a testing OpenShift cluster available we recommend using [minishift](https://docs.openshift.org/latest/minishift/index.html) over a free OpenShift Online account, since the latter only has limited resources available.
+   It may take a minute or two for the pod running the server to be up and running, depending on how fast your cluster is.
+   
+3. You can now run a local process using Telepresence that can access that service, even though the process is local but the service is running in the OpenShift cluster:
+
+   ```console
+   $ telepresence -m inject-tcp --new-deployment example --run curl http://myservice:8000/
+   Hello, world!
+   ```
+
+   (This will not work if the hello world pod hasn't started yet... if so, try again.)
+
+`curl` got access to the cluster even though it's running locally!
+In the more extended tutorial that follows you'll see how you can also route traffic *to* a local process from the cluster.
+
+## A longer introduction: exposing a service to the cluster
+
+{% include install.md cluster="OpenShift" command="oc" deployment="DeploymentConfig" install="https://docs.openshift.org/latest/cli_reference/get_started_cli.html" %}
 
 {% include getting-started-part-1.md cluster="OpenShift" command="oc" deployment="DeploymentConfig" %}
 
