@@ -43,7 +43,7 @@ def test_package(distro_image, package_directory, install_command):
     :param distro_image str: The Docker image to use to test the package.
     :param package_directory Path: local directory where the package can be
         found.
-    :param install_command str: "deb" or "rpm".
+    :param install_command str: "deb", "rpm" or "apk".
     """
     if install_command == "deb":
         install = (
@@ -52,6 +52,12 @@ def test_package(distro_image, package_directory, install_command):
             "gdebi -n /packages/*.deb")
     elif install_command == "rpm":
         install = "dnf -y install /packages/*.rpm"
+    elif install_command == "apk":
+        install = (
+            "apk update && "
+            "apk add --allow-untrusted /packages/*.apk"
+        )
+
     run(["sudo", "docker", "run", "--rm",
          "-v", "{}:/packages:ro".format(package_directory),
          distro_image,
@@ -65,6 +71,7 @@ def main(version):
     if out.exists():
         rmtree(str(out))
     out.mkdir()
+
     for ubuntu_distro in ["xenial", "yakkety", "zesty"]:
         distro_out = out / ubuntu_distro
         distro_out.mkdir()
@@ -81,6 +88,7 @@ def main(version):
                       distro_out,
                       ["torsocks", "python3", "openssh-client", "sshfs"])
         test_package("ubuntu:" + ubuntu_distro, distro_out, "deb")
+
     for fedora_distro in ["25"]:
         distro_out = out / ("fedora-" + fedora_distro)
         distro_out.mkdir()
@@ -90,6 +98,22 @@ def main(version):
                       distro_out,
                       ["python3", "torsocks", "openssh-clients", "sshfs"])
         test_package("fedora:" + fedora_distro, distro_out, "rpm")
+
+    # We need Alpine >3.5 for the torsocks package
+    for alpine_distro in ["3.5", "3.6"]:
+        # In the case of Alpine we need to build first an image that includes FPM
+        image = "alpine-fpm:{}".format(alpine_distro)
+        run(["sudo", "docker", "build", "--build-arg", "DISTRO={}".format(alpine_distro), "-f", str(THIS_DIRECTORY / "Dockerfile.alpine"), "-t", image, "."])
+
+        distro_out = out / "alpine-{}".format(alpine_distro)
+        distro_out.mkdir()
+
+        build_package(image,
+                      "apk",
+                      version,
+                      distro_out,
+                      ["python3", "torsocks", "openssh-client", "sshfs"])
+        test_package(image, distro_out, "apk")
 
 
 if __name__ == '__main__':

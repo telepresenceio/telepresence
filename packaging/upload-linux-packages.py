@@ -33,6 +33,14 @@ class Uploader(object):
         )
         self._upload(file_path, "telepresence-rpm", "fedora/" + release)
 
+    def upload_alpine(self, release):
+        """Upload a .apk for a specific Alpine release, e.g. '3.5'."""
+        file_path = (
+            PACKAGES / ("alpine-" + release) /
+            "telepresence_{}_noarch.apk".format(self.version)
+        )
+        self._upload(file_path, "telepresence", "alpine/" + release)
+
     def _upload(self, file_path, repository, distro):
         """Upload a file to a repository.
 
@@ -54,7 +62,11 @@ def main(version):
     uploader = Uploader(version)
     for release in ["xenial", "yakkety", "zesty"]:
         uploader.upload_ubuntu(release)
+
     uploader.upload_fedora("25")
+
+    for release in ["3.5", "3.6"]:
+        uploader.upload_alpine(release)
 
 
 if __name__ == '__main__':

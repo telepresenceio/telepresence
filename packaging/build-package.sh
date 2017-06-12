@@ -4,13 +4,15 @@
 #
 # Inputs:
 # $PACKAGE_VERSION is the package version to use.
-# $PACKAGE_TYPE is rpm or deb.
+# $PACKAGE_TYPE is rpm, deb or apk.
 # Command line arguments are the dependencies.
 set -e
 
 # Set proper ownership before exiting, so the created packages aren't owned by
-# root.
-trap 'chown -R --reference /build-inside/build-package.sh /out/' EXIT
+# root. (--reference not supported on Alpine)
+if [ ! -f /etc/alpine-release ]; then
+    trap 'chown -R --reference /build-inside/build-package.sh /out/' EXIT
+fi
 
 # Package only includes /usr/bin/telepresence:
 mkdir /tmp/build

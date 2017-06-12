@@ -1,0 +1,4 @@
+ARG DISTRO
+FROM alpine:$DISTRO
+RUN apk --no-cache add ruby ruby-bundler ruby-dev ruby-rdoc ruby-irb libffi-dev build-base tar git bash
+RUN gem install fpm
