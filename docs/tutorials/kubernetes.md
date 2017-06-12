@@ -1,7 +1,7 @@
 ---
 layout: doc
 weight: 1
-title: "Get started with Kubernetes"
+title: "Run a Kubernetes service locally"
 categories: tutorials
 ---
 
