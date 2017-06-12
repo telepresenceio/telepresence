@@ -1,7 +1,7 @@
 ---
 layout: doc
 weight: 1
-title: "Debug a Kubernetes service locally"
+title: "Debug a service locally"
 categories: tutorials
 ---
 
