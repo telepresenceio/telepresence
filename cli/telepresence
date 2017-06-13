@@ -605,7 +605,7 @@ def get_remote_info(
     )
 
 
-def ssh(runner, ssh_port, args, verbose=False):
+def ssh(runner, ssh_port, args):
     """Connect to remote pod via SSH.
 
     Returns Popen object.
@@ -616,7 +616,7 @@ def ssh(runner, ssh_port, args, verbose=False):
         "-F",
         "/dev/null",
         # SSH with no warnings:
-        "-vv" if verbose else "-q",
+        "-vv" if runner.verbose else "-q",
         # Don't validate host key:
         "-oStrictHostKeyChecking=no",
         # Don't store host key:
@@ -637,8 +637,9 @@ def wait_for_ssh(runner, ssh_port):
     while time() - start < 30:
         try:
             runner.check_call([
-                "ssh", "-q", "-p", str(ssh_port), "-oStrictHostKeyChecking=no",
-                "-oUserKnownHostsFile=/dev/null", "telepresence@localhost",
+                "ssh", "-F", "/dev/null", "-p", str(ssh_port), "-vv"
+                if runner.verbose else "-q", "-oUserKnownHostsFile=/dev/null",
+                "-oStrictHostKeyChecking=no", "telepresence@localhost",
                 "/bin/true"
             ])
         except CalledProcessError:
@@ -673,7 +674,7 @@ def wait_for_pod(runner, remote_info):
     )
 
 
-def connect(runner, remote_info, local_exposed_ports, context, verbose=False):
+def connect(runner, remote_info, local_exposed_ports, context, verbose):
     """
     Start all the processes that handle remote proxying.
 
@@ -935,6 +936,7 @@ def start_proxy(runner, args):
         remote_info,
         args.expose,
         args.context,
+        args.verbose
     )
 
     # Get the environment variables we want to copy from the remote pod; it may
@@ -1371,12 +1373,6 @@ def main():
                                                                    ["--help"]):
             ask_for_feedback()
         raise
-
-    # Make subprocess launchers aware of the verbose flag
-    if args.verbose:
-        global ssh, kubectl
-        ssh = partial(ssh, verbose=args.verbose)
-        kubectl = partial(kubectl, verbose=args.verbose)
 
     @handle_unexpected_errors(args.logfile)
     def go():
