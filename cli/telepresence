@@ -14,7 +14,7 @@ import signal
 import socket
 import ssl
 import sys
-from functools import wraps, partial
+from functools import wraps
 from shutil import rmtree, copy, which
 from subprocess import (
     check_output, Popen, CalledProcessError, run, TimeoutExpired, STDOUT,
@@ -162,7 +162,7 @@ class Runner(object):
         :return: File-like object for the given logfile path.
         """
         if logfile_path == "-":
-            return cls(sys.stdout, kubectl_cmd)
+            return cls(sys.stdout, kubectl_cmd, verbose)
         else:
             # Wipe existing logfile, and use line buffering so data gets
             # written out immediately.
