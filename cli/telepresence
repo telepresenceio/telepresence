@@ -14,7 +14,7 @@ import signal
 import socket
 import ssl
 import sys
-from functools import wraps
+from functools import wraps, partial
 from shutil import rmtree, copy, which
 from subprocess import (
     check_output, Popen, CalledProcessError, run, TimeoutExpired, STDOUT,
@@ -227,6 +227,13 @@ def parse_args():
     )
     parser.add_argument('--version', action='version', version=__version__)
     parser.add_argument(
+        "--verbose",
+        action='store_true',
+        help=(
+            "Enables verbose logging for troubleshooting."
+        )
+    )
+    parser.add_argument(
         "--logfile",
         default="./telepresence.log",
         help=(
@@ -341,9 +348,11 @@ def parse_args():
     return parser.parse_args()
 
 
-def kubectl(runner, context, namespace, args):
+def kubectl(runner, context, namespace, args, verbose=False):
     """Return command-line for running kubectl."""
     result = [runner.kubectl_cmd]
+    if verbose:
+        result.append("--v=4")
     result.extend(["--context", context])
     result.extend(["--namespace", namespace])
     result += args
@@ -590,15 +599,18 @@ def get_remote_info(
     )
 
 
-def ssh(runner, ssh_port, args):
+def ssh(runner, ssh_port, args, verbose=False):
     """Connect to remote pod via SSH.
 
     Returns Popen object.
     """
     return runner.popen([
         "ssh",
+        # Ignore local configuration (~/.ssh/config)
+        "-F",
+        "/dev/null",
         # SSH with no warnings:
-        "-q",
+        "-vv" if verbose else "-q",
         # Don't validate host key:
         "-oStrictHostKeyChecking=no",
         # Don't store host key:
@@ -662,6 +674,7 @@ def connect(
     remote_info,
     local_exposed_ports,
     context,
+    verbose=False
 ):
     """
     Start all the processes that handle remote proxying.
@@ -1001,7 +1014,8 @@ def wait_for_exit(runner, shell_process, processes):
         for p in processes:
             code = p.poll()
             if code is not None:
-                runner.write("A subprocess died, killing all processes...\n")
+                runner.write("A subprocess ({}) died with code {}, killing all processes...\n".format(
+                    p.args, p.returncode))
                 killall(processes)
                 # Unfortunatly torsocks doesn't deal well with connections
                 # being lost, so best we can do is shut down.
@@ -1375,6 +1389,12 @@ def main():
                                                                    ["--help"]):
             ask_for_feedback()
         raise
+
+    # Make subprocess launchers aware of the verbose flag
+    if args.verbose:
+        global ssh, kubectl
+        ssh = partial(ssh, verbose=args.verbose)
+        kubectl = partial(kubectl, verbose=args.verbose)
 
     @handle_unexpected_errors(args.logfile)
     def go():
