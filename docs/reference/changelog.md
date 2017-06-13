@@ -5,6 +5,14 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.51 (unreleased)
+
+Bug fixes:
+
+* Default `ssh` config is not used, in case it has options that break Telepresence.
+  Thanks to KUOKA Yusuke for the bug report, and Iván Montes for debugging and the patch to fix it.
+  ([#174](https://github.com/datawire/telepresence/issues/174))
+
 #### 0.50 (June 8, 2017)
 
 Bug fixes:
