@@ -145,17 +145,19 @@ class handle_unexpected_errors(object):
 class Runner(object):
     """Context for running subprocesses."""
 
-    def __init__(self, logfile, kubectl_cmd):
+    def __init__(self, logfile, kubectl_cmd, verbose):
         """
         :param logfile: file-like object to write logs to.
         :param kubectl_cmd: Command to run for kubectl, either "kubectl" or
             "oc" (for OpenShift Origin).
+        :param verbose: Whether subcommand should run in verbose mode.
         """
         self.logfile = logfile
         self.kubectl_cmd = kubectl_cmd
+        self.verbose = verbose
 
     @classmethod
-    def open(cls, logfile_path, kubectl_cmd):
+    def open(cls, logfile_path, kubectl_cmd, verbose):
         """
         :return: File-like object for the given logfile path.
         """
@@ -166,7 +168,9 @@ class Runner(object):
             # written out immediately.
             if os.path.exists(logfile_path):
                 os.remove(logfile_path)
-            return cls(open(logfile_path, "a", buffering=1), kubectl_cmd)
+            return cls(
+                open(logfile_path, "a", buffering=1), kubectl_cmd, verbose
+            )
 
     def write(self, message):
         """Write a message to the log."""
@@ -210,6 +214,28 @@ class Runner(object):
             **kwargs
         )
 
+    def kubectl(self, context, namespace, args):
+        """Return command-line for running kubectl."""
+        result = [self.kubectl_cmd]
+        if self.verbose:
+            result.append("--v=4")
+        result.extend(["--context", context])
+        result.extend(["--namespace", namespace])
+        result += args
+        return result
+
+    def get_kubectl(self, context, namespace, args, stderr=None):
+        """Return output of running kubectl."""
+        return self.get_output(
+            self.kubectl(context, namespace, args), stderr=stderr
+        )
+
+    def check_kubectl(self, context, namespace, kubectl_args, **kwargs):
+        """Check exit code of running kubectl."""
+        self.check_call(
+            self.kubectl(context, namespace, kubectl_args), **kwargs
+        )
+
 
 @handle_unexpected_errors("-")
 def parse_args():
@@ -229,9 +255,7 @@ def parse_args():
     parser.add_argument(
         "--verbose",
         action='store_true',
-        help=(
-            "Enables verbose logging for troubleshooting."
-        )
+        help=("Enables verbose logging for troubleshooting.")
     )
     parser.add_argument(
         "--logfile",
@@ -348,17 +372,6 @@ def parse_args():
     return parser.parse_args()
 
 
-def kubectl(runner, context, namespace, args, verbose=False):
-    """Return command-line for running kubectl."""
-    result = [runner.kubectl_cmd]
-    if verbose:
-        result.append("--v=4")
-    result.extend(["--context", context])
-    result.extend(["--namespace", namespace])
-    result += args
-    return result
-
-
 class RemoteInfo(object):
     """
     Information about the remote setup.
@@ -415,11 +428,9 @@ def _get_service_names(environment):
 
 def _get_remote_env(runner, context, namespace, pod_name, container_name):
     """Get the environment variables in the remote pod."""
-    env = runner.get_output(
-        kubectl(
-            runner, context, namespace,
-            ["exec", pod_name, "--container", container_name, "env"]
-        )
+    env = runner.get_kubectl(
+        context, namespace,
+        ["exec", pod_name, "--container", container_name, "env"]
     )
     result = {}
     for line in env.splitlines():
@@ -489,22 +500,20 @@ def get_deployment_json(
         ]
         if run_id is None:
             return json.loads(
-                runner.get_output(
-                    kubectl(
-                        runner, context, namespace, get_deployment +
-                        [deployment_name]
-                    ),
+                runner.get_kubectl(
+                    context,
+                    namespace,
+                    get_deployment + [deployment_name],
                     stderr=STDOUT
                 )
             )
         else:
             # When using a selector we get a list of objects, not just one:
             return json.loads(
-                runner.get_output(
-                    kubectl(
-                        runner, context, namespace, get_deployment +
-                        ["--selector=telepresence=" + run_id]
-                    ),
+                runner.get_kubectl(
+                    context,
+                    namespace,
+                    get_deployment + ["--selector=telepresence=" + run_id],
                     stderr=STDOUT
                 )
             )["items"][0]
@@ -539,11 +548,8 @@ def get_remote_info(
     start = time()
     while time() - start < 120:
         pods = json.loads(
-            runner.get_output(
-                kubectl(
-                    runner, context, namespace,
-                    ["get", "pod", "-o", "json", "--export"]
-                )
+            runner.get_kubectl(
+                context, namespace, ["get", "pod", "-o", "json", "--export"]
             )
         )["items"]
         for pod in pods:
@@ -647,11 +653,9 @@ def wait_for_pod(runner, remote_info):
     while time() - start < 120:
         try:
             pod = json.loads(
-                runner.get_output(
-                    kubectl(
-                        runner, remote_info.context, remote_info.namespace,
-                        ["get", "pod", remote_info.pod_name, "-o", "json"]
-                    )
+                runner.get_kubectl(
+                    remote_info.context, remote_info.namespace,
+                    ["get", "pod", remote_info.pod_name, "-o", "json"]
                 )
             )
         except CalledProcessError:
@@ -669,13 +673,7 @@ def wait_for_pod(runner, remote_info):
     )
 
 
-def connect(
-    runner,
-    remote_info,
-    local_exposed_ports,
-    context,
-    verbose=False
-):
+def connect(runner, remote_info, local_exposed_ports, context, verbose=False):
     """
     Start all the processes that handle remote proxying.
 
@@ -687,8 +685,8 @@ def connect(
     # forward remote port to here, by tunneling via remote SSH server:
     processes.append(
         runner.popen(
-            kubectl(
-                runner, context, remote_info.namespace, [
+            runner.kubectl(
+                context, remote_info.namespace, [
                     "port-forward", remote_info.pod_name,
                     "{}:8022".format(ssh_port)
                 ]
@@ -735,39 +733,32 @@ def create_new_deployment(runner, args):
     run_id = str(uuid4())
 
     def remove_existing_deployment():
-        runner.get_output(
-            kubectl(
-                runner, args.context, args.namespace, [
-                    "delete",
-                    "--ignore-not-found",
-                    "all",
-                    "--selector=telepresence=" + run_id,
-                ]
-            )
+        runner.get_kubectl(
+            args.context, args.namespace, [
+                "delete",
+                "--ignore-not-found",
+                "all",
+                "--selector=telepresence=" + run_id,
+            ]
         )
 
     atexit.register(remove_existing_deployment)
     remove_existing_deployment()
-    command = kubectl(
-        runner,
-        args.context,
-        args.namespace,
-        [
-            "run",
-            # This will result in using Deployment:
-            "--restart=Always",
-            "--limits=memory=256Mi",
-            "--requests=memory=64Mi",
-            args.new_deployment,
-            "--image=" + TELEPRESENCE_IMAGE,
-            "--labels=telepresence=" + run_id,
-        ]
-    )
+    command = [
+        "run",
+        # This will result in using Deployment:
+        "--restart=Always",
+        "--limits=memory=256Mi",
+        "--requests=memory=64Mi",
+        args.new_deployment,
+        "--image=" + TELEPRESENCE_IMAGE,
+        "--labels=telepresence=" + run_id,
+    ]
     for port in args.expose:
         command.append("--port={}".format(port))
     if args.expose:
         command.append("--expose")
-    runner.get_output(command)
+    runner.get_kubectl(args.context, args.namespace, command)
     return args.new_deployment, run_id
 
 
@@ -790,10 +781,9 @@ def swap_deployment(runner, args):
     )
 
     def apply_json(json_config):
-        runner.check_call(
-            kubectl(
-                runner, args.context, args.namespace, ["apply", "-f", "-"]
-            ),
+        runner.check_kubectl(
+            args.context,
+            args.namespace, ["apply", "-f", "-"],
             input=json.dumps(json_config).encode("utf-8")
         )
 
@@ -845,41 +835,34 @@ def swap_deployment_openshift(runner, args):
     deployment_name, *container_name = args.swap_deployment.split(":", 1)
     if container_name:
         container_name = container_name[0]
-    rcs = runner.get_output(
-        kubectl(
-            runner, args.context, args.namespace, [
-                "get", "rc", "-o", "name", "--selector",
-                "openshift.io/deployment-config.name=" + deployment_name
-            ]
-        )
+    rcs = runner.get_kubectl(
+        args.context, args.namespace, [
+            "get", "rc", "-o", "name", "--selector",
+            "openshift.io/deployment-config.name=" + deployment_name
+        ]
     )
     rc_name = sorted(
         rcs.split(), key=lambda n: int(n.split("-")[-1])
     )[0].split("/", 1)[1]
     rc_json = json.loads(
-        runner.get_output(
-            kubectl(
-                runner, args.context, args.namespace,
-                ["get", "rc", "-o", "json", "--export", rc_name]
-            ),
+        runner.get_kubectl(
+            args.context,
+            args.namespace, ["get", "rc", "-o", "json", "--export", rc_name],
             stderr=STDOUT
         )
     )
 
     def apply_json(json_config):
-        runner.check_call(
-            kubectl(
-                runner, args.context, args.namespace, ["apply", "-f", "-"]
-            ),
+        runner.check_kubectl(
+            args.context,
+            args.namespace, ["apply", "-f", "-"],
             input=json.dumps(json_config).encode("utf-8")
         )
         # Now that we've updated the replication controller, delete pods to
         # make sure changes get applied:
-        runner.check_call(
-            kubectl(
-                runner, args.context, args.namespace,
-                ["delete", "pod", "--selector", "deployment=" + rc_name]
-            )
+        runner.check_kubectl(
+            args.context, args.namespace,
+            ["delete", "pod", "--selector", "deployment=" + rc_name]
         )
 
     atexit.register(apply_json, rc_json)
@@ -1014,8 +997,10 @@ def wait_for_exit(runner, shell_process, processes):
         for p in processes:
             code = p.poll()
             if code is not None:
-                runner.write("A subprocess ({}) died with code {}, killing all processes...\n".format(
-                    p.args, p.returncode))
+                runner.write((
+                    "A subprocess ({}) died with code {}, " +
+                    "killing all processes...\n"
+                ).format(p.args, p.returncode))
                 killall(processes)
                 # Unfortunatly torsocks doesn't deal well with connections
                 # being lost, so best we can do is shut down.
@@ -1119,14 +1104,11 @@ def get_proxy_cidrs(runner, args, remote_info, service_address):
     # cloud resources:
     def resolve_ips():
         return json.loads(
-            runner.get_output(
-                kubectl(
-                    runner, args.context, args.namespace, [
-                        "exec", "--container=" + remote_info.container_name,
-                        remote_info.pod_name, "--", "python3", "-c",
-                        _GET_IPS_PY
-                    ] + args.also_proxy
-                )
+            runner.get_kubectl(
+                args.context, args.namespace, [
+                    "exec", "--container=" + remote_info.container_name,
+                    remote_info.pod_name, "--", "python3", "-c", _GET_IPS_PY
+                ] + args.also_proxy
             )
         )
 
@@ -1450,7 +1432,7 @@ def main():
         # different directories:
         if args.logfile != "-":
             args.logfile = os.path.abspath(args.logfile)
-        runner = Runner.open(args.logfile, kubectl_or_oc(server))
+        runner = Runner.open(args.logfile, kubectl_or_oc(server), args.verbose)
         runner.write(
             "Context: {}, namespace: {}, kubectl_command: {}\n".
             format(args.context, args.namespace, runner.kubectl_cmd)
