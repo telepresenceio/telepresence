@@ -1025,6 +1025,9 @@ def mount_remote_volumes(runner, remote_info, ssh_port):
             "sshfs",
             "-p",
             str(ssh_port),
+            # Don't load config file so it doesn't break us:
+            "-F",
+            "/dev/null",
             # Don't validate host key:
             "-o",
             "StrictHostKeyChecking=no",
