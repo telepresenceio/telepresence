@@ -1215,7 +1215,7 @@ def run_local_command(
                 "-e",
                 (
                     "ssh -oStrictHostKeyChecking=no " +
-                    "-oUserKnownHostsFile=/dev/null"
+                    "-oUserKnownHostsFile=/dev/null -F /dev/null"
                 ),
                 "-r",
                 "telepresence@localhost:" + str(ssh_port),
