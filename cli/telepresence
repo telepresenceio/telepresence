@@ -41,7 +41,12 @@ __version__ = "0.51"
 if os.environ.get("TELEPRESENCE_VERSION") is not None:
     __version__ = os.environ["TELEPRESENCE_VERSION"]
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
-TELEPRESENCE_IMAGE = "{}/telepresence-k8s:{}".format(REGISTRY, __version__)
+TELEPRESENCE_REMOTE_IMAGE = "{}/telepresence-k8s:{}".format(
+    REGISTRY, __version__
+)
+TELEPRESENCE_LOCAL_IMAGE = "{}/telepresence-local:{}".format(
+    REGISTRY, __version__
+)
 
 
 def random_name():
@@ -765,7 +770,7 @@ def create_new_deployment(runner, args):
         "--limits=memory=256Mi",
         "--requests=memory=64Mi",
         args.new_deployment,
-        "--image=" + TELEPRESENCE_IMAGE,
+        "--image=" + TELEPRESENCE_REMOTE_IMAGE,
         "--labels=telepresence=" + run_id,
     ]
     for port in args.expose:
@@ -819,7 +824,7 @@ def swap_deployment(runner, args):
     for container in new_deployment_json["spec"]["template"]["spec"
                                                              ]["containers"]:
         if container["name"] == container_name:
-            container["image"] = TELEPRESENCE_IMAGE
+            container["image"] = TELEPRESENCE_REMOTE_IMAGE
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
             container["imagePullPolicy"] = "IfNotPresent"
@@ -894,7 +899,7 @@ def swap_deployment_openshift(runner, args):
     )["telepresence"] = run_id
     for container in new_rc_json["spec"]["template"]["spec"]["containers"]:
         if container["name"] == container_name:
-            container["image"] = TELEPRESENCE_IMAGE
+            container["image"] = TELEPRESENCE_REMOTE_IMAGE
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
             container["imagePullPolicy"] = "IfNotPresent"
@@ -1169,9 +1174,7 @@ def get_proxy_cidrs(runner, args, remote_info, service_address):
     return list(result)
 
 
-def connect_sshuttle(
-    runner, remote_info, args, subprocesses, env, ssh_port, command
-):
+def connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh_port):
     """Connect to Kubernetes using sshuttle."""
     # Make sure we have sudo credentials by doing a small sudo in advance
     # of sshuttle using it:
@@ -1229,7 +1232,52 @@ def connect_sshuttle(
         else:
             sleep(0.1)
     get_hellotelepresence()
-    return Popen(command, env=env)
+
+
+def docker_runify(args):
+    """Prepend 'docker run' to a list of arguments."""
+    args = ['docker', 'run'] + args
+    docker_path = "/var/run/docker.sock"
+    if (os.path.exists(docker_path) and not os.access(docker_path, os.W_OK)):
+        return ["sudo"] + args
+    else:
+        return args
+
+
+def connect_docker(
+    runner, remote_info, args, subprocesses, env, ssh_port, command
+):
+    """Connect using sshuttle running in a Docker container."""
+    # Start the sshuttle container:
+    name = random_name()
+    subprocesses.append(
+        runner.popen(
+            docker_runify([
+                "--name=" + name, TELEPRESENCE_LOCAL_IMAGE, "proxy",
+                json.dumps({
+                    "port":
+                    ssh_port,
+                    "cidrs":
+                    get_proxy_cidrs(
+                        runner, args, remote_info,
+                        env["KUBERNETES_SERVICE_HOST"]
+                    )
+                })
+            ])
+        )
+    )
+    # Wait for sshuttle to be running:
+    try:
+        runner.check_call(docker_runify([TELEPRESENCE_LOCAL_IMAGE, "wait"]))
+    except CalledProcessError as e:
+        if e.returncode == 100:
+            # We're good!
+            return
+        raise
+    else:
+        raise RuntimeError(
+            "Waiting container exited prematurely. File a bug, please!"
+        )
 
 
 def run_local_command(
@@ -1270,9 +1318,13 @@ def run_local_command(
     if args.method == "inject-tcp":
         p = Popen(["torsocks"] + command, env=env)
     elif args.method == "vpn-tcp":
-        p = connect_sshuttle(
-            runner, remote_info, args, subprocesses, env, ssh_port, command
+        connect_sshuttle(
+            runner, remote_info, args, subprocesses, env, ssh_port
         )
+        p = Popen(command, env=env)
+    elif args.method == "container":
+        connect_docker(runner, remote_info, args, subprocesses, env, ssh_port)
+        p = Popen(command, env=env)
     else:
         raise RuntimeError(
             "GADZOOKS, A BUG: unknown proxying method " + args.method

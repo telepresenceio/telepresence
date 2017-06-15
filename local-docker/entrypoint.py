@@ -1,4 +1,7 @@
 """
+This commands has two modes: proxy, and wait.
+
+== Proxy mode ==
 Run sshuttle-telepresence via SSH IP and port given on command line.
 
 The SSH server will run on the host, so the sshuttle-telepresence talking to it
@@ -20,16 +23,35 @@ References:
 
 * https://stackoverflow.com/q/22944631/7862510
 * https://docs.docker.com/docker-for-mac/networking/
+
+
+== Wait mode ==
+
+Wait mode should be run in same network namespace as the proxy. It will do the
+'hellotelepresence' loop used to correct DNS on the k8s proxy, and to detect
+when the proxy is working.
+
+When the process exits with exit code 100 that means the proxy is active.
 """
 
 import sys
 import os
-import json
+from json import loads
 from subprocess import check_output
+from socket import gethostbyname, gaierror
+from time import time, sleep
 
 
 def main():
-    config = json.loads(sys.argv[1])
+    command = sys.argv[1]
+    if command == "proxy":
+        proxy(loads(sys.argv[2]))
+    elif command == "wait":
+        wait()
+
+
+def proxy(config):
+    """Start sshuttle proxy to Kubernetes."""
     port = config["port"]
     if "ip" in config:
         # Typically host is macOS:
@@ -48,6 +70,21 @@ def main():
             "-F /dev/null"
         ), "-r", "telepresence@{}:{}".format(ip, port), *cidrs
     )
+
+
+def wait():
+    """Wait for proxying to be live."""
+    start = time()
+    while time() - start < 10:
+        try:
+            gethostbyname("hellotelepresence")
+            sleep(1)  # just in case there's more to startup
+            sys.exit(100)
+        except gaierror:
+            sleep(0.1)
+        else:
+            sleep(0.1)
+    sys.exit("Failed to connect to proxy in remote cluster.")
 
 
 if __name__ == '__main__':
