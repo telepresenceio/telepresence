@@ -269,12 +269,14 @@ def parse_args():
         "--method",
         "-m",
         required=True,
-        choices=["inject-tcp", "vpn-tcp"],
+        choices=["inject-tcp", "vpn-tcp", "container"],
         help=(
             "inject-tcp: inject process-specific shared "
             "library that proxies TCP to the remote cluster.\n"
             "vpn-tcp: all local processes can route TCP "
-            "traffic to the remote cluster.\n\nFor more details see "
+            "traffic to the remote cluster.\n"
+            "container: used with --docker-run.\n"
+            "\nFor more details see "
             "http://www.telepresence.io/reference/methods.html"
         )
     )
@@ -367,6 +369,17 @@ def parse_args():
         help=(
             "Run the specified command arguments, e.g. "
             "'--run python myapp.py'."
+        )
+    )
+    group.add_argument(
+        "--docker-run",
+        metavar="DOCKER_RUN_ARG",
+        dest="docker",
+        nargs=argparse.REMAINDER,
+        help=(
+            "Run a Docker container, by passing the arguments to 'docker run',"
+            " e.g. '--docker-run -i -t ubuntu:16.04 /bin/bash'. "
+            "Requires --method container."
         )
     )
     return parser.parse_args()
@@ -932,11 +945,7 @@ def start_proxy(runner, args):
     )
 
     processes, socks_port, ssh_port = connect(
-        runner,
-        remote_info,
-        args.expose,
-        args.context,
-        args.verbose
+        runner, remote_info, args.expose, args.context, args.verbose
     )
 
     # Get the environment variables we want to copy from the remote pod; it may
@@ -1160,6 +1169,69 @@ def get_proxy_cidrs(runner, args, remote_info, service_address):
     return list(result)
 
 
+def connect_sshuttle(
+    runner, remote_info, args, subprocesses, env, ssh_port, command
+):
+    """Connect to Kubernetes using sshuttle."""
+    # Make sure we have sudo credentials by doing a small sudo in advance
+    # of sshuttle using it:
+    Popen(["sudo", "true"]).wait()
+    sshuttle_method = "auto"
+    if sys.platform.startswith("linux"):
+        # sshuttle tproxy mode seems to have issues:
+        sshuttle_method = "nat"
+    subprocesses.append(
+        runner.popen([
+            "sshuttle-telepresence",
+            "-v",
+            "--dns",
+            "--method",
+            sshuttle_method,
+            "-e",
+            (
+                "ssh -oStrictHostKeyChecking=no " +
+                "-oUserKnownHostsFile=/dev/null -F /dev/null"
+            ),
+            "-r",
+            "telepresence@localhost:" + str(ssh_port),
+        ] + get_proxy_cidrs(
+            runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
+        ))
+    )
+
+    # sshuttle will take a while to startup. We can detect it being up when
+    # DNS resolution of services starts working. We use a specific single
+    # segment so any search/domain statements in resolv.conf are applied,
+    # which then allows the DNS proxy to detect the suffix domain and
+    # filter it out.
+    def get_hellotelepresence():
+        # On Macs I suspect there is per-process caching and OS-level
+        # caching, so clear out caches by having separate process calls and
+        # explicit caching:
+        try:
+            runner.get_output([
+                "python3", "-c",
+                "import socket; socket.gethostbyname('hellotelepresence')"
+            ])
+        except CalledProcessError:
+            if sys.platform == "darwin":
+                runner.get_output(["sudo", "killall", "-HUP", "mDNSResponder"])
+            raise
+
+    start = time()
+    while time() - start < 10:
+        try:
+            get_hellotelepresence()
+            sleep(1)  # just in case there's more to startup
+            break
+        except CalledProcessError:
+            sleep(0.1)
+        else:
+            sleep(0.1)
+    get_hellotelepresence()
+    return Popen(command, env=env)
+
+
 def run_local_command(
     runner, remote_info, args, env_overrides, subprocesses, socks_port,
     ssh_port
@@ -1198,65 +1270,9 @@ def run_local_command(
     if args.method == "inject-tcp":
         p = Popen(["torsocks"] + command, env=env)
     elif args.method == "vpn-tcp":
-        # Make sure we have sudo credentials by doing a small sudo in advance
-        # of sshuttle using it:
-        Popen(["sudo", "true"]).wait()
-        sshuttle_method = "auto"
-        if sys.platform.startswith("linux"):
-            # sshuttle tproxy mode seems to have issues:
-            sshuttle_method = "nat"
-        subprocesses.append(
-            runner.popen([
-                "sshuttle-telepresence",
-                "-v",
-                "--dns",
-                "--method",
-                sshuttle_method,
-                "-e",
-                (
-                    "ssh -oStrictHostKeyChecking=no " +
-                    "-oUserKnownHostsFile=/dev/null -F /dev/null"
-                ),
-                "-r",
-                "telepresence@localhost:" + str(ssh_port),
-            ] + get_proxy_cidrs(
-                runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
-            ))
+        p = connect_sshuttle(
+            runner, remote_info, args, subprocesses, env, ssh_port, command
         )
-
-        # sshuttle will take a while to startup. We can detect it being up when
-        # DNS resolution of services starts working. We use a specific single
-        # segment so any search/domain statements in resolv.conf are applied,
-        # which then allows the DNS proxy to detect the suffix domain and
-        # filter it out.
-        def get_hellotelepresence():
-            # On Macs I suspect there is per-process caching and OS-level
-            # caching, so clear out caches by having separate process calls and
-            # explicit caching:
-            try:
-                runner.get_output([
-                    "python3", "-c",
-                    "import socket; socket.gethostbyname('hellotelepresence')"
-                ])
-            except CalledProcessError:
-                if sys.platform == "darwin":
-                    runner.get_output([
-                        "sudo", "killall", "-HUP", "mDNSResponder"
-                    ])
-                raise
-
-        start = time()
-        while time() - start < 10:
-            try:
-                get_hellotelepresence()
-                sleep(1)  # just in case there's more to startup
-                break
-            except CalledProcessError:
-                sleep(0.1)
-            else:
-                sleep(0.1)
-        get_hellotelepresence()
-        p = Popen(command, env=env)
     else:
         raise RuntimeError(
             "GADZOOKS, A BUG: unknown proxying method " + args.method
