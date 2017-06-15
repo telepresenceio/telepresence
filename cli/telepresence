@@ -1245,7 +1245,7 @@ def docker_runify(args):
 
 
 def connect_docker(
-    runner, remote_info, args, subprocesses, env, ssh_port, command
+    runner, remote_info, args, subprocesses, env, ssh_port
 ):
     """Connect using sshuttle running in a Docker container."""
     # Start the sshuttle container:
@@ -1280,6 +1280,20 @@ def connect_docker(
         )
 
 
+def setup_torsocks(runner, env, socks_port):
+    """Setup environment variables to make torsocks work correctly."""
+    # Create custom torsocks.conf, since some options we want (in particular,
+    # port) aren't accessible via env variables in older versions of torconf:
+    with NamedTemporaryFile(mode="w+", delete=False) as tor_conffile:
+        tor_conffile.write(TORSOCKS_CONFIG.format(socks_port))
+    atexit.register(os.remove, tor_conffile.name)
+    env["TORSOCKS_CONF_FILE"] = tor_conffile.name
+    if runner.logfile is not sys.stdout:
+        env["TORSOCKS_LOG_FILE_PATH"] = runner.logfile.name
+    if sys.platform == "darwin":
+        env["PATH"] = sip_workaround()
+
+
 def run_local_command(
     runner, remote_info, args, env_overrides, subprocesses, socks_port,
     ssh_port
@@ -1287,25 +1301,21 @@ def run_local_command(
     """--run-shell/--run support, run command locally."""
     env = os.environ.copy()
     env.update(env_overrides)
-    # Create custom torsocks.conf, since some options we want (in particular,
-    # port) aren't accessible via env variables in older versions of torconf:
-    with NamedTemporaryFile(mode="w+", delete=False) as tor_conffile:
-        tor_conffile.write(TORSOCKS_CONFIG.format(socks_port))
-    env["TORSOCKS_CONF_FILE"] = tor_conffile.name
-    if runner.logfile is not sys.stdout:
-        env["TORSOCKS_LOG_FILE_PATH"] = runner.logfile.name
+
     # Don't use runner.popen() since we want to give program access to current
     # stdout and stderr if it wants it.
     env["PROMPT_COMMAND"] = (
         'PS1="@{}|$PS1";unset PROMPT_COMMAND'.format(args.context)
     )
-    if sys.platform == "darwin" and args.method == "inject-tcp":
-        env["PATH"] = sip_workaround()
+
     # Inject replacements for unsupported tools like ping:
     env["PATH"] = get_unsupported_tools(args.method != "inject-tcp"
                                         ) + ":" + env["PATH"]
+
+    # Mount remote filesystem:
     mount_dir, mounted = mount_remote_volumes(runner, remote_info, ssh_port)
     env["TELEPRESENCE_ROOT"] = mount_dir
+
     # Make sure we use "bash", no "/bin/bash", so we get the copied version on
     # OS X:
     if args.run is None:
@@ -1316,6 +1326,7 @@ def run_local_command(
     else:
         command = args.run
     if args.method == "inject-tcp":
+        setup_torsocks(runner, env, socks_port)
         p = Popen(["torsocks"] + command, env=env)
     elif args.method == "vpn-tcp":
         connect_sshuttle(
@@ -1332,7 +1343,6 @@ def run_local_command(
 
     def terminate_if_alive():
         runner.write("Shutting down local shell...\n")
-        os.remove(tor_conffile.name)
         if p.poll() is None:
             runner.write("Killing local shell...\n")
             p.terminate()
