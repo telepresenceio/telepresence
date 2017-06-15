@@ -10,6 +10,7 @@ from subprocess import (
     PIPE,
     CalledProcessError,
     check_call,
+    run,
 )
 import time
 import os
@@ -180,6 +181,28 @@ class EndToEndTests(TestCase):
             "python3 tocluster.py {} {}".format(webserver_name, namespace),
         )
         assert exit_code == 113
+
+    def test_docker_tocluster(self):
+        """
+        Tests of communication to the cluster from a Docker container.
+        """
+        webserver_name = run_webserver()
+        result = run([
+            "telepresence",
+            "--method",
+            "container",
+            "--new-deployment",
+            random_name(),
+            "--docker-run",
+            "-v",
+            "{}:/host".format(os.getcwd()),
+            "python3:alpine",
+            "python3",
+            "/host/tocluster.py",
+            webserver_name,
+            current_namespace(),
+        ])
+        assert result.returncode == 113
 
     @skipIf(
         OPENSHIFT, "OpenShift doesn't allow root, which the tests need "
@@ -430,9 +453,9 @@ class EndToEndTests(TestCase):
         p = Popen(
             args=[
                 "telepresence", "--swap-deployment", name, "--logfile", "-",
-                "--method", TELEPRESENCE_METHOD,
-                "--run", "python3", "tocluster.py", webserver_name,
-                current_namespace(), "HELLO=there"
+                "--method", TELEPRESENCE_METHOD, "--run", "python3",
+                "tocluster.py", webserver_name, current_namespace(),
+                "HELLO=there"
             ],
             cwd=str(DIRECTORY),
         )
@@ -504,9 +527,9 @@ class EndToEndTests(TestCase):
         p = Popen(
             args=[
                 "telepresence", "--swap-deployment",
-                "{}:{}".format(name, container_name), "--logfile", "-",
-                "--method", TELEPRESENCE_METHOD,
-                "--run", "python3", "volumes.py"
+                "{}:{}".format(name,
+                               container_name), "--logfile", "-", "--method",
+                TELEPRESENCE_METHOD, "--run", "python3", "volumes.py"
             ],
             cwd=str(DIRECTORY),
         )
