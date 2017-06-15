@@ -1,6 +1,6 @@
 FROM alpine:3.6
 
-RUN apk add --no-cache python3
+RUN apk add --no-cache python3 openssh-client iptables
 
 COPY sshuttle-telepresence /usr/bin
 COPY entrypoint.py /usr/bin

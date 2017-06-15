@@ -189,14 +189,16 @@ class EndToEndTests(TestCase):
         webserver_name = run_webserver()
         result = run([
             "telepresence",
+            "--logfile",
+            "-",
             "--method",
             "container",
             "--new-deployment",
             random_name(),
             "--docker-run",
             "-v",
-            "{}:/host".format(os.getcwd()),
-            "python3:alpine",
+            "{}:/host".format(DIRECTORY),
+            "python:3-alpine",
             "python3",
             "/host/tocluster.py",
             webserver_name,

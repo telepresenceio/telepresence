@@ -79,7 +79,7 @@ def main(version):
                       "deb",
                       version,
                       distro_out,
-                      ["torsocks", "python3", "openssh-client", "sshfs"])
+                      ["torsocks", "python3", "openssh-client", "sshfs", "socat"])
         test_package("ubuntu:" + ubuntu_distro, distro_out, "deb")
     for fedora_distro in ["25"]:
         distro_out = out / ("fedora-" + fedora_distro)
@@ -88,7 +88,7 @@ def main(version):
                       "rpm",
                       version,
                       distro_out,
-                      ["python3", "torsocks", "openssh-clients", "sshfs"])
+                      ["python3", "torsocks", "openssh-clients", "sshfs", "socat"])
         test_package("fedora:" + fedora_distro, distro_out, "rpm")
 
 

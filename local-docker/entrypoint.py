@@ -65,7 +65,8 @@ def proxy(config):
                 break
     cidrs = config["cidrs"]
     os.execl(
-        "sshuttle-telepresence", "-v", "--dns", "--method", "nat", "-e", (
+        "/usr/bin/sshuttle-telepresence", "sshuttle-telepresence", "-v",
+        "--dns", "--method", "nat", "-e", (
             "ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null " +
             "-F /dev/null"
         ), "-r", "telepresence@{}:{}".format(ip, port), *cidrs

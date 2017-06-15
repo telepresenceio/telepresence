@@ -27,6 +27,11 @@ virtualenv/bin/sshuttle-telepresence: virtualenv
 build-k8s-proxy:
 	cd k8s-proxy && sudo docker build . -t datawire/telepresence-k8s:$(VERSION)
 
+build-local:
+	cp -f virtualenv/bin/sshuttle-telepresence local-docker
+	cd local-docker && sudo docker build . -t datawire/telepresence-local:$(VERSION)
+	rm -f local-docker/sshuttle-telepresence
+
 # Build Docker image inside minikube Docker:
 build-k8s-proxy-minikube:
 	eval $(shell minikube docker-env) && \
@@ -38,7 +43,7 @@ run-minikube:
 		env TELEPRESENCE_VERSION=$(VERSION) cli/telepresence --method=inject-tcp --new-deployment test --run-shell
 
 # Run tests in minikube:
-minikube-test: virtualenv build-k8s-proxy-minikube
+minikube-test: virtualenv build-k8s-proxy-minikube build-local
 	@echo "IMPORTANT: this will change kubectl context to minikube!\n\n"
 	kubectl config use-context minikube
 	source virtualenv/bin/activate && \
@@ -57,7 +62,7 @@ bumpversion: virtualenv
 	@echo "Please run: git push origin master --tags"
 
 # Will be run in Travis CI on tagged commits
-release: build-k8s-proxy virtualenv/bin/sshuttle-telepresence
+release: build-k8s-proxy build-local virtualenv/bin/sshuttle-telepresence
 	sudo docker push datawire/telepresence-k8s:$(VERSION)
 	env TELEPRESENCE_VERSION=$(VERSION) packaging/homebrew-package.sh
 	packaging/create-linux-packages.py $(VERSION)
