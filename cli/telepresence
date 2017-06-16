@@ -692,14 +692,19 @@ class SSH(object):
 
         Returns Popen object.
         """
-        return self.runner.popen(self.command(additional_args, [
-            # No remote command, since this intended for things like -L or -R
-            # where we don't want to run a remote command.
-            "-N",
-            # Ping once a second; after ten retries will disconnect:
-            "-oServerAliveInterval=1",
-            "-oServerAliveCountMax=10",
-        ]))
+        return self.runner.popen(
+            self.command(
+                additional_args,
+                [
+                    # No remote command, since this intended for things like -L or -R
+                    # where we don't want to run a remote command.
+                    "-N",
+                    # Ping once a second; after ten retries will disconnect:
+                    "-oServerAliveInterval=1",
+                    "-oServerAliveCountMax=10",
+                ]
+            )
+        )
 
     def wait(self):
         """Return when SSH server can be reached."""
@@ -739,7 +744,16 @@ def wait_for_pod(runner, remote_info):
     )
 
 
-def connect(runner, remote_info, local_exposed_ports, context, verbose):
+def expose_local_services(processes, ssh, port_numbers):
+    """Create SSH tunnels from remote proxy pod to local host."""
+    for port_number in port_numbers:
+        processes.append(
+            ssh.
+            popen(["-R", "*:{}:127.0.0.1:{}".format(port_number, port_number)])
+        )
+
+
+def connect(runner, remote_info, cmdline_args):
     """
     Start all the processes that handle remote proxying.
 
@@ -752,7 +766,7 @@ def connect(runner, remote_info, local_exposed_ports, context, verbose):
     processes.append(
         runner.popen(
             runner.kubectl(
-                context, remote_info.namespace, [
+                cmdline_args.context, remote_info.namespace, [
                     "port-forward", remote_info.pod_name,
                     "{}:8022".format(ssh.port)
                 ]
@@ -775,17 +789,17 @@ def connect(runner, remote_info, local_exposed_ports, context, verbose):
 
     ssh.wait()
 
-    for port_number in local_exposed_ports:
-        processes.append(
-            ssh.
-            popen(["-R", "*:{}:127.0.0.1:{}".format(port_number, port_number)])
-        )
+    # In Docker mode this happens inside the local Docker container:
+    if cmdline_args.method != "container":
+        expose_local_services(processes, ssh, cmdline_args.expose)
 
-    # start tunnel to remote SOCKS proxy, for telepresence --run.
     socks_port = find_free_port()
-    processes.append(
-        ssh.popen(["-L", "127.0.0.1:{}:127.0.0.1:9050".format(socks_port)]),
-    )
+    if cmdline_args.method == "tcp-inject":
+        # start tunnel to remote SOCKS proxy:
+        processes.append(
+            ssh.popen(["-L",
+                       "127.0.0.1:{}:127.0.0.1:9050".format(socks_port)]),
+        )
 
     return processes, socks_port, ssh
 
@@ -992,9 +1006,7 @@ def start_proxy(runner, args):
         run_id=run_id,
     )
 
-    processes, socks_port, ssh = connect(
-        runner, remote_info, args.expose, args.context, args.verbose
-    )
+    processes, socks_port, ssh = connect(runner, remote_info, args)
 
     # Get the environment variables we want to copy from the remote pod; it may
     # take a few seconds for the SSH proxies to get going:
