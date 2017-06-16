@@ -1033,7 +1033,8 @@ def wait_for_exit(runner, shell_process, processes):
             # Shell exited, we're done. Automatic shutdown cleanup will kill
             # subprocesses.
             raise SystemExit(shell_process.poll())
-        for p in processes:
+        for p in processes.subprocesses:
+            # XXX move this code into Subprocesses class
             code = p.poll()
             if code is not None:
                 runner.write((
