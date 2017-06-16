@@ -646,21 +646,16 @@ class Subprocesses(object):
         """
         Check if any processes are dead.
 
-        If they're all alive, return False.
+        If they're all alive, return None.
 
-        If not, kill the remaining ones and return True.
+        If not, kill the remaining ones and return the failed process' poll()
+        result.
         """
         for p in self.subprocesses:
             code = p.poll()
             if code is not None:
-                self.runner.write((
-                    "A subprocess ({}) died with code {}, " +
-                    "killing all processes...\n"
-                ).format(p.args, p.returncode))
                 self.killall()
-                return False
-        else:
-            return True
+                return p
 
 
 class SSH(object):
@@ -1065,9 +1060,14 @@ def wait_for_exit(runner, main_process, processes):
             # Shell exited, we're done. Automatic shutdown cleanup will kill
             # subprocesses.
             raise SystemExit(main_process.poll())
-        if processes.any_dead():
+        dead_process = processes.any_dead()
+        if dead_process:
             # Unfortunatly torsocks doesn't deal well with connections
             # being lost, so best we can do is shut down.
+            runner.write((
+                "A subprocess ({}) died with code {}, " +
+                "killed all processes...\n"
+            ).format(dead_process.args, dead_process.returncode))
             if sys.stderr.isatty:
                 print(
                     "Proxy to Kubernetes exited. This is typically due to"
