@@ -642,6 +642,26 @@ class Subprocesses(object):
                 p.kill()
                 p.wait()
 
+    def any_dead(self):
+        """
+        Check if any processes are dead.
+
+        If they're all alive, return False.
+
+        If not, kill the remaining ones and return True.
+        """
+        for p in self.subprocesses:
+            code = p.poll()
+            if code is not None:
+                self.runner.write((
+                    "A subprocess ({}) died with code {}, " +
+                    "killing all processes...\n"
+                ).format(p.args, p.returncode))
+                self.killall()
+                return False
+        else:
+            return True
+
 
 class SSH(object):
     """Run ssh to k8s-proxy with appropriate arguments."""
@@ -1025,32 +1045,24 @@ def sip_workaround():
     return ":".join(paths)
 
 
-def wait_for_exit(runner, shell_process, processes):
+def wait_for_exit(runner, main_process, processes):
     """Given Popens, wait for one of them to die."""
     while True:
         sleep(0.1)
-        if shell_process.poll() is not None:
+        if main_process.poll() is not None:
             # Shell exited, we're done. Automatic shutdown cleanup will kill
             # subprocesses.
-            raise SystemExit(shell_process.poll())
-        for p in processes.subprocesses:
-            # XXX move this code into Subprocesses class
-            code = p.poll()
-            if code is not None:
-                runner.write((
-                    "A subprocess ({}) died with code {}, " +
-                    "killing all processes...\n"
-                ).format(p.args, p.returncode))
-                processes.killall()
-                # Unfortunatly torsocks doesn't deal well with connections
-                # being lost, so best we can do is shut down.
-                if sys.stderr.isatty:
-                    print(
-                        "Proxy to Kubernetes exited. This is typically due to"
-                        " a lost connection.",
-                        file=sys.stderr
-                    )
-                raise SystemExit(3)
+            raise SystemExit(main_process.poll())
+        if processes.any_dead():
+            # Unfortunatly torsocks doesn't deal well with connections
+            # being lost, so best we can do is shut down.
+            if sys.stderr.isatty:
+                print(
+                    "Proxy to Kubernetes exited. This is typically due to"
+                    " a lost connection.",
+                    file=sys.stderr
+                )
+            raise SystemExit(3)
 
 
 def mount_remote_volumes(runner, remote_info, ssh):
