@@ -124,6 +124,7 @@ def assert_fromcluster(namespace, url, port):
                 "http://{}:{}/__init__.py".format(url, port)
             ])
             assert result == (DIRECTORY / "__init__.py").read_bytes()
+            print("Hooray, got expected result when querying via cluster.")
             return
         except CalledProcessError as e:
             print("curl failed, retrying ({})".format(e))

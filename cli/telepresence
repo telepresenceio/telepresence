@@ -661,9 +661,10 @@ class Subprocesses(object):
 class SSH(object):
     """Run ssh to k8s-proxy with appropriate arguments."""
 
-    def __init__(self, runner, port):
+    def __init__(self, runner, port, host="localhost"):
         self.runner = runner
         self.port = port
+        self.host = host
 
     def command(self, additional_args, prepend_arguments=[]):
         """Return command line argument list for running ssh."""
@@ -679,7 +680,7 @@ class SSH(object):
             "-oUserKnownHostsFile=/dev/null",
             "-p",
             str(self.port),
-            "telepresence@localhost",
+            "telepresence@" + self.host,
         ] + additional_args
 
     def popen(self, additional_args):
@@ -1307,7 +1308,9 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
                     get_proxy_cidrs(
                         runner, args, remote_info,
                         env["KUBERNETES_SERVICE_HOST"]
-                    )
+                    ),
+                    "expose_ports":
+                    args.expose,
                 })
             ])
         )

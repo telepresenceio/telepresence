@@ -35,7 +35,6 @@ When the process exits with exit code 100 that means the proxy is active.
 """
 
 import sys
-import os
 from json import loads
 from subprocess import check_output, Popen
 from socket import gethostbyname, gaierror
@@ -43,7 +42,9 @@ from time import time, sleep
 
 # This is cli/telepresence, being used as a library. The way it's packaged is a
 # hack, should fix that someday.
-import telepresence
+from telepresence import (
+    Runner, Subprocesses, SSH, wait_for_exit, expose_local_services
+)
 
 
 def main():
@@ -79,12 +80,13 @@ def proxy(config):
         ), "-r", "telepresence@{}:{}".format(ip, port)
     ] + cidrs)
     # Start the SSH tunnels to expose local services:
-    subps = telepresence.Subprocesses()
-    ssh = telepresence.SSH(telepresence.Runner("-", "kubectl", False), port)
-    telepresence.expose_local_services(subps, ssh, expose_ports)
+    subps = Subprocesses()
+    runner = Runner.open("-", "kubectl", False)
+    ssh = SSH(runner, port, ip)
+    expose_local_services(subps, ssh, expose_ports)
 
     # Wait for everything to exit:
-    telepresence.wait_for_exit(main_process, subps)
+    wait_for_exit(runner, main_process, subps)
 
 
 def wait():
