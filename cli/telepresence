@@ -1078,28 +1078,32 @@ def wait_for_exit(runner, main_process, processes):
             raise SystemExit(3)
 
 
-def mount_remote_volumes(runner, remote_info, ssh):
+def mount_remote_volumes(runner, remote_info, ssh, allow_all_users):
     """
     sshfs is used to mount the remote system locally.
+
+    Allowing all users may require root, so we use sudo in that case.
     """
     mount_dir = mkdtemp()
+    prefix = ["sudo"] if allow_all_users else []
+    middle = ["-o", "allow_other"] if allow_all_users else []
     try:
-        runner.check_call([
-            "sshfs",
-            "-p",
-            str(ssh.port),
-            # Don't load config file so it doesn't break us:
-            "-F",
-            "/dev/null",
-            # Don't validate host key:
-            "-o",
-            "StrictHostKeyChecking=no",
-            # Don't store host key:
-            "-o",
-            "UserKnownHostsFile=/dev/null",
-            "telepresence@localhost:/",
-            mount_dir
-        ])
+        runner.check_call(
+            prefix + [
+                "sshfs",
+                "-p",
+                str(ssh.port),
+                # Don't load config file so it doesn't break us:
+                "-F",
+                "/dev/null",
+                # Don't validate host key:
+                "-o",
+                "StrictHostKeyChecking=no",
+                # Don't store host key:
+                "-o",
+                "UserKnownHostsFile=/dev/null",
+            ] + middle + ["telepresence@localhost:/", mount_dir]
+        )
         mounted = True
     except CalledProcessError:
         print(
@@ -1378,8 +1382,11 @@ def run_local_command(
     env["PATH"] = get_unsupported_tools(args.method != "inject-tcp"
                                         ) + ":" + env["PATH"]
 
-    # Mount remote filesystem:
-    mount_dir, mounted = mount_remote_volumes(runner, remote_info, ssh)
+    # Mount remote filesystem. We allow all users if we're using Docker because
+    # we don't know what uid the Docker container will use:
+    mount_dir, mounted = mount_remote_volumes(
+        runner, remote_info, ssh, args.method == "container"
+    )
     env["TELEPRESENCE_ROOT"] = mount_dir
 
     # Make sure we use "bash", no "/bin/bash", so we get the copied version on
@@ -1402,6 +1409,8 @@ def run_local_command(
             runner, remote_info, args, subprocesses, env, ssh
         )
         docker_command = docker_runify([
+            "--volume={}:{}".
+            format(env["TELEPRESENCE_ROOT"], env["TELEPRESENCE_ROOT"]),
             "--network=container:" + container_name,
             "--env-file",
             envfile_path,

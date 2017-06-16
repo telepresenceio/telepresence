@@ -573,3 +573,24 @@ class DockerEndToEndTests(TestCase):
 
         self.addCleanup(cleanup)
         assert_fromcluster(current_namespace(), service_name, port)
+
+    def test_volumes(self):
+        """
+        Test availability of volumes in the container.
+        """
+        result = run([
+            "telepresence",
+            "--logfile",
+            "-",
+            "--method",
+            "container",
+            "--new-deployment",
+            random_name(),
+            "--docker-run",
+            "-v",
+            "{}:/host".format(DIRECTORY),
+            "python:3-alpine",
+            "python3",
+            "/host/volumes_simpler.py",
+        ])
+        assert result.returncode == 113
