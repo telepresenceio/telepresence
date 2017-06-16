@@ -3,7 +3,7 @@ End-to-end tests for running directly in the operating system.
 """
 
 import json
-from unittest import TestCase, skipIf
+from unittest import TestCase, skipIf, skipUnless
 from subprocess import (
     check_output,
     Popen,
@@ -26,7 +26,8 @@ from .utils import (
 )
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
-TELEPRESENCE_METHOD = os.environ["TELEPRESENCE_METHOD"]  # inject-tcp/vpn-tcp
+# inject-tcp/vpn-tcp/container:
+TELEPRESENCE_METHOD = os.environ["TELEPRESENCE_METHOD"]
 
 EXISTING_DEPLOYMENT = """\
 metadata:
@@ -110,9 +111,10 @@ def run_script_test(telepresence_args, local_command):
     return p.wait()
 
 
-class EndToEndTests(TestCase):
+@skipIf(TELEPRESENCE_METHOD == "container", "non-Docker tests")
+class NativeEndToEndTests(TestCase):
     """
-    End-to-end tests.
+    End-to-end tests on the native machine.
     """
 
     def test_run_directly(self):
@@ -181,30 +183,6 @@ class EndToEndTests(TestCase):
             "python3 tocluster.py {} {}".format(webserver_name, namespace),
         )
         assert exit_code == 113
-
-    def test_docker_tocluster(self):
-        """
-        Tests of communication to the cluster from a Docker container.
-        """
-        webserver_name = run_webserver()
-        result = run([
-            "telepresence",
-            "--logfile",
-            "-",
-            "--method",
-            "container",
-            "--new-deployment",
-            random_name(),
-            "--docker-run",
-            "-v",
-            "{}:/host".format(DIRECTORY),
-            "python:3-alpine",
-            "python3",
-            "/host/tocluster.py",
-            webserver_name,
-            current_namespace(),
-        ])
-        assert result.returncode == 113
 
     @skipIf(
         OPENSHIFT, "OpenShift doesn't allow root, which the tests need "
@@ -537,3 +515,32 @@ class EndToEndTests(TestCase):
         )
         exit_code = p.wait()
         assert 113 == exit_code
+
+
+@skipUnless(TELEPRESENCE_METHOD == "container", "requires Docker")
+class DockerEndToEndTests(TestCase):
+    """End-to-end tests on Docker."""
+
+    def test_docker_tocluster(self):
+        """
+        Tests of communication to the cluster from a Docker container.
+        """
+        webserver_name = run_webserver()
+        result = run([
+            "telepresence",
+            "--logfile",
+            "-",
+            "--method",
+            "container",
+            "--new-deployment",
+            random_name(),
+            "--docker-run",
+            "-v",
+            "{}:/host".format(DIRECTORY),
+            "python:3-alpine",
+            "python3",
+            "/host/tocluster.py",
+            webserver_name,
+            current_namespace(),
+        ])
+        assert result.returncode == 113
