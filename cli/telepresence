@@ -696,8 +696,8 @@ class SSH(object):
             self.command(
                 additional_args,
                 [
-                    # No remote command, since this intended for things like -L or -R
-                    # where we don't want to run a remote command.
+                    # No remote command, since this intended for things like -L
+                    # or -R where we don't want to run a remote command.
                     "-N",
                     # Ping once a second; after ten retries will disconnect:
                     "-oServerAliveInterval=1",

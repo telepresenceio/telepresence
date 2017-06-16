@@ -1,2 +1,3 @@
 # Copied in temporarily as part of image build phase:
 sshuttle-telepresence
+telepresence.py

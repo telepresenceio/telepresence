@@ -29,8 +29,9 @@ build-k8s-proxy:
 
 build-local:
 	cp -f virtualenv/bin/sshuttle-telepresence local-docker
+	cp -f cli/telepresence local-docker/telepresence.py
 	cd local-docker && sudo docker build . -t datawire/telepresence-local:$(VERSION)
-	rm -f local-docker/sshuttle-telepresence
+	rm -f local-docker/sshuttle-telepresence local-docker/telepresence.py
 
 # Build Docker image inside minikube Docker:
 build-k8s-proxy-minikube:

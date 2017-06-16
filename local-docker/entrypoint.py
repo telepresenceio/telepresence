@@ -37,9 +37,13 @@ When the process exits with exit code 100 that means the proxy is active.
 import sys
 import os
 from json import loads
-from subprocess import check_output
+from subprocess import check_output, Popen
 from socket import gethostbyname, gaierror
 from time import time, sleep
+
+# This is cli/telepresence, being used as a library. The way it's packaged is a
+# hack, should fix that someday.
+import telepresence
 
 
 def main():
@@ -64,13 +68,23 @@ def proxy(config):
                 ip = parts[1]
                 break
     cidrs = config["cidrs"]
-    os.execl(
-        "/usr/bin/sshuttle-telepresence", "sshuttle-telepresence", "-v",
-        "--dns", "--method", "nat", "-e", (
+    expose_ports = config["expose_ports"]
+
+    # Start the sshuttle VPN-like thing:
+    # XXX duplicates code in telepresence, remove duplication
+    main_process = Popen([
+        "sshuttle-telepresence", "-v", "--dns", "--method", "nat", "-e", (
             "ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null " +
             "-F /dev/null"
-        ), "-r", "telepresence@{}:{}".format(ip, port), *cidrs
-    )
+        ), "-r", "telepresence@{}:{}".format(ip, port)
+    ] + cidrs)
+    # Start the SSH tunnels to expose local services:
+    subps = telepresence.Subprocesses()
+    ssh = telepresence.SSH(telepresence.Runner("-", "kubectl", False), port)
+    telepresence.expose_local_services(subps, ssh, expose_ports)
+
+    # Wait for everything to exit:
+    telepresence.wait_for_exit(main_process, subps)
 
 
 def wait():
