@@ -628,12 +628,12 @@ class Subprocesses(object):
 
     def __init__(self):
         self.subprocesses = []
-        atexit.register(self._killall)
+        atexit.register(self.killall)
 
     def append(self, process):
         self.subprocesses.append(process)
 
-    def _killall(self):
+    def killall(self):
         # XXX need sudo kill for some of them...
         for p in self.subprocesses:
             if p.poll() is None:
@@ -1041,7 +1041,7 @@ def wait_for_exit(runner, shell_process, processes):
                     "A subprocess ({}) died with code {}, " +
                     "killing all processes...\n"
                 ).format(p.args, p.returncode))
-                killall(processes)
+                processes.killall()
                 # Unfortunatly torsocks doesn't deal well with connections
                 # being lost, so best we can do is shut down.
                 if sys.stderr.isatty:
