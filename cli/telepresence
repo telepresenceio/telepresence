@@ -623,6 +623,29 @@ def get_remote_info(
     )
 
 
+class Subprocesses(object):
+    """Shut down subprocesses on exit."""
+
+    def __init__(self):
+        self.subprocesses = []
+        atexit.register(self._killall)
+
+    def append(self, process):
+        self.subprocesses.append(process)
+
+    def _killall(self):
+        # XXX need sudo kill for some of them...
+        for p in self.subprocesses:
+            if p.poll() is None:
+                p.terminate()
+        for p in self.subprocesses:
+            try:
+                p.wait(timeout=1)
+            except TimeoutExpired:
+                p.kill()
+                p.wait()
+
+
 def ssh(runner, ssh_port, args):
     """Connect to remote pod via SSH.
 
@@ -698,7 +721,7 @@ def connect(runner, remote_info, local_exposed_ports, context, verbose):
 
     Return list of Popen instances.
     """
-    processes = []
+    processes = Subprocesses()
     ssh_port = find_free_port()
 
     # forward remote port to here, by tunneling via remote SSH server:
@@ -726,7 +749,6 @@ def connect(runner, remote_info, local_exposed_ports, context, verbose):
         ])
     )
 
-    atexit.register(killall, processes)
     wait_for_ssh(runner, ssh_port)
 
     for port_number in local_exposed_ports:
@@ -747,18 +769,6 @@ def connect(runner, remote_info, local_exposed_ports, context, verbose):
     )
 
     return processes, socks_port, ssh_port
-
-
-def killall(processes):
-    for p in processes:
-        if p.poll() is None:
-            p.terminate()
-    for p in processes:
-        try:
-            p.wait(timeout=1)
-        except TimeoutExpired:
-            p.kill()
-            p.wait()
 
 
 def create_new_deployment(runner, args):
