@@ -10,6 +10,7 @@ from copy import deepcopy
 import json
 import os
 import os.path
+import re
 import signal
 import socket
 import ssl
@@ -44,6 +45,9 @@ TELEPRESENCE_REMOTE_IMAGE = "{}/telepresence-k8s:{}".format(
 TELEPRESENCE_LOCAL_IMAGE = "{}/telepresence-local:{}".format(
     REGISTRY, __version__
 )
+
+# IP that shouldn't be in use on Internet, *or* local networks:
+MAC_LOOPBACK_IP = "198.18.0.254"
 
 
 def random_name():
@@ -769,25 +773,26 @@ def connect(runner, remote_info, cmdline_args):
             )
         )
     )
-    # On macOS Docker can access host's loopback (via an alias), but on Linux
-    # it can't. kubectl port-forward currently only listens on loopback. So on
-    # Linux we portforward from the docker0 interface to loopback (until we can
-    # use kubectl port-forward option to listen on docker0 -
+    # kubectl port-forward currently only listens on loopback. So we
+    # portforward from the docker0 interface on Linux, and the lo0 alias we
+    # added on OS X, to loopback (until we can use kubectl port-forward option
+    # to listen on docker0 -
     # https://github.com/kubernetes/kubernetes/pull/46517):
     if sys.platform == "linux":
-        import re
         docker_interface = re.findall(
             runner.get_output(["ifconfig", "docker0"]),
             r"inet addr:(\d+\.\d+\.\d+\.\d+)"
         )[0]
-        processes.append(
-            runner.popen([
-                "socat", "TCP4-LISTEN:{},bind={},reuseaddr,fork".format(
-                    ssh.port,
-                    docker_interface,
-                ), "TCP4:127.0.0.1:{}".format(ssh.port)
-            ])
-        )
+    else:
+        docker_interface = MAC_LOOPBACK_IP
+    processes.append(
+        runner.popen([
+            "socat", "TCP4-LISTEN:{},bind={},reuseaddr,fork".format(
+                ssh.port,
+                docker_interface,
+            ), "TCP4:127.0.0.1:{}".format(ssh.port)
+        ])
+    )
 
     ssh.wait()
 
@@ -1323,12 +1328,14 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
         # range that is assigned for testing network devices and therefore
         # shouldn't conflict with real IPs or local private networks
         # (https://tools.ietf.org/html/rfc6890).
-        runner.check_call(["sudo", "ifconfig", "lo0", "alias", "198.18.0.254"])
+        runner.check_call([
+            "sudo", "ifconfig", "lo0", "alias", MAC_LOOPBACK_IP
+        ])
         atexit.register(
             runner.check_call,
-            ["sudo", "ifconfig", "lo0", "-alias", "198.18.0.254"]
+            ["sudo", "ifconfig", "lo0", "-alias", MAC_LOOPBACK_IP]
         )
-        config["ip"] = "198.18.0.254"
+        config["ip"] = MAC_LOOPBACK_IP
     subprocesses.append(
         runner.popen(
             docker_runify([

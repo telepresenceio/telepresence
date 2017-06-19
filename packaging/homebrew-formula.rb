@@ -9,6 +9,7 @@ class Telepresence < Formula
   depends_on "python3"
   depends_on "torsocks"
   depends_on "sshfs"
+  depends_on "socat"
 
   def install
     system "env", "PATH=#{ENV['PATH']}:/usr/local/bin", "make", "virtualenv/bin/sshuttle-telepresence"
