@@ -1108,7 +1108,9 @@ def mount_remote_volumes(runner, remote_info, ssh, allow_all_users):
 
     Allowing all users may require root, so we use sudo in that case.
     """
-    mount_dir = mkdtemp()
+    # Docker for Mac only shares some folders; the default TMPDIR on OS X is
+    # not one of them, so make sure we use /tmp:
+    mount_dir = mkdtemp(dir="/tmp")
     prefix = ["sudo"] if allow_all_users else []
     middle = ["-o", "allow_other"] if allow_all_users else []
     try:
