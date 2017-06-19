@@ -814,7 +814,7 @@ def connect(runner, remote_info, cmdline_args):
         expose_local_services(processes, ssh, cmdline_args.expose)
 
     socks_port = find_free_port()
-    if cmdline_args.method == "tcp-inject":
+    if cmdline_args.method == "inject-tcp":
         # start tunnel to remote SOCKS proxy:
         processes.append(
             ssh.popen(["-L",
