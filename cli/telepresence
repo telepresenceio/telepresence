@@ -769,19 +769,25 @@ def connect(runner, remote_info, cmdline_args):
             )
         )
     )
-    # On macOS Docker can access host's loopback, so that's OK, but on Linux it
-    # can't. So on Linux we portforward from the docker0 interface to loopback
-    # (until we can use kubectl port-forward option to listen on docker0 -
+    # On macOS Docker can access host's loopback (via an alias), but on Linux
+    # it can't. kubectl port-forward currently only listens on loopback. So on
+    # Linux we portforward from the docker0 interface to loopback (until we can
+    # use kubectl port-forward option to listen on docker0 -
     # https://github.com/kubernetes/kubernetes/pull/46517):
-    docker_interface = "172.17.0.1"
-    processes.append(
-        runner.popen([
-            "socat", "TCP4-LISTEN:{},bind={},reuseaddr,fork".format(
-                ssh.port,
-                docker_interface,
-            ), "TCP4:127.0.0.1:{}".format(ssh.port)
-        ])
-    )
+    if sys.platform == "linux":
+        import re
+        docker_interface = re.findall(
+            runner.get_output(["ifconfig", "docker0"]),
+            r"inet addr:(\d+\.\d+\.\d+\.\d+)"
+        )[0]
+        processes.append(
+            runner.popen([
+                "socat", "TCP4-LISTEN:{},bind={},reuseaddr,fork".format(
+                    ssh.port,
+                    docker_interface,
+                ), "TCP4:127.0.0.1:{}".format(ssh.port)
+            ])
+        )
 
     ssh.wait()
 
