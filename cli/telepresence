@@ -773,26 +773,39 @@ def connect(runner, remote_info, cmdline_args):
             )
         )
     )
-    # kubectl port-forward currently only listens on loopback. So we
-    # portforward from the docker0 interface on Linux, and the lo0 alias we
-    # added on OS X, to loopback (until we can use kubectl port-forward option
-    # to listen on docker0 -
-    # https://github.com/kubernetes/kubernetes/pull/46517):
-    if sys.platform == "linux":
-        docker_interface = re.findall(
-            runner.get_output(["ifconfig", "docker0"]),
-            r"inet addr:(\d+\.\d+\.\d+\.\d+)"
-        )[0]
-    else:
-        docker_interface = MAC_LOOPBACK_IP
-    processes.append(
-        runner.popen([
-            "socat", "TCP4-LISTEN:{},bind={},reuseaddr,fork".format(
-                ssh.port,
-                docker_interface,
-            ), "TCP4:127.0.0.1:{}".format(ssh.port)
-        ])
-    )
+    if cmdline_args.method == "container":
+        # kubectl port-forward currently only listens on loopback. So we
+        # portforward from the docker0 interface on Linux, and the lo0 alias we
+        # added on OS X, to loopback (until we can use kubectl port-forward
+        # option to listen on docker0 -
+        # https://github.com/kubernetes/kubernetes/pull/46517):
+        if sys.platform == "linux":
+            docker_interface = re.findall(
+                runner.get_output(["ifconfig", "docker0"]),
+                r"inet addr:(\d+\.\d+\.\d+\.\d+)"
+            )[0]
+        else:
+            # The way to get routing from container to host is via an alias on
+            # lo0 (https://docs.docker.com/docker-for-mac/networking/). We use
+            # an IP range that is assigned for testing network devices and
+            # therefore shouldn't conflict with real IPs or local private
+            # networks (https://tools.ietf.org/html/rfc6890).
+            runner.check_call([
+                "sudo", "ifconfig", "lo0", "alias", MAC_LOOPBACK_IP
+            ])
+            atexit.register(
+                runner.check_call,
+                ["sudo", "ifconfig", "lo0", "-alias", MAC_LOOPBACK_IP]
+            )
+            docker_interface = MAC_LOOPBACK_IP
+        processes.append(
+            runner.popen([
+                "socat", "TCP4-LISTEN:{},bind={},reuseaddr,fork".format(
+                    ssh.port,
+                    docker_interface,
+                ), "TCP4:127.0.0.1:{}".format(ssh.port)
+            ])
+        )
 
     ssh.wait()
 
@@ -1323,18 +1336,6 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
         args.expose,
     }
     if sys.platform == "darwin":
-        # The way to get routing from container to host is via an alias on lo0
-        # (https://docs.docker.com/docker-for-mac/networking/). We use an IP
-        # range that is assigned for testing network devices and therefore
-        # shouldn't conflict with real IPs or local private networks
-        # (https://tools.ietf.org/html/rfc6890).
-        runner.check_call([
-            "sudo", "ifconfig", "lo0", "alias", MAC_LOOPBACK_IP
-        ])
-        atexit.register(
-            runner.check_call,
-            ["sudo", "ifconfig", "lo0", "-alias", MAC_LOOPBACK_IP]
-        )
         config["ip"] = MAC_LOOPBACK_IP
     subprocesses.append(
         runner.popen(
