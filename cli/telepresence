@@ -1307,21 +1307,33 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
     """Connect using sshuttle running in a Docker container."""
     # Start the sshuttle container:
     name = random_name()
+    config = {
+        "port":
+        ssh.port,
+        "cidrs":
+        get_proxy_cidrs(
+            runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
+        ),
+        "expose_ports":
+        args.expose,
+    }
+    if sys.platform == "darwin":
+        # The way to get routing from container to host is via an alias on lo0
+        # (https://docs.docker.com/docker-for-mac/networking/). We use an IP
+        # range that is assigned for testing network devices and therefore
+        # shouldn't conflict with real IPs or local private networks
+        # (https://tools.ietf.org/html/rfc6890).
+        runner.check_call(["sudo", "ifconfig", "lo0", "alias", "198.18.0.254"])
+        atexit.register(
+            runner.check_call,
+            ["sudo", "ifconfig", "lo0", "-alias", "198.18.0.254"]
+        )
+        config["ip"] = "198.18.0.254"
     subprocesses.append(
         runner.popen(
             docker_runify([
                 "--rm", "--privileged", "--name=" + name,
-                TELEPRESENCE_LOCAL_IMAGE, "proxy", json.dumps({
-                    "port":
-                    ssh.port,
-                    "cidrs":
-                    get_proxy_cidrs(
-                        runner, args, remote_info,
-                        env["KUBERNETES_SERVICE_HOST"]
-                    ),
-                    "expose_ports":
-                    args.expose,
-                })
+                TELEPRESENCE_LOCAL_IMAGE, "proxy", json.dumps(config)
             ])
         )
     )
