@@ -781,8 +781,8 @@ def connect(runner, remote_info, cmdline_args):
         # https://github.com/kubernetes/kubernetes/pull/46517):
         if sys.platform == "linux":
             docker_interface = re.findall(
-                runner.get_output(["ifconfig", "docker0"]),
-                r"inet addr:(\d+\.\d+\.\d+\.\d+)"
+                r"inet addr:(\d+\.\d+\.\d+\.\d+)",
+                runner.get_output(["ifconfig", "docker0"])
             )[0]
         else:
             # The way to get routing from container to host is via an alias on
