@@ -1342,8 +1342,14 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
     subprocesses.append(
         runner.popen(
             docker_runify([
-                "--rm", "--privileged", "--name=" + name,
-                TELEPRESENCE_LOCAL_IMAGE, "proxy", json.dumps(config)
+                "--rm",
+                "--privileged",
+                "--name=" + name,
+                # Make sure exit works ok:
+                "--init",
+                TELEPRESENCE_LOCAL_IMAGE,
+                "proxy",
+                json.dumps(config)
             ])
         )
     )
