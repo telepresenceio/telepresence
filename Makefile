@@ -68,6 +68,7 @@ bumpversion: virtualenv
 # Will be run in Travis CI on tagged commits
 release: build-k8s-proxy build-local virtualenv/bin/sshuttle-telepresence
 	sudo docker push datawire/telepresence-k8s:$(VERSION)
+	sudo docker push datawire/telepresence-local:$(VERSION)
 	env TELEPRESENCE_VERSION=$(VERSION) packaging/homebrew-package.sh
 	packaging/create-linux-packages.py $(VERSION)
 	packaging/upload-linux-packages.py $(VERSION)
