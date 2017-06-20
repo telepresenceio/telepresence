@@ -23,7 +23,7 @@ myservice   10.0.0.12    <none>        8000/TCP   1m
 
 It may take a minute or two for the pod running the server to be up and running, depending on how fast your cluster is.
 
-You can now run a local process using Telepresence that can access that service, even though the process is local but the service is running in the OpenShift cluster:
+You can now run a local process using Telepresence that can access that service, even though the process is local but the service is running in the Kubernetes cluster:
 
 ```console
 $ telepresence -m inject-tcp --new-deployment example --run curl http://myservice:8000/
