@@ -1340,7 +1340,7 @@ def make_docker_kill(runner, name):
 
     def kill():
         sudo = ["sudo"] if SUDO_FOR_DOCKER else []
-        runner.check_call(sudo + ["docker", "stop", "--time=5", name])
+        runner.check_call(sudo + ["docker", "stop", "--time=1", name])
 
     return kill
 

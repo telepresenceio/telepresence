@@ -578,12 +578,9 @@ class DockerEndToEndTests(TestCase):
             ],
         )
 
-        def cleanup():
-            p.terminate()
-            p.wait()
-
-        self.addCleanup(cleanup)
         assert_fromcluster(current_namespace(), service_name, port)
+        p.terminate()
+        p.wait()
 
     def test_volumes(self):
         """
