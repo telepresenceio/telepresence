@@ -1,6 +1,6 @@
 ---
 layout: doc
-weight: 5
+weight: 6
 title: "Changelog"
 categories: reference
 ---
