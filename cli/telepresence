@@ -49,6 +49,11 @@ TELEPRESENCE_LOCAL_IMAGE = "{}/telepresence-local:{}".format(
 # IP that shouldn't be in use on Internet, *or* local networks:
 MAC_LOOPBACK_IP = "198.18.0.254"
 
+# Whether Docker requires sudo
+SUDO_FOR_DOCKER = os.path.exists("/var/run/docker.sock") and not os.access(
+    "/var/run/docker.sock", os.W_OK
+)
+
 
 def random_name():
     """Return a random name for a container."""
@@ -624,27 +629,35 @@ def get_remote_info(
     )
 
 
+def kill_process(process):
+    """Kill a process, make sure it's a dead."""
+    if process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(timeout=1)
+    except TimeoutExpired:
+        process.kill()
+        process.wait()
+
+
 class Subprocesses(object):
     """Shut down subprocesses on exit."""
 
     def __init__(self):
-        self.subprocesses = []
+        self.subprocesses = {}
         atexit.register(self.killall)
 
-    def append(self, process):
-        self.subprocesses.append(process)
+    def append(self, process, killer=None):
+        if killer is None:
+            def kill():
+                kill_process(process)
+
+            killer = kill
+        self.subprocesses[process] = killer
 
     def killall(self):
-        # XXX need sudo kill for some of them...
-        for p in self.subprocesses:
-            if p.poll() is None:
-                p.terminate()
-        for p in self.subprocesses:
-            try:
-                p.wait(timeout=1)
-            except TimeoutExpired:
-                p.kill()
-                p.wait()
+        for killer in self.subprocesses.values():
+            killer()
 
     def any_dead(self):
         """
@@ -1316,11 +1329,20 @@ def connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh):
 def docker_runify(args):
     """Prepend 'docker run' to a list of arguments."""
     args = ['docker', 'run'] + args
-    docker_path = "/var/run/docker.sock"
-    if (os.path.exists(docker_path) and not os.access(docker_path, os.W_OK)):
+    if SUDO_FOR_DOCKER:
         return ["sudo"] + args
     else:
         return args
+
+
+def make_docker_kill(runner, name):
+    """Return a function that will kill a named docker container."""
+
+    def kill():
+        sudo = ["sudo"] if SUDO_FOR_DOCKER else []
+        runner.check_call(sudo + ["docker", "stop", "--time=5", name])
+
+    return kill
 
 
 def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
@@ -1351,7 +1373,7 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
                 "proxy",
                 json.dumps(config)
             ])
-        )
+        ), make_docker_kill(runner, name)
     )
     # Write out env file:
     with NamedTemporaryFile("w", delete=False) as envfile:
@@ -1439,13 +1461,15 @@ def run_local_command(
         connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh)
         p = Popen(command, env=env)
     elif args.method == "container":
-        container_name, envfile_path = connect_docker(
+        proxy_container_name, envfile_path = connect_docker(
             runner, remote_info, args, subprocesses, env, ssh
         )
+        container_name = random_name()
         docker_command = docker_runify([
             "--volume={}:{}".
             format(env["TELEPRESENCE_ROOT"], env["TELEPRESENCE_ROOT"]),
-            "--network=container:" + container_name,
+            "--name=" + container_name,
+            "--network=container:" + proxy_container_name,
             "--env-file",
             envfile_path,
             # To make sure shutdown works OK:
@@ -1458,11 +1482,14 @@ def run_local_command(
         )
 
     def terminate_if_alive():
-        runner.write("Shutting down local shell...\n")
+        runner.write("Shutting down local process...\n")
         if p.poll() is None:
-            runner.write("Killing local shell...\n")
-            p.terminate()
-            p.wait()
+            runner.write("Killing local process...\n")
+            if args.method == "container":
+                make_docker_kill(runner, container_name)()
+            else:
+                kill_process(p)
+
         if mounted:
             if sys.platform.startswith("linux"):
                 runner.get_output(["fusermount", "-u", mount_dir])

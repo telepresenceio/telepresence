@@ -526,6 +526,17 @@ class NativeEndToEndTests(TestCase):
 class DockerEndToEndTests(TestCase):
     """End-to-end tests on Docker."""
 
+    def get_containers(self):
+        return set(check_output(["sudo", "docker", "ps", "-q"]).split())
+
+    def setUp(self):
+        self.containers = self.get_containers()
+
+    def tearDown(self):
+        # Ensure no container leaks
+        time.sleep(1)
+        assert self.containers == self.get_containers()
+
     def test_tocluster(self):
         """
         Tests of communication to the cluster from a Docker container.
