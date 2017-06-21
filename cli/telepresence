@@ -393,7 +393,16 @@ def parse_args():
             "Requires --method container."
         )
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.method == "container" and args.docker_run is None:
+        raise SystemExit(
+            "'--docker-run' is required when using '--method container'."
+        )
+    if args.docker_run is not None and args.method != "container":
+        raise SystemExit(
+            "'--method container' is required when using '--docker-run'."
+        )
+    return args
 
 
 class RemoteInfo(object):
@@ -649,6 +658,7 @@ class Subprocesses(object):
 
     def append(self, process, killer=None):
         if killer is None:
+
             def kill():
                 kill_process(process)
 
@@ -1365,12 +1375,8 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
     subprocesses.append(
         runner.popen(
             docker_runify([
-                "--rm",
-                "--privileged",
-                "--name=" + name,
-                TELEPRESENCE_LOCAL_IMAGE,
-                "proxy",
-                json.dumps(config)
+                "--rm", "--privileged", "--name=" + name,
+                TELEPRESENCE_LOCAL_IMAGE, "proxy", json.dumps(config)
             ])
         ), make_docker_kill(runner, name)
     )
@@ -1465,8 +1471,9 @@ def run_local_command(
         )
         container_name = random_name()
         docker_command = docker_runify([
-            "--volume={}:{}".
-            format(env["TELEPRESENCE_ROOT"], env["TELEPRESENCE_ROOT"]),
+            "--volume={}:{}".format(
+                env["TELEPRESENCE_ROOT"], env["TELEPRESENCE_ROOT"]
+            ),
             "--name=" + container_name,
             "--network=container:" + proxy_container_name,
             "--env-file",
