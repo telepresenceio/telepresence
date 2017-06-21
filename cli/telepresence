@@ -10,6 +10,7 @@ from copy import deepcopy
 import json
 import os
 import os.path
+import re
 import signal
 import socket
 import ssl
@@ -31,9 +32,6 @@ from io import StringIO
 from urllib.parse import quote_plus
 unicode = str
 
-if sys.version_info[:2] < (3, 5):
-    raise SystemExit("Telepresence requires Python 3.5 or later.")
-
 # Don't modify next line without modifying corresponding line in
 # .bumpversion.cfg:
 __version__ = "0.51"
@@ -41,7 +39,20 @@ __version__ = "0.51"
 if os.environ.get("TELEPRESENCE_VERSION") is not None:
     __version__ = os.environ["TELEPRESENCE_VERSION"]
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
-TELEPRESENCE_IMAGE = "{}/telepresence-k8s:{}".format(REGISTRY, __version__)
+TELEPRESENCE_REMOTE_IMAGE = "{}/telepresence-k8s:{}".format(
+    REGISTRY, __version__
+)
+TELEPRESENCE_LOCAL_IMAGE = "{}/telepresence-local:{}".format(
+    REGISTRY, __version__
+)
+
+# IP that shouldn't be in use on Internet, *or* local networks:
+MAC_LOOPBACK_IP = "198.18.0.254"
+
+# Whether Docker requires sudo
+SUDO_FOR_DOCKER = os.path.exists("/var/run/docker.sock") and not os.access(
+    "/var/run/docker.sock", os.W_OK
+)
 
 
 def random_name():
@@ -269,12 +280,14 @@ def parse_args():
         "--method",
         "-m",
         required=True,
-        choices=["inject-tcp", "vpn-tcp"],
+        choices=["inject-tcp", "vpn-tcp", "container"],
         help=(
             "inject-tcp: inject process-specific shared "
             "library that proxies TCP to the remote cluster.\n"
             "vpn-tcp: all local processes can route TCP "
-            "traffic to the remote cluster.\n\nFor more details see "
+            "traffic to the remote cluster.\n"
+            "container: used with --docker-run.\n"
+            "\nFor more details see "
             "http://www.telepresence.io/reference/methods.html"
         )
     )
@@ -369,7 +382,27 @@ def parse_args():
             "'--run python myapp.py'."
         )
     )
-    return parser.parse_args()
+    group.add_argument(
+        "--docker-run",
+        metavar="DOCKER_RUN_ARG",
+        dest="docker_run",
+        nargs=argparse.REMAINDER,
+        help=(
+            "Run a Docker container, by passing the arguments to 'docker run',"
+            " e.g. '--docker-run -i -t ubuntu:16.04 /bin/bash'. "
+            "Requires --method container."
+        )
+    )
+    args = parser.parse_args()
+    if args.method == "container" and args.docker_run is None:
+        raise SystemExit(
+            "'--docker-run' is required when using '--method container'."
+        )
+    if args.docker_run is not None and args.method != "container":
+        raise SystemExit(
+            "'--method container' is required when using '--docker-run'."
+        )
+    return args
 
 
 class RemoteInfo(object):
@@ -605,48 +638,108 @@ def get_remote_info(
     )
 
 
-def ssh(runner, ssh_port, args):
-    """Connect to remote pod via SSH.
-
-    Returns Popen object.
-    """
-    return runner.popen([
-        "ssh",
-        # Ignore local configuration (~/.ssh/config)
-        "-F",
-        "/dev/null",
-        # SSH with no warnings:
-        "-vv" if runner.verbose else "-q",
-        # Don't validate host key:
-        "-oStrictHostKeyChecking=no",
-        # Don't store host key:
-        "-oUserKnownHostsFile=/dev/null",
-        # Ping once a second; after ten retries will disconnect:
-        "-oServerAliveInterval=1",
-        "-oServerAliveCountMax=10",
-        # No shell:
-        "-N",
-        "-p",
-        str(ssh_port),
-        "telepresence@localhost",
-    ] + args)
+def kill_process(process):
+    """Kill a process, make sure it's a dead."""
+    if process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(timeout=1)
+    except TimeoutExpired:
+        process.kill()
+        process.wait()
 
 
-def wait_for_ssh(runner, ssh_port):
-    start = time()
-    while time() - start < 30:
-        try:
-            runner.check_call([
-                "ssh", "-F", "/dev/null", "-p", str(ssh_port), "-vv"
-                if runner.verbose else "-q", "-oUserKnownHostsFile=/dev/null",
-                "-oStrictHostKeyChecking=no", "telepresence@localhost",
-                "/bin/true"
-            ])
-        except CalledProcessError:
-            sleep(0.25)
-        else:
-            return
-    raise RuntimeError("SSH isn't starting.")
+class Subprocesses(object):
+    """Shut down subprocesses on exit."""
+
+    def __init__(self):
+        self.subprocesses = {}
+        atexit.register(self.killall)
+
+    def append(self, process, killer=None):
+        if killer is None:
+
+            def kill():
+                kill_process(process)
+
+            killer = kill
+        self.subprocesses[process] = killer
+
+    def killall(self):
+        for killer in self.subprocesses.values():
+            killer()
+
+    def any_dead(self):
+        """
+        Check if any processes are dead.
+
+        If they're all alive, return None.
+
+        If not, kill the remaining ones and return the failed process' poll()
+        result.
+        """
+        for p in self.subprocesses:
+            code = p.poll()
+            if code is not None:
+                self.killall()
+                return p
+
+
+class SSH(object):
+    """Run ssh to k8s-proxy with appropriate arguments."""
+
+    def __init__(self, runner, port, host="localhost"):
+        self.runner = runner
+        self.port = port
+        self.host = host
+
+    def command(self, additional_args, prepend_arguments=[]):
+        """Return command line argument list for running ssh."""
+        return ["ssh"] + prepend_arguments + [
+            # Ignore local configuration (~/.ssh/config)
+            "-F",
+            "/dev/null",
+            # SSH with no warnings:
+            "-vv" if self.runner.verbose else "-q",
+            # Don't validate host key:
+            "-oStrictHostKeyChecking=no",
+            # Don't store host key:
+            "-oUserKnownHostsFile=/dev/null",
+            "-p",
+            str(self.port),
+            "telepresence@" + self.host,
+        ] + additional_args
+
+    def popen(self, additional_args):
+        """Connect to remote pod via SSH.
+
+        Returns Popen object.
+        """
+        return self.runner.popen(
+            self.command(
+                additional_args,
+                [
+                    # No remote command, since this intended for things like -L
+                    # or -R where we don't want to run a remote command.
+                    "-N",
+                    # Ping once a second; after ten retries will disconnect:
+                    "-oServerAliveInterval=1",
+                    "-oServerAliveCountMax=10",
+                ]
+            )
+        )
+
+    def wait(self):
+        """Return when SSH server can be reached."""
+        start = time()
+        while time() - start < 30:
+            try:
+                self.runner.check_call(self.command(["/bin/true"]))
+            except CalledProcessError:
+                sleep(0.25)
+            else:
+                return
+        raise RuntimeError("SSH isn't starting.")
 
 
 def wait_for_pod(runner, remote_info):
@@ -674,59 +767,84 @@ def wait_for_pod(runner, remote_info):
     )
 
 
-def connect(runner, remote_info, local_exposed_ports, context, verbose):
+def expose_local_services(processes, ssh, port_numbers):
+    """Create SSH tunnels from remote proxy pod to local host."""
+    for port_number in port_numbers:
+        processes.append(
+            ssh.
+            popen(["-R", "*:{}:127.0.0.1:{}".format(port_number, port_number)])
+        )
+
+
+def connect(runner, remote_info, cmdline_args):
     """
     Start all the processes that handle remote proxying.
 
     Return list of Popen instances.
     """
-    processes = []
-    ssh_port = find_free_port()
+    processes = Subprocesses()
+    ssh = SSH(runner, find_free_port())
 
     # forward remote port to here, by tunneling via remote SSH server:
     processes.append(
         runner.popen(
             runner.kubectl(
-                context, remote_info.namespace, [
+                cmdline_args.context, remote_info.namespace, [
                     "port-forward", remote_info.pod_name,
-                    "{}:8022".format(ssh_port)
+                    "{}:8022".format(ssh.port)
                 ]
             )
         )
     )
-    atexit.register(killall, processes)
-    wait_for_ssh(runner, ssh_port)
-
-    for port_number in local_exposed_ports:
-        processes.append(
-            ssh(
-                runner, ssh_port,
-                ["-R", "*:{}:127.0.0.1:{}".format(port_number, port_number)]
+    if cmdline_args.method == "container":
+        # kubectl port-forward currently only listens on loopback. So we
+        # portforward from the docker0 interface on Linux, and the lo0 alias we
+        # added on OS X, to loopback (until we can use kubectl port-forward
+        # option to listen on docker0 -
+        # https://github.com/kubernetes/kubernetes/pull/46517):
+        if sys.platform == "linux":
+            docker_interface = re.findall(
+                r"inet addr:(\d+\.\d+\.\d+\.\d+)",
+                runner.get_output(["ifconfig", "docker0"])
+            )[0]
+        else:
+            # The way to get routing from container to host is via an alias on
+            # lo0 (https://docs.docker.com/docker-for-mac/networking/). We use
+            # an IP range that is assigned for testing network devices and
+            # therefore shouldn't conflict with real IPs or local private
+            # networks (https://tools.ietf.org/html/rfc6890).
+            runner.check_call([
+                "sudo", "ifconfig", "lo0", "alias", MAC_LOOPBACK_IP
+            ])
+            atexit.register(
+                runner.check_call,
+                ["sudo", "ifconfig", "lo0", "-alias", MAC_LOOPBACK_IP]
             )
+            docker_interface = MAC_LOOPBACK_IP
+        processes.append(
+            runner.popen([
+                "socat", "TCP4-LISTEN:{},bind={},reuseaddr,fork".format(
+                    ssh.port,
+                    docker_interface,
+                ), "TCP4:127.0.0.1:{}".format(ssh.port)
+            ])
         )
 
-    # start tunnel to remote SOCKS proxy, for telepresence --run.
+    ssh.wait()
+
+    # In Docker mode this happens inside the local Docker container:
+    if cmdline_args.method != "container":
+        expose_local_services(processes, ssh, cmdline_args.expose)
+
     socks_port = find_free_port()
-    processes.append(
-        ssh(
-            runner, ssh_port,
-            ["-L", "127.0.0.1:{}:127.0.0.1:9050".format(socks_port)]
-        ),
-    )
+    if cmdline_args.method == "inject-tcp":
+        # start tunnel to remote SOCKS proxy:
+        processes.append(
+            ssh.popen(["-L",
+                       "127.0.0.1:{}:127.0.0.1:9050".format(socks_port)]),
+        )
 
-    return processes, socks_port, ssh_port
-
-
-def killall(processes):
-    for p in processes:
-        if p.poll() is None:
-            p.terminate()
-    for p in processes:
-        try:
-            p.wait(timeout=1)
-        except TimeoutExpired:
-            p.kill()
-            p.wait()
+    return processes, socks_port, ssh
 
 
 def create_new_deployment(runner, args):
@@ -752,7 +870,7 @@ def create_new_deployment(runner, args):
         "--limits=memory=256Mi",
         "--requests=memory=64Mi",
         args.new_deployment,
-        "--image=" + TELEPRESENCE_IMAGE,
+        "--image=" + TELEPRESENCE_REMOTE_IMAGE,
         "--labels=telepresence=" + run_id,
     ]
     for port in args.expose:
@@ -806,7 +924,7 @@ def swap_deployment(runner, args):
     for container in new_deployment_json["spec"]["template"]["spec"
                                                              ]["containers"]:
         if container["name"] == container_name:
-            container["image"] = TELEPRESENCE_IMAGE
+            container["image"] = TELEPRESENCE_REMOTE_IMAGE
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
             container["imagePullPolicy"] = "IfNotPresent"
@@ -881,7 +999,7 @@ def swap_deployment_openshift(runner, args):
     )["telepresence"] = run_id
     for container in new_rc_json["spec"]["template"]["spec"]["containers"]:
         if container["name"] == container_name:
-            container["image"] = TELEPRESENCE_IMAGE
+            container["image"] = TELEPRESENCE_REMOTE_IMAGE
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
             container["imagePullPolicy"] = "IfNotPresent"
@@ -931,13 +1049,7 @@ def start_proxy(runner, args):
         run_id=run_id,
     )
 
-    processes, socks_port, ssh_port = connect(
-        runner,
-        remote_info,
-        args.expose,
-        args.context,
-        args.verbose
-    )
+    processes, socks_port, ssh = connect(runner, remote_info, args)
 
     # Get the environment variables we want to copy from the remote pod; it may
     # take a few seconds for the SSH proxies to get going:
@@ -949,7 +1061,7 @@ def start_proxy(runner, args):
         except CalledProcessError:
             sleep(0.25)
 
-    return processes, env, socks_port, ssh_port, remote_info
+    return processes, env, socks_port, ssh, remote_info
 
 
 TORSOCKS_CONFIG = """
@@ -988,55 +1100,59 @@ def sip_workaround():
     return ":".join(paths)
 
 
-def wait_for_exit(runner, shell_process, processes):
+def wait_for_exit(runner, main_process, processes):
     """Given Popens, wait for one of them to die."""
     while True:
         sleep(0.1)
-        if shell_process.poll() is not None:
+        if main_process.poll() is not None:
             # Shell exited, we're done. Automatic shutdown cleanup will kill
             # subprocesses.
-            raise SystemExit(shell_process.poll())
-        for p in processes:
-            code = p.poll()
-            if code is not None:
-                runner.write((
-                    "A subprocess ({}) died with code {}, " +
-                    "killing all processes...\n"
-                ).format(p.args, p.returncode))
-                killall(processes)
-                # Unfortunatly torsocks doesn't deal well with connections
-                # being lost, so best we can do is shut down.
-                if sys.stderr.isatty:
-                    print(
-                        "Proxy to Kubernetes exited. This is typically due to"
-                        " a lost connection.",
-                        file=sys.stderr
-                    )
-                raise SystemExit(3)
+            raise SystemExit(main_process.poll())
+        dead_process = processes.any_dead()
+        if dead_process:
+            # Unfortunatly torsocks doesn't deal well with connections
+            # being lost, so best we can do is shut down.
+            runner.write((
+                "A subprocess ({}) died with code {}, " +
+                "killed all processes...\n"
+            ).format(dead_process.args, dead_process.returncode))
+            if sys.stderr.isatty:
+                print(
+                    "Proxy to Kubernetes exited. This is typically due to"
+                    " a lost connection.",
+                    file=sys.stderr
+                )
+            raise SystemExit(3)
 
 
-def mount_remote_volumes(runner, remote_info, ssh_port):
+def mount_remote_volumes(runner, remote_info, ssh, allow_all_users):
     """
     sshfs is used to mount the remote system locally.
+
+    Allowing all users may require root, so we use sudo in that case.
     """
-    mount_dir = mkdtemp()
+    # Docker for Mac only shares some folders; the default TMPDIR on OS X is
+    # not one of them, so make sure we use /tmp:
+    mount_dir = mkdtemp(dir="/tmp")
+    prefix = ["sudo"] if allow_all_users else []
+    middle = ["-o", "allow_other"] if allow_all_users else []
     try:
-        runner.check_call([
-            "sshfs",
-            "-p",
-            str(ssh_port),
-            # Don't load config file so it doesn't break us:
-            "-F",
-            "/dev/null",
-            # Don't validate host key:
-            "-o",
-            "StrictHostKeyChecking=no",
-            # Don't store host key:
-            "-o",
-            "UserKnownHostsFile=/dev/null",
-            "telepresence@localhost:/",
-            mount_dir
-        ])
+        runner.check_call(
+            prefix + [
+                "sshfs",
+                "-p",
+                str(ssh.port),
+                # Don't load config file so it doesn't break us:
+                "-F",
+                "/dev/null",
+                # Don't validate host key:
+                "-o",
+                "StrictHostKeyChecking=no",
+                # Don't store host key:
+                "-o",
+                "UserKnownHostsFile=/dev/null",
+            ] + middle + ["telepresence@localhost:/", mount_dir]
+        )
         mounted = True
     except CalledProcessError:
         print(
@@ -1160,32 +1276,180 @@ def get_proxy_cidrs(runner, args, remote_info, service_address):
     return list(result)
 
 
-def run_local_command(
-    runner, remote_info, args, env_overrides, subprocesses, socks_port,
-    ssh_port
-):
-    """--run-shell/--run support, run command locally."""
-    env = os.environ.copy()
-    env.update(env_overrides)
+def connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh):
+    """Connect to Kubernetes using sshuttle."""
+    # Make sure we have sudo credentials by doing a small sudo in advance
+    # of sshuttle using it:
+    Popen(["sudo", "true"]).wait()
+    sshuttle_method = "auto"
+    if sys.platform.startswith("linux"):
+        # sshuttle tproxy mode seems to have issues:
+        sshuttle_method = "nat"
+    subprocesses.append(
+        runner.popen([
+            "sshuttle-telepresence",
+            "-v",
+            "--dns",
+            "--method",
+            sshuttle_method,
+            "-e",
+            (
+                "ssh -oStrictHostKeyChecking=no " +
+                "-oUserKnownHostsFile=/dev/null -F /dev/null"
+            ),
+            "-r",
+            "telepresence@localhost:" + str(ssh.port),
+        ] + get_proxy_cidrs(
+            runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
+        ))
+    )
+
+    # sshuttle will take a while to startup. We can detect it being up when
+    # DNS resolution of services starts working. We use a specific single
+    # segment so any search/domain statements in resolv.conf are applied,
+    # which then allows the DNS proxy to detect the suffix domain and
+    # filter it out.
+    def get_hellotelepresence():
+        # On Macs I suspect there is per-process caching and OS-level
+        # caching, so clear out caches by having separate process calls and
+        # explicit caching:
+        try:
+            runner.get_output([
+                "python3", "-c",
+                "import socket; socket.gethostbyname('hellotelepresence')"
+            ])
+        except CalledProcessError:
+            if sys.platform == "darwin":
+                runner.get_output(["sudo", "killall", "-HUP", "mDNSResponder"])
+            raise
+
+    start = time()
+    while time() - start < 10:
+        try:
+            get_hellotelepresence()
+            sleep(1)  # just in case there's more to startup
+            break
+        except CalledProcessError:
+            sleep(0.1)
+        else:
+            sleep(0.1)
+    get_hellotelepresence()
+
+
+def docker_runify(args):
+    """Prepend 'docker run' to a list of arguments."""
+    args = ['docker', 'run'] + args
+    if SUDO_FOR_DOCKER:
+        return ["sudo"] + args
+    else:
+        return args
+
+
+def make_docker_kill(runner, name):
+    """Return a function that will kill a named docker container."""
+
+    def kill():
+        sudo = ["sudo"] if SUDO_FOR_DOCKER else []
+        runner.check_call(sudo + ["docker", "stop", "--time=1", name])
+
+    return kill
+
+
+def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
+    """Connect using sshuttle running in a Docker container."""
+    # Start the sshuttle container:
+    name = random_name()
+    config = {
+        "port":
+        ssh.port,
+        "cidrs":
+        get_proxy_cidrs(
+            runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
+        ),
+        "expose_ports":
+        args.expose,
+    }
+    if sys.platform == "darwin":
+        config["ip"] = MAC_LOOPBACK_IP
+    # Image already has tini init so doesn't need --init option:
+    subprocesses.append(
+        runner.popen(
+            docker_runify([
+                "--rm", "--privileged", "--name=" + name,
+                TELEPRESENCE_LOCAL_IMAGE, "proxy", json.dumps(config)
+            ])
+        ), make_docker_kill(runner, name)
+    )
+    # Write out env file:
+    with NamedTemporaryFile("w", delete=False) as envfile:
+        for key, value in env.items():
+            envfile.write("{}={}\n".format(key, value))
+    atexit.register(os.remove, envfile.name)
+
+    # Wait for sshuttle to be running:
+    while True:
+        try:
+            runner.check_call(
+                docker_runify([
+                    "--network=container:" + name, "--rm",
+                    TELEPRESENCE_LOCAL_IMAGE, "wait"
+                ])
+            )
+        except CalledProcessError as e:
+            if e.returncode == 100:
+                # We're good!
+                return name, envfile.name
+            elif e.returncode == 125:
+                # Docker failure, probably due to original container not
+                # starting yet... so sleep and try again:
+                sleep(1)
+                continue
+            else:
+                raise
+        else:
+            raise RuntimeError(
+                "Waiting container exited prematurely. File a bug, please!"
+            )
+
+
+def setup_torsocks(runner, env, socks_port):
+    """Setup environment variables to make torsocks work correctly."""
     # Create custom torsocks.conf, since some options we want (in particular,
     # port) aren't accessible via env variables in older versions of torconf:
     with NamedTemporaryFile(mode="w+", delete=False) as tor_conffile:
         tor_conffile.write(TORSOCKS_CONFIG.format(socks_port))
+    atexit.register(os.remove, tor_conffile.name)
     env["TORSOCKS_CONF_FILE"] = tor_conffile.name
     if runner.logfile is not sys.stdout:
         env["TORSOCKS_LOG_FILE_PATH"] = runner.logfile.name
+    if sys.platform == "darwin":
+        env["PATH"] = sip_workaround()
+
+
+def run_local_command(
+    runner, remote_info, args, env_overrides, subprocesses, socks_port, ssh
+):
+    """--run-shell/--run support, run command locally."""
+    env = os.environ.copy()
+    env.update(env_overrides)
+
     # Don't use runner.popen() since we want to give program access to current
     # stdout and stderr if it wants it.
     env["PROMPT_COMMAND"] = (
         'PS1="@{}|$PS1";unset PROMPT_COMMAND'.format(args.context)
     )
-    if sys.platform == "darwin" and args.method == "inject-tcp":
-        env["PATH"] = sip_workaround()
+
     # Inject replacements for unsupported tools like ping:
     env["PATH"] = get_unsupported_tools(args.method != "inject-tcp"
                                         ) + ":" + env["PATH"]
-    mount_dir, mounted = mount_remote_volumes(runner, remote_info, ssh_port)
+
+    # Mount remote filesystem. We allow all users if we're using Docker because
+    # we don't know what uid the Docker container will use:
+    mount_dir, mounted = mount_remote_volumes(
+        runner, remote_info, ssh, args.method == "container"
+    )
     env["TELEPRESENCE_ROOT"] = mount_dir
+
     # Make sure we use "bash", no "/bin/bash", so we get the copied version on
     # OS X:
     if args.run is None:
@@ -1196,85 +1460,52 @@ def run_local_command(
     else:
         command = args.run
     if args.method == "inject-tcp":
+        setup_torsocks(runner, env, socks_port)
         p = Popen(["torsocks"] + command, env=env)
     elif args.method == "vpn-tcp":
-        # Make sure we have sudo credentials by doing a small sudo in advance
-        # of sshuttle using it:
-        Popen(["sudo", "true"]).wait()
-        sshuttle_method = "auto"
-        if sys.platform.startswith("linux"):
-            # sshuttle tproxy mode seems to have issues:
-            sshuttle_method = "nat"
-        subprocesses.append(
-            runner.popen([
-                "sshuttle-telepresence",
-                "-v",
-                "--dns",
-                "--method",
-                sshuttle_method,
-                "-e",
-                (
-                    "ssh -oStrictHostKeyChecking=no " +
-                    "-oUserKnownHostsFile=/dev/null"
-                ),
-                "-r",
-                "telepresence@localhost:" + str(ssh_port),
-            ] + get_proxy_cidrs(
-                runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
-            ))
-        )
-
-        # sshuttle will take a while to startup. We can detect it being up when
-        # DNS resolution of services starts working. We use a specific single
-        # segment so any search/domain statements in resolv.conf are applied,
-        # which then allows the DNS proxy to detect the suffix domain and
-        # filter it out.
-        def get_hellotelepresence():
-            # On Macs I suspect there is per-process caching and OS-level
-            # caching, so clear out caches by having separate process calls and
-            # explicit caching:
-            try:
-                runner.get_output([
-                    "python3", "-c",
-                    "import socket; socket.gethostbyname('hellotelepresence')"
-                ])
-            except CalledProcessError:
-                if sys.platform == "darwin":
-                    runner.get_output([
-                        "sudo", "killall", "-HUP", "mDNSResponder"
-                    ])
-                raise
-
-        start = time()
-        while time() - start < 10:
-            try:
-                get_hellotelepresence()
-                sleep(1)  # just in case there's more to startup
-                break
-            except CalledProcessError:
-                sleep(0.1)
-            else:
-                sleep(0.1)
-        get_hellotelepresence()
+        connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh)
         p = Popen(command, env=env)
+    elif args.method == "container":
+        proxy_container_name, envfile_path = connect_docker(
+            runner, remote_info, args, subprocesses, env, ssh
+        )
+        container_name = random_name()
+        docker_command = docker_runify([
+            "--volume={}:{}".format(
+                env["TELEPRESENCE_ROOT"], env["TELEPRESENCE_ROOT"]
+            ),
+            "--name=" + container_name,
+            "--network=container:" + proxy_container_name,
+            "--env-file",
+            envfile_path,
+        ])
+        # Older versions of Docker don't have --init:
+        if "--init" in runner.get_output(["docker", "run", "--help"]):
+            docker_command += ["--init"]
+        docker_command += args.docker_run
+        p = Popen(docker_command, env=env)
     else:
         raise RuntimeError(
             "GADZOOKS, A BUG: unknown proxying method " + args.method
         )
 
     def terminate_if_alive():
-        runner.write("Shutting down local shell...\n")
-        os.remove(tor_conffile.name)
+        runner.write("Shutting down local process...\n")
         if p.poll() is None:
-            runner.write("Killing local shell...\n")
-            p.terminate()
-            p.wait()
+            runner.write("Killing local process...\n")
+            if args.method == "container":
+                make_docker_kill(runner, container_name)()
+            else:
+                kill_process(p)
+
         if mounted:
             if sys.platform.startswith("linux"):
-                runner.get_output(["fusermount", "-u", mount_dir])
+                try:
+                    runner.check_call(["fusermount", "-z", "-u", mount_dir])
+                except CalledProcessError:
+                    pass
             else:
-                runner.get_output(["umount", mount_dir])
-        os.rmdir(mount_dir)
+                runner.get_output(["umount", "-f", mount_dir])
 
     atexit.register(terminate_if_alive)
     wait_for_exit(runner, p, subprocesses)
@@ -1473,15 +1704,17 @@ def main():
             runner, "torsocks", "Please install torsocks (v2.1 or later)"
         )
         require_command(runner, "sshfs")
-        subprocesses, env, socks_port, ssh_port, remote_info = start_proxy(
+        subprocesses, env, socks_port, ssh, remote_info = start_proxy(
             runner, args
         )
         run_local_command(
-            runner, remote_info, args, env, subprocesses, socks_port, ssh_port
+            runner, remote_info, args, env, subprocesses, socks_port, ssh
         )
 
     go()
 
 
 if __name__ == '__main__':
+    if sys.version_info[:2] < (3, 5):
+        raise SystemExit("Telepresence requires Python 3.5 or later.")
     main()

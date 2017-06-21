@@ -3,13 +3,14 @@ End-to-end tests for running directly in the operating system.
 """
 
 import json
-from unittest import TestCase, skipIf
+from unittest import TestCase, skipIf, skipUnless
 from subprocess import (
     check_output,
     Popen,
     PIPE,
     CalledProcessError,
     check_call,
+    run,
 )
 import time
 import os
@@ -25,7 +26,8 @@ from .utils import (
 )
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
-TELEPRESENCE_METHOD = os.environ["TELEPRESENCE_METHOD"]  # inject-tcp/vpn-tcp
+# inject-tcp/vpn-tcp/container:
+TELEPRESENCE_METHOD = os.environ["TELEPRESENCE_METHOD"]
 
 EXISTING_DEPLOYMENT = """\
 metadata:
@@ -109,9 +111,32 @@ def run_script_test(telepresence_args, local_command):
     return p.wait()
 
 
-class EndToEndTests(TestCase):
+def assert_fromcluster(namespace, url, port):
+    """Assert that there's a webserver accessible from the cluster."""
+    for i in range(120):
+        try:
+            result = check_output([
+                'kubectl', 'run', '--attach', random_name(), "--quiet", '--rm',
+                '--image=alpine', '--restart', 'Never', "--namespace",
+                namespace, '--command', '--', '/bin/sh', '-c',
+                "apk add --no-cache --quiet curl && " +
+                "curl --silent --max-time 3 " +
+                "http://{}:{}/__init__.py".format(url, port)
+            ])
+            assert result == (DIRECTORY / "__init__.py").read_bytes()
+            print("Hooray, got expected result when querying via cluster.")
+            return
+        except CalledProcessError as e:
+            print("curl failed, retrying ({})".format(e))
+            time.sleep(1)
+            continue
+    raise RuntimeError("failed to connect to local HTTP server")
+
+
+@skipIf(TELEPRESENCE_METHOD == "container", "non-Docker tests")
+class NativeEndToEndTests(TestCase):
     """
-    End-to-end tests.
+    End-to-end tests on the native machine.
     """
 
     def test_run_directly(self):
@@ -216,24 +241,7 @@ class EndToEndTests(TestCase):
             p.wait()
 
         self.addCleanup(cleanup)
-
-        for i in range(120):
-            try:
-                result = check_output([
-                    'kubectl', 'run', '--attach', random_name(), "--quiet",
-                    '--rm', '--image=alpine', '--restart', 'Never',
-                    "--namespace", namespace, '--command', '--', '/bin/sh',
-                    '-c', "apk add --no-cache --quiet curl && " +
-                    "curl --silent --max-time 3 " +
-                    "http://{}:{}/__init__.py".format(url, port)
-                ])
-                assert result == (DIRECTORY / "__init__.py").read_bytes()
-                return
-            except CalledProcessError as e:
-                print("curl failed, retrying ({})".format(e))
-                time.sleep(1)
-                continue
-        raise RuntimeError("failed to connect to local HTTP server")
+        assert_fromcluster(namespace, url, port)
 
     def test_fromcluster(self):
         """
@@ -430,9 +438,9 @@ class EndToEndTests(TestCase):
         p = Popen(
             args=[
                 "telepresence", "--swap-deployment", name, "--logfile", "-",
-                "--method", TELEPRESENCE_METHOD,
-                "--run", "python3", "tocluster.py", webserver_name,
-                current_namespace(), "HELLO=there"
+                "--method", TELEPRESENCE_METHOD, "--run", "python3",
+                "tocluster.py", webserver_name, current_namespace(),
+                "HELLO=there"
             ],
             cwd=str(DIRECTORY),
         )
@@ -504,11 +512,93 @@ class EndToEndTests(TestCase):
         p = Popen(
             args=[
                 "telepresence", "--swap-deployment",
-                "{}:{}".format(name, container_name), "--logfile", "-",
-                "--method", TELEPRESENCE_METHOD,
-                "--run", "python3", "volumes.py"
+                "{}:{}".format(name,
+                               container_name), "--logfile", "-", "--method",
+                TELEPRESENCE_METHOD, "--run", "python3", "volumes.py"
             ],
             cwd=str(DIRECTORY),
         )
         exit_code = p.wait()
         assert 113 == exit_code
+
+
+@skipUnless(TELEPRESENCE_METHOD == "container", "requires Docker")
+class DockerEndToEndTests(TestCase):
+    """End-to-end tests on Docker."""
+
+    def get_containers(self):
+        return set(check_output(["sudo", "docker", "ps", "-q"]).split())
+
+    def setUp(self):
+        self.containers = self.get_containers()
+
+    def tearDown(self):
+        # Ensure no container leaks
+        time.sleep(1)
+        assert self.containers == self.get_containers()
+
+    def test_tocluster(self):
+        """
+        Tests of communication to the cluster from a Docker container.
+        """
+        webserver_name = run_webserver()
+        result = run([
+            "telepresence",
+            "--logfile",
+            "-",
+            "--method",
+            "container",
+            "--new-deployment",
+            random_name(),
+            "--docker-run",
+            "-v",
+            "{}:/host".format(DIRECTORY),
+            "python:3-alpine",
+            "python3",
+            "/host/tocluster.py",
+            webserver_name,
+            current_namespace(),
+        ])
+        assert result.returncode == 113
+
+    def test_fromcluster(self):
+        """
+        The cluster can talk to a process running in a Docker container.
+        """
+        service_name = random_name()
+        port = 12350
+        p = Popen(
+            args=[
+                "telepresence", "--new-deployment", service_name, "--expose",
+                str(port), "--logfile", "-", "--method", "container",
+                "--docker-run", "-v",
+                "{}:/host".format(DIRECTORY), "--workdir", "/host",
+                "python:3-alpine", "python3",
+                "-m", "http.server", str(port)
+            ],
+        )
+
+        assert_fromcluster(current_namespace(), service_name, port)
+        p.terminate()
+        p.wait()
+
+    def test_volumes(self):
+        """
+        Test availability of volumes in the container.
+        """
+        result = run([
+            "telepresence",
+            "--logfile",
+            "-",
+            "--method",
+            "container",
+            "--new-deployment",
+            random_name(),
+            "--docker-run",
+            "-v",
+            "{}:/host".format(DIRECTORY),
+            "python:3-alpine",
+            "python3",
+            "/host/volumes_simpler.py",
+        ])
+        assert result.returncode == 113

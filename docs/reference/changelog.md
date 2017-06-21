@@ -5,6 +5,14 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.52 (unreleased)
+
+Features:
+
+* Telepresence can now be used to proxy Docker containers, by using `--method container` together with `--docker-run`.
+  Thanks to Iván Montes for the feature request and initial testing.
+  ([#175](https://github.com/datawire/telepresence/issues/175))
+
 #### 0.51 (June 13, 2017)
 
 Bug fixes:

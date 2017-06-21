@@ -1,4 +1,4 @@
-.PHONY: default build-remote bumpversion release minikube-test build-remote-minikube
+.PHONY: default build-k8s-proxy bumpversion release minikube-test build-k8s-proxy-minikube
 
 VERSION=$(shell git describe --tags)
 SHELL:=/bin/bash
@@ -15,7 +15,7 @@ version:
 virtualenv:
 	virtualenv --python=python3 virtualenv
 	virtualenv/bin/pip install -r dev-requirements.txt
-	virtualenv/bin/pip install -r remote/requirements.txt
+	virtualenv/bin/pip install -r k8s-proxy/requirements.txt
 
 virtualenv/bin/sshuttle-telepresence: virtualenv
 	source virtualenv/bin/activate && packaging/build-sshuttle.py
@@ -23,14 +23,20 @@ virtualenv/bin/sshuttle-telepresence: virtualenv
 
 ## Development ##
 
-# Build Docker image inside local Docker:
-build-remote:
-	cd remote && sudo docker build . -t datawire/telepresence-k8s:$(VERSION)
+# Build Kubernetes side proxy image inside local Docker:
+build-k8s-proxy:
+	cd k8s-proxy && sudo docker build . -t datawire/telepresence-k8s:$(VERSION)
+
+build-local:
+	cp -f virtualenv/bin/sshuttle-telepresence local-docker
+	cp -f cli/telepresence local-docker/telepresence.py
+	cd local-docker && sudo docker build . -t datawire/telepresence-local:$(VERSION)
+	rm -f local-docker/sshuttle-telepresence local-docker/telepresence.py
 
 # Build Docker image inside minikube Docker:
-build-remote-minikube:
+build-k8s-proxy-minikube:
 	eval $(shell minikube docker-env) && \
-		cd remote && \
+		cd k8s-proxy && \
 		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
 
 run-minikube:
@@ -38,11 +44,14 @@ run-minikube:
 		env TELEPRESENCE_VERSION=$(VERSION) cli/telepresence --method=inject-tcp --new-deployment test --run-shell
 
 # Run tests in minikube:
-minikube-test: virtualenv build-remote-minikube
+minikube-test: virtualenv build-k8s-proxy-minikube build-local
 	@echo "IMPORTANT: this will change kubectl context to minikube!\n\n"
 	kubectl config use-context minikube
+	TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_METHOD=container ci/test.sh
 	source virtualenv/bin/activate && \
 		env TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_METHOD=inject-tcp ci/test.sh
+	# there's also TELEPRESENCE_METHOD=vpn-tcp, but that doesn't work with
+	# minikube at the moment, unfortunately, so we only run it on Travis.
 
 # Run tests relevant to OpenShift:
 openshift-tests: virtualenv
@@ -57,8 +66,9 @@ bumpversion: virtualenv
 	@echo "Please run: git push origin master --tags"
 
 # Will be run in Travis CI on tagged commits
-release: build-remote virtualenv/bin/sshuttle-telepresence
+release: build-k8s-proxy build-local virtualenv/bin/sshuttle-telepresence
 	sudo docker push datawire/telepresence-k8s:$(VERSION)
+	sudo docker push datawire/telepresence-local:$(VERSION)
 	env TELEPRESENCE_VERSION=$(VERSION) packaging/homebrew-package.sh
 	packaging/create-linux-packages.py $(VERSION)
 	packaging/upload-linux-packages.py $(VERSION)
