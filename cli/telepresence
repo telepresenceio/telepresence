@@ -1492,10 +1492,12 @@ def run_local_command(
 
         if mounted:
             if sys.platform.startswith("linux"):
-                runner.get_output(["fusermount", "-u", mount_dir])
+                try:
+                    runner.check_call(["fusermount", "-z", "-u", mount_dir])
+                except CalledProcessError:
+                    pass
             else:
-                runner.get_output(["umount", mount_dir])
-        os.rmdir(mount_dir)
+                runner.get_output(["umount", "-f", mount_dir])
 
     atexit.register(terminate_if_alive)
     wait_for_exit(runner, p, subprocesses)
