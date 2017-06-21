@@ -51,13 +51,13 @@ before_install:
   - ./ci/build-torsocks.sh
 
 install:
+  - make virtualenv
+  - make virtualenv/bin/sshuttle-telepresence
   # Push Docker images to Google Container Registry; on OS X we don't bother, we
   # just hope that the parallel Linux job finished building and pushing first...
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./ci/push-images.sh; fi
 
 script:
-  - make virtualenv
-  - make virtualenv/bin/sshuttle-telepresence
   - mkdir ~/tpbin
   - cp virtualenv/bin/sshuttle-telepresence ~/tpbin/
   - export TELEPRESENCE_VERSION=$(make version)
