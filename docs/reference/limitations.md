@@ -13,8 +13,8 @@ For method-specific limitations see the documentation on the [available proxying
 
 #### Docker containers
 
-A container run via `docker run` will not inherit the outgoing functionality of the Telepresence shell.
-If you want to use Telepresence to proxy a containerized application you should install and run Telepresence inside the container itself.
+When using `--method vpn-tcp` or `--method inject-tcp` a container run via `docker run` will not inherit the outgoing functionality of the Telepresence shell.
+If you want to use Telepresence to proxy a containerized application you should use [`--method container`](docker.html).
 
 #### `localhost` and the pod
 
