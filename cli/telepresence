@@ -1605,13 +1605,7 @@ def main():
 
     signal.signal(signal.SIGTERM, shutdown)
 
-    try:
-        args = parse_args()
-    except SystemExit as e:
-        if sys.stdin.isatty() and e.code == 0 and sys.argv[1:] in (["-h"],
-                                                                   ["--help"]):
-            ask_for_feedback()
-        raise
+    args = parse_args()
 
     @handle_unexpected_errors(args.logfile)
     def go():
