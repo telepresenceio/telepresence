@@ -5,6 +5,13 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.53 (unreleased)
+
+Bug fixes:
+
+* Fix regression where tools like `ping` weren't hidden on Mac in `inject-tcp` method.
+  ([#187](https://github.com/datawire/telepresence/issues/187))
+
 #### 0.52 (June 21, 2017)
 
 Features:

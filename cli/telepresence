@@ -1074,17 +1074,21 @@ TorPort {}
 """
 
 
-def sip_workaround():
+def sip_workaround(existing_paths, unsupported_tools_path):
     """
     Workaround System Integrity Protection.
 
     Newer OS X don't allow injecting libraries into binaries in /bin, /sbin and
     /usr. We therefore make a copy of them and modify $PATH to point at their
     new location. It's only ~100MB so this should be pretty fast!
+
+    :param existing_paths: Current $PATH.
+    :param unsupported_tools_path: Path where we have custom versions of ping
+        etc. Needs to be first in list so that we override system versions.
     """
     protected = {"/bin", "/sbin", "/usr/sbin", "/usr/bin"}
     # Remove protected paths from $PATH:
-    paths = [p for p in os.environ["PATH"].split(":") if p not in protected]
+    paths = [p for p in existing_paths.split(":") if p not in protected]
     # Add temp dir
     bin_dir = mkdtemp()
     paths.insert(0, bin_dir)
@@ -1096,6 +1100,7 @@ def sip_workaround():
             except IOError:
                 continue
             os.chmod(os.path.join(bin_dir, file), 0o775)
+    paths = [unsupported_tools_path] + paths
     # Return new $PATH
     return ":".join(paths)
 
@@ -1412,7 +1417,7 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
             )
 
 
-def setup_torsocks(runner, env, socks_port):
+def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
     """Setup environment variables to make torsocks work correctly."""
     # Create custom torsocks.conf, since some options we want (in particular,
     # port) aren't accessible via env variables in older versions of torconf:
@@ -1423,7 +1428,7 @@ def setup_torsocks(runner, env, socks_port):
     if runner.logfile is not sys.stdout:
         env["TORSOCKS_LOG_FILE_PATH"] = runner.logfile.name
     if sys.platform == "darwin":
-        env["PATH"] = sip_workaround()
+        env["PATH"] = sip_workaround(env["PATH"], unsupported_tools_path)
 
 
 def run_local_command(
@@ -1440,8 +1445,8 @@ def run_local_command(
     )
 
     # Inject replacements for unsupported tools like ping:
-    env["PATH"] = get_unsupported_tools(args.method != "inject-tcp"
-                                        ) + ":" + env["PATH"]
+    unsupported_tools_path = get_unsupported_tools(args.method != "inject-tcp")
+    env["PATH"] = unsupported_tools_path + ":" + env["PATH"]
 
     # Mount remote filesystem. We allow all users if we're using Docker because
     # we don't know what uid the Docker container will use:
@@ -1460,7 +1465,7 @@ def run_local_command(
     else:
         command = args.run
     if args.method == "inject-tcp":
-        setup_torsocks(runner, env, socks_port)
+        setup_torsocks(runner, env, socks_port, unsupported_tools_path)
         p = Popen(["torsocks"] + command, env=env)
     elif args.method == "vpn-tcp":
         connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh)
