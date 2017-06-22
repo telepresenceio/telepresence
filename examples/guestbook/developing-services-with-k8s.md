@@ -1,3 +1,11 @@
+---
+title: Locally developing microservices with Google Container Engine
+description: Learn how to set up a dev environment that lets you code/test changes locally, while connecting to other services running in Google Container Engine.
+author: richarddli
+tags: microservices, Container Engine, telepresence, PHP, Redis
+date_published: 2017-04-05
+---
+
 # Locally developing microservices with Google Container Engine
 
 The [guestbook](https://cloud.google.com/container-engine/docs/tutorials/guestbook) tutorial for Kubernetes shows how to get a simple PHP and Redis application running in Kubernetes, but doesn't explain how you can actually *change* the code. We'll show you how to set up a fast, productive development environment for coding on Kubernetes. In particular, we'll show how you can make changes locally on your laptop, and see those changes reflected instantly on your externally exposed IP.
@@ -28,16 +36,16 @@ In this tutorial, we're going to use the [Guestbook](https://cloud.google.com/co
 
 To set up your laptop, you'll need to install a few basic components.
 
-We're going to want to install the `gcloud` and `kubectl` command line tools. Follow the instructions at https://cloud.google.com/sdk/downloads to download and install the Cloud SDK. Then, insure `kubectl` is installed:
+First, install the `gcloud` and `kubectl` command line tools. Follow the instructions at [https://cloud.google.com/sdk/downloads](https://cloud.google.com/sdk/downloads) to download and install the Cloud SDK. Then, ensure `kubectl` is installed:
 
 ```
 % sudo gcloud components update kubectl
 ```
 
-We need to install Telepresence, which will proxy your locally running service to GKE.
+We need to install Telepresence, which will proxy your locally running service to Container Engine (for the latest install instructions and version, visit [the website](http://www.telepresence.io)).
 
 ```
-% curl -L https://github.com/datawire/telepresence/raw/0.52/cli/telepresence -o telepresence
+% curl -L https://github.com/datawire/telepresence/raw/0.26/cli/telepresence -o telepresence
 % chmod +x telepresence
 ```
 
@@ -81,7 +89,7 @@ All example files are in the [`examples/guestbook`](https://github.com/datawire/
 
 Setting up a production-ready Kubernetes cluster can be fairly complex, so we're going to use Google Container Engine in our example. If you already have a Kubernetes cluster handy, you can skip this section.
 
-To set up a Kubernetes cluster in GKE, go to https://console.cloud.google.com, choose the Google Container Engine option from the menu, and then Create a Cluster.
+To set up a Kubernetes cluster in Container Engine, go to [https://console.cloud.google.com](https://console.cloud.google.com), choose the Google Container Engine option from the menu, and then Create a Cluster.
 
 The following gcloud command will create a small 2 node cluster in the us-central1-a region:
 
@@ -136,16 +144,16 @@ Next, we need to deploy an externally visible load balancer. The [`frontend-serv
 Now, we're going to start the local Telepresence client, which will spawn a special shell which connects to the proxy in the remote Kubernetes cluster.
 
 ```
-% telepresence --method inject-tcp --deployment telepresence-deployment --expose 8080 --run-shell
+% telepresence --deployment telepresence-deployment --expose 8080 --run-shell
 ```
 
-In this special shell, change to the `examples/guestbook` directory, and start the frontend application as follows. We'll need to know the directory where Predis is installed. You can figure this out by typing:
+In this special shell, change to the `examples/guestbook` directory, and start the frontend application as follows. We'll need to know the directory where PHP can load its dependencies, e.g., Predis. You can figure this out by typing:
 
 ```
 % pear config-get php_dir
 ```
 
-Now, in the `examples/guestbook` directory, start PHP:
+Now, in the `examples/guestbook` directory, start PHP, and pass in the pear shared directory:
 
 ```
 % php -d include_path="PATH_TO_PEAR_DIR" -S 0.0.0.0:8080
