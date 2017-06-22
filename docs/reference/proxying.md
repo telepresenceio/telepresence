@@ -16,6 +16,9 @@ $ telepresence --expose 8080 --new-deployment example \
     --run python3 -m http.server 8080
 ```
 
+Note that you can't expose ports <1024 on clusters that don't support running images as `root`.
+This limitation is the default on OpenShift.
+
 ### Networking access to the cluster
 
 The locally running process wrapped by `telepresence` has access to everything that a normal Kubernetes pod would have access to.
