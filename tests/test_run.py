@@ -11,6 +11,7 @@ from subprocess import (
     CalledProcessError,
     check_call,
     run,
+    STDOUT
 )
 import time
 import os
@@ -224,18 +225,22 @@ class NativeEndToEndTests(TestCase):
             "-",
             "--method",
             TELEPRESENCE_METHOD,
-            "--run-shell",
+            "--run",
+            "python3",
+            "-m",
+            "http.server",
+            str(port)
         ]
         if port < 1024:
-            args = ["sudo"] + args
-        p = Popen(args=args, stdin=PIPE, stderr=PIPE, cwd=str(DIRECTORY))
-        p.stdin.write(("exec python3 -m http.server %s\n" %
-                       (port, )).encode("ascii"))
-        p.stdin.flush()
+            args[0] = "../cli/telepresence"
+            args = ["sudo", "-E"] + args
+        p = Popen(args=args, stderr=STDOUT, cwd=str(DIRECTORY))
 
         def cleanup():
-            p.stdin.close()
-            p.terminate()
+            if port < 1024:
+                check_call(["sudo", "setsid", "kill", str(p.pid)])
+            else:
+                p.terminate()
             p.wait()
 
         self.addCleanup(cleanup)
@@ -291,6 +296,8 @@ class NativeEndToEndTests(TestCase):
             KUBECTL,
             "run",
             service_name,
+            "--port=79",
+            "--expose",
             "--restart=Always",
             "--image=openshift/hello-openshift",
             "--replicas=2",
