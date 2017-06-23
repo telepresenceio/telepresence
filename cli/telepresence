@@ -877,14 +877,14 @@ def create_new_deployment(runner, args):
         command.append("--port={}".format(port))
     if args.expose:
         command.append("--expose")
-    if args.needs_net_bind_cap:
+    if args.needs_root:
         override = {
             "apiVersion": "extensions/v1beta1",
             "spec": {
                 "template": {
                     "spec": {
                         "securityContext": {
-                            "runAsUser": 0
+                           "runAsUser": 0
                         }
                     }
                 }
@@ -942,14 +942,10 @@ def swap_deployment(runner, args):
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
             container["imagePullPolicy"] = "IfNotPresent"
-            if args.needs_net_bind_cap:
-                print("NEED BIND CAP")
+            if args.needs_root:
                 container["securityContext"] = {
                     "runAsUser": 0,
-                    # "capabilities": {"add": ["NET_BIND_SERVICE"]}
                 }
-            with open("/tmp/out", "w") as f:
-                f.write(json.dumps(new_deployment_json))
             apply_json(new_deployment_json)
             return deployment_name, run_id
 
@@ -1691,15 +1687,12 @@ def main():
 
         # Figure out if we need capability that allows for ports < 1024:
         if any([p < 1024 for p in args.expose]):
-            print("NEED NET BIND CAPP")
             if runner.kubectl_cmd == "oc":
                 # OpenShift doesn't support running as root:
-                # XXX VERIFY, maybe supports the cap
                 raise SystemExit("OpenShift does not support ports <1024.")
-            args.needs_net_bind_cap = True
+            args.needs_root = True
         else:
-            print("DO NOOOOOOOOT NEED NET BIND CAPP")
-            args.needs_net_bind_cap = False
+            args.needs_root = False
 
         # minikube breaks DNS because DNS gets captured, sent to minikube,
         # which sends it back to DNS server set by host, resulting in loop...
