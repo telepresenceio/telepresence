@@ -42,30 +42,27 @@ First, install the `gcloud` and `kubectl` command line tools. Follow the instruc
 % sudo gcloud components update kubectl
 ```
 
-We need to install Telepresence, which will proxy your locally running service to Container Engine (for the latest install instructions and version, visit [the website](http://www.telepresence.io)).
+We need to install Telepresence, which will proxy your locally running service to Container Engine (for the latest installation instructions and documentation, visit [the Telepresence website](http://www.telepresence.io)).
+
+On OS X:
 
 ```
-% curl -L https://github.com/datawire/telepresence/raw/0.26/cli/telepresence -o telepresence
-% chmod +x telepresence
+brew cask install osxfuse
+brew install datawire/blackbird/telepresence
 ```
 
-Move telepresence to somewhere on your $PATH, e.g.,:
+On Ubuntu (16.04 or later):
 
 ```
-% mv telepresence /usr/local/bin
+curl -s https://packagecloud.io/install/repositories/datawireio/telepresence/script.deb.sh | sudo bash
+sudo apt install --no-install-recommends telepresence
 ```
 
-
-You'll also need to install `torsocks`. On Mac OS X:
-
-```
-% brew install torsocks
-```
-
-Or, if you're on Ubuntu:
+On Fedora (25 or later):
 
 ```
-% sudo apt install --no-install-recommends torsocks
+curl -s https://packagecloud.io/install/repositories/datawireio/telepresence/script.rpm.sh | sudo bash
+sudo dnf install telepresence
 ```
 
 We'll also need to configure a local development environment for PHP. The Guestbook application is fairly simple, but it does depend on the Predis library. We'll need to install the [PEAR package manager](https://pear.php.net/manual/en/installation.getting.php), and then install the Predis library.
