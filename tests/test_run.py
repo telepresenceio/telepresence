@@ -13,7 +13,6 @@ from subprocess import (
     run,
     STDOUT,
 )
-from shutil import which
 import time
 import os
 
@@ -232,10 +231,11 @@ class NativeEndToEndTests(TestCase):
         ]
         if port < 1024:
             # sudo sometimes causes different Python version to be used, due to
-            # different PATH. So make sure we use the same Python.
-            python3 = which("python3")
+            # different PATH. So make sure we use the same PATH.
             args[0] = "../cli/telepresence"
-            args = ["sudo", "-E", python3] + args
+            args = [
+                "sudo", "-E", "env", "PATH='{}'".format(os.environ["PATH"])
+            ] + args
         p = Popen(args=args, stdin=PIPE, stderr=STDOUT, cwd=str(DIRECTORY))
         p.stdin.write(("sleep 1; exec python3 -m http.server %s\n" %
                        (port, )).encode("ascii"))
