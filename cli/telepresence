@@ -340,13 +340,16 @@ def parse_args():
     )
     parser.add_argument(
         "--expose",
-        type=int,
         action='append',
+        metavar="PORT[:REMOTE_PORT]",
         default=[],
         help=(
-            "Local port number that will be exposed to Kubernetes. Should"
-            " match port exposed in the existing Deployment if using "
-            "--deployment or --swap-deployment."
+            "Port number that will be exposed to Kubernetes in the Deployment."
+            " Should match port exposed in the existing Deployment if using "
+            "--deployment or --swap-deployment. By default local port and "
+            "remote port are the same; if you want to listen on port 8080 "
+            "locally but be exposed as port 80 in Kubernetes you can do "
+            "'--expose 8080:80'."
         )
     )
     parser.add_argument(
@@ -402,6 +405,14 @@ def parse_args():
         raise SystemExit(
             "'--method container' is required when using '--docker-run'."
         )
+    new_expose = {}
+    for port_string in args.expose:
+        if ":" in port_string:
+            local_port, remote_port = map(int, port_string.split(":"))
+        else:
+            local_port, remote_port = int(port_string), int(port_string)
+        new_expose[local_port] = remote_port
+    args.expose = new_expose
     return args
 
 
@@ -768,11 +779,16 @@ def wait_for_pod(runner, remote_info):
 
 
 def expose_local_services(processes, ssh, port_numbers):
-    """Create SSH tunnels from remote proxy pod to local host."""
-    for port_number in port_numbers:
+    """Create SSH tunnels from remote proxy pod to local host.
+
+    :param processes: A `Subprocesses` instance.
+    :param ssh: A 'SSH` instance.
+    :param port_numbers: Mapping from local port to remote port.
+    """
+    for local_port, remote_port in port_numbers.items():
         processes.append(
             ssh.
-            popen(["-R", "*:{}:127.0.0.1:{}".format(port_number, port_number)])
+            popen(["-R", "*:{}:127.0.0.1:{}".format(remote_port, local_port)])
         )
 
 
@@ -873,7 +889,7 @@ def create_new_deployment(runner, args):
         "--image=" + TELEPRESENCE_REMOTE_IMAGE,
         "--labels=telepresence=" + run_id,
     ]
-    for port in args.expose:
+    for port in args.expose.values():
         command.append("--port={}".format(port))
     if args.expose:
         command.append("--expose")
@@ -1672,7 +1688,7 @@ def main():
         )
 
         # Figure out if we need capability that allows for ports < 1024:
-        if any([p < 1024 for p in args.expose]):
+        if any([p < 1024 for p in args.expose.values()]):
             if runner.kubectl_cmd == "oc":
                 # OpenShift doesn't support running as root:
                 raise SystemExit("OpenShift does not support ports <1024.")
