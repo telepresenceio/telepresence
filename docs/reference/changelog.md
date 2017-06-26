@@ -14,6 +14,8 @@ Features:
 
 Bug fixes:
 
+* Fix regression where exposing ports <1024 stopped working.
+  ([#194](https://github.com/datawire/telepresence/issues/194))
 * Fix regression where tools like `ping` weren't hidden on Mac in `inject-tcp` method.
   ([#187](https://github.com/datawire/telepresence/issues/187))
 

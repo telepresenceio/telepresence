@@ -26,7 +26,7 @@ $ telepresence --expose 80 --new-deployment example \
     --run python3 -m http.server 80
 ```
 
-Note that you can't expose ports <1024 on clusters that don't support running images as `root`.
+You can't expose ports <1024 on clusters that don't support running images as `root`.
 This limitation is the default on OpenShift.
 
 ### Networking access to the cluster

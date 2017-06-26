@@ -877,6 +877,20 @@ def create_new_deployment(runner, args):
         command.append("--port={}".format(port))
     if args.expose:
         command.append("--expose")
+    if args.needs_root:
+        override = {
+            "apiVersion": "extensions/v1beta1",
+            "spec": {
+                "template": {
+                    "spec": {
+                        "securityContext": {
+                           "runAsUser": 0
+                        }
+                    }
+                }
+            }
+        }
+        command.append("--overrides=" + json.dumps(override))
     runner.get_kubectl(args.context, args.namespace, command)
     return args.new_deployment, run_id
 
@@ -928,6 +942,10 @@ def swap_deployment(runner, args):
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
             container["imagePullPolicy"] = "IfNotPresent"
+            if args.needs_root:
+                container["securityContext"] = {
+                    "runAsUser": 0,
+                }
             apply_json(new_deployment_json)
             return deployment_name, run_id
 
@@ -1666,6 +1684,15 @@ def main():
             "Context: {}, namespace: {}, kubectl_command: {}\n".
             format(args.context, args.namespace, runner.kubectl_cmd)
         )
+
+        # Figure out if we need capability that allows for ports < 1024:
+        if any([p < 1024 for p in args.expose]):
+            if runner.kubectl_cmd == "oc":
+                # OpenShift doesn't support running as root:
+                raise SystemExit("OpenShift does not support ports <1024.")
+            args.needs_root = True
+        else:
+            args.needs_root = False
 
         # minikube breaks DNS because DNS gets captured, sent to minikube,
         # which sends it back to DNS server set by host, resulting in loop...
