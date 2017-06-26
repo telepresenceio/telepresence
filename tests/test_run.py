@@ -213,44 +213,44 @@ class NativeEndToEndTests(TestCase):
         OPENSHIFT, "OpenShift doesn't allow root, which the tests need "
         "(at the moment, this is fixable)"
     )
-    def fromcluster(self, telepresence_args, url, namespace, port):
+    def fromcluster(
+        self, telepresence_args, url, namespace, local_port, remote_port=None
+    ):
         """
         Test of communication from the cluster.
 
         Start webserver that serves files from this directory. Run HTTP query
         against it on the Kubernetes cluster, compare to real file.
         """
+        if remote_port is None:
+            port_string = str(local_port)
+            remote_port = local_port
+        else:
+            port_string = "{}:{}".format(local_port, remote_port)
+
         args = ["telepresence"] + telepresence_args + [
             "--expose",
-            str(port),
+            port_string,
             "--logfile",
             "-",
             "--method",
             TELEPRESENCE_METHOD,
             "--run-shell",
         ]
-        if port < 1024:
-            # sudo sometimes causes different Python version to be used, due to
-            # different PATH. So make sure we use the same PATH.
-            args[0] = "../cli/telepresence"
-            args = [
-                "sudo", "-E", "env", "PATH='{}'".format(os.environ["PATH"])
-            ] + args
         p = Popen(args=args, stdin=PIPE, stderr=STDOUT, cwd=str(DIRECTORY))
-        p.stdin.write(("sleep 1; exec python3 -m http.server %s\n" %
-                       (port, )).encode("ascii"))
+        p.stdin.write(
+            ("sleep 1; exec python3 -m http.server %s\n" %
+             (local_port, )).encode("ascii")
+        )
         p.stdin.flush()
 
         def cleanup():
             p.stdin.close()
-            if port < 1024:
-                check_call(["sudo", "setsid", "kill", str(p.pid)])
-            else:
-                p.terminate()
+            p.terminate()
             p.wait()
 
         self.addCleanup(cleanup)
-        assert_fromcluster(namespace, url, port, p)
+        assert_fromcluster(namespace, url, remote_port, p)
 
     def test_fromcluster(self):
         """
@@ -308,7 +308,8 @@ class NativeEndToEndTests(TestCase):
             ["--new-deployment", service_name],
             service_name,
             current_namespace(),
-            70,  # Gopher port, unlikely to be in use!
+            12399,
+            70,
         )
 
     @skipIf(OPENSHIFT, "OpenShift never allows running containers as root.")
@@ -338,7 +339,8 @@ class NativeEndToEndTests(TestCase):
             ["--swap-deployment", service_name],
             service_name,
             current_namespace(),
-            79,  # Finger, unlikely to be in use
+            12398,
+            79,
         )
 
     def test_loopback(self):
