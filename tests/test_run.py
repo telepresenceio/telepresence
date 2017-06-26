@@ -5,13 +5,7 @@ End-to-end tests for running directly in the operating system.
 import json
 from unittest import TestCase, skipIf, skipUnless
 from subprocess import (
-    check_output,
-    Popen,
-    PIPE,
-    CalledProcessError,
-    check_call,
-    run,
-    STDOUT
+    check_output, Popen, PIPE, CalledProcessError, check_call, run, STDOUT
 )
 import time
 import os
@@ -259,6 +253,27 @@ class NativeEndToEndTests(TestCase):
             current_namespace(),
             12370,
         )
+
+    def test_fromcluster_custom_local_port(self):
+        """
+        The cluster can talk to a process running in a Docker container, with
+        the local process listening on a different port.
+        """
+        service_name = random_name()
+        remote_port = 12360
+        local_port = 12355
+        p = Popen(
+            args=[
+                "telepresence", "--new-deployment", service_name, "--expose",
+                "{}:{}".format(local_port, remote_port), "--logfile", "-",
+                "--method", TELEPRESENCE_METHOD, "--run", "python3", "-m",
+                "http.server", str(local_port)
+            ],
+            cwd=str(DIRECTORY),
+        )
+        assert_fromcluster(current_namespace(), service_name, remote_port, p)
+        p.terminate()
+        p.wait()
 
     def test_fromcluster_with_namespace(self):
         """
@@ -626,6 +641,29 @@ class DockerEndToEndTests(TestCase):
         )
 
         assert_fromcluster(current_namespace(), service_name, port, p)
+        p.terminate()
+        p.wait()
+
+    def test_fromcluster_custom_local_port(self):
+        """
+        The cluster can talk to a process running in a Docker container, with
+        the local process listening on a different port.
+        """
+        service_name = random_name()
+        remote_port = 12350
+        local_port = 7777
+        p = Popen(
+            args=[
+                "telepresence", "--new-deployment",
+                service_name, "--expose", "{}:{}".format(
+                    local_port, remote_port
+                ), "--logfile", "-", "--method", "container", "--docker-run",
+                "-v", "{}:/host".format(DIRECTORY), "--workdir", "/host",
+                "python:3-alpine", "python3", "-m", "http.server",
+                str(local_port)
+            ],
+        )
+        assert_fromcluster(current_namespace(), service_name, remote_port, p)
         p.terminate()
         p.wait()
 
