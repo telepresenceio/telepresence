@@ -22,7 +22,7 @@ It is possible to expose a different local port than the remote port.
 Here we expose port 8080 locally as port 80 on the remote Deployment:
 
 ```console
-$ telepresence --expose 80 --new-deployment example \
+$ telepresence --expose 8080:80 --new-deployment example \
     --run python3 -m http.server 80
 ```
 
