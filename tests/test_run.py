@@ -112,7 +112,7 @@ def run_script_test(telepresence_args, local_command):
     return p.wait()
 
 
-def assert_fromcluster(namespace, url, port):
+def assert_fromcluster(namespace, url, port, telepresence_process):
     """Assert that there's a webserver accessible from the cluster."""
     for i in range(120):
         try:
@@ -129,6 +129,8 @@ def assert_fromcluster(namespace, url, port):
             return
         except CalledProcessError as e:
             print("curl failed, retrying ({})".format(e))
+            if telepresence_process.poll() is not None:
+                raise RuntimeError("Telepresence exited prematurely!")
             time.sleep(1)
             continue
     raise RuntimeError("failed to connect to local HTTP server")
@@ -225,18 +227,18 @@ class NativeEndToEndTests(TestCase):
             "-",
             "--method",
             TELEPRESENCE_METHOD,
-            "--run",
-            "python3",
-            "-m",
-            "http.server",
-            str(port)
+            "--run-shell",
         ]
         if port < 1024:
             args[0] = "../cli/telepresence"
             args = ["sudo", "-E"] + args
-        p = Popen(args=args, stderr=STDOUT, cwd=str(DIRECTORY))
+        p = Popen(args=args, stdin=PIPE, stderr=STDOUT, cwd=str(DIRECTORY))
+        p.stdin.write(("sleep 1; exec python3 -m http.server %s\n" %
+                       (port, )).encode("ascii"))
+        p.stdin.flush()
 
         def cleanup():
+            p.stdin.close()
             if port < 1024:
                 check_call(["sudo", "setsid", "kill", str(p.pid)])
             else:
@@ -244,7 +246,7 @@ class NativeEndToEndTests(TestCase):
             p.wait()
 
         self.addCleanup(cleanup)
-        assert_fromcluster(namespace, url, port)
+        assert_fromcluster(namespace, url, port, p)
 
     def test_fromcluster(self):
         """
@@ -255,7 +257,7 @@ class NativeEndToEndTests(TestCase):
             ["--new-deployment", service_name],
             service_name,
             current_namespace(),
-            12349,
+            12370,
         )
 
     def test_fromcluster_with_namespace(self):
@@ -623,7 +625,7 @@ class DockerEndToEndTests(TestCase):
             ],
         )
 
-        assert_fromcluster(current_namespace(), service_name, port)
+        assert_fromcluster(current_namespace(), service_name, port, p)
         p.terminate()
         p.wait()
 
