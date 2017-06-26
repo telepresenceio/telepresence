@@ -1583,20 +1583,6 @@ def require_command(runner, command, message=None):
         raise SystemExit(1)
 
 
-FEEDBACK_QUESTION = """
-Would you like to file an issue with your question?
-We'll try to answer quickly, and then improve the documentation going forward.
-File an issue: [N/y] """
-
-
-def ask_for_feedback():
-    """Ask user if they want to provide feedback."""
-    if input(FEEDBACK_QUESTION) == "y":
-        webbrowser.open_new(
-            "https://github.com/datawire/telepresence/issues/new"
-        )
-
-
 def kubectl_or_oc(server):
     """Figure out if we're using "kubectl" or "oc"."""
     if which("oc") is None:
