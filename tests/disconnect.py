@@ -17,7 +17,7 @@ def disconnect():
         "kubectl", "exec",
         "--container=" + os.environ["TELEPRESENCE_CONTAINER"],
         os.environ["TELEPRESENCE_POD"], "--", "/bin/sh", "-c",
-        r"kill $(ps xa | grep 'sshd: ' | " +
+        r"kill $(ps xa | tail -n +2 | " +
         r"sed 's/ *\([0-9][0-9]*\).*/\1/')"
     ],
         env=env)
@@ -26,4 +26,7 @@ def disconnect():
 if __name__ == '__main__':
     disconnect()
     time.sleep(10)
-    raise SystemExit(66)  # test expects 3
+    # The test expects 3, which is how telepresence exits when one of its
+    # subprocesses dies. That is, we expect to be killed before we reach this
+    # point, if we exit with 66 that means disconnect-detection failed.
+    raise SystemExit(66)

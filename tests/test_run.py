@@ -11,6 +11,7 @@ from subprocess import (
     CalledProcessError,
     check_call,
     run,
+    STDOUT,
 )
 import time
 import os
@@ -111,7 +112,7 @@ def run_script_test(telepresence_args, local_command):
     return p.wait()
 
 
-def assert_fromcluster(namespace, url, port):
+def assert_fromcluster(namespace, url, port, telepresence_process):
     """Assert that there's a webserver accessible from the cluster."""
     for i in range(120):
         try:
@@ -128,6 +129,8 @@ def assert_fromcluster(namespace, url, port):
             return
         except CalledProcessError as e:
             print("curl failed, retrying ({})".format(e))
+            if telepresence_process.poll() is not None:
+                raise RuntimeError("Telepresence exited prematurely!")
             time.sleep(1)
             continue
     raise RuntimeError("failed to connect to local HTTP server")
@@ -217,31 +220,37 @@ class NativeEndToEndTests(TestCase):
         Start webserver that serves files from this directory. Run HTTP query
         against it on the Kubernetes cluster, compare to real file.
         """
-        p = Popen(
-            args=["telepresence"] + telepresence_args + [
-                "--expose",
-                str(port),
-                "--logfile",
-                "-",
-                "--method",
-                TELEPRESENCE_METHOD,
-                "--run-shell",
-            ],
-            stdin=PIPE,
-            stderr=PIPE,
-            cwd=str(DIRECTORY)
-        )
-        p.stdin.write(("exec python3 -m http.server %s\n" %
+        args = ["telepresence"] + telepresence_args + [
+            "--expose",
+            str(port),
+            "--logfile",
+            "-",
+            "--method",
+            TELEPRESENCE_METHOD,
+            "--run-shell",
+        ]
+        if port < 1024:
+            # sudo sometimes causes different Python version to be used, due to
+            # different PATH. So make sure we use the same PATH.
+            args[0] = "../cli/telepresence"
+            args = [
+                "sudo", "-E", "env", "PATH='{}'".format(os.environ["PATH"])
+            ] + args
+        p = Popen(args=args, stdin=PIPE, stderr=STDOUT, cwd=str(DIRECTORY))
+        p.stdin.write(("sleep 1; exec python3 -m http.server %s\n" %
                        (port, )).encode("ascii"))
         p.stdin.flush()
 
         def cleanup():
             p.stdin.close()
-            p.terminate()
+            if port < 1024:
+                check_call(["sudo", "setsid", "kill", str(p.pid)])
+            else:
+                p.terminate()
             p.wait()
 
         self.addCleanup(cleanup)
-        assert_fromcluster(namespace, url, port)
+        assert_fromcluster(namespace, url, port, p)
 
     def test_fromcluster(self):
         """
@@ -252,7 +261,7 @@ class NativeEndToEndTests(TestCase):
             ["--new-deployment", service_name],
             service_name,
             current_namespace(),
-            12349,
+            12370,
         )
 
     def test_fromcluster_with_namespace(self):
@@ -266,6 +275,49 @@ class NativeEndToEndTests(TestCase):
             "{}.{}.svc.cluster.local".format(service_name, namespace),
             namespace,
             12347,
+        )
+
+    @skipIf(OPENSHIFT, "OpenShift never allows running containers as root.")
+    def test_fromcluster_port_lt_1024(self):
+        """
+        Communicate from the cluster to Telepresence, with port<1024.
+        """
+        service_name = random_name()
+        self.fromcluster(
+            ["--new-deployment", service_name],
+            service_name,
+            current_namespace(),
+            70,  # Gopher port, unlikely to be in use!
+        )
+
+    @skipIf(OPENSHIFT, "OpenShift never allows running containers as root.")
+    def test_swapdeployment_fromcluster_port_lt_1024(self):
+        """
+        Communicate from the cluster to Telepresence, with port<1024, using
+        swap-deployment because omg it's a different code path. Yay.
+        """
+        # Create a non-Telepresence deployment:
+        service_name = random_name()
+        check_call([
+            KUBECTL,
+            "run",
+            service_name,
+            "--port=79",
+            "--expose",
+            "--restart=Always",
+            "--image=openshift/hello-openshift",
+            "--replicas=2",
+            "--labels=telepresence-test=" + service_name,
+            "--env=HELLO=there",
+        ])
+        self.addCleanup(
+            check_call, [KUBECTL, "delete", DEPLOYMENT_TYPE, service_name]
+        )
+        self.fromcluster(
+            ["--swap-deployment", service_name],
+            service_name,
+            current_namespace(),
+            79,  # Finger, unlikely to be in use
         )
 
     def test_loopback(self):
@@ -571,14 +623,13 @@ class DockerEndToEndTests(TestCase):
             args=[
                 "telepresence", "--new-deployment", service_name, "--expose",
                 str(port), "--logfile", "-", "--method", "container",
-                "--docker-run", "-v",
-                "{}:/host".format(DIRECTORY), "--workdir", "/host",
-                "python:3-alpine", "python3",
-                "-m", "http.server", str(port)
+                "--docker-run", "-v", "{}:/host".format(DIRECTORY),
+                "--workdir", "/host", "python:3-alpine", "python3", "-m",
+                "http.server", str(port)
             ],
         )
 
-        assert_fromcluster(current_namespace(), service_name, port)
+        assert_fromcluster(current_namespace(), service_name, port, p)
         p.terminate()
         p.wait()
 
