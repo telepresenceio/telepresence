@@ -9,12 +9,25 @@ categories: reference
 
 If you use the `--expose` option for `telepresence` with a given port the pod will forward traffic it receives on that port to your local process.
 This allows the Kubernetes or OpenShift cluster to talk to your local process as if it was running in the pod.
-Here we expose port 8080:
+
+By default the remote port and the local port match.
+Here we expose port 8080 as port 8080 on the remote Deployment:
 
 ```console
 $ telepresence --expose 8080 --new-deployment example \
     --run python3 -m http.server 8080
 ```
+
+It is possible to expose a different local port than the remote port.
+Here we expose port 8080 locally as port 80 on the remote Deployment:
+
+```console
+$ telepresence --expose 8080:80 --new-deployment example \
+    --run python3 -m http.server 80
+```
+
+You can't expose ports <1024 on clusters that don't support running images as `root`.
+This limitation is the default on OpenShift.
 
 ### Networking access to the cluster
 

@@ -7,8 +7,15 @@ categories: reference
 
 #### 0.53 (unreleased)
 
+Features:
+
+* `--expose` can now expose a different local port than the one used on the cluster side.
+  ([#180](https://github.com/datawire/telepresence/issues/180))
+
 Bug fixes:
 
+* Fix regression where exposing ports <1024 stopped working.
+  ([#194](https://github.com/datawire/telepresence/issues/194))
 * Fix regression where tools like `ping` weren't hidden on Mac in `inject-tcp` method.
   ([#187](https://github.com/datawire/telepresence/issues/187))
 
