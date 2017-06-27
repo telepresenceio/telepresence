@@ -803,10 +803,26 @@ def connect(runner, remote_info, cmdline_args):
         # option to listen on docker0 -
         # https://github.com/kubernetes/kubernetes/pull/46517):
         if sys.platform == "linux":
-            docker_interface = re.findall(
-                r"inet addr:(\d+\.\d+\.\d+\.\d+)",
-                runner.get_output(["ifconfig", "docker0"])
-            )[0]
+
+            # If ip addr is available use it if not fall back to ifconfig.
+            if which("ip"):
+                docker_interfaces = re.findall(
+                    r"(\d+\.\d+\.\d+\.\d+)",
+                    runner.get_output(["ip", "addr", "show", "dev", "docker0"])
+                )
+            elif which("ifconfig"):
+                docker_interfaces = re.findall(
+                    r"(\d+\.\d+\.\d+\.\d+)",
+                    runner.get_output(["ifconfig", "docker0"])
+                )
+            else:
+                raise SystemExit("'ip addr' nor 'ifconfig' available")
+
+            if len(docker_interfaces) == 0:
+                raise SystemExit("No interface for docker found")
+
+            docker_interface = docker_interfaces[0]
+
         else:
             # The way to get routing from container to host is via an alias on
             # lo0 (https://docs.docker.com/docker-for-mac/networking/). We use
