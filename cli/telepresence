@@ -1667,14 +1667,6 @@ def main():
             format(args.context, args.namespace, runner.kubectl_cmd)
         )
 
-        # minikube breaks DNS because DNS gets captured, sent to minikube,
-        # which sends it back to DNS server set by host, resulting in loop...
-        if args.context == "minikube" and args.method == "vpn-tcp":
-            raise SystemExit(
-                "vpn-tcp method doesn't work with minikube.\n"
-                "See https://github.com/datawire/telepresence/issues/160"
-            )
-
         # Make sure we can access Kubernetes:
         try:
             if runner.kubectl_cmd == "oc":

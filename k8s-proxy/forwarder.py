@@ -44,7 +44,11 @@ class LocalResolver(object):
         # The default Twisted client.Resolver *almost* does what we want...
         # except it doesn't support ndots! So we manually deal with A records
         # and pass the rest on to client.Resolver.
-        self.fallback = client.Resolver(resolv='/etc/resolv.conf')
+        if NOLOOP:
+            # XXXX pick dns server not used on client machine
+            self.fallback = client.Resolver(servers=[("84.200.69.80", 53)])
+        else:
+            self.fallback = client.Resolver(resolv='/etc/resolv.conf')
         # Suffix set by resolv.conf search/domain line, which we remove once we
         # figure out what it is.
         self.suffix = []
@@ -66,6 +70,35 @@ class LocalResolver(object):
         print(failure)
         return defer.fail(error.DomainError(str(failure)))
 
+    def _no_loop_kube_query(self, query, timeout, real_name):
+        """
+        Do a query to Kube DNS for Kubernetes records only, fall back to
+        random DNS server if that fails.
+        """
+        new_query = deepcopy(query)
+        if not query.name.name.endswith(b".local"):
+            parts = query.name.name.split(b".")
+            if len(parts) == 1:
+                parts.append(NAMESPACE.encode("ascii"))
+            assert len(parts) == 2
+            new_query.name.name = b".".join(parts) + b".svc.cluster.local"
+
+        def fallback(_):
+            print(
+                "FAILED to lookup {}, trying {}".
+                format(new_query.name.name, query.name.name)
+            )
+            return self.fallback.query(query, timeout=timeout)
+
+        print("RESOLVING {}".format(new_query.name.name))
+        # XXX get kube-dns server IP somehow
+        d = deferToThread(resolve, query.name.name)
+
+        d.addErrback(fallback)
+        d.addCallback(lambda ips: self._got_ips(real_name, ips, dns.Record_A))
+        d.addErrback(self._got_error)
+        return d
+
     def query(self, query, timeout=None, real_name=None):
         # Preserve real name asked in query, in case we need to truncate suffix
         # during lookup:
@@ -73,9 +106,9 @@ class LocalResolver(object):
             real_name = query.name.name
         # We use a special marker hostname, which is always sent by
         # telepresence, to figure out the search suffix set by the client
-        # machine's resolv.conf. We then remove it since it masks our
-        # ability to add the Kubernetes suffixes. E.g. if DHCP sets 'search
-        # wework.com' we want to lookup 'kubernetes' if we get
+        # machine's resolv.conf. We then remove it since it masks our ability
+        # to add the Kubernetes suffixes. E.g. if DHCP sets 'search wework.com'
+        # on the client machine we will want to lookup 'kubernetes' if we get
         # 'kubernetes.wework.com'.
         parts = query.name.name.split(b".")
         if parts[0] == b"hellotelepresence" and not self.suffix:
@@ -108,15 +141,38 @@ class LocalResolver(object):
         # No special suffix:
         if query.type == dns.A:
             print("A query: {}".format(query.name.name))
+            # sshuttle, which is running on client side, works by capturing DNS
+            # packets to name servers. If we're on a VM, non-Kubernetes domains
+            # like google.com won't be handled by Kube DNS and so will be
+            # forwarded to name servers that host defined... and then they will
+            # be recaptured by sshuttle (depending on how VM networkng is
+            # setup) which will send them back here and result in infinite loop
+            # of DNS queries. So we check Kube DNS in way that won't trigger
+            # that, and if that doesn't work query a name server that sshuttle
+            # doesn't know about.
+            if NOLOOP:
+                # maybe be servicename, service.namespace, or something.local
+                # (.local is used for both services and pods):
+                if query.name.name.count(b".") in (
+                    0, 1
+                ) or query.name.name.endswith(b".local"):
+                    return self._no_loop_kube_query(
+                        query, timeout=timeout, real_name=real_name
+                    )
+                else:
+                    return self.fallback.query(query, timeout=timeout)
+
             d = deferToThread(resolve, query.name.name)
+            # We expect Kube DNS to be fast:
+            d.addTimeout(0.1, reactor)
             d.addCallback(
                 lambda ips: self._got_ips(real_name, ips, dns.Record_A)
             ).addErrback(self._got_error)
             return d
         elif query.type == dns.AAAA:
             # Kubernetes can't do IPv6, and if we return empty result OS X
-            # gives up, so never return anything IPv6y. Instead return A
-            # records to pacify OS X.
+            # gives up (Happy Eyeballs algorithm, maybe?), so never return
+            # anything IPv6y. Instead return A records to pacify OS X.
             print(
                 "AAAA query, sending back A instead: {}".
                 format(query.name.name)
@@ -136,6 +192,9 @@ def listen():
     reactor.listenUDP(9053, protocol)
 
 
+with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
+    NAMESPACE = f.read()
+NOLOOP = True
 reactor.suggestThreadPoolSize(50)
 print("Listening...")
 listen()
