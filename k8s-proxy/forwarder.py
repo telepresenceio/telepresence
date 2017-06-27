@@ -84,27 +84,24 @@ class LocalResolver(object):
             new_query.name.name = b".".join(parts) + b".svc.cluster.local"
 
         def fallback(err):
-            print("ONOS: ", err)
             print(
-                "FAILED to lookup {}, trying {}".
-                format(new_query.name.name, query.name.name)
+                "FAILED to lookup {} ({}), trying {}".
+                format(new_query.name.name, err, query.name.name)
             )
             return self.fallback.query(query, timeout=timeout)
 
         print("RESOLVING {}".format(new_query.name.name))
         # XXX get kube-dns server IP somehow
         # We expect Kube DNS to be fast:
-        d = client.Resolver(servers=[("10.0.0.10", 53)]).query(new_query, timeout=[0.1])
+        d = client.Resolver(servers=[("10.0.0.10", 53)]).query(
+            new_query, timeout=[0.1]
+        )
         d.addErrback(fallback)
-        #d.addCallback(lambda ips: self._got_ips(real_name, ips, dns.Record_A))
-        #d.addErrback(self._got_error)
         return d
 
     def query(self, query, timeout=None, real_name=None):
         # Preserve real name asked in query, in case we need to truncate suffix
         # during lookup:
-        if query.name.name.endswith(b".local"):
-            return
         if real_name is None:
             real_name = query.name.name
         # We use a special marker hostname, which is always sent by
