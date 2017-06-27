@@ -142,6 +142,11 @@ class NativeEndToEndTests(TestCase):
     End-to-end tests on the native machine.
     """
 
+    def tearDown(self):
+        # Ensure tests don't interfere with each other:
+        print("SLEEP")
+        time.sleep(5)
+
     def test_run_directly(self):
         """--run runs the command directly."""
         webserver_name = run_webserver()
@@ -243,14 +248,12 @@ class NativeEndToEndTests(TestCase):
              (local_port, )).encode("ascii")
         )
         p.stdin.flush()
-
-        def cleanup():
+        try:
+            assert_fromcluster(namespace, url, remote_port, p)
+        finally:
             p.stdin.close()
             p.terminate()
             p.wait()
-
-        self.addCleanup(cleanup)
-        assert_fromcluster(namespace, url, remote_port, p)
 
     def test_fromcluster(self):
         """
@@ -675,9 +678,13 @@ class DockerEndToEndTests(TestCase):
                 str(local_port)
             ],
         )
-        assert_fromcluster(current_namespace(), service_name, remote_port, p)
-        p.terminate()
-        p.wait()
+        try:
+            assert_fromcluster(
+                current_namespace(), service_name, remote_port, p
+            )
+        finally:
+            p.terminate()
+            p.wait()
 
     def test_volumes(self):
         """

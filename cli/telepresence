@@ -985,9 +985,12 @@ def swap_deployment(runner, args):
             # If we're on local VM we need to use different nameserver to
             # prevent infinite loops caused by sshuttle:
             if args.method == "vpn-tcp" and args.context == "minikube":
-                container.setdefault(
-                    "environment", {}
-                )["TELEPRESENCE_NAMESERVER"] = get_alternate_nameserver()
+                container.setdefault("env", []).append({
+                    "name":
+                    "TELEPRESENCE_NAMESERVER",
+                    "value":
+                    get_alternate_nameserver()
+                })
             if args.needs_root:
                 container["securityContext"] = {
                     "runAsUser": 0,
