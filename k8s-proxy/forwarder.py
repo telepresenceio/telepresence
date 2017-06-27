@@ -53,7 +53,7 @@ class LocalResolver(object):
             # sshuttle doesn't capture packets and cause an infinite query
             # loop:
             self.fallback = client.Resolver(
-                servers=[(os.environ["TELEPRESENCE_NAMSERVER"], 53)]
+                servers=[(os.environ["TELEPRESENCE_NAMESERVER"], 53)]
             )
         else:
             self.fallback = client.Resolver(resolv='/etc/resolv.conf')
@@ -200,7 +200,7 @@ def listen():
 
 with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
     NAMESPACE = f.read()
-NOLOOP = os.environ.get("TELEPRESENCE_NAMSERVER") is not None
+NOLOOP = os.environ.get("TELEPRESENCE_NAMESERVER") is not None
 reactor.suggestThreadPoolSize(50)
 print("Listening...")
 listen()
