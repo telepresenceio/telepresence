@@ -45,7 +45,12 @@ class LocalResolver(object):
         # except it doesn't support ndots! So we manually deal with A records
         # and pass the rest on to client.Resolver.
         if NOLOOP:
-            # XXXX pick dns server not used on client machine
+            self.kubedns = socket.gethostbyname(
+                "kube-dns.kube-system.svc.cluster.local"
+            )
+            # We want nameserver that the host machine *doesn't* use so
+            # sshuttle doesn't capture packets and cause an infinite query
+            # loop:
             self.fallback = client.Resolver(servers=[("84.200.69.80", 53)])
         else:
             self.fallback = client.Resolver(resolv='/etc/resolv.conf')
@@ -91,9 +96,9 @@ class LocalResolver(object):
             return self.fallback.query(query, timeout=timeout)
 
         print("RESOLVING {}".format(new_query.name.name))
-        # XXX get kube-dns server IP somehow
-        # We expect Kube DNS to be fast:
-        d = client.Resolver(servers=[("10.0.0.10", 53)]).query(
+        # We expect Kube DNS to be fast, so have short timeout in case we need
+        # to fallback:
+        d = client.Resolver(servers=[(self.kubedns, 53)]).query(
             new_query, timeout=[0.1]
         )
         d.addErrback(fallback)
@@ -192,6 +197,7 @@ def listen():
 
 with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
     NAMESPACE = f.read()
+# XXX
 NOLOOP = True
 reactor.suggestThreadPoolSize(50)
 print("Listening...")
