@@ -200,8 +200,7 @@ def listen():
 
 with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
     NAMESPACE = f.read()
-# XXX
-NOLOOP = True
+NOLOOP = os.environ.get("TELEPRESENCE_NAMSERVER") is not None
 reactor.suggestThreadPoolSize(50)
 print("Listening...")
 listen()
