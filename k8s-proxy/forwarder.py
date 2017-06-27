@@ -11,6 +11,7 @@ sshuttle in order to make forwarded DNS queries work in way that matches
 clients within a k8s pod.
 """
 
+import os
 import socket
 from copy import deepcopy
 
@@ -51,7 +52,9 @@ class LocalResolver(object):
             # We want nameserver that the host machine *doesn't* use so
             # sshuttle doesn't capture packets and cause an infinite query
             # loop:
-            self.fallback = client.Resolver(servers=[("84.200.69.80", 53)])
+            self.fallback = client.Resolver(
+                servers=[(os.environ["TELEPRESENCE_NAMSERVER"], 53)]
+            )
         else:
             self.fallback = client.Resolver(resolv='/etc/resolv.conf')
         # Suffix set by resolv.conf search/domain line, which we remove once we
