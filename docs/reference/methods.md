@@ -13,30 +13,24 @@ Telepresence has two different proxying methods; you will need to choose one of 
 2. `--method vpn-tcp` works by using a program called [sshuttle](https://shuttle.readthedocs.io) to open a VPN-like connection to the Kubernetes cluster.
 3. `--method container` is documented in the [Docker howto](../howto/docker.html).
 
-Here are some guidelines for choosing which method to use:
-
-* If you are using Go, use `vpn-tcp`.
-* If you are using a custom DNS resolver (i.e. not the `gethostbyname` standard API call) use `vpn-tcp`.
-* If you are using `minikube`, `minishift`, or otherwise running a local cluster, use `inject-tcp` (we hope to remove this limitation eventually, see [the relevant ticket](https://github.com/datawire/telepresence/issues/160) for details.)
-* In all other cases, try `inject-tcp` and if it causes problems switch to `vpn-tcp`.
+In general `vpn-tcp` should work in more cases, so start by using it.
+If you have problems, try `inject-tcp`.
 
 You can read about the specific limitations of each method below, and read about the differences in what they proxy in the documentation of [what gets proxied](/reference/proxying.html).
 
 ### Limitations: `--method vpn-tcp`
 
-In general `--method vpn-tcp` should work with more programs (and programming languages) than `--method inject-tcp`.
+`--method vpn-tcp` should work with more programs (and programming languages) than `--method inject-tcp`.
 For example, if you're developing in Go you'll want to stick to this method.
 
 This method does have some limitations of its own, however:
 
-1. Fully qualified Kubernetes domains like `yourservice.default.svc.cluster.local` won't resolve correctly on Linux.
-   `yourservice` and `yourservice.default` will resolve correctly, however.
-   See [the relevant ticket](https://github.com/datawire/telepresence/issues/161) for details.
-2. `minikube`, `minishift` and other ways of running Kubernetes on your local machine won't work: non-Kubernetes DNS lookups will fail.
-   See [the relevant ticket](https://github.com/datawire/telepresence/issues/160) for details.
-3. Only one instance of `telepresence` should be running at a time on any given developer machine.
-4. Cloud resources like AWS RDS will not be routed automatically via cluster.
-   You'll need to specify the hosts manually using `--also-proxy`, e.g. `--also-proxy mydatabase.somewhere.vpc.aws.amazon.com` to route traffic to that host via the Kubernetes cluster..
+* Fully qualified Kubernetes domains like `yourservice.default.svc.cluster.local` won't resolve correctly on Linux.
+  `yourservice` and `yourservice.default` will resolve correctly, however.
+  See [the relevant ticket](https://github.com/datawire/telepresence/issues/161) for details.
+* Only one instance of `telepresence` should be running at a time on any given developer machine.
+* Cloud resources like AWS RDS will not be routed automatically via cluster.
+  You'll need to specify the hosts manually using `--also-proxy`, e.g. `--also-proxy mydatabase.somewhere.vpc.aws.amazon.com` to route traffic to that host via the Kubernetes cluster..
 
 ### Limitations: `--method inject-tcp`
 

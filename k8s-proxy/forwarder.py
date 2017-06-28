@@ -11,6 +11,7 @@ sshuttle in order to make forwarded DNS queries work in way that matches
 clients within a k8s pod.
 """
 
+import os
 import socket
 from copy import deepcopy
 
@@ -25,6 +26,18 @@ import socks
 def resolve(hostname):
     """Do A record lookup, return list of IPs."""
     return socket.gethostbyname_ex(hostname)[2]
+
+
+# XXX duplicated from telepresence
+def get_resolv_conf_namservers():
+    """Return list of namserver IPs in /etc/resolv.conf."""
+    result = []
+    with open("/etc/resolv.conf") as f:
+        for line in f:
+            parts = line.lower().split()
+            if len(parts) >= 2 and parts[0] == 'nameserver':
+                result.append(parts[1])
+    return result
 
 
 class LocalResolver(object):
@@ -44,7 +57,16 @@ class LocalResolver(object):
         # The default Twisted client.Resolver *almost* does what we want...
         # except it doesn't support ndots! So we manually deal with A records
         # and pass the rest on to client.Resolver.
-        self.fallback = client.Resolver(resolv='/etc/resolv.conf')
+        if NOLOOP:
+            self.kubedns = get_resolv_conf_namservers()[0]
+            # We want nameserver that the host machine *doesn't* use so
+            # sshuttle doesn't capture packets and cause an infinite query
+            # loop:
+            self.fallback = client.Resolver(
+                servers=[(os.environ["TELEPRESENCE_NAMESERVER"], 53)]
+            )
+        else:
+            self.fallback = client.Resolver(resolv='/etc/resolv.conf')
         # Suffix set by resolv.conf search/domain line, which we remove once we
         # figure out what it is.
         self.suffix = []
@@ -66,6 +88,35 @@ class LocalResolver(object):
         print(failure)
         return defer.fail(error.DomainError(str(failure)))
 
+    def _no_loop_kube_query(self, query, timeout, real_name):
+        """
+        Do a query to Kube DNS for Kubernetes records only, fall back to
+        random DNS server if that fails.
+        """
+        new_query = deepcopy(query)
+        if not query.name.name.endswith(b".local"):
+            parts = query.name.name.split(b".")
+            if len(parts) == 1:
+                parts.append(NAMESPACE.encode("ascii"))
+            assert len(parts) == 2
+            new_query.name.name = b".".join(parts) + b".svc.cluster.local"
+
+        def fallback(err):
+            print(
+                "FAILED to lookup {} ({}), trying {}".
+                format(new_query.name.name, err, query.name.name)
+            )
+            return self.fallback.query(query, timeout=timeout)
+
+        print("RESOLVING {}".format(new_query.name.name))
+        # We expect Kube DNS to be fast, so have short timeout in case we need
+        # to fallback:
+        d = client.Resolver(servers=[(self.kubedns, 53)]).query(
+            new_query, timeout=[0.1]
+        )
+        d.addErrback(fallback)
+        return d
+
     def query(self, query, timeout=None, real_name=None):
         # Preserve real name asked in query, in case we need to truncate suffix
         # during lookup:
@@ -73,9 +124,9 @@ class LocalResolver(object):
             real_name = query.name.name
         # We use a special marker hostname, which is always sent by
         # telepresence, to figure out the search suffix set by the client
-        # machine's resolv.conf. We then remove it since it masks our
-        # ability to add the Kubernetes suffixes. E.g. if DHCP sets 'search
-        # wework.com' we want to lookup 'kubernetes' if we get
+        # machine's resolv.conf. We then remove it since it masks our ability
+        # to add the Kubernetes suffixes. E.g. if DHCP sets 'search wework.com'
+        # on the client machine we will want to lookup 'kubernetes' if we get
         # 'kubernetes.wework.com'.
         parts = query.name.name.split(b".")
         if parts[0] == b"hellotelepresence" and not self.suffix:
@@ -108,6 +159,27 @@ class LocalResolver(object):
         # No special suffix:
         if query.type == dns.A:
             print("A query: {}".format(query.name.name))
+            # sshuttle, which is running on client side, works by capturing DNS
+            # packets to name servers. If we're on a VM, non-Kubernetes domains
+            # like google.com won't be handled by Kube DNS and so will be
+            # forwarded to name servers that host defined... and then they will
+            # be recaptured by sshuttle (depending on how VM networkng is
+            # setup) which will send them back here and result in infinite loop
+            # of DNS queries. So we check Kube DNS in way that won't trigger
+            # that, and if that doesn't work query a name server that sshuttle
+            # doesn't know about.
+            if NOLOOP:
+                # maybe be servicename, service.namespace, or something.local
+                # (.local is used for both services and pods):
+                if query.name.name.count(b".") in (
+                    0, 1
+                ) or query.name.name.endswith(b".local"):
+                    return self._no_loop_kube_query(
+                        query, timeout=timeout, real_name=real_name
+                    )
+                else:
+                    return self.fallback.query(query, timeout=timeout)
+
             d = deferToThread(resolve, query.name.name)
             d.addCallback(
                 lambda ips: self._got_ips(real_name, ips, dns.Record_A)
@@ -115,8 +187,8 @@ class LocalResolver(object):
             return d
         elif query.type == dns.AAAA:
             # Kubernetes can't do IPv6, and if we return empty result OS X
-            # gives up, so never return anything IPv6y. Instead return A
-            # records to pacify OS X.
+            # gives up (Happy Eyeballs algorithm, maybe?), so never return
+            # anything IPv6y. Instead return A records to pacify OS X.
             print(
                 "AAAA query, sending back A instead: {}".
                 format(query.name.name)
@@ -136,6 +208,9 @@ def listen():
     reactor.listenUDP(9053, protocol)
 
 
+with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
+    NAMESPACE = f.read()
+NOLOOP = os.environ.get("TELEPRESENCE_NAMESERVER") is not None
 reactor.suggestThreadPoolSize(50)
 print("Listening...")
 listen()

@@ -29,6 +29,8 @@ from .utils import (
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 # inject-tcp/vpn-tcp/container:
 TELEPRESENCE_METHOD = os.environ["TELEPRESENCE_METHOD"]
+# If this env variable is set, we know we're using minikube or minishift:
+LOCAL_VM = os.environ.get("TELEPRESENCE_LOCAL_VM") is not None
 
 EXISTING_DEPLOYMENT = """\
 metadata:
@@ -112,6 +114,10 @@ def run_script_test(telepresence_args, local_command):
     return p.wait()
 
 
+@skipIf(
+    OPENSHIFT, "OpenShift doesn't allow root, which the tests need "
+    "(at the moment, this is fixable)"
+)
 def assert_fromcluster(namespace, url, port, telepresence_process):
     """Assert that there's a webserver accessible from the cluster."""
     for i in range(120):
@@ -243,14 +249,12 @@ class NativeEndToEndTests(TestCase):
              (local_port, )).encode("ascii")
         )
         p.stdin.flush()
-
-        def cleanup():
+        try:
+            assert_fromcluster(namespace, url, remote_port, p)
+        finally:
             p.stdin.close()
             p.terminate()
             p.wait()
-
-        self.addCleanup(cleanup)
-        assert_fromcluster(namespace, url, remote_port, p)
 
     def test_fromcluster(self):
         """
@@ -383,6 +387,10 @@ class NativeEndToEndTests(TestCase):
         # Exit code 3 means proxy exited prematurely:
         assert exit_code == 3
 
+    @skipIf(
+        LOCAL_VM and TELEPRESENCE_METHOD == "vpn-tcp",
+        "--deployment doesn't work on local VMs with vpn-tcp method."
+    )
     def existingdeployment(self, namespace, script):
         if namespace is None:
             namespace = current_namespace()
@@ -675,9 +683,13 @@ class DockerEndToEndTests(TestCase):
                 str(local_port)
             ],
         )
-        assert_fromcluster(current_namespace(), service_name, remote_port, p)
-        p.terminate()
-        p.wait()
+        try:
+            assert_fromcluster(
+                current_namespace(), service_name, remote_port, p
+            )
+        finally:
+            p.terminate()
+            p.wait()
 
     def test_volumes(self):
         """
