@@ -47,11 +47,12 @@ run-minikube:
 minikube-test: virtualenv build-k8s-proxy-minikube build-local
 	@echo "IMPORTANT: this will change kubectl context to minikube!\n\n"
 	kubectl config use-context minikube
-	#TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_METHOD=container ci/test.sh
-	#source virtualenv/bin/activate && \
-	#	env TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_METHOD=inject-tcp ci/test.sh
+	TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_METHOD=container ci/test.sh
 	source virtualenv/bin/activate && \
-		env TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_METHOD=vpn-tcp ci/test.sh
+		env TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_METHOD=inject-tcp ci/test.sh
+	source virtualenv/bin/activate && \
+		env TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_LOCAL_VM=1 \
+		TELEPRESENCE_METHOD=vpn-tcp ci/test.sh
 
 # Run tests relevant to OpenShift:
 openshift-tests: virtualenv

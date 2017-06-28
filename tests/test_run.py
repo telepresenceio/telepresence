@@ -29,6 +29,8 @@ from .utils import (
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 # inject-tcp/vpn-tcp/container:
 TELEPRESENCE_METHOD = os.environ["TELEPRESENCE_METHOD"]
+# If this env variable is set, we know we're using minikube or minishift:
+LOCAL_VM = os.environ.get("TELEPRESENCE_LOCAL_VM") is not None
 
 EXISTING_DEPLOYMENT = """\
 metadata:
@@ -141,11 +143,6 @@ class NativeEndToEndTests(TestCase):
     """
     End-to-end tests on the native machine.
     """
-
-    def tearDown(self):
-        # Ensure tests don't interfere with each other:
-        print("SLEEP")
-        time.sleep(5)
 
     def test_run_directly(self):
         """--run runs the command directly."""
@@ -386,6 +383,10 @@ class NativeEndToEndTests(TestCase):
         # Exit code 3 means proxy exited prematurely:
         assert exit_code == 3
 
+    @skipIf(
+        LOCAL_VM and TELEPRESENCE_METHOD == "vpn-tcp",
+        "--deployment doesn't work on local VMs with vpn-tcp method."
+    )
     def existingdeployment(self, namespace, script):
         if namespace is None:
             namespace = current_namespace()
