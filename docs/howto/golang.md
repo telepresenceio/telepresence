@@ -30,6 +30,8 @@ $ telepresence -m vpn-tcp --new-deployment golang \
                --run $GOPATH/bin/wuzz http://hello-world:8000/
 ```
 
+You can omit `-m vpn-tcp`, since it is the default proxying method, but keep in mind that Go programs will *not* work with `-m inject-tcp`.
+
 The `wuzz` UI will appear with the URL `http://hello-world:8000/`.
 Hit Enter and you should see the "Hello, World!" response from the Kubernetes service.
 You can also interact with the Kubernetes API - change the URL to `https://kubernetes/` (but typically you'll have problems with the custom certificate authority.)
@@ -42,7 +44,7 @@ This is just the same as the example covered in [the tutorial](/tutorials/kubern
 For example, if you have a `Deployment` called `myservice` running in Kubernetes and listening on port 8080, you can temporarily swap it out for a local process and have traffic forwarded to your laptop:
 
 ```console
-$ telepresence -m vpn-tcp --swap-deployment myservice --expose 8080 \
+$ telepresence --swap-deployment myservice --expose 8080 \
                --run ./yourgoserver --port=8080
 ```
 

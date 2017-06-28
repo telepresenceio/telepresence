@@ -24,8 +24,7 @@ It may take a minute or two for the pod running the server to be up and running,
 You can now run a Docker container using Telepresence that can access that service, even though the process is local but the service is running in the Kubernetes cluster:
 
 ```console
-$ telepresence -m container --new-deployment example \
-               --docker-run -i -t alpine:latest /bin/sh
+$ telepresence --new-deployment example --docker-run -i -t alpine /bin/sh
 alpine# apk add --no-cache curl
 alpine# curl http://myservice:8000/
 Hello, world!
@@ -35,7 +34,7 @@ Hello, world!
 
 ## How it works
 
-When you use `--method container` Telepresence will start a new proxy container, and then call `docker run` with whatever arguments you pass to `--docker-run` to start a container that will have its networking proxied.
+Telepresence will start a new proxy container, and then call `docker run` with whatever arguments you pass to `--docker-run` to start a container that will have its networking proxied.
 All networking is proxied:
 
 * Outgoing to Kubernetes.

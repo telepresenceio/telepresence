@@ -39,8 +39,7 @@ httpd.serve_forever()
 You start a proxy inside your Kubernetes cluster that will forward requests from the cluster to your local process, and in the resulting shell you start the web server:
 
 ```
-localhost$ telepresence -m inject-tcp --new-deployment hello-world \
-                        --expose 8080 --run-shell
+localhost$ telepresence --new-deployment hello-world --expose 8080 --run-shell
 @minikube|localhost$ python3 helloworld.py
 ```
 
