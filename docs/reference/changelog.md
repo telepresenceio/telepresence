@@ -5,6 +5,14 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.54 (unreleased)
+
+Bug fixes:
+
+* Support more versions of Linux in container mode.
+  Thanks to Henri Koski for bug report and patch.
+  ([#202](https://github.com/datawire/telepresence/issues/202))
+
 #### 0.53 (June 27, 2017)
 
 Features:
