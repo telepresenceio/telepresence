@@ -304,14 +304,15 @@ def parse_args():
     parser.add_argument(
         "--method",
         "-m",
-        required=True,
         choices=["inject-tcp", "vpn-tcp", "container"],
         help=(
-            "inject-tcp: inject process-specific shared "
+            "'inject-tcp': inject process-specific shared "
             "library that proxies TCP to the remote cluster.\n"
-            "vpn-tcp: all local processes can route TCP "
-            "traffic to the remote cluster.\n"
-            "container: used with --docker-run.\n"
+            "'vpn-tcp': all local processes can route TCP "
+            "traffic to the remote cluster. Requires root.\n"
+            "'container': used with --docker-run.\n"
+            "\n"
+            "Default is 'vpn-tcp', or 'container' when --docker-run is used.\n"
             "\nFor more details see "
             "http://www.telepresence.io/reference/methods.html"
         )
@@ -422,6 +423,13 @@ def parse_args():
         )
     )
     args = parser.parse_args()
+
+    if args.method is None:
+        if args.docker_run is not None:
+            args.method = "container"
+        else:
+            args.method = "vpn-tcp"
+
     if args.method == "container" and args.docker_run is None:
         raise SystemExit(
             "'--docker-run' is required when using '--method container'."
@@ -430,6 +438,7 @@ def parse_args():
         raise SystemExit(
             "'--method container' is required when using '--docker-run'."
         )
+
     new_expose = {}
     for port_string in args.expose:
         if ":" in port_string:
@@ -438,6 +447,7 @@ def parse_args():
             local_port, remote_port = int(port_string), int(port_string)
         new_expose[local_port] = remote_port
     args.expose = new_expose
+
     return args
 
 
