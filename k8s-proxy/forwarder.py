@@ -28,6 +28,18 @@ def resolve(hostname):
     return socket.gethostbyname_ex(hostname)[2]
 
 
+# XXX duplicated from telepresence
+def get_resolv_conf_namservers():
+    """Return list of namserver IPs in /etc/resolv.conf."""
+    result = []
+    with open("/etc/resolv.conf") as f:
+        for line in f:
+            parts = line.lower().split()
+            if len(parts) >= 2 and parts[0] == 'nameserver':
+                result.append(parts[1])
+    return result
+
+
 class LocalResolver(object):
     """
     A resolver which uses client-side DNS resolution to resolve A queries.
@@ -46,9 +58,7 @@ class LocalResolver(object):
         # except it doesn't support ndots! So we manually deal with A records
         # and pass the rest on to client.Resolver.
         if NOLOOP:
-            self.kubedns = socket.gethostbyname(
-                "kube-dns.kube-system.svc.cluster.local"
-            )
+            self.kubedns = get_resolv_conf_namservers()[0]
             # We want nameserver that the host machine *doesn't* use so
             # sshuttle doesn't capture packets and cause an infinite query
             # loop:

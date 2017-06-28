@@ -114,6 +114,10 @@ def run_script_test(telepresence_args, local_command):
     return p.wait()
 
 
+@skipIf(
+    OPENSHIFT, "OpenShift doesn't allow root, which the tests need "
+    "(at the moment, this is fixable)"
+)
 def assert_fromcluster(namespace, url, port, telepresence_process):
     """Assert that there's a webserver accessible from the cluster."""
     for i in range(120):

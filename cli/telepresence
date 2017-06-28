@@ -75,14 +75,21 @@ def find_free_port():
         s.close()
 
 
-def get_alternate_nameserver():
-    """Get a public nameserver that isn't in /etc/resolv.conf."""
-    banned = []
+def get_resolv_conf_namservers():
+    """Return list of namserver IPs in /etc/resolv.conf."""
+    result = []
     with open("/etc/resolv.conf") as f:
         for line in f:
             parts = line.lower().split()
             if len(parts) >= 2 and parts[0] == 'nameserver':
-                banned.append(parts[1])
+                result.append(parts[1])
+    return result
+
+
+def get_alternate_nameserver():
+    """Get a public nameserver that isn't in /etc/resolv.conf."""
+    banned = get_resolv_conf_namservers()
+    # From https://www.lifewire.com/free-and-public-dns-servers-2626062 -
     public = [
         "8.8.8.8", "8.8.4.4", "216.146.35.35", "216.146.36.36", "209.244.0.3",
         "209.244.0.4", "64.6.64.6", "64.6.65.6"
@@ -913,7 +920,7 @@ def create_new_deployment(runner, args):
         command.append("--expose")
     # If we're on local VM we need to use different nameserver to prevent
     # infinite loops caused by sshuttle:
-    if args.method == "vpn-tcp" and args.context == "minikube":
+    if args.method == "vpn-tcp" and args.in_local_vm:
         command.append(
             "--env=TELEPRESENCE_NAMESERVER=" + get_alternate_nameserver()
         )
@@ -984,7 +991,7 @@ def swap_deployment(runner, args):
             container["imagePullPolicy"] = "IfNotPresent"
             # If we're on local VM we need to use different nameserver to
             # prevent infinite loops caused by sshuttle:
-            if args.method == "vpn-tcp" and args.context == "minikube":
+            if args.method == "vpn-tcp" and args.in_local_vm:
                 container.setdefault("env", []).append({
                     "name":
                     "TELEPRESENCE_NAMESERVER",
@@ -1121,7 +1128,7 @@ def start_proxy(runner, args):
     # Get the environment variables we want to copy from the remote pod; it may
     # take a few seconds for the SSH proxies to get going:
     start = time()
-    while time() - start < 5:
+    while time() - start < 10:
         try:
             env = get_env_variables(runner, remote_info, args.context)
             break
@@ -1335,7 +1342,11 @@ def get_proxy_cidrs(runner, args, remote_info, service_address):
             get_output([runner.kubectl_cmd, "get", "pods", "-o", "json"])
         )["items"]
         for pod in pods:
-            result.add(ip_to_16range(pod["status"]["podIP"]))
+            try:
+                result.add(ip_to_16range(pod["status"]["podIP"]))
+            except KeyError:
+                # Apparently a problem on OpenShift
+                pass
     else:
         for node in nodes:
             pod_cidr = node["spec"].get("podCIDR")
@@ -1729,16 +1740,31 @@ def main():
         else:
             args.needs_root = False
 
-        # minikube breaks DNS because DNS gets captured, sent to minikube,
-        # which sends it back to DNS server set by host, resulting in loop...
-        # we've fixed that for most cases, but not --deployment:
+        # minikube/minishift break DNS because DNS gets captured, sent to
+        # minikube, which sends it back to DNS server set by host, resulting in
+        # loop... we've fixed that for most cases, but not --deployment.
+        def check_if_in_local_vm():
+            # Minikube just has 'minikube' as context'
+            if args.context == "minikube":
+                return True
+            # Minishift has complex context name, so check by server:
+            if runner.kubectl_cmd == "oc" and which("minishift"):
+                ip = runner.get_output(["minishift", "ip"]).strip()
+                if ip and ip in server:
+                    return True
+            return False
+
+        args.in_local_vm = check_if_in_local_vm()
+        if args.in_local_vm:
+            runner.write("Looks like we're in a local VM, e.g. minikube.\n")
         if (
-                args.context == "minikube" and args.method == "vpn-tcp" and
+                args.in_local_vm and args.method == "vpn-tcp" and
                 args.new_deployment is None and args.swap_deployment is None
         ):
             raise SystemExit(
-                "vpn-tcp method doesn't work with minikube when using"
-                " --deployment."
+                "vpn-tcp method doesn't work with minikube/minishift when"
+                " using --deployment. Use --swap-deployment or"
+                " --new-deployment instead."
             )
 
         # Make sure we can access Kubernetes:
