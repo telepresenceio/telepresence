@@ -5,6 +5,14 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.54 (unreleased)
+
+Features:
+
+* `--method vpn-tcp` now works on minikube and minishift.
+  As a result we now recommend using it as the default method.
+  ([#160](https://github.com/datawire/telepresence/issues/160))
+
 #### 0.53 (June 27, 2017)
 
 Features:
