@@ -171,6 +171,28 @@ class NativeEndToEndTests(TestCase):
         exit_code = p.wait()
         assert exit_code == 113
 
+    @skipIf(TELEPRESENCE_METHOD != "vpn-tcp", "this uses vpn-tcp.")
+    def test_run_directly_implicit_method(self):
+        """--method is optional."""
+        webserver_name = run_webserver()
+        p = Popen(
+            args=[
+                "telepresence",
+                "--new-deployment",
+                random_name(),
+                "--logfile",
+                "-",
+                "--run",
+                "python3",
+                "tocluster.py",
+                webserver_name,
+                current_namespace(),
+            ],
+            cwd=str(DIRECTORY),
+        )
+        exit_code = p.wait()
+        assert exit_code == 113
+
     @skipIf(OPENSHIFT, "OpenShift Online doesn't do namespaces")
     def create_namespace(self):
         """Create a new namespace, return its name."""
@@ -699,8 +721,6 @@ class DockerEndToEndTests(TestCase):
             "telepresence",
             "--logfile",
             "-",
-            "--method",
-            "container",
             "--new-deployment",
             random_name(),
             "--docker-run",
