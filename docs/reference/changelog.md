@@ -13,6 +13,12 @@ Features:
   As a result we now recommend using it as the default method.
   ([#160](https://github.com/datawire/telepresence/issues/160))
 
+Bug fixes:
+
+* Support more versions of Linux in container mode.
+  Thanks to Henri Koski for bug report and patch.
+  ([#202](https://github.com/datawire/telepresence/issues/202))
+
 #### 0.53 (June 27, 2017)
 
 Features:
