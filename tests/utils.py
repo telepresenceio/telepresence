@@ -75,6 +75,8 @@ def run_webserver(namespace=None):
             available = None
         print("webserver phase: {}".format(available))
         if available == b"Running":
+            # Wait long enough for it to be running
+            time.sleep(10)
             return webserver_name
         else:
             time.sleep(1)
