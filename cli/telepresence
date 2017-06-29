@@ -1423,7 +1423,7 @@ def connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh):
             raise
 
     start = time()
-    while time() - start < 10:
+    while time() - start < 20:
         try:
             get_hellotelepresence()
             sleep(1)  # just in case there's more to startup
