@@ -828,8 +828,10 @@ def connect(runner, remote_info, cmdline_args):
     processes.append(
         runner.popen(
             runner.kubectl(
-                cmdline_args.context, remote_info.namespace,
-                ["logs", "-f", remote_info.pod_name]
+                cmdline_args.context, remote_info.namespace, [
+                    "logs", "-f", remote_info.pod_name, "--container",
+                    remote_info.container_name
+                ]
             ),
             bufsize=0,
         )
