@@ -824,6 +824,16 @@ def connect(runner, remote_info, cmdline_args):
     Return list of Popen instances.
     """
     processes = Subprocesses()
+    # Keep local copy of pod logs, for debugging purposes:
+    processes.append(
+        runner.popen(
+            runner.kubectl(
+                cmdline_args.context, remote_info.namespace,
+                ["logs", "-f", remote_info.pod_name]
+            )
+        )
+    )
+
     ssh = SSH(runner, find_free_port())
 
     # forward remote port to here, by tunneling via remote SSH server:
