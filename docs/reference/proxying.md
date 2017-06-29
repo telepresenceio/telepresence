@@ -11,7 +11,7 @@ If you use the `--expose` option for `telepresence` with a given port the pod wi
 This allows the Kubernetes or OpenShift cluster to talk to your local process as if it was running in the pod.
 
 By default the remote port and the local port match.
-Here we expose port 8080 as port 8080 on the remote Deployment:
+Here we expose port 8080 as port 8080 on a remote Deployment called `example`:
 
 ```console
 $ telepresence --expose 8080 --new-deployment example \
@@ -19,10 +19,10 @@ $ telepresence --expose 8080 --new-deployment example \
 ```
 
 It is possible to expose a different local port than the remote port.
-Here we expose port 8080 locally as port 80 on the remote Deployment:
+Here we expose port 8080 locally as port 80 on a remote Deployment called `example2`:
 
 ```console
-$ telepresence --expose 8080:80 --new-deployment example \
+$ telepresence --expose 8080:80 --new-deployment example2 \
     --run python3 -m http.server 80
 ```
 
@@ -59,8 +59,7 @@ helloworld-1333052153-63kkw   1/1       Running   0          33s
 Now you can send queries to the new `Service` as if you were running inside Kubernetes:
 
 ```console
-$ telepresence --new-deployment quickstart \
-               --run curl http://helloworld.default
+$ telepresence --run curl http://helloworld.default
 <!DOCTYPE html>
 <html>
 <head>
@@ -87,7 +86,7 @@ You also have access to all the environment variables Kubernetes sets automatica
 For example, here you can see the environment variables that get added for each `Service`:
 
 ```console
-$ telepresence -m inject-tcp -n example --run env | grep KUBERNETES
+$ telepresence --run env | grep KUBERNETES
 KUBERNETES_PORT=tcp://10.0.0.1:443
 KUBERNETES_SERVICE_PORT=443
 KUBERNETES_PORT_443_TCP_ADDR=10.0.0.1
@@ -110,7 +109,7 @@ For example, all Kubernetes containers have a volume mounted at `/var/run/secret
 Those files are accessible from Telepresence:
 
 ```console
-$ telepresence -m inject-tcp -n myservice --run-shell
+$ telepresence --run-shell
 Starting proxy...
 @minikube|$ echo $TELEPRESENCE_ROOT
 /tmp/tmpk_svwt_5

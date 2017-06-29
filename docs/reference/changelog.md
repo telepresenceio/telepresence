@@ -11,6 +11,8 @@ Features:
 
 * `--method` is now optional, defaulting to "vpn-tcp", or "container" when `--docker-run` is used.
   ([#206](https://github.com/datawire/telepresence/issues/206))
+* If no deployment method (`--new-deployment`, `--swap-deployment` or `--deployment`) then `--new-deployment` is used by default with a randomly generated name.
+  ([#170](https://github.com/datawire/telepresence/issues/170))
 
 #### 0.54 (June 28, 2017)
 

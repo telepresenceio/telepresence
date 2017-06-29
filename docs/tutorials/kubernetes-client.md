@@ -26,7 +26,7 @@ It may take a minute or two for the pod running the server to be up and running,
 You can now run a local process using Telepresence that can access that service, even though the process is local but the service is running in the Kubernetes cluster:
 
 ```console
-$ telepresence --new-deployment example --run curl http://myservice:8000/
+$ telepresence --run curl http://myservice:8000/
 Hello, world!
 ```
 
@@ -34,8 +34,9 @@ Hello, world!
 
 What's going on:
 
-1. Telepresence creates a new `Deployment` called `example`, which runs a proxy.
+1. Telepresence creates a new `Deployment`, which runs a proxy.
 2. Telepresence runs `curl` locally in a way that proxies networking through that `Deployment`.
 3. The DNS lookup and HTTP request done by `curl` get routed through the proxy and transparently access the cluster... even though `curl` is running locally.
+4. When `curl` exits the new `Deployment` will be cleaned up.
 
 To learn more about what Telepresence proxies you can read the relevant [reference documentation](/reference/proxying.html).

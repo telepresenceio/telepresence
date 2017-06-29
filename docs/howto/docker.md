@@ -24,7 +24,7 @@ It may take a minute or two for the pod running the server to be up and running,
 You can now run a Docker container using Telepresence that can access that service, even though the process is local but the service is running in the Kubernetes cluster:
 
 ```console
-$ telepresence --new-deployment example --docker-run -i -t alpine /bin/sh
+$ telepresence --docker-run -i -t alpine /bin/sh
 alpine# apk add --no-cache curl
 alpine# curl http://myservice:8000/
 Hello, world!
