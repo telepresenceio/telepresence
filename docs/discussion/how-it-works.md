@@ -29,10 +29,12 @@ Environment variables from the remote pod are made available to your local proce
 In addition, the local process has its networking transparently overridden such that DNS calls and TCP connections are routed over the proxy to the remote Kubernetes cluster.
 This happens one of two ways:
 
+* When using `--method vpn-tcp`, the default, a VPN-like tunnel is created using a program called [sshuttle](http://sshuttle.readthedocs.io/), which tunnels the packets over the SSH connection, and forwards DNS queries to a DNS proxy in the cluster.
 * When using `--method inject-tcp` this is implemented using `LD_PRELOAD`/`DYLD_INSERT_LIBRARIES` mechanism on Linux/OSX, where a shared library can be injected into a process and override library calls.
   In particular, it overrides DNS resolution and TCP connection and routes them via a SOCKS proxy to the cluster.
   We wrote [a blog post](https://www.datawire.io/code-injection-on-linux-and-macos/) explaining LD_PRELOAD in more detail.
-* When using `--method vpn-tcp`, a VPN-like tunnel is created using a program called [sshuttle](http://sshuttle.readthedocs.io/), which tunnels the packets over the SSH connection, and forwards DNS queries to a DNS proxy in the cluster.
+
+(Technically there is a third method, for proxying containers, that is based on the `vpn-tcp` method.)
 
 Volumes are proxied using [sshfs](https://github.com/libfuse/sshfs), with their location available to the container as an environment variable.
 

@@ -30,7 +30,7 @@ categories: tutorials
 3. You can now run a local process using Telepresence that can access that service, even though the process is local but the service is running in the OpenShift cluster:
 
    ```console
-   $ telepresence -m inject-tcp --new-deployment example --run curl http://myservice:8000/
+   $ telepresence --new-deployment example --run curl http://myservice:8000/
    Hello, world!
    ```
 

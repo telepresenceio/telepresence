@@ -26,7 +26,7 @@ It may take a minute or two for the pod running the server to be up and running,
 You can now run a local process using Telepresence that can access that service, even though the process is local but the service is running in the Kubernetes cluster:
 
 ```console
-$ telepresence -m inject-tcp --new-deployment example --run curl http://myservice:8000/
+$ telepresence --new-deployment example --run curl http://myservice:8000/
 Hello, world!
 ```
 
