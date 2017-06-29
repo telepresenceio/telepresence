@@ -1554,6 +1554,20 @@ def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
         env["TORSOCKS_LOG_FILE_PATH"] = runner.logfile.name
     if sys.platform == "darwin":
         env["PATH"] = sip_workaround(env["PATH"], unsupported_tools_path)
+    # Try to ensure we're actually proxying network, by forcing DNS resolution
+    # via torsocks:
+    start = time()
+    while time() - start < 10:
+        try:
+            runner.check_call([
+                "torsocks", "python3", "-c"
+                "import socket; socket.socket().connect(('google.com', 80))"
+            ], env=env)
+        except CalledProcessError:
+            sleep(0.1)
+        else:
+            return
+    raise RuntimeError("SOCKS network proxying failed to start...")
 
 
 def run_local_command(
