@@ -40,14 +40,13 @@ Here's how you should run `telepresence` (you should make sure you're still in t
 
 ```console
 $ cd /tmp/telepresence-test
-$ telepresence --method inject-tcp \
-               --swap-deployment hello-world --expose 8000 \
+$ telepresence --swap-deployment hello-world --expose 8000 \
                --run python3 -m http.server 8000 &
 ```
 
 This does three things:
 
-* `--method inject-tcp` tells Telepresence to inject a shared library into the Python process, which will route TCP/DNS traffic to the remote cluster.
+* Starts a VPN-like process that sends queries to the appropriate DNS and IP ranges to the cluster.
 * `--swap-deployment` tells Telepresence to replace the existing `hello-world` pod with one running the Telepresence proxy. On exit, the old pod will be restored.
 * `--run` tells Telepresence to run the local web server and hook it up to the networking proxy.
 
@@ -93,7 +92,7 @@ Finally, let's kill Telepresence locally so you don't have to worry about other 
 
 ```console
 $ fg
-telepresence --method inject-tcp --swap-deployment hello-world --expose 8000 --run python3 -m http.server 8000
+telepresence --swap-deployment hello-world --expose 8000 --run python3 -m http.server 8000
 ^C
 Keyboard interrupt received, exiting.
 ```

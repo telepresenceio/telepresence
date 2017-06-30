@@ -26,9 +26,10 @@ Now we'll see how we can use wuzz to interact with a remote Kubernetes cluster.
 `telepresence` will create a new `Deployment` inside Kubernetes that will act as a proxy, and then communication from the `wuzz` subprocess it runs will be forwarded to the cluster:
 
 ```console
-$ telepresence -m vpn-tcp --new-deployment golang \
-               --run $GOPATH/bin/wuzz http://hello-world:8000/
+$ telepresence --run $GOPATH/bin/wuzz http://hello-world:8000/
 ```
+
+**Important:** Go programs will *not* work with `--method inject-tcp` option.
 
 The `wuzz` UI will appear with the URL `http://hello-world:8000/`.
 Hit Enter and you should see the "Hello, World!" response from the Kubernetes service.
@@ -42,7 +43,7 @@ This is just the same as the example covered in [the tutorial](/tutorials/kubern
 For example, if you have a `Deployment` called `myservice` running in Kubernetes and listening on port 8080, you can temporarily swap it out for a local process and have traffic forwarded to your laptop:
 
 ```console
-$ telepresence -m vpn-tcp --swap-deployment myservice --expose 8080 \
+$ telepresence --swap-deployment myservice --expose 8080 \
                --run ./yourgoserver --port=8080
 ```
 
