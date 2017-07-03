@@ -729,3 +729,29 @@ class DockerEndToEndTests(TestCase):
             "/host/volumes_simpler.py",
         ])
         assert result.returncode == 113
+
+    def test_env_variables(self):
+        # Local env variables shouldn't be used
+        environ = os.environ.copy()
+        environ["SHOULD_NOT_BE_SET"] = "This env variable has a space"
+        # But env variables from remote cluster should be, and tocluster.py
+        # checks those:
+        webserver_name = run_webserver()
+        result = run([
+            "telepresence",
+            "--logfile",
+            "-",
+            "--method",
+            "container",
+            "--new-deployment",
+            random_name(),
+            "--docker-run",
+            "-v",
+            "{}:/host".format(DIRECTORY),
+            "python:3-alpine",
+            "python3",
+            "/host/tocluster.py",
+            webserver_name,
+            current_namespace(),
+        ], env=environ)
+        assert result.returncode == 113

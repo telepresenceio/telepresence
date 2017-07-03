@@ -1640,6 +1640,10 @@ def run_local_command(
         connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh)
         p = Popen(command, env=env)
     elif args.method == "container":
+        # Don't want local environment:
+        env = env_overrides.copy()
+        env["TELEPRESENCE_ROOT"] = mount_dir
+        env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
         proxy_container_name, envfile_path = connect_docker(
             runner, remote_info, args, subprocesses, env, ssh
         )

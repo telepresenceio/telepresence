@@ -12,6 +12,11 @@ Features:
 * `--help` now includes some examples.
   ([#189](https://github.com/datawire/telepresence/issues/189))
 
+Bug fixes:
+
+* `--docker-run` container no longer gets environment variables from the host, only from the remote pod.
+  ([#214](https://github.com/datawire/telepresence/issues/214))
+
 #### 0.55 (June 30, 2017)
 
 Features:
