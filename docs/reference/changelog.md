@@ -5,6 +5,13 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.56 (unreleased)
+
+Features:
+
+* `--help` now includes some examples, and uses a pager when run in a tty.
+  ([#189](https://github.com/datawire/telepresence/issues/189))
+
 #### 0.55 (June 30, 2017)
 
 Features:
