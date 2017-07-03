@@ -9,7 +9,7 @@ categories: reference
 
 Features:
 
-* `--help` now includes some examples, and uses a pager when run in a tty.
+* `--help` now includes some examples.
   ([#189](https://github.com/datawire/telepresence/issues/189))
 
 #### 0.55 (June 30, 2017)
