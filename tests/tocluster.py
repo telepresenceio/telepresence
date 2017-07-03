@@ -69,6 +69,8 @@ def check_custom_env(envs):
     for env in envs:
         key, value = env.split("=", 1)
         assert os.environ[key] == value
+    # And a specific env variable that shouldn't be set:
+    assert "SHOULD_NOT_BE_SET" not in os.environ
 
 
 def main():
