@@ -24,6 +24,7 @@ from .utils import (
     current_namespace,
     OPENSHIFT,
     KUBECTL,
+    query_in_k8s,
 )
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
@@ -114,27 +115,12 @@ def run_script_test(telepresence_args, local_command):
     return p.wait()
 
 
-def assert_fromcluster(namespace, url, port, telepresence_process):
+def assert_fromcluster(namespace, service_name, port, telepresence_process):
     """Assert that there's a webserver accessible from the cluster."""
-    for i in range(120):
-        try:
-            result = check_output([
-                'kubectl', 'run', '--attach', random_name(), "--quiet", '--rm',
-                '--image=alpine', '--restart', 'Never', "--namespace",
-                namespace, '--command', '--', 'wget', "-q", "-O-",
-                "-T", "3",
-                "http://{}:{}/__init__.py".format(url, port)
-            ])
-            assert result == (DIRECTORY / "__init__.py").read_bytes()
-            print("Hooray, got expected result when querying via cluster.")
-            return
-        except CalledProcessError as e:
-            print("http request failed, retrying ({})".format(e))
-            if telepresence_process.poll() is not None:
-                raise RuntimeError("Telepresence exited prematurely!")
-            time.sleep(1)
-            continue
-    raise RuntimeError("failed to connect to local HTTP server")
+    url = "http://{}:{}/__init__.py".format(service_name, port)
+    result = query_in_k8s(namespace, url, telepresence_process)
+    assert result == (DIRECTORY / "__init__.py").read_bytes()
+    print("Hooray, got expected result when querying via cluster.")
 
 
 @skipIf(TELEPRESENCE_METHOD == "container", "non-Docker tests")
