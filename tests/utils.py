@@ -57,9 +57,9 @@ def query_in_k8s(namespace, url, process_to_poll):
 def run_webserver(namespace=None):
     """Run webserver in Kuberentes; return Service name."""
     webserver_name = random_name()
-    kubectl = [KUBECTL]
-    if namespace is not None:
-        kubectl.extend(["--namespace", namespace])
+    if namespace is None:
+        namespace = current_namespace()
+    kubectl = [KUBECTL, "--namespace", namespace]
 
     def cleanup():
         check_call(
@@ -97,8 +97,8 @@ def run_webserver(namespace=None):
             available = None
         print("webserver phase: {}".format(available))
         if available == b"Running":
-            # Wait long enough for it to be running
-            time.sleep(10)
+            # Wait for it to be running
+            query_in_k8s(namespace, "http://{}:8080/".format(webserver_name), None)
             return webserver_name
         else:
             time.sleep(1)
