@@ -1,6 +1,6 @@
 ---
 weight: 3
-title: "Using Telepresence with Docker"
+title: "Docker support"
 categories: howto
 layout: doc
 ---

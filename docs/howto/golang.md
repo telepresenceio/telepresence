@@ -1,6 +1,6 @@
 ---
 weight: 2
-title: "Using Telepresence with Go"
+title: "Go support"
 categories: howto
 layout: doc
 ---
