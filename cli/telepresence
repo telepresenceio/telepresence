@@ -273,6 +273,35 @@ class Runner(object):
         )
 
 
+HELP_EXAMPLES = """\
+== Examples ==
+
+Send a HTTP query to Kubernetes Service called 'myservice' listening on port \
+8080:
+
+$ telepresence --run curl http://myservice:8080/
+
+Replace an existing Deployment 'myserver' listening on port 9090 with a local \
+process listening on port 9090:
+
+$ telepresence --swap-deployment myserver --expose 9090 \
+  --run python3 -m http.server 9090
+
+Use a different local port than the remote port:
+
+$ telepresence --swap-deployment myserver --expose 9090:80 \
+  --run python3 -m http.server 9090
+
+Run a Docker container instead of a local process:
+
+$ telepresence --swap-deployment myserver --expose 80 \
+  --docker-run -i -t nginx:latest
+
+
+== Detailed usage ==
+"""
+
+
 @handle_unexpected_errors("-")
 def parse_args():
     """Create a new ArgumentParser and parse sys.argv."""
@@ -285,6 +314,7 @@ def parse_args():
             "Documentation: http://telepresence.io\n"
             "Real-time help: https://gitter.im/datawire/telepresence\n"
             "Issue tracker: https://github.com/datawire/telepresence/issues\n"
+            "\n" + HELP_EXAMPLES + "\n\n"
         )
     )
     parser.add_argument('--version', action='version', version=__version__)
