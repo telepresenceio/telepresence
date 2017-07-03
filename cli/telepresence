@@ -273,28 +273,34 @@ class Runner(object):
         )
 
 
-HELP_EXAMPLES="""\
+HELP_EXAMPLES = """\
 == Examples ==
 
-Send a HTTP query to Kubernetes Service called 'myservice' listening on port 8080:
+Send a HTTP query to Kubernetes Service called 'myservice' listening on port \
+8080:
 
 $ telepresence --run curl http://myservice:8080/
 
-Replace an existing Deployment 'myserver' listening on port 9090 with a local process listening on port 9090:
+Replace an existing Deployment 'myserver' listening on port 9090 with a local \
+process listening on port 9090:
 
-$ telepresence --swap-deployment myserver --expose 9090 --run python3 -m http.server 9090
+$ telepresence --swap-deployment myserver --expose 9090 \
+  --run python3 -m http.server 9090
 
 Use a different local port than the remote port:
 
-$ telepresence --swap-deployment myserver --expose 9090:80 --run python3 -m http.server 9090
+$ telepresence --swap-deployment myserver --expose 9090:80 \
+  --run python3 -m http.server 9090
 
 Run a Docker container instead of a local process:
 
-$ telepresence --swap-deployment myserver --expose 80 --docker-run -i -t nginx:latest
+$ telepresence --swap-deployment myserver --expose 80 \
+  --docker-run -i -t nginx:latest
 
 
 == Detailed usage ==
 """
+
 
 @handle_unexpected_errors("-")
 def parse_args():
