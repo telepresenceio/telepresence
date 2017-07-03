@@ -32,12 +32,34 @@ def telepresence_version():
     ).strip()
 
 
+def query_in_k8s(namespace, url, process_to_poll):
+    """Try sending HTTP requests to URL in Kubernetes, returning result.
+
+    On failure, retry. Will eventually timeout and raise exception.
+    """
+    for i in range(120):
+        try:
+            return check_output([
+                'kubectl', 'run', '--attach', random_name(), "--quiet", '--rm',
+                '--image=alpine', '--restart', 'Never', "--namespace",
+                namespace, '--command', '--', 'wget', "-q", "-O-",
+                "-T", "3", url,
+            ])
+        except CalledProcessError as e:
+            if process_to_poll is not None and process_to_poll.poll() is not None:
+                raise RuntimeError("Process exited prematurely: {}".format(process_to_poll.returncode))
+            print("http request failed, sleeping before retry ({})".format(e))
+            time.sleep(1)
+            continue
+    raise RuntimeError("failed to connect to HTTP server " + url)
+
+
 def run_webserver(namespace=None):
     """Run webserver in Kuberentes; return Service name."""
     webserver_name = random_name()
-    kubectl = [KUBECTL]
-    if namespace is not None:
-        kubectl.extend(["--namespace", namespace])
+    if namespace is None:
+        namespace = current_namespace()
+    kubectl = [KUBECTL, "--namespace", namespace]
 
     def cleanup():
         check_call(
@@ -75,8 +97,8 @@ def run_webserver(namespace=None):
             available = None
         print("webserver phase: {}".format(available))
         if available == b"Running":
-            # Wait long enough for it to be running
-            time.sleep(10)
+            # Wait for it to be running
+            query_in_k8s(namespace, "http://{}:8080/".format(webserver_name), None)
             return webserver_name
         else:
             time.sleep(1)

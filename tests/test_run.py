@@ -24,6 +24,7 @@ from .utils import (
     current_namespace,
     OPENSHIFT,
     KUBECTL,
+    query_in_k8s,
 )
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
@@ -114,32 +115,12 @@ def run_script_test(telepresence_args, local_command):
     return p.wait()
 
 
-@skipIf(
-    OPENSHIFT, "OpenShift doesn't allow root, which the tests need "
-    "(at the moment, this is fixable)"
-)
-def assert_fromcluster(namespace, url, port, telepresence_process):
+def assert_fromcluster(namespace, service_name, port, telepresence_process):
     """Assert that there's a webserver accessible from the cluster."""
-    for i in range(120):
-        try:
-            result = check_output([
-                'kubectl', 'run', '--attach', random_name(), "--quiet", '--rm',
-                '--image=alpine', '--restart', 'Never', "--namespace",
-                namespace, '--command', '--', '/bin/sh', '-c',
-                "apk add --no-cache --quiet curl && " +
-                "curl --silent --max-time 3 " +
-                "http://{}:{}/__init__.py".format(url, port)
-            ])
-            assert result == (DIRECTORY / "__init__.py").read_bytes()
-            print("Hooray, got expected result when querying via cluster.")
-            return
-        except CalledProcessError as e:
-            print("curl failed, retrying ({})".format(e))
-            if telepresence_process.poll() is not None:
-                raise RuntimeError("Telepresence exited prematurely!")
-            time.sleep(1)
-            continue
-    raise RuntimeError("failed to connect to local HTTP server")
+    url = "http://{}:{}/__init__.py".format(service_name, port)
+    result = query_in_k8s(namespace, url, telepresence_process)
+    assert result == (DIRECTORY / "__init__.py").read_bytes()
+    print("Hooray, got expected result when querying via cluster.")
 
 
 @skipIf(TELEPRESENCE_METHOD == "container", "non-Docker tests")
@@ -258,10 +239,6 @@ class NativeEndToEndTests(TestCase):
         )
         assert exit_code == 113
 
-    @skipIf(
-        OPENSHIFT, "OpenShift doesn't allow root, which the tests need "
-        "(at the moment, this is fixable)"
-    )
     def fromcluster(
         self, telepresence_args, url, namespace, local_port, remote_port=None
     ):
