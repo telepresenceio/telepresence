@@ -1,3 +1,3 @@
 ---
-redirect_to: "/references/developing.html"
+redirect_to: "/reference/developing.html"
 ---
