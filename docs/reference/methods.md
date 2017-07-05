@@ -29,6 +29,7 @@ This method does have some limitations of its own, however:
   `yourservice` and `yourservice.default` will resolve correctly, however.
   See [the relevant ticket](https://github.com/datawire/telepresence/issues/161) for details.
 * Only one instance of `telepresence` should be running at a time on any given developer machine.
+* VPNs may interfere with `telepresence`, and vice-versa: don't use both at once.
 * Cloud resources like AWS RDS will not be routed automatically via cluster.
   You'll need to specify the hosts manually using `--also-proxy`, e.g. `--also-proxy mydatabase.somewhere.vpc.aws.amazon.com` to route traffic to that host via the Kubernetes cluster..
 
