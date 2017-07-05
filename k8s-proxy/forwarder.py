@@ -108,12 +108,19 @@ class LocalResolver(object):
             )
             return self.fallback.query(query, timeout=timeout)
 
+        def fix_names(result):
+            # Make sure names in response match what the client asked format
+            for answer in result[0]:
+                answer.name = dns.Name(real_name)
+            return result
+
         print("RESOLVING {}".format(new_query.name.name))
         # We expect Kube DNS to be fast, so have short timeout in case we need
         # to fallback:
         d = client.Resolver(servers=[(self.kubedns, 53)]).query(
             new_query, timeout=[0.1]
         )
+        d.addCallback(fix_names)
         d.addErrback(fallback)
         return d
 
