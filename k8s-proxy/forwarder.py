@@ -112,6 +112,7 @@ class LocalResolver(object):
             # Make sure names in response match what the client asked format
             for answer in result[0]:
                 answer.name = dns.Name(real_name)
+            print("RESULT: {}".format(result))
             return result
 
         print("RESOLVING {}".format(new_query.name.name))

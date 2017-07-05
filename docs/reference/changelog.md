@@ -5,6 +5,14 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.57 (July 6, 2017)
+
+Bug fixes:
+
+* Fix DNS lookups on macOS in `vpn-tcp` mode.
+  Thanks to number101010 for the bug report.
+  ([#216](https://github.com/datawire/telepresence/issues/216))
+
 #### 0.56 (July 5, 2017)
 
 Features:
