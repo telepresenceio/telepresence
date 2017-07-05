@@ -24,7 +24,7 @@ def check_webserver_url(url, how):
     if os.environ["TELEPRESENCE_METHOD"] != "container":
         # XXX if we had docker image with curl it'd be ok to do this too:
         print("Retrieving URL created with {} using curl: {}".format(url, how))
-        curl_result = str(check_output(["curl", "-q", url]), "utf-8")
+        curl_result = str(check_output(["curl", url]), "utf-8")
         assert "Hello" in curl_result
 
 
