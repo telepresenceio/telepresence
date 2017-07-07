@@ -1,26 +1,35 @@
-# This can be deleted from git once Google updates to the new version of the tutorial.
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: telepresence-deployment
-  labels:
-    app: guestbook
-    tier: backend
+  name: frontend
+  # these labels can be applied automatically
+  # from the labels in the pod template if not set
+  # labels:
+  #   app: guestbook
+  #   tier: frontend
 spec:
   # this replicas value is default
   # modify it according to your case
-  replicas: 1
+  replicas: 3
+  # selector can be applied automatically
+  # from the labels in the pod template if not set
+  # selector:
+  #   matchLabels:
+  #     app: guestbook
+  #     tier: frontend
   template:
     metadata:
       labels:
         app: guestbook
-        tier: backend
+        tier: frontend
     spec:
       containers:
       - name: php-redis
-        image: datawire/telepresence-k8s:0.57
-        ports:
-          - containerPort:8080
+        image: gcr.io/google-samples/gb-frontend:v4
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
         env:
         - name: GET_HOSTS_FROM
           value: dns
@@ -30,4 +39,4 @@ spec:
           # line below.
           # value: env
         ports:
-        - containerPort: 8080
+        - containerPort: 80
