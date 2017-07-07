@@ -8,6 +8,7 @@ import os
 import sys
 from traceback import print_exception
 from urllib.request import urlopen
+from subprocess import check_output
 
 
 def handle_error(type, value, traceback):
@@ -20,6 +21,11 @@ def check_webserver_url(url, how):
     result = str(urlopen(url, timeout=5).read(), "utf-8")
     print("Got {} from webserver.".format(repr(result)))
     assert "Hello" in result
+    if os.environ["TELEPRESENCE_METHOD"] != "container":
+        # XXX if we had docker image with curl it'd be ok to do this too:
+        print("Retrieving URL created with {} using curl: {}".format(url, how))
+        curl_result = str(check_output(["curl", url]), "utf-8")
+        assert "Hello" in curl_result
 
 
 def check_urls(webserver_service, namespace):
@@ -69,6 +75,8 @@ def check_custom_env(envs):
     for env in envs:
         key, value = env.split("=", 1)
         assert os.environ[key] == value
+    # And a specific env variable that shouldn't be set:
+    assert "SHOULD_NOT_BE_SET" not in os.environ
 
 
 def main():

@@ -9,12 +9,25 @@ categories: reference
 
 If you use the `--expose` option for `telepresence` with a given port the pod will forward traffic it receives on that port to your local process.
 This allows the Kubernetes or OpenShift cluster to talk to your local process as if it was running in the pod.
-Here we expose port 8080:
+
+By default the remote port and the local port match.
+Here we expose port 8080 as port 8080 on a remote Deployment called `example`:
 
 ```console
 $ telepresence --expose 8080 --new-deployment example \
     --run python3 -m http.server 8080
 ```
+
+It is possible to expose a different local port than the remote port.
+Here we expose port 8080 locally as port 80 on a remote Deployment called `example2`:
+
+```console
+$ telepresence --expose 8080:80 --new-deployment example2 \
+    --run python3 -m http.server 80
+```
+
+You can't expose ports <1024 on clusters that don't support running images as `root`.
+This limitation is the default on OpenShift.
 
 ### Networking access to the cluster
 
@@ -46,8 +59,7 @@ helloworld-1333052153-63kkw   1/1       Running   0          33s
 Now you can send queries to the new `Service` as if you were running inside Kubernetes:
 
 ```console
-$ telepresence --new-deployment quickstart \
-               --run curl http://helloworld.default
+$ telepresence --run curl http://helloworld.default
 <!DOCTYPE html>
 <html>
 <head>
@@ -74,7 +86,7 @@ You also have access to all the environment variables Kubernetes sets automatica
 For example, here you can see the environment variables that get added for each `Service`:
 
 ```console
-$ telepresence -m inject-tcp -n example --run env | grep KUBERNETES
+$ telepresence --run env | grep KUBERNETES
 KUBERNETES_PORT=tcp://10.0.0.1:443
 KUBERNETES_SERVICE_PORT=443
 KUBERNETES_PORT_443_TCP_ADDR=10.0.0.1
@@ -86,56 +98,14 @@ KUBERNETES_SERVICE_HOST=10.0.0.1
 
 ### Volumes
 
-Volumes configured in the `Deployment` pod template will also be made your local process.
+Volumes configured in the `Deployment` pod template will also be made available to your local process.
 This will work better with read-only volumes with small files like `Secret` and `ConfigMap`; a local database server writing to a remote volume will be slow.
 
 Volume support requires a small amount of work on your part.
-The root directory where all the volumes can be found will be set to the `TELEPRESENCE_ROOT` environment variable in the shell run by `telepresence`.
+The root directory where all the volumes can be found will be set to the `TELEPRESENCE_ROOT` environment variable in the shell or subprocess run by `telepresence`.
 You will then need to use that env variable as the root for volume paths you are opening.
 
-For example, all Kubernetes containers have a volume mounted at `/var/run/secrets` with the service account details.
-Those files are accessible from Telepresence:
-
-```console
-$ telepresence -m inject-tcp -n myservice --run-shell
-Starting proxy...
-@minikube|$ echo $TELEPRESENCE_ROOT
-/tmp/tmpk_svwt_5
-@minikube|$ ls $TELEPRESENCE_ROOT/var/run/secrets/kubernetes.io/serviceaccount/
-ca.crt  namespace  token
-```
-
-The files are available at a different path than they are on the actual Kubernetes environment.
-
-One way to deal with that is to change your application's code slightly.
-For example, let's say you have a volume that mounts a file called `/app/secrets`.
-Normally you would just open it in your code like so:
-
-
-```python
-secret_file = open("/app/secrets")
-```
-
-To support volume proxying by Telepresence, you will need to change your code, for example:
-
-```python
-volume_root = "/"
-if "TELEPRESENCE_ROOT" in os.environ:
-    volume_root = os.environ["TELEPRESENCE_ROOT"]
-secret_file = open(os.path.join(volume_root, "app/secrets"))
-```
-
-By falling back to `/` when the environment variable is not set your code will continue to work in its normal Kubernetes setting.
-
-Another way you can do this is by using the [proot](http://proot-me.github.io/) utility on Linux, which allows you to do fake bind mounts without being root.
-For example, presuming you've installed `proot` (`apt install proot` on Ubuntu), in the following example we bind `$TELEPRESENCE_ROOT/var/run/secrets` to `/var/run/secrets`.
-That means code doesn't need to be modified as the paths are in the expected location:
-
-```console
-@minikube|$ proot -b $TELEPRESENCE_ROOT/var/run/secrets/:/var/run/secrets bash
-$ ls /var/run/secrets/kubernetes.io/serviceaccount/
-ca.crt  namespace  token
-```
+You can see an example of this in the [Volumes Howto](../howto/volumes.html).
 
 ### The complete list: what Telepresence proxies
 

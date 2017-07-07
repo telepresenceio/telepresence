@@ -5,10 +5,60 @@ title: "Changelog"
 categories: reference
 ---
 
-#### 0.53 (unreleased)
+#### 0.57 (July 6, 2017)
 
 Bug fixes:
 
+* Fix DNS lookups on macOS in `vpn-tcp` mode.
+  Thanks to number101010 for the bug report.
+  ([#216](https://github.com/datawire/telepresence/issues/216))
+
+#### 0.56 (July 5, 2017)
+
+Features:
+
+* `--help` now includes some examples.
+  ([#189](https://github.com/datawire/telepresence/issues/189))
+
+Bug fixes:
+
+* `--docker-run` container no longer gets environment variables from the host, only from the remote pod.
+  ([#214](https://github.com/datawire/telepresence/issues/214))
+
+#### 0.55 (June 30, 2017)
+
+Features:
+
+* `--method` is now optional, defaulting to "vpn-tcp", or "container" when `--docker-run` is used.
+  ([#206](https://github.com/datawire/telepresence/issues/206))
+* If no deployment method (`--new-deployment`, `--swap-deployment` or `--deployment`) then `--new-deployment` is used by default with a randomly generated name.
+  ([#170](https://github.com/datawire/telepresence/issues/170))
+
+#### 0.54 (June 28, 2017)
+
+Features:
+
+* `--method vpn-tcp` now works on minikube and minishift.
+  As a result we now recommend using it as the default method.
+  ([#160](https://github.com/datawire/telepresence/issues/160))
+
+Bug fixes:
+
+* Support more versions of Linux in container mode.
+  Thanks to Henri Koski for bug report and patch.
+  ([#202](https://github.com/datawire/telepresence/issues/202))
+
+#### 0.53 (June 27, 2017)
+
+Features:
+
+* `--expose` can now expose a different local port than the one used on the cluster side.
+  ([#180](https://github.com/datawire/telepresence/issues/180))
+
+Bug fixes:
+
+* Fix regression where exposing ports <1024 stopped working.
+  ([#194](https://github.com/datawire/telepresence/issues/194))
 * Fix regression where tools like `ping` weren't hidden on Mac in `inject-tcp` method.
   ([#187](https://github.com/datawire/telepresence/issues/187))
 

@@ -50,13 +50,18 @@ minikube-test: virtualenv build-k8s-proxy-minikube build-local
 	TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_METHOD=container ci/test.sh
 	source virtualenv/bin/activate && \
 		env TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_METHOD=inject-tcp ci/test.sh
-	# there's also TELEPRESENCE_METHOD=vpn-tcp, but that doesn't work with
-	# minikube at the moment, unfortunately, so we only run it on Travis.
+	source virtualenv/bin/activate && \
+		env TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_LOCAL_VM=1 \
+		TELEPRESENCE_METHOD=vpn-tcp ci/test.sh
 
 # Run tests relevant to OpenShift:
 openshift-tests: virtualenv
 	source virtualenv/bin/activate && \
-		env TELEPRESENCE_OPENSHIFT=1 TELEPRESENCE_METHOD=inject-tcp ci/test.sh
+		env TELEPRESENCE_OPENSHIFT=1 TELEPRESENCE_VERSION=$(VERSION) && \
+		TELEPRESENCE_METHOD=inject-tcp ci/test.sh
+	source virtualenv/bin/activate && \
+		env TELEPRESENCE_OPENSHIFT=1 TELEPRESENCE_METHOD=vpn-tcp \
+		TELEPRESENCE_LOCAL_VM=1 TELEPRESENCE_VERSION=$(VERSION) ci/test.sh
 
 ## Release ##
 
