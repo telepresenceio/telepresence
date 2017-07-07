@@ -103,13 +103,15 @@ Finally, we can authenticate to our cluster:
 
 ### The Guestbook application
 
-Now that we have our laptop and cloud Kubernetes installation configured, we're going to start setting up the Guestbook application. We'll start by installing Redis in the cluster. We'll need to set up the Redis master deployment ([config](https://github.com/datawire/telepresence/blob/master/examples/guestbook/redis-master-deployment.yaml)), the Redis master service ([config](https://github.com/datawire/telepresence/blob/master/examples/guestbook/redis-master-service.yaml)), the Redis slave deployment ([config](https://github.com/datawire/telepresence/blob/master/examples/guestbook/redis-slave-deployment.yaml)), and the Redis slave service ([config](https://github.com/datawire/telepresence/blob/master/examples/guestbook/redis-slave-service.yaml)). If you don't want to download each of these files manually, these files are in the [`examples/guestbook`](https://github.com/datawire/telepresence/tree/master/examples/guestbook) directory of the Telepresence repository.
+Now that we have our laptop and cloud Kubernetes installation configured, we're going to start setting up the Guestbook application. We'll start by installing Redis in the cluster. We'll need to set up the Redis master deployment ([config](https://github.com/datawire/telepresence/blob/master/examples/guestbook/redis-master-deployment.yaml)), the Redis master service ([config](https://github.com/datawire/telepresence/blob/master/examples/guestbook/redis-master-service.yaml)), the Redis slave deployment ([config](https://github.com/datawire/telepresence/blob/master/examples/guestbook/redis-slave-deployment.yaml)), the Redis slave service ([config](https://github.com/datawire/telepresence/blob/master/examples/guestbook/redis-slave-service.yaml)), and the frontend PHP [service](https://github.com/datawire/telepresence/blob/master/examples/guestbook/main-service.yaml)) and [deployment](https://github.com/datawire/telepresence/blob/master/examples/guestbook/main-deployment.yaml)). If you don't want to download each of these files manually, these files are in the [`examples/guestbook`](https://github.com/datawire/telepresence/tree/master/examples/guestbook) directory of the Telepresence repository.
 
 ```
-% kubectl create -f redis-master-deployment.yaml
-% kubectl create -f redis-master-service.yaml
-% kubectl create -f redis-slave-deployment.yaml
-% kubectl create -f redis-slave-service.yaml
+% kubectl apply -f redis-master-deployment.yaml
+% kubectl apply -f redis-master-service.yaml
+% kubectl apply -f redis-slave-deployment.yaml
+% kubectl apply -f redis-slave-service.yaml
+% kubectl apply -f main-deployment.yaml
+% kubectl apply -f main-service.yaml
 ```
 
 You can verify that everything is running:
@@ -117,31 +119,34 @@ You can verify that everything is running:
 ```
 % kubectl get pods
 NAME                           READY     STATUS    RESTARTS   AGE
-redis-master-343230949-lpw91   1/1       Running   0          1d
-redis-slave-132015689-dpp46    1/1       Running   0          1d
-redis-slave-132015689-v06md    1/1       Running   0          1d
+redis-master-343230949-lpw91   1/1       Running   0          1m
+redis-slave-132015689-dpp46    1/1       Running   0          1m
+redis-slave-132015689-v06md    1/1       Running   0          1m
+frontend-34242342432-zx235     3/3       Running   0          1m
 ```
 
-### Connecting the Guestbook frontend to Redis
-
-We're now going to use [Telepresence](http://www.telepresence.io) to create a virtual network between your local machine and the remote Kubernetes cluster. This way, the PHP application will be able to talk to remote cloud resources, and vice versa.
-
-We'll start by deploying the Telepresence proxy onto the Kubernetes cluster using the [`telepresence-deployment.yaml`](https://github.com/datawire/telepresence/blob/master/examples/guestbook/telepresence-deployment.yaml) deployment file.
+It's time to check out our app in the browser. Let's look up the IP address of our external load balancer:
 
 ```
-% kubectl create -f telepresence-deployment.yaml
+% kubectl get services
+NAME           CLUSTER-IP     EXTERNAL-IP      PORT(S)        AGE
+frontend       10.7.252.209   104.196.217.24   80:30563/TCP   2m
+redis-master   10.7.248.117   <none>           6379/TCP       2m
+redis-slave    10.7.245.58    <none>           6379/TCP       2m
 ```
 
-Next, we need to deploy an externally visible load balancer. The [`frontend-service.yaml`](https://github.com/datawire/telepresence/blob/master/examples/guestbook/frontend-service.yaml) uses a selector for `app:guestbook` and `tier:backend`. We've cleverly used these labels in the `telepresence-deployment.yaml`, so the load balancer will talk directly to our proxy.
+Go to the external IP address of your load balancer (in the above example, 104.196.217.24). You should see the Guestbook application running. Typing into the submit box will show how your message is persisting to the Redis cluster.
+
+### Switching to local development
+
+What if you want to try out some changes to your code, without having to redeploy it each time?
+
+We're now going to use [Telepresence](http://www.telepresence.io) to create a virtual network between your local machine and the remote Kubernetes cluster. This way, a PHP application running locally will be able to talk to remote cloud resources, and vice versa.
+
+In addition, Telepresence will temporarily replace the pods running the PHP code in Kubernetes with a proxy talking to your local machine:
 
 ```
-% kubectl create -f frontend-service.yaml
-```
-
-Now, we're going to start the local Telepresence client, which will spawn a special shell which connects to the proxy in the remote Kubernetes cluster.
-
-```
-% telepresence --deployment telepresence-deployment --expose 8080 --run-shell
+% telepresence --swap-deployment frontend --expose 8080:80 --run-shell
 ```
 
 In this special shell, change to the `examples/guestbook` directory, and start the frontend application as follows. We'll need to know the directory where PHP can load its dependencies, e.g., Predis. You can figure this out by typing:
@@ -156,27 +161,15 @@ Now, in the `examples/guestbook` directory, start PHP, and pass in the pear shar
 % php -d include_path="PATH_TO_PEAR_DIR" -S 0.0.0.0:8080
 ```
 
-It's time to check out our app in the browser. Let's look up the IP address of our external load balancer:
-
-```
-% kubectl get services
-NAME           CLUSTER-IP     EXTERNAL-IP      PORT(S)        AGE
-frontend       10.7.252.209   104.196.217.24   80:30563/TCP   25m
-redis-master   10.7.248.117   <none>           6379/TCP       5d
-redis-slave    10.7.245.58    <none>           6379/TCP       5d
-```
-
-Go to the external IP address of your load balancer (in the above example, 104.196.217.24). You should see the Guestbook application running. Typing into the submit box will show how your message is persisting to the Redis cluster.
-
 ### Editing your code
 
 Now, open `index.html` from your shell and try renaming the Submit button to Go. Save, hit reload. BEHOLD! You'll immediately see your changes reflected live on the external IP address.
 
-Terminate the PHP process, and type `exit` to terminate the Telepresence proxy.
+Terminate the PHP process, and type `exit` to terminate the Telepresence proxy and swap back to the original deployed code.
 
 ### Behind the scenes
 
-What's going on behind the scenes? Your incoming request goes to the load balancer. The load balancer, as mentioned above, looks for the Telepresence proxy based on the `app:guestbook` and `tier:backend` labels. The proxy, which is running in the cloud Kubernetes environment, then sends those requests to the local Telepresence client, which passes the request to the PHP application.
+What's going on behind the scenes? Your incoming request goes to the load balancer. The load balancer, as mentioned above, looks for the Telepresence proxy based on the `app:guestbook` and `tier:frontend` labels. The proxy, which is running in the cloud Kubernetes environment, then sends those requests to the local Telepresence client, which passes the request to the PHP application.
 
 ## Additional Resources
 

@@ -1,4 +1,3 @@
-# This can be deleted from git once Google updates to the new version of the tutorial.
 apiVersion: v1
 kind: Service
 metadata:
@@ -10,7 +9,7 @@ spec:
   ports:
     # the port that this service should serve on
   - port: 80
-    targetPort: 8080
+    targetPort: 80
   selector:
     app: guestbook
-    tier: backend
+    tier: frontend
