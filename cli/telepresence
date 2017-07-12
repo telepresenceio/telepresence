@@ -1673,16 +1673,16 @@ def run_local_command(
         p = Popen(command, env=env)
     elif args.method == "container":
         # Don't want local environment:
-        env = env_overrides.copy()
-        env["TELEPRESENCE_ROOT"] = mount_dir
-        env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
+        container_env = env_overrides.copy()
+        container_env["TELEPRESENCE_ROOT"] = mount_dir
+        container_env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
         proxy_container_name, envfile_path = connect_docker(
-            runner, remote_info, args, subprocesses, env, ssh
+            runner, remote_info, args, subprocesses, container_env, ssh
         )
         container_name = random_name()
         docker_command = docker_runify([
             "--volume={}:{}".format(
-                env["TELEPRESENCE_ROOT"], env["TELEPRESENCE_ROOT"]
+                container_env["TELEPRESENCE_ROOT"], container_env["TELEPRESENCE_ROOT"]
             ),
             "--name=" + container_name,
             "--network=container:" + proxy_container_name,
