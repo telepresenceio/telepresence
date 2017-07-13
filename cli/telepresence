@@ -1546,8 +1546,19 @@ def make_docker_kill(runner, name):
     return kill
 
 
-def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
-    """Connect using sshuttle running in a Docker container."""
+def connect_docker(
+    runner, remote_info, args, subprocesses, remote_env, ssh, mount_dir
+):
+    """
+    Connect using sshuttle running in a Docker container.
+
+    :param args: Command-line args to telepresence binary.
+    :param remote_env: Dictionary with environment on remote pod.
+    :param mount_dir: Path to local directory where remote pod's filesystem is
+        mounted.
+    """
+    remote_env["TELEPRESENCE_ROOT"] = mount_dir
+    remote_env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
     # Start the sshuttle container:
     name = random_name()
     config = {
@@ -1555,7 +1566,7 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
         ssh.port,
         "cidrs":
         get_proxy_cidrs(
-            runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
+            runner, args, remote_info, remote_env["KUBERNETES_SERVICE_HOST"]
         ),
         "expose_ports":
         args.expose,
@@ -1573,7 +1584,7 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
     )
     # Write out env file:
     with NamedTemporaryFile("w", delete=False) as envfile:
-        for key, value in env.items():
+        for key, value in remote_env.items():
             envfile.write("{}={}\n".format(key, value))
     atexit.register(os.remove, envfile.name)
 
@@ -1589,6 +1600,7 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
         except CalledProcessError as e:
             if e.returncode == 100:
                 # We're good!
+                break
                 return name, envfile.name
             elif e.returncode == 125:
                 # Docker failure, probably due to original container not
@@ -1601,6 +1613,21 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
             raise RuntimeError(
                 "Waiting container exited prematurely. File a bug, please!"
             )
+
+    # Start the container specified by the user:
+    container_name = random_name()
+    docker_command = docker_runify([
+        "--volume={}:{}".format(mount_dir, mount_dir),
+        "--name=" + container_name,
+        "--network=container:" + name,
+        "--env-file",
+        envfile.name,
+    ])
+    # Older versions of Docker don't have --init:
+    if "--init" in runner.get_output(["docker", "run", "--help"]):
+        docker_command += ["--init"]
+    docker_command += args.docker_run
+    return Popen(docker_command), container_name
 
 
 def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
@@ -1672,28 +1699,12 @@ def run_local_command(
         connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh)
         p = Popen(command, env=env)
     elif args.method == "container":
-        # Don't want local environment:
-        env = env_overrides.copy()
-        env["TELEPRESENCE_ROOT"] = mount_dir
-        env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
-        proxy_container_name, envfile_path = connect_docker(
-            runner, remote_info, args, subprocesses, env, ssh
+        # Don't want local environment, so we pass in original version we got
+        # from remote pod:
+        p, container_name = connect_docker(
+            runner, remote_info, args, subprocesses,
+            env_overrides.copy(), ssh, mount_dir
         )
-        container_name = random_name()
-        docker_command = docker_runify([
-            "--volume={}:{}".format(
-                env["TELEPRESENCE_ROOT"], env["TELEPRESENCE_ROOT"]
-            ),
-            "--name=" + container_name,
-            "--network=container:" + proxy_container_name,
-            "--env-file",
-            envfile_path,
-        ])
-        # Older versions of Docker don't have --init:
-        if "--init" in runner.get_output(["docker", "run", "--help"]):
-            docker_command += ["--init"]
-        docker_command += args.docker_run
-        p = Popen(docker_command, env=env)
     else:
         raise RuntimeError(
             "GADZOOKS, A BUG: unknown proxying method " + args.method
