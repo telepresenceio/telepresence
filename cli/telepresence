@@ -1559,19 +1559,33 @@ def make_docker_kill(runner, name):
     return kill
 
 
-def connect_docker(
-    runner, remote_info, args, subprocesses, remote_env, ssh, mount_dir
+def run_docker_command(
+    runner, remote_info, args, remote_env, subprocesses, ssh
 ):
     """
-    Connect using sshuttle running in a Docker container.
+    --docker-run support.
+
+    Connect using sshuttle running in a Docker container, and then run user
+    container.
 
     :param args: Command-line args to telepresence binary.
     :param remote_env: Dictionary with environment on remote pod.
     :param mount_dir: Path to local directory where remote pod's filesystem is
         mounted.
     """
+    # Mount remote filesystem. We allow all users if we're using Docker because
+    # we don't know what uid the Docker container will use:
+    mount_dir, mount_cleanup = mount_remote_volumes(
+        runner,
+        remote_info,
+        ssh,
+        True,
+    )
+
+    # Update environment:
     remote_env["TELEPRESENCE_ROOT"] = mount_dir
     remote_env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
+
     # Start the sshuttle container:
     name = random_name()
     config = {
@@ -1595,6 +1609,7 @@ def connect_docker(
             ])
         ), make_docker_kill(runner, name)
     )
+
     # Write out env file:
     with NamedTemporaryFile("w", delete=False) as envfile:
         for key, value in remote_env.items():
@@ -1640,7 +1655,18 @@ def connect_docker(
     if "--init" in runner.get_output(["docker", "run", "--help"]):
         docker_command += ["--init"]
     docker_command += args.docker_run
-    return Popen(docker_command), container_name
+    p = Popen(docker_command)
+
+    def terminate_if_alive():
+        runner.write("Shutting down containers...\n")
+        if p.poll() is None:
+            runner.write("Killing local container...\n")
+            make_docker_kill(runner, container_name)()
+
+        mount_cleanup()
+
+    atexit.register(terminate_if_alive)
+    wait_for_exit(runner, p, subprocesses)
 
 
 def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
@@ -1689,10 +1715,9 @@ def run_local_command(
     unsupported_tools_path = get_unsupported_tools(args.method != "inject-tcp")
     env["PATH"] = unsupported_tools_path + ":" + env["PATH"]
 
-    # Mount remote filesystem. We allow all users if we're using Docker because
-    # we don't know what uid the Docker container will use:
+    # Mount remote filesystem:
     mount_dir, mount_cleanup = mount_remote_volumes(
-        runner, remote_info, ssh, args.method == "container"
+        runner, remote_info, ssh, False
     )
     env["TELEPRESENCE_ROOT"] = mount_dir
 
@@ -1711,26 +1736,12 @@ def run_local_command(
     elif args.method == "vpn-tcp":
         connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh)
         p = Popen(command, env=env)
-    elif args.method == "container":
-        # Don't want local environment, so we pass in original version we got
-        # from remote pod:
-        p, container_name = connect_docker(
-            runner, remote_info, args, subprocesses,
-            env_overrides.copy(), ssh, mount_dir
-        )
-    else:
-        raise RuntimeError(
-            "GADZOOKS, A BUG: unknown proxying method " + args.method
-        )
 
     def terminate_if_alive():
         runner.write("Shutting down local process...\n")
         if p.poll() is None:
             runner.write("Killing local process...\n")
-            if args.method == "container":
-                make_docker_kill(runner, container_name)()
-            else:
-                kill_process(p)
+            kill_process(p)
 
         mount_cleanup()
 
@@ -1942,9 +1953,19 @@ def main():
         subprocesses, env, socks_port, ssh, remote_info = start_proxy(
             runner, args
         )
-        run_local_command(
-            runner, remote_info, args, env, subprocesses, socks_port, ssh
-        )
+        if args.method == "container":
+            run_docker_command(
+                runner,
+                remote_info,
+                args,
+                env,
+                subprocesses,
+                ssh,
+            )
+        else:
+            run_local_command(
+                runner, remote_info, args, env, subprocesses, socks_port, ssh
+            )
 
     go()
 
