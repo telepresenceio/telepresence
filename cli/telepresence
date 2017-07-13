@@ -1359,10 +1359,9 @@ def mount_remote_volumes(runner, remote_info, ssh, allow_all_users):
 
     def cleanup():
         if sys.platform.startswith("linux"):
-            try:
-                runner.check_call(["fusermount", "-z", "-u", mount_dir])
-            except CalledProcessError:
-                pass
+            runner.check_call(
+                sudo_prefix + ["fusermount", "-z", "-u", mount_dir]
+            )
         else:
             runner.get_output(sudo_prefix + ["umount", "-f", mount_dir])
 
