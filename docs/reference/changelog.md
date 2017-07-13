@@ -5,6 +5,14 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.58 (unreleased)
+
+Bug fixes:
+
+* Fixed regression that broke Docker on OS X.
+  Thanks to Vincent van der Weele for the bug report.
+  ([#221](https://github.com/datawire/telepresence/issues/221))
+
 #### 0.57 (July 6, 2017)
 
 Bug fixes:

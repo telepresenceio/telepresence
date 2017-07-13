@@ -1321,11 +1321,11 @@ def mount_remote_volumes(runner, remote_info, ssh, allow_all_users):
     # Docker for Mac only shares some folders; the default TMPDIR on OS X is
     # not one of them, so make sure we use /tmp:
     mount_dir = mkdtemp(dir="/tmp")
-    prefix = ["sudo"] if allow_all_users else []
+    sudo_prefix = ["sudo"] if allow_all_users else []
     middle = ["-o", "allow_other"] if allow_all_users else []
     try:
         runner.check_call(
-            prefix + [
+            sudo_prefix + [
                 "sshfs",
                 "-p",
                 str(ssh.port),
@@ -1353,7 +1353,19 @@ def mount_remote_volumes(runner, remote_info, ssh, allow_all_users):
             file=sys.stderr
         )
         mounted = False
-    return mount_dir, mounted
+
+    def no_cleanup():
+        pass
+
+    def cleanup():
+        if sys.platform.startswith("linux"):
+            runner.check_call(
+                sudo_prefix + ["fusermount", "-z", "-u", mount_dir]
+            )
+        else:
+            runner.get_output(sudo_prefix + ["umount", "-f", mount_dir])
+
+    return mount_dir, cleanup if mounted else no_cleanup
 
 
 NICE_FAILURE = """\
@@ -1546,8 +1558,33 @@ def make_docker_kill(runner, name):
     return kill
 
 
-def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
-    """Connect using sshuttle running in a Docker container."""
+def run_docker_command(
+    runner, remote_info, args, remote_env, subprocesses, ssh
+):
+    """
+    --docker-run support.
+
+    Connect using sshuttle running in a Docker container, and then run user
+    container.
+
+    :param args: Command-line args to telepresence binary.
+    :param remote_env: Dictionary with environment on remote pod.
+    :param mount_dir: Path to local directory where remote pod's filesystem is
+        mounted.
+    """
+    # Mount remote filesystem. We allow all users if we're using Docker because
+    # we don't know what uid the Docker container will use:
+    mount_dir, mount_cleanup = mount_remote_volumes(
+        runner,
+        remote_info,
+        ssh,
+        True,
+    )
+
+    # Update environment:
+    remote_env["TELEPRESENCE_ROOT"] = mount_dir
+    remote_env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
+
     # Start the sshuttle container:
     name = random_name()
     config = {
@@ -1555,7 +1592,7 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
         ssh.port,
         "cidrs":
         get_proxy_cidrs(
-            runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
+            runner, args, remote_info, remote_env["KUBERNETES_SERVICE_HOST"]
         ),
         "expose_ports":
         args.expose,
@@ -1571,9 +1608,10 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
             ])
         ), make_docker_kill(runner, name)
     )
+
     # Write out env file:
     with NamedTemporaryFile("w", delete=False) as envfile:
-        for key, value in env.items():
+        for key, value in remote_env.items():
             envfile.write("{}={}\n".format(key, value))
     atexit.register(os.remove, envfile.name)
 
@@ -1589,6 +1627,7 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
         except CalledProcessError as e:
             if e.returncode == 100:
                 # We're good!
+                break
                 return name, envfile.name
             elif e.returncode == 125:
                 # Docker failure, probably due to original container not
@@ -1601,6 +1640,32 @@ def connect_docker(runner, remote_info, args, subprocesses, env, ssh):
             raise RuntimeError(
                 "Waiting container exited prematurely. File a bug, please!"
             )
+
+    # Start the container specified by the user:
+    container_name = random_name()
+    docker_command = docker_runify([
+        "--volume={}:{}".format(mount_dir, mount_dir),
+        "--name=" + container_name,
+        "--network=container:" + name,
+        "--env-file",
+        envfile.name,
+    ])
+    # Older versions of Docker don't have --init:
+    if "--init" in runner.get_output(["docker", "run", "--help"]):
+        docker_command += ["--init"]
+    docker_command += args.docker_run
+    p = Popen(docker_command)
+
+    def terminate_if_alive():
+        runner.write("Shutting down containers...\n")
+        if p.poll() is None:
+            runner.write("Killing local container...\n")
+            make_docker_kill(runner, container_name)()
+
+        mount_cleanup()
+
+    atexit.register(terminate_if_alive)
+    wait_for_exit(runner, p, subprocesses)
 
 
 def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
@@ -1649,10 +1714,9 @@ def run_local_command(
     unsupported_tools_path = get_unsupported_tools(args.method != "inject-tcp")
     env["PATH"] = unsupported_tools_path + ":" + env["PATH"]
 
-    # Mount remote filesystem. We allow all users if we're using Docker because
-    # we don't know what uid the Docker container will use:
-    mount_dir, mounted = mount_remote_volumes(
-        runner, remote_info, ssh, args.method == "container"
+    # Mount remote filesystem:
+    mount_dir, mount_cleanup = mount_remote_volumes(
+        runner, remote_info, ssh, False
     )
     env["TELEPRESENCE_ROOT"] = mount_dir
 
@@ -1671,51 +1735,14 @@ def run_local_command(
     elif args.method == "vpn-tcp":
         connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh)
         p = Popen(command, env=env)
-    elif args.method == "container":
-        # Don't want local environment:
-        env = env_overrides.copy()
-        env["TELEPRESENCE_ROOT"] = mount_dir
-        env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
-        proxy_container_name, envfile_path = connect_docker(
-            runner, remote_info, args, subprocesses, env, ssh
-        )
-        container_name = random_name()
-        docker_command = docker_runify([
-            "--volume={}:{}".format(
-                env["TELEPRESENCE_ROOT"], env["TELEPRESENCE_ROOT"]
-            ),
-            "--name=" + container_name,
-            "--network=container:" + proxy_container_name,
-            "--env-file",
-            envfile_path,
-        ])
-        # Older versions of Docker don't have --init:
-        if "--init" in runner.get_output(["docker", "run", "--help"]):
-            docker_command += ["--init"]
-        docker_command += args.docker_run
-        p = Popen(docker_command, env=env)
-    else:
-        raise RuntimeError(
-            "GADZOOKS, A BUG: unknown proxying method " + args.method
-        )
 
     def terminate_if_alive():
         runner.write("Shutting down local process...\n")
         if p.poll() is None:
             runner.write("Killing local process...\n")
-            if args.method == "container":
-                make_docker_kill(runner, container_name)()
-            else:
-                kill_process(p)
+            kill_process(p)
 
-        if mounted:
-            if sys.platform.startswith("linux"):
-                try:
-                    runner.check_call(["fusermount", "-z", "-u", mount_dir])
-                except CalledProcessError:
-                    pass
-            else:
-                runner.get_output(["umount", "-f", mount_dir])
+        mount_cleanup()
 
     atexit.register(terminate_if_alive)
     wait_for_exit(runner, p, subprocesses)
@@ -1925,9 +1952,19 @@ def main():
         subprocesses, env, socks_port, ssh, remote_info = start_proxy(
             runner, args
         )
-        run_local_command(
-            runner, remote_info, args, env, subprocesses, socks_port, ssh
-        )
+        if args.method == "container":
+            run_docker_command(
+                runner,
+                remote_info,
+                args,
+                env,
+                subprocesses,
+                ssh,
+            )
+        else:
+            run_local_command(
+                runner, remote_info, args, env, subprocesses, socks_port, ssh
+            )
 
     go()
 
