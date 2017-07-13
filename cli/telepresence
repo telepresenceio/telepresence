@@ -1321,11 +1321,11 @@ def mount_remote_volumes(runner, remote_info, ssh, allow_all_users):
     # Docker for Mac only shares some folders; the default TMPDIR on OS X is
     # not one of them, so make sure we use /tmp:
     mount_dir = mkdtemp(dir="/tmp")
-    prefix = ["sudo"] if allow_all_users else []
+    sudo_prefix = ["sudo"] if allow_all_users else []
     middle = ["-o", "allow_other"] if allow_all_users else []
     try:
         runner.check_call(
-            prefix + [
+            sudo_prefix + [
                 "sshfs",
                 "-p",
                 str(ssh.port),
@@ -1364,7 +1364,7 @@ def mount_remote_volumes(runner, remote_info, ssh, allow_all_users):
             except CalledProcessError:
                 pass
         else:
-            runner.get_output(["umount", "-f", mount_dir])
+            runner.get_output(sudo_prefix + ["umount", "-f", mount_dir])
 
     return mount_dir, cleanup if mounted else no_cleanup
 
