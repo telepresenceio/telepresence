@@ -1353,7 +1353,20 @@ def mount_remote_volumes(runner, remote_info, ssh, allow_all_users):
             file=sys.stderr
         )
         mounted = False
-    return mount_dir, mounted
+
+    def no_cleanup():
+        pass
+
+    def cleanup():
+        if sys.platform.startswith("linux"):
+            try:
+                runner.check_call(["fusermount", "-z", "-u", mount_dir])
+            except CalledProcessError:
+                pass
+        else:
+            runner.get_output(["umount", "-f", mount_dir])
+
+    return mount_dir, cleanup if mounted else no_cleanup
 
 
 NICE_FAILURE = """\
@@ -1678,7 +1691,7 @@ def run_local_command(
 
     # Mount remote filesystem. We allow all users if we're using Docker because
     # we don't know what uid the Docker container will use:
-    mount_dir, mounted = mount_remote_volumes(
+    mount_dir, mount_cleanup = mount_remote_volumes(
         runner, remote_info, ssh, args.method == "container"
     )
     env["TELEPRESENCE_ROOT"] = mount_dir
@@ -1719,14 +1732,7 @@ def run_local_command(
             else:
                 kill_process(p)
 
-        if mounted:
-            if sys.platform.startswith("linux"):
-                try:
-                    runner.check_call(["fusermount", "-z", "-u", mount_dir])
-                except CalledProcessError:
-                    pass
-            else:
-                runner.get_output(["umount", "-f", mount_dir])
+        mount_cleanup()
 
     atexit.register(terminate_if_alive)
     wait_for_exit(runner, p, subprocesses)
