@@ -4,6 +4,7 @@ autoflake
 pytest
 pytest-xdist
 pytest-timeout
+pyyaml
 yapf
 pylint
 pex
