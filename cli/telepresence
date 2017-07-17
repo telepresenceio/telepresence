@@ -1052,7 +1052,31 @@ def swap_deployment(runner, args):
             "containers"
         ][0]["name"]
 
-    new_deployment_json = deepcopy(deployment_json)
+    new_deployment_json = new_swapped_deployment(
+        deployment_json, container_name, run_id, TELEPRESENCE_REMOTE_IMAGE,
+        args.method == "vpn-tcp" and args.in_local_vm, args.needs_root
+    )
+    apply_json(new_deployment_json)
+    return deployment_name, run_id
+
+
+def new_swapped_deployment(
+    old_deployment, container_to_update, run_id, telepresence_image,
+    add_custom_nameserver, as_root
+):
+    """
+    Create a new Deployment that uses telepresence-k8s image.
+
+    Makes the following changes:
+
+    1. Changes to single replica.
+    2. Disables command, args, livenessProbe, readinessProbe,
+       terminationMessagePolicy.
+    3. Adds labels.
+    4. Adds TELEPRESENCE_NAMESERVER env variable, if requested.
+    5. Runs as root, if requested.
+    """
+    new_deployment_json = deepcopy(old_deployment)
     new_deployment_json["spec"]["replicas"] = 1
     new_deployment_json["metadata"].setdefault("labels",
                                                {})["telepresence"] = run_id
@@ -1061,30 +1085,27 @@ def swap_deployment(runner, args):
     )["telepresence"] = run_id
     for container in new_deployment_json["spec"]["template"]["spec"
                                                              ]["containers"]:
-        if container["name"] == container_name:
-            container["image"] = TELEPRESENCE_REMOTE_IMAGE
+        if container["name"] == container_to_update:
+            container["image"] = telepresence_image
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
             container["imagePullPolicy"] = "IfNotPresent"
-            # If we're on local VM we need to use different nameserver to
-            # prevent infinite loops caused by sshuttle:
-            if args.method == "vpn-tcp" and args.in_local_vm:
+            if add_custom_nameserver:
                 container.setdefault("env", []).append({
                     "name":
                     "TELEPRESENCE_NAMESERVER",
                     "value":
                     get_alternate_nameserver()
                 })
-            if args.needs_root:
+            if as_root:
                 container["securityContext"] = {
                     "runAsUser": 0,
                 }
-            apply_json(new_deployment_json)
-            return deployment_name, run_id
+            return new_deployment_json
 
     raise RuntimeError(
-        "Couldn't find container {} in deployment {}.".
-        format(deployment_name, container_name)
+        "Couldn't find container {} in the Deployment.".
+        format(container_to_update)
     )
 
 
