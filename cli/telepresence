@@ -1052,6 +1052,8 @@ def swap_deployment(runner, args):
             "containers"
         ][0]["name"]
 
+    # If we're on local VM we need to use different nameserver to
+    # prevent infinite loops caused by sshuttle.
     new_deployment_json = new_swapped_deployment(
         deployment_json, container_name, run_id, TELEPRESENCE_REMOTE_IMAGE,
         args.method == "vpn-tcp" and args.in_local_vm, args.needs_root
@@ -1070,11 +1072,11 @@ def new_swapped_deployment(
     Makes the following changes:
 
     1. Changes to single replica.
-    2. Disables command, args, livenessProbe, readinessProbe,
-       terminationMessagePolicy.
+    2. Disables command, args, livenessProbe, readinessProbe, workingDir.
     3. Adds labels.
     4. Adds TELEPRESENCE_NAMESERVER env variable, if requested.
     5. Runs as root, if requested.
+    6. Sets terminationMessagePolicy.
     """
     new_deployment_json = deepcopy(old_deployment)
     new_deployment_json["spec"]["replicas"] = 1
@@ -1090,6 +1092,18 @@ def new_swapped_deployment(
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
             container["imagePullPolicy"] = "IfNotPresent"
+            # Drop unneeded fields:
+            for unneeded in [
+                "command", "args", "livenessProbe", "readinessProbe",
+                "workingDir"
+            ]:
+                try:
+                    container.pop(unneeded)
+                except KeyError:
+                    pass
+            # We don't write out termination file:
+            container["terminationMessagePolicy"] = "FallbackToLogsOnError"
+            # Use custom name server if necessary:
             if add_custom_nameserver:
                 container.setdefault("env", []).append({
                     "name":
