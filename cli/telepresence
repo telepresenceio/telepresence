@@ -1056,7 +1056,8 @@ def swap_deployment(runner, args):
     # prevent infinite loops caused by sshuttle.
     new_deployment_json = new_swapped_deployment(
         deployment_json, container_name, run_id, TELEPRESENCE_REMOTE_IMAGE,
-        args.method == "vpn-tcp" and args.in_local_vm, args.needs_root
+        args.method == "vpn-tcp" and args.in_local_vm, args.needs_root,
+        random_name(),
     )
     apply_json(new_deployment_json)
     return deployment_name, run_id
@@ -1064,7 +1065,7 @@ def swap_deployment(runner, args):
 
 def new_swapped_deployment(
     old_deployment, container_to_update, run_id, telepresence_image,
-    add_custom_nameserver, as_root
+        add_custom_nameserver, as_root, new_container_name,
 ):
     """
     Create a new Deployment that uses telepresence-k8s image.
@@ -1091,7 +1092,7 @@ def new_swapped_deployment(
             # Change the name to make sure all changes (in particular *removed*
             # fields) get reflected, rather than merged in way that means
             # removed fields are ignored:
-            container["name"] = random_name()
+            container["name"] = new_container_name
             container["image"] = telepresence_image
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
@@ -1183,7 +1184,8 @@ def swap_deployment_openshift(runner, args):
 
     new_rc_json = new_swapped_deployment(
         rc_json, container_name, run_id, TELEPRESENCE_REMOTE_IMAGE,
-        args.method == "vpn-tcp" and args.in_local_vm, False
+        args.method == "vpn-tcp" and args.in_local_vm, False,
+        random_name()
     )
     apply_json(new_rc_json)
     return deployment_name, run_id
