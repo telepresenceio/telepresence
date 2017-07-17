@@ -1088,6 +1088,10 @@ def new_swapped_deployment(
     for container in new_deployment_json["spec"]["template"]["spec"
                                                              ]["containers"]:
         if container["name"] == container_to_update:
+            # Change the name to make sure all changes (in particular *removed*
+            # fields) get reflected, rather than merged in way that means
+            # removed fields are ignored:
+            container["name"] = random_name()
             container["image"] = telepresence_image
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
