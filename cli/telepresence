@@ -1181,25 +1181,12 @@ def swap_deployment_openshift(runner, args):
         container_name = rc_json["spec"]["template"]["spec"]["containers"
                                                              ][0]["name"]
 
-    new_rc_json = deepcopy(rc_json)
-    new_rc_json["spec"]["replicas"] = 1
-    new_rc_json["metadata"].setdefault("labels", {})["telepresence"] = run_id
-    new_rc_json["spec"]["template"]["metadata"].setdefault(
-        "labels", {}
-    )["telepresence"] = run_id
-    for container in new_rc_json["spec"]["template"]["spec"]["containers"]:
-        if container["name"] == container_name:
-            container["image"] = TELEPRESENCE_REMOTE_IMAGE
-            # Not strictly necessary for real use, but tests break without this
-            # since we don't upload test images to Docker Hub:
-            container["imagePullPolicy"] = "IfNotPresent"
-            apply_json(new_rc_json)
-            return deployment_name, run_id
-
-    raise RuntimeError(
-        "Couldn't find container {} in deployment {}.".
-        format(deployment_name, container_name)
+    new_rc_json = new_swapped_deployment(
+        rc_json, container_name, run_id, TELEPRESENCE_REMOTE_IMAGE,
+        args.method == "vpn-tcp" and args.in_local_vm, False
     )
+    apply_json(new_rc_json)
+    return deployment_name, run_id
 
 
 def start_proxy(runner, args):
