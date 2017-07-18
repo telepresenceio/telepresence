@@ -5,6 +5,12 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.60 (unreleased)
+
+Misc:
+
+* Switched to upstream `sshuttle` instead of using forked version.
+
 #### 0.59 (July 18, 2017)
 
 Bug fixes:

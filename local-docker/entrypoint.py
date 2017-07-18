@@ -77,7 +77,8 @@ def proxy(config):
         "sshuttle-telepresence", "-v", "--dns", "--method", "nat", "-e", (
             "ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null " +
             "-F /dev/null"
-        ), "-r", "telepresence@{}:{}".format(ip, port)
+        ), "--to-ns", "127.0.0.1:9053", "-r",
+        "telepresence@{}:{}".format(ip, port)
     ] + cidrs)
     # Start the SSH tunnels to expose local services:
     subps = Subprocesses()

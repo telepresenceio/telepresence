@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-Create a standalone forked sshuttle.
+Create a standalone sshuttle.
+
+We use a particular commit off of upstream master since at the moment there is no release with the feature we want (as of July 18, 2017). Once a new release is made we can pin that.
 
 For now we have a fork with a branch; hope is to upstream our changes
 eventually.
@@ -14,9 +16,10 @@ from tempfile import mkdtemp
 def main():
     tempdir = mkdtemp() + "/sshuttle"
     check_call([
-        "git", "clone", "https://github.com/datawire/sshuttle.git", tempdir
+        "git", "clone", "https://github.com/sshuttle/sshuttle.git", tempdir
     ])
-    check_call(["git", "checkout", "custom-dns-server"], cwd=tempdir)
+    check_call(["git", "checkout", "be559fc78b881398fb4d0bd79a19d2eb255830a6"],
+               cwd=tempdir)
     check_call(["python3", "setup.py", "sdist"], cwd=tempdir)
     version = str(
         check_output(["python3", "setup.py", "--version"],
