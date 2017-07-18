@@ -645,6 +645,42 @@ class NativeEndToEndTests(TestCase):
         exit_code = p.wait()
         assert 113 == exit_code
 
+    def test_swapdeployment_auto_expose(self):
+        """
+        --swap-deployment auto-exposes ports listed in the Deployment.
+        """
+        service_name = random_name()
+        check_call([
+            KUBECTL,
+            "run",
+            service_name,
+            "--port=12377",
+            "--expose",
+            "--restart=Always",
+            "--image=openshift/hello-openshift",
+            "--replicas=2",
+            "--labels=telepresence-test=" + service_name,
+            "--env=HELLO=there",
+        ])
+        self.addCleanup(
+            check_call, [KUBECTL, "delete", DEPLOYMENT_TYPE, service_name]
+        )
+        port = 12377
+        # Explicitly do NOT use '--expose 12377', to see if it's auto-detected:
+        p = Popen(
+            args=[
+                "telepresence", "--swap-deployment", service_name,
+                "--logfile", "-", "--method", TELEPRESENCE_METHOD,
+                "--run", "python3", "-m",
+                "http.server", str(port)
+            ],
+            cwd=str(DIRECTORY),
+        )
+
+        assert_fromcluster(current_namespace(), service_name, port, p)
+        p.terminate()
+        p.wait()
+
 
 @skipUnless(TELEPRESENCE_METHOD == "container", "requires Docker")
 class DockerEndToEndTests(TestCase):
