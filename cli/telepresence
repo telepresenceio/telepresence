@@ -878,6 +878,8 @@ def expose_local_services(processes, ssh, port_numbers):
             ssh.
             popen(["-R", "*:{}:127.0.0.1:{}".format(remote_port, local_port)])
         )
+    if output:
+        print("", file=sys.stderr)
 
 
 def connect(runner, remote_info, cmdline_args):
