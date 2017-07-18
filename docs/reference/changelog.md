@@ -5,6 +5,14 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.59 (unreleased)
+
+Bug fixes:
+
+* When using `--swap-deployment`, many more container options that would break `telepresence` are swapped out.
+  Thanks to Jonathan Wickens for the bug report.
+  ([#226](https://github.com/datawire/telepresence/issues/226))
+
 #### 0.58 (July 13, 2017)
 
 Bug fixes:

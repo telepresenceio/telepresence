@@ -57,7 +57,7 @@ minikube-test: virtualenv build-k8s-proxy-minikube build-local
 # Run tests relevant to OpenShift:
 openshift-tests: virtualenv
 	source virtualenv/bin/activate && \
-		env TELEPRESENCE_OPENSHIFT=1 TELEPRESENCE_VERSION=$(VERSION) && \
+		env TELEPRESENCE_OPENSHIFT=1 TELEPRESENCE_VERSION=$(VERSION) \
 		TELEPRESENCE_METHOD=inject-tcp ci/test.sh
 	source virtualenv/bin/activate && \
 		env TELEPRESENCE_OPENSHIFT=1 TELEPRESENCE_METHOD=vpn-tcp \

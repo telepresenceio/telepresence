@@ -514,6 +514,27 @@ class NativeEndToEndTests(TestCase):
         self.addCleanup(check_call, [KUBECTL, "delete", DEPLOYMENT_TYPE, name])
         self.assert_swapdeployment(name, 2, "telepresence-test=" + name)
 
+    def test_swapdeployment_swap_args(self):
+        """
+        --swap-deployment swaps out Telepresence pod and overrides the entrypoint.
+        """
+        # Create a non-Telepresence deployment:
+        name = random_name()
+        check_call([
+            KUBECTL,
+            "run",
+            name,
+            "--restart=Always",
+            "--image=openshift/hello-openshift",
+            "--replicas=2",
+            "--labels=telepresence-test=" + name,
+            "--env=HELLO=there",
+            "--",
+            "/hello-openshift",
+        ])
+        self.addCleanup(check_call, [KUBECTL, "delete", DEPLOYMENT_TYPE, name])
+        self.assert_swapdeployment(name, 2, "telepresence-test=" + name)
+
     @skipIf(not OPENSHIFT, "Only runs on OpenShift")
     def test_swapdeployment_ocnewapp(self):
         """
