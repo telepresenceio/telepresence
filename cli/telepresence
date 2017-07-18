@@ -858,7 +858,22 @@ def expose_local_services(processes, ssh, port_numbers):
     :param ssh: A 'SSH` instance.
     :param port_numbers: Mapping from local port to remote port.
     """
+    output = sys.stderr.isatty()
+    if not port_numbers and output:
+        print(
+            "No traffic is being forwarded from the remote Deployment to your"
+            " local machine. You can use the --expose option to specify which"
+            " ports you want to forward.",
+            file=sys.stderr
+        )
     for local_port, remote_port in port_numbers.items():
+        if output:
+            print(
+                "Forwarding remote port {} to local port {}.".format(
+                    local_port, remote_port
+                ),
+                file=sys.stderr
+            )
         processes.append(
             ssh.
             popen(["-R", "*:{}:127.0.0.1:{}".format(remote_port, local_port)])
@@ -1055,8 +1070,12 @@ def swap_deployment(runner, args):
     # If we're on local VM we need to use different nameserver to
     # prevent infinite loops caused by sshuttle.
     new_deployment_json = new_swapped_deployment(
-        deployment_json, container_name, run_id, TELEPRESENCE_REMOTE_IMAGE,
-        args.method == "vpn-tcp" and args.in_local_vm, args.needs_root,
+        deployment_json,
+        container_name,
+        run_id,
+        TELEPRESENCE_REMOTE_IMAGE,
+        args.method == "vpn-tcp" and args.in_local_vm,
+        args.needs_root,
         random_name(),
     )
     apply_json(new_deployment_json)
@@ -1064,8 +1083,13 @@ def swap_deployment(runner, args):
 
 
 def new_swapped_deployment(
-    old_deployment, container_to_update, run_id, telepresence_image,
-        add_custom_nameserver, as_root, new_container_name,
+    old_deployment,
+    container_to_update,
+    run_id,
+    telepresence_image,
+    add_custom_nameserver,
+    as_root,
+    new_container_name,
 ):
     """
     Create a new Deployment that uses telepresence-k8s image.
@@ -1184,8 +1208,7 @@ def swap_deployment_openshift(runner, args):
 
     new_rc_json = new_swapped_deployment(
         rc_json, container_name, run_id, TELEPRESENCE_REMOTE_IMAGE,
-        args.method == "vpn-tcp" and args.in_local_vm, False,
-        random_name()
+        args.method == "vpn-tcp" and args.in_local_vm, False, random_name()
     )
     apply_json(new_rc_json)
     return deployment_name, run_id
