@@ -7,6 +7,12 @@ categories: reference
 
 #### 0.60 (unreleased)
 
+Features:
+
+* When using --swap-deployment, ports listed in the existing Deployment are automatically forwarded.
+  Thanks to Phil Lombardi and Rafi Schloming for the feature request.
+  ([#185](https://github.com/datawire/telepresence/issues/185))
+
 Misc:
 
 * Switched to upstream `sshuttle` instead of using forked version.
