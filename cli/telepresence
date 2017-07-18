@@ -1001,7 +1001,9 @@ def connect(runner, remote_info, cmdline_args):
     # In Docker mode this happens inside the local Docker container:
     if cmdline_args.method != "container":
         expose_local_services(
-            processes, ssh, cmdline_args.expose.local_to_remote(),
+            processes,
+            ssh,
+            cmdline_args.expose.local_to_remote(),
         )
 
     socks_port = find_free_port()
@@ -1104,7 +1106,7 @@ def swap_deployment(runner, args):
 
     # If we're on local VM we need to use different nameserver to
     # prevent infinite loops caused by sshuttle.
-    new_deployment_json = new_swapped_deployment(
+    new_deployment_json, orig_container_json = new_swapped_deployment(
         deployment_json,
         container_name,
         run_id,
@@ -1114,7 +1116,7 @@ def swap_deployment(runner, args):
         random_name(),
     )
     apply_json(new_deployment_json)
-    return deployment_name, run_id
+    return deployment_name, run_id, orig_container_json
 
 
 def new_swapped_deployment(
@@ -1179,7 +1181,7 @@ def new_swapped_deployment(
                 container["securityContext"] = {
                     "runAsUser": 0,
                 }
-            return new_deployment_json
+            return new_deployment_json, container
 
     raise RuntimeError(
         "Couldn't find container {} in the Deployment.".
@@ -1241,12 +1243,12 @@ def swap_deployment_openshift(runner, args):
         container_name = rc_json["spec"]["template"]["spec"]["containers"
                                                              ][0]["name"]
 
-    new_rc_json = new_swapped_deployment(
+    new_rc_json, orig_container_json = new_swapped_deployment(
         rc_json, container_name, run_id, TELEPRESENCE_REMOTE_IMAGE,
         args.method == "vpn-tcp" and args.in_local_vm, False, random_name()
     )
     apply_json(new_rc_json)
-    return deployment_name, run_id
+    return deployment_name, run_id, orig_container_json
 
 
 def start_proxy(runner, args):
@@ -1294,9 +1296,17 @@ def start_proxy(runner, args):
     if args.swap_deployment is not None:
         # This implies --swap-deployment
         if runner.kubectl_cmd == "oc":
-            args.deployment, run_id = swap_deployment_openshift(runner, args)
+            args.deployment, run_id, container_json = (
+                swap_deployment_openshift(runner, args)
+            )
         else:
-            args.deployment, run_id = swap_deployment(runner, args)
+            args.deployment, run_id, container_json = swap_deployment(
+                runner, args
+            )
+        args.expose.merge_automatic_ports([
+            p["containerPort"] for p in container_json.get("ports", [])
+            if p["protocol"] == "TCP"
+        ])
 
     deployment_type = "deployment"
     if runner.kubectl_cmd == "oc":
