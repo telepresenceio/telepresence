@@ -160,7 +160,7 @@ def test_swap_deployment_changes():
         False,
         False,
         "new_name",
-    ) == expected
+    ) == (expected, original["spec"]["template"]["spec"]["containers"][1])
 
 
 def test_portmapping():

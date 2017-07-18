@@ -1147,8 +1147,10 @@ def new_swapped_deployment(
     new_deployment_json["spec"]["template"]["metadata"].setdefault(
         "labels", {}
     )["telepresence"] = run_id
-    for container in new_deployment_json["spec"]["template"]["spec"
-                                                             ]["containers"]:
+    for container, old_container in zip(
+            new_deployment_json["spec"]["template"]["spec"]["containers"],
+            old_deployment["spec"]["template"]["spec"]["containers"],
+            ):
         if container["name"] == container_to_update:
             # Change the name to make sure all changes (in particular *removed*
             # fields) get reflected, rather than merged in way that means
@@ -1181,7 +1183,7 @@ def new_swapped_deployment(
                 container["securityContext"] = {
                     "runAsUser": 0,
                 }
-            return new_deployment_json, container
+            return new_deployment_json, old_container
 
     raise RuntimeError(
         "Couldn't find container {} in the Deployment.".
