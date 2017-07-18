@@ -901,7 +901,7 @@ def expose_local_services(processes, ssh, port_numbers):
         if output:
             print(
                 "Forwarding remote port {} to local port {}.".format(
-                    local_port, remote_port
+                    remote_port, local_port,
                 ),
                 file=sys.stderr
             )
