@@ -1551,6 +1551,9 @@ def connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh):
                 "ssh -oStrictHostKeyChecking=no " +
                 "-oUserKnownHostsFile=/dev/null -F /dev/null"
             ),
+            # DNS proxy running on remote pod:
+            "--to-ns",
+            "127.0.0.1:9053",
             "-r",
             "telepresence@localhost:" + str(ssh.port),
         ] + get_proxy_cidrs(
