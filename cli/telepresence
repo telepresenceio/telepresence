@@ -477,16 +477,47 @@ def parse_args():
             "'--method container' is required when using '--docker-run'."
         )
 
-    new_expose = {}
-    for port_string in args.expose:
-        if ":" in port_string:
-            local_port, remote_port = map(int, port_string.split(":"))
-        else:
-            local_port, remote_port = int(port_string), int(port_string)
-        new_expose[local_port] = remote_port
-    args.expose = new_expose
-
+    args.expose = PortMapping.parse(args.expose)
     return args
+
+
+class PortMapping(object):
+    """Maps local ports to listen to remote exposed ports."""
+
+    def __init__(self):
+        self._mapping = {}
+
+    @classmethod
+    def parse(cls, port_strings):
+        """Parse list of 'port' or 'local_port:remote_port' to PortMapping."""
+        result = PortMapping()
+        for port_string in port_strings:
+            if ":" in port_string:
+                local_port, remote_port = map(int, port_string.split(":"))
+            else:
+                local_port, remote_port = int(port_string), int(port_string)
+            result._mapping[local_port] = remote_port
+        return result
+
+    def merge_automatic_ports(self, ports):
+        """
+        Merge a list of ports to the existing ones.
+
+        The existing ones will win if the port is already there.
+        """
+        remote = self.remote()
+        for port in ports:
+            if port in remote:
+                continue
+            self._mapping[port] = port
+
+    def remote(self):
+        """Return set of remote ports."""
+        return set(self._mapping.values())
+
+    def local_to_remote(self):
+        """Return set of pairs of local, remote ports."""
+        return set(self._mapping.items())
 
 
 class RemoteInfo(object):
@@ -856,7 +887,7 @@ def expose_local_services(processes, ssh, port_numbers):
 
     :param processes: A `Subprocesses` instance.
     :param ssh: A 'SSH` instance.
-    :param port_numbers: Mapping from local port to remote port.
+    :param port_numbers: List of pairs of (local port, remote port).
     """
     output = sys.stderr.isatty()
     if not port_numbers and output:
@@ -866,7 +897,7 @@ def expose_local_services(processes, ssh, port_numbers):
             " ports you want to forward.",
             file=sys.stderr
         )
-    for local_port, remote_port in port_numbers.items():
+    for local_port, remote_port in port_numbers:
         if output:
             print(
                 "Forwarding remote port {} to local port {}.".format(
@@ -969,7 +1000,9 @@ def connect(runner, remote_info, cmdline_args):
 
     # In Docker mode this happens inside the local Docker container:
     if cmdline_args.method != "container":
-        expose_local_services(processes, ssh, cmdline_args.expose)
+        expose_local_services(
+            processes, ssh, cmdline_args.expose.local_to_remote(),
+        )
 
     socks_port = find_free_port()
     if cmdline_args.method == "inject-tcp":
@@ -1008,9 +1041,9 @@ def create_new_deployment(runner, args):
         "--image=" + TELEPRESENCE_REMOTE_IMAGE,
         "--labels=telepresence=" + run_id,
     ]
-    for port in args.expose.values():
+    for port in args.expose.remote():
         command.append("--port={}".format(port))
-    if args.expose:
+    if args.expose.remote():
         command.append("--expose")
     # If we're on local VM we need to use different nameserver to prevent
     # infinite loops caused by sshuttle:
@@ -1651,7 +1684,7 @@ def run_docker_command(
             runner, args, remote_info, remote_env["KUBERNETES_SERVICE_HOST"]
         ),
         "expose_ports":
-        args.expose,
+        list(args.expose.local_to_remote()),
     }
     if sys.platform == "darwin":
         config["ip"] = MAC_LOOPBACK_IP
@@ -1942,7 +1975,7 @@ def main():
         )
 
         # Figure out if we need capability that allows for ports < 1024:
-        if any([p < 1024 for p in args.expose.values()]):
+        if any([p < 1024 for p in args.expose.remote()]):
             if runner.kubectl_cmd == "oc":
                 # OpenShift doesn't support running as root:
                 raise SystemExit("OpenShift does not support ports <1024.")

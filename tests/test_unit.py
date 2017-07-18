@@ -153,7 +153,26 @@ def test_swap_deployment_changes():
     original = yaml.safe_load(COMPLEX_DEPLOYMENT)
     expected = yaml.safe_load(SWAPPED_DEPLOYMENT)
     assert telepresence.new_swapped_deployment(
-        original, "nginxhttps", "random_id_123",
-        "datawire/telepresence-k8s:0.777", False, False,
+        original,
+        "nginxhttps",
+        "random_id_123",
+        "datawire/telepresence-k8s:0.777",
+        False,
+        False,
         "new_name",
     ) == expected
+
+
+def test_portmapping():
+    """
+    Manually set exposed ports always override automatically exposed ports.
+    """
+    ports = telepresence.PortMapping.parse(["1234:80", "90"])
+    ports.merge_automatic_ports([80, 555, 666])
+    assert ports.local_to_remote() == {
+        (1234, 80),
+        (90, 90),
+        (555, 555),
+        (666, 666)
+    }
+    assert ports.remote() == {80, 90, 555, 666}
