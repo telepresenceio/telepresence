@@ -5,7 +5,7 @@ title: "Changelog"
 categories: reference
 ---
 
-#### 0.60 (unreleased)
+#### 0.60 (July 18, 2017)
 
 Features:
 
