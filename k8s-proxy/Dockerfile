@@ -28,9 +28,4 @@ COPY . /usr/src/app
 # other UID
 USER 1000
 
-# This is set on the remote pod, both for information purposes but also for use
-# by some of the end-to-end tests. Don't delete this without modifying
-# corresponding test:
-ENV TELEPRESENCE_PROXY=1
-
 CMD /usr/src/app/run.sh

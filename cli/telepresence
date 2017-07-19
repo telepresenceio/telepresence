@@ -562,18 +562,6 @@ class RemoteInfo(object):
         return self.container_config["image"].split(":")[-1]
 
 
-def _get_service_names(environment):
-    """Return names of Services, as used in env variable names."""
-    # Order matters for service_keys, need it to be consistent with port
-    # forwarding order in remote container.
-    result = [
-        key[:-len("_SERVICE_HOST")] for key in environment
-        if key.endswith("_SERVICE_HOST")
-    ]
-    result.sort()
-    return result
-
-
 def _get_remote_env(runner, context, namespace, pod_name, container_name):
     """Get the environment variables in the remote pod."""
     env = runner.get_kubectl(
@@ -587,13 +575,6 @@ def _get_remote_env(runner, context, namespace, pod_name, container_name):
     return result
 
 
-def get_deployment_set_keys(remote_info):
-    """Get the set of environment variables names set by the Deployment."""
-    return set([
-        var["name"] for var in remote_info.container_config.get("env", [])
-    ])
-
-
 def get_env_variables(runner, remote_info, context):
     """
     Generate environment variables that match kubernetes.
@@ -603,28 +584,19 @@ def get_env_variables(runner, remote_info, context):
         runner, context, remote_info.namespace, remote_info.pod_name,
         remote_info.container_name
     )
-    service_names = _get_service_names(remote_env)
-    deployment_set_keys = get_deployment_set_keys(remote_info)
     # Tell local process about the remote setup, useful for testing and
     # debugging:
-    socks_result = {
+    result = {
         "TELEPRESENCE_POD": remote_info.pod_name,
         "TELEPRESENCE_CONTAINER": remote_info.container_name
     }
-    # ips proxied via socks, can copy addresses unmodified:
-    for key, value in remote_env.items():
-        if key in deployment_set_keys:
-            # Copy over Deployment-set env variables:
-            socks_result[key] = value
-        for service_name in service_names:
-            # Copy over Service env variables to SOCKS variant:
-            if key.startswith(service_name + "_") and (
-                key.endswith("_ADDR") or key.endswith("_PORT") or
-                key.endswith("_PROTO") or key.endswith("_HOST") or
-                key.endswith("_TCP")
-            ):
-                socks_result[key] = value
-    return socks_result
+    # Alpine, which we use for telepresence-k8s image, automatically sets these
+    # HOME, PATH, HOSTNAME. The rest are from Kubernetes:
+    for key in ("HOME", "PATH", "HOSTNAME"):
+        if key in remote_env:
+            del remote_env[key]
+    result.update(remote_env)
+    return result
 
 
 def get_deployment_json(
