@@ -34,6 +34,16 @@ TELEPRESENCE_METHOD = os.environ["TELEPRESENCE_METHOD"]
 LOCAL_VM = os.environ.get("TELEPRESENCE_LOCAL_VM") is not None
 
 EXISTING_DEPLOYMENT = """\
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {name}
+  namespace: {namespace}
+data:
+  EXAMPLE_ENVFROM: foobar
+---
+%s
 metadata:
   name: {name}
   namespace: {namespace}
@@ -55,6 +65,9 @@ spec:
             memory: "150Mi"
       - name: {container_name}
         image: {image}
+        envFrom:
+        - configMapRef:
+            name: {name}
         env:
         - name: MYENV
           value: hello
@@ -76,16 +89,14 @@ spec:
 """
 
 if OPENSHIFT:
-    EXISTING_DEPLOYMENT = """\
+    EXISTING_DEPLOYMENT = EXISTING_DEPLOYMENT % ("""\
 apiVersion: v1
-kind: DeploymentConfig
-""" + EXISTING_DEPLOYMENT
+kind: DeploymentConfig""",)
     DEPLOYMENT_TYPE = "deploymentconfig"
 else:
-    EXISTING_DEPLOYMENT = """\
+    EXISTING_DEPLOYMENT = EXISTING_DEPLOYMENT % ("""\
 apiVersion: extensions/v1beta1
-kind: Deployment
-""" + EXISTING_DEPLOYMENT
+kind: Deployment""",)
     DEPLOYMENT_TYPE = "deployment"
 
 NAMESPACE_YAML = """\
@@ -437,16 +448,21 @@ class NativeEndToEndTests(TestCase):
             ],
             input=deployment.encode("utf-8")
         )
-        self.addCleanup(
-            check_output, [
+
+        def cleanup():
+            check_output([
                 KUBECTL, "delete", DEPLOYMENT_TYPE, name,
                 "--namespace=" + namespace
-            ]
-        )
+            ])
+            check_output([
+                KUBECTL, "delete", "ConfigMap", name,
+                "--namespace=" + namespace
+            ])
+        self.addCleanup(cleanup)
 
         args = ["--deployment", name, "--namespace", namespace]
         exit_code = run_script_test(
-            args, "python3 {} {} {} MYENV=hello".format(
+            args, "python3 {} {} {}".format(
                 script,
                 webserver_name,
                 namespace,
@@ -459,6 +475,13 @@ class NativeEndToEndTests(TestCase):
         Tests of communicating with existing Deployment.
         """
         self.existingdeployment(None, "tocluster.py")
+
+    def test_environmentvariables(self):
+        """
+        Local processes get access to env variables directly set and set via
+        envFrom.
+        """
+        self.existingdeployment(None, "envvariables.py")
 
     def test_existingdeployment_custom_namespace(self):
         """

@@ -5,6 +5,14 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.61 (unreleased)
+
+Bug fixes:
+
+* Environment variables created using ConfigMaps and Secrets (using `envFrom`) are now made available to the local process.
+  Thanks to Tristan Pemble for the bug report.
+  ([#230](https://github.com/datawire/telepresence/issues/230))
+
 #### 0.60 (July 18, 2017)
 
 Features:
