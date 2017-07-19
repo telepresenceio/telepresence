@@ -39,6 +39,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {name}
+  namespace: {namespace}
 data:
   EXAMPLE_ENVFROM: foobar
 ---
