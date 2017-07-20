@@ -15,6 +15,7 @@ import signal
 import socket
 import ssl
 import sys
+from typing import List, Set, Tuple, Dict, Optional, Callable
 from functools import wraps
 from shutil import rmtree, copy, which
 from subprocess import (
@@ -55,12 +56,12 @@ SUDO_FOR_DOCKER = os.path.exists("/var/run/docker.sock") and not os.access(
 )
 
 
-def random_name():
+def random_name() -> str:
     """Return a random name for a container."""
     return "telepresence-{}-{}".format(time(), os.getpid()).replace(".", "-")
 
 
-def find_free_port():
+def find_free_port() -> int:
     """
     Find a port that isn't in use.
 
@@ -75,7 +76,7 @@ def find_free_port():
         s.close()
 
 
-def get_resolv_conf_namservers():
+def get_resolv_conf_namservers() -> List[str]:
     """Return list of namserver IPs in /etc/resolv.conf."""
     result = []
     with open("/etc/resolv.conf") as f:
@@ -86,7 +87,7 @@ def get_resolv_conf_namservers():
     return result
 
 
-def get_alternate_nameserver():
+def get_alternate_nameserver() -> str:
     """Get a public nameserver that isn't in /etc/resolv.conf."""
     banned = get_resolv_conf_namservers()
     # From https://www.lifewire.com/free-and-public-dns-servers-2626062 -
@@ -100,7 +101,7 @@ def get_alternate_nameserver():
     raise RuntimeError("All known public nameservers are in /etc/resolv.conf.")
 
 
-def read_logs(logfile):
+def read_logs(logfile) -> str:
     """Read logfile, return string."""
     logs = "Not available"
     if logfile != "-" and os.path.exists(logfile):
@@ -181,7 +182,7 @@ class handle_unexpected_errors(object):
 class Runner(object):
     """Context for running subprocesses."""
 
-    def __init__(self, logfile, kubectl_cmd, verbose):
+    def __init__(self, logfile, kubectl_cmd: str, verbose: bool) -> None:
         """
         :param logfile: file-like object to write logs to.
         :param kubectl_cmd: Command to run for kubectl, either "kubectl" or
@@ -193,7 +194,7 @@ class Runner(object):
         self.verbose = verbose
 
     @classmethod
-    def open(cls, logfile_path, kubectl_cmd, verbose):
+    def open(cls, logfile_path, kubectl_cmd: str, verbose: bool):
         """
         :return: File-like object for the given logfile path.
         """
@@ -208,7 +209,7 @@ class Runner(object):
                 open(logfile_path, "a", buffering=1), kubectl_cmd, verbose
             )
 
-    def write(self, message):
+    def write(self, message: str) -> None:
         """Write a message to the log."""
         self.logfile.write(message)
         self.logfile.flush()
@@ -227,30 +228,27 @@ class Runner(object):
         )
         self.write(" ran!\n")
 
-    def get_output(self, *args, stderr=None, **kwargs):
+    def get_output(self, *args, stderr=None, **kwargs) -> str:
         """Return (stripped) command result as unicode string."""
         if stderr is None:
             stderr = self.logfile
         self.write("Running: {}...".format(args))
-        result = unicode(
-            check_output(*args, stdin=DEVNULL, stderr=stderr,
-                         **kwargs).strip(), "utf-8"
-        )
+        kwargs["stdin"] = DEVNULL
+        kwargs["stderr"] = stderr
+        result = unicode(check_output(*args, **kwargs).strip(), "utf-8")
         self.write(" ran!\n")
         return result
 
-    def popen(self, *args, stdin=DEVNULL, **kwargs):
+    def popen(self, *args, stdin=DEVNULL, **kwargs) -> Popen:
         """Return Popen object."""
         self.write("Running: {}...".format(args))
-        return Popen(
-            *args,
-            stdin=stdin,
-            stderr=self.logfile,
-            stdout=self.logfile,
-            **kwargs
-        )
+        kwargs["stdin"] = stdin
+        kwargs["stderr"] = self.logfile
+        kwargs["stdout"] = self.logfile
+        return Popen(*args, **kwargs)
 
-    def kubectl(self, context, namespace, args):
+    def kubectl(self, context: str, namespace: str,
+                args: List[str]) -> List[str]:
         """Return command-line for running kubectl."""
         result = [self.kubectl_cmd]
         if self.verbose:
@@ -260,13 +258,17 @@ class Runner(object):
         result += args
         return result
 
-    def get_kubectl(self, context, namespace, args, stderr=None):
+    def get_kubectl(
+        self, context: str, namespace: str, args: List[str], stderr=None
+    ) -> str:
         """Return output of running kubectl."""
         return self.get_output(
             self.kubectl(context, namespace, args), stderr=stderr
         )
 
-    def check_kubectl(self, context, namespace, kubectl_args, **kwargs):
+    def check_kubectl(
+        self, context: str, namespace: str, kubectl_args: List[str], **kwargs
+    ) -> None:
         """Check exit code of running kubectl."""
         self.check_call(
             self.kubectl(context, namespace, kubectl_args), **kwargs
@@ -303,7 +305,7 @@ $ telepresence --swap-deployment myserver --expose 80 \
 
 
 @handle_unexpected_errors("-")
-def parse_args():
+def parse_args() -> argparse.Namespace:
     """Create a new ArgumentParser and parse sys.argv."""
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -485,10 +487,10 @@ class PortMapping(object):
     """Maps local ports to listen to remote exposed ports."""
 
     def __init__(self):
-        self._mapping = {}
+        self._mapping = {}  # type: Dict[int,int]
 
     @classmethod
-    def parse(cls, port_strings):
+    def parse(cls, port_strings: List[str]):
         """Parse list of 'port' or 'local_port:remote_port' to PortMapping."""
         result = PortMapping()
         for port_string in port_strings:
@@ -499,7 +501,7 @@ class PortMapping(object):
             result._mapping[local_port] = remote_port
         return result
 
-    def merge_automatic_ports(self, ports):
+    def merge_automatic_ports(self, ports: List[int]):
         """
         Merge a list of ports to the existing ones.
 
@@ -511,11 +513,11 @@ class PortMapping(object):
                 continue
             self._mapping[port] = port
 
-    def remote(self):
+    def remote(self) -> Set[int]:
         """Return set of remote ports."""
         return set(self._mapping.values())
 
-    def local_to_remote(self):
+    def local_to_remote(self) -> Set[Tuple[int, int]]:
         """Return set of pairs of local, remote ports."""
         return set(self._mapping.items())
 
@@ -535,13 +537,13 @@ class RemoteInfo(object):
 
     def __init__(
         self,
-        runner,
-        context,
-        namespace,
-        deployment_name,
-        pod_name,
-        deployment_config,
-    ):
+        runner: Runner,
+        context: str,
+        namespace: str,
+        deployment_name: str,
+        pod_name: str,
+        deployment_config: dict,
+    ) -> None:
         self.context = context
         self.namespace = namespace
         self.deployment_name = deployment_name
@@ -554,15 +556,21 @@ class RemoteInfo(object):
                 "Could not find container with image "
                 "'datawire/telepresence-k8s' in pod {}.".format(pod_name)
             )
-        self.container_config = containers[0]
-        self.container_name = self.container_config["name"]
+        self.container_config = containers[0]  # type: Dict
+        self.container_name = self.container_config["name"]  # type: str
 
-    def remote_telepresence_version(self):
+    def remote_telepresence_version(self) -> str:
         """Return the version used by the remote Telepresence container."""
         return self.container_config["image"].split(":")[-1]
 
 
-def _get_remote_env(runner, context, namespace, pod_name, container_name):
+def _get_remote_env(
+    runner: Runner,
+    context: str,
+    namespace: str,
+    pod_name: str,
+    container_name: str
+) -> Dict[str, str]:
     """Get the environment variables in the remote pod."""
     env = runner.get_kubectl(
         context, namespace,
@@ -575,7 +583,8 @@ def _get_remote_env(runner, context, namespace, pod_name, container_name):
     return result
 
 
-def get_env_variables(runner, remote_info, context):
+def get_env_variables(runner: Runner, remote_info: RemoteInfo,
+                      context: str) -> Dict[str, str]:
     """
     Generate environment variables that match kubernetes.
     """
@@ -600,8 +609,13 @@ def get_env_variables(runner, remote_info, context):
 
 
 def get_deployment_json(
-    runner, deployment_name, context, namespace, deployment_type, run_id=None
-):
+    runner: Runner,
+    deployment_name: str,
+    context: str,
+    namespace: str,
+    deployment_type: str,
+    run_id: Optional[str]=None,
+) -> Dict:
     """Get the decoded JSON for a deployment.
 
     If this is a Deployment we created, the run_id is also passed in - this is
@@ -645,8 +659,13 @@ def get_deployment_json(
 
 
 def get_remote_info(
-    runner, deployment_name, context, namespace, deployment_type, run_id=None
-):
+    runner: Runner,
+    deployment_name: str,
+    context: str,
+    namespace: str,
+    deployment_type: str,
+    run_id: Optional[str]=None,
+) -> RemoteInfo:
     """
     Given the deployment name, return a RemoteInfo object.
 
@@ -725,7 +744,7 @@ def get_remote_info(
     )
 
 
-def kill_process(process):
+def kill_process(process: Popen) -> None:
     """Kill a process, make sure it's a dead."""
     if process.poll() is None:
         process.terminate()
@@ -740,10 +759,14 @@ class Subprocesses(object):
     """Shut down subprocesses on exit."""
 
     def __init__(self):
-        self.subprocesses = {}
+        self.subprocesses = {}  # type: Dict[Popen,Callable]
         atexit.register(self.killall)
 
-    def append(self, process, killer=None):
+    def append(self, process: Popen, killer: Optional[Callable]=None) -> None:
+        """
+        Register another subprocess to be shutdown, with optional callable that
+        will kill it.
+        """
         if killer is None:
 
             def kill():
@@ -753,6 +776,7 @@ class Subprocesses(object):
         self.subprocesses[process] = killer
 
     def killall(self):
+        """Killall all registered subprocesses."""
         for killer in self.subprocesses.values():
             killer()
 
@@ -775,13 +799,22 @@ class Subprocesses(object):
 class SSH(object):
     """Run ssh to k8s-proxy with appropriate arguments."""
 
-    def __init__(self, runner, port, host="localhost"):
+    def __init__(
+        self, runner: Runner, port: int, host: str="localhost"
+    ) -> None:
         self.runner = runner
         self.port = port
         self.host = host
 
-    def command(self, additional_args, prepend_arguments=[]):
-        """Return command line argument list for running ssh."""
+    def command(
+        self, additional_args: List[str], prepend_arguments: List[str]=[]
+    ) -> List[str]:
+        """
+        Return command line argument list for running ssh.
+
+        Takes command line arguments to run on remote machine, and optional
+        arguments to ssh itself.
+        """
         return ["ssh"] + prepend_arguments + [
             # Ignore local configuration (~/.ssh/config)
             "-F",
@@ -797,7 +830,7 @@ class SSH(object):
             "telepresence@" + self.host,
         ] + additional_args
 
-    def popen(self, additional_args):
+    def popen(self, additional_args: List[str]) -> Popen:
         """Connect to remote pod via SSH.
 
         Returns Popen object.
@@ -816,7 +849,7 @@ class SSH(object):
             )
         )
 
-    def wait(self):
+    def wait(self) -> None:
         """Return when SSH server can be reached."""
         start = time()
         while time() - start < 30:
@@ -829,7 +862,8 @@ class SSH(object):
         raise RuntimeError("SSH isn't starting.")
 
 
-def wait_for_pod(runner, remote_info):
+def wait_for_pod(runner: Runner, remote_info: RemoteInfo) -> None:
+    """Wait for the pod to start running."""
     start = time()
     while time() - start < 120:
         try:
@@ -854,7 +888,9 @@ def wait_for_pod(runner, remote_info):
     )
 
 
-def expose_local_services(processes, ssh, port_numbers):
+def expose_local_services(
+    processes: Subprocesses, ssh: SSH, port_numbers: List[Tuple[int, int]]
+) -> None:
     """Create SSH tunnels from remote proxy pod to local host.
 
     :param processes: A `Subprocesses` instance.
@@ -873,7 +909,8 @@ def expose_local_services(processes, ssh, port_numbers):
         if output:
             print(
                 "Forwarding remote port {} to local port {}.".format(
-                    remote_port, local_port,
+                    remote_port,
+                    local_port,
                 ),
                 file=sys.stderr
             )
@@ -885,11 +922,13 @@ def expose_local_services(processes, ssh, port_numbers):
         print("", file=sys.stderr)
 
 
-def connect(runner, remote_info, cmdline_args):
+def connect(
+    runner: Runner, remote_info: RemoteInfo, cmdline_args: argparse.Namespace
+) -> Tuple[Subprocesses, int, SSH]:
     """
     Start all the processes that handle remote proxying.
 
-    Return list of Popen instances.
+    Return (Subprocesses, local port of SOCKS proxying tunnel, SSH instance).
     """
     processes = Subprocesses()
     # Keep local copy of pod logs, for debugging purposes:
@@ -923,7 +962,9 @@ def connect(runner, remote_info, cmdline_args):
         # portforward from the docker0 interface on Linux, and the lo0 alias we
         # added on OS X, to loopback (until we can use kubectl port-forward
         # option to listen on docker0 -
-        # https://github.com/kubernetes/kubernetes/pull/46517):
+        # https://github.com/kubernetes/kubernetes/pull/46517, or all our users
+        # have latest version of Docker for Mac, which has nicer solution -
+        # https://github.com/datawire/telepresence/issues/224).
         if sys.platform == "linux":
 
             # If ip addr is available use it if not fall back to ifconfig.
@@ -989,8 +1030,9 @@ def connect(runner, remote_info, cmdline_args):
     return processes, socks_port, ssh
 
 
-def create_new_deployment(runner, args):
-    """Create a new Deployment, return its name."""
+def create_new_deployment(runner: Runner,
+                          args: argparse.Namespace) -> Tuple[str, str]:
+    """Create a new Deployment, return its name and Kubernetes label."""
     run_id = str(uuid4())
 
     def remove_existing_deployment():
@@ -1043,10 +1085,15 @@ def create_new_deployment(runner, args):
     return args.new_deployment, run_id
 
 
-def swap_deployment(runner, args):
-    """Swap out an existing Deployment, return its name.
+def swap_deployment(runner: Runner,
+                    args: argparse.Namespace) -> Tuple[str, str, Dict]:
+    """
+    Swap out an existing Deployment.
 
     Native Kubernetes version.
+
+    Returns (Deployment name, unique K8s label, JSON of original container that
+    was swapped out.)
     """
     run_id = str(uuid4())
 
@@ -1092,14 +1139,14 @@ def swap_deployment(runner, args):
 
 
 def new_swapped_deployment(
-    old_deployment,
-    container_to_update,
-    run_id,
-    telepresence_image,
-    add_custom_nameserver,
-    as_root,
-    new_container_name,
-):
+    old_deployment: Dict,
+    container_to_update: str,
+    run_id: str,
+    telepresence_image: str,
+    add_custom_nameserver: bool,
+    as_root: bool,
+    new_container_name: str,
+) -> Tuple[Dict, Dict]:
     """
     Create a new Deployment that uses telepresence-k8s image.
 
@@ -1111,6 +1158,9 @@ def new_swapped_deployment(
     4. Adds TELEPRESENCE_NAMESERVER env variable, if requested.
     5. Runs as root, if requested.
     6. Sets terminationMessagePolicy.
+
+    Returns dictionary that can be encoded to JSON and used with kubectl apply,
+    and contents of swapped out container.
     """
     new_deployment_json = deepcopy(old_deployment)
     new_deployment_json["spec"]["replicas"] = 1
@@ -1120,9 +1170,9 @@ def new_swapped_deployment(
         "labels", {}
     )["telepresence"] = run_id
     for container, old_container in zip(
-            new_deployment_json["spec"]["template"]["spec"]["containers"],
-            old_deployment["spec"]["template"]["spec"]["containers"],
-            ):
+        new_deployment_json["spec"]["template"]["spec"]["containers"],
+        old_deployment["spec"]["template"]["spec"]["containers"],
+    ):
         if container["name"] == container_to_update:
             # Change the name to make sure all changes (in particular *removed*
             # fields) get reflected, rather than merged in way that means
@@ -1163,9 +1213,13 @@ def new_swapped_deployment(
     )
 
 
-def swap_deployment_openshift(runner, args):
+def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
+                              ) -> Tuple[str, str, Dict]:
     """
-    Swap out an existing DeploymentConfig, return its name.
+    Swap out an existing DeploymentConfig.
+
+    Returns (Deployment name, unique K8s label, JSON of original container that
+    was swapped out.)
 
     In practice OpenShift doesn't seem to do the right thing when a
     DeploymentConfig is updated. In particular, we need to disable the image
@@ -1225,7 +1279,8 @@ def swap_deployment_openshift(runner, args):
     return deployment_name, run_id, orig_container_json
 
 
-def start_proxy(runner, args):
+def start_proxy(runner: Runner, args: argparse.Namespace
+                ) -> Tuple[Subprocesses, Dict[str, str], int, SSH, RemoteInfo]:
     """Start the kubectl port-forward and SSH clients that do the proxying."""
     if sys.stdout.isatty() and args.method != "container":
         print(
@@ -1326,7 +1381,7 @@ TorPort {}
 """
 
 
-def sip_workaround(existing_paths, unsupported_tools_path):
+def sip_workaround(existing_paths: str, unsupported_tools_path: str) -> str:
     """
     Workaround System Integrity Protection.
 
@@ -1357,7 +1412,9 @@ def sip_workaround(existing_paths, unsupported_tools_path):
     return ":".join(paths)
 
 
-def wait_for_exit(runner, main_process, processes):
+def wait_for_exit(
+    runner: Runner, main_process: Popen, processes: Subprocesses
+) -> None:
     """Given Popens, wait for one of them to die."""
     while True:
         sleep(0.1)
@@ -1382,11 +1439,15 @@ def wait_for_exit(runner, main_process, processes):
             raise SystemExit(3)
 
 
-def mount_remote_volumes(runner, remote_info, ssh, allow_all_users):
+def mount_remote_volumes(
+    runner: Runner, remote_info: RemoteInfo, ssh: SSH, allow_all_users: bool
+) -> Tuple[str, Callable]:
     """
     sshfs is used to mount the remote system locally.
 
     Allowing all users may require root, so we use sudo in that case.
+
+    Returns (path to mounted directory, callable that will unmount it).
     """
     # Docker for Mac only shares some folders; the default TMPDIR on OS X is
     # not one of them, so make sure we use /tmp:
@@ -1448,9 +1509,11 @@ exit 55
 """
 
 
-def get_unsupported_tools(dns_supported):
+def get_unsupported_tools(dns_supported: bool) -> str:
     """
     Create replacement command-line tools that just error out, in a nice way.
+
+    Returns path to directory where overriden tools are stored.
     """
     commands = ["ping", "traceroute"]
     if not dns_supported:
@@ -1476,7 +1539,12 @@ sys.stdout.flush()
 """
 
 
-def get_proxy_cidrs(runner, args, remote_info, service_address):
+def get_proxy_cidrs(
+    runner: Runner,
+    args: argparse.Namespace,
+    remote_info: RemoteInfo,
+    service_address: str
+) -> List[str]:
     """
     Figure out which IP ranges to route via sshuttle.
 
@@ -1513,7 +1581,7 @@ def get_proxy_cidrs(runner, args, remote_info, service_address):
             format(", ".join(args.also_proxy))
         )
 
-    def ip_to_16range(ip):
+    def ip_to_16range(ip: str) -> str:
         # Convert IP address, e.g. '10.3.241.23', into 16 bit range, in this
         # case '10.3.0.0/16':
         return ".".join(ip.split(".")[:2] + ["0", "0"]) + "/16"
@@ -1549,7 +1617,14 @@ def get_proxy_cidrs(runner, args, remote_info, service_address):
     return list(result)
 
 
-def connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh):
+def connect_sshuttle(
+    runner: Runner,
+    remote_info: RemoteInfo,
+    args: argparse.Namespace,
+    subprocesses: Subprocesses,
+    env: Dict[str, str],
+    ssh: SSH
+):
     """Connect to Kubernetes using sshuttle."""
     # Make sure we have sudo credentials by doing a small sudo in advance
     # of sshuttle using it:
@@ -1612,7 +1687,7 @@ def connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh):
     get_hellotelepresence()
 
 
-def docker_runify(args):
+def docker_runify(args: List[str]) -> List[str]:
     """Prepend 'docker run' to a list of arguments."""
     args = ['docker', 'run'] + args
     if SUDO_FOR_DOCKER:
@@ -1621,7 +1696,7 @@ def docker_runify(args):
         return args
 
 
-def make_docker_kill(runner, name):
+def make_docker_kill(runner: Runner, name: str) -> Callable:
     """Return a function that will kill a named docker container."""
 
     def kill():
@@ -1632,8 +1707,13 @@ def make_docker_kill(runner, name):
 
 
 def run_docker_command(
-    runner, remote_info, args, remote_env, subprocesses, ssh
-):
+    runner: Runner,
+    remote_info: RemoteInfo,
+    args: argparse.Namespace,
+    remote_env: Dict[str, str],
+    subprocesses: Subprocesses,
+    ssh: SSH,
+) -> None:
     """
     --docker-run support.
 
@@ -1771,8 +1851,14 @@ def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
 
 
 def run_local_command(
-    runner, remote_info, args, env_overrides, subprocesses, socks_port, ssh
-):
+    runner: Runner,
+    remote_info: RemoteInfo,
+    args: argparse.Namespace,
+    env_overrides: Dict[str, str],
+    subprocesses: Subprocesses,
+    socks_port: int,
+    ssh: SSH
+) -> None:
     """--run-shell/--run support, run command locally."""
     env = os.environ.copy()
     env.update(env_overrides)
@@ -1856,7 +1942,7 @@ Logs:
 """
 
 
-def require_command(runner, command, message=None):
+def require_command(runner: Runner, command: str, message: Optional[str]=None):
     if message is None:
         message = "Please install " + command
     try:
@@ -1870,8 +1956,12 @@ def require_command(runner, command, message=None):
         raise SystemExit(1)
 
 
-def kubectl_or_oc(server):
-    """Figure out if we're using "kubectl" or "oc"."""
+def kubectl_or_oc(server: str) -> str:
+    """
+    Return "kubectl" or "oc", the command-line tool we should use.
+
+    :param server: The URL of the cluster API server.
+    """
     if which("oc") is None:
         return "kubectl"
     # We've got oc, and possibly kubectl as well. We only want oc for OpenShift
@@ -1970,7 +2060,7 @@ def main():
         # minikube/minishift break DNS because DNS gets captured, sent to
         # minikube, which sends it back to DNS server set by host, resulting in
         # loop... we've fixed that for most cases, but not --deployment.
-        def check_if_in_local_vm():
+        def check_if_in_local_vm() -> bool:
             # Minikube just has 'minikube' as context'
             if args.context == "minikube":
                 return True

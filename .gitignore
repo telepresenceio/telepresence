@@ -3,3 +3,4 @@ virtualenv/
 .cache
 __pycache__
 telepresence.log
+.mypy_cache
