@@ -15,6 +15,7 @@ import signal
 import socket
 import ssl
 import sys
+from typing import List, Set, Tuple, Dict, Optional, Callable
 from functools import wraps
 from shutil import rmtree, copy, which
 from subprocess import (
@@ -55,12 +56,12 @@ SUDO_FOR_DOCKER = os.path.exists("/var/run/docker.sock") and not os.access(
 )
 
 
-def random_name():
+def random_name() -> str:
     """Return a random name for a container."""
     return "telepresence-{}-{}".format(time(), os.getpid()).replace(".", "-")
 
 
-def find_free_port():
+def find_free_port() -> int:
     """
     Find a port that isn't in use.
 
@@ -75,7 +76,7 @@ def find_free_port():
         s.close()
 
 
-def get_resolv_conf_namservers():
+def get_resolv_conf_namservers() -> List[str]:
     """Return list of namserver IPs in /etc/resolv.conf."""
     result = []
     with open("/etc/resolv.conf") as f:
@@ -86,7 +87,7 @@ def get_resolv_conf_namservers():
     return result
 
 
-def get_alternate_nameserver():
+def get_alternate_nameserver() -> str:
     """Get a public nameserver that isn't in /etc/resolv.conf."""
     banned = get_resolv_conf_namservers()
     # From https://www.lifewire.com/free-and-public-dns-servers-2626062 -
@@ -100,7 +101,7 @@ def get_alternate_nameserver():
     raise RuntimeError("All known public nameservers are in /etc/resolv.conf.")
 
 
-def read_logs(logfile):
+def read_logs(logfile) -> str:
     """Read logfile, return string."""
     logs = "Not available"
     if logfile != "-" and os.path.exists(logfile):
@@ -181,7 +182,7 @@ class handle_unexpected_errors(object):
 class Runner(object):
     """Context for running subprocesses."""
 
-    def __init__(self, logfile, kubectl_cmd, verbose):
+    def __init__(self, logfile, kubectl_cmd: str, verbose: bool) -> None:
         """
         :param logfile: file-like object to write logs to.
         :param kubectl_cmd: Command to run for kubectl, either "kubectl" or
@@ -193,7 +194,7 @@ class Runner(object):
         self.verbose = verbose
 
     @classmethod
-    def open(cls, logfile_path, kubectl_cmd, verbose):
+    def open(cls, logfile_path, kubectl_cmd: str, verbose: bool):
         """
         :return: File-like object for the given logfile path.
         """
@@ -208,7 +209,7 @@ class Runner(object):
                 open(logfile_path, "a", buffering=1), kubectl_cmd, verbose
             )
 
-    def write(self, message):
+    def write(self, message: str) -> None:
         """Write a message to the log."""
         self.logfile.write(message)
         self.logfile.flush()
@@ -227,30 +228,27 @@ class Runner(object):
         )
         self.write(" ran!\n")
 
-    def get_output(self, *args, stderr=None, **kwargs):
+    def get_output(self, *args, stderr=None, **kwargs) -> str:
         """Return (stripped) command result as unicode string."""
         if stderr is None:
             stderr = self.logfile
         self.write("Running: {}...".format(args))
-        result = unicode(
-            check_output(*args, stdin=DEVNULL, stderr=stderr,
-                         **kwargs).strip(), "utf-8"
-        )
+        kwargs["stdin"] = DEVNULL
+        kwargs["stderr"] = stderr
+        result = unicode(check_output(*args, **kwargs).strip(), "utf-8")
         self.write(" ran!\n")
         return result
 
-    def popen(self, *args, stdin=DEVNULL, **kwargs):
+    def popen(self, *args, stdin=DEVNULL, **kwargs) -> Popen:
         """Return Popen object."""
         self.write("Running: {}...".format(args))
-        return Popen(
-            *args,
-            stdin=stdin,
-            stderr=self.logfile,
-            stdout=self.logfile,
-            **kwargs
-        )
+        kwargs["stdin"] = stdin
+        kwargs["stderr"] = self.logfile
+        kwargs["stdout"] = self.logfile
+        return Popen(*args, **kwargs)
 
-    def kubectl(self, context, namespace, args):
+    def kubectl(self, context: str, namespace: str,
+                args: List[str]) -> List[str]:
         """Return command-line for running kubectl."""
         result = [self.kubectl_cmd]
         if self.verbose:
@@ -260,13 +258,17 @@ class Runner(object):
         result += args
         return result
 
-    def get_kubectl(self, context, namespace, args, stderr=None):
+    def get_kubectl(
+        self, context: str, namespace: str, args: List[str], stderr=None
+    ) -> str:
         """Return output of running kubectl."""
         return self.get_output(
             self.kubectl(context, namespace, args), stderr=stderr
         )
 
-    def check_kubectl(self, context, namespace, kubectl_args, **kwargs):
+    def check_kubectl(
+        self, context: str, namespace: str, kubectl_args: List[str], **kwargs
+    ) -> None:
         """Check exit code of running kubectl."""
         self.check_call(
             self.kubectl(context, namespace, kubectl_args), **kwargs
@@ -303,7 +305,7 @@ $ telepresence --swap-deployment myserver --expose 80 \
 
 
 @handle_unexpected_errors("-")
-def parse_args():
+def parse_args() -> argparse.Namespace:
     """Create a new ArgumentParser and parse sys.argv."""
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -488,7 +490,7 @@ class PortMapping(object):
         self._mapping = {}
 
     @classmethod
-    def parse(cls, port_strings):
+    def parse(cls, port_strings: List[str]):
         """Parse list of 'port' or 'local_port:remote_port' to PortMapping."""
         result = PortMapping()
         for port_string in port_strings:
@@ -499,7 +501,7 @@ class PortMapping(object):
             result._mapping[local_port] = remote_port
         return result
 
-    def merge_automatic_ports(self, ports):
+    def merge_automatic_ports(self, ports: List[int]):
         """
         Merge a list of ports to the existing ones.
 
@@ -511,11 +513,11 @@ class PortMapping(object):
                 continue
             self._mapping[port] = port
 
-    def remote(self):
+    def remote(self) -> Set[int]:
         """Return set of remote ports."""
         return set(self._mapping.values())
 
-    def local_to_remote(self):
+    def local_to_remote(self) -> Set[Tuple[int, int]]:
         """Return set of pairs of local, remote ports."""
         return set(self._mapping.items())
 
@@ -535,13 +537,13 @@ class RemoteInfo(object):
 
     def __init__(
         self,
-        runner,
-        context,
-        namespace,
-        deployment_name,
-        pod_name,
-        deployment_config,
-    ):
+        runner: Runner,
+        context: str,
+        namespace: str,
+        deployment_name: str,
+        pod_name: str,
+        deployment_config: dict,
+    ) -> None:
         self.context = context
         self.namespace = namespace
         self.deployment_name = deployment_name
@@ -554,15 +556,21 @@ class RemoteInfo(object):
                 "Could not find container with image "
                 "'datawire/telepresence-k8s' in pod {}.".format(pod_name)
             )
-        self.container_config = containers[0]
-        self.container_name = self.container_config["name"]
+        self.container_config = containers[0]  # Type: Dict
+        self.container_name = self.container_config["name"]  # Type: str
 
-    def remote_telepresence_version(self):
+    def remote_telepresence_version(self) -> str:
         """Return the version used by the remote Telepresence container."""
         return self.container_config["image"].split(":")[-1]
 
 
-def _get_remote_env(runner, context, namespace, pod_name, container_name):
+def _get_remote_env(
+    runner: Runner,
+    context: str,
+    namespace: str,
+    pod_name: str,
+    container_name: str
+) -> Dict[str, str]:
     """Get the environment variables in the remote pod."""
     env = runner.get_kubectl(
         context, namespace,
@@ -575,7 +583,8 @@ def _get_remote_env(runner, context, namespace, pod_name, container_name):
     return result
 
 
-def get_env_variables(runner, remote_info, context):
+def get_env_variables(runner: Runner, remote_info: RemoteInfo,
+                      context: str) -> Dict[str, str]:
     """
     Generate environment variables that match kubernetes.
     """
@@ -600,8 +609,13 @@ def get_env_variables(runner, remote_info, context):
 
 
 def get_deployment_json(
-    runner, deployment_name, context, namespace, deployment_type, run_id=None
-):
+    runner: Runner,
+    deployment_name: str,
+    context: str,
+    namespace: str,
+    deployment_type: str,
+    run_id: Optional[str]=None,
+) -> Dict:
     """Get the decoded JSON for a deployment.
 
     If this is a Deployment we created, the run_id is also passed in - this is
@@ -645,8 +659,13 @@ def get_deployment_json(
 
 
 def get_remote_info(
-    runner, deployment_name, context, namespace, deployment_type, run_id=None
-):
+    runner: Runner,
+    deployment_name: str,
+    context: str,
+    namespace: str,
+    deployment_type: str,
+    run_id: Optional[str]=None,
+) -> RemoteInfo:
     """
     Given the deployment name, return a RemoteInfo object.
 
@@ -725,7 +744,7 @@ def get_remote_info(
     )
 
 
-def kill_process(process):
+def kill_process(process: Popen) -> None:
     """Kill a process, make sure it's a dead."""
     if process.poll() is None:
         process.terminate()
@@ -740,10 +759,14 @@ class Subprocesses(object):
     """Shut down subprocesses on exit."""
 
     def __init__(self):
-        self.subprocesses = {}
+        self.subprocesses = {}  # Type: Dict[Popen:Callable]
         atexit.register(self.killall)
 
-    def append(self, process, killer=None):
+    def append(self, process: Popen, killer: Optional[Callable]=None) -> None:
+        """
+        Register another subprocess to be shutdown, with optional callable that
+        will kill it.
+        """
         if killer is None:
 
             def kill():
@@ -753,6 +776,7 @@ class Subprocesses(object):
         self.subprocesses[process] = killer
 
     def killall(self):
+        """Killall all registered subprocesses."""
         for killer in self.subprocesses.values():
             killer()
 
@@ -775,13 +799,22 @@ class Subprocesses(object):
 class SSH(object):
     """Run ssh to k8s-proxy with appropriate arguments."""
 
-    def __init__(self, runner, port, host="localhost"):
+    def __init__(
+        self, runner: Runner, port: int, host: str="localhost"
+    ) -> None:
         self.runner = runner
         self.port = port
         self.host = host
 
-    def command(self, additional_args, prepend_arguments=[]):
-        """Return command line argument list for running ssh."""
+    def command(
+        self, additional_args: List[str], prepend_arguments: List[str]=[]
+    ) -> List[str]:
+        """
+        Return command line argument list for running ssh.
+
+        Takes command line arguments to run on remote machine, and optional
+        arguments to ssh itself.
+        """
         return ["ssh"] + prepend_arguments + [
             # Ignore local configuration (~/.ssh/config)
             "-F",
@@ -797,7 +830,7 @@ class SSH(object):
             "telepresence@" + self.host,
         ] + additional_args
 
-    def popen(self, additional_args):
+    def popen(self, additional_args: List[str]) -> Popen:
         """Connect to remote pod via SSH.
 
         Returns Popen object.
@@ -816,7 +849,7 @@ class SSH(object):
             )
         )
 
-    def wait(self):
+    def wait(self) -> None:
         """Return when SSH server can be reached."""
         start = time()
         while time() - start < 30:
@@ -829,7 +862,8 @@ class SSH(object):
         raise RuntimeError("SSH isn't starting.")
 
 
-def wait_for_pod(runner, remote_info):
+def wait_for_pod(runner: Runner, remote_info: RemoteInfo) -> None:
+    """Wait for the pod to start running."""
     start = time()
     while time() - start < 120:
         try:
@@ -873,7 +907,8 @@ def expose_local_services(processes, ssh, port_numbers):
         if output:
             print(
                 "Forwarding remote port {} to local port {}.".format(
-                    remote_port, local_port,
+                    remote_port,
+                    local_port,
                 ),
                 file=sys.stderr
             )
@@ -1120,9 +1155,9 @@ def new_swapped_deployment(
         "labels", {}
     )["telepresence"] = run_id
     for container, old_container in zip(
-            new_deployment_json["spec"]["template"]["spec"]["containers"],
-            old_deployment["spec"]["template"]["spec"]["containers"],
-            ):
+        new_deployment_json["spec"]["template"]["spec"]["containers"],
+        old_deployment["spec"]["template"]["spec"]["containers"],
+    ):
         if container["name"] == container_to_update:
             # Change the name to make sure all changes (in particular *removed*
             # fields) get reflected, rather than merged in way that means
