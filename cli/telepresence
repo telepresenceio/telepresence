@@ -962,7 +962,9 @@ def connect(
         # portforward from the docker0 interface on Linux, and the lo0 alias we
         # added on OS X, to loopback (until we can use kubectl port-forward
         # option to listen on docker0 -
-        # https://github.com/kubernetes/kubernetes/pull/46517):
+        # https://github.com/kubernetes/kubernetes/pull/46517, or all our users
+        # have latest version of Docker for Mac, which has nicer solution -
+        # https://github.com/datawire/telepresence/issues/224).
         if sys.platform == "linux":
 
             # If ip addr is available use it if not fall back to ifconfig.
@@ -1579,7 +1581,7 @@ def get_proxy_cidrs(
             format(", ".join(args.also_proxy))
         )
 
-    def ip_to_16range(ip):
+    def ip_to_16range(ip: str) -> str:
         # Convert IP address, e.g. '10.3.241.23', into 16 bit range, in this
         # case '10.3.0.0/16':
         return ".".join(ip.split(".")[:2] + ["0", "0"]) + "/16"

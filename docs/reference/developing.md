@@ -22,6 +22,14 @@ $ cd telepresence
 $ make setup
 ```
 
+### Coding standard
+
+Formatting is enforced by the installed `yapf` tool; to reformat the code, you can do:
+
+```console
+$ virtualenv/bin/yapf cli/telepresence
+```
+
 ### Releasing Telepresence
 
 Theory of operation:
