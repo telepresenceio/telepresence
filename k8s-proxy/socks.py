@@ -17,6 +17,7 @@ for RESOLVE extension.
 import socket
 import struct
 import os
+from typing import Tuple, Callable, Type, Optional, Any
 
 # twisted imports
 from twisted.internet import reactor, protocol
@@ -26,12 +27,15 @@ from twisted.internet.error import ConnectionRefusedError, DNSLookupError
 
 DEBUG = "DEBUG_SOCKS" in os.environ
 
+NextState = Optional[Tuple[Callable, int]]
+
 
 class SOCKSv5Outgoing(protocol.Protocol):
     """Connection from the proxy server to the final destination."""
+    transport = None  # type: Any
 
     def __init__(self, socks):
-        self.socks = socks
+        self.socks = socks  # type: SOCKSv5
 
     def connectionMade(self):
         # First thing, make sure SOCKS connection knows about us, so events get
@@ -46,20 +50,16 @@ class SOCKSv5Outgoing(protocol.Protocol):
     def connectionLost(self, reason):
         self.socks.transport.loseConnection()
 
-    def dataReceived(self, data):
+    def dataReceived(self, data: bytes):
         self.socks.write(data)
 
-    def write(self, data):
+    def write(self, data: bytes):
         self.transport.write(data)
 
 
 class SOCKSv5(StatefulProtocol):
     """
     An implementation of the SOCKSv5 protocol.
-
-    @type logging: L{str} or L{None}
-    @ivar logging: If not L{None}, the name of the logfile to which connection
-        information will be written.
 
     @type reactor: object providing L{twisted.internet.interfaces.IReactorTCP}
     @ivar reactor: The reactor used to create connections.
@@ -72,16 +72,16 @@ class SOCKSv5(StatefulProtocol):
         L{None}. After that, it is the proxy-to-destination protocol instance
         along which the client's connection is being forwarded.
     """
+    transport = None  # type: Any
 
-    def __init__(self, logging=None, reactor=reactor):
-        self.logging = logging
-        self.reactor = reactor
+    def __init__(self, reactor=reactor):
+        self.reactor = reactor  # type: Any
 
-    def connectionMade(self):
-        self.otherConn = None
-        self.command = None
+    def connectionMade(self) -> None:
+        self.otherConn = None  # type: Optional[SOCKSv5Outgoing]
+        self.command = None  # type: Optional[str]
 
-    def dataReceived(self, data):
+    def dataReceived(self, data: bytes) -> None:
         """
         Called whenever data is received.
 
@@ -96,23 +96,23 @@ class SOCKSv5(StatefulProtocol):
             return
         StatefulProtocol.dataReceived(self, data)
 
-    def getInitialState(self):
+    def getInitialState(self) -> NextState:
         """Starting point for parsing state machine."""
         return self._parse_handshake_start, 2
 
-    def _parse_handshake_start(self, data):
+    def _parse_handshake_start(self, data: bytes) -> NextState:
         """Parse the first two bytes of the handshake request."""
         assert data[0] == 5
         length = data[1]
         return self._parse_handshake_auth, length
 
-    def _parse_handshake_auth(self, data):
+    def _parse_handshake_auth(self, data: bytes) -> NextState:
         """Parse the authentication methods bytes of the handshake request."""
         # NO_AUTH response
         self.write(b"\x05\x00")
         return self._parse_request_start, 4
 
-    def _parse_request_start(self, data):
+    def _parse_request_start(self, data: bytes) -> NextState:
         """Parse the start of the request."""
         assert data[0] == 5
         assert data[2] == 0
@@ -125,7 +125,7 @@ class SOCKSv5(StatefulProtocol):
         else:
             # Unsupported command response
             self._write_response(7, "0.0.0.0", 0)
-            return
+            return None
 
         if addr_type == 1:
             return self._parse_request_ipv4, 6
@@ -134,14 +134,15 @@ class SOCKSv5(StatefulProtocol):
         else:
             # XXX IPv6 currently unsupported
             self._write_response(7, "0.0.0.0", 0)
+            return None
 
-    def _parse_request_ipv4(self, data):
+    def _parse_request_ipv4(self, data: bytes) -> None:
         """Parse the rest of the request if address type is IPv4."""
         host = socket.inet_ntoa(data[:4])
         port = struct.unpack("!H", data[4:6])[0]
         self._done_parsing(host, port)
 
-    def _parse_request_domainname_start(self, data):
+    def _parse_request_domainname_start(self, data: bytes) -> NextState:
         """
         Parse the domain length part of the request if address type is a domain
         name.
@@ -149,7 +150,7 @@ class SOCKSv5(StatefulProtocol):
         length = data[0]
         return self._parse_request_domainname, length + 2
 
-    def _parse_request_domainname(self, data):
+    def _parse_request_domainname(self, data: bytes) -> None:
         """Parse the rest of the request if address type is a domain name."""
         host = str(data[:-2], "utf-8")
         port = struct.unpack("!H", data[-2:])[0]
@@ -165,7 +166,7 @@ class SOCKSv5(StatefulProtocol):
             error_code = 5
         self._write_response(error_code, "0.0.0.0", 0)
 
-    def _write_response(self, code, host, port):
+    def _write_response(self, code: int, host: str, port: int) -> None:
         """Send a response to the client."""
         self.write(
             struct.pack("!BBBB", 5, code, 0, 1) + socket.inet_aton(host) +
@@ -174,7 +175,7 @@ class SOCKSv5(StatefulProtocol):
         if code != 0:
             self.transport.loseConnection()
 
-    def _done_parsing(self, host, port):
+    def _done_parsing(self, host: str, port: int) -> None:
         """Called when the request is completely finished parsing."""
         if self.command == "CONNECT":
             d = self.connectClass(str(host), port, SOCKSv5Outgoing, self)
@@ -198,7 +199,9 @@ class SOCKSv5(StatefulProtocol):
         if self.otherConn:
             self.otherConn.transport.loseConnection()
 
-    def connectClass(self, host, port, klass, *args):
+    def connectClass(
+        self, host: str, port: int, klass: Type[protocol.Protocol], *args
+    ) -> Any:
         return protocol.ClientCreator(reactor, klass,
                                       *args).connectTCP(host, port)
 
@@ -223,5 +226,5 @@ if __name__ == '__main__':
     DEBUG = True
     from twisted.python.failure import startDebugMode
     startDebugMode()
-    reactor.listenTCP(9050, SOCKSv5Factory())
-    reactor.run()
+    reactor.listenTCP(9050, SOCKSv5Factory())  # type: ignore
+    reactor.run()  # type: ignore

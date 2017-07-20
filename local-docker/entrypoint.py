@@ -55,7 +55,7 @@ def main():
         wait()
 
 
-def proxy(config):
+def proxy(config: dict):
     """Start sshuttle proxy to Kubernetes."""
     port = config["port"]
     if "ip" in config:
