@@ -487,7 +487,7 @@ class PortMapping(object):
     """Maps local ports to listen to remote exposed ports."""
 
     def __init__(self):
-        self._mapping = {}
+        self._mapping = {}  # type: Dict[int,int]
 
     @classmethod
     def parse(cls, port_strings: List[str]):
@@ -556,8 +556,8 @@ class RemoteInfo(object):
                 "Could not find container with image "
                 "'datawire/telepresence-k8s' in pod {}.".format(pod_name)
             )
-        self.container_config = containers[0]  # Type: Dict
-        self.container_name = self.container_config["name"]  # Type: str
+        self.container_config = containers[0]  # type: Dict
+        self.container_name = self.container_config["name"]  # type: str
 
     def remote_telepresence_version(self) -> str:
         """Return the version used by the remote Telepresence container."""
@@ -759,7 +759,7 @@ class Subprocesses(object):
     """Shut down subprocesses on exit."""
 
     def __init__(self):
-        self.subprocesses = {}  # Type: Dict[Popen:Callable]
+        self.subprocesses = {}  # type: Dict[Popen,Callable]
         atexit.register(self.killall)
 
     def append(self, process: Popen, killer: Optional[Callable]=None) -> None:
@@ -888,7 +888,9 @@ def wait_for_pod(runner: Runner, remote_info: RemoteInfo) -> None:
     )
 
 
-def expose_local_services(processes, ssh, port_numbers):
+def expose_local_services(
+    processes: Subprocesses, ssh: SSH, port_numbers: List[Tuple[int, int]]
+) -> None:
     """Create SSH tunnels from remote proxy pod to local host.
 
     :param processes: A `Subprocesses` instance.
@@ -920,11 +922,13 @@ def expose_local_services(processes, ssh, port_numbers):
         print("", file=sys.stderr)
 
 
-def connect(runner, remote_info, cmdline_args):
+def connect(
+    runner: Runner, remote_info: RemoteInfo, cmdline_args: argparse.Namespace
+) -> Tuple[Subprocesses, int, SSH]:
     """
     Start all the processes that handle remote proxying.
 
-    Return list of Popen instances.
+    Return (Subprocesses, local port of SOCKS proxying tunnel, SSH instance).
     """
     processes = Subprocesses()
     # Keep local copy of pod logs, for debugging purposes:
@@ -1024,8 +1028,9 @@ def connect(runner, remote_info, cmdline_args):
     return processes, socks_port, ssh
 
 
-def create_new_deployment(runner, args):
-    """Create a new Deployment, return its name."""
+def create_new_deployment(runner: Runner,
+                          args: argparse.Namespace) -> Tuple[str, str]:
+    """Create a new Deployment, return its name and Kubernetes label."""
     run_id = str(uuid4())
 
     def remove_existing_deployment():
@@ -1078,10 +1083,15 @@ def create_new_deployment(runner, args):
     return args.new_deployment, run_id
 
 
-def swap_deployment(runner, args):
-    """Swap out an existing Deployment, return its name.
+def swap_deployment(runner: Runner,
+                    args: argparse.Namespace) -> Tuple[str, str, Dict]:
+    """
+    Swap out an existing Deployment.
 
     Native Kubernetes version.
+
+    Returns (Deployment name, unique K8s label, JSON of original container that
+    was swapped out.)
     """
     run_id = str(uuid4())
 
@@ -1127,14 +1137,14 @@ def swap_deployment(runner, args):
 
 
 def new_swapped_deployment(
-    old_deployment,
-    container_to_update,
-    run_id,
-    telepresence_image,
-    add_custom_nameserver,
-    as_root,
-    new_container_name,
-):
+    old_deployment: Dict,
+    container_to_update: str,
+    run_id: str,
+    telepresence_image: str,
+    add_custom_nameserver: bool,
+    as_root: bool,
+    new_container_name: str,
+) -> Tuple[Dict, Dict]:
     """
     Create a new Deployment that uses telepresence-k8s image.
 
@@ -1146,6 +1156,9 @@ def new_swapped_deployment(
     4. Adds TELEPRESENCE_NAMESERVER env variable, if requested.
     5. Runs as root, if requested.
     6. Sets terminationMessagePolicy.
+
+    Returns dictionary that can be encoded to JSON and used with kubectl apply,
+    and contents of swapped out container.
     """
     new_deployment_json = deepcopy(old_deployment)
     new_deployment_json["spec"]["replicas"] = 1
@@ -1198,9 +1211,13 @@ def new_swapped_deployment(
     )
 
 
-def swap_deployment_openshift(runner, args):
+def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
+                              ) -> Tuple[str, str, Dict]:
     """
-    Swap out an existing DeploymentConfig, return its name.
+    Swap out an existing DeploymentConfig.
+
+    Returns (Deployment name, unique K8s label, JSON of original container that
+    was swapped out.)
 
     In practice OpenShift doesn't seem to do the right thing when a
     DeploymentConfig is updated. In particular, we need to disable the image
@@ -1260,7 +1277,8 @@ def swap_deployment_openshift(runner, args):
     return deployment_name, run_id, orig_container_json
 
 
-def start_proxy(runner, args):
+def start_proxy(runner: Runner, args: argparse.Namespace
+                ) -> Tuple[Subprocesses, Dict[str, str], int, SSH, RemoteInfo]:
     """Start the kubectl port-forward and SSH clients that do the proxying."""
     if sys.stdout.isatty() and args.method != "container":
         print(
@@ -1361,7 +1379,7 @@ TorPort {}
 """
 
 
-def sip_workaround(existing_paths, unsupported_tools_path):
+def sip_workaround(existing_paths: str, unsupported_tools_path: str) -> str:
     """
     Workaround System Integrity Protection.
 
@@ -1392,7 +1410,9 @@ def sip_workaround(existing_paths, unsupported_tools_path):
     return ":".join(paths)
 
 
-def wait_for_exit(runner, main_process, processes):
+def wait_for_exit(
+    runner: Runner, main_process: Popen, processes: Subprocesses
+) -> None:
     """Given Popens, wait for one of them to die."""
     while True:
         sleep(0.1)
@@ -1417,11 +1437,15 @@ def wait_for_exit(runner, main_process, processes):
             raise SystemExit(3)
 
 
-def mount_remote_volumes(runner, remote_info, ssh, allow_all_users):
+def mount_remote_volumes(
+    runner: Runner, remote_info: RemoteInfo, ssh: SSH, allow_all_users: bool
+) -> Tuple[str, Callable]:
     """
     sshfs is used to mount the remote system locally.
 
     Allowing all users may require root, so we use sudo in that case.
+
+    Returns (path to mounted directory, callable that will unmount it).
     """
     # Docker for Mac only shares some folders; the default TMPDIR on OS X is
     # not one of them, so make sure we use /tmp:
@@ -1483,9 +1507,11 @@ exit 55
 """
 
 
-def get_unsupported_tools(dns_supported):
+def get_unsupported_tools(dns_supported: bool) -> str:
     """
     Create replacement command-line tools that just error out, in a nice way.
+
+    Returns path to directory where overriden tools are stored.
     """
     commands = ["ping", "traceroute"]
     if not dns_supported:
@@ -1511,7 +1537,12 @@ sys.stdout.flush()
 """
 
 
-def get_proxy_cidrs(runner, args, remote_info, service_address):
+def get_proxy_cidrs(
+    runner: Runner,
+    args: argparse.Namespace,
+    remote_info: RemoteInfo,
+    service_address: str
+) -> List[str]:
     """
     Figure out which IP ranges to route via sshuttle.
 
@@ -1584,7 +1615,14 @@ def get_proxy_cidrs(runner, args, remote_info, service_address):
     return list(result)
 
 
-def connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh):
+def connect_sshuttle(
+    runner: Runner,
+    remote_info: RemoteInfo,
+    args: argparse.Namespace,
+    subprocesses: Subprocesses,
+    env: Dict[str, str],
+    ssh: SSH
+):
     """Connect to Kubernetes using sshuttle."""
     # Make sure we have sudo credentials by doing a small sudo in advance
     # of sshuttle using it:
@@ -1647,7 +1685,7 @@ def connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh):
     get_hellotelepresence()
 
 
-def docker_runify(args):
+def docker_runify(args: List[str]) -> List[str]:
     """Prepend 'docker run' to a list of arguments."""
     args = ['docker', 'run'] + args
     if SUDO_FOR_DOCKER:
@@ -1656,7 +1694,7 @@ def docker_runify(args):
         return args
 
 
-def make_docker_kill(runner, name):
+def make_docker_kill(runner: Runner, name: str) -> Callable:
     """Return a function that will kill a named docker container."""
 
     def kill():
@@ -1667,8 +1705,13 @@ def make_docker_kill(runner, name):
 
 
 def run_docker_command(
-    runner, remote_info, args, remote_env, subprocesses, ssh
-):
+    runner: Runner,
+    remote_info: RemoteInfo,
+    args: argparse.Namespace,
+    remote_env: Dict[str, str],
+    subprocesses: Subprocesses,
+    ssh: SSH,
+) -> None:
     """
     --docker-run support.
 
@@ -1806,8 +1849,14 @@ def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
 
 
 def run_local_command(
-    runner, remote_info, args, env_overrides, subprocesses, socks_port, ssh
-):
+    runner: Runner,
+    remote_info: RemoteInfo,
+    args: argparse.Namespace,
+    env_overrides: Dict[str, str],
+    subprocesses: Subprocesses,
+    socks_port: int,
+    ssh: SSH
+) -> None:
     """--run-shell/--run support, run command locally."""
     env = os.environ.copy()
     env.update(env_overrides)
@@ -1891,7 +1940,7 @@ Logs:
 """
 
 
-def require_command(runner, command, message=None):
+def require_command(runner: Runner, command: str, message: Optional[str]=None):
     if message is None:
         message = "Please install " + command
     try:
@@ -1905,8 +1954,12 @@ def require_command(runner, command, message=None):
         raise SystemExit(1)
 
 
-def kubectl_or_oc(server):
-    """Figure out if we're using "kubectl" or "oc"."""
+def kubectl_or_oc(server: str) -> str:
+    """
+    Return "kubectl" or "oc", the command-line tool we should use.
+
+    :param server: The URL of the cluster API server.
+    """
     if which("oc") is None:
         return "kubectl"
     # We've got oc, and possibly kubectl as well. We only want oc for OpenShift
@@ -2005,7 +2058,7 @@ def main():
         # minikube/minishift break DNS because DNS gets captured, sent to
         # minikube, which sends it back to DNS server set by host, resulting in
         # loop... we've fixed that for most cases, but not --deployment.
-        def check_if_in_local_vm():
+        def check_if_in_local_vm() -> bool:
             # Minikube just has 'minikube' as context'
             if args.context == "minikube":
                 return True
