@@ -1,4 +1,4 @@
-.PHONY: default build-k8s-proxy bumpversion release minikube-test build-k8s-proxy-minikube
+.PHONY: default build-k8s-proxy bumpversion release minikube-test build-k8s-proxy-minikube setup
 
 VERSION=$(shell git describe --tags)
 SHELL:=/bin/bash
@@ -20,6 +20,7 @@ virtualenv:
 virtualenv/bin/sshuttle-telepresence: virtualenv
 	source virtualenv/bin/activate && packaging/build-sshuttle.py
 
+setup: virtualenv/bin/sshuttle-telepresence
 
 ## Development ##
 
