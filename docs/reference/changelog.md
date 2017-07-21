@@ -5,6 +5,13 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.62 (unreleased)
+
+Bug fixes:
+
+* SIGHUP now clean ups resources the same way SIGTERM and hitting Ctrl-C do.
+  ([#184](https://github.com/datawire/telepresence/issues/184))
+
 #### 0.61 (July 19, 2017)
 
 Bug fixes:
