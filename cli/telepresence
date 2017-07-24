@@ -1397,7 +1397,7 @@ def sip_workaround(existing_paths: str, unsupported_tools_path: str) -> str:
     # Remove protected paths from $PATH:
     paths = [p for p in existing_paths.split(":") if p not in protected]
     # Add temp dir
-    bin_dir = mkdtemp()
+    bin_dir = mkdtemp(dir="/tmp")
     paths.insert(0, bin_dir)
     atexit.register(rmtree, bin_dir)
     for directory in protected:
@@ -1518,7 +1518,7 @@ def get_unsupported_tools(dns_supported: bool) -> str:
     commands = ["ping", "traceroute"]
     if not dns_supported:
         commands += ["nslookup", "dig", "host"]
-    unsupported_bin = mkdtemp()
+    unsupported_bin = mkdtemp(dir="/tmp")
     for command in commands:
         path = unsupported_bin + "/" + command
         with open(path, "w") as f:
