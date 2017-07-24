@@ -5,6 +5,14 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.62 (unreleased)
+
+Bug fixes:
+
+* Better method for bypassing DNS caching on startup, which should make Linux platforms with systemd-resolved work.
+  Thanks to Vladimir Pouzanov for the bug report and testing.
+  ([#242](https://github.com/datawire/telepresence/issues/230))
+
 #### 0.61 (July 19, 2017)
 
 Bug fixes:

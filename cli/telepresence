@@ -1660,19 +1660,14 @@ def connect_sshuttle(
     # segment so any search/domain statements in resolv.conf are applied,
     # which then allows the DNS proxy to detect the suffix domain and
     # filter it out.
-    def get_hellotelepresence():
+    def get_hellotelepresence(counter=iter(range(10000))):
         # On Macs I suspect there is per-process caching and OS-level
-        # caching, so clear out caches by having separate process calls and
-        # explicit caching:
-        try:
-            runner.get_output([
-                "python3", "-c",
-                "import socket; socket.gethostbyname('hellotelepresence')"
-            ])
-        except CalledProcessError:
-            if sys.platform == "darwin":
-                runner.get_output(["sudo", "killall", "-HUP", "mDNSResponder"])
-            raise
+        # caching, so by pass caching by sending new request each time.
+        runner.get_output([
+            "python3", "-c",
+            "import socket; socket.gethostbyname('hellotelepresence{}')".
+            format(next(counter))
+        ])
 
     start = time()
     while time() - start < 20:
