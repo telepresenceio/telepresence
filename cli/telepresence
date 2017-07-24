@@ -1839,7 +1839,7 @@ def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
     while time() - start < 10:
         try:
             runner.check_call([
-                "torsocks", "python3", "-c"
+                "torsocks", "python3", "-c",
                 "import socket; socket.socket().connect(('google.com', 80))"
             ],
                               env=env)
