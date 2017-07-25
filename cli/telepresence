@@ -1656,12 +1656,21 @@ def get_proxy_cidrs(
     if new_services:
         service_ips = get_service_ips()
     # Store Service CIDR:
-    result.add(covering_cidr(service_ips))
+    service_cidr = covering_cidr(service_ips)
+    result.add(service_cidr)
     # Delete new services:
     for new_service in new_services:
         runner.check_call([
             runner.kubectl_cmd, "delete", "service", new_service
         ])
+
+    if sys.stderr.isatty():
+        print("Services started after this point will be inaccessible if "
+              "they have IPs outside the range {}; "
+              "restart telepresence if you can't access a "
+              "new Service.\n".format(
+                  service_cidr),
+              file=sys.stderr)
 
     return list(result)
 
