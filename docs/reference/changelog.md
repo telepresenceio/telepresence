@@ -12,6 +12,8 @@ Bug fixes:
 * Instead of hardcoding /16, using a better heuristic for guessing the IP range for Services.
   Thanks to Vladimir Pouzanov for the bug report.
   ([#243](https://github.com/datawire/telepresence/issues/243))
+* SIGHUP now clean ups resources the same way SIGTERM and hitting Ctrl-C do.
+  ([#184](https://github.com/datawire/telepresence/issues/184))
 
 #### 0.61 (July 19, 2017)
 

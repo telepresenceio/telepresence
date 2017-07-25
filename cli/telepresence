@@ -2037,12 +2037,13 @@ def kubectl_or_oc(server: str) -> str:
 
 
 def main():
-    # Make SIGTERM do clean shutdown (in particular, we want atexit functions
-    # to be called):
+    # Make SIGTERM and SIGHUP do clean shutdown (in particular, we want atexit
+    # functions to be called):
     def shutdown(signum, frame):
         raise SystemExit(0)
 
     signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGHUP, shutdown)
 
     args = parse_args()
 
