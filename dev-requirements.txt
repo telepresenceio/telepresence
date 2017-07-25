@@ -1,6 +1,7 @@
 bumpversion==0.5.3
 flake8
 autoflake
+hypothesis
 mypy
 pytest
 pytest-xdist

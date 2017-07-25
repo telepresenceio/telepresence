@@ -22,8 +22,6 @@ virtualenv/bin/sshuttle-telepresence: virtualenv
 
 setup: virtualenv/bin/sshuttle-telepresence
 
-## Development ##
-
 # Build Kubernetes side proxy image inside local Docker:
 build-k8s-proxy:
 	cd k8s-proxy && sudo docker build . -t datawire/telepresence-k8s:$(VERSION)
@@ -34,9 +32,16 @@ build-local:
 	cd local-docker && sudo docker build . -t datawire/telepresence-local:$(VERSION)
 	rm -f local-docker/sshuttle-telepresence local-docker/telepresence.py
 
+## Development ##
+
 # Build Docker image inside minikube Docker:
 build-k8s-proxy-minikube:
 	eval $(shell minikube docker-env) && \
+		cd k8s-proxy && \
+		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
+
+build-k8s-proxy-minishift:
+	eval $(shell minishift docker-env) && \
 		cd k8s-proxy && \
 		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
 
