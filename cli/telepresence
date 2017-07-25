@@ -1661,8 +1661,9 @@ def connect_sshuttle(
     # which then allows the DNS proxy to detect the suffix domain and
     # filter it out.
     def get_hellotelepresence(counter=iter(range(10000))):
-        # On Macs I suspect there is per-process caching and OS-level
-        # caching, so by pass caching by sending new request each time.
+        # On Macs, and perhaps elsewhere, there is OS-level caching of
+        # NXDOMAIN, so bypass caching by sending new domain each time. Another,
+        # less robust alternative, is to `killall -HUP mDNSResponder`.
         runner.get_output([
             "python3", "-c",
             "import socket; socket.gethostbyname('hellotelepresence{}')".
