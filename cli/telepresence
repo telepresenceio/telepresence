@@ -7,6 +7,7 @@ Kubernetes cluster.
 import argparse
 import atexit
 from copy import deepcopy
+import ipaddress
 import json
 import os
 import os.path
@@ -1397,7 +1398,7 @@ def sip_workaround(existing_paths: str, unsupported_tools_path: str) -> str:
     # Remove protected paths from $PATH:
     paths = [p for p in existing_paths.split(":") if p not in protected]
     # Add temp dir
-    bin_dir = mkdtemp()
+    bin_dir = mkdtemp(dir="/tmp")
     paths.insert(0, bin_dir)
     atexit.register(rmtree, bin_dir)
     for directory in protected:
@@ -1518,7 +1519,7 @@ def get_unsupported_tools(dns_supported: bool) -> str:
     commands = ["ping", "traceroute"]
     if not dns_supported:
         commands += ["nslookup", "dig", "host"]
-    unsupported_bin = mkdtemp()
+    unsupported_bin = mkdtemp(dir="/tmp")
     for command in commands:
         path = unsupported_bin + "/" + command
         with open(path, "w") as f:
@@ -1539,6 +1540,26 @@ sys.stdout.flush()
 """
 
 
+def covering_cidr(ips: List[str]) -> str:
+    """
+    Given list of IPs, return CIDR that covers them all.
+
+    Presumes it's at least a /24.
+    """
+
+    def collapse(ns):
+        return list(ipaddress.collapse_addresses(ns))
+
+    assert len(ips) > 0
+    networks = collapse([
+        ipaddress.IPv4Interface(ip + "/24").network for ip in ips
+    ])
+    # Increase network size until it combines everything:
+    while len(networks) > 1:
+        networks = collapse([networks[0].supernet()] + networks[1:])
+    return networks[0].with_prefixlen
+
+
 def get_proxy_cidrs(
     runner: Runner,
     args: argparse.Namespace,
@@ -1549,7 +1570,7 @@ def get_proxy_cidrs(
     Figure out which IP ranges to route via sshuttle.
 
     1. Given the IP address of a service, figure out IP ranges used by
-       Kubernetes services. We assume /16 for the services.
+       Kubernetes services.
     2. Extract pod ranges from API.
     3. Any hostnames/IPs given by the user using --also-proxy.
 
@@ -1581,11 +1602,6 @@ def get_proxy_cidrs(
             format(", ".join(args.also_proxy))
         )
 
-    def ip_to_16range(ip: str) -> str:
-        # Convert IP address, e.g. '10.3.241.23', into 16 bit range, in this
-        # case '10.3.0.0/16':
-        return ".".join(ip.split(".")[:2] + ["0", "0"]) + "/16"
-
     # Get pod IPs from nodes if possible, otherwise use pod IPs as heuristic:
     try:
         nodes = json.loads(
@@ -1599,20 +1615,62 @@ def get_proxy_cidrs(
             runner.
             get_output([runner.kubectl_cmd, "get", "pods", "-o", "json"])
         )["items"]
+        pod_ips = []
         for pod in pods:
             try:
-                result.add(ip_to_16range(pod["status"]["podIP"]))
+                pod_ips.append(pod["status"]["podIP"])
             except KeyError:
                 # Apparently a problem on OpenShift
                 pass
+        if pod_ips:
+            result.add(covering_cidr(pod_ips))
     else:
         for node in nodes:
             pod_cidr = node["spec"].get("podCIDR")
             if pod_cidr is not None:
                 result.add(pod_cidr)
 
-    # Add service IP range, based on heuristic:
-    result.add(ip_to_16range(service_address))
+    # Add service IP range, based on heuristic of constructing CIDR from
+    # existing Service IPs. We create more services if there are less than 8,
+    # to ensure some coverage of the IP range:
+    def get_service_ips():
+        services = json.loads(
+            runner.
+            get_output([runner.kubectl_cmd, "get", "services", "-o", "json"])
+        )["items"]
+        return [
+            svc["spec"]["clusterIP"] for svc in services
+            if svc["spec"]["clusterIP"] != "None"
+        ]
+
+    service_ips = get_service_ips()
+    new_services = []  # type: List[str]
+    # Ensure we have at least 8 ClusterIP Services:
+    while len(service_ips) + len(new_services) < 8:
+        new_service = random_name()
+        runner.check_call([
+            runner.kubectl_cmd, "create", "service", "clusterip", new_service,
+            "--tcp=3000"
+        ])
+        new_services.append(new_service)
+    if new_services:
+        service_ips = get_service_ips()
+    # Store Service CIDR:
+    service_cidr = covering_cidr(service_ips)
+    result.add(service_cidr)
+    # Delete new services:
+    for new_service in new_services:
+        runner.check_call([
+            runner.kubectl_cmd, "delete", "service", new_service
+        ])
+
+    if sys.stderr.isatty():
+        print("Guessing that Services IP range is {}. Services started after"
+              " this point will be inaccessible if are outside this range;"
+              " restart telepresence if you can't access a "
+              "new Service.\n".format(
+                  service_cidr),
+              file=sys.stderr)
 
     return list(result)
 
@@ -1839,7 +1897,7 @@ def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
     while time() - start < 10:
         try:
             runner.check_call([
-                "torsocks", "python3", "-c"
+                "torsocks", "python3", "-c",
                 "import socket; socket.socket().connect(('google.com', 80))"
             ],
                               env=env)
