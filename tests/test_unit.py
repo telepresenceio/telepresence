@@ -2,6 +2,9 @@
 Unit tests (in-memory, small units of code).
 """
 
+import ipaddress
+
+from hypothesis import strategies as st, given, example
 import yaml
 
 from . import telepresence
@@ -169,10 +172,36 @@ def test_portmapping():
     """
     ports = telepresence.PortMapping.parse(["1234:80", "90"])
     ports.merge_automatic_ports([80, 555, 666])
-    assert ports.local_to_remote() == {
-        (1234, 80),
-        (90, 90),
-        (555, 555),
-        (666, 666)
-    }
+    assert ports.local_to_remote() == {(1234, 80), (90, 90), (555, 555),
+                                       (666, 666)}
     assert ports.remote() == {80, 90, 555, 666}
+
+
+# Generate a random IPv4 as a string:
+ip = st.integers(
+    min_value=0, max_value=2**32 - 1
+).map(lambda i: str(ipaddress.IPv4Address(i)))
+# Generate a list of IPv4 strings:
+ips = st.lists(elements=ip, min_size=1)
+
+
+@given(ips)
+@example(["1.2.3.4", "1.2.3.5"])
+@example(["0.0.0.1", "255.255.255.255"])
+def test_covering_cidr(ips):
+    """
+    covering_cidr() gets the minimal CIDR that covers given IPs.
+
+    In particular, that means any subnets should *not* cover all given IPs.
+    """
+    cidr = telepresence.covering_cidr(ips)
+    assert isinstance(cidr, str)
+    cidr = ipaddress.IPv4Network(cidr)
+    assert cidr.prefixlen <= 24
+    # All IPs in given CIDR:
+    ips = [ipaddress.IPv4Address(i) for i in ips]
+    assert all([ip in cidr for ip in ips])
+    # Subnets do not contain all IPs if we're not in minimum 24 bit CIDR:
+    if cidr.prefixlen < 24:
+        for subnet in cidr.subnets():
+            assert not all([ip in subnet for ip in ips])

@@ -7,6 +7,7 @@ Kubernetes cluster.
 import argparse
 import atexit
 from copy import deepcopy
+import ipaddress
 import json
 import os
 import os.path
@@ -1537,6 +1538,26 @@ for host in sys.argv[1:]:
 sys.stdout.write(json.dumps(result))
 sys.stdout.flush()
 """
+
+
+def covering_cidr(ips: List[str]) -> str:
+    """
+    Given list of IPs, return CIDR that covers them all.
+
+    Presumes it's at least a /24.
+    """
+
+    def collapse(ns):
+        return list(ipaddress.collapse_addresses(ns))
+
+    assert len(ips) > 0
+    networks = collapse([
+        ipaddress.IPv4Interface(ip + "/24").network for ip in ips
+    ])
+    # Increase network size until it combines everything:
+    while len(networks) > 1:
+        networks = collapse([networks[0].supernet()] + networks[1:])
+    return networks[0].with_prefixlen
 
 
 def get_proxy_cidrs(
