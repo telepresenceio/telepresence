@@ -5,6 +5,14 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.62 (unreleased)
+
+Bug fixes:
+
+* Instead of hardcoding /16, using a better heuristic for guessing the IP range for Services.
+  Thanks to Vladimir Pouzanov for the bug report.
+  ([#243](https://github.com/datawire/telepresence/issues/243))
+
 #### 0.61 (July 19, 2017)
 
 Bug fixes:
