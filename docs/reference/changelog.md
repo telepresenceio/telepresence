@@ -11,8 +11,8 @@ Bug fixes:
 
 * Support for Linux distributions using systemd-resolved, like Ubuntu 17.04 and Arch, now works when there is no search domain set.
   Thanks to Vladimir Pouzanov for the bug report and testing.
-  ([#242](https://github.com/datawire/telepresence/issues/230))
-* Better method for bypassing DNS caching on startup, which should hopefully be more robust.
+  ([#242](https://github.com/datawire/telepresence/issues/242))
+* Better method for bypassing DNS caching on startup, which should be more robust.
 
 #### 0.61 (July 19, 2017)
 
