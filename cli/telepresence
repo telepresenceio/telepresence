@@ -1476,12 +1476,12 @@ def mount_remote_volumes(
     except CalledProcessError:
         print(
             "Mounting remote volumes failed, they will be unavailable"
-            " in this session. This is a known issue when running inside"
-            " Docker or on Windows Subystem for Linux. See"
-            " https://github.com/datawire/telepresence/issues/115 for"
-            " details. If you are not running in those environments"
-            " then please report a bug, attaching telepresence.log to"
-            " the bug report.",
+            " in this session. If you are running"
+            " on Windows Subystem for Linux then see"
+            " https://github.com/datawire/telepresence/issues/115,"
+            " otherwise please report a bug, attaching telepresence.log to"
+            " the bug report:"
+            " https://github.com/datawire/telepresence/issues/new",
             file=sys.stderr
         )
         mounted = False
