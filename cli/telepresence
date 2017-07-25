@@ -1665,9 +1665,9 @@ def get_proxy_cidrs(
         ])
 
     if sys.stderr.isatty():
-        print("Services started after this point will be inaccessible if "
-              "they have IPs outside the range {}; "
-              "restart telepresence if you can't access a "
+        print("Guessing that Services IP range is {}. Services started after"
+              " this point will be inaccessible if are outside this range;"
+              " restart telepresence if you can't access a "
               "new Service.\n".format(
                   service_cidr),
               file=sys.stderr)
