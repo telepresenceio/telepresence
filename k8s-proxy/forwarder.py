@@ -14,6 +14,7 @@ clients within a k8s pod.
 import os
 import socket
 from copy import deepcopy
+from typing import Callable, List, Tuple, Optional, Union
 
 from twisted.application.service import Application
 from twisted.internet import reactor, defer
@@ -22,14 +23,16 @@ from twisted.names import client, dns, error, server
 
 import socks
 
+DNSQueryResult = Union[defer.Deferred, Tuple[List[dns.RRHeader], List, List]]
 
-def resolve(hostname):
+
+def resolve(hostname: str) -> List[str]:
     """Do A record lookup, return list of IPs."""
     return socket.gethostbyname_ex(hostname)[2]
 
 
 # XXX duplicated from telepresence
-def get_resolv_conf_namservers():
+def get_resolv_conf_namservers() -> List[str]:
     """Return list of namserver IPs in /etc/resolv.conf."""
     result = []
     with open("/etc/resolv.conf") as f:
@@ -69,9 +72,10 @@ class LocalResolver(object):
             self.fallback = client.Resolver(resolv='/etc/resolv.conf')
         # Suffix set by resolv.conf search/domain line, which we remove once we
         # figure out what it is.
-        self.suffix = []
+        self.suffix = []  # type: List[bytes]
 
-    def _got_ips(self, name, ips, record_type):
+    def _got_ips(self, name: bytes, ips: List[str], record_type: Callable
+                 ) -> DNSQueryResult:
         """
         Generate the response to a query, given an IP.
         """
@@ -80,15 +84,17 @@ class LocalResolver(object):
             dns.RRHeader(name=name, payload=record_type(address=ip))
             for ip in ips
         ]
-        authority = []
-        additional = []
+        authority = []  # type: List
+        additional = []  # type: List
         return answers, authority, additional
 
-    def _got_error(self, failure):
+    def _got_error(self, failure) -> defer.Deferred:
         print(failure)
         return defer.fail(error.DomainError(str(failure)))
 
-    def _no_loop_kube_query(self, query, timeout, real_name):
+    def _no_loop_kube_query(
+        self, query: dns.Query, timeout: float, real_name: bytes
+    ) -> DNSQueryResult:
         """
         Do a query to Kube DNS for Kubernetes records only, fall back to
         random DNS server if that fails.
@@ -125,7 +131,12 @@ class LocalResolver(object):
         d.addErrback(fallback)
         return d
 
-    def query(self, query, timeout=None, real_name=None):
+    def query(
+        self,
+        query: dns.Query,
+        timeout: Optional[float]=None,
+        real_name: Optional[bytes]=None
+    ) -> DNSQueryResult:
         # Preserve real name asked in query, in case we need to truncate suffix
         # during lookup:
         if real_name is None:
@@ -201,7 +212,7 @@ class LocalResolver(object):
                 "AAAA query, sending back A instead: {}".
                 format(query.name.name)
             )
-            query.type = dns.A
+            query.type = dns.A  # type: ignore
             return self.query(query, timeout=timeout, real_name=real_name)
         else:
             print("{} query:".format(query.type, query.name.name))

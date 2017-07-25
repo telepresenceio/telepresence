@@ -69,8 +69,8 @@ script:
   - export GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/gcloud-service-key.json
   # Docker not available on OS X Travis:
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then TELEPRESENCE_METHOD=container ./ci/test.sh; fi
-  - TELEPRESENCE_METHOD=inject-tcp ./ci/test.sh
-  - TELEPRESENCE_METHOD=vpn-tcp ./ci/test.sh
+  - env TELEPRESENCE_METHOD=inject-tcp ./ci/test.sh
+  - env TELEPRESENCE_METHOD=vpn-tcp ./ci/test.sh
 
 # If a commit is tagged, release the software:
 deploy:
