@@ -39,9 +39,7 @@ build-k8s-proxy-minikube:
 	ci/build-k8s-proxy-minikube.sh
 
 build-k8s-proxy-minishift:
-	eval $(shell minishift docker-env) && \
-		cd k8s-proxy && \
-		docker build . -q -t datawire/telepresence-k8s:$(VERSION)
+	ci/build-k8s-proxy-minishift.sh
 
 run-minikube:
 	source virtualenv/bin/activate && \

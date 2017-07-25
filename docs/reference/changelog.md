@@ -14,7 +14,7 @@ Bug fixes:
   ([#243](https://github.com/datawire/telepresence/issues/243))
 * SIGHUP now clean ups resources the same way SIGTERM and hitting Ctrl-C do.
   ([#184](https://github.com/datawire/telepresence/issues/184))
-* Allow `make build-k8s-proxy-minikube` to work on macOS.
+* Allow `make build-k8s-proxy-minikube` to work on macOS. Same for Minishift.
 
 #### 0.61 (July 19, 2017)
 
