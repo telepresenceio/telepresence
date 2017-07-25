@@ -1543,7 +1543,8 @@ def get_proxy_cidrs(
     runner: Runner,
     args: argparse.Namespace,
     remote_info: RemoteInfo,
-    service_address: str
+    service_address: str,
+    override_service_net
 ) -> List[str]:
     """
     Figure out which IP ranges to route via sshuttle.
@@ -1611,8 +1612,11 @@ def get_proxy_cidrs(
             if pod_cidr is not None:
                 result.add(pod_cidr)
 
-    # Add service IP range, based on heuristic:
-    result.add(ip_to_16range(service_address))
+    if override_service_net:
+        result.add(override_service_net)
+    else:
+        # Add service IP range, based on heuristic:
+        result.add(ip_to_16range(service_address))
 
     return list(result)
 
@@ -1633,6 +1637,7 @@ def connect_sshuttle(
     if sys.platform.startswith("linux"):
         # sshuttle tproxy mode seems to have issues:
         sshuttle_method = "nat"
+    override_service_net = env.get("KUBERNETES_OVERRIDE_SERVICE_NET", None)
     subprocesses.append(
         runner.popen([
             "sshuttle-telepresence",
@@ -1651,7 +1656,8 @@ def connect_sshuttle(
             "-r",
             "telepresence@localhost:" + str(ssh.port),
         ] + get_proxy_cidrs(
-            runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
+            runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"],
+            override_service_net
         ))
     )
 
