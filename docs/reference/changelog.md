@@ -10,7 +10,7 @@ categories: reference
 Bug fixes:
 
 * Support for Linux distributions using systemd-resolved, like Ubuntu 17.04 and Arch, now works when there is no search domain set.
-  Thanks to Vladimir Pouzanov for the bug report and testing.
+  Thanks to Vladimir Pouzanov for the bug report, testing, and useful suggestions.
   ([#242](https://github.com/datawire/telepresence/issues/242))
 * Better method for bypassing DNS caching on startup, which should be more robust.
 * Instead of hardcoding /16, using a better heuristic for guessing the IP range for Services.
