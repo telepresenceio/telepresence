@@ -5,7 +5,7 @@ title: "Changelog"
 categories: reference
 ---
 
-#### 0.62 (unreleased)
+#### 0.62 (July 26, 2017)
 
 Bug fixes:
 
@@ -309,7 +309,7 @@ Backwards incompatible changes:
   [Add comments here](https://github.com/datawire/telepresence/issues/76) if you're interested.
 
 #### 0.21 (March 28, 2017)
-  
+
 Bug fixes:
 
 * Telepresence exits when connection is lost to the Kubernetes cluster, rather than hanging.
@@ -339,7 +339,7 @@ Features:
   ([#61](https://github.com/datawire/telepresence/issues/61))
 
 Bug fixes:
-  
+
 * When using `--run-shell`, allow access to the local host.
   Thanks to Jean-Paul Calderone for the bug report.
   ([#58](https://github.com/datawire/telepresence/issues/58))
