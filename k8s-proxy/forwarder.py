@@ -74,8 +74,8 @@ class LocalResolver(object):
         # figure out what it is.
         self.suffix = []  # type: List[bytes]
 
-    def _got_ips(self, name: bytes, ips: List[str], record_type: Callable
-                 ) -> DNSQueryResult:
+    def _got_ips(self, name: bytes, ips: List[str],
+                 record_type: Callable) -> DNSQueryResult:
         """
         Generate the response to a query, given an IP.
         """
@@ -148,10 +148,11 @@ class LocalResolver(object):
         # on the client machine we will want to lookup 'kubernetes' if we get
         # 'kubernetes.wework.com'.
         parts = query.name.name.split(b".")
-        if parts[0] == b"hellotelepresence" and not self.suffix:
+        if parts[0].startswith(b"hellotelepresence") and not self.suffix:
             self.suffix = parts[1:]
             print("Set DNS suffix we filter out to: {}".format(self.suffix))
-        if parts == [b"hellotelepresence"] + self.suffix:
+        if parts[0].startswith(b"hellotelepresence"
+                               ) and parts[1:] == self.suffix:
             return self._got_ips(real_name, ["127.0.0.1"], dns.Record_A)
         if parts[-len(self.suffix):] == self.suffix:
             new_query = deepcopy(query)

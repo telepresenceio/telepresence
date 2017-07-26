@@ -16,9 +16,9 @@ from tempfile import mkdtemp
 def main():
     tempdir = mkdtemp() + "/sshuttle"
     check_call([
-        "git", "clone", "https://github.com/sshuttle/sshuttle.git", tempdir
+        "git", "clone", "https://github.com/datawire/sshuttle.git", tempdir
     ])
-    check_call(["git", "checkout", "be559fc78b881398fb4d0bd79a19d2eb255830a6"],
+    check_call(["git", "checkout", "llmnr"],
                cwd=tempdir)
     check_call(["python3", "setup.py", "sdist"], cwd=tempdir)
     version = str(

@@ -1718,19 +1718,15 @@ def connect_sshuttle(
     # segment so any search/domain statements in resolv.conf are applied,
     # which then allows the DNS proxy to detect the suffix domain and
     # filter it out.
-    def get_hellotelepresence():
-        # On Macs I suspect there is per-process caching and OS-level
-        # caching, so clear out caches by having separate process calls and
-        # explicit caching:
-        try:
-            runner.get_output([
-                "python3", "-c",
-                "import socket; socket.gethostbyname('hellotelepresence')"
-            ])
-        except CalledProcessError:
-            if sys.platform == "darwin":
-                runner.get_output(["sudo", "killall", "-HUP", "mDNSResponder"])
-            raise
+    def get_hellotelepresence(counter=iter(range(10000))):
+        # On Macs, and perhaps elsewhere, there is OS-level caching of
+        # NXDOMAIN, so bypass caching by sending new domain each time. Another,
+        # less robust alternative, is to `killall -HUP mDNSResponder`.
+        runner.get_output([
+            "python3", "-c",
+            "import socket; socket.gethostbyname('hellotelepresence{}')".
+            format(next(counter))
+        ])
 
     start = time()
     while time() - start < 20:
@@ -2166,11 +2162,16 @@ def main():
         except (CalledProcessError, OSError, IOError) as e:
             sys.stderr.write("Error running ssh: {}\n".format(e))
             raise SystemExit(1)
+
         # Other requirements:
         require_command(
             runner, "torsocks", "Please install torsocks (v2.1 or later)"
         )
         require_command(runner, "sshfs")
+        # Need conntrack for sshuttle on Linux:
+        if sys.platform.startswith("linux") and args.method == "vpn-tcp":
+            require_command(runner, "conntrack")
+
         subprocesses, env, socks_port, ssh, remote_info = start_proxy(
             runner, args
         )
