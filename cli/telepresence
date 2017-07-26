@@ -2161,11 +2161,16 @@ def main():
         except (CalledProcessError, OSError, IOError) as e:
             sys.stderr.write("Error running ssh: {}\n".format(e))
             raise SystemExit(1)
+
         # Other requirements:
         require_command(
             runner, "torsocks", "Please install torsocks (v2.1 or later)"
         )
         require_command(runner, "sshfs")
+        # Need conntrack for sshuttle on Linux:
+        if sys.platform.startswith("linux") and args.method == "vpn-tcp":
+            require_command(runner, "conntrack")
+
         subprocesses, env, socks_port, ssh, remote_info = start_proxy(
             runner, args
         )
