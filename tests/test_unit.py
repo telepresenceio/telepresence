@@ -133,7 +133,7 @@ spec:
           name: secret-volume
         - mountPath: /etc/nginx/conf.d
           name: configmap-volume
-      - name: new_name
+      - name: nginxhttps
         image: datawire/telepresence-k8s:0.777
         terminationMessagePolicy: "FallbackToLogsOnError"
         imagePullPolicy: "IfNotPresent"
@@ -162,7 +162,6 @@ def test_swap_deployment_changes():
         "datawire/telepresence-k8s:0.777",
         False,
         False,
-        "new_name",
     ) == (expected, original["spec"]["template"]["spec"]["containers"][1])
 
 

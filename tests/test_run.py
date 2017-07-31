@@ -129,8 +129,14 @@ def run_script_test(telepresence_args, local_command):
 def assert_fromcluster(namespace, service_name, port, telepresence_process):
     """Assert that there's a webserver accessible from the cluster."""
     url = "http://{}:{}/__init__.py".format(service_name, port)
-    result = query_in_k8s(namespace, url, telepresence_process)
-    assert result == (DIRECTORY / "__init__.py").read_bytes()
+    expected = (DIRECTORY / "__init__.py").read_bytes()
+    for i in range(30):
+        result = query_in_k8s(namespace, url, telepresence_process)
+        if result != expected:
+            sleep(1)
+        else:
+            break
+    assert result == expected
     print("Hooray, got expected result when querying via cluster.")
 
 
@@ -671,13 +677,17 @@ class NativeEndToEndTests(TestCase):
     def test_swapdeployment_auto_expose(self):
         """
         --swap-deployment auto-exposes ports listed in the Deployment.
+
+        Important that the test uses port actually used by original container,
+        otherwise we will miss bugs where a telepresence proxy container is
+        added rather than being swapped.
         """
         service_name = random_name()
         check_call([
             KUBECTL,
             "run",
             service_name,
-            "--port=12377",
+            "--port=8888",
             "--expose",
             "--restart=Always",
             "--image=openshift/hello-openshift",
@@ -688,8 +698,8 @@ class NativeEndToEndTests(TestCase):
         self.addCleanup(
             check_call, [KUBECTL, "delete", DEPLOYMENT_TYPE, service_name]
         )
-        port = 12377
-        # Explicitly do NOT use '--expose 12377', to see if it's auto-detected:
+        port = 8888
+        # Explicitly do NOT use '--expose 8888', to see if it's auto-detected:
         p = Popen(
             args=[
                 "telepresence", "--swap-deployment", service_name,
