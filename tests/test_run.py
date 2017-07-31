@@ -671,13 +671,17 @@ class NativeEndToEndTests(TestCase):
     def test_swapdeployment_auto_expose(self):
         """
         --swap-deployment auto-exposes ports listed in the Deployment.
+
+        Important that the test uses port actually used by original container,
+        otherwise we will miss bugs where a telepresence proxy container is
+        added rather than being swapped.
         """
         service_name = random_name()
         check_call([
             KUBECTL,
             "run",
             service_name,
-            "--port=12377",
+            "--port=8888",
             "--expose",
             "--restart=Always",
             "--image=openshift/hello-openshift",
@@ -688,8 +692,8 @@ class NativeEndToEndTests(TestCase):
         self.addCleanup(
             check_call, [KUBECTL, "delete", DEPLOYMENT_TYPE, service_name]
         )
-        port = 12377
-        # Explicitly do NOT use '--expose 12377', to see if it's auto-detected:
+        port = 8888
+        # Explicitly do NOT use '--expose 8888', to see if it's auto-detected:
         p = Popen(
             args=[
                 "telepresence", "--swap-deployment", service_name,

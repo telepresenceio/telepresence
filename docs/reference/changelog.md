@@ -5,6 +5,13 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.63 (unreleased)
+
+Bug fixes:
+
+* Fixed regression in `--swap-deployment` where it would add a proxy container instead of replacing the existing one.
+  ([#253](https://github.com/datawire/telepresence/issues/253))
+
 #### 0.62 (July 26, 2017)
 
 Bug fixes:

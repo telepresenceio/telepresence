@@ -1110,6 +1110,13 @@ def swap_deployment(runner: Runner,
     )
 
     def apply_json(json_config):
+        # apply without delete will merge in unexpected ways, e.g. missing
+        # container attributes in the pod spec will not be removed. so we
+        # delete and then recreate.
+        runner.check_kubectl(
+            args.context,
+            args.namespace, ["delete", "deployment", deployment_name]
+        )
         runner.check_kubectl(
             args.context,
             args.namespace, ["apply", "-f", "-"],
@@ -1133,7 +1140,6 @@ def swap_deployment(runner: Runner,
         TELEPRESENCE_REMOTE_IMAGE,
         args.method == "vpn-tcp" and args.in_local_vm,
         args.needs_root,
-        random_name(),
     )
     apply_json(new_deployment_json)
     return deployment_name, run_id, orig_container_json
@@ -1146,7 +1152,6 @@ def new_swapped_deployment(
     telepresence_image: str,
     add_custom_nameserver: bool,
     as_root: bool,
-    new_container_name: str,
 ) -> Tuple[Dict, Dict]:
     """
     Create a new Deployment that uses telepresence-k8s image.
@@ -1175,10 +1180,6 @@ def new_swapped_deployment(
         old_deployment["spec"]["template"]["spec"]["containers"],
     ):
         if container["name"] == container_to_update:
-            # Change the name to make sure all changes (in particular *removed*
-            # fields) get reflected, rather than merged in way that means
-            # removed fields are ignored:
-            container["name"] = new_container_name
             container["image"] = telepresence_image
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
@@ -1274,7 +1275,7 @@ def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
 
     new_rc_json, orig_container_json = new_swapped_deployment(
         rc_json, container_name, run_id, TELEPRESENCE_REMOTE_IMAGE,
-        args.method == "vpn-tcp" and args.in_local_vm, False, random_name()
+        args.method == "vpn-tcp" and args.in_local_vm, False,
     )
     apply_json(new_rc_json)
     return deployment_name, run_id, orig_container_json
