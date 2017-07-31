@@ -36,7 +36,7 @@ unicode = str
 
 # Don't modify next line without modifying corresponding line in
 # .bumpversion.cfg:
-__version__ = "0.61"
+__version__ = "0.63"
 # Test runs can override version so we use specific custom Docker images:
 if os.environ.get("TELEPRESENCE_VERSION") is not None:
     __version__ = os.environ["TELEPRESENCE_VERSION"]
@@ -1110,6 +1110,13 @@ def swap_deployment(runner: Runner,
     )
 
     def apply_json(json_config):
+        # apply without delete will merge in unexpected ways, e.g. missing
+        # container attributes in the pod spec will not be removed. so we
+        # delete and then recreate.
+        runner.check_kubectl(
+            args.context,
+            args.namespace, ["delete", "deployment", deployment_name]
+        )
         runner.check_kubectl(
             args.context,
             args.namespace, ["apply", "-f", "-"],
@@ -1133,7 +1140,6 @@ def swap_deployment(runner: Runner,
         TELEPRESENCE_REMOTE_IMAGE,
         args.method == "vpn-tcp" and args.in_local_vm,
         args.needs_root,
-        random_name(),
     )
     apply_json(new_deployment_json)
     return deployment_name, run_id, orig_container_json
@@ -1146,7 +1152,6 @@ def new_swapped_deployment(
     telepresence_image: str,
     add_custom_nameserver: bool,
     as_root: bool,
-    new_container_name: str,
 ) -> Tuple[Dict, Dict]:
     """
     Create a new Deployment that uses telepresence-k8s image.
@@ -1175,10 +1180,6 @@ def new_swapped_deployment(
         old_deployment["spec"]["template"]["spec"]["containers"],
     ):
         if container["name"] == container_to_update:
-            # Change the name to make sure all changes (in particular *removed*
-            # fields) get reflected, rather than merged in way that means
-            # removed fields are ignored:
-            container["name"] = new_container_name
             container["image"] = telepresence_image
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
@@ -1274,7 +1275,7 @@ def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
 
     new_rc_json, orig_container_json = new_swapped_deployment(
         rc_json, container_name, run_id, TELEPRESENCE_REMOTE_IMAGE,
-        args.method == "vpn-tcp" and args.in_local_vm, False, random_name()
+        args.method == "vpn-tcp" and args.in_local_vm, False,
     )
     apply_json(new_rc_json)
     return deployment_name, run_id, orig_container_json
@@ -1476,12 +1477,12 @@ def mount_remote_volumes(
     except CalledProcessError:
         print(
             "Mounting remote volumes failed, they will be unavailable"
-            " in this session. This is a known issue when running inside"
-            " Docker or on Windows Subystem for Linux. See"
-            " https://github.com/datawire/telepresence/issues/115 for"
-            " details. If you are not running in those environments"
-            " then please report a bug, attaching telepresence.log to"
-            " the bug report.",
+            " in this session. If you are running"
+            " on Windows Subystem for Linux then see"
+            " https://github.com/datawire/telepresence/issues/115,"
+            " otherwise please report a bug, attaching telepresence.log to"
+            " the bug report:"
+            " https://github.com/datawire/telepresence/issues/new",
             file=sys.stderr
         )
         mounted = False
@@ -1718,19 +1719,15 @@ def connect_sshuttle(
     # segment so any search/domain statements in resolv.conf are applied,
     # which then allows the DNS proxy to detect the suffix domain and
     # filter it out.
-    def get_hellotelepresence():
-        # On Macs I suspect there is per-process caching and OS-level
-        # caching, so clear out caches by having separate process calls and
-        # explicit caching:
-        try:
-            runner.get_output([
-                "python3", "-c",
-                "import socket; socket.gethostbyname('hellotelepresence')"
-            ])
-        except CalledProcessError:
-            if sys.platform == "darwin":
-                runner.get_output(["sudo", "killall", "-HUP", "mDNSResponder"])
-            raise
+    def get_hellotelepresence(counter=iter(range(10000))):
+        # On Macs, and perhaps elsewhere, there is OS-level caching of
+        # NXDOMAIN, so bypass caching by sending new domain each time. Another,
+        # less robust alternative, is to `killall -HUP mDNSResponder`.
+        runner.get_output([
+            "python3", "-c",
+            "import socket; socket.gethostbyname('hellotelepresence{}')".
+            format(next(counter))
+        ])
 
     start = time()
     while time() - start < 20:
@@ -2166,11 +2163,16 @@ def main():
         except (CalledProcessError, OSError, IOError) as e:
             sys.stderr.write("Error running ssh: {}\n".format(e))
             raise SystemExit(1)
+
         # Other requirements:
         require_command(
             runner, "torsocks", "Please install torsocks (v2.1 or later)"
         )
         require_command(runner, "sshfs")
+        # Need conntrack for sshuttle on Linux:
+        if sys.platform.startswith("linux") and args.method == "vpn-tcp":
+            require_command(runner, "conntrack")
+
         subprocesses, env, socks_port, ssh, remote_info = start_proxy(
             runner, args
         )
