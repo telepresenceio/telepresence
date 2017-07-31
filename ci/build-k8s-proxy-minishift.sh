@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build the proxy in the Minikube docker
+# Build the proxy in the Minishift docker
 
 set -ex
 
