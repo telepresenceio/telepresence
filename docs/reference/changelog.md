@@ -7,7 +7,10 @@ categories: reference
 
 #### 0.64 (unreleased)
 
+Bug fixes:
+
 * Allow `make build-k8s-proxy-minikube` to work on macOS. Same for Minishift.
+* Allow `--logfile /dev/null`
 
 #### 0.63 (July 31, 2017)
 
