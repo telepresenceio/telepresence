@@ -202,10 +202,11 @@ class Runner(object):
         if logfile_path == "-":
             return cls(sys.stdout, kubectl_cmd, verbose)
         else:
-            # Wipe existing logfile, and use line buffering so data gets
-            # written out immediately.
+            # Wipe existing logfile, open using append mode so multiple
+            # processes don't clobber each other's outputs, and use line
+            # buffering so data gets written out immediately.
             if os.path.exists(logfile_path):
-                os.remove(logfile_path)
+                open(logfile_path, "w").close()
             return cls(
                 open(logfile_path, "a", buffering=1), kubectl_cmd, verbose
             )

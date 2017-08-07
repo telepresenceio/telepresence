@@ -2,6 +2,8 @@
 Unit tests (in-memory, small units of code).
 """
 
+import sys
+import tempfile
 import ipaddress
 
 from hypothesis import strategies as st, given, example
@@ -204,3 +206,21 @@ def test_covering_cidr(ips):
     if cidr.prefixlen < 24:
         for subnet in cidr.subnets():
             assert not all([ip in subnet for ip in ips])
+
+
+def test_runner_file():
+    """Test some reasonable values for the log file"""
+    # stdout
+    lf_dash = telepresence.Runner.open("-", "kubectl", False)
+    assert lf_dash.logfile is sys.stdout, lf_dash.logfile
+    # /dev/null -- just make sure we don't crash
+    telepresence.Runner.open("/dev/null", "kubectl", False)
+    # Regular file -- make sure the file has been truncated
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as out:
+        out.write("This should be truncated away.\nThis too.\n")
+    lf_file = telepresence.Runner.open(out.name, "kubectl", False)
+    content = "replacement content\n"
+    lf_file.write(content)
+    with open(out.name) as in_again:
+        read_content = in_again.read()
+        assert content == read_content, read_content
