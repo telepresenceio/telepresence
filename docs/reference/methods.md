@@ -59,9 +59,23 @@ We recommend using `--method vpn-tcp` instead if you're writing Go, since that m
 This causes connections *to* Kubernetes not to work.
 On OS X many Go programs won't start all, including `kubectl`.
 
-If you don't want to use `--method vpn-tcp` for some reason you can also workaround these limitations by doing the following in your development environment (there is no need to change anything for production):
+If you don't want to use `--method vpn-tcp` for some reason you can also work around these limitations by doing the following in your development environment (there is no need to change anything for production):
 
 * Use `gccgo` instead of `go build`.
 * Do `export GODEBUG=netdns=cgo` to [force Go to use the standard DNS lookup mechanism](https://golang.org/pkg/net/#hdr-Name_Resolution) rather than its own internal one.
 
-But the easiest thing to do, again, is to use `--method vpn-tcp` while *will* work with Go.
+But the easiest thing to do, again, is to use `--method vpn-tcp`, which *does* work with Go.
+
+#### MacOS System Integrity Protection
+
+In OS X El Capitan (10.11), Apple introduced a security feature called System Integrity Protection (SIP).
+
+* [Apple's _About SIP on your Mac_ article](https://support.apple.com/en-us/HT204899)
+* [Apple's SIP guide for developers](https://developer.apple.com/library/content/documentation/Security/Conceptual/System_Integrity_Protection_Guide/Introduction/Introduction.html#//apple_ref/doc/uid/TP40016462-CH1-DontLinkElementID_15)
+* [Wikipedia article about SIP](https://en.wikipedia.org/wiki/System_Integrity_Protection)
+
+SIP prevents, among other things, code injection into processes that originate from certain designated "protected directories" (including `/usr` and `/bin`). This includes [purging dynamic linker environment variables](https://developer.apple.com/library/content/documentation/Security/Conceptual/System_Integrity_Protection_Guide/RuntimeProtections/RuntimeProtections.html) for these processes. These protections are in place even when running as root. They can only be disabled by booting into recovery mode, and disabling them is highly discouraged.
+
+In practice, avoiding protected binaries is difficult. Invoking a service using common tools like `/bin/sh` or `/usr/bin/env` means losing Telepresence's injected libraries. As a result, connections _to_ Kubernetes will not work. Carefully avoiding protected binaries is the only reliable workaround.
+
+See [issue 268](https://github.com/datawire/telepresence/issues/268) for one user's experience.

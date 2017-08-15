@@ -11,6 +11,9 @@ Bug fixes:
 
 * Allow `make build-k8s-proxy-minikube` to work on macOS. Same for Minishift.
 * Allow `--logfile /dev/null`
+* Documented macOS limitations with `--inject-tcp` due to System Integrity Protection
+  ([#268](https://github.com/datawire/telepresence/issues/268))
+* The [website](https://www.telepresence.io/) has TLS enabled
 
 #### 0.63 (July 31, 2017)
 
