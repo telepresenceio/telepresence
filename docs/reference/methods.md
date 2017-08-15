@@ -76,6 +76,10 @@ In OS X El Capitan (10.11), Apple introduced a security feature called System In
 
 SIP prevents, among other things, code injection into processes that originate from certain designated "protected directories" (including `/usr` and `/bin`). This includes [purging dynamic linker environment variables](https://developer.apple.com/library/content/documentation/Security/Conceptual/System_Integrity_Protection_Guide/RuntimeProtections/RuntimeProtections.html) for these processes. These protections are in place even when running as root. They can only be disabled by booting into recovery mode, and disabling them is highly discouraged.
 
-In practice, avoiding protected binaries is difficult. Invoking a service using common tools like `/bin/sh` or `/usr/bin/env` means losing Telepresence's injected libraries. As a result, connections _to_ Kubernetes will not work. Carefully avoiding protected binaries is the only reliable workaround.
+Telepresence attempts to work around SIP to some extent by creating duplicates of `/bin`, `/usr/bin`, etc. and putting those in the `PATH` instead of the SIP-protected originals. This allows the user to type something like `env ENABLE_FROBULATE=1 ./my_binary` and get the benefits of `inject-tcp`; the `env` binary comes from an unprotected location in `/tmp`.
+
+What _does not_ work is using the full path to `/bin/sh` or `/usr/bin/env` or similar, since Telepresence cannot manipulate those commands when located in those directories. In practice, avoiding protected binaries is difficult because it is common for tools and scripts to use `sh` or `env` by full path, thereby losing Telepresence's injected libraries. As a result, connections _to_ Kubernetes do not work.
+
+Carefully avoiding protected binaries is the only reliable workaround. One hackish approach would be to create a directory tree containing copies of the binaries in the protected directories in a stable location (e.g., `~/bin_copy`). That would allow changing all tools and scripts to use those unprotected copies; this would have to be done in production as well as on your development machine. It would be much easier to use `--method vpn-tcp` instead.
 
 See [issue 268](https://github.com/datawire/telepresence/issues/268) for one user's experience.
