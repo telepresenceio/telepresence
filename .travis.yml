@@ -23,6 +23,7 @@ matrix:
 # Environment variables:
 env:
   global:
+    - SCOUT_DISABLE=1
     - PROJECT_NAME=datawireio
     - CLUSTER_NAME=telepresence-testing
     - CLOUDSDK_COMPUTE_ZONE=us-central1-a
