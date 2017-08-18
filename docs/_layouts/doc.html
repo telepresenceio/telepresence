@@ -9,13 +9,18 @@ layout: default
 
     <div class="eight columns page-content">
         <header class="post-header">
-            <h2 class="post-title">{{ page.title }}</h3>
+            <h2 class="post-title">{{ page.title }}</h2>
         </header>
 
         <div class="post-content docs">
-          {{ content }}
+            {{ content }}
 
-          <div><strong>Still have questions? Ask in our <a href="https://gitter.im/datawire/telepresence">Gitter chatroom</a> or <a href="https://github.com/datawire/telepresence/issues/new">file an issue on GitHub</a>.</strong></div>
+            <div><strong>Still have questions? Ask in our <a href="https://gitter.im/datawire/telepresence">Gitter chatroom</a> or <a href="https://github.com/datawire/telepresence/issues/new">file an issue on GitHub</a>.</strong></div>
+
+            {% if page.categories contains "tutorials" %}
+                {% include share-buttons.html %}
+            {% endif %}
+
         </div>
     </div>
 
