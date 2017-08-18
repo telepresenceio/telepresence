@@ -28,10 +28,13 @@ from time import sleep, time
 from traceback import print_exc
 from urllib.error import HTTPError
 from urllib.request import urlopen
+from pathlib import Path
 from uuid import uuid4
 import webbrowser
 from io import StringIO
 from urllib.parse import quote_plus
+
+from scout import Scout
 unicode = str
 
 # Don't modify next line without modifying corresponding line in
@@ -55,6 +58,38 @@ MAC_LOOPBACK_IP = "198.18.0.254"
 SUDO_FOR_DOCKER = os.path.exists("/var/run/docker.sock") and not os.access(
     "/var/run/docker.sock", os.W_OK
 )
+
+
+def safe_output(args):
+    try:
+        return unicode(check_output(args), "utf-8").strip()
+    except Exception as e:
+        return "(error: {})".format(e)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Usage Tracking
+# ----------------------------------------------------------------------------------------------------------------------
+config_root = Path.home() / ".config" / "telepresence"
+config_root.mkdir(parents=True, exist_ok=True)
+id_file = config_root / 'id'
+
+try:
+    with id_file.open('x') as f:
+        install_id = str(uuid4())
+        f.write(install_id)
+except FileExistsError:
+    with id_file.open('r') as f:
+        install_id = f.read()
+
+kubectl_versions = safe_output(["kubectl", "version", "--short"]).split("\n")
+kubectl_version = kubectl_versions[0].split(": v")[1]
+kube_cluster_version = kubectl_versions[1].split(": v")[1]
+
+scout = Scout("telepresence", __version__, install_id,
+              kubectl_version=kubectl_version,
+              kubernetes_version=kube_cluster_version)
+
+scout.report()
 
 
 def random_name() -> str:
