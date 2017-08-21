@@ -10,4 +10,4 @@ pyyaml
 yapf
 pylint
 pex
-git+git://github.com/datawire/scout.py.git@0.1.0
+git+git://github.com/datawire/scout.py.git@0.1.1
