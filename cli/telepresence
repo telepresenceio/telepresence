@@ -125,11 +125,8 @@ class Scout:
 
         url = ("https://" if self.use_https else "http://") + "{}/scout" .format(self.scout_host).lower()
         try:
-            print(1)
             req = request.Request(url, data=json.dumps(payload).encode("UTF-8"), headers=headers, method="POST")
-            print(2)
             resp = request.urlopen(req)
-            print(3)
             if resp.code / 100 == 2:
                 result = Scout.__merge_dicts(result, json.loads(resp.read().decode("UTF-8")))
         except Exception as e:
