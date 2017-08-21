@@ -135,7 +135,7 @@ class Scout:
         except Exception as e:
             # If scout is down or we are getting errors just proceed as if nothing happened. It should not impact the
             # user at all.
-            print(e)
+            pass
 
         return result
 
