@@ -10,7 +10,7 @@ categories: reference
 Telepresence has three different proxying methods; you will need to choose one of them.
 
 1. `--method inject-tcp` works by injecting a shared library into the subprocess run by Telepresence using `--run` and `--run-shell`.
-2. `--method vpn-tcp` works by using a program called [sshuttle](https://shuttle.readthedocs.io) to open a VPN-like connection to the Kubernetes cluster.
+2. `--method vpn-tcp` works by using a program called [sshuttle](https://sshuttle.readthedocs.io) to open a VPN-like connection to the Kubernetes cluster.
 3. `--method container` is documented in the [Docker howto](../howto/docker.html).
 
 In general `vpn-tcp` should work in more cases, and it is chosen by default (unless `--docker-run` is used, in which case the `container` method is the default.)
