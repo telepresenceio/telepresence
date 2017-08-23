@@ -16,6 +16,7 @@ import signal
 import socket
 import ssl
 import sys
+import platform
 from typing import List, Set, Tuple, Dict, Optional, Callable
 from functools import wraps
 from shutil import rmtree, copy, which
@@ -28,10 +29,13 @@ from time import sleep, time
 from traceback import print_exc
 from urllib.error import HTTPError
 from urllib.request import urlopen
+from pathlib import Path
 from uuid import uuid4
 import webbrowser
 from io import StringIO
 from urllib.parse import quote_plus
+from urllib import request
+
 unicode = str
 
 # Don't modify next line without modifying corresponding line in
@@ -55,6 +59,126 @@ MAC_LOOPBACK_IP = "198.18.0.254"
 SUDO_FOR_DOCKER = os.path.exists("/var/run/docker.sock") and not os.access(
     "/var/run/docker.sock", os.W_OK
 )
+
+
+# -----------------------------------------------------------------------------
+# Usage Tracking vvvv
+# -----------------------------------------------------------------------------
+
+class Scout:
+    def __init__(self, app, version, install_id, **kwargs):
+        self.app = Scout.__not_blank("app", app)
+        self.version = Scout.__not_blank("version", version)
+        self.install_id = Scout.__not_blank("install_id", install_id)
+        self.metadata = kwargs if kwargs is not None else {}
+        self.user_agent = self.create_user_agent()
+
+        # scout options; controlled via env vars
+        self.scout_host = os.getenv("SCOUT_HOST", "kubernaut.io")
+        self.use_https = os.getenv("SCOUT_HTTPS",
+                                   "1").lower() in {"1", "true", "yes"}
+        self.disabled = Scout.__is_disabled()
+
+    def report(self, **kwargs):
+        result = {'latest_version': self.version}
+
+        if self.disabled:
+            return result
+
+        merged_metadata = Scout.__merge_dicts(self.metadata, kwargs)
+
+        headers = {
+            'User-Agent': self.user_agent,
+            'Content-Type': 'application/json'
+        }
+
+        payload = {
+            'application': self.app,
+            'version': self.version,
+            'install_id': self.install_id,
+            'user_agent': self.create_user_agent(),
+            'metadata': merged_metadata
+        }
+
+        url = ("https://" if self.use_https else
+               "http://") + "{}/scout".format(self.scout_host).lower()
+        try:
+            req = request.Request(
+                url,
+                data=json.dumps(payload).encode("UTF-8"),
+                headers=headers,
+                method="POST"
+            )
+            resp = request.urlopen(req)
+            if resp.code / 100 == 2:
+                result = Scout.__merge_dicts(
+                    result, json.loads(resp.read().decode("UTF-8"))
+                )
+        except Exception as e:
+            # If scout is down or we are getting errors just proceed as if
+            # nothing happened. It should not impact the user at all.
+            result["FAILED"] = str(e)
+
+        return result
+
+    def create_user_agent(self):
+        result = "{0}/{1} ({2}; {3}; python {4})".format(
+            self.app, self.version,
+            platform.system(), platform.release(), platform.python_version()
+        ).lower()
+
+        return result
+
+    @staticmethod
+    def __not_blank(name, value):
+        if value is None or str(value).strip() == "":
+            raise ValueError(
+                "Value for '{}' is blank, empty or None".format(name)
+            )
+
+        return value
+
+    @staticmethod
+    def __merge_dicts(x, y):
+        z = x.copy()
+        z.update(y)
+        return z
+
+    @staticmethod
+    def __is_disabled():
+        if str(os.getenv("TRAVIS_REPO_SLUG")).startswith("datawire/"):
+            return True
+
+        return os.getenv("SCOUT_DISABLE", "0").lower() in {"1", "true", "yes"}
+
+
+def call_scout(kubectl_version, kube_cluster_version):
+    config_root = Path.home() / ".config" / "telepresence"
+    config_root.mkdir(parents=True, exist_ok=True)
+    id_file = config_root / 'id'
+
+    try:
+        with id_file.open('x') as f:
+            install_id = str(uuid4())
+            f.write(install_id)
+    except FileExistsError:
+        with id_file.open('r') as f:
+            install_id = f.read()
+
+    scout = Scout(
+        "telepresence",
+        __version__,
+        install_id,
+        kubectl_version=kubectl_version,
+        kubernetes_version=kube_cluster_version
+    )
+
+    return scout.report()
+
+
+# -----------------------------------------------------------------------------
+# Usage Tracking ^^^^
+# -----------------------------------------------------------------------------
 
 
 def random_name() -> str:
@@ -2059,6 +2183,17 @@ def main():
         else:
             raise SystemExit("Found neither 'kubectl' nor 'oc' in your $PATH.")
 
+        # Usage tracking
+        try:
+            kubectl_version_output = str(
+                check_output([prelim_command, "version", "--short"]), "utf-8"
+            ).split("\n")
+            kubectl_version = kubectl_version_output[0].split(": v")[1]
+            kube_cluster_version = kubectl_version_output[1].split(": v")[1]
+        except CalledProcessError as exc:
+            kubectl_version = kube_cluster_version = "(error: {})".format(exc)
+        scouted = call_scout(kubectl_version, kube_cluster_version)
+
         # Make sure we have a Kubernetes context set either on command line or
         # in kubeconfig:
         if args.context is None:
@@ -2100,6 +2235,7 @@ def main():
         if args.logfile != "-":
             args.logfile = os.path.abspath(args.logfile)
         runner = Runner.open(args.logfile, kubectl_or_oc(server), args.verbose)
+        runner.write("Scout info: {}\n".format(scouted))
         runner.write(
             "Context: {}, namespace: {}, kubectl_command: {}\n".
             format(args.context, args.namespace, runner.kubectl_cmd)

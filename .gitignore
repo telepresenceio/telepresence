@@ -5,3 +5,6 @@ __pycache__
 telepresence.log
 .mypy_cache
 *.pyc
+
+# IntelliJ IDEA
+.idea
