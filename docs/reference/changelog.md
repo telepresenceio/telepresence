@@ -14,6 +14,7 @@ Bug fixes:
 * Documented macOS limitations with `--inject-tcp` due to System Integrity Protection. Thanks to Dylan Scott for the detailed write-up.
   ([#268](https://github.com/datawire/telepresence/issues/268))
 * The [website](https://www.telepresence.io/) has TLS enabled
+* Telepresence [reports anonymous usage information](usage_reporting) during startup
 
 #### 0.63 (July 31, 2017)
 
