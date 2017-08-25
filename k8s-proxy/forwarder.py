@@ -216,7 +216,7 @@ class LocalResolver(object):
             query.type = dns.A  # type: ignore
             return self.query(query, timeout=timeout, real_name=real_name)
         else:
-            print("{} query:".format(query.type, query.name.name))
+            print("{} query: {}".format(query.type, query.name.name))
             return self.fallback.query(query, timeout=timeout)
 
 
