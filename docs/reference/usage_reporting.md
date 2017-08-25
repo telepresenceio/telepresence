@@ -30,7 +30,7 @@ The reporting code can be found in [`cli/telepresence`][1] by searching for "Usa
 
 ### When is it reported?
 
-Telepresence collects and reports usage on every command invocation.
+Telepresence collects and reports usage every time a session is launched.
 
 ### Can it be disabled?
 
