@@ -2,8 +2,8 @@
 <script>
     var clipboard = new Clipboard('.copy-to-clipboard');
     clipboard.on('success', function(e) {
+        document.getElementById(e.trigger.id).innerHTML = 'Copied';
         e.clearSelection();
-        alert('Copied to clipboard!');
     });
 </script>
 
