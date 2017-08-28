@@ -2,7 +2,6 @@
 <script>
     var clipboard = new Clipboard('.copy-to-clipboard');
     clipboard.on('success', function(e) {
-        ga('send', 'event', 'telepresence', 'download', e.trigger.dataset.system);
         e.clearSelection();
         alert('Copied to clipboard!');
     });
