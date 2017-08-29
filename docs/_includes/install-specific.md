@@ -10,11 +10,11 @@
 #### OS X
 <div class="u-cf u-full-width">
 On OS X you can install Telepresence by running the following:
-<button id="osxInstall" class="button fa-pull-right copy-to-clipboard" data-clipboard-text="brew cask install osxfuse&#xa;brew install datawire/blackbird/telepresence">Copy to clipboard</button>
+<button id="osxInstall" class="button fa-pull-right copy-to-clipboard" data-clipboard-text="brew cask install osxfuse&#xa;brew install socat datawire/blackbird/telepresence">Copy to clipboard</button>
 </div>
 ```shell
 brew cask install osxfuse
-brew install datawire/blackbird/telepresence
+brew install socat datawire/blackbird/telepresence
 ```
 
 #### Ubuntu 16.04 or later

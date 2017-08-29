@@ -5,6 +5,13 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.65 (August 29, 2017)
+
+Bug fixes:
+
+* Avoid a dependency conflict in the macOS Homebrew installation by dropping the required dependency on `socat`. You will still need to install `socat` if you want to use `--method container`, but installing it separately from Telepresence appears to work fine. Thanks to Dylan Scott for chasing this down.
+  ([#275](https://github.com/datawire/telepresence/issues/275))
+
 #### 0.64 (August 23, 2017)
 
 Bug fixes:
@@ -14,7 +21,7 @@ Bug fixes:
 
 Misc:
 
-* Documented macOS limitations with `--inject-tcp` due to System Integrity Protection. Thanks to Dylan Scott for the detailed write-up.
+* Documented macOS limitations with `--method inject-tcp` due to System Integrity Protection. Thanks to Dylan Scott for the detailed write-up.
   ([#268](https://github.com/datawire/telepresence/issues/268))
 * The [website](https://www.telepresence.io/) has TLS enabled
 * Telepresence [reports anonymous usage information](usage_reporting) during startup
@@ -52,7 +59,7 @@ Bug fixes:
 
 Features:
 
-* When using --swap-deployment, ports listed in the existing Deployment are automatically forwarded.
+* When using `--swap-deployment`, ports listed in the existing Deployment are automatically forwarded.
   Thanks to Phil Lombardi and Rafi Schloming for the feature request.
   ([#185](https://github.com/datawire/telepresence/issues/185))
 
