@@ -2,28 +2,22 @@
 
 set -ex
 
-TRAVIS_OS_NAME=osx # delete this line to run in Travis
 SCOUT_DISABLE=1
 PROJECT_NAME=datawireio
-CLUSTER_NAME=telepresence-testing
-CLOUDSDK_COMPUTE_ZONE=us-central1-a
 
-if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew cask install osxfuse; brew install python3 sshfs fi
-if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt install sshfs conntrack; fi
+# mac os x only
+brew cask install osxfuse
+brew install python3 sshfs
 
 # Record debugging information
 python --version
-python2 --version
 python3 --version
 # Make sure torsocks is installed:
-./build-torsocks.sh
+./ci/build-torsocks.sh
 
 # Install
 make virtualenv
 make virtualenv/bin/sshuttle-telepresence
-
-# If on Linux, push images
-if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./ci/push-images.sh; fi
 
 mkdir ~/tpbin
 cp virtualenv/bin/sshuttle-telepresence ~/tpbin/
@@ -41,3 +35,4 @@ env TELEPRESENCE_METHOD=vpn-tcp ./ci/test.sh
 
 # Discard
 kubernaut discard
+
