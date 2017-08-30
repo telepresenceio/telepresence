@@ -2130,6 +2130,9 @@ def require_command(runner: Runner, command: str, message: Optional[str]=None):
     except CalledProcessError as e:
         sys.stderr.write(message + "\n")
         sys.stderr.write(
+            '(Ran "which {}" to check in your $PATH.)\n'.format(command)
+        )
+        sys.stderr.write(
             "See the documentation at https://telepresence.io "
             "for more details.\n"
         )
