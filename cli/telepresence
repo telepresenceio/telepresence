@@ -156,24 +156,23 @@ def call_scout(kubectl_version, kube_cluster_version):
     config_root = Path.home() / ".config" / "telepresence"
     config_root.mkdir(parents=True, exist_ok=True)
     id_file = config_root / 'id'
+    scout_kwargs = dict(
+        kubectl_version=kubectl_version,
+        kubernetes_version=kube_cluster_version
+    )
 
     try:
         with id_file.open('x') as f:
             install_id = str(uuid4())
             f.write(install_id)
+            scout_kwargs["new_install"] = True
     except FileExistsError:
         with id_file.open('r') as f:
             install_id = f.read()
 
-    scout = Scout(
-        "telepresence",
-        __version__,
-        install_id,
-        kubectl_version=kubectl_version,
-        kubernetes_version=kube_cluster_version
-    )
+    scout = Scout("telepresence", __version__, install_id)
 
-    return scout.report()
+    return scout.report(**scout_kwargs)
 
 
 # -----------------------------------------------------------------------------
