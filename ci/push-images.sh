@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -ex
 
 export TELEPRESENCE_VERSION
 TELEPRESENCE_VERSION=$(make version)
