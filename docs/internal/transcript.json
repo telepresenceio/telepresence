@@ -208,7 +208,7 @@
     ],
     [
       3.0,
-      "\u001b[01;34m# And there's even support for volumes! For more info visit http://telepresence.io\r\n\u001b[00m"
+      "\u001b[01;34m# And there's even support for volumes! For more info visit https://telepresence.io\r\n\u001b[00m"
     ]
   ]
 }

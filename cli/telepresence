@@ -439,7 +439,7 @@ def parse_args() -> argparse.Namespace:
         description=(
             "Telepresence: local development proxied to a remote Kubernetes "
             "cluster.\n\n"
-            "Documentation: http://telepresence.io\n"
+            "Documentation: https://telepresence.io\n"
             "Real-time help: https://gitter.im/datawire/telepresence\n"
             "Issue tracker: https://github.com/datawire/telepresence/issues\n"
             "\n" + HELP_EXAMPLES + "\n\n"
@@ -2130,7 +2130,7 @@ def require_command(runner: Runner, command: str, message: Optional[str]=None):
     except CalledProcessError as e:
         sys.stderr.write(message + "\n")
         sys.stderr.write(
-            "See the documentation at http://telepresence.io "
+            "See the documentation at https://telepresence.io "
             "for more details.\n"
         )
         raise SystemExit(1)
