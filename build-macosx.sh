@@ -29,9 +29,8 @@ make virtualenv/bin/sshuttle-telepresence
 mkdir ~/tpbin
 cp virtualenv/bin/sshuttle-telepresence ~/tpbin/
 export PROJECT_NAME=datawireio
-export TELEPRESENCE_REGISTRY=gcr.io/${PROJECT_NAME}
 export TELEPRESENCE_VER_SUFFIX="-osx"
-export PATH=$PATH:$HOME/google-cloud-sdk/bin:~/tpbin/
+export PATH=$PATH:$HOME/google-cloud-sdk/bin:~/tpbin/:$PWD/virtualenv/bin
 
 # Build and push images
 ./ci/push-images.sh
@@ -41,10 +40,10 @@ kubernaut claim
 export KUBECONFIG=${HOME}/.kube/kubernaut
 
 # Run tests
-env TELEPRESENCE_METHOD=container ./ci/test.sh
-env TELEPRESENCE_METHOD=inject-tcp ./ci/test.sh
-env TELEPRESENCE_METHOD=vpn-tcp ./ci/test.sh
+# env TELEPRESENCE_METHOD=container ./ci/test.sh
+env TELEPRESENCE_METHOD=inject-tcp TELEPRESENCE_TESTS="-s -x" ./ci/test.sh
+# env TELEPRESENCE_METHOD=vpn-tcp ./ci/test.sh
 
-# Discard
+# Cleanup
 kubernaut discard
-
+rm -rf ~/tpbin
