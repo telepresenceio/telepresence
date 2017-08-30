@@ -20,6 +20,8 @@ categories: reference
 $ git clone git@github.com:datawire/telepresence.git
 $ cd telepresence
 $ make setup
+$ export TELEPRESENCE_VERSION=$(make version)
+$ export PATH=$PATH:$PWD/virtualenv/bin
 ```
 
 ### Coding standard
