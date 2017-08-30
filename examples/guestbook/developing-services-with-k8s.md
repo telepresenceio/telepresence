@@ -14,7 +14,7 @@ The [guestbook](https://cloud.google.com/container-engine/docs/tutorials/guestbo
 
 * [Kubernetes](https://kubernetes.io)
 * [Google Container Engine](https://cloud.google.com/container-engine/)
-* [Telepresence](http://www.telepresence.io)
+* [Telepresence](https://telepresence.io)
 * [PHP](http://www.php.net/) and [Redis](https://redis.io/)
 
 ## Prerequisites and setup
@@ -42,7 +42,7 @@ First, install the `gcloud` and `kubectl` command line tools. Follow the instruc
 % sudo gcloud components update kubectl
 ```
 
-We need to install Telepresence, which will proxy your locally running service to Container Engine (for the latest installation instructions and documentation, visit [the Telepresence website](http://www.telepresence.io)).
+We need to install Telepresence, which will proxy your locally running service to Container Engine (for the latest installation instructions and documentation, visit [the Telepresence website](https://telepresence.io)).
 
 On OS X:
 
@@ -141,7 +141,7 @@ Go to the external IP address of your load balancer (in the above example, 104.1
 
 What if you want to try out some changes to your code, without having to redeploy it each time?
 
-We're now going to use [Telepresence](http://www.telepresence.io) to create a virtual network between your local machine and the remote Kubernetes cluster. This way, a PHP application running locally will be able to talk to remote cloud resources, and vice versa.
+We're now going to use [Telepresence](https://telepresence.io) to create a virtual network between your local machine and the remote Kubernetes cluster. This way, a PHP application running locally will be able to talk to remote cloud resources, and vice versa.
 
 In addition, Telepresence will temporarily replace the pods running the PHP code in Kubernetes with a proxy talking to your local machine:
 

@@ -472,7 +472,7 @@ def parse_args() -> argparse.Namespace:
             "\n"
             "Default is 'vpn-tcp', or 'container' when --docker-run is used.\n"
             "\nFor more details see "
-            "http://www.telepresence.io/reference/methods.html"
+            "https://telepresence.io/reference/methods.html"
         )
     )
     group_deployment = parser.add_mutually_exclusive_group()
@@ -1433,13 +1433,13 @@ def start_proxy(runner: Runner, args: argparse.Namespace
             )
         print(
             "For a full list of method limitations see "
-            "http://www.telepresence.io/reference/methods.html.",
+            "https://telepresence.io/reference/methods.html",
             file=sys.stderr
         )
     if sys.stdout.isatty():
         print(
             "Volumes are rooted at $TELEPRESENCE_ROOT. See "
-            "http://www.telepresence.io/howto/volumes.html for details.\n",
+            "https://telepresence.io/howto/volumes.html for details.\n",
             file=sys.stderr
         )
 
@@ -1630,7 +1630,7 @@ NICE_FAILURE = """\
 #!/bin/sh
 echo {} is not supported under Telepresence.
 echo See \
-http://www.telepresence.io/user-guide/limitations-and-workarounds.html \
+https://telepresence.io/reference/limitations.html \
 for details.
 exit 55
 """
