@@ -1,6 +1,6 @@
 .PHONY: default build-k8s-proxy bumpversion release minikube-test build-k8s-proxy-minikube setup
 
-VERSION=$(shell git describe --tags)
+VERSION=$(shell git describe --tags)${TELEPRESENCE_VER_SUFFIX}
 SHELL:=/bin/bash
 
 default:
