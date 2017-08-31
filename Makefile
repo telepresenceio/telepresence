@@ -4,7 +4,7 @@ VERSION=$(shell git describe --tags)${TELEPRESENCE_VER_SUFFIX}
 SHELL:=/bin/bash
 
 default:
-	@echo "See http://www.telepresence.io/additional-information/developing.html"
+	@echo "See https://telepresence.io/reference/developing.html"
 
 version:
 	@echo $(VERSION)

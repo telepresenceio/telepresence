@@ -8,7 +8,7 @@ description: "Telepresence: a local development environment for a remote Kuberne
 keywords: "Telepresence, Kubernetes, microservices"
 
 baseurl: ""
-url: "http://telepresence.io" # the base hostname & protocol for your site
+url: "https://telepresence.io" # the base hostname & protocol for your site
 twitter_username: datawireio
 github_username:  datawire
 

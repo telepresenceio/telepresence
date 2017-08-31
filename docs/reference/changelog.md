@@ -5,6 +5,13 @@ title: "Changelog"
 categories: reference
 ---
 
+#### 0.66 (Unreleased)
+
+Misc:
+
+* Clarified what is being looked for and where on startup.
+* Cleaned up some links (HTTP vs HTTPS, avoid redirection).
+
 #### 0.65 (August 29, 2017)
 
 Bug fixes:

@@ -17,4 +17,4 @@ curl http:///demo.txt
 curl -s http://mynginx | grep title
 # I have access to the environment variables from the remote Kubernetes pods:
 curl -s http://$MYNGINX_SERVICE_HOST | grep title
-# And there's even support for volumes! For more info visit http://telepresence.io
+# And there's even support for volumes! For more info visit https://telepresence.io
