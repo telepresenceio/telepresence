@@ -15,8 +15,8 @@ cleanup() {
 trap cleanup ERR
 
 # mac os x only
-brew cask install osxfuse
-brew install python3 sshfs torsocks
+# brew cask install osxfuse
+# brew install python3 sshfs torsocks
 
 # record debugging information
 python --version
