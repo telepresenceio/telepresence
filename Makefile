@@ -13,7 +13,7 @@ version:
 ## Setup dependencies ##
 
 virtualenv:
-	virtualenv --python=python3 virtualenv
+	python3 -m venv virtualenv
 	virtualenv/bin/pip install -r dev-requirements.txt
 	virtualenv/bin/pip install -r k8s-proxy/requirements.txt
 
