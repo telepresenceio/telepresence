@@ -20,8 +20,10 @@ def main():
         allow_abbrev=False,  # can make adding changes not backwards compatible
         description=(
             "stamp-telepresence: "
-            "Time and origin stamp lines, passing through from stdin to stdout. "
-            "Helper for Telepresence. Visit https://telepresence.io for more info."
+            "Time and origin stamp lines, "
+            "passing through from stdin to stdout. "
+            "Helper for Telepresence. "
+            "Visit https://telepresence.io for more info."
         )
     )
     parser.add_argument("--version", action="version", version=__version__)
