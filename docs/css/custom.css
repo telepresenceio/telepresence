@@ -220,3 +220,90 @@ h1 a, h2 a, h3 a, h4 a, h5 a, h6 a {
         display: block;
     }
 }
+
+#dw-flyout {
+    position: fixed;
+    left: 12px;
+    bottom: 12px;
+    max-width: 320px;
+    min-width: 250px;
+    padding: 18px;
+    border-radius: 6px;
+    border: 1px solid #cccfd1;
+    background-color: #fff;
+    box-shadow: 0 3px 6px 0 hsla(199,7%,45%,.35);
+    -webkit-animation-name: x;
+    animation-name: x;
+    -webkit-animation-duration: .3s;
+    animation-duration: .3s;
+    -webkit-animation-fill-mode: both;
+    animation-fill-mode: both;
+    transition: all .3s ease-in-out;
+}
+
+#dw-flyout .hs-error-msgs {
+    list-style-type: none;
+}
+
+#dw-flyout.is-hidden {
+    left: -480px
+}
+
+#dw-flyout.is-dismissed {
+    bottom: -100%
+}
+
+#dw-flyout h3 {
+    margin: 3px 0 9px
+}
+
+#dw-flyout .inputs-list {
+    padding: 0
+}
+
+#dw-flyout .inputs-list label {
+    margin: 0
+}
+
+#dw-flyout .hs-form-booleancheckbox input[type=checkbox] {
+    margin-right: 9px
+}
+
+#dw-flyout .hs-form-field>label {
+    display: none
+}
+
+#dw-flyout .hbspt-form > form {
+    margin: 0;
+}
+
+#dw-flyout .hs-input {
+    width: 100%;
+}
+
+#dw-flyout input[type=submit] {
+    background: #62C2D7;
+    border-radius: 3px;
+    font-size: 16px;
+    color: #FFFFFF;
+    letter-spacing: 0px;
+    border: 0;
+    padding: 0;
+    width: 100%;
+    opacity: 1;
+}
+
+.dw-flyout__close {
+    cursor: pointer;
+    position: absolute;
+    top: -9px;
+    right: -9px;
+    display: block;
+    padding: 0 6px;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1;
+    color: #fff;
+    border-radius: 48px;
+    background-color: #6c777c
+}
