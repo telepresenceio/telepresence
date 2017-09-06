@@ -20,7 +20,10 @@ virtualenv:
 virtualenv/bin/sshuttle-telepresence: virtualenv
 	source virtualenv/bin/activate && packaging/build-sshuttle.py
 
-setup: virtualenv/bin/sshuttle-telepresence
+virtualenv/bin/stamp-telepresence: virtualenv cli/stamp-telepresence
+	cp -f cli/stamp-telepresence virtualenv/bin/
+
+setup: virtualenv/bin/sshuttle-telepresence virtualenv/bin/stamp-telepresence
 
 # Build Kubernetes side proxy image inside local Docker:
 build-k8s-proxy:
