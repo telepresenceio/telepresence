@@ -23,6 +23,7 @@ python --version
 python3 --version
 
 # install
+unset VIRTUALENV_INTERPRETER_RUNNING
 make virtualenv
 make virtualenv/bin/sshuttle-telepresence
 
