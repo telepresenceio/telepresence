@@ -24,12 +24,12 @@ setup: virtualenv/bin/sshuttle-telepresence
 
 # Build Kubernetes side proxy image inside local Docker:
 build-k8s-proxy:
-	cd k8s-proxy && sudo docker build . -t datawire/telepresence-k8s:$(VERSION)
+	cd k8s-proxy && docker build . -t datawire/telepresence-k8s:$(VERSION)
 
 build-local:
 	cp -f virtualenv/bin/sshuttle-telepresence local-docker
 	cp -f cli/telepresence local-docker/telepresence.py
-	cd local-docker && sudo docker build . -t datawire/telepresence-local:$(VERSION)
+	cd local-docker && docker build . -t datawire/telepresence-local:$(VERSION)
 	rm -f local-docker/sshuttle-telepresence local-docker/telepresence.py
 
 ## Development ##
@@ -74,8 +74,8 @@ bumpversion: virtualenv
 
 # Will be run in Travis CI on tagged commits
 release: build-k8s-proxy build-local virtualenv/bin/sshuttle-telepresence
-	sudo docker push datawire/telepresence-k8s:$(VERSION)
-	sudo docker push datawire/telepresence-local:$(VERSION)
+	docker push datawire/telepresence-k8s:$(VERSION)
+	docker push datawire/telepresence-local:$(VERSION)
 	env TELEPRESENCE_VERSION=$(VERSION) packaging/homebrew-package.sh
 	packaging/create-linux-packages.py $(VERSION)
 	packaging/upload-linux-packages.py $(VERSION)

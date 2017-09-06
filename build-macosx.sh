@@ -41,7 +41,8 @@ export KUBECONFIG=${HOME}/.kube/kubernaut
 
 # Run tests
 # env TELEPRESENCE_METHOD=container ./ci/test.sh
-env TELEPRESENCE_METHOD=inject-tcp TELEPRESENCE_TESTS="-s -x" ./ci/test.sh
+# env TELEPRESENCE_METHOD=inject-tcp TELEPRESENCE_TESTS="-s -x" ./ci/test.sh
+env TELEPRESENCE_METHOD=inject-tcp ./ci/test.sh
 # env TELEPRESENCE_METHOD=vpn-tcp ./ci/test.sh
 
 # Cleanup
