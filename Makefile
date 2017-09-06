@@ -16,6 +16,7 @@ virtualenv:
 	printenv
 	which python
 	which pip
+	which virtualenv
 	virtualenv --python=python3 virtualenv
 	virtualenv/bin/pip install -r dev-requirements.txt
 	virtualenv/bin/pip install -r k8s-proxy/requirements.txt
