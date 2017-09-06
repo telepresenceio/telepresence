@@ -11,7 +11,7 @@ $(document).ready(function () {
             });
         }
         $(".dw-flyout__close").click(function () {
-            n.addClass("is-dismissed").remove();
+            flyout.addClass("is-dismissed").remove();
             Cookies.set("hide-tutorial-flyout", !0, {expires: 30})
         });
     }
