@@ -13,10 +13,10 @@
                 return;
             }
             // init flyout visibility
-            toggleFlyout(bottomOfSidebar, flyout);
+            toggleFlyout(flyout);
             // on scroll, update flyout visibility
             $(window).scroll(function() {
-                toggleFlyout(bottomOfSidebar, flyout);
+                toggleFlyout(flyout);
             });
             // when dismissed, remove the flyout from the page
             $('.dw-flyout__close').click(function() {
@@ -25,18 +25,18 @@
             });
         }
 
-        function toggleFlyout (offset, el) {
+        function toggleFlyout (el) {
             // don't do anything for mobile screens
             if( screen.width < 768 ) {
                 return;
             }
             // hide the flyout
-            if( window.pageYOffset < offset + 100 ) {
+            if( window.pageYOffset < 250 ) {
                 $(el).addClass('is-hidden');
                 return;
             }
             // show the flyout
-            if( window.pageYOffset > offset - 100 ) {
+            if( window.pageYOffset > 250 ) {
                 $(el).removeClass('is-hidden');
                 return;
             }
@@ -58,11 +58,13 @@
 <div id="dw-flyout" class="is-hidden">
     <span class="dw-flyout__close">&times;</span>
     <h5>Keep up with the latest updates</h5>
+    <div id="hs-email-form"></div>
     <script>
         hbspt.forms.create({
             css: '',
             portalId: '485087',
-            formId: '956287a4-7614-486b-91bd-28c9a91949cb'
+            formId: '956287a4-7614-486b-91bd-28c9a91949cb',
+            target: '#hs-email-form'
         });
     </script>
 </div>
