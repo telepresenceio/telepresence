@@ -133,7 +133,7 @@ def assert_fromcluster(namespace, service_name, port, telepresence_process):
     for i in range(30):
         result = query_in_k8s(namespace, url, telepresence_process)
         if result != expected:
-            sleep(1)
+            time.sleep(1)
         else:
             break
     assert result == expected
