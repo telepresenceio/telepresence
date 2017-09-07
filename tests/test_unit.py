@@ -216,11 +216,13 @@ def test_runner_file():
     # /dev/null -- just make sure we don't crash
     telepresence.Runner.open("/dev/null", "kubectl", False)
     # Regular file -- make sure the file has been truncated
+    o_content = "original content\n"
     with tempfile.NamedTemporaryFile(mode="w", delete=False) as out:
-        out.write("This should be truncated away.\nThis too.\n")
+        out.write(o_content + "This should be truncated away.\nThis too.\n")
     lf_file = telepresence.Runner.open(out.name, "kubectl", False)
-    content = "replacement content\n"
-    lf_file.write(content)
+    n_content = "replacement content\n"
+    lf_file.write(n_content)
     with open(out.name) as in_again:
         read_content = in_again.read()
-        assert content == read_content, read_content
+        assert o_content not in read_content, read_content
+        assert n_content in read_content, read_content
