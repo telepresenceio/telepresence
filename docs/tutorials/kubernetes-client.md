@@ -5,7 +5,7 @@ title: "Connect to a remote Kubernetes cluster"
 categories: tutorials
 ---
 
-{% include install.md cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
+{% include install.md location="top" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
 
 ### Connecting to a remote cluster
 
@@ -40,3 +40,5 @@ What's going on:
 4. When `curl` exits the new `Deployment` will be cleaned up.
 
 To learn more about what Telepresence proxies you can read the relevant [reference documentation](/reference/proxying.html).
+
+{% include install.md location="bottom" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
