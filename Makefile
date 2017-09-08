@@ -31,6 +31,7 @@ build-k8s-proxy:
 
 build-local:
 	cp -f virtualenv/bin/sshuttle-telepresence local-docker
+	cp -f cli/stamp-telepresence local-docker
 	cp -f cli/telepresence local-docker/telepresence.py
 	cd local-docker && docker build . -t datawire/telepresence-local:$(VERSION)
 	rm -f local-docker/sshuttle-telepresence local-docker/telepresence.py
