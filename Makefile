@@ -13,14 +13,8 @@ version:
 ## Setup dependencies ##
 
 virtualenv:
-	printenv
-	which python
-	which pip
-	which virtualenv
 	virtualenv --python=/usr/local/bin/python3 virtualenv
-	unset VIRTUALENV_INTERPRETER_RUNNING
 	virtualenv/bin/pip install -r dev-requirements.txt
-	unset VIRTUALENV_INTERPRETER_RUNNING
 	virtualenv/bin/pip install -r k8s-proxy/requirements.txt
 
 virtualenv/bin/sshuttle-telepresence: virtualenv
