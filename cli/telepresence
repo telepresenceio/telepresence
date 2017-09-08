@@ -349,6 +349,10 @@ class Runner(object):
     def launch_command(self, track, *args, **kwargs) -> Popen:
         """Call a command, generate stamped, logged output."""
         kwargs = kwargs.copy()
+        in_data = kwargs.get("input")
+        if "input" in kwargs:
+            del kwargs["input"]
+            kwargs["stdin"] = PIPE
         kwargs["stdout"] = PIPE
         kwargs["stderr"] = STDOUT
         process = Popen(*args, **kwargs)
@@ -362,6 +366,8 @@ class Runner(object):
             stdout=self.logfile,
             stderr=self.logfile
         )
+        if in_data:
+            process.communicate(in_data, timeout=kwargs.get("timeout"))
         return process
 
     def check_call(self, *args, **kwargs):
