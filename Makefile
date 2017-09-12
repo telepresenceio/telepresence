@@ -14,9 +14,8 @@ version:
 
 virtualenv:
 	python3 -m venv virtualenv
-	virtualenv/bin/python -m ensurepip
-	virtualenv/bin/pip install -r dev-requirements.txt
-	virtualenv/bin/pip install -r k8s-proxy/requirements.txt
+	virtualenv/bin/python -m pip install -r dev-requirements.txt
+	virtualenv/bin/python -m pip install -r k8s-proxy/requirements.txt
 
 virtualenv/bin/sshuttle-telepresence: virtualenv
 	source virtualenv/bin/activate && packaging/build-sshuttle.py
