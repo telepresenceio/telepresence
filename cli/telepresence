@@ -2043,8 +2043,6 @@ def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
         env["TORSOCKS_LOG_FILE_PATH"] = runner.logfile.name
     if sys.platform == "darwin":
         env["PATH"] = sip_workaround(env["PATH"], unsupported_tools_path)
-    runner.write("torsocks PATH is {}\n".format(env["PATH"]))
-    runner.write("torsocks env is {}\n".format(env))
     # Try to ensure we're actually proxying network, by forcing DNS resolution
     # via torsocks:
     start = time()
@@ -2084,7 +2082,6 @@ def run_local_command(
     # Inject replacements for unsupported tools like ping:
     unsupported_tools_path = get_unsupported_tools(args.method != "inject-tcp")
     env["PATH"] = unsupported_tools_path + ":" + env["PATH"]
-    runner.write("rlc PATH is {}\n".format(env["PATH"]))
 
     # Mount remote filesystem:
     mount_dir, mount_cleanup = mount_remote_volumes(

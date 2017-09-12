@@ -13,7 +13,7 @@ categories: tutorials
  });
 </script>
 
-{% include install.md cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
+{% include install.md location="top" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
 
 {% include getting-started-part-1.md cluster="Kubernetes" command="kubectl" deployment="Deployment" %}
 
@@ -49,3 +49,5 @@ $ kubectl delete deployment,service hello-world
 ```
 
 Telepresence can do much more than this: see the reference section of the documentation, on the top-left, for details.
+
+{% include install.md location="bottom" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}

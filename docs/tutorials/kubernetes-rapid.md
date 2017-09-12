@@ -5,7 +5,7 @@ title: "Rapid development with Kubernetes"
 categories: tutorials
 ---
 
-{% include install.md cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
+{% include install.md location="top" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
 
 ### Rapid development with Telepresence
 
@@ -75,3 +75,5 @@ kubernetes# exit
 ```
 
 And there you have it: you edit your code locally, and changes are reflected immediately to clients inside the Kubernetes cluster without having to redeploy, create Docker images, and so on.
+
+{% include install.md location="bottom" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}

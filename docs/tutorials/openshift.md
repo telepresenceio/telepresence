@@ -41,7 +41,7 @@ In the more extended tutorial that follows you'll see how you can also route tra
 
 ## A longer introduction: exposing a service to the cluster
 
-{% include install.md cluster="OpenShift" command="oc" deployment="DeploymentConfig" install="https://docs.openshift.org/latest/cli_reference/get_started_cli.html" %}
+{% include install.md location="top" cluster="OpenShift" command="oc" deployment="DeploymentConfig" install="https://docs.openshift.org/latest/cli_reference/get_started_cli.html" %}
 
 {% include getting-started-part-1.md cluster="OpenShift" command="oc" deployment="DeploymentConfig" %}
 
@@ -78,3 +78,5 @@ $ oc delete dc,service,route,imagestream hello-world
 ```
 
 Telepresence can do much more than this: see the reference section of the documentation, on the top-left, for details.
+
+{% include install.md location="bottom" cluster="OpenShift" command="oc" deployment="DeploymentConfig" install="https://docs.openshift.org/latest/cli_reference/get_started_cli.html" %}

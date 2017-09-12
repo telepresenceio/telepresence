@@ -1,8 +1,8 @@
 <script>
 $(document).ready(function() {
-  $("#toggleinstall").click(function() {
-    $("#install-telepresence").toggle();
-    var button = $("#toggleinstall");
+  var button = $(".toggleInstall.{{ include.location }}");
+  button.click(function() {
+    $(".install-telepresence.{{ include.location }}").toggle();
     if (button.html() == "Show") {
         button.html("Hide");
     } else {
@@ -13,9 +13,9 @@ $(document).ready(function() {
 </script>
 
 ### Install Telepresence with Homebrew/apt/dnf
-#### **<a class="button" id="toggleinstall">Show</a>**
+#### **<a class="button toggleInstall {{ include.location }}" data-location="{{ include.location }}">Show</a>**
 
-<div id="install-telepresence" style="display: none;" markdown="1">
+<div class="install-telepresence {{ include.location }}" style="display: none;" markdown="1">
 
 You will need the following available on your machine:
 

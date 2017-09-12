@@ -5,7 +5,7 @@ title: "Minikube VPN access"
 categories: tutorials
 ---
 
-{% include install.md cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
+{% include install.md location="top" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
 
 ### Transparently connecting to Minikube
 
@@ -43,3 +43,5 @@ MYSERVICE_SERVICE_PORT=8000
 (This will not work if the hello world pod hasn't started yet... if so, try again.)
 
 Telepresence will also allow services within minikube to [access a process running your host machine](kubernetes-rapid.html).
+
+{% include install.md location="bottom" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
