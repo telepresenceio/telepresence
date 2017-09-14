@@ -1,13 +1,14 @@
 #!/bin/bash
 set -ex
-virtualenv/bin/flake8 --isolated local-docker/*.py k8s-proxy/*.py cli/telepresence
+virtualenv/bin/flake8 --isolated local-docker/*.py k8s-proxy/*.py cli/telepresence cli/stamp-telepresence
 # pylint doesn't work on Travis OS X, perhaps because it's python 3.6:
-if [ "$(uname)" == "Linux" ]; then virtualenv/bin/pylint -f parseable -E cli/telepresence; fi
-# MYPYPATH is stupid hack to get a telepresence.py:
+if [ "$(uname)" == "Linux" ]; then virtualenv/bin/pylint -f parseable -E cli/telepresence cli/stamp-telepresence; fi
+# MYPYPATH is stupid hack to get a telepresence.py for entrypoint.py to import:
 MYPYPATH=tests/ virtualenv/bin/mypy cli/telepresence local-docker/entrypoint.py
 # Couldn't figure out how to make this work well, so it's not very useful cause
 # of the skip:
 virtualenv/bin/mypy --ignore-missing-imports k8s-proxy/forwarder.py k8s-proxy/socks.py
+virtualenv/bin/mypy cli/stamp-telepresence
 echo | cli/telepresence --help
 if [ -z "$TELEPRESENCE_TESTS" ]; then
     # Don't want parallism for OpenShift (causes problems with OpenShift

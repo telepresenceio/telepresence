@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+"""
+Telepresence helper tool to time and origin stamp logfile lines.
+"""
+
+import argparse
+import os
+import sys
+import time
+
+# Don't modify next line without modifying corresponding line in
+# .bumpversion.cfg:
+__version__ = "0.65"
+
+
+def main():
+    """Time and origin stamp lines, passing through from stdin to stdout"""
+
+    parser = argparse.ArgumentParser(
+        allow_abbrev=False,  # can make adding changes not backwards compatible
+        description=(
+            "stamp-telepresence: "
+            "Time and origin stamp lines, "
+            "passing through from stdin to stdout. "
+            "Helper for Telepresence. "
+            "Visit https://telepresence.io for more info."
+        )
+    )
+    parser.add_argument("--version", action="version", version=__version__)
+    parser.add_argument(
+        "--start-time",
+        type=float,
+        default=time.time(),
+        help=(
+            "Start time for timestamps as float seconds from the Unix epoch "
+            "(i.e. as returned by time.time()); default is now."
+        )
+    )
+    parser.add_argument(
+        "--id",
+        default="[{}]".format(os.getpid()),
+        help="Origin's identifier string"
+    )
+    args = parser.parse_args()
+
+    start_time = args.start_time
+    origin_id = args.id
+    curtime = time.time
+    out_write = sys.stdout.write
+    out_flush = sys.stdout.flush
+
+    for line in sys.stdin:
+        out_write(
+            "{:6.1f} {} {}".format(curtime() - start_time, origin_id, line)
+        )
+        out_flush()
+
+
+if __name__ == "__main__":
+    if sys.version_info[:2] < (3, 5):
+        exit("Python 3.5 or later required.")
+    main()

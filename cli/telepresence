@@ -21,11 +21,11 @@ from typing import List, Set, Tuple, Dict, Optional, Callable
 from functools import wraps
 from shutil import rmtree, copy, which
 from subprocess import (
-    check_output, Popen, CalledProcessError, run, TimeoutExpired, STDOUT,
+    check_output, Popen, CalledProcessError, TimeoutExpired, STDOUT, PIPE,
     DEVNULL
 )
 from tempfile import mkdtemp, NamedTemporaryFile
-from time import sleep, time
+from time import sleep, time, ctime
 from traceback import print_exc
 from urllib.error import HTTPError
 from urllib.request import urlopen
@@ -317,6 +317,10 @@ class Runner(object):
         self.logfile = logfile
         self.kubectl_cmd = kubectl_cmd
         self.verbose = verbose
+        self.start_time = time()
+        self.counter = 0
+        self.write("Telepresence launched at {}".format(ctime()))
+        self.write("  {}".format(sys.argv))
 
     @classmethod
     def open(cls, logfile_path, kubectl_cmd: str, verbose: bool):
@@ -337,41 +341,67 @@ class Runner(object):
 
     def write(self, message: str) -> None:
         """Write a message to the log."""
-        self.logfile.write(message)
+        message = message.rstrip()
+        line = "{:6.1f} TL | {}\n".format(time() - self.start_time, message)
+        self.logfile.write(line)
         self.logfile.flush()
+
+    def launch_command(self, track, *args, **kwargs) -> Popen:
+        """Call a command, generate stamped, logged output."""
+        kwargs = kwargs.copy()
+        in_data = kwargs.get("input")
+        if "input" in kwargs:
+            del kwargs["input"]
+            kwargs["stdin"] = PIPE
+        kwargs["stdout"] = PIPE
+        kwargs["stderr"] = STDOUT
+        process = Popen(*args, **kwargs)
+        Popen(
+            [
+                "stamp-telepresence",
+                "--id", "{} |".format(track),
+                "--start-time", str(self.start_time)
+            ],
+            stdin=process.stdout,
+            stdout=self.logfile,
+            stderr=self.logfile
+        )
+        if in_data:
+            process.communicate(in_data, timeout=kwargs.get("timeout"))
+        return process
 
     def check_call(self, *args, **kwargs):
         """Run a subprocess, make sure it exited with 0."""
-        self.write("Running: {}... ".format(args))
+        self.counter = track = self.counter + 1
+        self.write("[{}] Running: {}... ".format(track, args))
         if "input" not in kwargs and "stdin" not in kwargs:
             kwargs["stdin"] = DEVNULL
-        run(
-            *args,
-            stdout=self.logfile,
-            stderr=self.logfile,
-            check=True,
-            **kwargs
-        )
-        self.write(" ran!\n")
+        process = self.launch_command(track, *args, **kwargs)
+        process.wait()
+        retcode = process.poll()
+        if retcode:
+            self.write("[{}] exit {}.".format(track, retcode))
+            raise CalledProcessError(retcode, args)
+        self.write("[{}] ran.".format(track))
 
     def get_output(self, *args, stderr=None, **kwargs) -> str:
         """Return (stripped) command result as unicode string."""
         if stderr is None:
             stderr = self.logfile
-        self.write("Running: {}...".format(args))
+        self.counter = track = self.counter + 1
+        self.write("[{}] Capturing: {}...".format(track, args))
         kwargs["stdin"] = DEVNULL
         kwargs["stderr"] = stderr
         result = unicode(check_output(*args, **kwargs).strip(), "utf-8")
-        self.write(" ran!\n")
+        self.write("[{}] captured.".format(track))
         return result
 
     def popen(self, *args, stdin=DEVNULL, **kwargs) -> Popen:
         """Return Popen object."""
-        self.write("Running: {}...".format(args))
+        self.counter = track = self.counter + 1
+        self.write("[{}] Launching: {}...".format(track, args))
         kwargs["stdin"] = stdin
-        kwargs["stderr"] = self.logfile
-        kwargs["stdout"] = self.logfile
-        return Popen(*args, **kwargs)
+        return self.launch_command(track, *args, **kwargs)
 
     def kubectl(self, context: str, namespace: str,
                 args: List[str]) -> List[str]:
@@ -2294,9 +2324,12 @@ def main():
             raise SystemExit(1)
         # Make sure we can run openssh:
         try:
-            runner.write("Running 'ssh -V'...")
-            version = check_output(["ssh", "-V"], stdin=DEVNULL, stderr=STDOUT)
-            if not version.startswith(b"OpenSSH"):
+            version = runner.get_output(
+                ["ssh", "-V"],
+                stdin=DEVNULL,
+                stderr=STDOUT
+            )
+            if not version.startswith("OpenSSH"):
                 raise SystemExit(
                     "'ssh' is not the OpenSSH client, apparently."
                 )
