@@ -15,6 +15,7 @@ trap 'chown -R --reference /build-inside/build-package.sh /out/' EXIT
 # Package only includes /usr/bin/telepresence:
 mkdir /tmp/build
 cp /source/cli/telepresence /tmp/build
+cp /source/cli/stamp-telepresence /tmp/build
 cp /source/virtualenv/bin/sshuttle-telepresence /tmp/build
 cd /out
 fpm -t "$PACKAGE_TYPE" \
@@ -25,4 +26,4 @@ fpm -t "$PACKAGE_TYPE" \
     --prefix /usr/bin \
     --chdir /tmp/build \
     --input-type dir \
-    telepresence sshuttle-telepresence
+    telepresence stamp-telepresence sshuttle-telepresence

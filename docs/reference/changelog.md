@@ -9,7 +9,9 @@ categories: reference
 
 Misc:
 
-* Clarified what is being looked for and where on startup.
+* The website now has a [community page](https://www.telepresence.io/reference/community).
+* The Telepresence logfile now has time and source stamps for almost every line. This will help us diagnose problems going forward.
+* Clarified which support binaries are being looked for and where on startup.
 * Cleaned up some links (HTTP vs HTTPS, avoid redirection).
 
 #### 0.65 (August 29, 2017)

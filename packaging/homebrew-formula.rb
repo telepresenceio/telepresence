@@ -13,6 +13,7 @@ class Telepresence < Formula
   def install
     system "env", "PATH=#{ENV["PATH"]}:/usr/local/bin", "make", "virtualenv/bin/sshuttle-telepresence"
     bin.install "cli/telepresence"
+    bin.install "cli/stamp-telepresence"
     bin.install "virtualenv/bin/sshuttle-telepresence"
   end
 
@@ -24,6 +25,7 @@ class Telepresence < Formula
 
   test do
     system "telepresence", "--help"
+    system "stamp-telepresence", "--help"
     system "sshuttle-telepresence", "--version"
   end
 end

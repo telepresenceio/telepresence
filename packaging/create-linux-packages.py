@@ -56,6 +56,7 @@ def test_package(distro_image, package_directory, install_command):
         "sudo", "docker", "run", "--rm", "-v",
         "{}:/packages:ro".format(package_directory), distro_image, "sh", "-c",
         install + " && telepresence --version " +
+        "&& stamp-telepresence --version " +
         "&& sshuttle-telepresence --version"
     ],
         check=True)
