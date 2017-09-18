@@ -165,10 +165,11 @@ def call_scout(kubectl_version, kube_cluster_version):
         with id_file.open('x') as f:
             install_id = str(uuid4())
             f.write(install_id)
-            scout_kwargs["new_install"] = True
+            scout_kwargs["new_install"] = "true"
     except FileExistsError:
         with id_file.open('r') as f:
             install_id = f.read()
+            scout_kwargs["new_install"] = "false"
 
     scout = Scout("telepresence", __version__, install_id)
 
