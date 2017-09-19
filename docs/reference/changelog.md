@@ -5,13 +5,17 @@ title: "Changelog"
 categories: reference
 ---
 
-#### 0.66 (Unreleased)
+#### 0.66 (September 19, 2017)
+
+Bug fixes:
+
+* The macOS Homebrew installation no longer assumes that you have Homebrew installed in the default location (`/usr/local`). It also no longer requires `virtualenv` to be installed.
 
 Misc:
 
-* The website now has a [community page](https://www.telepresence.io/reference/community).
 * The Telepresence logfile now has time and source stamps for almost every line. This will help us diagnose problems going forward.
 * Clarified which support binaries are being looked for and where on startup.
+* The website now has a [community page](https://www.telepresence.io/reference/community).
 * Cleaned up some links (HTTP vs HTTPS, avoid redirection).
 
 #### 0.65 (August 29, 2017)
