@@ -720,7 +720,7 @@ class DockerEndToEndTests(TestCase):
     """End-to-end tests on Docker."""
 
     def get_containers(self):
-        return set(check_output(["sudo", "docker", "ps", "-q"]).split())
+        return set(check_output(["docker", "ps", "-q"]).split())
 
     def setUp(self):
         self.containers = self.get_containers()

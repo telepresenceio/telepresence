@@ -25,7 +25,7 @@ def build_package(builder_image, package_type, version, out_dir, dependencies):
         on.
     """
     run([
-        "sudo", "docker", "run", "--rm", "-e", "PACKAGE_VERSION=" + version,
+        "docker", "run", "--rm", "-e", "PACKAGE_VERSION=" + version,
         "-e", "PACKAGE_TYPE=" + package_type, "-v",
         "{}:/build-inside:ro".format(THIS_DIRECTORY), "-v",
         "{}:/source:ro".format(THIS_DIRECTORY.parent), "-v",
@@ -53,7 +53,7 @@ def test_package(distro_image, package_directory, install_command):
     elif install_command == "rpm":
         install = "dnf -y install /packages/*.rpm"
     run([
-        "sudo", "docker", "run", "--rm", "-v",
+        "docker", "run", "--rm", "-v",
         "{}:/packages:ro".format(package_directory), distro_image, "sh", "-c",
         install + " && telepresence --version " +
         "&& stamp-telepresence --version " +

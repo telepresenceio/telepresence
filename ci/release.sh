@@ -7,7 +7,7 @@ if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
 fi
 
 # Login to Docker Hub
-sudo docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
+docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
 
 # Store the SSH key used to push to github.com/datawire/homebrew-blackbird; this
 # key is set as environment variable on Travis repo:
