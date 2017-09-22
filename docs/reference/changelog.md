@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 6
-title: "Changelog"
-categories: reference
----
+# Changelog
 
 #### 0.67 (September 21, 2017)
 

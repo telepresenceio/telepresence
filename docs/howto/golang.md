@@ -1,9 +1,4 @@
----
-weight: 2
-title: "Go support"
-categories: howto
-layout: doc
----
+# Go support
 
 In this howto you'll learn how to use Telepresence with a Go program.
 Because of the way Go is implemented you will need to use `--method vpn-tcp` with `telepresence`.

@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 7
-title: "Development info"
-categories: reference
----
+# Development info
 
 ### Known issues
 

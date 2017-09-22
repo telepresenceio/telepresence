@@ -1,9 +1,5 @@
----
-layout: doc
-weight: 3
-title: "Rapid development with Kubernetes"
-categories: tutorials
----
+# Rapid development with Kubernetes
+
 
 {% include install.md location="top" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
 

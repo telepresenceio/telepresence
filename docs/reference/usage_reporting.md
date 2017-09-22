@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 8
-title: "Usage Reporting"
-categories: reference
----
+# Usage Reporting
 
 Telepresence collects some basic information about its users so it can send important client notices, such as new version availability and security bulletins.
 We also use the information to aggregate basic usage analytics anonymously.

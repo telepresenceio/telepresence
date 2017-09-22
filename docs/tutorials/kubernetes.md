@@ -1,21 +1,18 @@
----
-layout: doc
-weight: 1
-title: "Debug a Kubernetes service locally"
-categories: tutorials
----
+# Debug a Kubernetes service locally
 
-<link rel="stylesheet" href="{{ "/css/mermaid.css" | prepend: site.baseurl }}">
-<script src="{{ "/js/mermaid.min.js" | prepend: site.baseurl }}"></script>
+<link rel="stylesheet" href="/css/mermaid.css">
+<script src="/js/mermaid.min.js"></script>
 <script>mermaid.initialize({
    startOnLoad: true,
    cloneCssStyles: false,
  });
 </script>
 
-{% include install.md location="top" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
+{% import "macros.html" as macros %}
+{{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/") }}
+{% include "../_includes/install.md" location="top" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
 
-{% include getting-started-part-1.md cluster="Kubernetes" command="kubectl" deployment="Deployment" %}
+{% include "../_includes/getting-started-part-1.md" cluster="Kubernetes" command="kubectl" deployment="Deployment" %}
 
 You should start a `Deployment` and publicly exposed `Service` like this:
 
@@ -42,7 +39,7 @@ $ kubectl expose deployment hello-world --type=LoadBalancer --name=hello-world
 > http://192.168.99.100:12345/
 > ```
 
-{% include getting-started-part-2.md cluster="Kubernetes" command="kubectl" deployment="Deployment" %}
+<!---{% include getting-started-part-2.md cluster="Kubernetes" command="kubectl" deployment="Deployment" %}--->
 
 ```console
 $ kubectl delete deployment,service hello-world
@@ -50,4 +47,4 @@ $ kubectl delete deployment,service hello-world
 
 Telepresence can do much more than this: see the reference section of the documentation, on the top-left, for details.
 
-{% include install.md location="bottom" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
+<!---{% include install.md location="bottom" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}--->

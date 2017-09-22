@@ -1,0 +1,20 @@
+{
+  "redirects": [
+    {
+      "from": "user-guide/features-and-functionality.html",
+      "to": "reference/connecting.html"
+    },
+    {
+      "from": "user-guide/getting-started.html",
+      "to": "tutorials/kubernetes.html"
+    },
+    {
+      "from": "user-guide/limitations-and-workarounds.html",
+      "to": "reference/limitations.html"
+    },
+    {
+      "from": "products/telepresence/index.html",
+      "to": "index.html"
+    }
+  ]
+}

@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 5
-title: "Windows support"
-categories: reference
----
+# Windows support
 
 If you are running Windows 10 Creators Edition (released April 2017), you have access to the Windows Subsystem for Linux.
 This allows you to run Linux programs transparently inside Windows, with access to the normal Windows filesystem.

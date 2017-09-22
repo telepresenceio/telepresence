@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 1
-title: "Connecting to the cluster"
-categories: reference
----
+# Connecting to the cluster
 
 ### Setting up the proxy
 

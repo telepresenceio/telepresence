@@ -1,8 +1,3 @@
----
-layout: doc
-weight: 0
-title: "Installing Telepresence"
-categories: reference
----
+# Installing Telepresence
 
 {% include install-specific.md %}

@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 4
-title: "Get started with OpenShift"
-categories: tutorials
----
+# Get started with OpenShift
 
 <link rel="stylesheet" href="{{ "/css/mermaid.css" | prepend: site.baseurl }}">
 <script src="{{ "/js/mermaid.min.js" | prepend: site.baseurl }}"></script>

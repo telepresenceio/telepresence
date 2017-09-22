@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 3
-title: "What gets proxied"
-categories: reference
----
+# What gets proxied
 
 ### Networking access from the cluster
 

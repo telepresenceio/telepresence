@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 2
-title: "How it works"
-categories: discussion
----
+# How it works
 
 ### Goals
 

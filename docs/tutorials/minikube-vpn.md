@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 4
-title: "Minikube VPN access"
-categories: tutorials
----
+# Minikube VPN access
 
 {% include install.md location="top" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
 

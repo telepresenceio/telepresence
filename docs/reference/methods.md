@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 0
-title: "Proxying methods"
-categories: reference
----
+# Proxying methods
 
 ### Choosing a proxying method
 

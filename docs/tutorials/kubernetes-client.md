@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 2
-title: "Connect to a remote Kubernetes cluster"
-categories: tutorials
----
+# Connect to a remote Kubernetes cluster
 
 {% include install.md location="top" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
 
