@@ -1,18 +1,9 @@
 # Debug a Kubernetes service locally
 
-<link rel="stylesheet" href="/css/mermaid.css">
-<script src="/js/mermaid.min.js"></script>
-<script>mermaid.initialize({
-   startOnLoad: true,
-   cloneCssStyles: false,
- });
-</script>
+{% import "../macros.html" as macros %}
+{{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/", "kubectl", "Kubernetes", "top") }}
 
-{% import "macros.html" as macros %}
-{{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/") }}
-{% include "../_includes/install.md" location="top" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
-
-{% include "../_includes/getting-started-part-1.md" cluster="Kubernetes" command="kubectl" deployment="Deployment" %}
+{{ macros.gettingStartedPart1("Kubernetes")}}
 
 You should start a `Deployment` and publicly exposed `Service` like this:
 
@@ -39,7 +30,7 @@ $ kubectl expose deployment hello-world --type=LoadBalancer --name=hello-world
 > http://192.168.99.100:12345/
 > ```
 
-<!---{% include getting-started-part-2.md cluster="Kubernetes" command="kubectl" deployment="Deployment" %}--->
+{{ macros.gettingStartedPart2("Deployment", "kubectl", "Kubernetes") }}
 
 ```console
 $ kubectl delete deployment,service hello-world
@@ -47,4 +38,8 @@ $ kubectl delete deployment,service hello-world
 
 Telepresence can do much more than this: see the reference section of the documentation, on the top-left, for details.
 
-<!---{% include install.md location="bottom" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}--->
+{{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/", "kubectl", "Kubernetes", "bottom") }}
+
+**Still have questions? Ask in our [Gitter chatroom](https://gitter.im/datawire/telepresence) or [file an issue on GitHub](https://github.com/datawire/telepresence/issues/new).**
+
+If this tutorial was useful to you, we'd appreciate it if you'd share it online.

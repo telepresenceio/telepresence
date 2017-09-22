@@ -6,7 +6,11 @@
 
 ## Tutorials
 
-* [Debug a Kubernetes service locally](tutorials/kubernetes-test.md)
+* [Debug a Kubernetes service locally](tutorials/kubernetes.md)
+* [Connect to a remote Kubernetes cluster](tutorials/kubernetes-client.md)
+* [Rapid development with Kubernetes](tutorials/kubernetes-rapid.md)
+* [Get started with OpenShift](tutorials/openshift.md)
+* [Minikube VPN access](tutorials/minikube-vpn.md)
 
 ## Discussion
 
@@ -23,7 +27,7 @@
 
 ## Reference
 
-* [Installing Telepresence](reference/install-test.md)
+* [Installing Telepresence](reference/install.md)
 * [Proxying methods](reference/methods.md)
 * [Connecting to the cluster](reference/connecting.md)
 * [Running local processes](reference/running.md)

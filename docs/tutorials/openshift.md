@@ -1,13 +1,5 @@
 # Get started with OpenShift
 
-<link rel="stylesheet" href="{{ "/css/mermaid.css" | prepend: site.baseurl }}">
-<script src="{{ "/js/mermaid.min.js" | prepend: site.baseurl }}"></script>
-<script>mermaid.initialize({
-   startOnLoad: true,
-   cloneCssStyles: false,
- });
-</script>
-
 ## A short introduction: accessing the cluster
 
 1. Install Telepresence (see below).
@@ -36,9 +28,10 @@ In the more extended tutorial that follows you'll see how you can also route tra
 
 ## A longer introduction: exposing a service to the cluster
 
-{% include install.md location="top" cluster="OpenShift" command="oc" deployment="DeploymentConfig" install="https://docs.openshift.org/latest/cli_reference/get_started_cli.html" %}
+{% import "../macros.html" as macros %}
+{{ macros.install("https://docs.openshift.org/latest/cli_reference/get_started_cli.html", "oc", "OpenShift", "top") }}
 
-{% include getting-started-part-1.md cluster="OpenShift" command="oc" deployment="DeploymentConfig" %}
+{{ macros.gettingStartedPart1("OpenShift")}}
 
 You should start a new application and publicly expose it:
 
@@ -66,7 +59,7 @@ In the above output the address is `http://example.openshiftsapps.com`, but you 
 It may take a few minutes before this route will be live; in the interim you will get an error page.
 If you do wait a minute and try again.
 
-{% include getting-started-part-2.md cluster="OpenShift" command="oc" deployment="DeploymentConfig" %}
+{{ macros.gettingStartedPart2("DeploymentConfig", "oc", "OpenShift") }}
 
 ```console
 $ oc delete dc,service,route,imagestream hello-world
@@ -74,4 +67,8 @@ $ oc delete dc,service,route,imagestream hello-world
 
 Telepresence can do much more than this: see the reference section of the documentation, on the top-left, for details.
 
-{% include install.md location="bottom" cluster="OpenShift" command="oc" deployment="DeploymentConfig" install="https://docs.openshift.org/latest/cli_reference/get_started_cli.html" %}
+{{ macros.install("https://docs.openshift.org/latest/cli_reference/get_started_cli.html", "oc", "OpenShift", "bottom") }}
+
+**Still have questions? Ask in our [Gitter chatroom](https://gitter.im/datawire/telepresence) or [file an issue on GitHub](https://github.com/datawire/telepresence/issues/new).**
+
+If this tutorial was useful to you, we'd appreciate it if you'd share it online.

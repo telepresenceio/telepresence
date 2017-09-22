@@ -1,6 +1,7 @@
 # Connect to a remote Kubernetes cluster
 
-{% include install.md location="top" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
+{% import "../macros.html" as macros %}
+{{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/", "kubectl", "Kubernetes", "top") }}
 
 ### Connecting to a remote cluster
 
@@ -36,4 +37,8 @@ What's going on:
 
 To learn more about what Telepresence proxies you can read the relevant [reference documentation](/reference/proxying.html).
 
-{% include install.md location="bottom" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
+{{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/", "kubectl", "Kubernetes", "bottom") }}
+
+**Still have questions? Ask in our [Gitter chatroom](https://gitter.im/datawire/telepresence) or [file an issue on GitHub](https://github.com/datawire/telepresence/issues/new).**
+
+If this tutorial was useful to you, we'd appreciate it if you'd share it online.

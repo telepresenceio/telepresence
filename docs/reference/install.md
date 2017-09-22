@@ -1,3 +1,4 @@
 # Installing Telepresence
 
-{% include install-specific.md %}
+{% import "../macros.html" as macros %}
+{{ macros.installSpecific("reference-page") }}

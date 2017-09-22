@@ -6,7 +6,8 @@
   },
   "plugins": [
     "gtm",
-    "bulk-redirect"
+    "bulk-redirect",
+    "scripts"
   ],
   "pluginsConfig": {
     "gtm": {
@@ -15,6 +16,14 @@
     },
     "bulk-redirect": {
       "redirectsFile": "redirects.json"
+    },
+    "scripts": {
+      "files": [
+        "js/jquery-3.2.1.min.js",
+        "js/clipboard.min.js",
+        "js/mermaid.min.js",
+        "js/install-instructions.js"
+      ]
     }
   }
 }
