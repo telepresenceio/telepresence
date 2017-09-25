@@ -1,6 +1,9 @@
 {
   "title": "Telepresence: Fast, realistic local development for Kubernetes and OpenShift Origin microservices",
   "root": ".",
+  "variables": {
+    "baseUrl": "https://www.telepresence.io"
+  },
   "structure": {
     "readme": "INDEX.md"
   },

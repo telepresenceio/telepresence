@@ -180,47 +180,6 @@ h1 a, h2 a, h3 a, h4 a, h5 a, h6 a {
     border-radius: 0 4px 4px 0;
 }
 
-.share-buttons {
-    padding: 30px 0;
-}
-.list-share-buttons {
-    list-style-type: none;
-    padding: 0;
-    margin: 0;
-}
-.list-share-buttons li {
-    display: inline-block;
-    padding-left: 5px;
-    padding-right: 5px;
-}
-.share-btn {
-    padding: 10px 16px;
-    font-size: 18px;
-    line-height: 1.33333;
-    border-radius: 2px;
-    color: #777;
-    background-color: #fff;
-    border: 1px solid #ccc;
-    display: inline-block;
-}
-.share-btn:hover {
-    color: #fff;
-    background-color: #1eaedb;
-    border-color: #1eaedb;
-    text-decoration: none;
-}
-.share-btn > svg {
-    fill: currentColor;
-    vertical-align: middle;
-    width: 18px;
-    margin: -3px 5px 0;
-}
-@media (max-width: 550px) {
-    .list-share-buttons li , .share-btn {
-        display: block;
-    }
-}
-
 #dw-flyout {
     position: fixed;
     left: 12px;

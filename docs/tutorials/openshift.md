@@ -69,6 +69,4 @@ Telepresence can do much more than this: see the reference section of the docume
 
 {{ macros.install("https://docs.openshift.org/latest/cli_reference/get_started_cli.html", "oc", "OpenShift", "bottom") }}
 
-**Still have questions? Ask in our [Gitter chatroom](https://gitter.im/datawire/telepresence) or [file an issue on GitHub](https://github.com/datawire/telepresence/issues/new).**
-
-If this tutorial was useful to you, we'd appreciate it if you'd share it online.
+{{ macros.tutorialFooter(page.title, file.path, book['baseUrl']) }}

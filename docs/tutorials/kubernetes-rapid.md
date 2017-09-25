@@ -74,6 +74,4 @@ And there you have it: you edit your code locally, and changes are reflected imm
 
 {{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/", "kubectl", "Kubernetes", "bottom") }}
 
-**Still have questions? Ask in our [Gitter chatroom](https://gitter.im/datawire/telepresence) or [file an issue on GitHub](https://github.com/datawire/telepresence/issues/new).**
-
-If this tutorial was useful to you, we'd appreciate it if you'd share it online.
+{{ macros.tutorialFooter(page.title, file.path, book['baseUrl']) }}
