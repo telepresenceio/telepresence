@@ -1,4 +1,4 @@
-# Forge
+# Telepresence GitBook
 
 Just cloned? Set up GitBook to get started.
 
@@ -12,6 +12,8 @@ Still writing and editing? Run the server so you can preview as you go.
 
     npm start
 
-Seeing this page in GitBook? We want this page to be our custom index.html page, not GitBook's generated page. At some point we must figure out how to do that.
-
+### Redirects
 There is a `redirects.json` file that holds the 301 redirects.
+
+### Styling
+Custom styles for the GitBook pages are in the styles/website.css file.
