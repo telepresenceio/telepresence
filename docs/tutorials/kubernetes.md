@@ -1,21 +1,9 @@
----
-layout: doc
-weight: 1
-title: "Debug a Kubernetes service locally"
-categories: tutorials
----
+# Debug a Kubernetes service locally
 
-<link rel="stylesheet" href="{{ "/css/mermaid.css" | prepend: site.baseurl }}">
-<script src="{{ "/js/mermaid.min.js" | prepend: site.baseurl }}"></script>
-<script>mermaid.initialize({
-   startOnLoad: true,
-   cloneCssStyles: false,
- });
-</script>
+{% import "../macros.html" as macros %}
+{{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/", "kubectl", "Kubernetes", "top") }}
 
-{% include install.md location="top" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
-
-{% include getting-started-part-1.md cluster="Kubernetes" command="kubectl" deployment="Deployment" %}
+{{ macros.gettingStartedPart1("Kubernetes")}}
 
 You should start a `Deployment` and publicly exposed `Service` like this:
 
@@ -42,7 +30,7 @@ $ kubectl expose deployment hello-world --type=LoadBalancer --name=hello-world
 > http://192.168.99.100:12345/
 > ```
 
-{% include getting-started-part-2.md cluster="Kubernetes" command="kubectl" deployment="Deployment" %}
+{{ macros.gettingStartedPart2("Deployment", "kubectl", "Kubernetes") }}
 
 ```console
 $ kubectl delete deployment,service hello-world
@@ -50,4 +38,6 @@ $ kubectl delete deployment,service hello-world
 
 Telepresence can do much more than this: see the reference section of the documentation, on the top-left, for details.
 
-{% include install.md location="bottom" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
+{{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/", "kubectl", "Kubernetes", "bottom") }}
+
+{{ macros.tutorialFooter(page.title, file.path, book['baseUrl']) }}

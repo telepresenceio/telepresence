@@ -1,9 +1,4 @@
----
-weight: 3
-title: "Docker support"
-categories: howto
-layout: doc
----
+# Docker support
 
 In this howto you'll learn to use Telepresence to proxy a Docker container.
 Processes running in the container will have transparent access to a remote Kubernetes or OpenShift cluster.

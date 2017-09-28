@@ -8,3 +8,9 @@ telepresence.log
 
 # IntelliJ IDEA
 .idea
+
+# --- Docs ---
+=======
+docs/_book
+docs/node_modules/
+.netlify

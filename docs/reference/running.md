@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 2
-title: "Running local processes"
-categories: reference
----
+# Running local processes
 
 There are two ways you can have Telepresence run your local process.
 

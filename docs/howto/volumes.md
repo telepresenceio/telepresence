@@ -1,9 +1,4 @@
----
-weight: 4
-title: "Volume access"
-categories: howto
-layout: doc
----
+# Volume access
 
 Volume support requires a small amount of work on your part.
 The root directory where all the volumes can be found will be set to the `TELEPRESENCE_ROOT` environment variable in the shell run by `telepresence`.

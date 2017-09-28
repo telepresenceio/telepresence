@@ -1,12 +1,7 @@
----
-layout: doc
-weight: 1
-title: "Why Telepresence?"
-categories: discussion
----
+# Why Telepresence?
 
-<link rel="stylesheet" href="{{ "/css/mermaid.css" | prepend: site.baseurl }}">
-<script src="{{ "/js/mermaid.min.js" | prepend: site.baseurl }}"></script>
+<link rel="stylesheet" href="{{ "/css/mermaid.css" }}">
+<script src="{{ "/js/mermaid.min.js" }}"></script>
 <script>mermaid.initialize({
    startOnLoad: true,
    cloneCssStyles: false,

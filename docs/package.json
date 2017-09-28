@@ -1,0 +1,29 @@
+{
+  "name": "telepresence",
+  "version": "1.0.0",
+  "description": "GitBook Documentation for Forge",
+  "main": "index.js",
+  "dependencies": {
+    "gitbook-cli": "^2.3.0",
+    "gitbook-plugin-bulk-redirect": "^0.2.1",
+    "gitbook-plugin-gtm": "0.0.6",
+    "gitbook-plugin-scripts": "^1.0.2",
+    "netlify-cli": "^1.2.2"
+  },
+  "scripts": {
+    "postinstall": "gitbook install",
+    "build": "gitbook build",
+    "start": "gitbook serve"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/datawire/telepresence.git"
+  },
+  "author": "Datawire",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/datawire/telepresence/issues"
+  },
+  "homepage": "https://github.com/datawire/telepresence#readme",
+  "devDependencies": {}
+}

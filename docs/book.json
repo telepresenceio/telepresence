@@ -1,0 +1,32 @@
+{
+  "title": "Telepresence: Fast, realistic local development for Kubernetes and OpenShift Origin microservices",
+  "root": ".",
+  "variables": {
+    "baseUrl": "https://www.telepresence.io"
+  },
+  "structure": {
+    "readme": "INDEX.md"
+  },
+  "plugins": [
+    "gtm",
+    "bulk-redirect",
+    "scripts"
+  ],
+  "pluginsConfig": {
+    "gtm": {
+      "token": "GTM-KMVFH7G",
+      "virtualPageViews": true
+    },
+    "bulk-redirect": {
+      "redirectsFile": "redirects.json"
+    },
+    "scripts": {
+      "files": [
+        "js/jquery-3.2.1.min.js",
+        "js/clipboard.min.js",
+        "js/mermaid.min.js",
+        "js/install-instructions.js"
+      ]
+    }
+  }
+}

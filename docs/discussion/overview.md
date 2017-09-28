@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 4
-title: "Introduction to Telepresence"
-categories: discussion
----
+# Introduction to Telepresence
 
 Telepresence is an open source tool that lets you run a single service locally, while connecting that service to a remote Kubernetes cluster. This lets developers working on multi-service applications to:
 

@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 11
-title: "Community"
-categories: reference
----
+# Community
 
 ### Ensuring Telepresence works well for everyone
 

@@ -1,0 +1,44 @@
+{
+  "redirects": [
+    {
+      "from": "user-guide/features-and-functionality.html",
+      "to": "reference/connecting.html"
+    },
+    {
+      "from": "user-guide/getting-started.html",
+      "to": "tutorials/kubernetes.html"
+    },
+    {
+      "from": "user-guide/limitations-and-workarounds.html",
+      "to": "reference/limitations.html"
+    },
+    {
+      "from": "products/telepresence/index.html",
+      "to": "index.html"
+    },
+    {
+      "from": "about/how-it-works.html",
+      "to": "discussion/how-it-works.html"
+    },
+    {
+      "from": "about/why-telepresence.html",
+      "to": "discussion/why-telepresence.html"
+    },
+    {
+      "from": "additional-information/changelog.html",
+      "to": "/reference/changelog.html"
+    },
+    {
+      "from": "additional-information/developing.html",
+      "to": "reference/developing.html"
+    },
+    {
+      "from": "getting-started/install.html",
+      "to": "tutorials/kubernetes.html"
+    },
+    {
+      "from": "getting-started/quickstart.html",
+      "to": "tutorials/kubernetes.html"
+    }
+  ]
+}

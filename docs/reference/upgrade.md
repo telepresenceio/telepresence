@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 8
-title: "Upgrading Telepresence"
-categories: reference
----
+# Upgrading Telepresence
 
 <script src="https://cdn.jsdelivr.net/npm/clipboard@1/dist/clipboard.min.js"></script>
 <script>

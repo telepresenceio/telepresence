@@ -1,11 +1,7 @@
----
-layout: doc
-weight: 4
-title: "Minikube VPN access"
-categories: tutorials
----
+# Minikube VPN access
 
-{% include install.md location="top" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
+{% import "../macros.html" as macros %}
+{{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/", "kubectl", "Kubernetes", "top") }}
 
 ### Transparently connecting to Minikube
 
@@ -44,4 +40,6 @@ MYSERVICE_SERVICE_PORT=8000
 
 Telepresence will also allow services within minikube to [access a process running your host machine](kubernetes-rapid.html).
 
-{% include install.md location="bottom" cluster="Kubernetes" command="kubectl" install="https://kubernetes.io/docs/tasks/tools/install-kubectl/" %}
+{{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/", "kubectl", "Kubernetes", "bottom") }}
+
+{{ macros.tutorialFooter(page.title, file.path, book['baseUrl']) }}

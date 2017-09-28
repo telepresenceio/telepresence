@@ -1,9 +1,4 @@
----
-layout: doc
-weight: 4
-title: "Generic limitations & workarounds"
-categories: reference
----
+# Generic limitations & workarounds
 
 ### Method-specific limitations
 
