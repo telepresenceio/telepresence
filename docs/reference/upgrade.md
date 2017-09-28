@@ -1,38 +1,23 @@
 # Upgrading Telepresence
 
-<script src="https://cdn.jsdelivr.net/npm/clipboard@1/dist/clipboard.min.js"></script>
-<script>
-    var clipboard = new Clipboard('.copy-to-clipboard');
-    clipboard.on('success', function(e) {
-        $(e.trigger).text('Copied');
-        e.clearSelection();
-    });
-</script>
-
 #### OS X
-<div class="u-cf u-full-width">
 On OS X you can upgrade Telepresence by running the following:
-<button data-system="osx" data-location="{{ include.location }}" class="button fa-pull-right copy-to-clipboard" data-clipboard-text="brew upgrade datawire/blackbird/telepresence">Copy to clipboard</button>
-</div>
+<button data-system="osx" data-location="upgrade" class="button fa-pull-right copy-to-clipboard" data-clipboard-text="brew upgrade datawire/blackbird/telepresence">Copy to clipboard</button>
 ```shell
 brew upgrade datawire/blackbird/telepresence
 ```
 
 #### Ubuntu 16.04 or later
-<div class="u-cf u-full-width">
 Run the following to upgrade Telepresence:
-<button data-system="ubuntu" data-location="{{ include.location }}" class="button fa-pull-right copy-to-clipboard" data-clipboard-text="sudo apt update&#xa;sudo apt install --no-install-recommends telepresence">Copy to clipboard</button>
-</div>
+<button data-system="ubuntu" data-location="upgrade" class="button fa-pull-right copy-to-clipboard" data-clipboard-text="sudo apt update&#xa;sudo apt install --no-install-recommends telepresence">Copy to clipboard</button>
 ```shell
 sudo apt update
 sudo apt install --no-install-recommends telepresence
 ```
 
 #### Fedora 25
-<div class="u-cf u-full-width">
 Run the following to upgrade Telepresence:
-<button data-system="fedora" data-location="{{ include.location }}" class="button fa-pull-right copy-to-clipboard" data-clipboard-text="sudo dnf upgrade telepresence">Copy to clipboard</button>
-</div>
+<button data-system="fedora" data-location="upgrade" class="button fa-pull-right copy-to-clipboard" data-clipboard-text="sudo dnf upgrade telepresence">Copy to clipboard</button>
 ```shell
 sudo dnf upgrade telepresence
 ```
