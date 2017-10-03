@@ -1,0 +1,467 @@
+/* http://meyerweb.com/eric/tools/css/reset/
+   v2.0 | 20110126
+   License: none (public domain)
+*/
+
+*, *::before, *::after {
+    box-sizing: inherit;
+}
+
+html, body, div, span, applet, object, iframe,
+h1, h2, h3, h4, h5, h6, p, blockquote, pre,
+a, abbr, acronym, address, big, cite, code,
+del, dfn, em, img, ins, kbd, q, s, samp,
+small, strike, strong, sub, sup, tt, var,
+b, u, i, center,
+dl, dt, dd, ol, ul, li,
+fieldset, form, label, legend,
+table, caption, tbody, tfoot, thead, tr, th, td,
+article, aside, canvas, details, embed,
+figure, figcaption, footer, header, hgroup,
+menu, nav, output, ruby, section, summary,
+time, mark, audio, video {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-size: 100%;
+    font: inherit;
+    vertical-align: baseline;
+    box-sizing: border-box;
+}
+/* HTML5 display-role reset for older browsers */
+article, aside, details, figcaption, figure,
+footer, header, hgroup, menu, nav, section {
+    display: block;
+}
+ol, ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+blockquote, q {
+    quotes: none;
+}
+blockquote:before, blockquote:after,
+q:before, q:after {
+    content: '';
+    content: none;
+}
+table {
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+.container {
+    margin-right: auto;
+    margin-left: auto;
+    padding-right: 15px;
+    padding-left: 15px;
+    width: 100%;
+}
+
+
+@media screen and (min-width: 576px) {
+    .container {
+        max-width: 540px;
+    }
+}
+
+@media screen and (min-width: 768px) {
+    .container {
+        max-width: 720px;
+    }
+}
+
+@media screen and (min-width: 992px) {
+    .container {
+        max-width: 990px;
+    }
+}
+
+body {
+    font-family: 'Source Sans Pro', sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    color: #222222;
+    font-weight: 400;
+}
+
+a {
+    color: #F9634E;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+h1, h2, h3, h4, h5, h6, strong {
+    font-weight: bold;
+}
+
+/*
+* COLORS
+*/
+.text-red {
+    color: #F9634E;
+}
+.bg-red {
+    background-color: #F9634E;
+}
+.text-blue {
+    color: #68C2D6;
+}
+.bg-blue {
+    background-color: #68C2D6;
+}
+.text-white {
+    color: #FFFFFF;
+}
+.bg-white {
+    background-color: #FFFFFF;
+}
+.bg-gray {
+    background-color: #F4F4F4;
+}
+.text-black {
+    color: #222222;
+}
+
+.text-xl {
+    font-size: 3em; /* 48px */
+}
+.text-lg {
+    font-size: 2.25em; /* 36px */
+}
+.text-md {
+    font-size: 1.5em; /* 24px */
+}
+.text-sm {
+    font-size: 1.125em; /* 18px */
+}
+.text-regular {
+    font-size: 1em; /* 16px */
+}
+.text-xs {
+    font-size: 0.875em; /* 14px */
+}
+
+.font-light {
+    font-weight: 300;
+}
+
+
+/*
+* Utilities
+*/
+.text-center {
+    text-align: center;
+}
+
+.flex-center {
+    justify-content: center;
+}
+
+.text-uppercase {
+    text-transform: uppercase;
+}
+
+@media screen and (max-width: 767px) {
+    .hidden-xs {
+        display: none !important;
+    }
+}
+
+.btn {
+    padding: 10px 35px;
+    text-transform: uppercase;
+    font-size: 1.125em;
+    color: #fff;
+    text-decoration: none;
+    display: inline-block;
+    letter-spacing: 4px;
+}
+.btn:hover {
+    text-decoration: none;
+    opacity: 0.95;
+}
+.btn-black {
+    background-color: #2B2F3E;
+}
+.btn-red {
+    background-color: #F9634E;
+}
+
+.border-gray {
+    border: 1px solid #E2E2E2;
+}
+
+.box-shadow {
+    box-shadow: 0 12px 14px rgba(0,0,0,0.1);
+    position: relative;
+}
+
+.padding-top-20 {
+    padding-top: 20px;
+}
+
+.padding-bottom-20 {
+    padding-bottom: 20px;
+}
+
+.padding-top-60 {
+    padding-top: 60px;
+}
+
+.padding-bottom-60 {
+    padding-bottom: 60px;
+}
+
+.padding-top-75 {
+    padding-top: 75px;
+}
+
+.padding-bottom-75 {
+    padding-bottom: 75px;
+}
+
+.padding-top-130 {
+    padding-top: 130px;
+}
+
+.padding-bottom-130 {
+    padding-bottom: 130px;
+}
+
+@media screen and (min-width: 768px) {
+    header {
+        display: flex;
+        justify-content: space-between;
+    }
+}
+
+.main-navigation {
+    display: flex;
+    padding: 20px 5px;
+}
+@media screen and (min-width: 768px) {
+    .main-navigation {
+        padding: 30px;
+    }
+}
+.main-navigation li a {
+    margin: 0 10px;
+    color: #222222;
+    text-decoration: none;
+    text-transform: uppercase;
+}
+@media screen and (min-width: 768px) {
+    .main-navigation li a {
+        font-size: 1.125em;
+        font-weight: bold;
+    }
+}
+
+.main-navigation li a:hover {
+    text-decoration: underline;
+}
+
+.right-nav {
+    padding: 20px;
+    text-align: center;
+}
+
+#hero {
+    padding: 30px;
+}
+#hero h1 {
+    font-weight: 900;
+}
+#hero img {
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+.about-tabs {
+    display: flex;
+    justify-content: center;
+}
+
+.about-tabs .tab {
+    text-align: center;
+    letter-spacing: -0.38px;
+    text-transform: uppercase;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 10px;
+    background: #F4F4F4;
+    color: #F9634E;
+}
+@media screen and (min-width: 768px) {
+    .about-tabs .tab {
+        width: 185px;
+        height: 131px;
+        font-size: 1em;
+        padding: 10px 0;
+        margin: 10px;
+    }
+}
+.about-tabs .tab.active {
+    background: #F9634E;
+    color: #fff;
+}
+.about-tabs .tab img {
+    margin-bottom: 10px;
+    height: 33px;
+    text-align: center;
+}
+.about-tabs .tab svg {
+    height: 33px;
+    margin: 0 auto 10px;
+}
+.about-tabs .tab.active path{
+    fill: #fff;
+}
+.tab-content {
+    padding: 55px 0;
+    max-width: 915px;
+    margin: 0 auto;
+}
+.tab-content p {
+    font-size: 1.5em;
+}
+@media screen and (min-width: 768px) {
+    .tab-content p {
+        font-size: 2.25em;
+    }
+}
+
+.tab-content div {
+    display: none;
+}
+
+.tab-content a.tutorial-link {
+    font-size: 1.5rem;
+    padding-top: 50px;
+}
+.content-box {
+    padding: 30px;
+    position: relative;
+}
+@media screen and (min-width: 768px) {
+    .content-box {
+        padding: 70px 50px;
+    }
+}
+.quotes {
+    max-width: 100%;
+}
+.slick-arrow {
+    border: none;
+    outline: none;
+    background: transparent;
+    padding: 0 10px;
+    cursor: pointer;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    height: 37px;
+    width: 20px;
+    position: absolute;
+    top: 50%;
+    text-indent: -999999px;
+}
+.slick-prev {
+    background: url('/images/left-arrow.svg');
+    left: -50px;
+}
+.slick-next {
+    background: url('/images/right-arrow.svg');
+    right: -50px;
+}
+.quotes.content-box {
+    padding-top: 50px;
+    padding-bottom: 50px;
+}
+.quote {
+    display: flex;
+    align-items: flex-start;
+}
+
+.quote p {
+    font-size: 20px;
+    font-weight: 300;
+    font-style: italic;
+}
+@media screen and (min-width: 768px) {
+    .quote p {
+        font-size: 30px;
+    }
+}
+
+.quote p span.author {
+    font-weight: 400;
+    font-size: 20px;
+}
+
+.quote img {
+    margin: 30px 100px 0 40px
+}
+
+.github-buttons {
+    padding: 40px 0;
+}
+
+.code-box {
+    margin-top: 25px;
+    padding: 25px;
+    background-color: #F4F4F4;
+    overflow: auto;
+}
+.code-box code {
+    font-family: Courier New, serif;
+}
+
+.get-started-steps {
+    counter-reset: item;
+    margin-left: 0;
+    padding-left: 75px;
+}
+.get-started-steps li {
+    display: block;
+    margin-bottom: 50px;
+    list-style-position: inside;
+}
+.get-started-steps li::before {
+    position: absolute;
+    display: inline-block;
+    content: counter(item);
+    counter-increment: item;
+    width: 48px;
+    line-height: 48px;
+    color: #fff;
+    background: #F9634E;
+    margin-left: -75px;
+    text-align: center;
+    font-size: 1.5em;
+}
+/*
+* For the asciicast video. Otherwise it is left aligned
+*/
+.asciicast iframe {
+    margin: 25px auto 0 !important;
+    display: block !important;
+}
+.sponsored-by {
+    padding: 90px 0 0;
+}
+.sponsored-by img.datawire-logo {
+    margin-bottom: 25px;
+}
+
+footer {
+    padding: 30px 0;
+}

@@ -1,150 +1,301 @@
+
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="google-site-verification" content="-oU4YrjDGK55Okd886LJBNRYFZ3a5PBgaKWOdQeop-8" />
-        <title>Telepresence - Telepresence</title>
-        <!-- Google Tag Manager -->
-        <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start': new Date().getTime(),event:'gtm.js'});
-            var f=d.getElementsByTagName(s)[0], j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
-            j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-        })(window,document,'script','dataLayer','GTM-KMVFH7G');</script>
-        <!-- End Google Tag Manager -->
-        <meta name="description" content="Telepresence: a local development environment for a remote Kubernetes cluster">
-        <meta name="keywords" content="Telepresence, Kubernetes, microservices">
-        <meta name="author" content="Datawire.io">
-        <meta name="generator" content="Doc42 0.1.0">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <link rel='stylesheet' href='https://fonts.googleapis.com/css?family=Source+Sans+Pro:400,300,600,700' type='text/css' media='all' />
-        <link href="https://fonts.googleapis.com/css?family=Source+Code+Pro" rel="stylesheet">
-        <link rel="stylesheet" href="/styles/kissui.css">
-        <link rel="stylesheet" href="/styles/custom.css">
-        <link rel="stylesheet" href="/styles/pygments.css">
+    <title>Telepresence - Telepresence</title>
+    <meta name="description" content="Telepresence: a local development environment for a remote Kubernetes cluster">
+    <meta name="keywords" content="Telepresence, Kubernetes, microservices">
+    <meta name="author" content="Datawire.io">
 
-        <link rel="canonical" href="http://localhost:4000/">
-        <link rel="alternate" type="application/rss+xml" title="Telepresence" href="http://localhost:4000/feed.xml">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,900"
+          type="text/css" media="all" />
+    <link rel="stylesheet" href="/styles/home.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.8.1/slick.min.css">
 
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start': new Date().getTime(),event:'gtm.js'});
+        var f=d.getElementsByTagName(s)[0], j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
+        j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-KMVFH7G');</script>
+    <!-- End Google Tag Manager -->
 
-        <!--[if lte IE 8]>
-        <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/v2-legacy.js"></script>
-        <![endif]-->
-        <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/v2.js"></script>
-    </head>
-    <body>
-        <div class="row">
-            <header id="main_header">
-                <nav class="basic border menu">
-                    <div class="fluid">
-                        <a class="header item" href="/">
-                            Telepresence
-                        </a>
+</head>
+<body>
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KMVFH7G"
+                  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
 
-                        <a class="item" href="/tutorials/kubernetes.html">
-                          <i class="fa fa-download"></i> Get Started
-                        </a>
-                        <a class="item" href="/discussion/overview.html">
-                          <i class="fa fa-book"></i> Documentation
-                        </a>
-                        <a class="item" href="https://github.com/datawire/telepresence/" target="_blank">
-                            <i class="fa fa-github"></i> GitHub
-                        </a>
-                        <a class="item" href="https://gitter.im/datawire/telepresence" target="_blank">
-                            <i class="fa fa-support"></i> Need help?
-                        </a>
-                    </div>
-                </nav>
-            </header>
-        </div>
-        <div class="fluid">
-            <div class="wrapper">
-                <header class="hero">
-                    <div class="logo">
-                        <img src="/images/logo.png" style="width: 200px;">
-                        <h3>Telepresence</h3>
-                        <h4>Fast, realistic local development for Kubernetes and OpenShift Origin microservices:</h4>
-                        <h5>
-                            <div style="width: 50%; border-width: 1px; border-style: solid; border-color: #333333; padding: 10px; text-align: left; margin: 0 auto; font-weight: normal;">
-                                "Going through CI to test 2 lines of changed code seems excessive.Telepresence got it
-                                down to <tt>`go run main.go`</tt> with an added benefit of getting access to real
-                                ConfigMap / Secrets."<br>
-                                <div align="right">—Vladimir Pouzanov</div>
-                            </div>
-                        </h5>
-                        <br>
-                        <p>
-                            <a class="github-button" href="https://github.com/datawire/telepresence"
-                               data-icon="octicon-star" data-show-count="true"
-                               aria-label="Star datawire/telepresence on GitHub">Star</a>
-                            <a class="github-button" href="https://github.com/datawire/telepresence/fork"
-                               data-icon="octicon-repo-forked" data-show-count="true"
-                               aria-label="Fork datawire/telepresence on GitHub">Fork</a>
-                        </p>
-                    </div>
-                </header>
-
-                <div class="container">
-                    <p style="font-size: 150%; text-align: center; text-style: bold;">Do you want to...</p>
-                    <ul style="font-size: 150%; list-style: none; text-align: center;">
-                        <li>... <a href="/tutorials/minikube-vpn.html">get VPN-like access to minikube?</a></li>
-                        <li>... <a href="/tutorials/kubernetes-client.html">transparently connect to a Kubernetes cluster?</a></li>
-                        <li>... <a href="/tutorials/kubernetes-rapid.html">rapidly develop a new service?</a></li>
-                        <li>... <a href="/tutorials/kubernetes.html">debug a Kubernetes service locally?</a></li>
-                        <li>... <a href="/tutorials/openshift.html">use Telepresence with OpenShift?</a></li>
-                    </ul>
-                    <br>
-                    <br>
-                </div>
-
-                <div class="container">
-                    <h5>
-                        <ul class="fa-ul">
-                            <li><i class="fa-li fa fa-fighter-jet"></i><strong>Fast dev cycle:</strong> no more waiting for your whole deployment pipeline to finish just to try a small change! A local process on your laptop is exposed via a Service in your Kubernetes or OpenShift staging cluster (a local minikube or a cluster in the cloud.)</li>
-                            <li><i class="fa-li fa fa-external-link-square"></i><strong>Realistic environment:</strong>
-                                transparently access other microservices in a Kubernetes or OpenShift cluster, as well as cloud resources like AWS RDS. Your code can also read the same environment variables and volumes a normal Kubernetes pod would have.</li>
-                            <li><i class="fa-li fa fa-wrench"></i><strong>Use your own tools:</strong> edit, run and debug your code locally, just as you would any other application.</li>
-                        </ul>
-                    </h5>
-                </div>
-
-                <div class="mailing-list-signup">
-                    <h5><strong>Keep up with the latest updates</strong></h5>
-                    <script>
-                        hbspt.forms.create({
-                         css: '',
-                         portalId: '485087',
-                         formId: '956287a4-7614-486b-91bd-28c9a91949cb'
-                        });
-                    </script>
-                </div>
-
-                <div class="container">
-                    <h5><br><strong>How it works:</strong><br>Telepresence substitutes a proxy image for your normal container in the Kubernetes cluster. Your local code gets transparent access to the Kubernetes network by using <a href="https://www.datawire.io/code-injection-on-linux-and-macos/">LD_PRELOAD</a> to hijack TCP connections and reroute them through that proxy pod, bootstrapping off of <tt>kubectl port-forward</tt>. Volumes are proxied using <tt>sshfs</tt>.</h5>
-                </div>
-
-                <div class="container">
-                    <h5><br><strong>Get started in 3 minutes:</strong><br>
-                        <ol>
-                            <li><a href="/tutorials/kubernetes.html">Install locally</a> with Homebrew, apt or dnf.</li>
-                            <li>Run <tt>telepresence -m inject-tcp -n test --run-shell</tt>.</li>
-                            <li>You now have a shell that proxies network connections to Kubernetes!</li>
-                        </ol>
-                        <br>
-                    </h5>
-                    <center>
-                        <script type="text/javascript" src="https://asciinema.org/a/117761.js" id="asciicast-117761" async></script>
-                    </center>
-                </div>
-
-                <div class="container">
-                    <p style="text-align: center;">Telepresence is sponsored by Project Blackbird, helping you <a href="https://datawire.io">deploy microservices on Kubernetes in AWS</a> <img src="/images/blackbird.png" style="width: 4em; vertical-align: middle; align: right;"></p>
-                </div>
-
-                <script async defer src="https://buttons.github.io/buttons.js"></script>
-
+<header class="white-bg">
+    <ul class="main-navigation">
+        <li>
+            <a href="/tutorials/kubernetes.html">Get Started</a>
+        </li>
+        <li>
+            <a href="/discussion/overview.html">Docs</a>
+        </li>
+        <li>
+            <a target="_blank" href="https://github.com/datawire/telepresence">GitHub</a>
+        </li>
+        <li>
+            <a target="_blank" href="https://gitter.im/datawire/telepresence">Need Help?</a>
+        </li>
+    </ul>
+    <div class="right-nav hidden-xs">
+        <a class="btn btn-black" href="#get-started">Get Started</a>
+    </div>
+</header>
+<section id="hero" class="bg-white text-center">
+    <h1 class="text-uppercase text-xl">Telepresence</h1>
+    <p class="font-light text-uppercase text-md">
+        Fast, realistic development for Kubernetes and OpenShift microservices
+    </p>
+    <div class="github-buttons">
+        <a class="github-button" href="https://github.com/datawire/telepresence"
+           data-icon="octicon-star" data-show-count="true"
+           aria-label="Star datawire/telepresence on GitHub">Star</a>
+        <a class="github-button" href="https://github.com/datawire/telepresence/fork"
+           data-icon="octicon-repo-forked" data-show-count="true"
+           aria-label="Fork datawire/telepresence on GitHub">Fork</a>
+    </div>
+    <img src="/images/bird-on-bricks.svg">
+</section>
+<section id="tabs" class="bg-white box-shadow">
+    <div class="container">
+        <ul class="about-tabs">
+            <li class="tab" data-tabId="debug-locally">
+                <img alt="Debug locally" class="svg" src="/images/debug-locally.svg">
+                <span>Debug locally</span>
+            </li>
+            <li class="tab" data-tabId="instant-feedback">
+                <img alt="Instant feedback" class="svg" src="/images/instant-feedback.svg">
+                <span>Instant feedback</span>
+            </li>
+            <li class="tab" data-tabId="realistic-environment">
+                <img alt="Realistic environment" class="svg" src="/images/realistic-environment.svg">
+                <span>Realistic environment</span>
+            </li>
+            <li class="tab" data-tabId="minimal-resources">
+                <img alt="Minimal resource footprint" class="svg" src="/images/minimal-resources.svg">
+                <span>Minimal resource footprint</span>
+            </li>
+            <li class="tab" data-tabId="your-tools">
+                <img alt="Use your own tools" class="svg" src="/images/your-tools.svg">
+                <span>Use your own tools</span>
+            </li>
+        </ul>
+        <div class="tab-content font-light">
+            <div id="debug-locally">
+                <p>Debug your Kubernetes service locally, using your favorite debugging tool.</p>
+                <p><a class="tutorial-link" href="/tutorials/kubernetes">Go to tutorial</a></p>
+            </div>
+            <div id="instant-feedback">
+                <p>Test and iterate on code changes instantly, instead of waiting for your deployment cycle.</p>
+                <p><a class="tutorial-link" href="/tutorials/kubernetes-rapid">Go to tutorial</a></p>
+            </div>
+            <div id="realistic-environment">
+                <p>
+                    With Telepresence, you’re developing on a Kubernetes or OpenShift cluster, which can be configured
+                    to be identical to production. Eliminate bugs due to differences between development and production
+                    environments.
+                </p>
+            </div>
+            <div id="minimal-resources">
+                <p>
+                    Telepresence adds virtually zero overhead to your development environment. It only requires the
+                    memory and CPU necessary to run your actual service. Don’t let your laptop melt from running
+                    minikube!
+                </p>
+            </div>
+            <div id="your-tools">
+                <p>
+                    Use your favorite code editor, debugger, profiler, or other tools. Anything that runs on your
+                    laptop works with Telepresence.
+                </p>
             </div>
         </div>
-    </body>
+    </div>
+</section>
+<section class="bg-gray padding-top-75 padding-bottom-60">
+    <div class="container">
+        <div class="quote-container">
+            <div class="quotes bg-white border-gray box-shadow content-box">
+                <div>
+                    <div class="quote">
+                        <img class="hidden-xs" src="/images/quote.svg">
+                        <div class="quote-content">
+                            <p>"Going through CI to test 2 lines of changed code seems excessive.Telepresence got it
+                                down to `go run main.go` with an added benefit of getting access to real ConfigMap /
+                                Secrets."</p>
+                            <p><span class="author">Vladimir Pouzanov</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+<section id="get-started" class="bg-gray padding-top-75 padding-bottom-60">
+    <h1 class="text-lg text-uppercase text-center padding-bottom-60">Get Started</h1>
+    <div class="container">
+        <div class="bg-white border-gray box-shadow content-box">
+            <h2 class="text-red text-uppercase text-md padding-bottom-20">How it works:</h2>
+            <p class="text-md font-light">Telepresence substitutes a proxy image for your normal container in the
+                Kubernetes cluster. Your local code gets transparent access to the Kubernetes network by using
+                <a target="_blank" href="https://www.datawire.io/code-injection-on-linux-and-macos/">LD_PRELOAD</a> to
+                hijack TCP connections and reroute them through that proxy pod, bootstrapping off of kubectl
+                port-forward. Volumes are proxied using sshfs.</p>
+        </div>
+    </div>
+</section>
+<section class="bg-gray padding-top-75 padding-bottom-130">
+    <div class="container">
+        <h1 class="text-lg text-uppercase text-center padding-bottom-60">Get started in 3 minutes</h1>
+        <div class="bg-white border-gray box-shadow content-box">
+            <ol class="get-started-steps">
+                <li>
+                    <p class="text-md"><a href="/tutorials/kubernetes">Install Locally</a> with Homebrew, apt or dnf</p>
+                </li>
+                <li>
+                    <p class="text-md">Run</p>
+                    <div class="code-box">
+                        <pre><code>telepresence -m inject-tcp -n test --run-shell</code></pre>
+                    </div>
+                </li>
+                <li>
+                    <p class="text-md">You now have a shell that proxies network connections to Kubernetes!</p>
+                </li>
+            </ol>
+            <script type="text/javascript" src="https://asciinema.org/a/117761.js" id="asciicast-117761" async></script>
+        </div>
+        <div class="sponsored-by text-center">
+            <a href="https://datawire.io" target="_blank">
+                <img class="datawire-logo" alt="Datawire" src="/images/datawire-logo.svg">
+            </a>
+            <p class="text-md">
+                Built by <a href="https://datawire.io" target="_blank">Datawire</a>, helping you build an amazing
+                development workflow on Kubernetes
+            </p>
+        </div>
+    </div>
+</section>
+<footer class="white-bg">
+    <ul class="main-navigation flex-center">
+        <li>
+            <a href="/tutorials/kubernetes.html">Get Started</a>
+        </li>
+        <li>
+            <a href="/discussion/overview.html">Docs</a>
+        </li>
+        <li>
+            <a target="_blank" href="https://github.com/datawire/telepresence">GitHub</a>
+        </li>
+        <li>
+            <a target="_blank" href="https://gitter.im/datawire/telepresence">Need Help?</a>
+        </li>
+    </ul>
+</footer>
+<script async defer src="https://buttons.github.io/buttons.js"></script>
+<script src="/js/jquery-3.2.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.8.1/slick.min.js"></script>
+<script>
+    $(document).ready(function() {
+        changeTab($('.about-tabs li.tab:first-child').data('tabid'));
+
+        $('.about-tabs li.tab').click(function() {
+            changeTab($(this).data('tabid'));
+        });
+
+
+        function changeTab(tabId) {
+            $('.about-tabs li.tab').removeClass('active');
+            $('.about-tabs li.tab[data-tabId="'+tabId+'"]').addClass('active');
+            $('.tab-content div').hide();
+            $('#' + tabId).show();
+        }
+
+        $('.quotes').slick();
+
+        /*
+         Smooth scrolling. Ref: https://css-tricks.com/snippets/jquery/smooth-scrolling/
+         */
+        $('a[href*="#"]')
+            .not('[href="#"]')
+            .not('[href="#0"]')
+            .click(function(event) {
+                // On-page links
+                if (
+                    location.pathname.replace(/^\//, '') == this.pathname.replace(/^\//, '')
+                    &&
+                    location.hostname == this.hostname
+                ) {
+                    // Figure out element to scroll to
+                    var target = $(this.hash);
+                    target = target.length ? target : $('[name=' + this.hash.slice(1) + ']');
+                    // Does a scroll target exist?
+                    if (target.length) {
+                        // Only prevent default if animation is actually gonna happen
+                        event.preventDefault();
+                        $('html, body').animate({
+                            scrollTop: target.offset().top
+                        }, 1000, function() {
+                            // Callback after animation
+                            // Must change focus!
+                            var $target = $(target);
+                            $target.focus();
+                            if ($target.is(":focus")) { // Checking if the target was focused
+                                return false;
+                            } else {
+                                $target.attr('tabindex','-1'); // Adding tabindex for elements not focusable
+                                $target.focus(); // Set focus again
+                            };
+                        });
+                    }
+                }
+            });
+
+            /*
+             * Replace all SVG images with inline SVG so we can change it's color when active
+             * Ref: https://stackoverflow.com/questions/24933430/img-src-svg-changing-the-fill-color
+             */
+            $('img.svg').each(function(){
+                var $img = $(this);
+                var imgID = $img.attr('id');
+                var imgClass = $img.attr('class');
+                var imgURL = $img.attr('src');
+
+                jQuery.get(imgURL, function(data) {
+                    // Get the SVG tag, ignore the rest
+                    var $svg = $(data).find('svg');
+
+                    // Add replaced image's ID to the new SVG
+                    if(typeof imgID !== 'undefined') {
+                        $svg = $svg.attr('id', imgID);
+                    }
+                    // Add replaced image's classes to the new SVG
+                    if(typeof imgClass !== 'undefined') {
+                        $svg = $svg.attr('class', imgClass+' replaced-svg');
+                    }
+
+                    // Remove any invalid XML tags as per http://validator.w3.org
+                    $svg = $svg.removeAttr('xmlns:a');
+
+                    // Check if the viewport is set, if the viewport is not set the SVG wont't scale.
+                    if(!$svg.attr('viewBox') && $svg.attr('height') && $svg.attr('width')) {
+                        $svg.attr('viewBox', '0 0 ' + $svg.attr('height') + ' ' + $svg.attr('width'))
+                    }
+
+                    // Replace image with new SVG
+                    $img.replaceWith($svg);
+
+                }, 'xml');
+
+            });
+    });
+</script>
+</body>
 </html>
