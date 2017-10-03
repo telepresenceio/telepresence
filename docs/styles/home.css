@@ -272,7 +272,7 @@ h1, h2, h3, h4, h5, h6, strong {
 }
 
 #hero {
-    padding: 30px;
+    padding: 20px;
 }
 #hero h1 {
     font-weight: 900;
@@ -281,7 +281,9 @@ h1, h2, h3, h4, h5, h6, strong {
     max-width: 100%;
     margin: 0 auto;
 }
-
+#hero .btn {
+    margin-top: 30px;
+}
 .about-tabs {
     display: flex;
     justify-content: center;
@@ -452,11 +454,11 @@ h1, h2, h3, h4, h5, h6, strong {
 * For the asciicast video. Otherwise it is left aligned
 */
 .asciicast iframe {
-    margin: 25px auto 0 !important;
+    margin: 25px auto !important;
     display: block !important;
 }
 .sponsored-by {
-    padding: 90px 0 0;
+    padding: 130px 0 45px;
 }
 .sponsored-by img.datawire-logo {
     margin-bottom: 25px;

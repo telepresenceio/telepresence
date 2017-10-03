@@ -33,10 +33,10 @@
 <header class="white-bg">
     <ul class="main-navigation">
         <li>
-            <a href="/tutorials/kubernetes.html">Get Started</a>
+            <a href="/tutorials/kubernetes">Get Started</a>
         </li>
         <li>
-            <a href="/discussion/overview.html">Docs</a>
+            <a href="/discussion/overview">Docs</a>
         </li>
         <li>
             <a target="_blank" href="https://github.com/datawire/telepresence">GitHub</a>
@@ -45,15 +45,15 @@
             <a target="_blank" href="https://gitter.im/datawire/telepresence">Need Help?</a>
         </li>
     </ul>
-    <div class="right-nav hidden-xs">
-        <a class="btn btn-black" href="#get-started">Get Started</a>
-    </div>
 </header>
 <section id="hero" class="bg-white text-center">
     <h1 class="text-uppercase text-xl">Telepresence</h1>
     <p class="font-light text-uppercase text-md">
         Fast, realistic development for Kubernetes and OpenShift microservices
     </p>
+    <div class="get-started-button">
+        <a href="#get-started" class="btn btn-black">Get Started</a>
+    </div>
     <div class="github-buttons">
         <a class="github-button" href="https://github.com/datawire/telepresence"
            data-icon="octicon-star" data-show-count="true"
@@ -128,7 +128,7 @@
                     <div class="quote">
                         <img class="hidden-xs" src="/images/quote.svg">
                         <div class="quote-content">
-                            <p>"Going through CI to test 2 lines of changed code seems excessive.Telepresence got it
+                            <p>"Going through CI to test 2 lines of changed code seems excessive. Telepresence got it
                                 down to `go run main.go` with an added benefit of getting access to real ConfigMap /
                                 Secrets."</p>
                             <p><span class="author">Vladimir Pouzanov</span></p>
@@ -139,20 +139,7 @@
         </div>
     </div>
 </section>
-<section id="get-started" class="bg-gray padding-top-75 padding-bottom-60">
-    <h1 class="text-lg text-uppercase text-center padding-bottom-60">Get Started</h1>
-    <div class="container">
-        <div class="bg-white border-gray box-shadow content-box">
-            <h2 class="text-red text-uppercase text-md padding-bottom-20">How it works:</h2>
-            <p class="text-md font-light">Telepresence substitutes a proxy image for your normal container in the
-                Kubernetes cluster. Your local code gets transparent access to the Kubernetes network by using
-                <a target="_blank" href="https://www.datawire.io/code-injection-on-linux-and-macos/">LD_PRELOAD</a> to
-                hijack TCP connections and reroute them through that proxy pod, bootstrapping off of kubectl
-                port-forward. Volumes are proxied using sshfs.</p>
-        </div>
-    </div>
-</section>
-<section class="bg-gray padding-top-75 padding-bottom-130">
+<section id="get-started" class="bg-gray padding-top-75 padding-bottom-130">
     <div class="container">
         <h1 class="text-lg text-uppercase text-center padding-bottom-60">Get started in 3 minutes</h1>
         <div class="bg-white border-gray box-shadow content-box">
@@ -171,6 +158,18 @@
                 </li>
             </ol>
             <script type="text/javascript" src="https://asciinema.org/a/117761.js" id="asciicast-117761" async></script>
+            <div class="text-center">
+                <a class="btn btn-black" href="/discussion/overview">Read the docs</a>
+            </div>
+
+            <div class="padding-top-60">
+                <h2 class="text-red text-uppercase text-md padding-bottom-20">How it works:</h2>
+                <p class="text-md font-light">Telepresence substitutes a proxy image for your normal container in the
+                    Kubernetes cluster. Your local code gets transparent access to the Kubernetes network by using
+                    <a target="_blank" href="https://www.datawire.io/code-injection-on-linux-and-macos/">LD_PRELOAD</a> to
+                    hijack TCP connections and reroute them through that proxy pod, bootstrapping off of kubectl
+                    port-forward. Volumes are proxied using sshfs.</p>
+            </div>
         </div>
         <div class="sponsored-by text-center">
             <a href="https://datawire.io" target="_blank">
@@ -186,10 +185,10 @@
 <footer class="white-bg">
     <ul class="main-navigation flex-center">
         <li>
-            <a href="/tutorials/kubernetes.html">Get Started</a>
+            <a href="/tutorials/kubernetes">Get Started</a>
         </li>
         <li>
-            <a href="/discussion/overview.html">Docs</a>
+            <a href="/discussion/overview">Docs</a>
         </li>
         <li>
             <a target="_blank" href="https://github.com/datawire/telepresence">GitHub</a>
