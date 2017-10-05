@@ -12,6 +12,9 @@ OpenShift makes it easy to deploy your containers, but it can also impact your d
 ##### [Run a local process in Kubernetes with Telepresence](https://blog.codersociety.com/run-a-local-process-in-kubernetes-with-telepresence-dc16bd593b52) - Kentaro Wakayama
 This post walks through how the engineers at Coder Society use Telepresence in their Kubernetes development stack to gain access to running Kubernetes services without having to expose them publicly.
 
+##### [Smarter local development of Kubernetes microservices with Telepresence](http://blog.stacktical.com/cloud-computing/2017/09/27/telepresence-kubernes-development.html) - [Stacktical](https://stacktical.com)
+Installing projects locally as a developer has always been tedious, and microservices make that even more complicated. In this post, Stacktical talks about how Telepresence makes it super fast and easy for them to work amongst existing Kubernetes microservices. 
+
 ##### [5 open source tools for microservices developers on Kubernetes](https://hackernoon.com/5-open-source-tools-for-microservices-developers-on-kubernetes-4fac73c2c6ee) - Richard Li
 Kubernetes has powerful features for container scheduling, service discovery, and load balancing, but what tools exist for developers who are developing software on Kubernetes? This post covers 5 popular open source tools, including Telepresence! 
 
