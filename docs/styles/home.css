@@ -457,6 +457,60 @@ h1, h2, h3, h4, h5, h6, strong {
     margin: 25px auto !important;
     display: block !important;
 }
+
+.mailing-list-signup .hbspt-form {
+    max-width: 680px;
+    margin: 30px auto 0;
+}
+.mailing-list-signup .hbspt-form > form {
+    display: flex;
+    flex-direction: column;
+}
+@media screen and (min-width: 768px) {
+    .mailing-list-signup .hbspt-form > form {
+        flex-direction: row;
+    }
+}
+.mailing-list-signup .hbspt-form > form > .hs_email {
+    flex: 1;
+    margin-bottom: 10px;
+}
+.mailing-list-signup .hbspt-form > form > .hs_email input {
+    width: 100%;
+    border-radius: 0;
+    border: 1px solid #F9634E;
+    height: 60px;
+    padding: 10px;
+    font-size: 20px;
+    color: #9B9B9B;
+    font-weight: 400;
+}
+.mailing-list-signup .hbspt-form > form > .hs_email > label {
+    display: none;
+}
+.mailing-list-signup .hbspt-form .hs-error-msgs {
+    list-style-type: none;
+    margin-bottom: 0;
+}
+.mailing-list-signup .hs_submit .hs-button {
+    padding: 15px 30px;
+    text-transform: uppercase;
+    font-size: 20px;
+    color: #fff;
+    text-decoration: none;
+    display: inline-block;
+    background-color: #F9634E;
+    border: none;
+    height: 60px;
+    cursor: pointer;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+}
+.mailing-list-signup .hs_submit .hs-button:hover {
+    opacity: 0.95;
+}
+
 .sponsored-by {
     padding: 130px 0 45px;
 }
