@@ -410,7 +410,11 @@ h1, h2, h3, h4, h5, h6, strong {
 }
 
 .quote img {
-    margin: 30px 100px 0 40px
+    margin: 30px 100px 0 40px;
+}
+.quote img.logo {
+    margin: 10px 50px 0 30px;
+    max-width: 120px;
 }
 
 .github-buttons {
