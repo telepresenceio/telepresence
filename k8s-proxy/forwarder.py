@@ -228,8 +228,12 @@ def listen():
     reactor.listenUDP(9053, protocol)
 
 
-with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
-    NAMESPACE = f.read()
+predefined_namespace = os.getenv('TELEPRESENCE_CONTAINER_NAMESPACE', None)
+if predefined_namespace:
+    NAMESPACE = predefined_namespace
+else:
+    with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
+        NAMESPACE = f.read()
 NOLOOP = os.environ.get("TELEPRESENCE_NAMESERVER") is not None
 reactor.suggestThreadPoolSize(50)
 print("Listening...")
