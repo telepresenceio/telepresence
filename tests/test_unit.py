@@ -147,6 +147,11 @@ spec:
           name: secret-volume
         - mountPath: /etc/nginx/conf.d
           name: configmap-volume
+        env:
+        - name: TELEPRESENCE_CONTAINER_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
 """
 
 

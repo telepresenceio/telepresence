@@ -1295,7 +1295,6 @@ def swap_deployment(runner: Runner,
         TELEPRESENCE_REMOTE_IMAGE,
         args.method == "vpn-tcp" and args.in_local_vm,
         args.needs_root,
-        args.namespace,
     )
     apply_json(new_deployment_json)
     return deployment_name, run_id, orig_container_json
@@ -1308,7 +1307,6 @@ def new_swapped_deployment(
     telepresence_image: str,
     add_custom_nameserver: bool,
     as_root: bool,
-    namespace: str,
 ) -> Tuple[Dict, Dict]:
     """
     Create a new Deployment that uses telepresence-k8s image.
@@ -1370,10 +1368,12 @@ def new_swapped_deployment(
             in the k8s-proxy.
             """
             container.setdefault("env", []).append({
-                    "name":
-                    "TELEPRESENCE_CONTAINER_NAMESPACE",
-                    "value":
-                    namespace
+                    "name": "TELEPRESENCE_CONTAINER_NAMESPACE",
+                    "valueFrom": {
+                        "fieldRef": {
+                            "fieldPath": "metadata.namespace"
+                        }
+                    }
                 })
             return new_deployment_json, old_container
 
@@ -1448,7 +1448,6 @@ def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
         TELEPRESENCE_REMOTE_IMAGE,
         args.method == "vpn-tcp" and args.in_local_vm,
         False,
-        args.namespace
     )
     apply_json(new_rc_json)
     return deployment_name, run_id, orig_container_json
