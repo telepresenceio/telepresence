@@ -65,6 +65,7 @@ spec:
         image: openshift/hello-openshift
         resources:
           limits:
+            cpu: "100m"
             memory: "150Mi"
       - name: {container_name}
         image: {image}
@@ -79,8 +80,10 @@ spec:
           mountPath: /podinfo
         resources:
           requests:
+            cpu: "100m"
             memory: "150Mi"
           limits:
+            cpu: "100m"
             memory: "150Mi"
       volumes:
       - name: podinfo
