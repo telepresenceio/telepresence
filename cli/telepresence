@@ -733,8 +733,15 @@ def _get_remote_env(
         ["exec", pod_name, "--container", container_name, "env"]
     )
     result = {}
+    prior_key = None
     for line in env.splitlines():
-        key, value = line.split("=", 1)
+        try:
+            key, value = line.split("=", 1)
+            prior_key = key
+        except ValueError:
+            # Prior key's value contains one or more newlines
+            key = prior_key
+            value = result[key] + "\n" + line
         result[key] = value
     return result
 

@@ -42,6 +42,9 @@ metadata:
   namespace: {namespace}
 data:
   EXAMPLE_ENVFROM: foobar
+  EX_MULTI_LINE: |
+    first line (no newline before, newline after)
+    second line (newline before and after)
 ---
 %s
 metadata:

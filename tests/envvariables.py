@@ -17,6 +17,10 @@ def handle_error(type, value, traceback):
 def check_custom_env():
     assert os.environ["MYENV"] == "hello"
     assert os.environ["EXAMPLE_ENVFROM"] == "foobar"
+    assert os.environ["EX_MULTI_LINE"] == \
+        "first line (no newline before, newline after)\n" + \
+        "second line (newline before and after)\n"
+
 
 
 def main():
