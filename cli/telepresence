@@ -732,7 +732,7 @@ def _get_remote_env(
         context, namespace,
         ["exec", pod_name, "--container", container_name, "env"]
     )
-    result = {}
+    result = {}  # type: Dict[str,str]
     prior_key = None
     for line in env.splitlines():
         try:
