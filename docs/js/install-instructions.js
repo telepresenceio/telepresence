@@ -14,12 +14,9 @@ $(document).ready(function() {
         e.clearSelection();
     });
 
-    var path = null;
+    window.mermaid.init(undefined, document.querySelectorAll('.mermaid'));
 
-    setInterval(function() {
-        if (path !== window.location.pathname) {
-            path = window.location.pathname;
-            window.mermaid.init(undefined, document.querySelectorAll('.lang-mermaid'))
-        }
-    }, 1000);
+    gitbook.events.bind("page.change", function() {
+       window.mermaid.init(undefined, document.querySelectorAll('.mermaid'));
+    });
 });
