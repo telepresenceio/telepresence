@@ -1369,6 +1369,19 @@ def new_swapped_deployment(
                 container["securityContext"] = {
                     "runAsUser": 0,
                 }
+            """
+            Add namespace environment variable to support deployments using
+            automountServiceAccountToken: false. To be used by forwarder.py
+            in the k8s-proxy.
+            """
+            container.setdefault("env", []).append({
+                    "name": "TELEPRESENCE_CONTAINER_NAMESPACE",
+                    "valueFrom": {
+                        "fieldRef": {
+                            "fieldPath": "metadata.namespace"
+                        }
+                    }
+                })
             return new_deployment_json, old_container
 
     raise RuntimeError(
@@ -1436,8 +1449,12 @@ def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
                                                              ][0]["name"]
 
     new_rc_json, orig_container_json = new_swapped_deployment(
-        rc_json, container_name, run_id, TELEPRESENCE_REMOTE_IMAGE,
-        args.method == "vpn-tcp" and args.in_local_vm, False,
+        rc_json,
+        container_name,
+        run_id,
+        TELEPRESENCE_REMOTE_IMAGE,
+        args.method == "vpn-tcp" and args.in_local_vm,
+        False,
     )
     apply_json(new_rc_json)
     return deployment_name, run_id, orig_container_json
