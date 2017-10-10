@@ -51,13 +51,12 @@ You can also choose to run the Telepresence manually by starting a `Deployment` 
 
 The `Deployment` should only have 1 replica, and use the Telepresence different image:
 
-```yaml
-apiVersion: extensions/v1beta1
+<pre><code class="lang-yaml">apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   name: myservice
 spec:
-  replicas: 1  # <-- only one replica
+  replicas: 1  # only one replica
   template:
     metadata:
       labels:
@@ -65,8 +64,8 @@ spec:
     spec:
       containers:
       - name: myservice
-        image: datawire/telepresence-k8s:{{ book['version']) }}  # <-- new image
-```
+        image: datawire/telepresence-k8s:{{ book['version'] }}  # new image
+</code></pre>
 
 You should apply this file to your cluster:
 

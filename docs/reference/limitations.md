@@ -19,8 +19,7 @@ This can be a problem in cases where you are running multiple containers in a po
 The solution is to access the pod via its IP, rather than at `127.0.0.1`.
 You can have the pod IP configured as an environment variable `$MY_POD_IP` in the Deployment using the Kubernetes [Downward API](https://kubernetes.io/docs/tasks/configure-pod-container/environment-variable-expose-pod-information/):
 
-```yaml
-apiVersion: extensions/v1beta1
+<pre><code class="lang-yaml">apiVersion: extensions/v1beta1
 kind: Deployment
 spec:
   template:
@@ -33,4 +32,4 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
-```
+</code></pre>
