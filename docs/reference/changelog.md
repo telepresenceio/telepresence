@@ -1,5 +1,18 @@
 # Changelog
 
+#### 0.68 (Unreleased)
+
+Bug fixes:
+
+* Telepresence no longer crashes when the deployment has multi-line environment variables.
+  ([#301](https://github.com/datawire/telepresence/issues/301))
+* Telepresence now sets a RAM limit on its Kubernetes pods.
+  ([#287](https://github.com/datawire/telepresence/issues/287))
+
+Misc
+
+* [Telepresence documentation](https://www.telepresence.io/discussion/overview) uses GitBook.
+
 #### 0.67 (September 21, 2017)
 
 Bug fixes:
