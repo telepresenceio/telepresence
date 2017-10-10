@@ -79,8 +79,8 @@ def run_webserver(namespace=None):
             webserver_name,
             "--labels=telepresence=" + webserver_name,
             "--image=openshift/hello-openshift",
-            "--limits='cpu=100m,memory=256Mi'",
-            "--requests='cpu=25m,memory=150Mi'",
+            "--limits=cpu=100m,memory=256Mi",
+            "--requests=cpu=25m,memory=150Mi",
             "--port=8080",
             "--expose",
         ]
