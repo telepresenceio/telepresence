@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
       - name: servicename
-        image: datawire/telepresence-k8s:{{ site.data.version.version }}
+        image: datawire/telepresence-k8s:{{ book['version'] }}
         env:
         - name: MY_POD_IP
           valueFrom:

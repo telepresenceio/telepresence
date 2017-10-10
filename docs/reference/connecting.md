@@ -65,7 +65,7 @@ spec:
     spec:
       containers:
       - name: myservice
-        image: datawire/telepresence-k8s:{{ site.data.version.version }}  # <-- new image
+        image: datawire/telepresence-k8s:{{ book['version']) }}  # <-- new image
 ```
 
 You should apply this file to your cluster:
