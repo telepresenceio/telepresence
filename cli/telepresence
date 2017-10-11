@@ -1326,6 +1326,8 @@ def new_swapped_deployment(
     4. Adds TELEPRESENCE_NAMESERVER env variable, if requested.
     5. Runs as root, if requested.
     6. Sets terminationMessagePolicy.
+    7. Adds TELEPRESENCE_CONTAINER_NAMESPACE env variable so the forwarder does
+       not have to access the k8s API from within the pod.
 
     Returns dictionary that can be encoded to JSON and used with kubectl apply,
     and contents of swapped out container.
@@ -1369,6 +1371,17 @@ def new_swapped_deployment(
                 container["securityContext"] = {
                     "runAsUser": 0,
                 }
+            # Add namespace environment variable to support deployments using
+            # automountServiceAccountToken: false. To be used by forwarder.py
+            # in the k8s-proxy.
+            container.setdefault("env", []).append({
+                    "name": "TELEPRESENCE_CONTAINER_NAMESPACE",
+                    "valueFrom": {
+                        "fieldRef": {
+                            "fieldPath": "metadata.namespace"
+                        }
+                    }
+                })
             return new_deployment_json, old_container
 
     raise RuntimeError(
