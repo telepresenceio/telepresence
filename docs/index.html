@@ -179,11 +179,7 @@
 
             <div class="padding-top-60">
                 <h2 class="text-red text-uppercase text-md padding-bottom-20">How it works:</h2>
-                <p class="text-md font-light">Telepresence substitutes a proxy image for your normal container in the
-                    Kubernetes cluster. Your local code gets transparent access to the Kubernetes network by using
-                    <a target="_blank" href="https://www.datawire.io/code-injection-on-linux-and-macos/">LD_PRELOAD</a> to
-                    hijack TCP connections and reroute them through that proxy pod, bootstrapping off of kubectl
-                    port-forward. Volumes are proxied using sshfs.</p>
+                <p class="text-md font-light">Telepresence substitutes a two-way network proxy for your normal pod running in the Kubernetes cluster. This pod proxies data from your Kubernetes environment (e.g., TCP connections, environment variables, volumes) to the local process. The local process has its networking transparently overridden so that DNS calls and TCP connections are routed through the proxy to the remote Kubernetes cluster.</p>
             </div>
         </div>
     </div>
