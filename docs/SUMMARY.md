@@ -39,6 +39,7 @@
 * [Upgrading Telepresence](reference/upgrade.md)
 * [Usage Reporting](reference/usage_reporting.md)
 * [Community](reference/community.md)
+* [Related Projects](reference/related-projects.md)
 
 ## Need Help?
 
