@@ -2,6 +2,7 @@
   "title": "Telepresence: Fast, realistic local development for Kubernetes and OpenShift Origin microservices",
   "root": ".",
   "variables": {
+    "__comment": "Do not modify version line without modifying the corresponding line in .bumpversion.cfg",
     "version": "0.67",
     "baseUrl": "https://www.telepresence.io"
   },
