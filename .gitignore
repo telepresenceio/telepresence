@@ -5,9 +5,14 @@ __pycache__
 telepresence.log
 .mypy_cache
 *.pyc
+.hypothesis
 
-# IntelliJ IDEA
+# Secrets -- don't commit these!
+gcloud-service-key.json
+
+# Dev tools
 .idea
+.vscode
 
 # --- Docs ---
 =======
