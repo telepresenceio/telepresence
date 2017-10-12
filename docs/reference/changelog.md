@@ -1,6 +1,6 @@
 # Changelog
 
-#### 0.68 (Unreleased)
+#### 0.68 (October 12, 2017)
 
 Bug fixes:
 
@@ -8,6 +8,10 @@ Bug fixes:
   ([#301](https://github.com/datawire/telepresence/issues/301))
 * Telepresence now sets a RAM limit on its Kubernetes pods.
   ([#287](https://github.com/datawire/telepresence/issues/287))
+* Deployments that do not use the default service account (and thus don't automatically have access to service account credentials for the k8s API) are now supported.
+  Thanks to Dino Hensen for the patch.
+  ([#313](https://github.com/datawire/telepresence/pull/313), 
+  [#314](https://github.com/datawire/telepresence/pull/314))
 
 Misc
 
