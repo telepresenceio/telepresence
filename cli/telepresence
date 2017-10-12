@@ -1816,7 +1816,7 @@ def get_proxy_cidrs(
         )["items"]
         return [
             svc["spec"]["clusterIP"] for svc in services
-            if svc["spec"]["clusterIP"] != "None"
+            if "clusterIP" in svc["spec"] and svc["spec"]["clusterIP"] != "None"
         ]
 
     service_ips = get_service_ips()
