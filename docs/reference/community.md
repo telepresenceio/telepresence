@@ -24,8 +24,11 @@ In this video interview, Michael Hausenblas of Red Hat interviews Abhay Saxena, 
 ##### [Productive Dev Environments for Kubernetes](https://youtu.be/4cct9JgItYQ) - Philip Lombardi
 This talk from the NYC Kubernetes meetup covers strategies and trade-offs for setting up productive and realistic development environments for microservices and includes a demo of Telepresence. 
 
-##### [Running Spark Drivers with Telepresence](https://gist.github.com/natb1/6a9f17aa82aa56429c85514e8f14412a#file-running-spark-drivers-with-telepresence-md) - Nate Buesgens
+##### [Running Spark Drivers with Telepresence](https://www.datawire.io/running-spark-drivers-with-telepresence/) - Nate Buesgens
 The team at [vizual.ai](https://www.vizual.ai) uses Spark for analyzing and modeling clickstream data, Kubernetes for orchestrating their Spark cluster, and Telepresence to make the Spark application development workflow more efficient. 
+
+##### [Writing golang applications designed to run in Kubernetes](https://github.com/number101010/go-kubernetes-vscode-dev) - number101010 
+This repo is a template to get started writing golang applications designed to run in Kubernetes and uses Telepresence to mimic the in-cluster environment. 
 
 ###### If you're interested in sharing your use case for Telepresence, we'd love to hear it! You can reach out to us in the [Gitter chatroom](https://gitter.im/datawire/telepresence) or [submit a pull request](https://github.com/datawire/telepresence/pulls). 
 
