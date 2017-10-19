@@ -1814,9 +1814,10 @@ def get_proxy_cidrs(
             runner.
             get_output([runner.kubectl_cmd, "get", "services", "-o", "json"])
         )["items"]
+        # FIXME: Add test(s) here so we don't crash on, e.g., ExternalName
         return [
             svc["spec"]["clusterIP"] for svc in services
-            if svc["spec"]["clusterIP"] != "None"
+            if svc["spec"].get("clusterIP", "None") != "None"
         ]
 
     service_ips = get_service_ips()
