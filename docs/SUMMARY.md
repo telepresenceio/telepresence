@@ -6,6 +6,7 @@
 
 ## Tutorials
 
+* [Fast dev workflow with Docker/K8S](tutorials/docker.md)
 * [Debug a Kubernetes service locally](tutorials/kubernetes.md)
 * [Connect to a remote Kubernetes cluster](tutorials/kubernetes-client.md)
 * [Rapid development with Kubernetes](tutorials/kubernetes-rapid.md)
@@ -22,22 +23,24 @@
 
 * [Local development for GKE](https://cloud.google.com/community/tutorials/developing-services-with-k8s)
 * [Go support](howto/golang.md)
-* [Docker support](howto/docker.md)
 * [Volume access](howto/volumes.md)
 
 ## Reference
 
 * [Installing Telepresence](reference/install.md)
+* [Upgrading Telepresence](reference/upgrade.md)
 * [Proxying methods](reference/methods.md)
 * [Connecting to the cluster](reference/connecting.md)
 * [Running local processes](reference/running.md)
 * [What gets proxied](reference/proxying.md)
 * [Generic limitations & workarounds](reference/limitations.md)
 * [Windows support](reference/windows.md)
-* [Changelog](reference/changelog.md)
-* [Development info](reference/developing.md)
-* [Upgrading Telepresence](reference/upgrade.md)
 * [Usage Reporting](reference/usage_reporting.md)
+* [Changelog](reference/changelog.md)
+
+## Community
+
+* [Development info](reference/developing.md)
 * [Community](reference/community.md)
 * [Related Projects](reference/related-projects.md)
 
