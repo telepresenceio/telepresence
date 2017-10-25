@@ -4,7 +4,8 @@ Keeping development environments in sync is a constant pain. Containerizing your
 
 Telepresence lets you run a Docker container locally, while proxying it to your Kubernetes cluster. In this HOWTO, we'll walk through how to use Telepresence with a containerized Docker environment to build a fast development workflow.
 
-If you haven't already, make sure you [install Telepresence](reference/install).
+{% import "../macros.html" as macros %}
+{{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/", "kubectl", "Kubernetes", "top") }}
 
 ## Quick example
 
@@ -111,3 +112,7 @@ Telepresence will start a new proxy container, and then call `docker run` with w
 * Incoming connections to ports specified with `--expose`.
 
 Volumes and environment variables from the remote `Deployment` are also available in the container.
+
+{{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/", "kubectl", "Kubernetes", "bottom") }}
+
+{{ macros.tutorialFooter(page.title, file.path, book['baseUrl']) }}
