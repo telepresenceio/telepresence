@@ -14,7 +14,7 @@ We'll start with a quick example. Start by running a service in the cluster:
 $ kubectl run qotm --image=datawire/qotm:1.3 --port=5000 --expose
 $ kubectl get service qotm
 NAME        CLUSTER-IP   EXTERNAL-IP   PORT(S)    AGE
-qotm   10.0.0.12    <none>        8000/TCP   1m
+qotm        10.0.0.12    <none>        8000/TCP   1m
 ```
 
 It may take a minute or two for the pod running the server to be up and running, depending on how fast your cluster is.
@@ -49,13 +49,13 @@ In the repository is a [Dockerfile](https://github.com/datawire/qotm/blob/master
 Build the runtime environment:
 
 ```
+$ cd qotm
 $ docker build -t qotm-dev .
 ```
 
-We'll use Telepresence to swap the QOTM deployment with the local Docker image. Behind the scenes, Telepresence invokes `docker run`, so it supports any arguments you can pass to `docker run`. In this case, we're going to also mount our local directory to `/service` in your Docker container. We're going to change into the QOTM directory where we have the source for the service.
+We'll use Telepresence to swap the QOTM deployment with the local Docker image. Behind the scenes, Telepresence invokes `docker run`, so it supports any arguments you can pass to `docker run`. In this case, we're going to also mount our local directory to `/service` in your Docker container. Make sure your current workding directory is the `qotm` diretory, since we're going to mount that directly into the container.
 
 ```
-$ cd qotm
 $ telepresence --swap-deployment qotm --docker-run \
   --rm -it -v $(pwd):/service qotm-dev:latest
 ```
