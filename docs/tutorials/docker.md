@@ -4,6 +4,8 @@ Keeping development environments in sync is a constant pain. Containerizing your
 
 Telepresence lets you run a Docker container locally, while proxying it to your Kubernetes cluster. In this HOWTO, we'll walk through how to use Telepresence with a containerized Docker environment to build a fast development workflow.
 
+If you haven't already, make sure you [install Telepresence](reference/install).
+
 ## Quick example
 
 We'll start with a quick example. Start by running a service in the cluster:
