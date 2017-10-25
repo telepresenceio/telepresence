@@ -1,14 +1,8 @@
-# Docker support
+# Fast development workflow with Docker and Kubernetes
 
-Telepresence lets you directly proxy a Docker container. This approach gives a different set of tradeoffs versus the [other proxying methods](/reference/methods) supported by Telepresence.
+Keeping development environments in sync is a constant pain. Containerizing your development environment enables consistency across development machines, and also simplifies the process for onboarding a developer.
 
-In particular:
-
-* The container method uses container networking, instead of overriding host networking as the other methods. We believe that this may be more robust than the other methods.
-* The container method requires that you containerize your build/runtime environment. This requires a bit more setup, but also provides other benefits (e.g., greater consistency across developer machines). The other methods assume you run your service locally.
-
-In this HOWTO you'll learn to use Telepresence to proxy a Docker container.
-Processes running in the container will have transparent access to a remote Kubernetes or OpenShift cluster.
+Telepresence lets you run a Docker container locally, while proxying it to your Kubernetes cluster. In this HOWTO, we'll walk through how to use Telepresence with a containerized Docker environment to build a fast development workflow.
 
 ## Quick example
 
