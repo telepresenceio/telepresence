@@ -418,9 +418,12 @@ h1, h2, h3, h4, h5, h6, strong {
 }
 
 .github-buttons {
-    padding: 40px 0;
+    padding: 30px 0;
 }
-
+.blog-post-announcement {
+    text-align: center;
+    padding-bottom: 35px;
+}
 .code-box {
     margin-top: 25px;
     padding: 25px;
