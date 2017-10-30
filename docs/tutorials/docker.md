@@ -1,8 +1,10 @@
 # Fast development workflow with Docker and Kubernetes
 
-Keeping development environments in sync is a constant pain. Containerizing your development environment enables consistency across development machines, and also simplifies the process for onboarding a developer.
+Keeping development environments in sync is a constant pain. Containerizing your development environment enables your service to run in the exact same environment everywhere: from your laptop to production.
 
-Telepresence lets you run a Docker container locally, while proxying it to your Kubernetes cluster. In this HOWTO, we'll walk through how to use Telepresence with a containerized Docker environment to build a fast development workflow.
+Telepresence, in conjunction with a containerized development environment, gives the developer a fast development workflow in developing a multi-container application on Kubernetes.  Telepresence lets you run a Docker container locally, while proxying it to your Kubernetes cluster.
+
+In this HOWTO, we'll walk through how to use Telepresence with a containerized Docker environment to build a fast development workflow.
 
 {% import "../macros.html" as macros %}
 {{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/", "kubectl", "Kubernetes", "top") }}
