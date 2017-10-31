@@ -1,6 +1,6 @@
 # Changelog
 
-#### 0.69 (Unreleased)
+#### 0.69 (October 31, 2017)
 
 Bug fixes:
 
