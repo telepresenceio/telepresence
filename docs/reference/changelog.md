@@ -9,6 +9,11 @@ Bug fixes:
   ([#324](https://github.com/datawire/telepresence/pull/324),
   [#329](https://github.com/datawire/telepresence/pull/329))
 
+Misc:
+
+* The [anonymous usage information](usage_reporting) reported by Telepresence now includes the operation (e.g., "swap-deployment") and method (e.g., "vpn-tcp") used.
+  This will help us focus development resources.
+
 #### 0.68 (October 12, 2017)
 
 Bug fixes:

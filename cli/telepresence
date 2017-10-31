@@ -152,13 +152,15 @@ class Scout:
         return os.getenv("SCOUT_DISABLE", "0").lower() in {"1", "true", "yes"}
 
 
-def call_scout(kubectl_version, kube_cluster_version):
+def call_scout(kubectl_version, kube_cluster_version, operation, method):
     config_root = Path.home() / ".config" / "telepresence"
     config_root.mkdir(parents=True, exist_ok=True)
     id_file = config_root / 'id'
     scout_kwargs = dict(
         kubectl_version=kubectl_version,
-        kubernetes_version=kube_cluster_version
+        kubernetes_version=kube_cluster_version,
+        operation=operation,
+        method=method
     )
 
     try:
@@ -2246,7 +2248,20 @@ def main():
             kube_cluster_version = kubectl_version_output[1].split(": v")[1]
         except CalledProcessError as exc:
             kubectl_version = kube_cluster_version = "(error: {})".format(exc)
-        scouted = call_scout(kubectl_version, kube_cluster_version)
+        if args.deployment:
+            operation = "deployment"
+        elif args.new_deployment:
+            operation = "new_deployment"
+        elif args.swap_deployment:
+            operation = "swap_deployment"
+        else:
+            operation = "bad_args"
+        scouted = call_scout(
+            kubectl_version,
+            kube_cluster_version,
+            operation,
+            args.method
+        )
 
         # Make sure we have a Kubernetes context set either on command line or
         # in kubeconfig:
