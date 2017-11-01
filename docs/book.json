@@ -3,7 +3,7 @@
   "root": ".",
   "variables": {
     "__comment": "Do not modify version line without modifying the corresponding line in .bumpversion.cfg",
-    "version": "0.70",
+    "version": "0.71",
     "baseUrl": "https://www.telepresence.io"
   },
   "structure": {

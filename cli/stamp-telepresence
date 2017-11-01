@@ -10,7 +10,7 @@ import time
 
 # Don't modify next line without modifying corresponding line in
 # .bumpversion.cfg:
-__version__ = "0.70"
+__version__ = "0.71"
 
 
 def main():
