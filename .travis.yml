@@ -42,10 +42,13 @@ branches:
 before_install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update > /dev/null; brew cask install osxfuse; brew install python3 sshfs; fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt install sshfs conntrack; fi
+  # Newer Ruby needed for Package Cloud
+  - rvm install 2.1
   # Record some debugging info:
   - python --version
   - python2 --version
   - python3 --version
+  - ruby --version
   # Decrypt the service key:
   - openssl aes-256-cbc -K $encrypted_6168b41c1bb0_key -iv $encrypted_6168b41c1bb0_iv -in gcloud-service-key.json.enc -out gcloud-service-key.json -d
   # Make sure gcloud is installed:
