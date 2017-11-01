@@ -1,6 +1,6 @@
 # Changelog
 
-#### 0.70 (November 1, 2017)
+#### 0.71 (November 1, 2017)
 
 Bug fixes:
 
@@ -13,6 +13,7 @@ Misc:
 
 * The [anonymous usage information](usage_reporting) reported by Telepresence now includes the operation (e.g., "swap-deployment") and method (e.g., "vpn-tcp") used.
   This will help us focus development resources.
+* Telepresence is no longer packaged for Ubuntu 16.10 (Yakkety Yak) as that release has [reached end of life](http://fridge.ubuntu.com/2017/07/20/ubuntu-16-10-yakkety-yak-end-of-life-reached-on-july-20-2017/).
 
 #### 0.68 (October 12, 2017)
 

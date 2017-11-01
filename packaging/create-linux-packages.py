@@ -67,7 +67,7 @@ def main(version):
     if out.exists():
         rmtree(str(out))
     out.mkdir()
-    for ubuntu_distro in ["xenial", "yakkety", "zesty"]:
+    for ubuntu_distro in ["xenial", "zesty"]:
         distro_out = out / ubuntu_distro
         distro_out.mkdir()
         image = "alanfranz/fwd-ubuntu-{}:latest".format(ubuntu_distro)

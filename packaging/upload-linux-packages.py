@@ -52,7 +52,7 @@ class Uploader(object):
 
 def main(version):
     uploader = Uploader(version)
-    for release in ["xenial", "yakkety", "zesty"]:
+    for release in ["xenial", "zesty"]:
         uploader.upload_ubuntu(release)
     uploader.upload_fedora("25")
 
