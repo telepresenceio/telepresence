@@ -16,25 +16,16 @@ virtualenv:
 	virtualenv --python=python3 virtualenv
 	virtualenv/bin/pip install -r dev-requirements.txt
 	virtualenv/bin/pip install -r k8s-proxy/requirements.txt
+	virtualenv/bin/pip install --process-dependency-links -e .
 
-virtualenv/bin/sshuttle-telepresence: virtualenv
-	source virtualenv/bin/activate && packaging/build-sshuttle.py
-
-virtualenv/bin/stamp-telepresence: virtualenv cli/stamp-telepresence
-	cp -f cli/stamp-telepresence virtualenv/bin/
-
-setup: virtualenv/bin/sshuttle-telepresence virtualenv/bin/stamp-telepresence
+setup: virtualenv
 
 # Build Kubernetes side proxy image inside local Docker:
 build-k8s-proxy:
 	cd k8s-proxy && docker build . -t datawire/telepresence-k8s:$(VERSION)
 
 build-local:
-	cp -f virtualenv/bin/sshuttle-telepresence local-docker
-	cp -f cli/stamp-telepresence local-docker
-	cp -f cli/telepresence local-docker/telepresence.py
-	cd local-docker && docker build . -t datawire/telepresence-local:$(VERSION)
-	rm -f local-docker/sshuttle-telepresence local-docker/telepresence.py
+	docker build --file local-docker/Dockerfile . -t datawire/telepresence-local:$(VERSION)
 
 ## Development ##
 
