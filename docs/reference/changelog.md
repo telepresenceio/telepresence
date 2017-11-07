@@ -21,7 +21,7 @@ Bug fixes:
 
 * Telepresence no longer crashes when the deployment has multi-line environment variables.
   ([#301](https://github.com/datawire/telepresence/issues/301))
-* Telepresence now sets a RAM limit on its Kubernetes pods.
+* Telepresence now sets a CPU limit on its Kubernetes pods.
   ([#287](https://github.com/datawire/telepresence/issues/287))
 * Deployments that do not use the default service account (and thus don't automatically have access to service account credentials for the k8s API) are now supported.
   Thanks to Dino Hensen for the patch.
