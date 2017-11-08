@@ -61,5 +61,6 @@ def run_stamp():
         exit("Telepresence requires Python 3.5 or later.")
     main()
 
+
 if __name__ == '__main__':
     run_stamp()

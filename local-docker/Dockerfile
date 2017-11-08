@@ -1,3 +1,4 @@
+# docker build --file local-docker/Dockerfile .
 FROM alpine:3.6
 
 RUN apk add --no-cache python3 openssh-client iptables tini conntrack-tools git && \
