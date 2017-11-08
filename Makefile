@@ -16,9 +16,9 @@ virtualenv:
 	virtualenv --python=python3 virtualenv
 	virtualenv/bin/pip install -r dev-requirements.txt
 	virtualenv/bin/pip install -r k8s-proxy/requirements.txt
-	virtualenv/bin/pip install --process-dependency-links -e .
 
 setup: virtualenv
+	virtualenv/bin/pip install --process-dependency-links -e .
 
 # Build Kubernetes side proxy image inside local Docker:
 build-k8s-proxy:
