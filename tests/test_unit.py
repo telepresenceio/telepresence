@@ -9,7 +9,7 @@ import ipaddress
 from hypothesis import strategies as st, given, example
 import yaml
 
-from . import telepresence
+from telepresence import main as telepresence
 
 COMPLEX_DEPLOYMENT = """\
 apiVersion: extensions/v1beta1
