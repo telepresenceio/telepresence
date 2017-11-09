@@ -2118,7 +2118,12 @@ def run_local_command(
         # We skip .bashrc since it might e.g. have kubectl running to get bash
         # autocomplete, and Go programs don't like DYLD on macOS at least (see
         # https://github.com/datawire/telepresence/issues/125).
-        command = ["bash", "--norc"]
+        # If we have a .bashrc.telepresence we'll use that instead thou
+        rc_file = os.path.join(os.path.expanduser('~'), '.bashrc.telepresence')
+        if os.path.isfile(rc_file):
+            command = ["bash", "--rcfile", rc_file]
+        else:
+            command = ["bash", "--norc"]
     else:
         command = args.run
     if args.method == "inject-tcp":
