@@ -67,16 +67,10 @@ def main(version):
     if out.exists():
         rmtree(str(out))
     out.mkdir()
-    for ubuntu_distro in ["xenial", "zesty"]:
+    for ubuntu_distro in ["xenial", "zesty", "artful"]:
         distro_out = out / ubuntu_distro
         distro_out.mkdir()
-        image = "alanfranz/fwd-ubuntu-{}:latest".format(ubuntu_distro)
-        # At the moment we need custom image for zesty. This will be
-        # unnecessary once
-        # https://github.com/alanfranz/fpm-within-docker/pull/1 is merged:
-        if ubuntu_distro == "zesty":
-            image = "datawire/fpm-within-docker:zesty"
-
+        image = "alanfranz/fpm-within-docker:ubuntu-{}".format(ubuntu_distro)
         build_package(
             image, "deb", version, distro_out, [
                 "torsocks", "python3", "openssh-client", "sshfs", "socat",
@@ -84,11 +78,11 @@ def main(version):
             ]
         )
         test_package("ubuntu:" + ubuntu_distro, distro_out, "deb")
-    for fedora_distro in ["25"]:
+    for fedora_distro in ["26", "27"]:
         distro_out = out / ("fedora-" + fedora_distro)
         distro_out.mkdir()
         build_package(
-            "alanfranz/fwd-fedora-{}:latest".format(fedora_distro), "rpm",
+            "alanfranz/fpm-within-docker:fedora-{}".format(fedora_distro), "rpm",
             version, distro_out, [
                 "python3", "torsocks", "openssh-clients", "sshfs", "socat",
                 "conntrack-tools"
