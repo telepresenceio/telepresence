@@ -21,12 +21,6 @@ setup(
     version=get_version(),
     description=__doc__,
     packages=["telepresence"],
-    install_requires=[
-        "sshuttle-telepresence"
-    ],
-    dependency_links=[
-        "git+https://github.com/datawire/sshuttle.git@telepresence#egg=sshuttle-telepresence-0"
-    ],
     entry_points={
         "console_scripts": [
             "telepresence = telepresence.main:run_telepresence",
