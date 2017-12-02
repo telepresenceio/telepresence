@@ -12,18 +12,20 @@ set -e
 # root.
 trap 'chown -R --reference /build-inside/build-package.sh /out/' EXIT
 
-# Package only includes /usr/bin/telepresence:
-mkdir /tmp/build
-cp /source/cli/telepresence /tmp/build
-cp /source/cli/stamp-telepresence /tmp/build
-cp /source/virtualenv/bin/sshuttle-telepresence /tmp/build
+# XXX: Ubuntu needs software installed while Fedora is fine as-is
+python3 -V || (apt-get -qq update && apt-get -qq install python3-venv git)
+
+# Install in /usr/share/telepresence and /usr/bin
+PREFIX=/usr /source/install.sh
+
 cd /out
 fpm -t "$PACKAGE_TYPE" \
     --name telepresence \
     --version "$PACKAGE_VERSION" \
     --description "Local development for a remote Kubernetes cluster." \
     ${@/#/--depends } \
-    --prefix /usr/bin \
-    --chdir /tmp/build \
     --input-type dir \
-    telepresence stamp-telepresence sshuttle-telepresence
+    /usr/share/telepresence \
+    /usr/bin/sshuttle-telepresence \
+    /usr/bin/stamp-telepresence \
+    /usr/bin/telepresence
