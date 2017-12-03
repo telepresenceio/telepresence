@@ -16,9 +16,10 @@ virtualenv:
 	virtualenv --python=python3 virtualenv
 	virtualenv/bin/pip install -r dev-requirements.txt
 	virtualenv/bin/pip install -r k8s-proxy/requirements.txt
+	virtualenv/bin/pip install git+https://github.com/datawire/sshuttle.git@telepresence
 
 setup: virtualenv
-	virtualenv/bin/pip install --process-dependency-links -e .
+	virtualenv/bin/pip install -e .
 
 # Build Kubernetes side proxy image inside local Docker:
 build-k8s-proxy:
@@ -68,7 +69,7 @@ bumpversion: virtualenv
 	@echo "Please run: git push origin master --tags"
 
 # Will be run in Travis CI on tagged commits
-release: build-k8s-proxy build-local virtualenv/bin/sshuttle-telepresence
+release: build-k8s-proxy build-local virtualenv
 	docker push datawire/telepresence-k8s:$(VERSION)
 	docker push datawire/telepresence-local:$(VERSION)
 	env TELEPRESENCE_VERSION=$(VERSION) packaging/homebrew-package.sh
