@@ -10,13 +10,13 @@ class Telepresence < Formula
   depends_on "torsocks" => :run
   depends_on "sshfs" => :run
 
+  include Language::Python::Virtualenv
+
   def install
-    system "python3", "-m", "venv", "virtualenv"
-    system "virtualenv/bin/python", "-m", "pip", "install", "pex"
-    system "bash", "-c", "source virtualenv/bin/activate && packaging/build-sshuttle.py"
-    bin.install "cli/telepresence"
-    bin.install "cli/stamp-telepresence"
-    bin.install "virtualenv/bin/sshuttle-telepresence"
+    venv = virtualenv_create(libexec, "python3")
+    venv.pip_install "git+https://github.com/datawire/sshuttle.git@telepresence"
+    bin.install libexec/"bin/sshuttle-telepresence"
+    venv.pip_install_and_link buildpath
   end
 
   def caveats; <<-EOS.undent
