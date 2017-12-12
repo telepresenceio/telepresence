@@ -1968,6 +1968,7 @@ def run_docker_command(
     )
 
     # Update environment:
+    os.environ["TELEPRESENCE_ROOT"] = mount_dir
     remote_env["TELEPRESENCE_ROOT"] = mount_dir
     remote_env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
 
@@ -2039,7 +2040,8 @@ def run_docker_command(
     # Older versions of Docker don't have --init:
     if "--init" in runner.get_output(["docker", "run", "--help"]):
         docker_command += ["--init"]
-    docker_command += args.docker_run
+    for arg in args.docker_run:
+        docker_command += [os.path.expandvars(arg)]
     p = Popen(docker_command)
 
     def terminate_if_alive():
