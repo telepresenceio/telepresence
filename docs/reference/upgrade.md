@@ -7,7 +7,7 @@ On OS X you can upgrade Telepresence by running the following:
 brew upgrade datawire/blackbird/telepresence
 ```
 
-#### Ubuntu 16.04 or later
+#### Ubuntu
 Run the following to upgrade Telepresence:
 <button data-system="ubuntu" data-location="upgrade" class="button fa-pull-right copy-to-clipboard" data-clipboard-text="sudo apt update&#xa;sudo apt install --no-install-recommends telepresence">Copy to clipboard</button>
 ```shell
@@ -15,7 +15,7 @@ sudo apt update
 sudo apt install --no-install-recommends telepresence
 ```
 
-#### Fedora 25
+#### Fedora
 Run the following to upgrade Telepresence:
 <button data-system="fedora" data-location="upgrade" class="button fa-pull-right copy-to-clipboard" data-clipboard-text="sudo dnf upgrade telepresence">Copy to clipboard</button>
 ```shell
