@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from subprocess import run
 
+import distros
+
 PACKAGES = Path(__file__).absolute().parent / "out"
 
 
@@ -52,9 +54,10 @@ class Uploader(object):
 
 def main(version):
     uploader = Uploader(version)
-    for release in ["xenial", "zesty"]:
+    for release in distros.ubuntu:
         uploader.upload_ubuntu(release)
-    uploader.upload_fedora("25")
+    for release in distros.fedora:
+        uploader.upload_fedora(release)
 
 
 if __name__ == '__main__':

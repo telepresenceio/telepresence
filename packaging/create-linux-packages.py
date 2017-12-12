@@ -11,6 +11,8 @@ from shutil import rmtree
 from subprocess import run
 from pathlib import Path
 
+import distros
+
 THIS_DIRECTORY = Path(__file__).absolute().parent
 
 
@@ -67,7 +69,7 @@ def main(version):
     if out.exists():
         rmtree(str(out))
     out.mkdir()
-    for ubuntu_distro in ["xenial", "zesty", "artful"]:
+    for ubuntu_distro in distros.ubuntu:
         distro_out = out / ubuntu_distro
         distro_out.mkdir()
         image = "alanfranz/fpm-within-docker:ubuntu-{}".format(ubuntu_distro)
@@ -78,7 +80,7 @@ def main(version):
             ]
         )
         test_package("ubuntu:" + ubuntu_distro, distro_out, "deb")
-    for fedora_distro in ["26", "27"]:
+    for fedora_distro in distros.fedora:
         distro_out = out / ("fedora-" + fedora_distro)
         distro_out.mkdir()
         build_package(
