@@ -1,5 +1,18 @@
 # Changelog
 
+#### 0.72 (December 12, 2017)
+
+Misc:
+
+* The Telepresence source tree is organized more like a typical Python project.
+  This will allow for quicker development going forward.
+  ([#344](https://github.com/datawire/telepresence/pull/344))
+* Telepresence has native packages for Ubuntu Xenial, Zesty, and Artful, and for Fedora 26 and 27.
+  ([#269](https://github.com/datawire/telepresence/issues/269))
+* An install script is included for installing Telepresence from source.
+  ([#347](https://github.com/datawire/telepresence/issues/347))
+  
+
 #### 0.71 (November 1, 2017)
 
 Bug fixes:
