@@ -7,9 +7,9 @@ import os
 import sys
 import time
 
-# Don't modify next line without modifying corresponding line in
-# .bumpversion.cfg:
-__version__ = "0.71"
+import telepresence
+
+__version__ = telepresence.__version__
 
 
 def main():
