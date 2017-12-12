@@ -1,7 +1,5 @@
-#!/usr/bin/env python3
 """
-Telepresence CLI tool: local development environment for a remote
-Kubernetes cluster.
+Telepresence: local development environment for a remote Kubernetes cluster.
 """
 
 import argparse
@@ -36,14 +34,12 @@ from io import StringIO
 from urllib.parse import quote_plus
 from urllib import request
 
+import telepresence
+
+__version__ = telepresence.__version__
+
 unicode = str
 
-# Don't modify next line without modifying corresponding line in
-# .bumpversion.cfg:
-__version__ = "0.71"
-# Test runs can override version so we use specific custom Docker images:
-if os.environ.get("TELEPRESENCE_VERSION") is not None:
-    __version__ = os.environ["TELEPRESENCE_VERSION"]
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 TELEPRESENCE_REMOTE_IMAGE = "{}/telepresence-k8s:{}".format(
     REGISTRY, __version__
@@ -2402,7 +2398,12 @@ def main():
     go()
 
 
-if __name__ == '__main__':
+def run_telepresence():
+    """Run telepresence"""
     if sys.version_info[:2] < (3, 5):
         raise SystemExit("Telepresence requires Python 3.5 or later.")
     main()
+
+
+if __name__ == '__main__':
+    run_telepresence()

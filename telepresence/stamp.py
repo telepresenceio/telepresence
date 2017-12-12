@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Telepresence helper tool to time and origin stamp logfile lines.
 """
@@ -56,7 +55,12 @@ def main():
         out_flush()
 
 
-if __name__ == "__main__":
+def run_stamp():
+    """Run stamp-telepresence"""
     if sys.version_info[:2] < (3, 5):
-        exit("Python 3.5 or later required.")
+        exit("Telepresence requires Python 3.5 or later.")
     main()
+
+
+if __name__ == '__main__':
+    run_stamp()

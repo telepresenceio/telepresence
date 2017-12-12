@@ -14,17 +14,30 @@
 ```console
 $ git clone git@github.com:datawire/telepresence.git
 $ cd telepresence
-$ make setup
 $ export TELEPRESENCE_VERSION=$(make version)
+$ make setup
 $ export PATH=$PATH:$PWD/virtualenv/bin
 ```
+
+This installs Telepresence and its development requirements into a virtualenv in your source tree. Instead of putting the virtualenv bin directory at the end of your `PATH`, you can activate the virtualenv or place copies of the executables in some other directory that is on your `PATH`: `telepresence`, `stamp-telepresence`, and `sshuttle-telepresence`.
+
+The `TELEPRESENCE_VERSION` environment variable is computed from your local checkout to synchronize your changes to images used in Docker and in Kubernetes with what Telepresence tries to launch in Docker daemon and your remote cluster. If you modify that code, you must rebuild it.
+
+```console
+$ make build-local                # if you modify local-docker
+$ make build-k8s-proxy            # if you modify k8s-proxy
+$ make build-k8s-proxy-minikube   #  ... and you use Minikube
+$ make build-k8s-proxy-minishift  #  ... and you use Minishift
+```
+
+If your cluster is remote, you also need to push your images. FIXME: How?
 
 ### Coding standard
 
 Formatting is enforced by the installed `yapf` tool; to reformat the code, you can do:
 
 ```console
-$ virtualenv/bin/yapf cli/telepresence
+$ virtualenv/bin/yapf -i telepresence
 ```
 
 ### Releasing Telepresence
@@ -83,6 +96,8 @@ For example, to run all tests containing the string "fromcluster" and to exit im
 See `py.test --help` for other options you might want to set in `TELEPRESENCE_TESTS`.
 
 ### Running a local copy of `telepresence`
+
+FIXME: This is out-of-date. The above section of setting up a development environment has the correct info, but lacks a clear example like this section has.
 
 During local development, typically against minikube, you will want to manually run `telepresence` you are working on.
 You need to:

@@ -1,0 +1,7 @@
+.git
+docs/node_modules
+docs/_book
+docs/.bundle
+virtualenv
+*/__pycache__
+*cache*

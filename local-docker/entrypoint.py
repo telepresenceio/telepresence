@@ -42,7 +42,7 @@ from time import time, sleep
 
 # This is cli/telepresence, being used as a library. The way it's packaged is a
 # hack, should fix that someday.
-from telepresence import (
+from telepresence.main import (
     Runner, Subprocesses, SSH, wait_for_exit, expose_local_services
 )
 
