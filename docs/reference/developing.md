@@ -37,7 +37,7 @@ If your cluster is remote, you also need to push your images. FIXME: How?
 Formatting is enforced by the installed `yapf` tool; to reformat the code, you can do:
 
 ```console
-$ virtualenv/bin/yapf -i telepresence
+$ virtualenv/bin/yapf -r -i telepresence
 ```
 
 ### Releasing Telepresence
