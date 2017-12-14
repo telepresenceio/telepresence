@@ -11,6 +11,8 @@ SERVICE_KEY=gcloud-service-key.json
 
 if [ ! -e "${SERVICE_KEY}" ]; then
     echo "Provide gcloud service account key in ``${SERVICE_KEY}``"
+    echo "Obtain one from GCP Console:"
+    echo "    APIs & Services > Credentials > Create credentials > Service account key"
     exit 1
 fi
 
