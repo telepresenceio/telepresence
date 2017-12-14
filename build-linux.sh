@@ -4,6 +4,11 @@
 
 set -eEx
 
+# Attempt to get credentials cached early on while the user is still looking
+# at the terminal.  They'll be required later on during the test suite run and
+# the prompt is likely to be buried in test output at that point.
+sudo echo -n
+
 export SCOUT_DISABLE=1
 export PROJECT_NAME=datawireio
 export CLUSTER_NAME=telepresence-testing
@@ -46,8 +51,17 @@ docker push "${TELEPRESENCE_REGISTRY}/telepresence-k8s:${TELEPRESENCE_VERSION}"
 # Run tests
 #export TELEPRESENCE_TESTS="-xs"
 export TELEPRESENCE_TESTS="-xs -k fromcluster"
-#env TELEPRESENCE_METHOD=container ./ci/test.sh
+
+# Refresh the credentials
+# sudo echo -n
+# env TELEPRESENCE_METHOD=container ./ci/test.sh
+
+# Refresh the credentials
+sudo echo -n
 env TELEPRESENCE_METHOD=inject-tcp ./ci/test.sh
+
+# Refresh the credentials
+sudo echo -n
 env TELEPRESENCE_METHOD=vpn-tcp ./ci/test.sh
 
 # Cleanup
