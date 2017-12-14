@@ -56,10 +56,10 @@ SUDO_FOR_DOCKER = os.path.exists("/var/run/docker.sock") and not os.access(
     "/var/run/docker.sock", os.W_OK
 )
 
-
 # -----------------------------------------------------------------------------
 # Usage Tracking vvvv
 # -----------------------------------------------------------------------------
+
 
 class Scout:
     def __init__(self, app, version, install_id, **kwargs):
@@ -119,8 +119,8 @@ class Scout:
 
     def create_user_agent(self):
         result = "{0}/{1} ({2}; {3}; python {4})".format(
-            self.app, self.version,
-            platform.system(), platform.release(), platform.python_version()
+            self.app, self.version, platform.system(), platform.release(),
+            platform.python_version()
         ).lower()
 
         return result
@@ -270,9 +270,9 @@ class handle_unexpected_errors(object):
                 if self.logfile != "-":
                     print(
                         "And here are the last few lines of the logfile "
-                        "(see {} for the complete logs):\n\n".
-                        format(self.logfile) +
-                        "\n".join(logs.splitlines()[-20:]) + "\n"
+                        "(see {} for the complete logs):\n\n".format(
+                            self.logfile
+                        ) + "\n".join(logs.splitlines()[-20:]) + "\n"
                     )
 
                 if input(
@@ -290,8 +290,7 @@ class handle_unexpected_errors(object):
                             sys.argv, __version__, sys.version,
                             safe_output([
                                 "kubectl", "version", "--short", "--client"
-                            ]),
-                            safe_output(["oc", "version"]),
+                            ]), safe_output(["oc", "version"]),
                             safe_output(["uname", "-a"]), error, logs[-1000:]
                         )[:4000]
                     )
@@ -354,16 +353,13 @@ class Runner(object):
         kwargs["stdout"] = PIPE
         kwargs["stderr"] = STDOUT
         process = Popen(*args, **kwargs)
-        Popen(
-            [
-                "stamp-telepresence",
-                "--id", "{} |".format(track),
-                "--start-time", str(self.start_time)
-            ],
-            stdin=process.stdout,
-            stdout=self.logfile,
-            stderr=self.logfile
-        )
+        Popen([
+            "stamp-telepresence", "--id", "{} |".format(track), "--start-time",
+            str(self.start_time)
+        ],
+              stdin=process.stdout,
+              stdout=self.logfile,
+              stderr=self.logfile)
         if in_data:
             process.communicate(in_data, timeout=kwargs.get("timeout"))
         return process
@@ -719,10 +715,7 @@ class RemoteInfo(object):
 
 
 def _get_remote_env(
-    runner: Runner,
-    context: str,
-    namespace: str,
-    pod_name: str,
+    runner: Runner, context: str, namespace: str, pod_name: str,
     container_name: str
 ) -> Dict[str, str]:
     """Get the environment variables in the remote pod."""
@@ -775,7 +768,7 @@ def get_deployment_json(
     context: str,
     namespace: str,
     deployment_type: str,
-    run_id: Optional[str]=None,
+    run_id: Optional[str] = None,
 ) -> Dict:
     """Get the decoded JSON for a deployment.
 
@@ -814,8 +807,9 @@ def get_deployment_json(
             )["items"][0]
     except CalledProcessError as e:
         raise SystemExit(
-            "Failed to find Deployment '{}': {}".
-            format(deployment_name, str(e.stdout, "utf-8"))
+            "Failed to find Deployment '{}': {}".format(
+                deployment_name, str(e.stdout, "utf-8")
+            )
         )
 
 
@@ -825,7 +819,7 @@ def get_remote_info(
     context: str,
     namespace: str,
     deployment_type: str,
-    run_id: Optional[str]=None,
+    run_id: Optional[str] = None,
 ) -> RemoteInfo:
     """
     Given the deployment name, return a RemoteInfo object.
@@ -856,11 +850,13 @@ def get_remote_info(
             name = pod["metadata"]["name"]
             phase = pod["status"]["phase"]
             runner.write(
-                "Checking {} (phase {})...\n".
-                format(pod["metadata"].get("labels"), phase)
+                "Checking {} (phase {})...\n".format(
+                    pod["metadata"].get("labels"), phase
+                )
             )
-            if not set(expected_metadata.get("labels", {}).items(
-            )).issubset(set(pod["metadata"].get("labels", {}).items())):
+            if not set(expected_metadata.get("labels", {}).items()).issubset(
+                set(pod["metadata"].get("labels", {}).items())
+            ):
                 runner.write("Labels don't match.\n")
                 continue
             # Metadata for Deployment will hopefully have a namespace. If not,
@@ -923,7 +919,8 @@ class Subprocesses(object):
         self.subprocesses = {}  # type: Dict[Popen,Callable]
         atexit.register(self.killall)
 
-    def append(self, process: Popen, killer: Optional[Callable]=None) -> None:
+    def append(self, process: Popen,
+               killer: Optional[Callable] = None) -> None:
         """
         Register another subprocess to be shutdown, with optional callable that
         will kill it.
@@ -961,14 +958,14 @@ class SSH(object):
     """Run ssh to k8s-proxy with appropriate arguments."""
 
     def __init__(
-        self, runner: Runner, port: int, host: str="localhost"
+        self, runner: Runner, port: int, host: str = "localhost"
     ) -> None:
         self.runner = runner
         self.port = port
         self.host = host
 
     def command(
-        self, additional_args: List[str], prepend_arguments: List[str]=[]
+        self, additional_args: List[str], prepend_arguments: List[str] = []
     ) -> List[str]:
         """
         Return command line argument list for running ssh.
@@ -1076,8 +1073,9 @@ def expose_local_services(
                 file=sys.stderr
             )
         processes.append(
-            ssh.
-            popen(["-R", "*:{}:127.0.0.1:{}".format(remote_port, local_port)])
+            ssh.popen([
+                "-R", "*:{}:127.0.0.1:{}".format(remote_port, local_port)
+            ])
         )
     if output:
         print("", file=sys.stderr)
@@ -1274,8 +1272,8 @@ def swap_deployment(runner: Runner,
         # container attributes in the pod spec will not be removed. so we
         # delete and then recreate.
         runner.check_kubectl(
-            args.context,
-            args.namespace, ["delete", "deployment", deployment_name]
+            args.context, args.namespace,
+            ["delete", "deployment", deployment_name]
         )
         runner.check_kubectl(
             args.context,
@@ -1373,13 +1371,14 @@ def new_swapped_deployment(
             # automountServiceAccountToken: false. To be used by forwarder.py
             # in the k8s-proxy.
             container.setdefault("env", []).append({
-                    "name": "TELEPRESENCE_CONTAINER_NAMESPACE",
-                    "valueFrom": {
-                        "fieldRef": {
-                            "fieldPath": "metadata.namespace"
-                        }
+                "name":
+                "TELEPRESENCE_CONTAINER_NAMESPACE",
+                "valueFrom": {
+                    "fieldRef": {
+                        "fieldPath": "metadata.namespace"
                     }
-                })
+                }
+            })
             return new_deployment_json, old_container
 
     raise RuntimeError(
@@ -1447,8 +1446,12 @@ def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
                                                              ][0]["name"]
 
     new_rc_json, orig_container_json = new_swapped_deployment(
-        rc_json, container_name, run_id, TELEPRESENCE_REMOTE_IMAGE,
-        args.method == "vpn-tcp" and args.in_local_vm, False,
+        rc_json,
+        container_name,
+        run_id,
+        TELEPRESENCE_REMOTE_IMAGE,
+        args.method == "vpn-tcp" and args.in_local_vm,
+        False,
     )
     apply_json(new_rc_json)
     return deployment_name, run_id, orig_container_json
@@ -1735,9 +1738,7 @@ def covering_cidr(ips: List[str]) -> str:
 
 
 def get_proxy_cidrs(
-    runner: Runner,
-    args: argparse.Namespace,
-    remote_info: RemoteInfo,
+    runner: Runner, args: argparse.Namespace, remote_info: RemoteInfo,
     service_address: str
 ) -> List[str]:
     """
@@ -1772,22 +1773,25 @@ def get_proxy_cidrs(
         raise SystemExit(
             "We failed to do a DNS lookup inside Kubernetes for the "
             "hostname(s) you listed in "
-            "--also-proxy ({}). Maybe you mistyped one of them?".
-            format(", ".join(args.also_proxy))
+            "--also-proxy ({}). Maybe you mistyped one of them?".format(
+                ", ".join(args.also_proxy)
+            )
         )
 
     # Get pod IPs from nodes if possible, otherwise use pod IPs as heuristic:
     try:
         nodes = json.loads(
-            runner.
-            get_output([runner.kubectl_cmd, "get", "nodes", "-o", "json"])
+            runner.get_output([
+                runner.kubectl_cmd, "get", "nodes", "-o", "json"
+            ])
         )["items"]
     except CalledProcessError as e:
         runner.write("Failed to get nodes: {}".format(e))
         # Fallback to using pod IPs:
         pods = json.loads(
-            runner.
-            get_output([runner.kubectl_cmd, "get", "pods", "-o", "json"])
+            runner.get_output([
+                runner.kubectl_cmd, "get", "pods", "-o", "json"
+            ])
         )["items"]
         pod_ips = []
         for pod in pods:
@@ -1809,8 +1813,9 @@ def get_proxy_cidrs(
     # to ensure some coverage of the IP range:
     def get_service_ips():
         services = json.loads(
-            runner.
-            get_output([runner.kubectl_cmd, "get", "services", "-o", "json"])
+            runner.get_output([
+                runner.kubectl_cmd, "get", "services", "-o", "json"
+            ])
         )["items"]
         # FIXME: Add test(s) here so we don't crash on, e.g., ExternalName
         return [
@@ -1840,23 +1845,20 @@ def get_proxy_cidrs(
         ])
 
     if sys.stderr.isatty():
-        print("Guessing that Services IP range is {}. Services started after"
-              " this point will be inaccessible if are outside this range;"
-              " restart telepresence if you can't access a "
-              "new Service.\n".format(
-                  service_cidr),
-              file=sys.stderr)
+        print(
+            "Guessing that Services IP range is {}. Services started after"
+            " this point will be inaccessible if are outside this range;"
+            " restart telepresence if you can't access a "
+            "new Service.\n".format(service_cidr),
+            file=sys.stderr
+        )
 
     return list(result)
 
 
 def connect_sshuttle(
-    runner: Runner,
-    remote_info: RemoteInfo,
-    args: argparse.Namespace,
-    subprocesses: Subprocesses,
-    env: Dict[str, str],
-    ssh: SSH
+    runner: Runner, remote_info: RemoteInfo, args: argparse.Namespace,
+    subprocesses: Subprocesses, env: Dict[str, str], ssh: SSH
 ):
     """Connect to Kubernetes using sshuttle."""
     # Make sure we have sudo credentials by doing a small sudo in advance
@@ -1986,7 +1988,8 @@ def run_docker_command(
         runner.popen(
             docker_runify([
                 "--rm", "--privileged", "--name=" + name,
-                TELEPRESENCE_LOCAL_IMAGE, "proxy", json.dumps(config)
+                TELEPRESENCE_LOCAL_IMAGE, "proxy",
+                json.dumps(config)
             ])
         ), make_docker_kill(runner, name)
     )
@@ -2080,12 +2083,8 @@ def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
 
 
 def run_local_command(
-    runner: Runner,
-    remote_info: RemoteInfo,
-    args: argparse.Namespace,
-    env_overrides: Dict[str, str],
-    subprocesses: Subprocesses,
-    socks_port: int,
+    runner: Runner, remote_info: RemoteInfo, args: argparse.Namespace,
+    env_overrides: Dict[str, str], subprocesses: Subprocesses, socks_port: int,
     ssh: SSH
 ) -> None:
     """--run-shell/--run support, run command locally."""
@@ -2094,9 +2093,8 @@ def run_local_command(
 
     # Don't use runner.popen() since we want to give program access to current
     # stdout and stderr if it wants it.
-    env["PROMPT_COMMAND"] = (
-        'PS1="@{}|$PS1";unset PROMPT_COMMAND'.format(args.context)
-    )
+    env["PROMPT_COMMAND"
+        ] = ('PS1="@{}|$PS1";unset PROMPT_COMMAND'.format(args.context))
 
     # Inject replacements for unsupported tools like ping:
     unsupported_tools_path = get_unsupported_tools(args.method != "inject-tcp")
@@ -2171,7 +2169,9 @@ Logs:
 """
 
 
-def require_command(runner: Runner, command: str, message: Optional[str]=None):
+def require_command(
+    runner: Runner, command: str, message: Optional[str] = None
+):
     if message is None:
         message = "Please install " + command
     try:
@@ -2253,10 +2253,7 @@ def main():
         else:
             operation = "bad_args"
         scouted = call_scout(
-            kubectl_version,
-            kube_cluster_version,
-            operation,
-            args.method
+            kubectl_version, kube_cluster_version, operation, args.method
         )
 
         # Make sure we have a Kubernetes context set either on command line or
@@ -2302,8 +2299,9 @@ def main():
         runner = Runner.open(args.logfile, kubectl_or_oc(server), args.verbose)
         runner.write("Scout info: {}\n".format(scouted))
         runner.write(
-            "Context: {}, namespace: {}, kubectl_command: {}\n".
-            format(args.context, args.namespace, runner.kubectl_cmd)
+            "Context: {}, namespace: {}, kubectl_command: {}\n".format(
+                args.context, args.namespace, runner.kubectl_cmd
+            )
         )
 
         # Figure out if we need capability that allows for ports < 1024:
@@ -2356,11 +2354,9 @@ def main():
             raise SystemExit(1)
         # Make sure we can run openssh:
         try:
-            version = runner.get_output(
-                ["ssh", "-V"],
-                stdin=DEVNULL,
-                stderr=STDOUT
-            )
+            version = runner.get_output(["ssh", "-V"],
+                                        stdin=DEVNULL,
+                                        stderr=STDOUT)
             if not version.startswith("OpenSSH"):
                 raise SystemExit(
                     "'ssh' is not the OpenSSH client, apparently."
