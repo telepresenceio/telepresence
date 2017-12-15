@@ -5,47 +5,46 @@ Telepresence: local development environment for a remote Kubernetes cluster.
 import argparse
 import atexit
 from copy import deepcopy
-import ipaddress
 import json
 import os
 import os.path
 import re
 import signal
-import socket
 import ssl
 import sys
-import platform
 from typing import List, Set, Tuple, Dict, Optional, Callable
 from functools import wraps
 from shutil import rmtree, copy, which
 from subprocess import (
-    check_output, Popen, CalledProcessError, TimeoutExpired, STDOUT, PIPE,
-    DEVNULL
+    check_output, Popen, CalledProcessError, STDOUT, DEVNULL
 )
 from tempfile import mkdtemp, NamedTemporaryFile
-from time import sleep, time, ctime
+from time import sleep, time
 from traceback import print_exc
 from urllib.error import HTTPError
 from urllib.request import urlopen
-from pathlib import Path
 from uuid import uuid4
 import webbrowser
 from io import StringIO
 from urllib.parse import quote_plus
-from urllib import request
 
 import telepresence
-
-__version__ = telepresence.__version__
-
-unicode = str
+from telepresence.cleanup import kill_process, Subprocesses, wait_for_exit
+from telepresence.remote import RemoteInfo, get_remote_info, \
+    get_deployment_json
+from telepresence.runner import Runner, read_logs
+from telepresence.ssh import SSH
+from telepresence.usage_tracking import call_scout
+from telepresence.utilities import random_name, find_free_port, \
+    get_alternate_nameserver
+from telepresence.vpn import get_proxy_cidrs, connect_sshuttle
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 TELEPRESENCE_REMOTE_IMAGE = "{}/telepresence-k8s:{}".format(
-    REGISTRY, __version__
+    REGISTRY, telepresence.__version__
 )
 TELEPRESENCE_LOCAL_IMAGE = "{}/telepresence-local:{}".format(
-    REGISTRY, __version__
+    REGISTRY, telepresence.__version__
 )
 
 # IP that shouldn't be in use on Internet, *or* local networks:
@@ -57,185 +56,6 @@ SUDO_FOR_DOCKER = os.path.exists("/var/run/docker.sock") and not os.access(
 )
 
 
-# -----------------------------------------------------------------------------
-# Usage Tracking vvvv
-# -----------------------------------------------------------------------------
-
-class Scout:
-    def __init__(self, app, version, install_id, **kwargs):
-        self.app = Scout.__not_blank("app", app)
-        self.version = Scout.__not_blank("version", version)
-        self.install_id = Scout.__not_blank("install_id", install_id)
-        self.metadata = kwargs if kwargs is not None else {}
-        self.user_agent = self.create_user_agent()
-
-        # scout options; controlled via env vars
-        self.scout_host = os.getenv("SCOUT_HOST", "kubernaut.io")
-        self.use_https = os.getenv("SCOUT_HTTPS",
-                                   "1").lower() in {"1", "true", "yes"}
-        self.disabled = Scout.__is_disabled()
-
-    def report(self, **kwargs):
-        result = {'latest_version': self.version}
-
-        if self.disabled:
-            return result
-
-        merged_metadata = Scout.__merge_dicts(self.metadata, kwargs)
-
-        headers = {
-            'User-Agent': self.user_agent,
-            'Content-Type': 'application/json'
-        }
-
-        payload = {
-            'application': self.app,
-            'version': self.version,
-            'install_id': self.install_id,
-            'user_agent': self.create_user_agent(),
-            'metadata': merged_metadata
-        }
-
-        url = ("https://" if self.use_https else
-               "http://") + "{}/scout".format(self.scout_host).lower()
-        try:
-            req = request.Request(
-                url,
-                data=json.dumps(payload).encode("UTF-8"),
-                headers=headers,
-                method="POST"
-            )
-            resp = request.urlopen(req)
-            if resp.code / 100 == 2:
-                result = Scout.__merge_dicts(
-                    result, json.loads(resp.read().decode("UTF-8"))
-                )
-        except Exception as e:
-            # If scout is down or we are getting errors just proceed as if
-            # nothing happened. It should not impact the user at all.
-            result["FAILED"] = str(e)
-
-        return result
-
-    def create_user_agent(self):
-        result = "{0}/{1} ({2}; {3}; python {4})".format(
-            self.app, self.version,
-            platform.system(), platform.release(), platform.python_version()
-        ).lower()
-
-        return result
-
-    @staticmethod
-    def __not_blank(name, value):
-        if value is None or str(value).strip() == "":
-            raise ValueError(
-                "Value for '{}' is blank, empty or None".format(name)
-            )
-
-        return value
-
-    @staticmethod
-    def __merge_dicts(x, y):
-        z = x.copy()
-        z.update(y)
-        return z
-
-    @staticmethod
-    def __is_disabled():
-        if str(os.getenv("TRAVIS_REPO_SLUG")).startswith("datawire/"):
-            return True
-
-        return os.getenv("SCOUT_DISABLE", "0").lower() in {"1", "true", "yes"}
-
-
-def call_scout(kubectl_version, kube_cluster_version, operation, method):
-    config_root = Path.home() / ".config" / "telepresence"
-    config_root.mkdir(parents=True, exist_ok=True)
-    id_file = config_root / 'id'
-    scout_kwargs = dict(
-        kubectl_version=kubectl_version,
-        kubernetes_version=kube_cluster_version,
-        operation=operation,
-        method=method
-    )
-
-    try:
-        with id_file.open('x') as f:
-            install_id = str(uuid4())
-            f.write(install_id)
-            scout_kwargs["new_install"] = True
-    except FileExistsError:
-        with id_file.open('r') as f:
-            install_id = f.read()
-            scout_kwargs["new_install"] = False
-
-    scout = Scout("telepresence", __version__, install_id)
-
-    return scout.report(**scout_kwargs)
-
-
-# -----------------------------------------------------------------------------
-# Usage Tracking ^^^^
-# -----------------------------------------------------------------------------
-
-
-def random_name() -> str:
-    """Return a random name for a container."""
-    return "telepresence-{}-{}".format(time(), os.getpid()).replace(".", "-")
-
-
-def find_free_port() -> int:
-    """
-    Find a port that isn't in use.
-
-    XXX race condition-prone.
-    """
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    try:
-        s.bind(("", 0))
-        return s.getsockname()[1]
-    finally:
-        s.close()
-
-
-def get_resolv_conf_namservers() -> List[str]:
-    """Return list of namserver IPs in /etc/resolv.conf."""
-    result = []
-    with open("/etc/resolv.conf") as f:
-        for line in f:
-            parts = line.lower().split()
-            if len(parts) >= 2 and parts[0] == 'nameserver':
-                result.append(parts[1])
-    return result
-
-
-def get_alternate_nameserver() -> str:
-    """Get a public nameserver that isn't in /etc/resolv.conf."""
-    banned = get_resolv_conf_namservers()
-    # From https://www.lifewire.com/free-and-public-dns-servers-2626062 -
-    public = [
-        "8.8.8.8", "8.8.4.4", "216.146.35.35", "216.146.36.36", "209.244.0.3",
-        "209.244.0.4", "64.6.64.6", "64.6.65.6"
-    ]
-    for nameserver in public:
-        if nameserver not in banned:
-            return nameserver
-    raise RuntimeError("All known public nameservers are in /etc/resolv.conf.")
-
-
-def read_logs(logfile) -> str:
-    """Read logfile, return string."""
-    logs = "Not available"
-    if logfile != "-" and os.path.exists(logfile):
-        try:
-            with open(logfile, "r") as logfile:
-                logs = logfile.read()
-        except Exception as e:
-            logs += ", error ({})".format(e)
-    return logs
-
-
 class handle_unexpected_errors(object):
     """Decorator that catches unexpected errors."""
 
@@ -245,7 +65,7 @@ class handle_unexpected_errors(object):
     def __call__(self, f):
         def safe_output(args):
             try:
-                return unicode(check_output(args), "utf-8").strip()
+                return str(check_output(args), "utf-8").strip()
             except Exception as e:
                 return "(error: {})".format(e)
 
@@ -287,7 +107,7 @@ class handle_unexpected_errors(object):
                     body = quote_plus(
                         # Overly long URLs won't work:
                         BUG_REPORT_TEMPLATE.format(
-                            sys.argv, __version__, sys.version,
+                            sys.argv, telepresence.__version__, sys.version,
                             safe_output([
                                 "kubectl", "version", "--short", "--client"
                             ]),
@@ -300,133 +120,6 @@ class handle_unexpected_errors(object):
                     raise SystemExit(1)
 
         return call_f
-
-
-class Runner(object):
-    """Context for running subprocesses."""
-
-    def __init__(self, logfile, kubectl_cmd: str, verbose: bool) -> None:
-        """
-        :param logfile: file-like object to write logs to.
-        :param kubectl_cmd: Command to run for kubectl, either "kubectl" or
-            "oc" (for OpenShift Origin).
-        :param verbose: Whether subcommand should run in verbose mode.
-        """
-        self.logfile = logfile
-        self.kubectl_cmd = kubectl_cmd
-        self.verbose = verbose
-        self.start_time = time()
-        self.counter = 0
-        self.write("Telepresence launched at {}".format(ctime()))
-        self.write("  {}".format(sys.argv))
-
-    @classmethod
-    def open(cls, logfile_path, kubectl_cmd: str, verbose: bool):
-        """
-        :return: File-like object for the given logfile path.
-        """
-        if logfile_path == "-":
-            return cls(sys.stdout, kubectl_cmd, verbose)
-        else:
-            # Wipe existing logfile, open using append mode so multiple
-            # processes don't clobber each other's outputs, and use line
-            # buffering so data gets written out immediately.
-            if os.path.exists(logfile_path):
-                open(logfile_path, "w").close()
-            return cls(
-                open(logfile_path, "a", buffering=1), kubectl_cmd, verbose
-            )
-
-    def write(self, message: str) -> None:
-        """Write a message to the log."""
-        message = message.rstrip()
-        line = "{:6.1f} TL | {}\n".format(time() - self.start_time, message)
-        self.logfile.write(line)
-        self.logfile.flush()
-
-    def launch_command(self, track, *args, **kwargs) -> Popen:
-        """Call a command, generate stamped, logged output."""
-        kwargs = kwargs.copy()
-        in_data = kwargs.get("input")
-        if "input" in kwargs:
-            del kwargs["input"]
-            kwargs["stdin"] = PIPE
-        kwargs["stdout"] = PIPE
-        kwargs["stderr"] = STDOUT
-        process = Popen(*args, **kwargs)
-        Popen(
-            [
-                "stamp-telepresence",
-                "--id", "{} |".format(track),
-                "--start-time", str(self.start_time)
-            ],
-            stdin=process.stdout,
-            stdout=self.logfile,
-            stderr=self.logfile
-        )
-        if in_data:
-            process.communicate(in_data, timeout=kwargs.get("timeout"))
-        return process
-
-    def check_call(self, *args, **kwargs):
-        """Run a subprocess, make sure it exited with 0."""
-        self.counter = track = self.counter + 1
-        self.write("[{}] Running: {}... ".format(track, args))
-        if "input" not in kwargs and "stdin" not in kwargs:
-            kwargs["stdin"] = DEVNULL
-        process = self.launch_command(track, *args, **kwargs)
-        process.wait()
-        retcode = process.poll()
-        if retcode:
-            self.write("[{}] exit {}.".format(track, retcode))
-            raise CalledProcessError(retcode, args)
-        self.write("[{}] ran.".format(track))
-
-    def get_output(self, *args, stderr=None, **kwargs) -> str:
-        """Return (stripped) command result as unicode string."""
-        if stderr is None:
-            stderr = self.logfile
-        self.counter = track = self.counter + 1
-        self.write("[{}] Capturing: {}...".format(track, args))
-        kwargs["stdin"] = DEVNULL
-        kwargs["stderr"] = stderr
-        result = unicode(check_output(*args, **kwargs).strip(), "utf-8")
-        self.write("[{}] captured.".format(track))
-        return result
-
-    def popen(self, *args, stdin=DEVNULL, **kwargs) -> Popen:
-        """Return Popen object."""
-        self.counter = track = self.counter + 1
-        self.write("[{}] Launching: {}...".format(track, args))
-        kwargs["stdin"] = stdin
-        return self.launch_command(track, *args, **kwargs)
-
-    def kubectl(self, context: str, namespace: str,
-                args: List[str]) -> List[str]:
-        """Return command-line for running kubectl."""
-        result = [self.kubectl_cmd]
-        if self.verbose:
-            result.append("--v=4")
-        result.extend(["--context", context])
-        result.extend(["--namespace", namespace])
-        result += args
-        return result
-
-    def get_kubectl(
-        self, context: str, namespace: str, args: List[str], stderr=None
-    ) -> str:
-        """Return output of running kubectl."""
-        return self.get_output(
-            self.kubectl(context, namespace, args), stderr=stderr
-        )
-
-    def check_kubectl(
-        self, context: str, namespace: str, kubectl_args: List[str], **kwargs
-    ) -> None:
-        """Check exit code of running kubectl."""
-        self.check_call(
-            self.kubectl(context, namespace, kubectl_args), **kwargs
-        )
 
 
 HELP_EXAMPLES = """\
@@ -473,7 +166,8 @@ def parse_args() -> argparse.Namespace:
             "\n" + HELP_EXAMPLES + "\n\n"
         )
     )
-    parser.add_argument('--version', action='version', version=__version__)
+    parser.add_argument('--version', action='version',
+                        version=telepresence.__version__)
     parser.add_argument(
         "--verbose",
         action='store_true',
@@ -676,48 +370,6 @@ class PortMapping(object):
         return set(self._mapping.items())
 
 
-class RemoteInfo(object):
-    """
-    Information about the remote setup.
-
-    :ivar namespace str: The Kubernetes namespace.
-    :ivar context str: The Kubernetes context.
-    :ivar deployment_name str: The name of the Deployment object.
-    :ivar pod_name str: The name of the pod created by the Deployment.
-    :ivar deployment_config dict: The decoded k8s object (i.e. JSON/YAML).
-    :ivar container_config dict: The container within the Deployment JSON.
-    :ivar container_name str: The name of the container.
-    """
-
-    def __init__(
-        self,
-        runner: Runner,
-        context: str,
-        namespace: str,
-        deployment_name: str,
-        pod_name: str,
-        deployment_config: dict,
-    ) -> None:
-        self.context = context
-        self.namespace = namespace
-        self.deployment_name = deployment_name
-        self.pod_name = pod_name
-        self.deployment_config = deployment_config
-        cs = deployment_config["spec"]["template"]["spec"]["containers"]
-        containers = [c for c in cs if "telepresence-k8s" in c["image"]]
-        if not containers:
-            raise RuntimeError(
-                "Could not find container with image "
-                "'datawire/telepresence-k8s' in pod {}.".format(pod_name)
-            )
-        self.container_config = containers[0]  # type: Dict
-        self.container_name = self.container_config["name"]  # type: str
-
-    def remote_telepresence_version(self) -> str:
-        """Return the version used by the remote Telepresence container."""
-        return self.container_config["image"].split(":")[-1]
-
-
 def _get_remote_env(
     runner: Runner,
     context: str,
@@ -767,286 +419,6 @@ def get_env_variables(runner: Runner, remote_info: RemoteInfo,
             del remote_env[key]
     result.update(remote_env)
     return result
-
-
-def get_deployment_json(
-    runner: Runner,
-    deployment_name: str,
-    context: str,
-    namespace: str,
-    deployment_type: str,
-    run_id: Optional[str]=None,
-) -> Dict:
-    """Get the decoded JSON for a deployment.
-
-    If this is a Deployment we created, the run_id is also passed in - this is
-    the uuid we set for the telepresence label. Otherwise run_id is None and
-    the Deployment name must be used to locate the Deployment.
-    """
-    assert context is not None
-    assert namespace is not None
-    try:
-        get_deployment = [
-            "get",
-            deployment_type,
-            "-o",
-            "json",
-            "--export",
-        ]
-        if run_id is None:
-            return json.loads(
-                runner.get_kubectl(
-                    context,
-                    namespace,
-                    get_deployment + [deployment_name],
-                    stderr=STDOUT
-                )
-            )
-        else:
-            # When using a selector we get a list of objects, not just one:
-            return json.loads(
-                runner.get_kubectl(
-                    context,
-                    namespace,
-                    get_deployment + ["--selector=telepresence=" + run_id],
-                    stderr=STDOUT
-                )
-            )["items"][0]
-    except CalledProcessError as e:
-        raise SystemExit(
-            "Failed to find Deployment '{}': {}".
-            format(deployment_name, str(e.stdout, "utf-8"))
-        )
-
-
-def get_remote_info(
-    runner: Runner,
-    deployment_name: str,
-    context: str,
-    namespace: str,
-    deployment_type: str,
-    run_id: Optional[str]=None,
-) -> RemoteInfo:
-    """
-    Given the deployment name, return a RemoteInfo object.
-
-    If this is a Deployment we created, the run_id is also passed in - this is
-    the uuid we set for the telepresence label. Otherwise run_id is None and
-    the Deployment name must be used to locate the Deployment.
-    """
-    deployment = get_deployment_json(
-        runner,
-        deployment_name,
-        context,
-        namespace,
-        deployment_type,
-        run_id=run_id
-    )
-    expected_metadata = deployment["spec"]["template"]["metadata"]
-    runner.write("Expected metadata for pods: {}\n".format(expected_metadata))
-
-    start = time()
-    while time() - start < 120:
-        pods = json.loads(
-            runner.get_kubectl(
-                context, namespace, ["get", "pod", "-o", "json", "--export"]
-            )
-        )["items"]
-        for pod in pods:
-            name = pod["metadata"]["name"]
-            phase = pod["status"]["phase"]
-            runner.write(
-                "Checking {} (phase {})...\n".
-                format(pod["metadata"].get("labels"), phase)
-            )
-            if not set(expected_metadata.get("labels", {}).items(
-            )).issubset(set(pod["metadata"].get("labels", {}).items())):
-                runner.write("Labels don't match.\n")
-                continue
-            # Metadata for Deployment will hopefully have a namespace. If not,
-            # fall back to one we were given. If we weren't given one, best we
-            # can do is choose "default".
-            if (name.startswith(deployment_name + "-")
-                and
-                pod["metadata"]["namespace"] == deployment["metadata"].get(
-                    "namespace", namespace)
-                and
-                phase in (
-                    "Pending", "Running"
-            )):
-                runner.write("Looks like we've found our pod!\n")
-                remote_info = RemoteInfo(
-                    runner,
-                    context,
-                    namespace,
-                    deployment_name,
-                    name,
-                    deployment,
-                )
-                # Ensure remote container is running same version as we are:
-                if remote_info.remote_telepresence_version() != __version__:
-                    raise SystemExit((
-                        "The remote datawire/telepresence-k8s container is " +
-                        "running version {}, but this tool is version {}. " +
-                        "Please make sure both are running the same version."
-                    ).format(
-                        remote_info.remote_telepresence_version(), __version__
-                    ))
-                # Wait for pod to be running:
-                wait_for_pod(runner, remote_info)
-                return remote_info
-
-        # Didn't find pod...
-        sleep(1)
-
-    raise RuntimeError(
-        "Telepresence pod not found for Deployment '{}'.".
-        format(deployment_name)
-    )
-
-
-def kill_process(process: Popen) -> None:
-    """Kill a process, make sure it's a dead."""
-    if process.poll() is None:
-        process.terminate()
-    try:
-        process.wait(timeout=1)
-    except TimeoutExpired:
-        process.kill()
-        process.wait()
-
-
-class Subprocesses(object):
-    """Shut down subprocesses on exit."""
-
-    def __init__(self):
-        self.subprocesses = {}  # type: Dict[Popen,Callable]
-        atexit.register(self.killall)
-
-    def append(self, process: Popen, killer: Optional[Callable]=None) -> None:
-        """
-        Register another subprocess to be shutdown, with optional callable that
-        will kill it.
-        """
-        if killer is None:
-
-            def kill():
-                kill_process(process)
-
-            killer = kill
-        self.subprocesses[process] = killer
-
-    def killall(self):
-        """Killall all registered subprocesses."""
-        for killer in self.subprocesses.values():
-            killer()
-
-    def any_dead(self):
-        """
-        Check if any processes are dead.
-
-        If they're all alive, return None.
-
-        If not, kill the remaining ones and return the failed process' poll()
-        result.
-        """
-        for p in self.subprocesses:
-            code = p.poll()
-            if code is not None:
-                self.killall()
-                return p
-
-
-class SSH(object):
-    """Run ssh to k8s-proxy with appropriate arguments."""
-
-    def __init__(
-        self, runner: Runner, port: int, host: str="localhost"
-    ) -> None:
-        self.runner = runner
-        self.port = port
-        self.host = host
-
-    def command(
-        self, additional_args: List[str], prepend_arguments: List[str]=[]
-    ) -> List[str]:
-        """
-        Return command line argument list for running ssh.
-
-        Takes command line arguments to run on remote machine, and optional
-        arguments to ssh itself.
-        """
-        return ["ssh"] + prepend_arguments + [
-            # Ignore local configuration (~/.ssh/config)
-            "-F",
-            "/dev/null",
-            # SSH with no warnings:
-            "-vv" if self.runner.verbose else "-q",
-            # Don't validate host key:
-            "-oStrictHostKeyChecking=no",
-            # Don't store host key:
-            "-oUserKnownHostsFile=/dev/null",
-            "-p",
-            str(self.port),
-            "telepresence@" + self.host,
-        ] + additional_args
-
-    def popen(self, additional_args: List[str]) -> Popen:
-        """Connect to remote pod via SSH.
-
-        Returns Popen object.
-        """
-        return self.runner.popen(
-            self.command(
-                additional_args,
-                [
-                    # No remote command, since this intended for things like -L
-                    # or -R where we don't want to run a remote command.
-                    "-N",
-                    # Ping once a second; after ten retries will disconnect:
-                    "-oServerAliveInterval=1",
-                    "-oServerAliveCountMax=10",
-                ]
-            )
-        )
-
-    def wait(self) -> None:
-        """Return when SSH server can be reached."""
-        start = time()
-        while time() - start < 30:
-            try:
-                self.runner.check_call(self.command(["/bin/true"]))
-            except CalledProcessError:
-                sleep(0.25)
-            else:
-                return
-        raise RuntimeError("SSH isn't starting.")
-
-
-def wait_for_pod(runner: Runner, remote_info: RemoteInfo) -> None:
-    """Wait for the pod to start running."""
-    start = time()
-    while time() - start < 120:
-        try:
-            pod = json.loads(
-                runner.get_kubectl(
-                    remote_info.context, remote_info.namespace,
-                    ["get", "pod", remote_info.pod_name, "-o", "json"]
-                )
-            )
-        except CalledProcessError:
-            sleep(0.25)
-            continue
-        if pod["status"]["phase"] == "Running":
-            for container in pod["status"]["containerStatuses"]:
-                if container["name"] == remote_info.container_name and (
-                    container["ready"]
-                ):
-                    return
-        sleep(0.25)
-    raise RuntimeError(
-        "Pod isn't starting or can't be found: {}".format(pod["status"])
-    )
 
 
 def expose_local_services(
@@ -1587,33 +959,6 @@ def sip_workaround(existing_paths: str, unsupported_tools_path: str) -> str:
     return ":".join(paths)
 
 
-def wait_for_exit(
-    runner: Runner, main_process: Popen, processes: Subprocesses
-) -> None:
-    """Given Popens, wait for one of them to die."""
-    while True:
-        sleep(0.1)
-        if main_process.poll() is not None:
-            # Shell exited, we're done. Automatic shutdown cleanup will kill
-            # subprocesses.
-            raise SystemExit(main_process.poll())
-        dead_process = processes.any_dead()
-        if dead_process:
-            # Unfortunatly torsocks doesn't deal well with connections
-            # being lost, so best we can do is shut down.
-            runner.write((
-                "A subprocess ({}) died with code {}, " +
-                "killed all processes...\n"
-            ).format(dead_process.args, dead_process.returncode))
-            if sys.stdout.isatty:
-                print(
-                    "Proxy to Kubernetes exited. This is typically due to"
-                    " a lost connection.",
-                    file=sys.stderr
-                )
-            raise SystemExit(3)
-
-
 def mount_remote_volumes(
     runner: Runner, remote_info: RemoteInfo, ssh: SSH, allow_all_users: bool
 ) -> Tuple[str, Callable]:
@@ -1700,220 +1045,6 @@ def get_unsupported_tools(dns_supported: bool) -> str:
             f.write(NICE_FAILURE.format(command))
         os.chmod(path, 0o755)
     return unsupported_bin
-
-
-# Script to dump resolved IPs to stdout as JSON list:
-_GET_IPS_PY = """
-import socket, sys, json
-
-result = []
-for host in sys.argv[1:]:
-    result.append(socket.gethostbyname(host))
-sys.stdout.write(json.dumps(result))
-sys.stdout.flush()
-"""
-
-
-def covering_cidr(ips: List[str]) -> str:
-    """
-    Given list of IPs, return CIDR that covers them all.
-
-    Presumes it's at least a /24.
-    """
-
-    def collapse(ns):
-        return list(ipaddress.collapse_addresses(ns))
-
-    assert len(ips) > 0
-    networks = collapse([
-        ipaddress.IPv4Interface(ip + "/24").network for ip in ips
-    ])
-    # Increase network size until it combines everything:
-    while len(networks) > 1:
-        networks = collapse([networks[0].supernet()] + networks[1:])
-    return networks[0].with_prefixlen
-
-
-def get_proxy_cidrs(
-    runner: Runner,
-    args: argparse.Namespace,
-    remote_info: RemoteInfo,
-    service_address: str
-) -> List[str]:
-    """
-    Figure out which IP ranges to route via sshuttle.
-
-    1. Given the IP address of a service, figure out IP ranges used by
-       Kubernetes services.
-    2. Extract pod ranges from API.
-    3. Any hostnames/IPs given by the user using --also-proxy.
-
-    See https://github.com/kubernetes/kubernetes/issues/25533 for eventual
-    long-term solution for service CIDR.
-    """
-
-    # Run script to convert --also-proxy hostnames to IPs, doing name
-    # resolution inside Kubernetes, so we get cloud-local IP addresses for
-    # cloud resources:
-    def resolve_ips():
-        return json.loads(
-            runner.get_kubectl(
-                args.context, args.namespace, [
-                    "exec", "--container=" + remote_info.container_name,
-                    remote_info.pod_name, "--", "python3", "-c", _GET_IPS_PY
-                ] + args.also_proxy
-            )
-        )
-
-    try:
-        result = set([ip + "/32" for ip in resolve_ips()])
-    except CalledProcessError as e:
-        runner.write(str(e))
-        raise SystemExit(
-            "We failed to do a DNS lookup inside Kubernetes for the "
-            "hostname(s) you listed in "
-            "--also-proxy ({}). Maybe you mistyped one of them?".
-            format(", ".join(args.also_proxy))
-        )
-
-    # Get pod IPs from nodes if possible, otherwise use pod IPs as heuristic:
-    try:
-        nodes = json.loads(
-            runner.
-            get_output([runner.kubectl_cmd, "get", "nodes", "-o", "json"])
-        )["items"]
-    except CalledProcessError as e:
-        runner.write("Failed to get nodes: {}".format(e))
-        # Fallback to using pod IPs:
-        pods = json.loads(
-            runner.
-            get_output([runner.kubectl_cmd, "get", "pods", "-o", "json"])
-        )["items"]
-        pod_ips = []
-        for pod in pods:
-            try:
-                pod_ips.append(pod["status"]["podIP"])
-            except KeyError:
-                # Apparently a problem on OpenShift
-                pass
-        if pod_ips:
-            result.add(covering_cidr(pod_ips))
-    else:
-        for node in nodes:
-            pod_cidr = node["spec"].get("podCIDR")
-            if pod_cidr is not None:
-                result.add(pod_cidr)
-
-    # Add service IP range, based on heuristic of constructing CIDR from
-    # existing Service IPs. We create more services if there are less than 8,
-    # to ensure some coverage of the IP range:
-    def get_service_ips():
-        services = json.loads(
-            runner.
-            get_output([runner.kubectl_cmd, "get", "services", "-o", "json"])
-        )["items"]
-        # FIXME: Add test(s) here so we don't crash on, e.g., ExternalName
-        return [
-            svc["spec"]["clusterIP"] for svc in services
-            if svc["spec"].get("clusterIP", "None") != "None"
-        ]
-
-    service_ips = get_service_ips()
-    new_services = []  # type: List[str]
-    # Ensure we have at least 8 ClusterIP Services:
-    while len(service_ips) + len(new_services) < 8:
-        new_service = random_name()
-        runner.check_call([
-            runner.kubectl_cmd, "create", "service", "clusterip", new_service,
-            "--tcp=3000"
-        ])
-        new_services.append(new_service)
-    if new_services:
-        service_ips = get_service_ips()
-    # Store Service CIDR:
-    service_cidr = covering_cidr(service_ips)
-    result.add(service_cidr)
-    # Delete new services:
-    for new_service in new_services:
-        runner.check_call([
-            runner.kubectl_cmd, "delete", "service", new_service
-        ])
-
-    if sys.stderr.isatty():
-        print("Guessing that Services IP range is {}. Services started after"
-              " this point will be inaccessible if are outside this range;"
-              " restart telepresence if you can't access a "
-              "new Service.\n".format(
-                  service_cidr),
-              file=sys.stderr)
-
-    return list(result)
-
-
-def connect_sshuttle(
-    runner: Runner,
-    remote_info: RemoteInfo,
-    args: argparse.Namespace,
-    subprocesses: Subprocesses,
-    env: Dict[str, str],
-    ssh: SSH
-):
-    """Connect to Kubernetes using sshuttle."""
-    # Make sure we have sudo credentials by doing a small sudo in advance
-    # of sshuttle using it:
-    Popen(["sudo", "true"]).wait()
-    sshuttle_method = "auto"
-    if sys.platform.startswith("linux"):
-        # sshuttle tproxy mode seems to have issues:
-        sshuttle_method = "nat"
-    subprocesses.append(
-        runner.popen([
-            "sshuttle-telepresence",
-            "-v",
-            "--dns",
-            "--method",
-            sshuttle_method,
-            "-e",
-            (
-                "ssh -oStrictHostKeyChecking=no " +
-                "-oUserKnownHostsFile=/dev/null -F /dev/null"
-            ),
-            # DNS proxy running on remote pod:
-            "--to-ns",
-            "127.0.0.1:9053",
-            "-r",
-            "telepresence@localhost:" + str(ssh.port),
-        ] + get_proxy_cidrs(
-            runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
-        ))
-    )
-
-    # sshuttle will take a while to startup. We can detect it being up when
-    # DNS resolution of services starts working. We use a specific single
-    # segment so any search/domain statements in resolv.conf are applied,
-    # which then allows the DNS proxy to detect the suffix domain and
-    # filter it out.
-    def get_hellotelepresence(counter=iter(range(10000))):
-        # On Macs, and perhaps elsewhere, there is OS-level caching of
-        # NXDOMAIN, so bypass caching by sending new domain each time. Another,
-        # less robust alternative, is to `killall -HUP mDNSResponder`.
-        runner.get_output([
-            "python3", "-c",
-            "import socket; socket.gethostbyname('hellotelepresence{}')".
-            format(next(counter))
-        ])
-
-    start = time()
-    while time() - start < 20:
-        try:
-            get_hellotelepresence()
-            sleep(1)  # just in case there's more to startup
-            break
-        except CalledProcessError:
-            sleep(0.1)
-        else:
-            sleep(0.1)
-    get_hellotelepresence()
 
 
 def docker_runify(args: List[str]) -> List[str]:

@@ -9,7 +9,9 @@ import ipaddress
 from hypothesis import strategies as st, given, example
 import yaml
 
-from telepresence import main as telepresence
+import telepresence.runner
+import telepresence.vpn
+import telepresence.main
 
 COMPLEX_DEPLOYMENT = """\
 apiVersion: extensions/v1beta1
@@ -162,7 +164,7 @@ def test_swap_deployment_changes():
     """
     original = yaml.safe_load(COMPLEX_DEPLOYMENT)
     expected = yaml.safe_load(SWAPPED_DEPLOYMENT)
-    assert telepresence.new_swapped_deployment(
+    assert telepresence.main.new_swapped_deployment(
         original,
         "nginxhttps",
         "random_id_123",
@@ -176,7 +178,7 @@ def test_portmapping():
     """
     Manually set exposed ports always override automatically exposed ports.
     """
-    ports = telepresence.PortMapping.parse(["1234:80", "90"])
+    ports = telepresence.main.PortMapping.parse(["1234:80", "90"])
     ports.merge_automatic_ports([80, 555, 666])
     assert ports.local_to_remote() == {(1234, 80), (90, 90), (555, 555),
                                        (666, 666)}
@@ -200,7 +202,7 @@ def test_covering_cidr(ips):
 
     In particular, that means any subnets should *not* cover all given IPs.
     """
-    cidr = telepresence.covering_cidr(ips)
+    cidr = telepresence.vpn.covering_cidr(ips)
     assert isinstance(cidr, str)
     cidr = ipaddress.IPv4Network(cidr)
     assert cidr.prefixlen <= 24
@@ -216,15 +218,15 @@ def test_covering_cidr(ips):
 def test_runner_file():
     """Test some reasonable values for the log file"""
     # stdout
-    lf_dash = telepresence.Runner.open("-", "kubectl", False)
+    lf_dash = telepresence.runner.Runner.open("-", "kubectl", False)
     assert lf_dash.logfile is sys.stdout, lf_dash.logfile
     # /dev/null -- just make sure we don't crash
-    telepresence.Runner.open("/dev/null", "kubectl", False)
+    telepresence.runner.Runner.open("/dev/null", "kubectl", False)
     # Regular file -- make sure the file has been truncated
     o_content = "original content\n"
     with tempfile.NamedTemporaryFile(mode="w", delete=False) as out:
         out.write(o_content + "This should be truncated away.\nThis too.\n")
-    lf_file = telepresence.Runner.open(out.name, "kubectl", False)
+    lf_file = telepresence.runner.Runner.open(out.name, "kubectl", False)
     n_content = "replacement content\n"
     lf_file.write(n_content)
     with open(out.name) as in_again:
