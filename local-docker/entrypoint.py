@@ -40,11 +40,10 @@ from subprocess import check_output, Popen
 from socket import gethostbyname, gaierror
 from time import time, sleep
 
-# This is cli/telepresence, being used as a library. The way it's packaged is a
-# hack, should fix that someday.
-from telepresence.main import (
-    Runner, Subprocesses, SSH, wait_for_exit, expose_local_services
-)
+from telepresence.main import expose_local_services
+from telepresence.ssh import SSH
+from telepresence.cleanup import Subprocesses, wait_for_exit
+from telepresence.runner import Runner
 
 
 def main():
