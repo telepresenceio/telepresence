@@ -6,6 +6,7 @@ import os
 import re
 from setuptools import setup
 
+
 def get_version(filename="telepresence/__init__.py"):
     """Parse out version info"""
     base_dir = os.path.dirname(os.path.abspath(__file__))
