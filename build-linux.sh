@@ -49,12 +49,14 @@ make setup
 
 # Build and push images
 make build-local build-k8s-proxy
-docker tag "datawire/telepresence-local:${TELEPRESENCE_VERSION}" \
-           "${TELEPRESENCE_REGISTRY}/telepresence-local:${TELEPRESENCE_VERSION}"
-docker push "${TELEPRESENCE_REGISTRY}/telepresence-local:${TELEPRESENCE_VERSION}"
 docker tag "datawire/telepresence-k8s:${TELEPRESENCE_VERSION}" \
            "${TELEPRESENCE_REGISTRY}/telepresence-k8s:${TELEPRESENCE_VERSION}"
 docker push "${TELEPRESENCE_REGISTRY}/telepresence-k8s:${TELEPRESENCE_VERSION}"
+
+docker tag "datawire/telepresence-local:${TELEPRESENCE_VERSION}" \
+           "${TELEPRESENCE_REGISTRY}/telepresence-local:${TELEPRESENCE_VERSION}"
+docker push "${TELEPRESENCE_REGISTRY}/telepresence-local:${TELEPRESENCE_VERSION}"
+
 
 # Get a Kubernetes cluster
 #kubernaut claim
