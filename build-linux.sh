@@ -62,9 +62,8 @@ docker push "${TELEPRESENCE_REGISTRY}/telepresence-local:${TELEPRESENCE_VERSION}
 #kubernaut claim
 #export KUBECONFIG=${HOME}/.kube/kubernaut
 
-# Run tests
-#export TELEPRESENCE_TESTS="-xs"
-export TELEPRESENCE_TESTS="-xs -k fromcluster"
+# Provide additional arguments to py.test
+export TELEPRESENCE_TESTS="-xs"
 
 # Refresh the credentials
 # sudo echo -n
