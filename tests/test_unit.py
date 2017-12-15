@@ -9,6 +9,8 @@ import ipaddress
 from hypothesis import strategies as st, given, example
 import yaml
 
+import telepresence.cli
+import telepresence.deployment
 import telepresence.runner
 import telepresence.vpn
 import telepresence.main
@@ -164,7 +166,7 @@ def test_swap_deployment_changes():
     """
     original = yaml.safe_load(COMPLEX_DEPLOYMENT)
     expected = yaml.safe_load(SWAPPED_DEPLOYMENT)
-    assert telepresence.main.new_swapped_deployment(
+    assert telepresence.deployment.new_swapped_deployment(
         original,
         "nginxhttps",
         "random_id_123",
@@ -178,7 +180,7 @@ def test_portmapping():
     """
     Manually set exposed ports always override automatically exposed ports.
     """
-    ports = telepresence.main.PortMapping.parse(["1234:80", "90"])
+    ports = telepresence.cli.PortMapping.parse(["1234:80", "90"])
     ports.merge_automatic_ports([80, 555, 666])
     assert ports.local_to_remote() == {(1234, 80), (90, 90), (555, 555),
                                        (666, 666)}

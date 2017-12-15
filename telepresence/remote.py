@@ -1,10 +1,14 @@
 import json
+import sys
 from subprocess import STDOUT, CalledProcessError
 from time import time, sleep
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple, Callable
+
+from tempfile import mkdtemp
 
 from telepresence import __version__
 from telepresence.runner import Runner
+from telepresence.ssh import SSH
 
 
 class RemoteInfo(object):
@@ -212,3 +216,63 @@ def get_remote_info(
         "Telepresence pod not found for Deployment '{}'.".
         format(deployment_name)
     )
+
+
+def mount_remote_volumes(
+    runner: Runner, remote_info: RemoteInfo, ssh: SSH, allow_all_users: bool
+) -> Tuple[str, Callable]:
+    """
+    sshfs is used to mount the remote system locally.
+
+    Allowing all users may require root, so we use sudo in that case.
+
+    Returns (path to mounted directory, callable that will unmount it).
+    """
+    # Docker for Mac only shares some folders; the default TMPDIR on OS X is
+    # not one of them, so make sure we use /tmp:
+    mount_dir = mkdtemp(dir="/tmp")
+    sudo_prefix = ["sudo"] if allow_all_users else []
+    middle = ["-o", "allow_other"] if allow_all_users else []
+    try:
+        runner.check_call(
+            sudo_prefix + [
+                "sshfs",
+                "-p",
+                str(ssh.port),
+                # Don't load config file so it doesn't break us:
+                "-F",
+                "/dev/null",
+                # Don't validate host key:
+                "-o",
+                "StrictHostKeyChecking=no",
+                # Don't store host key:
+                "-o",
+                "UserKnownHostsFile=/dev/null",
+            ] + middle + ["telepresence@localhost:/", mount_dir]
+        )
+        mounted = True
+    except CalledProcessError:
+        print(
+            "Mounting remote volumes failed, they will be unavailable"
+            " in this session. If you are running"
+            " on Windows Subystem for Linux then see"
+            " https://github.com/datawire/telepresence/issues/115,"
+            " otherwise please report a bug, attaching telepresence.log to"
+            " the bug report:"
+            " https://github.com/datawire/telepresence/issues/new",
+            file=sys.stderr
+        )
+        mounted = False
+
+    def no_cleanup():
+        pass
+
+    def cleanup():
+        if sys.platform.startswith("linux"):
+            runner.check_call(
+                sudo_prefix + ["fusermount", "-z", "-u", mount_dir]
+            )
+        else:
+            runner.get_output(sudo_prefix + ["umount", "-f", mount_dir])
+
+    return mount_dir, cleanup if mounted else no_cleanup
