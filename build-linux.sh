@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Plan:
+# (1) Make it work for me
+# (2) Rewrite it in Python
+# (3) Refactor out duplication with build-macos.sh
+# (4) Make it usable in .travis.yaml
+
 # Build script for Linux automated builds
 
 set -eEx
