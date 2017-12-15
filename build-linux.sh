@@ -17,6 +17,12 @@ if [ -z "${TELEPRESENCE_REGISTRY}" ]; then
 fi
 shift
 
+# Provide additional arguments to py.test
+if [ $# -gt 0 ]; then
+    export TELEPRESENCE_TESTS="$1"
+    shift
+fi
+
 # Attempt to get credentials cached early on while the user is still looking
 # at the terminal.  They'll be required later on during the test suite run and
 # the prompt is likely to be buried in test output at that point.
@@ -61,9 +67,6 @@ docker push "${TELEPRESENCE_REGISTRY}/telepresence-local:${TELEPRESENCE_VERSION}
 # Get a Kubernetes cluster
 #kubernaut claim
 #export KUBECONFIG=${HOME}/.kube/kubernaut
-
-# Provide additional arguments to py.test
-export TELEPRESENCE_TESTS="-xs"
 
 # Refresh the credentials
 # sudo echo -n
