@@ -10,6 +10,13 @@
 
 set -eEx
 
+export TELEPRESENCE_REGISTRY="$1"
+if [ -z "${TELEPRESENCE_REGISTRY}" ]; then
+    echo "Usage: build-linux-sh <docker telepresence registry>"
+    exit 11
+fi
+shift
+
 # Attempt to get credentials cached early on while the user is still looking
 # at the terminal.  They'll be required later on during the test suite run and
 # the prompt is likely to be buried in test output at that point.
@@ -21,7 +28,6 @@ export CLUSTER_NAME=telepresence-testing
 export CLOUDSDK_COMPUTE_ZONE=us-central1-a
 export TELEPRESENCE_VER_SUFFIX=$(date +-LNX-%s)
 export TELEPRESENCE_VERSION=$(make version)
-export TELEPRESENCE_REGISTRY=ark3
 export PATH=$PATH:$PWD/virtualenv/bin:~/datawire/kubernaut/virtualenv/bin
 
 ci/setup-gcloud.sh
