@@ -22,7 +22,8 @@ class Subprocesses(object):
     """Shut down subprocesses on exit."""
 
     def __init__(self):
-        self.subprocesses = {}  # type: Dict[Popen,Callable]
+        Dict  # Avoid Pyflakes F401
+        self.subprocesses = {}  # type: Dict[Popen, Callable]
         atexit.register(self.killall)
 
     def append(self, process: Popen,
@@ -40,7 +41,7 @@ class Subprocesses(object):
         self.subprocesses[process] = killer
 
     def killall(self):
-        """Killall all registered subprocesses."""
+        """Kill all registered subprocesses."""
         for killer in self.subprocesses.values():
             killer()
 
@@ -72,7 +73,7 @@ def wait_for_exit(
             raise SystemExit(main_process.poll())
         dead_process = processes.any_dead()
         if dead_process:
-            # Unfortunatly torsocks doesn't deal well with connections
+            # Unfortunately torsocks doesn't deal well with connections
             # being lost, so best we can do is shut down.
             runner.write((
                 "A subprocess ({}) died with code {}, " +
