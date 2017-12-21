@@ -66,17 +66,41 @@ def get_proxy_cidrs(
     # resolution inside Kubernetes, so we get cloud-local IP addresses for
     # cloud resources:
     def resolve_ips():
-        return json.loads(
+        # Separate hostnames from IPs and IP ranges
+        hostnames = []
+        ip_ranges = []
+
+        for proxy_target in args.also_proxy:
+            try:
+                addr = ipaddress.ip_address(proxy_target)
+            except ValueError:
+                pass
+            else:
+                ip_ranges.append("{}/{}".format(proxy_target, addr.max_prefixlen))
+                continue
+
+            try:
+                ipaddress.ip_network(proxy_target)
+            except ValueError:
+                pass
+            else:
+                ip_ranges.append(proxy_target)
+                continue
+
+            hostnames.append(proxy_target)
+
+        resolved_ips = json.loads(
             runner.get_kubectl(
                 args.context, args.namespace, [
                     "exec", "--container=" + remote_info.container_name,
                     remote_info.pod_name, "--", "python3", "-c", _GET_IPS_PY
-                ] + args.also_proxy
+                ] + hostnames
             )
         )
+        return resolved_ips + ip_ranges
 
     try:
-        result = set([ip + "/32" for ip in resolve_ips()])
+        result = set(resolve_ips())
     except CalledProcessError as e:
         runner.write(str(e))
         raise SystemExit(
