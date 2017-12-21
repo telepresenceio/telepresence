@@ -238,9 +238,9 @@ def parse_args() -> argparse.Namespace:
         default=[],
         help=(
             "If you are using --method=vpn-tcp, use this to add additional "
-            "remote IPs or hostnames to proxy. Kubernetes service and pods "
-            "are proxied automatically, so you only need to list cloud "
-            "resources, e.g. the hostname of a AWS RDS. "
+            "remote IPs, IP ranges, or hostnames to proxy. Kubernetes service "
+            "and pods are proxied automatically, so you only need to list "
+            "cloud resources, e.g. the hostname of a AWS RDS. "
             "When using --method=inject-tcp "
             "this option is unnecessary as all outgoing communication in "
             "the run subprocess will be proxied."
