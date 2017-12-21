@@ -34,7 +34,6 @@ export CLUSTER_NAME=telepresence-testing
 export CLOUDSDK_COMPUTE_ZONE=us-central1-a
 export TELEPRESENCE_VER_SUFFIX=$(date +-LNX-%s)
 export TELEPRESENCE_VERSION=$(make version)
-export PATH=$PATH:$PWD/virtualenv/bin:~/datawire/kubernaut/virtualenv/bin
 
 ci/setup-gcloud.sh
 
@@ -52,6 +51,10 @@ python3 --version
 # install
 rm -rf virtualenv
 make setup
+
+# `setup` created a new virtualenv for us.  Activate it so we find the
+# telepresence installed there.
+. virtualenv/bin/activate
 
 # Build and push images
 make build-local build-k8s-proxy
