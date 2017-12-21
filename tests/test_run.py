@@ -4,6 +4,7 @@ End-to-end tests for running directly in the operating system.
 
 import json
 from unittest import TestCase, skipIf, skipUnless
+from urllib.request import urlopen
 from subprocess import (
     check_output,
     Popen,
@@ -261,9 +262,16 @@ class NativeEndToEndTests(TestCase):
         # We avoid the domain name here due to
         # https://github.com/datawire/telepresence/issues/379
         httpbin = "23.23.209.130"
+
+        # Find out our own address.  It's difficult to know the cluster IP
+        # address that the request should correctly originate from so instead
+        # we'll assert that it's at least not our own address.
+        result = str(urlopen("http://httpbin.org/ip", timeout=5).read(), "utf-8")
+        origin = json.loads(result)["origin"]
+
         exit_code = run_script_test(
             ["--new-deployment", random_name(), "--also-proxy", httpbin],
-            "python3 alsoproxyhostname.py",
+            "python3 alsoproxyhostname.py {}".format(origin),
         )
         assert exit_code == 113
 

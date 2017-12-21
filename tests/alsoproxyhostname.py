@@ -5,8 +5,7 @@ This module will indicate success by exiting with code 113.
 """
 
 import sys
-from os import environ
-from socket import gethostbyname
+from json import loads
 from urllib.request import Request, urlopen
 from traceback import print_exception
 
@@ -19,6 +18,10 @@ def main():
     # make sure exceptions cause exit:
     sys.excepthook = handle_error
 
+    # Our own address, an address not on the cluster, from which the request
+    # should not originate.
+    local_ip = sys.argv[1]
+
     # Issue the request to a specific httpbin IP as a work-around for
     # <https://github.com/datawire/telepresence/issues/379>.  We must use http
     # to avoid SNI problems.
@@ -29,12 +32,11 @@ def main():
     print("Retrieving {}".format(url))
     result = str(urlopen(request, timeout=5).read(), "utf-8")
     print("Got {} from webserver.".format(repr(result)))
+    request_ip = loads(result)["origin"]
 
-    telepresence_address = gethostbyname(environ["TELEPRESENCE_POD"])
-
-    assert telepresence_address in result, (
-        "Did not find telepresence pod address ({}) in response:\n\t{}".format(
-            telepresence_address, result
+    assert request_ip !=  local_ip, (
+        "Found local IP ({}) as request origin instead of cluster IP.".format(
+            local_ip,
         )
     )
 
