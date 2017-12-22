@@ -72,19 +72,11 @@ def get_proxy_cidrs(
 
         for proxy_target in args.also_proxy:
             try:
-                addr = ipaddress.ip_address(proxy_target)
+                addr = ipaddress.ip_network(proxy_target)
             except ValueError:
                 pass
             else:
-                ip_ranges.append("{}/{}".format(proxy_target, addr.max_prefixlen))
-                continue
-
-            try:
-                ipaddress.ip_network(proxy_target)
-            except ValueError:
-                pass
-            else:
-                ip_ranges.append(proxy_target)
+                ip_ranges.append(str(addr))
                 continue
 
             hostnames.append(proxy_target)
