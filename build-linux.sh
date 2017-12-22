@@ -52,6 +52,8 @@ make setup
 # telepresence installed there.
 . virtualenv/bin/activate
 
+./ci/lint.sh
+
 # Build and push images
 make build-local build-k8s-proxy
 docker tag "datawire/telepresence-k8s:${TELEPRESENCE_VERSION}" \
