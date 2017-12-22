@@ -52,7 +52,7 @@ install:
   # Push Docker images to Google Container Registry; on OS X we don't bother, we
   # just hope that the parallel Linux job finished building and pushing first...
   # FIXME: push-images sets T_VERSION itself and doesn't use T_REGISTRY at all
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./ci/push-images.sh; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./ci/push-images.sh "${PROJECT_NAME}"; fi
 
 script:
   - export TELEPRESENCE_VERSION=$(make version)

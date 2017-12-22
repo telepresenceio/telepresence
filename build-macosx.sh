@@ -33,7 +33,7 @@ export TELEPRESENCE_VER_SUFFIX="-osx"
 export PATH=$PATH:$HOME/google-cloud-sdk/bin:~/tpbin/:$PWD/virtualenv/bin
 
 # Build and push images
-./ci/push-images.sh
+./ci/push-images.sh "${PROJECT_NAME}"
 
 # Get a Kubernetes cluster
 kubernaut claim
