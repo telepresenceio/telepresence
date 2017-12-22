@@ -21,6 +21,10 @@ gcloud --quiet components update
 gcloud --quiet components update kubectl
 gcloud auth activate-service-account --key-file "${SERVICE_KEY}"
 
+PROJECT_NAME=$1
+CLUSTER_NAME=$2
+CLOUDSDK_COMPUTE_ZONE=$3
+
 gcloud --quiet config set project $PROJECT_NAME
 gcloud --quiet config set container/cluster $CLUSTER_NAME
 gcloud --quiet config set compute/zone ${CLOUDSDK_COMPUTE_ZONE}

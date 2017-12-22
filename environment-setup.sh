@@ -4,6 +4,10 @@
 # suite.  These steps should typically only be required once to prepare the
 # environment.
 
+PROJECT_NAME=$1
+CLUSTER_NAME=$2
+CLOUDSDK_COMPUTE_ZONE=$3
+
 case "$(uname -s)" in
      Darwin)
 	 brew update > /dev/null
@@ -29,7 +33,7 @@ python3 --version
 ruby --version
 
 # Make sure gcloud is installed:
-./ci/setup-gcloud.sh
+./ci/setup-gcloud.sh "${PROJECT_NAME}" "${CLUSTER_NAME}" "${CLOUDSDK_COMPUTE_ZONE}"
 
 # Make sure torsocks is installed:
 ./ci/build-torsocks.sh
