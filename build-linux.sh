@@ -44,10 +44,6 @@ cleanup() {
 
 trap cleanup ERR
 
-# record debugging information
-python --version
-python3 --version
-
 # install
 rm -rf virtualenv
 make setup
