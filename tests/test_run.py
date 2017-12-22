@@ -252,17 +252,7 @@ class NativeEndToEndTests(TestCase):
         assert exit_code == 113
 
     @skipIf(TELEPRESENCE_METHOD != "vpn-tcp", "--also-proxy only sensible for vpn-tcp")
-    def test_tocluster_also_proxy_hostname(self):
-        """
-        The ``--also-proxy`` option accepts a hostname and arranges to have
-        traffic for that host proxied via via the cluster.  The hostname must
-        be resolveable on the cluster and the address reached from it.
-        """
-        # This is is httpbin.org
-        # We avoid the domain name here due to
-        # https://github.com/datawire/telepresence/issues/379
-        httpbin = "23.23.209.130"
-
+    def _tocluster_also_proxy_test(self, httpbin):
         # Find out our own address.  It's difficult to know the cluster IP
         # address that the request should correctly originate from so instead
         # we'll assert that it's at least not our own address.
@@ -275,7 +265,18 @@ class NativeEndToEndTests(TestCase):
         )
         assert exit_code == 113
 
-    @skipIf(TELEPRESENCE_METHOD != "vpn-tcp", "--also-proxy only sensible for vpn-tcp")
+    def test_tocluster_also_proxy_hostname(self):
+        """
+        The ``--also-proxy`` option accepts a hostname and arranges to have
+        traffic for that host proxied via via the cluster.  The hostname must
+        be resolveable on the cluster and the address reached from it.
+        """
+        # This is is httpbin.org
+        # We avoid the real domain name here due to
+        # https://github.com/datawire/telepresence/issues/379
+        httpbin = "ec2-23-23-209-130.compute-1.amazonaws.com."
+        self._tocluster_also_proxy_test(httpbin)
+
     def test_tocluster_also_proxy_cidr(self):
         """
         The ``--also-proxy`` option accepts an IP range given by a CIDR-notation
@@ -284,18 +285,7 @@ class NativeEndToEndTests(TestCase):
         """
         # This is is httpbin.org
         httpbin = "23.23.209.130/32"
-
-        # Find out our own address.  It's difficult to know the cluster IP
-        # address that the request should correctly originate from so instead
-        # we'll assert that it's at least not our own address.
-        result = str(urlopen("http://httpbin.org/ip", timeout=5).read(), "utf-8")
-        origin = json.loads(result)["origin"]
-
-        exit_code = run_script_test(
-            ["--new-deployment", random_name(), "--also-proxy", httpbin],
-            "python3 alsoproxyhostname.py {}".format(origin),
-        )
-        assert exit_code == 113
+        self._tocluster_also_proxy_test(httpbin)
 
     def test_tocluster_with_namespace(self):
         """
