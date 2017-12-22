@@ -277,6 +277,16 @@ class NativeEndToEndTests(TestCase):
         httpbin = "ec2-23-23-209-130.compute-1.amazonaws.com."
         self._tocluster_also_proxy_test(httpbin)
 
+    def test_tocluster_also_proxy_ip_literal(self):
+        """
+        The ``--also-proxy`` option accepts an IP range given by a CIDR-notation
+        string and arranges to have traffic for addresses in that range
+        proxied via the cluster.
+        """
+        # This is is httpbin.org
+        httpbin = "23.23.209.130"
+        self._tocluster_also_proxy_test(httpbin)
+
     def test_tocluster_also_proxy_cidr(self):
         """
         The ``--also-proxy`` option accepts an IP range given by a CIDR-notation
