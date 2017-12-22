@@ -35,8 +35,6 @@ export CLOUDSDK_COMPUTE_ZONE=us-central1-a
 export TELEPRESENCE_VER_SUFFIX=$(date +-LNX-%s)
 export TELEPRESENCE_VERSION=$(make version)
 
-ci/setup-gcloud.sh
-
 cleanup() {
   printf "Performing cleanup...\n"
   #kubernaut discard
