@@ -1,0 +1,263 @@
+#!/usr/bin/env python3
+
+from time import time
+from os import environ
+from sys import (
+    platform,
+    stdout,
+    stderr,
+)
+from os.path import expanduser
+from shutil import rmtree
+from argparse import ArgumentParser
+from subprocess import (
+    CalledProcessError,
+    check_call,
+    check_output,
+)
+
+def main():
+    parser = _parser()
+    args = parser.parse_args()
+
+    if args.travis:
+        manage_virtualenv = True
+        flake8 = True
+        pylint = True
+        mypy = True
+        if platform == "linux":
+            registry = "gcr.io/" + environ["PROJECT_NAME"]
+        else:
+            registry = None
+        methods = ["inject-tcp", "vpn-tcp"]
+        if platform == "linux":
+            methods.insert(0, "container")
+        test_args = []
+    else:
+        manage_virtualenv = args.manage_virtualenv
+        flake8 = args.flake8
+        pylint = args.pylint
+        mypy = args.mypy
+        registry = args.registry
+        methods = args.methods or ['container', 'inject-tcp', 'vpn-tcp']
+        test_args = args.test_args or []
+
+    # Attempt to get credentials cached early on while the user is still
+    # looking at the terminal.  They'll be required later on during the test
+    # suite run and the prompt is likely to be buried in test output at that
+    # point.
+    _sudo("echo", "-n")
+
+    if manage_virtualenv:
+        _setup_virtualenv()
+
+    if flake8:
+        _flake8()
+
+    if pylint:
+        _pylint()
+
+    if mypy:
+        _mypy()
+
+    _virtualenv('telepresence', '--help')
+
+    version = _get_version()
+    if registry:
+        _build(version)
+        _push(version, registry)
+
+    for method in methods:
+        _test(registry, version, method, test_args)
+
+def _test(registry, version, method, test_args):
+    # Refresh the credentials
+    _sudo("echo", "-n")
+
+    if environ.get("TELEPRESENCE_OPENSHIFT"):
+        # Don't want parallism for OpenShift (causes problems with OpenShift
+        # Online's limited free plan).
+        parallel = "1"
+    elif method == "vpn-tcp":
+        # And don't want parallelism for VPN-y method since should only have
+        # one running a time.
+        parallel = "1"
+    elif platform == "darwin":
+        # And parallelism breaks container method on OS X.
+        parallel = "1"
+    else:
+        parallel = "4"
+
+    _virtualenv(
+        "py.test",
+        "-v",
+        "--timeout", "360",
+        "--timeout-method", "thread",
+        "--fulltrace",
+        "--numprocesses", parallel,
+        *test_args,
+        "tests",
+        "k8s-proxy/test_socks.py",
+        env={
+            "TELEPRESENCE_METHOD": method,
+            "TELEPRESENCE_VERSION": version,
+            "TELEPRESENCE_REGISTRY": registry,
+            "SCOUT_DISABLE": "1",
+        },
+    )
+
+def _build(version):
+    _run(
+        "docker",
+        "build",
+        "--file",
+        "local-docker/Dockerfile",
+        ".",
+        "-t",
+        "datawire/telepresence-local:" + version,
+    )
+    _run(
+        "docker",
+        "build",
+        "k8s-proxy",
+        "-t",
+        "datawire/telepresence-k8s:" + version,
+    )
+
+def _push(version, registry):
+    for image in ["telepresence-k8s", "telepresence-local"]:
+        source = "datawire/" + image + ":" + version
+        destination = registry + "/" + image + ":" + version
+        _run(
+            "docker",
+            "tag",
+            source,
+            destination,
+        )
+        if registry.startswith("gcr.io/"):
+            _gcloud(
+                "docker",
+                "--",
+                "push",
+                destination,
+            )
+        else:
+            _run(
+                "docker",
+                "push",
+                destination,
+            )
+
+def _parser():
+    parser = ArgumentParser(
+        description="Test Telepresence",
+    )
+    parser.add_argument(
+        '--travis',
+        action='store_true',
+    )
+    parser.add_argument(
+        '--push-to-registry',
+        metavar='REGISTRY',
+        dest='registry',
+        type=str,
+        help='Docker registry to which to push built images',
+    )
+    parser.add_argument(
+        "--manage-virtualenv",
+        action='store_true',
+        dest='manage_virtualenv',
+    )
+    parser.add_argument(
+        '--flake8',
+        action='store_true',
+        dest='flake8',
+    )
+    parser.add_argument(
+        '--pylint',
+        action='store_true',
+        dest='pylint',
+    )
+    parser.add_argument(
+        '--mypy',
+        action='store_true',
+        dest='mypy',
+    )
+    parser.add_argument(
+        '--method',
+        action='append',
+        dest='methods',
+        choices=['container', 'inject-tcp', 'vpn-tcp']
+    )
+    parser.add_argument(
+        'test_args',
+        metavar='test-args',
+        nargs='*',
+    )
+
+    return parser
+
+def _get_version():
+    git_tag = check_output(["git", "describe", "--tags"]).decode("utf-8").strip()
+    suffix = "-LNX-{}".format(int(time()))
+    return git_tag + suffix
+
+def _setup_virtualenv():
+    rmtree("virtualenv/bin")
+    _run("virtualenv", "--python=python3", "virtualenv")
+    _pip("install", "-r", "dev-requirements.txt")
+    _pip("install", "-r", "k8s-proxy/requirements.txt")
+    _pip("install", "git+https://github.com/datawire/sshuttle.git@telepresence")
+    _pip("install", "-e", ".")
+
+
+def _flake8():
+    _virtualenv("flake8", "--isolated", "local-docker", "k8s-proxy", "telepresence")
+
+def _pylint():
+    _virtualenv("pylint", "-f", "parseable", "-E", "telepresence")
+
+def _mypy():
+    _virtualenv("mypy", "telepresence", "local-docker/entrypoint.py")
+    # Couldn't figure out how to make this work well, so it's not very useful
+    # cause of the skip:
+    _virtualenv(
+        "mypy",
+        "--ignore-missing-imports",
+        "k8s-proxy/forwarder.py",
+        "k8s-proxy/socks.py",
+    )
+
+def _gcloud(*argv):
+    gcloud = expanduser("~/google-cloud-sdk/bin/gcloud")
+    _run(gcloud, *argv)
+
+def _pip(*argv):
+    _virtualenv("pip", *argv)
+
+def _virtualenv(*argv, env=None):
+    _run("virtualenv/bin/" + argv[0], *argv[1:], env=env)
+
+def _sudo(*argv):
+    _run("sudo", *argv)
+
+def _run(*argv, env=None):
+    pass_env = environ.copy()
+    if env is not None:
+        pass_env.update(env)
+    print(
+        "+ {} {}".format(
+            " ".join(list(
+                "=".join((k, v)) for (k, v) in (env or {}).items()
+            )),
+            " ".join(argv),
+        ),
+    )
+    try:
+        check_call(argv, stdout=stdout, stderr=stderr, env=pass_env)
+    except CalledProcessError as e:
+        raise SystemExit(e.returncode)
+
+
+if __name__ == '__main__':
+    main()
