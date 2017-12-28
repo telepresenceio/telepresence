@@ -1,6 +1,8 @@
 #!/bin/bash
 set -ex
 
+virtualenv/bin/yapf -dr telepresence > /dev/null || { echo "YAPF check failed" >&2; exit 1; }
+
 virtualenv/bin/flake8 --isolated local-docker k8s-proxy telepresence
 
 # pylint doesn't work on Travis OS X, perhaps because it's python 3.6:
