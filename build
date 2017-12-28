@@ -7,7 +7,10 @@ from sys import (
     stdout,
     stderr,
 )
-from os.path import expanduser
+from os.path import (
+    expanduser,
+    abspath,
+)
 from shutil import rmtree
 from argparse import ArgumentParser
 from subprocess import (
@@ -33,6 +36,12 @@ def main():
         if platform == "linux":
             methods.insert(0, "container")
         test_args = []
+        test_env = {
+            # Magic incantation to make kubectl work, because apparently
+            # gcloud can't do that correctly (see
+            # https://github.com/kubernetes/kubernetes/issues/30617)
+            "GOOGLE_APPLICATION_CREDENTIALS": abspath("gcloud-service-key.json"),
+        }
     else:
         manage_virtualenv = args.manage_virtualenv
         flake8 = args.flake8
@@ -41,6 +50,7 @@ def main():
         registry = args.registry
         methods = args.methods or ['container', 'inject-tcp', 'vpn-tcp']
         test_args = args.test_args or []
+        test_env = {}
 
     # Attempt to get credentials cached early on while the user is still
     # looking at the terminal.  They'll be required later on during the test
@@ -68,9 +78,9 @@ def main():
         _push(version, registry)
 
     for method in methods:
-        _test(registry, version, method, test_args)
+        _test(registry, version, method, test_env, test_args)
 
-def _test(registry, version, method, test_args):
+def _test(registry, version, method, test_env, test_args):
     # Refresh the credentials
     _sudo("echo", "-n")
 
@@ -88,6 +98,15 @@ def _test(registry, version, method, test_args):
     else:
         parallel = "4"
 
+    if test_env is None:
+        test_env = {}
+    test_env.update({
+        "TELEPRESENCE_METHOD": method,
+        "TELEPRESENCE_VERSION": version,
+        "TELEPRESENCE_REGISTRY": registry,
+        "SCOUT_DISABLE": "1",
+    })
+
     _virtualenv(
         "py.test",
         "-v",
@@ -98,12 +117,7 @@ def _test(registry, version, method, test_args):
         *test_args,
         "tests",
         "k8s-proxy/test_socks.py",
-        env={
-            "TELEPRESENCE_METHOD": method,
-            "TELEPRESENCE_VERSION": version,
-            "TELEPRESENCE_REGISTRY": registry,
-            "SCOUT_DISABLE": "1",
-        },
+        env=test_env,
     )
 
 def _build(version):
