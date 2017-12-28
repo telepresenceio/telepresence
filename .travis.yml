@@ -47,23 +47,8 @@ before_install:
   # Do the rest of the setup - which is a bit less particular to travis.
   - "./environment-setup.sh ${PROJECT_NAME} ${CLUSTER_NAME} ${CLOUDSDK_COMPUTE_ZONE}"
 
-install:
-  - make setup
-  # Push Docker images to Google Container Registry; on OS X we don't bother, we
-  # just hope that the parallel Linux job finished building and pushing first...
-  # FIXME: push-images sets T_VERSION itself and doesn't use T_REGISTRY at all
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./ci/push-images.sh "${PROJECT_NAME}"; fi
-
 script:
-  - export TELEPRESENCE_VERSION=$(make version)
-  - export TELEPRESENCE_REGISTRY=gcr.io/${PROJECT_NAME}
-  - export PATH=$HOME/google-cloud-sdk/bin:$PATH:$(pwd)/virtualenv/bin
-  # Magic incantation to make kubectl work, because apparently gcloud can't do that correctly (see https://github.com/kubernetes/kubernetes/issues/30617)
-  - export GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/gcloud-service-key.json
-  # Docker not available on OS X Travis:
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then TELEPRESENCE_METHOD=container ./ci/test.sh; fi
-  - env TELEPRESENCE_METHOD=inject-tcp ./ci/test.sh
-  - env TELEPRESENCE_METHOD=vpn-tcp ./ci/test.sh
+  - "./build --travis"
 
 after_script:
   - "./ci/clean-cluster.py"
