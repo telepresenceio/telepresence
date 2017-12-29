@@ -47,7 +47,7 @@ before_install:
   # Do the rest of the setup - which is a bit less particular to travis.
   - "./environment-setup.sh ${PROJECT_NAME} ${CLUSTER_NAME} ${CLOUDSDK_COMPUTE_ZONE}"
   # Also get google cloud sdk binaries (including kubectl) into PATH:
-  - "export PATH=${HOME}/google-cloud-sdk/bin:{$PATH}"
+  - "export PATH=${HOME}/google-cloud-sdk/bin:${PATH}"
 
 script:
   - "./build --travis"
