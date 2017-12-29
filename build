@@ -183,7 +183,7 @@ def _parser():
     parser.add_argument(
         '--version-suffix',
         dest='version_suffix',
-        default="{OS}-{TIME}",
+        default="-{OS}-{TIME}",
         help='Include a unique-ish suffix on the computed version number.',
     )
     parser.add_argument(
