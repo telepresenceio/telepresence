@@ -93,12 +93,10 @@ def _test(registry, version, method, test_env, test_args):
         # Don't want parallism for OpenShift (causes problems with OpenShift
         # Online's limited free plan).
         parallel = "1"
-    elif method == "vpn-tcp":
+    elif method == "vpn-tcp" or method == "container":
         # And don't want parallelism for VPN-y method since should only have
-        # one running a time.
-        parallel = "1"
-    elif platform == "darwin":
-        # And parallelism breaks container method on OS X.
+        # one running a time.  Or for container method because it confuses
+        # checking in the tests for leaked resources.
         parallel = "1"
     else:
         parallel = "4"
