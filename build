@@ -217,7 +217,7 @@ def _get_version():
     return git_tag + suffix
 
 def _setup_virtualenv():
-    rmtree("virtualenv")
+    rmtree("virtualenv", ignore_errors=True)
     _run("virtualenv", "--python=python3", "virtualenv")
     _pip("install", "-r", "dev-requirements.txt")
     _pip("install", "-r", "k8s-proxy/requirements.txt")
