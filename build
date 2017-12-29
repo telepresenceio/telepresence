@@ -237,7 +237,7 @@ def _setup_virtualenv():
     _pip("install", "-r", "k8s-proxy/requirements.txt")
     _pip("install", "git+https://github.com/datawire/sshuttle.git@telepresence")
     _run("head", "virtualenv/bin/pip")
-    _pip("install", "--verbose", "-e", ".")
+    _run("virtualenv/bin/python", "setup.py", "develop", "--no-deps")
 
 
 def _flake8():
