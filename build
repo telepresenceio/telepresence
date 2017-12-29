@@ -266,7 +266,7 @@ def _virtualenv(*argv, env=None):
     env.update({
         "PATH": bindir + pathsep + environ["PATH"]
     })
-    _run("python", "-v", "/".join((bindir, argv[0])), *argv[1:], env=env)
+    _run("python", "/".join((bindir, argv[0])), *argv[1:], env=env)
 
 def _sudo(*argv):
     _run("sudo", *argv)
