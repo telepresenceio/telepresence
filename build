@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 
 from time import time
-from os import environ
+from os import (
+    environ,
+    pathsep,
+)
 from sys import (
     platform,
     stdout,
@@ -250,7 +253,12 @@ def _pip(*argv):
     _virtualenv("pip", *argv)
 
 def _virtualenv(*argv, env=None):
-    _run("virtualenv/bin/" + argv[0], *argv[1:], env=env)
+    if env is None:
+        env = {}
+    env.update({
+        "PATH": abspath("virtualenv/bin") + pathsep + environ["PATH"]
+    })
+    _run(*argv, env=env)
 
 def _sudo(*argv):
     _run("sudo", *argv)
