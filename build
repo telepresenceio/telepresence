@@ -281,6 +281,7 @@ def _run(*argv, env=None):
             )),
             " ".join(argv),
         ),
+        flush=True,
     )
     try:
         check_call(argv, stdout=stdout, stderr=stderr, env=pass_env)
