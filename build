@@ -260,12 +260,13 @@ def _pip(*argv):
     _virtualenv("pip", *argv)
 
 def _virtualenv(*argv, env=None):
+    bindir = abspath("virtualenv/bin")
     if env is None:
         env = {}
     env.update({
-        "PATH": abspath("virtualenv/bin") + pathsep + environ["PATH"]
+        "PATH": bindir + pathsep + environ["PATH"]
     })
-    _run("python", "-v", "-v", *argv, env=env)
+    _run("python", "-v", "-v", "/".join((bindir, argv[0])), *argv[1:], env=env)
 
 def _sudo(*argv):
     _run("sudo", *argv)
