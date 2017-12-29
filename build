@@ -75,6 +75,8 @@ def main():
     if mypy:
         _mypy()
 
+    _run("pwd")
+    _run("ls", "-lR", "virtualenv")
     _virtualenv('telepresence', '--help')
 
     version = _get_version(version_suffix)
