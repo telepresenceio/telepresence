@@ -76,7 +76,7 @@ def main():
         _mypy()
 
     _run("pwd")
-    _run("ls", "-lR", "virtualenv")
+    _run("find", "virtualenv", "-maxdepth", "4")
     _virtualenv('telepresence', '--help')
 
     version = _get_version(version_suffix)
