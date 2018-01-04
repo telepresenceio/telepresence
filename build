@@ -39,10 +39,15 @@ def main():
         flake8 = True
         pylint = True
         mypy = True
+        registry = "gcr.io/" + environ["PROJECT_NAME"]
         if platform == "linux":
-            registry = "gcr.io/" + environ["PROJECT_NAME"]
+            # We'll do this on Linux and keep our fingers crossed that this is
+            # done by the time the OS X builder wants to pull any images.  On
+            # travis, this is a pretty safe bet as OS X has much longer build
+            # queues and takes longer to set up.
+            build_and_push = True
         else:
-            registry = None
+            build_and_push = False
         version_suffix = ""
         methods = ["inject-tcp", "vpn-tcp"]
         if platform == "linux":
@@ -60,6 +65,7 @@ def main():
         pylint = args.pylint
         mypy = args.mypy
         registry = args.registry
+        build_and_push = args.build_and_push
         version_suffix = args.version_suffix
         methods = args.methods or ['container', 'inject-tcp', 'vpn-tcp']
         test_args = args.test_args or []
@@ -86,7 +92,7 @@ def main():
     _virtualenv('telepresence', '--help')
 
     version = _get_version(version_suffix)
-    if registry:
+    if build_and_push:
         _build(version)
         _push(version, registry)
 
@@ -185,11 +191,16 @@ def _parser():
         action='store_true',
     )
     parser.add_argument(
-        '--push-to-registry',
+        '--registry',
         metavar='REGISTRY',
         dest='registry',
         type=str,
-        help='Docker registry to which to push built images',
+        help='Docker registry for pushing/pulling Telepresence images',
+    )
+    parser.add_argument(
+        '--build-and-push',
+        action='store_true',
+        dest='build_and_push',
     )
     parser.add_argument(
         '--version-suffix',
