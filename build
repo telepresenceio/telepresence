@@ -68,7 +68,10 @@ def main():
 
     if flake8:
         _flake8()
+
+    # XXXX
     return
+
     if pylint:
         _pylint()
 
