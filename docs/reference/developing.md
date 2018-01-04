@@ -11,26 +11,47 @@
 
 ### Setting up a development environment
 
+The following instructions will gets the Telepresence source and sets up some of its dependencies (torsocks, gcloud).
+It also creates a virtualenv and installs Telepresence's Python dependencies into it.
+
+
 ```console
 $ git clone git@github.com:datawire/telepresence.git
 $ cd telepresence
-$ export TELEPRESENCE_VERSION=$(make version)
-$ make setup
-$ export PATH=$PATH:$PWD/virtualenv/bin
+$ ./environment-setup.sh $PROJECT $CLUSTER $ZONE
+$ ./build --manage-virtualenv
 ```
-
-This installs Telepresence and its development requirements into a virtualenv in your source tree. Instead of putting the virtualenv bin directory at the end of your `PATH`, you can activate the virtualenv or place copies of the executables in some other directory that is on your `PATH`: `telepresence`, `stamp-telepresence`, and `sshuttle-telepresence`.
-
-The `TELEPRESENCE_VERSION` environment variable is computed from your local checkout to synchronize your changes to images used in Docker and in Kubernetes with what Telepresence tries to launch in Docker daemon and your remote cluster. If you modify that code, you must rebuild it.
+You may want to activate the virtualenvenv (for the duration of your shell):
 
 ```console
-$ make build-local                # if you modify local-docker
-$ make build-k8s-proxy            # if you modify k8s-proxy
-$ make build-k8s-proxy-minikube   #  ... and you use Minikube
-$ make build-k8s-proxy-minishift  #  ... and you use Minishift
+$ . virtualenv/bin/activate
 ```
 
-If your cluster is remote, you also need to push your images. FIXME: How?
+This will give you access to the Telepresence executables:
+
+* `telepresence`
+* `stamp-telepresence`
+* `sshuttle-telepresence`.
+
+If you modify Telepresence, you must rebuild the Docker images and make them available to be pulled from elsewhere.
+
+```console
+$ ./build --build-and-push
+```
+
+Or if you want to build images using minikube:
+
+```console
+$ eval $(minikube docker-env --shell bash)
+$ ./build --build-and-push
+```
+
+Or using minishift:
+
+```console
+$ eval $(minishift docker-env --shell bash)
+$ ./build --build-and-push
+```
 
 ### Coding standard
 

@@ -1,4 +1,4 @@
-.PHONY: default build-k8s-proxy bumpversion release minikube-test build-k8s-proxy-minikube setup
+.PHONY: default build-k8s-proxy bumpversion release minikube-test build-k8s-proxy-minikube
 
 VERSION=$(shell git describe --tags)${TELEPRESENCE_VER_SUFFIX}
 SHELL:=/bin/bash
@@ -17,9 +17,6 @@ virtualenv:
 	virtualenv/bin/pip install -r dev-requirements.txt
 	virtualenv/bin/pip install -r k8s-proxy/requirements.txt
 	virtualenv/bin/pip install git+https://github.com/datawire/sshuttle.git@telepresence
-
-setup: virtualenv
-	virtualenv/bin/pip install -e .
 
 # Build Kubernetes side proxy image inside local Docker:
 build-k8s-proxy:
