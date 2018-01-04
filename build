@@ -111,10 +111,13 @@ def _test(registry, version, method, test_env, test_args):
 
     if test_env is None:
         test_env = {}
+    if registry is not None:
+        test_env.update({
+            "TELEPRESENCE_REGISTRY": registry,
+        })
     test_env.update({
         "TELEPRESENCE_METHOD": method,
         "TELEPRESENCE_VERSION": version,
-        "TELEPRESENCE_REGISTRY": registry,
         "SCOUT_DISABLE": "1",
     })
 
