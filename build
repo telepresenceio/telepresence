@@ -192,6 +192,7 @@ def _parser():
         metavar='REGISTRY',
         dest='registry',
         type=str,
+        required=True,
         help='Docker registry for pushing/pulling Telepresence images',
     )
     parser.add_argument(
