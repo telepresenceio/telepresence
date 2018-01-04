@@ -77,17 +77,12 @@ def main():
     if flake8:
         _flake8()
 
-    # XXXX
-    return
-
     if pylint:
         _pylint()
 
     if mypy:
         _mypy()
 
-    _run("pwd")
-    _run("find", "virtualenv", "-maxdepth", "4")
     _virtualenv('telepresence', '--help')
 
     version = _get_version(version_suffix)
@@ -244,12 +239,10 @@ def _setup_virtualenv():
     _run("virtualenv", "--python=python3", "virtualenv")
     _pip("--version")
     _pip("install", "flake8")
-    # _pip("install", "-r", "dev-requirements.txt")
-    # _pip("install", "-r", "k8s-proxy/requirements.txt")
-    # _pip("install", "git+https://github.com/datawire/sshuttle.git@telepresence")
-    # _run("head", "virtualenv/bin/pip")
-    # _pip("install", "-e", ".")
-
+    _pip("install", "-r", "dev-requirements.txt")
+    _pip("install", "-r", "k8s-proxy/requirements.txt")
+    _pip("install", "git+https://github.com/datawire/sshuttle.git@telepresence")
+    _pip("install", "-e", ".")
 
 def _flake8():
     _virtualenv("flake8", "--isolated", "local-docker", "k8s-proxy", "telepresence")
