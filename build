@@ -233,7 +233,6 @@ def _setup_virtualenv():
     _run("virtualenv", "--python=python3", "virtualenv")
     _pip("--version")
     _pip("install", "--verbose", "-r", "dev-requirements.txt")
-    _run("find", "virtualenv", "-maxdepth", "4")
     # _pip("install", "-r", "k8s-proxy/requirements.txt")
     # _pip("install", "git+https://github.com/datawire/sshuttle.git@telepresence")
     # _run("head", "virtualenv/bin/pip")
