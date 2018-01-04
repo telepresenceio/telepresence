@@ -230,7 +230,6 @@ def _get_version(suffix_format):
 
 def _setup_virtualenv():
     rmtree("virtualenv", ignore_errors=True)
-    _run("pip", "install", "--upgrade", "virtualenv")
     _run("virtualenv", "--python=python3", "virtualenv")
     _pip("--version")
     _pip("install", "--verbose", "-r", "dev-requirements.txt")
