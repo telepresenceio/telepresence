@@ -235,11 +235,12 @@ def _setup_virtualenv():
     rmtree("virtualenv", ignore_errors=True)
     _run("virtualenv", "--python=python3", "virtualenv")
     _pip("--version")
-    _pip("install", "-r", "dev-requirements.txt")
+    _pip("install", "flake8")
+    # _pip("install", "-r", "dev-requirements.txt")
     # _pip("install", "-r", "k8s-proxy/requirements.txt")
     # _pip("install", "git+https://github.com/datawire/sshuttle.git@telepresence")
     # _run("head", "virtualenv/bin/pip")
-    # _run("virtualenv/bin/python", "setup.py", "develop", "--no-deps")
+    # _pip("install", "-e", ".")
 
 
 def _flake8():
