@@ -290,7 +290,7 @@ def _run(*argv, env=None):
     print(
         "+ {} {}".format(
             " ".join(list(
-                "=".join((k, v)) for (k, v) in (env or {}).items()
+                "{}={}".format(k, v) for (k, v) in (env or {}).items()
             )),
             " ".join(argv),
         ),
