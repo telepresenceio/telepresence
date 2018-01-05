@@ -189,6 +189,7 @@ def _parser():
     parser.add_argument(
         '--travis',
         action='store_true',
+        help='do all the things CI should do'
     )
     parser.add_argument(
         '--registry',
@@ -201,12 +202,13 @@ def _parser():
         '--build-and-push',
         action='store_true',
         dest='build_and_push',
+        help='build the Docker images and push them to the registry',
     )
     parser.add_argument(
         '--version-suffix',
         dest='version_suffix',
         default="-{OS}-{TIME}",
-        help='Include a unique-ish suffix on the computed version number.',
+        help='include a unique-ish suffix on the version number/image tag',
     )
     parser.add_argument(
         "--manage-virtualenv",
@@ -217,27 +219,32 @@ def _parser():
         '--flake8',
         action='store_true',
         dest='flake8',
+        help='run flake8 on the code base',
     )
     parser.add_argument(
         '--pylint',
         action='store_true',
         dest='pylint',
+        help='run pylint on the code base',
     )
     parser.add_argument(
         '--mypy',
         action='store_true',
         dest='mypy',
+        help='run mypy on the code base',
     )
     parser.add_argument(
         '--method',
         action='append',
         dest='methods',
-        choices=['container', 'inject-tcp', 'vpn-tcp']
+        choices=['container', 'inject-tcp', 'vpn-tcp'],
+        help='add a mode to those which will be tested',
     )
     parser.add_argument(
         'test_args',
         metavar='test-args',
         nargs='*',
+        help='pass additional arguments to py.test',
     )
 
     return parser
