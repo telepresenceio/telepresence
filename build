@@ -11,10 +11,12 @@ from sys import (
     stderr,
 )
 from os.path import (
-    expanduser,
     abspath,
 )
-from shutil import rmtree
+from shutil import (
+    rmtree,
+    which,
+)
 from argparse import ArgumentParser
 from subprocess import (
     CalledProcessError,
@@ -25,6 +27,10 @@ from subprocess import (
 def main():
     parser = _parser()
     args = parser.parse_args()
+
+    for exe in {"gcloud", "kubectl"}:
+        if which(exe) is None:
+            raise SystemExit("Required executable {} not found on $PATH".format(exe))
 
     try:
         # Presence of this variable in pip processes we launch causes pip to
@@ -283,8 +289,7 @@ def _mypy():
     )
 
 def _gcloud(*argv):
-    gcloud = expanduser("~/google-cloud-sdk/bin/gcloud")
-    _run(gcloud, *argv)
+    _run("gcloud", *argv)
 
 def _pip(*argv):
     _virtualenv("pip", *argv)
