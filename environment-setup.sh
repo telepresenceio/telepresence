@@ -23,9 +23,6 @@ case "$(uname -s)" in
 	 exit 1
 esac
 
-# Newer Ruby needed for Package Cloud
-rvm install 2.1
-
 # Record some debugging info:
 python --version
 python2 --version

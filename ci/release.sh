@@ -6,6 +6,9 @@ if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
     exit 0;
 fi
 
+# Newer Ruby needed for Package Cloud
+rvm install 2.1
+
 # Login to Docker Hub
 docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
 
