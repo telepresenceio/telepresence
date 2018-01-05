@@ -71,6 +71,9 @@ def main():
         test_args = args.test_args or []
         test_env = {}
 
+    if registry is None:
+        raise SystemExit("You must specify a registry with --registry (or --travis)")
+
     # Attempt to get credentials cached early on while the user is still
     # looking at the terminal.  They'll be required later on during the test
     # suite run and the prompt is likely to be buried in test output at that
@@ -192,7 +195,6 @@ def _parser():
         metavar='REGISTRY',
         dest='registry',
         type=str,
-        required=True,
         help='Docker registry for pushing/pulling Telepresence images',
     )
     parser.add_argument(
