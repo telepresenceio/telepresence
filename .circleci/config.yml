@@ -6,9 +6,20 @@ jobs:
     macos:
       xcode: "9.0"
 
-
     steps:
       - "checkout"
+
+      - run:
+          name: "decrypt gcloud keys"
+          command: |
+            # To update:
+            #   1) Generate a new key and IV:
+            #      $ dd if=/dev/urandom count=64 bs=1 | md5sum
+            #   2) Update GCLOUD_KEY and GCLOUD_IV in CircleCI "Environment
+            #      Variables" configuration for Telepresence project.
+            #   3) Encrypt the new gcloud key:
+            #      $ ci/encrypt-gcloud-key $GCLOUD_KEY $GCLOUD_IV
+            ci/decrypt-gcloud-key $GCLOUD_KEY $GCLOUD_IV
 
       - run:
           name: "setup environment"
