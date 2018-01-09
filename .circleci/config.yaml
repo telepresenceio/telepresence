@@ -1,0 +1,22 @@
+# https://circleci.com/docs/2.0/
+
+version: 2
+jobs:
+  build:
+    macos:
+      xcode: "9.1"
+
+    steps:
+      - "checkout"
+
+      - run:
+          name: "setup environment"
+          command: |
+            ./environment-setup.sh datawireio telepresence-testing us-central1-a
+
+      # run tests!
+      - run:
+          name: "run tests"
+          command: |
+            export PATH=${HOME}/google-cloud-sdk/bin:${PATH}
+            ./build --travis
