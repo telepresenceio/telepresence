@@ -19,7 +19,7 @@ jobs:
             #      Variables" configuration for Telepresence project.
             #   3) Encrypt the new gcloud key:
             #      $ ci/encrypt-gcloud-key $GCLOUD_KEY $GCLOUD_IV
-            ci/decrypt-gcloud-key $GCLOUD_KEY $GCLOUD_IV
+            ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
 
       - run:
           name: "setup environment"
