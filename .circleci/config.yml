@@ -12,6 +12,7 @@ jobs:
       - run:
           name: "get git tags???"
           command: |
+            env
             git fetch --depth=1000000 --all --tags
 
       - run:
@@ -73,5 +74,4 @@ jobs:
           name: "run tests"
           command: |
             export PATH=${HOME}/google-cloud-sdk/bin:${PATH}
-            # Note hard-coded OSX version suffix.  We also skip container method due to the platform.
-            ./build --circle
+            # ./build --circle
