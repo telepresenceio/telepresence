@@ -65,6 +65,13 @@ def main():
             # https://github.com/kubernetes/kubernetes/issues/30617)
             "GOOGLE_APPLICATION_CREDENTIALS": abspath("gcloud-service-key.json"),
         }
+    elif args.circle:
+        registry = "exarkun"
+        version_suffix = "-osx"
+        methods = ["inject-tcp", "vpn-tcp"]
+        flake8 = pylint = mypy = build_and_push = None
+        test_args = []
+        test_env = {}
     else:
         manage_virtualenv = args.manage_virtualenv
         flake8 = args.flake8
@@ -199,7 +206,12 @@ def _parser():
     parser.add_argument(
         '--travis',
         action='store_true',
-        help='do all the things CI should do'
+        help='do all the things Travis should do'
+    )
+    parser.add_argument(
+        '--circle',
+        action='store_true',
+        help='do all the things CircleCI should do'
     )
     parser.add_argument(
         '--registry',
