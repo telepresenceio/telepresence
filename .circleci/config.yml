@@ -30,6 +30,11 @@ jobs:
             # Note hard-coded OSX platform
             ./environment-setup.sh datawireio telepresence-testing us-central1-a osx
 
+      - run:
+          name: "configure gcloud"
+          command: |
+            echo 'PATH=${HOME}/google-cloud-sdk/bin:${PATH}' >> ${BASH_ENV}
+
       - save_cache:
           key: "system-components"
           paths:
@@ -43,7 +48,6 @@ jobs:
       - run:
           name: "setup Python environment"
           command: |
-            export PATH=${HOME}/google-cloud-sdk/bin:${PATH}
             ./build --registry gcr.io/datawireio --manage-virtualenv
 
       - save_cache:
@@ -56,11 +60,9 @@ jobs:
       - run:
           name: "run lint checks"
           command: |
-            export PATH=${HOME}/google-cloud-sdk/bin:${PATH}
             ./build --registry gcr.io/datawireio --flake8 --pylint --mypy
 
       - run:
           name: "run tests"
           command: |
-            export PATH=${HOME}/google-cloud-sdk/bin:${PATH}
             ./build --circle
