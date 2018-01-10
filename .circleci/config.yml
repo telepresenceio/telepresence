@@ -3,14 +3,14 @@
 version: 2
 jobs:
   build:
-    override:
-      - "git fetch --unshallow"
-
     macos:
       xcode: "9.0"
 
     steps:
-      - "checkout"
+      - checkout:
+          override:
+            - "git fetch --unshallow"
+
 
       - run:
           name: "get git tags???"
