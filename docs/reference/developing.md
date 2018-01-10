@@ -36,21 +36,21 @@ This will give you access to the Telepresence executables:
 If you modify Telepresence, you must rebuild the Docker images and make them available to be pulled from elsewhere.
 
 ```console
-$ ./build --build-and-push
+$ ./build --registry <Docker registry for tag and push> --build-and-push
 ```
 
 Or if you want to build images using minikube:
 
 ```console
 $ eval $(minikube docker-env --shell bash)
-$ ./build --build-and-push
+$ ./build --registry <Docker registry for tag and push> --build-and-push
 ```
 
 Or using minishift:
 
 ```console
 $ eval $(minishift docker-env --shell bash)
-$ ./build --build-and-push
+$ ./build --registry <Docker registry for tag and push> --build-and-push
 ```
 
 ### Coding standard
