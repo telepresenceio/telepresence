@@ -10,17 +10,6 @@ jobs:
       - "checkout"
 
       - run:
-          name: "get git tags???"
-          command: |
-            env
-            git fetch --depth=1000000 --all --tags
-
-      - run:
-          name: "dump git tags"
-          command: |
-            git tag
-
-      - run:
           name: "decrypt gcloud keys"
           command: |
             # To update:
@@ -74,4 +63,4 @@ jobs:
           name: "run tests"
           command: |
             export PATH=${HOME}/google-cloud-sdk/bin:${PATH}
-            # ./build --circle
+            ./build --circle
