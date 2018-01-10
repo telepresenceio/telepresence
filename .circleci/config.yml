@@ -18,7 +18,7 @@ jobs:
             #   2) Update GCLOUD_KEY and GCLOUD_IV in CircleCI "Environment
             #      Variables" configuration for Telepresence project.
             #   3) Encrypt the new gcloud key:
-            #      $ ci/encrypt-gcloud-key $GCLOUD_KEY $GCLOUD_IV
+            #      $ ci/encrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
             ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
 
       - run:
