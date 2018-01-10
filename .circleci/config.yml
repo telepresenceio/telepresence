@@ -6,6 +6,9 @@ jobs:
     macos:
       xcode: "9.0"
 
+    environment:
+      - PROJECT_NAME: "datawireio"
+
     steps:
       - "checkout"
 

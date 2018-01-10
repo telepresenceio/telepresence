@@ -67,8 +67,8 @@ def main():
         }
     elif args.circle:
         manage_virtualenv = False
-        registry = "exarkun"
-        version_suffix = "-osx"
+        registry = "gcr.io/" + environ["PROJECT_NAME"]
+        version_suffix = ""
         methods = ["inject-tcp", "vpn-tcp"]
         flake8 = pylint = mypy = build_and_push = False
         test_args = []
