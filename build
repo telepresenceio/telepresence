@@ -70,7 +70,7 @@ def main():
         registry = "exarkun"
         version_suffix = "-osx"
         methods = ["inject-tcp", "vpn-tcp"]
-        flake8 = pylint = mypy = build_and_push = None
+        flake8 = pylint = mypy = build_and_push = False
         test_args = []
         test_env = {}
     else:
