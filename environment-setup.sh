@@ -13,6 +13,7 @@ fi
 PROJECT_NAME=$1
 CLUSTER_NAME=$2
 CLOUDSDK_COMPUTE_ZONE=$3
+OS=$4
 
 case "$(uname -s)" in
     Darwin)
@@ -40,4 +41,4 @@ ruby --version
 ./ci/setup-gcloud.sh "${PROJECT_NAME}" "${CLUSTER_NAME}" "${CLOUDSDK_COMPUTE_ZONE}"
 
 # Make sure torsocks is installed:
-./ci/build-torsocks.sh
+./ci/build-torsocks.sh "$OS"

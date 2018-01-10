@@ -45,7 +45,7 @@ before_install:
   - "ci/decrypt-gcloud-key travisci $encrypted_6168b41c1bb0_key $encrypted_6168b41c1bb0_iv"
 
   # Do the rest of the setup - which is a bit less particular to travis.
-  - "./environment-setup.sh ${PROJECT_NAME} ${CLUSTER_NAME} ${CLOUDSDK_COMPUTE_ZONE}"
+  - "./environment-setup.sh ${PROJECT_NAME} ${CLUSTER_NAME} ${CLOUDSDK_COMPUTE_ZONE} ${TRAVIS_OS_NAME}"
 
   # Also get google cloud sdk binaries (including kubectl) into PATH:
   - "export PATH=${HOME}/google-cloud-sdk/bin:${PATH}"

@@ -24,7 +24,7 @@ jobs:
       - run:
           name: "setup environment"
           command: |
-            ./environment-setup.sh datawireio telepresence-testing us-central1-a
+            ./environment-setup.sh datawireio telepresence-testing us-central1-a osx
 
       - run:
           name: "run tests"
