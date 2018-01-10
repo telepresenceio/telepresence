@@ -29,5 +29,6 @@ jobs:
       - run:
           name: "run tests"
           command: |
+            export PROJECT_NAME=datawireio
             export PATH=${HOME}/google-cloud-sdk/bin:${PATH}
             ./build --travis
