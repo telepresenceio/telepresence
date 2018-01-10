@@ -10,6 +10,11 @@ jobs:
       - "checkout"
 
       - run:
+          name: "get git tags???"
+          command: |
+            git fetch --tags
+
+      - run:
           name: "dump git tags"
           command: |
             git tag
