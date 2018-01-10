@@ -1,11 +1,18 @@
 #!/bin/bash
 set -e
-if [ ! -d "$HOME/google-cloud-sdk/bin" ]; then
-    rm -rf $HOME/google-cloud-sdk;
-    export CLOUDSDK_CORE_DISABLE_PROMPTS=1;
-    curl https://sdk.cloud.google.com | bash;
+
+if ! type -p gcloud; then
+    # Cannot find gcloud.  So we'll just install it.
+    if [ ! -d "$HOME/google-cloud-sdk/bin" ]; then
+	rm -rf $HOME/google-cloud-sdk;
+	export CLOUDSDK_CORE_DISABLE_PROMPTS=1;
+	curl https://sdk.cloud.google.com | bash;
+    fi
+    export PATH=~/google-cloud-sdk/bin:$PATH
+
+    gcloud --quiet components update
+    gcloud --quiet components update kubectl
 fi
-export PATH=~/google-cloud-sdk/bin:$PATH
 
 SERVICE_KEY=gcloud-service-key.json
 
@@ -17,8 +24,6 @@ if [ ! -e "${SERVICE_KEY}" ]; then
 fi
 
 gcloud --quiet version
-gcloud --quiet components update
-gcloud --quiet components update kubectl
 gcloud auth activate-service-account --key-file "${SERVICE_KEY}"
 
 PROJECT_NAME=$1
