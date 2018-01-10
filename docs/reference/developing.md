@@ -40,14 +40,14 @@ If you modify Telepresence, you must rebuild the Docker images and make them ava
 $ ./build --registry <Docker registry for tag and push> --build-and-push
 ```
 
-Or if you want to build images using minikube:
+Or if you want to build images using minikube (untested):
 
 ```console
 $ eval $(minikube docker-env --shell bash)
 $ ./build --registry <Docker registry for tag and push> --build-and-push
 ```
 
-Or using minishift:
+Or using minishift (untested):
 
 ```console
 $ eval $(minishift docker-env --shell bash)
