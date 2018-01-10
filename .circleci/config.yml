@@ -12,7 +12,7 @@ jobs:
       - run:
           name: "get git tags???"
           command: |
-            git fetch --all --tags
+            git fetch --depth=1000000 --all --tags
 
       - run:
           name: "dump git tags"
