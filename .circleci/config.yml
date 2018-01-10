@@ -21,16 +21,36 @@ jobs:
             #      $ ci/encrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
             ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
 
+      - restore_cache:
+          key: "homebrew"
+
       - run:
           name: "setup non-Python environment"
           command: |
+            # Note hard-coded OSX platform
             ./environment-setup.sh datawireio telepresence-testing us-central1-a osx
+
+      - save_cache:
+          key: "homebrew"
+          paths:
+            - "~/Library/Caches/Homebrew"
+
+      - restore_cache:
+          key: |
+            requirements-{{ .Branch }}-{{ checksum "dev-requirements.txt" }}-{{ checksum "k8s-proxy/requirements.txt" }}-{{ checksum "setup.py" }}
 
       - run:
           name: "setup Python environment"
           command: |
             export PATH=${HOME}/google-cloud-sdk/bin:${PATH}
             ./build --registry gcr.io/datawireio --manage-virtualenv
+
+      - save_cache:
+          key: |
+            requirements-{{ .Branch }}-{{ checksum "dev-requirements.txt" }}-{{ checksum "k8s-proxy/requirements.txt" }}-{{ checksum "setup.py" }}
+          paths:
+            # OSX specific
+            - "~/Library/Caches/pip/wheels/"
 
       - run:
           name: "run lint checks"
@@ -42,4 +62,5 @@ jobs:
           name: "run tests"
           command: |
             export PATH=${HOME}/google-cloud-sdk/bin:${PATH}
+            # Note hard-coded OSX version suffix.  We also skip container method due to the platform.
             ./build --registry gcr.io/datawireio --build --version-suffix -osx --method inject-tcp --method vpn-tcp
