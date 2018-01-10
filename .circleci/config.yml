@@ -10,6 +10,11 @@ jobs:
       - "checkout"
 
       - run:
+          name: "dump git tags"
+          command: |
+            git tag
+
+      - run:
           name: "decrypt gcloud keys"
           command: |
             # To update:
