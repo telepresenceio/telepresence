@@ -13,6 +13,7 @@
 
 The following instructions will gets the Telepresence source and sets up some of its dependencies (torsocks, gcloud).
 It also creates a virtualenv and installs Telepresence's Python dependencies into it.
+The arguments required for `environment-setup.sh` are Google Cloud configuration items which identify a GKE cluster which can be used for testing.
 
 
 ```console
