@@ -73,7 +73,7 @@ def main():
         registry = args.registry
         build_and_push = args.build_and_push
         version_suffix = args.version_suffix
-        methods = args.methods or ['container', 'inject-tcp', 'vpn-tcp']
+        methods = args.methods
         test_args = args.test_args or []
         test_env = {}
 
@@ -244,6 +244,7 @@ def _parser():
         action='append',
         dest='methods',
         choices=['container', 'inject-tcp', 'vpn-tcp'],
+        default=[],
         help='add a mode to those which will be tested',
     )
     parser.add_argument(
