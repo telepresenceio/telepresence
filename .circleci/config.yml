@@ -30,13 +30,13 @@ jobs:
           name: "setup Python environment"
           command: |
             export PATH=${HOME}/google-cloud-sdk/bin:${PATH}
-            ./build --manage-virtualenv
+            ./build --registry gcr.io/datawireio --manage-virtualenv
 
       - run:
           name: "run lint checks"
           command: |
             export PATH=${HOME}/google-cloud-sdk/bin:${PATH}
-            ./build --flake8 --pylint --mypy
+            ./build --registry gcr.io/datawireio --flake8 --pylint --mypy
 
       - run:
           name: "run tests"
