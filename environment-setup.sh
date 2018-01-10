@@ -4,6 +4,11 @@
 # suite.  These steps should typically only be required once to prepare the
 # environment.
 
+if [ "$#" -ne 3 ]; then
+    echo "Usage: $0 <gcloud project name> <gcloud cluster name> <gcloud compute zone>"
+    exit 1
+fi
+
 PROJECT_NAME=$1
 CLUSTER_NAME=$2
 CLOUDSDK_COMPUTE_ZONE=$3
