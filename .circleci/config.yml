@@ -22,7 +22,7 @@ jobs:
             ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
 
       - restore_cache:
-          key: "homebrew"
+          key: "system-components"
 
       - run:
           name: "setup non-Python environment"
@@ -31,9 +31,10 @@ jobs:
             ./environment-setup.sh datawireio telepresence-testing us-central1-a osx
 
       - save_cache:
-          key: "homebrew"
+          key: "system-components"
           paths:
             - "~/Library/Caches/Homebrew"
+            - "~/google-cloud-sdk/"
 
       - restore_cache:
           key: |
