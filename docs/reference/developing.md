@@ -34,7 +34,13 @@ This will give you access to the Telepresence executables:
 * `stamp-telepresence`
 * `sshuttle-telepresence`.
 
-If you modify Telepresence, you must rebuild the Docker images and make them available to be pulled from elsewhere.
+You can test your modifications to Telepresence with the `build` tool:
+
+```console
+$ ./build --registry <Docker registry for tag and push> --method <container | inject-tcp | vpn-tcp> [--method ...]
+```
+
+You can also build images and push them to a registry without running any tests:
 
 ```console
 $ ./build --registry <Docker registry for tag and push> --build-and-push
