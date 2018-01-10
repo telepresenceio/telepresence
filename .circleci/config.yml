@@ -38,7 +38,7 @@ jobs:
 
       - restore_cache:
           key: |
-            requirements-{{ .Branch }}-{{ checksum "dev-requirements.txt" }}-{{ checksum "k8s-proxy/requirements.txt" }}-{{ checksum "setup.py" }}
+            pip-http-cache-{{ .Branch }}-{{ checksum "dev-requirements.txt" }}-{{ checksum "k8s-proxy/requirements.txt" }}-{{ checksum "setup.py" }}
 
       - run:
           name: "setup Python environment"
