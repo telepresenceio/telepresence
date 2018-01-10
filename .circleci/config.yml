@@ -22,13 +22,22 @@ jobs:
             ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
 
       - run:
-          name: "setup environment"
+          name: "setup non-Python environment"
           command: |
             ./environment-setup.sh datawireio telepresence-testing us-central1-a osx
 
       - run:
+          name: "setup Python environment"
+          command: |
+            ./build --manage-virtualenv
+
+      - run:
+          name: "run lint checks"
+          command: |
+            ./build --flake8 --pylint --mypy
+
+      - run:
           name: "run tests"
           command: |
-            export PROJECT_NAME=datawireio
             export PATH=${HOME}/google-cloud-sdk/bin:${PATH}
-            ./build --travis
+            ./build --registry gcr.io/datawireio --build --version-suffix -osx --method inject-tcp --method vpn-tcp
