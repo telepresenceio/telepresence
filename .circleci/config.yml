@@ -63,4 +63,4 @@ jobs:
           command: |
             export PATH=${HOME}/google-cloud-sdk/bin:${PATH}
             # Note hard-coded OSX version suffix.  We also skip container method due to the platform.
-            ./build --registry gcr.io/datawireio --build --version-suffix -osx --method inject-tcp --method vpn-tcp
+            ./build --registry gcr.io/datawireio --build --version-suffix=-osx --method inject-tcp --method vpn-tcp
