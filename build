@@ -66,6 +66,7 @@ def main():
             "GOOGLE_APPLICATION_CREDENTIALS": abspath("gcloud-service-key.json"),
         }
     elif args.circle:
+        manage_virtualenv = False
         registry = "exarkun"
         version_suffix = "-osx"
         methods = ["inject-tcp", "vpn-tcp"]
