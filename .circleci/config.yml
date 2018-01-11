@@ -14,6 +14,7 @@ jobs:
   build-image:
     machine:
       enabled: true
+      # https://circleci.com/docs/2.0/configuration-reference/#machine
       image: "circleci/classic:201711-01"
 
     steps:
