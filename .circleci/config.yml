@@ -38,6 +38,7 @@ jobs:
       - run:
           name: "setup non-Python environment"
           command: |
+            pyenv local 3
             ./environment-setup.sh datawireio telepresence-testing us-central1-a linux
 
       - run:
