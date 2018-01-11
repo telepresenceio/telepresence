@@ -16,6 +16,11 @@ jobs:
       enabled: true
 
     steps:
+      - run:
+          name: "update system"
+          command: |
+            apt-get update
+
       - "checkout"
 
       - run:
