@@ -65,12 +65,15 @@ def wait_for_exit(
     runner: Runner, main_process: Popen, processes: Subprocesses
 ) -> None:
     """Given Popens, wait for one of them to die."""
+    runner.write("Everything launched. Waiting to exit...")
     while True:
         sleep(0.1)
-        if main_process.poll() is not None:
+        main_code = main_process.poll()
+        if main_code is not None:
             # Shell exited, we're done. Automatic shutdown cleanup will kill
             # subprocesses.
-            raise SystemExit(main_process.poll())
+            runner.write("Main process ({}) exited with code {}.".format(main_process.args, main_code))
+            raise SystemExit(main_code)
         dead_process = processes.any_dead()
         if dead_process:
             # Unfortunately torsocks doesn't deal well with connections
