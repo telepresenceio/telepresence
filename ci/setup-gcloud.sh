@@ -50,7 +50,7 @@ if ! type -p kubectl; then
 	    echo "Unknown platform."
 	    exit 1
 	    ;;
-
+    esac
 fi
 
 SERVICE_KEY=gcloud-service-key.json
