@@ -155,6 +155,11 @@ jobs:
             pip-http-cache-{{ .Branch }}-{{ checksum "dev-requirements.txt" }}-{{ checksum "k8s-proxy/requirements.txt" }}-{{ checksum "setup.py" }}
 
       - run:
+          name: "configure gcloud"
+          command: |
+            echo 'PATH=${HOME}/google-cloud-sdk/bin:${PATH}' >> ${BASH_ENV}
+
+     - run:
           name: "setup Python environment"
           command: |
             ./build --registry gcr.io/datawireio --manage-virtualenv
