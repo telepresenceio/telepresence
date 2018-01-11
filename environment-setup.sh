@@ -23,7 +23,10 @@ case "$(uname -s)" in
         ;;
 
     Linux)
-        sudo apt install sshfs conntrack python3 python3-virtualenv
+        sudo apt install \
+             sshfs conntrack python3 \
+             python3-virtualenv \
+             lsb-release
 
         # Create an environment variable for the correct distribution
         export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)"
@@ -33,7 +36,7 @@ case "$(uname -s)" in
         curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
         # Update the package list and install the Cloud SDK
         sudo apt-get update && sudo apt-get install google-cloud-sdk
-	;;
+        ;;
 
     *)
         echo "Unknown platform."
