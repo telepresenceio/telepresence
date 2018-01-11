@@ -49,6 +49,7 @@ jobs:
       - run:
           name: "setup non-Python environment"
           command: |
+            sudo pip install --upgrade pip virtualenv
             ./environment-setup.sh datawireio telepresence-testing us-central1-a linux
 
       - run:
