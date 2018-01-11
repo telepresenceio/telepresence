@@ -14,7 +14,7 @@ jobs:
   build-image:
     machine:
       enabled: true
-      image: "circleci/python:3"
+      image: "circleci/classic:201711-01"
 
     steps:
       - run:
