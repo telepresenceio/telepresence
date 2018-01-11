@@ -159,7 +159,7 @@ jobs:
           command: |
             echo 'PATH=${HOME}/google-cloud-sdk/bin:${PATH}' >> ${BASH_ENV}
 
-     - run:
+      - run:
           name: "setup Python environment"
           command: |
             ./build --registry gcr.io/datawireio --manage-virtualenv
