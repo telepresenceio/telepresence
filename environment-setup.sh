@@ -35,7 +35,7 @@ case "$(uname -s)" in
         # Import the Google Cloud Platform public key
         curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
         # Update the package list and install the Cloud SDK
-        sudo apt-get update && sudo apt-get install google-cloud-sdk
+        sudo apt-get update && sudo apt-get install google-cloud-sdk kubectl
         ;;
 
     *)
