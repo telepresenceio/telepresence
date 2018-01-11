@@ -6,6 +6,7 @@
 
 if [ "$#" -ne 3 ]; then
     echo "Usage: $0 <gcloud project name> <gcloud cluster name> <gcloud compute zone>"
+    echo "  (See .travis.yml for sample values)"
     exit 1
 fi
 
@@ -14,18 +15,19 @@ CLUSTER_NAME=$2
 CLOUDSDK_COMPUTE_ZONE=$3
 
 case "$(uname -s)" in
-     Darwin)
-	 brew update > /dev/null
-	 brew cask install osxfuse
-	 brew install python3 sshfs
-	 ;;
+    Darwin)
+        brew update > /dev/null
+        brew cask install osxfuse
+        brew install python3 sshfs
+        ;;
 
-     Linux)
-	 sudo apt install sshfs conntrack
-	 ;;
-     *)
-	 echo "Unknown platform."
-	 exit 1
+    Linux)
+        sudo apt install sshfs conntrack
+        ;;
+
+    *)
+        echo "Unknown platform."
+        exit 1
 esac
 
 # Record some debugging info:
