@@ -2,7 +2,7 @@
 
 version: 2
 jobs:
-  build:
+  build-macos:
     macos:
       xcode: "9.0"
 
