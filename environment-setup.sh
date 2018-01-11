@@ -25,7 +25,7 @@ case "$(uname -s)" in
     Linux)
         sudo apt-get install \
              sshfs conntrack python3 \
-             python3-virtualenv \
+             virtualenv \
              lsb-release
 
         # Create an environment variable for the correct distribution
