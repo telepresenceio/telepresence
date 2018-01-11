@@ -14,6 +14,7 @@ jobs:
   build-image:
     machine:
       enabled: true
+      image: "circleci/python:3"
 
     steps:
       - run:
@@ -38,7 +39,6 @@ jobs:
       - run:
           name: "setup non-Python environment"
           command: |
-            pyenv global 2.7.12 3.6.2
             ./environment-setup.sh datawireio telepresence-testing us-central1-a linux
 
       - run:
