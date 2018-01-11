@@ -1,5 +1,4 @@
-#!/bin/bash
-set -e
+#!/bin/bash -ex
 
 PROJECT_NAME=$1
 CLUSTER_NAME=$2
