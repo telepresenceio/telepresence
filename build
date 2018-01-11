@@ -70,9 +70,16 @@ def main():
         registry = "gcr.io/" + environ["PROJECT_NAME"]
         version_suffix = ""
         methods = ["inject-tcp", "vpn-tcp"]
+        if platform == "linux":
+            methods.insert(0, "container")
         flake8 = pylint = mypy = build_and_push = False
         test_args = []
-        test_env = {}
+        test_env = {
+            # Magic incantation to make kubectl work, because apparently
+            # gcloud can't do that correctly (see
+            # https://github.com/kubernetes/kubernetes/issues/30617)
+            "GOOGLE_APPLICATION_CREDENTIALS": abspath("gcloud-service-key.json"),
+        }
     else:
         manage_virtualenv = args.manage_virtualenv
         flake8 = args.flake8

@@ -6,7 +6,12 @@ workflows:
   ci:
     jobs:
       - build-image
+
       - build-macos:
+          requires:
+            - "build-image"
+
+      - build-linux:
           requires:
             - "build-image"
 
@@ -58,6 +63,54 @@ jobs:
           name: "build and push image"
           command: |
             ./build --registry gcr.io/datawireio --version-suffix "" --build-and-push
+
+  build-linux:
+    machine:
+      enabled: true
+      # https://circleci.com/docs/2.0/configuration-reference/#machine
+      image: "circleci/classic:201711-01"
+
+    steps:
+      - run:
+          name: "update system"
+          command: |
+            sudo apt-get --quiet update
+
+      - "checkout"
+
+      - run:
+          name: "decrypt gcloud keys"
+          command: |
+            # To update:
+            #   1) Generate a new key and IV:
+            #      $ dd if=/dev/urandom count=64 bs=1 | md5sum
+            #   2) Update GCLOUD_KEY and GCLOUD_IV in CircleCI "Environment
+            #      Variables" configuration for Telepresence project.
+            #   3) Encrypt the new gcloud key:
+            #      $ ci/encrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
+            ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
+
+      - run:
+          name: "setup non-Python environment"
+          command: |
+            # https://raw.githubusercontent.com/circleci/image-builder/picard-vm-image/provision.sh
+            pyenv global 2.7.12 3.5.2
+            ./environment-setup.sh datawireio telepresence-testing us-central1-a linux
+
+      - run:
+          name: "configure gcloud"
+          command: |
+            echo 'PATH=${HOME}/google-cloud-sdk/bin:${PATH}' >> ${BASH_ENV}
+
+      - run:
+          name: "setup Python environment"
+          command: |
+            ./build --registry gcr.io/datawireio --manage-virtualenv
+
+      - run:
+          name: "run tests image"
+          command: |
+            ./build --circle
 
   build-macos:
     macos:
