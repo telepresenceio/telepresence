@@ -23,7 +23,7 @@ case "$(uname -s)" in
         ;;
 
     Linux)
-        sudo apt install \
+        sudo apt-get install \
              sshfs conntrack python3 \
              python3-virtualenv \
              lsb-release
