@@ -1,7 +1,18 @@
 # https://circleci.com/docs/2.0/
 
 version: 2
+workflows:
+  version: 2
+  ci:
+    jobs:
+      - "build-image"
+      - "build-macos"
+
 jobs:
+  build-image:
+    machine:
+      enabled: true
+
   build-macos:
     macos:
       xcode: "9.0"
