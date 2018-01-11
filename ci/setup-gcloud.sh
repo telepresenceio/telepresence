@@ -16,7 +16,7 @@ if ! type -p gcloud; then
 	    # Import the Google Cloud Platform public key
 	    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
 	    # Update the package list and install the Cloud SDK
-	    sudo apt-get update && sudo apt-get install google-cloud-sdk kubectl
+	    sudo apt-get update && sudo apt-get install google-cloud-sdk
 	    ;;
 
 	*)
@@ -26,6 +26,18 @@ if ! type -p gcloud; then
 		curl https://sdk.cloud.google.com | bash;
 	    fi
 	    export PATH=~/google-cloud-sdk/bin:$PATH
+	    ;;
+    esac
+fi
+
+if ! type -p kubectl; then
+    # Cannot find kubectl.  Install it yay.
+    case "${OS}" in
+	linux)
+	    sudo apt-get install kubectl
+	    ;;
+
+	*)
 	    gcloud --quiet components update
 	    gcloud --quiet components update kubectl
 	    ;;
