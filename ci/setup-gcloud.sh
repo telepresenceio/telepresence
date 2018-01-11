@@ -31,17 +31,26 @@ if ! type -p gcloud; then
 fi
 
 if ! type -p kubectl; then
-    # Cannot find kubectl.  Install it yay.
+    # Cannot find kubectl.  Install it.
+    # https://kubernetes.io/docs/tasks/tools/install-kubectl/
     case "${OS}" in
 	linux)
-	    sudo apt-get install kubectl
+	    # Wish there were Ubuntu packages...
+	    VER="v1.9.0"
+	    curl -LO https://storage.googleapis.com/kubernetes-release/release/${VER}/bin/linux/amd64/kubectl
+	    chmod +x ./kubectl
+	    export PATH=${PWD}:${PATH}
+	    ;;
+
+	osx)
+	    brew install kubectl
 	    ;;
 
 	*)
-	    gcloud --quiet components update
-	    gcloud --quiet components update kubectl
+	    echo "Unknown platform."
+	    exit 1
 	    ;;
-    esac
+
 fi
 
 SERVICE_KEY=gcloud-service-key.json
