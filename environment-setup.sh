@@ -23,7 +23,7 @@ case "$(uname -s)" in
         ;;
 
     Linux)
-        sudo apt install sshfs conntrack python3
+        sudo apt install sshfs conntrack python3 python3-virtualenv
 
         # Create an environment variable for the correct distribution
         export CLOUD_SDK_REPO="cloud-sdk-$(lsb_release -c -s)"
