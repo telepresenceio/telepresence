@@ -22,7 +22,7 @@ $ cd telepresence
 $ ./environment-setup.sh $PROJECT $CLUSTER $ZONE
 $ ./build --manage-virtualenv
 ```
-You may want to activate the virtualenvenv (for the duration of your shell):
+You may want to activate the virtualenv (for the duration of your shell):
 
 ```console
 $ . virtualenv/bin/activate
