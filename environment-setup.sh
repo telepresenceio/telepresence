@@ -23,7 +23,7 @@ case "$(uname -s)" in
         ;;
 
     Linux)
-        sudo apt install sshfs conntrack
+        sudo apt install sshfs conntrack python3
         ;;
 
     *)
