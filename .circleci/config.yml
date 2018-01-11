@@ -5,8 +5,11 @@ workflows:
   version: 2
   ci:
     jobs:
-      - "build-image"
-      - "build-macos"
+      - build-image:
+
+      - build-macos:
+          requires:
+            - "build-image"
 
 jobs:
   build-image:
