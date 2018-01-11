@@ -109,7 +109,7 @@ jobs:
             ./build --registry gcr.io/datawireio --manage-virtualenv
 
       - run:
-          name: "run tests image"
+          name: "run tests"
           command: |
             ./build --circle
 
