@@ -40,6 +40,8 @@ jobs:
       - run:
           name: "setup non-Python environment"
           command: |
+            # https://raw.githubusercontent.com/circleci/image-builder/picard-vm-image/provision.sh
+            pyenv global 2.7.12 3.5.2
             ./environment-setup.sh datawireio telepresence-testing us-central1-a linux
 
       - run:
