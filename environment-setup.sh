@@ -4,7 +4,7 @@
 # suite.  These steps should typically only be required once to prepare the
 # environment.
 
-if [ "$#" -ne 3 ]; then
+if [ "$#" -ne 4 ]; then
     echo "Usage: $0 <gcloud project name> <gcloud cluster name> <gcloud compute zone>"
     echo "  (See .travis.yml for sample values)"
     exit 1
