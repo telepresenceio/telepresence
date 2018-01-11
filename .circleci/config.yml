@@ -98,11 +98,6 @@ jobs:
             ./environment-setup.sh datawireio telepresence-testing us-central1-a linux
 
       - run:
-          name: "configure gcloud"
-          command: |
-            echo 'PATH=${HOME}/google-cloud-sdk/bin:${PATH}' >> ${BASH_ENV}
-
-      - run:
           name: "setup Python environment"
           command: |
             ./build --registry gcr.io/datawireio --manage-virtualenv
@@ -142,11 +137,6 @@ jobs:
           command: |
             # Note hard-coded OSX platform
             ./environment-setup.sh datawireio telepresence-testing us-central1-a osx
-
-      - run:
-          name: "configure gcloud"
-          command: |
-            echo 'PATH=${HOME}/google-cloud-sdk/bin:${PATH}' >> ${BASH_ENV}
 
       - save_cache:
           key: "system-components"
