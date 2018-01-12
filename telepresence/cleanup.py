@@ -72,7 +72,11 @@ def wait_for_exit(
         if main_code is not None:
             # Shell exited, we're done. Automatic shutdown cleanup will kill
             # subprocesses.
-            runner.write("Main process ({}) exited with code {}.".format(main_process.args, main_code))
+            runner.write(
+                "Main process ({}) exited with code {}.".format(
+                    main_process.args, main_code
+                )
+            )
             raise SystemExit(main_code)
         dead_process = processes.any_dead()
         if dead_process:
