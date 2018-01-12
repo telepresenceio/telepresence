@@ -15,14 +15,14 @@ CLUSTER_NAME=$2
 CLOUDSDK_COMPUTE_ZONE=$3
 OS=$4
 
-case "$(uname -s)" in
-    Darwin)
+case "${OS}" in
+    osx)
         brew update > /dev/null
         brew cask install osxfuse
         brew install python3 sshfs
         ;;
 
-    Linux)
+    linux)
         sudo apt-get install \
              sshfs conntrack \
              lsb-release
@@ -43,4 +43,4 @@ ruby --version || true
 ./ci/setup-gcloud.sh "${PROJECT_NAME}" "${CLUSTER_NAME}" "${CLOUDSDK_COMPUTE_ZONE}" "${OS}"
 
 # Make sure torsocks is installed:
-./ci/build-torsocks.sh "$OS"
+./ci/build-torsocks.sh "${OS}"
