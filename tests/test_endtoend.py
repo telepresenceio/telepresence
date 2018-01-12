@@ -22,6 +22,7 @@ from .utils import (
     KUBECTL,
     random_name,
     telepresence_version,
+    run_webserver,
 )
 
 from .rwlock import RWLock
@@ -80,14 +81,17 @@ class _EndToEndTestsMixin(object):
 
 
     def setUp(self):
-        deployment_ident = self._operation.prepare_deployment(self.DESIRED_ENVIRONMENT)
-        self.addCleanup(self._cleanup_deployment, deployment_ident)
-        operation_args = self._operation.telepresence_args(deployment_ident)
-
         probe_endtoend = (Path(__file__).parent / "probe_endtoend.py").as_posix()
-        method_args = self._method.telepresence_args(probe_endtoend)
 
+        deployment_ident = self._operation.prepare_deployment(self.DESIRED_ENVIRONMENT)
+        print("Prepared deployment {}/{}".format(deployment_ident.namespace, deployment_ident.name))
+        self.addCleanup(self._cleanup_deployment, deployment_ident)
+
+        operation_args = self._operation.telepresence_args(deployment_ident)
+        method_args = self._method.telepresence_args(probe_endtoend)
         args = operation_args + method_args
+
+        self.webserver_name = run_webserver(deployment_ident.namespace)
         try:
             try:
                 self._method.lock()
@@ -122,6 +126,36 @@ class _EndToEndTestsMixin(object):
             "Desired: {}\n"
             "Probed: {}\n".format(self.DESIRED_ENVIRONMENT, probe_environment),
         )
+
+
+    def test_environment_for_services(self):
+        """
+        The Telepresence execution context supplies environment variables with
+        values locating services configured on the cluster.
+        """
+        probe_environment = self.probe_result["environ"]
+        from pprint import pprint
+        pprint(probe_environment)
+        service_env = self.webserver_name.upper().replace("-", "_")
+        host = probe_environment[service_env + "_SERVICE_HOST"]
+        port = probe_environment[service_env + "_SERVICE_PORT"]
+
+        prefix = service_env + "_PORT_{}_TCP".format(port)
+        desired_environment = {
+            service_env + "_PORT": "tcp://{}:{}".format(host, port),
+            prefix + "_PROTO": "tcp",
+            prefix + "_PORT": port,
+            prefix + "_ADDR": host,
+        }
+
+        self.assertEqual(
+            desired_environment,
+            {k: probe_environment.get(k, None) for k in desired_environment},
+            "Probe environment missing some expected items:\n"
+            "Desired: {}\n"
+            "Probed: {}\n".format(desired_environment, probe_environment),
+        )
+        # assert os.environ[prefix] == os.environ[service_env + "_PORT"]
 
 
     def _cleanup_deployment(self, ident):
@@ -366,7 +400,7 @@ class NewEndToEndVPNTCPTests(telepresence_tests(
     """
     Tests for the *vpn-tcp* method creating a new Deployment.
     """
-
+    test_environment_from_deployment = None
 
 
 class NewEndToEndInjectTCPTests(telepresence_tests(
@@ -376,6 +410,7 @@ class NewEndToEndInjectTCPTests(telepresence_tests(
     """
     Tests for the *inject-tcp* method creating a new Deployment.
     """
+    test_environment_from_deployment = None
 
 
 
@@ -386,3 +421,4 @@ class NewEndToEndContainerTests(telepresence_tests(
     """
     Tests for the *container* method creating a new Deployment.
     """
+    test_environment_from_deployment = None
