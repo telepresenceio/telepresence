@@ -39,7 +39,6 @@ if ! type -p kubectl; then
 	    VER="v1.9.0"
 	    curl -LO https://storage.googleapis.com/kubernetes-release/release/${VER}/bin/linux/amd64/kubectl
 	    chmod +x ./kubectl
-	    export PATH=${PWD}:${PATH}
 	    ;;
 
 	osx)
