@@ -72,6 +72,7 @@ def run_webserver(namespace=None):
     cleanup()
     atexit.register(cleanup)
 
+    print("Creating webserver {}/{}".format(namespace, webserver_name))
     check_output(
         kubectl + [
             "run",
