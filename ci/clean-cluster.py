@@ -101,7 +101,7 @@ def main():
 
     names = [
         name
-        for kind in ("svc", "deploy")
+        for kind in ("svc", "deploy", "po")
         for name in get_resources(kind, args.prefix, args.min_age)
     ]
     if not names:
