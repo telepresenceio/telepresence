@@ -2,8 +2,12 @@
 End-to-end Telepresence tests for running directly in the operating system.
 """
 
+import os
 from sys import executable
-from json import loads, dumps
+from json import (
+    JSONDecodeError,
+    loads, dumps,
+)
 from unittest import (
     TestCase,
 )
@@ -17,10 +21,13 @@ from shutil import which
 from .utils import (
     KUBECTL,
     random_name,
+    telepresence_version,
 )
 
 from .rwlock import RWLock
 
+
+REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
 network = RWLock()
 
@@ -80,19 +87,41 @@ class _EndToEndTestsMixin(object):
         probe_endtoend = (Path(__file__).parent / "probe_endtoend.py").as_posix()
         method_args = self._method.telepresence_args(probe_endtoend)
 
+        args = operation_args + method_args
         try:
-            output = _telepresence(operation_args + method_args)
+            try:
+                self._method.lock()
+                output = _telepresence(args)
+            finally:
+                self._method.unlock()
         except CalledProcessError as e:
-            print(e.output.decode("utf-8"))
-            self.fail("Sorry")
+            self.fail("Failure running {}: {}\n{}".format(
+                ["telepresence"] + args, str(e), e.output.decode("utf-8"),
+            ))
         else:
-            self.probe_result = loads(output)
+            # Scrape the payload out of the overall noise.
+            output = output.split(b"{probe delimiter}")[1]
+            try:
+                self.probe_result = loads(output)
+            except JSONDecodeError:
+                self.fail("Could not decode JSON probe result from {}:\n{}".format(
+                    ["telepresence"] + args, output.decode("utf-8"),
+                ))
 
 
-    def test_environment(self):
+    def test_environment_from_deployment(self):
+        """
+        The Telepresence execution context supplies environment variables with
+        values defined in the Kubernetes Deployment.
+        """
         probe_environment = self.probe_result["environ"]
-        for k in self.DESIRED_ENVIRONMENT:
-            self.assertEqual(self.DESIRED_ENVIRONMENT[k], probe_environment[k])
+        self.assertEqual(
+            self.DESIRED_ENVIRONMENT,
+            {k: probe_environment.get(k, None) for k in self.DESIRED_ENVIRONMENT},
+            "Probe environment missing some expected items:\n"
+            "Desired: {}\n"
+            "Probed: {}\n".format(self.DESIRED_ENVIRONMENT, probe_environment),
+        )
 
 
     def _cleanup_deployment(self, ident):
@@ -109,7 +138,7 @@ class _VPNTCPMethod(object):
         network.lock_write()
 
 
-    def release(self):
+    def unlock(self):
         network.unlock_write()
 
 
@@ -126,7 +155,7 @@ class _InjectTCPMethod(object):
         network.lock_read()
 
 
-    def release(self):
+    def unlock(self):
         network.unlock_read()
 
 
@@ -143,7 +172,7 @@ class _ContainerMethod(object):
         network.lock_read()
 
 
-    def release(self):
+    def unlock(self):
         network.unlock_read()
 
 
@@ -157,7 +186,7 @@ class _ContainerMethod(object):
         ]
 
 
-def create_deployment(environ):
+def create_deployment(image, environ):
     def env_arguments(environ):
         return list(
             "--env={}={}".format(k, v)
@@ -166,16 +195,6 @@ def create_deployment(environ):
         )
     name = random_name()
     namespace_name = random_name()
-    namespace = dumps({
-        "kind": "Namespace",
-        "apiVersion": "v1",
-        "metadata": {
-            "name": namespace_name,
-            "labels": {
-                "telepresence-test": "name",
-            },
-        },
-    })
     deployment = dumps({
         "kind": "Deployment",
         "apiVersion": "extensions/v1beta1",
@@ -206,9 +225,24 @@ def create_deployment(environ):
             },
         },
     })
-    check_output([KUBECTL, "create", "-f", "-"], input=namespace.encode("utf-8"))
+    create_namespace(namespace_name, name)
     check_output([KUBECTL, "create", "-f", "-"], input=deployment.encode("utf-8"))
     return ResourceIdent(namespace_name, name)
+
+
+
+def create_namespace(namespace_name, name):
+    namespace = dumps({
+        "kind": "Namespace",
+        "apiVersion": "v1",
+        "metadata": {
+            "name": namespace_name,
+            "labels": {
+                "telepresence-test": name,
+            },
+        },
+    })
+    check_output([KUBECTL, "create", "-f", "-"], input=namespace.encode("utf-8"))
 
 
 
@@ -220,7 +254,14 @@ class _ExistingDeploymentOperation(object):
     def prepare_deployment(self, environ):
         if self.swap:
             return create_deployment("openshift/hello-openshift", environ)
-        return create_deployment("datawire/telepresence-k8s", environ)
+
+        return create_deployment(
+            "{}/telepresence-k8s:{}".format(
+                REGISTRY,
+                telepresence_version(),
+            ),
+            environ,
+        )
 
 
     def telepresence_args(self, deployment_ident):
@@ -231,6 +272,22 @@ class _ExistingDeploymentOperation(object):
         return [
             "--namespace", deployment_ident.namespace,
             option, deployment_ident.name,
+        ]
+
+
+
+class _NewDeploymentOperation(object):
+    def prepare_deployment(self, environ):
+        namespace_name = random_name()
+        name = random_name()
+        create_namespace(namespace_name, name)
+        return ResourceIdent(namespace_name, name)
+
+
+    def telepresence_args(self, deployment_ident):
+        return [
+            "--namespace", deployment_ident.namespace,
+            "--new-deployment", deployment_ident.name,
         ]
 
 
@@ -299,4 +356,33 @@ class ExistingEndToEndContainerTests(telepresence_tests(
 )):
     """
     Tests for the *container* method using an existing Deployment.
+    """
+
+
+class NewEndToEndVPNTCPTests(telepresence_tests(
+        _VPNTCPMethod(),
+        _NewDeploymentOperation(),
+)):
+    """
+    Tests for the *vpn-tcp* method creating a new Deployment.
+    """
+
+
+
+class NewEndToEndInjectTCPTests(telepresence_tests(
+        _InjectTCPMethod(),
+        _NewDeploymentOperation(),
+)):
+    """
+    Tests for the *inject-tcp* method creating a new Deployment.
+    """
+
+
+
+class NewEndToEndContainerTests(telepresence_tests(
+        _ContainerMethod(),
+        _NewDeploymentOperation(),
+)):
+    """
+    Tests for the *container* method creating a new Deployment.
     """

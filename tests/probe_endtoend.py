@@ -12,8 +12,11 @@ def main():
     parser = ArgumentParser()
     parser.parse_args()
 
-    print(dumps({
+    result = dumps({
         "environ": dict(environ),
-    }))
+    })
+
+    delimiter = "{probe delimiter}"
+    print("{}{}{}".format(delimiter, result, delimiter))
 
 main()
