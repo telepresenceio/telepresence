@@ -155,7 +155,10 @@ class _EndToEndTestsMixin(object):
             "Desired: {}\n"
             "Probed: {}\n".format(desired_environment, probe_environment),
         )
-        # assert os.environ[prefix] == os.environ[service_env + "_PORT"]
+        self.assertEqual(
+            probe_environment[prefix],
+            probe_environment[service_env + "_PORT"],
+        )
 
 
     def _cleanup_deployment(self, ident):
