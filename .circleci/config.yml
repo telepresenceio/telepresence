@@ -56,6 +56,7 @@ jobs:
           name: "configure gcloud"
           command: |
             echo 'PATH=${HOME}/google-cloud-sdk/bin:${PWD}/ci:${PATH}' >> ${BASH_ENV}
+            echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
 
       - run:
           name: "setup Python environment"
