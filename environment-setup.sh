@@ -38,7 +38,7 @@ python --version
 python2 --version
 python3 --version
 ruby --version || true
-docker version
+docker version || true
 
 # Make sure gcloud is installed.  This includes kubectl.
 ./ci/setup-gcloud.sh "${PROJECT_NAME}" "${CLUSTER_NAME}" "${CLOUDSDK_COMPUTE_ZONE}" "${OS}"
