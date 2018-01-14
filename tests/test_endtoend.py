@@ -162,6 +162,7 @@ class _EndToEndTestsMixin(object):
         check_call([
             KUBECTL, "delete",
             "--namespace", ident.namespace,
+            "--ignore-not-found",
             "deployment", ident.name,
         ])
 
