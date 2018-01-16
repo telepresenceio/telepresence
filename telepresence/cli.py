@@ -231,9 +231,24 @@ def parse_args(args=None) -> argparse.Namespace:
             "Swap out an existing deployment with the Telepresence proxy, "
             "swap back on exit. If there are multiple containers in the pod "
             "then add the optional container name to indicate which container"
+            " to use.\n"
+            "This automatically sets --forward-traffic to true"
+        )
+    )
+
+    group_deployment.add_argument(
+        "--copy-deployment",
+        "-c",
+        dest="copy_deployment",
+        metavar="DEPLOYMENT_NAME[:CONTAINER]",
+        help=(
+            "Copy out an existing deployment with the Telepresence proxy, "
+            "delete on exit. If there are multiple containers in the pod "
+            "then add the optional container name to indicate which container"
             " to use."
         )
     )
+
     group_deployment.add_argument(
         "--deployment",
         "-d",
@@ -241,6 +256,15 @@ def parse_args(args=None) -> argparse.Namespace:
         help=(
             "The name of an existing Kubernetes Deployment where the " +
             "datawire/telepresence-k8s image is already running."
+        )
+    )
+    parser.add_argument(
+        "--forward-traffic",
+        dest="forward_traffic",
+        action="store_true",
+        help=(
+            "Proxy traffic from kubernetes to local.\n\n"
+            "Only useful with `--copy-deployment`."
         )
     )
     parser.add_argument(
@@ -361,8 +385,13 @@ def parse_args(args=None) -> argparse.Namespace:
             args.method = "vpn-tcp"
     if args.deployment is None and args.new_deployment is None and (
         args.swap_deployment is None
+        and args.copy_deployment is None
     ):
         args.new_deployment = random_name()
+
+    if args.swap_deployment is not None:
+        args.copy_deployment = args.swap_deployment
+        args.forward_traffic = True
 
     if args.method == "container" and args.docker_run is None:
         raise SystemExit(
