@@ -157,7 +157,7 @@ def _test(registry, version, method, test_env, test_args):
         *test_args,
         "tests",
         "k8s-proxy/test_socks.py",
-        env=test_env,
+        env=test_env
     )
 
 
