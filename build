@@ -45,9 +45,7 @@ def main():
 
     if args.travis:
         manage_virtualenv = True
-        flake8 = True
-        pylint = True
-        mypy = True
+        lint = True
         registry = "gcr.io/" + environ["PROJECT_NAME"]
         if platform == "linux":
             # We'll do this on Linux and keep our fingers crossed that this is
@@ -71,9 +69,7 @@ def main():
         }
     else:
         manage_virtualenv = args.manage_virtualenv
-        flake8 = args.flake8
-        pylint = args.pylint
-        mypy = args.mypy
+        lint = args.lint
         registry = args.registry
         build_and_push = args.build_and_push
         version_suffix = args.version_suffix
@@ -102,14 +98,8 @@ def main():
     if manage_virtualenv:
         _setup_virtualenv()
 
-    if flake8:
-        _flake8()
-
-    if pylint:
-        _pylint()
-
-    if mypy:
-        _mypy()
+    if lint:
+        _lint()
 
     _virtualenv('telepresence', '--help')
 
@@ -238,22 +228,10 @@ def _parser():
         dest='manage_virtualenv',
     )
     parser.add_argument(
-        '--flake8',
+        '--lint',
         action='store_true',
-        dest='flake8',
-        help='run flake8 on the code base',
-    )
-    parser.add_argument(
-        '--pylint',
-        action='store_true',
-        dest='pylint',
-        help='run pylint on the code base',
-    )
-    parser.add_argument(
-        '--mypy',
-        action='store_true',
-        dest='mypy',
-        help='run mypy on the code base',
+        dest='lint',
+        help='run linters on the code base (yapf, flake8, pylint, mypy)',
     )
     parser.add_argument(
         '--method',
@@ -294,17 +272,12 @@ def _setup_virtualenv():
     _pip("install", "-e", ".")
 
 
-def _flake8():
+def _lint():
+    _virtualenv("yapf", "-dr", "telepresence")
     _virtualenv(
         "flake8", "--isolated", "local-docker", "k8s-proxy", "telepresence"
     )
-
-
-def _pylint():
     _virtualenv("pylint", "-f", "parseable", "-E", "telepresence")
-
-
-def _mypy():
     _virtualenv("mypy", "telepresence", "local-docker/entrypoint.py")
     # Couldn't figure out how to make this work well, so it's not very useful
     # cause of the skip:
