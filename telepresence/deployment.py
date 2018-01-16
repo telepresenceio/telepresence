@@ -68,10 +68,11 @@ def create_new_deployment(runner: Runner,
     return args.new_deployment, run_id
 
 
-def swap_deployment(runner: Runner,
-                    args: argparse.Namespace) -> Tuple[str, str, Dict]:
+
+def copy_deployment(runner: Runner,
+                    args: argparse.Namespace, zero_original: bool) -> Tuple[str, str, Dict]:
     """
-    Swap out an existing Deployment.
+    Copy out an existing Deployment.
 
     Native Kubernetes version.
 
@@ -80,7 +81,7 @@ def swap_deployment(runner: Runner,
     """
     run_id = str(uuid4())
 
-    deployment_name, *container_name = args.swap_deployment.split(":", 1)
+    deployment_name, *container_name = args.copy_deployment.split(":", 1)
     if container_name:
         container_name = container_name[0]
     deployment_json = get_deployment_json(
@@ -90,24 +91,37 @@ def swap_deployment(runner: Runner,
         args.namespace,
         "deployment",
     )
+    # Todo: check if length of deployment name would be a problem?
+    deployment_copy_name = "{}-{}".format(deployment_name, run_id)
 
-    def apply_json(json_config):
-        # If we don't delete the deployment first (eg, if we perform a
-        # replace) then related ReplicaSets and Pods tend to hang around.
-        # This seems like a misbehavior of of Kuberentes.
-        runner.check_kubectl(
-            args.context,
-            args.namespace,
-            ["delete", "deployment", deployment_name],
+    def delete_deployment(check=True):
+        out = runner.kubectl(
+            args.context, args.namespace,
+            ["delete", "deployment", deployment_copy_name]
         )
+        if check:
+            runner.check_call(out)
+
+    def resize_original(replicas):
+        runner.check_kubectl(
+            args.context, args.namespace,
+            ["scale", "deployment", deployment_name, "--replicas={}".format(replicas)]
+        )
+
+    atexit.register(delete_deployment)
+    def apply_json(json_config):
+        # apply without delete will merge in unexpected ways, e.g. missing
+        # container attributes in the pod spec will not be removed. so we
+        # delete and then recreate.
+
+        delete_deployment(False)
+
         runner.check_kubectl(
             args.context,
             args.namespace,
             ["apply", "-f", "-"],
             input=json.dumps(json_config).encode("utf-8"),
         )
-
-    atexit.register(apply_json, deployment_json)
 
     # If no container name was given, just use the first one:
     if not container_name:
@@ -117,25 +131,34 @@ def swap_deployment(runner: Runner,
 
     # If we're on local VM we need to use different nameserver to
     # prevent infinite loops caused by sshuttle.
-    new_deployment_json, orig_container_json = new_swapped_deployment(
+    new_deployment_json, orig_container_json = new_copied_deployment(
         deployment_json,
         container_name,
         run_id,
         TELEPRESENCE_REMOTE_IMAGE,
         args.method == "vpn-tcp" and args.in_local_vm,
         args.needs_root,
+        args.forward_traffic,
+        deployment_copy_name
     )
     apply_json(new_deployment_json)
+    if zero_original:
+        original_replicas = deployment_json["spec"]["replicas"]
+        resize_original(0)
+        atexit.register(resize_original, original_replicas)
+
     return deployment_name, run_id, orig_container_json
 
 
-def new_swapped_deployment(
+def new_copied_deployment(
     old_deployment: Dict,
     container_to_update: str,
     run_id: str,
     telepresence_image: str,
     add_custom_nameserver: bool,
     as_root: bool,
+    forward_traffic: bool,
+    copied_deployment_name: str,
 ) -> Tuple[Dict, Dict]:
     """
     Create a new Deployment that uses telepresence-k8s image.
@@ -155,7 +178,12 @@ def new_swapped_deployment(
     and contents of swapped out container.
     """
     new_deployment_json = deepcopy(old_deployment)
+    new_deployment_json["metadata"]["name"] = copied_deployment_name
     new_deployment_json["spec"]["replicas"] = 1
+    if not forward_traffic:
+        new_deployment_json["metadata"]["labels"] = {}
+        new_deployment_json["spec"]["template"]["metadata"]["labels"] = {}
+        new_deployment_json["spec"]["selector"] = None
     new_deployment_json["metadata"].setdefault("labels",
                                                {})["telepresence"] = run_id
     new_deployment_json["spec"]["template"]["metadata"].setdefault(
@@ -205,15 +233,18 @@ def new_swapped_deployment(
                     }
                 }
             })
+            
             return new_deployment_json, old_container
 
     raise RuntimeError(
         "Couldn't find container {} in the Deployment.".
         format(container_to_update)
     )
+    
+    return new_deployment, old_container
 
 
-def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
+def copy_deployment_openshift(runner: Runner, args: argparse.Namespace
                               ) -> Tuple[str, str, Dict]:
     """
     Swap out an existing DeploymentConfig.
@@ -231,7 +262,7 @@ def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
     then restores it. We delete the pods to force the RC to do its thing.
     """
     run_id = str(uuid4())
-    deployment_name, *container_name = args.swap_deployment.split(":", 1)
+    deployment_name, *container_name = args.copy_deployment.split(":", 1)
     if container_name:
         container_name = container_name[0]
     rcs = runner.get_kubectl(
@@ -271,7 +302,7 @@ def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
         container_name = rc_json["spec"]["template"]["spec"]["containers"
                                                              ][0]["name"]
 
-    new_rc_json, orig_container_json = new_swapped_deployment(
+    new_rc_json, orig_container_json = new_copied_deployment(
         rc_json,
         container_name,
         run_id,
