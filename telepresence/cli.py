@@ -196,7 +196,7 @@ def parse_args(args=None) -> argparse.Namespace:
     parser.add_argument(
         "--method",
         "-m",
-        choices=["inject-tcp", "vpn-tcp", "container"],
+        choices=["inject-tcp", "vpn-tcp", "container", "none"],
         help=(
             "'inject-tcp': inject process-specific shared "
             "library that proxies TCP to the remote cluster.\n"
