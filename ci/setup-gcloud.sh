@@ -73,4 +73,7 @@ gcloud --quiet container clusters get-credentials $CLUSTER_NAME
 # gcr.io from the specified service key.  For the test suite to complete, when
 # the registry is gcr.io, Docker needs to be able to pull images.  This
 # enables that.
-gcloud --quiet docker
+if type -p docker; then
+    # Only do this if Docker is installed, though, otherwise it's an error.
+    gcloud --quiet docker
+fi
