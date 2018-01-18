@@ -284,6 +284,20 @@ h1, h2, h3, h4, h5, h6, strong {
 #hero .btn {
     margin-top: 30px;
 }
+
+.version-number {
+    height: 72px;
+    width: 72px;
+    display: inline-block;
+    line-height: 68px;
+    text-align: center;
+    border: 2px solid #222;
+    border-radius: 30px;
+    font-size: 28px;
+    font-weight: 300;
+    margin: 10px 0;
+}
+
 .about-tabs {
     display: flex;
     justify-content: center;

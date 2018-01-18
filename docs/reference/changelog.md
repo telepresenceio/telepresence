@@ -1,5 +1,21 @@
 # Changelog
 
+#### 0.73 (December 28, 2017)
+
+Features:
+
+* The `--also-proxy` feature supports specifying IP ranges (in [CIDR notation](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing#CIDR_notation)) in addition to hostnames and individual IPs.
+  ([#375](https://github.com/datawire/telepresence/issues/375))
+
+Misc:
+
+* Telepresence source code is no longer one giant Python file.
+  This will allow for quicker development going forward.
+  ([#377](https://github.com/datawire/telepresence/pull/377))
+* Telepresence source code conforms to `yapf` formatting.
+  The lint stage of the CI pipeline enforces this.
+  ([#368](https://github.com/datawire/telepresence/issues/368))
+
 #### 0.72 (December 12, 2017)
 
 Misc:

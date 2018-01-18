@@ -65,6 +65,21 @@ def main():
             # https://github.com/kubernetes/kubernetes/issues/30617)
             "GOOGLE_APPLICATION_CREDENTIALS": abspath("gcloud-service-key.json"),
         }
+    elif args.circle:
+        manage_virtualenv = False
+        registry = "gcr.io/" + environ["PROJECT_NAME"]
+        version_suffix = ""
+        methods = ["inject-tcp", "vpn-tcp"]
+        if platform == "linux":
+            methods.insert(0, "container")
+        flake8 = pylint = mypy = build_and_push = False
+        test_args = []
+        test_env = {
+            # Magic incantation to make kubectl work, because apparently
+            # gcloud can't do that correctly (see
+            # https://github.com/kubernetes/kubernetes/issues/30617)
+            "GOOGLE_APPLICATION_CREDENTIALS": abspath("gcloud-service-key.json"),
+        }
     else:
         manage_virtualenv = args.manage_virtualenv
         flake8 = args.flake8
@@ -73,9 +88,13 @@ def main():
         registry = args.registry
         build_and_push = args.build_and_push
         version_suffix = args.version_suffix
-        methods = args.methods or ['container', 'inject-tcp', 'vpn-tcp']
+        methods = args.methods
         test_args = args.test_args or []
         test_env = {}
+
+        if methods and not build_and_push:
+            print("Some tests will run, behaving as though --build-and-push supplied.")
+            build_and_push = True
 
     if registry is None:
         raise SystemExit("You must specify a registry with --registry (or --travis)")
@@ -195,7 +214,12 @@ def _parser():
     parser.add_argument(
         '--travis',
         action='store_true',
-        help='do all the things CI should do'
+        help='do all the things Travis should do'
+    )
+    parser.add_argument(
+        '--circle',
+        action='store_true',
+        help='do all the things CircleCI should do'
     )
     parser.add_argument(
         '--registry',
@@ -244,6 +268,7 @@ def _parser():
         action='append',
         dest='methods',
         choices=['container', 'inject-tcp', 'vpn-tcp'],
+        default=[],
         help='add a mode to those which will be tested',
     )
     parser.add_argument(

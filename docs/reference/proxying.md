@@ -71,7 +71,7 @@ That means transparent access to cloud resources like databases that are accessi
 It also means public servers like `google.com` will be routed via the cluster, but again only for the subprocess run by `telepresence` via `--run` or `--run-shell`.
 
 When using `--method=vpn-tcp` *all* processes on the machine running `telepresence` will have access to the Kubernetes cluster.
-Cloud resources will only be routed via the cluster if you explicitly specify them using `--also-proxy <hostname>`.
+Cloud resources will only be routed via the cluster if you explicitly specify them using `--also-proxy <ip | ip range | hostname>`.
 Access to public websites should not be affected or changed in any way.
 
 ### Environment variables
@@ -135,7 +135,7 @@ When using `--method vpn-tcp`, Telepresence currently proxies the following:
 * The standard [DNS entries for services](https://kubernetes.io/docs/user-guide/services/#dns).
   E.g. `redis-master` and `redis-master.default`, but not those ending with `.local`. 
 * Any environment variables that the `Deployment` explicitly configured for the pod.
-* TCP connections to any `Service` in the cluster regardless of when they were started, as well as to any hosts explicitly listed with `--also-proxy`.
+* TCP connections to any `Service` in the cluster regardless of when they were started, as well as to any hosts or ranges explicitly listed with `--also-proxy`.
 * TCP connections *from* Kubernetes to your local machine, for ports specified on the command line using `--expose`.
 * Access to volumes, including those for `Secret` and `ConfigMap` Kubernetes objects.
 * `/var/run/secrets/kubernetes.io` credentials (used to the [access the Kubernetes( API](https://kubernetes.io/docs/user-guide/accessing-the-cluster/#accessing-the-api-from-a-pod)).

@@ -13,6 +13,7 @@
 
 The following instructions will gets the Telepresence source and sets up some of its dependencies (torsocks, gcloud).
 It also creates a virtualenv and installs Telepresence's Python dependencies into it.
+The arguments required for `environment-setup.sh` are Google Cloud configuration items which identify a GKE cluster which can be used for testing.
 
 
 ```console
@@ -21,7 +22,7 @@ $ cd telepresence
 $ ./environment-setup.sh $PROJECT $CLUSTER $ZONE
 $ ./build --manage-virtualenv
 ```
-You may want to activate the virtualenvenv (for the duration of your shell):
+You may want to activate the virtualenv (for the duration of your shell):
 
 ```console
 $ . virtualenv/bin/activate
@@ -33,24 +34,30 @@ This will give you access to the Telepresence executables:
 * `stamp-telepresence`
 * `sshuttle-telepresence`.
 
-If you modify Telepresence, you must rebuild the Docker images and make them available to be pulled from elsewhere.
+You can test your modifications to Telepresence with the `build` tool:
 
 ```console
-$ ./build --build-and-push
+$ ./build --registry <Docker registry for tag and push> --method <container | inject-tcp | vpn-tcp> [--method ...]
 ```
 
-Or if you want to build images using minikube:
+You can also build images and push them to a registry without running any tests:
+
+```console
+$ ./build --registry <Docker registry for tag and push> --build-and-push
+```
+
+Or if you want to build images using minikube (untested):
 
 ```console
 $ eval $(minikube docker-env --shell bash)
-$ ./build --build-and-push
+$ ./build --registry <Docker registry for tag and push> --build-and-push
 ```
 
-Or using minishift:
+Or using minishift (untested):
 
 ```console
 $ eval $(minishift docker-env --shell bash)
-$ ./build --build-and-push
+$ ./build --registry <Docker registry for tag and push> --build-and-push
 ```
 
 ### Coding standard
