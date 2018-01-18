@@ -68,3 +68,9 @@ gcloud --quiet config set project $PROJECT_NAME
 gcloud --quiet config set container/cluster $CLUSTER_NAME
 gcloud --quiet config set compute/zone ${CLOUDSDK_COMPUTE_ZONE}
 gcloud --quiet container clusters get-credentials $CLUSTER_NAME
+
+# `gcloud docker` implicitly generates Docker authentication configuration for
+# gcr.io from the specified service key.  For the test suite to complete, when
+# the registry is gcr.io, Docker needs to be able to pull images.  This
+# enables that.
+gcloud --quiet docker
