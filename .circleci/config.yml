@@ -11,13 +11,9 @@ workflows:
           requires:
             - "build-image"
 
-      # This would be excellent to enable.  The next big hurdle preventing us
-      # from doing so is the mysterious inability to pull images from gcr.io
-      # in the CircleCI build environment.
-      #
-      # - build-linux:
-      #     requires:
-      #       - "build-image"
+      - build-linux:
+          requires:
+            - "build-image"
 
 jobs:
   build-image:
