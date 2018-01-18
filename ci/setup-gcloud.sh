@@ -36,7 +36,7 @@ if ! type -p kubectl; then
     case "${OS}" in
 	linux)
 	    # Wish there were Ubuntu packages...
-	    VER="v1.9.0"
+	    VER="v1.6.13"
 	    curl -LO https://storage.googleapis.com/kubernetes-release/release/${VER}/bin/linux/amd64/kubectl
 	    chmod +x ./kubectl
 	    ;;
