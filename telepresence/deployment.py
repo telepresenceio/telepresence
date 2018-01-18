@@ -1,6 +1,7 @@
 import argparse
 import atexit
 import json
+from pprint import pformat
 from subprocess import STDOUT
 from typing import Tuple, Dict
 from uuid import uuid4
@@ -98,6 +99,9 @@ def swap_deployment(runner: Runner,
         runner.check_kubectl(
             args.context, args.namespace,
             ["delete", "deployment", deployment_name]
+        )
+        runner.write(
+            "Restoring original deployment:\n{}".format(pformat(json_config)),
         )
         runner.check_kubectl(
             args.context,
