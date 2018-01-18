@@ -12,13 +12,6 @@ matrix:
         directories:
           - "$HOME/google-cloud-sdk/"
           - "$HOME/.cache/pip/wheels/"
-    - os: osx
-      language: generic
-      cache:
-        directories:
-          - "$HOME/google-cloud-sdk/"
-          - "$HOME/Library/Caches/Homebrew"
-          - "$HOME/Library/Caches/pip/wheels/"
 
 # Environment variables:
 env:
