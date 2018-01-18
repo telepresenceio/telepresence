@@ -132,11 +132,12 @@ def run_local_command(
     unsupported_tools_path = get_unsupported_tools(args.method != "inject-tcp")
     env["PATH"] = unsupported_tools_path + ":" + env["PATH"]
 
-    # Mount remote filesystem:
-    mount_dir, mount_cleanup = mount_remote_volumes(
-        runner, remote_info, ssh, False
-    )
-    env["TELEPRESENCE_ROOT"] = mount_dir
+    if not args.no_fs:
+        # Mount remote filesystem:
+        mount_dir, mount_cleanup = mount_remote_volumes(
+            runner, remote_info, ssh, False
+        )
+        env["TELEPRESENCE_ROOT"] = mount_dir
 
     # Make sure we use "bash", no "/bin/bash", so we get the copied version on
     # OS X:
@@ -159,8 +160,8 @@ def run_local_command(
         if p.poll() is None:
             runner.write("Killing local process...\n")
             kill_process(p)
-
-        mount_cleanup()
+        if not args.no_fs:
+            mount_cleanup()
 
     atexit.register(terminate_if_alive)
     wait_for_exit(runner, p, subprocesses)

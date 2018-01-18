@@ -246,6 +246,14 @@ def parse_args() -> argparse.Namespace:
             "the run subprocess will be proxied."
         )
     )
+    parser.add_argument(
+        "--no-fs",
+        dest="no_fs",
+        action="store_true",
+        help=(
+            "If you do not wish to mount volumes, use this flag."
+        )
+    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--run-shell",
