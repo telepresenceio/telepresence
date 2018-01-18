@@ -42,7 +42,7 @@ branches:
 before_install:
   # Decrypt the service key.  This only makes sense on travis.  All other
   # environments should get a gcloud key some other way.
-  - "openssl aes-256-cbc -K $encrypted_6168b41c1bb0_key -iv $encrypted_6168b41c1bb0_iv -in gcloud-service-key.json.enc -out gcloud-service-key.json -d"
+  - "ci/decrypt-gcloud-key travisci $encrypted_6168b41c1bb0_key $encrypted_6168b41c1bb0_iv"
 
   # Do the rest of the setup - which is a bit less particular to travis.
   - "./environment-setup.sh ${PROJECT_NAME} ${CLUSTER_NAME} ${CLOUDSDK_COMPUTE_ZONE}"

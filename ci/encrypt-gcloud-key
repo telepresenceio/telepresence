@@ -1,0 +1,13 @@
+#!/bin/sh
+
+WHICH=$1
+KEY=$2
+IV=$3
+
+openssl \
+    aes-256-cbc \
+    -e \
+    -in gcloud-service-key.json \
+    -out gcloud-service-key.${WHICH}.json.enc \
+    -K "$KEY" \
+    -iv "$IV"
