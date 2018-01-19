@@ -184,7 +184,7 @@ jobs:
       - run:
           name: "run lint checks"
           command: |
-            ./build --registry gcr.io/datawireio --flake8 --pylint --mypy
+            ./build --registry gcr.io/datawireio --lint
 
       - run:
           name: "run tests"
