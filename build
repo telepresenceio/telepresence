@@ -74,7 +74,7 @@ def main():
         methods = ["inject-tcp", "vpn-tcp"]
         if platform == "linux":
             methods.insert(0, "container")
-        flake8 = pylint = mypy = build_and_push = False
+        lint = False
         test_args = []
         test_env = {
             # Magic incantation to make kubectl work, because apparently
