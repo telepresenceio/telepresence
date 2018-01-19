@@ -80,7 +80,8 @@ def main():
             # Magic incantation to make kubectl work, because apparently
             # gcloud can't do that correctly (see
             # https://github.com/kubernetes/kubernetes/issues/30617)
-            "GOOGLE_APPLICATION_CREDENTIALS": abspath("gcloud-service-key.json"),
+            "GOOGLE_APPLICATION_CREDENTIALS":
+            abspath("gcloud-service-key.json"),
         }
     else:
         manage_virtualenv = args.manage_virtualenv
