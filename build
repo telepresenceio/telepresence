@@ -75,6 +75,7 @@ def main():
         if platform == "linux":
             methods.insert(0, "container")
         lint = False
+        build_and_push = False
         test_args = []
         test_env = {
             # Magic incantation to make kubectl work, because apparently
