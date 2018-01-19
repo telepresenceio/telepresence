@@ -60,6 +60,7 @@ jobs:
           name: "configure gcloud"
           command: |
             echo 'PATH=${HOME}/google-cloud-sdk/bin:${PWD}/ci:${PATH}' >> ${BASH_ENV}
+            # If we installed kubectl, it was into ${PWD}
             echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
 
       - run:
@@ -107,6 +108,7 @@ jobs:
             # https://raw.githubusercontent.com/circleci/image-builder/picard-vm-image/provision.sh
             pyenv global 2.7.12 3.5.2
             ./environment-setup.sh datawireio telepresence-testing us-central1-a linux
+            # If we installed kubectl, it was into ${PWD}
             echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
 
       - run:
@@ -164,6 +166,8 @@ jobs:
           name: "configure gcloud"
           command: |
             echo 'PATH=${HOME}/google-cloud-sdk/bin:${PATH}' >> ${BASH_ENV}
+            # If we installed kubectl, it was into ${PWD}
+            echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
 
       - run:
           name: "setup Python environment"
