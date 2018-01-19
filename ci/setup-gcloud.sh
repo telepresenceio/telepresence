@@ -34,15 +34,13 @@ if ! type -p kubectl; then
     # Cannot find kubectl.  Install it.
     # https://kubernetes.io/docs/tasks/tools/install-kubectl/
     case "${OS}" in
-	linux)
-	    # Wish there were Ubuntu packages...
-	    VER="v1.9.0"
+	linux|osx)
+	    # Wish there were packages... There don't seem to be any dpkgs for
+	    # Ubuntu and Homebrew only has the newest version, too new for us
+	    # to actually use (due to the version of the testing cluster).
+	    VER="v1.6.13"
 	    curl -LO https://storage.googleapis.com/kubernetes-release/release/${VER}/bin/linux/amd64/kubectl
 	    chmod +x ./kubectl
-	    ;;
-
-	osx)
-	    brew install kubectl
 	    ;;
 
 	*)
