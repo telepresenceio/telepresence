@@ -83,15 +83,27 @@ class _EndToEndTestsMixin(object):
     def setUp(self):
         probe_endtoend = (Path(__file__).parent / "probe_endtoend.py").as_posix()
 
-        deployment_ident = self._operation.prepare_deployment(self.DESIRED_ENVIRONMENT)
+        # Create a web server service.  We'll observe side-effects related to
+        # this, such as things set in our environment, and also interact with
+        # it directly to demonstrate behaviors related to networking.  It's
+        # important that we create this before the ``prepare_deployment`` step
+        # below because the environment supplied by Kubernetes to a
+        # Deployment's containers depends on the state of the cluster at the
+        # time of pod creation.
+        deployment_ident = ResourceIdent(
+            namespace=random_name(),
+            name=random_name(),
+        )
+        create_namespace(deployment_ident.namespace, deployment_ident.name)
+        self.webserver_name = run_webserver(deployment_ident.namespace)
+
+        self._operation.prepare_deployment(deployment_ident, self.DESIRED_ENVIRONMENT)
         print("Prepared deployment {}/{}".format(deployment_ident.namespace, deployment_ident.name))
         self.addCleanup(self._cleanup_deployment, deployment_ident)
 
         operation_args = self._operation.telepresence_args(deployment_ident)
         method_args = self._method.telepresence_args(probe_endtoend)
         args = operation_args + method_args
-
-        self.webserver_name = run_webserver(deployment_ident.namespace)
         try:
             try:
                 self._method.lock()
@@ -134,8 +146,6 @@ class _EndToEndTestsMixin(object):
         values locating services configured on the cluster.
         """
         probe_environment = self.probe_result["environ"]
-        from pprint import pprint
-        pprint(probe_environment)
         service_env = self.webserver_name.upper().replace("-", "_")
         host = probe_environment[service_env + "_SERVICE_HOST"]
         port = probe_environment[service_env + "_SERVICE_PORT"]
@@ -224,29 +234,27 @@ class _ContainerMethod(object):
         ]
 
 
-def create_deployment(image, environ):
+def create_deployment(deployment_ident, image, environ):
     def env_arguments(environ):
         return list(
             "--env={}={}".format(k, v)
             for (k, v)
             in environ.items()
         )
-    name = random_name()
-    namespace_name = random_name()
     deployment = dumps({
         "kind": "Deployment",
         "apiVersion": "extensions/v1beta1",
         "metadata": {
-            "name": name,
-            "namespace": namespace_name,
+            "name": deployment_ident.name,
+            "namespace": deployment_ident.namespace,
         },
         "spec": {
             "replicas": 2,
             "template": {
                 "metadata": {
                     "labels": {
-                        "name": name,
-                        "telepresence-test": name,
+                        "name": deployment_ident.name,
+                        "telepresence-test": deployment_ident.name,
                     },
                 },
                 "spec": {
@@ -263,9 +271,7 @@ def create_deployment(image, environ):
             },
         },
     })
-    create_namespace(namespace_name, name)
     check_output([KUBECTL, "create", "-f", "-"], input=deployment.encode("utf-8"))
-    return ResourceIdent(namespace_name, name)
 
 
 
@@ -289,17 +295,15 @@ class _ExistingDeploymentOperation(object):
         self.swap = swap
 
 
-    def prepare_deployment(self, environ):
+    def prepare_deployment(self, deployment_ident, environ):
         if self.swap:
-            return create_deployment("openshift/hello-openshift", environ)
-
-        return create_deployment(
-            "{}/telepresence-k8s:{}".format(
+            image = "openshift/hello-openshift"
+        else:
+            image = "{}/telepresence-k8s:{}".format(
                 REGISTRY,
                 telepresence_version(),
-            ),
-            environ,
-        )
+            )
+        create_deployment(deployment_ident, image, environ)
 
 
     def telepresence_args(self, deployment_ident):
@@ -315,12 +319,8 @@ class _ExistingDeploymentOperation(object):
 
 
 class _NewDeploymentOperation(object):
-    def prepare_deployment(self, environ):
-        namespace_name = random_name()
-        name = random_name()
-        create_namespace(namespace_name, name)
-        return ResourceIdent(namespace_name, name)
-
+    def prepare_deployment(self, deployment_ident, environ):
+        pass
 
     def telepresence_args(self, deployment_ident):
         return [
