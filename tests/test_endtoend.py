@@ -23,6 +23,7 @@ from .utils import (
     random_name,
     telepresence_version,
     run_webserver,
+    create_namespace,
 )
 
 from .rwlock import RWLock
@@ -78,51 +79,6 @@ class _EndToEndTestsMixin(object):
     def __init__(self, method, operation):
         self._method = method
         self._operation = operation
-
-
-    def setUp(self):
-        probe_endtoend = (Path(__file__).parent / "probe_endtoend.py").as_posix()
-
-        # Create a web server service.  We'll observe side-effects related to
-        # this, such as things set in our environment, and also interact with
-        # it directly to demonstrate behaviors related to networking.  It's
-        # important that we create this before the ``prepare_deployment`` step
-        # below because the environment supplied by Kubernetes to a
-        # Deployment's containers depends on the state of the cluster at the
-        # time of pod creation.
-        deployment_ident = ResourceIdent(
-            namespace=random_name(),
-            name=random_name(),
-        )
-        create_namespace(deployment_ident.namespace, deployment_ident.name)
-        self.webserver_name = run_webserver(deployment_ident.namespace)
-
-        self._operation.prepare_deployment(deployment_ident, self.DESIRED_ENVIRONMENT)
-        print("Prepared deployment {}/{}".format(deployment_ident.namespace, deployment_ident.name))
-        self.addCleanup(self._cleanup_deployment, deployment_ident)
-
-        operation_args = self._operation.telepresence_args(deployment_ident)
-        method_args = self._method.telepresence_args(probe_endtoend)
-        args = operation_args + method_args
-        try:
-            try:
-                self._method.lock()
-                output = _telepresence(args)
-            finally:
-                self._method.unlock()
-        except CalledProcessError as e:
-            self.fail("Failure running {}: {}\n{}".format(
-                ["telepresence"] + args, str(e), e.output.decode("utf-8"),
-            ))
-        else:
-            # Scrape the payload out of the overall noise.
-            output = output.split(b"{probe delimiter}")[1]
-            try:
-                self.probe_result = loads(output)
-            except JSONDecodeError:
-                self.fail("Could not decode JSON probe result from {}:\n{}".format(
-                    ["telepresence"] + args, output.decode("utf-8"),
-                ))
 
 
     def test_environment_from_deployment(self):
@@ -182,6 +138,8 @@ class _EndToEndTestsMixin(object):
 
 
 class _VPNTCPMethod(object):
+    name = "--method=vpn-tcp"
+
     def lock(self):
         network.lock_write()
 
@@ -199,6 +157,8 @@ class _VPNTCPMethod(object):
 
 
 class _InjectTCPMethod(object):
+    name = "--method=inject-tcp"
+
     def lock(self):
         network.lock_read()
 
@@ -216,6 +176,8 @@ class _InjectTCPMethod(object):
 
 
 class _ContainerMethod(object):
+    name = "--method=container"
+
     def lock(self):
         network.lock_read()
 
@@ -275,24 +237,13 @@ def create_deployment(deployment_ident, image, environ):
 
 
 
-def create_namespace(namespace_name, name):
-    namespace = dumps({
-        "kind": "Namespace",
-        "apiVersion": "v1",
-        "metadata": {
-            "name": namespace_name,
-            "labels": {
-                "telepresence-test": name,
-            },
-        },
-    })
-    check_output([KUBECTL, "create", "-f", "-"], input=namespace.encode("utf-8"))
-
-
-
 class _ExistingDeploymentOperation(object):
     def __init__(self, swap):
         self.swap = swap
+        if swap:
+            self.name = "--swap-deployment"
+        else:
+            self.name = "--deployment"
 
 
     def prepare_deployment(self, deployment_ident, environ):
@@ -319,6 +270,8 @@ class _ExistingDeploymentOperation(object):
 
 
 class _NewDeploymentOperation(object):
+    name = "--new-deployment"
+
     def prepare_deployment(self, deployment_ident, environ):
         pass
 
