@@ -5,9 +5,6 @@
 * Docs get updated off of master, so documentation on site may reference unreleased features if you're not careful.
   Until that's fixed, releases should happen as soon as new feature is merged to master.
   See [issue #4](https://github.com/datawire/telepresence/issues/4).
-* Mac Travis build relies on Docker images pushed from Linux build; we're just assuming Mac builds will always be slower than Linux builds.
-  Travis now supports staged builds so we should switch to that eventually.
-  See [issue #153](https://github.com/datawire/telepresence/issues/153).
 
 ### Setting up a development environment
 
@@ -76,7 +73,7 @@ Theory of operation:
 2. Use [bumpversion](https://pypi.python.org/pypi/bumpversion) to increase the version in relevant files and then commit a new git tag with the new version.
    See `.bumpversion.cfg` for the configuration.
 3. Push the new commit and tag to GitHub.
-4. This will trigger Travis CI, which will in turn:
+4. This will trigger CircleCI and Travis CI, which will in turn:
    1. Push a new Docker image to the Docker Hub.
    2. Update the Homebrew formula in [homebrew-blackbird](https://github.com/datawire/homebrew-blackbird).
       The Homebrew formula refers to the tarball GitHub [generates for each release](https://github.com/datawire/telepresence/releases).
@@ -104,7 +101,7 @@ In order to run *all* possible code paths in Telepresence, you need to do the fo
 | Minishift          | `make openshift-tests` with minishift kube context   |
 | Remote OS cluster  | `make openshift-tests` with remote OpenShift context |
 | Docker on Mac      | `make minikube-test` on Mac with Docker              |
-| Other Mac          | Runs on Travis                                       |
+| Other Mac          | Runs on Circle                                       |
 
 In practice running on remote OpenShift cluster usually doesn't happen.
 
