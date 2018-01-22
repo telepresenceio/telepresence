@@ -216,7 +216,7 @@ def _push(registry, version):
 
 
 def _parser():
-    parser = ArgumentParser(description="Test Telepresence", )
+    parser = ArgumentParser(description="Test Telepresence")
     parser.add_argument(
         '--travis',
         action='store_true',
