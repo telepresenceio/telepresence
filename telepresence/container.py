@@ -4,7 +4,7 @@ import json
 import sys
 from subprocess import CalledProcessError, Popen
 from time import sleep
-from typing import List, Callable, Dict
+from typing import List, Callable, Dict, Tuple
 
 import os
 import os.path
@@ -46,6 +46,15 @@ def make_docker_kill(runner: Runner, name: str) -> Callable:
     return kill
 
 
+def parse_docker_args(docker_run: List[str]) -> Tuple[List[str], List[str]]:
+    """Separate --publish flags from the rest of the docker arguments"""
+    parser = argparse.ArgumentParser(allow_abbrev=False)
+    parser.add_argument("--publish", "-p", action="append", default=[])
+    publish_ns, docker_args = parser.parse_known_args(docker_run)
+    publish_args = ["-p={}".format(pub) for pub in publish_ns.publish]
+    return docker_args, publish_args
+
+
 def run_docker_command(
     runner: Runner,
     remote_info: RemoteInfo,
@@ -78,6 +87,10 @@ def run_docker_command(
     remote_env["TELEPRESENCE_ROOT"] = mount_dir
     remote_env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
 
+    # Extract --publish flags and add them to the sshuttle container, which is
+    # responsible for defining the network entirely.
+    docker_args, publish_args = parse_docker_args(args.docker_run)
+
     # Start the sshuttle container:
     name = random_name()
     config = {
@@ -95,11 +108,13 @@ def run_docker_command(
     # Image already has tini init so doesn't need --init option:
     subprocesses.append(
         runner.popen(
-            docker_runify([
-                "--rm", "--privileged", "--name=" + name,
-                TELEPRESENCE_LOCAL_IMAGE, "proxy",
-                json.dumps(config)
-            ])
+            docker_runify(
+                publish_args + [
+                    "--rm", "--privileged", "--name=" + name,
+                    TELEPRESENCE_LOCAL_IMAGE, "proxy",
+                    json.dumps(config)
+                ]
+            )
         ), make_docker_kill(runner, name)
     )
 
@@ -147,7 +162,7 @@ def run_docker_command(
     # Older versions of Docker don't have --init:
     if "--init" in runner.get_output(["docker", "run", "--help"]):
         docker_command += ["--init"]
-    docker_command += args.docker_run
+    docker_command += docker_args
     p = Popen(docker_command)
 
     def terminate_if_alive():
