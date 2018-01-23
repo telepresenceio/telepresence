@@ -433,8 +433,8 @@ def main():
         if args.in_local_vm:
             runner.write("Looks like we're in a local VM, e.g. minikube.\n")
         if (
-                args.in_local_vm and args.method == "vpn-tcp" and
-                args.new_deployment is None and args.swap_deployment is None
+            args.in_local_vm and args.method == "vpn-tcp"
+            and args.new_deployment is None and args.swap_deployment is None
         ):
             raise SystemExit(
                 "vpn-tcp method doesn't work with minikube/minishift when"
