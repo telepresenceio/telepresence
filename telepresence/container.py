@@ -4,7 +4,7 @@ import json
 import sys
 from subprocess import CalledProcessError, Popen
 from time import sleep
-from typing import List, Callable, Dict
+from typing import List, Callable, Dict, Tuple
 
 import os
 import os.path
@@ -46,6 +46,15 @@ def make_docker_kill(runner: Runner, name: str) -> Callable:
     return kill
 
 
+def parse_docker_args(docker_run: List[str]) -> Tuple[List[str], List[str]]:
+    """Separate --publish flags from the rest of the docker arguments"""
+    parser = argparse.ArgumentParser(allow_abbrev=False)
+    parser.add_argument("--publish", "-p", action="append", default=[])
+    publish_ns, docker_args = parser.parse_known_args(docker_run)
+    publish_args = ["-p={}".format(pub) for pub in publish_ns.publish]
+    return docker_args, publish_args
+
+
 def run_docker_command(
     runner: Runner,
     remote_info: RemoteInfo,
@@ -80,10 +89,7 @@ def run_docker_command(
 
     # Extract --publish flags and add them to the sshuttle container, which is
     # responsible for defining the network entirely.
-    parser = argparse.ArgumentParser(allow_abbrev=False)
-    parser.add_argument("--publish", "-p", action="append", default=[])
-    publish_ns, docker_args = parser.parse_known_args(args.docker_run)
-    publish_args = ["-p={}".format(pub) for pub in publish_ns.publish]
+    docker_args, publish_args = parse_docker_args(args.docker_run)
 
     # Start the sshuttle container:
     name = random_name()
