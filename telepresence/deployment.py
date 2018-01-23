@@ -93,19 +93,12 @@ def swap_deployment(runner: Runner,
     )
 
     def apply_json(json_config):
-        # apply without delete will merge in unexpected ways, e.g. missing
-        # container attributes in the pod spec will not be removed. so we
-        # delete and then recreate.
-        runner.check_kubectl(
-            args.context, args.namespace,
-            ["delete", "deployment", deployment_name]
-        )
         runner.write(
             "Restoring original deployment:\n{}".format(pformat(json_config)),
         )
         runner.check_kubectl(
             args.context,
-            args.namespace, ["-v", "13", "apply", "-f", "-"],
+            args.namespace, ["-v", "13", "replace", "-f", "-"],
             input=json.dumps(json_config).encode("utf-8")
         )
 

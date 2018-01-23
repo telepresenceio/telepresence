@@ -24,13 +24,16 @@ from subprocess import (
     check_output,
 )
 
+
 def main():
     parser = _parser()
     args = parser.parse_args()
 
     for exe in {"gcloud", "kubectl"}:
         if which(exe) is None:
-            raise SystemExit("Required executable {} not found on $PATH".format(exe))
+            raise SystemExit(
+                "Required executable {} not found on $PATH".format(exe)
+            )
 
     try:
         # Presence of this variable in pip processes we launch causes pip to
@@ -42,9 +45,7 @@ def main():
 
     if args.travis:
         manage_virtualenv = True
-        flake8 = True
-        pylint = True
-        mypy = True
+        lint = True
         registry = "gcr.io/" + environ["PROJECT_NAME"]
         if platform == "linux":
             # We'll do this on Linux and keep our fingers crossed that this is
@@ -63,7 +64,8 @@ def main():
             # Magic incantation to make kubectl work, because apparently
             # gcloud can't do that correctly (see
             # https://github.com/kubernetes/kubernetes/issues/30617)
-            "GOOGLE_APPLICATION_CREDENTIALS": abspath("gcloud-service-key.json"),
+            "GOOGLE_APPLICATION_CREDENTIALS":
+            abspath("gcloud-service-key.json"),
         }
     elif args.circle:
         manage_virtualenv = False
@@ -72,19 +74,19 @@ def main():
         methods = ["inject-tcp", "vpn-tcp"]
         if platform == "linux":
             methods.insert(0, "container")
-        flake8 = pylint = mypy = build_and_push = False
+        lint = False
+        build_and_push = False
         test_args = []
         test_env = {
             # Magic incantation to make kubectl work, because apparently
             # gcloud can't do that correctly (see
             # https://github.com/kubernetes/kubernetes/issues/30617)
-            "GOOGLE_APPLICATION_CREDENTIALS": abspath("gcloud-service-key.json"),
+            "GOOGLE_APPLICATION_CREDENTIALS":
+            abspath("gcloud-service-key.json"),
         }
     else:
         manage_virtualenv = args.manage_virtualenv
-        flake8 = args.flake8
-        pylint = args.pylint
-        mypy = args.mypy
+        lint = args.lint
         registry = args.registry
         build_and_push = args.build_and_push
         version_suffix = args.version_suffix
@@ -93,11 +95,16 @@ def main():
         test_env = {}
 
         if methods and not build_and_push:
-            print("Some tests will run, behaving as though --build-and-push supplied.")
+            print(
+                "Some tests will run, behaving as though"
+                " --build-and-push supplied."
+            )
             build_and_push = True
 
     if registry is None:
-        raise SystemExit("You must specify a registry with --registry (or --travis)")
+        raise SystemExit(
+            "You must specify a registry with --registry (or --travis)"
+        )
 
     # Attempt to get credentials cached early on while the user is still
     # looking at the terminal.  They'll be required later on during the test
@@ -108,14 +115,8 @@ def main():
     if manage_virtualenv:
         _setup_virtualenv()
 
-    if flake8:
-        _flake8()
-
-    if pylint:
-        _pylint()
-
-    if mypy:
-        _mypy()
+    if lint:
+        _lint()
 
     _virtualenv('telepresence', '--help')
 
@@ -130,6 +131,7 @@ def main():
 
     for method in methods:
         _test(registry, version, method, test_env, test_args)
+
 
 def _test(registry, version, method, test_env, test_args):
     # Refresh the credentials
@@ -162,15 +164,19 @@ def _test(registry, version, method, test_env, test_args):
     _virtualenv(
         "py.test",
         "-v",
-        "--timeout", "360",
-        "--timeout-method", "thread",
+        "--timeout",
+        "360",
+        "--timeout-method",
+        "thread",
         "--fulltrace",
-        "--numprocesses", parallel,
+        "--numprocesses",
+        parallel,
         *test_args,
         "tests",
         "k8s-proxy/test_socks.py",
-        env=test_env,
+        env=test_env
     )
+
 
 def _build(registry, version):
     _run(
@@ -190,6 +196,7 @@ def _build(registry, version):
         "{}/telepresence-k8s:{}".format(registry, version),
     )
 
+
 def _push(registry, version):
     for image in ["telepresence-k8s", "telepresence-local"]:
         image = registry + "/" + image + ":" + version
@@ -199,19 +206,18 @@ def _push(registry, version):
             image,
         )
 
+
 def _parser():
-    parser = ArgumentParser(
-        description="Test Telepresence",
-    )
+    parser = ArgumentParser(description="Test Telepresence")
     parser.add_argument(
         '--travis',
         action='store_true',
-        help='do all the things Travis should do'
+        help='do all the things CI should do',
     )
     parser.add_argument(
         '--circle',
         action='store_true',
-        help='do all the things CircleCI should do'
+        help='do all the things CircleCI should do',
     )
     parser.add_argument(
         '--registry',
@@ -238,22 +244,10 @@ def _parser():
         dest='manage_virtualenv',
     )
     parser.add_argument(
-        '--flake8',
+        '--lint',
         action='store_true',
-        dest='flake8',
-        help='run flake8 on the code base',
-    )
-    parser.add_argument(
-        '--pylint',
-        action='store_true',
-        dest='pylint',
-        help='run pylint on the code base',
-    )
-    parser.add_argument(
-        '--mypy',
-        action='store_true',
-        dest='mypy',
-        help='run mypy on the code base',
+        dest='lint',
+        help='run linters on the code base (yapf, flake8, pylint, mypy)',
     )
     parser.add_argument(
         '--method',
@@ -272,11 +266,14 @@ def _parser():
 
     return parser
 
+
 def _get_version(suffix_format):
-    git_tag = check_output(["git", "describe", "--tags"]).decode("utf-8").strip()
+    git_tag = check_output(["git", "describe",
+                            "--tags"]).decode("utf-8").strip()
     os = {"linux": "LNX", "darwin": "OSX"}.get(platform)
     now = str(int(time()))
     return git_tag + suffix_format.format(OS=os, TIME=now)
+
 
 def _setup_virtualenv():
     rmtree("virtualenv", ignore_errors=True)
@@ -285,43 +282,47 @@ def _setup_virtualenv():
     _pip("install", "flake8")
     _pip("install", "-r", "dev-requirements.txt")
     _pip("install", "-r", "k8s-proxy/requirements.txt")
-    _pip("install", "git+https://github.com/datawire/sshuttle.git@telepresence")
+    _pip(
+        "install", "git+https://github.com/datawire/sshuttle.git@telepresence"
+    )
     _pip("install", "-e", ".")
 
-def _flake8():
-    _virtualenv("flake8", "--isolated", "local-docker", "k8s-proxy", "telepresence")
 
-def _pylint():
-    _virtualenv("pylint", "-f", "parseable", "-E", "telepresence")
-
-def _mypy():
-    _virtualenv("mypy", "telepresence", "local-docker/entrypoint.py")
+def _lint():
+    _virtualenv("yapf", "-dr", "telepresence", "build")
+    _virtualenv(
+        "flake8", "--isolated", "local-docker", "k8s-proxy", "telepresence",
+        "build"
+    )
+    _virtualenv("pylint", "-f", "parseable", "-E", "telepresence", "build")
+    _virtualenv("mypy", "telepresence", "local-docker/entrypoint.py", "build")
     # Couldn't figure out how to make this work well, so it's not very useful
     # cause of the skip:
     _virtualenv(
-        "mypy",
-        "--ignore-missing-imports",
-        "k8s-proxy/forwarder.py",
-        "k8s-proxy/socks.py",
+        "mypy", "--ignore-missing-imports", "k8s-proxy/forwarder.py",
+        "k8s-proxy/socks.py"
     )
+
 
 def _gcloud(*argv):
     _run("gcloud", *argv)
 
+
 def _pip(*argv):
     _virtualenv("pip", *argv)
+
 
 def _virtualenv(*argv, env=None):
     bindir = abspath("virtualenv/bin")
     if env is None:
         env = {}
-    env.update({
-        "PATH": bindir + pathsep + environ["PATH"]
-    })
+    env.update({"PATH": bindir + pathsep + environ["PATH"]})
     _run("/".join((bindir, argv[0])), *argv[1:], env=env)
+
 
 def _sudo(*argv):
     _run("sudo", *argv)
+
 
 def _run(*argv, env=None):
     pass_env = environ.copy()
@@ -329,9 +330,9 @@ def _run(*argv, env=None):
         pass_env.update(env)
     print(
         "+ {} {}".format(
-            " ".join(list(
-                "{}={}".format(k, v) for (k, v) in (env or {}).items()
-            )),
+            " ".join(
+                list("{}={}".format(k, v) for (k, v) in (env or {}).items())
+            ),
             " ".join(argv),
         ),
         flush=True,

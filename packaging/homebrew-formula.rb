@@ -19,9 +19,10 @@ class Telepresence < Formula
     venv.pip_install_and_link buildpath
   end
 
-  def caveats; <<-EOS.undent
-    Use of the container method requires socat.
-      brew install socat
+  def caveats
+    <<~EOS
+      Use of the container method requires socat.
+        brew install socat
     EOS
   end
 

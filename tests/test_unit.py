@@ -10,6 +10,7 @@ from hypothesis import strategies as st, given, example
 import yaml
 
 import telepresence.cli
+import telepresence.container
 import telepresence.deployment
 import telepresence.runner
 import telepresence.vpn
@@ -235,3 +236,23 @@ def test_runner_file():
         read_content = in_again.read()
         assert o_content not in read_content, read_content
         assert n_content in read_content, read_content
+
+
+def test_docker_publish_args():
+    """Test extraction of docker publish arguments"""
+    parse_docker_args = telepresence.container.parse_docker_args
+
+    expected_docker = ['--rm', '-it', 'fedora:latest', 'curl', 'qotm']
+    expected_publish = ['-p=8000:localhost:8000']
+
+    no_publish = "--rm -it fedora:latest curl qotm".split()
+    assert parse_docker_args(no_publish) == (expected_docker, [])
+    publish_variants = [
+        "--rm -it -p 8000:localhost:8000 fedora:latest curl qotm",
+        "--rm -it --publish 8000:localhost:8000 fedora:latest curl qotm",
+        "--rm -it -p=8000:localhost:8000 fedora:latest curl qotm",
+        "--rm -it --publish=8000:localhost:8000 fedora:latest curl qotm",
+    ]
+    for variant in publish_variants:
+        assert parse_docker_args(variant.split()) == \
+               (expected_docker, expected_publish)

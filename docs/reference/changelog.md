@@ -1,5 +1,17 @@
 # Changelog
 
+#### 0.74 (Unreleased)
+
+Bug fixes:
+
+* Telepresence correctly handles the `--publish` (`-p`) Docker option by incorporating it into the `docker` invocation that sets up networking.
+
+Misc:
+
+* Environment and testing setup is no longer entangled with Travis CI setup.
+  The `environment-setup.sh` and `build` scripts are used by Travis and can be used by developers as well.
+  ([#374](https://github.com/datawire/telepresence/issues/374))
+
 #### 0.73 (December 28, 2017)
 
 Features:
