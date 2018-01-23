@@ -93,7 +93,7 @@ class handle_unexpected_errors(object):
                         ) + "\n".join(logs.splitlines()[-20:]) + "\n"
                     )
 
-                if input(
+                if sys.stdout.isatty() and input(
                     "Would you like to file an issue in our issue tracker?"
                     " We'd really appreciate the help improving our "
                     "product. [Y/n]: ",
