@@ -179,14 +179,12 @@ def get_remote_info(
             # Metadata for Deployment will hopefully have a namespace. If not,
             # fall back to one we were given. If we weren't given one, best we
             # can do is choose "default".
-            if (name.startswith(deployment_name + "-")
-                and
-                pod["metadata"]["namespace"] == deployment["metadata"].get(
-                    "namespace", namespace)
-                and
-                phase in (
-                    "Pending", "Running"
-            )):
+            if (
+                name.startswith(deployment_name + "-")
+                and pod["metadata"]["namespace"] == deployment["metadata"].get(
+                    "namespace", namespace
+                ) and phase in ("Pending", "Running")
+            ):
                 runner.write("Looks like we've found our pod!\n")
                 remote_info = RemoteInfo(
                     runner,
