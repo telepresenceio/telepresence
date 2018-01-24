@@ -108,35 +108,68 @@ def main():
     for method in methods:
         _test(registry, version, method, test_env, test_args)
 
+    _newtest(registry, version, test_env, test_args)
+
+
+def _limit_for_openshift(maximum):
+    if environ.get("TELEPRESENCE_OPENSHIFT"):
+        # Don't want parallism for OpenShift (causes problems with OpenShift
+        # Online's limited free plan).
+        return 1
+    return maximum
+
+
+def _limit_for_method(method, maximum):
+    if method == "vpn-tcp" or method == "container":
+        # And don't want parallelism for VPN-y method since should only have
+        # one running a time.  Or for container method because it confuses
+        # checking in the tests for leaked resources.
+        return 1
+    return maximum
+
+
+def _newtest(registry, version, test_env, test_args):
+    parallel = str(_limit_for_openshift(4))
+    test_env = _test_env_for_telepresence(test_env, registry, version)
+    _pytest(
+        "--numprocesses",
+        parallel,
+        "tests",
+        *test_args,
+        "-k",
+        "not test_run",
+        test_env=test_env,
+    )
+
 
 def _test(registry, version, method, test_env, test_args):
     # Refresh the credentials
     _sudo("echo", "-n")
 
-    if environ.get("TELEPRESENCE_OPENSHIFT"):
-        # Don't want parallism for OpenShift (causes problems with OpenShift
-        # Online's limited free plan).
-        parallel = "1"
-    elif method == "vpn-tcp" or method == "container":
-        # And don't want parallelism for VPN-y method since should only have
-        # one running a time.  Or for container method because it confuses
-        # checking in the tests for leaked resources.
-        parallel = "1"
-    else:
-        parallel = "4"
+    parallel = str(_limit_for_openshift(
+        _limit_for_method(
+            method,
+            4,
+        )
+    ))
 
-    if test_env is None:
-        test_env = {}
-    if registry is not None:
-        test_env.update({
-            "TELEPRESENCE_REGISTRY": registry,
-        })
+    test_env = _test_env_for_telepresence(test_env, registry, version)
     test_env.update({
         "TELEPRESENCE_METHOD": method,
-        "TELEPRESENCE_VERSION": version,
         "SCOUT_DISABLE": "1",
     })
 
+    _pytest(
+        "--numprocesses",
+        parallel,
+        *test_args,
+        "tests/test_run.py",
+        "k8s-proxy/test_socks.py",
+        env=test_env
+    )
+
+
+def _pytest(*args, test_env=None):
     _virtualenv(
         "py.test",
         "-v",
@@ -145,13 +178,21 @@ def _test(registry, version, method, test_env, test_args):
         "--timeout-method",
         "thread",
         "--fulltrace",
-        "--numprocesses",
-        parallel,
-        *test_args,
-        "tests",
-        "k8s-proxy/test_socks.py",
-        env=test_env
-    )
+        *args,
+        env=test_env)
+
+
+def _test_env_for_telepresence(test_env, registry, version):
+    if test_env is None:
+        test_env = {}
+    if registry is not None:
+        test_env.update({
+            "TELEPRESENCE_REGISTRY": registry,
+        })
+    test_env.update({
+        "TELEPRESENCE_VERSION": version,
+    })
+    return test_env
 
 
 def _build(registry, version):
