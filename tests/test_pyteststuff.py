@@ -22,7 +22,7 @@ from .utils import (
     create_namespace,
 )
 
-from .test_endtoend import (
+from .parameterize_utils import (
     _ContainerMethod,
     _InjectTCPMethod,
     _VPNTCPMethod,
@@ -45,6 +45,9 @@ OPERATIONS = [
 
 
 class ResourceIdent(object):
+    """
+    Identify a Kubernetes resource.
+    """
     def __init__(self, namespace, name):
         self.namespace = namespace
         self.name = name
@@ -77,6 +80,18 @@ def _telepresence(telepresence_args):
 
 
 def run_telepresence_probe(request, method, operation, desired_environment):
+    """
+    :param request: The pytest mumble mumble whatever.
+
+    :param method: The definition of a Telepresence method to use for this
+        run.
+
+    :param operation: The definition of a Telepresence operation to use
+        for this run.
+
+    :param dict desired_environment: Key/value pairs to set in the probe's
+        environment.
+    """
     probe_endtoend = (Path(__file__).parent / "probe_endtoend.py").as_posix()
 
     # Create a web server service.  We'll observe side-effects related to
@@ -152,8 +167,17 @@ class Probe(object):
         self._method = method
         self._operation = operation
 
+
+    def __str__(self):
+        return "Probe[{}, {}]".format(
+            self._method.name,
+            self._operation.name,
+        )
+
+
     def result(self):
         if self._result is None:
+            print("Launching {}".format(self))
             self._result = run_telepresence_probe(
                 self._request,
                 self._method,
@@ -162,8 +186,10 @@ class Probe(object):
             )
         return self._result
 
+
     def cleanup(self):
-        pass
+        print("Cleaning up {}".format(self))
+
 
 
 @pytest.fixture(scope="module")
@@ -180,12 +206,7 @@ with_probe = pytest.mark.parametrize(
 
     # The parameters are the elements of the cartesian product of methods,
     # operations.
-    list(
-        product(
-            METHODS,
-            OPERATIONS,
-        ),
-    ),
+    list(product(METHODS, OPERATIONS)),
 
     # Use the `name` of methods and operations to generate readable
     # parameterized test names.
@@ -223,5 +244,36 @@ def test_environment_from_deployment(probe):
 
 
 @with_probe
-def test_environment_from_buzz(probe):
-    print(probe)
+def test_environment_for_services(probe):
+    """
+    The Telepresence execution context supplies environment variables with
+    values locating services configured on the cluster.
+    """
+    probe_result = probe.result()
+    probe_environment = probe_result.result["environ"]
+    webserver_name = probe_result.webserver_name
+
+    service_env = webserver_name.upper().replace("-", "_")
+    host = probe_environment[service_env + "_SERVICE_HOST"]
+    port = probe_environment[service_env + "_SERVICE_PORT"]
+
+    prefix = service_env + "_PORT_{}_TCP".format(port)
+    desired_environment = {
+        service_env + "_PORT": "tcp://{}:{}".format(host, port),
+        prefix + "_PROTO": "tcp",
+        prefix + "_PORT": port,
+        prefix + "_ADDR": host,
+    }
+
+    assert (
+        desired_environment ==
+        {k: probe_environment.get(k, None) for k in desired_environment}
+    ), (
+        "Probe environment missing some expected items:\n"
+        "Desired: {}\n"
+        "Probed: {}\n".format(desired_environment, probe_environment),
+    )
+    assert (
+        probe_environment[prefix] ==
+        probe_environment[service_env + "_PORT"]
+    )
