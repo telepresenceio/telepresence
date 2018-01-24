@@ -96,12 +96,14 @@ def swap_deployment(runner: Runner,
         # replace) then related ReplicaSets and Pods tend to hang around.
         # This seems like a misbehavior of of Kuberentes.
         runner.check_kubectl(
-            args.context, args.namespace,
+            args.context,
+            args.namespace,
             ["delete", "deployment", deployment_name],
         )
         runner.check_kubectl(
             args.context,
-            args.namespace, ["apply", "-f", "-"],
+            args.namespace,
+            ["apply", "-f", "-"],
             input=json.dumps(json_config).encode("utf-8"),
         )
 
