@@ -674,22 +674,24 @@ class NativeEndToEndTests(TestCase):
                     ]), "utf-8"
                 )
             )["items"]
-            images = list(
-                pod["spec"]["containers"][0]["image"]
+            image_and_phase = list(
+                (pod["spec"]["containers"][0]["image"],
+                 pod["status"]["phase"])
                 for pod
                 in pods
+                if pod
             )
             if all(
                     image.startswith("openshift/hello-openshift")
-                    for image
-                    in images
+                    for (image, phase)
+                    in image_and_phase
             ):
                 print("Found openshift!")
                 return
             time.sleep(1)
 
             if time.time() - start > 60:
-                assert False, "Didn't switch back to openshift: {}".format(images)
+                assert False, "Didn't switch back to openshift: {}".format(image_and_phase)
 
     def test_swapdeployment_explicit_container(self):
         """
