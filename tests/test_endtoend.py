@@ -1,14 +1,14 @@
 
 from json import (
     JSONDecodeError,
-    loads, dumps,
+    loads,
 )
 from sys import executable
 from shutil import which
 from itertools import product
 from subprocess import (
     CalledProcessError,
-    PIPE, STDOUT, Popen, check_output, check_call,
+    PIPE, STDOUT, check_output, check_call,
 )
 
 from pathlib import Path
