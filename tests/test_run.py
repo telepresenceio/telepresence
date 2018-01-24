@@ -679,7 +679,6 @@ class NativeEndToEndTests(TestCase):
                  pod["status"]["phase"])
                 for pod
                 in pods
-                if pod
             )
             if all(
                     image.startswith("openshift/hello-openshift")
