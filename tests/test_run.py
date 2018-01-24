@@ -691,7 +691,14 @@ class NativeEndToEndTests(TestCase):
             time.sleep(1)
 
             if time.time() - start > 60:
-                assert False, "Didn't switch back to openshift: {}".format(image_and_phase)
+                assert False, \
+                    "Didn't switch back to openshift: \n\t{}\n{}".format(
+                        image_and_phase,
+                        check_output([
+                            KUBECTL, "get", "-o", "json", "all",
+                            "--selector", selector,
+                        ]),
+                    )
 
     def test_swapdeployment_explicit_container(self):
         """
