@@ -665,7 +665,7 @@ class NativeEndToEndTests(TestCase):
 
         # Ensure pods swap back too:
         start = time.time()
-        while time.time() - start < 60:
+        while True:
             pods = json.loads(
                 str(
                     check_output([
@@ -674,14 +674,22 @@ class NativeEndToEndTests(TestCase):
                     ]), "utf-8"
                 )
             )["items"]
-            if [
+            images = list(
                 pod["spec"]["containers"][0]["image"]
-                .startswith("openshift/hello-openshift") for pod in pods
-            ] == [True] * len(pods):
+                for pod
+                in pods
+            )
+            if all(
+                    image.startswith("openshift/hello-openshift")
+                    for image
+                    in images
+            ):
                 print("Found openshift!")
                 return
             time.sleep(1)
-        assert False, "Didn't switch back to openshift"
+
+            if time.time() - start > 60:
+                assert False, "Didn't switch back to openshift: {}".format(images)
 
     def test_swapdeployment_explicit_container(self):
         """
