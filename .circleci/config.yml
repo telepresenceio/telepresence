@@ -117,6 +117,15 @@ jobs:
           command: |
             ./build --circle
 
+      - run:
+          # We can do this at the end of the Linux build because it has a
+          # time-based condition for what it cleans up.  It won't get in the
+          # way of a concurrent OS X (or other) build because it only looks at
+          # reasonably old resources.
+          name: "clean cluster"
+          command: |
+            ./ci/clean-cluster.py
+
   build-macos:
     macos:
       xcode: "9.0"
