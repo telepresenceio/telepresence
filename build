@@ -135,9 +135,9 @@ def _newtest(registry, version, test_env, test_args):
         "--numprocesses",
         parallel,
         "tests",
-        *test_args,
         "-k",
         "not test_run",
+        *test_args,
         test_env=test_env,
     )
 
