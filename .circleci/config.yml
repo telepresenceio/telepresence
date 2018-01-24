@@ -11,13 +11,9 @@ workflows:
           requires:
             - "build-image"
 
-      # This would be excellent to enable.  The next big hurdle preventing us
-      # from doing so is the mysterious inability to pull images from gcr.io
-      # in the CircleCI build environment.
-      #
-      # - build-linux:
-      #     requires:
-      #       - "build-image"
+      - build-linux:
+          requires:
+            - "build-image"
 
 jobs:
   build-image:
@@ -120,6 +116,15 @@ jobs:
           name: "run tests"
           command: |
             ./build --circle
+
+      - run:
+          # We can do this at the end of the Linux build because it has a
+          # time-based condition for what it cleans up.  It won't get in the
+          # way of a concurrent OS X (or other) build because it only looks at
+          # reasonably old resources.
+          name: "clean cluster"
+          command: |
+            ./ci/clean-cluster.py
 
   build-macos:
     macos:

@@ -200,19 +200,11 @@ def _build(registry, version):
 def _push(registry, version):
     for image in ["telepresence-k8s", "telepresence-local"]:
         image = registry + "/" + image + ":" + version
-        if registry.startswith("gcr.io/"):
-            _gcloud(
-                "docker",
-                "--",
-                "push",
-                image,
-            )
-        else:
-            _run(
-                "docker",
-                "push",
-                image,
-            )
+        _run(
+            "docker",
+            "push",
+            image,
+        )
 
 
 def _parser():
