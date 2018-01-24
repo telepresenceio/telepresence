@@ -3,13 +3,13 @@ End-to-end tests for running directly in the operating system.
 """
 
 import json
+from pprint import pformat
 from unittest import TestCase, skipIf, skipUnless
 from urllib.request import urlopen
 from subprocess import (
     check_output,
     Popen,
     PIPE,
-    CalledProcessError,
     check_call,
     run,
     STDOUT,
@@ -694,10 +694,10 @@ class NativeEndToEndTests(TestCase):
                 assert False, \
                     "Didn't switch back to openshift: \n\t{}\n{}".format(
                         image_and_phase,
-                        check_output([
+                        pformat(json.loads(check_output([
                             KUBECTL, "get", "-o", "json", "all",
                             "--selector", selector,
-                        ]),
+                        ]))),
                     )
 
     def test_swapdeployment_explicit_container(self):
