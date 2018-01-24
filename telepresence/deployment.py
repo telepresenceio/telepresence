@@ -94,7 +94,7 @@ def swap_deployment(runner: Runner,
     def apply_json(json_config):
         runner.check_kubectl(
             args.context,
-            args.namespace, ["replace", "-f", "-"],
+            args.namespace, ["replace", "--force", "-f", "-"],
             input=json.dumps(json_config).encode("utf-8")
         )
 
