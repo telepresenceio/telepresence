@@ -30,7 +30,7 @@ from .utils import (
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 # inject-tcp/vpn-tcp/container:
-TELEPRESENCE_METHOD = os.environ["TELEPRESENCE_METHOD"]
+TELEPRESENCE_METHOD = os.environ.get("TELEPRESENCE_METHOD", None)
 # If this env variable is set, we know we're using minikube or minishift:
 LOCAL_VM = os.environ.get("TELEPRESENCE_LOCAL_VM") is not None
 
