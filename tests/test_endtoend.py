@@ -31,10 +31,18 @@ from .rwlock import RWLock
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
+# Some Telepresence configurations take over the machine's whole network
+# stack.  We must avoid concurrency when running those tests.  The network
+# lock gives us a way to do that.  Tests with an isolated network impact
+# (inject-tcp, container) will do a read-acquire on this lock.  Tests with a
+# global network impact (vpn-tcp) will do a write-acquire on this lock.
 network = RWLock()
 
 
 class ResourceIdent(object):
+    """
+    Identify a Kubernetes resource.
+    """
     def __init__(self, namespace, name):
         self.namespace = namespace
         self.name = name
@@ -77,6 +85,13 @@ class _EndToEndTestsMixin(object):
     }
 
     def __init__(self, method, operation):
+        """
+        :param _method: The definition of a Telepresence method to use for this
+            test run.
+
+        :param _operation: The definition of a Telepresence operation to use
+            for this test run.
+        """
         self._method = method
         self._operation = operation
 

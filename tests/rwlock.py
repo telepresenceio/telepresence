@@ -1,3 +1,7 @@
+"""
+An implementation of a cross-process read/write lock.
+"""
+
 import multiprocessing
 
 class RWLock(object):
