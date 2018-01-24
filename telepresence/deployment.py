@@ -92,10 +92,17 @@ def swap_deployment(runner: Runner,
     )
 
     def apply_json(json_config):
+        # If we don't delete the deployment first (eg, if we perform a
+        # replace) then related ReplicaSets and Pods tend to hang around.
+        # This seems like a misbehavior of of Kuberentes.
+        runner.check_kubectl(
+            args.context, args.namespace,
+            ["delete", "deployment", deployment_name],
+        )
         runner.check_kubectl(
             args.context,
-            args.namespace, ["replace", "--force", "-f", "-"],
-            input=json.dumps(json_config).encode("utf-8")
+            args.namespace, ["apply", "-f", "-"],
+            input=json.dumps(json_config).encode("utf-8"),
         )
 
     atexit.register(apply_json, deployment_json)
