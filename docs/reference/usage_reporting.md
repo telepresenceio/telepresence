@@ -21,9 +21,9 @@ The following information is collected and sent during version checks:
 - Kubernetes version
 - Operation (e.g., "swap-deployment") and method (e.g., "vpn-tcp")
 
-The reporting code can be found in [`cli/telepresence`][1] by searching for "Usage".
+The reporting code can be found in [`telepresence/usage_tracking.py`][1].
 
-[1]: https://github.com/datawire/telepresence/blob/master/cli/telepresence
+[1]: https://github.com/datawire/telepresence/blob/master/telepresence/usage_tracking.py
 
 ## When is it reported?
 
