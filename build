@@ -129,12 +129,8 @@ def _limit_for_method(method, maximum):
 
 
 def _newtest(registry, version, test_env, test_args):
-    parallel = str(_limit_for_openshift(4))
     test_env = _test_env_for_telepresence(test_env, registry, version)
     _pytest(
-        "--numprocesses",
-        parallel,
-        "tests",
         "-k",
         "not test_run",
         *test_args,
