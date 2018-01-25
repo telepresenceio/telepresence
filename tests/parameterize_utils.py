@@ -34,7 +34,7 @@ REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
 
 class _ContainerMethod(object):
-    name = "--method=container"
+    name = "container"
 
     def lock(self):
         network.lock_read()
@@ -55,7 +55,7 @@ class _ContainerMethod(object):
 
 
 class _InjectTCPMethod(object):
-    name = "--method=inject-tcp"
+    name = "inject-tcp"
 
     def lock(self):
         network.lock_read()
@@ -74,7 +74,7 @@ class _InjectTCPMethod(object):
 
 
 class _VPNTCPMethod(object):
-    name = "--method=vpn-tcp"
+    name = "vpn-tcp"
 
     def lock(self):
         network.lock_write()
@@ -95,9 +95,9 @@ class _ExistingDeploymentOperation(object):
     def __init__(self, swap):
         self.swap = swap
         if swap:
-            self.name = "--swap-deployment"
+            self.name = "swap"
         else:
-            self.name = "--deployment"
+            self.name = "existing"
 
 
     def prepare_deployment(self, deployment_ident, environ):
@@ -124,7 +124,7 @@ class _ExistingDeploymentOperation(object):
 
 
 class _NewDeploymentOperation(object):
-    name = "--new-deployment"
+    name = "new"
 
     def prepare_deployment(self, deployment_ident, environ):
         pass

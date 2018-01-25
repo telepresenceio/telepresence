@@ -33,7 +33,7 @@ with_probe = pytest.mark.parametrize(
 
     # Use the `name` of methods and operations to generate readable
     # parameterized test names.
-    ids=lambda param: "{} {}".format(param[0].name, param[1].name),
+    ids=lambda param: "{},{}".format(param[0].name, param[1].name),
 
     # Pass the parameters through the probe fixture to get the object that's
     # really passed to the decorated function.
