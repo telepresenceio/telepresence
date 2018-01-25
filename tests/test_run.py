@@ -3,13 +3,13 @@ End-to-end tests for running directly in the operating system.
 """
 
 import json
+from pprint import pformat
 from unittest import TestCase, skipIf, skipUnless
 from urllib.request import urlopen
 from subprocess import (
     check_output,
     Popen,
     PIPE,
-    CalledProcessError,
     check_call,
     run,
     STDOUT,
@@ -665,7 +665,7 @@ class NativeEndToEndTests(TestCase):
 
         # Ensure pods swap back too:
         start = time.time()
-        while time.time() - start < 60:
+        while True:
             pods = json.loads(
                 str(
                     check_output([
@@ -674,14 +674,30 @@ class NativeEndToEndTests(TestCase):
                     ]), "utf-8"
                 )
             )["items"]
-            if [
-                pod["spec"]["containers"][0]["image"]
-                .startswith("openshift/hello-openshift") for pod in pods
-            ] == [True] * len(pods):
+            image_and_phase = list(
+                (pod["spec"]["containers"][0]["image"],
+                 pod["status"]["phase"])
+                for pod
+                in pods
+            )
+            if all(
+                    image.startswith("openshift/hello-openshift")
+                    for (image, phase)
+                    in image_and_phase
+            ):
                 print("Found openshift!")
                 return
             time.sleep(1)
-        assert False, "Didn't switch back to openshift"
+
+            if time.time() - start > 60:
+                assert False, \
+                    "Didn't switch back to openshift: \n\t{}\n{}".format(
+                        image_and_phase,
+                        pformat(json.loads(check_output([
+                            KUBECTL, "get", "-o", "json", "all",
+                            "--selector", selector,
+                        ]))),
+                    )
 
     def test_swapdeployment_explicit_container(self):
         """
