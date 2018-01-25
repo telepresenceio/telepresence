@@ -37,8 +37,14 @@ class _ContainerMethod(object):
     name = "container"
 
     def unsupported(self):
-        if which("docker") is None:
-            return "docker executable not found on $PATH"
+        missing = set()
+        for exe in {"socat", "docker"}:
+            if which(exe) is None:
+                missing.add(exe)
+        if missing:
+            return "Required executables {} not found on $PATH".format(
+                missing,
+            )
         return None
 
     def lock(self):
