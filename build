@@ -37,6 +37,8 @@ def main():
     except KeyError:
         pass
 
+    run_tests = args.tests
+
     if args.circle:
         manage_virtualenv = False
         registry = "gcr.io/" + environ["PROJECT_NAME"]
@@ -64,7 +66,7 @@ def main():
         test_args = args.test_args or []
         test_env = {}
 
-        if methods and not build_and_push:
+        if (run_tests or methods) and not build_and_push:
             print(
                 "Some tests will run, behaving as though"
                 " --build-and-push supplied."
@@ -105,10 +107,11 @@ def main():
         # our _local_ Docker image repository.
         _push(registry, version)
 
-    for method in methods:
-        _test(registry, version, method, test_env, test_args)
+    if run_tests:
+        for method in methods:
+            _test(registry, version, method, test_env, test_args)
 
-    _newtest(registry, version, test_env, test_args)
+        _newtest(registry, version, test_env, test_args)
 
 
 def _limit_for_openshift(maximum):
@@ -247,6 +250,12 @@ def _parser():
         "--manage-virtualenv",
         action='store_true',
         dest='manage_virtualenv',
+    )
+    parser.add_argument(
+        "--no-tests",
+        action='store_false',
+        dest='tests',
+        default=True,
     )
     parser.add_argument(
         '--lint',
