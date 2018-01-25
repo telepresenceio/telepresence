@@ -212,8 +212,9 @@ def _telepresence(telepresence_args):
     Run a probe in a Telepresence execution context.
     """
     args = [
-        executable, which("telepresence"),
-        "--logfile", "-",
+        executable,
+        which("telepresence"),
+        "--logfile=-",
     ] + telepresence_args
     print("Running {}".format(args))
     return check_output(
@@ -272,13 +273,16 @@ def run_telepresence_probe(request, method, operation, desired_environment):
         )
     else:
         # Scrape the payload out of the overall noise.
-        output = output.split(b"{probe delimiter}")[1]
+        setup_logs, output, teardown_logs = output.decode("utf-8").split(
+            u"{probe delimiter}",
+        )
         try:
             probe_result = loads(output)
         except JSONDecodeError:
             assert False, "Could not decode JSON probe result from {}:\n{}".format(
                 ["telepresence"] + args, output.decode("utf-8"),
             )
+        print("Telepresence output:\n{}{}".format(setup_logs, teardown_logs))
         return ProbeResult(webserver_name, probe_result)
 
 
