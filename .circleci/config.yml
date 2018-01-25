@@ -83,6 +83,7 @@ jobs:
       - run:
           name: "setup Python environment"
           command: |
+            sudo pip install --upgrade virtualenv
             ./build --registry gcr.io/datawireio --manage-virtualenv --no-tests
 
       - run:
