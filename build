@@ -173,7 +173,6 @@ def _pytest(*args, test_env=None):
         "360",
         "--timeout-method",
         "thread",
-        "--fulltrace",
         *args,
         env=test_env)
 
