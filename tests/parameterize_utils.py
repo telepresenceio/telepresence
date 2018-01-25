@@ -44,6 +44,10 @@ class _ContainerMethod(object):
         network.unlock_read()
 
 
+    def inherits_client_environment(self):
+        return False
+
+
     def telepresence_args(self, probe):
         return [
             "--method", "container",
@@ -65,6 +69,10 @@ class _InjectTCPMethod(object):
         network.unlock_read()
 
 
+    def inherits_client_environment(self):
+        return True
+
+
     def telepresence_args(self, probe):
         return [
             "--method", "inject-tcp",
@@ -84,11 +92,16 @@ class _VPNTCPMethod(object):
         network.unlock_write()
 
 
+    def inherits_client_environment(self):
+        return True
+
+
     def telepresence_args(self, probe):
         return [
             "--method", "vpn-tcp",
             "--run", executable, probe,
         ]
+
 
 
 class _ExistingDeploymentOperation(object):
@@ -98,6 +111,10 @@ class _ExistingDeploymentOperation(object):
             self.name = "swap"
         else:
             self.name = "existing"
+
+
+    def inherits_deployment_environment(self):
+        return True
 
 
     def prepare_deployment(self, deployment_ident, environ):
@@ -125,6 +142,9 @@ class _ExistingDeploymentOperation(object):
 
 class _NewDeploymentOperation(object):
     name = "new"
+
+    def inherits_deployment_environment(self):
+        return False
 
     def prepare_deployment(self, deployment_ident, environ):
         pass
@@ -207,25 +227,43 @@ def _cleanup_deployment(ident):
 
 
 
-def _telepresence(telepresence_args):
+def _telepresence(telepresence_args, env=None):
     """
     Run a probe in a Telepresence execution context.
+
+    :param list telepresence: Arguments to pass to the Telepresence CLI.
+
+    :param env: Environment variables to set for the Telepresence CLI.  These
+        are added to the current process's environment.  ``None`` means the
+        same thing as ``{}``.
     """
     args = [
         executable,
         which("telepresence"),
         "--logfile=-",
     ] + telepresence_args
+
+    pass_env = os.environ.copy()
+    if env is not None:
+        pass_env.update(env)
+
     print("Running {}".format(args))
     return check_output(
         args=args,
         stdin=PIPE,
         stderr=STDOUT,
+        env=pass_env,
     )
 
 
 
-def run_telepresence_probe(request, method, operation, desired_environment):
+def run_telepresence_probe(
+        request,
+        method,
+        operation,
+        desired_environment,
+        client_environment,
+):
     """
     :param request: The pytest mumble mumble whatever.
 
@@ -237,6 +275,9 @@ def run_telepresence_probe(request, method, operation, desired_environment):
 
     :param dict desired_environment: Key/value pairs to set in the probe's
         environment.
+
+    :param dict client_environment: Key/value pairs to set in the Telepresence
+        CLI's environment.
     """
     probe_endtoend = (Path(__file__).parent / "probe_endtoend.py").as_posix()
 
@@ -264,7 +305,7 @@ def run_telepresence_probe(request, method, operation, desired_environment):
     try:
         try:
             method.lock()
-            output = _telepresence(args)
+            output = _telepresence(args, client_environment)
         finally:
             method.unlock()
     except CalledProcessError as e:
@@ -295,6 +336,8 @@ class ProbeResult(object):
 
 
 class Probe(object):
+    CLIENT_ENV_VAR = "SHOULD_NOT_BE_SET"
+
     DESIRED_ENVIRONMENT = {
         "MYENV": "hello",
         "EXAMPLE_ENVFROM": "foobar",
@@ -313,14 +356,14 @@ class Probe(object):
 
     def __init__(self, request, method, operation):
         self._request = request
-        self._method = method
-        self._operation = operation
+        self.method = method
+        self.operation = operation
 
 
     def __str__(self):
         return "Probe[{}, {}]".format(
-            self._method.name,
-            self._operation.name,
+            self.method.name,
+            self.operation.name,
         )
 
 
@@ -329,9 +372,10 @@ class Probe(object):
             print("Launching {}".format(self))
             self._result = run_telepresence_probe(
                 self._request,
-                self._method,
-                self._operation,
+                self.method,
+                self.operation,
                 self.DESIRED_ENVIRONMENT,
+                {self.CLIENT_ENV_VAR: "FOO"},
             )
         return self._result
 

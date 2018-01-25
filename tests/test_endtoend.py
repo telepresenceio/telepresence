@@ -49,21 +49,39 @@ def test_environment_from_deployment(probe):
     values defined in the Kubernetes Deployment.
     """
     probe_environment = probe.result().result["environ"]
-    assert (
-        probe.DESIRED_ENVIRONMENT
-        == {
-            k: probe_environment.get(k, None)
-            for k
-            in probe.DESIRED_ENVIRONMENT
-        }
-    ), (
-        "Probe environment missing some expected items:\n"
-        "Desired: {}\n"
-        "Probed: {}\n".format(
-            probe.DESIRED_ENVIRONMENT,
-            probe_environment,
+    if probe.operation.inherits_deployment_environment():
+        # If the operation is expected to inherit an environment from an
+        # existing Deployment, make sure that it did.
+        assert (
+            probe.DESIRED_ENVIRONMENT
+            == {
+                k: probe_environment.get(k, None)
+                for k
+                in probe.DESIRED_ENVIRONMENT
+            }
+        ), (
+            "Probe environment missing some expected items:\n"
+            "Desired: {}\n"
+            "Probed: {}\n".format(
+                probe.DESIRED_ENVIRONMENT,
+                probe_environment,
+            )
         )
-    )
+
+    if probe.method.inherits_client_environment():
+        # Likewise, make an assertion about client environment being inherited
+        # if this method is supposed to do that.
+        assert (
+            probe.CLIENT_ENV_VAR in probe_environment
+        ), (
+            "Telepresence client environment missing from Telepresence execution context."
+        )
+    else:
+        assert (
+            probe.CLIENT_ENV_VAR not in probe_environment
+        ), (
+            "Telepresence client environment leaked into Telepresence execution context."
+        )
 
 
 @with_probe
