@@ -18,9 +18,13 @@ from .parameterize_utils import (
 @pytest.fixture(scope="module")
 def probe(request):
     method, operation = request.param
-    probe = Probe(request, method, operation)
-    yield probe
-    probe.cleanup()
+    reason = method.unsupported()
+    if reason is None:
+        probe = Probe(request, method, operation)
+        yield probe
+        probe.cleanup()
+    else:
+        pytest.skip(reason)
 
 
 with_probe = pytest.mark.parametrize(

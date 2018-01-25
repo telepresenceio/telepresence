@@ -36,6 +36,11 @@ REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 class _ContainerMethod(object):
     name = "container"
 
+    def unsupported(self):
+        if which("docker") is None:
+            return "docker executable not found on $PATH"
+        return None
+
     def lock(self):
         network.lock_read()
 
@@ -61,6 +66,9 @@ class _ContainerMethod(object):
 class _InjectTCPMethod(object):
     name = "inject-tcp"
 
+    def unsupported(self):
+        return None
+
     def lock(self):
         network.lock_read()
 
@@ -83,6 +91,9 @@ class _InjectTCPMethod(object):
 
 class _VPNTCPMethod(object):
     name = "vpn-tcp"
+
+    def unsupported(self):
+        return None
 
     def lock(self):
         network.lock_write()
