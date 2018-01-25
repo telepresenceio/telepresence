@@ -169,10 +169,8 @@ def _pytest(*args, test_env=None):
     _virtualenv(
         "py.test",
         "-v",
-        "--timeout",
-        "360",
-        "--timeout-method",
-        "thread",
+        "--timeout=360",
+        "--timeout-method=thread",
         *args,
         env=test_env)
 
