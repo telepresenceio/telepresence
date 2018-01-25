@@ -35,7 +35,7 @@ jobs:
       - run:
           name: "run lint checks"
           command: |
-            ./build --registry gcr.io/datawireio --lint
+            ./build --registry gcr.io/datawireio --no-tests --lint
 
   build-image:
     docker:
@@ -198,7 +198,7 @@ jobs:
       - run:
           name: "setup Python environment"
           command: |
-            ./build --registry gcr.io/datawireio --manage-virtualenv
+            ./build --registry gcr.io/datawireio --manage-virtualenv --no-tests
 
       - save_cache:
           key: |
