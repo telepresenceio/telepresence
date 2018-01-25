@@ -83,12 +83,12 @@ jobs:
       - run:
           name: "setup Python environment"
           command: |
-            ./build --registry gcr.io/datawireio --manage-virtualenv
+            ./build --registry gcr.io/datawireio --manage-virtualenv --no-tests
 
       - run:
           name: "build and push image"
           command: |
-            ./build --registry gcr.io/datawireio --version-suffix "" --build-and-push
+            ./build --registry gcr.io/datawireio --version-suffix "" --build-and-push --no-tests
 
   build-linux:
     machine:
