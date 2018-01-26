@@ -29,12 +29,6 @@ def main():
     parser = _parser()
     args = parser.parse_args()
 
-    for exe in {"gcloud", "kubectl"}:
-        if which(exe) is None:
-            raise SystemExit(
-                "Required executable {} not found on $PATH".format(exe)
-            )
-
     try:
         # Presence of this variable in pip processes we launch causes pip to
         # write the wrong #! line.  Only expected to be set on OS X.
@@ -100,6 +94,12 @@ def main():
                 " --build-and-push supplied."
             )
             build_and_push = True
+
+    if methods:
+        if which("kubectl") is None:
+            raise SystemExit(
+                "Required executable 'kubectl' not found on $PATH.",
+            )
 
     if registry is None:
         raise SystemExit(
@@ -302,10 +302,6 @@ def _lint():
         "mypy", "--ignore-missing-imports", "k8s-proxy/forwarder.py",
         "k8s-proxy/socks.py"
     )
-
-
-def _gcloud(*argv):
-    _run("gcloud", *argv)
 
 
 def _pip(*argv):

@@ -5,6 +5,7 @@ workflows:
   version: 2
   ci:
     jobs:
+      - lint
       - build-image
 
       - build-macos:
@@ -16,6 +17,26 @@ workflows:
             - "build-image"
 
 jobs:
+  lint:
+    docker:
+      # https://circleci.com/docs/2.0/circleci-images/
+      # https://hub.docker.com/r/circleci/python/
+      - image: "circleci/python:3"
+
+    steps:
+      - "checkout"
+
+      - run:
+          name: "setup Python environment"
+          command: |
+            sudo pip install --upgrade virtualenv
+            ./build --registry gcr.io/datawireio --manage-virtualenv
+
+      - run:
+          name: "run lint checks"
+          command: |
+            ./build --registry gcr.io/datawireio --lint
+
   build-image:
     docker:
       # https://circleci.com/docs/2.0/circleci-images/
@@ -185,11 +206,6 @@ jobs:
           paths:
             # OSX specific
             - "~/Library/Caches/pip/"
-
-      - run:
-          name: "run lint checks"
-          command: |
-            ./build --registry gcr.io/datawireio --lint
 
       - run:
           name: "run tests"
