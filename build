@@ -108,13 +108,21 @@ def main():
         _push(registry, version)
 
     if run_tests:
+        # Run the original end-to-end tests against each requested
+        # Telepresence method.
         for method in methods:
             _test(registry, version, method, test_env, test_args)
 
+        # Run the rest of the test suite, including the new end-to-end tests
+        # which manage the Telepresence method in use without our help.
         _newtest(registry, version, test_env, test_args)
 
 
 def _limit_for_openshift(maximum):
+    """
+    Select a testing parallelism level, taking into consideration the limits
+    of OpenShift if that's where we're running.
+    """
     if environ.get("TELEPRESENCE_OPENSHIFT"):
         # Don't want parallism for OpenShift (causes problems with OpenShift
         # Online's limited free plan).
@@ -123,6 +131,10 @@ def _limit_for_openshift(maximum):
 
 
 def _limit_for_method(method, maximum):
+    """
+    Select a testing parallelism level, taking into consideration the limits
+    of the given Telepresence method.
+    """
     if method == "vpn-tcp" or method == "container":
         # And don't want parallelism for VPN-y method since should only have
         # one running a time.  Or for container method because it confuses
@@ -132,6 +144,14 @@ def _limit_for_method(method, maximum):
 
 
 def _newtest(registry, version, test_env, test_args):
+    """
+    Run the test suite (except the original end-to-end tests).
+
+    :param registry: A Docker registry where necessary images can be found.
+    :param version: The Telepresence version to test.
+    :param test_env: Extra items to add to the test process environment.
+    :param test_args: Extra args to add to the py.test command line.
+    """
     test_env = _test_env_for_telepresence(test_env, registry, version)
     _pytest(
         "-k",
@@ -174,6 +194,18 @@ def _pytest(*args, test_env=None):
 
 
 def _test_env_for_telepresence(test_env, registry, version):
+    """
+    Construct the additional environment variables which must be set in
+    Telepresence's environment for it to behave as we wish.
+
+    :param test_env: More variables to include in the result.
+
+    :param registry: The location of the registry holding Telepresence Docker
+        images to test.
+
+    :param version: The version of Telepresence (as indicated by Docker image
+        tags) to test.
+    """
     if test_env is None:
         test_env = {}
     if registry is not None:
