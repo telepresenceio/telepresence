@@ -30,7 +30,7 @@ jobs:
           name: "setup Python environment"
           command: |
             sudo pip install --upgrade virtualenv
-            ./build --registry gcr.io/datawireio --manage-virtualenv
+            ./build --registry gcr.io/datawireio --no-tests --manage-virtualenv
 
       - run:
           name: "run lint checks"
