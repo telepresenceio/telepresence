@@ -20,16 +20,6 @@ from .utils import (
     telepresence_version,
 )
 
-from .rwlock import RWLock
-
-
-# Some Telepresence configurations take over the machine's whole network
-# stack.  We must avoid concurrency when running those tests.  The network
-# lock gives us a way to do that.  Tests with an isolated network impact
-# (inject-tcp, container) will do a read-acquire on this lock.  Tests with a
-# global network impact (vpn-tcp) will do a write-acquire on this lock.
-network = RWLock()
-
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
 
@@ -46,13 +36,6 @@ class _ContainerMethod(object):
                 missing,
             )
         return None
-
-    def lock(self):
-        network.lock_read()
-
-
-    def unlock(self):
-        network.unlock_read()
 
 
     def inherits_client_environment(self):
@@ -75,13 +58,6 @@ class _InjectTCPMethod(object):
     def unsupported(self):
         return None
 
-    def lock(self):
-        network.lock_read()
-
-
-    def unlock(self):
-        network.unlock_read()
-
 
     def inherits_client_environment(self):
         return True
@@ -100,13 +76,6 @@ class _VPNTCPMethod(object):
 
     def unsupported(self):
         return None
-
-    def lock(self):
-        network.lock_write()
-
-
-    def unlock(self):
-        network.unlock_write()
 
 
     def inherits_client_environment(self):
@@ -163,8 +132,10 @@ class _NewDeploymentOperation(object):
     def inherits_deployment_environment(self):
         return False
 
+
     def prepare_deployment(self, deployment_ident, environ):
         pass
+
 
     def telepresence_args(self, deployment_ident):
         return [
@@ -320,11 +291,7 @@ def run_telepresence_probe(
     method_args = method.telepresence_args(probe_endtoend)
     args = operation_args + method_args
     try:
-        try:
-            method.lock()
-            output = _telepresence(args, client_environment)
-        finally:
-            method.unlock()
+        output = _telepresence(args, client_environment)
     except CalledProcessError as e:
         assert False, "Failure running {}: {}\n{}".format(
             ["telepresence"] + args, str(e), e.output.decode("utf-8"),
