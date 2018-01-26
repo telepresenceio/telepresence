@@ -29,7 +29,7 @@ def main():
     parser = _parser()
     args = parser.parse_args()
 
-    for exe in {"gcloud", "kubectl"}:
+    for exe in {"kubectl"}:
         if which(exe) is None:
             raise SystemExit(
                 "Required executable {} not found on $PATH".format(exe)
@@ -302,10 +302,6 @@ def _lint():
         "mypy", "--ignore-missing-imports", "k8s-proxy/forwarder.py",
         "k8s-proxy/socks.py"
     )
-
-
-def _gcloud(*argv):
-    _run("gcloud", *argv)
 
 
 def _pip(*argv):
