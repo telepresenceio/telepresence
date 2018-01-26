@@ -29,12 +29,6 @@ def main():
     parser = _parser()
     args = parser.parse_args()
 
-    for exe in {"kubectl"}:
-        if which(exe) is None:
-            raise SystemExit(
-                "Required executable {} not found on $PATH".format(exe)
-            )
-
     try:
         # Presence of this variable in pip processes we launch causes pip to
         # write the wrong #! line.  Only expected to be set on OS X.
