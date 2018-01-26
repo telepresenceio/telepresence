@@ -97,7 +97,7 @@ In order to run *all* possible code paths in Telepresence, you need to do the fo
 | Test environment   | How to run                                           |
 |--------------------|------------------------------------------------------|
 | Minikube           | `make minikube-test`                                 |
-| Remote K8s cluster | Runs on Travis                                       |
+| Remote K8s cluster | Runs on Circle                                       |
 | Minishift          | `make openshift-tests` with minishift kube context   |
 | Remote OS cluster  | `make openshift-tests` with remote OpenShift context |
 | Docker on Mac      | `make minikube-test` on Mac with Docker              |
@@ -105,7 +105,7 @@ In order to run *all* possible code paths in Telepresence, you need to do the fo
 
 In practice running on remote OpenShift cluster usually doesn't happen.
 
-Travis on Mac cannot support Docker, which is why that needs to be done manually.
+CircleCI on Mac does not yet support Docker, which is why that needs to be done manually.
 
 #### Running individual tests
 

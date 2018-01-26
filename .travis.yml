@@ -3,7 +3,7 @@ python:
   - "3.5"
 sudo: required
 
-# Run on Linux and OS X:
+# Run on Linux, only for releases.
 matrix:
   include:
     - os: linux
@@ -16,14 +16,8 @@ matrix:
 # Environment variables:
 env:
   global:
-    - SCOUT_DISABLE=1
-    - PROJECT_NAME=datawireio
-    - CLUSTER_NAME=telepresence-testing
-    - CLOUDSDK_COMPUTE_ZONE=us-central1-a
     # DOCKER_PASSWORD:
     - secure: "crKoRn+A2LQ/DTcndX204BsDCPXzl6twsrgoQ8CNmYD154n9bYWzg21uWPiaYFrZYYR3dxb8l40VOMTaFUp1iDM3QwA5U3rEdYBIDV0XK4ORvvr5xkmRj8qd7Fmub+lMPWb2euRVK8odSHMiNo111pfB5ddai2VadbwQhNGznuTcY5fNrrTGjCSusP+w4TV+Tz8f6dzsnx9ZduU2XYMh1mZkynHbJJ28o6l7O1jYxUtOGb9cFEvICNW9r2owbasaRL51SLOFJxNmgjpawm5FGyCCFnpfHT53aaj69FdquH1kAQCpHM4GRluu05Vx9Q+T60sZb2v1mgyzSkl2qAdQlniwvrcroYSSWcMPgNQDwjjpDlWRBdlPXqZbVf0TxTGsc+ZDrLrn7j5ZmrJMoItiqLLVmtsCZ53abFZZBcyoBjyY3dcg2lTU0NIAul93AjfonVK/BC84vSNhU6ePpZbEk1UtXQUNmUMciE9lF8rU8UeKyotZY8+gTVTnmHhv4dVwpePCMgfdnkZj/tfDKb+qrwU0bRi0KbUEsqI/At/kydcZD7L63lhHBW/Ptm82gXI788pgp2BzTuha41NWSu72bSmGFpdcwZNAxLrAJ8Ge4ns4nhihUIy7N9uY/UZX96UmITbjD8hQ3GKEvbpf9PHa0+RBD9irZUJOFatGxhDb6zk="
-
-
 
 # Only build master branch and tags of form 0.1 or 1.0.2 (all PRs will be built):
 branches:
@@ -31,23 +25,13 @@ branches:
     - master
     - /^\d+\.\d+(\.\d+)?$/
 
-# Install various dependencies:
-before_install:
-  # Decrypt the service key.  This only makes sense on travis.  All other
-  # environments should get a gcloud key some other way.
-  - "ci/decrypt-gcloud-key travisci $encrypted_6168b41c1bb0_key $encrypted_6168b41c1bb0_iv"
+# Release takes care of its own installation.
+install: |
+  :;
 
-  # Do the rest of the setup - which is a bit less particular to travis.
-  - "./environment-setup.sh ${PROJECT_NAME} ${CLUSTER_NAME} ${CLOUDSDK_COMPUTE_ZONE} ${TRAVIS_OS_NAME}"
-
-  # Also get google cloud sdk binaries (including kubectl) into PATH:
-  - "export PATH=${HOME}/google-cloud-sdk/bin:${PATH}"
-
-script:
-  - "./build --travis"
-
-after_script:
-  - "./ci/clean-cluster.py"
+# Nothing to do here.  Release will happen later, maybe.
+script: |
+  :;
 
 # If a commit is tagged, release the software:
 deploy:

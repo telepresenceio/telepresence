@@ -37,31 +37,7 @@ def main():
     except KeyError:
         pass
 
-    if args.travis:
-        manage_virtualenv = True
-        lint = True
-        registry = "gcr.io/" + environ["PROJECT_NAME"]
-        if platform == "linux":
-            # We'll do this on Linux and keep our fingers crossed that this is
-            # done by the time the OS X builder wants to pull any images.  On
-            # travis, this is a pretty safe bet as OS X has much longer build
-            # queues and takes longer to set up.
-            build_and_push = True
-        else:
-            build_and_push = False
-        version_suffix = ""
-        methods = ["inject-tcp", "vpn-tcp"]
-        if platform == "linux":
-            methods.insert(0, "container")
-        test_args = []
-        test_env = {
-            # Magic incantation to make kubectl work, because apparently
-            # gcloud can't do that correctly (see
-            # https://github.com/kubernetes/kubernetes/issues/30617)
-            "GOOGLE_APPLICATION_CREDENTIALS":
-            abspath("gcloud-service-key.json"),
-        }
-    elif args.circle:
+    if args.circle:
         manage_virtualenv = False
         registry = "gcr.io/" + environ["PROJECT_NAME"]
         version_suffix = ""
@@ -103,7 +79,7 @@ def main():
 
     if registry is None:
         raise SystemExit(
-            "You must specify a registry with --registry (or --travis)"
+            "You must specify a registry with --registry (or --circle)"
         )
 
     # Attempt to get credentials cached early on while the user is still
@@ -209,11 +185,6 @@ def _push(registry, version):
 
 def _parser():
     parser = ArgumentParser(description="Test Telepresence")
-    parser.add_argument(
-        '--travis',
-        action='store_true',
-        help='do all the things CI should do',
-    )
     parser.add_argument(
         '--circle',
         action='store_true',
