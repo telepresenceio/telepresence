@@ -1,6 +1,6 @@
 # Changelog
 
-#### 0.74 (January 26, 2018)
+#### 0.75 (January 30, 2018)
 
 Bug fixes:
 
