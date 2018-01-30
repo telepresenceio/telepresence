@@ -13,11 +13,15 @@ set -e
 trap 'chown -R --reference /build-inside/build-package.sh /out/' EXIT
 
 # XXX: Ubuntu needs software installed while Fedora is fine as-is
-python3 -V || (apt-get -qq update && apt-get -qq install python3-venv git)
+command -v python3 >/dev/null 2>&1 || \
+    (echo "Installing required packages" && \
+     apt-get -qq update && \
+     apt-get -qq install python3-venv git > /dev/null)
 
 # Install in /usr/share/telepresence and /usr/bin
 PREFIX=/usr /source/install.sh
 
+echo "Building package using FPM"
 cd /out
 fpm -t "$PACKAGE_TYPE" \
     --name telepresence \
