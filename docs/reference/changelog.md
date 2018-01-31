@@ -1,5 +1,11 @@
 # Changelog
 
+#### 0.76 (Unreleased)
+
+Misc:
+
+* Improved cleanup of our testing cluster used by CI
+
 #### 0.75 (January 30, 2018)
 
 Bug fixes:
