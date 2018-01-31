@@ -7,24 +7,8 @@ clean up the Telepresence test cluster, as Telepresence tests currently leak.
 import argparse
 import json
 from datetime import datetime, timedelta, timezone
-from subprocess import check_output
+from subprocess import run, PIPE
 from typing import Dict, List
-
-
-def get_kubectl() -> List[str]:
-    """Get correct kubectl command"""
-    k8s_namespace = str(
-        check_output([
-            "kubectl", "config", "view", "--minify=true",
-            "-o=jsonpath={.contexts[0].context.namespace}"
-        ]).strip(), "ascii"
-    )
-    if k8s_namespace:
-        return ["kubectl", "--namespace", k8s_namespace]
-    return ["kubectl"]
-
-
-KUBECTL = get_kubectl()
 
 
 def get_now() -> datetime:
@@ -41,8 +25,11 @@ def parse_k8s_timestamp(timestamp: str) -> datetime:
 
 def get_kubectl_json(cmd: List[str]) -> Dict:
     """Call kubectl and parse resulting JSON"""
-    output = str(check_output(KUBECTL + cmd + ["-o", "json"]), "utf-8")
-    return json.loads(output)
+    com_proc = run(["kubectl"] + cmd + ["-o", "json"],
+                   stdout=PIPE,
+                   encoding="utf-8",
+                   check=True)
+    return json.loads(com_proc.stdout)
 
 
 def get_resources(kind: str, prefix="",
@@ -115,7 +102,7 @@ def main():
     for name in names:
         print(" {}".format(name))
     if not args.dry_run:
-        check_output(KUBECTL + ["delete"] + names)
+        run(["kubectl", "delete"] + names)
 
 
 if __name__ == "__main__":
