@@ -165,6 +165,7 @@ def test_swap_deployment_changes():
     The modified Deployment used to swap out an existing Deployment replaces
     all values that might break our own image.
     """
+    # Todo: Fix this test if we agree on the 0 replica way.
     original = yaml.safe_load(COMPLEX_DEPLOYMENT)
     expected = yaml.safe_load(SWAPPED_DEPLOYMENT)
     assert telepresence.deployment.new_swapped_deployment(
