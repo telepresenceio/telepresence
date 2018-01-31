@@ -1,16 +1,23 @@
 # Changelog
 
-#### 0.74 (Unreleased)
+#### 0.75 (January 30, 2018)
 
 Bug fixes:
 
 * Telepresence correctly handles the `--publish` (`-p`) Docker option by incorporating it into the `docker` invocation that sets up networking.
+  ([#387](https://github.com/datawire/telepresence/issues/387))
 
 Misc:
 
-* Environment and testing setup is no longer entangled with Travis CI setup.
-  The `environment-setup.sh` and `build` scripts are used by Travis and can be used by developers as well.
+* The end of startup and the beginning of shutdown are now both clearly indicated in `telepresence.log`.
+* Environment and testing setup is no longer entangled with TravisCI setup.
+  The `environment-setup.sh` and `build` scripts are used by continuous integration and can be used by developers as well.
   ([#374](https://github.com/datawire/telepresence/issues/374))
+* Continuous integration operations, specifically testing, have been moved to CircleCI.
+  The release process remains on TravisCI, at least for this release.
+  ([#397](https://github.com/datawire/telepresence/issues/397))
+  ([#417](https://github.com/datawire/telepresence/issues/417))
+
 
 #### 0.73 (December 28, 2017)
 

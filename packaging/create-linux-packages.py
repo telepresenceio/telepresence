@@ -15,6 +15,16 @@ import distros
 
 THIS_DIRECTORY = Path(__file__).absolute().parent
 
+def show_banner(text, char="=", width=79):
+    """
+    Make it easy to show what's going on
+    """
+    res = char * 2 + " " + text
+    remaining = width - len(res) - 1
+    if remaining > 0:
+        res += " " + char * remaining
+    print("\n" + res + "\n")
+
 
 def build_package(builder_image, package_type, version, out_dir, dependencies):
     """
@@ -48,12 +58,12 @@ def test_package(distro_image, package_directory, install_command):
     """
     if install_command == "deb":
         install = (
-            "apt-get -q update && "
-            "apt-get -q -y --no-install-recommends install gdebi-core && "
-            "gdebi -n /packages/*.deb"
+            "apt-get -qq update && "
+            "dpkg --unpack --recursive /packages > /dev/null && "
+            "apt-get -qq -f install > /dev/null"
         )
     elif install_command == "rpm":
-        install = "dnf -y install /packages/*.rpm"
+        install = "dnf -qy install /packages/*.rpm"
     run([
         "docker", "run", "--rm", "-v",
         "{}:/packages:ro".format(package_directory), distro_image, "sh", "-c",
@@ -70,6 +80,7 @@ def main(version):
         rmtree(str(out))
     out.mkdir()
     for ubuntu_distro in distros.ubuntu:
+        show_banner("Build Ubuntu " + ubuntu_distro)
         distro_out = out / ubuntu_distro
         distro_out.mkdir()
         image = "alanfranz/fpm-within-docker:ubuntu-{}".format(ubuntu_distro)
@@ -79,8 +90,10 @@ def main(version):
                 "conntrack"
             ]
         )
+        show_banner("Test Ubuntu " + ubuntu_distro)
         test_package("ubuntu:" + ubuntu_distro, distro_out, "deb")
     for fedora_distro in distros.fedora:
+        show_banner("Build Fedora " + fedora_distro)
         distro_out = out / ("fedora-" + fedora_distro)
         distro_out.mkdir()
         build_package(
@@ -90,6 +103,7 @@ def main(version):
                 "conntrack-tools"
             ]
         )
+        show_banner("Test Fedora " + fedora_distro)
         test_package("fedora:" + fedora_distro, distro_out, "rpm")
 
 
