@@ -32,26 +32,37 @@ def get_kubectl_json(cmd: List[str]) -> Dict:
     return json.loads(com_proc.stdout)
 
 
-def get_resources(kind: str, prefix="",
-                  min_age=timedelta(seconds=0)) -> List[str]:
+KINDS = "ns", "svc", "deploy", "po"
+KIND_MAP = {
+    "Namespace": "ns/",
+    "Service": "svc/",
+    "Deployment": "deploy/",
+    "Pod": "po/"
+}
+
+
+def get_resource_names(kinds: List[str], prefix: str,
+                       min_age: timedelta) -> List[str]:
     """
-    Return names of k8s resources with the given name prefix and minimum age
+    Return kind/name of resources with the given name prefix and minimum age
     """
     now = get_now()
-    resources = get_kubectl_json(["get", kind])["items"]
+    resources = get_kubectl_json(["get", ",".join(kinds)])["items"]
     names = []
     for resource in resources:
-        name = resource["metadata"]["name"]
-        if kind == "svc" and name == "kubernetes":
+        kind = resource["kind"]
+        metadata = resource["metadata"]
+        name = metadata["name"]
+        if kind == "Service" and name == "kubernetes":
             continue
         if not name.startswith(prefix):
             continue
-        timestamp_str = resource["metadata"]["creationTimestamp"]
+        timestamp_str = metadata["creationTimestamp"]
         timestamp = parse_k8s_timestamp(timestamp_str)
         age = now - timestamp
         if age < min_age:
             continue
-        names.append("{}/{}".format(kind, name))
+        names.append(KIND_MAP[kind] + name)
     return names
 
 
@@ -86,10 +97,8 @@ def main():
     )
     args = parser.parse_args()
 
-    names = [
-        name for kind in ("svc", "deploy", "po")
-        for name in get_resources(kind, args.prefix, args.min_age)
-    ]
+    names = get_resource_names(KINDS, args.prefix, args.min_age)
+
     if not names:
         print("Nothing to clean up.")
         return
