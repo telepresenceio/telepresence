@@ -5,8 +5,8 @@ clean up the Telepresence test cluster, as Telepresence tests currently leak.
 """
 
 import argparse
-import datetime
 import json
+from datetime import datetime, timedelta, timezone
 from subprocess import check_output
 from typing import Dict, List
 
@@ -27,16 +27,16 @@ def get_kubectl() -> List[str]:
 KUBECTL = get_kubectl()
 
 
-def get_now() -> datetime.datetime:
+def get_now() -> datetime:
     """Get current date/time in UTC"""
-    return datetime.datetime.now(tz=datetime.timezone.utc)
+    return datetime.now(tz=timezone.utc)
 
 
-def parse_k8s_timestamp(timestamp: str) -> datetime.datetime:
+def parse_k8s_timestamp(timestamp: str) -> datetime:
     """Get date/time in UTC from k8s timestamp"""
     fmt = "%Y-%m-%dT%H:%M:%SZ"
-    naive = datetime.datetime.strptime(timestamp, fmt)
-    return naive.replace(tzinfo=datetime.timezone.utc)
+    naive = datetime.strptime(timestamp, fmt)
+    return naive.replace(tzinfo=timezone.utc)
 
 
 def get_kubectl_json(cmd: List[str]) -> Dict:
@@ -46,7 +46,7 @@ def get_kubectl_json(cmd: List[str]) -> Dict:
 
 
 def get_resources(kind: str, prefix="",
-                  min_age=datetime.timedelta(seconds=0)) -> List[str]:
+                  min_age=timedelta(seconds=0)) -> List[str]:
     """
     Return names of k8s resources with the given name prefix and minimum age
     """
@@ -68,10 +68,10 @@ def get_resources(kind: str, prefix="",
     return names
 
 
-def seconds(value: str) -> datetime.timedelta:
+def seconds(value: str) -> timedelta:
     """Return a timedelta with the given number of seconds"""
     try:
-        return datetime.timedelta(seconds=int(value))
+        return timedelta(seconds=int(value))
     except ValueError:
         message = "Invalid age in seconds: {}".format(value)
         raise argparse.ArgumentTypeError(message)
@@ -100,8 +100,7 @@ def main():
     args = parser.parse_args()
 
     names = [
-        name
-        for kind in ("svc", "deploy", "po")
+        name for kind in ("svc", "deploy", "po")
         for name in get_resources(kind, args.prefix, args.min_age)
     ]
     if not names:
