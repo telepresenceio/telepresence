@@ -5,6 +5,7 @@
 Bug fixes:
 
 * Telepresence correctly handles the `--publish` (`-p`) Docker option by incorporating it into the `docker` invocation that sets up networking.
+  ([#387](https://github.com/datawire/telepresence/issues/387))
 
 Misc:
 
