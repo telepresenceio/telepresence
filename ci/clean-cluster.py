@@ -5,73 +5,68 @@ clean up the Telepresence test cluster, as Telepresence tests currently leak.
 """
 
 import argparse
-import datetime
 import json
-from subprocess import check_output
+from datetime import datetime, timedelta, timezone
+from subprocess import check_output, run
 from typing import Dict, List
 
 
-def get_kubectl() -> List[str]:
-    """Get correct kubectl command"""
-    k8s_namespace = str(
-        check_output([
-            "kubectl", "config", "view", "--minify=true",
-            "-o=jsonpath={.contexts[0].context.namespace}"
-        ]).strip(), "ascii"
-    )
-    if k8s_namespace:
-        return ["kubectl", "--namespace", k8s_namespace]
-    return ["kubectl"]
-
-
-KUBECTL = get_kubectl()
-
-
-def get_now() -> datetime.datetime:
+def get_now() -> datetime:
     """Get current date/time in UTC"""
-    return datetime.datetime.now(tz=datetime.timezone.utc)
+    return datetime.now(tz=timezone.utc)
 
 
-def parse_k8s_timestamp(timestamp: str) -> datetime.datetime:
+def parse_k8s_timestamp(timestamp: str) -> datetime:
     """Get date/time in UTC from k8s timestamp"""
     fmt = "%Y-%m-%dT%H:%M:%SZ"
-    naive = datetime.datetime.strptime(timestamp, fmt)
-    return naive.replace(tzinfo=datetime.timezone.utc)
+    naive = datetime.strptime(timestamp, fmt)
+    return naive.replace(tzinfo=timezone.utc)
 
 
 def get_kubectl_json(cmd: List[str]) -> Dict:
     """Call kubectl and parse resulting JSON"""
-    output = str(check_output(KUBECTL + cmd + ["-o", "json"]), "utf-8")
+    output = str(check_output(["kubectl"] + cmd + ["-o", "json"]), "utf-8")
     return json.loads(output)
 
 
-def get_resources(kind: str, prefix="",
-                  min_age=datetime.timedelta(seconds=0)) -> List[str]:
+KINDS = "ns", "svc", "deploy", "po"
+KIND_MAP = {
+    "Namespace": "ns/",
+    "Service": "svc/",
+    "Deployment": "deploy/",
+    "Pod": "po/"
+}
+
+
+def get_resource_names(kinds: List[str], prefix: str,
+                       min_age: timedelta) -> List[str]:
     """
-    Return names of k8s resources with the given name prefix and minimum age
+    Return kind/name of resources with the given name prefix and minimum age
     """
     now = get_now()
-    resources = get_kubectl_json(["get", kind])["items"]
+    resources = get_kubectl_json(["get", ",".join(kinds)])["items"]
     names = []
     for resource in resources:
-        name = resource["metadata"]["name"]
-        if kind == "svc" and name == "kubernetes":
+        kind = resource["kind"]
+        metadata = resource["metadata"]
+        name = metadata["name"]
+        if kind == "Service" and name == "kubernetes":
             continue
         if not name.startswith(prefix):
             continue
-        timestamp_str = resource["metadata"]["creationTimestamp"]
+        timestamp_str = metadata["creationTimestamp"]
         timestamp = parse_k8s_timestamp(timestamp_str)
         age = now - timestamp
         if age < min_age:
             continue
-        names.append("{}/{}".format(kind, name))
+        names.append(KIND_MAP[kind] + name)
     return names
 
 
-def seconds(value: str) -> datetime.timedelta:
+def seconds(value: str) -> timedelta:
     """Return a timedelta with the given number of seconds"""
     try:
-        return datetime.timedelta(seconds=int(value))
+        return timedelta(seconds=int(value))
     except ValueError:
         message = "Invalid age in seconds: {}".format(value)
         raise argparse.ArgumentTypeError(message)
@@ -99,11 +94,8 @@ def main():
     )
     args = parser.parse_args()
 
-    names = [
-        name
-        for kind in ("svc", "deploy", "po")
-        for name in get_resources(kind, args.prefix, args.min_age)
-    ]
+    names = get_resource_names(KINDS, args.prefix, args.min_age)
+
     if not names:
         print("Nothing to clean up.")
         return
@@ -116,7 +108,7 @@ def main():
     for name in names:
         print(" {}".format(name))
     if not args.dry_run:
-        check_output(KUBECTL + ["delete"] + names)
+        run(["kubectl", "delete"] + names)
 
 
 if __name__ == "__main__":
