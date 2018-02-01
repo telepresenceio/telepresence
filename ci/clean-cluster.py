@@ -7,7 +7,7 @@ clean up the Telepresence test cluster, as Telepresence tests currently leak.
 import argparse
 import json
 from datetime import datetime, timedelta, timezone
-from subprocess import run, PIPE
+from subprocess import check_output, run
 from typing import Dict, List
 
 
@@ -25,11 +25,8 @@ def parse_k8s_timestamp(timestamp: str) -> datetime:
 
 def get_kubectl_json(cmd: List[str]) -> Dict:
     """Call kubectl and parse resulting JSON"""
-    com_proc = run(["kubectl"] + cmd + ["-o", "json"],
-                   stdout=PIPE,
-                   encoding="utf-8",
-                   check=True)
-    return json.loads(com_proc.stdout)
+    output = str(check_output(["kubectl"] + cmd + ["-o", "json"]), "utf-8")
+    return json.loads(output)
 
 
 KINDS = "ns", "svc", "deploy", "po"
