@@ -4,6 +4,7 @@ import atexit
 from pathlib import Path
 import time
 import os
+from json import dumps
 from subprocess import check_output, STDOUT, check_call, CalledProcessError
 
 DIRECTORY = Path(__file__).absolute().parent
@@ -72,6 +73,7 @@ def run_webserver(namespace=None):
     cleanup()
     atexit.register(cleanup)
 
+    print("Creating webserver {}/{}".format(namespace, webserver_name))
     check_output(
         kubectl + [
             "run",
@@ -113,3 +115,17 @@ def current_namespace():
             "-o=jsonpath={.contexts[0].context.namespace}"
         ]).strip(), "ascii"
     ) or "default"
+
+
+def create_namespace(namespace_name, name):
+    namespace = dumps({
+        "kind": "Namespace",
+        "apiVersion": "v1",
+        "metadata": {
+            "name": namespace_name,
+            "labels": {
+                "telepresence-test": name,
+            },
+        },
+    })
+    check_output([KUBECTL, "create", "-f", "-"], input=namespace.encode("utf-8"))

@@ -30,7 +30,7 @@ from .utils import (
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 # inject-tcp/vpn-tcp/container:
-TELEPRESENCE_METHOD = os.environ["TELEPRESENCE_METHOD"]
+TELEPRESENCE_METHOD = os.environ.get("TELEPRESENCE_METHOD", None)
 # If this env variable is set, we know we're using minikube or minishift:
 LOCAL_VM = os.environ.get("TELEPRESENCE_LOCAL_VM") is not None
 
@@ -535,13 +535,6 @@ class NativeEndToEndTests(TestCase):
         """
         self.existingdeployment(None, "tocluster.py")
 
-    def test_environmentvariables(self):
-        """
-        Local processes get access to env variables directly set and set via
-        envFrom.
-        """
-        self.existingdeployment(None, "envvariables.py")
-
     def test_existingdeployment_custom_namespace(self):
         """
         Tests of communicating with existing Deployment in a custom namespace.
@@ -887,30 +880,4 @@ class DockerEndToEndTests(TestCase):
             "python3",
             "/host/volumes_simpler.py",
         ])
-        assert result.returncode == 113
-
-    def test_env_variables(self):
-        # Local env variables shouldn't be used
-        environ = os.environ.copy()
-        environ["SHOULD_NOT_BE_SET"] = "This env variable has a space"
-        # But env variables from remote cluster should be, and tocluster.py
-        # checks those:
-        webserver_name = run_webserver()
-        result = run([
-            "telepresence",
-            "--logfile",
-            "-",
-            "--method",
-            "container",
-            "--new-deployment",
-            random_name(),
-            "--docker-run",
-            "-v",
-            "{}:/host".format(DIRECTORY),
-            "python:3-alpine",
-            "python3",
-            "/host/tocluster.py",
-            webserver_name,
-            current_namespace(),
-        ], env=environ)
         assert result.returncode == 113

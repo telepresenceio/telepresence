@@ -37,6 +37,8 @@ def main():
     except KeyError:
         pass
 
+    run_tests = args.tests
+
     if args.circle:
         manage_virtualenv = False
         registry = "gcr.io/" + environ["PROJECT_NAME"]
@@ -64,14 +66,14 @@ def main():
         test_args = args.test_args or []
         test_env = {}
 
-        if methods and not build_and_push:
+        if (run_tests or methods) and not build_and_push:
             print(
                 "Some tests will run, behaving as though"
                 " --build-and-push supplied."
             )
             build_and_push = True
 
-    if methods:
+    if methods or run_tests:
         if which("kubectl") is None:
             raise SystemExit(
                 "Required executable 'kubectl' not found on $PATH.",
@@ -105,26 +107,105 @@ def main():
         # our _local_ Docker image repository.
         _push(registry, version)
 
-    for method in methods:
-        _test(registry, version, method, test_env, test_args)
+    if run_tests:
+        # Run the original end-to-end tests against each requested
+        # Telepresence method.
+        for method in methods:
+            _test(registry, version, method, test_env, test_args)
+
+        # Run the rest of the test suite, including the new end-to-end tests
+        # which manage the Telepresence method in use without our help.
+        _newtest(registry, version, test_env, test_args)
+
+
+def _limit_for_openshift(maximum):
+    """
+    Select a testing parallelism level, taking into consideration the limits
+    of OpenShift if that's where we're running.
+    """
+    if environ.get("TELEPRESENCE_OPENSHIFT"):
+        # Don't want parallism for OpenShift (causes problems with OpenShift
+        # Online's limited free plan).
+        return 1
+    return maximum
+
+
+def _limit_for_method(method, maximum):
+    """
+    Select a testing parallelism level, taking into consideration the limits
+    of the given Telepresence method.
+    """
+    if method == "vpn-tcp" or method == "container":
+        # And don't want parallelism for VPN-y method since should only have
+        # one running a time.  Or for container method because it confuses
+        # checking in the tests for leaked resources.
+        return 1
+    return maximum
+
+
+def _newtest(registry, version, test_env, test_args):
+    """
+    Run the test suite (except the original end-to-end tests).
+
+    :param registry: A Docker registry where necessary images can be found.
+    :param version: The Telepresence version to test.
+    :param test_env: Extra items to add to the test process environment.
+    :param test_args: Extra args to add to the py.test command line.
+    """
+    test_env = _test_env_for_telepresence(test_env, registry, version)
+    _pytest(
+        "-k",
+        "not test_run",
+        *test_args,
+        test_env=test_env,
+    )
 
 
 def _test(registry, version, method, test_env, test_args):
     # Refresh the credentials
     _sudo("echo", "-n")
 
-    if environ.get("TELEPRESENCE_OPENSHIFT"):
-        # Don't want parallism for OpenShift (causes problems with OpenShift
-        # Online's limited free plan).
-        parallel = "1"
-    elif method == "vpn-tcp" or method == "container":
-        # And don't want parallelism for VPN-y method since should only have
-        # one running a time.  Or for container method because it confuses
-        # checking in the tests for leaked resources.
-        parallel = "1"
-    else:
-        parallel = "4"
+    parallel = str(_limit_for_openshift(_limit_for_method(method, 4)))
+    test_env = _test_env_for_telepresence(test_env, registry, version)
+    test_env.update({
+        "TELEPRESENCE_METHOD": method,
+        "SCOUT_DISABLE": "1",
+    })
 
+    _pytest(
+        "--numprocesses",
+        parallel,
+        *test_args,
+        "tests/test_run.py",
+        "k8s-proxy/test_socks.py",
+        test_env=test_env,
+    )
+
+
+def _pytest(*args, test_env=None):
+    _virtualenv(
+        "py.test",
+        "-v",
+        "--timeout=360",
+        "--timeout-method=thread",
+        *args,
+        env=test_env,
+    )
+
+
+def _test_env_for_telepresence(test_env, registry, version):
+    """
+    Construct the additional environment variables which must be set in
+    Telepresence's environment for it to behave as we wish.
+
+    :param test_env: More variables to include in the result.
+
+    :param registry: The location of the registry holding Telepresence Docker
+        images to test.
+
+    :param version: The version of Telepresence (as indicated by Docker image
+        tags) to test.
+    """
     if test_env is None:
         test_env = {}
     if registry is not None:
@@ -132,26 +213,9 @@ def _test(registry, version, method, test_env, test_args):
             "TELEPRESENCE_REGISTRY": registry,
         })
     test_env.update({
-        "TELEPRESENCE_METHOD": method,
         "TELEPRESENCE_VERSION": version,
-        "SCOUT_DISABLE": "1",
     })
-
-    _virtualenv(
-        "py.test",
-        "-v",
-        "--timeout",
-        "360",
-        "--timeout-method",
-        "thread",
-        "--fulltrace",
-        "--numprocesses",
-        parallel,
-        *test_args,
-        "tests",
-        "k8s-proxy/test_socks.py",
-        env=test_env
-    )
+    return test_env
 
 
 def _build(registry, version):
@@ -213,6 +277,12 @@ def _parser():
         "--manage-virtualenv",
         action='store_true',
         dest='manage_virtualenv',
+    )
+    parser.add_argument(
+        "--no-tests",
+        action='store_false',
+        dest='tests',
+        default=True,
     )
     parser.add_argument(
         '--lint',

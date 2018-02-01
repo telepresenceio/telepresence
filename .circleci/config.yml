@@ -30,12 +30,12 @@ jobs:
           name: "setup Python environment"
           command: |
             sudo pip install --upgrade virtualenv
-            ./build --registry gcr.io/datawireio --manage-virtualenv
+            ./build --registry gcr.io/datawireio --no-tests --manage-virtualenv
 
       - run:
           name: "run lint checks"
           command: |
-            ./build --registry gcr.io/datawireio --lint
+            ./build --registry gcr.io/datawireio --no-tests --lint
 
   build-image:
     docker:
@@ -83,12 +83,13 @@ jobs:
       - run:
           name: "setup Python environment"
           command: |
-            ./build --registry gcr.io/datawireio --manage-virtualenv
+            sudo pip install --upgrade virtualenv
+            ./build --registry gcr.io/datawireio --manage-virtualenv --no-tests
 
       - run:
           name: "build and push image"
           command: |
-            ./build --registry gcr.io/datawireio --version-suffix "" --build-and-push
+            ./build --registry gcr.io/datawireio --version-suffix "" --build-and-push --no-tests
 
   build-linux:
     machine:
@@ -198,7 +199,7 @@ jobs:
       - run:
           name: "setup Python environment"
           command: |
-            ./build --registry gcr.io/datawireio --manage-virtualenv
+            ./build --registry gcr.io/datawireio --manage-virtualenv --no-tests
 
       - save_cache:
           key: |

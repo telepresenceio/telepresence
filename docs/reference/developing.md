@@ -10,14 +10,14 @@
 
 The following instructions will gets the Telepresence source and sets up some of its dependencies (torsocks, gcloud).
 It also creates a virtualenv and installs Telepresence's Python dependencies into it.
-The arguments required for `environment-setup.sh` are Google Cloud configuration items which identify a GKE cluster which can be used for testing.
+The arguments required for `environment-setup.sh` are Google Cloud configuration items which identify a GKE cluster which can be used for testing, plus the operating system.
 
 
 ```console
 $ git clone git@github.com:datawire/telepresence.git
 $ cd telepresence
-$ ./environment-setup.sh $PROJECT $CLUSTER $ZONE
-$ ./build --manage-virtualenv
+$ ./environment-setup.sh $PROJECT $CLUSTER $ZONE <linux|osx>
+$ ./build --manage-virtualenv --no-tests --registry unused
 ```
 You may want to activate the virtualenv (for the duration of your shell):
 
@@ -34,27 +34,29 @@ This will give you access to the Telepresence executables:
 You can test your modifications to Telepresence with the `build` tool:
 
 ```console
-$ ./build --registry <Docker registry for tag and push> --method <container | inject-tcp | vpn-tcp> [--method ...]
+$ ./build --registry <Docker registry for tag and push> --method <container | inject-tcp | vpn-tcp> [--method ...] [-- <pytest args>]
 ```
+
+See `./build --help` for details about how to run specific tests.
 
 You can also build images and push them to a registry without running any tests:
 
 ```console
-$ ./build --registry <Docker registry for tag and push> --build-and-push
+$ ./build --registry <Docker registry for tag and push> --build-and-push --no-tests
 ```
 
 Or if you want to build images using minikube (untested):
 
 ```console
 $ eval $(minikube docker-env --shell bash)
-$ ./build --registry <Docker registry for tag and push> --build-and-push
+$ ./build --registry <Docker registry for tag and push> --build-and-push --no-tests
 ```
 
 Or using minishift (untested):
 
 ```console
 $ eval $(minishift docker-env --shell bash)
-$ ./build --registry <Docker registry for tag and push> --build-and-push
+$ ./build --registry <Docker registry for tag and push> --build-and-push --no-tests
 ```
 
 ### Coding standard
