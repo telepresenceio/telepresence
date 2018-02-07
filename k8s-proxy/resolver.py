@@ -55,9 +55,9 @@ class LocalResolver(object):
             )
         else:
             self.fallback = client.Resolver(resolv='/etc/resolv.conf')
-        # Suffix set by resolv.conf search/domain line, which we remove once we
-        # figure out what it is.
-        self.suffix = []  # type: List[bytes]
+        # Suffixes which may be set by resolv.conf search/domain line, which
+        # we remove once we figure out what it is.
+        self.suffixes = set()  # type: Set[Tuple[bytes]]
 
     def _got_ips(self, name: bytes, ips: List[str],
                  record_type: Callable) -> DNSQueryResult:
@@ -116,32 +116,25 @@ class LocalResolver(object):
         d.addErrback(fallback)
         return d
 
-    def query(
-        self,
-        query: dns.Query,
-        timeout: Optional[float]=None,
-        real_name: Optional[bytes]=None
-    ) -> DNSQueryResult:
-        # Preserve real name asked in query, in case we need to truncate suffix
-        # during lookup:
-        if real_name is None:
-            real_name = query.name.name
-        # We use a special marker hostname, which is always sent by
-        # telepresence, to figure out the search suffix set by the client
-        # machine's resolv.conf. We then remove it since it masks our ability
-        # to add the Kubernetes suffixes. E.g. if DHCP sets 'search wework.com'
-        # on the client machine we will want to lookup 'kubernetes' if we get
-        # 'kubernetes.wework.com'.
-        parts = query.name.name.split(b".")
-        if parts[0].startswith(b"hellotelepresence") and not self.suffix:
-            self.suffix = parts[1:]
-            print("Set DNS suffix we filter out to: {}".format(self.suffix))
-        if parts[0].startswith(b"hellotelepresence"
-                               ) and parts[1:] == self.suffix:
+    def _identify_suffix_probe(self, real_name, parts):
+        if parts[0].startswith(b"hellotelepresence"):
+            suffix = tuple(parts[1:])
+            if suffix not in self.suffixes:
+                self.suffixes.add(suffix)
+                print("Set DNS suffix we filter out to: {}".format(sorted(self.suffixes)))
             return self._got_ips(real_name, ["127.0.0.1"], dns.Record_A)
-        if parts[-len(self.suffix):] == self.suffix:
+
+    def _strip_search_suffix(self, parts):
+        for suffix in self.suffixes:
+            if tuple(parts[-len(suffix):]) == suffix:
+                return parts[:-len(suffix)]
+        return parts
+
+    def _handle_search_suffix(self, query, parts, timeout):
+        stem = self._strip_search_suffix(parts)
+        if stem != parts:
             new_query = deepcopy(query)
-            new_query.name.name = b".".join(parts[:-len(self.suffix)])
+            new_query.name.name = b".".join(stem)
             print(
                 "Updated query of type {} from {} to {}".
                 format(query.type, query.name.name, new_query.name.name)
@@ -160,6 +153,32 @@ class LocalResolver(object):
                 timeout=(1, 1),
                 real_name=query.name.name,
             ).addErrback(failed)
+
+    def query(
+        self,
+        query: dns.Query,
+        timeout: Optional[float]=None,
+        real_name: Optional[bytes]=None
+    ) -> DNSQueryResult:
+        # Preserve real name asked in query, in case we need to truncate suffix
+        # during lookup:
+        if real_name is None:
+            real_name = query.name.name
+        # We use a special marker hostname, which is always sent by
+        # telepresence, to figure out the search suffix set by the client
+        # machine's resolv.conf. We then remove it since it masks our ability
+        # to add the Kubernetes suffixes. E.g. if DHCP sets 'search wework.com'
+        # on the client machine we will want to lookup 'kubernetes' if we get
+        # 'kubernetes.wework.com'.
+        parts = query.name.name.split(b".")
+
+        result = self._identify_suffix_probe(real_name, parts)
+        if result is not None:
+            return result
+
+        result = self._handle_search_suffix(query, parts, timeout)
+        if result is not None:
+            return result
 
         # No special suffix:
         if query.type == dns.A:
