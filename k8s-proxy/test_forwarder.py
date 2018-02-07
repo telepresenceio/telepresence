@@ -31,8 +31,11 @@ def test_infer_search_domains(resolver):
     for search in [u".foo", u".foo.bar", u".alternate"]:
         for i in range(3):
             name = u"{}{}{}".format(probe, next(counter), search).encode("ascii")
-            expected = ([RRHeader(name, Record_A(b"127.0.0.1"))], [], [])
-
+            rrheader = RRHeader(
+                name=name,
+                payload=Record_A(address=b"127.0.0.1"),
+            )
+            expected = ([rrheader], [], [])
             result = resolver.query(Query(name))
             assert expected == result
 
