@@ -39,8 +39,8 @@ class LocalResolver(object):
     the like. This is a superset of what a DNS query would return!
     """
 
-    def __init__(self, noloop, telepresence_nameserver, namespace):
-        self.noloop = noloop
+    def __init__(self, telepresence_nameserver, namespace):
+        self.noloop = telepresence_nameserver is not None
         self.namespace = namespace
         # The default Twisted client.Resolver *almost* does what we want...
         # except it doesn't support ndots! So we manually deal with A records

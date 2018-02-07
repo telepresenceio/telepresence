@@ -36,10 +36,10 @@ def main():
     else:
         with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
             NAMESPACE = f.read()
-    NOLOOP = os.environ.get("TELEPRESENCE_NAMESERVER") is not None
+    telepresence_nameserver = os.environ.get("TELEPRESENCE_NAMESERVER")
     reactor.suggestThreadPoolSize(50)
     print("Listening...")
-    listen(resolver.LocalResolver(NOLOOP, os.environ["TELEPRESENCE_NAMESERVER"], NAMESPACE))
+    listen(resolver.LocalResolver(telepresence_nameserver, NAMESPACE))
 
 
 main()

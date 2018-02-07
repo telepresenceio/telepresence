@@ -19,7 +19,6 @@ from resolver import LocalResolver
 @pytest.fixture
 def resolver():
     return LocalResolver(
-        True,
         # Construct it with an invalid DNS server address (an IP is required,
         # no hostnames allowed).  We're not interested in actually issuing DNS
         # queries to any servers during these tests.  This will ensure that if
