@@ -18,7 +18,15 @@ from resolver import LocalResolver
 
 @pytest.fixture
 def resolver():
-    return LocalResolver(True, b"example.invalid", u"default")
+    return LocalResolver(
+        True,
+        # Construct it with an invalid DNS server address (an IP is required,
+        # no hostnames allowed).  We're not interested in actually issuing DNS
+        # queries to any servers during these tests.  This will ensure that if
+        # we attempt to do so, it will break quickly.
+        b"example.invalid",
+        u"default",
+    )
 
 
 def test_infer_search_domains(resolver):
@@ -40,4 +48,5 @@ def test_infer_search_domains(resolver):
             assert expected == result
 
     for search in [u".foo", u".foo.bar", u".alternate"]:
-        assert b"example.com" == resolver._strip_search_suffix(b"example.com" + search)
+        mangled = (u"example.com" + search).encode("ascii").split(b".")
+        assert [b"example", b"com"] == resolver._strip_search_suffix(mangled)
