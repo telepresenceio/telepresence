@@ -169,7 +169,6 @@ def _test(registry, version, method, test_env, test_args):
     test_env = _test_env_for_telepresence(test_env, registry, version)
     test_env.update({
         "TELEPRESENCE_METHOD": method,
-        "SCOUT_DISABLE": "1",
     })
 
     _pytest(
@@ -214,6 +213,9 @@ def _test_env_for_telepresence(test_env, registry, version):
         })
     test_env.update({
         "TELEPRESENCE_VERSION": version,
+
+        # We don't want to collect test runs as real usage data.
+        "SCOUT_DISABLE": "1",
     })
     return test_env
 
