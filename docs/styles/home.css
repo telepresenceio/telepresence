@@ -233,19 +233,19 @@ h1, h2, h3, h4, h5, h6, strong {
     padding-bottom: 130px;
 }
 
-.datawire-logo {
+.datawire-link {
     display: block;
     padding: 15px 0 5px;
     width: 110px;
     margin-left: 16px;
 }
-.datawire-logo > img {
+.datawire-link > img {
     display: block;
     width: 100%;
 }
 
 @media screen and (min-width: 768px) {
-    .datawire-logo {
+    .datawire-link {
         padding: 15px 0;
         width: 130px;
         margin-left: 40px;
