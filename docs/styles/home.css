@@ -233,20 +233,32 @@ h1, h2, h3, h4, h5, h6, strong {
     padding-bottom: 130px;
 }
 
+.datawire-link {
+    display: block;
+    padding: 15px 0 5px;
+    width: 110px;
+    margin-left: 16px;
+}
+.datawire-link > img {
+    display: block;
+    width: 100%;
+}
+
 @media screen and (min-width: 768px) {
-    header {
-        display: flex;
-        justify-content: space-between;
+    .datawire-link {
+        padding: 15px 0;
+        width: 130px;
+        margin-left: 40px;
     }
 }
 
 .main-navigation {
     display: flex;
-    padding: 20px 5px;
+    padding: 10px 5px;
 }
 @media screen and (min-width: 768px) {
     .main-navigation {
-        padding: 30px;
+        padding: 0 30px;
     }
 }
 .main-navigation li a {
@@ -272,7 +284,7 @@ h1, h2, h3, h4, h5, h6, strong {
 }
 
 #hero {
-    padding: 20px;
+    padding: 45px 20px;
 }
 #hero h1 {
     font-weight: 900;
@@ -418,9 +430,10 @@ h1, h2, h3, h4, h5, h6, strong {
     }
 }
 
-.quote p span.author {
+.quote p .author {
     font-weight: 400;
     font-size: 20px;
+    color: #222222;
 }
 
 .quote img {
