@@ -1,10 +1,10 @@
-# Generic limitations & workarounds
+# Troubleshooting & Workarounds
 
 ### Method-specific limitations
 
 For method-specific limitations see the documentation on the [available proxying methods](/reference/methods.html).
 
-### General limitations
+### General limitations & workarounds
 
 #### Docker containers
 
@@ -33,3 +33,14 @@ spec:
             fieldRef:
               fieldPath: status.podIP
 </code></pre>
+
+#### EC2
+
+Amazon EC2 instances inside a VPC use a custom DNS setup that resolves internal names. This will prevent Telepresence from working properly. To resolve this issue, override the default name servers, e.g.,
+
+```
+sudo echo 'supersede domain-name-servers 8.8.8.8, 8.8.4.4;' >> /etc/dhcp/dhclient.conf
+sudo dhclient
+```
+
+For more details see [issue # 462](https://github.com/datawire/telepresence/issues/462).
