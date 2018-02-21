@@ -437,39 +437,6 @@ class NativeEndToEndTests(TestCase):
             79,
         )
 
-    def test_loopback(self):
-        """The shell run by telepresence can access localhost."""
-        p = Popen(["python3", "-m", "http.server", "12346"],
-                  cwd=str(DIRECTORY))
-
-        def cleanup():
-            p.terminate()
-            p.wait()
-
-        self.addCleanup(cleanup)
-
-        name = random_name()
-        p = Popen(
-            args=[
-                "telepresence",
-                "--method",
-                TELEPRESENCE_METHOD,
-                "--new-deployment",
-                name,
-                "--run-shell",
-            ],
-            stdin=PIPE,
-            stdout=PIPE,
-            cwd=str(DIRECTORY)
-        )
-        result, _ = p.communicate(
-            b"curl --silent http://localhost:12346/test_run.py\n"
-        )
-        # We're loading this file via curl, so it should have the string
-        # "cuttlefish" which is in this comment and unlikely to appear by
-        # accident.
-        assert b"cuttlefish" in result
-
     def test_disconnect(self):
         """Telepresence exits if the connection is lost."""
         exit_code = run_script_test(["--new-deployment", random_name()],

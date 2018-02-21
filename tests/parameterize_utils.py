@@ -7,13 +7,16 @@ from json import (
 from shutil import which
 from subprocess import (
     CalledProcessError,
-    PIPE, STDOUT, check_output, check_call,
+    PIPE, STDOUT,
+    Popen,
+    check_output, check_call,
 )
 
 from pathlib import Path
 
 from .utils import (
     KUBECTL,
+    DIRECTORY,
     random_name,
     run_webserver,
     create_namespace,
@@ -38,6 +41,10 @@ class _ContainerMethod(object):
         return None
 
 
+    def loopback_is_host(self):
+        return False
+
+
     def inherits_client_environment(self):
         return False
 
@@ -59,6 +66,10 @@ class _InjectTCPMethod(object):
         return None
 
 
+    def loopback_is_host(self):
+        return True
+
+
     def inherits_client_environment(self):
         return True
 
@@ -76,6 +87,10 @@ class _VPNTCPMethod(object):
 
     def unsupported(self):
         return None
+
+
+    def loopback_is_host(self):
+        return True
 
 
     def inherits_client_environment(self):
@@ -251,6 +266,7 @@ def run_telepresence_probe(
         operation,
         desired_environment,
         client_environment,
+        probe_urls,
 ):
     """
     :param request: The pytest mumble mumble whatever.
@@ -266,6 +282,9 @@ def run_telepresence_probe(
 
     :param dict client_environment: Key/value pairs to set in the Telepresence
         CLI's environment.
+
+    :param list[str] probe_urls: URLs to direct the probe process to request
+        and return to us.
     """
     probe_endtoend = (Path(__file__).parent / "probe_endtoend.py").as_posix()
 
@@ -281,15 +300,36 @@ def run_telepresence_probe(
         name=random_name(),
     )
     create_namespace(deployment_ident.namespace, deployment_ident.name)
+
+    # TODO: Factor run_webserver and the next webserver thing into fixtures
+    # that Probe can manage so that run_telepresence_probe can just focus on
+    # running telepresence.
+
+    # This is an extra pod running on Kubernetes so that various tests can
+    # observe how such a thing impacts on the Telepresence execution
+    # environment (e.g., environment variables set, etc).
     webserver_name = run_webserver(deployment_ident.namespace)
+
+    # This is a local web server that the Telepresence probe can try to
+    # interact with to verify network routing to the host.
+    p = Popen(
+        # TODO Just cross our fingers and hope this port is available...
+        [executable, "-m", "http.server", "12346"],
+        cwd=str(DIRECTORY),
+    )
+    request.addfinalizer(lambda: [p.terminate(), p.wait()])
 
     operation.prepare_deployment(deployment_ident, desired_environment)
     print("Prepared deployment {}/{}".format(deployment_ident.namespace, deployment_ident.name))
     request.addfinalizer(lambda: _cleanup_deployment(deployment_ident))
 
+    probe_args = []
+    for url in probe_urls:
+        probe_args.extend(["--probe-url", url])
+
     operation_args = operation.telepresence_args(deployment_ident)
     method_args = method.telepresence_args(probe_endtoend)
-    args = operation_args + method_args
+    args = operation_args + method_args + probe_args
     try:
         output = _telepresence(args, client_environment)
     except CalledProcessError as e:
@@ -336,6 +376,12 @@ class Probe(object):
         #     "second line (newline before and after)\n"
         # ),
     }
+
+    # A resource available from a server running on the Telepresence host
+    # which the tests can use to verify correct routing-to-host behavior from
+    # the Telepresence execution context.
+    LOOPBACK_URL = "http://localhost:12346/test_endtoend.py"
+
     _result = None
 
     def __init__(self, request, method, operation):
@@ -360,6 +406,7 @@ class Probe(object):
                 self.operation,
                 self.DESIRED_ENVIRONMENT,
                 {self.CLIENT_ENV_VAR: "FOO"},
+                [self.LOOPBACK_URL],
             )
         return self._result
 
