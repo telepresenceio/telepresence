@@ -21,6 +21,11 @@ import socks
 import resolver
 
 
+NAMESPACE_PATH = (
+    "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+)
+
+
 def listen(client):
     reactor.listenTCP(9050, socks.SOCKSv5Factory())
     factory = server.DNSServerFactory(clients=[client])
@@ -34,7 +39,7 @@ def main():
     if predefined_namespace:
         NAMESPACE = predefined_namespace
     else:
-        with open("/var/run/secrets/kubernetes.io/serviceaccount/namespace") as f:
+        with open(NAMESPACE_PATH) as f:
             NAMESPACE = f.read()
     telepresence_nameserver = os.environ.get("TELEPRESENCE_NAMESERVER")
     reactor.suggestThreadPoolSize(50)

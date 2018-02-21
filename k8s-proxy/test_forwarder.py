@@ -37,7 +37,9 @@ def test_infer_search_domains(resolver):
     counter = count(0)
     for search in [u".foo", u".foo.bar", u".alternate"]:
         for i in range(3):
-            name = u"{}{}{}".format(probe, next(counter), search).encode("ascii")
+            name = u"{}{}{}".format(
+                probe, next(counter), search,
+            ).encode("ascii")
             rrheader = RRHeader(
                 name=name,
                 payload=Record_A(address=b"127.0.0.1"),

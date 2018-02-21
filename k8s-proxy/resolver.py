@@ -8,6 +8,7 @@ from twisted.internet.threads import deferToThread
 
 DNSQueryResult = Union[defer.Deferred, Tuple[List[dns.RRHeader], List, List]]
 
+
 def resolve(hostname: str) -> List[str]:
     """Do A record lookup, return list of IPs."""
     return socket.gethostbyname_ex(hostname)[2]
@@ -23,7 +24,6 @@ def get_resolv_conf_namservers() -> List[str]:
             if len(parts) >= 2 and parts[0] == 'nameserver':
                 result.append(parts[1])
     return result
-
 
 
 class LocalResolver(object):
@@ -121,7 +121,9 @@ class LocalResolver(object):
             suffix = tuple(parts[1:])
             if suffix not in self.suffixes:
                 self.suffixes.add(suffix)
-                print("Set DNS suffix we filter out to: {}".format(sorted(self.suffixes)))
+                print("Set DNS suffix we filter out to: {}".format(
+                    sorted(self.suffixes))
+                )
             return self._got_ips(real_name, ["127.0.0.1"], dns.Record_A)
 
     def _strip_search_suffix(self, parts):
