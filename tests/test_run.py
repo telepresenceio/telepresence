@@ -514,28 +514,6 @@ class NativeEndToEndTests(TestCase):
         """
         self.existingdeployment(None, "volumes.py")
 
-    def test_unsupportedtools(self):
-        """
-        Unsupported command line tools like ping fail nicely.
-        """
-        p = Popen(
-            args=[
-                "telepresence",
-                "--method",
-                TELEPRESENCE_METHOD,
-                "--new-deployment",
-                random_name(),
-                "--logfile",
-                "-",
-                "--run",
-                "python3",
-                "unsupportedcli.py",
-            ],
-            cwd=str(DIRECTORY),
-        )
-        exit_code = p.wait()
-        assert exit_code == 113
-
     def test_swapdeployment(self):
         """
         --swap-deployment swaps out Telepresence pod and then swaps it back on
