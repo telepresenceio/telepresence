@@ -2,6 +2,11 @@
 
 #### 0.76 (Unreleased)
 
+Bug fixes:
+
+* Telepresence now makes a greater effort to account for local DNS search domain configuration when bridging DNS to Kubernetes.
+  ([#393])(https://github.com/datawire/telepresence/issues/393))
+
 Misc:
 
 * A new end-to-end test suite setup will help us reduce the cycle time associated with testing Telepresence as we port over existing tests.
@@ -54,7 +59,7 @@ Misc:
   ([#269](https://github.com/datawire/telepresence/issues/269))
 * An install script is included for installing Telepresence from source.
   ([#347](https://github.com/datawire/telepresence/issues/347))
-  
+
 
 #### 0.71 (November 1, 2017)
 
