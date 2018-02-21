@@ -35,7 +35,7 @@ def main():
 def probe_urls(urls):
     for url in urls:
         print("Retrieving {}".format(url))
-        result = urlopen(url, timeout=5).read().decode("utf-8")
+        result = urlopen(url, timeout=30).read().decode("utf-8")
         print("Got result of length {} ".format(len(result)))
         yield (url, result)
 
