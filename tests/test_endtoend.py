@@ -132,9 +132,9 @@ def test_loopback_network_access(probe):
     """
     if probe.method.loopback_is_host():
         probe_result = probe.result()
-        response = next(
-            response
-            for url, response
+        (success, response) = next(
+            result
+            for url, result
             in probe_result.result["probe-urls"]
             if url == probe.LOOPBACK_URL
         )
@@ -142,4 +142,4 @@ def test_loopback_network_access(probe):
         # We're loading _this_ file via curl, so it should have the string
         # "cuttlefish" which is in this comment and unlikely to appear by
         # accident.
-        assert u"cuttlefish" in response
+        assert success and u"cuttlefish" in response

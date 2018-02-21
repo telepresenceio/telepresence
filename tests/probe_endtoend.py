@@ -35,8 +35,14 @@ def main():
 def probe_urls(urls):
     for url in urls:
         print("Retrieving {}".format(url))
-        result = urlopen(url, timeout=30).read().decode("utf-8")
-        print("Got result of length {} ".format(len(result)))
+        try:
+            response = urlopen(url, timeout=30).read()
+        except Exception as e:
+            print("Got error: {}".format(e))
+            result = (False, str(e))
+        else:
+            print("Got {} bytes".format(len(response)))
+            result = (True, response.decode("utf-8"))
         yield (url, result)
 
 
