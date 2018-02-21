@@ -136,7 +136,7 @@ def test_loopback_network_access(probe):
             result
             for url, result
             in probe_result.result["probe-urls"]
-            if url == probe.LOOPBACK_URL
+            if url == probe.loopback_url
         )
 
         # We're loading _this_ file via curl, so it should have the string
