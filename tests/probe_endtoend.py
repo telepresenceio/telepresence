@@ -8,6 +8,9 @@ created the execution context correctly.
 from os import (
     environ,
 )
+from os.path import (
+    join,
+)
 from json import (
     dumps,
 )
@@ -30,6 +33,7 @@ def main():
         "environ": dict(environ),
         "probe-urls": list(probe_urls(args.probe_url)),
         "probe-commands": list(probe_commands(args.probe_command)),
+        "probe-paths": list(probe_paths(args.probe_path)),
     })
 
     delimiter = "{probe delimiter}"
@@ -62,6 +66,17 @@ def probe_commands(commands):
             result = (True, output.decode("utf-8"))
         yield (command, result)
 
+
+def probe_paths(paths):
+    root = environ["TELEPRESENCE_ROOT"]
+    for path in paths:
+        try:
+            with open(join(root, path)) as f:
+                yield (path, f.read())
+        except FileNotFoundError:
+            yield (path, None)
+
+
 def argument_parser():
     parser = ArgumentParser()
     parser.add_argument(
@@ -73,6 +88,11 @@ def argument_parser():
         "--probe-command",
         action="append",
         help="A command to run.",
+    )
+    parser.add_argument(
+        "--probe-path",
+        action="append",
+        help="A path to read.",
     )
     return parser
 
