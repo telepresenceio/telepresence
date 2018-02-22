@@ -122,3 +122,24 @@ def test_environment_for_services(probe):
         probe_environment[prefix] ==
         probe_environment[service_env + "_PORT"]
     )
+
+
+@with_probe
+def test_loopback_network_access(probe):
+    """
+    The Telepresence execution environment allows network access to the host
+    at the loopback address.
+    """
+    if probe.method.loopback_is_host():
+        probe_result = probe.result()
+        (success, response) = next(
+            result
+            for url, result
+            in probe_result.result["probe-urls"]
+            if url == probe.loopback_url
+        )
+
+        # We're loading _this_ file via curl, so it should have the string
+        # "cuttlefish" which is in this comment and unlikely to appear by
+        # accident.
+        assert success and u"cuttlefish" in response
