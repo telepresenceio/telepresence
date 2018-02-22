@@ -1,4 +1,5 @@
 import os
+from time import sleep
 from sys import executable
 from json import (
     JSONDecodeError,
@@ -270,6 +271,9 @@ def _telepresence(telepresence_args, env=None):
     :param env: Environment variables to set for the Telepresence CLI.  These
         are added to the current process's environment.  ``None`` means the
         same thing as ``{}``.
+
+    :return Popen: A ``Popen`` object corresponding to the running
+        Telepresence process.
     """
     args = [
         executable,
@@ -282,10 +286,12 @@ def _telepresence(telepresence_args, env=None):
         pass_env.update(env)
 
     print("Running {}".format(args))
-    return check_output(
+    return Popen(
         args=args,
         stdin=PIPE,
+        stdout=PIPE,
         stderr=STDOUT,
+        bufsize=0,
         env=pass_env,
     )
 
@@ -364,31 +370,79 @@ def run_telepresence_probe(
     method_args = method.telepresence_args(probe_endtoend)
     args = operation_args + method_args + probe_args
     try:
-        output = _telepresence(args, client_environment)
+        telepresence = _telepresence(args, client_environment)
     except CalledProcessError as e:
         assert False, "Failure running {}: {}\n{}".format(
             ["telepresence"] + args, str(e), e.output.decode("utf-8"),
         )
     else:
-        # Scrape the payload out of the overall noise.
-        setup_logs, output, teardown_logs = output.decode("utf-8").split(
-            u"{probe delimiter}",
-        )
         try:
-            probe_result = loads(output)
-        except JSONDecodeError:
+            setup_logs, probe_result, rest = _read_probe_output(telepresence)
+        except JSONDecodeError as e:
             assert False, "Could not decode JSON probe result from {}:\n{}".format(
-                ["telepresence"] + args, output.decode("utf-8"),
+                ["telepresence"] + args, e.doc,
             )
-        print("Telepresence output:\n{}{}".format(setup_logs, teardown_logs))
-        return ProbeResult(webserver_name, probe_result)
+        print("Telepresence output:\n{}".format(setup_logs))
+        return ProbeResult(telepresence, webserver_name, probe_result, rest)
+
+
+
+def _read_probe_output(telepresence):
+    output = b""
+    finished = False
+    for i in range(120):
+        print(
+            "Attempting Telepresence stdout read "
+            "(with {} bytes buffered)...".format(len(output)),
+        )
+        exited = telepresence.poll() is not None
+        output += read_available(telepresence.stdout)
+
+        # Try to scrape the payload out of the overall noise.
+        parts = output.decode("utf-8").split(u"{probe delimiter}")
+        if len(parts) == 3:
+            finished = True
+            break
+
+        if exited:
+            # It has exited and we have read everything it had to write.  If
+            # we didn't find what we want by now, we've failed.  Get out of
+            # the loop without marking it as finished and we'll get an
+            # exception.
+            break
+
+        # If we didn't find it, chill out for a moment before trying again.
+        sleep(1.0)
+
+    if finished:
+        # If we found enough parts, we're ready to parse some json and return.
+        setup_logs, output, rest = parts
+        return setup_logs, loads(output), rest
+
+    raise Exception(
+        "Didn't find probe results:\n{}".format(output.decode("utf-8"))
+    )
+
+
+
+def read_available(stdout):
+    output = b""
+    while True:
+        size = 2 ** 16
+        more = stdout.read()
+        output += more
+        if len(more) < size:
+            break
+    return output
 
 
 
 class ProbeResult(object):
-    def __init__(self, webserver_name, result):
+    def __init__(self, telepresence, webserver_name, result, rest):
+        self.telepresence = telepresence
         self.webserver_name = webserver_name
         self.result = result
+        self.telepresence_output_buffer = rest
 
 
 
@@ -463,7 +517,7 @@ class Probe(object):
                 [executable, "-m", "http.server", str(local_port)],
                 cwd=str(DIRECTORY),
             )
-            self._cleanup.append(lambda: [p.terminate(), p.wait()])
+            self._cleanup.append(lambda: _cleanup_process(p))
 
             self._result = run_telepresence_probe(
                 self._request,
@@ -475,6 +529,7 @@ class Probe(object):
                 self.QUESTIONABLE_COMMANDS,
                 self.INTERESTING_PATHS,
             )
+            self._cleanup.append(lambda: _cleanup_process(self._result.telepresence))
         return self._result
 
 
@@ -482,3 +537,12 @@ class Probe(object):
         print("Cleaning up {}".format(self))
         for cleanup in self._cleanup:
             cleanup()
+
+
+
+def _cleanup_process(process):
+    print("Terminating {}".format(process.pid))
+    process.terminate()
+    print("Waiting on {}".format(process.pid))
+    process.wait()
+    print("Cleaned up {}".format(process.pid))

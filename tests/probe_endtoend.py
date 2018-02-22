@@ -8,6 +8,10 @@ created the execution context correctly.
 from os import (
     environ,
 )
+from sys import (
+    stdin,
+    stdout,
+)
 from os.path import (
     join,
 )
@@ -37,7 +41,25 @@ def main():
     })
 
     delimiter = "{probe delimiter}"
-    print("{}{}{}".format(delimiter, result, delimiter))
+    print("{}{}{}".format(delimiter, result, delimiter), flush=True)
+
+    read_and_respond()
+
+
+
+def read_and_respond():
+    for line in stdin:
+        command, argv = line.split()
+        response = COMMANDS[command](*argv)
+        stdout.write(dumps(response) + "\n")
+        stdout.flush()
+
+
+
+COMMANDS = {
+    "probe-url": lambda *urls: list(probe_urls(urls)),
+}
+
 
 
 def probe_urls(urls):
