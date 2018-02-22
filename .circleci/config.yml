@@ -132,7 +132,7 @@ jobs:
       - run:
           name: "setup Python environment"
           command: |
-            ./build --registry gcr.io/datawireio --manage-virtualenv
+            ./build --registry gcr.io/datawireio --manage-virtualenv --no-tests
 
       - run:
           name: "run tests"
