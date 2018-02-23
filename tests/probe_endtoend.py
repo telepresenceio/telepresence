@@ -17,6 +17,10 @@ from argparse import (
 from urllib.request import (
     urlopen
 )
+from subprocess import (
+    CalledProcessError,
+    check_output,
+)
 
 def main():
     parser = argument_parser()
@@ -25,8 +29,8 @@ def main():
     result = dumps({
         "environ": dict(environ),
         "probe-urls": list(probe_urls(args.probe_url)),
+        "probe-commands": list(probe_commands(args.probe_command)),
     })
-
 
     delimiter = "{probe delimiter}"
     print("{}{}{}".format(delimiter, result, delimiter))
@@ -46,12 +50,29 @@ def probe_urls(urls):
         yield (url, result)
 
 
+def probe_commands(commands):
+    for command in commands:
+        try:
+            output = check_output([command, "arg1"])
+        except CalledProcessError as e:
+            result = (False, e.returncode)
+        except FileNotFoundError:
+            result = (False, None)
+        else:
+            result = (True, output.decode("utf-8"))
+        yield (command, result)
+
 def argument_parser():
     parser = ArgumentParser()
     parser.add_argument(
         "--probe-url",
         action="append",
         help="A URL to retrieve.",
+    )
+    parser.add_argument(
+        "--probe-command",
+        action="append",
+        help="A command to run.",
     )
     return parser
 

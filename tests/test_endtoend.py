@@ -143,3 +143,17 @@ def test_loopback_network_access(probe):
         # "cuttlefish" which is in this comment and unlikely to appear by
         # accident.
         assert success and u"cuttlefish" in response
+
+
+@with_probe
+def test_unsupported_tools(probe):
+    """
+    In the Telepresence execution context, unsupported command line tools like
+    ping fail nicely.
+    """
+    probe_result = probe.result()
+    for (command, (success, result)) in probe_result.result["probe-commands"]:
+        if probe.method.command_has_graceful_failure(command):
+            assert not success and result == 55, (
+                "{} expected to fail".format(command)
+            )

@@ -42,6 +42,10 @@ class _ContainerMethod(object):
         return None
 
 
+    def command_has_graceful_failure(self, command):
+        return False
+
+
     def loopback_is_host(self):
         return False
 
@@ -67,6 +71,12 @@ class _InjectTCPMethod(object):
         return None
 
 
+    def command_has_graceful_failure(self, command):
+        return command in {
+            "ping", "traceroute", "nslookup", "host", "dig",
+        }
+
+
     def loopback_is_host(self):
         return True
 
@@ -88,6 +98,12 @@ class _VPNTCPMethod(object):
 
     def unsupported(self):
         return None
+
+
+    def command_has_graceful_failure(self, command):
+        return command in {
+            "ping", "traceroute",
+        }
 
 
     def loopback_is_host(self):
@@ -268,6 +284,7 @@ def run_telepresence_probe(
         desired_environment,
         client_environment,
         probe_urls,
+        probe_commands,
 ):
     """
     :param request: The pytest mumble mumble whatever.
@@ -286,6 +303,9 @@ def run_telepresence_probe(
 
     :param list[str] probe_urls: URLs to direct the probe process to request
         and return to us.
+
+    :param list[str] probe_commands: Commands (argv[0]) to direct the probe to
+        attempt to run and report back on the results.
     """
     probe_endtoend = (Path(__file__).parent / "probe_endtoend.py").as_posix()
 
@@ -317,6 +337,8 @@ def run_telepresence_probe(
     probe_args = []
     for url in probe_urls:
         probe_args.extend(["--probe-url", url])
+    for command in probe_commands:
+        probe_args.extend(["--probe-command", command])
 
     operation_args = operation.telepresence_args(deployment_ident)
     method_args = method.telepresence_args(probe_endtoend)
@@ -373,6 +395,17 @@ class Probe(object):
     # the Telepresence execution context.
     LOOPBACK_URL_TEMPLATE = "http://localhost:{}/test_endtoend.py"
 
+    # Commands which indirectly interact with Telepresence in some way and
+    # which may not be s upported (and which we care about them failing in a
+    # nice way).
+    QUESTIONABLE_COMMANDS = [
+        "ping",
+        "traceroute",
+        "nslookup",
+        "host",
+        "dig",
+    ]
+
     _result = None
 
     def __init__(self, request, method, operation):
@@ -412,6 +445,7 @@ class Probe(object):
                 self.DESIRED_ENVIRONMENT,
                 {self.CLIENT_ENV_VAR: "FOO"},
                 [self.loopback_url],
+                self.QUESTIONABLE_COMMANDS,
             )
         return self._result
 
