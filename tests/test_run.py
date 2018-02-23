@@ -508,12 +508,6 @@ class NativeEndToEndTests(TestCase):
         """
         self.existingdeployment(self.create_namespace(), "tocluster.py")
 
-    def test_volumes(self):
-        """
-        Volumes are accessible locally.
-        """
-        self.existingdeployment(None, "volumes.py")
-
     def test_swapdeployment(self):
         """
         --swap-deployment swaps out Telepresence pod and then swaps it back on
@@ -636,50 +630,6 @@ class NativeEndToEndTests(TestCase):
                             "--selector", selector,
                         ]))),
                     )
-
-    def test_swapdeployment_explicit_container(self):
-        """
-        --swap-deployment <dep>:<container> swaps out the given container.
-        """
-        # Create a non-Telepresence Deployment with multiple containers:
-        name = random_name()
-        container_name = random_name()
-        deployment = EXISTING_DEPLOYMENT.format(
-            name=name,
-            container_name=container_name,
-            image="openshift/hello-openshift",
-            namespace=current_namespace(),
-            replicas=2
-        )
-        check_output(
-            args=[
-                KUBECTL,
-                "apply",
-                "-f",
-                "-",
-            ],
-            input=deployment.encode("utf-8")
-        )
-        self.addCleanup(
-            check_output, [
-                KUBECTL,
-                "delete",
-                DEPLOYMENT_TYPE,
-                name,
-            ]
-        )
-
-        p = Popen(
-            args=[
-                "telepresence", "--swap-deployment",
-                "{}:{}".format(name,
-                               container_name), "--logfile", "-", "--method",
-                TELEPRESENCE_METHOD, "--run", "python3", "volumes.py"
-            ],
-            cwd=str(DIRECTORY),
-        )
-        exit_code = p.wait()
-        assert 113 == exit_code
 
     def test_swapdeployment_auto_expose(self):
         """
@@ -807,22 +757,3 @@ class DockerEndToEndTests(TestCase):
         finally:
             p.terminate()
             p.wait()
-
-    def test_volumes(self):
-        """
-        Test availability of volumes in the container.
-        """
-        result = run([
-            "telepresence",
-            "--logfile",
-            "-",
-            "--new-deployment",
-            random_name(),
-            "--docker-run",
-            "-v",
-            "{}:/host".format(DIRECTORY),
-            "python:3-alpine",
-            "python3",
-            "/host/volumes_simpler.py",
-        ])
-        assert result.returncode == 113

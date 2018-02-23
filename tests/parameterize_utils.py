@@ -198,9 +198,19 @@ def create_deployment(deployment_ident, image, environ):
                     "labels": {
                         "name": deployment_ident.name,
                         "telepresence-test": deployment_ident.name,
+                        "hello": "monkeys",
                     },
                 },
                 "spec": {
+                    "volumes": [{
+                        "name": "podinfo",
+                        "downwardAPI": {
+                            "items": [{
+                                "path": "labels",
+                                "fieldRef": {"fieldPath": "metadata.labels"},
+                            }],
+                        },
+                    }],
                     "containers": [{
                         "name": "hello",
                         "image": image,
@@ -209,6 +219,10 @@ def create_deployment(deployment_ident, image, environ):
                             for (k, v)
                             in environ.items()
                         ),
+                        "volumeMounts": [{
+                            "name": "podinfo",
+                            "mountPath": "/podinfo",
+                        }],
                     }],
                 },
             },
@@ -285,6 +299,7 @@ def run_telepresence_probe(
         client_environment,
         probe_urls,
         probe_commands,
+        probe_paths,
 ):
     """
     :param request: The pytest mumble mumble whatever.
@@ -306,6 +321,9 @@ def run_telepresence_probe(
 
     :param list[str] probe_commands: Commands (argv[0]) to direct the probe to
         attempt to run and report back on the results.
+
+    :param list[str] probe_paths: Paths relative to $TELEPRESENCE_ROOT to
+        direct the probe to read and report back to us.
     """
     probe_endtoend = (Path(__file__).parent / "probe_endtoend.py").as_posix()
 
@@ -339,6 +357,8 @@ def run_telepresence_probe(
         probe_args.extend(["--probe-url", url])
     for command in probe_commands:
         probe_args.extend(["--probe-command", command])
+    for path in probe_paths:
+        probe_args.extend(["--probe-path", path])
 
     operation_args = operation.telepresence_args(deployment_ident)
     method_args = method.telepresence_args(probe_endtoend)
@@ -406,6 +426,13 @@ class Probe(object):
         "dig",
     ]
 
+    # Paths relative to $TELEPRESENCE_ROOT in the Telepresence execution
+    # context which the probe will read and return to us.
+    INTERESTING_PATHS = [
+        "podinfo/labels",
+        "var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+    ]
+
     _result = None
 
     def __init__(self, request, method, operation):
@@ -446,6 +473,7 @@ class Probe(object):
                 {self.CLIENT_ENV_VAR: "FOO"},
                 [self.loopback_url],
                 self.QUESTIONABLE_COMMANDS,
+                self.INTERESTING_PATHS,
             )
         return self._result
 

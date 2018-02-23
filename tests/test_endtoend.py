@@ -157,3 +157,23 @@ def test_unsupported_tools(probe):
             assert not success and result == 55, (
                 "{} expected to fail".format(command)
             )
+
+
+@with_probe
+def test_volumes(probe):
+    """
+    The Telepresence execution context exposes volumes.
+    """
+    probe_result = probe.result()
+    path_contents = dict(probe_result.result["probe-paths"])
+
+    if probe.operation.inherits_deployment_environment():
+        assert 'hello="monkeys"' in path_contents["podinfo/labels"]
+    else:
+        assert path_contents["podinfo/labels"] is None
+
+    assert path_contents[
+        "var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    ].startswith(
+        "-----BEGIN CERT"
+    )
