@@ -153,29 +153,6 @@ class NativeEndToEndTests(TestCase):
     End-to-end tests on the native machine.
     """
 
-    def test_run_directly(self):
-        """--run runs the command directly."""
-        webserver_name = run_webserver()
-        p = Popen(
-            args=[
-                "telepresence",
-                "--method",
-                TELEPRESENCE_METHOD,
-                "--new-deployment",
-                random_name(),
-                "--logfile",
-                "-",
-                "--run",
-                "python3",
-                "tocluster.py",
-                webserver_name,
-                current_namespace(),
-            ],
-            cwd=str(DIRECTORY),
-        )
-        exit_code = p.wait()
-        assert exit_code == 113
-
     @skipIf(TELEPRESENCE_METHOD != "vpn-tcp", "this uses vpn-tcp.")
     def test_run_directly_implicit_method(self):
         """--method is optional."""
@@ -238,19 +215,6 @@ class NativeEndToEndTests(TestCase):
         )
         return name
 
-    def test_tocluster(self):
-        """
-        Tests of communication to the cluster.
-        """
-        webserver_name = run_webserver()
-        exit_code = run_script_test(
-            ["--new-deployment", random_name()],
-            "python3 tocluster.py {} {}".format(
-                webserver_name, current_namespace()
-            ),
-        )
-        assert exit_code == 113
-
     @skipIf(TELEPRESENCE_METHOD != "vpn-tcp", "--also-proxy only sensible for vpn-tcp")
     def _tocluster_also_proxy_test(self, httpbin):
         # Find out our own address.  It's difficult to know the cluster IP
@@ -297,18 +261,7 @@ class NativeEndToEndTests(TestCase):
         httpbin = "23.23.209.130/32"
         self._tocluster_also_proxy_test(httpbin)
 
-    def test_tocluster_with_namespace(self):
-        """
-        Tests of communication to the cluster with non-default namespace.
-        """
-        namespace = self.create_namespace()
-        webserver_name = run_webserver(namespace)
-        exit_code = run_script_test(
-            ["--new-deployment", random_name(), "--namespace", namespace],
-            "python3 tocluster.py {} {}".format(webserver_name, namespace),
-        )
-        assert exit_code == 113
-
+    # TODO test default namespace behavior
     def fromcluster(
         self, telepresence_args, url, namespace, local_port, remote_port=None
     ):
@@ -496,17 +449,7 @@ class NativeEndToEndTests(TestCase):
         )
         assert 113 == exit_code
 
-    def test_existingdeployment(self):
-        """
-        Tests of communicating with existing Deployment.
-        """
-        self.existingdeployment(None, "tocluster.py")
-
-    def test_existingdeployment_custom_namespace(self):
-        """
-        Tests of communicating with existing Deployment in a custom namespace.
-        """
-        self.existingdeployment(self.create_namespace(), "tocluster.py")
+    # XXX Test existing deployment w/ default namespace
 
     def test_swapdeployment(self):
         """
@@ -686,30 +629,6 @@ class DockerEndToEndTests(TestCase):
         # Ensure no container leaks
         time.sleep(1)
         assert self.containers == self.get_containers()
-
-    def test_tocluster(self):
-        """
-        Tests of communication to the cluster from a Docker container.
-        """
-        webserver_name = run_webserver()
-        result = run([
-            "telepresence",
-            "--logfile",
-            "-",
-            "--method",
-            "container",
-            "--new-deployment",
-            random_name(),
-            "--docker-run",
-            "-v",
-            "{}:/host".format(DIRECTORY),
-            "python:3-alpine",
-            "python3",
-            "/host/tocluster.py",
-            webserver_name,
-            current_namespace(),
-        ])
-        assert result.returncode == 113
 
     def test_fromcluster(self):
         """

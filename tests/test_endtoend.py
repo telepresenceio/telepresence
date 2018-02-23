@@ -3,6 +3,12 @@ End-to-end tests which launch Telepresence and verify user-facing
 behaviors.
 """
 
+from sys import (
+    stdout,
+)
+from json import (
+    loads,
+)
 from itertools import product
 
 import pytest
@@ -177,3 +183,44 @@ def test_volumes(probe):
     ].startswith(
         "-----BEGIN CERT"
     )
+
+
+@with_probe
+def test_network_routing_to_cluster(probe):
+    """
+    The Telepresence execution context provides network routing for traffic
+    originated in that context destined for addresses served by resources on
+    the Kubernetes cluster.
+    """
+    probe_result = probe.result()
+
+    probe_environ = probe_result.result["environ"]
+    service_env = probe_result.webserver_name.upper().replace("-", "_")
+    host = probe_environ[service_env + "_SERVICE_HOST"]
+    port = probe_environ[service_env + "_SERVICE_PORT"]
+
+    # Check the partial service domain name with hard-coded port.
+    svc_url = "http://{}:8080/".format(probe_result.webserver_name)
+    (success, response) = probe_url(probe_result, svc_url)
+    assert success and "Hello" in response
+
+    # Check the name as defined by the environment service variables.
+    svc_url = "http://{}:{}/".format(host, port)
+    (success, response) = probe_url(probe_result, svc_url)
+    assert success and "Hello" in response
+
+    if probe.method.name == "inject-tcp":
+        # Check the full service domain name.
+        svc_url = "http://{}.{}.svc.cluster.local:{}/".format(
+            probe_result.webserver_name,
+            probe_result.deployment_ident.namespace,
+            port,
+        )
+        (success, response) = probe_url(probe_result, svc_url)
+        assert success and "Hello" in response
+
+
+
+def probe_url(probe_result, url):
+    probe_result.write("probe-url {}".format(url))
+    return loads(probe_result.read())[0][1]

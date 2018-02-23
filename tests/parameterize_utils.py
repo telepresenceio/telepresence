@@ -1,5 +1,14 @@
 import os
-from sys import executable
+from time import (
+    sleep,
+)
+from struct import (
+    unpack,
+)
+from sys import (
+    executable,
+    stdout,
+)
 from json import (
     JSONDecodeError,
     loads, dumps,
@@ -58,7 +67,11 @@ class _ContainerMethod(object):
         return [
             "--method", "container",
             "--docker-run",
+            # The probe wants to use stdio to communicate with the test process.
+            "--interactive",
+            # Put the probe into the container filesystem.
             "--volume", "{}:/probe.py".format(probe),
+            # More or less any image that can run a Python 3 program is fine.
             "python:3-alpine",
             "python", "/probe.py",
         ]
@@ -270,6 +283,9 @@ def _telepresence(telepresence_args, env=None):
     :param env: Environment variables to set for the Telepresence CLI.  These
         are added to the current process's environment.  ``None`` means the
         same thing as ``{}``.
+
+    :return Popen: A ``Popen`` object corresponding to the running
+        Telepresence process.
     """
     args = [
         executable,
@@ -282,10 +298,12 @@ def _telepresence(telepresence_args, env=None):
         pass_env.update(env)
 
     print("Running {}".format(args))
-    return check_output(
+    return Popen(
         args=args,
         stdin=PIPE,
+        stdout=PIPE,
         stderr=STDOUT,
+        bufsize=0,
         env=pass_env,
     )
 
@@ -364,31 +382,126 @@ def run_telepresence_probe(
     method_args = method.telepresence_args(probe_endtoend)
     args = operation_args + method_args + probe_args
     try:
-        output = _telepresence(args, client_environment)
+        telepresence = _telepresence(args, client_environment)
     except CalledProcessError as e:
         assert False, "Failure running {}: {}\n{}".format(
             ["telepresence"] + args, str(e), e.output.decode("utf-8"),
         )
     else:
-        # Scrape the payload out of the overall noise.
-        setup_logs, output, teardown_logs = output.decode("utf-8").split(
-            u"{probe delimiter}",
-        )
+        writer = stdout.buffer
+        output = _read_tagged_output(
+            telepresence,
+            telepresence.stdout,
+            writer,
+        ).decode("utf-8")
         try:
-            probe_result = loads(output)
-        except JSONDecodeError:
+            initial_result = loads(output)
+        except JSONDecodeError as e:
             assert False, "Could not decode JSON probe result from {}:\n{}".format(
-                ["telepresence"] + args, output.decode("utf-8"),
+                ["telepresence"] + args, e.doc,
             )
-        print("Telepresence output:\n{}{}".format(setup_logs, teardown_logs))
-        return ProbeResult(webserver_name, probe_result)
+        return ProbeResult(
+            writer,
+            telepresence,
+            deployment_ident,
+            webserver_name,
+            initial_result,
+        )
+
+
+
+# See probe_endtoend.py
+MAGIC_PREFIX = b"\xc0\xc1\xfe\xff"
+def _read_tagged_output(process, output, writer):
+    """
+    Read some structured data from the ``output`` stream of the
+    Telepresence/probe process.  Write any unstructured data found on the way
+    to ``writer``.
+    """
+    data = b""
+    length = None
+    while True:
+        returncode = process.poll()
+        if returncode is None:
+            # The process hasn't exited.  Try to do a partial read of its
+            # output.
+            new_data = output.read(2 ** 16)
+            if not new_data:
+                # Don't poll excessively if nothing is coming out.
+                sleep(1)
+                continue
+        else:
+            # The process has exited.  Read everything that's left.
+            new_data = output.read()
+
+        data += new_data
+        tag = data.find(MAGIC_PREFIX)
+        if tag == -1:
+            # Try to produce output that is streaming to the greatest degree
+            # possible.  If the first byte of the tag doesn't even appear in
+            # data, we know nothing in data is going to be relevant to our tag
+            # search so we can send all of data onwards right now.
+            if MAGIC_PREFIX[0] not in data:
+                writer.write(data)
+                data = b""
+        else:
+            # Found the tag.  We can send anything before it onwards.
+            if tag > 0:
+                writer.write(data[:tag])
+                data = data[tag:]
+
+            if len(data) >= 8:
+                # There's enough data left that the 4 byte length prefix is
+                # complete.
+                [length] = unpack(">I", data[4:8])
+
+                if len(data) >= length + 8:
+                    # There's enough data to satisfy the length prefix.  We
+                    # found the tagged output.  Grab it.
+                    tagged = data[8:length + 8]
+                    remaining = data[length + 8:]
+
+                    # Strange buffering interactions in the way the probe
+                    # writes its output means there may actually be data left.
+                    # This is unfortunate.  Guess we'll just deal with it,
+                    # though.  There _shouldn't_ be any more _tagged_ data.
+                    assert MAGIC_PREFIX[0] not in remaining
+                    writer.write(remaining)
+                    remaining = b""
+                    return tagged
+
+        # Process exited, we parsed all of its output, we're done after we
+        # pass along any untagged data we have buffered.
+        if returncode is not None:
+            if data:
+                writer.write(data)
+                data = b""
+            break
+    raise Exception("Failed to find a tagged value.")
 
 
 
 class ProbeResult(object):
-    def __init__(self, webserver_name, result):
+    def __init__(self, writer, telepresence, deployment_ident, webserver_name, result):
+        self._writer = writer
+        self.telepresence = telepresence
+        self.deployment_ident = deployment_ident
         self.webserver_name = webserver_name
         self.result = result
+
+
+    def write(self, command):
+        if "\n" in command:
+            raise ValueError("Cannot send multiline command.")
+        self.telepresence.stdin.write((command + "\n").encode("utf-8"))
+
+
+    def read(self):
+        return _read_tagged_output(
+            self.telepresence,
+            self.telepresence.stdout,
+            self._writer,
+        ).decode("utf-8")
 
 
 
@@ -463,7 +576,7 @@ class Probe(object):
                 [executable, "-m", "http.server", str(local_port)],
                 cwd=str(DIRECTORY),
             )
-            self._cleanup.append(lambda: [p.terminate(), p.wait()])
+            self._cleanup.append(lambda: _cleanup_process(p))
 
             self._result = run_telepresence_probe(
                 self._request,
@@ -475,6 +588,7 @@ class Probe(object):
                 self.QUESTIONABLE_COMMANDS,
                 self.INTERESTING_PATHS,
             )
+            self._cleanup.append(lambda: _cleanup_process(self._result.telepresence))
         return self._result
 
 
@@ -482,3 +596,12 @@ class Probe(object):
         print("Cleaning up {}".format(self))
         for cleanup in self._cleanup:
             cleanup()
+
+
+
+def _cleanup_process(process):
+    print("Terminating {}".format(process.pid))
+    process.terminate()
+    print("Waiting on {}".format(process.pid))
+    process.wait()
+    print("Cleaned up {}".format(process.pid))
