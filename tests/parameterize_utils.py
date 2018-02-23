@@ -395,7 +395,7 @@ def run_telepresence_probe(
             writer,
         ).decode("utf-8")
         try:
-            probe_result = loads(output)
+            initial_result = loads(output)
         except JSONDecodeError as e:
             assert False, "Could not decode JSON probe result from {}:\n{}".format(
                 ["telepresence"] + args, e.doc,
@@ -405,7 +405,7 @@ def run_telepresence_probe(
             telepresence,
             deployment_ident,
             webserver_name,
-            probe_result,
+            initial_result,
         )
 
 
