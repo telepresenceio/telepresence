@@ -318,6 +318,7 @@ def run_telepresence_probe(
         probe_urls,
         probe_commands,
         probe_paths,
+        also_proxy,
 ):
     """
     :param request: The pytest mumble mumble whatever.
@@ -342,6 +343,9 @@ def run_telepresence_probe(
 
     :param list[str] probe_paths: Paths relative to $TELEPRESENCE_ROOT to
         direct the probe to read and report back to us.
+
+    :param list[str] also_proxy: Values to pass to Telepresence as
+        ``--also-proxy`` arguments.
     """
     probe_endtoend = (Path(__file__).parent / "probe_endtoend.py").as_posix()
 
@@ -378,9 +382,13 @@ def run_telepresence_probe(
     for path in probe_paths:
         probe_args.extend(["--probe-path", path])
 
+    telepresence_args = []
+    for addr in also_proxy:
+        telepresence_args.extend(["--also-proxy", addr])
+
     operation_args = operation.telepresence_args(deployment_ident)
     method_args = method.telepresence_args(probe_endtoend)
-    args = operation_args + method_args + probe_args
+    args = operation_args + telepresence_args + method_args + probe_args
     try:
         telepresence = _telepresence(args, client_environment)
     except CalledProcessError as e:
@@ -505,6 +513,24 @@ class ProbeResult(object):
 
 
 
+class AlsoProxy(object):
+    """
+    Represent parameters of a particular case to test of ``--also-proxy``.
+    """
+    def __init__(self, argument, host):
+        """
+        :param str argument: The value to supply to ``--also-proxy``.
+
+        :param str host: The host component of a URL to request to verify the
+            feature is working.  This should be an address which gets proxied
+            by Telepresence because ``argument`` was passed to
+            ``--also-proxy``.
+        """
+        self.argument = argument
+        self.host = host
+
+
+
 class Probe(object):
     CLIENT_ENV_VAR = "SHOULD_NOT_BE_SET"
 
@@ -546,6 +572,36 @@ class Probe(object):
         "var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
     ]
 
+    # This is is httpbin.org.  We avoid the real domain name here due to
+    # <https://github.com/datawire/telepresence/issues/379>.  This is just any
+    # domain name that resolves to one IP address that will serve up
+    # httpbin.org.
+    #
+    # Also notice that each ALSO_PROXY_... uses non-overlapping addresses
+    # because we run Telepresence once with _all_ of these as ``--also-proxy``
+    # arguments.  We want to make sure each case works so we don't want
+    # overlapping addresses where an argument of form might work and cause it
+    # to appear as though the other cases are also working.  Instead, with a
+    # different address each time, each form must be working.
+    ALSO_PROXY_HOSTNAME = AlsoProxy(
+        "ec2-23-23-209-130.compute-1.amazonaws.com.",
+        "23.23.209.130",
+    )
+
+    # Also httpbin.org.  This time we're exercising Telepresence support for
+    # specifying an IP address literal to ``--also-proxy``.
+    ALSO_PROXY_IP = AlsoProxy(
+        "23.23.136.1",
+        "23.23.136.1",
+    )
+
+    # Also httpbin.org.  This time exercising support for specifying an IP
+    # network to ``--also-proxy``.
+    ALSO_PROXY_CIDR = AlsoProxy(
+        "23.21.74.117/32",
+        "23.21.74.117",
+    )
+
     _result = None
 
     def __init__(self, request, method, operation):
@@ -578,6 +634,11 @@ class Probe(object):
             )
             self._cleanup.append(lambda: _cleanup_process(p))
 
+            also_proxy = [
+                self.ALSO_PROXY_HOSTNAME.argument,
+                self.ALSO_PROXY_IP.argument,
+                self.ALSO_PROXY_CIDR.argument,
+            ]
             self._result = run_telepresence_probe(
                 self._request,
                 self.method,
@@ -587,6 +648,7 @@ class Probe(object):
                 [self.loopback_url],
                 self.QUESTIONABLE_COMMANDS,
                 self.INTERESTING_PATHS,
+                also_proxy,
             )
             self._cleanup.append(lambda: _cleanup_process(self._result.telepresence))
         return self._result
