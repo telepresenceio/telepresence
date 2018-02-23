@@ -3,14 +3,18 @@ End-to-end tests which launch Telepresence and verify user-facing
 behaviors.
 """
 
-from sys import (
-    stdout,
-)
 from json import (
     loads,
 )
-from itertools import product
-
+from urllib.request import (
+    urlopen,
+)
+from itertools import (
+    product,
+)
+from ipaddress import (
+    IPv4Address,
+)
 import pytest
 
 from .parameterize_utils import (
@@ -224,3 +228,66 @@ def test_network_routing_to_cluster(probe):
 def probe_url(probe_result, url):
     probe_result.write("probe-url {}".format(url))
     return loads(probe_result.read())[0][1]
+
+
+
+@with_probe
+def test_network_routing_also_proxy_hostname(probe):
+    """
+    The ``--also-proxy`` option accepts a hostname and arranges to have
+    traffic for that host proxied via via the cluster.  The hostname must
+    be resolveable on the cluster and the address reached from it.
+    """
+    probe_result = probe.result()
+    ip = httpbin_ip()
+
+    (success, request_ip) = probe_also_proxy(
+        probe_result,
+        probe.ALSO_PROXY_HOSTNAME.host,
+    )
+    assert success and IPv4Address(ip) != IPv4Address(request_ip)
+
+
+@with_probe
+def test_network_routing_also_proxy_ip_literal(probe):
+    """
+    The ``--also-proxy`` option accepts a single IP address given by a literal
+    and arranges to have traffic for addresses in that range proxied via the
+    cluster.
+    """
+    probe_result = probe.result()
+    ip = httpbin_ip()
+
+    (success, request_ip) = probe_also_proxy(
+        probe_result,
+        probe.ALSO_PROXY_IP.host,
+    )
+    assert success and IPv4Address(ip) != IPv4Address(request_ip)
+
+
+@with_probe
+def test_network_routing_also_proxy_ip_cidr(probe):
+    """
+    The ``--also-proxy`` option accepts an IP range given by a CIDR-notation
+    string and arranges to have traffic for addresses in that range
+    proxied via the cluster.
+    """
+    probe_result = probe.result()
+    ip = httpbin_ip()
+
+    (success, request_ip) = probe_also_proxy(
+        probe_result,
+        probe.ALSO_PROXY_CIDR.host,
+    )
+    assert success and IPv4Address(ip) != IPv4Address(request_ip)
+
+
+def httpbin_ip():
+    result = str(urlopen("http://httpbin.org/ip", timeout=30).read(), "utf-8")
+    origin = loads(result)["origin"]
+    return origin
+
+
+def probe_also_proxy(probe_result, hostname):
+    probe_result.write("probe-also-proxy {}".format(hostname))
+    return loads(probe_result.read())

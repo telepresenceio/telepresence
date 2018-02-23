@@ -20,12 +20,14 @@ from os.path import (
 )
 from json import (
     dumps,
+    loads,
 )
 from argparse import (
     ArgumentParser,
 )
 from urllib.request import (
-    urlopen
+    Request,
+    urlopen,
 )
 from subprocess import (
     CalledProcessError,
@@ -103,8 +105,28 @@ def read_and_respond(commands, output):
 
 
 
+def probe_also_proxy(hostname):
+    # We must use http to avoid SNI problems.
+    url = "http://{}/ip".format(hostname)
+    # And we must specify the host header to avoid vhost problems.
+    request = Request(url, None, {"Host": "httpbin.org"})
+
+    print("Retrieving {}".format(url))
+    try:
+        response = str(urlopen(request, timeout=30).read(), "utf-8")
+    except Exception as e:
+        print("Got error: {}".format(e))
+        result = (False, str(e))
+    else:
+        print("Got {} from webserver.".format(repr(response)))
+        request_ip = loads(response)["origin"]
+        result = (True, request_ip)
+    return result
+
+
 COMMANDS = {
     "probe-url": lambda *urls: list(probe_urls(urls)),
+    "probe-also-proxy": probe_also_proxy,
 }
 
 
