@@ -389,7 +389,11 @@ def run_telepresence_probe(
         )
     else:
         writer = stdout.buffer
-        output = _read_tagged_output(telepresence, telepresence.stdout, writer)
+        output = _read_tagged_output(
+            telepresence,
+            telepresence.stdout,
+            writer,
+        ).decode("utf-8")
         try:
             probe_result = loads(output)
         except JSONDecodeError as e:
