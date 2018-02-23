@@ -56,6 +56,12 @@ with_probe = pytest.mark.parametrize(
 
 
 
+@pytest.fixture(scope="session")
+def origin_ip():
+    return IPv4Address(httpbin_ip())
+
+
+
 @with_probe
 def test_environment_from_deployment(probe):
     """
@@ -232,54 +238,51 @@ def probe_url(probe_result, url):
 
 
 @with_probe
-def test_network_routing_also_proxy_hostname(probe):
+def test_network_routing_also_proxy_hostname(probe, origin_ip):
     """
     The ``--also-proxy`` option accepts a hostname and arranges to have
     traffic for that host proxied via via the cluster.  The hostname must
     be resolveable on the cluster and the address reached from it.
     """
     probe_result = probe.result()
-    ip = httpbin_ip()
 
     (success, request_ip) = probe_also_proxy(
         probe_result,
         probe.ALSO_PROXY_HOSTNAME.host,
     )
-    assert success and IPv4Address(ip) != IPv4Address(request_ip)
+    assert success and origin_ip != request_ip
 
 
 @with_probe
-def test_network_routing_also_proxy_ip_literal(probe):
+def test_network_routing_also_proxy_ip_literal(probe, origin_ip):
     """
     The ``--also-proxy`` option accepts a single IP address given by a literal
     and arranges to have traffic for addresses in that range proxied via the
     cluster.
     """
     probe_result = probe.result()
-    ip = httpbin_ip()
 
     (success, request_ip) = probe_also_proxy(
         probe_result,
         probe.ALSO_PROXY_IP.host,
     )
-    assert success and IPv4Address(ip) != IPv4Address(request_ip)
+    assert success and origin_ip != request_ip
 
 
 @with_probe
-def test_network_routing_also_proxy_ip_cidr(probe):
+def test_network_routing_also_proxy_ip_cidr(probe, origin_ip):
     """
     The ``--also-proxy`` option accepts an IP range given by a CIDR-notation
     string and arranges to have traffic for addresses in that range
     proxied via the cluster.
     """
     probe_result = probe.result()
-    ip = httpbin_ip()
 
     (success, request_ip) = probe_also_proxy(
         probe_result,
         probe.ALSO_PROXY_CIDR.host,
     )
-    assert success and IPv4Address(ip) != IPv4Address(request_ip)
+    assert success and origin_ip != request_ip
 
 
 def httpbin_ip():
@@ -290,4 +293,5 @@ def httpbin_ip():
 
 def probe_also_proxy(probe_result, hostname):
     probe_result.write("probe-also-proxy {}".format(hostname))
-    return loads(probe_result.read())
+    success, request_ip = loads(probe_result.read())
+    return success, IPv4Address(request_ip)
