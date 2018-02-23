@@ -44,3 +44,16 @@ sudo dhclient
 ```
 
 For more details see [issue # 462](https://github.com/datawire/telepresence/issues/462).
+
+#### Fedora 18+/CentOS 7+/RHEL 7+ and `--docker-run`
+
+Fedora 18+/CentOS 7+/RHEL 7+ ship with firewalld enabled and running by default. In it's default configuration this will drop traffic on unknown ports originating from Docker's default bridge network - usually `172.17.0.0/16`. 
+
+To resolve this issue, instruct firewalld to trust traffic from `172.17.0.0/16`:
+
+```
+sudo firewall-cmd --permanent --zone=trusted --add-source=172.17.0.0/16
+sudo firewall-cmd --reload
+```
+
+For more details see [issue # 464](https://github.com/datawire/telepresence/issues/464).
