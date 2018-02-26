@@ -136,6 +136,7 @@ def run_script_test(telepresence_args, local_command):
 def assert_fromcluster(namespace, service_name, port, telepresence_process):
     """Assert that there's a webserver accessible from the cluster."""
     url = "http://{}:{}/__init__.py".format(service_name, port)
+    print("assert_fromcluster(url={})".format(url))
     expected = (DIRECTORY / "__init__.py").read_bytes()
     for i in range(30):
         result = query_in_k8s(namespace, url, telepresence_process)
