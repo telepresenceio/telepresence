@@ -350,7 +350,7 @@ def run_telepresence_probe(
     :param list[str] probe_paths: Paths relative to $TELEPRESENCE_ROOT to
         direct the probe to read and report back to us.
 
-    :param list[str] also_proxy: Values to pass to Telepresence as
+    :param list[AlsoProxy] also_proxy: Values to pass to Telepresence as
         ``--also-proxy`` arguments.
     """
     probe_endtoend = (Path(__file__).parent / "probe_endtoend.py").as_posix()
