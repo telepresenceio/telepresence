@@ -4,7 +4,7 @@
 
 Bug fixes:
 
-* Telepresence now makes a greater effort to account for local DNS search domain configuration when bridging DNS to Kubernetes.
+* Telepresence now makes a greater effort to account for local DNS search domain configuration when bridging DNS to Kubernetes when using `--method=vpn-tcp`.
   ([#393])(https://github.com/datawire/telepresence/issues/393))
 
 Misc:
