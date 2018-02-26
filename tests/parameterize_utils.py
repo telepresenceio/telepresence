@@ -5,6 +5,12 @@ from time import (
 from struct import (
     unpack,
 )
+from socket import (
+    AF_INET,
+    SOCK_STREAM,
+    getaddrinfo,
+    gethostbyaddr,
+)
 from sys import (
     executable,
     stdout,
@@ -572,10 +578,16 @@ class Probe(object):
         "var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
     ]
 
-    # This is is httpbin.org.  We avoid the real domain name here due to
-    # <https://github.com/datawire/telepresence/issues/379>.  This is just any
-    # domain name that resolves to one IP address that will serve up
-    # httpbin.org.
+    # Get some httpbin.org addresses.  We avoid the real domain name in the
+    # related tests due to
+    # <https://github.com/datawire/telepresence/issues/379>.
+    _httpbin = iter(getaddrinfo(
+        "httpbin.org",
+        80,
+        AF_INET,
+        SOCK_STREAM,
+    ))
+
     #
     # Also notice that each ALSO_PROXY_... uses non-overlapping addresses
     # because we run Telepresence once with _all_ of these as ``--also-proxy``
@@ -583,23 +595,28 @@ class Probe(object):
     # overlapping addresses where an argument of form might work and cause it
     # to appear as though the other cases are also working.  Instead, with a
     # different address each time, each form must be working.
+    _an_ip = next(_httpbin)[4][0]
     ALSO_PROXY_HOSTNAME = AlsoProxy(
-        "ec2-23-23-209-130.compute-1.amazonaws.com.",
-        "23.23.209.130",
+        # This is just any domain name that resolves to _one_ IP address that
+        # will serve up httpbin.org.  See #379.
+        gethostbyaddr(_an_ip)[0],
+        _an_ip,
     )
 
-    # Also httpbin.org.  This time we're exercising Telepresence support for
-    # specifying an IP address literal to ``--also-proxy``.
+    # This time we're exercising Telepresence support for specifying an IP
+    # address literal to ``--also-proxy``.
+    _an_ip = next(_httpbin)[4][0]
     ALSO_PROXY_IP = AlsoProxy(
-        "23.23.136.1",
-        "23.23.136.1",
+        _an_ip,
+        _an_ip,
     )
 
-    # Also httpbin.org.  This time exercising support for specifying an IP
-    # network to ``--also-proxy``.
+    # This time exercising support for specifying an IP network to
+    # ``--also-proxy``.
+    _an_ip = next(_httpbin)[4][0]
     ALSO_PROXY_CIDR = AlsoProxy(
-        "23.21.74.117/32",
-        "23.21.74.117",
+        "{}/32".format(_an_ip),
+        _an_ip,
     )
 
     _result = None
