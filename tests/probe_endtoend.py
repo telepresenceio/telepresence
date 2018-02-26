@@ -33,7 +33,13 @@ from subprocess import (
     CalledProcessError,
     check_output,
 )
-
+from http.server import (
+    HTTPServer,
+    BaseHTTPRequestHandler,
+)
+from threading import (
+    Thread,
+)
 # The probe's output is mixed together with Telepresence output and maybe more
 # output from things like socat or torsocks.  This makes it difficult to
 # extract information from the probe via stdout.  Unfortunately, options apart
@@ -71,6 +77,10 @@ def main():
     })
 
     output.write(result)
+
+    for (port, value) in zip(args.http_port, args.http_value):
+        run_http_server(port, value)
+
     read_and_respond(stdin.buffer, output)
     print("Goodbye.")
 
@@ -124,9 +134,22 @@ def probe_also_proxy(hostname):
     return result
 
 
+def run_http_server(port, value):
+    class SingleValueHTTPRequestHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(value.encode("utf-8"))
+
+    server = HTTPServer(("", port), SingleValueHTTPRequestHandler)
+    Thread(target=server.serve_forever, daemon=True).start()
+
+
 COMMANDS = {
     "probe-url": lambda *urls: list(probe_urls(urls)),
     "probe-also-proxy": probe_also_proxy,
+    "run-http-server": run_http_server,
 }
 
 
@@ -184,6 +207,17 @@ def argument_parser():
         "--probe-path",
         action="append",
         help="A path to read.",
+    )
+    parser.add_argument(
+        "--http-port",
+        type=int,
+        action="append",
+        help="A port number on which to serve HTTP.",
+    )
+    parser.add_argument(
+        "--http-value",
+        action="append",
+        help="A value to return from the most recent HTTP server.",
     )
     return parser
 

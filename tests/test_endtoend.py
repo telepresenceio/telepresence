@@ -3,6 +3,12 @@ End-to-end tests which launch Telepresence and verify user-facing
 behaviors.
 """
 
+from os import (
+    urandom,
+)
+from base64 import (
+    b64encode,
+)
 from json import (
     loads,
 )
@@ -21,6 +27,9 @@ from .parameterize_utils import (
     METHODS,
     OPERATIONS,
     Probe,
+)
+from .utils import (
+    query_in_k8s,
 )
 
 # Mark this as the `probe` fixture and declare that instances of it may be
@@ -283,6 +292,34 @@ def test_network_routing_also_proxy_ip_cidr(probe, origin_ip):
         probe.ALSO_PROXY_CIDR.host,
     )
     assert success and origin_ip != request_ip
+
+
+
+@with_probe
+def test_network_routing_from_cluster(probe):
+    """
+    The Kubernetes cluster can route traffic to the Telepresence execution
+    context.
+    """
+    probe_result = probe.result()
+
+    url = "http://{}.{}:{}/random_value".format(
+        probe_result.deployment_ident.name,
+        probe_result.deployment_ident.namespace,
+        probe.HTTP_SERVER_SAME_PORT.local_port,
+    )
+    query_result = query_in_k8s(
+        probe_result.deployment_ident.namespace,
+        url,
+        probe_result.telepresence,
+    )
+    assert query_result == probe_result.HTTP_SERVER_SAME_PORT.value
+
+
+def run_http_server(probe_result, value):
+    probe_result.write("run-http-server {}".format(value))
+    port = loads(probe_result.read())
+    return port
 
 
 def httpbin_ip():
