@@ -642,3 +642,30 @@ footer {
         text-align: center;
     }
 }
+
+#case-study {
+    padding: 45px 15px;
+}
+
+#case-study h1, h2 {
+    color: #f9634e;
+}
+
+#case-study h1 {
+    font-size: 46px;
+    line-height: 1.5;
+    margin-bottom: 35px;
+}
+
+#case-study h2 {
+    font-size: 22px;
+    line-height: 29px;
+    font-weight: normal;
+    padding-bottom: 10px;
+}
+
+#case-study p {
+    font-size: 17px;
+    line-height: 26px;
+    padding-bottom: 25px;
+}
