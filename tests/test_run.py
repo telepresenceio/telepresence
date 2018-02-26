@@ -153,49 +153,6 @@ class NativeEndToEndTests(TestCase):
     End-to-end tests on the native machine.
     """
 
-    @skipIf(TELEPRESENCE_METHOD != "vpn-tcp", "this uses vpn-tcp.")
-    def test_run_directly_implicit_method(self):
-        """--method is optional."""
-        webserver_name = run_webserver()
-        p = Popen(
-            args=[
-                "telepresence",
-                "--new-deployment",
-                random_name(),
-                "--logfile",
-                "-",
-                "--run",
-                "python3",
-                "tocluster.py",
-                webserver_name,
-                current_namespace(),
-            ],
-            cwd=str(DIRECTORY),
-        )
-        exit_code = p.wait()
-        assert exit_code == 113
-
-    def test_run_directly_implicit_deployment(self):
-        """--*deployment is optional."""
-        webserver_name = run_webserver()
-        p = Popen(
-            args=[
-                "telepresence",
-                "--method",
-                TELEPRESENCE_METHOD,
-                "--logfile",
-                "-",
-                "--run",
-                "python3",
-                "tocluster.py",
-                webserver_name,
-                current_namespace(),
-            ],
-            cwd=str(DIRECTORY),
-        )
-        exit_code = p.wait()
-        assert exit_code == 113
-
     @skipIf(OPENSHIFT, "OpenShift Online doesn't do namespaces")
     def create_namespace(self):
         """Create a new namespace, return its name."""

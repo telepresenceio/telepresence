@@ -256,3 +256,30 @@ def test_docker_publish_args():
     for variant in publish_variants:
         assert parse_docker_args(variant.split()) == \
                (expected_docker, expected_publish)
+
+
+def test_default_method():
+    """
+    The ``--method`` argument is optional and defaults to *vpn-tcp*.
+    """
+    args = telepresence.cli.parse_args([])
+    assert args.method == "vpn-tcp"
+
+
+def test_docker_run_implies_container_method():
+    """
+    If a value is given for the ``--docker-run`` argument then the method is
+    *container*.
+    """
+    args = telepresence.cli.parse_args(["--docker-run", "foo:latest", "/bin/bash"])
+    assert args.method == "container"
+
+
+def test_default_operation():
+    """
+    The default operation is ``--new-deployment``.
+    """
+    args = telepresence.cli.parse_args([])
+    assert args.new_deployment is not None
+    assert args.deployment is None
+    assert args.swap_deployment is None
