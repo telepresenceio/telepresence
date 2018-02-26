@@ -64,23 +64,23 @@
 <section id="case-study" class="bg-white">
 
     <div class="container">
-        <h1 class="title">Verloop Case Study</h1>
+        <h1 class="title">Verloop: Going to 0 Wait on Build Times</h1>
 
         <h2>Can you tell us about yourself and what your company does?</h2>
 
-        <p>I am Piyush Mishra, Factotum at <a href="https://verloop.io">https://verloop.io</a>. Verloop is a conversational marketing platform. Which is a fancy way of saying that we are a SaaS platform to run livechat with chatbots as the first class citizen.</p>
+        <p>I am Piyush Mishra, Factotum at <a href="https://verloop.io">https://verloop.io</a>. Verloop is a conversational marketing platform, which is a fancy way of saying that we are a SaaS platform to run livechat with chatbots as a first class citizen.</p>
 
         <h2>What was your pre-Telepresence development experience? What challenges did you face?</h2>
 
-        <p>Before we switched to Telepresence, we used to use kube-openvpn to forward network from our staging to local and manage env variables separately with direnvor shell scripts. We didn’t need to forward the filesystem, so we never did that. Maintaining env variables was a pain, forwarding traffic from local to the pod was also a pain.</p>
+        <p>Before we switched to Telepresence, we used to use kube-openvpn to forward network from our staging to local and manage environment variables separately with shell scripts. We didn’t need to forward the filesystem, so we never did that. Maintaining environment variables was a pain. Forwarding traffic from local to the pod was also a pain, requiring a lot of set up and configuration.</p>
 
         <h2>Why did you choose Telepresence?</h2>
 
-        <p>We were going to roll our own internal software to do pretty much what telepresence does. Asked for similar solutions on kubernetes slack and looked up on Google. At this moment, I can’t remember where we found you guys, but I landed on your website and knew this was exactly what I wanted.</p>
+        <p>We were going to roll our own internal software to do pretty much what Telepresence does. We asked for similar solutions on the Kubernetes Slack channel and looked up on Google. I landed on your website and knew this was exactly what I wanted.</p>
 
         <h2>What benefits have you seen since adopting Telepresence?</h2>
 
-        <p>0 wait on build times has to be the biggest gain yet. We have builds from 30s to 4.5 minutes in length. With kube-openvpn, it was possible to avoid building to check every single time, but it was cumbersome to set up forwarding from our local to cluster. All of that went to 0 the day we switched to telepresence.</p>
+        <p>0 wait on build times has been the biggest gain. We have builds from 30s to 4.5 minutes in length. With kube-openvpn, it was possible to avoid building every single time, but it was cumbersome and time consuming to set up forwarding from our local to cluster. All of our wait times went to 0 the day we switched to Telepresence.</p>
 
         <div class="text-center">
             <a href="/#get-started" class="btn btn-black">Get Started</a>
