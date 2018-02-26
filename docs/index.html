@@ -49,6 +49,9 @@
             <a href="/discussion/overview">Docs</a>
         </li>
         <li>
+            <a href="/case-studies">Case Studies</a>
+        </li>
+        <li>
             <a target="_blank" href="https://github.com/datawire/telepresence">GitHub</a>
         </li>
         <li>
@@ -243,6 +246,9 @@
             <a href="/discussion/overview">Docs</a>
         </li>
         <li>
+            <a href="/case-studies">Case Studies</a>
+        </li>
+        <li>
             <a target="_blank" href="https://github.com/datawire/telepresence">GitHub</a>
         </li>
         <li>
@@ -279,77 +285,77 @@
          Smooth scrolling. Ref: https://css-tricks.com/snippets/jquery/smooth-scrolling/
          */
         $('a[href*="#"]')
-            .not('[href="#"]')
-            .not('[href="#0"]')
-            .click(function(event) {
-                // On-page links
-                if (
-                    location.pathname.replace(/^\//, '') == this.pathname.replace(/^\//, '')
-                    &&
-                    location.hostname == this.hostname
-                ) {
-                    // Figure out element to scroll to
-                    var target = $(this.hash);
-                    target = target.length ? target : $('[name=' + this.hash.slice(1) + ']');
-                    // Does a scroll target exist?
-                    if (target.length) {
-                        // Only prevent default if animation is actually gonna happen
-                        event.preventDefault();
-                        $('html, body').animate({
-                            scrollTop: target.offset().top
-                        }, 1000, function() {
-                            // Callback after animation
-                            // Must change focus!
-                            var $target = $(target);
-                            $target.focus();
-                            if ($target.is(":focus")) { // Checking if the target was focused
-                                return false;
-                            } else {
-                                $target.attr('tabindex','-1'); // Adding tabindex for elements not focusable
-                                $target.focus(); // Set focus again
-                            };
-                        });
+                .not('[href="#"]')
+                .not('[href="#0"]')
+                .click(function(event) {
+                    // On-page links
+                    if (
+                            location.pathname.replace(/^\//, '') == this.pathname.replace(/^\//, '')
+                            &&
+                            location.hostname == this.hostname
+                    ) {
+                        // Figure out element to scroll to
+                        var target = $(this.hash);
+                        target = target.length ? target : $('[name=' + this.hash.slice(1) + ']');
+                        // Does a scroll target exist?
+                        if (target.length) {
+                            // Only prevent default if animation is actually gonna happen
+                            event.preventDefault();
+                            $('html, body').animate({
+                                scrollTop: target.offset().top
+                            }, 1000, function() {
+                                // Callback after animation
+                                // Must change focus!
+                                var $target = $(target);
+                                $target.focus();
+                                if ($target.is(":focus")) { // Checking if the target was focused
+                                    return false;
+                                } else {
+                                    $target.attr('tabindex','-1'); // Adding tabindex for elements not focusable
+                                    $target.focus(); // Set focus again
+                                };
+                            });
+                        }
                     }
+                });
+
+        /*
+         * Replace all SVG images with inline SVG so we can change it's color when active
+         * Ref: https://stackoverflow.com/questions/24933430/img-src-svg-changing-the-fill-color
+         */
+        $('img.svg').each(function(){
+            var $img = $(this);
+            var imgID = $img.attr('id');
+            var imgClass = $img.attr('class');
+            var imgURL = $img.attr('src');
+
+            jQuery.get(imgURL, function(data) {
+                // Get the SVG tag, ignore the rest
+                var $svg = $(data).find('svg');
+
+                // Add replaced image's ID to the new SVG
+                if(typeof imgID !== 'undefined') {
+                    $svg = $svg.attr('id', imgID);
                 }
-            });
+                // Add replaced image's classes to the new SVG
+                if(typeof imgClass !== 'undefined') {
+                    $svg = $svg.attr('class', imgClass+' replaced-svg');
+                }
 
-            /*
-             * Replace all SVG images with inline SVG so we can change it's color when active
-             * Ref: https://stackoverflow.com/questions/24933430/img-src-svg-changing-the-fill-color
-             */
-            $('img.svg').each(function(){
-                var $img = $(this);
-                var imgID = $img.attr('id');
-                var imgClass = $img.attr('class');
-                var imgURL = $img.attr('src');
+                // Remove any invalid XML tags as per http://validator.w3.org
+                $svg = $svg.removeAttr('xmlns:a');
 
-                jQuery.get(imgURL, function(data) {
-                    // Get the SVG tag, ignore the rest
-                    var $svg = $(data).find('svg');
+                // Check if the viewport is set, if the viewport is not set the SVG wont't scale.
+                if(!$svg.attr('viewBox') && $svg.attr('height') && $svg.attr('width')) {
+                    $svg.attr('viewBox', '0 0 ' + $svg.attr('height') + ' ' + $svg.attr('width'))
+                }
 
-                    // Add replaced image's ID to the new SVG
-                    if(typeof imgID !== 'undefined') {
-                        $svg = $svg.attr('id', imgID);
-                    }
-                    // Add replaced image's classes to the new SVG
-                    if(typeof imgClass !== 'undefined') {
-                        $svg = $svg.attr('class', imgClass+' replaced-svg');
-                    }
+                // Replace image with new SVG
+                $img.replaceWith($svg);
 
-                    // Remove any invalid XML tags as per http://validator.w3.org
-                    $svg = $svg.removeAttr('xmlns:a');
+            }, 'xml');
 
-                    // Check if the viewport is set, if the viewport is not set the SVG wont't scale.
-                    if(!$svg.attr('viewBox') && $svg.attr('height') && $svg.attr('width')) {
-                        $svg.attr('viewBox', '0 0 ' + $svg.attr('height') + ' ' + $svg.attr('width'))
-                    }
-
-                    // Replace image with new SVG
-                    $img.replaceWith($svg);
-
-                }, 'xml');
-
-            });
+        });
     });
 </script>
 </body>
