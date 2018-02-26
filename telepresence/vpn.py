@@ -12,7 +12,6 @@ from telepresence.remote import RemoteInfo
 from telepresence.utilities import random_name
 from telepresence.runner import Runner
 
-
 # The number of DNS probes which must be issued during startup before the
 # sshuttle-proxied DNS system is considered properly "primed" with respect to
 # search domains.
