@@ -49,7 +49,7 @@ def query_in_k8s(namespace, url, process_to_poll):
         except CalledProcessError as e:
             if process_to_poll is not None and process_to_poll.poll() is not None:
                 raise RuntimeError("Process exited prematurely: {}".format(process_to_poll.returncode))
-            print("http request failed, sleeping before retry ({})".format(e))
+            print("http request failed, sleeping before retry ({}; {})".format(e, e.output))
             time.sleep(1)
             continue
     raise RuntimeError("failed to connect to HTTP server " + url)
