@@ -313,7 +313,7 @@ def test_network_routing_from_cluster(probe):
         url,
         probe_result.telepresence,
     )
-    assert query_result == probe_result.HTTP_SERVER_SAME_PORT.value
+    assert query_result.decode("utf-8") == probe.HTTP_SERVER_SAME_PORT.value
 
 
 def run_http_server(probe_result, value):
