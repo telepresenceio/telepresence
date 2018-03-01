@@ -36,6 +36,7 @@ from .utils import (
     random_name,
     run_webserver,
     create_namespace,
+    cleanup_namespace,
     telepresence_version,
 )
 
@@ -422,6 +423,7 @@ def run_telepresence_probe(
         name=random_name() + "-test",
     )
     create_namespace(deployment_ident.namespace, deployment_ident.name)
+    request.addfinalizer(lambda: cleanup_namespace(deployment_ident.namespace))
 
     # TODO: Factor run_webserver into a fixture that Probe can manage so that
     # run_telepresence_probe can just focus on running telepresence.
