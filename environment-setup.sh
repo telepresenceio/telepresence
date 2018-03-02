@@ -36,7 +36,7 @@ esac
 
 # Record some debugging info:
 python --version
-python2 --version
+python2 --version || true
 python3 --version
 ruby --version || true
 docker version || true
