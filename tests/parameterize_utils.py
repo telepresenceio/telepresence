@@ -36,6 +36,7 @@ from .utils import (
     random_name,
     run_webserver,
     create_namespace,
+    cleanup_namespace,
     telepresence_version,
 )
 
@@ -165,6 +166,18 @@ class _ExistingDeploymentOperation(object):
         create_deployment(deployment_ident, image, environ)
 
 
+    def cleanup_deployment(self, deployment_ident):
+        _cleanup_deployment(deployment_ident)
+
+
+    def prepare_service(self, deployment_ident, ports):
+        create_service(deployment_ident, ports)
+
+
+    def cleanup_service(self, deployment_ident, ports):
+        cleanup_service(deployment_ident, ports)
+
+
     def telepresence_args(self, deployment_ident):
         if self.swap:
             option = "--swap-deployment"
@@ -188,6 +201,18 @@ class _NewDeploymentOperation(object):
         pass
 
 
+    def cleanup_deployment(self, deployment_ident):
+        pass
+
+
+    def prepare_service(self, deployment_ident, ports):
+        pass
+
+
+    def cleanup_service(self, deployment_ident, ports):
+        pass
+
+
     def telepresence_args(self, deployment_ident):
         return [
             "--namespace", deployment_ident.namespace,
@@ -197,12 +222,6 @@ class _NewDeploymentOperation(object):
 
 
 def create_deployment(deployment_ident, image, environ):
-    def env_arguments(environ):
-        return list(
-            "--env={}={}".format(k, v)
-            for (k, v)
-            in environ.items()
-        )
     deployment = dumps({
         "kind": "Deployment",
         "apiVersion": "extensions/v1beta1",
@@ -248,6 +267,43 @@ def create_deployment(deployment_ident, image, environ):
         },
     })
     check_output([KUBECTL, "create", "-f", "-"], input=deployment.encode("utf-8"))
+
+def create_service(deployment_ident, ports):
+    if not ports:
+        return
+    service_obj = {
+        "kind": "Service",
+        "apiVersion": "v1",
+        "metadata": {
+            "name": deployment_ident.name,
+            "namespace": deployment_ident.namespace,
+        },
+        "spec": {
+            "selector": {
+                "telepresence-test": deployment_ident.name
+            },
+            "type": "ClusterIP",
+            "ports": []
+        }
+    }
+    for port in ports:
+        service_obj["spec"]["ports"].append({
+            "name": "expose-port-{}".format(port),
+            "protocol": "TCP",
+            "port": port,
+            "targetPort": port
+        })
+    service = dumps(service_obj)
+    check_output([KUBECTL, "create", "-f", "-"], input=service.encode("utf-8"))
+
+def cleanup_service(deployment_ident, ports):
+    if not ports:
+        return
+    check_call([
+        KUBECTL, "delete",
+        "--namespace", deployment_ident.namespace,
+        "service", deployment_ident.name
+    ])
 
 
 METHODS = [
@@ -367,6 +423,7 @@ def run_telepresence_probe(
         name=random_name() + "-test",
     )
     create_namespace(deployment_ident.namespace, deployment_ident.name)
+    request.addfinalizer(lambda: cleanup_namespace(deployment_ident.namespace))
 
     # TODO: Factor run_webserver into a fixture that Probe can manage so that
     # run_telepresence_probe can just focus on running telepresence.
@@ -378,7 +435,10 @@ def run_telepresence_probe(
 
     operation.prepare_deployment(deployment_ident, desired_environment)
     print("Prepared deployment {}/{}".format(deployment_ident.namespace, deployment_ident.name))
-    request.addfinalizer(lambda: _cleanup_deployment(deployment_ident))
+    request.addfinalizer(lambda: operation.cleanup_deployment(deployment_ident))
+
+    operation.prepare_service(deployment_ident, [])
+    request.addfinalizer(lambda: operation.cleanup_service(deployment_ident, []))
 
     probe_args = []
     for url in probe_urls:

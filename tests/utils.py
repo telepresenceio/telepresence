@@ -129,3 +129,7 @@ def create_namespace(namespace_name, name):
         },
     })
     check_output([KUBECTL, "create", "-f", "-"], input=namespace.encode("utf-8"))
+
+
+def cleanup_namespace(namespace_name):
+    check_call([KUBECTL, "delete", "namespace", namespace_name])
