@@ -161,7 +161,10 @@ def run_docker_command(
     ])
     # Older versions of Docker don't have --init:
     if "--init" in runner.get_output(["docker", "run", "--help"]):
-        docker_command += ["--init"]
+        init_args = [init for init in docker_args if \
+                    (init == "--init") or init.startswith("--init=")]
+        if not init_args:
+            docker_command += ["--init"]
     docker_command += docker_args
     p = Popen(docker_command)
 
