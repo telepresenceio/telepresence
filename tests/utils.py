@@ -56,7 +56,7 @@ def query_in_k8s(namespace, url, process_to_poll):
 
 
 def run_webserver(namespace=None):
-    """Run webserver in Kuberentes; return Service name."""
+    """Run webserver in Kubernetes; return Service name."""
     webserver_name = random_name() + "-web"
     if namespace is None:
         namespace = current_namespace()
