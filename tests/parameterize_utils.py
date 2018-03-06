@@ -441,8 +441,9 @@ def run_telepresence_probe(
     print("Prepared deployment {}/{}".format(deployment_ident.namespace, deployment_ident.name))
     request.addfinalizer(lambda: operation.cleanup_deployment(deployment_ident))
 
-    operation.prepare_service(deployment_ident, [])
-    request.addfinalizer(lambda: operation.cleanup_service(deployment_ident, []))
+    service_ports = [http.remote_port for http in http_servers]
+    operation.prepare_service(deployment_ident, service_ports)
+    request.addfinalizer(lambda: operation.cleanup_service(deployment_ident, service_ports))
 
     probe_args = []
     for url in probe_urls:
