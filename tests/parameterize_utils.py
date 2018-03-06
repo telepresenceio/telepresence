@@ -411,7 +411,7 @@ def run_telepresence_probe(
         ``--also-proxy`` arguments.
 
     :param list[HTTPServer] http_servers: Configuration for HTTP servers to
-        pass to the Telepreosence probe with `--http-...``.
+        pass to the Telepresence probe with `--http-...``.
     """
     probe_endtoend = (Path(__file__).parent / "probe_endtoend.py").as_posix()
 
@@ -707,9 +707,9 @@ class Probe(object):
         _an_ip,
     )
 
-    HTTP_SERVER_SAME_PORT = HTTPServer(12370, 12370, random_name())
-    # HTTP_SERVER_DIFFERENT_PORT = (12360, 12355, random_name())
-    # HTTP_SERVER_LOW_PORT = (12350, 79, random_name())
+    HTTP_SERVER_SAME_PORT = HTTPServer(12370, 12370, random_name("same"))
+    HTTP_SERVER_DIFFERENT_PORT = HTTPServer(12360, 12355, random_name("diff"))
+    HTTP_SERVER_LOW_PORT = HTTPServer(12350, 79, random_name("low"))
 
     _result = None
 
@@ -750,6 +750,8 @@ class Probe(object):
             ]
             http_servers = [
                 self.HTTP_SERVER_SAME_PORT,
+                self.HTTP_SERVER_DIFFERENT_PORT,
+                self.HTTP_SERVER_LOW_PORT,
             ]
             self._result = run_telepresence_probe(
                 self._request,

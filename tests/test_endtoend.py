@@ -305,6 +305,26 @@ def test_network_routing_from_cluster(probe):
     assert query_result == http.value
 
 
+@with_probe
+def test_network_routing_from_cluster_local_port(probe):
+    """
+    The cluster can talk to a process running in a Docker container, with
+    the local process listening on a different port.
+    """
+    http = probe.HTTP_SERVER_DIFFERENT_PORT
+    query_result = query_http_server(probe.result(), http)
+    assert query_result == http.value
+
+
+@with_probe
+def test_network_routing_from_cluster_low_port(probe):
+    """
+    Communicate from the cluster to Telepresence, with port<1024.
+    """
+    http = probe.HTTP_SERVER_LOW_PORT
+    query_result = query_http_server(probe.result(), http)
+    assert query_result == http.value
+
 
 def query_http_server(probe_result, http):
     ident = probe_result.deployment_ident
