@@ -159,8 +159,15 @@ def run_docker_command(
         "--env-file",
         envfile.name,
     ])
+    # Don't add --init if the user is doing something with it
+    init_args = [
+        arg for arg in docker_args
+        if arg == "--init" or arg.startswith("--init=")
+    ]
     # Older versions of Docker don't have --init:
-    if "--init" in runner.get_output(["docker", "run", "--help"]):
+    if not init_args and "--init" in runner.get_output([
+        "docker", "run", "--help"
+    ]):
         docker_command += ["--init"]
     docker_command += docker_args
     p = Popen(docker_command)

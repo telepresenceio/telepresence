@@ -174,8 +174,8 @@ class _ExistingDeploymentOperation(object):
         create_service(deployment_ident, ports)
 
 
-    def cleanup_service(self, deployment_ident):
-        cleanup_service(deployment_ident)
+    def cleanup_service(self, deployment_ident, ports):
+        cleanup_service(deployment_ident, ports)
 
 
     def telepresence_args(self, deployment_ident):
@@ -209,7 +209,7 @@ class _NewDeploymentOperation(object):
         pass
 
 
-    def cleanup_service(self, deployment_ident):
+    def cleanup_service(self, deployment_ident, ports):
         pass
 
 
@@ -269,6 +269,8 @@ def create_deployment(deployment_ident, image, environ):
     check_output([KUBECTL, "create", "-f", "-"], input=deployment.encode("utf-8"))
 
 def create_service(deployment_ident, ports):
+    if not ports:
+        return
     service_obj = {
         "kind": "Service",
         "apiVersion": "v1",
@@ -294,7 +296,9 @@ def create_service(deployment_ident, ports):
     service = dumps(service_obj)
     check_output([KUBECTL, "create", "-f", "-"], input=service.encode("utf-8"))
 
-def cleanup_service(deployment_ident):
+def cleanup_service(deployment_ident, ports):
+    if not ports:
+        return
     check_call([
         KUBECTL, "delete",
         "--namespace", deployment_ident.namespace,
@@ -437,11 +441,8 @@ def run_telepresence_probe(
     print("Prepared deployment {}/{}".format(deployment_ident.namespace, deployment_ident.name))
     request.addfinalizer(lambda: operation.cleanup_deployment(deployment_ident))
 
-    operation.prepare_service(
-        deployment_ident,
-        [http.local_port for http in http_servers]
-    )
-    request.addfinalizer(lambda: operation.cleanup_service(deployment_ident))
+    operation.prepare_service(deployment_ident, [])
+    request.addfinalizer(lambda: operation.cleanup_service(deployment_ident, []))
 
     probe_args = []
     for url in probe_urls:

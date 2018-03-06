@@ -37,6 +37,13 @@ brew install socat datawire/blackbird/telepresence
 <pre class="install-instructions" data-system="ubuntu" data-location="{{ location }}"><code>curl -s https://packagecloud.io/install/repositories/datawireio/telepresence/script.deb.sh | sudo bash
 sudo apt install --no-install-recommends telepresence
 </code></pre>
+<p>If you are running another Debian-based distribution that has Python 3.5 installable as <code>python3</code>, you may be able to use the Ubuntu 16.04 (Xenial) packages. The following works on Linux Mint 18.2 (Sonya) and Debian 9 (Stretch) by forcing the PackageCloud installer to access Xenial packages.</p>
+<pre><code>curl -sO https://packagecloud.io/install/repositories/datawireio/telepresence/script.deb.sh
+sudo env os=ubuntu dist=xenial bash script.deb.sh
+sudo apt install --no-install-recommends telepresence
+rm script.deb.sh
+</code></pre>
+<p>A similar approach may work on Debian-based distributions with Python 3.6 by using the Ubuntu 17.10 (Artful) packages.</p>
 
 <h4>Fedora 26 or later</h4>
 <p>Run the following:</p>
@@ -45,20 +52,24 @@ sudo apt install --no-install-recommends telepresence
 <pre class="install-instructions" data-system="fedora" data-location="{{ location }}"><code>curl -s https://packagecloud.io/install/repositories/datawireio/telepresence/script.rpm.sh | sudo bash
 sudo dnf install telepresence
 </code></pre>
+<p>If you are running a Fedora-based distribution that has Python 3.6 installable as <code>python3</code>, you may be able to use Fedora packages. See the Ubuntu section above for information on how to invoke the PackageCloud installer script to force OS and distribution.</p>
 
 <h4>Windows</h4>
 <p>See the <a href="/reference/windows.html">Windows support documentation</a>.</p>
 
 <h4>Install from source</h4>
 <p>
-    Install into <code>/usr/local/share/telepresence</code> and <code>/usr/local/bin</code> by running:
+    On systems with Python 3.5 or newer, install into <code>/usr/local/share/telepresence</code> and <code>/usr/local/bin</code> by running:
 </p>
 <button data-system="source" data-location="{{ location }}" class="button fa-pull-right copy-to-clipboard" data-clipboard-text="sudo env PREFIX=/usr/local ./install.sh">Copy to clipboard</button>
 
 <pre class="install-instructions" data-system="source" data-location="{{ location }}"><code>sudo env PREFIX=/usr/local ./install.sh
 </code></pre>
 <p>
-    Install into arbitrary locations by setting other environment variables before calling the install script. See the install script for more information. After installation you can safely delete the source code.
+    Install the software from the <a href="/reference/install.html#dependencies">list of dependencies</a> to finish.
+</p>
+<p>
+    Install into arbitrary locations by setting other environment variables before calling the install script. <a href="https://github.com/datawire/telepresence/blob/master/install.sh">See the install script</a> for more information. After installation you can safely delete the source code.
 </p>
 
 <h4>Other platforms</h4>
