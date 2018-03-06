@@ -423,8 +423,8 @@ def run_telepresence_probe(
     # Deployment's containers depends on the state of the cluster at the
     # time of pod creation.
     deployment_ident = ResourceIdent(
-        namespace=random_name() + "-ns",
-        name=random_name() + "-test",
+        namespace=random_name("ns"),
+        name=random_name("test"),
     )
     create_namespace(deployment_ident.namespace, deployment_ident.name)
     request.addfinalizer(lambda: cleanup_namespace(deployment_ident.namespace))

@@ -19,10 +19,12 @@ else:
     KUBECTL = "kubectl"
 
 
-def random_name():
+def random_name(suffix=""):
     """Return a new name each time."""
-    return "testing-{}-{}-{}".format(
-        REVISION, os.getpid(), time.time() - START_TIME
+    if not suffix.startswith("-"):
+        suffix = "-" + suffix
+    return "testing-{}-{}-{}{}".format(
+        REVISION, os.getpid(), time.time() - START_TIME, suffix
     ).replace(".", "-")
 
 
@@ -41,7 +43,7 @@ def query_in_k8s(namespace, url, process_to_poll):
     for i in range(120):
         try:
             return check_output([
-                'kubectl', 'run', '--attach', random_name() + "-q", "--quiet",
+                'kubectl', 'run', '--attach', random_name("q"), "--quiet",
                 '--rm', '--image=alpine', '--restart', 'Never', "--namespace",
                 namespace, '--command', '--', 'wget', "-q", "-O-",
                 "-T", "3", url,
@@ -57,7 +59,7 @@ def query_in_k8s(namespace, url, process_to_poll):
 
 def run_webserver(namespace=None):
     """Run webserver in Kubernetes; return Service name."""
-    webserver_name = random_name() + "-web"
+    webserver_name = random_name("web")
     if namespace is None:
         namespace = current_namespace()
     kubectl = [KUBECTL, "--namespace", namespace]
