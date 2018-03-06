@@ -57,6 +57,25 @@ def query_in_k8s(namespace, url, process_to_poll):
     raise RuntimeError("failed to connect to HTTP server " + url)
 
 
+def query_from_cluster(url, namespace, tries=10):
+    """
+    Run an HTTP request from the cluster with timeout and retries
+    """
+    shell_command = (
+        "for value in $(seq {}); do".format(tries) +
+        " sleep 1;" +
+        " wget -qO- -T3 {} && break;".format(url) +
+        " done"
+    )
+    return check_output([
+        "kubectl", "--namespace={}".format(namespace),
+        "run", random_name("query"),
+        "--attach", "--quiet", "--rm",
+        "--image=alpine", "--restart=Never",
+        "--command", "--", "sh", "-c", shell_command,
+    ]).decode("utf-8")
+
+
 def run_webserver(namespace=None):
     """Run webserver in Kubernetes; return Service name."""
     webserver_name = random_name("web")

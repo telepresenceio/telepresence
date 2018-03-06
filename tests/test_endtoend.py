@@ -29,7 +29,7 @@ from .parameterize_utils import (
     Probe,
 )
 from .utils import (
-    query_in_k8s,
+    query_from_cluster,
 )
 
 # Mark this as the `probe` fixture and declare that instances of it may be
@@ -294,26 +294,26 @@ def test_network_routing_also_proxy_ip_cidr(probe, origin_ip):
     assert success and origin_ip != request_ip
 
 
-
 @with_probe
 def test_network_routing_from_cluster(probe):
     """
     The Kubernetes cluster can route traffic to the Telepresence execution
     context.
     """
-    probe_result = probe.result()
+    http = probe.HTTP_SERVER_SAME_PORT
+    query_result = query_http_server(probe.result(), http)
+    assert query_result == http.value
 
+
+
+def query_http_server(probe_result, http):
+    ident = probe_result.deployment_ident
     url = "http://{}.{}:{}/random_value".format(
-        probe_result.deployment_ident.name,
-        probe_result.deployment_ident.namespace,
-        probe.HTTP_SERVER_SAME_PORT.local_port,
+        ident.name,
+        ident.namespace,
+        http.remote_port,
     )
-    query_result = query_in_k8s(
-        probe_result.deployment_ident.namespace,
-        url,
-        probe_result.telepresence,
-    )
-    assert query_result.decode("utf-8") == probe.HTTP_SERVER_SAME_PORT.value
+    return query_from_cluster(url, ident.namespace)
 
 
 def run_http_server(probe_result, value):
