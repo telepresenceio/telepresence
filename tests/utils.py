@@ -22,7 +22,7 @@ else:
 def random_name():
     """Return a new name each time."""
     return "testing-{}-{}-{}".format(
-        REVISION, time.time() - START_TIME, os.getpid()
+        REVISION, os.getpid(), time.time() - START_TIME
     ).replace(".", "-")
 
 
@@ -41,15 +41,15 @@ def query_in_k8s(namespace, url, process_to_poll):
     for i in range(120):
         try:
             return check_output([
-                'kubectl', 'run', '--attach', random_name(), "--quiet", '--rm',
-                '--image=alpine', '--restart', 'Never', "--namespace",
+                'kubectl', 'run', '--attach', random_name() + "-q", "--quiet",
+                '--rm', '--image=alpine', '--restart', 'Never', "--namespace",
                 namespace, '--command', '--', 'wget', "-q", "-O-",
                 "-T", "3", url,
             ])
         except CalledProcessError as e:
             if process_to_poll is not None and process_to_poll.poll() is not None:
                 raise RuntimeError("Process exited prematurely: {}".format(process_to_poll.returncode))
-            print("http request failed, sleeping before retry ({})".format(e))
+            print("http request failed, sleeping before retry ({}; {})".format(e, e.output))
             time.sleep(1)
             continue
     raise RuntimeError("failed to connect to HTTP server " + url)
@@ -57,7 +57,7 @@ def query_in_k8s(namespace, url, process_to_poll):
 
 def run_webserver(namespace=None):
     """Run webserver in Kubernetes; return Service name."""
-    webserver_name = random_name()
+    webserver_name = random_name() + "-web"
     if namespace is None:
         namespace = current_namespace()
     kubectl = [KUBECTL, "--namespace", namespace]
@@ -129,3 +129,7 @@ def create_namespace(namespace_name, name):
         },
     })
     check_output([KUBECTL, "create", "-f", "-"], input=namespace.encode("utf-8"))
+
+
+def cleanup_namespace(namespace_name):
+    check_call([KUBECTL, "delete", "namespace", namespace_name])
