@@ -225,20 +225,6 @@ class NativeEndToEndTests(TestCase):
         )
 
     @skipIf(OPENSHIFT, "OpenShift never allows running containers as root.")
-    def test_fromcluster_port_lt_1024(self):
-        """
-        Communicate from the cluster to Telepresence, with port<1024.
-        """
-        service_name = random_name()
-        self.fromcluster(
-            ["--new-deployment", service_name],
-            service_name,
-            current_namespace(),
-            12399,
-            70,
-        )
-
-    @skipIf(OPENSHIFT, "OpenShift never allows running containers as root.")
     def test_swapdeployment_fromcluster_port_lt_1024(self):
         """
         Communicate from the cluster to Telepresence, with port<1024, using
