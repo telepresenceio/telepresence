@@ -211,27 +211,6 @@ class NativeEndToEndTests(TestCase):
             p.terminate()
             p.wait()
 
-    def test_fromcluster_custom_local_port(self):
-        """
-        The cluster can talk to a process running in a Docker container, with
-        the local process listening on a different port.
-        """
-        service_name = random_name()
-        remote_port = 12360
-        local_port = 12355
-        p = Popen(
-            args=[
-                "telepresence", "--new-deployment", service_name, "--expose",
-                "{}:{}".format(local_port, remote_port), "--logfile", "-",
-                "--method", TELEPRESENCE_METHOD, "--run", "python3", "-m",
-                "http.server", str(local_port)
-            ],
-            cwd=str(DIRECTORY),
-        )
-        assert_fromcluster(current_namespace(), service_name, remote_port, p)
-        p.terminate()
-        p.wait()
-
     def test_fromcluster_with_namespace(self):
         """
         Communicate from the cluster to Telepresence, with custom namespace.
