@@ -325,6 +325,8 @@ def test_network_routing_from_cluster_low_port(probe):
     """
     Communicate from the cluster to Telepresence, with port<1024.
     """
+    if probe.operation.name == "existing":
+        pytest.xfail("Issue 496")
     http = probe.HTTP_SERVER_LOW_PORT
     query_result = query_http_server(probe.result(), http)
     assert query_result == http.value
