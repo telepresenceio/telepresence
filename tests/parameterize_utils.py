@@ -163,7 +163,7 @@ class _ExistingDeploymentOperation(object):
                 REGISTRY,
                 telepresence_version(),
             )
-        create_deployment(deployment_ident, image, environ)
+        create_deployment(deployment_ident, image, environ, replicas=1)
 
 
     def cleanup_deployment(self, deployment_ident):
@@ -221,7 +221,7 @@ class _NewDeploymentOperation(object):
 
 
 
-def create_deployment(deployment_ident, image, environ):
+def create_deployment(deployment_ident, image, environ, replicas):
     deployment = dumps({
         "kind": "Deployment",
         "apiVersion": "extensions/v1beta1",
@@ -230,7 +230,7 @@ def create_deployment(deployment_ident, image, environ):
             "namespace": deployment_ident.namespace,
         },
         "spec": {
-            "replicas": 2,
+            "replicas": replicas,
             "template": {
                 "metadata": {
                     "labels": {
