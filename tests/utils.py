@@ -21,7 +21,7 @@ else:
 
 def random_name(suffix=""):
     """Return a new name each time."""
-    if not suffix.startswith("-"):
+    if suffix and not suffix.startswith("-"):
         suffix = "-" + suffix
     return "testing-{}-{}-{}{}".format(
         REVISION, os.getpid(), time.time() - START_TIME, suffix
