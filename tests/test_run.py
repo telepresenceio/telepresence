@@ -211,18 +211,6 @@ class NativeEndToEndTests(TestCase):
             p.terminate()
             p.wait()
 
-    def test_fromcluster(self):
-        """
-        Communicate from the cluster to Telepresence, with default namespace.
-        """
-        service_name = random_name()
-        self.fromcluster(
-            ["--new-deployment", service_name],
-            service_name,
-            current_namespace(),
-            12370,
-        )
-
     def test_fromcluster_custom_local_port(self):
         """
         The cluster can talk to a process running in a Docker container, with
