@@ -211,19 +211,6 @@ class NativeEndToEndTests(TestCase):
             p.terminate()
             p.wait()
 
-    def test_fromcluster_with_namespace(self):
-        """
-        Communicate from the cluster to Telepresence, with custom namespace.
-        """
-        namespace = self.create_namespace()
-        service_name = random_name()
-        self.fromcluster(
-            ["--new-deployment", service_name, "--namespace", namespace],
-            "{}.{}.svc.cluster.local".format(service_name, namespace),
-            namespace,
-            12347,
-        )
-
     @skipIf(OPENSHIFT, "OpenShift never allows running containers as root.")
     def test_swapdeployment_fromcluster_port_lt_1024(self):
         """
