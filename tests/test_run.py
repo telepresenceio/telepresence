@@ -211,37 +211,6 @@ class NativeEndToEndTests(TestCase):
             p.terminate()
             p.wait()
 
-    @skipIf(OPENSHIFT, "OpenShift never allows running containers as root.")
-    def test_swapdeployment_fromcluster_port_lt_1024(self):
-        """
-        Communicate from the cluster to Telepresence, with port<1024, using
-        swap-deployment because omg it's a different code path. Yay.
-        """
-        # Create a non-Telepresence deployment:
-        service_name = random_name()
-        check_call([
-            KUBECTL,
-            "run",
-            service_name,
-            "--port=79",
-            "--expose",
-            "--restart=Always",
-            "--image=openshift/hello-openshift",
-            "--replicas=2",
-            "--labels=telepresence-test=" + service_name,
-            "--env=HELLO=there",
-        ])
-        self.addCleanup(
-            check_call, [KUBECTL, "delete", DEPLOYMENT_TYPE, service_name]
-        )
-        self.fromcluster(
-            ["--swap-deployment", service_name],
-            service_name,
-            current_namespace(),
-            12398,
-            79,
-        )
-
     def test_disconnect(self):
         """Telepresence exits if the connection is lost."""
         exit_code = run_script_test(["--new-deployment", random_name()],
