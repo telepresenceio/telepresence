@@ -92,13 +92,17 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
             "--image=alpine", "--restart=Never",
             "--command", "--", "sh", "-c", shell_command,
         ]).decode("utf-8")
+        print("query output:")
+        print(_indent(res))
         debug, res = res.split(delimiter + "\n")
-        print("wget debug output:")
-        print("\t" + debug.replace("\n", "\t\n"))
         if res:
             return res
         print("... empty response")
     return res
+
+
+def _indent(text):
+    return "\t" + text.replace("\n", "\t\n")
 
 
 def run_webserver(namespace=None):
