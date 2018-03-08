@@ -222,6 +222,23 @@ class _NewDeploymentOperation(object):
 
 
 def create_deployment(deployment_ident, image, environ, replicas):
+    """
+    Create a ``Deployment`` in the current context.
+
+    :param ResourceIdent deployment_ident: The identifier to assign to the
+        deployment.
+
+    :param str image: The Docker image to put in the Deployment's pod
+        template.
+
+    :param dict[str, str] environ: The environment to put in the Deployment's
+        pod template.
+
+    :param int replicas: The number of replicas to configure for the
+        Deployment.
+
+    :raise CalledProcessError: If the *kubectl* command returns an error code.
+    """
     deployment = dumps({
         "kind": "Deployment",
         "apiVersion": "extensions/v1beta1",
