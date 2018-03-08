@@ -6,6 +6,13 @@ Misc:
 
 * A new end-to-end test suite setup will help us reduce the cycle time associated with testing Telepresence as we port over existing tests.
   ([429](https://github.com/datawire/telepresence/pull/429))
+  ([463](https://github.com/datawire/telepresence/pull/463))
+  ([468](https://github.com/datawire/telepresence/pull/468))
+  ([473](https://github.com/datawire/telepresence/pull/473))
+  ([474](https://github.com/datawire/telepresence/pull/474))
+  ([475](https://github.com/datawire/telepresence/pull/475))
+  ([479](https://github.com/datawire/telepresence/pull/479))
+  ([495](https://github.com/datawire/telepresence/pull/495))
 * Improved cleanup of our testing cluster used by CI.
 * Added the ability to specify `--init=false` flag when using `--docker-run`
   ([481](https://github.com/datawire/telepresence/issues/481))
