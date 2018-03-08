@@ -74,6 +74,7 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
     ).decode("utf-8")
     shell_command = (
         """
+        set -e
         for value in $(seq {tries}); do
             sleep 1
             wget --server-response --output-document=output -T3 {url} 2>&1 && break
