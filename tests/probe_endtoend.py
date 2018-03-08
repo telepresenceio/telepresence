@@ -151,7 +151,6 @@ def run_http_server(port, value):
 COMMANDS = {
     "probe-url": lambda *urls: list(probe_urls(urls)),
     "probe-also-proxy": probe_also_proxy,
-    "run-http-server": run_http_server,
 }
 
 

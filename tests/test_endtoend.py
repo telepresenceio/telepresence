@@ -359,12 +359,6 @@ def query_http_server(probe_result, http):
     )
 
 
-def run_http_server(probe_result, value):
-    probe_result.write("run-http-server {}".format(value))
-    port = loads(probe_result.read())
-    return port
-
-
 def httpbin_ip():
     result = str(urlopen("http://httpbin.org/ip", timeout=30).read(), "utf-8")
     origin = loads(result)["origin"]
