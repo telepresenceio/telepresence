@@ -137,10 +137,12 @@ def probe_also_proxy(hostname):
 def run_http_server(port, value):
     class SingleValueHTTPRequestHandler(BaseHTTPRequestHandler):
         def do_GET(self):
+            response_body = value.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(response_body)))
             self.end_headers()
-            self.wfile.write(value.encode("utf-8"))
+            self.wfile.write(response_body)
 
     server = HTTPServer(("", port), SingleValueHTTPRequestHandler)
     Thread(target=server.serve_forever, daemon=True).start()
