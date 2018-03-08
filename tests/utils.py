@@ -95,8 +95,8 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
         ]).decode("utf-8")
         print("query output:")
         print(_indent(res))
-        debug, res = res.split(delimiter + "\n")
         if res:
+            debug, res = res.split(delimiter + "\n")
             return res
         print("... empty response")
     return res
