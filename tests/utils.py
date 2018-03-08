@@ -5,7 +5,14 @@ from pathlib import Path
 import time
 import os
 from json import dumps
-from subprocess import check_output, STDOUT, check_call, CalledProcessError
+from base64 import b64encode
+from subprocess import (
+    check_output,
+    STDOUT,
+    check_call,
+    CalledProcessError,
+)
+
 
 DIRECTORY = Path(__file__).absolute().parent
 REVISION = str(check_output(["git", "rev-parse", "--short", "HEAD"]),
@@ -61,12 +68,22 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
     """
     Run an HTTP request from the cluster with timeout and retries
     """
+    # Separate debug output from the HTTP server response.
+    delimiter = b64encode(
+        b"totally random stuff that won't appear anywhere else"
+    ).decode("utf-8")
     shell_command = (
-        "for value in $(seq {}); do".format(tries) +
-        " sleep 1;" +
-        " wget -qO- -T3 {} && break;".format(url) +
-        " done"
-    )
+        """
+        for value in $(seq {tries}); do
+            sleep 1
+            wget --server-response --output-document=output -T3 {url} 2>&1 && break
+        done
+        echo {delimiter}
+        [ -e output ] && cat output
+        """).format(tries=tries, url=url, delimiter=delimiter)
+    print("Querying {url} (tries={tries} empty-retries={empty})".format(
+        url=url, tries=tries, empty=retries_on_empty,
+    ))
     for _ in range(retries_on_empty + 1):
         res = check_output([
             "kubectl", "--namespace={}".format(namespace),
@@ -75,8 +92,12 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
             "--image=alpine", "--restart=Never",
             "--command", "--", "sh", "-c", shell_command,
         ]).decode("utf-8")
+        debug, res = res.split(delimiter + "\n")
+        print("wget debug output:")
+        print("\t" + debug.replace("\n", "\t\n"))
         if res:
             return res
+        print("... empty response")
     return res
 
 
