@@ -74,11 +74,33 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
     ).decode("utf-8")
     shell_command = (
         """
+        # Make sure we'll stop with an error if anything we try to do stops
+        # with an error.
         set -e
+
+        # Try wget the number of times we were asked.
         for value in $(seq {tries}); do
+            # Don't try too fast.
             sleep 1
+
+            # server-response gets us the response headers which we'll dump
+            # later to help debug any unexpected failures.
+            #
+            # output-document gets the content to a file which we can read out
+            # later.  We want to do it later so that the caller has a chance
+            # of parsing the overall script output.  If we let the page output
+            # arrive now it gets mixed with other wget output and things get
+            # confusing.
+            #
+            # -T3 sets a timeout for this particular request.
+            #
+            # If this request succeeds then we're done and we can break out of
+            # the loop.
             wget --server-response --output-document=output -T3 {url} 2>&1 && break
         done
+
+        # wget output is over.  Put this known string into the output here to
+        # separate all that stuff from the response body which comes next.
         echo {delimiter}
         [ -e output ] && cat output
         """).format(tries=tries, url=url, delimiter=delimiter)
