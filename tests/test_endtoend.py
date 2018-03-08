@@ -339,7 +339,12 @@ def query_http_server(probe_result, http):
         ident.namespace,
         http.remote_port,
     )
-    return query_from_cluster(url, ident.namespace, 1)
+    return query_from_cluster(
+        url,
+        ident.namespace,
+        tries=10,
+        retries_on_empty=5,
+    )
 
 
 def run_http_server(probe_result, value):
