@@ -333,6 +333,18 @@ def test_network_routing_from_cluster_low_port(probe):
 
 
 def query_http_server(probe_result, http):
+    """
+    Request a resource from one of the HTTP servers begin run by the probe
+    process.
+
+    :param ProbeResult probe_result: A probe result we can use to help find
+        the desired HTTP server.
+
+    :param HTTPServer http: The particular HTTP server to which we want to
+        issue a request.
+
+    :return str: The response body.
+    """
     ident = probe_result.deployment_ident
     url = "http://{}.{}:{}/random_value".format(
         ident.name,
