@@ -82,9 +82,10 @@ class LocalResolver(object):
             )
         else:
             self.fallback = client.Resolver(resolv='/etc/resolv.conf')
+
         # Suffixes which may be set by resolv.conf search/domain line, which
         # we remove once we figure out what it is.
-        self.suffixes = []  # type: List[Tuple[bytes]] sorted descending by tuple length
+        self.suffixes = []
 
     def _got_ips(self, name: bytes, ips: List[str],
                  record_type: Callable) -> DNSQueryResult:
