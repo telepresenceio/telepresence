@@ -4,6 +4,7 @@ name resolution for anyone who sends queries to it.
 """
 
 from itertools import count
+from string import ascii_lowercase
 
 import pytest
 
@@ -14,6 +15,8 @@ from twisted.names.dns import (
 )
 
 from resolver import LocalResolver
+
+from hypothesis import strategies as st, given
 
 
 @pytest.fixture
@@ -51,3 +54,52 @@ def test_infer_search_domains(resolver):
     for search in [u".foo", u".foo.bar", u".alternate"]:
         mangled = (u"example.com" + search).encode("ascii").split(b".")
         assert [b"example", b"com"] == resolver._strip_search_suffix(mangled)
+
+
+def labels():
+    """
+    Build random DNS labels.
+
+    This can't build every possible DNS label.  It just does enough to
+    exercise the suffix detection logic (assuming that logic is independent of
+    the particular bytes of the labels).
+    """
+    return st.text(
+        alphabet=ascii_lowercase,
+        min_size=1,
+        average_size=2,
+    )
+
+
+@given(labels(), labels(), labels())
+def test_prefer_longest_suffix(resolver, first, second, third):
+    """
+    If ``LocalResolver`` observes overlapping suffixes (for example, "foo" and
+    "bar.foo") then it prefers to strip the longest one possible from any
+    queries it forwards.
+    """
+    probe = "hellotelepresence"
+    target_suffix = "{}.{}".format(second, third)
+
+    # Let it discover a few overlapping suffixes.
+    resolver.query(
+        Query("{}.{}".format(probe, third).encode("ascii")),
+    )
+
+    resolver.query(
+        Query("{}.{}".format(probe, target_suffix).encode("ascii")),
+    )
+
+    resolver.query(
+        Query("{}.{}.{}.{}".format(
+            probe, first, second, third,
+        ).encode("ascii")),
+    )
+
+    # Ask it what base name it would forward if it received a query for a name
+    # which has both suffixes.  We would like it to strip the longest prefix
+    # it can.
+    stripped = resolver._strip_search_suffix(
+        "example.{}".format(target_suffix).encode("ascii").split(b"."),
+    )
+    assert [b"example"] == stripped
