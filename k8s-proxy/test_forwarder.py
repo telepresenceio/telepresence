@@ -14,7 +14,10 @@ from twisted.names.dns import (
     Query,
 )
 
-from resolver import LocalResolver
+from resolver import (
+    LocalResolver,
+    insort,
+)
 
 from hypothesis import strategies as st, given
 
@@ -103,3 +106,16 @@ def test_prefer_longest_suffix(resolver, first, second, third):
         "example.{}".format(target_suffix).encode("ascii").split(b"."),
     )
     assert [b"example"] == stripped
+
+
+@given(st.lists(st.integers(), average_size=5))
+def test_insort(values):
+    """
+    ``insort`` inserts a new element into a sorted list in the correct
+    position to maintain the list's sorted property.
+    """
+    insort_target = []
+    for v in values:
+        insort(insort_target, v, key=lambda v: -v)
+
+    assert sorted(values, reverse=True) == insort_target

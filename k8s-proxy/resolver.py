@@ -8,6 +8,27 @@ from twisted.internet.threads import deferToThread
 
 DNSQueryResult = Union[defer.Deferred, Tuple[List[dns.RRHeader], List, List]]
 
+def insort(target_list, new_element, key):
+    """
+    Insert ``new_element`` into ``target_list`` while maintaining the sort
+    order of ``target_list`` (as defined by ``key``), assuming ``target_list``
+    is already sorted.
+    """
+    # Since target_list is sorted we could do a binary search.  Good
+    # first-time contribution for a new Telepresence contributor, perhaps...
+
+    if not target_list:
+        target_list.append(new_element)
+        return
+
+    new_key = key(new_element)
+    for i, existing_element in enumerate(target_list):
+        if key(existing_element) > new_key:
+            target_list.insert(i, new_element)
+            return
+
+    target_list.append(new_element)
+
 
 def resolve(hostname: str) -> List[str]:
     """Do A record lookup, return list of IPs."""
@@ -57,7 +78,7 @@ class LocalResolver(object):
             self.fallback = client.Resolver(resolv='/etc/resolv.conf')
         # Suffixes which may be set by resolv.conf search/domain line, which
         # we remove once we figure out what it is.
-        self.suffixes = set()  # type: Set[Tuple[bytes]]
+        self.suffixes = []  # type: List[Tuple[bytes]] sorted descending by tuple length
 
     def _got_ips(self, name: bytes, ips: List[str],
                  record_type: Callable) -> DNSQueryResult:
@@ -120,10 +141,12 @@ class LocalResolver(object):
         if parts[0].startswith(b"hellotelepresence"):
             suffix = tuple(parts[1:])
             if suffix not in self.suffixes:
-                self.suffixes.add(suffix)
+                # Insert the new suffix so that the list is sorted starting
+                # with longest suffixes.
+                insort(self.suffixes, suffix, lambda parts: -len(parts))
                 print("Set DNS suffix we filter out to: {}".format(
-                    sorted(self.suffixes))
-                )
+                    self.suffixes
+                ))
             return self._got_ips(real_name, ["127.0.0.1"], dns.Record_A)
 
     def _strip_search_suffix(self, parts):
