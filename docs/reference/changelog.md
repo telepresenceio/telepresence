@@ -21,6 +21,8 @@ Misc:
 * Improved cleanup of our testing cluster used by CI.
 * Added the ability to specify `--init=false` flag when using `--docker-run`
   ([481](https://github.com/datawire/telepresence/issues/481))
+* Reduced the verbosity of DNS lookup failures in the logs.
+  ([497](https://github.com/datawire/telepresence/issues/497))
 
 #### 0.75 (January 30, 2018)
 
