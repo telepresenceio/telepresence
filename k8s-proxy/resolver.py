@@ -103,8 +103,9 @@ class LocalResolver(object):
         return answers, authority, additional
 
     def _got_error(self, failure) -> defer.Deferred:
-        print(failure)
-        return defer.fail(error.DomainError(str(failure)))
+        if failure.check(socket.gaierror):
+            print("getaddrinfo error: {}".format(failure.getErrorMessage()))
+        return defer.fail(error.DomainError(failure.getErrorMessage()))
 
     def _no_loop_kube_query(
         self, query: dns.Query, timeout: float, real_name: bytes
