@@ -163,7 +163,7 @@ class _ExistingDeploymentOperation(object):
                 REGISTRY,
                 telepresence_version(),
             )
-        create_deployment(deployment_ident, image, environ)
+        create_deployment(deployment_ident, image, environ, replicas=1)
 
 
     def cleanup_deployment(self, deployment_ident):
@@ -221,7 +221,24 @@ class _NewDeploymentOperation(object):
 
 
 
-def create_deployment(deployment_ident, image, environ):
+def create_deployment(deployment_ident, image, environ, replicas):
+    """
+    Create a ``Deployment`` in the current context.
+
+    :param ResourceIdent deployment_ident: The identifier to assign to the
+        deployment.
+
+    :param str image: The Docker image to put in the Deployment's pod
+        template.
+
+    :param dict[str, str] environ: The environment to put in the Deployment's
+        pod template.
+
+    :param int replicas: The number of replicas to configure for the
+        Deployment.
+
+    :raise CalledProcessError: If the *kubectl* command returns an error code.
+    """
     deployment = dumps({
         "kind": "Deployment",
         "apiVersion": "extensions/v1beta1",
@@ -230,7 +247,7 @@ def create_deployment(deployment_ident, image, environ):
             "namespace": deployment_ident.namespace,
         },
         "spec": {
-            "replicas": 2,
+            "replicas": replicas,
             "template": {
                 "metadata": {
                     "labels": {
@@ -381,6 +398,7 @@ def run_telepresence_probe(
         probe_commands,
         probe_paths,
         also_proxy,
+        http_servers,
 ):
     """
     :param request: The pytest mumble mumble whatever.
@@ -408,6 +426,9 @@ def run_telepresence_probe(
 
     :param list[AlsoProxy] also_proxy: Values to pass to Telepresence as
         ``--also-proxy`` arguments.
+
+    :param list[HTTPServer] http_servers: Configuration for HTTP servers to
+        pass to the Telepresence probe with `--http-...``.
     """
     probe_endtoend = (Path(__file__).parent / "probe_endtoend.py").as_posix()
 
@@ -419,8 +440,8 @@ def run_telepresence_probe(
     # Deployment's containers depends on the state of the cluster at the
     # time of pod creation.
     deployment_ident = ResourceIdent(
-        namespace=random_name() + "-ns",
-        name=random_name() + "-test",
+        namespace=random_name("ns"),
+        name=random_name("test"),
     )
     create_namespace(deployment_ident.namespace, deployment_ident.name)
     request.addfinalizer(lambda: cleanup_namespace(deployment_ident.namespace))
@@ -437,8 +458,9 @@ def run_telepresence_probe(
     print("Prepared deployment {}/{}".format(deployment_ident.namespace, deployment_ident.name))
     request.addfinalizer(lambda: operation.cleanup_deployment(deployment_ident))
 
-    operation.prepare_service(deployment_ident, [])
-    request.addfinalizer(lambda: operation.cleanup_service(deployment_ident, []))
+    service_ports = [http.remote_port for http in http_servers]
+    operation.prepare_service(deployment_ident, service_ports)
+    request.addfinalizer(lambda: operation.cleanup_service(deployment_ident, service_ports))
 
     probe_args = []
     for url in probe_urls:
@@ -447,10 +469,19 @@ def run_telepresence_probe(
         probe_args.extend(["--probe-command", command])
     for path in probe_paths:
         probe_args.extend(["--probe-path", path])
+    for http in http_servers:
+        probe_args.extend([
+            "--http-port", str(http.local_port),
+            "--http-value", http.value,
+        ])
 
     telepresence_args = []
     for addr in also_proxy:
         telepresence_args.extend(["--also-proxy", addr])
+    for http in http_servers:
+        telepresence_args.extend([
+            "--expose", http.expose_string(),
+        ])
 
     operation_args = operation.telepresence_args(deployment_ident)
     method_args = method.telepresence_args(probe_endtoend)
@@ -597,6 +628,20 @@ class AlsoProxy(object):
 
 
 
+class HTTPServer(object):
+    def __init__(self, local_port, remote_port, value):
+        self.local_port = local_port
+        self.remote_port = remote_port
+        self.value = value
+
+
+    def expose_string(self):
+        if self.local_port == self.remote_port:
+            return str(self.local_port)
+        return "{}:{}".format(self.local_port, self.remote_port)
+
+
+
 class Probe(object):
     CLIENT_ENV_VAR = "SHOULD_NOT_BE_SET"
 
@@ -679,6 +724,10 @@ class Probe(object):
         _an_ip,
     )
 
+    HTTP_SERVER_SAME_PORT = HTTPServer(12370, 12370, random_name("same"))
+    HTTP_SERVER_DIFFERENT_PORT = HTTPServer(12360, 12355, random_name("diff"))
+    HTTP_SERVER_LOW_PORT = HTTPServer(12350, 79, random_name("low"))
+
     _result = None
 
     def __init__(self, request, method, operation):
@@ -716,6 +765,11 @@ class Probe(object):
                 self.ALSO_PROXY_IP.argument,
                 self.ALSO_PROXY_CIDR.argument,
             ]
+            http_servers = [
+                self.HTTP_SERVER_SAME_PORT,
+                self.HTTP_SERVER_DIFFERENT_PORT,
+                self.HTTP_SERVER_LOW_PORT,
+            ]
             self._result = run_telepresence_probe(
                 self._request,
                 self.method,
@@ -726,6 +780,7 @@ class Probe(object):
                 self.QUESTIONABLE_COMMANDS,
                 self.INTERESTING_PATHS,
                 also_proxy,
+                http_servers
             )
             self._cleanup.append(lambda: _cleanup_process(self._result.telepresence))
         return self._result
