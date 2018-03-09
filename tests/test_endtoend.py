@@ -340,21 +340,24 @@ def probe_also_proxy(probe_result, hostname):
     return success, IPv4Address(request_ip)
 
 
-@after_probe
-def test_swapdeployment_restores_images(probe):
-    """
-    After a Telepresence session with ``--swap-deployment`` exits, the image
-    specified by the original deployment has been restored to the Kubernetes
-    Deployment resource.
-    """
+def _get_swap_result(probe):
     if probe.operation.name != "swap":
         pytest.skip("Test only applies to --swap-deployment usage.")
 
     # Telepresence won't try to swap anything back until it believes its job
     # is done.  So make sure its job is done before we make any assertions
     # about whether things were swapped back.
-    result = probe.ensure_dead()
+    return probe.ensure_dead()
 
+
+@after_probe
+def test_swapdeployment_restores_deployment_image(probe):
+    """
+    After a Telepresence session with ``--swap-deployment`` exits, the image
+    specified by the original deployment has been restored to the Kubernetes
+    Deployment resource.
+    """
+    result = _get_swap_result(probe)
     deployment = get_deployment(result.deployment_ident)
     images = {
         container["image"]
@@ -363,8 +366,16 @@ def test_swapdeployment_restores_images(probe):
     }
     assert {probe.operation.image} == images
 
+
+@after_probe
+def test_swapdeployment_restores_deployment_pods(probe):
+    """
+    After a Telepresence session with ``--swap-deployment`` exits, pods with
+    the image specified by the original have been restored.
+    """
+    result = _get_swap_result(probe)
     start = time()
-    while start > time() + 60:
+    while time() < start + 60:
         pods = get_pods(result.deployment_ident)["items"]
         image_and_phase = [
             (pod["spec"]["containers"][0]["image"], pod["status"]["phase"])
@@ -390,9 +401,20 @@ def test_swapdeployment_restores_images(probe):
         )
 
 
+@after_probe
+def test_swapdeployment_restores_deployment_replicas(probe):
+    """
+    After a Telepresence session with ``--swap-deployment`` exits, the replica
+    configuration specified by the original deployment has been restored to
+    the Kubernetes Deployment resource.
+    """
+    result = _get_swap_result(probe)
+    deployment = get_deployment(result.deployment_ident)
+    assert probe.operation.replicas == deployment["spec"]["replicas"]
+
 
 def kubectl(*argv):
-    return loads(check_output([KUBECTL] + argv).decode("utf-8"))
+    return loads(check_output((KUBECTL,) + argv).decode("utf-8"))
 
 
 

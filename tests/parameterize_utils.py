@@ -148,12 +148,14 @@ class _ExistingDeploymentOperation(object):
         if swap:
             self.name = "swap"
             self.image = "openshift/hello-openshift"
+            self.replicas = 2
         else:
             self.name = "existing"
             self.image = "{}/telepresence-k8s:{}".format(
                 REGISTRY,
                 telepresence_version(),
             )
+            self.replicas = 1
 
 
     def inherits_deployment_environment(self):
