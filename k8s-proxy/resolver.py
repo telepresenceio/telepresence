@@ -58,6 +58,12 @@ class LocalResolver(object):
     This will run in the pod, and we can send it queries and see what a client
     application running in the pod would get if they ran `gethostbyname()` or
     the like. This is a superset of what a DNS query would return!
+
+    :ivar [(bytes,...)] suffix: Search suffixes we've detected the client
+        system adds and which we need to strip to discover the true query
+        name.  The elements of the list are names split into separate labels
+        (eg ``b"example.invalid"`` becomes ``(b"example", b"invalid")``).  The
+        list is maintained in order of longest suffixes to shortest suffixes.
     """
 
     def __init__(self, telepresence_nameserver, namespace):
