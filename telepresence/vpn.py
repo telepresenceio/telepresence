@@ -12,6 +12,11 @@ from telepresence.remote import RemoteInfo
 from telepresence.utilities import random_name
 from telepresence.runner import Runner
 
+# The number of DNS probes which must be issued during startup before the
+# sshuttle-proxied DNS system is considered properly "primed" with respect to
+# search domains.
+REQUIRED_HELLOTELEPRESENCE_DNS_PROBES = 10
+
 
 def covering_cidr(ips: List[str]) -> str:
     """
@@ -231,11 +236,15 @@ def connect_sshuttle(
         ])
 
     start = time()
+    probes = 0
     while time() - start < 20:
+        probes += 1
         try:
             get_hellotelepresence()
-            sleep(1)  # just in case there's more to startup
-            break
+            if probes >= REQUIRED_HELLOTELEPRESENCE_DNS_PROBES:
+                break
         except CalledProcessError:
             sleep(0.1)
+
+    sleep(1)  # just in case there's more to startup
     get_hellotelepresence()

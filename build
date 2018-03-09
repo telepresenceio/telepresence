@@ -177,6 +177,7 @@ def _test(registry, version, method, test_env, test_args):
         *test_args,
         "tests/test_run.py",
         "k8s-proxy/test_socks.py",
+        "k8s-proxy/test_forwarder.py",
         test_env=test_env,
     )
 
