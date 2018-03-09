@@ -8,6 +8,7 @@ from twisted.internet.threads import deferToThread
 
 DNSQueryResult = Union[defer.Deferred, Tuple[List[dns.RRHeader], List, List]]
 
+
 def insort(target_list, new_element, key):
     """
     Insert ``new_element`` into ``target_list`` while maintaining the sort
