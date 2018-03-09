@@ -3,6 +3,9 @@ End-to-end tests which launch Telepresence and verify user-facing
 behaviors.
 """
 
+from pprint import (
+    pformat,
+)
 from time import (
     time,
 )
@@ -352,26 +355,64 @@ def test_swapdeployment_restores_images(probe):
     # about whether things were swapped back.
     result = probe.ensure_dead()
 
+    deployment = get_deployment(result.deployment_ident)
+    images = {
+        container["image"]
+        for container
+        in deployment["spec"]["template"]["spec"]["containers"]
+    }
+    assert {probe.operation.image} == images
+
     start = time()
-    while time() < start + 60:
-        deployment = get_deployment(result.deployment_ident)
-        images = {
-            container["image"]
-            for container
-            in deployment["spec"]["template"]["spec"]["containers"]
-        }
-        if {probe.operation.image} == images:
+    while start > time() + 60:
+        pods = get_pods(result.deployment_ident)["items"]
+        image_and_phase = [
+            (pod["spec"]["containers"][0]["image"], pod["status"]["phase"])
+            for pod
+            in pods
+        ]
+        if all(
+            image.startswith(probe.operation.image)
+            for (image, phase)
+            in image_and_phase
+        ):
+            # Found the images we want, success.
             return
 
-    assert {probe.operation.image} == images
+    # Ran out of time.
+    selector = "telepresence-test={}".format(result.deployment_ident.name)
+    assert False, \
+        "Didn't switch back: \n\t{}\n{}".format(
+            image_and_phase,
+            pformat(kubectl(
+                "get", "-o", "json", "all", "--selector", selector,
+            )),
+        )
+
+
+
+def kubectl(*argv):
+    return loads(check_output([KUBECTL] + argv).decode("utf-8"))
 
 
 
 def get_deployment(ident):
-    return loads(check_output([
-        KUBECTL, "get",
+    return kubectl(
+        "get",
         "--namespace", ident.namespace,
         DEPLOYMENT_TYPE, ident.name,
         "-o", "json",
         "--export",
-    ]).decode("utf-8"))
+    )
+
+
+
+def get_pods(ident):
+    return kubectl(
+        "get",
+        "--namespace", ident.namespace,
+        "pod",
+        "--selector", "telepresence-test={}".format(ident.name),
+        "-o", "json",
+        "--export",
+    )
