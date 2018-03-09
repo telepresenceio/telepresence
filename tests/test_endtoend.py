@@ -3,6 +3,12 @@ End-to-end tests which launch Telepresence and verify user-facing
 behaviors.
 """
 
+from os import (
+    urandom,
+)
+from base64 import (
+    b64encode,
+)
 from json import (
     loads,
 )
@@ -21,6 +27,9 @@ from .parameterize_utils import (
     METHODS,
     OPERATIONS,
     Probe,
+)
+from .utils import (
+    query_from_cluster,
 )
 
 # Mark this as the `probe` fixture and declare that instances of it may be
@@ -283,6 +292,71 @@ def test_network_routing_also_proxy_ip_cidr(probe, origin_ip):
         probe.ALSO_PROXY_CIDR.host,
     )
     assert success and origin_ip != request_ip
+
+
+@with_probe
+def test_network_routing_from_cluster(probe):
+    """
+    The Kubernetes cluster can route traffic to the Telepresence execution
+    context.
+    """
+    if probe.operation.name == "new":
+        pytest.xfail("Issue 494")
+    http = probe.HTTP_SERVER_SAME_PORT
+    query_result = query_http_server(probe.result(), http)
+    assert query_result == http.value
+
+
+@with_probe
+def test_network_routing_from_cluster_local_port(probe):
+    """
+    The cluster can talk to a process running in a Docker container, with
+    the local process listening on a different port.
+    """
+    if probe.operation.name == "new":
+        pytest.xfail("Issue 494")
+    http = probe.HTTP_SERVER_DIFFERENT_PORT
+    query_result = query_http_server(probe.result(), http)
+    assert query_result == http.value
+
+
+@with_probe
+def test_network_routing_from_cluster_low_port(probe):
+    """
+    Communicate from the cluster to Telepresence, with port<1024.
+    """
+    if probe.operation.name == "existing":
+        pytest.xfail("Issue 496")
+    http = probe.HTTP_SERVER_LOW_PORT
+    query_result = query_http_server(probe.result(), http)
+    assert query_result == http.value
+
+
+def query_http_server(probe_result, http):
+    """
+    Request a resource from one of the HTTP servers begin run by the probe
+    process.
+
+    :param ProbeResult probe_result: A probe result we can use to help find
+        the desired HTTP server.
+
+    :param HTTPServer http: The particular HTTP server to which we want to
+        issue a request.
+
+    :return str: The response body.
+    """
+    ident = probe_result.deployment_ident
+    url = "http://{}.{}:{}/random_value".format(
+        ident.name,
+        ident.namespace,
+        http.remote_port,
+    )
+    return query_from_cluster(
+        url,
+        ident.namespace,
+        tries=10,
+        retries_on_empty=5,
+    )
 
 
 def httpbin_ip():

@@ -43,6 +43,8 @@
 * [Development info](reference/developing.md)
 * [Community](reference/community.md)
 * [Related Projects](reference/related-projects.md)
+* [Case Studies](https://www.telepresence.io/case-studies)
+
 
 ## Need Help?
 

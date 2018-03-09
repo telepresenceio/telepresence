@@ -120,7 +120,7 @@ class handle_unexpected_errors(object):
 
 
 @handle_unexpected_errors("-")
-def parse_args() -> argparse.Namespace:
+def parse_args(args=None) -> argparse.Namespace:
     """Create a new ArgumentParser and parse sys.argv."""
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -274,7 +274,7 @@ def parse_args() -> argparse.Namespace:
             "Requires --method container."
         )
     )
-    args = parser.parse_args()
+    args = parser.parse_args(args)
 
     # Fill in defaults:
     if args.method is None:

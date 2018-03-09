@@ -1,0 +1,120 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Verloop Case Study - Telepresence</title>
+    <meta name="description" content="Telepresence: a local development environment for a remote Kubernetes cluster">
+    <meta name="keywords" content="Telepresence, Kubernetes, microservices">
+    <meta name="author" content="Datawire.io">
+
+    <link rel="shortcut icon" href="/favicon.ico">
+
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,900"
+          type="text/css" media="all" />
+    <link rel="stylesheet" href="/styles/home.css">
+
+    <!--[if lte IE 8]>
+    <script charset="utf-8" type="text/javascript" src="https://js.hsforms.net/forms/v2-legacy.js"></script>
+    <![endif]-->
+    <script charset="utf-8" type="text/javascript" src="https://js.hsforms.net/forms/v2.js"></script>
+
+    <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start': new Date().getTime(),event:'gtm.js'});
+        var f=d.getElementsByTagName(s)[0], j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
+        j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-KMVFH7G');</script>
+    <!-- End Google Tag Manager -->
+
+</head>
+<body>
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KMVFH7G"
+                  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+
+<header class="white-bg">
+    <a class="datawire-link" target="_blank" href="https://www.datawire.io">
+        <img alt="Datawire" src="/images/datawire-logo.svg">
+    </a>
+    <ul class="main-navigation">
+        <li>
+            <a href="/">Home</a>
+        </li>
+        <li>
+            <a href="/tutorials/docker">Get Started</a>
+        </li>
+        <li>
+            <a href="/discussion/overview">Docs</a>
+        </li>
+        <li>
+            <a href="/case-studies">Case Studies</a>
+        </li>
+        <li>
+            <a target="_blank" href="https://github.com/datawire/telepresence">GitHub</a>
+        </li>
+        <li>
+            <a target="_blank" href="https://gitter.im/datawire/telepresence">Need Help?</a>
+        </li>
+    </ul>
+</header>
+<section id="case-study" class="bg-white">
+
+    <div class="container">
+        <h1 class="title">Verloop: Going from 4.5 minute to 0 second build times</h1>
+
+        <h2>Can you tell us about yourself and what your company does?</h2>
+
+        <p>I am Piyush Mishra, Factotum at <a href="https://verloop.io">https://verloop.io</a>. Verloop is a conversational marketing platform, which is a fancy way of saying that we are a SaaS platform to run livechat with chatbots as a first class citizen.</p>
+
+        <h2>What was your pre-Telepresence development experience?</h2>
+
+        <p>Before we switched to Telepresence, we used to use kube-openvpn to forward network from our staging to local and manage environment variables separately with shell scripts. We didn’t need to forward the filesystem, so we never did that. Maintaining environment variables was a pain. Forwarding traffic from local to the pod was also a pain, requiring a lot of set up and configuration.</p>
+
+        <h2>What is your workflow with Telepresence?</h2>
+
+        <p>We have multiple services, in multiple repositories. Our engineers code locally with Telepresence. Then they check in the code into the correct source repository. Once the code is checked into the source repository, it is deployed into a staging environment, where it is tested before being deployed into production.</p>
+
+        <h2>Why did you choose Telepresence?</h2>
+
+        <p>We were going to roll our own internal software to do pretty much what Telepresence does. We asked for similar solutions on the Kubernetes Slack channel and looked up on Google. I landed on your website and knew this was exactly what I wanted.</p>
+
+        <h2>What benefits have you seen since adopting Telepresence?</h2>
+
+        <p>0 wait on build times has been the biggest gain. We have builds from that take as long as 4.5 minutes. With kube-openvpn, it was possible to avoid building every single time, but it was cumbersome and time consuming to set up forwarding from our local to cluster. All of our wait times went to 0 the day we switched to Telepresence.</p>
+
+        <div class="text-center">
+            <a href="/#get-started" class="btn btn-black">Get Started</a>
+        </div>
+    </div>
+
+</section>
+<footer class="white-bg">
+    <ul class="main-navigation flex-center">
+        <li>
+            <a href="/">Home</a>
+        </li>
+        <li>
+            <a href="/tutorials/kubernetes">Get Started</a>
+        </li>
+        <li>
+            <a href="/discussion/overview">Docs</a>
+        </li>
+        <li>
+            <a href="/case-studies">Case Studies</a>
+        </li>
+        <li>
+            <a target="_blank" href="https://github.com/datawire/telepresence">GitHub</a>
+        </li>
+        <li>
+            <a target="_blank" href="https://gitter.im/datawire/telepresence">Need Help?</a>
+        </li>
+    </ul>
+</footer>
+<script async defer src="https://buttons.github.io/buttons.js"></script>
+<script src="/js/jquery-3.2.1.min.js"></script>
+</body>
+</html>

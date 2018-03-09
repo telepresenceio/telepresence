@@ -136,6 +136,7 @@ def run_script_test(telepresence_args, local_command):
 def assert_fromcluster(namespace, service_name, port, telepresence_process):
     """Assert that there's a webserver accessible from the cluster."""
     url = "http://{}:{}/__init__.py".format(service_name, port)
+    print("assert_fromcluster(url={})".format(url))
     expected = (DIRECTORY / "__init__.py").read_bytes()
     for i in range(30):
         result = query_in_k8s(namespace, url, telepresence_process)
@@ -152,49 +153,6 @@ class NativeEndToEndTests(TestCase):
     """
     End-to-end tests on the native machine.
     """
-
-    @skipIf(TELEPRESENCE_METHOD != "vpn-tcp", "this uses vpn-tcp.")
-    def test_run_directly_implicit_method(self):
-        """--method is optional."""
-        webserver_name = run_webserver()
-        p = Popen(
-            args=[
-                "telepresence",
-                "--new-deployment",
-                random_name(),
-                "--logfile",
-                "-",
-                "--run",
-                "python3",
-                "tocluster.py",
-                webserver_name,
-                current_namespace(),
-            ],
-            cwd=str(DIRECTORY),
-        )
-        exit_code = p.wait()
-        assert exit_code == 113
-
-    def test_run_directly_implicit_deployment(self):
-        """--*deployment is optional."""
-        webserver_name = run_webserver()
-        p = Popen(
-            args=[
-                "telepresence",
-                "--method",
-                TELEPRESENCE_METHOD,
-                "--logfile",
-                "-",
-                "--run",
-                "python3",
-                "tocluster.py",
-                webserver_name,
-                current_namespace(),
-            ],
-            cwd=str(DIRECTORY),
-        )
-        exit_code = p.wait()
-        assert exit_code == 113
 
     @skipIf(OPENSHIFT, "OpenShift Online doesn't do namespaces")
     def create_namespace(self):
@@ -252,97 +210,6 @@ class NativeEndToEndTests(TestCase):
             p.stdin.close()
             p.terminate()
             p.wait()
-
-    def test_fromcluster(self):
-        """
-        Communicate from the cluster to Telepresence, with default namespace.
-        """
-        service_name = random_name()
-        self.fromcluster(
-            ["--new-deployment", service_name],
-            service_name,
-            current_namespace(),
-            12370,
-        )
-
-    def test_fromcluster_custom_local_port(self):
-        """
-        The cluster can talk to a process running in a Docker container, with
-        the local process listening on a different port.
-        """
-        service_name = random_name()
-        remote_port = 12360
-        local_port = 12355
-        p = Popen(
-            args=[
-                "telepresence", "--new-deployment", service_name, "--expose",
-                "{}:{}".format(local_port, remote_port), "--logfile", "-",
-                "--method", TELEPRESENCE_METHOD, "--run", "python3", "-m",
-                "http.server", str(local_port)
-            ],
-            cwd=str(DIRECTORY),
-        )
-        assert_fromcluster(current_namespace(), service_name, remote_port, p)
-        p.terminate()
-        p.wait()
-
-    def test_fromcluster_with_namespace(self):
-        """
-        Communicate from the cluster to Telepresence, with custom namespace.
-        """
-        namespace = self.create_namespace()
-        service_name = random_name()
-        self.fromcluster(
-            ["--new-deployment", service_name, "--namespace", namespace],
-            "{}.{}.svc.cluster.local".format(service_name, namespace),
-            namespace,
-            12347,
-        )
-
-    @skipIf(OPENSHIFT, "OpenShift never allows running containers as root.")
-    def test_fromcluster_port_lt_1024(self):
-        """
-        Communicate from the cluster to Telepresence, with port<1024.
-        """
-        service_name = random_name()
-        self.fromcluster(
-            ["--new-deployment", service_name],
-            service_name,
-            current_namespace(),
-            12399,
-            70,
-        )
-
-    @skipIf(OPENSHIFT, "OpenShift never allows running containers as root.")
-    def test_swapdeployment_fromcluster_port_lt_1024(self):
-        """
-        Communicate from the cluster to Telepresence, with port<1024, using
-        swap-deployment because omg it's a different code path. Yay.
-        """
-        # Create a non-Telepresence deployment:
-        service_name = random_name()
-        check_call([
-            KUBECTL,
-            "run",
-            service_name,
-            "--port=79",
-            "--expose",
-            "--restart=Always",
-            "--image=openshift/hello-openshift",
-            "--replicas=2",
-            "--labels=telepresence-test=" + service_name,
-            "--env=HELLO=there",
-        ])
-        self.addCleanup(
-            check_call, [KUBECTL, "delete", DEPLOYMENT_TYPE, service_name]
-        )
-        self.fromcluster(
-            ["--swap-deployment", service_name],
-            service_name,
-            current_namespace(),
-            12398,
-            79,
-        )
 
     def test_disconnect(self):
         """Telepresence exits if the connection is lost."""
@@ -567,66 +434,3 @@ class NativeEndToEndTests(TestCase):
         assert_fromcluster(current_namespace(), service_name, port, p)
         p.terminate()
         p.wait()
-
-
-@skipUnless(TELEPRESENCE_METHOD == "container", "requires Docker")
-class DockerEndToEndTests(TestCase):
-    """End-to-end tests on Docker."""
-
-    def get_containers(self):
-        return set(check_output(["docker", "ps", "-q"]).split())
-
-    def setUp(self):
-        self.containers = self.get_containers()
-
-    def tearDown(self):
-        # Ensure no container leaks
-        time.sleep(1)
-        assert self.containers == self.get_containers()
-
-    def test_fromcluster(self):
-        """
-        The cluster can talk to a process running in a Docker container.
-        """
-        service_name = random_name()
-        port = 12350
-        p = Popen(
-            args=[
-                "telepresence", "--new-deployment", service_name, "--expose",
-                str(port), "--logfile", "-", "--method", "container",
-                "--docker-run", "-v", "{}:/host".format(DIRECTORY),
-                "--workdir", "/host", "python:3-alpine", "python3", "-m",
-                "http.server", str(port)
-            ],
-        )
-
-        assert_fromcluster(current_namespace(), service_name, port, p)
-        p.terminate()
-        p.wait()
-
-    def test_fromcluster_custom_local_port(self):
-        """
-        The cluster can talk to a process running in a Docker container, with
-        the local process listening on a different port.
-        """
-        service_name = random_name()
-        remote_port = 12350
-        local_port = 7777
-        p = Popen(
-            args=[
-                "telepresence", "--new-deployment",
-                service_name, "--expose", "{}:{}".format(
-                    local_port, remote_port
-                ), "--logfile", "-", "--method", "container", "--docker-run",
-                "-v", "{}:/host".format(DIRECTORY), "--workdir", "/host",
-                "python:3-alpine", "python3", "-m", "http.server",
-                str(local_port)
-            ],
-        )
-        try:
-            assert_fromcluster(
-                current_namespace(), service_name, remote_port, p
-            )
-        finally:
-            p.terminate()
-            p.wait()

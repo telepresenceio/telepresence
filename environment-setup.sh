@@ -19,7 +19,9 @@ case "${OS}" in
     osx)
         brew update > /dev/null
         brew cask install osxfuse
-        brew install python3 sshfs
+        brew install sshfs
+        brew install python3 || brew upgrade python
+        pip3 install virtualenv
         ;;
 
     linux)
@@ -35,7 +37,7 @@ esac
 
 # Record some debugging info:
 python --version
-python2 --version
+python2 --version || true
 python3 --version
 ruby --version || true
 docker version || true

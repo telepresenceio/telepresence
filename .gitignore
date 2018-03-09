@@ -4,6 +4,7 @@ virtualenv/
 __pycache__
 telepresence.log
 .mypy_cache
+.pytest_cache
 *.pyc
 .hypothesis
 *.egg-info
