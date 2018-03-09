@@ -20,10 +20,79 @@ REVISION = str(check_output(["git", "rev-parse", "--short", "HEAD"]),
 START_TIME = time.time()
 OPENSHIFT = os.environ.get('TELEPRESENCE_OPENSHIFT')
 
+EXISTING_DEPLOYMENT = """\
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {name}
+  namespace: {namespace}
+data:
+  EXAMPLE_ENVFROM: foobar
+  EX_MULTI_LINE: |
+    first line (no newline before, newline after)
+    second line (newline before and after)
+---
+%s
+metadata:
+  name: {name}
+  namespace: {namespace}
+spec:
+  replicas: {replicas}
+  template:
+    metadata:
+      labels:
+        name: {name}
+        hello: monkeys  # <-- used by volumes test
+    spec:
+      containers:
+      # Extra container at start to demonstrate we can handle multiple
+      # containers
+      - name: getintheway
+        image: openshift/hello-openshift
+        resources:
+          limits:
+            cpu: "100m"
+            memory: "150Mi"
+      - name: {container_name}
+        image: {image}
+        envFrom:
+        - configMapRef:
+            name: {name}
+        env:
+        - name: MYENV
+          value: hello
+        volumeMounts:
+        - name: podinfo
+          mountPath: /podinfo
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "150Mi"
+          limits:
+            cpu: "100m"
+            memory: "150Mi"
+      volumes:
+      - name: podinfo
+        downwardAPI:
+          items:
+            - path: "labels"
+              fieldRef:
+                fieldPath: metadata.labels
+"""
+
 if OPENSHIFT:
     KUBECTL = "oc"
+    EXISTING_DEPLOYMENT = EXISTING_DEPLOYMENT % ("""\
+apiVersion: v1
+kind: DeploymentConfig""",)
+    DEPLOYMENT_TYPE = "deploymentconfig"
 else:
     KUBECTL = "kubectl"
+    EXISTING_DEPLOYMENT = EXISTING_DEPLOYMENT % ("""\
+apiVersion: extensions/v1beta1
+kind: Deployment""",)
+    DEPLOYMENT_TYPE = "deployment"
 
 
 def random_name(suffix=""):

@@ -147,8 +147,13 @@ class _ExistingDeploymentOperation(object):
         self.swap = swap
         if swap:
             self.name = "swap"
+            self.image = "openshift/hello-openshift"
         else:
             self.name = "existing"
+            self.image = "{}/telepresence-k8s:{}".format(
+                REGISTRY,
+                telepresence_version(),
+            )
 
 
     def inherits_deployment_environment(self):
@@ -156,14 +161,7 @@ class _ExistingDeploymentOperation(object):
 
 
     def prepare_deployment(self, deployment_ident, environ):
-        if self.swap:
-            image = "openshift/hello-openshift"
-        else:
-            image = "{}/telepresence-k8s:{}".format(
-                REGISTRY,
-                telepresence_version(),
-            )
-        create_deployment(deployment_ident, image, environ, replicas=1)
+        create_deployment(deployment_ident, self.image, environ, replicas=1)
 
 
     def cleanup_deployment(self, deployment_ident):
@@ -174,8 +172,8 @@ class _ExistingDeploymentOperation(object):
         create_service(deployment_ident, ports)
 
 
-    def cleanup_service(self, deployment_ident, ports):
-        cleanup_service(deployment_ident, ports)
+    def cleanup_service(self, deployment_ident):
+        cleanup_service(deployment_ident)
 
 
     def telepresence_args(self, deployment_ident):
@@ -209,7 +207,7 @@ class _NewDeploymentOperation(object):
         pass
 
 
-    def cleanup_service(self, deployment_ident, ports):
+    def cleanup_service(self, deployment_ident):
         pass
 
 
@@ -313,12 +311,12 @@ def create_service(deployment_ident, ports):
     service = dumps(service_obj)
     check_output([KUBECTL, "create", "-f", "-"], input=service.encode("utf-8"))
 
-def cleanup_service(deployment_ident, ports):
-    if not ports:
-        return
+
+def cleanup_service(deployment_ident):
     check_call([
         KUBECTL, "delete",
         "--namespace", deployment_ident.namespace,
+        "--ignore-not-found",
         "service", deployment_ident.name
     ])
 
@@ -444,7 +442,6 @@ def run_telepresence_probe(
         name=random_name("test"),
     )
     create_namespace(deployment_ident.namespace, deployment_ident.name)
-    request.addfinalizer(lambda: cleanup_namespace(deployment_ident.namespace))
 
     # TODO: Factor run_webserver into a fixture that Probe can manage so that
     # run_telepresence_probe can just focus on running telepresence.
@@ -456,11 +453,9 @@ def run_telepresence_probe(
 
     operation.prepare_deployment(deployment_ident, desired_environment)
     print("Prepared deployment {}/{}".format(deployment_ident.namespace, deployment_ident.name))
-    request.addfinalizer(lambda: operation.cleanup_deployment(deployment_ident))
 
     service_ports = [http.remote_port for http in http_servers]
     operation.prepare_service(deployment_ident, service_ports)
-    request.addfinalizer(lambda: operation.cleanup_service(deployment_ident, service_ports))
 
     probe_args = []
     for url in probe_urls:
@@ -782,7 +777,8 @@ class Probe(object):
                 also_proxy,
                 http_servers
             )
-            self._cleanup.append(lambda: _cleanup_process(self._result.telepresence))
+            self._cleanup.append(self.ensure_dead)
+            self._cleanup.append(self.cleanup_resources)
         return self._result
 
 
@@ -792,10 +788,28 @@ class Probe(object):
             cleanup()
 
 
+    def ensure_dead(self):
+        if self._result is None:
+            raise Exception("Probe never launched")
+
+        _cleanup_process(self._result.telepresence)
+        return self._result
+
+
+    def cleanup_resources(self):
+        if self._result is None:
+            raise Exception("Probe never launched")
+
+        self.operation.cleanup_deployment(self._result.deployment_ident)
+        self.operation.cleanup_service(self._result.deployment_ident)
+        cleanup_namespace(self._result.deployment_ident.namespace)
+
+
 
 def _cleanup_process(process):
-    print("Terminating {}".format(process.pid))
-    process.terminate()
-    print("Waiting on {}".format(process.pid))
-    process.wait()
-    print("Cleaned up {}".format(process.pid))
+    if process.returncode is None:
+        print("Terminating {}".format(process.pid))
+        process.terminate()
+        print("Waiting on {}".format(process.pid))
+        process.wait()
+        print("Cleaned up {}".format(process.pid))

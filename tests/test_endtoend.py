@@ -3,11 +3,8 @@ End-to-end tests which launch Telepresence and verify user-facing
 behaviors.
 """
 
-from os import (
-    urandom,
-)
-from base64 import (
-    b64encode,
+from time import (
+    time,
 )
 from json import (
     loads,
@@ -15,55 +12,24 @@ from json import (
 from urllib.request import (
     urlopen,
 )
-from itertools import (
-    product,
-)
 from ipaddress import (
     IPv4Address,
 )
+from subprocess import (
+    check_output,
+)
+
 import pytest
 
-from .parameterize_utils import (
-    METHODS,
-    OPERATIONS,
-    Probe,
+from .conftest import (
+    with_probe,
+    after_probe,
 )
 from .utils import (
+    KUBECTL,
+    DEPLOYMENT_TYPE,
     query_from_cluster,
 )
-
-# Mark this as the `probe` fixture and declare that instances of it may be
-# shared by any tests within the same module.
-@pytest.fixture(scope="module")
-def probe(request):
-    method, operation = request.param
-    reason = method.unsupported()
-    if reason is None:
-        probe = Probe(request, method, operation)
-        yield probe
-        probe.cleanup()
-    else:
-        pytest.skip(reason)
-
-
-with_probe = pytest.mark.parametrize(
-    # Parameterize the probe parameter to decorated methods
-    "probe",
-
-    # The parameters are the elements of the cartesian product of methods,
-    # operations.
-    list(product(METHODS, OPERATIONS)),
-
-    # Use the `name` of methods and operations to generate readable
-    # parameterized test names.
-    ids=lambda param: "{},{}".format(param[0].name, param[1].name),
-
-    # Pass the parameters through the probe fixture to get the object that's
-    # really passed to the decorated function.
-    indirect=True,
-)
-
-
 
 @pytest.fixture(scope="session")
 def origin_ip():
@@ -369,3 +335,43 @@ def probe_also_proxy(probe_result, hostname):
     probe_result.write("probe-also-proxy {}".format(hostname))
     success, request_ip = loads(probe_result.read())
     return success, IPv4Address(request_ip)
+
+
+@after_probe
+def test_swapdeployment_restores_images(probe):
+    """
+    After a Telepresence session with ``--swap-deployment`` exits, the image
+    specified by the original deployment has been restored to the Kubernetes
+    Deployment resource.
+    """
+    if probe.operation.name != "swap":
+        pytest.skip("Test only applies to --swap-deployment usage.")
+
+    # Telepresence won't try to swap anything back until it believes its job
+    # is done.  So make sure its job is done before we make any assertions
+    # about whether things were swapped back.
+    result = probe.ensure_dead()
+
+    start = time()
+    while time() < start + 60:
+        deployment = get_deployment(result.deployment_ident)
+        images = {
+            container["image"]
+            for container
+            in deployment["spec"]["template"]["spec"]["containers"]
+        }
+        if {probe.operation.image} == images:
+            return
+
+    assert {probe.operation.image} == images
+
+
+
+def get_deployment(ident):
+    return loads(check_output([
+        KUBECTL, "get",
+        "--namespace", ident.namespace,
+        DEPLOYMENT_TYPE, ident.name,
+        "-o", "json",
+        "--export",
+    ]).decode("utf-8"))
