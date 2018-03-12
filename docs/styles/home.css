@@ -669,3 +669,76 @@ footer {
     line-height: 26px;
     padding-bottom: 25px;
 }
+
+
+.case-studies {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    margin: -75px 0 0;
+    position: relative;
+}
+
+.case-study {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    flex: 1;
+    margin: 5px;
+    background: white;
+    box-shadow: 0 5px 6px 0 rgba(0,0,0,0.15);
+    padding: 50px 20px;
+    border: 1px solid #eee;
+}
+.case-study:hover {
+    text-decoration: none;
+}
+
+.case-study > div {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    margin-bottom: 35px;
+}
+
+.case-study > div img{
+    max-width: 60%;
+}
+
+.case-study > div > p {
+    font-size: 28px;
+    line-height: 42px;
+    text-align: center;
+    color: #222;
+}
+
+.case-study-btn {
+    border-radius: 24px;
+    padding: 10px 10px;
+    color: #222222;
+    font-size: 14px;
+    font-weight: bold;
+    display: inline-block;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    width: auto;
+    border: 2px solid #222222;
+    text-align: center;
+}
+
+.case-study-btn:hover {
+    color: white;
+    background: #222222;
+}
+
+.page-title {
+    padding: 75px 0 150px;
+    position: relative;
+}
+
+.page-title h1 {
+    font-size: 42px;
+    line-height: 55px;
+}
