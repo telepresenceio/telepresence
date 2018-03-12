@@ -163,7 +163,7 @@ class _ExistingDeploymentOperation(object):
 
 
     def prepare_deployment(self, deployment_ident, environ):
-        create_deployment(deployment_ident, self.image, environ, replicas=1)
+        create_deployment(deployment_ident, self.image, environ, replicas=self.replicas)
 
 
     def cleanup_deployment(self, deployment_ident):
