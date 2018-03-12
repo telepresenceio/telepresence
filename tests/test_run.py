@@ -201,26 +201,6 @@ class NativeEndToEndTests(TestCase):
 
     # XXX Test existing deployment w/ default namespace
 
-    def test_swapdeployment(self):
-        """
-        --swap-deployment swaps out Telepresence pod and then swaps it back on
-        exit, when original pod was created with `kubectl run` or `oc run`.
-        """
-        # Create a non-Telepresence deployment:
-        name = random_name()
-        check_call([
-            KUBECTL,
-            "run",
-            name,
-            "--restart=Always",
-            "--image=openshift/hello-openshift",
-            "--replicas=2",
-            "--labels=telepresence-test=" + name,
-            "--env=HELLO=there",
-        ])
-        self.addCleanup(check_call, [KUBECTL, "delete", DEPLOYMENT_TYPE, name])
-        self.assert_swapdeployment(name, 2, "telepresence-test=" + name)
-
     def test_swapdeployment_swap_args(self):
         """
         --swap-deployment swaps out Telepresence pod and overrides the entrypoint.
@@ -285,44 +265,6 @@ class NativeEndToEndTests(TestCase):
                 ]), "utf-8"
             )
         )
-        # We swapped back:
-        assert deployment["spec"]["replicas"] == replicas
-
-        # Ensure pods swap back too:
-        start = time.time()
-        while True:
-            pods = json.loads(
-                str(
-                    check_output([
-                        KUBECTL, "get", "pod", "--selector=" + selector, "-o",
-                        "json", "--export"
-                    ]), "utf-8"
-                )
-            )["items"]
-            image_and_phase = list(
-                (pod["spec"]["containers"][0]["image"],
-                 pod["status"]["phase"])
-                for pod
-                in pods
-            )
-            if all(
-                    image.startswith("openshift/hello-openshift")
-                    for (image, phase)
-                    in image_and_phase
-            ):
-                print("Found openshift!")
-                return
-            time.sleep(1)
-
-            if time.time() - start > 60:
-                assert False, \
-                    "Didn't switch back to openshift: \n\t{}\n{}".format(
-                        image_and_phase,
-                        pformat(json.loads(check_output([
-                            KUBECTL, "get", "-o", "json", "all",
-                            "--selector", selector,
-                        ]))),
-                    )
 
     def test_swapdeployment_auto_expose(self):
         """
