@@ -21,7 +21,7 @@ def main():
     version = book["variables"]["version"]
 
     # Run GitBook
-    shutil.rmtree(docs / "node_modules")
+    shutil.rmtree(docs / "node_modules", ignore_errors=True)
     run = lambda command: subprocess.run(command, check=True, cwd=docs)
     run(["npm", "install"])
     run(["npm", "run", "build"])
