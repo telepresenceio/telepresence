@@ -320,6 +320,7 @@ def test_network_routing_from_cluster_auto_expose_same(probe):
 
 
 @with_probe
+@pytest.mark.xfail
 def test_network_routing_from_cluster_auto_expose_diff(probe):
     """
     Like ``test_network_routing_from_cluster_auto_expose_same`` but for the
@@ -327,8 +328,6 @@ def test_network_routing_from_cluster_auto_expose_diff(probe):
     """
     if probe.operation.name != "swap":
         pytest.skip("Test only applies to --swap-deployment usage.")
-
-    pytest.skip("Issue 505")
 
     result = probe.result()
     http = probe.operation.http_server_auto_expose_diff
