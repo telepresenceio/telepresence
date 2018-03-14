@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Create Ubuntu and Fedora packages in out/.
+Create Ubuntu and Fedora packages in dist.
 
 Usage:
 create-linux-packages.py <release-version>
@@ -11,9 +11,11 @@ from shutil import rmtree
 from subprocess import run
 from pathlib import Path
 
-import distros
+from distros import distros
 
-THIS_DIRECTORY = Path(__file__).absolute().parent
+THIS_DIRECTORY = Path(__file__).absolute().resolve().parent
+DIST = THIS_DIRECTORY.parent / "dist"
+
 
 def show_banner(text, char="=", width=79):
     """
@@ -37,8 +39,8 @@ def build_package(builder_image, package_type, version, out_dir, dependencies):
         on.
     """
     run([
-        "docker", "run", "--rm", "-e", "PACKAGE_VERSION=" + version,
-        "-e", "PACKAGE_TYPE=" + package_type, "-v",
+        "docker", "run", "--rm", "-e", "PACKAGE_VERSION=" + version, "-e",
+        "PACKAGE_TYPE=" + package_type, "-v",
         "{}:/build-inside:ro".format(THIS_DIRECTORY), "-v",
         "{}:/source:ro".format(THIS_DIRECTORY.parent), "-v",
         str(out_dir) + ":/out", "-w", "/build-inside", builder_image,
@@ -54,57 +56,63 @@ def test_package(distro_image, package_directory, install_command):
     :param distro_image str: The Docker image to use to test the package.
     :param package_directory Path: local directory where the package can be
         found.
-    :param install_command str: "deb" or "rpm".
+    :param install_command str: commands to install packages in /packages
     """
-    if install_command == "deb":
-        install = (
-            "apt-get -qq update && "
-            "dpkg --unpack --recursive /packages > /dev/null && "
-            "apt-get -qq -f install > /dev/null"
-        )
-    elif install_command == "rpm":
-        install = "dnf -qy install /packages/*.rpm"
+    command = """
+        set -e
+        {}
+        telepresence --version
+        stamp-telepresence --version
+        sshuttle-telepresence --version
+    """.format(install_command)
     run([
-        "docker", "run", "--rm", "-v",
-        "{}:/packages:ro".format(package_directory), distro_image, "sh", "-c",
-        install + " && telepresence --version " +
-        "&& stamp-telepresence --version " +
-        "&& sshuttle-telepresence --version"
+        "docker", "run", "--rm",
+        "-v={}:/packages:ro".format(package_directory), distro_image, "sh",
+        "-c", command
     ],
-        check=True)
+        check = True)
+
+
+def get_upload_commands(system, release, package):
+    """Returns the required package_cloud commands to upload this package"""
+    repos = ["datawireio/stable", "datawire/telepresence"]
+    res = []
+    for repo in repos:
+        res.append(
+            "package_cloud push {}/{}/{} {}".format(
+                repo, system, release, package
+            )
+        )
+    return res
 
 
 def main(version):
-    out = THIS_DIRECTORY / "out"
-    if out.exists():
-        rmtree(str(out))
-    out.mkdir()
-    for ubuntu_distro in distros.ubuntu:
-        show_banner("Build Ubuntu " + ubuntu_distro)
-        distro_out = out / ubuntu_distro
-        distro_out.mkdir()
-        image = "alanfranz/fpm-within-docker:ubuntu-{}".format(ubuntu_distro)
-        build_package(
-            image, "deb", version, distro_out, [
-                "torsocks", "python3", "openssh-client", "sshfs", "socat",
-                "conntrack"
-            ]
-        )
-        show_banner("Test Ubuntu " + ubuntu_distro)
-        test_package("ubuntu:" + ubuntu_distro, distro_out, "deb")
-    for fedora_distro in distros.fedora:
-        show_banner("Build Fedora " + fedora_distro)
-        distro_out = out / ("fedora-" + fedora_distro)
-        distro_out.mkdir()
-        build_package(
-            "alanfranz/fpm-within-docker:fedora-{}".format(fedora_distro), "rpm",
-            version, distro_out, [
-                "python3", "torsocks", "openssh-clients", "sshfs", "socat",
-                "conntrack-tools"
-            ]
-        )
-        show_banner("Test Fedora " + fedora_distro)
-        test_package("fedora:" + fedora_distro, distro_out, "rpm")
+    """Create Linux packages"""
+    uploads = []
+    for system, release, package_type, dependencies, install_command in distros:
+        name = "{}-{}".format(system, release)
+        distro_out = DIST / name
+        if distro_out.exists():
+            rmtree(str(distro_out))
+        distro_out.mkdir(parents=True)
+
+        show_banner("Build {}".format(name))
+        image = "alanfranz/fpm-within-docker:{}".format(name)
+        build_package(image, package_type, version, distro_out, dependencies)
+
+        show_banner("Test {}".format(name))
+        image = "{}:{}".format(system, release)
+        test_package(image, distro_out, install_command)
+
+        package = next(distro_out.glob("*"))
+        uploads.extend(get_upload_commands(system, release, package))
+
+    upload_script = DIST / "upload_linux_packages.sh"
+    with upload_script.open("w") as f:
+        f.write("/bin/sh\n\n")
+        f.write("set -e\n\n")
+        f.write("\n".join(uploads))
+        f.write("\n")
 
 
 if __name__ == '__main__':
