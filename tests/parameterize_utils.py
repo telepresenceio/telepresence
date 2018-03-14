@@ -820,6 +820,13 @@ class Probe(object):
 
 
     def ensure_dead(self):
+        """
+        Make sure the Telepresence process launched by this Probe is no longer
+        running.
+
+        :raise Exception: If no Telepresence process was ever launched by this
+            Probe in the first.
+        """
         if self._result is None:
             raise Exception("Probe never launched")
 
@@ -828,6 +835,12 @@ class Probe(object):
 
 
     def cleanup_resources(self):
+        """
+        Delete Kubernetes resources related to this Probe.
+
+        :raise Exception: If no Telepresence process was ever launched by this
+            Probe in the first place.
+        """
         if self._result is None:
             raise Exception("Probe never launched")
 
@@ -838,6 +851,11 @@ class Probe(object):
 
 
 def _cleanup_process(process):
+    """
+    Terminate and wait on the given process, if it still exists.
+
+    Do nothing if it has already been waited on.
+    """
     if process.returncode is None:
         print("Terminating {}".format(process.pid))
         process.terminate()
