@@ -105,14 +105,17 @@ def main(version):
         test_package(image, distro_out, install_command)
 
         package = next(distro_out.glob("*"))
-        uploads.extend(get_upload_commands(system, release, package))
+        rel_package = package.relative_to(DIST)
+        uploads.extend(get_upload_commands(system, release, rel_package))
 
     upload_script = DIST / "upload_linux_packages.sh"
     with upload_script.open("w") as f:
         f.write("/bin/sh\n\n")
         f.write("set -e\n\n")
+        f.write('cd "$(dirname "$0")"\n')
         f.write("\n".join(uploads))
         f.write("\n")
+    upload_script.chmod(0o775)
 
 
 if __name__ == '__main__':
