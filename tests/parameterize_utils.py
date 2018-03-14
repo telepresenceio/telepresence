@@ -149,6 +149,11 @@ class _ExistingDeploymentOperation(object):
             self.name = "swap"
             self.image = "openshift/hello-openshift"
             self.replicas = 2
+            # An argument list to use to override the default command of the
+            # container.  This allows the swap-deployment tests to verify that a
+            # command is restored after Telepresence swaps the original deployment
+            # back in.
+            self.container_args = ["/hello-openshift"]
         else:
             self.name = "existing"
             self.image = "{}/telepresence-k8s:{}".format(
@@ -156,6 +161,7 @@ class _ExistingDeploymentOperation(object):
                 telepresence_version(),
             )
             self.replicas = 1
+            self.container_args = None
 
 
     def inherits_deployment_environment(self):
@@ -163,7 +169,13 @@ class _ExistingDeploymentOperation(object):
 
 
     def prepare_deployment(self, deployment_ident, environ):
-        create_deployment(deployment_ident, self.image, environ, replicas=self.replicas)
+        create_deployment(
+            deployment_ident,
+            self.image,
+            self.container_args,
+            environ,
+            replicas=self.replicas,
+        )
 
 
     def cleanup_deployment(self, deployment_ident):
@@ -221,7 +233,7 @@ class _NewDeploymentOperation(object):
 
 
 
-def create_deployment(deployment_ident, image, environ, replicas):
+def create_deployment(deployment_ident, image, args, environ, replicas):
     """
     Create a ``Deployment`` in the current context.
 
@@ -231,6 +243,9 @@ def create_deployment(deployment_ident, image, environ, replicas):
     :param str image: The Docker image to put in the Deployment's pod
         template.
 
+    :param list[str] args: An argument list to specify as the command for the
+        image.  Or ``None`` to use the image default.
+
     :param dict[str, str] environ: The environment to put in the Deployment's
         pod template.
 
@@ -239,6 +254,22 @@ def create_deployment(deployment_ident, image, environ, replicas):
 
     :raise CalledProcessError: If the *kubectl* command returns an error code.
     """
+    container = {
+        "name": "hello",
+        "image": image,
+        "env": list(
+            {"name": k, "value": v}
+            for (k, v)
+            in environ.items()
+        ),
+        "volumeMounts": [{
+            "name": "podinfo",
+            "mountPath": "/podinfo",
+        }],
+    }
+    if args is not None:
+        container["args"] = args
+
     deployment = dumps({
         "kind": "Deployment",
         "apiVersion": "extensions/v1beta1",
@@ -266,19 +297,7 @@ def create_deployment(deployment_ident, image, environ, replicas):
                             }],
                         },
                     }],
-                    "containers": [{
-                        "name": "hello",
-                        "image": image,
-                        "env": list(
-                            {"name": k, "value": v}
-                            for (k, v)
-                            in environ.items()
-                        ),
-                        "volumeMounts": [{
-                            "name": "podinfo",
-                            "mountPath": "/podinfo",
-                        }],
-                    }],
+                    "containers": [container],
                 },
             },
         },
@@ -453,8 +472,16 @@ def run_telepresence_probe(
     # environment (e.g., environment variables set, etc).
     webserver_name = run_webserver(deployment_ident.namespace)
 
-    operation.prepare_deployment(deployment_ident, desired_environment)
-    print("Prepared deployment {}/{}".format(deployment_ident.namespace, deployment_ident.name))
+    operation.prepare_deployment(
+        deployment_ident,
+        desired_environment,
+    )
+    print(
+        "Prepared deployment {}/{}".format(
+            deployment_ident.namespace,
+            deployment_ident.name,
+        )
+    )
 
     service_ports = [http.remote_port for http in http_servers]
     operation.prepare_service(deployment_ident, service_ports)

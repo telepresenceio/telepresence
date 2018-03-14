@@ -351,7 +351,7 @@ def _get_swap_result(probe):
 
 
 @after_probe
-def test_swapdeployment_restores_deployment_image(probe):
+def test_swapdeployment_restores_container_image(probe):
     """
     After a Telepresence session with ``--swap-deployment`` exits, the image
     specified by the original deployment has been restored to the Kubernetes
@@ -365,6 +365,23 @@ def test_swapdeployment_restores_deployment_image(probe):
         in deployment["spec"]["template"]["spec"]["containers"]
     }
     assert {probe.operation.image} == images
+
+
+@after_probe
+def test_swapdeployment_restores_container_command(probe):
+    """
+    After a Telepresence session with ``--swap-deployment`` exits, the image
+    specified by the original deployment has been restored to the Kubernetes
+    Deployment resource.
+    """
+    result = _get_swap_result(probe)
+    deployment = get_deployment(result.deployment_ident)
+    args = [
+        container["args"]
+        for container
+        in deployment["spec"]["template"]["spec"]["containers"]
+    ]
+    assert [probe.operation.container_args] == args
 
 
 @after_probe
@@ -411,6 +428,7 @@ def test_swapdeployment_restores_deployment_replicas(probe):
     result = _get_swap_result(probe)
     deployment = get_deployment(result.deployment_ident)
     assert probe.operation.replicas == deployment["spec"]["replicas"]
+
 
 
 def kubectl(*argv):
