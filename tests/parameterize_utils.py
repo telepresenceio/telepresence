@@ -43,6 +43,20 @@ from .utils import (
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
 
+class HTTPServer(object):
+    def __init__(self, local_port, remote_port, value):
+        self.local_port = local_port
+        self.remote_port = remote_port
+        self.value = value
+
+
+    def expose_string(self):
+        if self.local_port == self.remote_port:
+            return str(self.local_port)
+        return "{}:{}".format(self.local_port, self.remote_port)
+
+
+
 class _ContainerMethod(object):
     name = "container"
 
@@ -154,6 +168,16 @@ class _ExistingDeploymentOperation(object):
             # command is restored after Telepresence swaps the original deployment
             # back in.
             self.container_args = ["/hello-openshift"]
+            self.http_server_auto_expose_same = HTTPServer(
+                12340,
+                12340,
+                random_name("auto-same"),
+            )
+            self.http_server_auto_expose_diff = HTTPServer(
+                12330,
+                12331,
+                random_name("auto-diff"),
+            )
         else:
             self.name = "existing"
             self.image = "{}/telepresence-k8s:{}".format(
@@ -169,17 +193,38 @@ class _ExistingDeploymentOperation(object):
 
 
     def prepare_deployment(self, deployment_ident, environ):
+        if self.swap:
+            ports = [
+                {
+                    "containerPort": self.http_server_auto_expose_same.local_port,
+                    "hostPort": self.http_server_auto_expose_same.remote_port,
+                },
+                {
+                    "containerPort": self.http_server_auto_expose_diff.local_port,
+                    "hostPort": self.http_server_auto_expose_diff.remote_port,
+                },
+            ]
         create_deployment(
             deployment_ident,
             self.image,
             self.container_args,
             environ,
+            ports,
             replicas=self.replicas,
         )
 
 
     def cleanup_deployment(self, deployment_ident):
         _cleanup_deployment(deployment_ident)
+
+
+    def auto_http_servers(self):
+        if self.swap:
+            return [
+                self.http_server_auto_expose_same,
+                self.http_server_auto_expose_diff,
+            ]
+        return []
 
 
     def prepare_service(self, deployment_ident, ports):
@@ -217,6 +262,10 @@ class _NewDeploymentOperation(object):
         pass
 
 
+    def auto_http_servers(self):
+        return []
+
+
     def prepare_service(self, deployment_ident, ports):
         pass
 
@@ -233,7 +282,7 @@ class _NewDeploymentOperation(object):
 
 
 
-def create_deployment(deployment_ident, image, args, environ, replicas):
+def create_deployment(deployment_ident, image, args, environ, ports, replicas):
     """
     Create a ``Deployment`` in the current context.
 
@@ -269,6 +318,8 @@ def create_deployment(deployment_ident, image, args, environ, replicas):
     }
     if args is not None:
         container["args"] = args
+    if ports is not None:
+        container["ports"] = ports
 
     deployment = dumps({
         "kind": "Deployment",
@@ -485,7 +536,20 @@ def run_telepresence_probe(
         )
     )
 
+    # Make sure we expose every port with an http server that the tests want
+    # to talk to.
     service_ports = [http.remote_port for http in http_servers]
+
+    # Also give the operation a chance to declare additional ports.  This is
+    # used by the auto-expose swap-deployment tests to make sure that ports on
+    # an existing Deployment are still exposed even if the Telepresence
+    # command line doesn't have the arguments to expose them.
+    auto_http_servers = operation.auto_http_servers()
+    service_ports.extend([
+        http.remote_port for http in auto_http_servers
+    ])
+
+    # Tell the operation to prepare a service exposing those ports.
     operation.prepare_service(deployment_ident, service_ports)
 
     probe_args = []
@@ -495,7 +559,7 @@ def run_telepresence_probe(
         probe_args.extend(["--probe-command", command])
     for path in probe_paths:
         probe_args.extend(["--probe-path", path])
-    for http in http_servers:
+    for http in http_servers + auto_http_servers:
         probe_args.extend([
             "--http-port", str(http.local_port),
             "--http-value", http.value,
@@ -651,20 +715,6 @@ class AlsoProxy(object):
         """
         self.argument = argument
         self.host = host
-
-
-
-class HTTPServer(object):
-    def __init__(self, local_port, remote_port, value):
-        self.local_port = local_port
-        self.remote_port = remote_port
-        self.value = value
-
-
-    def expose_string(self):
-        if self.local_port == self.remote_port:
-            return str(self.local_port)
-        return "{}:{}".format(self.local_port, self.remote_port)
 
 
 

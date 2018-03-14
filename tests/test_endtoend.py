@@ -301,6 +301,41 @@ def test_network_routing_from_cluster_low_port(probe):
     assert query_result == http.value
 
 
+@with_probe
+def test_network_routing_from_cluster_auto_expose_same(probe):
+    """
+    --swap-deployment auto-exposes ports listed in the Deployment.
+
+    Important that the test uses port actually used by original container,
+    otherwise we will miss bugs where a Telepresence proxy container is added
+    rather than being swapped.
+    """
+    if probe.operation.name != "swap":
+        pytest.skip("Test only applies to --swap-deployment usage.")
+
+    result = probe.result()
+    http = probe.operation.http_server_auto_expose_same
+    query_result = query_http_server(result, http)
+    assert query_result == http.value
+
+
+@with_probe
+def test_network_routing_from_cluster_auto_expose_diff(probe):
+    """
+    Like ``test_network_routing_from_cluster_auto_expose_same`` but for the
+    case where the exposed port and the container port are different.
+    """
+    if probe.operation.name != "swap":
+        pytest.skip("Test only applies to --swap-deployment usage.")
+
+    pytest.skip("Issue 505")
+
+    result = probe.result()
+    http = probe.operation.http_server_auto_expose_diff
+    query_result = query_http_server(result, http)
+    assert query_result == http.value
+
+
 def query_http_server(probe_result, http):
     """
     Request a resource from one of the HTTP servers begin run by the probe
