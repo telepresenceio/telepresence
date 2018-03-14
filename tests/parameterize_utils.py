@@ -204,6 +204,9 @@ class _ExistingDeploymentOperation(object):
                     "hostPort": self.http_server_auto_expose_diff.remote_port,
                 },
             ]
+        else:
+            ports = []
+
         create_deployment(
             deployment_ident,
             self.image,
