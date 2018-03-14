@@ -30,6 +30,11 @@ def probe(request):
 
 
 def _probe_parametrize(fixture_name):
+    """
+    Create a "parametrized" pytest fixture which will supply Probes (one for
+    each coordinate in the cartesion space defined by METHODS and OPERATIONS)
+    to test functions which use it.
+    """
     return pytest.mark.parametrize(
         # Parameterize the probe parameter to decorated methods
         fixture_name,
@@ -48,6 +53,7 @@ def _probe_parametrize(fixture_name):
     )
 
 
+# Create a fixture supplying a Probe.
 with_probe = _probe_parametrize("probe")
 
 _after_probe_mark = pytest.mark.after_probe()
