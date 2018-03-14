@@ -462,6 +462,8 @@ def run_telepresence_probe(
         namespace=random_name("ns"),
         name=random_name("test"),
     )
+    # Create the Kubernetes Namespace everything related to this run will live
+    # in.  Cleanup is the responsibility of the Probe we return.
     create_namespace(deployment_ident.namespace, deployment_ident.name)
 
     # TODO: Factor run_webserver into a fixture that Probe can manage so that
