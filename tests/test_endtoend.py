@@ -347,7 +347,8 @@ def _get_swap_result(probe):
     # Telepresence won't try to swap anything back until it believes its job
     # is done.  So make sure its job is done before we make any assertions
     # about whether things were swapped back.
-    return probe.ensure_dead()
+    probe.ensure_dead()
+    return probe.result()
 
 
 @after_probe
