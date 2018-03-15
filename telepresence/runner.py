@@ -4,6 +4,7 @@ from subprocess import Popen, PIPE, STDOUT, DEVNULL, CalledProcessError, \
 from time import time, ctime
 from typing import List
 
+from inspect import getframeinfo, currentframe
 import os
 
 
@@ -21,6 +22,7 @@ class Runner(object):
         self.kubectl_cmd = kubectl_cmd
         self.verbose = verbose
         self.start_time = time()
+        self.checkpoint_time = self.start_time
         self.counter = 0
         self.write("Telepresence launched at {}".format(ctime()))
         self.write("  {}".format(sys.argv))
@@ -41,6 +43,19 @@ class Runner(object):
             return cls(
                 open(logfile_path, "a", buffering=1), kubectl_cmd, verbose
             )
+
+    def checkpoint(self) -> None:
+        """Write caller's frame info to the log."""
+        info = getframeinfo(currentframe().f_back)
+        when = time()
+        spent = when - self.checkpoint_time
+        self.checkpoint_time = when
+        self.write(
+            "CHECKPOINT {}:{}({}) {:6.1f}s".format(
+                os.path.basename(info.filename), info.lineno, info.function,
+                spent
+            )
+        )
 
     def write(self, message: str) -> None:
         """Write a message to the log."""

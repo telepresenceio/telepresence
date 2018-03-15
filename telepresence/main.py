@@ -57,6 +57,7 @@ def get_env_variables(runner: Runner, remote_info: RemoteInfo,
     """
     Generate environment variables that match kubernetes.
     """
+    runner.checkpoint()
     # Get the environment:
     remote_env = _get_remote_env(
         runner, context, remote_info.namespace, remote_info.pod_name,
@@ -120,6 +121,7 @@ def connect(
 
     Return (Subprocesses, local port of SOCKS proxying tunnel, SSH instance).
     """
+    runner.checkpoint()
     processes = Subprocesses()
     # Keep local copy of pod logs, for debugging purposes:
     processes.append(
