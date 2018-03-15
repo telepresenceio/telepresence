@@ -43,9 +43,6 @@ def main():
         manage_virtualenv = False
         registry = "gcr.io/" + environ["PROJECT_NAME"]
         version_suffix = ""
-        methods = ["inject-tcp", "vpn-tcp"]
-        if platform == "linux":
-            methods.insert(0, "container")
         lint = False
         build_and_push = False
         test_args = []
@@ -62,18 +59,17 @@ def main():
         registry = args.registry
         build_and_push = args.build_and_push
         version_suffix = args.version_suffix
-        methods = args.methods
         test_args = args.test_args or []
         test_env = {}
 
-        if (run_tests or methods) and not build_and_push:
+        if run_tests and not build_and_push:
             print(
                 "Some tests will run, behaving as though"
                 " --build-and-push supplied."
             )
             build_and_push = True
 
-    if methods or run_tests:
+    if run_tests:
         if which("kubectl") is None:
             raise SystemExit(
                 "Required executable 'kubectl' not found on $PATH.",
@@ -108,14 +104,9 @@ def main():
         _push(registry, version)
 
     if run_tests:
-        # Run the original end-to-end tests against each requested
-        # Telepresence method.
-        for method in methods:
-            _test(registry, version, method, test_env, test_args)
-
         # Run the rest of the test suite, including the new end-to-end tests
         # which manage the Telepresence method in use without our help.
-        _newtest(registry, version, test_env, test_args)
+        _test(registry, version, test_env, test_args)
 
 
 def _limit_for_openshift(maximum):
@@ -143,41 +134,20 @@ def _limit_for_method(method, maximum):
     return maximum
 
 
-def _newtest(registry, version, test_env, test_args):
+def _test(registry, version, test_env, test_args):
     """
-    Run the test suite (except the original end-to-end tests).
+    Run the test suite.
 
     :param registry: A Docker registry where necessary images can be found.
     :param version: The Telepresence version to test.
     :param test_env: Extra items to add to the test process environment.
     :param test_args: Extra args to add to the py.test command line.
     """
-    test_env = _test_env_for_telepresence(test_env, registry, version)
-    _pytest(
-        "-k",
-        "not test_run",
-        *test_args,
-        test_env=test_env,
-    )
-
-
-def _test(registry, version, method, test_env, test_args):
     # Refresh the credentials
     _sudo("echo", "-n")
-
-    parallel = str(_limit_for_openshift(_limit_for_method(method, 4)))
     test_env = _test_env_for_telepresence(test_env, registry, version)
-    test_env.update({
-        "TELEPRESENCE_METHOD": method,
-    })
-
     _pytest(
-        "--numprocesses",
-        parallel,
         *test_args,
-        "tests/test_run.py",
-        "k8s-proxy/test_socks.py",
-        "k8s-proxy/test_forwarder.py",
         test_env=test_env,
     )
 
@@ -292,14 +262,6 @@ def _parser():
         action='store_true',
         dest='lint',
         help='run linters on the code base (yapf, flake8, pylint, mypy)',
-    )
-    parser.add_argument(
-        '--method',
-        action='append',
-        dest='methods',
-        choices=['container', 'inject-tcp', 'vpn-tcp'],
-        default=[],
-        help='add a mode to those which will be tested',
     )
     parser.add_argument(
         'test_args',

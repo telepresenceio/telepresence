@@ -34,7 +34,7 @@ This will give you access to the Telepresence executables:
 You can test your modifications to Telepresence with the `build` tool:
 
 ```console
-$ ./build --registry <Docker registry for tag and push> --method <container | inject-tcp | vpn-tcp> [--method ...] [-- <pytest args>]
+$ ./build --registry <Docker registry for tag and push> [-- <pytest args>]
 ```
 
 See `./build --help` for details about how to run specific tests.
