@@ -15,14 +15,14 @@ Prep for package/release
 Package
 - Make packages for Linux:
   ./packaging/create-linux-packages.py <new version number>
-- Build Scout blob (example in #437)
-- Build Gitter announcement
+- Build Scout blob (this program)
+- Build Gitter announcement (this program)
 
 Release
 - Upload linux packages to package cloud:
   rvm install 2.1 (from ci/release.sh)
   gem install package_cloud (from ci/release.sh)
-  sh ./dist/upload_linux_packages.sh
+  ./dist/upload_linux_packages.sh
 - Update Homebrew package:
   (GitHub key stuff from ci/release.sh)
   ./packaging/homebrew-package.sh
@@ -37,9 +37,9 @@ import subprocess
 from pathlib import Path
 from shutil import rmtree
 
-THIS_DIRECTORY = Path(__file__).absolute().resolve().parent
-DIST = THIS_DIRECTORY.parent / "dist"
-VENV_BIN = THIS_DIRECTORY.parent / "virtualenv" / "bin"
+PROJECT = Path(__file__).absolute().resolve().parent.parent
+DIST = PROJECT / "dist"
+VENV_BIN = PROJECT / "virtualenv" / "bin"
 
 
 def get_versions():
@@ -92,6 +92,26 @@ def emit_release_info(version, notices=None):
     s3_uploader_path.chmod(0o775)
 
 
+def emit_announcement(version):
+    """Extract the latest changelog entry as a release announcement."""
+    changelog = PROJECT / "docs" / "reference" / "changelog.md"
+    announcement = DIST / "announcement.md"
+    with announcement.open("w") as dest:
+        with changelog.open() as source:
+            expected = "#### {} (".format(version)
+            for line in source:
+                if line.startswith(expected):
+                    break
+            else:
+                raise RuntimeError("Start not found [{}]".format(expected))
+            dest.write("Announcing\n")
+            dest.write("# Telepresence {}\n".format(version))
+            for line in source:
+                if line.startswith("#### "):
+                    break
+                dest.write(line)
+
+
 def main():
     """
     Perform the steps required to build and deploy, but not release, a new
@@ -102,6 +122,9 @@ def main():
     DIST.mkdir(parents=True)
     current, new = get_versions()
     emit_release_info(new)
+    emit_announcement(new)
+    print("Changelog diff:")
+    print("git diff -b {}..HEAD docs/reference/changelog.md".format(current))
 
 
 if __name__ == "__main__":
