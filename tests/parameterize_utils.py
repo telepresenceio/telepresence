@@ -147,8 +147,21 @@ class _ExistingDeploymentOperation(object):
         self.swap = swap
         if swap:
             self.name = "swap"
+            self.image = "openshift/hello-openshift"
+            self.replicas = 2
+            # An argument list to use to override the default command of the
+            # container.  This allows the swap-deployment tests to verify that a
+            # command is restored after Telepresence swaps the original deployment
+            # back in.
+            self.container_args = ["/hello-openshift"]
         else:
             self.name = "existing"
+            self.image = "{}/telepresence-k8s:{}".format(
+                REGISTRY,
+                telepresence_version(),
+            )
+            self.replicas = 1
+            self.container_args = None
 
 
     def inherits_deployment_environment(self):
@@ -156,14 +169,13 @@ class _ExistingDeploymentOperation(object):
 
 
     def prepare_deployment(self, deployment_ident, environ):
-        if self.swap:
-            image = "openshift/hello-openshift"
-        else:
-            image = "{}/telepresence-k8s:{}".format(
-                REGISTRY,
-                telepresence_version(),
-            )
-        create_deployment(deployment_ident, image, environ, replicas=1)
+        create_deployment(
+            deployment_ident,
+            self.image,
+            self.container_args,
+            environ,
+            replicas=self.replicas,
+        )
 
 
     def cleanup_deployment(self, deployment_ident):
@@ -174,8 +186,8 @@ class _ExistingDeploymentOperation(object):
         create_service(deployment_ident, ports)
 
 
-    def cleanup_service(self, deployment_ident, ports):
-        cleanup_service(deployment_ident, ports)
+    def cleanup_service(self, deployment_ident):
+        cleanup_service(deployment_ident)
 
 
     def telepresence_args(self, deployment_ident):
@@ -209,7 +221,7 @@ class _NewDeploymentOperation(object):
         pass
 
 
-    def cleanup_service(self, deployment_ident, ports):
+    def cleanup_service(self, deployment_ident):
         pass
 
 
@@ -221,7 +233,7 @@ class _NewDeploymentOperation(object):
 
 
 
-def create_deployment(deployment_ident, image, environ, replicas):
+def create_deployment(deployment_ident, image, args, environ, replicas):
     """
     Create a ``Deployment`` in the current context.
 
@@ -231,6 +243,9 @@ def create_deployment(deployment_ident, image, environ, replicas):
     :param str image: The Docker image to put in the Deployment's pod
         template.
 
+    :param list[str] args: An argument list to specify as the command for the
+        image.  Or ``None`` to use the image default.
+
     :param dict[str, str] environ: The environment to put in the Deployment's
         pod template.
 
@@ -239,6 +254,22 @@ def create_deployment(deployment_ident, image, environ, replicas):
 
     :raise CalledProcessError: If the *kubectl* command returns an error code.
     """
+    container = {
+        "name": "hello",
+        "image": image,
+        "env": list(
+            {"name": k, "value": v}
+            for (k, v)
+            in environ.items()
+        ),
+        "volumeMounts": [{
+            "name": "podinfo",
+            "mountPath": "/podinfo",
+        }],
+    }
+    if args is not None:
+        container["args"] = args
+
     deployment = dumps({
         "kind": "Deployment",
         "apiVersion": "extensions/v1beta1",
@@ -266,19 +297,7 @@ def create_deployment(deployment_ident, image, environ, replicas):
                             }],
                         },
                     }],
-                    "containers": [{
-                        "name": "hello",
-                        "image": image,
-                        "env": list(
-                            {"name": k, "value": v}
-                            for (k, v)
-                            in environ.items()
-                        ),
-                        "volumeMounts": [{
-                            "name": "podinfo",
-                            "mountPath": "/podinfo",
-                        }],
-                    }],
+                    "containers": [container],
                 },
             },
         },
@@ -313,12 +332,12 @@ def create_service(deployment_ident, ports):
     service = dumps(service_obj)
     check_output([KUBECTL, "create", "-f", "-"], input=service.encode("utf-8"))
 
-def cleanup_service(deployment_ident, ports):
-    if not ports:
-        return
+
+def cleanup_service(deployment_ident):
     check_call([
         KUBECTL, "delete",
         "--namespace", deployment_ident.namespace,
+        "--ignore-not-found",
         "service", deployment_ident.name
     ])
 
@@ -443,8 +462,9 @@ def run_telepresence_probe(
         namespace=random_name("ns"),
         name=random_name("test"),
     )
+    # Create the Kubernetes Namespace everything related to this run will live
+    # in.  Cleanup is the responsibility of the Probe we return.
     create_namespace(deployment_ident.namespace, deployment_ident.name)
-    request.addfinalizer(lambda: cleanup_namespace(deployment_ident.namespace))
 
     # TODO: Factor run_webserver into a fixture that Probe can manage so that
     # run_telepresence_probe can just focus on running telepresence.
@@ -454,13 +474,19 @@ def run_telepresence_probe(
     # environment (e.g., environment variables set, etc).
     webserver_name = run_webserver(deployment_ident.namespace)
 
-    operation.prepare_deployment(deployment_ident, desired_environment)
-    print("Prepared deployment {}/{}".format(deployment_ident.namespace, deployment_ident.name))
-    request.addfinalizer(lambda: operation.cleanup_deployment(deployment_ident))
+    operation.prepare_deployment(
+        deployment_ident,
+        desired_environment,
+    )
+    print(
+        "Prepared deployment {}/{}".format(
+            deployment_ident.namespace,
+            deployment_ident.name,
+        )
+    )
 
     service_ports = [http.remote_port for http in http_servers]
     operation.prepare_service(deployment_ident, service_ports)
-    request.addfinalizer(lambda: operation.cleanup_service(deployment_ident, service_ports))
 
     probe_args = []
     for url in probe_urls:
@@ -782,7 +808,8 @@ class Probe(object):
                 also_proxy,
                 http_servers
             )
-            self._cleanup.append(lambda: _cleanup_process(self._result.telepresence))
+            self._cleanup.append(self.ensure_dead)
+            self._cleanup.append(self.cleanup_resources)
         return self._result
 
 
@@ -792,10 +819,45 @@ class Probe(object):
             cleanup()
 
 
+    def ensure_dead(self):
+        """
+        Make sure the Telepresence process launched by this Probe is no longer
+        running.
+
+        :raise Exception: If no Telepresence process was ever launched by this
+            Probe in the first.
+        """
+        if self._result is None:
+            raise Exception("Probe never launched")
+
+        _cleanup_process(self._result.telepresence)
+
+
+    def cleanup_resources(self):
+        """
+        Delete Kubernetes resources related to this Probe.
+
+        :raise Exception: If no Telepresence process was ever launched by this
+            Probe in the first place.
+        """
+        if self._result is None:
+            raise Exception("Probe never launched")
+
+        self.operation.cleanup_deployment(self._result.deployment_ident)
+        self.operation.cleanup_service(self._result.deployment_ident)
+        cleanup_namespace(self._result.deployment_ident.namespace)
+
+
 
 def _cleanup_process(process):
-    print("Terminating {}".format(process.pid))
-    process.terminate()
-    print("Waiting on {}".format(process.pid))
-    process.wait()
-    print("Cleaned up {}".format(process.pid))
+    """
+    Terminate and wait on the given process, if it still exists.
+
+    Do nothing if it has already been waited on.
+    """
+    if process.returncode is None:
+        print("Terminating {}".format(process.pid))
+        process.terminate()
+        print("Waiting on {}".format(process.pid))
+        process.wait()
+        print("Cleaned up {}".format(process.pid))

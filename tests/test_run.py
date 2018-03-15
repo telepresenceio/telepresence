@@ -4,14 +4,12 @@ End-to-end tests for running directly in the operating system.
 
 import json
 from pprint import pformat
-from unittest import TestCase, skipIf, skipUnless
-from urllib.request import urlopen
+from unittest import TestCase, skipIf
 from subprocess import (
     check_output,
     Popen,
     PIPE,
     check_call,
-    run,
     STDOUT,
 )
 import time
@@ -25,6 +23,8 @@ from .utils import (
     current_namespace,
     OPENSHIFT,
     KUBECTL,
+    DEPLOYMENT_TYPE,
+    EXISTING_DEPLOYMENT,
     query_in_k8s,
 )
 
@@ -34,77 +34,6 @@ TELEPRESENCE_METHOD = os.environ.get("TELEPRESENCE_METHOD", None)
 # If this env variable is set, we know we're using minikube or minishift:
 LOCAL_VM = os.environ.get("TELEPRESENCE_LOCAL_VM") is not None
 
-EXISTING_DEPLOYMENT = """\
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {name}
-  namespace: {namespace}
-data:
-  EXAMPLE_ENVFROM: foobar
-  EX_MULTI_LINE: |
-    first line (no newline before, newline after)
-    second line (newline before and after)
----
-%s
-metadata:
-  name: {name}
-  namespace: {namespace}
-spec:
-  replicas: {replicas}
-  template:
-    metadata:
-      labels:
-        name: {name}
-        hello: monkeys  # <-- used by volumes test
-    spec:
-      containers:
-      # Extra container at start to demonstrate we can handle multiple
-      # containers
-      - name: getintheway
-        image: openshift/hello-openshift
-        resources:
-          limits:
-            cpu: "100m"
-            memory: "150Mi"
-      - name: {container_name}
-        image: {image}
-        envFrom:
-        - configMapRef:
-            name: {name}
-        env:
-        - name: MYENV
-          value: hello
-        volumeMounts:
-        - name: podinfo
-          mountPath: /podinfo
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "150Mi"
-          limits:
-            cpu: "100m"
-            memory: "150Mi"
-      volumes:
-      - name: podinfo
-        downwardAPI:
-          items:
-            - path: "labels"
-              fieldRef:
-                fieldPath: metadata.labels
-"""
-
-if OPENSHIFT:
-    EXISTING_DEPLOYMENT = EXISTING_DEPLOYMENT % ("""\
-apiVersion: v1
-kind: DeploymentConfig""",)
-    DEPLOYMENT_TYPE = "deploymentconfig"
-else:
-    EXISTING_DEPLOYMENT = EXISTING_DEPLOYMENT % ("""\
-apiVersion: extensions/v1beta1
-kind: Deployment""",)
-    DEPLOYMENT_TYPE = "deployment"
 
 NAMESPACE_YAML = """\
 apiVersion: v1
@@ -272,47 +201,6 @@ class NativeEndToEndTests(TestCase):
 
     # XXX Test existing deployment w/ default namespace
 
-    def test_swapdeployment(self):
-        """
-        --swap-deployment swaps out Telepresence pod and then swaps it back on
-        exit, when original pod was created with `kubectl run` or `oc run`.
-        """
-        # Create a non-Telepresence deployment:
-        name = random_name()
-        check_call([
-            KUBECTL,
-            "run",
-            name,
-            "--restart=Always",
-            "--image=openshift/hello-openshift",
-            "--replicas=2",
-            "--labels=telepresence-test=" + name,
-            "--env=HELLO=there",
-        ])
-        self.addCleanup(check_call, [KUBECTL, "delete", DEPLOYMENT_TYPE, name])
-        self.assert_swapdeployment(name, 2, "telepresence-test=" + name)
-
-    def test_swapdeployment_swap_args(self):
-        """
-        --swap-deployment swaps out Telepresence pod and overrides the entrypoint.
-        """
-        # Create a non-Telepresence deployment:
-        name = random_name()
-        check_call([
-            KUBECTL,
-            "run",
-            name,
-            "--restart=Always",
-            "--image=openshift/hello-openshift",
-            "--replicas=2",
-            "--labels=telepresence-test=" + name,
-            "--env=HELLO=there",
-            "--",
-            "/hello-openshift",
-        ])
-        self.addCleanup(check_call, [KUBECTL, "delete", DEPLOYMENT_TYPE, name])
-        self.assert_swapdeployment(name, 2, "telepresence-test=" + name)
-
     @skipIf(not OPENSHIFT, "Only runs on OpenShift")
     def test_swapdeployment_ocnewapp(self):
         """
@@ -356,44 +244,6 @@ class NativeEndToEndTests(TestCase):
                 ]), "utf-8"
             )
         )
-        # We swapped back:
-        assert deployment["spec"]["replicas"] == replicas
-
-        # Ensure pods swap back too:
-        start = time.time()
-        while True:
-            pods = json.loads(
-                str(
-                    check_output([
-                        KUBECTL, "get", "pod", "--selector=" + selector, "-o",
-                        "json", "--export"
-                    ]), "utf-8"
-                )
-            )["items"]
-            image_and_phase = list(
-                (pod["spec"]["containers"][0]["image"],
-                 pod["status"]["phase"])
-                for pod
-                in pods
-            )
-            if all(
-                    image.startswith("openshift/hello-openshift")
-                    for (image, phase)
-                    in image_and_phase
-            ):
-                print("Found openshift!")
-                return
-            time.sleep(1)
-
-            if time.time() - start > 60:
-                assert False, \
-                    "Didn't switch back to openshift: \n\t{}\n{}".format(
-                        image_and_phase,
-                        pformat(json.loads(check_output([
-                            KUBECTL, "get", "-o", "json", "all",
-                            "--selector", selector,
-                        ]))),
-                    )
 
     def test_swapdeployment_auto_expose(self):
         """
