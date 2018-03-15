@@ -884,7 +884,6 @@ class Probe(object):
             raise Exception("Probe never launched")
 
         _cleanup_process(self._result.telepresence)
-        return self._result
 
 
     def cleanup_resources(self):
