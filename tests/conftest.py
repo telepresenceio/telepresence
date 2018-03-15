@@ -111,8 +111,16 @@ def pytest_collection_modifyitems(session, config, items):
                 callspec = existing.callspec
             except AttributeError:
                 # Not all Functions have a callspec.  Any that doesn't isn't
-                # interesting to us.
+                # parametrized like we are.  If we were previously within the
+                # block of like-configured tests, we're not anymore.
+                if found:
+                    items.insert(i, inserting)
+                    break
+
+                # None of the rest of the logic of this loop makes sense for
+                # non-parameterized tests.
                 continue
+
             if callspec.params == inserting.callspec.params:
                 # We're somewhere in the block of like-configured tests.  We
                 # assume they all appear together.

@@ -20,6 +20,7 @@ Misc:
   ([495](https://github.com/datawire/telepresence/pull/495))
   ([501](https://github.com/datawire/telepresence/pull/501))
   ([506](https://github.com/datawire/telepresence/pull/506))
+  ([507](https://github.com/datawire/telepresence/pull/507))
 * Improved cleanup of our testing cluster used by CI.
 * Added the ability to specify `--init=false` flag when using `--docker-run`
   ([481](https://github.com/datawire/telepresence/issues/481))

@@ -396,15 +396,18 @@ def cleanup_service(deployment_ident):
     ])
 
 
+INJECT_TCP_METHOD = _InjectTCPMethod()
+NEW_DEPLOYMENT_OPERATION = _NewDeploymentOperation()
+
 METHODS = [
     _ContainerMethod(),
-    _InjectTCPMethod(),
+    INJECT_TCP_METHOD,
     _VPNTCPMethod(),
 ]
 OPERATIONS = [
     _ExistingDeploymentOperation(False),
     _ExistingDeploymentOperation(True),
-    _NewDeploymentOperation(),
+    NEW_DEPLOYMENT_OPERATION,
 ]
 
 class ResourceIdent(object):
@@ -608,6 +611,14 @@ def run_telepresence_probe(
 
 
 
+class NoTaggedValue(Exception):
+    """
+    Attempted to read a tagged value from the Telepresence process but all
+    Telepresence output was examined (Telepresence has exited) and there was
+    none.
+    """
+
+
 # See probe_endtoend.py
 MAGIC_PREFIX = b"\xc0\xc1\xfe\xff"
 def _read_tagged_output(process, output, writer):
@@ -675,7 +686,7 @@ def _read_tagged_output(process, output, writer):
                 writer.write(data)
                 data = b""
             break
-    raise Exception("Failed to find a tagged value.")
+    raise NoTaggedValue()
 
 
 

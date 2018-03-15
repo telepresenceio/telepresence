@@ -5,6 +5,9 @@ The report can be inspected by the test suite to verify Telepresence has
 created the execution context correctly.
 """
 
+from time import (
+    sleep,
+)
 from os import (
     environ,
 )
@@ -32,6 +35,7 @@ from urllib.request import (
 from subprocess import (
     CalledProcessError,
     check_output,
+    run,
 )
 from http.server import (
     HTTPServer,
@@ -103,7 +107,6 @@ def read_and_respond(commands, output):
         print("Read line: {!r}".format(line), flush=True)
         if not line:
             print("Closed? {}".format(commands.closed), flush=True)
-            from time import sleep
             sleep(1)
             continue
         argv = line.split()
@@ -148,9 +151,39 @@ def run_http_server(port, value):
     Thread(target=server.serve_forever, daemon=True).start()
 
 
+def disconnect_telepresence(namespace):
+    # Kill off sshd server process the SSH client is talking to, forcing
+    # disconnection:
+    env = environ.copy()
+    # Don't want torsocks messing with kubectl:
+    for name in ["LD_PRELOAD", "DYLD_INSERT_LIBRARIES"]:
+        if name in env:
+            del env[name]
+    # We can't tell if this succeeded, sadly, since it kills ssh session used
+    # by kubectl exec!
+    command = [
+        "kubectl", "exec",
+        "--namespace=" + namespace,
+        "--container=" + environ["TELEPRESENCE_CONTAINER"],
+        environ["TELEPRESENCE_POD"], "--", "/bin/sh", "-c",
+        r"kill $(ps xa | tail -n +2 | " +
+        r"sed 's/ *\([0-9][0-9]*\).*/\1/')"
+    ]
+    print("Using kubectl to kill Telepresence support processes:")
+    print("\t{}".format(" ".join(command)), flush=True)
+
+    run(command, env=env)
+    sleep(10)
+    # The test expects 3, which is how telepresence exits when one of its
+    # subprocesses dies. That is, we expect to be killed before we reach this
+    # point, if we exit with 66 that means disconnect-detection failed.
+    raise SystemExit(66)
+
+
 COMMANDS = {
     "probe-url": lambda *urls: list(probe_urls(urls)),
     "probe-also-proxy": probe_also_proxy,
+    "disconnect-telepresence": disconnect_telepresence,
 }
 
 
