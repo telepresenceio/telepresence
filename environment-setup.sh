@@ -6,7 +6,7 @@
 
 if [ "$#" -ne 4 ]; then
     echo "Usage: $0 <gcloud project name> <gcloud cluster name> <gcloud compute zone> <linux|osx>"
-    echo "  (See .travis.yml for sample values)"
+    echo "  (See .circleci/config.yml for sample values)"
     exit 1
 fi
 
