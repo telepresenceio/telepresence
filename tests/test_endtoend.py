@@ -29,6 +29,7 @@ from .parameterize_utils import (
     INJECT_TCP_METHOD,
     NEW_DEPLOYMENT_OPERATION,
     NoTaggedValue,
+    Probe,
 )
 from .conftest import (
     with_probe,
@@ -499,15 +500,21 @@ def get_pods(ident):
     )
 
 
-@pytest.mark.parametrize(
-    "probe",
-    [(INJECT_TCP_METHOD, NEW_DEPLOYMENT_OPERATION)],
-    indirect=True,
-)
-def test_disconnect(probe):
+def test_disconnect(request):
     """
     Telepresence exits with code 3 if its connection to the cluster is lost.
     """
+    # Avoid using the Probe fixture because it is scoped for multi-test use to
+    # allow a Telepresence session to be used by multiple tests.  This test is
+    # going to ruin its Telepresence session.  We don't want that to affect
+    # other tests.
+    #
+    # Just pick a semi-arbitrary Probe configuration.  We do need to have
+    # kubectl available in the Telepresence execution context for
+    # ``disconnect_telepresence`` to work, though.
+    probe = Probe(request, INJECT_TCP_METHOD, NEW_DEPLOYMENT_OPERATION)
+    request.addfinalizer(probe.cleanup)
+
     probe_result = probe.result()
     disconnect_telepresence(
         probe_result,
