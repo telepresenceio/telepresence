@@ -110,6 +110,9 @@ def emit_announcement(version):
                 if line.startswith("#### "):
                     break
                 dest.write(line)
+            dest.write("See how to [install][i] or [upgrade][u].\n\n")
+            dest.write("[i]: https://www.telepresence.io/reference/install\n")
+            dest.write("[u]: https://www.telepresence.io/reference/upgrade\n")
 
 
 def main():
