@@ -140,13 +140,6 @@ class NativeEndToEndTests(TestCase):
             p.terminate()
             p.wait()
 
-    def test_disconnect(self):
-        """Telepresence exits if the connection is lost."""
-        exit_code = run_script_test(["--new-deployment", random_name()],
-                                    "python3 disconnect.py")
-        # Exit code 3 means proxy exited prematurely:
-        assert exit_code == 3
-
     @skipIf(
         LOCAL_VM and TELEPRESENCE_METHOD == "vpn-tcp",
         "--deployment doesn't work on local VMs with vpn-tcp method."
