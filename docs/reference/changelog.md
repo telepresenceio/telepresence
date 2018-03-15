@@ -2,31 +2,35 @@
 
 #### 0.76 (Unreleased)
 
+Features:
+
+* Added the ability to specify `--init=false` flag when using `--docker-run`
+  Thanks to GitHub user CMajeri for the patch.
+  ([#481](https://github.com/datawire/telepresence/issues/481))
+
 Bug fixes:
 
 * Telepresence now makes a greater effort to account for local DNS search domain configuration when bridging DNS to Kubernetes when using `--method=vpn-tcp`.
-  ([#393])(https://github.com/datawire/telepresence/issues/393))
+  ([#393](https://github.com/datawire/telepresence/issues/393))
 
 Misc:
 
-* A new end-to-end test suite setup will help us reduce the cycle time associated with testing Telepresence as we port over existing tests.
-  ([429](https://github.com/datawire/telepresence/pull/429))
-  ([463](https://github.com/datawire/telepresence/pull/463))
-  ([468](https://github.com/datawire/telepresence/pull/468))
-  ([473](https://github.com/datawire/telepresence/pull/473))
-  ([474](https://github.com/datawire/telepresence/pull/474))
-  ([475](https://github.com/datawire/telepresence/pull/475))
-  ([479](https://github.com/datawire/telepresence/pull/479))
-  ([495](https://github.com/datawire/telepresence/pull/495))
-  ([501](https://github.com/datawire/telepresence/pull/501))
-  ([506](https://github.com/datawire/telepresence/pull/506))
-  ([507](https://github.com/datawire/telepresence/pull/507))
-  ([507](https://github.com/datawire/telepresence/pull/508))
+* A new end-to-end test suite setup will help us reduce the cycle time associated with testing Telepresence.
+  ([#429](https://github.com/datawire/telepresence/pull/429))
+  ([#463](https://github.com/datawire/telepresence/pull/463))
+  ([#468](https://github.com/datawire/telepresence/pull/468))
+  ([#473](https://github.com/datawire/telepresence/pull/473))
+  ([#474](https://github.com/datawire/telepresence/pull/474))
+  ([#475](https://github.com/datawire/telepresence/pull/475))
+  ([#479](https://github.com/datawire/telepresence/pull/479))
+  ([#495](https://github.com/datawire/telepresence/pull/495))
+  ([#501](https://github.com/datawire/telepresence/pull/501))
+  ([#506](https://github.com/datawire/telepresence/pull/506))
+  ([#507](https://github.com/datawire/telepresence/pull/507))
+  ([#508](https://github.com/datawire/telepresence/pull/508))
 * Improved cleanup of our testing cluster used by CI.
-* Added the ability to specify `--init=false` flag when using `--docker-run`
-  ([481](https://github.com/datawire/telepresence/issues/481))
 * Reduced the verbosity of DNS lookup failures in the logs.
-  ([497](https://github.com/datawire/telepresence/issues/497))
+  ([#497](https://github.com/datawire/telepresence/issues/497))
 
 #### 0.75 (January 30, 2018)
 
@@ -45,7 +49,6 @@ Misc:
   The release process remains on TravisCI, at least for this release.
   ([#397](https://github.com/datawire/telepresence/issues/397))
   ([#417](https://github.com/datawire/telepresence/issues/417))
-
 
 #### 0.73 (December 28, 2017)
 
@@ -74,7 +77,6 @@ Misc:
   ([#269](https://github.com/datawire/telepresence/issues/269))
 * An install script is included for installing Telepresence from source.
   ([#347](https://github.com/datawire/telepresence/issues/347))
-
 
 #### 0.71 (November 1, 2017)
 
