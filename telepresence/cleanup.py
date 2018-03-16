@@ -65,6 +65,7 @@ def wait_for_exit(
     runner: Runner, main_process: Popen, processes: Subprocesses
 ) -> None:
     """Given Popens, wait for one of them to die."""
+    runner.checkpoint()
     runner.write("Everything launched. Waiting to exit...")
     while True:
         sleep(0.1)

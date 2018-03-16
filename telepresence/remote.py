@@ -145,6 +145,7 @@ def get_remote_info(
     the uuid we set for the telepresence label. Otherwise run_id is None and
     the Deployment name must be used to locate the Deployment.
     """
+    runner.checkpoint()
     deployment = get_deployment_json(
         runner,
         deployment_name,
@@ -228,6 +229,7 @@ def mount_remote_volumes(
     """
     # Docker for Mac only shares some folders; the default TMPDIR on OS X is
     # not one of them, so make sure we use /tmp:
+    runner.checkpoint()
     mount_dir = mkdtemp(dir="/tmp")
     sudo_prefix = ["sudo"] if allow_all_users else []
     middle = ["-o", "allow_other"] if allow_all_users else []

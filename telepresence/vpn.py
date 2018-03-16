@@ -67,6 +67,7 @@ def get_proxy_cidrs(
     long-term solution for service CIDR.
     """
 
+    runner.checkpoint()
     # Run script to convert --also-proxy hostnames to IPs, doing name
     # resolution inside Kubernetes, so we get cloud-local IP addresses for
     # cloud resources:
