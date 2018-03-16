@@ -185,6 +185,18 @@ They allow the test to retrieve the information so assertions can be made.
 
 When writing end-to-end tests keep a few things in mind:
 
+##### Shared Telepresence
+
+The `probe` fixture re-uses `Probe` instances.
+Tests should not modify the `Probe` passed in for the `probe` argument.
+Doing so will invalidate the results of subsequent tests.
+
+Likewise, the `Probe` instance has an associated `Telepresence` process.
+Tests should not modify that process, either, or subsequent tests will be invalidated.
+This should be fairly easy since there's not _much_ that can be done to "modify" a running Telepresence process.
+One very obvious example, though, is that the process can be killed.
+Don't do that.
+
 ##### End-to-end Debugging
 
 When such a test fails,
