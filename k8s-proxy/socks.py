@@ -21,6 +21,8 @@ from typing import Tuple, Callable, Type, Optional, Any
 
 # twisted imports
 from twisted.internet import reactor, protocol
+from twisted.internet.defer import Deferred
+from twisted.internet.threads import deferToThread
 from twisted.python import log
 from twisted.protocols.stateful import StatefulProtocol
 from twisted.internet.error import ConnectionRefusedError, DNSLookupError
@@ -57,6 +59,10 @@ class SOCKSv5Outgoing(protocol.Protocol):
         self.transport.write(data)
 
 
+def reverse_resolve(name : bytes) -> Deferred:
+    return deferToThread(lambda: socket.gethostbyaddr(name)[0])
+
+
 class SOCKSv5(StatefulProtocol):
     """
     An implementation of the SOCKSv5 protocol.
@@ -74,8 +80,9 @@ class SOCKSv5(StatefulProtocol):
     """
     transport = None  # type: Any
 
-    def __init__(self, reactor=reactor):
+    def __init__(self, reactor=reactor, reverse_resolve=reverse_resolve):
         self.reactor = reactor  # type: Any
+        self.reverse_resolve = reverse_resolve # type: Callable[[bytes], Deferred]
 
     def connectionMade(self) -> None:
         self.otherConn = None  # type: Optional[SOCKSv5Outgoing]
@@ -122,6 +129,8 @@ class SOCKSv5(StatefulProtocol):
             self.command = "CONNECT"
         elif command == 240:  # \xF0
             self.command = "RESOLVE"
+        elif command == 241:  # \xF1
+            self.command = "RESOLVE_PTR"
         else:
             # Unsupported command response
             self._write_response(7, "0.0.0.0", 0)
@@ -194,6 +203,23 @@ class SOCKSv5(StatefulProtocol):
             self.reactor.resolve(
                 host,
             ).addCallback(write_response).addErrback(write_error)
+        elif self.command == "RESOLVE_PTR":
+
+            def write_response(name):
+                self.write(b"\5\0\0\3%b%b" % (
+                    bytes([len(name)]),
+                    name.encode("ascii"),
+                ))
+                self.transport.loseConnection()
+
+            def write_error(e):
+                log.err(e)
+                self.write(b"\5\1\0\0")
+                self.transport.loseConnection()
+
+            d = self.reverse_resolve(host)
+            d.addCallback(write_response)
+            d.addErrback(write_error)
 
     def connectionLost(self, reason):
         if self.otherConn:
