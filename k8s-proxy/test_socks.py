@@ -237,19 +237,7 @@ class ConnectTests(unittest.TestCase):
         @see: U{http://en.wikipedia.org/wiki/SOCKS#SOCKS5}
         """
         self.assert_handshake()
-        self.deliver_data(
-            self.sock,
-            struct.pack('!BBBB', 5, 0xf0, 0, 3) + struct.pack(
-                "!B", len(b"example.com")
-            ) + b"example.com" + struct.pack("!H", 3401)
-        )
-        reply = self.sock.transport.value()
-        self.sock.transport.clear()
-        self.assertEqual(
-            reply,
-            struct.pack('!BBBB', 5, 0, 0, 1) + socket.inet_aton('5.6.7.8')
-        )
-        self.assertTrue(self.sock.transport.stringTCPTransport_closing)
+        self.assert_resolve("example.com", "5.6.7.8")
 
     def test_socks5TorStyleFailedResolution(self):
         """
