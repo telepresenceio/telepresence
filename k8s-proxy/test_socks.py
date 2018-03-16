@@ -122,7 +122,13 @@ class ConnectTests(unittest.TestCase):
         self.sock.transport.clear()
         self.assertEqual(reply, struct.pack("!BB", 5, 0))
 
-    def assert_connect(self, address):
+    def assert_connect(
+            self,
+            connect_address,
+            connect_port,
+            bound_address,
+            bound_port,
+    ):
         """The server responds to CONNECT with successful result."""
         # The CONNECT command to an IPv4 address
         self.deliver_data(
@@ -139,9 +145,9 @@ class ConnectTests(unittest.TestCase):
                 1,
             ) +
             # IP address to connect to
-            socket.inet_aton(address) +
+            socket.inet_aton(connect_address) +
             # Port number to connect to
-            struct.pack("!H", 34)
+            struct.pack("!H", connect_port)
         )
         reply = self.sock.transport.value()
         self.sock.transport.clear()
@@ -159,15 +165,15 @@ class ConnectTests(unittest.TestCase):
                 1,
             ) +
             # The server-bound address
-            socket.inet_aton('2.3.4.5') +
+            socket.inet_aton(bound_address) +
             # The server-bound port number
-            struct.pack("!H", 42)
+            struct.pack("!H", bound_port)
         )
         self.assertFalse(self.sock.transport.stringTCPTransport_closing)
         self.assertIsNotNone(self.sock.driver_outgoing)
         self.assertEqual(
             self.sock.driver_outgoing.transport.getPeer(),
-            IPv4Address('TCP', address, 34)
+            IPv4Address('TCP', connect_address, connect_port)
         )
 
     def assert_dataflow(self):
@@ -184,10 +190,39 @@ class ConnectTests(unittest.TestCase):
         self.sock.driver_outgoing.dataReceived(b'hi there')
         self.assertEqual(self.sock.transport.value(), b'hi there')
 
+    def assert_resolve(self, domainname, address):
+        self.deliver_data(
+            self.sock,
+            struct.pack(
+                '!BBBB',
+                # VER (Version)
+                5,
+                # RESOLVE
+                0xf0,
+                # RSV (Reserved)
+                0,
+                # ATYP (Address type); 3 = Domain name
+                3,
+            ) +
+            # Length-prefixed domain to resolve.
+            struct.pack("!B", len(domainname)) +
+            domainname +
+            # Arbitrary port required by the protocol but not used for
+            # anything.
+            struct.pack("!H", 3401)
+        )
+        reply = self.sock.transport.value()
+        self.sock.transport.clear()
+        self.assertEqual(
+            reply,
+            struct.pack('!BBBB', 5, 0, 0, 1) + socket.inet_aton(address)
+        )
+        self.assertTrue(self.sock.transport.stringTCPTransport_closing)
+
     def test_simple(self):
         """The server proxies an outgoing connection to an IPv4 address."""
         self.assert_handshake()
-        self.assert_connect('1.2.3.4')
+        self.assert_connect('1.2.3.4', 34)
         self.assert_dataflow()
 
         self.sock.connectionLost('fake reason')
@@ -236,7 +271,7 @@ class ConnectTests(unittest.TestCase):
     def test_eofRemote(self):
         """If the outgoing connection closes the client connection closes."""
         self.assert_handshake()
-        self.assert_connect('1.2.3.4')
+        self.assert_connect('1.2.3.4', 34)
 
         # now close it from the server side
         self.sock.driver_outgoing.connectionLost('fake reason')
@@ -245,7 +280,7 @@ class ConnectTests(unittest.TestCase):
     def test_eofLocal(self):
         """If the client connection closes the outgoing connection closes."""
         self.assert_handshake()
-        self.assert_connect('1.2.3.4')
+        self.assert_connect('1.2.3.4', 34)
 
         self.sock.connectionLost('fake reason')
         self.assertTrue(
