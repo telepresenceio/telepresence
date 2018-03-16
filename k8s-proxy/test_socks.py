@@ -219,8 +219,10 @@ class ConnectTests(unittest.TestCase):
         )
         self.assertTrue(self.sock.transport.stringTCPTransport_closing)
 
-    def test_simple(self):
-        """The server proxies an outgoing connection to an IPv4 address."""
+    def test_ipv4Connect(self):
+        """
+        The server proxies an outgoing connection to an IPv4 address.
+        """
         self.assert_handshake()
         self.assert_connect('1.2.3.4', 34)
         self.assert_dataflow()
