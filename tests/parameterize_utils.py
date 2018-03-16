@@ -177,11 +177,15 @@ class _ExistingDeploymentOperation(object):
                 same_port,
                 random_name("auto-same"),
             )
+            print("HTTP Server auto-expose same-port: {}".format(same_port))
             self.http_server_auto_expose_diff = HTTPServer(
                 12330,
                 randrange(20000, 40000),
                 random_name("auto-diff"),
             )
+            print("HTTP Server auto-expose diff-port: {}".format(
+                self.http_server_auto_exposxe_diff.remote_port,
+            ))
         else:
             self.name = "existing"
             self.image = "{}/telepresence-k8s:{}".format(
