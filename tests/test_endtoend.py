@@ -385,6 +385,19 @@ def _get_swap_result(probe):
     return probe.result()
 
 
+@with_probe
+def test_resolve_names(probe):
+    """
+    Name resolution is performed in the context of the Kubernetes cluster.
+    """
+    result = probe.result()
+    result.write("gethostbyname {}.{}".format(
+        result.deployment_ident.name,
+        result.deployment_ident.namespace,
+    ))
+    print(loads(result.read()))
+
+
 @after_probe
 def test_swapdeployment_restores_container_image(probe):
     """
