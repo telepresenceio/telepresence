@@ -8,7 +8,10 @@ extension.
 import struct
 import socket
 
-from twisted.internet import defer, address
+from twisted.internet import defer
+from twisted.internet.address import (
+    IPv4Address,
+)
 from twisted.internet.error import DNSLookupError
 from twisted.python.compat import iterbytes
 from twisted.test import proto_helpers
@@ -26,7 +29,7 @@ class StringTCPTransport(proto_helpers.StringTransport):
         return self.peer
 
     def getHost(self):
-        return address.IPv4Address('TCP', '2.3.4.5', 42)
+        return IPv4Address('TCP', '2.3.4.5', 42)
 
     def loseConnection(self):
         self.stringTCPTransport_closing = True
@@ -72,7 +75,7 @@ class SOCKSv5Driver(socks.SOCKSv5):
         def got_ip(ip):
             proto = klass(*args)
             transport = StringTCPTransport()
-            transport.peer = address.IPv4Address('TCP', ip, port)
+            transport.peer = IPv4Address('TCP', ip, port)
             proto.makeConnection(transport)
             self.driver_outgoing = proto
             return proto
@@ -119,13 +122,13 @@ class ConnectTests(unittest.TestCase):
         self.sock.transport.clear()
         self.assertEqual(reply, struct.pack("!BB", 5, 0))
 
-    def assert_connect(self):
+    def assert_connect(self, address):
         """The server responds to CONNECT with successful result."""
         # The CONNECT command to an IPv4 address, host 1.2.3.4 port 34:
         # VER = 5, CMD = 1 (CONNECT), ATYP = 1 (IPv4)
         self.deliver_data(
             self.sock,
-            struct.pack('!BBBB', 5, 1, 0, 1) + socket.inet_aton('1.2.3.4') +
+            struct.pack('!BBBB', 5, 1, 0, 1) + socket.inet_aton(address) +
             struct.pack("!H", 34)
         )
         reply = self.sock.transport.value()
@@ -139,7 +142,7 @@ class ConnectTests(unittest.TestCase):
         self.assertIsNotNone(self.sock.driver_outgoing)
         self.assertEqual(
             self.sock.driver_outgoing.transport.getPeer(),
-            address.IPv4Address('TCP', '1.2.3.4', 34)
+            IPv4Address('TCP', address, 34)
         )
 
     def assert_dataflow(self):
@@ -159,7 +162,7 @@ class ConnectTests(unittest.TestCase):
     def test_simple(self):
         """The server proxies an outgoing connection to an IPv4 address."""
         self.assert_handshake()
-        self.assert_connect()
+        self.assert_connect('1.2.3.4')
         self.assert_dataflow()
 
         self.sock.connectionLost('fake reason')
@@ -208,7 +211,7 @@ class ConnectTests(unittest.TestCase):
     def test_eofRemote(self):
         """If the outgoing connection closes the client connection closes."""
         self.assert_handshake()
-        self.assert_connect()
+        self.assert_connect('1.2.3.4')
 
         # now close it from the server side
         self.sock.driver_outgoing.connectionLost('fake reason')
@@ -217,7 +220,7 @@ class ConnectTests(unittest.TestCase):
     def test_eofLocal(self):
         """If the client connection closes the outgoing connection closes."""
         self.assert_handshake()
-        self.assert_connect()
+        self.assert_connect('1.2.3.4')
 
         self.sock.connectionLost('fake reason')
         self.assertTrue(
