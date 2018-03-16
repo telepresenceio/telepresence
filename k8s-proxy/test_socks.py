@@ -102,10 +102,11 @@ class ConnectTests(unittest.TestCase):
         self.sock = SOCKSv5Driver()
         transport = StringTCPTransport()
         self.sock.makeConnection(transport)
-        self.sock.reactor = FakeResolverReactor({
+        self.dns = {
             "example.com": "5.6.7.8",
             "1.2.3.4": "1.2.3.4"
-        })
+        }
+        self.sock.reactor = FakeResolverReactor(self.dns)
 
     def deliver_data(self, protocol, data):
         """
@@ -129,7 +130,26 @@ class ConnectTests(unittest.TestCase):
             bound_address,
             bound_port,
     ):
-        """The server responds to CONNECT with successful result."""
+        """
+        The server responds to CONNECT with successful result.
+        """
+        try:
+            packed_address = socket.inet_pton(socket.AF_INET, connect_address)
+        except OSError:
+            # It's a domain name
+            address_type = 3
+            encoded_address = connect_address.encode("ascii")
+            packed_address = (
+                # Protocol calls for a length prefix.
+                struct.pack("!B", len(encoded_address)) +
+                encoded_address
+            )
+            expected_peer_address = self.dns[connect_address]
+        else:
+            # It's an IPv4 literal.
+            address_type = 1
+            expected_peer_address = connect_address
+
         # The CONNECT command to an IPv4 address
         self.deliver_data(
             self.sock,
@@ -142,11 +162,9 @@ class ConnectTests(unittest.TestCase):
                 # RSV (Reserved)
                 0,
                 # ATYP = 1 (IPv4)
-                1,
+                address_type,
             ) +
-            # IP address to connect to
-            socket.inet_aton(connect_address) +
-            # Port number to connect to
+            packed_address +
             struct.pack("!H", connect_port)
         )
         reply = self.sock.transport.value()
@@ -173,7 +191,7 @@ class ConnectTests(unittest.TestCase):
         self.assertIsNotNone(self.sock.driver_outgoing)
         self.assertEqual(
             self.sock.driver_outgoing.transport.getPeer(),
-            IPv4Address('TCP', connect_address, connect_port)
+            IPv4Address('TCP', expected_peer_address, connect_port)
         )
 
     def assert_dataflow(self):
@@ -191,6 +209,7 @@ class ConnectTests(unittest.TestCase):
         self.assertEqual(self.sock.transport.value(), b'hi there')
 
     def assert_resolve(self, domainname, address):
+        encoded_name = domainname.encode("ascii")
         self.deliver_data(
             self.sock,
             struct.pack(
@@ -205,8 +224,8 @@ class ConnectTests(unittest.TestCase):
                 3,
             ) +
             # Length-prefixed domain to resolve.
-            struct.pack("!B", len(domainname)) +
-            domainname +
+            struct.pack("!B", len(encoded_name)) +
+            encoded_name +
             # Arbitrary port required by the protocol but not used for
             # anything.
             struct.pack("!H", 3401)
@@ -224,7 +243,21 @@ class ConnectTests(unittest.TestCase):
         The server proxies an outgoing connection to an IPv4 address.
         """
         self.assert_handshake()
-        self.assert_connect('1.2.3.4', 34)
+        self.assert_connect('1.2.3.4', 34, "2.3.4.5", 42)
+        self.assert_dataflow()
+
+        self.sock.connectionLost('fake reason')
+        self.assertTrue(
+            self.sock.driver_outgoing.transport.stringTCPTransport_closing
+        )
+
+    def test_domainnameConnect(self):
+        """
+        The server proxies an outgoing connection to an IPv4 address specified by
+        a domain name.
+        """
+        self.assert_handshake()
+        self.assert_connect("example.com", 123, "2.3.4.5", 42)
         self.assert_dataflow()
 
         self.sock.connectionLost('fake reason')
@@ -261,7 +294,7 @@ class ConnectTests(unittest.TestCase):
     def test_eofRemote(self):
         """If the outgoing connection closes the client connection closes."""
         self.assert_handshake()
-        self.assert_connect('1.2.3.4', 34)
+        self.assert_connect('1.2.3.4', 34, "2.3.4.5", 42)
 
         # now close it from the server side
         self.sock.driver_outgoing.connectionLost('fake reason')
@@ -270,7 +303,7 @@ class ConnectTests(unittest.TestCase):
     def test_eofLocal(self):
         """If the client connection closes the outgoing connection closes."""
         self.assert_handshake()
-        self.assert_connect('1.2.3.4', 34)
+        self.assert_connect('1.2.3.4', 34, "2.3.4.5", 42)
 
         self.sock.connectionLost('fake reason')
         self.assertTrue(
