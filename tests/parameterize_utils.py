@@ -1,4 +1,7 @@
 import os
+from random import (
+    randrange,
+)
 from time import (
     sleep,
 )
@@ -168,14 +171,15 @@ class _ExistingDeploymentOperation(object):
             # command is restored after Telepresence swaps the original deployment
             # back in.
             self.container_args = ["/hello-openshift"]
+            same_port = randrange(20000, 40000)
             self.http_server_auto_expose_same = HTTPServer(
-                12340,
-                12340,
+                same_port,
+                same_port,
                 random_name("auto-same"),
             )
             self.http_server_auto_expose_diff = HTTPServer(
                 12330,
-                12331,
+                randrange(20000, 40000),
                 random_name("auto-diff"),
             )
         else:
