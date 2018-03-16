@@ -230,7 +230,7 @@ class ConnectTests(unittest.TestCase):
             self.sock.driver_outgoing.transport.stringTCPTransport_closing
         )
 
-    def test_socks5ConnectSuccessfulResolution(self):
+    def test_socks5SuccessfulResolution(self):
         """
         Socks5 also supports hostname-based connections.
 
