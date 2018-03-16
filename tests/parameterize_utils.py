@@ -2,6 +2,9 @@ import os
 from random import (
     randrange,
 )
+from functools import (
+    partial,
+)
 from time import (
     sleep,
 )
@@ -46,9 +49,22 @@ from .utils import (
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
 
+def retry(condition, function):
+    while True:
+        result = function()
+        if not condition(result):
+            return result
+
+
+def random_port():
+    return randrange(20000, 40000)
+
+
 class HTTPServer(object):
     def __init__(self, local_port, remote_port, value):
         self.local_port = local_port
+        if remote_port is None:
+            remote_port = local_port
         self.remote_port = remote_port
         self.value = value
 
@@ -171,7 +187,7 @@ class _ExistingDeploymentOperation(object):
             # command is restored after Telepresence swaps the original deployment
             # back in.
             self.container_args = ["/hello-openshift"]
-            same_port = randrange(20000, 40000)
+            same_port = random_port()
             self.http_server_auto_expose_same = HTTPServer(
                 same_port,
                 same_port,
@@ -180,11 +196,11 @@ class _ExistingDeploymentOperation(object):
             print("HTTP Server auto-expose same-port: {}".format(same_port))
             self.http_server_auto_expose_diff = HTTPServer(
                 12330,
-                randrange(20000, 40000),
+                random_port(),
                 random_name("auto-diff"),
             )
             print("HTTP Server auto-expose diff-port: {}".format(
-                self.http_server_auto_exposxe_diff.remote_port,
+                self.http_server_auto_expose_diff.remote_port,
             ))
         else:
             self.name = "existing"
@@ -822,9 +838,29 @@ class Probe(object):
         _an_ip,
     )
 
-    HTTP_SERVER_SAME_PORT = HTTPServer(12370, 12370, random_name("same"))
-    HTTP_SERVER_DIFFERENT_PORT = HTTPServer(12360, 12355, random_name("diff"))
-    HTTP_SERVER_LOW_PORT = HTTPServer(12350, 79, random_name("low"))
+    HTTP_SERVER_SAME_PORT = HTTPServer(
+        random_port(),
+        None,
+        random_name("same"),
+    )
+    print("HTTP Server same-port: {}".format(
+        HTTP_SERVER_SAME_PORT.remote_port,
+    ))
+    HTTP_SERVER_DIFFERENT_PORT = HTTPServer(
+        12360,
+        random_port(),
+        random_name("diff"),
+    )
+    print("HTTP Server diff-port: {}".format(
+        HTTP_SERVER_SAME_PORT.remote_port,
+    ))
+    HTTP_SERVER_LOW_PORT = HTTPServer(
+        12350,
+        # This needs to be allocated from the privileged range.  Try to avoid
+        # values that are obviously going to fail.
+        retry({22, 80, 111, 443}.__contains__, partial(randrange, 1, 1024)),
+        random_name("low"),
+    )
 
     _result = None
 
