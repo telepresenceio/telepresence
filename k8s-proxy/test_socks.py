@@ -174,7 +174,7 @@ class ConnectTests(unittest.TestCase):
         """
         Socks5 also supports hostname-based connections.
 
-        @see: U{http://en.wikipedia.org/wiki/SOCKS#SOCKS_5_protocol}
+        @see: U{http://en.wikipedia.org/wiki/SOCKS#SOCKS5}
         """
         self.assert_handshake()
         self.deliver_data(
