@@ -59,6 +59,150 @@ $ eval $(minishift docker-env --shell bash)
 $ ./build --registry <Docker registry for tag and push> --build-and-push --no-tests
 ```
 
+### End-to-End Testing
+
+The Telepresence test suite includes a set of tests which run Telepresence as a real user would.
+These tests launch Telepresence and have it communicate with a real Kubernetes cluster, running real pods and observing the results.
+These tests are implemented in `tests/test_endtoend.py` and `tests/test_endtoend_distinct.py`.
+
+While the test functions themselves are present in these test modules,
+there are several additional support modules also involved.
+`tests/probe_endtoend.py` is a Python program which the tests tell Telepresence to run.
+`tests/parameterize_utils.py` is a support module for writing tests.
+`tests/conftest.py` integrates the tests with pytest.
+At points during end-to-end test development you may find yourself working with any of these sources.
+
+With the aim of making it clear how to write your own end-to-end test, here is one dissected.
+
+#### Test Probe
+
+```python
+from .conftest import (
+    with_probe,
+)
+
+@with_probe
+def test_demonstration(probe):
+```
+
+The end-to-end tests are written using a number of pytest features.
+The first is parameterized fixtures to make it easy to apply a test to all Telepresence execution modes.
+
+Notice that the test function is defined to take an argument `probe`.
+The argument must be named `probe` to select the correct pytest fixture.
+The `with_probe` decorator parameterizes the `probe` fixture with all of the Telepresence execution modes.
+This means that pytest will call this test function many times with different values for `probe`.
+For example, the test function will be called with a probe associated with a run of Telepresence given the `--method=container --new-deployment` arguments.
+The test function is called once for each combination of method arguments and operations (`--new-deployment`, `--swap-deployment`, etc).
+
+
+#### Probe Result
+
+```python
+    probe_environment = probe.result().result["environ"]
+```
+
+`probe.result()` will be used in every end-to-end test.
+This method returns an object - a `ProbeResult` - representing the Telepresence run.
+This *may* initiate a new run of Telepresence but it may also re-use the Telepresence launched by an earlier test with the same configuration (the same `probe`).
+This is the result of pytest fixture optimization and it allows the test suite to run Telepresence far fewer times than would otherwise be required (reducing the overall runtime of the test suite).
+
+The Telepresence probe collects some information from the Telepresence execution context immediately upon starting.
+The `result` attribute of the `ProbeResult` provides access to this information.
+In this case, we retrieve the complete POSIX environment for inspection.
+
+#### Probe Operation
+
+```python
+    if probe.operation.inherits_deployment_environment():
+```
+
+This test now prepares to make its first assertion.
+This first assertion is guarded by a check against the result of a method of `probe.operation`.
+`probe.operation` is a reference to an object representing the operation which the probe used.
+Remember that a test decorated with `with_probe` will be run multiple times with different `probe` arguments.
+Many of those probes will be configured with a different operation.
+This attribute lets a test vary its behavior based on that operation.
+This is useful because different operations may have different desired behavior and require different assertions in their tests.
+For more details about what can be done with the operation object, see `tests/parameterize_utils.py` where operations are implemented.
+
+In this case, `inherits_deployment_environment` is a method of the operation which returns a boolean.
+The result indicates whether it is expired and desired that the Telepresence execution context's POSIX environment inherits environment variables that were set in a pre-existing Kubernetes Deployment resource.
+Not all Telepresence configurations interact with a pre-existing Deployment - hence the need for this check.
+
+Supposing we are running with a probe where this check succeeds:
+
+```python
+        desired = probe.DESIRED_ENVIRONMENT
+	expected = {
+            k: probe_environment.get(k, None)
+            for k
+            in probe.DESIRED_ENVIRONMENT
+        }
+        assert desired == expected
+```
+
+Here the test makes an assertion about the observed POSIX environment.
+It looks up the value of the environment which *ought* to have been inherited - `probe.DESIRED_ENVIRONMENT` - and makes sure the items all appear in the observed environment.
+
+For the `else` case of this branch, we might assert that `desired` does *not* appear in the observed environment.
+
+#### Probe Method
+
+Test can also inspect the method in use.
+
+```python
+    if probe.method.inherits_client_environment():
+        assert probe.CLIENT_ENV_VAR in probe_environment
+```
+
+The idea here is similar.
+Different behavior may be desired from different methods.
+Inspection of `probe.method` provides a way to vary the test behavior based on this.
+Methods are implemented in `tests/parameterize_utils.py`.
+
+#### Probe Interaction
+
+The Telepresence process associated with the probe continues to run while the tests run.
+This means interactions with it are possible.
+Simple messages can easily be exchanged with the probe.
+
+```python
+    probe_result.write("probe-also-proxy {}".format(hostname))
+    success, request_ip = loads(probe_result.read())
+```
+
+This uses a command supported by the probe which makes it issue an HTTP request to a particular URL and return the response.
+These commands are implemented in `probe_endtoend.py`.
+In this case, the result is a two-tuple.
+The first element indicates whether the HTTP request succeeded or not.
+The second element gives some data from the HTTP response (if it succeeded).
+
+Probe commands are useful for observing any state or behavior which is only visible in the Telepresence execution context.
+They allow the test to retrieve the information so assertions can be made.
+
+#### Final Thoughts
+
+When writing end-to-end tests keep a few things in mind:
+
+##### End-to-end Debugging
+
+When such a test fails,
+the *default* is for it to present a low-information failure in the test suite result.
+This may be the test suite hanging and being killed by a pytest timeout.
+Or it may be Telepresence crashing and the full Telepresence log being dumped.
+These kind of test failures are challenging to debug.
+Be sure to examine all of the information available.
+If not enough information is available, add logging to Telepresence or the test suite.
+*Do* write your tests first, observe them fail, and improve their failure behavior before making them pass.
+
+##### Unit Tests
+
+End-to-end tests provide a highly realistic model of real-world Telepresence behavior.
+However, they are not the only option and not always the best option.
+For subtle logic (particularly involving many possible outcomes), unit tests may provide a lower-cost option.
+A single end-to-end test to verify a gross code path combined with many unit tests to exercise all of the subtleties can provide the best of both worlds.
+
 ### Coding standard
 
 Formatting is enforced by the installed `yapf` tool; to reformat the code, you can do:
