@@ -124,18 +124,43 @@ class ConnectTests(unittest.TestCase):
 
     def assert_connect(self, address):
         """The server responds to CONNECT with successful result."""
-        # The CONNECT command to an IPv4 address, host 1.2.3.4 port 34:
-        # VER = 5, CMD = 1 (CONNECT), ATYP = 1 (IPv4)
+        # The CONNECT command to an IPv4 address
         self.deliver_data(
             self.sock,
-            struct.pack('!BBBB', 5, 1, 0, 1) + socket.inet_aton(address) +
+            struct.pack(
+                '!BBBB',
+                # VER = 5
+                5,
+                # CMD = 1 (CONNECT)
+                1,
+                # RSV (Reserved)
+                0,
+                # ATYP = 1 (IPv4)
+                1,
+            ) +
+            # IP address to connect to
+            socket.inet_aton(address) +
+            # Port number to connect to
             struct.pack("!H", 34)
         )
         reply = self.sock.transport.value()
         self.sock.transport.clear()
         self.assertEqual(
             reply,
-            struct.pack('!BBBB', 5, 0, 0, 1) + socket.inet_aton('2.3.4.5') +
+            struct.pack(
+                '!BBBB',
+                # VER (Version)
+                5,
+                # REP (Reply); 0 = Succeeded.
+                0,
+                # RSV (Reserved)
+                0,
+                # ATYP (Address type); 1 = (IPv4)
+                1,
+            ) +
+            # The server-bound address
+            socket.inet_aton('2.3.4.5') +
+            # The server-bound port number
             struct.pack("!H", 42)
         )
         self.assertFalse(self.sock.transport.stringTCPTransport_closing)
