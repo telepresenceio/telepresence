@@ -2,35 +2,6 @@
 """
 Perform the steps required to build and deploy, but not release, a new version
 of Telepresence.
-
-Package
-- Make packages for Linux:
-  ./packaging/create-linux-packages.py <new version number>
-- Build Scout blob (this program)
-- Build Gitter announcement (this program)
-- Build images (part of testing)
-
-Initiate release - user does this manually
-- View changelog diff
-- Finalize the changelog
-- version and tag:
-  ./virtualenv/bin/bumpversion --verbose --list minor, git stuff
-- Wait for tag CI to do the above
-- Release the packaged stuff in the dist directory
-
-Release - via ci/release.sh (needs update)
-- Re-tag Docker images
-  (pull images from gcr.io and push to docker.io)
-- Upload linux packages to package cloud:
-  rvm install 2.1 (from ci/release.sh)
-  gem install package_cloud (from ci/release.sh)
-  ./dist/upload_linux_packages.sh
-- Update Homebrew package:
-  (GitHub key stuff from ci/release.sh)
-  ./packaging/homebrew-package.sh
-- Push scout blobs
-  ./dist/s3_uploader.sh
-- Ask user to post on Gitter
 """
 
 import json
@@ -130,6 +101,7 @@ def main():
     current, new = get_versions()
     emit_release_info(new)
     emit_announcement(new)
+    package_linux.main(new)
     print("Changelog diff:")
     print("git diff -b {}..HEAD docs/reference/changelog.md".format(current))
 
