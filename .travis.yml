@@ -16,7 +16,3 @@ install: |
 # Nothing to do here.  Release will happen later, maybe.
 script: |
   :;
-
-# Do nothing always. We'll disconnect Travis later.
-deploy: |
-  :;
