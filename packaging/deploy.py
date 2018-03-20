@@ -17,21 +17,16 @@ DIST = PROJECT / "dist"
 VENV_BIN = PROJECT / "virtualenv" / "bin"
 
 
-def get_versions():
-    """Retrieve the current and new version numbers"""
-    bumpversion = str(VENV_BIN / "bumpversion")
-    command = [bumpversion] + "--list --dry-run --allow-dirty minor".split()
-    data = subprocess.check_output(command)
-    lines = data.decode("utf-8").splitlines()
-    current = new = None
-    for line in lines:
-        if line.startswith("current_version="):
-            current = line.split("=", 1)[1]
-        elif line.startswith("new_version="):
-            new = line.split("=", 1)[1]
-    assert current, lines
-    assert new, lines
-    return current, new
+def get_version():
+    """Retrieve the current version number"""
+    cfg = PROJECT / ".bumpversion.cfg"
+    for line in cfg.open():
+        if line.startswith("current_version = "):
+            current = line.split(" = ", 1)[1]
+            break
+    else:
+        exit("Could not find version number in {}".format(cfg))
+    return current.strip()
 
 
 _S3_UPLOADER = """#!/bin/bash
@@ -98,12 +93,10 @@ def main():
     if DIST.exists():
         rmtree(str(DIST))
     DIST.mkdir(parents=True)
-    current, new = get_versions()
-    emit_release_info(new)
-    emit_announcement(new)
-    package_linux.main(new)
-    print("Changelog diff:")
-    print("git diff -b {}..HEAD docs/reference/changelog.md".format(current))
+    version = get_version()
+    emit_release_info(version)
+    emit_announcement(version)
+    package_linux.main(version)
 
 
 if __name__ == "__main__":
