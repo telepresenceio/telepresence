@@ -106,7 +106,7 @@ def run_docker_command(
     if sys.platform == "darwin":
         config["ip"] = MAC_LOOPBACK_IP
     # Image already has tini init so doesn't need --init option:
-    runner.checkpoint()
+    span = runner.span()
     subprocesses.append(
         runner.popen(
             docker_runify(
@@ -171,7 +171,7 @@ def run_docker_command(
     ]):
         docker_command += ["--init"]
     docker_command += docker_args
-    runner.checkpoint()
+    span.end()
     p = Popen(docker_command)
 
     def terminate_if_alive():

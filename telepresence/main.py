@@ -57,7 +57,7 @@ def get_env_variables(runner: Runner, remote_info: RemoteInfo,
     """
     Generate environment variables that match kubernetes.
     """
-    runner.checkpoint()
+    span = runner.span()
     # Get the environment:
     remote_env = _get_remote_env(
         runner, context, remote_info.namespace, remote_info.pod_name,
@@ -75,6 +75,7 @@ def get_env_variables(runner: Runner, remote_info: RemoteInfo,
         if key in remote_env:
             del remote_env[key]
     result.update(remote_env)
+    span.end()
     return result
 
 
@@ -121,7 +122,7 @@ def connect(
 
     Return (Subprocesses, local port of SOCKS proxying tunnel, SSH instance).
     """
-    runner.checkpoint()
+    span = runner.span()
     processes = Subprocesses()
     # Keep local copy of pod logs, for debugging purposes:
     processes.append(
@@ -219,12 +220,14 @@ def connect(
                        "127.0.0.1:{}:127.0.0.1:9050".format(socks_port)]),
         )
 
+    span.end()
     return processes, socks_port, ssh
 
 
 def start_proxy(runner: Runner, args: argparse.Namespace
                 ) -> Tuple[Subprocesses, Dict[str, str], int, SSH, RemoteInfo]:
     """Start the kubectl port-forward and SSH clients that do the proxying."""
+    span = runner.span()
     if sys.stdout.isatty() and args.method != "container":
         print(
             "Starting proxy with method '{}', which has the following "
@@ -311,6 +314,7 @@ def start_proxy(runner: Runner, args: argparse.Namespace
         except CalledProcessError:
             sleep(0.25)
 
+    span.end()
     return processes, env, socks_port, ssh, remote_info
 
 
@@ -401,6 +405,8 @@ def main():
         if args.logfile != "-":
             args.logfile = os.path.abspath(args.logfile)
         runner = Runner.open(args.logfile, kubectl_or_oc(server), args.verbose)
+        span = runner.span()
+        atexit.register(span.end)
         runner.write("Scout info: {}\n".format(scouted))
         runner.write(
             "Context: {}, namespace: {}, kubectl_command: {}\n".format(
