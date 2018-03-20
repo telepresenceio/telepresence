@@ -3,22 +3,24 @@
 Perform the steps required to build and deploy, but not release, a new version
 of Telepresence.
 
-Prep for package/release
-- changelog
-- version and tag:
-  ./virtualenv/bin/bumpversion --verbose --list minor
-- docker build/push:
-  ./build --registry datawire --build-and-push --version-suffix="" --no-tests
-- run tests
-- Display change log diff
-
 Package
 - Make packages for Linux:
   ./packaging/create-linux-packages.py <new version number>
 - Build Scout blob (this program)
 - Build Gitter announcement (this program)
+- Build images (part of testing)
 
-Release
+Initiate release - user does this manually
+- View changelog diff
+- Finalize the changelog
+- version and tag:
+  ./virtualenv/bin/bumpversion --verbose --list minor, git stuff
+- Wait for tag CI to do the above
+- Release the packaged stuff in the dist directory
+
+Release - via ci/release.sh (needs update)
+- Re-tag Docker images
+  (pull images from gcr.io and push to docker.io)
 - Upload linux packages to package cloud:
   rvm install 2.1 (from ci/release.sh)
   gem install package_cloud (from ci/release.sh)
@@ -26,9 +28,9 @@ Release
 - Update Homebrew package:
   (GitHub key stuff from ci/release.sh)
   ./packaging/homebrew-package.sh
-- test linux packages remotely
 - Push scout blobs
-- Post on Gitter
+  ./dist/s3_uploader.sh
+- Ask user to post on Gitter
 """
 
 import json
@@ -36,6 +38,8 @@ import subprocess
 
 from pathlib import Path
 from shutil import rmtree
+
+import package_linux
 
 PROJECT = Path(__file__).absolute().resolve().parent.parent
 DIST = PROJECT / "dist"
