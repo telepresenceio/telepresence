@@ -4,7 +4,50 @@ from subprocess import Popen, PIPE, STDOUT, DEVNULL, CalledProcessError, \
 from time import time, ctime
 from typing import List
 
+from inspect import getframeinfo, currentframe
 import os
+
+
+class Span(object):
+    def __init__(self, runner, tag, parent, verbose=True):
+        self.runner = runner
+        self.tag = tag
+        self.parent = parent
+        self.children = []
+        if self.parent:
+            self.parent.children.append(self)
+            self.depth = self.parent.depth + 1
+        else:
+            self.depth = 0
+        self.start_time = None
+        self.end_time = None
+        self.verbose = verbose
+
+    def begin(self):
+        self.start_time = time()
+        if self.verbose:
+            self.runner.write("BEGIN SPAN {}".format(self.tag))
+
+    def end(self):
+        self.end_time = time()
+        if self.runner.current_span == self:
+            self.runner.current_span = self.parent
+        if self.verbose:
+            spent = self.end_time - self.start_time
+            self.runner.write("END SPAN {} {:6.1f}s".format(self.tag, spent))
+        if self.parent is None:
+            self.runner.write("SPAN SUMMARY:")
+            self.summarize()
+
+    def summarize(self):
+        indent = self.depth * "  "
+        if self.end_time:
+            spent = "{:6.1f}s".format(self.end_time - self.start_time)
+        else:
+            spent = "???"
+        self.runner.write("{}{} {}".format(spent, indent, self.tag))
+        for ch in self.children:
+            ch.summarize()
 
 
 class Runner(object):
@@ -21,6 +64,7 @@ class Runner(object):
         self.kubectl_cmd = kubectl_cmd
         self.verbose = verbose
         self.start_time = time()
+        self.current_span = None  # type: Span
         self.counter = 0
         self.write("Telepresence launched at {}".format(ctime()))
         self.write("  {}".format(sys.argv))
@@ -42,6 +86,22 @@ class Runner(object):
                 open(logfile_path, "a", buffering=1), kubectl_cmd, verbose
             )
 
+    def span(self, name: str = "", context=True, verbose=True) -> Span:
+        """Write caller's frame info to the log."""
+
+        if context:
+            info = getframeinfo(currentframe().f_back)
+            tag = "{}:{}({})".format(
+                os.path.basename(info.filename), info.lineno,
+                "{},{}".format(info.function, name) if name else info.function
+            )
+        else:
+            tag = name
+        s = Span(self, tag, self.current_span, verbose=verbose)
+        self.current_span = s
+        s.begin()
+        return s
+
     def write(self, message: str) -> None:
         """Write a message to the log."""
         message = message.rstrip()
@@ -49,7 +109,12 @@ class Runner(object):
         self.logfile.write(line)
         self.logfile.flush()
 
-    def launch_command(self, track, *args, **kwargs) -> Popen:
+    def command_span(self, track, args):
+        return self.span(
+            "{} {}".format(track, " ".join(args))[:80], False, verbose=False
+        )
+
+    def launch_command(self, track, args, **kwargs) -> Popen:
         """Call a command, generate stamped, logged output."""
         kwargs = kwargs.copy()
         in_data = kwargs.get("input")
@@ -58,7 +123,7 @@ class Runner(object):
             kwargs["stdin"] = PIPE
         kwargs["stdout"] = PIPE
         kwargs["stderr"] = STDOUT
-        process = Popen(*args, **kwargs)
+        process = Popen(args, **kwargs)
         Popen([
             "stamp-telepresence", "--id", "{} |".format(track), "--start-time",
             str(self.start_time)
@@ -70,21 +135,25 @@ class Runner(object):
             process.communicate(in_data, timeout=kwargs.get("timeout"))
         return process
 
-    def check_call(self, *args, **kwargs):
+    def check_call(self, args, **kwargs):
         """Run a subprocess, make sure it exited with 0."""
         self.counter = track = self.counter + 1
         self.write("[{}] Running: {}... ".format(track, args))
         if "input" not in kwargs and "stdin" not in kwargs:
             kwargs["stdin"] = DEVNULL
-        process = self.launch_command(track, *args, **kwargs)
-        process.wait()
+        span = self.command_span(track, args)
+        try:
+            process = self.launch_command(track, args, **kwargs)
+            process.wait()
+        finally:
+            span.end()
         retcode = process.poll()
         if retcode:
             self.write("[{}] exit {}.".format(track, retcode))
             raise CalledProcessError(retcode, args)
         self.write("[{}] ran.".format(track))
 
-    def get_output(self, *args, stderr=None, **kwargs) -> str:
+    def get_output(self, args, stderr=None, **kwargs) -> str:
         """Return (stripped) command result as unicode string."""
         if stderr is None:
             stderr = self.logfile
@@ -92,16 +161,21 @@ class Runner(object):
         self.write("[{}] Capturing: {}...".format(track, args))
         kwargs["stdin"] = DEVNULL
         kwargs["stderr"] = stderr
-        result = str(check_output(*args, **kwargs).strip(), "utf-8")
+        span = self.command_span(track, args)
+        try:
+            result = str(check_output(args, **kwargs).strip(), "utf-8")
+        finally:
+            span.end()
         self.write("[{}] captured.".format(track))
         return result
 
-    def popen(self, *args, stdin=DEVNULL, **kwargs) -> Popen:
+    def popen(self, args, stdin=DEVNULL, **kwargs) -> Popen:
         """Return Popen object."""
         self.counter = track = self.counter + 1
         self.write("[{}] Launching: {}...".format(track, args))
         kwargs["stdin"] = stdin
-        return self.launch_command(track, *args, **kwargs)
+        result = self.launch_command(track, args, **kwargs)
+        return result
 
     def kubectl(self, context: str, namespace: str,
                 args: List[str]) -> List[str]:

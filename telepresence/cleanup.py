@@ -65,6 +65,7 @@ def wait_for_exit(
     runner: Runner, main_process: Popen, processes: Subprocesses
 ) -> None:
     """Given Popens, wait for one of them to die."""
+    span = runner.span()
     runner.write("Everything launched. Waiting to exit...")
     while True:
         sleep(0.1)
@@ -77,6 +78,7 @@ def wait_for_exit(
                     main_process.args, main_code
                 )
             )
+            span.end()
             raise SystemExit(main_code)
         dead_process = processes.any_dead()
         if dead_process:
@@ -92,4 +94,5 @@ def wait_for_exit(
                     " a lost connection.",
                     file=sys.stderr
                 )
+            span.end()
             raise SystemExit(3)

@@ -16,6 +16,7 @@ from telepresence.utilities import get_alternate_nameserver
 def create_new_deployment(runner: Runner,
                           args: argparse.Namespace) -> Tuple[str, str]:
     """Create a new Deployment, return its name and Kubernetes label."""
+    span = runner.span()
     run_id = str(uuid4())
 
     def remove_existing_deployment():
@@ -65,6 +66,7 @@ def create_new_deployment(runner: Runner,
         }
         command.append("--overrides=" + json.dumps(override))
     runner.get_kubectl(args.context, args.namespace, command)
+    span.end()
     return args.new_deployment, run_id
 
 
@@ -78,6 +80,7 @@ def swap_deployment(runner: Runner,
     Returns (Deployment name, unique K8s label, JSON of original container that
     was swapped out.)
     """
+    span = runner.span()
     run_id = str(uuid4())
 
     deployment_name, *container_name = args.swap_deployment.split(":", 1)
@@ -126,6 +129,7 @@ def swap_deployment(runner: Runner,
         args.needs_root,
     )
     apply_json(new_deployment_json)
+    span.end()
     return deployment_name, run_id, orig_container_json
 
 

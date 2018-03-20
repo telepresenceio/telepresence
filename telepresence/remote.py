@@ -145,6 +145,7 @@ def get_remote_info(
     the uuid we set for the telepresence label. Otherwise run_id is None and
     the Deployment name must be used to locate the Deployment.
     """
+    span = runner.span()
     deployment = get_deployment_json(
         runner,
         deployment_name,
@@ -205,11 +206,13 @@ def get_remote_info(
                     ))
                 # Wait for pod to be running:
                 wait_for_pod(runner, remote_info)
+                span.end()
                 return remote_info
 
         # Didn't find pod...
         sleep(1)
 
+    span.end()
     raise RuntimeError(
         "Telepresence pod not found for Deployment '{}'.".
         format(deployment_name)
@@ -228,6 +231,7 @@ def mount_remote_volumes(
     """
     # Docker for Mac only shares some folders; the default TMPDIR on OS X is
     # not one of them, so make sure we use /tmp:
+    span = runner.span()
     mount_dir = mkdtemp(dir="/tmp")
     sudo_prefix = ["sudo"] if allow_all_users else []
     middle = ["-o", "allow_other"] if allow_all_users else []
@@ -273,4 +277,5 @@ def mount_remote_volumes(
         else:
             runner.get_output(sudo_prefix + ["umount", "-f", mount_dir])
 
+    span.end()
     return mount_dir, cleanup if mounted else no_cleanup

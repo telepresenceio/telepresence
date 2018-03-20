@@ -67,6 +67,8 @@ def get_proxy_cidrs(
     long-term solution for service CIDR.
     """
 
+    span = runner.span()
+
     # Run script to convert --also-proxy hostnames to IPs, doing name
     # resolution inside Kubernetes, so we get cloud-local IP addresses for
     # cloud resources:
@@ -183,6 +185,7 @@ def get_proxy_cidrs(
             file=sys.stderr
         )
 
+    span.end()
     return list(result)
 
 
@@ -194,6 +197,7 @@ def connect_sshuttle(
     # Make sure we have sudo credentials by doing a small sudo in advance
     # of sshuttle using it:
     Popen(["sudo", "true"]).wait()
+    span = runner.span()
     sshuttle_method = "auto"
     if sys.platform.startswith("linux"):
         # sshuttle tproxy mode seems to have issues:
@@ -235,6 +239,7 @@ def connect_sshuttle(
             format(next(counter))
         ])
 
+    subspan = runner.span("sshuttle-wait")
     start = time()
     probes = 0
     while time() - start < 20:
@@ -248,3 +253,5 @@ def connect_sshuttle(
 
     sleep(1)  # just in case there's more to startup
     get_hellotelepresence()
+    subspan.end()
+    span.end()
