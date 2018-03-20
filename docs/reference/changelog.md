@@ -28,6 +28,8 @@ Misc:
   ([#506](https://github.com/datawire/telepresence/pull/506))
   ([#507](https://github.com/datawire/telepresence/pull/507))
   ([#508](https://github.com/datawire/telepresence/pull/508))
+* New documentation introducing developers to Telepresence end-to-end test development.
+  ([#509](https://github.com/datawire/telepresence/pull/509))
 * Improved cleanup of our testing cluster used by CI.
 * Reduced the verbosity of DNS lookup failures in the logs.
   ([#497](https://github.com/datawire/telepresence/issues/497))
