@@ -110,7 +110,7 @@ def main(version):
 
     upload_script = DIST / "upload_linux_packages.sh"
     with upload_script.open("w") as f:
-        f.write("/bin/sh\n\n")
+        f.write("#!/bin/sh\n\n")
         f.write("set -e\n\n")
         f.write('cd "$(dirname "$0")"\n')
         f.write("\n".join(uploads))
