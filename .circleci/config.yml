@@ -15,6 +15,9 @@ jobs:
       - image: "circleci/python:3"
 
     steps:
+      - setup_remote_docker:
+          docker_layer_caching: true
+
       - "checkout"
 
       - run:
