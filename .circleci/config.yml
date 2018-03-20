@@ -7,6 +7,7 @@ workflows:
     jobs:
       - lint
       - build-image
+      - deploy
 
       - build-macos:
           requires:
@@ -90,6 +91,23 @@ jobs:
           name: "build and push image"
           command: |
             ./build --registry gcr.io/datawireio --version-suffix "" --build-and-push --no-tests
+
+  deploy:
+    docker:
+      # https://circleci.com/docs/2.0/circleci-images/
+      # https://hub.docker.com/r/circleci/python/
+      - image: "circleci/python:3"
+
+    steps:
+      - "checkout"
+
+      - run:
+          name: "deploy"
+          command: |
+            packaging/deploy.py
+
+      - store-artifacts:
+          path: dist
 
   build-linux:
     machine:
