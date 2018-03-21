@@ -68,7 +68,9 @@ class _RandomPortAssigner(object):
         self.high = high
 
     def __iter__(self):
-        return iter(shuffle(randrange(self.low, self.high)))
+        ports = list(range(self.low, self.high))
+        shuffle(ports)
+        return iter(ports)
 
 
 _random_ports = iter(_RandomPortAssigner(20000, 40000))
