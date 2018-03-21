@@ -601,6 +601,7 @@ def run_telepresence_probe(
     ])
 
     # Tell the operation to prepare a service exposing those ports.
+    print("Creating service with ports {}".format(service_ports))
     operation.prepare_service(deployment_ident, service_ports)
 
     probe_args = []
