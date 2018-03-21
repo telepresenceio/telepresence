@@ -1,4 +1,11 @@
 import os
+from random import (
+    shuffle,
+    randrange,
+)
+from functools import (
+    partial,
+)
 from time import (
     sleep,
 )
@@ -43,9 +50,43 @@ from .utils import (
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 
 
+def retry(condition, function):
+    while True:
+        result = function()
+        if not condition(result):
+            return result
+
+
+class _RandomPortAssigner(object):
+    """
+    Provide ports in the requested range in an unstable order and
+    without replacement.  This reduces the chances that concurrent runs
+    of the test suite will try to use the same port number.
+    """
+    def __init__(self, low, high):
+        self.low = low
+        self.high = high
+
+    def __iter__(self):
+        ports = list(range(self.low, self.high))
+        shuffle(ports)
+        return iter(ports)
+
+
+_random_ports = iter(_RandomPortAssigner(20000, 40000))
+def random_port():
+    """
+    :return int: A port number which is unique within the scope of this
+        process.
+    """
+    return next(_random_ports)
+
+
 class HTTPServer(object):
     def __init__(self, local_port, remote_port, value):
         self.local_port = local_port
+        if remote_port is None:
+            remote_port = local_port
         self.remote_port = remote_port
         self.value = value
 
@@ -169,15 +210,21 @@ class _ExistingDeploymentOperation(object):
             # back in.
             self.container_args = ["/hello-openshift"]
             self.http_server_auto_expose_same = HTTPServer(
-                12340,
-                12340,
+                random_port(),
+                None,
                 random_name("auto-same"),
             )
+            print("HTTP Server auto-expose same-port: {}".format(
+                self.http_server_auto_expose_same.remote_port,
+            ))
             self.http_server_auto_expose_diff = HTTPServer(
                 12330,
-                12331,
+                random_port(),
                 random_name("auto-diff"),
             )
+            print("HTTP Server auto-expose diff-port: {}".format(
+                self.http_server_auto_expose_diff.remote_port,
+            ))
         else:
             self.name = "existing"
             self.image = "{}/telepresence-k8s:{}".format(
@@ -556,6 +603,7 @@ def run_telepresence_probe(
     ])
 
     # Tell the operation to prepare a service exposing those ports.
+    print("Creating service with ports {}".format(service_ports))
     operation.prepare_service(deployment_ident, service_ports)
 
     probe_args = []
@@ -814,9 +862,31 @@ class Probe(object):
         _an_ip,
     )
 
-    HTTP_SERVER_SAME_PORT = HTTPServer(12370, 12370, random_name("same"))
-    HTTP_SERVER_DIFFERENT_PORT = HTTPServer(12360, 12355, random_name("diff"))
-    HTTP_SERVER_LOW_PORT = HTTPServer(12350, 79, random_name("low"))
+    HTTP_SERVER_SAME_PORT = HTTPServer(
+        random_port(),
+        None,
+        random_name("same"),
+    )
+    print("HTTP Server same-port: {}".format(
+        HTTP_SERVER_SAME_PORT.remote_port,
+    ))
+    HTTP_SERVER_DIFFERENT_PORT = HTTPServer(
+        12360,
+        random_port(),
+        random_name("diff"),
+    )
+    print("HTTP Server diff-port: {}".format(
+        HTTP_SERVER_SAME_PORT.remote_port,
+    ))
+    HTTP_SERVER_LOW_PORT = HTTPServer(
+        12350,
+        # This needs to be allocated from the privileged range.  Try to avoid
+        # values that are obviously going to fail.  We only allocate one
+        # low-value port number so we don't need special steps to avoid
+        # reusing one.
+        retry({22, 80, 111, 443}.__contains__, partial(randrange, 1, 1024)),
+        random_name("low"),
+    )
 
     _result = None
 

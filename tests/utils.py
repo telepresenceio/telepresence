@@ -2,6 +2,7 @@
 
 import atexit
 from pathlib import Path
+import socket
 import time
 import os
 from json import dumps
@@ -99,8 +100,9 @@ def random_name(suffix=""):
     """Return a new name each time."""
     if suffix and not suffix.startswith("-"):
         suffix = "-" + suffix
-    return "testing-{}-{}-{}{}".format(
-        REVISION, os.getpid(), time.time() - START_TIME, suffix
+    hostname = socket.gethostname()
+    return "testing-{}-{}-{}-{}{}".format(
+        REVISION, hostname[:16], os.getpid(), int(time.time() - START_TIME), suffix
     ).replace(".", "-")
 
 

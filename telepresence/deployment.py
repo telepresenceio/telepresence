@@ -41,7 +41,10 @@ def create_new_deployment(runner: Runner,
         "--image=" + TELEPRESENCE_REMOTE_IMAGE,
         "--labels=telepresence=" + run_id,
     ]
-    for port in args.expose.remote():
+    # Provide a stable argument ordering.  Reverse it because that happens to
+    # make some current tests happy but in the long run that's totally
+    # arbitrary and doesn't need to be maintained.  See issue 494.
+    for port in sorted(args.expose.remote(), reverse=True):
         command.append("--port={}".format(port))
     if args.expose.remote():
         command.append("--expose")
