@@ -206,7 +206,7 @@ class SOCKSv5(StatefulProtocol):
             ).addCallback(write_response).addErrback(write_error)
         elif self.command == "RESOLVE_PTR":
 
-            def write_response(name):
+            def write_domain(name):
                 self.write(b"\5\0\0\3%b%b" % (
                     bytes([len(name)]),
                     name.encode("ascii"),
@@ -219,7 +219,7 @@ class SOCKSv5(StatefulProtocol):
                 self.transport.loseConnection()
 
             d = self.reverse_resolve(host)
-            d.addCallback(write_response)
+            d.addCallback(write_domain)
             d.addErrback(write_error)
 
     def connectionLost(self, reason):
