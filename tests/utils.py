@@ -102,7 +102,7 @@ def random_name(suffix=""):
         suffix = "-" + suffix
     hostname = socket.gethostname()
     return "testing-{}-{}-{}-{}{}".format(
-        REVISION, hostname, os.getpid(), int(time.time() - START_TIME), suffix
+        REVISION, hostname[:16], os.getpid(), int(time.time() - START_TIME), suffix
     ).replace(".", "-")
 
 
