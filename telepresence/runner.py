@@ -6,6 +6,7 @@ from typing import List
 
 from inspect import getframeinfo, currentframe
 import os
+from .cache import Cache
 
 
 class Span(object):
@@ -68,6 +69,7 @@ class Runner(object):
         self.counter = 0
         self.write("Telepresence launched at {}".format(ctime()))
         self.write("  {}".format(sys.argv))
+        self.cache = Cache.load(os.path.expanduser("~/.telepresence.cache"))
 
     @classmethod
     def open(cls, logfile_path, kubectl_cmd: str, verbose: bool):
