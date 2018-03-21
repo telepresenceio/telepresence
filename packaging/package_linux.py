@@ -70,12 +70,12 @@ def test_package(distro_image, package_directory, install_command):
         "-v={}:/packages:ro".format(package_directory), distro_image, "sh",
         "-c", command
     ],
-        check = True)
+        check=True)
 
 
 def get_upload_commands(system, release, package):
     """Returns the required package_cloud commands to upload this package"""
-    repos = ["datawireio/stable", "datawire/telepresence"]
+    repos = ["datawireio/stable", "datawireio/telepresence"]
     res = []
     for repo in repos:
         res.append(

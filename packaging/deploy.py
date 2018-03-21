@@ -5,7 +5,6 @@ of Telepresence.
 """
 
 import json
-import subprocess
 
 from pathlib import Path
 from shutil import rmtree
