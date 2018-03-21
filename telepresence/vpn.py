@@ -110,7 +110,16 @@ def get_proxy_cidrs(
             )
         )
 
-    # Get pod IPs from nodes if possible, otherwise use pod IPs as heuristic:
+    result.update(podCIDRs(runner))
+    result.add(serviceCIDR(runner))
+
+    span.end()
+    return list(result)
+
+
+# Get pod IPs from nodes if possible, otherwise use pod IPs as heuristic:
+def podCIDRs(runner: Runner):
+    cidrs = set()
     try:
         nodes = json.loads(
             runner.get_output([
@@ -133,13 +142,16 @@ def get_proxy_cidrs(
                 # Apparently a problem on OpenShift
                 pass
         if pod_ips:
-            result.add(covering_cidr(pod_ips))
+            cidrs.add(covering_cidr(pod_ips))
     else:
         for node in nodes:
             pod_cidr = node["spec"].get("podCIDR")
             if pod_cidr is not None:
-                result.add(pod_cidr)
+                cidrs.add(pod_cidr)
+    return list(cidrs)
 
+
+def serviceCIDR(runner: Runner):
     # Add service IP range, based on heuristic of constructing CIDR from
     # existing Service IPs. We create more services if there are less than 8,
     # to ensure some coverage of the IP range:
@@ -169,7 +181,6 @@ def get_proxy_cidrs(
         service_ips = get_service_ips()
     # Store Service CIDR:
     service_cidr = covering_cidr(service_ips)
-    result.add(service_cidr)
     # Delete new services:
     for new_service in new_services:
         runner.check_call([
@@ -184,9 +195,7 @@ def get_proxy_cidrs(
             "new Service.\n".format(service_cidr),
             file=sys.stderr
         )
-
-    span.end()
-    return list(result)
+    return service_cidr
 
 
 def connect_sshuttle(
