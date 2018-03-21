@@ -395,7 +395,20 @@ def test_resolve_names(probe):
         result.deployment_ident.name,
         result.deployment_ident.namespace,
     ))
-    print(loads(result.read()))
+    reply = loads(result.read())
+    assert IPv4Address(reply)
+
+
+@with_probe
+def test_resolve_addresses(probe):
+    """
+    Reverse name resolution is performed in the context of the Kubernetes
+    cluster.
+    """
+    result = probe.result()
+    result.write("gethostbyaddr 4.2.2.1")
+    reply = loads(result.read())
+    assert "level3.net" in reply[0]
 
 
 @after_probe
