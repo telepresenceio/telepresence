@@ -1,0 +1,78 @@
+diff --git a/src/lib/gethostbyname.c b/src/lib/gethostbyname.c
+index e43ed4a..296099e 100644
+--- a/src/lib/gethostbyname.c
++++ b/src/lib/gethostbyname.c
+@@ -301,6 +301,7 @@ LIBC_GETHOSTBYADDR_R_RET_TYPE tsocks_gethostbyaddr_r(LIBC_GETHOSTBYADDR_R_SIG)
+ 
+ 	he->h_aliases = NULL;
+ 	he->h_length = strlen(he->h_name);
++	he->h_addrtype = type;
+ 	/* Assign the address list within the data of the given buffer. */
+ 	data->addr_list[0] = (char *) addr;
+ 	data->addr_list[1] = NULL;
+diff --git a/tests/test_dns.c b/tests/test_dns.c
+index 2d87744..0c1eacf 100644
+--- a/tests/test_dns.c
++++ b/tests/test_dns.c
+@@ -26,7 +26,7 @@
+ #include <tap/tap.h>
+ #include "helpers.h"
+ 
+-#define NUM_TESTS 4
++#define NUM_TESTS 5
+ 
+ struct test_host {
+ 	const char *name;
+@@ -76,6 +76,44 @@ static void test_gethostbyname(const struct test_host *host)
+ 	return;
+ }
+ 
++static void test_gethostbyaddr_r(const struct test_host *host) {
++  int result;
++  in_addr_t addr;
++  struct hostent ret;
++  char buf[1024];
++  int buflen = sizeof buf;
++  struct hostent *result_entp;
++  int h_errno;
++
++  assert(host);
++  diag("gethostbyaddr_r test");
++
++  addr = inet_addr(host->ip);
++  result = gethostbyaddr_r(
++		       (const void *)&addr,
++		       INET_ADDRSTRLEN,
++		       AF_INET,
++		       &ret,
++		       buf,
++		       buflen,
++		       &result_entp,
++		       &h_errno
++		       );
++  if (result) {
++    fail("Resolving address %s: %d", host->ip, result);
++  }
++
++  if (strcmp(host->name, result_entp->h_name) != 0) {
++    fail("Wrong resolved name: %s", result_entp->h_name);
++  }
++
++  if (result_entp->h_addrtype != AF_INET) {
++    fail("Wrong resolved address family: %d", result_entp->h_addrtype);
++  }
++
++  ok(1, "Resolved address");
++}
++
+ static void test_gethostbyaddr(const struct test_host *host)
+ {
+ 	struct hostent *he;
+@@ -148,6 +186,7 @@ int main(int argc, char **argv)
+ 	test_getaddrinfo(&tor_check);
+ 	test_gethostbyname(&tor_dir_auth1);
+ 	test_gethostbyaddr(&tor_dir_auth2);
++	test_gethostbyaddr_r(&tor_dir_auth2);
+ 	test_getaddrinfo(&tor_localhost);
+ 
+ end:
