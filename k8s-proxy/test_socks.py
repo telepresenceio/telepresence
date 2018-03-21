@@ -300,8 +300,8 @@ class ConnectTests(unittest.TestCase):
 
     def test_domainnameConnect(self):
         """
-        The server proxies an outgoing connection to an IPv4 address specified by
-        a domain name.
+        The server proxies an outgoing connection to an IPv4 address specified
+        by a domain name.
         """
         self.assert_handshake()
         self.assert_connect("example.com", 123, "2.3.4.5", 42)
