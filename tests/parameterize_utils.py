@@ -1,5 +1,6 @@
 import os
 from random import (
+    shuffle,
     randrange,
 )
 from functools import (
@@ -56,8 +57,27 @@ def retry(condition, function):
             return result
 
 
+class _RandomPortAssigner(object):
+    """
+    Provide ports in the requested range in an unstable order and
+    without replacement.  This reduces the chances that concurrent runs
+    of the test suite will try to use the same port number.
+    """
+    def __init__(self, low, high):
+        self.low = low
+        self.high = high
+
+    def __iter__(self):
+        return iter(shuffle(randrange(self.low, self.high)))
+
+
+_random_ports = iter(_RandomPortAssigner(20000, 40000))
 def random_port():
-    return randrange(20000, 40000)
+    """
+    :return int: A port number which is unique within the scope of this
+        process.
+    """
+    return next(_random_ports)
 
 
 class HTTPServer(object):
