@@ -25,6 +25,7 @@ jobs:
       - run:
           name: "deploy"
           command: |
+            pyenv global 2.7.12 3.5.2
             python3 --version
             packaging/deploy.py
 
