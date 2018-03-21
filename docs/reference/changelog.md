@@ -10,6 +10,8 @@ Features:
 
 Bug fixes:
 
+* Telepresence now supports IPv4 reverse lookups when using `--method=inject-tcp`.
+  ([#195](https://github.com/datawire/telepresence/issues/195))
 * Telepresence now makes a greater effort to account for local DNS search domain configuration when bridging DNS to Kubernetes when using `--method=vpn-tcp`.
   ([#393](https://github.com/datawire/telepresence/issues/393))
 * Telepresence should no longer get confused looking for the route to the host when using the container method.
