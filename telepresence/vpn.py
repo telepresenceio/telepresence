@@ -73,8 +73,8 @@ def get_proxy_cidrs(
     # resolution inside Kubernetes, so we get cloud-local IP addresses for
     # cloud resources:
     result = set(k8s_resolve(runner, args, remote_info, args.also_proxy))
-    result.update(podCIDRs(runner))
-    result.add(serviceCIDR(runner))
+    result.update(runner.cache.child(args.context).lookup("podCIDRs", lambda: podCIDRs(runner)))
+    result.add(runner.cache.child(args.context).lookup("serviceCIDR", lambda: serviceCIDR(runner)))
 
     span.end()
     return list(result)
