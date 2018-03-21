@@ -59,7 +59,7 @@ class SOCKSv5Outgoing(protocol.Protocol):
         self.transport.write(data)
 
 
-def reverse_resolve(name : bytes) -> Deferred:
+def reverse_resolve(name: bytes) -> Deferred:
     return deferToThread(lambda: socket.gethostbyaddr(name)[0])
 
 
