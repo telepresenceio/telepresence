@@ -92,6 +92,12 @@ def k8s_resolve(
     runner: Runner, args: argparse.Namespace, remote_info: RemoteInfo,
     hosts_or_ips: List[str]
 ) -> List[str]:
+    """
+    Resolve a list of host and/or ip addresses inside the cluster
+    using the context, namespace, and remote_info supplied. Note that
+    if any hostname fails to resolve this will raise a SystemExit
+    exception.
+    """
     # Separate hostnames from IPs and IP ranges
     hostnames = []
     ip_ranges = []
@@ -142,8 +148,8 @@ def k8s_resolve(
     return resolved_ips + ip_ranges
 
 
-# Get pod IPs from nodes if possible, otherwise use pod IPs as heuristic:
 def podCIDRs(runner: Runner):
+    """Get pod IPs from nodes if possible, otherwise use pod IPs as heuristic:"""
     cidrs = set()
     try:
         nodes = json.loads(
@@ -177,9 +183,12 @@ def podCIDRs(runner: Runner):
 
 
 def serviceCIDR(runner: Runner):
-    # Add service IP range, based on heuristic of constructing CIDR from
-    # existing Service IPs. We create more services if there are less than 8,
-    # to ensure some coverage of the IP range:
+    """
+    Get service IP range, based on heuristic of constructing CIDR from
+    existing Service IPs. We create more services if there are less
+    than 8, to ensure some coverage of the IP range.
+    """
+
     def get_service_ips():
         services = json.loads(
             runner.get_output([
