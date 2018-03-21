@@ -79,7 +79,7 @@ class SOCKSv5(StatefulProtocol):
         along which the client's connection is being forwarded.
     """
     transport = None  # type: Any
-    reverse_resolve = None # type: Callable[[bytes], Deferred]
+    reverse_resolve = None  # type: Callable[[bytes], Deferred]
 
     def __init__(self, reactor=reactor, reverse_resolve=reverse_resolve):
         self.reactor = reactor  # type: Any
