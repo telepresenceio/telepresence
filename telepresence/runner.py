@@ -69,7 +69,9 @@ class Runner(object):
         self.counter = 0
         self.write("Telepresence launched at {}".format(ctime()))
         self.write("  {}".format(sys.argv))
-        self.cache = Cache.load(os.path.expanduser("~/.telepresence.cache"))
+        cache_dir = os.path.expanduser("~/.cache/telepresence")
+        os.makedirs(cache_dir, exist_ok=True)
+        self.cache = Cache.load(os.path.join(cache_dir, "cache.json"))
 
     @classmethod
     def open(cls, logfile_path, kubectl_cmd: str, verbose: bool):
