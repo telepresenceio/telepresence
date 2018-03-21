@@ -32,3 +32,6 @@ jobs:
 
       - store-artifacts:
           path: dist
+
+      - store-artifacts:
+          path: dist.tbz
