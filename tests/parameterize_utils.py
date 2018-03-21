@@ -881,7 +881,9 @@ class Probe(object):
     HTTP_SERVER_LOW_PORT = HTTPServer(
         12350,
         # This needs to be allocated from the privileged range.  Try to avoid
-        # values that are obviously going to fail.
+        # values that are obviously going to fail.  We only allocate one
+        # low-value port number so we don't need special steps to avoid
+        # reusing one.
         retry({22, 80, 111, 443}.__contains__, partial(randrange, 1, 1024)),
         random_name("low"),
     )
