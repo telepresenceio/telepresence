@@ -187,13 +187,14 @@ class _ExistingDeploymentOperation(object):
             # command is restored after Telepresence swaps the original deployment
             # back in.
             self.container_args = ["/hello-openshift"]
-            same_port = random_port()
             self.http_server_auto_expose_same = HTTPServer(
-                same_port,
-                same_port,
+                random_port(),
+                None,
                 random_name("auto-same"),
             )
-            print("HTTP Server auto-expose same-port: {}".format(same_port))
+            print("HTTP Server auto-expose same-port: {}".format(
+                self.http_server_auto_expose_same.remote_port,
+            ))
             self.http_server_auto_expose_diff = HTTPServer(
                 12330,
                 random_port(),
