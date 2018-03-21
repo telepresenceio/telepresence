@@ -28,10 +28,10 @@ jobs:
             pyenv global 2.7.12 3.5.2
             python3 --version
             packaging/deploy.py
-            tar cvjf telepresence-dist-$(cat dist/release_version.txt).tbz dist
+            tar cvjf telepresence-dist.tbz dist
 
       - store-artifacts:
           path: dist
 
       - store-artifacts:
-          path: dist.tbz
+          path: telepresence-dist.tbz
