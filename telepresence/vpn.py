@@ -73,15 +73,25 @@ def get_proxy_cidrs(
     # resolution inside Kubernetes, so we get cloud-local IP addresses for
     # cloud resources:
     result = set(k8s_resolve(runner, args, remote_info, args.also_proxy))
-    result.update(runner.cache.child(args.context).lookup("podCIDRs", lambda: podCIDRs(runner)))
-    result.add(runner.cache.child(args.context).lookup("serviceCIDR", lambda: serviceCIDR(runner)))
+    result.update(
+        runner.cache.child(args.context).lookup(
+            "podCIDRs", lambda: podCIDRs(runner)
+        )
+    )
+    result.add(
+        runner.cache.child(args.context).lookup(
+            "serviceCIDR", lambda: serviceCIDR(runner)
+        )
+    )
 
     span.end()
     return list(result)
 
 
-def k8s_resolve(runner: Runner, args: argparse.Namespace, remote_info: RemoteInfo,
-                hosts_or_ips: List[str]) -> List[str]:
+def k8s_resolve(
+    runner: Runner, args: argparse.Namespace, remote_info: RemoteInfo,
+    hosts_or_ips: List[str]
+) -> List[str]:
     # Separate hostnames from IPs and IP ranges
     hostnames = []
     ip_ranges = []
@@ -109,7 +119,8 @@ def k8s_resolve(runner: Runner, args: argparse.Namespace, remote_info: RemoteInf
                 runner.get_kubectl(
                     args.context, args.namespace, [
                         "exec", "--container=" + remote_info.container_name,
-                        remote_info.pod_name, "--", "python3", "-c", _GET_IPS_PY
+                        remote_info.pod_name, "--", "python3", "-c",
+                        _GET_IPS_PY
                     ] + hostnames
                 )
             )

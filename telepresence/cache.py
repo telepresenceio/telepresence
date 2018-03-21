@@ -1,8 +1,8 @@
 import atexit
 import json
 
-class Cache(object):
 
+class Cache(object):
     @classmethod
     def load(cls, filename):
         try:
@@ -10,9 +10,11 @@ class Cache(object):
                 cache = json.load(f)
         except FileNotFoundError:
             cache = {}
+
         def flush():
             with open(filename, "w") as f:
                 json.dump(cache, f)
+
         atexit.register(flush)
         return Cache(cache)
 
