@@ -80,9 +80,9 @@ class SOCKSv5(StatefulProtocol):
     """
     transport = None  # type: Any
 
-    def __init__(self, reactor=reactor, reverse_resolve=reverse_resolve):
-        self.reactor: Any = reactor
-        self.reverse_resolve: Callable[[str], Deferred] = reverse_resolve
+    def __init__(self, reactor=reactor, reverse=reverse_resolve):
+        self.reactor = reactor  # type: Any
+        self.reverse = reverse  # type: Callable[[str], Deferred]
 
     def connectionMade(self) -> None:
         self.otherConn = None  # type: Optional[SOCKSv5Outgoing]
@@ -217,7 +217,7 @@ class SOCKSv5(StatefulProtocol):
                 self.write(b"\5\1\0\0")
                 self.transport.loseConnection()
 
-            d = self.reverse_resolve(host)
+            d = self.reverse(host)
             d.addCallback(write_domain)
             d.addErrback(write_error)
 
