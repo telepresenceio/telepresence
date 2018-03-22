@@ -1,5 +1,6 @@
 import atexit
 import json
+from time import time
 
 
 class Cache(object):
@@ -23,6 +24,9 @@ class Cache(object):
     def __init__(self, values):
         self.values = values
 
+    def __contains__(self, key):
+        return key in self.values
+
     def __getitem__(self, key):
         return self.values[key]
 
@@ -36,6 +40,13 @@ class Cache(object):
             child = {}
             self.values[key] = child
         return Cache(child)
+
+    def invalidate(self, ttl):
+        now = time()
+        created = self.lookup("created", lambda: 0)
+        if (now - created) > ttl:
+            self.clear()
+            self["created"] = now
 
     def lookup(self, key, function):
         if key in self.values:

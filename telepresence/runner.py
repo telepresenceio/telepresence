@@ -72,11 +72,7 @@ class Runner(object):
         cache_dir = os.path.expanduser("~/.cache/telepresence")
         os.makedirs(cache_dir, exist_ok=True)
         self.cache = Cache.load(os.path.join(cache_dir, "cache.json"))
-        created = self.cache.lookup("created", lambda: 0)
-        self.write("{} {}".format(self.start_time - created, 12 * 60 * 60))
-        if (self.start_time - created) > 12 * 60 * 60:
-            self.cache.clear()
-            self.cache["created"] = self.start_time
+        self.cache.invalidate(12 * 60 * 60)
 
     @classmethod
     def open(cls, logfile_path, kubectl_cmd: str, verbose: bool):
