@@ -167,7 +167,7 @@ def test_volumes(probe):
         assert path_contents["podinfo/labels"] is None
 
     assert path_contents[
-        "var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+        "run/secrets/kubernetes.io/serviceaccount/ca.crt"
     ].startswith(
         "-----BEGIN CERT"
     )

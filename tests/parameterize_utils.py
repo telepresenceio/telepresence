@@ -818,7 +818,7 @@ class Probe(object):
     # context which the probe will read and return to us.
     INTERESTING_PATHS = [
         "podinfo/labels",
-        "var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+        "run/secrets/kubernetes.io/serviceaccount/ca.crt",
     ]
 
     # Get some httpbin.org addresses.  We avoid the real domain name in the
