@@ -11,12 +11,14 @@ class Cache(object):
         except FileNotFoundError:
             cache = {}
 
+        result = Cache(cache)
+
         def flush():
             with open(filename, "w") as f:
-                json.dump(cache, f)
+                json.dump(result.values, f)
 
         atexit.register(flush)
-        return Cache(cache)
+        return result
 
     def __init__(self, values):
         self.values = values
@@ -42,3 +44,6 @@ class Cache(object):
             value = function()
             self.values[key] = value
             return value
+
+    def clear(self):
+        self.values.clear()
