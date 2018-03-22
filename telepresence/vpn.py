@@ -149,7 +149,9 @@ def k8s_resolve(
 
 
 def podCIDRs(runner: Runner):
-    """Get pod IPs from nodes if possible, otherwise use pod IPs as heuristic:"""
+    """
+    Get pod IPs from nodes if possible, otherwise use pod IPs as heuristic:
+    """
     cidrs = set()
     try:
         nodes = json.loads(
