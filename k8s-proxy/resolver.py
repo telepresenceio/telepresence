@@ -2,6 +2,7 @@ import socket
 from copy import deepcopy
 from typing import Callable, List, Tuple, Optional, Union
 
+from twisted.python.failure import Failure
 from twisted.internet import defer
 from twisted.names import client, dns, error
 from twisted.internet.threads import deferToThread
@@ -167,26 +168,13 @@ class LocalResolver(object):
     def _handle_search_suffix(self, query, parts, timeout):
         stem = self._strip_search_suffix(parts)
         if stem != parts:
-            new_query = deepcopy(query)
-            new_query.name.name = b".".join(stem)
-            print(
-                "Updated query of type {} from {} to {}".
-                format(query.type, query.name.name, new_query.name.name)
-            )
-
-            def failed(f):
-                print(
-                    "Failed to lookup {} due to {}, falling back to {}".
-                    format(new_query.name.name, f, query.name.name)
-                )
-                return self.fallback.query(query, timeout=timeout)
-
-            return defer.maybeDeferred(
-                self.query,
-                new_query,
-                timeout=(1, 1),
-                real_name=query.name.name,
-            ).addErrback(failed)
+            # This is a query including a search domain from the client's
+            # network context.  The search domain doesn't make sense in the
+            # cluster's network context.  Fail this query fast.
+            print("Fast-failing query with search suffix: {}".format(
+                query.name,
+            ))
+            return Failure(error.DomainError())
 
     def query(
         self,
