@@ -26,6 +26,10 @@ case "${OS}" in
         ;;
 
     linux)
+	# Try to get a reasonably recent version of torsocks
+	echo "deb http://archive.ubuntu.com/ubuntu/ trusty-backports main" \
+	    | sudo tee /etc/apt/sources.list.d/trusty-backports.list
+	sudo apt-get update
         sudo apt-get install \
              sshfs conntrack torsocks \
              lsb-release
