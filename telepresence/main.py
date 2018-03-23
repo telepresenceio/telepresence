@@ -96,6 +96,7 @@ def expose_local_services(
             " ports you want to forward.",
             file=sys.stderr
         )
+    remote_forward_arguments = []
     for local_port, remote_port in port_numbers:
         if output:
             print(
@@ -105,11 +106,11 @@ def expose_local_services(
                 ),
                 file=sys.stderr
             )
-        processes.append(
-            ssh.popen([
-                "-R", "*:{}:127.0.0.1:{}".format(remote_port, local_port)
-            ])
-        )
+        remote_forward_arguments.extend([
+            "-R",
+            "*:{}:127.0.0.1:{}".format(remote_port, local_port),
+        ])
+    processes.append(ssh.popen(remote_forward_arguments))
     if output:
         print("", file=sys.stderr)
 
