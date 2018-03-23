@@ -47,6 +47,7 @@ from telepresence.runner import Runner
 
 
 def main():
+    """Dispatch to the correct mode"""
     command = sys.argv[1]
     if command == "proxy":
         proxy(loads(sys.argv[2]))
@@ -62,7 +63,7 @@ def proxy(config: dict):
         ip = config["ip"]
     else:
         # Typically host is Linux, use default route:
-        for line in str(check_output(["route"]), "ascii").splitlines():
+        for line in str(check_output(["route", "-n"]), "ascii").splitlines():
             parts = line.split()
             if parts[0] == "default":
                 ip = parts[1]
