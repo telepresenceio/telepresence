@@ -29,6 +29,20 @@ def probe(request):
         pytest.skip(reason)
 
 
+def _make_mark(name):
+    """
+    Turn a string into a pytest mark.
+    """
+    return getattr(pytest.mark, name.replace("-", "_"))
+
+
+def _get_marks(items):
+    """
+    Get the pytest marks appropriate for the given method and operation.
+    """
+    return [_make_mark(item.name) for item in items]
+
+
 def _probe_parametrize(fixture_name):
     """
     Create a "parametrized" pytest fixture which will supply Probes (one for
@@ -41,7 +55,10 @@ def _probe_parametrize(fixture_name):
 
         # The parameters are the elements of the cartesian product of methods,
         # operations.
-        list(product(METHODS, OPERATIONS)),
+         [pytest.param(value,marks=_get_marks(value))
+          for value
+          in product(METHODS, OPERATIONS)
+        ],
 
         # Use the `name` of methods and operations to generate readable
         # parameterized test names.
