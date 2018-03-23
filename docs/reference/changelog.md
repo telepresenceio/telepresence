@@ -33,6 +33,8 @@ Misc:
 * Improved cleanup of our testing cluster used by CI.
 * Reduced the verbosity of DNS lookup failures in the logs.
   ([#497](https://github.com/datawire/telepresence/issues/497))
+* Telepresence is now tested against OS packaged version of torsocks.
+  ([#528](https://github.com/datawire/telepresence/issues/528))
 
 #### 0.75 (January 30, 2018)
 
