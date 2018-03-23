@@ -92,11 +92,13 @@ jobs:
             ./build --registry gcr.io/datawireio --version-suffix "" --build-and-push --no-tests
 
   build-linux:
-    docker:
-      # https://circleci.com/docs/2.0/configuration-reference/#docker
-      image: "ubuntu:xenial"
+    machine:
+      enabled: true
+      # https://circleci.com/docs/2.0/configuration-reference/#machine
+      image: "circleci/classic:201711-01"
+
     environment:
-    - PROJECT_NAME: "datawireio"
+      - PROJECT_NAME: "datawireio"
 
     steps:
       - run:
