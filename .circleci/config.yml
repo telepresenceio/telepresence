@@ -95,9 +95,8 @@ jobs:
     docker:
       # https://circleci.com/docs/2.0/configuration-reference/#docker
       image: "ubuntu:xenial"
-
-      environment:
-        - PROJECT_NAME: "datawireio"
+    environment:
+    - PROJECT_NAME: "datawireio"
 
     steps:
       - run:
