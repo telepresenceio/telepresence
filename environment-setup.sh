@@ -31,7 +31,7 @@ case "${OS}" in
 	    | sudo tee /etc/apt/sources.list.d/trusty-backports.list
 	sudo apt-get update
         sudo apt-get install \
-             sshfs conntrack torsocks \
+             sshfs conntrack torsocks='2.*' \
              lsb-release
         ;;
 
