@@ -20,13 +20,14 @@ case "${OS}" in
         brew update > /dev/null
         brew cask install osxfuse
         brew install sshfs
+        brew install torsocks
         brew install python3 || brew upgrade python
         pip3 install virtualenv
         ;;
 
     linux)
         sudo apt-get install \
-             sshfs conntrack \
+             sshfs conntrack torsocks \
              lsb-release
         ;;
 
