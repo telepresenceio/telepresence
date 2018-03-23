@@ -45,6 +45,3 @@ docker version || true
 torsocks --version || true
 # Make sure gcloud is installed.  This includes kubectl.
 ./ci/setup-gcloud.sh "${PROJECT_NAME}" "${CLUSTER_NAME}" "${CLOUDSDK_COMPUTE_ZONE}" "${OS}"
-
-# Make sure torsocks is installed:
-./ci/build-torsocks.sh "${OS}"
