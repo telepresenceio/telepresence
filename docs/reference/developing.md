@@ -37,6 +37,17 @@ You can test your modifications to Telepresence with the `build` tool:
 $ ./build --registry <Docker registry for tag and push> [-- <pytest args>]
 ```
 
+You can run a subset of the tests using the pytest features for selecting tests
+(for example, `-k` and `-m`).
+End-to-end tests are marked with the method and operation they exercise.
+So, for example, you can run all of the tests in the vpn-tcp, swap-deployment configuration:
+
+```console
+$ ./build --registry <Docker registry for tag and push> -- -m 'vpn_tcp and swap_deployment'
+```
+
+Note that `-` must be replaced with `_` due to pytest limitations.
+
 See `./build --help` for details about how to run specific tests.
 
 You can also build images and push them to a registry without running any tests:
