@@ -10,6 +10,8 @@ Features:
 
 Bug fixes:
 
+* Telepresence no longer crashes when applications attempt to resolve an address to a domain name.
+  ([#195](https://github.com/datawire/telepresence/issues/195))
 * Telepresence now makes a greater effort to account for local DNS search domain configuration when bridging DNS to Kubernetes when using `--method=vpn-tcp`.
   ([#393](https://github.com/datawire/telepresence/issues/393))
 
