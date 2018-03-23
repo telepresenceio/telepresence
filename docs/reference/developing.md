@@ -19,6 +19,7 @@ $ cd telepresence
 $ ./environment-setup.sh $PROJECT $CLUSTER $ZONE <linux|osx>
 $ ./build --manage-virtualenv --no-tests --registry unused
 ```
+
 You may want to activate the virtualenv (for the duration of your shell):
 
 ```console
@@ -133,13 +134,12 @@ Not all Telepresence configurations interact with a pre-existing Deployment - he
 Supposing we are running with a probe where this check succeeds:
 
 ```python
-        desired = probe.DESIRED_ENVIRONMENT
-	expected = {
-            k: probe_environment.get(k, None)
-            for k
-            in probe.DESIRED_ENVIRONMENT
-        }
-        assert desired == expected
+    desired = probe.DESIRED_ENVIRONMENT
+    expected = {
+        k: probe_environment.get(k, None)
+        for k in probe.DESIRED_ENVIRONMENT
+    }
+    assert desired == expected
 ```
 
 Here the test makes an assertion about the observed POSIX environment.
