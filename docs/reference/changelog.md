@@ -15,21 +15,8 @@ Bug fixes:
 
 Misc:
 
-* A new end-to-end test suite setup will help us reduce the cycle time associated with testing Telepresence.
-  ([#429](https://github.com/datawire/telepresence/pull/429))
-  ([#463](https://github.com/datawire/telepresence/pull/463))
-  ([#468](https://github.com/datawire/telepresence/pull/468))
-  ([#473](https://github.com/datawire/telepresence/pull/473))
-  ([#474](https://github.com/datawire/telepresence/pull/474))
-  ([#475](https://github.com/datawire/telepresence/pull/475))
-  ([#479](https://github.com/datawire/telepresence/pull/479))
-  ([#495](https://github.com/datawire/telepresence/pull/495))
-  ([#501](https://github.com/datawire/telepresence/pull/501))
-  ([#506](https://github.com/datawire/telepresence/pull/506))
-  ([#507](https://github.com/datawire/telepresence/pull/507))
-  ([#508](https://github.com/datawire/telepresence/pull/508))
-* New documentation introducing developers to Telepresence end-to-end test development.
-  ([#509](https://github.com/datawire/telepresence/pull/509))
+* A new end-to-end test suite setup will help us reduce the cycle time associated with testing Telepresence. We added documentation introducing developers to Telepresence end-to-end test development.
+  ([#400](https://github.com/datawire/telepresence/issues/400))
 * Improved cleanup of our testing cluster used by CI.
 * Reduced the verbosity of DNS lookup failures in the logs.
   ([#497](https://github.com/datawire/telepresence/issues/497))
