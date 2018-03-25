@@ -1,6 +1,6 @@
 # Changelog
 
-#### 0.76 (Unreleased)
+#### 0.76 (March 25, 2018)
 
 Features:
 
