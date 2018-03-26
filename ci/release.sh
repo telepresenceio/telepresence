@@ -39,8 +39,10 @@ gcloud docker --authorize-only
 # Docker Images
 docker pull gcr.io/datawireio/telepresence-k8s:$VERSION
 docker pull gcr.io/datawireio/telepresence-local:$VERSION
-docker push datawireio/telepresence-k8s:$VERSION
-docker push datawireio/telepresence-local:$VERSION
+docker tag gcr.io/datawireio/telepresence-k8s:$VERSION datawire/telepresence-k8s:$VERSION
+docker tag gcr.io/datawireio/telepresence-local:$VERSION datawire/telepresence-local:$VERSION
+docker push datawire/telepresence-k8s:$VERSION
+docker push datawire/telepresence-local:$VERSION
 
 # Linux Packages
 dist/upload_linux_packages.sh
