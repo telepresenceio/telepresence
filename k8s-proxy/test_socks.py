@@ -96,13 +96,16 @@ class ConnectTests(unittest.TestCase):
     """
 
     def setUp(self):
-        self.sock = SOCKSv5Driver()
-        transport = StringTCPTransport()
-        self.sock.makeConnection(transport)
-        self.sock.reactor = FakeResolverReactor({
+        self.dns = {
             "example.com": "5.6.7.8",
             "1.2.3.4": "1.2.3.4"
-        })
+        }
+        self.reactor = FakeResolverReactor(self.dns)
+        self.sock = SOCKSv5Driver(
+            self.reactor,
+        )
+        transport = StringTCPTransport()
+        self.sock.makeConnection(transport)
 
     def deliver_data(self, protocol, data):
         """
@@ -111,6 +114,13 @@ class ConnectTests(unittest.TestCase):
         """
         for byte in iterbytes(data):
             protocol.dataReceived(byte)
+            if protocol.transport.disconnecting:
+                # Don't deliver any more data if the protocol lost its
+                # connection.  This happens in some error cases where the
+                # server can't parse the input.  Continuing to deliver data
+                # diverges from real transport behavior and generates tons of
+                # garbage.
+                break
 
     def assert_handshake(self):
         """The server responds with NO_AUTH to the initial SOCKS5 handshake."""
@@ -204,6 +214,104 @@ class ConnectTests(unittest.TestCase):
         self.assertEqual(reply, struct.pack('!BBBB', 5, 4, 0, 0))
         self.assertTrue(self.sock.transport.stringTCPTransport_closing)
         self.assertEqual(len(self.flushLoggedErrors(DNSLookupError)), 1)
+
+    def assert_resolve_pointer(self, address, resolved_name):
+        """
+        Assert that a RESOLVE_PTR request has the desired result.
+
+        :param str address: The IPv4 address literal to include in the
+            request.
+
+        :param Union[None, str] resolved_name: The domain name expected as the
+            result of the resolution.  Or, if the address is expected to be
+            unresolveable, ``None``.
+        """
+        self.deliver_data(
+            self.sock,
+            struct.pack(
+                '!BBBB',
+                # VER (Version)
+                5,
+                # RESOLVE_PTR
+                0xf1,
+                # RSV (Reserved)
+                0,
+                # ATYP (Address type); 1 = IPv4 address
+                1,
+            ) +
+            # The IP address to reverse-resolve.
+            socket.inet_pton(socket.AF_INET, address) +
+            # Arbitrary, unused, but required port number.
+            struct.pack('!H', 1234),
+        )
+        reply = self.sock.transport.value()
+        self.sock.transport.clear()
+
+        expected = (
+            # Version
+            5,
+        )
+        if resolved_name is None:
+            # Failure case
+            reply_format = "!BBBB"
+            # Address type - No address available
+            expected = expected + (
+                # Status - General failure
+                1,
+                # Reserved
+                0,
+                # No address follows, no address type.
+                0,
+            )
+        else:
+            # Success case
+            reply_format = "!BBBB{}p".format(
+                len(resolved_name) +
+                # Python makes us account for the length-prefix byte
+                # ourselves.
+                1
+            )
+            expected = expected + (
+                # Success
+                0,
+                # Reserved
+                0,
+                # Address type - domain name
+                3,
+                # The resulting domain
+                resolved_name.encode("ascii"),
+            )
+
+        self.assertEqual(
+            struct.calcsize(reply_format),
+            len(reply),
+            "Reply not of expected length: {}".format(reply),
+        )
+        self.assertEqual(
+            expected,
+            struct.unpack(reply_format, reply),
+        )
+        self.assertTrue(self.sock.transport.stringTCPTransport_closing)
+
+    def test_socks5TorStyleSuccessfulResolvePointer(self):
+        """
+        A Tor-style name pointer resolution returns a success response if the
+        pointer is resolveable.
+        """
+        self.assert_handshake()
+        self.assert_resolve_pointer("5.6.7.8", "example.com")
+    test_socks5TorStyleSuccessfulResolvePointer.todo = (
+        "Real pointer resolution disabled until Torsocks 2.3.0-ish available."
+    )
+
+    def test_socks5TorStyleFailedResolvePointer(self):
+        """
+        A Tor-style name pointer resolution returns a failure response if the
+        pointer is not resolveable.
+        """
+        self.assert_handshake()
+        self.assert_resolve_pointer("2.3.4.5", None)
+        self.assertTrue(self.sock.transport.stringTCPTransport_closing)
 
     def test_eofRemote(self):
         """If the outgoing connection closes the client connection closes."""

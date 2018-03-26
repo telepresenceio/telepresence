@@ -122,6 +122,8 @@ class SOCKSv5(StatefulProtocol):
             self.command = "CONNECT"
         elif command == 240:  # \xF0
             self.command = "RESOLVE"
+        elif command == 241:  # \xF1
+            self.command = "RESOLVE_PTR"
         else:
             # Unsupported command response
             self._write_response(7, "0.0.0.0", 0)
@@ -194,6 +196,12 @@ class SOCKSv5(StatefulProtocol):
             self.reactor.resolve(
                 host,
             ).addCallback(write_response).addErrback(write_error)
+        elif self.command == "RESOLVE_PTR":
+            # Stub error implementation until torsocks fix is available.  See:
+            # https://github.com/datawire/telepresence/issues/195
+            # https://trac.torproject.org/projects/tor/ticket/25586
+            self.write(b"\5\1\0\0")
+            self.transport.loseConnection()
 
     def connectionLost(self, reason):
         if self.otherConn:
