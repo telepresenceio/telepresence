@@ -214,7 +214,10 @@ class SOCKSv5(StatefulProtocol):
 
             def write_error(e):
                 log.err(e)
-                self.write(b"\5\1\0\0")
+                self.write(b"\5\0\0\3%b%b" % (
+                    bytes([len(host)]),
+                    host.encode("ascii"),
+                ))
                 self.transport.loseConnection()
 
             d = self.reverse(host)

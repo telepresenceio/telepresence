@@ -184,12 +184,26 @@ def disconnect_telepresence(namespace):
     raise SystemExit(66)
 
 
+def probe_gethostbyname(name):
+    try:
+        return True, gethostbyname(name)
+    except Exception as e:
+        return False, str(e)
+
+
+def probe_gethostbyaddr(name):
+    try:
+        return True, gethostbyaddr(name)
+    except Exception as e:
+        return False, str(e)
+
+
 COMMANDS = {
     "probe-url": lambda *urls: list(probe_urls(urls)),
     "probe-also-proxy": probe_also_proxy,
     "disconnect-telepresence": disconnect_telepresence,
-    "gethostbyname": gethostbyname,
-    "gethostbyaddr": gethostbyaddr,
+    "gethostbyname": probe_gethostbyname,
+    "gethostbyaddr": probe_gethostbyaddr,
 }
 
 

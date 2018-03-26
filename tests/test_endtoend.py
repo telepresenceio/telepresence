@@ -395,8 +395,19 @@ def test_resolve_names(probe):
         result.deployment_ident.name,
         result.deployment_ident.namespace,
     ))
-    reply = loads(result.read())
-    assert IPv4Address(reply)
+    success, reply = loads(result.read())
+    assert success and IPv4Address(reply), reply
+
+
+@with_probe
+def test_resolve_names_failure(probe):
+    """
+    Attempted resolution of non-existent names results in blah blah blah
+    """
+    result = probe.result()
+    result.write("gethostbyname example.invalid")
+    success, reply = loads(result.read())
+    assert not success, reply
 
 
 @with_probe
@@ -407,8 +418,27 @@ def test_resolve_addresses(probe):
     """
     result = probe.result()
     result.write("gethostbyaddr 4.2.2.1")
-    reply = loads(result.read())
-    assert "level3.net" in reply[0]
+    success, reply = loads(result.read())
+    assert success and "level3.net" in reply[0], reply
+
+
+@with_probe
+def test_resolve_addresses_failure(probe):
+    """
+    Attempted reverse name resolution for addresses with no corresponding
+    names results in blah blah blah.
+    """
+    result = probe.result()
+    # RFC 6890 - An address from TEST-NET-1.  Selected in hopes it will never
+    # reverse resolve to anything.
+    result.write("gethostbyaddr 192.0.2.1")
+    success, reply = loads(result.read())
+    assert (
+        # musl libc behaves like this
+        (success and reply[0] == '192.0.2.1') or
+        # glibc behaves like this
+        (not success)
+    ), (success, reply)
 
 
 @after_probe

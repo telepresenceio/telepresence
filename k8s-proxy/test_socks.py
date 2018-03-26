@@ -416,11 +416,15 @@ class ConnectTests(unittest.TestCase):
 
     def test_socks5TorStyleFailedResolvePointer(self):
         """
-        A Tor-style name pointer resolution returns a failure response if the
-        pointer is not resolveable.
+        A Tor-style name pointer resolution returns a success response
+        containing the address being resolved.
+
+        This avoids a crash bug in Torsocks
+        (https://trac.torproject.org/projects/tor/ticket/25627) and mirrors
+        Alpine (musl libc) behavior (but not glibc behavior).
         """
         self.assert_handshake()
-        self.assert_resolve_pointer("2.3.4.5", None)
+        self.assert_resolve_pointer("2.3.4.5", "2.3.4.5")
         self.assertTrue(self.sock.transport.stringTCPTransport_closing)
         self.assertEqual(len(self.flushLoggedErrors(socket.herror)), 1)
 
