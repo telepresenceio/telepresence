@@ -5,7 +5,7 @@
 
 set -eu
 
-apk --no-cache add bash build-base ca-certificates docker git openssh-client python python3-dev ruby ruby-dev
+apk --no-cache add bash build-base ca-certificates curl docker git openssh-client python python3-dev ruby ruby-dev
 pip3 install awscli
 gem install --no-document package_cloud
 
