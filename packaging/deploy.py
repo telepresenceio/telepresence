@@ -84,6 +84,19 @@ def emit_announcement(version):
             dest.write("[u]: https://www.telepresence.io/reference/upgrade\n")
 
 
+def emit_machinery():
+    """Copy scripts and data used by the release process"""
+    machinery = [
+        PROJECT / "packaging" / "homebrew-package.sh",
+        PROJECT / "packaging" / "homebrew-formula.rb",
+        PROJECT / "ci" / "release.sh",
+        PROJECT / "ci" / "release-setup.sh"
+    ]
+    for item in machinery:
+        dest = DIST / item.name
+        dest.write_bytes(item.read_bytes())
+
+
 def main():
     """
     Perform the steps required to build and deploy, but not release, a new
@@ -95,6 +108,7 @@ def main():
     version = get_version()
     emit_release_info(version)
     emit_announcement(version)
+    emit_machinery()
     package_linux.main(version)
 
 

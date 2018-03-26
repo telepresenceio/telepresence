@@ -15,19 +15,13 @@ echo Releasing Telepresence $VERSION
 # -----------
 
 # ssh stuff to allow a push to github.com/datawire/homebrew-blackbird
-mkdir -p ~/.ssh
-ssh-keyscan -H github.com > ~/.ssh/known_hosts
-echo -e "$HOMEBREW_KEY" > ~/.ssh/homebrew.rsa
-chmod 600 ~/.ssh/homebrew.rsa
 eval $(ssh-agent)
-ssh-add ~/.ssh/homebrew.rsa
-
-# Git wants this stuff set
-git config --global user.email "services@datawire.io"
-git config --global user.name "d6e automaton"
+echo -e "$HOMEBREW_KEY" > homebrew.rsa
+chmod 600 homebrew.rsa
+ssh-add homebrew.rsa
+ssh -oStrictHostKeyChecking=no -T git@github.com || true
 
 # Install/test package cloud CLI (uses PACKAGECLOUD_TOKEN)
-gem install package_cloud
 package_cloud repository list | fgrep public
 
 # Login to Docker Hub
@@ -49,7 +43,7 @@ docker push datawire/telepresence-local:$VERSION
 dist/upload_linux_packages.sh
 
 # Homebrew
-env TELEPRESENCE_VERSION=$VERSION packaging/homebrew-package.sh
+env TELEPRESENCE_VERSION=$VERSION dist/homebrew-package.sh
 
 # Scout blobs
 dist/s3_uploader.sh

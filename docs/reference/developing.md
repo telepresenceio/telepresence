@@ -262,6 +262,7 @@ At the moment, the Linux packages are not tested, other than a minor smoke test.
 7. Run the release script.  
    `ci/release.sh`.
 8. Post the release announcement on Gitter et al.
+   The release script outputs the announcement, or you can find it in `dist/announcement.md`.
 
 #### What the release script does
 
