@@ -3,12 +3,13 @@
 set -eu
 
 # Inputs
-echo Releasing Telepresence $VERSION
 echo "$HOMEBREW_KEY $DOCKER_PASSWORD $PACKAGECLOUD_TOKEN" > /dev/null
 if [ ! -x dist/upload_linux_packages.sh ]; then
     echo "Built distribution not found."
     exit 1
 fi
+VERSION=$(cat dist/release_version.txt)
+echo Releasing Telepresence $VERSION
 
 # Preparation
 # -----------
