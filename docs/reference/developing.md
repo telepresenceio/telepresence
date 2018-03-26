@@ -254,14 +254,22 @@ At the moment, the Linux packages are not tested, other than a minor smoke test.
    `git push origin master --tags`
 4. Wait for [CircleCI](https://circleci.com/gh/datawire/workflows/telepresence/tree/master) to finish.
    Make sure all the test pass.
-5. Download the tarball of deployable artifacts and unarchive into the project directory. It will populate the `dist` subdirectory.
-6. Set up release credentials:
+5. Set up a container to run the release:  
+   `# XXX this stuff should be in a Dockerfile`  
+   `host> docker run --rm -it --name build -v`  
+   `/var/run/docker.sock:/var/run/docker.sock alpine:3.7 sh`  
+   `host> docker cp ci/release-setup.sh build:/root`  
+   `container> ~/release-setup.sh`
+6. Set up release credentials in the container:
    * Set environment variables `HOMEBREW_KEY`, `DOCKER_PASSWORD`, and `PACKAGECLOUD_TOKEN`.
    * Make sure AWS S3 access is set up, either via files in `~/.aws` or via environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
    * Make sure Docker registry access is setup for gcr.io.
-7. Run the release script.  
-   `ci/release.sh`.
-8. Post the release announcement on Gitter et al.
+7. Download the tarball of deployable artifacts and unarchive into container in the home directory. It will populate the `dist` subdirectory:  
+   `wget https://.../telepresence-dist.tbz`  
+   `tar xf telepresence-dist.tbz`
+8. Run the release script.  
+   `dist/release.sh`.
+9. Post the release announcement on Gitter et al.
    The release script outputs the announcement, or you can find it in `dist/announcement.md`.
 
 #### What the release script does

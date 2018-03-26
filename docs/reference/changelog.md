@@ -1,5 +1,11 @@
 # Changelog
 
+#### 0.77 (March 26, 2018)
+
+Misc:
+
+* Updates to the release process.
+
 #### 0.76 (March 25, 2018)
 
 Features:
