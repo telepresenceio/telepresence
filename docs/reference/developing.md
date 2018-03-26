@@ -255,7 +255,10 @@ At the moment, the Linux packages are not tested, other than a minor smoke test.
 4. Wait for [CircleCI](https://circleci.com/gh/datawire/workflows/telepresence/tree/master) to finish.
    Make sure all the test pass.
 5. Download the tarball of deployable artifacts and unarchive into the project directory. It will populate the `dist` subdirectory.
-6. Set environment variables VERSION, HOMEBREW_KEY, DOCKER_PASSWORD, and PACKAGECLOUD_TOKEN. Make sure Docker registry access is setup for gcr.io.
+6. Set up release credentials:
+   * Set environment variables `HOMEBREW_KEY`, `DOCKER_PASSWORD`, and `PACKAGECLOUD_TOKEN`.
+   * Make sure AWS S3 access is set up, either via files in `~/.aws` or via environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+   * Make sure Docker registry access is setup for gcr.io.
 7. Run the release script.  
    `ci/release.sh`.
 8. Post the release announcement on Gitter et al.
