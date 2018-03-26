@@ -26,7 +26,6 @@ package_cloud repository list | fgrep public
 
 # Login to Docker Hub
 docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
-gcloud docker --authorize-only
 
 # Release
 # -------
