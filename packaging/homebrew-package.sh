@@ -2,13 +2,13 @@
 set -e
 
 # Clone blackbird-homebrew:
-BUILD_HOMEBREW_DIR=$(mktemp --directory)
+BUILD_HOMEBREW_DIR=$(mktemp -d)
 echo "Cloning into ${BUILD_HOMEBREW_DIR}..."
 git clone git@github.com:datawire/homebrew-blackbird.git "${BUILD_HOMEBREW_DIR}"
 FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
 
 # Update recipe
-cp packaging/homebrew-formula.rb "$FORMULA"
+cp dist/homebrew-formula.rb "$FORMULA"
 sed "s/__NEW_VERSION__/${TELEPRESENCE_VERSION}/g" -i "$FORMULA"
 TARBALL_HASH=$(curl --silent -L "https://github.com/datawire/telepresence/archive/${TELEPRESENCE_VERSION}.tar.gz" | sha256sum | cut -f 1 -d " ")
 sed "s/__TARBALL_HASH__/${TARBALL_HASH}/g" -i "$FORMULA"
