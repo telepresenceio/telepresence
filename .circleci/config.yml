@@ -85,6 +85,7 @@ jobs:
       - run:
           name: "build and push image"
           command: |
+            docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
             ./build --registry datawire --version-suffix="" --build-and-push --no-tests
 
   deploy:
