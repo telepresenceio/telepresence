@@ -5,17 +5,17 @@ workflows:
   version: 2
   ci:
     jobs:
-#      - lint
+      - lint
       - build-image
-#      - deploy
+      - deploy
 
-#      - build-macos:
-#          requires:
-#            - "build-image"
+      - build-macos:
+          requires:
+            - "build-image"
 
-#      - build-linux:
-#          requires:
-#            - "build-image"
+      - build-linux:
+          requires:
+            - "build-image"
 
 jobs:
   lint:
