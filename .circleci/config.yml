@@ -72,7 +72,6 @@ jobs:
           name: "setup non-Python environment"
           command: |
             sudo apt-get install lsb-release
-            sudo pip install --upgrade pip virtualenv
             ci/setup-gcloud.sh datawireio telepresence-testing us-central1-a linux
 
       - run:
@@ -81,11 +80,6 @@ jobs:
             echo 'PATH=${HOME}/google-cloud-sdk/bin:${PWD}/ci:${PATH}' >> ${BASH_ENV}
             # If we installed kubectl, it was into ${PWD}
             echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
-
-      - run:
-          name: "setup Python environment"
-          command: |
-            ./build --registry gcr.io/datawireio --manage-virtualenv --no-tests
 
       - run:
           name: "build and push image"
