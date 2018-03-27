@@ -52,34 +52,17 @@ jobs:
       - run:
           name: "update system"
           command: |
-            sudo apt-get --quiet update
+            sudo apt-get -qq update
+            sudo apt-get -qq install lsb-release
 
       - "checkout"
 
       - run:
-          name: "decrypt gcloud keys"
+          name: "setup gcloud"
           command: |
-            # To update:
-            #   1) Generate a new key and IV:
-            #      $ dd if=/dev/urandom count=64 bs=1 | md5sum
-            #   2) Update GCLOUD_KEY and GCLOUD_IV in CircleCI "Environment
-            #      Variables" configuration for Telepresence project.
-            #   3) Encrypt the new gcloud key:
-            #      $ ci/encrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
             ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
-
-      - run:
-          name: "setup non-Python environment"
-          command: |
-            sudo apt-get install lsb-release
             ci/setup-gcloud.sh datawireio telepresence-testing us-central1-a linux
-
-      - run:
-          name: "configure gcloud"
-          command: |
             echo 'PATH=${HOME}/google-cloud-sdk/bin:${PWD}/ci:${PATH}' >> ${BASH_ENV}
-            # If we installed kubectl, it was into ${PWD}
-            echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
 
       - run:
           name: "build and push image"
