@@ -71,6 +71,7 @@ jobs:
       - run:
           name: "setup non-Python environment"
           command: |
+            sudo apt-get install lsb-release
             sudo pip install --upgrade pip virtualenv
             ci/setup-gcloud.sh datawireio telepresence-testing us-central1-a linux
 
