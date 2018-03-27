@@ -5,17 +5,17 @@ workflows:
   version: 2
   ci:
     jobs:
-      - lint
+#      - lint
       - build-image
-      - deploy
+#      - deploy
 
-      - build-macos:
-          requires:
-            - "build-image"
+#      - build-macos:
+#          requires:
+#            - "build-image"
 
-      - build-linux:
-          requires:
-            - "build-image"
+#      - build-linux:
+#          requires:
+#            - "build-image"
 
 jobs:
   lint:
@@ -72,7 +72,7 @@ jobs:
           name: "setup non-Python environment"
           command: |
             sudo pip install --upgrade pip virtualenv
-            ./environment-setup.sh datawireio telepresence-testing us-central1-a linux
+            ci/setup-gcloud.sh datawireio telepresence-testing us-central1-a linux
 
       - run:
           name: "configure gcloud"
@@ -84,7 +84,6 @@ jobs:
       - run:
           name: "setup Python environment"
           command: |
-            sudo pip install --upgrade virtualenv
             ./build --registry gcr.io/datawireio --manage-virtualenv --no-tests
 
       - run:
