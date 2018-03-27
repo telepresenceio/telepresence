@@ -31,14 +31,14 @@ jobs:
           name: "setup Python environment"
           command: |
             sudo pip install --upgrade virtualenv
-            ./build --registry gcr.io/datawireio --no-tests --manage-virtualenv
+            ./build --no-tests --manage-virtualenv
 
       - run:
           name: "run lint checks"
           command: |
-            ./build --registry gcr.io/datawireio --no-tests --lint
+            ./build --no-tests --lint
 
-  build-image:
+  build-image-gcloud:
     docker:
       # https://circleci.com/docs/2.0/circleci-images/
       # https://hub.docker.com/r/circleci/python/
@@ -68,6 +68,24 @@ jobs:
           name: "build and push image"
           command: |
             ./build --registry gcr.io/datawireio --version-suffix "" --build-and-push --no-tests
+
+  build-image:
+    docker:
+      # https://circleci.com/docs/2.0/circleci-images/
+      # https://hub.docker.com/r/circleci/python/
+      - image: "circleci/python:3"
+
+    steps:
+      # https://circleci.com/docs/2.0/building-docker-images/
+      - setup_remote_docker:
+          docker_layer_caching: true
+
+      - "checkout"
+
+      - run:
+          name: "build and push image"
+          command: |
+            ./build --registry datawire --version-suffix="" --build-and-push --no-tests
 
   deploy:
     machine:
@@ -138,7 +156,7 @@ jobs:
       - run:
           name: "setup Python environment"
           command: |
-            ./build --registry gcr.io/datawireio --manage-virtualenv --no-tests
+            ./build --manage-virtualenv --no-tests
 
       - run:
           name: "run tests"
@@ -205,7 +223,7 @@ jobs:
       - run:
           name: "setup Python environment"
           command: |
-            ./build --registry gcr.io/datawireio --manage-virtualenv --no-tests
+            ./build --manage-virtualenv --no-tests
 
       - save_cache:
           key: |
