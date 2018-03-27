@@ -92,8 +92,6 @@ def main():
     if lint:
         _lint()
 
-    _virtualenv('telepresence', '--help')
-
     version = _get_version(version_suffix)
 
     if build_and_push:
@@ -308,6 +306,7 @@ def _lint():
         "mypy", "--ignore-missing-imports", "k8s-proxy/forwarder.py",
         "k8s-proxy/socks.py"
     )
+    _virtualenv('telepresence', '--help')
 
 
 def _pip(*argv):
