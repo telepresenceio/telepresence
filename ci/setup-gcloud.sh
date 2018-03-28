@@ -14,16 +14,16 @@ if ! type -p gcloud; then
 	    # Add the Cloud SDK distribution URI as a package source
 	    echo "deb http://packages.cloud.google.com/apt $CLOUD_SDK_REPO main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
 	    # Import the Google Cloud Platform public key
-	    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+	    curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
 	    # Update the package list and install the Cloud SDK
-	    sudo apt-get update && sudo apt-get install google-cloud-sdk
+	    sudo apt-get -qq update && sudo apt-get -qq install google-cloud-sdk
 	    ;;
 
 	*)
 	    if [ ! -d "$HOME/google-cloud-sdk/bin" ]; then
 		rm -rf $HOME/google-cloud-sdk;
 		export CLOUDSDK_CORE_DISABLE_PROMPTS=1;
-		curl https://sdk.cloud.google.com | bash;
+		curl -s https://sdk.cloud.google.com | bash;
 	    fi
 	    export PATH=~/google-cloud-sdk/bin:$PATH
 	    ;;
@@ -81,5 +81,5 @@ gcloud --quiet container clusters get-credentials $CLUSTER_NAME
 # enables that.
 if type -p docker; then
     # Only do this if Docker is installed, though, otherwise it's an error.
-    gcloud --quiet docker
+    gcloud --quiet docker --authorize-only
 fi

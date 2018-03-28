@@ -1,51 +1,24 @@
 #!/bin/bash
-# Run the release!
+
 set -eu
 
-# Inputs
-echo "$HOMEBREW_KEY $DOCKER_PASSWORD $PACKAGECLOUD_TOKEN" > /dev/null
+cd "$(dirname "$0")"/..
+
+echo "$HOMEBREW_KEY $PACKAGECLOUD_TOKEN" > /dev/null
+echo "$AWS_ACCESS_KEY_ID $AWS_SECRET_ACCESS_KEY" > /dev/null
 if [ ! -x dist/upload_linux_packages.sh ]; then
     echo "Built distribution not found."
     exit 1
 fi
-VERSION=$(cat dist/release_version.txt)
-echo Releasing Telepresence $VERSION
 
-# Preparation
-# -----------
+docker build \
+    --file ci/Dockerfile.releaser \
+    -t datawire/telepresence-releaser \
+    ci
 
-# ssh stuff to allow a push to github.com/datawire/homebrew-blackbird
-eval $(ssh-agent)
-echo -e "$HOMEBREW_KEY" > homebrew.rsa
-chmod 600 homebrew.rsa
-ssh-add homebrew.rsa
-ssh -oStrictHostKeyChecking=no -T git@github.com || true
-
-# Install/test package cloud CLI (uses PACKAGECLOUD_TOKEN)
-package_cloud repository list | fgrep public
-
-# Login to Docker Hub
-docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
-
-# Release
-# -------
-
-# Docker Images
-docker pull gcr.io/datawireio/telepresence-k8s:$VERSION
-docker pull gcr.io/datawireio/telepresence-local:$VERSION
-docker tag gcr.io/datawireio/telepresence-k8s:$VERSION datawire/telepresence-k8s:$VERSION
-docker tag gcr.io/datawireio/telepresence-local:$VERSION datawire/telepresence-local:$VERSION
-docker push datawire/telepresence-k8s:$VERSION
-docker push datawire/telepresence-local:$VERSION
-
-# Linux Packages
-dist/upload_linux_packages.sh
-
-# Homebrew
-env TELEPRESENCE_VERSION=$VERSION dist/homebrew-package.sh
-
-# Scout blobs
-dist/s3_uploader.sh
-
-# Ask user to post on Gitter
-cat dist/announcement.md
+docker run \
+    -e HOMEBREW_KEY -e PACKAGECLOUD_TOKEN \
+    -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY \
+    -v $(pwd)/dist:/root/dist:ro \
+    --rm -it datawire/telepresence-releaser \
+    dist/release-in-docker.sh

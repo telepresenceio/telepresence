@@ -89,8 +89,7 @@ def emit_machinery():
     machinery = [
         PROJECT / "packaging" / "homebrew-package.sh",
         PROJECT / "packaging" / "homebrew-formula.rb",
-        PROJECT / "ci" / "release.sh",
-        PROJECT / "ci" / "release-setup.sh"
+        PROJECT / "ci" / "release-in-docker.sh"
     ]
     for item in machinery:
         dest = DIST / item.name
