@@ -72,45 +72,87 @@ def get_proxy_cidrs(
     # Run script to convert --also-proxy hostnames to IPs, doing name
     # resolution inside Kubernetes, so we get cloud-local IP addresses for
     # cloud resources:
-    def resolve_ips():
-        # Separate hostnames from IPs and IP ranges
-        hostnames = []
-        ip_ranges = []
-
-        for proxy_target in args.also_proxy:
-            try:
-                addr = ipaddress.ip_network(proxy_target)
-            except ValueError:
-                pass
-            else:
-                ip_ranges.append(str(addr))
-                continue
-
-            hostnames.append(proxy_target)
-
-        resolved_ips = json.loads(
-            runner.get_kubectl(
-                args.context, args.namespace, [
-                    "exec", "--container=" + remote_info.container_name,
-                    remote_info.pod_name, "--", "python3", "-c", _GET_IPS_PY
-                ] + hostnames
-            )
+    result = set(k8s_resolve(runner, args, remote_info, args.also_proxy))
+    result.update(
+        runner.cache.child(args.context).lookup(
+            "podCIDRs", lambda: podCIDRs(runner)
         )
-        return resolved_ips + ip_ranges
-
-    try:
-        result = set(resolve_ips())
-    except CalledProcessError as e:
-        runner.write(str(e))
-        raise SystemExit(
-            "We failed to do a DNS lookup inside Kubernetes for the "
-            "hostname(s) you listed in "
-            "--also-proxy ({}). Maybe you mistyped one of them?".format(
-                ", ".join(args.also_proxy)
-            )
+    )
+    result.add(
+        runner.cache.child(args.context).lookup(
+            "serviceCIDR", lambda: serviceCIDR(runner)
         )
+    )
 
-    # Get pod IPs from nodes if possible, otherwise use pod IPs as heuristic:
+    span.end()
+    return list(result)
+
+
+def k8s_resolve(
+    runner: Runner, args: argparse.Namespace, remote_info: RemoteInfo,
+    hosts_or_ips: List[str]
+) -> List[str]:
+    """
+    Resolve a list of host and/or ip addresses inside the cluster
+    using the context, namespace, and remote_info supplied. Note that
+    if any hostname fails to resolve this will raise a SystemExit
+    exception.
+    """
+    # Separate hostnames from IPs and IP ranges
+    hostnames = []
+    ip_ranges = []
+
+    ipcache = runner.cache.child(args.context).child("ips")
+
+    for proxy_target in hosts_or_ips:
+        try:
+            addr = ipaddress.ip_network(proxy_target)
+        except ValueError:
+            pass
+        else:
+            ip_ranges.append(str(addr))
+            continue
+
+        if proxy_target in ipcache:
+            ip_ranges.append(ipcache[proxy_target])
+            continue
+
+        hostnames.append(proxy_target)
+
+    if hostnames:
+        try:
+            resolved_ips = json.loads(
+                runner.get_kubectl(
+                    args.context, args.namespace, [
+                        "exec", "--container=" + remote_info.container_name,
+                        remote_info.pod_name, "--", "python3", "-c",
+                        _GET_IPS_PY
+                    ] + hostnames
+                )
+            )
+        except CalledProcessError as e:
+            runner.write(str(e))
+            raise SystemExit(
+                "We failed to do a DNS lookup inside Kubernetes for the "
+                "hostname(s) you listed in "
+                "--also-proxy ({}). Maybe you mistyped one of them?".format(
+                    ", ".join(args.also_proxy)
+                )
+            )
+    else:
+        resolved_ips = []
+
+    for host, ip in zip(hostnames, resolved_ips):
+        ipcache[host] = ip
+
+    return resolved_ips + ip_ranges
+
+
+def podCIDRs(runner: Runner):
+    """
+    Get pod IPs from nodes if possible, otherwise use pod IPs as heuristic:
+    """
+    cidrs = set()
     try:
         nodes = json.loads(
             runner.get_output([
@@ -133,16 +175,22 @@ def get_proxy_cidrs(
                 # Apparently a problem on OpenShift
                 pass
         if pod_ips:
-            result.add(covering_cidr(pod_ips))
+            cidrs.add(covering_cidr(pod_ips))
     else:
         for node in nodes:
             pod_cidr = node["spec"].get("podCIDR")
             if pod_cidr is not None:
-                result.add(pod_cidr)
+                cidrs.add(pod_cidr)
+    return list(cidrs)
 
-    # Add service IP range, based on heuristic of constructing CIDR from
-    # existing Service IPs. We create more services if there are less than 8,
-    # to ensure some coverage of the IP range:
+
+def serviceCIDR(runner: Runner):
+    """
+    Get service IP range, based on heuristic of constructing CIDR from
+    existing Service IPs. We create more services if there are less
+    than 8, to ensure some coverage of the IP range.
+    """
+
     def get_service_ips():
         services = json.loads(
             runner.get_output([
@@ -169,7 +217,6 @@ def get_proxy_cidrs(
         service_ips = get_service_ips()
     # Store Service CIDR:
     service_cidr = covering_cidr(service_ips)
-    result.add(service_cidr)
     # Delete new services:
     for new_service in new_services:
         runner.check_call([
@@ -184,9 +231,7 @@ def get_proxy_cidrs(
             "new Service.\n".format(service_cidr),
             file=sys.stderr
         )
-
-    span.end()
-    return list(result)
+    return service_cidr
 
 
 def connect_sshuttle(

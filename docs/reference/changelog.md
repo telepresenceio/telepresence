@@ -2,6 +2,12 @@
 
 #### 0.78 (Unreleased)
 
+Features:
+
+* Telepresence starts roughly five seconds faster on every invocation thanks to some basic caching of cluster information.
+  The cache is stored in `~/.cache/telepresence` and is cleared automatically after twelve hours.
+  Delete the contents of that directory to clear the cache manually.
+
 Bug fixes:
 
 * When using the container method, Telepresence waits longer for networking to start before giving up.
