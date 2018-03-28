@@ -1,5 +1,14 @@
 # Changelog
 
+#### 0.78 (Unreleased)
+
+Bug fixes:
+
+* When using the container method, Telepresence waits longer for networking to start before giving up.
+  This may help users who sometimes experience higher latency between their local network and their Kubernetes cluster.
+  ([#340](https://github.com/datawire/telepresence/issues/340))
+  ([#539](https://github.com/datawire/telepresence/issues/539))
+
 #### 0.77 (March 26, 2018)
 
 Misc:
