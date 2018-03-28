@@ -20,13 +20,18 @@ case "${OS}" in
         brew update > /dev/null
         brew cask install osxfuse
         brew install sshfs
+        brew install torsocks
         brew install python3 || brew upgrade python
         pip3 install virtualenv
         ;;
 
     linux)
+	# Try to get a reasonably recent version of torsocks
+	echo "deb http://archive.ubuntu.com/ubuntu/ trusty-backports main" \
+	    | sudo tee /etc/apt/sources.list.d/trusty-backports.list
+	sudo apt-get update
         sudo apt-get install \
-             sshfs conntrack \
+             sshfs conntrack torsocks='2.*' \
              lsb-release
         ;;
 
@@ -41,9 +46,6 @@ python2 --version || true
 python3 --version
 ruby --version || true
 docker version || true
-
+torsocks --version || true
 # Make sure gcloud is installed.  This includes kubectl.
 ./ci/setup-gcloud.sh "${PROJECT_NAME}" "${CLUSTER_NAME}" "${CLOUDSDK_COMPUTE_ZONE}" "${OS}"
-
-# Make sure torsocks is installed:
-./ci/build-torsocks.sh "${OS}"
