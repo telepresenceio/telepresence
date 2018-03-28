@@ -45,7 +45,7 @@ class Span(object):
         if self.end_time:
             spent = "{:6.1f}s".format(self.end_time - self.start_time)
         else:
-            spent = "???"
+            spent = "   ???"
         self.runner.write("{}{} {}".format(spent, indent, self.tag))
         for ch in self.children:
             ch.summarize()
