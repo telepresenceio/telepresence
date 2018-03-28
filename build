@@ -41,7 +41,7 @@ def main():
 
     if args.circle:
         manage_virtualenv = False
-        registry = "datawire"
+        registry = "gcr.io/" + environ["PROJECT_NAME"]
         version_suffix = ""
         lint = False
         build_and_push = False

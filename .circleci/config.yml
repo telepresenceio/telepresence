@@ -38,7 +38,7 @@ jobs:
           command: |
             ./build --no-tests --lint
 
-  build-image-gcloud:
+  build-image:
     docker:
       # https://circleci.com/docs/2.0/circleci-images/
       # https://hub.docker.com/r/circleci/python/
@@ -69,7 +69,7 @@ jobs:
           command: |
             ./build --registry gcr.io/datawireio --version-suffix "" --build-and-push --no-tests
 
-  build-image:
+  build-image-dockerhub:
     docker:
       # https://circleci.com/docs/2.0/circleci-images/
       # https://hub.docker.com/r/circleci/python/
