@@ -14,11 +14,11 @@ class Cache(object):
 
         result = Cache(cache)
 
-        def flush():
+        def save():
             with open(filename, "w") as f:
                 json.dump(result.values, f)
 
-        atexit.register(flush)
+        atexit.register(save)
         return result
 
     def __init__(self, values):
