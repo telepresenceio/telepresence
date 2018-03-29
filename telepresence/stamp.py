@@ -43,16 +43,25 @@ def main():
     args = parser.parse_args()
 
     start_time = args.start_time
-    origin_id = args.id
+    origin_id = "{:>3s} |".format(args.id)
     curtime = time.time
     out_write = sys.stdout.write
     out_flush = sys.stdout.flush
+    """actual_start_time = curtime()"""
 
     for line in sys.stdin:
         out_write(
             "{:6.1f} {} {}".format(curtime() - start_time, origin_id, line)
         )
         out_flush()
+    """
+    out_write(
+        "{:6.1f} STA | [{}] ran in {:0.2f} secs.\n".format(
+            curtime() - start_time, args.id,
+            curtime() - actual_start_time
+        )
+    )
+    """
 
 
 def run_stamp():
