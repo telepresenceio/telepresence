@@ -1,5 +1,26 @@
 # Changelog
 
+#### 0.78 (March 29, 2018)
+
+Features:
+
+* Telepresence starts roughly five seconds faster on every invocation thanks to some basic caching of cluster information.
+  The cache is stored in `~/.cache/telepresence` and is cleared automatically after twelve hours.
+  Delete the contents of that directory to clear the cache manually.
+
+Bug fixes:
+
+* When using the container method, Telepresence waits longer for networking to start before giving up.
+  This may help users who sometimes experience higher latency between their local network and their Kubernetes cluster.
+  ([#340](https://github.com/datawire/telepresence/issues/340))
+  ([#539](https://github.com/datawire/telepresence/issues/539))
+
+#### 0.77 (March 26, 2018)
+
+Misc:
+
+* Updates to the release process.
+
 #### 0.76 (March 25, 2018)
 
 Features:

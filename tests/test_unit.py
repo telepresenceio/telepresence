@@ -7,6 +7,7 @@ import tempfile
 import ipaddress
 
 from hypothesis import strategies as st, given, example
+from time import time
 import yaml
 
 import telepresence.cli
@@ -15,6 +16,8 @@ import telepresence.deployment
 import telepresence.runner
 import telepresence.vpn
 import telepresence.main
+
+from telepresence.cache import Cache
 
 COMPLEX_DEPLOYMENT = """\
 apiVersion: extensions/v1beta1
@@ -283,3 +286,19 @@ def test_default_operation():
     assert args.new_deployment is not None
     assert args.deployment is None
     assert args.swap_deployment is None
+
+def test_cache():
+    cache = Cache({})
+    assert "foo" not in cache
+    assert cache.lookup("foo", lambda: 3) == 3
+    assert "foo" in cache
+
+def test_cache_invalidation():
+    cache = Cache({})
+    cache.invalidate(12*60*60)
+
+    cache["pi"] = 3
+    cache.invalidate(12*60*60)
+    assert "pi" in cache
+    cache.invalidate(-1)
+    assert "pi" not in cache

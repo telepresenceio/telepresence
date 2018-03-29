@@ -69,6 +69,7 @@ def get_deployment_json(
     """
     assert context is not None
     assert namespace is not None
+    span = runner.span()
     try:
         get_deployment = [
             "get",
@@ -102,10 +103,13 @@ def get_deployment_json(
                 deployment_name, str(e.stdout, "utf-8")
             )
         )
+    finally:
+        span.end()
 
 
 def wait_for_pod(runner: Runner, remote_info: RemoteInfo) -> None:
     """Wait for the pod to start running."""
+    span = runner.span()
     start = time()
     while time() - start < 120:
         try:
@@ -123,8 +127,10 @@ def wait_for_pod(runner: Runner, remote_info: RemoteInfo) -> None:
                 if container["name"] == remote_info.container_name and (
                     container["ready"]
                 ):
+                    span.end()
                     return
         sleep(0.25)
+    span.end()
     raise RuntimeError(
         "Pod isn't starting or can't be found: {}".format(pod["status"])
     )

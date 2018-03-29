@@ -41,7 +41,7 @@ def main():
 
     if args.circle:
         manage_virtualenv = False
-        registry = "gcr.io/" + environ["PROJECT_NAME"]
+        registry = "datawire"
         version_suffix = ""
         lint = False
         build_and_push = False
@@ -75,7 +75,7 @@ def main():
                 "Required executable 'kubectl' not found on $PATH.",
             )
 
-    if registry is None:
+    if registry is None and build_and_push:
         raise SystemExit(
             "You must specify a registry with --registry (or --circle)"
         )
@@ -84,15 +84,14 @@ def main():
     # looking at the terminal.  They'll be required later on during the test
     # suite run and the prompt is likely to be buried in test output at that
     # point.
-    _sudo("echo", "-n")
+    if run_tests:
+        _sudo("echo", "-n")
 
     if manage_virtualenv:
         _setup_virtualenv()
 
     if lint:
         _lint()
-
-    _virtualenv('telepresence', '--help')
 
     version = _get_version(version_suffix)
 
@@ -308,6 +307,7 @@ def _lint():
         "mypy", "--ignore-missing-imports", "k8s-proxy/forwarder.py",
         "k8s-proxy/socks.py"
     )
+    _virtualenv('telepresence', '--help')
 
 
 def _pip(*argv):

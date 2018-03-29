@@ -96,14 +96,12 @@ def proxy(config: dict):
 def wait():
     """Wait for proxying to be live."""
     start = time()
-    while time() - start < 10:
+    while time() - start < 30:
         try:
             gethostbyname("hellotelepresence")
             sleep(1)  # just in case there's more to startup
             sys.exit(100)
         except gaierror:
-            sleep(0.1)
-        else:
             sleep(0.1)
     sys.exit("Failed to connect to proxy in remote cluster.")
 

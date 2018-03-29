@@ -31,14 +31,14 @@ jobs:
           name: "setup Python environment"
           command: |
             sudo pip install --upgrade virtualenv
-            ./build --registry gcr.io/datawireio --no-tests --manage-virtualenv
+            ./build --no-tests --manage-virtualenv
 
       - run:
           name: "run lint checks"
           command: |
-            ./build --registry gcr.io/datawireio --no-tests --lint
+            ./build --no-tests --lint
 
-  build-image:
+  build-image-gcloud:
     docker:
       # https://circleci.com/docs/2.0/circleci-images/
       # https://hub.docker.com/r/circleci/python/
@@ -52,45 +52,41 @@ jobs:
       - run:
           name: "update system"
           command: |
-            sudo apt-get --quiet update
+            sudo apt-get -qq update
+            sudo apt-get -qq install lsb-release
 
       - "checkout"
 
       - run:
-          name: "decrypt gcloud keys"
+          name: "setup gcloud"
           command: |
-            # To update:
-            #   1) Generate a new key and IV:
-            #      $ dd if=/dev/urandom count=64 bs=1 | md5sum
-            #   2) Update GCLOUD_KEY and GCLOUD_IV in CircleCI "Environment
-            #      Variables" configuration for Telepresence project.
-            #   3) Encrypt the new gcloud key:
-            #      $ ci/encrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
             ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
-
-      - run:
-          name: "setup non-Python environment"
-          command: |
-            sudo pip install --upgrade pip virtualenv
-            ./environment-setup.sh datawireio telepresence-testing us-central1-a linux
-
-      - run:
-          name: "configure gcloud"
-          command: |
+            ci/setup-gcloud.sh datawireio telepresence-testing us-central1-a linux
             echo 'PATH=${HOME}/google-cloud-sdk/bin:${PWD}/ci:${PATH}' >> ${BASH_ENV}
-            # If we installed kubectl, it was into ${PWD}
-            echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
-
-      - run:
-          name: "setup Python environment"
-          command: |
-            sudo pip install --upgrade virtualenv
-            ./build --registry gcr.io/datawireio --manage-virtualenv --no-tests
 
       - run:
           name: "build and push image"
           command: |
             ./build --registry gcr.io/datawireio --version-suffix "" --build-and-push --no-tests
+
+  build-image:
+    docker:
+      # https://circleci.com/docs/2.0/circleci-images/
+      # https://hub.docker.com/r/circleci/python/
+      - image: "circleci/python:3"
+
+    steps:
+      # https://circleci.com/docs/2.0/building-docker-images/
+      - setup_remote_docker:
+          docker_layer_caching: true
+
+      - "checkout"
+
+      - run:
+          name: "build and push image"
+          command: |
+            docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
+            ./build --registry datawire --version-suffix="" --build-and-push --no-tests
 
   deploy:
     machine:
@@ -161,7 +157,7 @@ jobs:
       - run:
           name: "setup Python environment"
           command: |
-            ./build --registry gcr.io/datawireio --manage-virtualenv --no-tests
+            ./build --manage-virtualenv --no-tests
 
       - run:
           name: "run tests"
@@ -228,7 +224,7 @@ jobs:
       - run:
           name: "setup Python environment"
           command: |
-            ./build --registry gcr.io/datawireio --manage-virtualenv --no-tests
+            ./build --manage-virtualenv --no-tests
 
       - save_cache:
           key: |
