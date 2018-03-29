@@ -1,6 +1,6 @@
 # Changelog
 
-#### 0.78 (Unreleased)
+#### 0.78 (March 29, 2018)
 
 Features:
 
