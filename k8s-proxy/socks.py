@@ -216,13 +216,13 @@ class SOCKSv5(StatefulProtocol):
                 log.err(e)
                 # Avoid doing string formatting on a string literal containing
                 # a nul.  Early CPython 3.6 fails to interpret this correctly.
-                self.write(b"".join(
+                self.write(b"".join((
                     b"\5\0\0\3",
                     b"%b%b" % (
                         bytes([len(host)]),
                         host.encode("ascii"),
                     ),
-                ))
+                )))
                 self.transport.loseConnection()
 
             d = self.reverse(host)
