@@ -4,7 +4,7 @@ Telepresence is an open source tool that lets you run a single service locally, 
 
 1. Do fast local development of a single service, even if that service depends on other services in your cluster. Make a change to your service, save, and you can immediately see the new service in action.
 
-2. Use any tool installed locally to test/debug/edit your service. For example, you can use a debugger!
+2. Use any tool installed locally to test/debug/edit your service. For example, you can use a debugger or IDE!
 
 3. Make your local development machine operate as if it's part of your Kubernetes cluster. If you've got an application on your machine that you want to run against a service in the cluster -- it's easy to do.
 
@@ -32,9 +32,7 @@ Typical alternatives to Telepresence include:
 
 ## Getting started
 
-There are a number of quick start tutorials on using Telepresence:
+Telepresence offers a broad set of [proxying options](reference/methods.md) which have different strengths and weaknesses. Generally speaking, we recommend you:
 
-* [Debugging services on Kubernetes](https://www.telepresence.io/tutorials/kubernetes)
-* [Using Telepresence with Google Container Engine](https://cloud.google.com/community/tutorials/developing-services-with-k8s).
-* [Getting started with OpenShift and Telepresence](https://www.telepresence.io/tutorials/openshift)
-* [Telepresence and Minikube](https://www.telepresence.io/tutorials/minikube-vpn)
+* Start with the container method, which provides the most consistent environment for your code. Here is a [container quick start](tutorials/docker).
+* Use the VPN method, which lets you use an IDE or debugger with your code. Here is a [quick start that uses the VPN method](tutorials/kubernetes-rapid)
