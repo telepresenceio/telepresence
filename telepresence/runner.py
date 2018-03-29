@@ -85,8 +85,11 @@ class Runner(object):
             # Wipe existing logfile, open using append mode so multiple
             # processes don't clobber each other's outputs, and use line
             # buffering so data gets written out immediately.
-            if os.path.exists(logfile_path):
+            try:
                 open(logfile_path, "w").close()
+            except OSError as exc:
+                exit("Failed to open logfile ({}): {}".format(logfile_path, exc))
+
             return cls(
                 open(logfile_path, "a", buffering=1), kubectl_cmd, verbose
             )

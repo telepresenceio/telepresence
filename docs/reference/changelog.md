@@ -1,5 +1,12 @@
 # Changelog
 
+#### 0.79 (Unreleased)
+
+Bug fixes:
+
+* No more crash when Telepresence cannot write to its log file.
+  ([#459](https://github.com/datawire/telepresence/issues/459))
+
 #### 0.78 (March 29, 2018)
 
 Features:
