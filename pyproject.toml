@@ -1,0 +1,6 @@
+[tool.towncrier]
+    package = "telepresence"
+    filename = "docs/reference/changelog.md"
+    template = ".towncrier/template.md"
+    fragment_directory = "newsfragments"
+    start_line = "<!--- towncrier start line -->"
