@@ -1,5 +1,12 @@
 # Changelog
 
+#### 0.79 (Unreleased)
+
+Bug fixes:
+
+* Telepresence now supports IPv4 reverse lookups when using `--method=inject-tcp`.
+  ([#195](https://github.com/datawire/telepresence/issues/195))
+
 #### 0.78 (March 29, 2018)
 
 Features:
