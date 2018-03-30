@@ -145,10 +145,7 @@ def _test(registry, version, test_env, test_args):
     # Refresh the credentials
     _sudo("echo", "-n")
     test_env = _test_env_for_telepresence(test_env, registry, version)
-    _pytest(
-        *test_args,
-        test_env=test_env,
-    )
+    _pytest(*test_args, test_env=test_env)
 
 
 def _pytest(*args, test_env=None):
@@ -158,7 +155,7 @@ def _pytest(*args, test_env=None):
         "--timeout=360",
         "--timeout-method=thread",
         *args,
-        env=test_env,
+        env=test_env
     )
 
 

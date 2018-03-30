@@ -1,3 +1,4 @@
+import shlex
 import sys
 from subprocess import Popen, PIPE, STDOUT, DEVNULL, CalledProcessError, \
     check_output
@@ -6,10 +7,14 @@ from typing import List
 
 from inspect import getframeinfo, currentframe
 import os
+
+import telepresence
 from .cache import Cache
 
 
 class Span(object):
+    emit_summary = False
+
     def __init__(self, runner, tag, parent, verbose=True):
         self.runner = runner
         self.tag = tag
@@ -31,14 +36,15 @@ class Span(object):
 
     def end(self):
         self.end_time = time()
+        spent = self.end_time - self.start_time
         if self.runner.current_span == self:
             self.runner.current_span = self.parent
         if self.verbose:
-            spent = self.end_time - self.start_time
             self.runner.write("END SPAN {} {:6.1f}s".format(self.tag, spent))
-        if self.parent is None:
+        if self.parent is None and Span.emit_summary:
             self.runner.write("SPAN SUMMARY:")
             self.summarize()
+        return spent
 
     def summarize(self):
         indent = self.depth * "  "
@@ -49,6 +55,22 @@ class Span(object):
         self.runner.write("{}{} {}".format(spent, indent, self.tag))
         for ch in self.children:
             ch.summarize()
+
+
+def str_command(args: List[str]):
+    """
+    Return a string representing the shell command and its arguments.
+
+    :param args: Shell command and its arguments
+    :return: String representation thereof
+    """
+    res = []
+    for arg in args:
+        if "\n" in arg:
+            res.append(repr(arg))
+        else:
+            res.append(shlex.quote(arg))
+    return " ".join(res)
 
 
 class Runner(object):
@@ -67,8 +89,23 @@ class Runner(object):
         self.start_time = time()
         self.current_span = None  # type: Span
         self.counter = 0
-        self.write("Telepresence launched at {}".format(ctime()))
-        self.write("  {}".format(sys.argv))
+        self.write(
+            "Telepresence {} launched at {}\n  {}".format(
+                telepresence.__version__, ctime(), str_command(sys.argv)
+            )
+        )
+        report = (
+            ["kubectl", "version", "--short"],
+            ["oc", "version"],
+            ["uname", "-a"],
+        )
+        for command in report:
+            try:
+                self.popen(command)
+            except OSError:
+                pass
+        self.write("Python {}".format(sys.version))
+
         cache_dir = os.path.expanduser("~/.cache/telepresence")
         os.makedirs(cache_dir, exist_ok=True)
         self.cache = Cache.load(os.path.join(cache_dir, "cache.json"))
@@ -85,8 +122,15 @@ class Runner(object):
             # Wipe existing logfile, open using append mode so multiple
             # processes don't clobber each other's outputs, and use line
             # buffering so data gets written out immediately.
-            if os.path.exists(logfile_path):
+            try:
                 open(logfile_path, "w").close()
+            except OSError as exc:
+                exit(
+                    "Failed to open logfile ({}): {}".format(
+                        logfile_path, exc
+                    )
+                )
+
             return cls(
                 open(logfile_path, "a", buffering=1), kubectl_cmd, verbose
             )
@@ -107,16 +151,25 @@ class Runner(object):
         s.begin()
         return s
 
-    def write(self, message: str) -> None:
+    def write(self, message: str, prefix="TEL") -> None:
         """Write a message to the log."""
-        message = message.rstrip()
-        line = "{:6.1f} TL | {}\n".format(time() - self.start_time, message)
-        self.logfile.write(line)
+        for sub_message in message.splitlines():
+            line = "{:6.1f} {} | {}\n".format(
+                time() - self.start_time, prefix, sub_message.rstrip()
+            )
+            self.logfile.write(line)
         self.logfile.flush()
+
+    def set_success(self, flag: bool) -> None:
+        """Indicate whether the command succeeded"""
+        Span.emit_summary = flag
+        self.write("Success. Starting cleanup.")
 
     def command_span(self, track, args):
         return self.span(
-            "{} {}".format(track, " ".join(args))[:80], False, verbose=False
+            "{} {}".format(track, str_command(args))[:80],
+            False,
+            verbose=False
         )
 
     def launch_command(self, track, args, **kwargs) -> Popen:
@@ -128,9 +181,14 @@ class Runner(object):
             kwargs["stdin"] = PIPE
         kwargs["stdout"] = PIPE
         kwargs["stderr"] = STDOUT
-        process = Popen(args, **kwargs)
+        try:
+            process = Popen(args, **kwargs)
+        except OSError as exc:
+            self.write("[{}] {}".format(track, exc))
+            raise
         Popen([
-            "stamp-telepresence", "--id", "{} |".format(track), "--start-time",
+            "stamp-telepresence", "--id",
+            str(track), "--start-time",
             str(self.start_time)
         ],
               stdin=process.stdout,
@@ -143,41 +201,44 @@ class Runner(object):
     def check_call(self, args, **kwargs):
         """Run a subprocess, make sure it exited with 0."""
         self.counter = track = self.counter + 1
-        self.write("[{}] Running: {}... ".format(track, args))
+        self.write("[{}] Running: {}".format(track, str_command(args)))
         if "input" not in kwargs and "stdin" not in kwargs:
             kwargs["stdin"] = DEVNULL
         span = self.command_span(track, args)
-        try:
-            process = self.launch_command(track, args, **kwargs)
-            process.wait()
-        finally:
-            span.end()
+        process = self.launch_command(track, args, **kwargs)
+        process.wait()
+        spent = span.end()
         retcode = process.poll()
         if retcode:
-            self.write("[{}] exit {}.".format(track, retcode))
+            self.write(
+                "[{}] exit {} in {:0.2f} secs.".format(track, retcode, spent)
+            )
             raise CalledProcessError(retcode, args)
-        self.write("[{}] ran.".format(track))
+        self.write("[{}] ran in {:0.2f} secs.".format(track, spent))
 
-    def get_output(self, args, stderr=None, **kwargs) -> str:
+    def get_output(self, args, reveal=False, stderr=None, **kwargs) -> str:
         """Return (stripped) command result as unicode string."""
         if stderr is None:
             stderr = self.logfile
         self.counter = track = self.counter + 1
-        self.write("[{}] Capturing: {}...".format(track, args))
+        self.write("[{}] Capturing: {}".format(track, str_command(args)))
         kwargs["stdin"] = DEVNULL
         kwargs["stderr"] = stderr
         span = self.command_span(track, args)
         try:
             result = str(check_output(args, **kwargs).strip(), "utf-8")
         finally:
-            span.end()
-        self.write("[{}] captured.".format(track))
+            spent = span.end()
+            if reveal or self.verbose:
+                self.write(result, prefix="{:3d}".format(track))
+        if spent > 1:
+            self.write("[{}] captured in {:0.2f} secs.".format(track, spent))
         return result
 
     def popen(self, args, stdin=DEVNULL, **kwargs) -> Popen:
         """Return Popen object."""
         self.counter = track = self.counter + 1
-        self.write("[{}] Launching: {}...".format(track, args))
+        self.write("[{}] Launching: {}".format(track, str_command(args)))
         kwargs["stdin"] = stdin
         result = self.launch_command(track, args, **kwargs)
         return result
