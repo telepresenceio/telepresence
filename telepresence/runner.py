@@ -88,9 +88,16 @@ class Runner(object):
                 telepresence.__version__, ctime(), str_command(sys.argv)
             )
         )
-        self.popen(["kubectl", "version", "--short"])
-        self.popen(["oc", "version"])
-        self.popen(["uname", "-a"])
+        report = (
+            ["kubectl", "version", "--short"],
+            ["oc", "version"],
+            ["uname", "-a"],
+        )
+        for command in report:
+            try:
+                self.popen(command)
+            except OSError:
+                pass
         self.write("Python {}".format(sys.version))
 
         cache_dir = os.path.expanduser("~/.cache/telepresence")
@@ -168,7 +175,11 @@ class Runner(object):
             kwargs["stdin"] = PIPE
         kwargs["stdout"] = PIPE
         kwargs["stderr"] = STDOUT
-        process = Popen(args, **kwargs)
+        try:
+            process = Popen(args, **kwargs)
+        except OSError as exc:
+            self.write("[{}] {}".format(track, exc))
+            raise
         Popen([
             "stamp-telepresence", "--id",
             str(track), "--start-time",
