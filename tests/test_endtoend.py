@@ -416,6 +416,9 @@ def test_resolve_addresses(probe):
     Reverse name resolution is performed in the context of the Kubernetes
     cluster.
     """
+    if probe.method.name == "inject-tcp":
+        pytest.xfail("Issue 546")
+
     result = probe.result()
     result.write("gethostbyaddr 4.2.2.1")
     success, reply = loads(result.read())
