@@ -5,3 +5,8 @@
     directory = "newsfragments"
     start_string = "<!--- towncrier start line -->"
     title_format = "{version} ({project_date})"
+
+    [[tool.towncrier.type]]
+        directory = "misc"
+	name = "Misc"
+	showcontent = true
