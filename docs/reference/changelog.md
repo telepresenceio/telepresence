@@ -4,6 +4,8 @@
 
 Bug fixes:
 
+* Telepresence now supports IPv4 reverse lookups when using `--method=inject-tcp`.
+  ([#195](https://github.com/datawire/telepresence/issues/195))
 * No more crash when Telepresence cannot write to its log file.
   ([#459](https://github.com/datawire/telepresence/issues/459))
 

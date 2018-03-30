@@ -44,6 +44,10 @@ from http.server import (
 from threading import (
     Thread,
 )
+from socket import (
+    gethostbyname,
+    gethostbyaddr,
+)
 # The probe's output is mixed together with Telepresence output and maybe more
 # output from things like socat or torsocks.  This makes it difficult to
 # extract information from the probe via stdout.  Unfortunately, options apart
@@ -180,10 +184,26 @@ def disconnect_telepresence(namespace):
     raise SystemExit(66)
 
 
+def probe_gethostbyname(name):
+    try:
+        return True, gethostbyname(name)
+    except Exception as e:
+        return False, str(e)
+
+
+def probe_gethostbyaddr(name):
+    try:
+        return True, gethostbyaddr(name)
+    except Exception as e:
+        return False, str(e)
+
+
 COMMANDS = {
     "probe-url": lambda *urls: list(probe_urls(urls)),
     "probe-also-proxy": probe_also_proxy,
     "disconnect-telepresence": disconnect_telepresence,
+    "gethostbyname": probe_gethostbyname,
+    "gethostbyaddr": probe_gethostbyaddr,
 }
 
 
