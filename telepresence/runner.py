@@ -64,7 +64,13 @@ def str_command(args: List[str]):
     :param args: Shell command and its arguments
     :return: String representation thereof
     """
-    return " ".join(map(shlex.quote, args))
+    res = []
+    for arg in args:
+        if "\n" in arg:
+            res.append(repr(arg))
+        else:
+            res.append(shlex.quote(arg))
+    return " ".join(res)
 
 
 class Runner(object):
