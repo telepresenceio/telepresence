@@ -434,9 +434,12 @@ def test_resolve_addresses_failure(probe):
     result.write("gethostbyaddr 192.0.2.1")
     success, reply = loads(result.read())
     assert (
-        # musl libc behaves like this
+        # musl libc behaves like this - so container mode will produce this
+        # result.
         (success and reply[0] == '192.0.2.1') or
-        # glibc behaves like this
+        # glibc behaves like this - other modes should produce this result
+        # (unless you happen to have musl libc installed for some other
+        # reason).
         (not success)
     ), (success, reply)
 
