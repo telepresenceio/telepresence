@@ -7,6 +7,16 @@
     title_format = "{version} ({project_date})"
 
     [[tool.towncrier.type]]
+        directory = "feature"
+	name = "Features"
+	showcontent = true
+
+    [[tool.towncrier.type]]
+        directory = "bugfix"
+	name = "Bugfixes"
+	showcontent = true
+
+    [[tool.towncrier.type]]
         directory = "misc"
 	name = "Misc"
 	showcontent = true
