@@ -7,6 +7,12 @@ Bug fixes:
 * No more crash when Telepresence cannot write to its log file.
   ([#459](https://github.com/datawire/telepresence/issues/459))
 
+Misc:
+
+* The commands that Telepresence launches have always been recorded in the logfile.
+  Now they are formatted so they can be copy-pasted into your terminal in most cases.
+* The beginning of the logfile contains more information about your local and cluster setup to aid with bug reports and troubleshooting.
+
 #### 0.78 (March 29, 2018)
 
 Features:
