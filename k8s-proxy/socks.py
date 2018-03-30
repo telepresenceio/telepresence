@@ -205,29 +205,27 @@ class SOCKSv5(StatefulProtocol):
             ).addCallback(write_response).addErrback(write_error)
         elif self.command == "RESOLVE_PTR":
 
-            def write_domain(name):
-                self.write(b"\5\0\0\3%b%b" % (
-                    bytes([len(name)]),
-                    name.encode("ascii"),
-                ))
-                self.transport.loseConnection()
-
-            def write_error(e):
+            def squelch_error(e):
                 log.err(e)
+                # Turn the failure into success with the requested address as
+                # the result.
+                return host
+
+            def write_domain(name):
                 # Avoid doing string formatting on a string literal containing
                 # a nul.  Early CPython 3.6 fails to interpret this correctly.
                 self.write(b"".join((
                     b"\5\0\0\3",
                     b"%b%b" % (
-                        bytes([len(host)]),
-                        host.encode("ascii"),
+                        bytes([len(name)]),
+                        name.encode("ascii"),
                     ),
                 )))
                 self.transport.loseConnection()
 
             d = self.reverse(host)
+            d.addErrback(squelch_error)
             d.addCallback(write_domain)
-            d.addErrback(write_error)
 
     def connectionLost(self, reason):
         if self.otherConn:
