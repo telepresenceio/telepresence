@@ -65,8 +65,8 @@ def wait_for_exit(
     runner: Runner, main_process: Popen, processes: Subprocesses
 ) -> None:
     """Given Popens, wait for one of them to die."""
-    span = runner.span()
     runner.write("Everything launched. Waiting to exit...")
+    span = runner.span()
     while True:
         sleep(0.1)
         main_code = main_process.poll()
@@ -74,11 +74,12 @@ def wait_for_exit(
             # Shell exited, we're done. Automatic shutdown cleanup will kill
             # subprocesses.
             runner.write(
-                "Main process ({}) exited with code {}.".format(
+                "Main process ({})\n exited with code {}.".format(
                     main_process.args, main_code
                 )
             )
             span.end()
+            runner.set_success(True)
             raise SystemExit(main_code)
         dead_process = processes.any_dead()
         if dead_process:
