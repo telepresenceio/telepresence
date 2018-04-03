@@ -246,7 +246,7 @@ At the moment, the Linux packages are not tested, other than a minor smoke test.
 
 #### Theory of operation
 
-1. Make sure `docs/reference/changelog.md` has changelog entries for next release, and today's release date.
+1. Make sure `docs/reference/changelog.md` has changelog entries for the next release, and today's release date. If changelog entries are in the `newsfragments` directory, use `virtualenv/bin/towncrier` to construct the changelog update.
 2. Use [bumpversion](https://pypi.python.org/pypi/bumpversion) to increase the version in relevant files and then commit a new git tag with the new version.
    See `.bumpversion.cfg` for the configuration.  
    `virtualenv/bin/bumpversion --verbose minor`

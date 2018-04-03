@@ -1,5 +1,7 @@
 # Changelog
 
+<!--- towncrier start line -->
+
 #### 0.79 (Unreleased)
 
 Bug fixes:
