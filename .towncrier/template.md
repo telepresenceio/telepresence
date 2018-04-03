@@ -1,9 +1,7 @@
 {% for section, _ in sections.items() %}
-
 {% if sections[section] %}
 {% for category, val in definitions.items() if category in sections[section]%}
 {{ definitions[category]['name'] }}:
-
 
 {% if definitions[category]['showcontent'] %}
 {% for text, values in sections[section][category].items() %}
@@ -12,7 +10,6 @@
   ([{{ value }}](https://github.com/datawire/telepresence/issues/{{ value.strip("#") }}))
 {% endfor %}
 {% endfor %}
-
 {% else %}
 * {{ sections[section][category]['']|join(', ') }}
 
@@ -26,7 +23,6 @@ No significant changes.
 {% endfor %}
 {% else %}
 No significant changes.
-
 
 {% endif %}
 {% endfor %}
