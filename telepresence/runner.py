@@ -4,7 +4,7 @@ import sys
 from subprocess import Popen, PIPE, DEVNULL, CalledProcessError
 from threading import Thread
 from time import time, ctime, sleep
-from typing import List, Deque
+from typing import List
 
 from inspect import getframeinfo, currentframe
 import os
@@ -76,8 +76,7 @@ class Runner(object):
         self.counter = 0
 
         # Keep the last 25 lines of log
-        Deque  # Avoid F401
-        self.logtail = deque(maxlen=25)  # type: Deque[str]
+        self.logtail = deque(maxlen=25)  # type: deque
         self.write(
             "Telepresence {} launched at {}\n  {}".format(
                 telepresence.__version__, ctime(), str_command(sys.argv)
