@@ -1,7 +1,7 @@
 import shlex
 import sys
-from subprocess import Popen, PIPE, STDOUT, DEVNULL, CalledProcessError, \
-    check_output
+from subprocess import Popen, PIPE, DEVNULL, CalledProcessError
+from threading import Thread
 from time import time, ctime
 from typing import List
 
@@ -55,22 +55,6 @@ class Span(object):
         self.runner.write("{}{} {}".format(spent, indent, self.tag))
         for ch in self.children:
             ch.summarize()
-
-
-def str_command(args: List[str]):
-    """
-    Return a string representing the shell command and its arguments.
-
-    :param args: Shell command and its arguments
-    :return: String representation thereof
-    """
-    res = []
-    for arg in args:
-        if "\n" in arg:
-            res.append(repr(arg))
-        else:
-            res.append(shlex.quote(arg))
-    return " ".join(res)
 
 
 class Runner(object):
@@ -172,40 +156,38 @@ class Runner(object):
             verbose=False
         )
 
-    def launch_command(self, track, args, **kwargs) -> Popen:
+    def make_logger(self, track, capture=None):
+        """Create a logger that optionally captures what is logged"""
+        prefix = "{:>3d}".format(track)
+
+        if capture is None:
+
+            def logger(line):
+                """Just log"""
+                self.write(line, prefix=prefix)
+        else:
+
+            def logger(line):
+                """Log and capture"""
+                capture.append(line)
+                self.write(line, prefix=prefix)
+
+        return logger
+
+    def launch_command(self, track, out_cb, err_cb, args, **kwargs) -> Popen:
         """Call a command, generate stamped, logged output."""
-        kwargs = kwargs.copy()
-        in_data = kwargs.get("input")
-        if "input" in kwargs:
-            del kwargs["input"]
-            kwargs["stdin"] = PIPE
-        kwargs["stdout"] = PIPE
-        kwargs["stderr"] = STDOUT
         try:
-            process = Popen(args, **kwargs)
+            process = launch_command(args, out_cb, err_cb, **kwargs)
         except OSError as exc:
             self.write("[{}] {}".format(track, exc))
             raise
-        Popen([
-            "stamp-telepresence", "--id",
-            str(track), "--start-time",
-            str(self.start_time)
-        ],
-              stdin=process.stdout,
-              stdout=self.logfile,
-              stderr=self.logfile)
-        if in_data:
-            process.communicate(in_data, timeout=kwargs.get("timeout"))
         return process
 
-    def check_call(self, args, **kwargs):
-        """Run a subprocess, make sure it exited with 0."""
-        self.counter = track = self.counter + 1
-        self.write("[{}] Running: {}".format(track, str_command(args)))
-        if "input" not in kwargs and "stdin" not in kwargs:
-            kwargs["stdin"] = DEVNULL
+    def run_command(self, track, msg1, msg2, out_cb, err_cb, args, **kwargs):
+        """Run a command synchronously"""
+        self.write("[{}] {}: {}".format(track, msg1, str_command(args)))
         span = self.command_span(track, args)
-        process = self.launch_command(track, args, **kwargs)
+        process = self.launch_command(track, out_cb, err_cb, args, **kwargs)
         process.wait()
         spent = span.end()
         retcode = process.poll()
@@ -214,34 +196,46 @@ class Runner(object):
                 "[{}] exit {} in {:0.2f} secs.".format(track, retcode, spent)
             )
             raise CalledProcessError(retcode, args)
-        self.write("[{}] ran in {:0.2f} secs.".format(track, spent))
-
-    def get_output(self, args, reveal=False, stderr=None, **kwargs) -> str:
-        """Return (stripped) command result as unicode string."""
-        if stderr is None:
-            stderr = self.logfile
-        self.counter = track = self.counter + 1
-        self.write("[{}] Capturing: {}".format(track, str_command(args)))
-        kwargs["stdin"] = DEVNULL
-        kwargs["stderr"] = stderr
-        span = self.command_span(track, args)
-        try:
-            result = str(check_output(args, **kwargs).strip(), "utf-8")
-        finally:
-            spent = span.end()
-            if reveal or self.verbose:
-                self.write(result, prefix="{:3d}".format(track))
         if spent > 1:
-            self.write("[{}] captured in {:0.2f} secs.".format(track, spent))
-        return result
+            self.write("[{}] {} in {:0.2f} secs.".format(track, msg2, spent))
 
-    def popen(self, args, stdin=DEVNULL, **kwargs) -> Popen:
+    def check_call(self, args, **kwargs):
+        """Run a subprocess, make sure it exited with 0."""
+        self.counter = track = self.counter + 1
+        out_cb = err_cb = self.make_logger(track)
+        self.run_command(
+            track, "Running", "ran", out_cb, err_cb, args, **kwargs
+        )
+
+    def get_output(self, args, reveal=False, **kwargs) -> str:
+        """Return (stripped) command result as unicode string."""
+        self.counter = track = self.counter + 1
+        capture = []  # type: List[str]
+        if reveal or self.verbose:
+            out_cb = self.make_logger(track, capture=capture)
+        else:
+            out_cb = capture.append
+        err_cb = self.make_logger(track)
+        self.run_command(
+            track, "Capturing", "captured", out_cb, err_cb, args, **kwargs
+        )
+        return "".join(capture).strip()
+
+    def popen(self, args, **kwargs) -> Popen:
         """Return Popen object."""
         self.counter = track = self.counter + 1
+        out_cb = err_cb = self.make_logger(track)
+        done = lambda process: self._popen_done(track, process)
         self.write("[{}] Launching: {}".format(track, str_command(args)))
-        kwargs["stdin"] = stdin
-        result = self.launch_command(track, args, **kwargs)
-        return result
+        process = self.launch_command(
+            track, out_cb, err_cb, args, done=done, **kwargs
+        )
+        return process
+
+    def _popen_done(self, track, process):
+        retcode = process.poll()
+        if retcode is not None:
+            self.write("[{}] exit {}".format(track, retcode))
 
     def kubectl(self, context: str, namespace: str,
                 args: List[str]) -> List[str]:
@@ -281,3 +275,69 @@ def read_logs(logfile) -> str:
         except Exception as e:
             logs += ", error ({})".format(e)
     return logs
+
+
+def str_command(args: List[str]):
+    """
+    Return a string representing the shell command and its arguments.
+
+    :param args: Shell command and its arguments
+    :return: String representation thereof
+    """
+    res = []
+    for arg in args:
+        if "\n" in arg:
+            res.append(repr(arg))
+        else:
+            res.append(shlex.quote(arg))
+    return " ".join(res)
+
+
+def launch_command(args, out_cb, err_cb, done=None, **kwargs):
+    """
+    Launch subprocess with args, kwargs.
+    Log stdout and stderr by calling respective callbacks.
+    """
+
+    def pump_stream(callback, stream):
+        """Pump the stream"""
+        for line in stream:
+            callback(line)
+
+    def joiner():
+        """Wait for streams to finish, then call done callback"""
+        for th in threads:
+            th.join()
+        done(process)
+
+    kwargs = kwargs.copy()
+    in_data = kwargs.get("input")
+    if "input" in kwargs:
+        del kwargs["input"]
+        assert kwargs.get("stdin") is None, kwargs["stdin"]
+        kwargs["stdin"] = PIPE
+    elif "stdin" not in kwargs:
+        kwargs["stdin"] = DEVNULL
+    kwargs.setdefault("stdout", PIPE)
+    kwargs.setdefault("stderr", PIPE)
+    kwargs["universal_newlines"] = True  # Text streams, not byte streams
+    process = Popen(args, **kwargs)
+    threads = []
+    if process.stdout:
+        thread = Thread(
+            target=pump_stream, args=(out_cb, process.stdout), daemon=True
+        )
+        thread.start()
+        threads.append(thread)
+    if process.stderr:
+        thread = Thread(
+            target=pump_stream, args=(err_cb, process.stderr), daemon=True
+        )
+        thread.start()
+        threads.append(thread)
+    if done and threads:
+        Thread(target=joiner, daemon=True).start()
+    if in_data:
+        process.stdin.write(in_data)
+        process.stdin.close()
+    return process
