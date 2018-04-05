@@ -31,5 +31,4 @@ fpm -t "$PACKAGE_TYPE" \
     --input-type dir \
     /usr/share/telepresence \
     /usr/bin/sshuttle-telepresence \
-    /usr/bin/stamp-telepresence \
     /usr/bin/telepresence

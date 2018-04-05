@@ -28,7 +28,6 @@ class Telepresence < Formula
 
   test do
     system "telepresence", "--help"
-    system "stamp-telepresence", "--help"
     system "sshuttle-telepresence", "--version"
   end
 end

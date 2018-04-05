@@ -24,8 +24,7 @@ setup(
     packages=["telepresence"],
     entry_points={
         "console_scripts": [
-            "telepresence = telepresence.main:run_telepresence",
-            "stamp-telepresence = telepresence.stamp:run_stamp"
+            "telepresence = telepresence.main:run_telepresence"
         ]
     },
     url="https://www.telepresence.io"
