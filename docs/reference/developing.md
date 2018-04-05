@@ -29,7 +29,6 @@ $ . virtualenv/bin/activate
 This will give you access to the Telepresence executables:
 
 * `telepresence`
-* `stamp-telepresence`
 * `sshuttle-telepresence`.
 
 You can test your modifications to Telepresence with the `build` tool:

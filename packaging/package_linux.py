@@ -62,7 +62,6 @@ def test_package(distro_image, package_directory, install_command):
         set -e
         {}
         telepresence --version
-        stamp-telepresence --version
         sshuttle-telepresence --version
     """.format(install_command)
     run([

@@ -28,7 +28,6 @@ rm -rf "${VENVDIR}/share"
 install -d "${BINDIR}"
 install \
  "${VENVDIR}/bin/sshuttle-telepresence" \
- "${VENVDIR}/bin/stamp-telepresence" \
  "${VENVDIR}/bin/telepresence" \
  "${BINDIR}"
 
