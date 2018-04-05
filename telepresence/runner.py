@@ -341,6 +341,6 @@ def launch_command(args, out_cb, err_cb, done=None, **kwargs):
     if done and threads:
         Thread(target=joiner, daemon=True).start()
     if in_data:
-        process.stdin.write(in_data)
+        process.stdin.write(str(in_data, "utf-8"))
         process.stdin.close()
     return process
