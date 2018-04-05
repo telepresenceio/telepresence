@@ -11,7 +11,6 @@ from typing import List, Set, Tuple
 from functools import wraps
 
 import telepresence
-from telepresence.runner import read_logs
 from telepresence.utilities import random_name
 
 
@@ -57,13 +56,15 @@ class PortMapping(object):
 class handle_unexpected_errors(object):
     """Decorator that catches unexpected errors."""
 
-    def __init__(self, logfile):
+    def __init__(self, logfile, runner=None):
         self.logfile = logfile
+        self.runner = runner
 
     def __call__(self, f):
         def safe_output(args):
             try:
-                return str(check_output(args), "utf-8").strip()
+                return str(check_output(args),
+                           "utf-8").strip().replace("\n", " // ")
             except Exception as e:
                 return "(error: {})".format(e)
 
@@ -76,7 +77,10 @@ class handle_unexpected_errors(object):
             except KeyboardInterrupt:
                 raise SystemExit(0)
             except Exception as e:
-                logs = read_logs(self.logfile)
+                if self.runner:
+                    logs = self.runner.read_logs()
+                else:
+                    logs = "Not available"
                 errorf = StringIO()
                 print_exc(file=errorf)
                 error = errorf.getvalue()
@@ -86,15 +90,22 @@ class handle_unexpected_errors(object):
                     "Here's the traceback:\n\n" + error + "\n"
                 )
                 if self.logfile != "-":
+                    log_ref = " (see {} for the complete logs):".format(
+                        self.logfile
+                    )
+                else:
+                    log_ref = ""
+                if "\n" in logs:
                     print(
-                        "And here are the last few lines of the logfile "
-                        "(see {} for the complete logs):\n\n".format(
-                            self.logfile
-                        ) + "\n".join(logs.splitlines()[-20:]) + "\n"
+                        "And here are the last few lines of the logfile" +
+                        log_ref + "\n\n" + "\n".join(logs.splitlines()[-20:]) +
+                        "\n"
                     )
 
                 if sys.stdout.isatty() and input(
                     "Would you like to file an issue in our issue tracker?"
+                    " You'll be able to review and edit before anything is"
+                    " posted to the public."
                     " We'd really appreciate the help improving our "
                     "product. [Y/n]: ",
                 ).lower() in ("y", ""):
@@ -106,9 +117,8 @@ class handle_unexpected_errors(object):
                         # Overly long URLs won't work:
                         BUG_REPORT_TEMPLATE.format(
                             sys.argv, telepresence.__version__, sys.version,
-                            safe_output([
-                                "kubectl", "version", "--short", "--client"
-                            ]), safe_output(["oc", "version"]),
+                            safe_output(["kubectl", "version", "--short"]),
+                            safe_output(["oc", "version"]),
                             safe_output(["uname", "-a"]), error, logs[-1000:]
                         )[:4000]
                     )

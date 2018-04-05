@@ -398,15 +398,23 @@ def main():
                     )
                 cluster = context_setting["context"]["cluster"]
                 break
+        else:
+            return exit("Error: Unable to find cluster information")
         for cluster_setting in kubectl_config["clusters"]:
             if cluster_setting["name"] == cluster:
                 server = cluster_setting["cluster"]["server"]
+                break
+        else:
+            return exit("Error: Unable to find server information")
 
         # Log file path should be absolute since some processes may run in
         # different directories:
         if args.logfile != "-":
             args.logfile = os.path.abspath(args.logfile)
         runner = Runner.open(args.logfile, kubectl_or_oc(server), args.verbose)
+        return runner, scouted, server
+
+    def go_too(runner, scouted, server):
         span = runner.span()
         atexit.register(span.end)
         runner.write("Scout info: {}\n".format(scouted))
@@ -415,7 +423,6 @@ def main():
                 args.context, args.namespace, runner.kubectl_cmd
             )
         )
-
         # Figure out if we need capability that allows for ports < 1024:
         if any([p < 1024 for p in args.expose.remote()]):
             if runner.kubectl_cmd == "oc":
@@ -451,7 +458,6 @@ def main():
                 " using --deployment. Use --swap-deployment or"
                 " --new-deployment instead."
             )
-
         # Make sure we can access Kubernetes:
         try:
             if runner.kubectl_cmd == "oc":
@@ -476,7 +482,6 @@ def main():
         except (CalledProcessError, OSError, IOError) as e:
             sys.stderr.write("Error running ssh: {}\n".format(e))
             raise SystemExit(1)
-
         # Other requirements:
         require_command(
             runner, "torsocks", "Please install torsocks (v2.1 or later)"
@@ -485,7 +490,6 @@ def main():
         # Need conntrack for sshuttle on Linux:
         if sys.platform.startswith("linux") and args.method == "vpn-tcp":
             require_command(runner, "conntrack")
-
         subprocesses, env, socks_port, ssh, remote_info = start_proxy(
             runner, args
         )
@@ -503,7 +507,9 @@ def main():
                 runner, remote_info, args, env, subprocesses, socks_port, ssh
             )
 
-    go()
+    runner_, scouted_, server_ = go()
+    handle_unexpected_errors(args.logfile,
+                             runner_)(go_too)(runner_, scouted_, server_)
 
 
 def run_telepresence():

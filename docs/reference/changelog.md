@@ -19,6 +19,9 @@ Misc:
 * The commands that Telepresence launches have always been recorded in the logfile.
   Now they are formatted so they can be copy-pasted into your terminal in most cases.
 * The beginning of the logfile contains more information about your local and cluster setup to aid with bug reports and troubleshooting.
+* The crash reporter does a better job of capturing relevant information and tries to avoid missing the end of the logfile.
+  ([#446](https://github.com/datawire/telepresence/issues/446))
+  ([#466](https://github.com/datawire/telepresence/issues/466))
 * When using the vpn-tcp method, DNS queries from the domain search path (the search list in `/etc/resolv.conf`) now yield NXDOMAIN instead of implicitly stripping off the search suffix.
   The resolver library will eventually query for the bare name (without the search suffix), at which point Telepresence DNS will return the expected IP address in the cluster.
   ([#192](https://github.com/datawire/telepresence/issues/192))
