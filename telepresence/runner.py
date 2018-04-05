@@ -1,9 +1,10 @@
+from collections import deque
 import shlex
 import sys
 from subprocess import Popen, PIPE, DEVNULL, CalledProcessError
 from threading import Thread
-from time import time, ctime
-from typing import List
+from time import time, ctime, sleep
+from typing import List, Deque
 
 from inspect import getframeinfo, currentframe
 import os
@@ -73,6 +74,10 @@ class Runner(object):
         self.start_time = time()
         self.current_span = None  # type: Span
         self.counter = 0
+
+        # Keep the last 25 lines of log
+        Deque  # Avoid F401
+        self.logtail = deque(maxlen=25)  # type: Deque[str]
         self.write(
             "Telepresence {} launched at {}\n  {}".format(
                 telepresence.__version__, ctime(), str_command(sys.argv)
@@ -144,7 +149,13 @@ class Runner(object):
                 time() - self.start_time, prefix, sub_message.rstrip()
             )
             self.logfile.write(line)
+            self.logtail.append(line)
         self.logfile.flush()
+
+    def read_logs(self) -> str:
+        """Return the end of the contents of the log"""
+        sleep(2.0)
+        return "".join(self.logtail)
 
     def set_success(self, flag: bool) -> None:
         """Indicate whether the command succeeded"""
@@ -268,18 +279,6 @@ class Runner(object):
         self.check_call(
             self.kubectl(context, namespace, kubectl_args), **kwargs
         )
-
-
-def read_logs(logfile) -> str:
-    """Read logfile, return string."""
-    logs = "Not available"
-    if logfile != "-" and os.path.exists(logfile):
-        try:
-            with open(logfile, "r") as logfile:
-                logs = logfile.read()
-        except Exception as e:
-            logs += ", error ({})".format(e)
-    return logs
 
 
 def str_command(args: List[str]):
