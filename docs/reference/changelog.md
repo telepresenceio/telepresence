@@ -10,6 +10,9 @@ Bug fixes:
   ([#195](https://github.com/datawire/telepresence/issues/195))
 * No more crash when Telepresence cannot write to its log file.
   ([#459](https://github.com/datawire/telepresence/issues/459))
+* Fixed remaining instances of logfile content that was not time and origin stamped.
+  As a side-effect, the `stamp-telepresence` command has been removed.
+  ([#390](https://github.com/datawire/telepresence/issues/390))
 
 Misc:
 
