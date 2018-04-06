@@ -176,13 +176,15 @@ class Runner(object):
 
             def logger(line):
                 """Just log"""
-                self.write(line, prefix=prefix)
+                if line is not None:
+                    self.write(line, prefix=prefix)
         else:
 
             def logger(line):
                 """Log and capture"""
                 capture.append(line)
-                self.write(line, prefix=prefix)
+                if line is not None:
+                    self.write(line, prefix=prefix)
 
         return logger
 
@@ -231,6 +233,10 @@ class Runner(object):
         self.run_command(
             track, "Capturing", "captured", out_cb, err_cb, args, **kwargs
         )
+        # Wait for end of stream to be recorded
+        while not capture or capture[-1] is not None:
+            sleep(0.1)
+        del capture[-1]
         return "".join(capture).strip()
 
     def popen(self, args, **kwargs) -> Popen:
@@ -306,6 +312,7 @@ def launch_command(args, out_cb, err_cb, done=None, **kwargs):
         """Pump the stream"""
         for line in stream:
             callback(line)
+        callback(None)
 
     def joiner():
         """Wait for streams to finish, then call done callback"""
