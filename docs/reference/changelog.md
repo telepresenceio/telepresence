@@ -2,6 +2,12 @@
 
 <!--- towncrier start line -->
 
+#### 0.80 (April 6, 2018)
+
+Bug fixes:
+
+* This release corrects a race condition in subprocess output capture when using the `--verbose` option.
+
 #### 0.79 (April 6, 2018)
 
 Bug fixes:
