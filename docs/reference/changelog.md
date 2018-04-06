@@ -2,7 +2,7 @@
 
 <!--- towncrier start line -->
 
-#### 0.79 (Unreleased)
+#### 0.79 (April 6, 2018)
 
 Bug fixes:
 
