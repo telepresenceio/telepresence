@@ -1,0 +1,14 @@
+dns + routing from inside docker and outside docker
+kill ssh and it restarts
+close laptop and it restarts
+move networks (with different config) and stuff continues to work
+change dns and stuff continues to work
+kill daemon and it cleans up after itself:
+  ipt
+
+what does daemon do when starting dirty:
+  with ipt
+  with old ssh
+  when ssh fails (e.g. due to port conflict)
+
+create/delete services and see that they appear/disappear

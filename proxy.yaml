@@ -1,0 +1,35 @@
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: sshd
+spec:
+  selector:
+    deployment: sshd
+  ports:
+  - name: sshd
+    protocol: TCP
+    port: 22
+    targetPort: 8022
+  type: LoadBalancer
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: sshd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      deployment: sshd
+  template:
+    metadata:
+      labels:
+        deployment: sshd
+    spec:
+      containers:
+      - name: proxy
+        image: datawire/telepresence-k8s:0.75
+        ports:
+        - protocol: TCP
+          containerPort: 8022
