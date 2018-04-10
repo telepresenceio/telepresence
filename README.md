@@ -158,6 +158,13 @@ Features:
    consider using kubectl port-forward instead of solving this
    problem, but kubectl port-forward seems to have not great
    reliability around long-lived connections.
+ - Currently only kubernetes clusterIP services are supported. Need to
+   watch other kinds of services and pods as well.
+ - Right now all lookups are on the name as supplied. We need to
+   support the proper lookup logic for
+   "blah.namespace.svc.cluster.local".
+ - Right now only A records are interecepted, should handle other
+   types of DNS queries as well.
 
 Tests:
 
