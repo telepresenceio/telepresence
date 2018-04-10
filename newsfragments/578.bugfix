@@ -1,0 +1,3 @@
+When using the vpn-tcp method, DNS queries from the domain search path no longer yield NXDOMAIN.
+Unfortunately, the expected follow-up query does not occur in some network conditions.
+This change fixes a DNS regression introduced in 0.81.
