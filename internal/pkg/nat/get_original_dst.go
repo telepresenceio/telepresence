@@ -1,7 +1,7 @@
 // get the original destination for the socket when redirect by linux iptables 
 // refer to https://raw.githubusercontent.com/missdeer/avege/master/src/inbound/redir/redir_iptables.go
 //
-package tputil
+package nat
 
 import (
 	"fmt"

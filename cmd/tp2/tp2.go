@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 	"strconv"
-	"github.com/datawire/tp2/internal/pkg/tputil"
+	"github.com/datawire/tp2/internal/pkg/nat"
 	"github.com/google/shlex"
 	"github.com/miekg/dns"
 	"golang.org/x/net/proxy"
@@ -285,7 +285,7 @@ func handleConnection(conn *net.TCPConn) {
 	// hmm, we may not actually need to get the original destination,
 	// we could just forward each ip to a unique port and either
 	// listen on that port or run port-forward
-	_, host, err := tputil.GetOriginalDst(conn)
+	_, host, err := nat.GetOriginalDst(conn)
 	if err != nil {
 		log.Println("GetOriginalDst:", err)
 		return
