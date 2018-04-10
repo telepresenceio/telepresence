@@ -109,7 +109,7 @@ Step 2:
 
 ```
 go get github.com/datawire/tp2/cmd/tp2
-sudo tp2 -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | awk '{ print $2 }') -remote $(kubectl get svc tp2 -o go-template='{{(index .status.loadBalancer.ingress 0).ip}}')
+sudo tp2 -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }') -remote $(kubectl get svc tp2 -o go-template='{{(index .status.loadBalancer.ingress 0).ip}}')
 ```
 
 Note: If you are using the google cloud auth plugin for kubectl, then
@@ -122,7 +122,7 @@ invoke it directly instead of via sudo, e.g.:
 ```
 chown root:root $(which tp2)
 chmod u+s $(which tp2)
-tp2 -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | awk '{ print $2 }') -remote $(kubectl get svc tp2 -o go-template='{{(index .status.loadBalancer.ingress 0).ip}}')
+tp2 -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }') -remote $(kubectl get svc tp2 -o go-template='{{(index .status.loadBalancer.ingress 0).ip}}')
 ```
 
 Step 3:
@@ -147,6 +147,17 @@ UX:
    # automatically (re)connect me to whatever cluster my context points to
    tp2
    ```
+Features:
+
+ - Security: Right now it deploys the existing telepresence proxy as a
+   permanent endpoint in the cluster and exposes the sshd service as a
+   LoadBalancer. This sshd is configured to permit no-password
+   logins. This is obviously not ideal from a security perspective. We
+   could do something better than this like generate a keypair, but
+   there is a bunch of UX to work out in this area. We could also
+   consider using kubectl port-forward instead of solving this
+   problem, but kubectl port-forward seems to have not great
+   reliability around long-lived connections.
 
 Tests:
 
