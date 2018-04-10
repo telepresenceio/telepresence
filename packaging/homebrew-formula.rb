@@ -1,16 +1,15 @@
 # This script is generated automatically by the release automation code in the
 # Telepresence repository:
 class Telepresence < Formula
+  include Language::Python::Virtualenv
   desc "Local dev environment attached to a remote Kubernetes cluster"
   homepage "https://telepresence.io"
   url "https://github.com/datawire/telepresence/archive/__NEW_VERSION__.tar.gz"
   sha256 "__TARBALL_HASH__"
 
-  depends_on "python3"
-  depends_on "torsocks" => :run
-  depends_on "sshfs" => :run
-
-  include Language::Python::Virtualenv
+  depends_on "python"
+  depends_on "torsocks"
+  depends_on "sshfs"
 
   def install
     venv = virtualenv_create(libexec, "python3")
@@ -27,7 +26,7 @@ class Telepresence < Formula
   end
 
   test do
-    system "telepresence", "--help"
-    system "sshuttle-telepresence", "--version"
+    system "#{bin}/telepresence", "--help"
+    system "#{bin}/sshuttle-telepresence", "--version"
   end
 end
