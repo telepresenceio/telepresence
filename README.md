@@ -63,7 +63,9 @@ OS and environmental dependencies. They are also useful on their own,
 For example, many applications can be directly configured to use a
 SOCKS5 proxy. There are also various third party tools on both macos
 and windows that claim to solve the problem of capturing some/all
-traffic and sending it through a SOCKS5 proxy.
+traffic and sending it through a SOCKS5 proxy. See
+[https://en.wikipedia.org/wiki/Comparison_of_proxifiers] for more
+details.
 
 For the traffic capturing mechanism to work, there are two basic
 primitives that are OS-specific:
