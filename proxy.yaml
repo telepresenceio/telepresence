@@ -2,12 +2,12 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: sshd
+  name: tp2
 spec:
   selector:
-    deployment: sshd
+    deployment: tp2
   ports:
-  - name: sshd
+  - name: tp2
     protocol: TCP
     port: 22
     targetPort: 8022
@@ -16,16 +16,16 @@ spec:
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: sshd
+  name: tp2
 spec:
   replicas: 1
   selector:
     matchLabels:
-      deployment: sshd
+      deployment: tp2
   template:
     metadata:
       labels:
-        deployment: sshd
+        deployment: tp2
     spec:
       containers:
       - name: proxy
