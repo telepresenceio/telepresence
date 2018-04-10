@@ -121,7 +121,7 @@ func (this *handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			return
 		}
 	}
-	in, err := dns.Exchange(r, "8.8.8.8:53")
+	in, err := dns.Exchange(r, *fallbackIP + ":53")
 	if err != nil {
 		log.Println(err)
 		return
@@ -138,6 +138,7 @@ func dnsMain() {
 }
 
 var dnsIP = flag.String("dns", "10.0.0.1", "dns ip address")
+var fallbackIP = flag.String("fallback", "", "dns fallback")
 var remote = flag.String("remote", "", "remote host")
 
 func main() {
@@ -148,6 +149,18 @@ func main() {
 		if err != nil { panic(err) }
 		home := current.HomeDir
 		*kubeconfig = filepath.Join(home, ".kube/config")
+	}
+
+	if *fallbackIP == "" {
+		if *dnsIP == "8.8.8.8" {
+			*fallbackIP = "8.8.4.4"
+		} else {
+			*fallbackIP = "8.8.8.8"
+		}
+	}
+
+	if *fallbackIP == *dnsIP {
+		panic("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
 	}
 
 	kubeWatch()
