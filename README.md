@@ -46,24 +46,24 @@ It is a daemon that runs on your laptop (or anywhere else) and
 provides three basic functions:
 
  * a DNS server that:
-  - maintains records for dns-addressible entities in a configured
-    kubernetes cluster
-  - forwards any requests that don't match kubernetes entities to a
-    configurable fallback
+   - maintains records for dns-addressible entities in a configured
+     kubernetes cluster
+   - forwards any requests that don't match kubernetes entities to a
+     configurable fallback
 
  * a SOCKS5 proxy that maintains auto-reconnecting connectivity into
    the the kubernetes cluster
 
  * a traffic capturing mechanism that:
-  - dynamicaly adds/removes port forwarding rules for kubernetes ips
-  - translates tcp connections to socks5 connections
+   - dynamicaly adds/removes port forwarding rules for kubernetes ips
+   - translates tcp connections to socks5 connections
 
-Of these four basic functions, the first two have extremely minimal OS
-and environmental dependencies. They are also useful on their own, For
-example, many applications can be directly configured to use a SOCKS5
-proxy. There are also various third party tools on both macos and
-windows that claim to solve the problem of capturing some/all traffic
-and sending it through a SOCKS5 proxy.
+Of these three basic functions, the first two have extremely minimal
+OS and environmental dependencies. They are also useful on their own,
+For example, many applications can be directly configured to use a
+SOCKS5 proxy. There are also various third party tools on both macos
+and windows that claim to solve the problem of capturing some/all
+traffic and sending it through a SOCKS5 proxy.
 
 For the traffic capturing mechanism to work, there are two basic
 primitives that are OS-specific:
