@@ -16,7 +16,6 @@ import (
 	"time"
 	"strconv"
 	"github.com/datawire/tp2/internal/pkg/nat"
-	"github.com/google/shlex"
 	"github.com/miekg/dns"
 	"golang.org/x/net/proxy"
 	"k8s.io/api/core/v1"
@@ -26,21 +25,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/cache"
 )
-
-func ipt(argline string) {
-	args, err := shlex.Split(argline)
-	if err != nil { panic(err) }
-	args = append([]string{"-t", "nat"}, args...)
-	cmd := exec.Command("iptables", args...)
-	log.Printf("iptables -t nat %s\n", argline)
-	out, err := cmd.CombinedOutput()
-	if len(out) > 0 {
-		log.Printf("%s", out)
-	}
-	if err != nil {
-		log.Println(err)
-	}
-}
 
 var kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 
@@ -86,25 +70,23 @@ func kubeWatch() {
 
 
 var domainsToAddresses sync.Map
+// XXX: need to do better than futz-1234
+var translator = nat.NewTranslator("futz-1234")
 
 func removeRoute(key string) {
-	old, ok := domainsToAddresses.Load(key)
-	if ok {
-		ipt("-D futz-1234 -j REDIRECT --dest " + old.(string) +
-			"/32 -p tcp --to-ports 1234 -m ttl ! --ttl 42")
+	if old, ok := domainsToAddresses.Load(key); ok {
+		translator.ClearTCP(old.(string))
 	}
 }
 
 func updateRoute(svc *v1.Service) {
-	key := svc.Name + "."
-	removeRoute(key)
 	domainsToAddresses.Store(svc.Name + ".", svc.Spec.ClusterIP)
-	ipt("-A futz-1234 -j REDIRECT --dest " + svc.Spec.ClusterIP +
-		"/32 -p tcp --to-ports 1234 -m ttl ! --ttl 42")
+	translator.ForwardTCP(svc.Spec.ClusterIP, "1234")
 }
 
 type handler struct{}
 func (this *handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
+	log.Println("DNS request for", r.Question[0].Name)
 	switch r.Question[0].Qtype {
 	case dns.TypeA:
 		domain := r.Question[0].Name
@@ -172,30 +154,9 @@ func main() {
 		return
 	}
 
-	// XXX: need to fix futz-1234 everywhere
-	// XXX: -D only removes one copy of the rule, need to figure out how to remove all copies just in case
-	ipt("-D OUTPUT -j futz-1234")
-	// we need to be in the PREROUTING chain in order to get traffic
-	// from docker containers, not sure you would *always* want this,
-	// but probably makes sense as a default
-	ipt("-D PREROUTING -j futz-1234")
-	ipt("-N futz-1234")
-	ipt("-F futz-1234")
-	ipt("-I OUTPUT 1 -j futz-1234")
-	ipt("-I PREROUTING 1 -j futz-1234")
-	ipt("-A futz-1234 -j RETURN --dest 127.0.0.1/32 -p tcp")
-	// XXX: need to figure out a better way to handle dns, maybe take an arg
-	ipt("-A futz-1234 -j REDIRECT --dest " + *dnsIP + "/32 -p udp --to-ports 1233 -m ttl ! --ttl 42")
-
-	cleanup := func () {
-		// XXX: -D only removes one copy of the rule, need to figure out how to remove all copies just in case
-		ipt("-D OUTPUT -j futz-1234")
-		ipt("-D PREROUTING -j futz-1234")
-		ipt("-F futz-1234")
-		ipt("-X futz-1234")
-	}
-
-	defer cleanup()
+	translator.Enable()
+	translator.ForwardUDP(*dnsIP, "1233")
+	defer translator.Disable()
 
 	sshch := make(chan bool)
 	defer func() { sshch<-true }()
