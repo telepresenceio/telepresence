@@ -56,7 +56,7 @@ $ cd qotm
 $ docker build -t qotm-dev .
 ```
 
-We'll use Telepresence to swap the QOTM deployment with the local Docker image. Behind the scenes, Telepresence invokes `docker run`, so it supports any arguments you can pass to `docker run`. In this case, we're going to also mount our local directory to `/service` in your Docker container. Make sure your current workding directory is the `qotm` diretory, since we're going to mount that directly into the container.
+We'll use Telepresence to swap the QOTM deployment with the local Docker image. Behind the scenes, Telepresence invokes `docker run`, so it supports any arguments you can pass to `docker run`. In this case, we're going to also mount our local directory to `/service` in your Docker container. Make sure your current working directory is the `qotm` diretory, since we're going to mount that directly into the container.
 
 ```
 $ telepresence --swap-deployment qotm --docker-run \
