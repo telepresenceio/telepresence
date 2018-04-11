@@ -2,6 +2,15 @@
 
 <!--- towncrier start line -->
 
+#### 0.82 (April 11, 2018)
+
+Bug fixes:
+
+* When using the vpn-tcp method, DNS queries from the domain search path no longer yield NXDOMAIN.
+  Unfortunately, the expected follow-up query does not occur under some network conditions.
+  This change fixes a DNS regression introduced in 0.79.
+  ([#578](https://github.com/datawire/telepresence/issues/578))
+
 #### 0.81 (April 6, 2018)
 
 Bug fixes:
