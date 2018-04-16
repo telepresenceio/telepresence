@@ -1,6 +1,13 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.83 (April 16, 2018)
+
+Misc:
+
+* Telepresence requires fewer cluster permissions than before.
+  The required permissions are now [documented](https://www.telepresence.io/reference/connecting#cluster-permissions) for Kubernetes.
+  ([#568](https://github.com/datawire/telepresence/issues/568))
 
 #### 0.82 (April 11, 2018)
 
