@@ -1,0 +1,1 @@
+Telepresence requires fewer cluster permissions than before. The required permissions are [documented](https://www.telepresence.io/reference/connecting#cluster-permissions) for Kubernetes.
