@@ -209,7 +209,7 @@ class Runner(object):
         except OSError as exc:
             self.write("[{}] {}".format(track, exc))
             raise
-        #self.write("CMD: {}".format(str_command(args)))
+        # Grep-able log: self.write("CMD: {}".format(str_command(args)))
         return process
 
     def run_command(self, track, msg1, msg2, out_cb, err_cb, args, **kwargs):
