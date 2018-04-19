@@ -150,6 +150,94 @@ def swap_deployment(runner: Runner,
     return deployment_name, run_id, orig_container_json
 
 
+def supplant_deployment(runner: Runner,
+                        args: argparse.Namespace) -> Tuple[str, str, Dict]:
+    """
+    Swap out an existing Deployment, supplant method.
+
+    Native Kubernetes version.
+
+    Returns (Deployment name, unique K8s label, JSON of original container that
+    was swapped out.)
+    """
+    span = runner.span()
+    run_id = str(uuid4())
+
+    deployment_name, *container_name = args.swap_deployment.split(":", 1)
+    if container_name:
+        container_name = container_name[0]
+    deployment_json = get_deployment_json(
+        runner,
+        deployment_name,
+        args.context,
+        args.namespace,
+        "deployment",
+    )
+
+    # If no container name was given, just use the first one:
+    if not container_name:
+        container_name = deployment_json["spec"]["template"]["spec"][
+            "containers"
+        ][0]["name"]
+
+    # If we're on local VM we need to use different nameserver to
+    # prevent infinite loops caused by sshuttle.
+    add_custom_nameserver = args.method == "vpn-tcp" and args.in_local_vm
+
+    new_deployment_json, orig_container_json = new_swapped_deployment(
+        deployment_json,
+        container_name,
+        run_id,
+        TELEPRESENCE_REMOTE_IMAGE,
+        add_custom_nameserver,
+        args.needs_root,
+    )
+
+    # Compute a new name that isn't too long, i.e. up to 63 characters.
+    # https://github.com/kubernetes/community/blob/master/contributors/design-proposals/architecture/identifiers.md
+    new_deployment_name = "{name:.{max_width}s}-{id}".format(
+        name=deployment_json["metadata"]["name"],
+        id=run_id,
+        max_width=(63 - (len(run_id) + 1))
+    )
+    new_deployment_json["metadata"]["name"] = new_deployment_name
+
+    def resize_original(replicas):
+        """Resize the original deployment (kubectl scale)"""
+        runner.check_kubectl(
+            args.context, args.namespace, [
+                "scale", "deployment", deployment_name,
+                "--replicas={}".format(replicas)
+            ]
+        )
+
+    def delete_new_deployment(check):
+        """Delete the new (copied) deployment"""
+        ignore = []
+        if not check:
+            ignore = ["--ignore-not-found"]
+        runner.check_kubectl(
+            args.context, args.namespace,
+            ["delete", "deployment", new_deployment_name] + ignore
+        )
+
+    # Launch the new deployment
+    atexit.register(delete_new_deployment, True)
+    delete_new_deployment(False)  # Just in case
+    runner.check_kubectl(
+        args.context,
+        args.namespace, ["apply", "-f", "-"],
+        input=json.dumps(new_deployment_json).encode("utf-8")
+    )
+
+    # Scale down the original deployment
+    atexit.register(resize_original, deployment_json["spec"]["replicas"])
+    resize_original(0)
+
+    span.end()
+    return deployment_name, run_id, orig_container_json
+
+
 def new_swapped_deployment(
     old_deployment: Dict,
     container_to_update: str,
