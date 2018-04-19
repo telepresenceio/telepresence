@@ -245,14 +245,21 @@ class Runner(object):
         else:
             out_cb = capture.append
         err_cb = self.make_logger(track)
-        self.run_command(
-            track, "Capturing", "captured", out_cb, err_cb, args, **kwargs
-        )
+        cpe_exc = None
+        try:
+            self.run_command(
+                track, "Capturing", "captured", out_cb, err_cb, args, **kwargs
+            )
+        except CalledProcessError as exc:
+            cpe_exc = exc
         # Wait for end of stream to be recorded
         while not capture or capture[-1] is not None:
             sleep(0.1)
         del capture[-1]
-        return "".join(capture).strip()
+        output = "".join(capture).strip()
+        if cpe_exc:
+            raise CalledProcessError(cpe_exc.returncode, cpe_exc.cmd, output)
+        return output
 
     def popen(self, args, **kwargs) -> Popen:
         """Return Popen object."""

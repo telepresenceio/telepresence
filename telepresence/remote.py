@@ -99,8 +99,8 @@ def get_deployment_json(
             )["items"][0]
     except CalledProcessError as e:
         raise SystemExit(
-            "Failed to find Deployment '{}': {}".format(
-                deployment_name, str(e.stdout, "utf-8")
+            "Failed to find Deployment '{}':\n{}".format(
+                deployment_name, e.stdout
             )
         )
     finally:
