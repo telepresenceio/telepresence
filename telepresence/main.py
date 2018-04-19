@@ -1,3 +1,16 @@
+# Copyright 2018 Datawire. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
 Telepresence: local development environment for a remote Kubernetes cluster.
 """
@@ -460,15 +473,18 @@ def main():
             )
         # Make sure we can access Kubernetes:
         try:
-            if runner.kubectl_cmd == "oc":
-                status_command = "status"
-            else:
-                status_command = "cluster-info"
-            runner.get_output([
-                runner.kubectl_cmd, "--context", args.context, status_command
-            ])
-        except (CalledProcessError, OSError, IOError) as e:
-            sys.stderr.write("Error accessing Kubernetes: {}\n".format(e))
+            runner.get_kubectl(
+                args.context,
+                args.namespace, [
+                    "get", "pods", "telepresence-connectivity-check",
+                    "--ignore-not-found"
+                ],
+                stderr=STDOUT
+            )
+        except (CalledProcessError, OSError, IOError) as exc:
+            sys.stderr.write("Error accessing Kubernetes: {}\n".format(exc))
+            if exc.output:
+                sys.stderr.write("{}\n".format(exc.output.strip()))
             raise SystemExit(1)
         # Make sure we can run openssh:
         try:
