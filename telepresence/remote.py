@@ -160,60 +160,69 @@ def get_remote_info(
         deployment_type,
         run_id=run_id
     )
-    expected_metadata = deployment["spec"]["template"]["metadata"]
-    runner.write("Expected metadata for pods: {}\n".format(expected_metadata))
+    dst_metadata = deployment["spec"]["template"]["metadata"]
+    expected_labels = dst_metadata.get("labels", {})
+
+    # Metadata for Deployment will hopefully have a namespace. If not,
+    # fall back to one we were given. If we weren't given one, best we
+    # can do is choose "default".
+    deployment_namespace = deployment["metadata"].get("namespace", namespace)
+
+    runner.write("Searching for Telepresence pod:")
+    runner.write("  with name {}-*".format(deployment_name))
+    runner.write("  with labels {}".format(expected_labels))
+    runner.write("  with namespace {}".format(deployment_namespace))
+
+    cmd = "get pod -o json --export".split()
+    if run_id:
+        cmd.append("--selector=telepresence={}".format(run_id))
 
     start = time()
     while time() - start < 120:
-        pods = json.loads(
-            runner.get_kubectl(
-                context, namespace, ["get", "pod", "-o", "json", "--export"]
-            )
-        )["items"]
+        pods = json.loads(runner.get_kubectl(context, namespace, cmd))["items"]
         for pod in pods:
             name = pod["metadata"]["name"]
             phase = pod["status"]["phase"]
-            runner.write(
-                "Checking {} (phase {})...\n".format(
-                    pod["metadata"].get("labels"), phase
-                )
-            )
-            if not set(expected_metadata.get("labels", {}).items()).issubset(
-                set(pod["metadata"].get("labels", {}).items())
-            ):
-                runner.write("Labels don't match.\n")
+            labels = pod["metadata"].get("labels", {})
+            pod_ns = pod["metadata"]["namespace"]
+            runner.write("Checking {}".format(name))
+            if not name.startswith(deployment_name + "-"):
+                runner.write("--> Name does not match")
                 continue
-            # Metadata for Deployment will hopefully have a namespace. If not,
-            # fall back to one we were given. If we weren't given one, best we
-            # can do is choose "default".
-            if (
-                name.startswith(deployment_name + "-")
-                and pod["metadata"]["namespace"] == deployment["metadata"].get(
-                    "namespace", namespace
-                ) and phase in ("Pending", "Running")
-            ):
-                runner.write("Looks like we've found our pod!\n")
-                remote_info = RemoteInfo(
-                    runner,
-                    context,
-                    namespace,
-                    deployment_name,
-                    name,
-                    deployment,
-                )
-                # Ensure remote container is running same version as we are:
-                if remote_info.remote_telepresence_version() != __version__:
-                    raise SystemExit((
-                        "The remote datawire/telepresence-k8s container is " +
-                        "running version {}, but this tool is version {}. " +
-                        "Please make sure both are running the same version."
-                    ).format(
-                        remote_info.remote_telepresence_version(), __version__
-                    ))
-                # Wait for pod to be running:
-                wait_for_pod(runner, remote_info)
-                span.end()
-                return remote_info
+            if phase not in ("Pending", "Running"):
+                runner.write("--> Wrong phase: {}".format(phase))
+                continue
+            if not set(expected_labels.items()).issubset(set(labels.items())):
+                runner.write("--> Labels don't match: {}".format(labels))
+                continue
+            if pod_ns != deployment_namespace:
+                runner.write("--> Wrong namespace: {}".format(pod_ns))
+                continue
+
+            runner.write("Looks like we've found our pod!\n")
+            remote_info = RemoteInfo(
+                runner,
+                context,
+                namespace,
+                deployment_name,
+                name,
+                deployment,
+            )
+
+            # Ensure remote container is running same version as we are:
+            remote_version = remote_info.remote_telepresence_version()
+            if remote_version != __version__:
+                runner.write("Pod is running Tel {}".format(remote_version))
+                raise SystemExit((
+                    "The remote datawire/telepresence-k8s container is " +
+                    "running version {}, but this tool is version {}. " +
+                    "Please make sure both are running the same version."
+                ).format(remote_version(), __version__))
+
+            # Wait for pod to be running:
+            wait_for_pod(runner, remote_info)
+            span.end()
+            return remote_info
 
         # Didn't find pod...
         sleep(1)
