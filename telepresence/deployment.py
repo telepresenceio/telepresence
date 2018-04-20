@@ -87,69 +87,6 @@ def create_new_deployment(runner: Runner,
     return args.new_deployment, run_id
 
 
-def swap_deployment(runner: Runner,
-                    args: argparse.Namespace) -> Tuple[str, str, Dict]:
-    """
-    Swap out an existing Deployment.
-
-    Native Kubernetes version.
-
-    Returns (Deployment name, unique K8s label, JSON of original container that
-    was swapped out.)
-    """
-    span = runner.span()
-    run_id = str(uuid4())
-
-    deployment_name, *container_name = args.swap_deployment.split(":", 1)
-    if container_name:
-        container_name = container_name[0]
-    deployment_json = get_deployment_json(
-        runner,
-        deployment_name,
-        args.context,
-        args.namespace,
-        "deployment",
-    )
-
-    def apply_json(json_config):
-        # If we don't delete the deployment first (eg, if we perform a
-        # replace) then related ReplicaSets and Pods tend to hang around.
-        # This seems like a misbehavior of of Kuberentes.
-        runner.check_kubectl(
-            args.context,
-            args.namespace,
-            ["delete", "deployment", deployment_name],
-        )
-        runner.check_kubectl(
-            args.context,
-            args.namespace,
-            ["apply", "-f", "-"],
-            input=json.dumps(json_config).encode("utf-8"),
-        )
-
-    atexit.register(apply_json, deployment_json)
-
-    # If no container name was given, just use the first one:
-    if not container_name:
-        container_name = deployment_json["spec"]["template"]["spec"][
-            "containers"
-        ][0]["name"]
-
-    # If we're on local VM we need to use different nameserver to
-    # prevent infinite loops caused by sshuttle.
-    new_deployment_json, orig_container_json = new_swapped_deployment(
-        deployment_json,
-        container_name,
-        run_id,
-        TELEPRESENCE_REMOTE_IMAGE,
-        args.method == "vpn-tcp" and args.in_local_vm,
-        args.needs_root,
-    )
-    apply_json(new_deployment_json)
-    span.end()
-    return deployment_name, run_id, orig_container_json
-
-
 def supplant_deployment(runner: Runner,
                         args: argparse.Namespace) -> Tuple[str, str, Dict]:
     """
