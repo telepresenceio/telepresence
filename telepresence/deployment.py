@@ -194,11 +194,12 @@ def supplant_deployment(runner: Runner,
     )
 
     # Compute a new name that isn't too long, i.e. up to 63 characters.
+    # Trim the original name until "tel-{run_id}-{pod_id}" fits.
     # https://github.com/kubernetes/community/blob/master/contributors/design-proposals/architecture/identifiers.md
     new_deployment_name = "{name:.{max_width}s}-{id}".format(
         name=deployment_json["metadata"]["name"],
         id=run_id,
-        max_width=(63 - (len(run_id) + 1))
+        max_width=(50 - (len(run_id) + 1))
     )
     new_deployment_json["metadata"]["name"] = new_deployment_name
 
@@ -235,7 +236,7 @@ def supplant_deployment(runner: Runner,
     resize_original(0)
 
     span.end()
-    return deployment_name, run_id, orig_container_json
+    return new_deployment_name, run_id, orig_container_json
 
 
 def new_swapped_deployment(
