@@ -1,6 +1,12 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.84 (April 20, 2018)
+
+Bug fixes:
+
+* This release fixes startup checks for cluster access to avoid crashing or quitting unnecessarily when sufficient access is available.
+
 #### 0.83 (April 16, 2018)
 
 Misc:
