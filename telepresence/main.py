@@ -30,8 +30,9 @@ from time import sleep, time
 
 from telepresence.cleanup import Subprocesses
 from telepresence.cli import parse_args, handle_unexpected_errors
-from telepresence.deployment import create_new_deployment, swap_deployment, \
-    swap_deployment_openshift
+from telepresence.deployment import (
+    create_new_deployment, supplant_deployment, swap_deployment_openshift
+)
 from telepresence.container import MAC_LOOPBACK_IP, run_docker_command
 from telepresence.local import run_local_command
 from telepresence.remote import RemoteInfo, get_remote_info
@@ -290,7 +291,7 @@ def start_proxy(runner: Runner, args: argparse.Namespace
                 swap_deployment_openshift(runner, args)
             )
         else:
-            args.deployment, run_id, container_json = swap_deployment(
+            args.deployment, run_id, container_json = supplant_deployment(
                 runner, args
             )
         args.expose.merge_automatic_ports([
