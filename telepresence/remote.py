@@ -217,7 +217,7 @@ def get_remote_info(
                     "The remote datawire/telepresence-k8s container is " +
                     "running version {}, but this tool is version {}. " +
                     "Please make sure both are running the same version."
-                ).format(remote_version(), __version__))
+                ).format(remote_version, __version__))
 
             # Wait for pod to be running:
             wait_for_pod(runner, remote_info)
