@@ -86,6 +86,7 @@ class Runner(object):
         self.kubectl_cmd = kubectl_cmd
         self.verbose = verbose
         self.start_time = time()
+        Optional  # Avoid Pyflakes F401
         self.current_span = None  # type: Optional[Span]
         self.counter = 0
 
