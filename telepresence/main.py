@@ -60,6 +60,7 @@ def _get_remote_env(
             prior_key = key
         except ValueError:
             # Prior key's value contains one or more newlines
+            assert prior_key is not None
             key = prior_key
             value = result[key] + "\n" + line
         result[key] = value

@@ -18,7 +18,7 @@ import sys
 from subprocess import Popen, PIPE, DEVNULL, CalledProcessError
 from threading import Thread
 from time import time, ctime, sleep
-from typing import List
+from typing import List, Optional
 
 from inspect import getframeinfo, currentframe
 import os
@@ -86,7 +86,8 @@ class Runner(object):
         self.kubectl_cmd = kubectl_cmd
         self.verbose = verbose
         self.start_time = time()
-        self.current_span = None  # type: Span
+        Optional  # Avoid Pyflakes F401
+        self.current_span = None  # type: Optional[Span]
         self.counter = 0
 
         # Keep the last 25 lines of log
@@ -141,7 +142,9 @@ class Runner(object):
         """Write caller's frame info to the log."""
 
         if context:
-            info = getframeinfo(currentframe().f_back)
+            frame = currentframe()
+            assert frame is not None  # mypy
+            info = getframeinfo(frame.f_back)
             tag = "{}:{}({})".format(
                 os.path.basename(info.filename), info.lineno,
                 "{},{}".format(info.function, name) if name else info.function
