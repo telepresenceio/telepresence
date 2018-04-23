@@ -131,7 +131,6 @@ def run_docker_command(
             if e.returncode == 100:
                 # We're good!
                 break
-                return name, envfile.name
             elif e.returncode == 125:
                 # Docker failure, probably due to original container not
                 # starting yet... so sleep and try again:
@@ -147,12 +146,12 @@ def run_docker_command(
     # Start the container specified by the user:
     container_name = random_name()
     docker_command = docker_runify([
-        "--volume={}:{}".format(mount_dir, mount_dir),
         "--name=" + container_name,
         "--network=container:" + name,
-        "--env-file",
-        envfile.name,
+        "--env-file="+envfile.name,
     ])
+    if mount_dir:
+        docker_command.append("--volume={}:{}".format(mount_dir, mount_dir))
     # Don't add --init if the user is doing something with it
     init_args = [
         arg for arg in docker_args
