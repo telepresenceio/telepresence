@@ -3,14 +3,14 @@ import atexit
 import sys
 from subprocess import CalledProcessError, Popen
 from time import time, sleep
-from typing import Dict
+from typing import Dict, Optional
 
 import os
 from shutil import rmtree, copy
 from tempfile import mkdtemp, NamedTemporaryFile
 
 from telepresence.cleanup import Subprocesses, kill_process, wait_for_exit
-from telepresence.remote import RemoteInfo, mount_remote_volumes
+from telepresence.remote import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.ssh import SSH
 from telepresence.vpn import connect_sshuttle
@@ -115,9 +115,14 @@ def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
 
 
 def run_local_command(
-    runner: Runner, remote_info: RemoteInfo, args: argparse.Namespace,
-    env_overrides: Dict[str, str], subprocesses: Subprocesses, socks_port: int,
-    ssh: SSH
+    runner: Runner,
+    remote_info: RemoteInfo,
+    args: argparse.Namespace,
+    env_overrides: Dict[str, str],
+    subprocesses: Subprocesses,
+    socks_port: int,
+    ssh: SSH,
+    mount_dir: Optional[str],
 ) -> None:
     """--run-shell/--run support, run command locally."""
     env = os.environ.copy()
@@ -132,11 +137,8 @@ def run_local_command(
     unsupported_tools_path = get_unsupported_tools(args.method != "inject-tcp")
     env["PATH"] = unsupported_tools_path + ":" + env["PATH"]
 
-    # Mount remote filesystem:
-    mount_dir, mount_cleanup = mount_remote_volumes(
-        runner, remote_info, ssh, False
-    )
-    env["TELEPRESENCE_ROOT"] = mount_dir
+    if mount_dir:
+        env["TELEPRESENCE_ROOT"] = mount_dir
 
     # Make sure we use "bash", no "/bin/bash", so we get the copied version on
     # OS X:
@@ -159,8 +161,6 @@ def run_local_command(
         if p.poll() is None:
             runner.write("Killing local process...\n")
             kill_process(p)
-
-        mount_cleanup()
 
     atexit.register(terminate_if_alive)
     wait_for_exit(runner, p, subprocesses)

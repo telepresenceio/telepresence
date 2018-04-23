@@ -4,7 +4,7 @@ import json
 import sys
 from subprocess import CalledProcessError, Popen
 from time import sleep
-from typing import List, Callable, Dict, Tuple
+from typing import List, Callable, Dict, Tuple, Optional
 
 import os
 import os.path
@@ -12,7 +12,7 @@ from tempfile import NamedTemporaryFile
 
 from telepresence import TELEPRESENCE_LOCAL_IMAGE
 from telepresence.cleanup import Subprocesses, wait_for_exit
-from telepresence.remote import RemoteInfo, mount_remote_volumes
+from telepresence.remote import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.ssh import SSH
 from telepresence.utilities import random_name
@@ -62,6 +62,7 @@ def run_docker_command(
     remote_env: Dict[str, str],
     subprocesses: Subprocesses,
     ssh: SSH,
+    mount_dir: Optional[str],
 ) -> None:
     """
     --docker-run support.
@@ -74,17 +75,9 @@ def run_docker_command(
     :param mount_dir: Path to local directory where remote pod's filesystem is
         mounted.
     """
-    # Mount remote filesystem. We allow all users if we're using Docker because
-    # we don't know what uid the Docker container will use:
-    mount_dir, mount_cleanup = mount_remote_volumes(
-        runner,
-        remote_info,
-        ssh,
-        True,
-    )
-
     # Update environment:
-    remote_env["TELEPRESENCE_ROOT"] = mount_dir
+    if mount_dir:
+        remote_env["TELEPRESENCE_ROOT"] = mount_dir
     remote_env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
 
     # Extract --publish flags and add them to the sshuttle container, which is
@@ -138,7 +131,6 @@ def run_docker_command(
             if e.returncode == 100:
                 # We're good!
                 break
-                return name, envfile.name
             elif e.returncode == 125:
                 # Docker failure, probably due to original container not
                 # starting yet... so sleep and try again:
@@ -154,12 +146,12 @@ def run_docker_command(
     # Start the container specified by the user:
     container_name = random_name()
     docker_command = docker_runify([
-        "--volume={}:{}".format(mount_dir, mount_dir),
         "--name=" + container_name,
         "--network=container:" + name,
-        "--env-file",
-        envfile.name,
+        "--env-file=" + envfile.name,
     ])
+    if mount_dir:
+        docker_command.append("--volume={}:{}".format(mount_dir, mount_dir))
     # Don't add --init if the user is doing something with it
     init_args = [
         arg for arg in docker_args
@@ -179,8 +171,6 @@ def run_docker_command(
         if p.poll() is None:
             runner.write("Killing local container...\n")
             make_docker_kill(runner, container_name)()
-
-        mount_cleanup()
 
     atexit.register(terminate_if_alive)
     wait_for_exit(runner, p, subprocesses)

@@ -23,6 +23,7 @@ import signal
 import os
 import re
 import sys
+from tempfile import mkdtemp
 from typing import List, Tuple, Dict
 from shutil import which
 from subprocess import (CalledProcessError, check_output, STDOUT, DEVNULL)
@@ -35,7 +36,10 @@ from telepresence.deployment import (
 )
 from telepresence.container import MAC_LOOPBACK_IP, run_docker_command
 from telepresence.local import run_local_command
-from telepresence.remote import RemoteInfo, get_remote_info
+from telepresence.remote import (
+    RemoteInfo, get_remote_info, mount_remote_volumes
+)
+
 from telepresence.runner import Runner
 from telepresence.ssh import SSH
 from telepresence.startup import kubectl_or_oc, require_command
@@ -272,7 +276,7 @@ def start_proxy(runner: Runner, args: argparse.Namespace
             "https://telepresence.io/reference/methods.html",
             file=sys.stderr
         )
-    if sys.stdout.isatty():
+    if args.mount and sys.stdout.isatty():
         print(
             "Volumes are rooted at $TELEPRESENCE_ROOT. See "
             "https://telepresence.io/howto/volumes.html for details.\n",
@@ -504,13 +508,43 @@ def main():
         require_command(
             runner, "torsocks", "Please install torsocks (v2.1 or later)"
         )
-        require_command(runner, "sshfs")
+        if args.mount:
+            require_command(runner, "sshfs")
         # Need conntrack for sshuttle on Linux:
         if sys.platform.startswith("linux") and args.method == "vpn-tcp":
             require_command(runner, "conntrack")
         subprocesses, env, socks_port, ssh, remote_info = start_proxy(
             runner, args
         )
+
+        # Mount remote filesystem
+        if args.mount:
+            # The mount directory is made here, removed by mount_cleanup if
+            # mount succeeds, leaked if mount fails.
+            if args.mount is True:
+                # Docker for Mac only shares some folders; the default TMPDIR
+                # on OS X is not one of them, so make sure we use /tmp:
+                mount_dir = mkdtemp(dir="/tmp")
+            else:
+                # FIXME: Maybe warn if args.mount doesn't start with /tmp?
+                try:
+                    args.mount.mkdir(parents=True, exist_ok=True)
+                except OSError as exc:
+                    exit("Unable to use mount path: {}".format(exc))
+                mount_dir = str(args.mount)
+            # We allow all users if we're using Docker because we don't know
+            # what uid the Docker container will use.
+            mount_dir, mount_cleanup = mount_remote_volumes(
+                runner,
+                remote_info,
+                ssh,
+                args.method == "container",  # allow all users
+                mount_dir,
+            )
+            atexit.register(mount_cleanup)
+        else:
+            mount_dir = None
+
         if args.method == "container":
             run_docker_command(
                 runner,
@@ -519,10 +553,12 @@ def main():
                 env,
                 subprocesses,
                 ssh,
+                mount_dir,
             )
         else:
             run_local_command(
-                runner, remote_info, args, env, subprocesses, socks_port, ssh
+                runner, remote_info, args, env, subprocesses, socks_port, ssh,
+                mount_dir
             )
 
     runner_, scouted_, server_ = go()
