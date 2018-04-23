@@ -1,6 +1,31 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.85 (April 23, 2018)
+
+Features:
+
+* You can set `$TELEPRESENCE_ROOT` to a known path using the `--mount=/known/path` argument.
+  See the [volumes documentation](https://www.telepresence.io/howto/volumes) for example usage.
+  ([#454](https://github.com/datawire/telepresence/issues/454))
+* Turn off volume support entirely with `--mount=false`.
+  ([#378](https://github.com/datawire/telepresence/issues/378))
+
+Bug fixes:
+
+* The swap-deployment operation works differently now.
+
+  The original method saved a copy of the deployment manifest, deleted the deployment, and then created a deployment for Telepresence.
+  To clean up, it deleted the Telepresence deployment and recreated the original deployment using the saved manifest.
+  The problem with this approach was that an outside system managing known deployments could clobber the Telepresence deployment, causing the user's Telepresence session to crash mysteriously.
+
+  The new method creates a separate deployment for Telepresence with the same labels as the original deployment and scales down the original deployment to zero replicas.
+  Services will find the new deployment the same way they found the original, via label selectors.
+  To clean up, it deletes the Telepresence deployment and scales the original deployment back to its previous replica count.
+
+  An outside system managing known deployments should not touch the Telepresence deployment; it may scale up the original and steal requests from the Telepresence session, but at least that session won't crash mysteriously as it would before.
+  ([#575](https://github.com/datawire/telepresence/issues/575))
+
 #### 0.84 (April 20, 2018)
 
 Bug fixes:
