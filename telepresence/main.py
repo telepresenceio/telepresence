@@ -272,7 +272,7 @@ def start_proxy(runner: Runner, args: argparse.Namespace
             "https://telepresence.io/reference/methods.html",
             file=sys.stderr
         )
-    if sys.stdout.isatty():
+    if sys.stdout.isatty() and not args.no_fs:
         print(
             "Volumes are rooted at $TELEPRESENCE_ROOT. See "
             "https://telepresence.io/howto/volumes.html for details.\n",
@@ -504,7 +504,8 @@ def main():
         require_command(
             runner, "torsocks", "Please install torsocks (v2.1 or later)"
         )
-        require_command(runner, "sshfs")
+        if not args.no_fs:
+            require_command(runner, "sshfs")
         # Need conntrack for sshuttle on Linux:
         if sys.platform.startswith("linux") and args.method == "vpn-tcp":
             require_command(runner, "conntrack")

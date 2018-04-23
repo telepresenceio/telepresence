@@ -74,17 +74,18 @@ def run_docker_command(
     :param mount_dir: Path to local directory where remote pod's filesystem is
         mounted.
     """
-    # Mount remote filesystem. We allow all users if we're using Docker because
-    # we don't know what uid the Docker container will use:
-    mount_dir, mount_cleanup = mount_remote_volumes(
-        runner,
-        remote_info,
-        ssh,
-        True,
-    )
+    if not args.no_fs:
+        # Mount remote filesystem. We allow all users if we're using Docker because
+        # we don't know what uid the Docker container will use:
+        mount_dir, mount_cleanup = mount_remote_volumes(
+            runner,
+            remote_info,
+            ssh,
+            True,
+        )
+        remote_env["TELEPRESENCE_ROOT"] = mount_dir
 
     # Update environment:
-    remote_env["TELEPRESENCE_ROOT"] = mount_dir
     remote_env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
 
     # Extract --publish flags and add them to the sshuttle container, which is
@@ -179,8 +180,8 @@ def run_docker_command(
         if p.poll() is None:
             runner.write("Killing local container...\n")
             make_docker_kill(runner, container_name)()
-
-        mount_cleanup()
+        if not args.no_fs:
+            mount_cleanup()
 
     atexit.register(terminate_if_alive)
     wait_for_exit(runner, p, subprocesses)
