@@ -1,10 +1,9 @@
 import json
 import sys
+from pathlib import Path
 from subprocess import STDOUT, CalledProcessError
 from time import time, sleep
 from typing import Optional, Dict, Tuple, Callable
-
-from tempfile import mkdtemp
 
 from telepresence import __version__
 from telepresence.runner import Runner
@@ -235,7 +234,8 @@ def get_remote_info(
 
 
 def mount_remote_volumes(
-    runner: Runner, remote_info: RemoteInfo, ssh: SSH, allow_all_users: bool
+    runner: Runner, remote_info: RemoteInfo, ssh: SSH, allow_all_users: bool,
+    mount_dir: str
 ) -> Tuple[str, Callable]:
     """
     sshfs is used to mount the remote system locally.
@@ -244,14 +244,11 @@ def mount_remote_volumes(
 
     Returns (path to mounted directory, callable that will unmount it).
     """
-    # Docker for Mac only shares some folders; the default TMPDIR on OS X is
-    # not one of them, so make sure we use /tmp:
     span = runner.span()
-    mount_dir = mkdtemp(dir="/tmp")
     sudo_prefix = ["sudo"] if allow_all_users else []
     middle = ["-o", "allow_other"] if allow_all_users else []
     try:
-        runner.check_call(
+        runner.get_output(
             sudo_prefix + [
                 "sshfs",
                 "-p",
@@ -265,10 +262,11 @@ def mount_remote_volumes(
                 # Don't store host key:
                 "-o",
                 "UserKnownHostsFile=/dev/null",
-            ] + middle + ["telepresence@localhost:/", mount_dir]
+            ] + middle + ["telepresence@localhost:/", mount_dir],
+            stderr=STDOUT
         )
         mounted = True
-    except CalledProcessError:
+    except CalledProcessError as exc:
         print(
             "Mounting remote volumes failed, they will be unavailable"
             " in this session. If you are running"
@@ -279,6 +277,11 @@ def mount_remote_volumes(
             " https://github.com/datawire/telepresence/issues/new",
             file=sys.stderr
         )
+        if exc.output:
+            print(
+                "\nMount error was: {}\n".format(exc.output.strip()),
+                file=sys.stderr
+            )
         mounted = False
 
     def no_cleanup():
@@ -291,6 +294,10 @@ def mount_remote_volumes(
             )
         else:
             runner.get_output(sudo_prefix + ["umount", "-f", mount_dir])
+        try:
+            Path(mount_dir).rmdir()
+        except OSError:
+            pass
 
     span.end()
     return mount_dir, cleanup if mounted else no_cleanup
