@@ -6,8 +6,8 @@ from urllib.parse import quote_plus
 
 from io import StringIO
 from subprocess import check_output
-from typing import List, Set, Tuple
-
+from typing import List, Set, Tuple, Union
+from pathlib import Path
 from functools import wraps
 
 import telepresence
@@ -127,6 +127,21 @@ class handle_unexpected_errors(object):
                     raise SystemExit(1)
 
         return call_f
+
+
+def path_or_bool(value: str) -> Union[Path, bool]:
+    """Parse value as a Path or a boolean"""
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    value = value.lower()
+    if value in ("true", "on", "yes", "1"):
+        return True
+    if value in ("false", "off", "no", "0"):
+        return False
+    raise argparse.ArgumentTypeError(
+        "Value must be true, false, or an absolute filesystem path"
+    )
 
 
 @handle_unexpected_errors("-")
@@ -256,6 +271,21 @@ def parse_args(args=None) -> argparse.Namespace:
             "the run subprocess will be proxied."
         )
     )
+    parser.add_argument(
+        "--mount",
+        type=path_or_bool,
+        metavar="PATH_OR_BOOLEAN",
+        dest="mount",
+        default=True,
+        help=(
+            "The absolute path for the root directory where volumes will be "
+            "mounted, $TELEPRESENCE_ROOT. "
+            "Use \"true\" to have Telepresence pick a random mount point "
+            "under /tmp (default). "
+            "Use \"false\" to disable filesystem mounting entirely."
+        )
+    )
+
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--run-shell",
