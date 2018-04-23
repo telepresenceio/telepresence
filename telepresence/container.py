@@ -148,7 +148,7 @@ def run_docker_command(
     docker_command = docker_runify([
         "--name=" + container_name,
         "--network=container:" + name,
-        "--env-file="+envfile.name,
+        "--env-file=" + envfile.name,
     ])
     if mount_dir:
         docker_command.append("--volume={}:{}".format(mount_dir, mount_dir))
