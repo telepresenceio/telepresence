@@ -1,4 +1,5 @@
 # Local development with Java
+*Author: Cesar Tron-Lozai ([@CesarTronLozai](https://twitter.com/cesarTronLozai))*
 
 {% import "../macros.html" as macros %}
 {{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/", "kubectl", "Kubernetes", "top") }}
