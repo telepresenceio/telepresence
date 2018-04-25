@@ -19,6 +19,7 @@
 * [Get started with OpenShift](tutorials/openshift.md)
 * [Minikube VPN access](tutorials/minikube-vpn.md)
 * [Using Telepresence with Golang](howto/golang.md)
+* [Local Java development](tutorials/java.md)
 
 ## Reference
 
