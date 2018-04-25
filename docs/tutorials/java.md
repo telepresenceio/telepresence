@@ -30,15 +30,15 @@ As mentioned above, the goal is to compile and run our code inside a Docker cont
 
 Let's build the command step by step.
 
-* `telepresence` We run `Telepresence`!
-* `--swap-deployment foo` this assumes we already have a `foo` deployment running in our clusters. For different options check the documentation!
+* `telepresence` Runs `Telepresence`!
+* `--swap-deployment foo` Assumes we already have a `foo` deployment running in our clusters. For different options check the documentation!
 * `--docker-run` Tells `Telepresence` to run a Docker containers
 * `--rm` Tells Docker to discard our image when it terminates (no need to clutter your computer)
-* `-v$(pwd):/build` We mount the current directory (result of the `pwd` command) into a `/build` folder inside the Docker container. This is where your source code will be; in this case used by Maven.
-* `-v $HOME/.m2/repository:/m2` We mount the Maven cache folder so we don't have to download Maven artifacts every time we run the container
+* `-v$(pwd):/build` Mounts the current directory (result of the `pwd` command) into a `/build` folder inside the Docker container. This is where your source code will be; in this case used by Maven.
+* `-v $HOME/.m2/repository:/m2` Mounts the Maven cache folder so we don't have to download Maven artifacts every time we run the container
 * `-p 8080:8080` That's optional. If your container is running a server on, for example, port `8080`, you can map that port if you need to make requests to your service directly
 * `maven:3.5.3-jdk-8-slim` That's the image which we will use to build and run our service. Here this is a prebuilt image containing Maven and Java 8. Use any other image to match your need
-* `mvn -Dmaven.repo.local=/m2 -f /build spring-boot:run` This is the command that the Docker container should run. Here it uses the Spring Boot Maven plugin but you can use whatever command required by your build tool. We tell maven to point to the mounted repository cache and where the source code is
+* `mvn -Dmaven.repo.local=/m2 -f /build spring-boot:run` Command to be run in the Docker container. Here it uses the Spring Boot Maven plugin but you can use whatever command required by your build tool. It tells maven to point to the mounted repository cache and where the source code located
 
 And that's it! You can easily create a `telepresence.sh` file in the root of your project with the following:
 
@@ -50,12 +50,12 @@ And that's it! You can easily create a `telepresence.sh` file in the root of you
 
 ### Kubernetes Client
 
-If you are using a Kubernetes client like this [one](https://github.com/fabric8io/kubernetes-client), you need to make sure the process can access service account information. This can be done with the `--mount` command introduced in `Telepresence 0.85`.
+If you are using a Kubernetes client like this [one](https://github.com/fabric8io/kubernetes-client), you need to make sure the client can access service account information. This can be done with the `--mount` command introduced in `Telepresence 0.85`.
 
 We need to add the following to the command:
 
-* `--mount /tmp/known` To tell `Telepresence` to mount `TELEPRESENCE_ROOT` to a known folder
-* `-v=/tmp/known/var/run/secrets:/var/run/secrets` This is another Docker mounting command to mount the know folder to `/var/run/secrets` in the local container. The [Fabric8 Kubernetes client](https://github.com/fabric8io/kubernetes-client) can find the secrets there as it would inside Kubernetes
+* `--mount /tmp/known` Tells `Telepresence` to mount `TELEPRESENCE_ROOT` to a known folder
+* `-v=/tmp/known/var/run/secrets:/var/run/secrets` This is another Docker mounting command to mount the known folder to `/var/run/secrets` in the local container. The [Fabric8 Kubernetes client](https://github.com/fabric8io/kubernetes-client) can find the secrets there as it would inside Kubernetes
 
 So our `telepresense.sh` file would look like that
 
@@ -69,12 +69,12 @@ For more details about the `mount` command check the [documentation](/howto/volu
 
 ### Debugging your code
 
-If you need to debug your code with your favourite IDE that's super easy too. You only need to pass a JVM argument and forward the remoting port:
+If you need to debug your code with your favourite IDE that's super easy too. You only need to pass a JVM argument and forward the remote port:
 
-* `-e MAVEN_OPTS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005` This creates a Docker environment variable that Maven will use to set a JVM argument and awaits for a remoting connection on port `5005`. This is for Java 8+, check the Java documentation if you are running a lower version.
-* `-p 5005:5005` Tells docker to forward that ports locally.
+* `-e MAVEN_OPTS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005` Creates a Docker environment variable that Maven will use to set a JVM argument and awaits for a remote connection on port `5005`. This is for Java 8+, check the Java documentation if you are running a lower version.
+* `-p 5005:5005` Tells docker to forward that ports from your local machine.
 
-Then you can use your IDE to connect start a debug remote session on your local port `5005`
+Then you can use your IDE to start a debug remote session on your local port `5005`
 
 > telepresence-debug.sh
 > ```bash
@@ -109,9 +109,9 @@ You can create a `JREBEL` environment variable that point to this folder. That m
 
 To activate JRebel, you need the following:
 
-* `-v $JREBEL:/jrebel` the JRebel folder is mounted
-* `-v $JREBEL/jrebel.jar:/jrebel.jar` the `jrebel.jar` is made available to JREBEL
-* `-v $HOME/.jrebel:/root/.jrebel` your JRebel home folder is mounted, this is to give access to the licence and stats. This assume the home folder of the process in your docker image is `/root`, change if appropriate
+* `-v $JREBEL:/jrebel` Mounts the JRebel folder
+* `-v $JREBEL/jrebel.jar:/jrebel.jar` Makes `jrebel.jar` available to JREBEL
+* `-v $HOME/.jrebel:/root/.jrebel` Mounts your JRebel home folder, this gives access to the licence and JRebel stats. This assumes the home folder of the process in your docker image is `/root`, change if required
 * `-Drun.jvmArguments="-agentpath:/jrebel/lib/libjrebel64.so"` Tells the JVM to use the Linux64 JRebel agent
 
 > telepresence-jrebel.sh
