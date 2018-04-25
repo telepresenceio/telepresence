@@ -17,8 +17,8 @@ This is is very useful if your application is formed of many such services which
 
 The idea is quite simple, `Telepresence` will start a Docker container on your local machine, remove the running pod for `Foo` and replace it with a two-way proxy to your local docker container.
 
-If other services in your cluster want to talk to `Foo`, they'll get redirect to your local process. If your local process wants to talk to any other services running in your cluster, `Telepresence` will redirect the calls to your cluster.
-It will also maintain all the environment variables defined in your deployment. It's magic.
+If other services in your cluster want to talk to `Foo`, they'll get redirected to your local process. If your local process wants to talk to any other services running in your cluster, `Telepresence` will redirect the calls to your cluster.
+It will also maintain all the environment variables defined in your deployment. It's magical.
 
 In order to run our Java application in a local Docker container, we can simply start a container which has Java and Maven/Gradle installed, mount the source directory to our code, and do a Maven/Gradle build.
 
