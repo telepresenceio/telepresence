@@ -1,6 +1,6 @@
 # Fast development workflow with Docker and Kubernetes
 
-Keeping development environments in sync is a constant pain. Containerizing your development environment enables your service to run in the exact same environment everywhere: from your laptop to production.
+Keeping development environments in sync is a constant pain. Containerizing your development environment enables your service to run in the exact same environment everywhere: from your laptop to production (for more details on the benefits of a container native development workflow, see [this post by Matt Butcher](https://open.microsoft.com/2018/04/23/5-reasons-you-should-be-doing-container-native-development/).)
 
 Telepresence, in conjunction with a containerized development environment, gives the developer a fast development workflow in developing a multi-container application on Kubernetes.  Telepresence lets you run a Docker container locally, while proxying it to your Kubernetes cluster.
 
