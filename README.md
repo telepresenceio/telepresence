@@ -122,8 +122,8 @@ but the workaround I found was to make the tp2 binary suid root and
 invoke it directly instead of via sudo, e.g.:
 
 ```
-chown root:wheel $(which tp2)
-chmod u+s $(which tp2)
+sudo chown root:wheel $(which tp2)
+sudo chmod u+s $(which tp2)
 tp2 -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }') -remote $(kubectl get svc tp2 -o go-template='{{(index .status.loadBalancer.ingress 0).ip}}')
 ```
 
