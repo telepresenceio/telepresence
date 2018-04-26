@@ -83,6 +83,7 @@ func removeRoute(key string) {
 func updateRoute(svc *v1.Service) {
 	domainsToAddresses.Store(svc.Name + ".", svc.Spec.ClusterIP)
 	translator.ForwardTCP(svc.Spec.ClusterIP, "1234")
+	kickDNS()
 }
 
 type handler struct{}
@@ -252,12 +253,11 @@ func main() {
 		}
 	}()
 
-	kickDNS()
-	defer kickDNS()
-
 	ch := make(chan os.Signal)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 	log.Println(<-ch)
+
+	defer kickDNS()
 }
 
 func reader(pipe io.ReadCloser) {
