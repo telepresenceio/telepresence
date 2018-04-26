@@ -159,7 +159,11 @@ Features:
    there is a bunch of UX to work out in this area. We could also
    consider using kubectl port-forward instead of solving this
    problem, but kubectl port-forward seems to have not great
-   reliability around long-lived connections.
+   reliability around long-lived connections. One possible way to
+   avoid the UX would be to generate and store a keypair and then use
+   kubectl (port-forward, cp, or just grab the secret) to access
+   it. This would let you control access via rbac and require no
+   additional administration beyond the current situation.
  - Currently only kubernetes clusterIP services are supported. Need to
    watch other kinds of services and pods as well.
  - Right now all lookups are on the name as supplied. We need to
