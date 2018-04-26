@@ -91,7 +91,7 @@ func (this *handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	log.Println(r.Question[0].Qtype, "DNS request for", r.Question[0].Name)
 	switch r.Question[0].Qtype {
 	case dns.TypeA:
-		domain := strings.TrimSuffix(r.Question[0].Name, "wework.com.")
+		domain := r.Question[0].Name
 		log.Println("Looking up", domain)
 		address, ok := domainsToAddresses.Load(domain)
 		if ok {
