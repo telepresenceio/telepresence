@@ -111,7 +111,7 @@ Step 2:
 
 ```
 go get github.com/datawire/tp2/cmd/tp2
-sudo tp2 -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }') -remote $(kubectl get svc tp2 -o go-template='{{(index .status.loadBalancer.ingress 0).ip}}')
+sudo tp2 -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }') -remote $(kubectl get svc tp2 -o go-template='{{with index .status.loadBalancer.ingress 0}}{{or .ip .hostname}}{{end}}')
 ```
 
 Note: If you are using the google cloud auth plugin for kubectl, then
@@ -124,7 +124,7 @@ invoke it directly instead of via sudo, e.g.:
 ```
 sudo chown root:wheel $(which tp2)
 sudo chmod u+s $(which tp2)
-tp2 -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }') -remote $(kubectl get svc tp2 -o go-template='{{(index .status.loadBalancer.ingress 0).ip}}')
+tp2 -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }') -remote $(kubectl get svc tp2 -o go-template='{{with index .status.loadBalancer.ingress 0}}{{or .ip .hostname}}{{end}}')
 ```
 
 Step 3:
