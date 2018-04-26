@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -115,7 +116,7 @@ func (this *handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			return
 		}
 	default:
-		domain := strings.TrimSuffix(r.Question[0].Name, "wework.com.")
+		domain := r.Question[0].Name
 		_, ok := domainsToAddresses.Load(domain)
 		if ok {
 			log.Println("Found:", domain)
@@ -172,6 +173,15 @@ func main() {
 
 	if *fallbackIP == *dnsIP {
 		panic("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
+	}
+
+	if runtime.GOOS == "darwin" {
+		// setup dns search path
+		iface, _ := getIface()
+		domains, _ := getSearchDomains(iface)
+		setSearchDomains(iface, ".")
+		// restore dns search path
+		defer setSearchDomains(iface, domains)
 	}
 
 	kubeWatch()
@@ -372,4 +382,34 @@ func kickDNS() {
 		err = proc.Signal(syscall.SIGHUP)
 		if err != nil { log.Println(err) }
 	}
+}
+
+func shell(command string) (result string, err error) {
+	log.Println(command)
+	cmd := exec.Command("sh", "-c", command)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	log.Printf("%s", out)
+	result = string(out)
+	return
+}
+
+func getIface() (iface string, err error) {
+	iface, err = shell("networksetup -listnetworkserviceorder | head -2 | tail -1 | cut -f2-100 -d' '")
+	iface = strings.TrimSpace(iface)
+	return
+}
+
+func getSearchDomains(iface string) (domains string, err error) {
+	domains, err = shell(fmt.Sprintf("networksetp -getsearchdomains '%s'", iface))
+	domains = strings.TrimSpace(domains)
+	return
+}
+
+func setSearchDomains(iface, domains string) (err error) {
+	_, err = shell(fmt.Sprintf("networksetup -setsearchdomains '%s' '%s'", iface, domains))
+	return
 }
