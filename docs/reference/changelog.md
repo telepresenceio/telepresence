@@ -1,6 +1,16 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.86 (April 26, 2018)
+
+Misc:
+
+* By default, the Telepresence proxy runs in the cluster as an unprivileged user; as built, the proxy image gives up root privileges.
+  However, when the proxy needs to bind to privileged ports, it _must_ run as root.
+  Instead of using the security context feature of Kubernetes to gain root, Telepresence now uses a different image that does not give up root privileges.
+  This allows Telepresence to run in clusters that lock down the Kubernetes security context feature.
+  ([#617](https://github.com/datawire/telepresence/issues/617))
+
 #### 0.85 (April 23, 2018)
 
 Features:
