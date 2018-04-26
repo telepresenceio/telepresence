@@ -21,7 +21,9 @@ from uuid import uuid4
 
 from copy import deepcopy
 
-from telepresence import TELEPRESENCE_REMOTE_IMAGE
+from telepresence import (
+    TELEPRESENCE_REMOTE_IMAGE, TELEPRESENCE_REMOTE_IMAGE_PRIV
+)
 from telepresence.remote import get_deployment_json
 from telepresence.runner import Runner
 from telepresence.utilities import get_alternate_nameserver
@@ -45,6 +47,10 @@ def create_new_deployment(runner: Runner,
 
     atexit.register(remove_existing_deployment)
     remove_existing_deployment()
+    if args.needs_root:
+        image_name = TELEPRESENCE_REMOTE_IMAGE_PRIV
+    else:
+        image_name = TELEPRESENCE_REMOTE_IMAGE
     command = [
         "run",
         # This will result in using Deployment:
@@ -52,7 +58,7 @@ def create_new_deployment(runner: Runner,
         "--limits=cpu=100m,memory=256Mi",
         "--requests=cpu=25m,memory=64Mi",
         args.new_deployment,
-        "--image=" + TELEPRESENCE_REMOTE_IMAGE,
+        "--image=" + image_name,
         "--labels=telepresence=" + run_id,
     ]
     # Provide a stable argument ordering.  Reverse it because that happens to
@@ -68,20 +74,6 @@ def create_new_deployment(runner: Runner,
         command.append(
             "--env=TELEPRESENCE_NAMESERVER=" + get_alternate_nameserver()
         )
-    if args.needs_root:
-        override = {
-            "apiVersion": "extensions/v1beta1",
-            "spec": {
-                "template": {
-                    "spec": {
-                        "securityContext": {
-                            "runAsUser": 0
-                        }
-                    }
-                }
-            }
-        }
-        command.append("--overrides=" + json.dumps(override))
     runner.get_kubectl(args.context, args.namespace, command)
     span.end()
     return args.new_deployment, run_id
@@ -121,13 +113,17 @@ def supplant_deployment(runner: Runner,
     # prevent infinite loops caused by sshuttle.
     add_custom_nameserver = args.method == "vpn-tcp" and args.in_local_vm
 
+    if args.needs_root:
+        image_name = TELEPRESENCE_REMOTE_IMAGE_PRIV
+    else:
+        image_name = TELEPRESENCE_REMOTE_IMAGE
+
     new_deployment_json, orig_container_json = new_swapped_deployment(
         deployment_json,
         container_name,
         run_id,
-        TELEPRESENCE_REMOTE_IMAGE,
+        image_name,
         add_custom_nameserver,
-        args.needs_root,
     )
 
     # Compute a new name that isn't too long, i.e. up to 63 characters.
@@ -182,7 +178,6 @@ def new_swapped_deployment(
     run_id: str,
     telepresence_image: str,
     add_custom_nameserver: bool,
-    as_root: bool,
 ) -> Tuple[Dict, Dict]:
     """
     Create a new Deployment that uses telepresence-k8s image.
@@ -236,10 +231,6 @@ def new_swapped_deployment(
                     "value":
                     get_alternate_nameserver()
                 })
-            if as_root:
-                container["securityContext"] = {
-                    "runAsUser": 0,
-                }
             # Add namespace environment variable to support deployments using
             # automountServiceAccountToken: false. To be used by forwarder.py
             # in the k8s-proxy.
@@ -324,7 +315,6 @@ def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
         run_id,
         TELEPRESENCE_REMOTE_IMAGE,
         args.method == "vpn-tcp" and args.in_local_vm,
-        False,
     )
     apply_json(new_rc_json)
     return deployment_name, run_id, orig_container_json
