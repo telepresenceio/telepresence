@@ -82,7 +82,7 @@ func removeRoute(key string) {
 }
 
 func updateRoute(svc *v1.Service) {
-	if svc.Spec.ClusterIP == "" { return }
+	if svc.Spec.ClusterIP == "None" { return }
 	domainsToAddresses.Store(svc.Name + ".", svc.Spec.ClusterIP)
 	translator.ForwardTCP(svc.Spec.ClusterIP, "1234")
 	kickDNS()
