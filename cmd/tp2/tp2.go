@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -10,11 +11,11 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
-	"strconv"
 	"github.com/datawire/tp2/internal/pkg/nat"
 	"github.com/miekg/dns"
 	"golang.org/x/net/proxy"
@@ -70,8 +71,8 @@ func kubeWatch() {
 
 
 var domainsToAddresses sync.Map
-// XXX: need to do better than futz-1234
-var translator = nat.NewTranslator("futz-1234")
+// XXX: need to do better than tp2
+var translator = nat.NewTranslator("tp2")
 
 func removeRoute(key string) {
 	if old, ok := domainsToAddresses.Load(key); ok {
@@ -86,20 +87,43 @@ func updateRoute(svc *v1.Service) {
 
 type handler struct{}
 func (this *handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
-	log.Println("DNS request for", r.Question[0].Name)
+	log.Println(r.Question[0].Qtype, "DNS request for", r.Question[0].Name)
 	switch r.Question[0].Qtype {
 	case dns.TypeA:
-		domain := r.Question[0].Name
+		domain := strings.TrimSuffix(r.Question[0].Name, "wework.com.")
+		log.Println("Looking up", domain)
 		address, ok := domainsToAddresses.Load(domain)
 		if ok {
+			log.Println("Found:", domain)
 			msg := dns.Msg{}
 			msg.SetReply(r)
 			msg.Authoritative = true
+			// mac dns seems to fallback if you don't
+			// support recursion, if you have more than a
+			// single dns server, this will prevent us
+			// from intercepting all queries
+			msg.RecursionAvailable = true
+			// if we don't give back the same domain
+			// requested, then mac dns seems to return an
+			// nxdomain
 			msg.Answer = append(msg.Answer, &dns.A{
-				Hdr: dns.RR_Header{ Name: domain, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60 },
+				Hdr: dns.RR_Header{ Name: r.Question[0].Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60 },
 				A: net.ParseIP(address.(string)),
 			})
 			w.WriteMsg(&msg)
+			return
+		}
+	default:
+		domain := strings.TrimSuffix(r.Question[0].Name, "wework.com.")
+		_, ok := domainsToAddresses.Load(domain)
+		if ok {
+			log.Println("Found:", domain)
+			msg := dns.Msg{}
+			msg.SetReply(r)
+			msg.Authoritative = true
+			msg.RecursionAvailable = true
+			w.WriteMsg(&msg)
+			log.Println("replied with empty")
 			return
 		}
 	}
@@ -112,7 +136,11 @@ func (this *handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 }
 
 func dnsMain() {
-	srv := &dns.Server{Addr: ":" + strconv.Itoa(1233), Net: "udp"}
+	// turns out you need to listen on localhost for nat to work
+	// properly for udp, otherwise you get an "unexpected source
+	// blah thingy" because the dns reply packets look like they
+	// are coming from the wrong place
+	srv := &dns.Server{Addr: "127.0.0.1:" + strconv.Itoa(1233), Net: "udp"}
 	srv.Handler = &handler{}
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("Failed to set udp listener %s\n", err.Error())
@@ -224,6 +252,9 @@ func main() {
 		}
 	}()
 
+	kickDNS()
+	defer kickDNS()
+
 	ch := make(chan os.Signal)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 	log.Println(<-ch)
@@ -246,7 +277,7 @@ func handleConnection(conn *net.TCPConn) {
 	// hmm, we may not actually need to get the original destination,
 	// we could just forward each ip to a unique port and either
 	// listen on that port or run port-forward
-	_, host, err := nat.GetOriginalDst(conn)
+	_, host, err := translator.GetOriginalDst(conn)
 	if err != nil {
 		log.Println("GetOriginalDst:", err)
 		return
@@ -302,5 +333,43 @@ func pipe(from, to *net.TCPConn) {
 				break
 			}
 		}
+	}
+}
+
+func getPIDs() (pids []int, err error) {
+	cmd := exec.Command("ps", "-axo", "pid=,command=")
+	out, err := cmd.CombinedOutput()
+	if err != nil { return }
+	if !cmd.ProcessState.Success() {
+		err = fmt.Errorf("%s", out)
+		return
+	}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.Contains(strings.ToLower(line), "mdnsresponder") {
+			parts := strings.Fields(line)
+			var pid int
+			pid, err = strconv.Atoi(parts[0])
+			if err != nil { return }
+			pids = append(pids, pid)
+		}
+	}
+
+	return
+}
+
+func kickDNS() {
+	pids, err := getPIDs()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	log.Printf("Kicking DNS: %v\n", pids)
+	for _, pid := range pids {
+		proc, err := os.FindProcess(pid)
+		if err != nil { log.Println(err) }
+		err = proc.Signal(syscall.SIGHUP)
+		if err != nil { log.Println(err) }
 	}
 }

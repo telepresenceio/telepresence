@@ -2,6 +2,7 @@ package nat
 
 import (
 	"net"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +13,7 @@ const (
 	BAD = "BAD"
 )
 
-func checkForwardTCP(t *testing.T, fromIP, toPort string) {
+func checkForwardTCP(t *testing.T, tr *Translator, fromIP, toPort string) {
 	ln, err := net.Listen("tcp", ":" + toPort)
 	if err != nil {
 		t.Error(err)
@@ -36,7 +37,7 @@ func checkForwardTCP(t *testing.T, fromIP, toPort string) {
 		defer conn.Close()
 		conn.(*net.TCPConn).SetDeadline(deadline)
 
-		_, orig, err := GetOriginalDst(conn.(*net.TCPConn))
+		_, orig, err := tr.GetOriginalDst(conn.(*net.TCPConn))
 		if err != nil {
 			t.Error(err)
 			return
@@ -60,7 +61,7 @@ func checkForwardTCP(t *testing.T, fromIP, toPort string) {
 		}
 	}()
 
-	c, err := net.Dial("tcp", fromIP)
+	c, err := net.DialTimeout("tcp", fromIP, 3*time.Second)
 	if err != nil {
 		t.Error(err)
 		return
@@ -123,9 +124,9 @@ func TestTranslator(t *testing.T) {
 	tr.ForwardTCP("192.0.2.2", "1234")
 	tr.ForwardTCP("192.0.2.3", "1234")
 
-	checkForwardTCP(t, "192.0.2.1:80", "4321")
-	checkForwardTCP(t, "192.0.2.2:80", "1234")
-	checkForwardTCP(t, "192.0.2.3:80", "1234")
+	checkForwardTCP(t, tr, "192.0.2.1:80", "4321")
+	checkForwardTCP(t, tr, "192.0.2.2:80", "1234")
+	checkForwardTCP(t, tr, "192.0.2.3:80", "1234")
 
 	tr.ClearTCP("192.0.2.3")
 	checkNoForwardTCP(t, "192.0.2.2:80")
@@ -135,5 +136,23 @@ func TestTranslator(t *testing.T) {
 	checkNoForwardTCP(t, "192.0.2.2:80")
 	checkNoForwardTCP(t, "192.0.2.3:80")
 	// XXX: need to make this a proper check
-	ipt("-L " + tr.Name)
+//	ipt("-L " + tr.Name)
+}
+
+func TestSorted(t *testing.T) {
+	tr := NewTranslator("test-table")
+	defer tr.Disable()
+	tr.ForwardTCP("192.0.2.1", "4321")
+	tr.ForwardTCP("192.0.2.3", "4323")
+	tr.ForwardTCP("192.0.2.2", "4322")
+	tr.ForwardUDP("192.0.2.4", "1234")
+	entries := tr.sorted()
+	if !reflect.DeepEqual(entries, []Entry {
+		{Address{"tcp", "192.0.2.1"}, "4321"},
+		{Address{"tcp", "192.0.2.2"}, "4322"},
+		{Address{"tcp", "192.0.2.3"}, "4323"},
+		{Address{"udp", "192.0.2.4"}, "1234"},
+	}) {
+		t.Errorf("not sorted: %s", entries)
+	}
 }
