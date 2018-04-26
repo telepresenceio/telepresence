@@ -1,13 +1,10 @@
 
 all: test build
 
-generate:
-	test ! -e /dev/pf || go generate github.com/datawire/pf
-
-build: generate
+build:
 	go build cmd/tp2/tp2.go && sudo chown root:wheel ./tp2 && sudo chmod u+s ./tp2
 
-test: generate
+test:
 	go test -v -exec sudo github.com/datawire/tp2/internal/pkg/nat/
 
 KUBECONFIG ?= ~/.kube/config
