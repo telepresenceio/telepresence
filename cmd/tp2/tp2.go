@@ -177,12 +177,14 @@ func main() {
 	}
 
 	if runtime.GOOS == "darwin" {
-		// setup dns search path
-		iface, _ := getIface()
-		domains, _ := getSearchDomains(iface)
-		setSearchDomains(iface, ".")
-		// restore dns search path
-		defer setSearchDomains(iface, domains)
+		ifaces, _ := getIfaces()
+		for _, iface := range ifaces {
+			// setup dns search path
+			domain, _ := getSearchDomains(iface)
+			setSearchDomains(iface, ".")
+			// restore dns search path
+			defer setSearchDomains(iface, domain)
+		}
 	}
 
 	kubeWatch()
@@ -398,9 +400,15 @@ func shell(command string) (result string, err error) {
 	return
 }
 
-func getIface() (iface string, err error) {
-	iface, err = shell("networksetup -listnetworkserviceorder | head -2 | tail -1 | cut -f2-100 -d' '")
-	iface = strings.TrimSpace(iface)
+func getIfaces() (ifaces []string, err error) {
+	lines, err := shell("networksetup -listallnetworkservices | fgrep -v '*'")
+	if err != nil { return }
+	for _, line := range strings.Split(lines, "\n") {
+		line = strings.TrimSpace(line)
+		if len(line) > 0 {
+			ifaces = append(ifaces, line)
+		}
+	}
 	return
 }
 
