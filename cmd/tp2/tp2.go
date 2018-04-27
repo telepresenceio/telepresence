@@ -413,7 +413,7 @@ func getIfaces() (ifaces []string, err error) {
 }
 
 func getSearchDomains(iface string) (domains string, err error) {
-	domains, err = shell(fmt.Sprintf("networksetp -getsearchdomains '%s'", iface))
+	domains, err = shell(fmt.Sprintf("networksetup -getsearchdomains '%s'", iface))
 	domains = strings.TrimSpace(domains)
 	return
 }
