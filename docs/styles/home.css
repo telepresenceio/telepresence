@@ -567,6 +567,10 @@ footer {
     box-shadow: 0 3px 6px -2px hsla(199,7%,45%,.5);
 }
 
+#announcement-widget .container {
+    max-width: 1080px;
+}
+
 #announcement-widget .close {
     float: none;
     line-height: 1;
@@ -605,6 +609,11 @@ footer {
 .announcement-widget__content p a {
     color: white;
     font-weight: bold;
+    text-decoration: underline;
+}
+
+.announcement-widget__content p a:hover {
+    text-decoration: none;
 }
 
 @media (min-width: 768px) {
