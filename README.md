@@ -104,27 +104,27 @@ Step 1:
 Install the proxy endpoint into your cluster:
 
 ```
-kubectl apply -f https://raw.githubusercontent.com/datawire/tp2/master/proxy.yaml
+kubectl apply -f https://raw.githubusercontent.com/datawire/teleproxy/master/proxy.yaml
 ```
 
 Step 2:
 
 ```
-go get github.com/datawire/tp2/cmd/tp2
-sudo tp2 -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }') -remote $(kubectl get svc tp2 -o go-template='{{with index .status.loadBalancer.ingress 0}}{{or .ip .hostname}}{{end}}')
+go get github.com/datawire/teleproxy/cmd/teleproxy
+sudo teleproxy -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }') -remote $(kubectl get svc teleproxy -o go-template='{{with index .status.loadBalancer.ingress 0}}{{or .ip .hostname}}{{end}}')
 ```
 
 Note: If you are using the google cloud auth plugin for kubectl, then
 at some point your tokens will expire and the plugin will try to
-reauth. The reauth will fail because tp2 is not running as you but
+reauth. The reauth will fail because teleproxy is not running as you but
 running as root instead. There are probably better ways to fix this,
-but the workaround I found was to make the tp2 binary suid root and
+but the workaround I found was to make the teleproxy binary suid root and
 invoke it directly instead of via sudo, e.g.:
 
 ```
-sudo chown root:wheel $(which tp2)
-sudo chmod u+s $(which tp2)
-tp2 -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }') -remote $(kubectl get svc tp2 -o go-template='{{with index .status.loadBalancer.ingress 0}}{{or .ip .hostname}}{{end}}')
+sudo chown root:wheel $(which teleproxy)
+sudo chmod u+s $(which teleproxy)
+teleproxy -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }') -remote $(kubectl get svc teleproxy -o go-template='{{with index .status.loadBalancer.ingress 0}}{{or .ip .hostname}}{{end}}')
 ```
 
 Step 3:
@@ -147,7 +147,7 @@ UX:
  - we could watch the supplied kubeconfig for changes... when combined with the prior two options and the suid installation, the invocation would require no args, e.g.:
    ```
    # automatically (re)connect me to whatever cluster my context points to
-   tp2
+   teleproxy
    ```
 Features:
 

@@ -2,12 +2,12 @@
 all: test build
 
 build:
-	go build cmd/tp2/tp2.go && sudo chown root:wheel ./tp2 && sudo chmod u+s ./tp2
+	go build cmd/teleproxy/teleproxy.go && sudo chown root:wheel ./teleproxy && sudo chmod u+s ./teleproxy
 
 test:
-	go test -v -exec sudo github.com/datawire/tp2/internal/pkg/nat/
+	go test -v -exec sudo github.com/datawire/teleproxy/internal/pkg/nat/
 
 KUBECONFIG ?= ~/.kube/config
 
 run: build
-	./tp2 -kubeconfig ${KUBECONFIG} -dns $(shell fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $$2 }') -remote $(shell kubectl get svc tp2 -o go-template='{{with index .status.loadBalancer.ingress 0}}{{or .ip .hostname}}{{end}}')
+	./teleproxy -kubeconfig ${KUBECONFIG} -dns $(shell fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $$2 }') -remote $(shell kubectl get svc teleproxy -o go-template='{{with index .status.loadBalancer.ingress 0}}{{or .ip .hostname}}{{end}}')

@@ -17,7 +17,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"github.com/datawire/tp2/internal/pkg/nat"
+	"github.com/datawire/teleproxy/internal/pkg/nat"
 	"github.com/miekg/dns"
 	"golang.org/x/net/proxy"
 	"k8s.io/api/core/v1"
@@ -72,8 +72,8 @@ func kubeWatch() {
 
 
 var domainsToAddresses sync.Map
-// XXX: need to do better than tp2
-var translator = nat.NewTranslator("tp2")
+// XXX: need to do better than teleproxy
+var translator = nat.NewTranslator("teleproxy")
 
 func removeRoute(key string) {
 	if old, ok := domainsToAddresses.Load(key); ok {

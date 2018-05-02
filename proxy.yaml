@@ -2,12 +2,12 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: tp2
+  name: teleproxy
 spec:
   selector:
-    deployment: tp2
+    deployment: teleproxy
   ports:
-  - name: tp2
+  - name: teleproxy
     protocol: TCP
     port: 22
     targetPort: 8022
@@ -16,16 +16,16 @@ spec:
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: tp2
+  name: teleproxy
 spec:
   replicas: 1
   selector:
     matchLabels:
-      deployment: tp2
+      deployment: teleproxy
   template:
     metadata:
       labels:
-        deployment: tp2
+        deployment: teleproxy
     spec:
       containers:
       - name: proxy
