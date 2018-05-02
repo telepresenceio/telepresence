@@ -4,7 +4,10 @@ all: test build
 build:
 	go build cmd/teleproxy/teleproxy.go && sudo chown root:wheel ./teleproxy && sudo chmod u+s ./teleproxy
 
-test:
+get:
+	go get -t -d ./...
+
+test: get
 	go test -v -exec sudo github.com/datawire/teleproxy/internal/pkg/nat/
 
 KUBECONFIG ?= ~/.kube/config
