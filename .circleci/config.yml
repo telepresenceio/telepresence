@@ -22,7 +22,7 @@ jobs:
           echo 'export GOPATH=${HOME}/go' >> ${BASH_ENV}
 
       - run: |
-          which go && go version && echo 'GOPATH: "${GOPATH}"'
+          which go && go version && echo GOPATH: \"${GOPATH}\"
 
       - checkout
       - run: make test
@@ -46,7 +46,7 @@ jobs:
           echo 'export GOPATH=${HOME}/go' >> ${BASH_ENV}
 
       - run: |
-          which go && go version && echo 'GOPATH: "${GOPATH}"'
+          which go && go version && echo GOPATH: \"${GOPATH}\"
 
       - checkout
       - run: make test
@@ -57,7 +57,7 @@ jobs:
     working_directory: ~/go/src/github.com/datawire/teleproxy
     steps:
       - run: |
-          which go && go version && echo 'GOPATH: "${GOPATH}"'
+          which go && go version && echo GOPATH: \"${GOPATH}\"
 
       - checkout
       - run: make test
