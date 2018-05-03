@@ -19,7 +19,6 @@ import argparse
 import atexit
 import signal
 
-import os
 import re
 import sys
 from tempfile import mkdtemp
@@ -35,6 +34,7 @@ from telepresence.deployment import (
     create_new_deployment, supplant_deployment, swap_deployment_openshift
 )
 from telepresence.local import run_local_command
+from telepresence.output import Output
 from telepresence.remote import (
     RemoteInfo, get_remote_info, mount_remote_volumes
 )
@@ -347,6 +347,9 @@ def main():
 
     args = parse_args()  # tab-completion stuff goes here
 
+    output = Output(args.logfile)
+    args.logfile = output.logfile_path
+
     # Set up signal handling
     # Make SIGTERM and SIGHUP do clean shutdown (in particular, we want atexit
     # functions to be called):
@@ -382,15 +385,11 @@ def main():
         args.method
     )
 
-    # Log file path should be absolute since some processes may run in
-    # different directories:
-    if args.logfile != "-":
-        args.logfile = os.path.abspath(args.logfile)
-    runner = Runner.open(args.logfile, kube_info.command, args.verbose)
+    runner = Runner(output, kube_info.command, args.verbose)
     span = runner.span()
     atexit.register(span.end)
-    runner.write("Scout info: {}\n".format(scouted))
-    runner.write(
+    output.write("Scout info: {}\n".format(scouted))
+    output.write(
         "Context: {}, namespace: {}, kubectl_command: {}\n".format(
             args.context, args.namespace, runner.kubectl_cmd
         )
@@ -412,7 +411,7 @@ def main():
 
     args.in_local_vm = check_if_in_local_vm()
     if args.in_local_vm:
-        runner.write("Looks like we're in a local VM, e.g. minikube.\n")
+        output.write("Looks like we're in a local VM, e.g. minikube.\n")
     if (
         args.in_local_vm and args.method == "vpn-tcp"
         and args.new_deployment is None and args.swap_deployment is None
