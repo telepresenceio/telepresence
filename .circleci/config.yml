@@ -18,6 +18,7 @@ jobs:
 
       # Golang paths
       - run: echo 'export PATH=${PATH}:/usr/local/go/bin' >> ${BASH_ENV}
+      - run: which go && go version
 
       - checkout
       - run: make test
