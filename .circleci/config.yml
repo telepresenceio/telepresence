@@ -41,6 +41,7 @@ jobs:
       - run: which go && go version
 
       - checkout
+      - run: pwd && ls
       - run: make test
 
 workflows:
