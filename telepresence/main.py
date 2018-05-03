@@ -17,7 +17,6 @@ Telepresence: local development environment for a remote Kubernetes cluster.
 
 import argparse
 import atexit
-import json
 import signal
 
 import os
@@ -26,23 +25,22 @@ import sys
 from tempfile import mkdtemp
 from typing import List, Tuple, Dict
 from shutil import which
-from subprocess import (CalledProcessError, check_output, STDOUT, DEVNULL)
+from subprocess import (CalledProcessError, STDOUT, DEVNULL)
 from time import sleep, time
 
 from telepresence.cleanup import Subprocesses
 from telepresence.cli import parse_args, handle_unexpected_errors
+from telepresence.container import MAC_LOOPBACK_IP, run_docker_command
 from telepresence.deployment import (
     create_new_deployment, supplant_deployment, swap_deployment_openshift
 )
-from telepresence.container import MAC_LOOPBACK_IP, run_docker_command
 from telepresence.local import run_local_command
 from telepresence.remote import (
     RemoteInfo, get_remote_info, mount_remote_volumes
 )
-
 from telepresence.runner import Runner
 from telepresence.ssh import SSH
-from telepresence.startup import kubectl_or_oc, require_command
+from telepresence.startup import analyze_kube, require_command
 from telepresence.usage_tracking import call_scout
 from telepresence.utilities import find_free_port
 
@@ -340,6 +338,16 @@ def start_proxy(runner: Runner, args: argparse.Namespace
 
 
 def main():
+    """
+    Top-level function for Telepresence
+    """
+
+    ########################################
+    # Preliminaries: No changes to the machine or the cluster, no cleanup
+
+    args = parse_args()  # tab-completion stuff goes here
+
+    # Set up signal handling
     # Make SIGTERM and SIGHUP do clean shutdown (in particular, we want atexit
     # functions to be called):
     def shutdown(signum, frame):
@@ -348,176 +356,128 @@ def main():
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGHUP, shutdown)
 
-    args = parse_args()
+    kube_info = analyze_kube(args)
 
-    @handle_unexpected_errors(args.logfile)
-    def go():
-        # We don't quite know yet if we want kubectl or oc (if someone has both
-        # it depends on the context), so until we know the context just guess.
-        # We prefer kubectl over oc insofar as (1) kubectl commands we do in
-        # this prelim setup stage don't require oc and (2) sometimes oc is a
-        # different binary unrelated to OpenShift.
-        if which("kubectl"):
-            prelim_command = "kubectl"
-        elif which("oc"):
-            prelim_command = "oc"
-        else:
-            raise SystemExit("Found neither 'kubectl' nor 'oc' in your $PATH.")
+    if args.deployment:
+        operation = "deployment"
+    elif args.new_deployment:
+        operation = "new_deployment"
+    elif args.swap_deployment:
+        operation = "swap_deployment"
+    else:
+        operation = "bad_args"
 
-        # Usage tracking
-        try:
-            kubectl_version_output = str(
-                check_output([prelim_command, "version", "--short"]), "utf-8"
-            ).split("\n")
-            kubectl_version = kubectl_version_output[0].split(": v")[1]
-            kube_cluster_version = kubectl_version_output[1].split(": v")[1]
-        except CalledProcessError as exc:
-            kubectl_version = kube_cluster_version = "(error: {})".format(exc)
-        if args.deployment:
-            operation = "deployment"
-        elif args.new_deployment:
-            operation = "new_deployment"
-        elif args.swap_deployment:
-            operation = "swap_deployment"
-        else:
-            operation = "bad_args"
-        scouted = call_scout(
-            kubectl_version, kube_cluster_version, operation, args.method
+    # Figure out if we need capability that allows for ports < 1024:
+    if any([p < 1024 for p in args.expose.remote()]):
+        if kube_info.command == "oc":
+            # OpenShift doesn't support running as root:
+            raise SystemExit("OpenShift does not support ports <1024.")
+        args.needs_root = True
+    else:
+        args.needs_root = False
+
+    # Usage tracking
+    scouted = call_scout(
+        kube_info.kubectl_version, kube_info.cluster_version, operation,
+        args.method
+    )
+
+    # Log file path should be absolute since some processes may run in
+    # different directories:
+    if args.logfile != "-":
+        args.logfile = os.path.abspath(args.logfile)
+    runner = Runner.open(args.logfile, kube_info.command, args.verbose)
+    span = runner.span()
+    atexit.register(span.end)
+    runner.write("Scout info: {}\n".format(scouted))
+    runner.write(
+        "Context: {}, namespace: {}, kubectl_command: {}\n".format(
+            args.context, args.namespace, runner.kubectl_cmd
         )
+    )
 
-        # Make sure we have a Kubernetes context set either on command line or
-        # in kubeconfig:
-        if args.context is None:
-            try:
-                args.context = str(
-                    check_output([prelim_command, "config", "current-context"],
-                                 stderr=STDOUT), "utf-8"
-                ).strip()
-            except CalledProcessError:
-                raise SystemExit(
-                    "No current-context set. "
-                    "Please use the --context option to explicitly set the "
-                    "context."
-                )
-
-        # Figure out explicit namespace if its not specified, and the server
-        # address (we use the server address to determine for good whether we
-        # want oc or kubectl):
-        kubectl_config = json.loads(
-            str(
-                check_output([prelim_command, "config", "view", "-o", "json"]),
-                "utf-8"
-            )
-        )
-        for context_setting in kubectl_config["contexts"]:
-            if context_setting["name"] == args.context:
-                if args.namespace is None:
-                    args.namespace = context_setting["context"].get(
-                        "namespace", "default"
-                    )
-                cluster = context_setting["context"]["cluster"]
-                break
-        else:
-            return exit("Error: Unable to find cluster information")
-        for cluster_setting in kubectl_config["clusters"]:
-            if cluster_setting["name"] == cluster:
-                server = cluster_setting["cluster"]["server"]
-                break
-        else:
-            return exit("Error: Unable to find server information")
-
-        # Log file path should be absolute since some processes may run in
-        # different directories:
-        if args.logfile != "-":
-            args.logfile = os.path.abspath(args.logfile)
-        runner = Runner.open(args.logfile, kubectl_or_oc(server), args.verbose)
-        return runner, scouted, server
-
-    def go_too(runner, scouted, server):
-        span = runner.span()
-        atexit.register(span.end)
-        runner.write("Scout info: {}\n".format(scouted))
-        runner.write(
-            "Context: {}, namespace: {}, kubectl_command: {}\n".format(
-                args.context, args.namespace, runner.kubectl_cmd
-            )
-        )
-        # Figure out if we need capability that allows for ports < 1024:
-        if any([p < 1024 for p in args.expose.remote()]):
-            if runner.kubectl_cmd == "oc":
-                # OpenShift doesn't support running as root:
-                raise SystemExit("OpenShift does not support ports <1024.")
-            args.needs_root = True
-        else:
-            args.needs_root = False
-
-        # minikube/minishift break DNS because DNS gets captured, sent to
-        # minikube, which sends it back to DNS server set by host, resulting in
-        # loop... we've fixed that for most cases, but not --deployment.
-        def check_if_in_local_vm() -> bool:
-            # Minikube just has 'minikube' as context'
-            if args.context == "minikube":
+    # minikube/minishift break DNS because DNS gets captured, sent to
+    # minikube, which sends it back to DNS server set by host, resulting in
+    # loop... we've fixed that for most cases, but not --deployment.
+    def check_if_in_local_vm() -> bool:
+        # Minikube just has 'minikube' as context'
+        if args.context == "minikube":
+            return True
+        # Minishift has complex context name, so check by server:
+        if runner.kubectl_cmd == "oc" and which("minishift"):
+            ip = runner.get_output(["minishift", "ip"]).strip()
+            if ip and ip in kube_info.server:
                 return True
-            # Minishift has complex context name, so check by server:
-            if runner.kubectl_cmd == "oc" and which("minishift"):
-                ip = runner.get_output(["minishift", "ip"]).strip()
-                if ip and ip in server:
-                    return True
-            return False
+        return False
 
-        args.in_local_vm = check_if_in_local_vm()
-        if args.in_local_vm:
-            runner.write("Looks like we're in a local VM, e.g. minikube.\n")
-        if (
-            args.in_local_vm and args.method == "vpn-tcp"
-            and args.new_deployment is None and args.swap_deployment is None
-        ):
-            raise SystemExit(
-                "vpn-tcp method doesn't work with minikube/minishift when"
-                " using --deployment. Use --swap-deployment or"
-                " --new-deployment instead."
-            )
-        # Make sure we can access Kubernetes:
-        try:
-            runner.get_kubectl(
-                args.context,
-                args.namespace, [
-                    "get", "pods", "telepresence-connectivity-check",
-                    "--ignore-not-found"
-                ],
-                stderr=STDOUT
-            )
-        except (CalledProcessError, OSError, IOError) as exc:
-            sys.stderr.write("Error accessing Kubernetes: {}\n".format(exc))
-            if exc.output:
-                sys.stderr.write("{}\n".format(exc.output.strip()))
-            raise SystemExit(1)
-        # Make sure we can run openssh:
-        try:
-            version = runner.get_output(["ssh", "-V"],
-                                        stdin=DEVNULL,
-                                        stderr=STDOUT)
-            if not version.startswith("OpenSSH"):
-                raise SystemExit(
-                    "'ssh' is not the OpenSSH client, apparently."
-                )
-        except (CalledProcessError, OSError, IOError) as e:
-            sys.stderr.write("Error running ssh: {}\n".format(e))
-            raise SystemExit(1)
-        # Other requirements:
-        require_command(
-            runner, "torsocks", "Please install torsocks (v2.1 or later)"
+    args.in_local_vm = check_if_in_local_vm()
+    if args.in_local_vm:
+        runner.write("Looks like we're in a local VM, e.g. minikube.\n")
+    if (
+        args.in_local_vm and args.method == "vpn-tcp"
+        and args.new_deployment is None and args.swap_deployment is None
+    ):
+        raise SystemExit(
+            "vpn-tcp method doesn't work with minikube/minishift when"
+            " using --deployment. Use --swap-deployment or"
+            " --new-deployment instead."
         )
-        if args.mount:
-            require_command(runner, "sshfs")
-        # Need conntrack for sshuttle on Linux:
-        if sys.platform.startswith("linux") and args.method == "vpn-tcp":
-            require_command(runner, "conntrack")
+
+    # Make sure we can access Kubernetes:
+    try:
+        runner.get_kubectl(
+            args.context,
+            args.namespace, [
+                "get", "pods", "telepresence-connectivity-check",
+                "--ignore-not-found"
+            ],
+            stderr=STDOUT
+        )
+    except (CalledProcessError, OSError, IOError) as exc:
+        sys.stderr.write("Error accessing Kubernetes: {}\n".format(exc))
+        if exc.output:
+            sys.stderr.write("{}\n".format(exc.output.strip()))
+        raise SystemExit(1)
+
+    # Make sure we can run openssh:
+    try:
+        version = runner.get_output(["ssh", "-V"],
+                                    stdin=DEVNULL,
+                                    stderr=STDOUT)
+        if not version.startswith("OpenSSH"):
+            raise SystemExit("'ssh' is not the OpenSSH client, apparently.")
+    except (CalledProcessError, OSError, IOError) as e:
+        sys.stderr.write("Error running ssh: {}\n".format(e))
+        raise SystemExit(1)
+
+    # Other requirements:
+    require_command(
+        runner, "torsocks", "Please install torsocks (v2.1 or later)"
+    )
+    if args.mount:
+        require_command(runner, "sshfs")
+
+    # Need conntrack for sshuttle on Linux:
+    if sys.platform.startswith("linux") and args.method == "vpn-tcp":
+        require_command(runner, "conntrack")
+
+    # Set up exit handling including crash reporter
+    reporter = handle_unexpected_errors(args.logfile, runner)
+    # XXX exit handling via atexit
+
+    ########################################
+    # Now it's okay to change things
+
+    @reporter
+    def go():
+        # Set up the proxy pod (operation -> pod name)
+        # Connect to the proxy (pod name -> ssh object)
+        # Capture remote environment information (ssh object -> env info)
         subprocesses, env, socks_port, ssh, remote_info = start_proxy(
             runner, args
         )
 
-        # Mount remote filesystem
+        # Handle filesystem stuff (pod name, ssh object)
         if args.mount:
             # The mount directory is made here, removed by mount_cleanup if
             # mount succeeds, leaked if mount fails.
@@ -545,6 +505,8 @@ def main():
         else:
             mount_dir = None
 
+        # Set up outbound networking (pod name, ssh object)
+        # Launch user command with the correct environment (...)
         if args.method == "container":
             run_docker_command(
                 runner,
@@ -561,9 +523,10 @@ def main():
                 mount_dir
             )
 
-    runner_, scouted_, server_ = go()
-    handle_unexpected_errors(args.logfile,
-                             runner_)(go_too)(runner_, scouted_, server_)
+        # Clean up (call the cleanup methods for everything above)
+        # XXX handled by atexit
+
+    go()
 
 
 def run_telepresence():

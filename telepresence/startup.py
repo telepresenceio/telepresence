@@ -15,12 +15,13 @@
 import ssl
 import sys
 
-from subprocess import CalledProcessError
+import json
+from shutil import which
+from subprocess import check_output, CalledProcessError, STDOUT
+from types import SimpleNamespace
 from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
-
-from shutil import which
 
 from telepresence.runner import Runner
 
@@ -64,3 +65,74 @@ def kubectl_or_oc(server: str) -> str:
         return "kubectl"
     else:
         return "oc"
+
+
+def analyze_kube(args):
+    """Examine the local machine's kubernetes configuration"""
+    res = SimpleNamespace()
+
+    # We don't quite know yet if we want kubectl or oc (if someone has both
+    # it depends on the context), so until we know the context just guess.
+    # We prefer kubectl over oc insofar as (1) kubectl commands we do in
+    # this prelim setup stage don't require oc and (2) sometimes oc is a
+    # different binary unrelated to OpenShift.
+    if which("kubectl"):
+        prelim_command = "kubectl"
+    elif which("oc"):
+        prelim_command = "oc"
+    else:
+        raise SystemExit("Found neither 'kubectl' nor 'oc' in your $PATH.")
+
+    try:
+        kubectl_version_output = str(
+            check_output([prelim_command, "version", "--short"]), "utf-8"
+        ).split("\n")
+        res.kubectl_version = kubectl_version_output[0].split(": v")[1]
+        res.cluster_version = kubectl_version_output[1].split(": v")[1]
+    except CalledProcessError as exc:
+        res.kubectl_version = res.cluster_version = "(error: {})".format(exc)
+
+    # Make sure we have a Kubernetes context set either on command line or
+    # in kubeconfig:
+    if args.context is None:
+        try:
+            args.context = str(
+                check_output([prelim_command, "config", "current-context"],
+                             stderr=STDOUT), "utf-8"
+            ).strip()
+        except CalledProcessError:
+            raise SystemExit(
+                "No current-context set. "
+                "Please use the --context option to explicitly set the "
+                "context."
+            )
+
+    # Figure out explicit namespace if its not specified, and the server
+    # address (we use the server address to determine for good whether we
+    # want oc or kubectl):
+    kubectl_config = json.loads(
+        str(
+            check_output([prelim_command, "config", "view", "-o", "json"]),
+            "utf-8"
+        )
+    )
+    for context_setting in kubectl_config["contexts"]:
+        if context_setting["name"] == args.context:
+            if args.namespace is None:
+                args.namespace = context_setting["context"].get(
+                    "namespace", "default"
+                )
+            res.cluster = context_setting["context"]["cluster"]
+            break
+    else:
+        raise SystemExit("Error: Unable to find cluster information")
+    for cluster_setting in kubectl_config["clusters"]:
+        if cluster_setting["name"] == res.cluster:
+            res.server = cluster_setting["cluster"]["server"]
+            break
+    else:
+        raise SystemExit("Error: Unable to find server information")
+
+    res.command = kubectl_or_oc(res.server)
+
+    return res
