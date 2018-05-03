@@ -20,7 +20,9 @@ jobs:
       - run: |
           echo 'export PATH=${PATH}:/usr/local/go/bin' >> ${BASH_ENV} &&
           echo 'export GOPATH=${HOME}/go' >> ${BASH_ENV}
-      - run: which go && go version && echo 'GOPATH: "${GOPATH}"'
+
+      - run: |
+          which go && go version && echo 'GOPATH: "${GOPATH}"'
 
       - checkout
       - run: make test
@@ -42,7 +44,9 @@ jobs:
       - run: |
           echo 'export PATH=${PATH}:/usr/local/go/bin' >> ${BASH_ENV} &&
           echo 'export GOPATH=${HOME}/go' >> ${BASH_ENV}
-      - run: which go && go version && echo 'GOPATH: "${GOPATH}"'
+
+      - run: |
+          which go && go version && echo 'GOPATH: "${GOPATH}"'
 
       - checkout
       - run: make test
