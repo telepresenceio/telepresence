@@ -17,8 +17,9 @@ jobs:
           sudo tar -C /usr/local -xzf /tmp/go.tgz
 
       # Golang paths
-      - run: echo 'export PATH=${PATH}:/usr/local/go/bin' >> ${BASH_ENV}
-      - run: echo 'export GOPATH=${HOME}/go' >> ${BASH_ENV}
+      - run: |
+          echo 'export PATH=${PATH}:/usr/local/go/bin' >> ${BASH_ENV} &&
+          echo 'export GOPATH=${HOME}/go' >> ${BASH_ENV}
       - run: which go && go version && echo GOPATH: "${GOPATH}"
 
       - checkout
@@ -38,8 +39,9 @@ jobs:
           sudo tar -C /usr/local -xzf /tmp/go.tgz
 
       # Golang paths
-      - run: echo 'export PATH=${PATH}:/usr/local/go/bin' >> ${BASH_ENV}
-      - run: echo 'export GOPATH=${HOME}/go' >> ${BASH_ENV}
+      - run: |
+          echo 'export PATH=${PATH}:/usr/local/go/bin' >> ${BASH_ENV} &&
+          echo 'export GOPATH=${HOME}/go' >> ${BASH_ENV}
       - run: which go && go version && echo GOPATH: "${GOPATH}"
 
       - checkout
