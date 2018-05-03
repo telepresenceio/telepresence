@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from collections import deque
-import shlex
 import sys
 from subprocess import Popen, PIPE, DEVNULL, CalledProcessError
 from threading import Thread
@@ -24,6 +23,8 @@ from inspect import getframeinfo, currentframe
 import os
 
 from telepresence.cache import Cache
+from telepresence.span import Span
+from telepresence.utilities import str_command
 
 
 class Runner(object):
@@ -263,22 +264,6 @@ class Runner(object):
         self.check_call(
             self.kubectl(context, namespace, kubectl_args), **kwargs
         )
-
-
-def str_command(args: List[str]):
-    """
-    Return a string representing the shell command and its arguments.
-
-    :param args: Shell command and its arguments
-    :return: String representation thereof
-    """
-    res = []
-    for arg in args:
-        if "\n" in arg:
-            res.append(repr(arg))
-        else:
-            res.append(shlex.quote(arg))
-    return " ".join(res)
 
 
 def launch_command(args, out_cb, err_cb, done=None, **kwargs):
