@@ -93,8 +93,8 @@ def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
         tor_conffile.write(TORSOCKS_CONFIG.format(socks_port))
     atexit.register(os.remove, tor_conffile.name)
     env["TORSOCKS_CONF_FILE"] = tor_conffile.name
-    if runner.logfile is not sys.stdout:
-        env["TORSOCKS_LOG_FILE_PATH"] = runner.logfile.name
+    if runner.output.logfile is not sys.stdout:
+        env["TORSOCKS_LOG_FILE_PATH"] = runner.output.logfile.name
     if sys.platform == "darwin":
         env["PATH"] = sip_workaround(env["PATH"], unsupported_tools_path)
     # Try to ensure we're actually proxying network, by forcing DNS resolution
