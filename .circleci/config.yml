@@ -1,6 +1,8 @@
 version: 2
+
 jobs:
-  build:
+
+  macos-build:
     macos:
       xcode: "9.0"
     working_directory: ~/go/src/github.com/datawire/teleproxy
@@ -9,14 +11,27 @@ jobs:
 
       # For some reason it is faster to curl into a file than to just
       # pipe the curl straight to tar.
-      - run: curl https://dl.google.com/go/go1.10.2.darwin-amd64.tar.gz -o /tmp/go.tgz
-      - run: sudo tar -C /usr/local -xzf /tmp/go.tgz
+      - run: |
+          curl https://dl.google.com/go/go1.10.2.darwin-amd64.tar.gz -o /tmp/go.tgz &&
+          sudo tar -C /usr/local -xzf /tmp/go.tgz
 
       # Golang paths
-      - run:
-          command: |
-            echo 'export PATH=${PATH}:/usr/local/go/bin' >> ${BASH_ENV}
-
+      - run: echo 'export PATH=${PATH}:/usr/local/go/bin' >> ${BASH_ENV}
 
       - checkout
       - run: make test
+
+  machine-build:
+    machine: true
+    working_directory: ~/go/src/github.com/datawire/teleproxy
+    steps:
+      - checkout
+      - run: make test
+
+workflows:
+  version: 2
+
+  multibuild:
+    jobs:
+      - machine-build
+      - macos-build
