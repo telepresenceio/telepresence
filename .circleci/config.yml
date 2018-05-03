@@ -53,7 +53,7 @@ jobs:
 
   container-build:
     docker:
-      image: circleci/golang:1.10.1
+      - image: circleci/golang:1.10.1
     working_directory: ~/go/src/github.com/datawire/teleproxy
     steps:
       - run: |
