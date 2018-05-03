@@ -51,6 +51,17 @@ jobs:
       - checkout
       - run: make test
 
+  container-build:
+    docker:
+      image: circleci/golang:1.10.1
+    working_directory: ~/go/src/github.com/datawire/teleproxy
+    steps:
+      - run: |
+          which go && go version && echo 'GOPATH: "${GOPATH}"'
+
+      - checkout
+      - run: make test
+
 workflows:
   version: 2
 
@@ -58,3 +69,4 @@ workflows:
     jobs:
       - machine-build
       - macos-build
+      - container-build
