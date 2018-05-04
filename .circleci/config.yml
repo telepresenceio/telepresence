@@ -21,8 +21,9 @@ jobs:
           echo 'export PATH=${PATH}:/usr/local/go/bin' >> ${BASH_ENV} &&
           echo 'export GOPATH=${HOME}/go' >> ${BASH_ENV}
 
-      - run: |
-          which go && go version && echo GOPATH: \"${GOPATH}\"
+      - run: 'echo PATH: ${PATH} || true'
+      - run: 'echo GOPATH: ${GOPATH} || true'
+      - run: go version
 
       - checkout
       - run: make test
@@ -45,19 +46,9 @@ jobs:
           echo 'export PATH=${PATH}:/usr/local/go/bin' >> ${BASH_ENV} &&
           echo 'export GOPATH=${HOME}/go' >> ${BASH_ENV}
 
-      - run: |
-          which go && go version && echo GOPATH: \"${GOPATH}\"
-
-      - checkout
-      - run: make test
-
-  container-build:
-    docker:
-      - image: circleci/golang:1.10.1
-    working_directory: /go/src/github.com/datawire/teleproxy
-    steps:
-      - run: |
-          which go && go version && echo GOPATH: \"${GOPATH}\"
+      - run: 'echo PATH: ${PATH} || true'
+      - run: 'echo GOPATH: ${GOPATH} || true'
+      - run: go version
 
       - checkout
       - run: make test
@@ -69,4 +60,3 @@ workflows:
     jobs:
       - machine-build
       - macos-build
-      - container-build
