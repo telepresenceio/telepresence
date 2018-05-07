@@ -96,15 +96,28 @@ class Scout:
         return os.getenv("SCOUT_DISABLE", "0").lower() in {"1", "true", "yes"}
 
 
-def call_scout(kubectl_version, kube_cluster_version, operation, method):
+def call_scout(session):
+    args = session.args
+    kube_info = session.kube_info
+
     config_root = Path.home() / ".config" / "telepresence"
     config_root.mkdir(parents=True, exist_ok=True)
     id_file = config_root / 'id'
+
+    if args.deployment:
+        operation = "deployment"
+    elif args.new_deployment:
+        operation = "new_deployment"
+    elif args.swap_deployment:
+        operation = "swap_deployment"
+    else:
+        operation = "bad_args"
+
     scout_kwargs = dict(
-        kubectl_version=kubectl_version,
-        kubernetes_version=kube_cluster_version,
+        kubectl_version=kube_info.kubectl_version,
+        kubernetes_version=kube_info.cluster_version,
         operation=operation,
-        method=method
+        method=args.method
     )
 
     try:
@@ -118,5 +131,6 @@ def call_scout(kubectl_version, kube_cluster_version, operation, method):
             scout_kwargs["new_install"] = False
 
     scout = Scout("telepresence", __version__, install_id)
+    scouted = scout.report(**scout_kwargs)
 
-    return scout.report(**scout_kwargs)
+    session.output.write("Scout info: {}\n".format(scouted))

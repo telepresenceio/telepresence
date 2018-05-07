@@ -56,9 +56,8 @@ class PortMapping(object):
 class handle_unexpected_errors(object):
     """Decorator that catches unexpected errors."""
 
-    def __init__(self, logfile, runner=None):
-        self.logfile = logfile
-        self.runner = runner
+    def __init__(self, session):
+        self.session = session
 
     def __call__(self, f):
         def safe_output(args):
@@ -77,10 +76,13 @@ class handle_unexpected_errors(object):
             except KeyboardInterrupt:
                 raise SystemExit(0)
             except Exception as e:
-                if self.runner:
-                    logs = self.runner.read_logs()
-                else:
+                try:
+                    logs = self.session.output.read_logs()
+                    log_path = self.session.output.logfile_path
+                except AttributeError:
+                    # No session or no output
                     logs = "Not available"
+                    log_path = "-"
                 errorf = StringIO()
                 print_exc(file=errorf)
                 error = errorf.getvalue()
@@ -89,9 +91,9 @@ class handle_unexpected_errors(object):
                     "\n\n"
                     "Here's the traceback:\n\n" + error + "\n"
                 )
-                if self.logfile != "-":
+                if log_path != "-":
                     log_ref = " (see {} for the complete logs):".format(
-                        self.logfile
+                        log_path
                     )
                 else:
                     log_ref = ""
