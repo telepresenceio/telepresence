@@ -40,7 +40,7 @@ from subprocess import check_output, Popen
 from socket import gethostbyname, gaierror
 from time import time, sleep
 
-from telepresence.main import expose_local_services
+from telepresence.expose import expose_local_services
 from telepresence.ssh import SSH
 from telepresence.cleanup import Subprocesses, wait_for_exit
 from telepresence.runner import Runner
