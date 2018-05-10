@@ -302,6 +302,25 @@ def parse_args(args=None) -> argparse.Namespace:
         )
     )
 
+    parser.add_argument(
+        "--env-json",
+        metavar="FILENAME",
+        default=None,
+        help="Also emit the remote environment to a file as a JSON blob."
+    )
+
+    parser.add_argument(
+        "--env-file",
+        metavar="FILENAME",
+        default=None,
+        help=(
+            "Also emit the remote environment to an env file in Docker "
+            "Compose format. "
+            "See https://docs.docker.com/compose/env-file/ for more "
+            "information on the limitations of this format."
+        )
+    )
+
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--run-shell",

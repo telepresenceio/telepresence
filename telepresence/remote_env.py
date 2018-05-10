@@ -13,10 +13,10 @@
 # limitations under the License.
 
 import argparse
-from json import loads
+from json import loads, dump
 from subprocess import CalledProcessError
 from time import time, sleep
-from typing import Dict
+from typing import Dict, Tuple, List
 
 from telepresence.remote import RemoteInfo
 from telepresence.runner import Runner
@@ -80,3 +80,52 @@ def get_remote_env(
     else:
         return exit("Error: Failed to get environment variables")
     return env
+
+
+def serialize_as_env_file(env: Dict[str, str]) -> Tuple[str, List[str]]:
+    """
+    Render an env file as defined by Docker Compose
+    https://docs.docker.com/compose/env-file/
+
+    - Compose expects each line in an env file to be in VAR=VAL format.
+    - Lines beginning with # are processed as comments and ignored.
+    - Blank lines are ignored.
+    - There is no special handling of quotation marks.
+      This means that they are part of the VAL.
+
+    Unstated but implied is that values cannot include newlines.
+    """
+    res = []
+    skipped = []
+    for key, value in sorted(env.items()):
+        if "\n" in value:
+            skipped.append(key)
+        else:
+            res.append("{}={}\n".format(key, value))
+    return "".join(res), skipped
+
+
+def write_env_files(session) -> None:
+    args = session.args
+    env = session.env
+    if args.env_json:
+        try:
+            with open(args.env_json, "w") as env_json_file:
+                dump(env, env_json_file, sort_keys=True, indent=4)
+        except IOError as exc:
+            print("Failed to write environment as JSON: {}".format(exc))
+
+    if args.env_file:
+        try:
+            data, skipped = serialize_as_env_file(env)
+            with open(args.env_file, "w") as env_file:
+                env_file.write(data)
+            if skipped:
+                print(
+                    "Skipped these environment keys when writing env "
+                    "file because the associated values have newlines:"
+                )
+                for key in skipped:
+                    print(key)
+        except IOError as exc:
+            print("Failed to write environment as env file: {}".format(exc))
