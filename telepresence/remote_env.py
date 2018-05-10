@@ -1,3 +1,6 @@
+import argparse
+from subprocess import CalledProcessError
+from time import time, sleep
 from typing import Dict
 
 from telepresence.remote import RemoteInfo
@@ -53,3 +56,20 @@ def get_env_variables(runner: Runner, remote_info: RemoteInfo,
     result.update(remote_env)
     span.end()
     return result
+
+
+def get_remote_env(
+    runner: Runner, args: argparse.Namespace, remote_info: RemoteInfo
+) -> Dict[str, str]:
+    # Get the environment variables we want to copy from the remote pod; it may
+    # take a few seconds for the SSH proxies to get going:
+    start = time()
+    while time() - start < 10:
+        try:
+            env = get_env_variables(runner, remote_info, args.context)
+            break
+        except CalledProcessError:
+            sleep(0.25)
+    else:
+        return exit("Error: Failed to get environment variables")
+    return env

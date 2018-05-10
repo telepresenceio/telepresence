@@ -9,7 +9,7 @@ import os
 from shutil import rmtree, copy
 from tempfile import mkdtemp, NamedTemporaryFile
 
-from telepresence.cleanup import Subprocesses, kill_process, wait_for_exit
+from telepresence.cleanup import Subprocesses, kill_process
 from telepresence.remote import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.ssh import SSH
@@ -123,7 +123,7 @@ def run_local_command(
     socks_port: int,
     ssh: SSH,
     mount_dir: Optional[str],
-) -> None:
+) -> Popen:
     """--run-shell/--run support, run command locally."""
     env = os.environ.copy()
     env.update(env_overrides)
@@ -163,4 +163,4 @@ def run_local_command(
             kill_process(p)
 
     atexit.register(terminate_if_alive)
-    wait_for_exit(runner, p, subprocesses)
+    return p

@@ -3,9 +3,7 @@ import atexit
 import re
 import sys
 from shutil import which
-from subprocess import CalledProcessError
-from time import time, sleep
-from typing import Tuple, Dict
+from typing import Tuple
 
 from telepresence.cleanup import Subprocesses
 from telepresence.container import MAC_LOOPBACK_IP
@@ -13,7 +11,6 @@ from telepresence.deployment import create_new_deployment, \
     swap_deployment_openshift, supplant_deployment
 from telepresence.expose import expose_local_services
 from telepresence.remote import RemoteInfo, get_remote_info
-from telepresence.remote_env import get_env_variables
 from telepresence.runner import Runner
 from telepresence.ssh import SSH
 from telepresence.utilities import find_free_port
@@ -129,8 +126,7 @@ def connect(
     return processes, socks_port, ssh
 
 
-def start_proxy(runner: Runner, args: argparse.Namespace
-                ) -> Tuple[Subprocesses, Dict[str, str], int, SSH, RemoteInfo]:
+def start_proxy(runner: Runner, args: argparse.Namespace) -> RemoteInfo:
     """Start the kubectl port-forward and SSH clients that do the proxying."""
     span = runner.span()
     if sys.stdout.isatty() and args.method != "container":
@@ -206,18 +202,6 @@ def start_proxy(runner: Runner, args: argparse.Namespace
         deployment_type,
         run_id=run_id,
     )
-
-    processes, socks_port, ssh = connect(runner, remote_info, args)
-
-    # Get the environment variables we want to copy from the remote pod; it may
-    # take a few seconds for the SSH proxies to get going:
-    start = time()
-    while time() - start < 10:
-        try:
-            env = get_env_variables(runner, remote_info, args.context)
-            break
-        except CalledProcessError:
-            sleep(0.25)
-
     span.end()
-    return processes, env, socks_port, ssh, remote_info
+
+    return remote_info

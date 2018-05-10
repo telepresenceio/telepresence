@@ -21,22 +21,22 @@ import signal
 import sys
 from types import SimpleNamespace
 
+from telepresence.cleanup import wait_for_exit
 from telepresence.cli import parse_args, handle_unexpected_errors
 from telepresence.container import run_docker_command
 from telepresence.local import run_local_command
 from telepresence.output import Output
-from telepresence.proxy import start_proxy
+from telepresence.proxy import start_proxy, connect
 from telepresence.mount import mount_remote
+from telepresence.remote_env import get_remote_env
 from telepresence.startup import analyze_args
 from telepresence.usage_tracking import call_scout
 
 
-def main():
+def main(session):
     """
     Top-level function for Telepresence
     """
-
-    session = SimpleNamespace()
 
     ########################################
     # Preliminaries: No changes to the machine or the cluster, no cleanup
@@ -63,24 +63,23 @@ def main():
     # Usage tracking
     call_scout(session)
 
-    # Set up exit handling including crash reporter
-    reporter = handle_unexpected_errors(session)
+    # Set up exit handling
     # XXX exit handling via atexit
+    try:
+        ########################################
+        # Now it's okay to change things
 
-    ########################################
-    # Now it's okay to change things
-
-    @reporter
-    def go():
         runner = session.runner
         args = session.args
 
         # Set up the proxy pod (operation -> pod name)
+        remote_info = start_proxy(runner, args)
+
         # Connect to the proxy (pod name -> ssh object)
+        subprocesses, socks_port, ssh = connect(runner, remote_info, args)
+
         # Capture remote environment information (ssh object -> env info)
-        subprocesses, env, socks_port, ssh, remote_info = start_proxy(
-            runner, args
-        )
+        env = get_remote_env(runner, args, remote_info)
 
         # Used by mount_remote
         session.ssh = ssh
@@ -92,7 +91,7 @@ def main():
         # Set up outbound networking (pod name, ssh object)
         # Launch user command with the correct environment (...)
         if args.method == "container":
-            run_docker_command(
+            user_process = run_docker_command(
                 runner,
                 remote_info,
                 args,
@@ -102,22 +101,27 @@ def main():
                 mount_dir,
             )
         else:
-            run_local_command(
+            user_process = run_local_command(
                 runner, remote_info, args, env, subprocesses, socks_port, ssh,
                 mount_dir
             )
 
         # Clean up (call the cleanup methods for everything above)
-        # XXX handled by atexit
+        # XXX handled by wait_for_exit and atexit
+        wait_for_exit(runner, user_process, subprocesses)
 
-    go()
+    finally:
+        pass
 
 
 def run_telepresence():
     """Run telepresence"""
     if sys.version_info[:2] < (3, 5):
         raise SystemExit("Telepresence requires Python 3.5 or later.")
-    main()
+
+    session = SimpleNamespace()
+    crash_reporter_decorator = handle_unexpected_errors(session)
+    crash_reporter_decorator(main)(session)
 
 
 if __name__ == '__main__':

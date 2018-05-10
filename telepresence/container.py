@@ -11,7 +11,7 @@ import os.path
 from tempfile import NamedTemporaryFile
 
 from telepresence import TELEPRESENCE_LOCAL_IMAGE
-from telepresence.cleanup import Subprocesses, wait_for_exit
+from telepresence.cleanup import Subprocesses
 from telepresence.remote import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.ssh import SSH
@@ -63,7 +63,7 @@ def run_docker_command(
     subprocesses: Subprocesses,
     ssh: SSH,
     mount_dir: Optional[str],
-) -> None:
+) -> Popen:
     """
     --docker-run support.
 
@@ -173,4 +173,4 @@ def run_docker_command(
             make_docker_kill(runner, container_name)()
 
     atexit.register(terminate_if_alive)
-    wait_for_exit(runner, p, subprocesses)
+    return p
