@@ -698,6 +698,8 @@ footer {
     box-shadow: 0 5px 6px 0 rgba(0,0,0,0.15);
     padding: 50px 20px;
     border: 1px solid #eee;
+    min-width: 310px;
+    max-width: 310px;
 }
 .case-study:hover {
     text-decoration: none;
