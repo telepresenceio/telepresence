@@ -84,6 +84,7 @@ def main(session):
         # Used by mount_remote
         session.ssh = ssh
         session.remote_info = remote_info
+        session.env = env
 
         # Handle filesystem stuff (pod name, ssh object)
         mount_dir = mount_remote(session)

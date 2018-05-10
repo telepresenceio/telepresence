@@ -90,8 +90,6 @@ def run_docker_command(
         mounted.
     """
     # Update environment:
-    if mount_dir:
-        remote_env["TELEPRESENCE_ROOT"] = mount_dir
     remote_env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
 
     # Extract --publish flags and add them to the sshuttle container, which is
