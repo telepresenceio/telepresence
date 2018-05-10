@@ -67,7 +67,7 @@ func (t *Translator) Enable() {
 		err = rule.SetAnchorCall(t.Name)
 		if err != nil { panic(err) }
 		rule.SetAction(action)
-		err = t.dev.AddRule(rule)
+		err = t.dev.PrependRule(rule)
 		if err != nil { panic(err) }
 	}
 
