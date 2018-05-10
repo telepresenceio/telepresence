@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+from json import loads
 from subprocess import CalledProcessError
 from time import time, sleep
 from typing import Dict
@@ -27,21 +28,13 @@ def _get_remote_env(
 ) -> Dict[str, str]:
     """Get the environment variables in the remote pod."""
     env = runner.get_kubectl(
-        context, namespace,
-        ["exec", pod_name, "--container", container_name, "env"]
+        context, namespace, [
+            "exec", pod_name, "--container", container_name, "--", "python3",
+            "-c", "import json, os; print(json.dumps(dict(os.environ)))"
+        ]
     )
     result = {}  # type: Dict[str,str]
-    prior_key = None
-    for line in env.splitlines():
-        try:
-            key, value = line.split("=", 1)
-            prior_key = key
-        except ValueError:
-            # Prior key's value contains one or more newlines
-            assert prior_key is not None
-            key = prior_key
-            value = result[key] + "\n" + line
-        result[key] = value
+    result.update(loads(env))
     return result
 
 
