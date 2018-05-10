@@ -22,7 +22,6 @@ from typing import List, Callable, Dict, Tuple, Optional
 
 import os
 import os.path
-from tempfile import NamedTemporaryFile
 
 from telepresence import TELEPRESENCE_LOCAL_IMAGE
 from telepresence.cleanup import Subprocesses
