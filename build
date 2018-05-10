@@ -37,6 +37,7 @@ from subprocess import (
     check_call,
     check_output,
 )
+from pathlib import Path
 
 
 def main():
@@ -315,7 +316,25 @@ def _setup_virtualenv():
     _pip("install", "-e", ".")
 
 
+def _license_check():
+    license_text = "Licensed under the Apache License, Version 2.0"
+    dirs = ["telepresence", "local-docker"]  # XXX k8s-proxy
+    patterns = ["*.py"]  # Future: check other file types
+    license_missing = []
+    for dirname in dirs:
+        for pattern in patterns:
+            for filepath in Path(dirname).glob("**/" + pattern):
+                if license_text not in filepath.read_text():
+                    license_missing.append(filepath)
+    if license_missing:
+        print("License header not found in file(s):")
+        for filepath in license_missing:
+            print("- {}".format(filepath))
+        exit(1)
+
+
 def _lint():
+    _license_check()
     _virtualenv("yapf", "-dr", "telepresence", "build")
     _virtualenv(
         "flake8", "--isolated", "local-docker", "k8s-proxy", "telepresence",
