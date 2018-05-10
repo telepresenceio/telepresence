@@ -1,3 +1,17 @@
+# Copyright 2018 Datawire. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import socket
 from copy import deepcopy
 from typing import Callable, List, Tuple, Optional, Union
@@ -191,13 +205,14 @@ class LocalResolver(object):
     def query(
         self,
         query: dns.Query,
-        timeout: Optional[float]=None,
+        timeout=None,  # FIXME: What type? Usage seems inconsistent.
         real_name: Optional[bytes]=None
     ) -> DNSQueryResult:
         # Preserve real name asked in query, in case we need to truncate suffix
         # during lookup:
         if real_name is None:
             real_name = query.name.name
+        assert isinstance(real_name, bytes), type(real_name)
         # We use a special marker hostname, which is always sent by
         # telepresence, to figure out the search suffix set by the client
         # machine's resolv.conf. We then remove it since it masks our ability
