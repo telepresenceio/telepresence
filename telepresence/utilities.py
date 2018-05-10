@@ -1,4 +1,19 @@
+# Copyright 2018 Datawire. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import socket
+import shlex
 from time import time
 from typing import List
 
@@ -26,7 +41,7 @@ def find_free_port() -> int:
 
 
 def get_resolv_conf_namservers() -> List[str]:
-    """Return list of namserver IPs in /etc/resolv.conf."""
+    """Return list of nameserver IPs in /etc/resolv.conf."""
     result = []
     with open("/etc/resolv.conf") as f:
         for line in f:
@@ -48,3 +63,19 @@ def get_alternate_nameserver() -> str:
         if nameserver not in banned:
             return nameserver
     raise RuntimeError("All known public nameservers are in /etc/resolv.conf.")
+
+
+def str_command(args: List[str]):
+    """
+    Return a string representing the shell command and its arguments.
+
+    :param args: Shell command and its arguments
+    :return: String representation thereof
+    """
+    res = []
+    for arg in args:
+        if "\n" in arg:
+            res.append(repr(arg))
+        else:
+            res.append(shlex.quote(arg))
+    return " ".join(res)

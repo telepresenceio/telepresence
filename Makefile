@@ -1,74 +1,65 @@
-.PHONY: default build-k8s-proxy bumpversion release minikube-test build-k8s-proxy-minikube
+# Copyright 2018 Datawire. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+.PHONY: default version registry lint unit e2e bumpversion help
 
 VERSION=$(shell git describe --tags)${TELEPRESENCE_VER_SUFFIX}
+TELEPRESENCE_REGISTRY?=${USER}
 SHELL:=/bin/bash
 
-default:
+default: help
+	@echo
 	@echo "See https://telepresence.io/reference/developing.html"
 
 version:
 	@echo $(VERSION)
 
+registry:
+	@echo $(TELEPRESENCE_REGISTRY)
 
 ## Setup dependencies ##
 
-virtualenv:
-	virtualenv --python=python3 virtualenv
-	virtualenv/bin/pip install -r dev-requirements.txt
-	virtualenv/bin/pip install -r k8s-proxy/requirements.txt
-	virtualenv/bin/pip install git+https://github.com/datawire/sshuttle.git@telepresence
-
-# Build Kubernetes side proxy image inside local Docker:
-build-k8s-proxy:
-	cd k8s-proxy && docker build . -t datawire/telepresence-k8s:$(VERSION)
-
-build-local:
-	docker build --file local-docker/Dockerfile . -t datawire/telepresence-local:$(VERSION)
+virtualenv:  ## Set up Python3 virtual environment for development
+	./build --manage-virtualenv --no-tests
 
 ## Development ##
 
-# Build Docker image inside minikube Docker:
-build-k8s-proxy-minikube:
-	ci/build-k8s-proxy-minikube.sh
+format:  ## Format source code in-place
+format: virtualenv
+	virtualenv/bin/yapf -ir telepresence build
 
-build-k8s-proxy-minishift:
-	ci/build-k8s-proxy-minishift.sh
+lint:  ## Run the linters used by CI
+	./build --lint --no-tests
 
-run-minikube:
-	source virtualenv/bin/activate && \
-		env TELEPRESENCE_VERSION=$(VERSION) cli/telepresence --method=inject-tcp --new-deployment test --run-shell
+unit:  ## Run the unit tests
+	./build --registry $(TELEPRESENCE_REGISTRY) -- -x -k "not endtoend"
 
-# Run tests in minikube:
-minikube-test: virtualenv build-k8s-proxy-minikube build-local
-	@echo "IMPORTANT: this will change kubectl context to minikube!\n\n"
-	kubectl config use-context minikube
-	TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_METHOD=container ci/test.sh
-	source virtualenv/bin/activate && \
-		env TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_METHOD=inject-tcp ci/test.sh
-	source virtualenv/bin/activate && \
-		env TELEPRESENCE_VERSION=$(VERSION) TELEPRESENCE_LOCAL_VM=1 \
-		TELEPRESENCE_METHOD=vpn-tcp ci/test.sh
+e2e:  ## Run the end-to-end tests
+	./build --registry $(TELEPRESENCE_REGISTRY) -- -x -k "endtoend"
 
-# Run tests relevant to OpenShift:
-openshift-tests: virtualenv
-	source virtualenv/bin/activate && \
-		env TELEPRESENCE_OPENSHIFT=1 TELEPRESENCE_VERSION=$(VERSION) \
-		TELEPRESENCE_METHOD=inject-tcp ci/test.sh
-	source virtualenv/bin/activate && \
-		env TELEPRESENCE_OPENSHIFT=1 TELEPRESENCE_METHOD=vpn-tcp \
-		TELEPRESENCE_LOCAL_VM=1 TELEPRESENCE_VERSION=$(VERSION) ci/test.sh
 
 ## Release ##
 
 # This is run by developer and triggers release process in CI:
+bumpversion:  ## Increment version number and commit
 bumpversion: virtualenv
-	virtualenv/bin/bumpversion --verbose --list minor
+	virtualenv/bin/bumpversion --list minor
 	@echo "Please run: git push origin master --tags"
 
-# Will be run in Travis CI on tagged commits
-release: build-k8s-proxy build-local virtualenv
-	docker push datawire/telepresence-k8s:$(VERSION)
-	docker push datawire/telepresence-local:$(VERSION)
-	env TELEPRESENCE_VERSION=$(VERSION) packaging/homebrew-package.sh
-	packaging/create-linux-packages.py $(VERSION)
-	packaging/upload-linux-packages.py $(VERSION)
+## Help - https://gist.github.com/prwhite/8168133#gistcomment-1737630
+
+help:  ## Show this message
+	@echo 'usage: make [target] ...'
+	@echo
+	@egrep '^(.+)\:  ##\ (.+)' ${MAKEFILE_LIST} | column -t -c 2 -s ':#'

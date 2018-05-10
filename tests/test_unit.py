@@ -20,13 +20,12 @@ import tempfile
 import ipaddress
 
 from hypothesis import strategies as st, given, example
-from time import time
 import yaml
 
 import telepresence.cli
 import telepresence.container
 import telepresence.deployment
-import telepresence.runner
+import telepresence.output
 import telepresence.vpn
 import telepresence.main
 
@@ -233,18 +232,18 @@ def test_covering_cidr(ips):
             assert not all([ip in subnet for ip in ips])
 
 
-def test_runner_file():
+def test_output_file():
     """Test some reasonable values for the log file"""
     # stdout
-    lf_dash = telepresence.runner.Runner.open("-", "kubectl", False)
+    lf_dash = telepresence.output.Output("-")
     assert lf_dash.logfile is sys.stdout, lf_dash.logfile
     # /dev/null -- just make sure we don't crash
-    telepresence.runner.Runner.open("/dev/null", "kubectl", False)
+    telepresence.output.Output("/dev/null")
     # Regular file -- make sure the file has been truncated
     o_content = "original content\n"
     with tempfile.NamedTemporaryFile(mode="w", delete=False) as out:
         out.write(o_content + "This should be truncated away.\nThis too.\n")
-    lf_file = telepresence.runner.Runner.open(out.name, "kubectl", False)
+    lf_file = telepresence.output.Output(out.name)
     n_content = "replacement content\n"
     lf_file.write(n_content)
     with open(out.name) as in_again:
@@ -299,11 +298,13 @@ def test_default_operation():
     assert args.deployment is None
     assert args.swap_deployment is None
 
+
 def test_cache():
     cache = Cache({})
     assert "foo" not in cache
     assert cache.lookup("foo", lambda: 3) == 3
     assert "foo" in cache
+
 
 def test_cache_invalidation():
     cache = Cache({})

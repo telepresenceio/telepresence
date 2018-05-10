@@ -1,3 +1,17 @@
+# Copyright 2018 Datawire. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
 import sys
 import webbrowser
@@ -56,9 +70,8 @@ class PortMapping(object):
 class handle_unexpected_errors(object):
     """Decorator that catches unexpected errors."""
 
-    def __init__(self, logfile, runner=None):
-        self.logfile = logfile
-        self.runner = runner
+    def __init__(self, session):
+        self.session = session
 
     def __call__(self, f):
         def safe_output(args):
@@ -77,10 +90,13 @@ class handle_unexpected_errors(object):
             except KeyboardInterrupt:
                 raise SystemExit(0)
             except Exception as e:
-                if self.runner:
-                    logs = self.runner.read_logs()
-                else:
+                try:
+                    logs = self.session.output.read_logs()
+                    log_path = self.session.output.logfile_path
+                except AttributeError:
+                    # No session or no output
                     logs = "Not available"
+                    log_path = "-"
                 errorf = StringIO()
                 print_exc(file=errorf)
                 error = errorf.getvalue()
@@ -89,9 +105,9 @@ class handle_unexpected_errors(object):
                     "\n\n"
                     "Here's the traceback:\n\n" + error + "\n"
                 )
-                if self.logfile != "-":
+                if log_path != "-":
                     log_ref = " (see {} for the complete logs):".format(
-                        self.logfile
+                        log_path
                     )
                 else:
                     log_ref = ""

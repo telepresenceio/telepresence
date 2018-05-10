@@ -1,3 +1,17 @@
+# Copyright 2018 Datawire. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
 import atexit
 import sys
@@ -9,7 +23,7 @@ import os
 from shutil import rmtree, copy
 from tempfile import mkdtemp, NamedTemporaryFile
 
-from telepresence.cleanup import Subprocesses, kill_process, wait_for_exit
+from telepresence.cleanup import Subprocesses, kill_process
 from telepresence.remote import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.ssh import SSH
@@ -93,8 +107,8 @@ def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
         tor_conffile.write(TORSOCKS_CONFIG.format(socks_port))
     atexit.register(os.remove, tor_conffile.name)
     env["TORSOCKS_CONF_FILE"] = tor_conffile.name
-    if runner.logfile is not sys.stdout:
-        env["TORSOCKS_LOG_FILE_PATH"] = runner.logfile.name
+    if runner.output.logfile is not sys.stdout:
+        env["TORSOCKS_LOG_FILE_PATH"] = runner.output.logfile.name
     if sys.platform == "darwin":
         env["PATH"] = sip_workaround(env["PATH"], unsupported_tools_path)
     # Try to ensure we're actually proxying network, by forcing DNS resolution
@@ -123,7 +137,7 @@ def run_local_command(
     socks_port: int,
     ssh: SSH,
     mount_dir: Optional[str],
-) -> None:
+) -> Popen:
     """--run-shell/--run support, run command locally."""
     env = os.environ.copy()
     env.update(env_overrides)
@@ -163,4 +177,4 @@ def run_local_command(
             kill_process(p)
 
     atexit.register(terminate_if_alive)
-    wait_for_exit(runner, p, subprocesses)
+    return p

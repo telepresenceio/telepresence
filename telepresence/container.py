@@ -1,3 +1,17 @@
+# Copyright 2018 Datawire. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
 import atexit
 import json
@@ -11,7 +25,7 @@ import os.path
 from tempfile import NamedTemporaryFile
 
 from telepresence import TELEPRESENCE_LOCAL_IMAGE
-from telepresence.cleanup import Subprocesses, wait_for_exit
+from telepresence.cleanup import Subprocesses
 from telepresence.remote import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.ssh import SSH
@@ -63,7 +77,7 @@ def run_docker_command(
     subprocesses: Subprocesses,
     ssh: SSH,
     mount_dir: Optional[str],
-) -> None:
+) -> Popen:
     """
     --docker-run support.
 
@@ -173,4 +187,4 @@ def run_docker_command(
             make_docker_kill(runner, container_name)()
 
     atexit.register(terminate_if_alive)
-    wait_for_exit(runner, p, subprocesses)
+    return p

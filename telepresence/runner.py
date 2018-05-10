@@ -12,77 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import deque
-import shlex
 import sys
 from subprocess import Popen, PIPE, DEVNULL, CalledProcessError
 from threading import Thread
-from time import time, ctime, sleep
+from time import time, sleep
 from typing import List, Optional
 
 from inspect import getframeinfo, currentframe
 import os
 
-import telepresence
-from .cache import Cache
-
-
-class Span(object):
-    emit_summary = False
-
-    def __init__(self, runner, tag, parent, verbose=True):
-        self.runner = runner
-        self.tag = tag
-        self.parent = parent
-        self.children = []
-        if self.parent:
-            self.parent.children.append(self)
-            self.depth = self.parent.depth + 1
-        else:
-            self.depth = 0
-        self.start_time = None
-        self.end_time = None
-        self.verbose = verbose
-
-    def begin(self):
-        self.start_time = time()
-        if self.verbose:
-            self.runner.write("BEGIN SPAN {}".format(self.tag))
-
-    def end(self):
-        self.end_time = time()
-        spent = self.end_time - self.start_time
-        if self.runner.current_span == self:
-            self.runner.current_span = self.parent
-        if self.verbose:
-            self.runner.write("END SPAN {} {:6.1f}s".format(self.tag, spent))
-        if self.parent is None and Span.emit_summary:
-            self.runner.write("SPAN SUMMARY:")
-            self.summarize()
-        return spent
-
-    def summarize(self):
-        indent = self.depth * "  "
-        if self.end_time:
-            spent = "{:6.1f}s".format(self.end_time - self.start_time)
-        else:
-            spent = "   ???"
-        self.runner.write("{}{} {}".format(spent, indent, self.tag))
-        for ch in self.children:
-            ch.summarize()
+from telepresence.cache import Cache
+from telepresence.output import Output
+from telepresence.span import Span
+from telepresence.utilities import str_command
 
 
 class Runner(object):
     """Context for running subprocesses."""
 
-    def __init__(self, logfile, kubectl_cmd: str, verbose: bool) -> None:
+    def __init__(
+        self, output: Output, kubectl_cmd: str, verbose: bool
+    ) -> None:
         """
-        :param logfile: file-like object to write logs to.
+        :param output: The Output instance for the session
         :param kubectl_cmd: Command to run for kubectl, either "kubectl" or
             "oc" (for OpenShift Origin).
         :param verbose: Whether subcommand should run in verbose mode.
         """
-        self.logfile = logfile
+        self.output = output
         self.kubectl_cmd = kubectl_cmd
         self.verbose = verbose
         self.start_time = time()
@@ -90,13 +47,7 @@ class Runner(object):
         self.current_span = None  # type: Optional[Span]
         self.counter = 0
 
-        # Keep the last 25 lines of log
-        self.logtail = deque(maxlen=25)  # type: deque
-        self.write(
-            "Telepresence {} launched at {}\n  {}".format(
-                telepresence.__version__, ctime(), str_command(sys.argv)
-            )
-        )
+        # Log some version info
         report = (
             ["kubectl", "version", "--short"],
             ["oc", "version"],
@@ -107,7 +58,7 @@ class Runner(object):
                 self.popen(command)
             except OSError:
                 pass
-        self.write("Python {}".format(sys.version))
+        self.output.write("Python {}".format(sys.version))
 
         cache_dir = os.path.expanduser("~/.cache/telepresence")
         os.makedirs(cache_dir, exist_ok=True)
@@ -119,24 +70,8 @@ class Runner(object):
         """
         :return: File-like object for the given logfile path.
         """
-        if logfile_path == "-":
-            return cls(sys.stdout, kubectl_cmd, verbose)
-        else:
-            # Wipe existing logfile, open using append mode so multiple
-            # processes don't clobber each other's outputs, and use line
-            # buffering so data gets written out immediately.
-            try:
-                open(logfile_path, "w").close()
-            except OSError as exc:
-                exit(
-                    "Failed to open logfile ({}): {}".format(
-                        logfile_path, exc
-                    )
-                )
-
-            return cls(
-                open(logfile_path, "a", buffering=1), kubectl_cmd, verbose
-            )
+        output = Output(logfile_path)
+        return cls(output, kubectl_cmd, verbose)
 
     def span(self, name: str = "", context=True, verbose=True) -> Span:
         """Write caller's frame info to the log."""
@@ -157,26 +92,18 @@ class Runner(object):
         return s
 
     def write(self, message: str, prefix="TEL") -> None:
-        """Write a message to the log."""
-        if self.logfile.closed:
-            return
-        for sub_message in message.splitlines():
-            line = "{:6.1f} {} | {}\n".format(
-                time() - self.start_time, prefix, sub_message.rstrip()
-            )
-            self.logfile.write(line)
-            self.logtail.append(line)
-        self.logfile.flush()
+        """Don't use this..."""
+        return self.output.write(message, prefix)
 
     def read_logs(self) -> str:
         """Return the end of the contents of the log"""
         sleep(2.0)
-        return "".join(self.logtail)
+        return self.output.read_logs()
 
     def set_success(self, flag: bool) -> None:
         """Indicate whether the command succeeded"""
         Span.emit_summary = flag
-        self.write("Success. Starting cleanup.")
+        self.output.write("Success. Starting cleanup.")
 
     def command_span(self, track, args):
         return self.span(
@@ -194,14 +121,14 @@ class Runner(object):
             def logger(line):
                 """Just log"""
                 if line is not None:
-                    self.write(line, prefix=prefix)
+                    self.output.write(line, prefix=prefix)
         else:
 
             def logger(line):
                 """Log and capture"""
                 capture.append(line)
                 if line is not None:
-                    self.write(line, prefix=prefix)
+                    self.output.write(line, prefix=prefix)
 
         return logger
 
@@ -210,26 +137,28 @@ class Runner(object):
         try:
             process = launch_command(args, out_cb, err_cb, **kwargs)
         except OSError as exc:
-            self.write("[{}] {}".format(track, exc))
+            self.output.write("[{}] {}".format(track, exc))
             raise
-        # Grep-able log: self.write("CMD: {}".format(str_command(args)))
+        # Grep-able log: self.output.write("CMD: {}".format(str_command(args)))
         return process
 
     def run_command(self, track, msg1, msg2, out_cb, err_cb, args, **kwargs):
         """Run a command synchronously"""
-        self.write("[{}] {}: {}".format(track, msg1, str_command(args)))
+        self.output.write("[{}] {}: {}".format(track, msg1, str_command(args)))
         span = self.command_span(track, args)
         process = self.launch_command(track, out_cb, err_cb, args, **kwargs)
         process.wait()
         spent = span.end()
         retcode = process.poll()
         if retcode:
-            self.write(
+            self.output.write(
                 "[{}] exit {} in {:0.2f} secs.".format(track, retcode, spent)
             )
             raise CalledProcessError(retcode, args)
         if spent > 1:
-            self.write("[{}] {} in {:0.2f} secs.".format(track, msg2, spent))
+            self.output.write(
+                "[{}] {} in {:0.2f} secs.".format(track, msg2, spent)
+            )
 
     def check_call(self, args, **kwargs):
         """Run a subprocess, make sure it exited with 0."""
@@ -272,7 +201,9 @@ class Runner(object):
         def done(proc):
             self._popen_done(track, proc)
 
-        self.write("[{}] Launching: {}".format(track, str_command(args)))
+        self.output.write(
+            "[{}] Launching: {}".format(track, str_command(args))
+        )
         process = self.launch_command(
             track, out_cb, err_cb, args, done=done, **kwargs
         )
@@ -281,7 +212,7 @@ class Runner(object):
     def _popen_done(self, track, process):
         retcode = process.poll()
         if retcode is not None:
-            self.write("[{}] exit {}".format(track, retcode))
+            self.output.write("[{}] exit {}".format(track, retcode))
 
     def kubectl(self, context: str, namespace: str,
                 args: List[str]) -> List[str]:
@@ -309,22 +240,6 @@ class Runner(object):
         self.check_call(
             self.kubectl(context, namespace, kubectl_args), **kwargs
         )
-
-
-def str_command(args: List[str]):
-    """
-    Return a string representing the shell command and its arguments.
-
-    :param args: Shell command and its arguments
-    :return: String representation thereof
-    """
-    res = []
-    for arg in args:
-        if "\n" in arg:
-            res.append(repr(arg))
-        else:
-            res.append(shlex.quote(arg))
-    return " ".join(res)
 
 
 def launch_command(args, out_cb, err_cb, done=None, **kwargs):

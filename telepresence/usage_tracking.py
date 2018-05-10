@@ -1,3 +1,17 @@
+# Copyright 2018 Datawire. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 import platform
 from pathlib import Path
@@ -96,15 +110,28 @@ class Scout:
         return os.getenv("SCOUT_DISABLE", "0").lower() in {"1", "true", "yes"}
 
 
-def call_scout(kubectl_version, kube_cluster_version, operation, method):
+def call_scout(session):
+    args = session.args
+    kube_info = session.kube_info
+
     config_root = Path.home() / ".config" / "telepresence"
     config_root.mkdir(parents=True, exist_ok=True)
     id_file = config_root / 'id'
+
+    if args.deployment:
+        operation = "deployment"
+    elif args.new_deployment:
+        operation = "new_deployment"
+    elif args.swap_deployment:
+        operation = "swap_deployment"
+    else:
+        operation = "bad_args"
+
     scout_kwargs = dict(
-        kubectl_version=kubectl_version,
-        kubernetes_version=kube_cluster_version,
+        kubectl_version=kube_info.kubectl_version,
+        kubernetes_version=kube_info.cluster_version,
         operation=operation,
-        method=method
+        method=args.method
     )
 
     try:
@@ -118,5 +145,6 @@ def call_scout(kubectl_version, kube_cluster_version, operation, method):
             scout_kwargs["new_install"] = False
 
     scout = Scout("telepresence", __version__, install_id)
+    scouted = scout.report(**scout_kwargs)
 
-    return scout.report(**scout_kwargs)
+    session.output.write("Scout info: {}\n".format(scouted))
