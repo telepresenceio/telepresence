@@ -1,6 +1,24 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.87 (May 11, 2018)
+
+Features:
+
+* Telepresence can optionally emit the remote environment as a JSON blob or as a `.env`-format file.
+  Use the `--env-json` or `--env-file` options respectively to specify the desired filenames.
+  See [https://docs.docker.com/compose/env-file/](https://docs.docker.com/compose/env-file/) for information about the limitations of the Docker Compose-style `.env` file format.
+  ([#608](https://github.com/datawire/telepresence/issues/608))
+
+Bug fixes:
+
+* Telepresence can now transfer complex environment variable values without truncating or mangling them.
+  ([#597](https://github.com/datawire/telepresence/issues/597))
+* The container method now supports multi-line environment variable values.
+  ([#301](https://github.com/datawire/telepresence/issues/301))
+* Telepresence avoids running afoul of lifecycle hooks when swapping a deployment.
+  ([#587](https://github.com/datawire/telepresence/issues/587))
+
 #### 0.86 (April 26, 2018)
 
 Misc:
