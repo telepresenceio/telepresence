@@ -215,7 +215,7 @@ def new_swapped_deployment(
             # Drop unneeded fields:
             for unneeded in [
                 "command", "args", "livenessProbe", "readinessProbe",
-                "workingDir"
+                "workingDir", "lifecycle"
             ]:
                 try:
                     container.pop(unneeded)
