@@ -48,6 +48,7 @@ from .utils import (
 )
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
+ENVFILE_PATH = Path("/tmp")
 
 
 def retry(condition, function):
@@ -200,6 +201,8 @@ class _VPNTCPMethod(object):
 class _ExistingDeploymentOperation(object):
     def __init__(self, swap):
         self.swap = swap
+        self.json_env = None  # Filled in below
+        self.envfile = None   # Filled in below
         if swap:
             self.name = "swap"
             self.image = "openshift/hello-openshift"
@@ -263,9 +266,16 @@ class _ExistingDeploymentOperation(object):
             replicas=self.replicas,
         )
 
+        self.json_env = ENVFILE_PATH / (deployment_ident.name + ".json")
+        self.envfile = ENVFILE_PATH / (deployment_ident.name + ".env")
+
 
     def cleanup_deployment(self, deployment_ident):
         _cleanup_deployment(deployment_ident)
+        if self.json_env:
+            self.json_env.unlink()
+        if self.envfile:
+            self.envfile.unlink()
 
 
     def auto_http_servers(self):
@@ -293,6 +303,8 @@ class _ExistingDeploymentOperation(object):
         return [
             "--namespace", deployment_ident.namespace,
             option, deployment_ident.name,
+            "--env-json", str(self.json_env),
+            "--env-file", str(self.envfile),
         ]
 
 
@@ -779,6 +791,14 @@ class AlsoProxy(object):
         self.host = host
 
 
+_json_blob = """{
+    "a": "b",
+    "c": "d",
+    "really long key": "really long value",
+    "multiline key": "-----BEGIN PGP PUBLIC KEY BLOCK-----\nmQENBFrVHZEBCACuD163edXBofnt8qNyluDufnIp0PucPZmK0lUuaJT/xi5RRki+\ntakVww0LGwPn6mcTI2Tgb2cEIvwk7yyXC5yPOPdWchUCxhfeadIgytDPOm3g51zG\nh/Ob1VH067nZlL1qJ7We4ZP0NGpT+MSVDYwGFROMoliRLe5bqz3SZgCI+GgXiHDU\nNbvkxAHE6Z5ZxkzAjBnJDmOf9kdnIHZvuBAVylHUorjTLN2jxJOQYFx7nqwbaOsA\n6i/5W4/CYm2NwPb09I4H2Hi8qQQ1PN5WV+Ky3PngE6yZTMRk34b1aV5VLJPf3yoi\nfqaqjX9xIetMvg6DZP0FiPqC66DESaEz1rv5ABEBAAG0EHRlc3RAZXhhbXBsZS5j\nb22JARwEEAECAAYFAlrVHZEACgkQ1A1oULTM9GYCigf9EWVBQwsG6LxmjhZ5bFyx\n8WT3H86tUhMgvmPGZEV/jl7VUG69DcGb2mhevN8F3mM/V+6njREwCmF9qKbY5HJj\npgG46Rsm6UrbZVH23CRnHFsQ7M0inyZ1CrhCyMETZYHpKOs7lIdAHH1q9F8fTIW6\n9KTnSe0LQpiV5tNxg2EJzCNYpvyvTOA0mGbi+XbjQJDGKr1xqfMYBr79Os9N/dGe\ncWrpBoHLAzB07ZC5CxdXo7Z21i+cTlTM/2c4tE9dLth3Yzzw9fqXyRqlrG1K8Bmz\n8LKhIHctewW9a6M7JTp48p7fRZiCir7N9Zj0hq6zry8+FHnkZIvFNOHFcbUrfS2Y\n2g==\n=rNSt\n-----END PGP PUBLIC KEY BLOCK-----",
+    "one last key": "this last value"
+}"""
+
 
 class Probe(object):
     CLIENT_ENV_VAR = "SHOULD_NOT_BE_SET"
@@ -786,16 +806,11 @@ class Probe(object):
     DESIRED_ENVIRONMENT = {
         "MYENV": "hello",
         "EXAMPLE_ENVFROM": "foobar",
-
-        # XXXX
-        # Container method doesn't support multi-line environment variables.
-        # Therefore disable this for all methods or the container tests all
-        # fail...
-        # XXXX
-        # "EX_MULTI_LINE": (
-        #     "first line (no newline before, newline after)\n"
-        #     "second line (newline before and after)\n"
-        # ),
+        "EX_MULTI_LINE": (
+            "first line = (no newline before, newline after)\n"
+            "second line = (newline before and after)\n"
+        ),
+        "EX_JSON_BLOB_FROM_597": _json_blob,
     }
 
     # A resource available from a server running on the Telepresence host

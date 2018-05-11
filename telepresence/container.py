@@ -22,7 +22,6 @@ from typing import List, Callable, Dict, Tuple, Optional
 
 import os
 import os.path
-from tempfile import NamedTemporaryFile
 
 from telepresence import TELEPRESENCE_LOCAL_IMAGE
 from telepresence.cleanup import Subprocesses
@@ -90,8 +89,6 @@ def run_docker_command(
         mounted.
     """
     # Update environment:
-    if mount_dir:
-        remote_env["TELEPRESENCE_ROOT"] = mount_dir
     remote_env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
 
     # Extract --publish flags and add them to the sshuttle container, which is
@@ -126,12 +123,6 @@ def run_docker_command(
         ), make_docker_kill(runner, name)
     )
 
-    # Write out env file:
-    with NamedTemporaryFile("w", delete=False) as envfile:
-        for key, value in remote_env.items():
-            envfile.write("{}={}\n".format(key, value))
-    atexit.register(os.remove, envfile.name)
-
     # Wait for sshuttle to be running:
     while True:
         try:
@@ -162,10 +153,17 @@ def run_docker_command(
     docker_command = docker_runify([
         "--name=" + container_name,
         "--network=container:" + name,
-        "--env-file=" + envfile.name,
     ])
+
+    # Prepare container environment
+    for key in remote_env:
+        docker_command.append("-e={}".format(key))
+    docker_env = os.environ.copy()
+    docker_env.update(remote_env)
+
     if mount_dir:
         docker_command.append("--volume={}:{}".format(mount_dir, mount_dir))
+
     # Don't add --init if the user is doing something with it
     init_args = [
         arg for arg in docker_args
@@ -178,7 +176,8 @@ def run_docker_command(
         docker_command += ["--init"]
     docker_command += docker_args
     span.end()
-    p = Popen(docker_command)
+
+    p = Popen(docker_command, env=docker_env)
 
     def terminate_if_alive():
         runner.write("Shutting down containers...\n")

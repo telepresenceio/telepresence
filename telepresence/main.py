@@ -28,7 +28,7 @@ from telepresence.local import run_local_command
 from telepresence.output import Output
 from telepresence.proxy import start_proxy, connect
 from telepresence.mount import mount_remote
-from telepresence.remote_env import get_remote_env
+from telepresence.remote_env import get_remote_env, write_env_files
 from telepresence.startup import analyze_args
 from telepresence.usage_tracking import call_scout
 
@@ -84,9 +84,13 @@ def main(session):
         # Used by mount_remote
         session.ssh = ssh
         session.remote_info = remote_info
+        session.env = env
 
         # Handle filesystem stuff (pod name, ssh object)
         mount_dir = mount_remote(session)
+
+        # Maybe write environment files
+        write_env_files(session)
 
         # Set up outbound networking (pod name, ssh object)
         # Launch user command with the correct environment (...)

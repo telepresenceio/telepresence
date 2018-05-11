@@ -66,6 +66,34 @@ def test_environment_from_deployment(probe):
             )
         )
 
+        probe_json_env = loads(probe.operation.json_env.read_text())
+        assert (
+            probe.DESIRED_ENVIRONMENT
+            == {
+                k: probe_json_env.get(k, None)
+                for k
+                in probe.DESIRED_ENVIRONMENT
+            }
+        ), (
+            "Probe json env missing some expected items:\n"
+            "Desired: {}\n"
+            "Probed: {}\n".format(
+                probe.DESIRED_ENVIRONMENT,
+                probe_environment,
+            )
+        )
+        assert "TELEPRESENCE_ROOT" in probe_json_env, probe_json_env
+
+        probe_envfile = probe.operation.envfile.read_text()
+        for key, value in probe.DESIRED_ENVIRONMENT.items():
+            report = key, probe_envfile
+            if "\n" in value:
+                assert "{}=".format(key) not in probe_envfile, report
+            else:
+                assert "{}={}\n".format(key, value) in probe_envfile
+        assert "TELEPRESENCE_ROOT=" in probe_envfile, probe_envfile
+
+
     if probe.method.inherits_client_environment():
         # Likewise, make an assertion about client environment being inherited
         # if this method is supposed to do that.

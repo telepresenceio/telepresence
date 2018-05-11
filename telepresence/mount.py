@@ -117,6 +117,7 @@ def mount_remote(session):
             args.method == "container",  # allow all users
             mount_dir,
         )
+        session.env["TELEPRESENCE_ROOT"] = mount_dir
         atexit.register(mount_cleanup)
     else:
         mount_dir = None

@@ -151,9 +151,6 @@ def run_local_command(
     unsupported_tools_path = get_unsupported_tools(args.method != "inject-tcp")
     env["PATH"] = unsupported_tools_path + ":" + env["PATH"]
 
-    if mount_dir:
-        env["TELEPRESENCE_ROOT"] = mount_dir
-
     # Make sure we use "bash", no "/bin/bash", so we get the copied version on
     # OS X:
     if args.run is None:
