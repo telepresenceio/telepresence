@@ -48,6 +48,7 @@ from .utils import (
 )
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
+ENVFILE_PATH = Path("/tmp")
 
 
 def retry(condition, function):
@@ -200,6 +201,8 @@ class _VPNTCPMethod(object):
 class _ExistingDeploymentOperation(object):
     def __init__(self, swap):
         self.swap = swap
+        self.json_env = None  # Filled in below
+        self.envfile = None   # Filled in below
         if swap:
             self.name = "swap"
             self.image = "openshift/hello-openshift"
@@ -263,9 +266,16 @@ class _ExistingDeploymentOperation(object):
             replicas=self.replicas,
         )
 
+        self.json_env = ENVFILE_PATH / (deployment_ident.name + ".json")
+        self.envfile = ENVFILE_PATH / (deployment_ident.name + ".env")
+
 
     def cleanup_deployment(self, deployment_ident):
         _cleanup_deployment(deployment_ident)
+        if self.json_env:
+            self.json_env.unlink()
+        if self.envfile:
+            self.envfile.unlink()
 
 
     def auto_http_servers(self):
@@ -293,6 +303,8 @@ class _ExistingDeploymentOperation(object):
         return [
             "--namespace", deployment_ident.namespace,
             option, deployment_ident.name,
+            "--env-json", str(self.json_env),
+            "--env-file", str(self.envfile),
         ]
 
 
