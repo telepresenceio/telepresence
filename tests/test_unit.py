@@ -104,6 +104,13 @@ spec:
           name: secret-volume
         - mountPath: /etc/nginx/conf.d
           name: configmap-volume
+        lifecycle:
+          postStart:
+            exec:
+              command: ["/bin/sh", "-c", "echo postStart handler"]
+          preStop:
+            exec:
+              command: ["/usr/sbin/nginx","-s","quit"]
 """
 
 SWAPPED_DEPLOYMENT = """\

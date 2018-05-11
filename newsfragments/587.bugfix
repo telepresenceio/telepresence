@@ -1,0 +1,1 @@
+Telepresence avoids running afoul of lifecycle hooks when swapping a deployment.
