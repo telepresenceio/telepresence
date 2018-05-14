@@ -19,6 +19,7 @@ import sys
 from shutil import which
 from typing import Tuple
 
+from telepresence.background import LocalServer
 from telepresence.cleanup import Subprocesses
 from telepresence.container import MAC_LOOPBACK_IP
 from telepresence.deployment import create_new_deployment, \
@@ -128,13 +129,17 @@ def connect(
             cmdline_args.expose.local_to_remote(),
         )
 
+    # Start tunnels for the SOCKS proxy (local -> remote)
+    # and the local server for the proxy to poll (remote -> local).
     socks_port = find_free_port()
-    if cmdline_args.method == "inject-tcp":
-        # start tunnel to remote SOCKS proxy:
-        processes.append(
-            ssh.popen(["-L",
-                       "127.0.0.1:{}:127.0.0.1:9050".format(socks_port)]),
-        )
+    local_server_port = find_free_port()
+    local_server = LocalServer(local_server_port)
+    processes.append(local_server, local_server.kill)
+    forward_args = [
+        "-L127.0.0.1:{}:127.0.0.1:9050".format(socks_port),
+        "-R9055:127.0.0.1:{}".format(local_server_port)
+    ]
+    processes.append(ssh.popen(forward_args))
 
     span.end()
     return processes, socks_port, ssh
@@ -201,7 +206,7 @@ def start_proxy(runner: Runner, args: argparse.Namespace) -> RemoteInfo:
     deployment_type = "deployment"
     if runner.kubectl_cmd == "oc":
         # OpenShift Origin uses DeploymentConfig instead, but for swapping we
-        # mess with RweplicationController instead because mutating DC doesn't
+        # mess with ReplicationController instead because mutating DC doesn't
         # work:
         if args.swap_deployment:
             deployment_type = "rc"
