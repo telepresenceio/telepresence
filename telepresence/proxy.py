@@ -133,7 +133,7 @@ def connect(
     # and the local server for the proxy to poll (remote -> local).
     socks_port = find_free_port()
     local_server_port = find_free_port()
-    local_server = LocalServer(local_server_port)
+    local_server = LocalServer(local_server_port, runner.output)
     processes.append(local_server, local_server.kill)
     forward_args = [
         "-L127.0.0.1:{}:127.0.0.1:9050".format(socks_port),

@@ -43,7 +43,8 @@ class DumbHandler(BaseHTTPRequestHandler):
 class LocalServer(BackgroundBase):
     """Dumb HTTP server for the proxy pod to poll."""
 
-    def __init__(self, port: int) -> None:
+    def __init__(self, port: int, output) -> None:
+        DumbHandler.tel_output = output.write
         self.server = HTTPServer(("127.0.0.1", port), DumbHandler)
         self.thread = Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
