@@ -340,17 +340,17 @@ def _lint():
         "flake8", "--isolated", "local-docker", "k8s-proxy", "telepresence",
         "build"
     )
-    _virtualenv("pylint", "-f", "parseable", "-E", "telepresence", "build")
+    _virtualenv(
+        "pylint", "-f", "parseable", "-E", "local-docker", "k8s-proxy",
+        "telepresence", "build"
+    )
     _virtualenv(
         "mypy", "--strict-optional", "telepresence",
         "local-docker/entrypoint.py", "build"
     )
     # Couldn't figure out how to make this work well, so it's not very useful
     # cause of the skip:
-    _virtualenv(
-        "mypy", "--ignore-missing-imports", "k8s-proxy/forwarder.py",
-        "k8s-proxy/socks.py"
-    )
+    _virtualenv("mypy", "--ignore-missing-imports", "k8s-proxy")
     _virtualenv('telepresence', '--help')
 
 
