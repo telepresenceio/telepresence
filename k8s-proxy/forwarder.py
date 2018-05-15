@@ -1,3 +1,16 @@
+# Copyright 2018 Datawire. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
 SOCKS proxy + DNS repeater.
 
@@ -19,11 +32,9 @@ from twisted.names import dns, server
 
 import socks
 import resolver
+import periodic
 
-
-NAMESPACE_PATH = (
-    "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
-)
+NAMESPACE_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 
 
 def listen(client):
@@ -43,6 +54,7 @@ def main():
             NAMESPACE = f.read()
     telepresence_nameserver = os.environ.get("TELEPRESENCE_NAMESERVER")
     reactor.suggestThreadPoolSize(50)
+    periodic.setup(reactor)
     print("Listening...")
     listen(resolver.LocalResolver(telepresence_nameserver, NAMESPACE))
 
