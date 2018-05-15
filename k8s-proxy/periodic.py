@@ -67,4 +67,4 @@ def setup(reactor):
     """
     poller = Poll(reactor)
     periodic_task = LoopingCall(poller.periodic)
-    periodic_task.start(3, True)
+    periodic_task.start(30, True)
