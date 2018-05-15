@@ -23,10 +23,21 @@ class DumbHandler(BaseHTTPRequestHandler):
     HTTP handler that returns success for any HEAD request
     """
 
+    tel_output = print
+
     def do_HEAD(self) -> None:
         "Handle head"
         self.send_response(200)
         self.end_headers()
+
+    def log_message(self, format: str, *args) -> None:
+        """
+        Make sure log messages go to the right place
+        """
+        message = format % args
+        if message == '"HEAD / HTTP/1.1" 200 -':
+            message = "(proxy checking local liveness)"
+        self.tel_output(message)
 
 
 class LocalServer(BackgroundBase):
