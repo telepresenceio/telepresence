@@ -14,11 +14,25 @@
 
 import atexit
 import sys
+from abc import ABCMeta, abstractmethod
 from subprocess import Popen, TimeoutExpired
 from time import sleep
-from typing import Optional, Callable, Dict
+from typing import Optional, Callable, Dict, Union
 
 from telepresence.runner import Runner
+
+
+class BackgroundBase(metaclass=ABCMeta):
+    """
+    Popen object or some other background task
+    """
+
+    @abstractmethod
+    def poll(self) -> Union[int, None]:
+        pass
+
+
+Background = Union[Popen, BackgroundBase]
 
 
 def kill_process(process: Popen) -> None:
@@ -37,16 +51,17 @@ class Subprocesses(object):
 
     def __init__(self):
         Dict  # Avoid Pyflakes F401
-        self.subprocesses = {}  # type: Dict[Popen, Callable]
+        self.subprocesses = {}  # type: Dict[Background, Callable]
         atexit.register(self.killall)
 
-    def append(self, process: Popen,
+    def append(self, process: Background,
                killer: Optional[Callable] = None) -> None:
         """
         Register another subprocess to be shutdown, with optional callable that
         will kill it.
         """
         if killer is None:
+            assert isinstance(process, Popen), process
 
             def kill():
                 kill_process(process)

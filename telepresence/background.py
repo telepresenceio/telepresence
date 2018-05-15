@@ -15,23 +15,24 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from threading import Thread
 
+from telepresence.cleanup import BackgroundBase
+
 
 class DumbHandler(BaseHTTPRequestHandler):
     """
     HTTP handler that returns success for any HEAD request
     """
 
-    def do_HEAD(self):
+    def do_HEAD(self) -> None:
         "Handle head"
         self.send_response(200)
         self.end_headers()
-        print("blah")
 
 
-class LocalServer(object):
+class LocalServer(BackgroundBase):
     """Dumb HTTP server for the proxy pod to poll."""
 
-    def __init__(self, port: int):
+    def __init__(self, port: int) -> None:
         self.server = HTTPServer(("127.0.0.1", port), DumbHandler)
         self.thread = Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
