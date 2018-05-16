@@ -88,14 +88,13 @@ def get_proxy_cidrs(
     # cloud resources:
     result = set(k8s_resolve(runner, args, remote_info, args.also_proxy))
     result.update(
-        runner.cache.child(args.context).lookup(
-            "podCIDRs", lambda: podCIDRs(runner)
-        )
+        runner.cache.child(args.context
+                           ).lookup("podCIDRs", lambda: podCIDRs(runner))
     )
     result.add(
-        runner.cache.child(args.context).lookup(
-            "serviceCIDR", lambda: serviceCIDR(runner)
-        )
+        runner.cache.child(
+            args.context
+        ).lookup("serviceCIDR", lambda: serviceCIDR(runner))
     )
 
     span.end()

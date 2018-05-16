@@ -115,8 +115,8 @@ def run_docker_command(
         runner.popen(
             docker_runify(
                 publish_args + [
-                    "--rm", "--privileged", "--name=" + name,
-                    TELEPRESENCE_LOCAL_IMAGE, "proxy",
+                    "--rm", "--privileged", "--name=" +
+                    name, TELEPRESENCE_LOCAL_IMAGE, "proxy",
                     json.dumps(config)
                 ]
             )
