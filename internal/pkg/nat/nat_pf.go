@@ -17,7 +17,7 @@ type Translator struct {
 	dev *ppf.Handle
 }
 
-func pf(argline, stdin string) {
+func pf(argline, stdin string) (err error) {
 	args, err := shlex.Split(argline)
 	if err != nil { panic(err) }
 	args = append([]string{}, args...)
@@ -30,7 +30,10 @@ func pf(argline, stdin string) {
 	}
 	if err != nil {
 		log.Println(err)
+		return fmt.Errorf("IN:%s\nOUT:%s\nERR:%s\n", strings.TrimSpace(stdin), strings.TrimSpace(string(out)),
+			err)
 	}
+	return
 }
 
 func (t *Translator) rules() string {
