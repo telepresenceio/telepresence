@@ -1,6 +1,16 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.88 (May 16, 2018)
+
+Features:
+
+* Various points in the Kubernetes stack have timeouts for idle connections.
+  This includes the Kubelet, the API server, or even an ELB that might be in front of everything.
+  Telepresence now avoids those timeouts by periodically sending data through its open connections.
+  In some cases, this will prevent sessions from ending abruptly due to a lost connection.
+  ([#573](https://github.com/datawire/telepresence/issues/573))
+
 #### 0.87 (May 11, 2018)
 
 Features:
