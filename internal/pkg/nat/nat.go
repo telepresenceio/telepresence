@@ -25,7 +25,6 @@ func (e *Entry) String() string {
 	return fmt.Sprintf("%s:%s->%s", e.Destination.Proto, e.Destination.Ip, e.Port)
 }
 
-// XXX: this doesn't appear to work
 func (t *Translator) sorted() []Entry {
 	entries := make([]Entry, len(t.Mappings))
 
