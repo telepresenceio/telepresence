@@ -70,11 +70,14 @@ func (t *Translator) Enable() {
 		err = rule.SetAnchorCall(t.Name)
 		if err != nil { panic(err) }
 		rule.SetAction(action)
+		rule.SetQuick(true)
 		err = t.dev.PrependRule(rule)
 		if err != nil { panic(err) }
 	}
 
 	pf("-a " + t.Name + " -F all", "")
+
+	pf("-f /dev/stdin", "pass on lo0")
 	pf("-a " + t.Name + " -f /dev/stdin", t.rules())
 
 	t.dev.Start()
