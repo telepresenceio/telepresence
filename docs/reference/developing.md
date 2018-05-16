@@ -245,10 +245,13 @@ At the moment, the Linux packages are not tested, other than a minor smoke test.
 
 #### Theory of operation
 
+0. Recreate your Python virtual environment from scratch and re-run the linters.
+   This avoids the frustration of having your release fail in the lint stage in CI, which rebuilds its virtualenv every time.  
+   `rm -r virtualenv && ./build --manage-virtualenv --lint --no-tests`
 1. Make sure `docs/reference/changelog.md` has changelog entries for the next release, and today's release date.
-  If changelog entries are in the `newsfragments` directory, use [towncrier](https://pypi.org/project/towncrier/) to construct the changelog update.
-  towncrier's version management is slightly incompatible with bumpversion; specify the new version explicitly.  
-  `virtualenv/bin/towncrier --version 0.xx`
+   If changelog entries are in the `newsfragments` directory, use [towncrier](https://pypi.org/project/towncrier/) to construct the changelog update.
+   towncrier's version management is slightly incompatible with bumpversion; specify the new version explicitly.  
+   `virtualenv/bin/towncrier --version 0.xx`
 2. Use [bumpversion](https://pypi.org/project/bumpversion/) to increase the version in relevant files and then commit a new git tag with the new version.
    See `.bumpversion.cfg` for the configuration.  
    `virtualenv/bin/bumpversion --list minor`
