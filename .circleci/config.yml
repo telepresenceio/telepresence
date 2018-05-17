@@ -164,6 +164,10 @@ jobs:
           command: |
             ./build --circle
 
+      - store_test_results:
+          # https://circleci.com/docs/2.0/collect-test-data/#pytest
+          path: test-reports
+
       - run:
           # We can do this at the end of the Linux build because it has a
           # time-based condition for what it cleans up.  It won't get in the

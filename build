@@ -60,7 +60,7 @@ def main():
         version_suffix = ""
         lint = False
         build_and_push = False
-        test_args = []
+        test_args = ["--junitxml=test-reports/junit.xml"]
         test_env = {
             # Magic incantation to make kubectl work, because apparently
             # gcloud can't do that correctly (see
