@@ -13,8 +13,12 @@ run-tests:
 test-go: get run-tests
 
 test-docker:
-	docker build -f scripts/Dockerfile . -t teleproxy-make
-	docker run --cap-add=NET_ADMIN teleproxy-make run-tests
+	@if [[ "$(shell which docker)-no" != "-no" ]]; then \
+		docker build -f scripts/Dockerfile . -t teleproxy-make && \
+		docker run --cap-add=NET_ADMIN teleproxy-make run-tests ; \
+	else \
+		echo "SKIPPING DOCKER TESTS" ; \
+	fi
 
 test: test-go test-docker
 
