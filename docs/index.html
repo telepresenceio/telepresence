@@ -6,7 +6,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <title>Telepresence - Telepresence</title>
+    <title>Home - Telepresence</title>
     <meta name="description" content="Telepresence: a local development environment for a remote Kubernetes cluster">
     <meta name="keywords" content="Telepresence, Kubernetes, microservices">
     <meta name="author" content="Datawire.io">
@@ -37,26 +37,41 @@
                   height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 <!-- End Google Tag Manager (noscript) -->
 <header class="white-bg">
-    <a class="datawire-link" target="_blank" href="https://www.datawire.io">
-        <img alt="Datawire" src="/images/datawire-logo.svg">
-    </a>
-    <ul class="main-navigation">
-        <li>
-            <a href="/tutorials/docker">Get Started</a>
-        </li>
-        <li>
-            <a href="/discussion/overview">Docs</a>
-        </li>
-        <li>
-            <a href="/case-studies">Case Studies</a>
-        </li>
-        <li>
-            <a target="_blank" href="https://github.com/datawire/telepresence">GitHub</a>
-        </li>
-        <li>
-            <a target="_blank" href="https://gitter.im/datawire/telepresence">Need Help?</a>
-        </li>
-    </ul>
+    <div class="navigation-left">
+        <a class="datawire-link" href="/">
+            <img alt="Telepresence" src="/images/telepresence-logo.png">
+        </a>
+        <ul class="main-navigation">
+            <li>
+                <a href="/tutorials/docker">Get Started</a>
+            </li>
+            <li>
+                <a href="/discussion/overview">Docs</a>
+            </li>
+            <li>
+                <a href="/case-studies">Case Studies</a>
+            </li>
+            <li>
+                <a href="/about">About</a>
+            </li>
+            <li>
+                <a target="_blank" href="https://github.com/datawire/telepresence">GitHub</a>
+            </li>
+        </ul>
+    </div>
+    <div class="navigation-right">
+        <ul class="main-navigation right">
+            <li>
+                <div class="dropdown">
+                    <button class="dropbtn">▾ Need Help?</button>
+                    <div class="dropdown-content">
+                        <a target="_blank" href="https://gitter.im/datawire/telepresence">Community Gitter</a>
+                        <a target="_blank" href="https://www.datawire.io/pricing">Enterprise Support</a>
+                    </div>
+                </div>
+            </li>
+        </ul>
+    </div>
 </header>
 <section id="hero" class="bg-white text-center">
     <h1 class="text-uppercase text-xl">Telepresence</h1>
@@ -226,9 +241,12 @@
             </div>
         </div>
         <div class="sponsored-by text-center">
-            <a href="https://datawire.io" target="_blank">
-                <img class="datawire-logo" alt="Datawire" src="/images/datawire-logo.svg">
-            </a>
+            <div class="cncf">
+                <img class="cncf-logo" alt="Cloud Native Computing Foundation" src="https://d33wubrfki0l68.cloudfront.net/ea0d91fac8683c38ea9a1fb8a4e9914627ac6aae/8efa9/img/logos/cloud-native-computing.svg">
+                <p class="text-md">
+                    Telepresence is a <a href="https://www.cncf.io">Cloud Native Computing Foundation</a> sandbox project
+                </p>
+            </div>
             <p class="text-md">
                 Built by <a href="https://datawire.io" target="_blank">Datawire</a>, helping you build an amazing
                 development workflow on Kubernetes
@@ -248,10 +266,13 @@
             <a href="/case-studies">Case Studies</a>
         </li>
         <li>
+            <a href="/about">About</a>
+        </li>
+        <li>
             <a target="_blank" href="https://github.com/datawire/telepresence">GitHub</a>
         </li>
         <li>
-            <a target="_blank" href="https://gitter.im/datawire/telepresence">Need Help?</a>
+            <a target="_blank" href="https://gitter.im/datawire/telepresence">Gitter</a>
         </li>
     </ul>
 </footer>

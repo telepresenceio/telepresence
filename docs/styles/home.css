@@ -252,25 +252,63 @@ h1, h2, h3, h4, h5, h6, strong {
     }
 }
 
+header {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
+@media screen and (min-width: 768px) {
+    header {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 35px;
+    }
+}
+
+.navigation-right {
+    display: flex;
+    flex-direction: column;
+}
+@media screen and (min-width: 768px) {
+    .navigation-right {
+        align-items: flex-end;
+    }
+}
+
 .main-navigation {
     display: flex;
     padding: 10px 5px;
+    flex-wrap: wrap;
+    flex-direction: column;
 }
+
 @media screen and (min-width: 768px) {
     .main-navigation {
         padding: 0 30px;
+        flex-direction: row;
+    }
+
+    .main-navigation.right {
+        justify-content: flex-end;
+        margin-right: 10px;
     }
 }
+
 .main-navigation li a {
     margin: 0 10px;
     color: #222222;
     text-decoration: none;
     text-transform: uppercase;
+    line-height: 35px;
 }
+
 @media screen and (min-width: 768px) {
     .main-navigation li a {
         font-size: 1.125em;
         font-weight: bold;
+        line-height: 1;
     }
 }
 
@@ -278,10 +316,57 @@ h1, h2, h3, h4, h5, h6, strong {
     text-decoration: underline;
 }
 
-.right-nav {
-    padding: 20px;
-    text-align: center;
+.main-navigation li .dropbtn {
+    color: #222222;
+    border: none;
+    cursor: pointer;
+    text-transform: uppercase;
+    padding: 0;
+    font-size: 16px;
+    display: none;
 }
+@media screen and (min-width: 768px) {
+    .main-navigation li .dropbtn {
+        font-size: 1.125em;
+        font-weight: bold;
+        line-height: 1;
+        display: block;
+    }
+}
+
+.main-navigation .dropdown {
+    position: relative;
+    display: inline-block;
+    font-size: 15px;
+}
+
+@media screen and (min-width: 768px) {
+    .main-navigation .dropdown-content {
+        display: none;
+        position: absolute;
+        right: 0;
+        background-color: white;
+        min-width: 200px;
+        box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2);
+        z-index: 1;
+        border: 1px solid #E2E2E2;
+    }
+}
+
+.main-navigation .dropdown-content a {
+    color: black;
+    padding: 12px 16px;
+    line-height: 25px;
+    text-decoration: none;
+    display: block;
+    font-weight: normal;
+    font-size: 1em;
+}
+
+.main-navigation .dropdown:hover .dropdown-content {
+    display: block;
+}
+
 
 #hero {
     padding: 45px 20px;
@@ -548,9 +633,15 @@ h1, h2, h3, h4, h5, h6, strong {
 .sponsored-by {
     padding: 130px 0 45px;
 }
-.sponsored-by img.datawire-logo {
+.sponsored-by img.cncf-logo {
+    max-width: 300px;
     margin-bottom: 25px;
 }
+
+.cncf {
+    margin-bottom: 75px;
+}
+
 
 footer {
     padding: 30px 0;
@@ -752,4 +843,10 @@ footer {
 .page-title h1 {
     font-size: 42px;
     line-height: 55px;
+}
+
+#about-page p {
+    font-size: 17px;
+    line-height: 26px;
+    padding-bottom: 20px;
 }
