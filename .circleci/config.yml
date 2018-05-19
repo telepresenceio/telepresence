@@ -241,3 +241,7 @@ jobs:
           name: "run tests"
           command: |
             ./build --circle
+
+      - store_test_results:
+          # https://circleci.com/docs/2.0/collect-test-data/#pytest
+          path: test-reports
