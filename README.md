@@ -1,6 +1,6 @@
 # [Documentation](https://telepresence.io) - start here!
 
-[![Build Status](https://circleci.com/gh/datawire/telepresence.svg?style=shield)](https://circleci.com/gh/datawire/workflows)
+[![Build Status](https://circleci.com/gh/telepresenceio/telepresence.svg?style=shield)](https://circleci.com/gh/telepresenceio/workflows)
 [![Join the chat at https://gitter.im/datawire/telepresence](https://badges.gitter.im/datawire/telepresence.svg)](https://gitter.im/datawire/telepresence?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 ## Demo
