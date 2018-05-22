@@ -28,4 +28,4 @@ For more about Telepresence, and the various options, [read the documentation](h
 
 ## About Telepresence
 
-Telepresence is an open source project by [Datawire](https://www.datawire.io), and licensed under the Apache 2.0 License.
+Telepresence is an open source project hosted by the [Cloud Native Computing Foundation](https://www.cncf.io) and originally created by [Datawire](https://www.datawire.io). Telepresence is licensed under the Apache 2.0 License.
