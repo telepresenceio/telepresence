@@ -307,7 +307,7 @@ def _setup_virtualenv():
     rmtree("virtualenv", ignore_errors=True)
     _run("virtualenv", "--python=python3", "virtualenv")
     _pip("--version")
-    _pip("install", "flake8", "pex", "enum34")
+    _pip("install", "flake8")
     _pip("install", "-r", "dev-requirements.txt")
     _pip("install", "-r", "k8s-proxy/requirements.txt")
     _pip(
