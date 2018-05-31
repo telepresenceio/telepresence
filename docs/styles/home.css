@@ -376,7 +376,7 @@ header {
 }
 #hero img {
     max-width: 100%;
-    margin: 0 auto;
+    margin: 25px auto 0;
 }
 #hero .btn {
     margin-top: 30px;
