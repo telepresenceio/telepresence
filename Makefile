@@ -14,7 +14,7 @@
 
 .PHONY: default version registry format lint unit e2e help
 
-VERSION=$(shell python3 setup.py --version)${TELEPRESENCE_VER_SUFFIX}
+VERSION=$(shell git describe --tags)${TELEPRESENCE_VER_SUFFIX}
 TELEPRESENCE_REGISTRY?=${USER}
 SHELL:=/bin/bash
 
