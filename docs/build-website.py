@@ -16,15 +16,31 @@ def main():
     out = docs / "_book"
     shutil.rmtree(out, ignore_errors=True)
 
-    # Grab the current version in the standard Python way
-    version_cp = subprocess.run(
-        #["python3", "setup.py", "--version"],
-        ["python3", "-c", "import telepresence; print(telepresence.__version__)"],
-        cwd=str(project),
-        check=True,
-        stdout=subprocess.PIPE,
+    # Grab the current version in some way.
+    # Netlify's Python setup makes this harder than it should be...
+    version_commands = (
+        ["python3", "-Wignore", "setup.py", "--version"],
+        [
+            "python3", "-c",
+            "import telepresence; print(telepresence.__version__)"
+        ],
+        ["make", "version"],
+        ["git", "describe", "--tags"],
     )
-    version = str(version_cp.stdout, "utf-8").strip()
+    for cmd in version_commands:
+        try:
+            version_cp = subprocess.run(
+                cmd,
+                cwd=str(project),
+                check=True,
+                stdout=subprocess.PIPE,
+            )
+        except (subprocess.CalledProcessError, OSError):
+            continue
+        version = str(version_cp.stdout, "utf-8").strip()
+        break
+    else:
+        raise RuntimeError("Failed to determine version number")
 
     # Build book.json, substituting the current version into the template
     book_json = (docs / "book.json.in").read_text()
