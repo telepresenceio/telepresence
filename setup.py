@@ -6,6 +6,8 @@ import os
 import re
 from setuptools import setup
 
+import versioneer
+
 
 def get_version(filename="telepresence/__init__.py"):
     """Parse out version info"""
@@ -19,7 +21,8 @@ def get_version(filename="telepresence/__init__.py"):
 
 setup(
     name="telepresence",
-    version=get_version(),
+    version=versioneer.get_version(),
+    cmdclass=versioneer.get_cmdclass(),
     description=__doc__,
     packages=["telepresence"],
     entry_points={
