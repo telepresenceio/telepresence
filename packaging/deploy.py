@@ -104,6 +104,12 @@ def main():
         rmtree(str(DIST))
     DIST.mkdir(parents=True)
     version = get_version()
+    release = "+" not in version # Is this a release version?
+    if not release:
+        # FIXME: Non-release versions should still yield... something.
+        print("Version {} is not a release version".format(version))
+        return
+
     emit_release_info(version)
     emit_announcement(version)
     emit_machinery()
