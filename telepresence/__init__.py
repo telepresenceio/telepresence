@@ -24,7 +24,7 @@ del get_versions
 
 # Use the most recent released image version. Override below:
 try:
-    image_version = __version__[:__version__.index("+")]
+    image_version = __version__[:__version__.index("-")]
 except ValueError:
     image_version = __version__
 
