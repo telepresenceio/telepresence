@@ -18,7 +18,8 @@ def main():
 
     # Grab the current version in the standard Python way
     version_cp = subprocess.run(
-        ["python3", "setup.py", "--version"],
+        #["python3", "setup.py", "--version"],
+        ["python3", "-c", "import telepresence; print(telepresence.__version__)"],
         cwd=str(project),
         check=True,
         stdout=subprocess.PIPE,
