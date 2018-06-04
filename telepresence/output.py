@@ -18,7 +18,7 @@ import sys
 from time import time as curtime, ctime
 from typing import TextIO
 
-from telepresence import __version__
+from telepresence import __version__, image_version, version_override
 from telepresence.utilities import str_command
 
 
@@ -65,6 +65,10 @@ class Output(object):
             "Telepresence {} launched at {}".format(__version__, ctime())
         )
         self.write("  {}".format(str_command(sys.argv)))
+        if version_override:
+            self.write("  TELEPRESENCE_VERSION is {}".format(image_version))
+        elif image_version != __version__:
+            self.write("  Using images version {} (dev)".format(image_version))
 
     def write(self, message: str, prefix="TEL") -> None:
         """Write a message to the log."""

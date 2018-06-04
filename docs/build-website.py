@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import json
 import re
 import shutil
 import subprocess
@@ -12,13 +11,41 @@ def main():
     "Build the website"
 
     # Source and output directories
-    docs = Path(__file__).parent.resolve()
+    project = Path(__file__).absolute().resolve().parent.parent
+    docs = project / "docs"
     out = docs / "_book"
     shutil.rmtree(out, ignore_errors=True)
 
-    # Grab the current version number from book.json
-    book = json.load((docs / "book.json").open())
-    version = book["variables"]["version"]
+    # Grab the current version in some way.
+    # Netlify's Python setup makes this harder than it should be...
+    version_commands = (
+        ["python3", "-Wignore", "setup.py", "--version"],
+        [
+            "python3", "-c",
+            "import telepresence; print(telepresence.__version__)"
+        ],
+        ["make", "version"],
+        ["git", "describe", "--tags"],
+    )
+    for cmd in version_commands:
+        try:
+            version_cp = subprocess.run(
+                cmd,
+                cwd=str(project),
+                check=True,
+                stdout=subprocess.PIPE,
+            )
+        except (subprocess.CalledProcessError, OSError):
+            continue
+        version = str(version_cp.stdout, "utf-8").strip()
+        break
+    else:
+        raise RuntimeError("Failed to determine version number")
+
+    # Build book.json, substituting the current version into the template
+    book_json = (docs / "book.json.in").read_text()
+    book_json = book_json.replace("{{ VERSION }}", version)
+    (docs / "book.json").write_text(book_json)
 
     # Run GitBook
     shutil.rmtree(docs / "node_modules", ignore_errors=True)
@@ -47,9 +74,6 @@ def main():
     landing_page = (docs / "index.html").read_text()
     landing_page = landing_page.replace("{{ VERSION }}", version)
     (out / "index.html").write_text(landing_page)
-
-    # Drop extra files copied by GitBook
-    (out / "build-website.py").unlink()
 
 
 if __name__ == "__main__":

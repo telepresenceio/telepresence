@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-.PHONY: default version registry lint unit e2e bumpversion help
+.PHONY: default version registry format lint unit e2e help
 
 VERSION=$(shell git describe --tags)${TELEPRESENCE_VER_SUFFIX}
 TELEPRESENCE_REGISTRY?=${USER}
@@ -47,15 +47,6 @@ unit:  ## Run the unit tests
 
 e2e:  ## Run the end-to-end tests
 	./build --registry $(TELEPRESENCE_REGISTRY) -- -x -k "endtoend"
-
-
-## Release ##
-
-# This is run by developer and triggers release process in CI:
-bumpversion:  ## Increment version number and commit
-bumpversion: virtualenv
-	virtualenv/bin/bumpversion --list minor
-	@echo "Please run: git push origin master --tags"
 
 ## Help - https://gist.github.com/prwhite/8168133#gistcomment-1737630
 

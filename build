@@ -338,11 +338,11 @@ def _lint():
     _virtualenv("yapf", "-dr", "telepresence", "build")
     _virtualenv(
         "flake8", "--isolated", "local-docker", "k8s-proxy", "telepresence",
-        "build"
+        "build", "setup.py"
     )
     _virtualenv(
         "pylint", "-f", "parseable", "-E", "local-docker", "k8s-proxy",
-        "telepresence", "build"
+        "telepresence", "build", "setup.py"
     )
     _virtualenv(
         "mypy", "--strict-optional", "telepresence",

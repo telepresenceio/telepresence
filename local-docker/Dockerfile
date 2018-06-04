@@ -5,7 +5,7 @@ RUN apk add --no-cache python3 openssh-client iptables tini conntrack-tools git 
     pip3 install git+https://github.com/datawire/sshuttle.git@telepresence && \
     apk del --no-cache -r git
 
-COPY setup.py /tmp/build/
+COPY setup.* versioneer.py /tmp/build/
 COPY telepresence /tmp/build/telepresence
 COPY local-docker/entrypoint.py /usr/bin/
 RUN pip3 install /tmp/build && chmod +x /usr/bin/entrypoint.py
