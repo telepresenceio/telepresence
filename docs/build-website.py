@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import json
 import re
 import shutil
 import subprocess
@@ -12,13 +11,24 @@ def main():
     "Build the website"
 
     # Source and output directories
-    docs = Path(__file__).parent.resolve()
+    project = Path(__file__).absolute().resolve().parent.parent
+    docs = project / "docs"
     out = docs / "_book"
     shutil.rmtree(out, ignore_errors=True)
 
-    # Grab the current version number from book.json
-    book = json.load((docs / "book.json").open())
-    version = book["variables"]["version"]
+    # Grab the current version in the standard Python way
+    version_cp = subprocess.run(
+        ["python3", "setup.py", "--version"],
+        cwd=str(project),
+        check=True,
+        stdout=subprocess.PIPE,
+    )
+    version = str(version_cp.stdout, "utf-8").strip()
+
+    # Build book.json, substituting the current version into the template
+    book_json = (docs / "book.json.in").read_text()
+    book_json = book_json.replace("{{ VERSION }}", version)
+    (docs / "book.json").write_text(book_json)
 
     # Run GitBook
     shutil.rmtree(docs / "node_modules", ignore_errors=True)

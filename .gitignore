@@ -18,7 +18,7 @@ gcloud-service-key.json
 .vscode
 
 # --- Docs ---
-=======
+docs/book.json
 docs/_book
 docs/node_modules/
 .netlify
