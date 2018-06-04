@@ -48,9 +48,6 @@ def main():
     landing_page = landing_page.replace("{{ VERSION }}", version)
     (out / "index.html").write_text(landing_page)
 
-    # Drop extra files copied by GitBook
-    (out / "build-website.py").unlink()
-
 
 if __name__ == "__main__":
     main()
