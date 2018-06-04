@@ -8,6 +8,7 @@ import json
 
 from pathlib import Path
 from shutil import rmtree
+import subprocess
 
 import package_linux
 
@@ -17,15 +18,12 @@ VENV_BIN = PROJECT / "virtualenv" / "bin"
 
 
 def get_version():
-    """Retrieve the current version number"""
-    cfg = PROJECT / ".bumpversion.cfg"
-    for line in cfg.open():
-        if line.startswith("current_version = "):
-            current = line.split(" = ", 1)[1]
-            break
-    else:
-        exit("Could not find version number in {}".format(cfg))
-    return current.strip()
+    """Retrieve the current version number in the standard Python way"""
+    version_bytes = subprocess.check_output(
+        ["python3", "setup.py", "--version"], cwd=str(PROJECT)
+    )
+    version = str(version_bytes, "utf-8").strip()
+    return version
 
 
 _S3_UPLOADER = """#!/bin/bash
