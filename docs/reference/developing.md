@@ -250,11 +250,13 @@ At the moment, the Linux packages are not tested, other than a minor smoke test.
    `rm -r virtualenv && ./build --manage-virtualenv --lint --no-tests`
 1. Make sure `docs/reference/changelog.md` has changelog entries for the next release, and today's release date.
    If changelog entries are in the `newsfragments` directory, use [towncrier](https://pypi.org/project/towncrier/) to construct the changelog update.
-   towncrier's version management is slightly incompatible with bumpversion; specify the new version explicitly.  
-   `virtualenv/bin/towncrier --version 0.xx`
-2. Use [bumpversion](https://pypi.org/project/bumpversion/) to increase the version in relevant files and then commit a new git tag with the new version.
-   See `.bumpversion.cfg` for the configuration.  
-   `virtualenv/bin/bumpversion --list minor`
+   towncrier's version management is incompatible with the rest of the universe; specify the new version explicitly.
+   Make sure to commit your changes.  
+   `virtualenv/bin/towncrier --version 0.xx`  
+   `# Edit the change log`  
+   `git commit docs/reference/changelog.md`
+2. Mark the new version number for Telepresence by tagging in Git.  
+   `git tag 0.xx`
 3. Push the new commit and tag to GitHub.  
    `git push origin master --tags`
 4. Wait for [CircleCI](https://circleci.com/gh/datawire/workflows/telepresence/tree/master) to finish.
