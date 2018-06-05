@@ -42,6 +42,10 @@ def main():
     else:
         raise RuntimeError("Failed to determine version number")
 
+    # Try to roll back unreleased version number to prior release number
+    if "-" in version:
+        version = version[:version.index("-")]
+
     # Build book.json, substituting the current version into the template
     book_json = (docs / "book.json.in").read_text()
     book_json = book_json.replace("{{ VERSION }}", version)
