@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# Install Telepresence in ${PREFIX}/share/telepresence,
-# binaries in ${PREFIX}/bin.
+# Install Telepresence binaries in ${PREFIX}/bin.
 
 set -o errexit
 set -o pipefail
@@ -11,25 +10,25 @@ set -o nounset
 echo "Installing Telepresence in ${PREFIX}"
 
 SRCDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-DATADIR="${DATADIR:-${PREFIX}/share/telepresence}"
-VENVDIR="${VENVDIR:-${DATADIR}/libexec}"
 BINDIR="${BINDIR:-${PREFIX}/bin}"
 
-# Create a virtualenv and install into it
-python3 -m venv "${VENVDIR}"
-"${VENVDIR}/bin/pip" -q install "git+https://github.com/datawire/sshuttle.git@telepresence"
-"${VENVDIR}/bin/pip" -q install "${SRCDIR}"
+# Setup
+BLDDIR=$(mktemp -d)
+trap "rm -rf $BLDDIR" EXIT
+DIST="${BLDDIR}/dist"
+mkdir -p "${DIST}"
 
-# Remove unnecessary packages and wheels
-"${VENVDIR}/bin/pip" -q uninstall -y pip
-rm -rf "${VENVDIR}/share"
+# Build executables in dist
+cd "${SRCDIR}"
+python3 packaging/build-telepresence.py "${DIST}/telepresence"
+python3 packaging/build-sshuttle.py "${DIST}/sshuttle-telepresence"
 
 # Place binaries
 install -d "${BINDIR}"
 install \
- "${VENVDIR}/bin/sshuttle-telepresence" \
- "${VENVDIR}/bin/telepresence" \
- "${BINDIR}"
+    "${DIST}/sshuttle-telepresence" \
+    "${DIST}/telepresence" \
+    "${BINDIR}"
 
 # Make sure things appear to run
 VERSION=$("${BINDIR}/telepresence" --version)
