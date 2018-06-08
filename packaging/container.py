@@ -37,9 +37,10 @@ def str_command(args: List[str]) -> str:
 class Container(object):
     """
     Run commands in a container
+    FIXME: This should be a context manager
     """
 
-    def __init__(self, image: str, verbose=True):
+    def __init__(self, image: str, verbose=True) -> None:
         self.image = image
         self.container = None
         self.verbose = verbose
@@ -49,7 +50,7 @@ class Container(object):
             return
         self._run(["docker", "kill", self.container])
 
-    def _run(self, *args, **kwargs):
+    def _run(self, *args, **kwargs) -> str:
         "Run a command"
         if self.verbose:
             cmd = str_command(args[0])
@@ -70,15 +71,15 @@ class Container(object):
             res = self._run(docker + [self.image] + infinite)
             self.container = res.strip()
 
-    def execute(self, args: List[str], cwd="/"):
+    def execute(self, args: List[str], cwd="/") -> str:
         "Run a command in the container"
         self.launch()
         cmd = ["docker", "exec", "-w", cwd, self.container] + args
-        self._run(cmd)
+        return self._run(cmd)
 
-    def execute_sh(self, command: str, **kwargs):
+    def execute_sh(self, command: str, **kwargs) -> str:
         "Run a command passed as a string"
-        self.execute(shlex.split(command), **kwargs)
+        return self.execute(shlex.split(command), **kwargs)
 
     def copy_from(self, source: str, target: str):
         "Copy files from the container"
