@@ -78,6 +78,7 @@ jobs:
     steps:
       # https://circleci.com/docs/2.0/building-docker-images/
       - setup_remote_docker:
+          version: 17.11.0-ce
           docker_layer_caching: true
 
       - "checkout"
