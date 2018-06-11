@@ -42,12 +42,14 @@ class Container(object):
 
     def __init__(self, image: str, verbose=True) -> None:
         self.image = image
-        self.container = None
         self.verbose = verbose
+        self.container = "CNTNR"
+        docker = "docker run --rm -d".split()
+        infinite = "tail -f /dev/null".split()
+        res = self._run(docker + [self.image] + infinite)
+        self.container = res.strip()
 
     def __del__(self):
-        if not self.container:
-            return
         self._run(["docker", "kill", self.container])
 
     def _run(self, *args, **kwargs) -> str:
@@ -63,17 +65,8 @@ class Container(object):
             print(res.rstrip())
         return res
 
-    def launch(self):
-        "Launch the container"
-        if not self.container:
-            docker = "docker run --rm -d".split()
-            infinite = "tail -f /dev/null".split()
-            res = self._run(docker + [self.image] + infinite)
-            self.container = res.strip()
-
     def execute(self, args: List[str], cwd="/") -> str:
         "Run a command in the container"
-        self.launch()
         cmd = ["docker", "exec", "-w", cwd, self.container] + args
         return self._run(cmd)
 
@@ -83,12 +76,10 @@ class Container(object):
 
     def copy_from(self, source: str, target: str):
         "Copy files from the container"
-        self.launch()
         args = ["docker", "cp", "{}:{}".format(self.container, source), target]
         self._run(args)
 
     def copy_to(self, source: str, target: str):
         "Copy files to the container"
-        self.launch()
         args = ["docker", "cp", source, "{}:{}".format(self.container, target)]
         self._run(args)
