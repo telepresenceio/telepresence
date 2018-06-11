@@ -1,6 +1,22 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.89 (June 11, 2018)
+
+Bug fixes:
+
+* When launching the user's container (when using the container method), if the `docker` command requires `sudo`, Telepresence now uses `sudo -E` to ensure that environment variables get passed through to the container.
+  This fixes a regression caused by the [fix for multi-line environment variables (#301)](https://github.com/telepresenceio/telepresence/issues/301).
+  ([#672](https://github.com/datawire/telepresence/issues/672))
+
+Misc:
+
+* Version number handling has been simplified.
+  ([#641](https://github.com/datawire/telepresence/issues/641))
+* Linux packaging has been simplified.
+  ([#643](https://github.com/telepresenceio/telepresence/issues/643))
+
+
 #### 0.88 (May 16, 2018)
 
 Features:
