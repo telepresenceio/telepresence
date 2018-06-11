@@ -1,0 +1,1 @@
+When launching the user's container (when using the container method), if the `docker` command requires `sudo`, Telepresence now uses `sudo -E` to ensure that environment variables get passed through to the container. This fixes a regression caused by the fix for multi-line environment variables ([#301](https://github.com/telepresenceio/telepresence/issues/301)).
