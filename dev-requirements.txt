@@ -1,5 +1,4 @@
 flake8
-autoflake
 hypothesis
 mypy
 pytest
@@ -7,7 +6,5 @@ pytest-xdist
 pytest-timeout
 pyyaml
 yapf
-astroid==1.6.1
 pylint
-pex
 towncrier

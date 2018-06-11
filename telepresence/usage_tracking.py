@@ -114,9 +114,9 @@ def call_scout(session):
     args = session.args
     kube_info = session.kube_info
 
-    config_root = Path.home() / ".config" / "telepresence"
+    config_root = Path(Path.home() / ".config" / "telepresence")
     config_root.mkdir(parents=True, exist_ok=True)
-    id_file = config_root / 'id'
+    id_file = Path(config_root / "id")
 
     if args.deployment:
         operation = "deployment"

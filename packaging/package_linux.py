@@ -133,7 +133,7 @@ def main(version):
         rel_package = package.relative_to(DIST)
         uploads.extend(get_upload_commands(system, release, rel_package))
 
-    upload_script = DIST / "upload_linux_packages.sh"
+    upload_script = Path(DIST / "upload_linux_packages.sh")
     with upload_script.open("w") as f:
         f.write("#!/bin/sh\n\n")
         f.write("set -e\n\n")
