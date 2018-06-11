@@ -40,10 +40,12 @@ SUDO_FOR_DOCKER = os.path.exists("/var/run/docker.sock") and not os.access(
 )
 
 
-def docker_runify(args: List[str]) -> List[str]:
+def docker_runify(args: List[str], env=False) -> List[str]:
     """Prepend 'docker run' to a list of arguments."""
     args = ['docker', 'run'] + args
     if SUDO_FOR_DOCKER:
+        if env:
+            return ["sudo", "-E"] + args
         return ["sudo"] + args
     else:
         return args
@@ -153,7 +155,8 @@ def run_docker_command(
     docker_command = docker_runify([
         "--name=" + container_name,
         "--network=container:" + name,
-    ])
+    ],
+                                   env=True)
 
     # Prepare container environment
     for key in remote_env:
