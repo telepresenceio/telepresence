@@ -14,7 +14,7 @@
 
 import shlex
 from subprocess import check_output
-from typing import List
+from typing import List, Optional
 
 
 # Copy-pasta from telepresence.utilities
@@ -65,14 +65,22 @@ class Container(object):
             print(res.rstrip())
         return res
 
-    def execute(self, args: List[str], cwd="/") -> str:
+    def execute(self, args: List[str], cwd: Optional[str] = None) -> str:
         "Run a command in the container"
-        cmd = ["docker", "exec", "-w", cwd, self.container] + args
+        if cwd:
+            command = " ".join(shlex.quote(arg) for arg in args)
+            args = [
+                "sh", "-c", "cd {} && {}".format(shlex.quote(cwd), command)
+            ]
+        cmd = ["docker", "exec", self.container] + args
         return self._run(cmd)
 
-    def execute_sh(self, command: str, **kwargs) -> str:
+    def execute_sh(self, command: str, cwd: Optional[str] = None) -> str:
         "Run a command passed as a string"
-        return self.execute(shlex.split(command), **kwargs)
+        if cwd:
+            command = "cd {} && {}".format(shlex.quote(cwd), command)
+        cmd = ["docker", "exec", self.container, "sh", "-c", command]
+        return self._run(cmd)
 
     def copy_from(self, source: str, target: str):
         "Copy files from the container"
