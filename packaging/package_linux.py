@@ -1,4 +1,17 @@
 #!/usr/bin/env python3
+# Copyright 2018 Datawire. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
 Create Ubuntu and Fedora packages in dist.
 
@@ -7,10 +20,10 @@ create-linux-packages.py <release-version>
 """
 
 import sys
-from shutil import rmtree
-from subprocess import run
 from pathlib import Path
+from typing import List
 
+from container import Container
 from distros import distros
 
 THIS_DIRECTORY = Path(__file__).absolute().resolve().parent
@@ -28,48 +41,65 @@ def show_banner(text, char="=", width=79):
     print("\n" + res + "\n")
 
 
-def build_package(builder_image, package_type, version, out_dir, dependencies):
+def prep_to_build() -> Container:
     """
-    Build a deb or RPM package using a fpm-within-docker Docker image.
-
-    :param package_type str: "rpm" or "deb".
-    :param version str: The package version.
-    :param out_dir Path: Directory where package will be output.
-    :param dependencies list: package names the resulting package should depend
-        on.
+    Prepare container to build packages
     """
-    run([
-        "docker", "run", "--rm", "-e", "PACKAGE_VERSION=" + version, "-e",
-        "PACKAGE_TYPE=" + package_type, "-v",
-        "{}:/build-inside:ro".format(THIS_DIRECTORY), "-v",
-        "{}:/source:ro".format(THIS_DIRECTORY.parent), "-v",
-        str(out_dir) + ":/out", "-w", "/build-inside", builder_image,
-        "/build-inside/build-package.sh", *dependencies
-    ],
-        check=True)
+    con = Container("alpine")
+    con.execute_sh("apk update -q")
+    con.execute_sh("apk add -q alpine-sdk dpkg-dev rpm-dev ruby ruby-dev")
+    con.execute_sh("gem install -q --no-ri --no-rdoc fpm")
+    con.copy_to(str(DIST / "telepresence"), "/usr/bin")
+    con.copy_to(str(DIST / "sshuttle-telepresence"), "/usr/bin")
+    return con
 
 
-def test_package(distro_image, package_directory, install_command):
+def build_package(
+    con: Container, name: str, version: str, dependencies: List[str],
+    package_type: str
+) -> str:
+    """
+    Build a package in the prepared build container
+    """
+    fpm_header = [
+        "fpm",
+        "--name=telepresence",
+        "--version={}".format(version),
+        "--description=Local development for a remote Kubernetes cluster.",
+        "--input-type=dir",
+    ]
+    fpm_deps = ["--depends={}".format(dep) for dep in dependencies]
+    fpm_type = ["--output-type={}".format(package_type)]
+    fpm_trailer = [
+        "/usr/bin/sshuttle-telepresence",
+        "/usr/bin/telepresence",
+    ]
+    target_path = DIST / name
+    target_path.mkdir()
+
+    pkg_dir = "/" + name
+    con.execute_sh("mkdir {}".format(pkg_dir))
+    con.execute(fpm_header + fpm_deps + fpm_type + fpm_trailer, cwd=pkg_dir)
+    pkg_name = con.execute_sh("ls", cwd=pkg_dir).strip()
+    con.copy_from(str(Path(pkg_dir) / pkg_name), str(target_path))
+
+    rel_package = str(Path(name) / pkg_name)
+    return rel_package
+
+
+def test_package(image: str, package: Path, install_cmd: str):
     """
     Test a package can be installed and Telepresence run.
-
-    :param distro_image str: The Docker image to use to test the package.
-    :param package_directory Path: local directory where the package can be
-        found.
-    :param install_command str: commands to install packages in /packages
     """
-    command = """
-        set -e
-        {}
-        telepresence --version
-        sshuttle-telepresence --version
-    """.format(install_command)
-    run([
-        "docker", "run", "--rm",
-        "-v={}:/packages:ro".format(package_directory), distro_image, "sh",
-        "-c", command
-    ],
-        check=True)
+    con = Container(image)
+    con.execute_sh("mkdir /packages")
+    con.copy_to(str(package), "/packages")
+    package_path = "/packages/{}".format(package.name)
+    command = "set -e\n{}".format(install_cmd).format(package_path)
+    con.execute(["sh", "-c", command])
+    con.execute_sh("python3 --version")
+    con.execute_sh("telepresence --version")
+    con.execute_sh("sshuttle-telepresence --version")
 
 
 def get_upload_commands(system, release, package):
@@ -87,27 +117,23 @@ def get_upload_commands(system, release, package):
 
 def main(version):
     """Create Linux packages"""
+    show_banner("Building packages...")
+    con = prep_to_build()
     uploads = []
-    for system, release, package_type, dependencies, install_command in distros:
+    for system, release, package_type, dependencies, install_cmd in distros:
         name = "{}-{}".format(system, release)
-        distro_out = DIST / name
-        if distro_out.exists():
-            rmtree(str(distro_out))
-        distro_out.mkdir(parents=True)
-
         show_banner("Build {}".format(name))
-        image = "alanfranz/fpm-within-docker:{}".format(name)
-        build_package(image, package_type, version, distro_out, dependencies)
-
+        rel_package = build_package(
+            con, name, version, dependencies, package_type
+        )
+        package = DIST / rel_package
         show_banner("Test {}".format(name))
         image = "{}:{}".format(system, release)
-        test_package(image, distro_out, install_command)
-
-        package = next(distro_out.glob("*"))
+        test_package(image, package, install_cmd)
         rel_package = package.relative_to(DIST)
         uploads.extend(get_upload_commands(system, release, rel_package))
 
-    upload_script = DIST / "upload_linux_packages.sh"
+    upload_script = Path(DIST / "upload_linux_packages.sh")
     with upload_script.open("w") as f:
         f.write("#!/bin/sh\n\n")
         f.write("set -e\n\n")

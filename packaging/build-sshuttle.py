@@ -8,34 +8,70 @@ For now we have a fork with a branch; hope is to upstream our changes
 eventually.
 """
 
-import os
+import sys
+from pathlib import Path
 from subprocess import check_call, check_output
-from tempfile import mkdtemp
+from tempfile import TemporaryDirectory
 
 
-def main():
-    tempdir = mkdtemp() + "/sshuttle"
-    check_call([
-        "git", "clone", "https://github.com/datawire/sshuttle.git", tempdir
-    ])
-    check_call(["git", "checkout", "llmnr"],
-               cwd=tempdir)
-    check_call(["python3", "setup.py", "sdist"], cwd=tempdir)
-    version = str(
-        check_output(["python3", "setup.py", "--version"],
-                     cwd=tempdir).strip(), "ascii"
-    )
-    dest = os.path.join(
-        os.path.abspath(os.getcwd()), "virtualenv", "bin",
-        "sshuttle-telepresence"
-    )
-    print(dest)
-    check_call([
-        "pex", "dist/sshuttle-{}.tar.gz".format(version), "-o", dest,
-        "--python-shebang=/usr/bin/env python3", "-c", "sshuttle"
-    ],
-               cwd=tempdir)
+def build_sshuttle(output: Path):
+    """
+    Build an sshuttle-telepresence executable using Pex
+    """
+    with TemporaryDirectory() as temp_name:
+        build = Path(temp_name)
+
+        # Grab correct sshuttle source code as an sdist tarball
+        code = build / "sshuttle"
+        check_call([
+            "git", "clone", "-q", "https://github.com/datawire/sshuttle.git",
+            str(code)
+        ])
+        check_call(["git", "checkout", "-q", "telepresence"], cwd=str(code))
+        check_call(["python3", "setup.py", "-q", "sdist"], cwd=str(code))
+        version = str(
+            check_output(["python3", "setup.py", "--version"],
+                         cwd=str(code)).strip(), "ascii"
+        )
+        tarball = code / "dist" / "sshuttle-telepresence-{}.tar.gz".format(
+            version
+        )
+        assert tarball.exists(), str(tarball)
+
+        # Set up Pex in a one-off virtualenv
+        check_call(["python3", "-m", "venv", str(build / "venv")])
+        check_call([str(build / "venv/bin/pip"), "-q", "install", "pex"])
+
+        # Use Pex to build the executable
+        check_call([
+            str(build / "venv/bin/pex"),
+            "--python-shebang=/usr/bin/env python3",
+            "--script=sshuttle-telepresence",
+            "--output-file={}".format(output),
+            tarball,
+        ])
+
+    print("Built {}".format(output))
 
 
-if __name__ == '__main__':
-    main()
+def main(output):
+    """
+    Set things up then call the code that builds the executable.
+    """
+    if output is None:
+        project = Path(__file__).absolute().resolve().parent.parent
+        output = project / "dist" / "sshuttle-telepresence"
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if output.exists():
+        output.unlink()
+
+    build_sshuttle(output)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        _output = Path(sys.argv[1])
+    else:
+        _output = None
+    main(_output)
