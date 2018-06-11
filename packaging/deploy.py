@@ -157,6 +157,7 @@ def main():
     release = "-" not in version  # Is this a release version?
     build_executables()
     emit_release_info(version)
+    package_linux.main(version)
 
     if not release:
         print("Version {} is not a release version".format(version))
@@ -164,7 +165,6 @@ def main():
 
     emit_announcement(version)
     emit_machinery()
-    package_linux.main(version)
 
 
 if __name__ == "__main__":
