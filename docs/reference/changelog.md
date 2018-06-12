@@ -1,7 +1,7 @@
 # Changelog
 
 <!--- towncrier start line -->
-#### 0.90 (June 11, 2018)
+#### 0.90 (June 12, 2018)
 
 Bug fixes:
 
