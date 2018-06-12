@@ -1,6 +1,14 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.90 (June 11, 2018)
+
+Bug fixes:
+
+* Fixed a regression in the Telepresence executable mode bits in packages.
+  ([#682](https://github.com/telepresenceio/telepresence/issues/682))
+* Fixed other packaging-related issues.
+
 #### 0.89 (June 11, 2018)
 
 Bug fixes:
@@ -15,7 +23,6 @@ Misc:
   ([#641](https://github.com/datawire/telepresence/issues/641))
 * Linux packaging has been simplified.
   ([#643](https://github.com/telepresenceio/telepresence/issues/643))
-
 
 #### 0.88 (May 16, 2018)
 
