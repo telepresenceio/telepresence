@@ -5,6 +5,7 @@ import shutil
 import subprocess
 
 from pathlib import Path
+from shlex import quote
 
 
 def main():
@@ -20,15 +21,17 @@ def main():
     # Netlify's Python setup makes this harder than it should be...
     version_commands = (
         ["python3", "-Wignore", "setup.py", "--version"],
+        ["python3.6", "-Wignore", "setup.py", "--version"],
         [
             "python3", "-c",
             "import telepresence; print(telepresence.__version__)"
         ],
-        ["make", "version"],
         ["git", "describe", "--tags"],
+        ["make", "version"],
     )
     for cmd in version_commands:
         try:
+            print("Trying: {}".format(" ".join(quote(arg) for arg in cmd)))
             version_cp = subprocess.run(
                 cmd,
                 cwd=str(project),
@@ -36,8 +39,10 @@ def main():
                 stdout=subprocess.PIPE,
             )
         except (subprocess.CalledProcessError, OSError):
+            print(" ... failed")
             continue
         version = str(version_cp.stdout, "utf-8").strip()
+        print("\nFound version {}".format(version))
         break
     else:
         raise RuntimeError("Failed to determine version number")
@@ -45,6 +50,8 @@ def main():
     # Try to roll back unreleased version number to prior release number
     if "-" in version:
         version = version[:version.index("-")]
+        print("Using version {}".format(version))
+    print()
 
     # Build book.json, substituting the current version into the template
     book_json = (docs / "book.json.in").read_text()
