@@ -3,9 +3,15 @@
 import re
 import shutil
 import subprocess
+import sys
 
 from pathlib import Path
 from shlex import quote
+
+
+def spew(*args, **kwargs):
+    "Print to stderr"
+    print(*args, file=sys.stderr, **kwargs)
 
 
 def main():
@@ -31,7 +37,7 @@ def main():
     )
     for cmd in version_commands:
         try:
-            print("Trying: {}".format(" ".join(quote(arg) for arg in cmd)))
+            spew("Trying: {}".format(" ".join(quote(arg) for arg in cmd)))
             version_cp = subprocess.run(
                 cmd,
                 cwd=str(project),
@@ -39,10 +45,10 @@ def main():
                 stdout=subprocess.PIPE,
             )
         except (subprocess.CalledProcessError, OSError):
-            print(" ... failed")
+            spew(" ... failed")
             continue
         version = str(version_cp.stdout, "utf-8").strip()
-        print("\nFound version {}".format(version))
+        spew("\nFound version {}".format(version))
         break
     else:
         raise RuntimeError("Failed to determine version number")
@@ -50,8 +56,8 @@ def main():
     # Try to roll back unreleased version number to prior release number
     if "-" in version:
         version = version[:version.index("-")]
-        print("Using version {}".format(version))
-    print()
+        spew("Using version {}".format(version))
+    spew()
 
     # Build book.json, substituting the current version into the template
     book_json = (docs / "book.json.in").read_text()
