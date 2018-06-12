@@ -31,6 +31,7 @@ def make_compressed_zipapp(source: Path, output: Path, main_function: str):
 
     # Build final zip file
     create_archive(compressed, str(output), interpreter="/usr/bin/env python3")
+    output.chmod(0o755)  # Seems to default to 744 on CircleCI
 
 
 def build_telepresence(project: Path, output: Path):
