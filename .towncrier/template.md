@@ -7,7 +7,7 @@
 {% for text, values in sections[section][category].items() %}
 * {{ text }}
 {% for value in values %}
-  ([{{ value }}](https://github.com/datawire/telepresence/issues/{{ value.strip("#") }}))
+  ([{{ value }}](https://github.com/telepresenceio/telepresence/issues/{{ value.strip("#") }}))
 {% endfor %}
 {% endfor %}
 {% else %}
