@@ -259,7 +259,7 @@ At the moment, the Linux packages are not tested, other than a minor smoke test.
    `git tag 0.xx`
 3. Push the new commit and tag to GitHub.  
    `git push origin master --tags`
-4. Wait for [CircleCI](https://circleci.com/gh/datawire/workflows/telepresence/tree/master) to finish.
+4. Wait for [CircleCI](https://circleci.com/gh/telepresenceio/workflows/telepresence/tree/master) to finish.
    Make sure all the test pass.
 5. Download the tarball of deployable artifacts and unarchive into container in your project directory. It will populate the `dist` subdirectory.  
    `curl -s https://.../telepresence-dist.tbz | tar xf -`
@@ -269,7 +269,7 @@ At the moment, the Linux packages are not tested, other than a minor smoke test.
    * `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for AWS S3 access
 7. Run the release script.  
    `ci/release.sh`
-8. Post the release announcement on Gitter et al.
+8. Post the release announcement on Slack et al.
    The release script outputs the announcement, or you can find it in `dist/announcement.md`.
 
 #### What the release script does
