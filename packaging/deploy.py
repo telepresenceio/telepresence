@@ -104,15 +104,16 @@ def emit_announcement(version):
                     break
             else:
                 raise RuntimeError("Start not found [{}]".format(expected))
-            dest.write("Announcing\n")
             dest.write("# Telepresence {}\n".format(version))
             for line in source:
                 if line.startswith("#### "):
                     break
                 dest.write(line)
-            dest.write("[Install][i] or [Upgrade][u].\n\n")
-            dest.write("[i]: https://www.telepresence.io/reference/install\n")
-            dest.write("[u]: https://www.telepresence.io/reference/upgrade\n")
+            dest.write(
+                "[Install](https://www.telepresence.io/reference/install) "
+                "or "
+                "[Upgrade](https://www.telepresence.io/reference/upgrade).\n"
+            )
 
 
 def emit_machinery():
