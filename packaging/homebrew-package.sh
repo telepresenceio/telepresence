@@ -10,7 +10,7 @@ FORMULA="${BUILD_HOMEBREW_DIR}/Formula/telepresence.rb"
 # Update recipe
 cp dist/homebrew-formula.rb "$FORMULA"
 sed "s/__NEW_VERSION__/${TELEPRESENCE_VERSION}/g" -i "$FORMULA"
-TARBALL_HASH=$(curl --silent -L "https://github.com/datawire/telepresence/archive/${TELEPRESENCE_VERSION}.tar.gz" | sha256sum | cut -f 1 -d " ")
+TARBALL_HASH=$(curl --silent -L "https://github.com/telepresenceio/telepresence/archive/${TELEPRESENCE_VERSION}.tar.gz" | sha256sum | cut -f 1 -d " ")
 sed "s/__TARBALL_HASH__/${TARBALL_HASH}/g" -i "$FORMULA"
 chmod 644 "$FORMULA"
 cd "${BUILD_HOMEBREW_DIR}"
