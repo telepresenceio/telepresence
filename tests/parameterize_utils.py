@@ -945,6 +945,7 @@ class Probe(object):
                 self.HTTP_SERVER_DIFFERENT_PORT,
                 self.HTTP_SERVER_LOW_PORT,
             ]
+            self._result = "FAILED"
             self._result = run_telepresence_probe(
                 self._request,
                 self.method,
@@ -959,6 +960,7 @@ class Probe(object):
             )
             self._cleanup.append(self.ensure_dead)
             self._cleanup.append(self.cleanup_resources)
+        assert self._result != "FAILED"
         return self._result
 
 
@@ -978,6 +980,8 @@ class Probe(object):
         """
         if self._result is None:
             raise Exception("Probe never launched")
+        if self._result == "FAILED":
+            raise Exception("Probe has failed")
 
         _cleanup_process(self._result.telepresence)
 
