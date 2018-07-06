@@ -22,7 +22,8 @@ jobs:
     docker:
       # https://circleci.com/docs/2.0/circleci-images/
       # https://hub.docker.com/r/circleci/python/
-      - image: "circleci/python:3"
+      # Pick 3.6.* to avoid 3.7-related breakage of Astroid/PyLint
+      - image: "circleci/python:3.6"
 
     steps:
       - "checkout"
