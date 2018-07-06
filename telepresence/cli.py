@@ -85,8 +85,6 @@ class handle_unexpected_errors(object):
         def call_f(*args, **kwargs):
             try:
                 return f(*args, **kwargs)
-            except SystemExit:
-                raise
             except KeyboardInterrupt:
                 raise SystemExit(0)
             except Exception as e:
