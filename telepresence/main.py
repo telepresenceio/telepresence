@@ -15,7 +15,6 @@
 Telepresence: local development environment for a remote Kubernetes cluster.
 """
 
-import atexit
 import signal
 
 import sys
@@ -49,7 +48,7 @@ def main(session):
     session.kube_info, session.runner = analyze_args(session)
 
     span = session.runner.span()
-    atexit.register(span.end)
+    session.runner.add_cleanup("Stop time tracking", span.end)
 
     # Set up signal handling
     # Make SIGTERM and SIGHUP do clean shutdown (in particular, we want atexit

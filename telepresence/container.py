@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import argparse
-import atexit
 import json
 import sys
 from subprocess import CalledProcessError, Popen
@@ -188,5 +187,5 @@ def run_docker_command(
             runner.write("Killing local container...\n")
             make_docker_kill(runner, container_name)()
 
-    atexit.register(terminate_if_alive)
+    runner.add_cleanup("Terminate local container", terminate_if_alive)
     return p
