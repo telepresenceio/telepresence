@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import atexit
 import json
 from time import time
 
@@ -51,7 +50,7 @@ class Cache(object):
             with open(filename, "w") as f:
                 json.dump(result.values, f)
 
-        atexit.register(save)
+        result.save = save
         return result
 
     def __init__(self, values):

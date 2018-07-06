@@ -64,6 +64,7 @@ class Runner(object):
         os.makedirs(cache_dir, exist_ok=True)
         self.cache = Cache.load(os.path.join(cache_dir, "cache.json"))
         self.cache.invalidate(12 * 60 * 60)
+        self.add_cleanup("Save caches", self.cache.save)
 
     @classmethod
     def open(cls, logfile_path, kubectl_cmd: str, verbose: bool):
