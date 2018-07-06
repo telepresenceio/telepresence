@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import atexit
 import sys
 from abc import ABCMeta, abstractmethod
 from subprocess import Popen, TimeoutExpired
@@ -49,10 +48,10 @@ def kill_process(process: Popen) -> None:
 class Subprocesses(object):
     """Shut down subprocesses on exit."""
 
-    def __init__(self):
+    def __init__(self, runner):
         Dict  # Avoid Pyflakes F401
         self.subprocesses = {}  # type: Dict[Background, Callable]
-        atexit.register(self.killall)
+        runner.add_cleanup("Kill subprocesses", self.killall)
 
     def append(self, process: Background,
                killer: Optional[Callable] = None) -> None:
