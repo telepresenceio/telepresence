@@ -174,6 +174,7 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
         # separate all that stuff from the response body which comes next.
         echo {delimiter}
         [ -e output ] && cat output
+        echo {delimiter}
         """).format(tries=tries, url=url, delimiter=delimiter)
     print("Querying {url} (tries={tries} empty-retries={empty})".format(
         url=url, tries=tries, empty=retries_on_empty,
@@ -189,7 +190,7 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
         print("query output:")
         print(_indent(res))
         if res:
-            debug, res = res.split(delimiter + "\n")
+            before, res, after = res.split(delimiter + "\n")
             return res
         print("... empty response")
     return res
