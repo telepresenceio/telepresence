@@ -45,7 +45,7 @@ def prep_to_build() -> Container:
     """
     Prepare container to build packages
     """
-    con = Container("alpine")
+    con = Container("alpine:3.7")
     con.execute_sh("apk update -q")
     con.execute_sh("apk add -q alpine-sdk dpkg-dev rpm-dev ruby ruby-dev")
     con.execute_sh("gem install -q --no-ri --no-rdoc fpm")

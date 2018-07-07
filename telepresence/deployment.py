@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import argparse
-import atexit
 import json
 from subprocess import STDOUT
 from typing import Tuple, Dict
@@ -45,7 +44,7 @@ def create_new_deployment(runner: Runner,
             ]
         )
 
-    atexit.register(remove_existing_deployment)
+    runner.add_cleanup("Delete new deployment", remove_existing_deployment)
     remove_existing_deployment()
     if args.needs_root:
         image_name = TELEPRESENCE_REMOTE_IMAGE_PRIV
@@ -156,7 +155,7 @@ def supplant_deployment(runner: Runner,
         )
 
     # Launch the new deployment
-    atexit.register(delete_new_deployment, True)
+    runner.add_cleanup("Delete new deployment", delete_new_deployment, True)
     delete_new_deployment(False)  # Just in case
     runner.check_kubectl(
         args.context,
@@ -165,7 +164,10 @@ def supplant_deployment(runner: Runner,
     )
 
     # Scale down the original deployment
-    atexit.register(resize_original, deployment_json["spec"]["replicas"])
+    runner.add_cleanup(
+        "Re-scale original deployment", resize_original,
+        deployment_json["spec"]["replicas"]
+    )
     resize_original(0)
 
     span.end()
@@ -302,7 +304,9 @@ def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
             ["delete", "pod", "--selector", "deployment=" + rc_name]
         )
 
-    atexit.register(apply_json, rc_json)
+    runner.add_cleanup(
+        "Restore original replication controller", apply_json, rc_json
+    )
 
     # If no container name was given, just use the first one:
     if not container_name:

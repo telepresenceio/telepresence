@@ -97,8 +97,8 @@ def proxy(config: dict):
         "telepresence@{}:{}".format(ip, port)
     ] + cidrs)
     # Start the SSH tunnels to expose local services:
-    subps = Subprocesses()
     runner = Runner.open("-", "kubectl", False)
+    subps = Subprocesses(runner)
     ssh = SSH(runner, port, ip)
     expose_local_services(subps, ssh, expose_ports)
 

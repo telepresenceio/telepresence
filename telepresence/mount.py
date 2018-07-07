@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import atexit
 import sys
 from pathlib import Path
 from subprocess import STDOUT, CalledProcessError
@@ -118,7 +117,7 @@ def mount_remote(session):
             mount_dir,
         )
         session.env["TELEPRESENCE_ROOT"] = mount_dir
-        atexit.register(mount_cleanup)
+        session.runner.add_cleanup("Unmount remote filesystem", mount_cleanup)
     else:
         mount_dir = None
     return mount_dir

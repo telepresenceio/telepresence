@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import atexit
 import sys
 from subprocess import Popen, PIPE, DEVNULL, CalledProcessError
 from threading import Thread
@@ -64,6 +64,7 @@ class Runner(object):
         os.makedirs(cache_dir, exist_ok=True)
         self.cache = Cache.load(os.path.join(cache_dir, "cache.json"))
         self.cache.invalidate(12 * 60 * 60)
+        self.add_cleanup("Save caches", self.cache.save)
 
     @classmethod
     def open(cls, logfile_path, kubectl_cmd: str, verbose: bool):
@@ -240,6 +241,15 @@ class Runner(object):
         self.check_call(
             self.kubectl(context, namespace, kubectl_args), **kwargs
         )
+
+    # Cleanup
+
+    def add_cleanup(self, name: str, callback, *args, **kwargs) -> None:
+        def cleanup():
+            self.output.write("(Cleanup) {}".format(name))
+            callback(*args, **kwargs)
+
+        atexit.register(cleanup)
 
 
 def launch_command(args, out_cb, err_cb, done=None, **kwargs):

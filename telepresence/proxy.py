@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import argparse
-import atexit
 import re
 import sys
 from shutil import which
@@ -40,7 +39,7 @@ def connect(
     Return (Subprocesses, local port of SOCKS proxying tunnel, SSH instance).
     """
     span = runner.span()
-    processes = Subprocesses()
+    processes = Subprocesses(runner)
     # Keep local copy of pod logs, for debugging purposes:
     processes.append(
         runner.popen(
@@ -105,8 +104,8 @@ def connect(
             runner.check_call([
                 "sudo", "ifconfig", "lo0", "alias", MAC_LOOPBACK_IP
             ])
-            atexit.register(
-                runner.check_call,
+            runner.add_cleanup(
+                "Mac Loopback", runner.check_call,
                 ["sudo", "ifconfig", "lo0", "-alias", MAC_LOOPBACK_IP]
             )
             docker_interface = MAC_LOOPBACK_IP

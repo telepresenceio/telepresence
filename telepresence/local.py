@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import argparse
-import atexit
 import sys
 from subprocess import CalledProcessError, Popen
 from time import time, sleep
@@ -30,7 +29,9 @@ from telepresence.ssh import SSH
 from telepresence.vpn import connect_sshuttle
 
 
-def sip_workaround(existing_paths: str, unsupported_tools_path: str) -> str:
+def sip_workaround(
+    runner: Runner, existing_paths: str, unsupported_tools_path: str
+) -> str:
     """
     Workaround System Integrity Protection.
 
@@ -48,7 +49,7 @@ def sip_workaround(existing_paths: str, unsupported_tools_path: str) -> str:
     # Add temp dir
     bin_dir = mkdtemp(dir="/tmp")
     paths.insert(0, bin_dir)
-    atexit.register(rmtree, bin_dir)
+    runner.add_cleanup("Remove SIP workaround binaries", rmtree, bin_dir)
     for directory in protected:
         for file in os.listdir(directory):
             try:
@@ -105,12 +106,14 @@ def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
     # port) aren't accessible via env variables in older versions of torconf:
     with NamedTemporaryFile(mode="w+", delete=False) as tor_conffile:
         tor_conffile.write(TORSOCKS_CONFIG.format(socks_port))
-    atexit.register(os.remove, tor_conffile.name)
+    runner.add_cleanup("Remove TOR config", os.remove, tor_conffile.name)
     env["TORSOCKS_CONF_FILE"] = tor_conffile.name
     if runner.output.logfile is not sys.stdout:
         env["TORSOCKS_LOG_FILE_PATH"] = runner.output.logfile.name
     if sys.platform == "darwin":
-        env["PATH"] = sip_workaround(env["PATH"], unsupported_tools_path)
+        env["PATH"] = sip_workaround(
+            runner, env["PATH"], unsupported_tools_path
+        )
     # Try to ensure we're actually proxying network, by forcing DNS resolution
     # via torsocks:
     start = time()
@@ -173,5 +176,5 @@ def run_local_command(
             runner.write("Killing local process...\n")
             kill_process(p)
 
-    atexit.register(terminate_if_alive)
+    runner.add_cleanup("Terminate local process", terminate_if_alive)
     return p
