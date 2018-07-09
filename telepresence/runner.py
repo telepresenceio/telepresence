@@ -245,11 +245,44 @@ class Runner(object):
     # Cleanup
 
     def add_cleanup(self, name: str, callback, *args, **kwargs) -> None:
+        """
+        Set up callback to be called during cleanup processing on exit.
+
+        :param name: Logged for debugging
+        :param callback: What to call during cleanup
+        """
+
         def cleanup():
             self.output.write("(Cleanup) {}".format(name))
             callback(*args, **kwargs)
 
         atexit.register(cleanup)
+
+    # Exit
+
+    def fail(self, message: str, code=1) -> SystemExit:
+        """
+        Report failure to the user and exit. Does not return. Cleanup will run
+        before the process ends. This does not invoke the crash reporter; an
+        uncaught exception will achieve that, e.g., RuntimeError.
+
+        :param message: So the user knows what happened
+        :param code: Process exit code
+        """
+        self.write("FAILING: {}".format(message))
+        print(message, file=sys.stderr)
+        self.write("EXITING with status code {}".format(code))
+        exit(code)
+        return SystemExit(code)  # Not reached; just here for the linters
+
+    def exit(self) -> SystemExit:
+        """
+        Exit after a successful session. Does not return. Cleanup will run
+        before the process ends.
+        """
+        self.write("EXITING successful session.")
+        exit(0)
+        return SystemExit(0)  # Not reached; just here for the linters
 
 
 def launch_command(args, out_cb, err_cb, done=None, **kwargs):

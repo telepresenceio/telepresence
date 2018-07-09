@@ -78,7 +78,7 @@ def get_remote_env(
         except CalledProcessError:
             sleep(0.25)
     else:
-        return exit("Error: Failed to get environment variables")
+        raise runner.fail("Error: Failed to get environment variables")
     return env
 
 

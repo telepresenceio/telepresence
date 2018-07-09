@@ -108,7 +108,7 @@ def get_deployment_json(
                 )
             )["items"][0]
     except CalledProcessError as e:
-        raise SystemExit(
+        raise runner.fail(
             "Failed to find Deployment '{}':\n{}".format(
                 deployment_name, e.stdout
             )
@@ -223,7 +223,7 @@ def get_remote_info(
             remote_version = remote_info.remote_telepresence_version()
             if remote_version != image_version:
                 runner.write("Pod is running Tel {}".format(remote_version))
-                raise SystemExit((
+                raise runner.fail((
                     "The remote datawire/telepresence-k8s container is " +
                     "running version {}, but this tool is version {}. " +
                     "Please make sure both are running the same version."
