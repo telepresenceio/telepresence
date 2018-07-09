@@ -108,12 +108,13 @@ def serialize_as_env_file(env: Dict[str, str]) -> Tuple[str, List[str]]:
 def write_env_files(session) -> None:
     args = session.args
     env = session.env
+    runner = session.runner
     if args.env_json:
         try:
             with open(args.env_json, "w") as env_json_file:
                 dump(env, env_json_file, sort_keys=True, indent=4)
         except IOError as exc:
-            print("Failed to write environment as JSON: {}".format(exc))
+            runner.show("Failed to write environment as JSON: {}".format(exc))
 
     if args.env_file:
         try:
@@ -121,11 +122,13 @@ def write_env_files(session) -> None:
             with open(args.env_file, "w") as env_file:
                 env_file.write(data)
             if skipped:
-                print(
+                runner.show(
                     "Skipped these environment keys when writing env "
                     "file because the associated values have newlines:"
                 )
                 for key in skipped:
-                    print(key)
+                    runner.show(key)
         except IOError as exc:
-            print("Failed to write environment as env file: {}".format(exc))
+            runner.show(
+                "Failed to write environment as env file: {}".format(exc)
+            )

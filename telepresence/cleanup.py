@@ -118,10 +118,9 @@ def wait_for_exit(
                 "killed all processes...\n"
             ).format(dead_process.args, dead_process.returncode))
             if sys.stdout.isatty:
-                print(
+                runner.show(
                     "Proxy to Kubernetes exited. This is typically due to"
-                    " a lost connection.",
-                    file=sys.stderr
+                    " a lost connection."
                 )
             span.end()
             raise runner.fail("Exiting...", code=3)

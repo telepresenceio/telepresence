@@ -236,12 +236,11 @@ def serviceCIDR(runner: Runner):
         ])
 
     if sys.stderr.isatty():
-        print(
+        runner.show(
             "Guessing that Services IP range is {}. Services started after"
             " this point will be inaccessible if are outside this range;"
             " restart telepresence if you can't access a "
-            "new Service.\n".format(service_cidr),
-            file=sys.stderr
+            "new Service.\n".format(service_cidr)
         )
     return service_cidr
 
