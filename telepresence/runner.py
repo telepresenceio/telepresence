@@ -13,7 +13,8 @@
 # limitations under the License.
 import atexit
 import sys
-from subprocess import Popen, PIPE, DEVNULL, CalledProcessError
+import textwrap
+from subprocess import Popen, PIPE, DEVNULL, CalledProcessError, check_output
 from threading import Thread
 from time import time, sleep
 from typing import List, Optional
@@ -46,6 +47,21 @@ class Runner(object):
         Optional  # Avoid Pyflakes F401
         self.current_span = None  # type: Optional[Span]
         self.counter = 0
+
+        if sys.stderr.isatty():
+            try:
+                term_width = int(check_output(["tput", "cols"]))
+            except (CalledProcessError, OSError):
+                term_width = 79
+        else:
+            term_width = 99999
+        self.wrapper = textwrap.TextWrapper(
+            width=term_width,
+            initial_indent="T: ",
+            subsequent_indent="T: ",
+            replace_whitespace=False,
+            drop_whitespace=False,
+        )
 
         # Log some version info
         report = (
@@ -105,6 +121,12 @@ class Runner(object):
         """Indicate whether the command succeeded"""
         Span.emit_summary = flag
         self.output.write("Success. Starting cleanup.")
+
+    def show(self, message: str) -> None:
+        """Display a message to the user on stderr"""
+        self.write(message, prefix=">>>")
+        for line in message.splitlines():
+            print(self.wrapper.fill(line), file=sys.stderr)
 
     def command_span(self, track, args):
         return self.span(
@@ -269,8 +291,7 @@ class Runner(object):
         :param message: So the user knows what happened
         :param code: Process exit code
         """
-        self.write("FAILING: {}".format(message))
-        print(message, file=sys.stderr)
+        self.show(message)
         self.write("EXITING with status code {}".format(code))
         exit(code)
         return SystemExit(code)  # Not reached; just here for the linters
