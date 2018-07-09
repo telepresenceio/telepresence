@@ -100,7 +100,7 @@ def proxy(config: dict):
     runner = Runner.open("-", "kubectl", False)
     subps = Subprocesses(runner)
     ssh = SSH(runner, port, ip)
-    expose_local_services(subps, ssh, expose_ports)
+    expose_local_services(runner, subps, ssh, expose_ports)
 
     # Wait for everything to exit:
     wait_for_exit(runner, main_process, subps)
