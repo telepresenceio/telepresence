@@ -88,10 +88,10 @@ def connect(
                     runner.get_output(["ifconfig", "docker0"])
                 )
             else:
-                raise SystemExit("'ip addr' nor 'ifconfig' available")
+                raise runner.fail("'ip addr' nor 'ifconfig' available")
 
             if len(docker_interfaces) == 0:
-                raise SystemExit("No interface for docker found")
+                raise runner.fail("No interface for docker found")
 
             docker_interface = docker_interfaces[0]
 

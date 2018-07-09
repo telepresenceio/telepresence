@@ -124,4 +124,4 @@ def wait_for_exit(
                     file=sys.stderr
                 )
             span.end()
-            raise SystemExit(3)
+            raise runner.fail("Exiting...", code=3)

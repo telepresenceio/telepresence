@@ -106,7 +106,9 @@ def mount_remote(session):
             try:
                 args.mount.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
-                exit("Unable to use mount path: {}".format(exc))
+                raise session.runner.fail(
+                    "Unable to use mount path: {}".format(exc)
+                )
             mount_dir = str(args.mount)
         # We allow all users if we're using Docker because we don't know
         # what uid the Docker container will use.

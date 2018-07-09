@@ -108,8 +108,7 @@ def k8s_resolve(
     """
     Resolve a list of host and/or ip addresses inside the cluster
     using the context, namespace, and remote_info supplied. Note that
-    if any hostname fails to resolve this will raise a SystemExit
-    exception.
+    if any hostname fails to resolve this will fail Telepresence.
     """
     # Separate hostnames from IPs and IP ranges
     hostnames = []
@@ -145,7 +144,7 @@ def k8s_resolve(
             )
         except CalledProcessError as e:
             runner.write(str(e))
-            raise SystemExit(
+            raise runner.fail(
                 "We failed to do a DNS lookup inside Kubernetes for the "
                 "hostname(s) you listed in "
                 "--also-proxy ({}). Maybe you mistyped one of them?".format(

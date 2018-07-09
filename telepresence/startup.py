@@ -42,7 +42,7 @@ def require_command(
             "See the documentation at https://telepresence.io "
             "for more details.\n"
         )
-        raise SystemExit(1)
+        raise runner.fail("Missing required command: {}".format(command))
 
 
 def kubectl_or_oc(server: str) -> str:
@@ -182,7 +182,7 @@ def analyze_args(session):
         args.in_local_vm and args.method == "vpn-tcp"
         and args.new_deployment is None and args.swap_deployment is None
     ):
-        raise SystemExit(
+        raise runner.fail(
             "vpn-tcp method doesn't work with minikube/minishift when"
             " using --deployment. Use --swap-deployment or"
             " --new-deployment instead."
@@ -202,7 +202,7 @@ def analyze_args(session):
         sys.stderr.write("Error accessing Kubernetes: {}\n".format(exc))
         if exc.output:
             sys.stderr.write("{}\n".format(exc.output.strip()))
-        raise SystemExit(1)
+        raise runner.fail("Cluster access failed")
 
     # Make sure we can run openssh:
     try:
@@ -210,10 +210,9 @@ def analyze_args(session):
                                     stdin=DEVNULL,
                                     stderr=STDOUT)
         if not version.startswith("OpenSSH"):
-            raise SystemExit("'ssh' is not the OpenSSH client, apparently.")
+            raise runner.fail("'ssh' is not the OpenSSH client, apparently.")
     except (CalledProcessError, OSError, IOError) as e:
-        sys.stderr.write("Error running ssh: {}\n".format(e))
-        raise SystemExit(1)
+        raise runner.fail("Error running ssh: {}\n".format(e))
 
     # Other requirements:
     require_command(
