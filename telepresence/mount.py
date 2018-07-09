@@ -55,21 +55,17 @@ def mount_remote_volumes(
         )
         mounted = True
     except CalledProcessError as exc:
-        print(
+        runner.show(
             "Mounting remote volumes failed, they will be unavailable"
             " in this session. If you are running"
             " on Windows Subystem for Linux then see"
             " https://github.com/datawire/telepresence/issues/115,"
             " otherwise please report a bug, attaching telepresence.log to"
             " the bug report:"
-            " https://github.com/datawire/telepresence/issues/new",
-            file=sys.stderr
+            " https://github.com/datawire/telepresence/issues/new"
         )
         if exc.output:
-            print(
-                "\nMount error was: {}\n".format(exc.output.strip()),
-                file=sys.stderr
-            )
+            runner.show("\nMount error was: {}\n".format(exc.output.strip()))
         mounted = False
 
     def no_cleanup():
