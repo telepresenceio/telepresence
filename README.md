@@ -42,33 +42,53 @@ Portability:
 How it works
 ------------
 
-It is a daemon that runs on your laptop (or anywhere else) and
-provides three basic functions:
+The go implementation consists of three components wired together in
+such a way as to provide the illusion that a system is on the same
+network as a kubernetes cluster.
 
- * a DNS server that:
-   - maintains records for dns-addressible entities in a configured
+The Parts:
+
+  - An overlay dns server:
+
+    This is a component that uses the github.com/miekg/dns library to
+    provide a dns server implementation that resolves each query by
+    first checking with "local logic", and then falling back to
+    relaying to a remote dns server. This results in a dns server that
+    will mimic any remote server modulo whatever overrides are
+    implemented in the "local logic". Both the local logic and the
+    remote dns server are configurable.
+
+  - A firewall-based ip interceptor:
+
+    This is a component that uses the system firewall (iptables on
+    linux, pf on mac) to intercept connections made to specified ip
+    addresses and/or CIDRs. Whenever a connection is made, a callback
+    is invoked with the incoming connection along with the original
+    destination.
+
+  - A kubernetes event notifier:
+
+    This is a component that watches and listens for interesting
+    kubernetes events and notifies a supplied set of callbacks when
+    they occur.
+
+These three components run in a single daemon on your laptop (or
+anywhere else) and together they provide these basic functions:
+
+ * The DNS server:
+   - maintains records for dns-addressible entities in your current
      kubernetes cluster
-   - forwards any requests that don't match kubernetes entities to a
-     configurable fallback
+   - forwards any requests that don't match kubernetes entities to
+     your original dns server
 
- * a SOCKS5 proxy that maintains auto-reconnecting connectivity into
-   the the kubernetes cluster
+ * The ip interceptor forwards connections to an auto-reconnecting
+   SOCKS5 proxy into the kubernetes cluster.
 
- * a traffic capturing mechanism that:
-   - dynamicaly adds/removes port forwarding rules for kubernetes ips
-   - translates tcp connections to socks5 connections
+ * Both of the above components depend on the view of dns-addressible
+   entities maintained by the kubernetes event notifier.
 
-Of these three basic functions, the first two have extremely minimal
-OS and environmental dependencies. They are also useful on their own,
-For example, many applications can be directly configured to use a
-SOCKS5 proxy. There are also various third party tools on both macos
-and windows that claim to solve the problem of capturing some/all
-traffic and sending it through a SOCKS5 proxy. See
-https://en.wikipedia.org/wiki/Comparison_of_proxifiers for more
-details.
-
-For the traffic capturing mechanism to work, there are two basic
-primitives that are OS-specific:
+For the ip interceptor to work, there are two basic primitives that
+are OS-specific:
 
 1. The ability to configure the OS to forward an ip (or range of ips)
    to a designated local ip/port:
@@ -171,6 +191,10 @@ Features:
    "blah.namespace.svc.cluster.local".
  - Right now only A records are interecepted, should handle other
    types of DNS queries as well.
+
+Diagnostics:
+
+ - wiring together all the components in a way that allows them to quickly/easily report exactly why they don't work in any given environment might be a good strategy for improved diagnostics/bug reporting
 
 Tests:
 
