@@ -17,7 +17,7 @@ import textwrap
 from subprocess import Popen, PIPE, DEVNULL, CalledProcessError, check_output
 from threading import Thread
 from time import time, sleep
-from typing import List, Optional
+import typing
 
 from inspect import getframeinfo, currentframe
 import os
@@ -44,8 +44,7 @@ class Runner(object):
         self.kubectl_cmd = kubectl_cmd
         self.verbose = verbose
         self.start_time = time()
-        Optional  # Avoid Pyflakes F401
-        self.current_span = None  # type: Optional[Span]
+        self.current_span = None  # type: typing.Optional[Span]
         self.counter = 0
 
         if sys.stderr.isatty():
@@ -194,7 +193,7 @@ class Runner(object):
     def get_output(self, args, reveal=False, **kwargs) -> str:
         """Return (stripped) command result as unicode string."""
         self.counter = track = self.counter + 1
-        capture = []  # type: List[str]
+        capture = []  # type: typing.List[str]
         if reveal or self.verbose:
             out_cb = self.make_logger(track, capture=capture)
         else:
@@ -238,7 +237,7 @@ class Runner(object):
             self.output.write("[{}] exit {}".format(track, retcode))
 
     def kubectl(self, context: str, namespace: str,
-                args: List[str]) -> List[str]:
+                args: typing.List[str]) -> typing.List[str]:
         """Return command-line for running kubectl."""
         result = [self.kubectl_cmd]
         if self.verbose:
@@ -249,7 +248,11 @@ class Runner(object):
         return result
 
     def get_kubectl(
-        self, context: str, namespace: str, args: List[str], stderr=None
+        self,
+        context: str,
+        namespace: str,
+        args: typing.List[str],
+        stderr=None
     ) -> str:
         """Return output of running kubectl."""
         return self.get_output(
@@ -257,7 +260,8 @@ class Runner(object):
         )
 
     def check_kubectl(
-        self, context: str, namespace: str, kubectl_args: List[str], **kwargs
+        self, context: str, namespace: str, kubectl_args: typing.List[str],
+        **kwargs
     ) -> None:
         """Check exit code of running kubectl."""
         self.check_call(
