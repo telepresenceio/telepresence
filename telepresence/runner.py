@@ -12,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import atexit
+import os
 import sys
 import textwrap
-from subprocess import Popen, PIPE, DEVNULL, CalledProcessError, check_output
-from threading import Thread
-from time import time, sleep
 import typing
-
-from inspect import getframeinfo, currentframe
-import os
+from inspect import currentframe, getframeinfo
+from subprocess import CalledProcessError, DEVNULL, PIPE, Popen, check_output
+from threading import Thread
+from time import sleep, time
 
 from telepresence.cache import Cache
 from telepresence.output import Output
