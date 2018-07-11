@@ -19,7 +19,9 @@ import sys
 from types import SimpleNamespace
 
 from telepresence.cleanup import wait_for_exit
-from telepresence.cli import parse_args, handle_unexpected_errors
+from telepresence.cli import (
+    parse_args, handle_unexpected_errors, crash_reporting
+)
 from telepresence.container import run_docker_command
 from telepresence.local import run_local_command
 from telepresence.output import Output
@@ -52,7 +54,7 @@ def main(session):
     call_scout(session)
 
     # Set up exit handling
-    with session.runner.cleanup_handling():
+    with session.runner.cleanup_handling(), crash_reporting(session.runner):
         ########################################
         # Now it's okay to change things
 
