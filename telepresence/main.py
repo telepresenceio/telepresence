@@ -15,8 +15,6 @@
 Telepresence: local development environment for a remote Kubernetes cluster.
 """
 
-import signal
-
 import sys
 from types import SimpleNamespace
 
@@ -50,21 +48,11 @@ def main(session):
     span = session.runner.span()
     session.runner.add_cleanup("Stop time tracking", span.end)
 
-    # Set up signal handling
-    # Make SIGTERM and SIGHUP do clean shutdown (in particular, we want atexit
-    # functions to be called):
-    def shutdown(signum, frame):
-        raise SystemExit(0)
-
-    signal.signal(signal.SIGTERM, shutdown)
-    signal.signal(signal.SIGHUP, shutdown)
-
     # Usage tracking
     call_scout(session)
 
     # Set up exit handling
-    # XXX exit handling via atexit
-    try:
+    with session.runner.cleanup_handling():
         ########################################
         # Now it's okay to change things
 
@@ -109,12 +97,7 @@ def main(session):
                 mount_dir
             )
 
-        # Clean up (call the cleanup methods for everything above)
-        # XXX handled by wait_for_exit and atexit
         wait_for_exit(runner, user_process, subprocesses)
-
-    finally:
-        pass
 
 
 def run_telepresence():

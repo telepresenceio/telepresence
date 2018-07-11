@@ -11,11 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import atexit
 import os
+import signal
 import sys
 import textwrap
 import typing
+from contextlib import contextmanager
 from inspect import currentframe, getframeinfo
 from subprocess import CalledProcessError, DEVNULL, PIPE, Popen, check_output
 from threading import Thread
@@ -25,6 +26,15 @@ from telepresence.cache import Cache
 from telepresence.output import Output
 from telepresence.span import Span
 from telepresence.utilities import str_command
+
+_CleanupItem = typing.NamedTuple(
+    "_CleanupItem", [
+        ("name", str),
+        ("callable", typing.Callable),
+        ("args", typing.Tuple),
+        ("kwargs", typing.Dict[str, typing.Any]),
+    ]
+)
 
 
 class Runner(object):
@@ -45,6 +55,7 @@ class Runner(object):
         self.start_time = time()
         self.current_span = None  # type: typing.Optional[Span]
         self.counter = 0
+        self.cleanup_stack = []  # type: typing.List[_CleanupItem]
 
         if sys.stderr.isatty():
             try:
@@ -276,12 +287,48 @@ class Runner(object):
         :param name: Logged for debugging
         :param callback: What to call during cleanup
         """
+        cleanup_item = _CleanupItem(name, callback, args, kwargs)
+        self.cleanup_stack.append(cleanup_item)
 
-        def cleanup():
-            self.output.write("(Cleanup) {}".format(name))
-            callback(*args, **kwargs)
+    def _signal_received(self, sig_num, frame):
+        try:
+            sig_name = signal.Signals(sig_num).name
+        except (ValueError, AttributeError):
+            sig_name = str(sig_num)
+        try:
+            frame_name = frame.f_code.co_name
+        except AttributeError:
+            frame_name = "(unknown)"
+        self.show(
+            "Received signal {} while in function {}".format(
+                sig_name, frame_name
+            )
+        )
+        self.exit()
 
-        atexit.register(cleanup)
+    def _do_cleanup(self):
+        failures = []
+        self.show("Exit cleanup in progress")
+        for name, callback, args, kwargs in reversed(self.cleanup_stack):
+            self.write("(Cleanup) {}".format(name))
+            try:
+                callback(*args, **kwargs)
+            except BaseException as exc:
+                self.write("(Cleanup) {} failed:".format(name))
+                self.write("(Cleanup)   {}".format(exc))
+                failures.append((name, exc))
+        return failures
+
+    @contextmanager
+    def cleanup_handling(self):
+        signal.signal(signal.SIGTERM, self._signal_received)
+        signal.signal(signal.SIGHUP, self._signal_received)
+        try:
+            yield
+        finally:
+            failures = self._do_cleanup()
+        if failures:
+            self.show("WARNING: Failures during cleanup. See above.")
 
     # Exit
 
