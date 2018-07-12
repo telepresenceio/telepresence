@@ -16,11 +16,9 @@ import argparse
 import sys
 import webbrowser
 from contextlib import contextmanager
-from functools import wraps
-from io import StringIO
 from pathlib import Path
 from subprocess import check_output
-from traceback import print_exc, format_exc
+from traceback import format_exc
 from typing import List, Set, Tuple, Union
 from urllib.parse import quote_plus
 
@@ -135,35 +133,6 @@ def crash_reporting(runner=None):
         report_crash(error, log_path, logs)
 
 
-class handle_unexpected_errors(object):
-    """Decorator that catches unexpected errors."""
-
-    def __init__(self, session):
-        self.session = session
-
-    def __call__(self, f):
-        @wraps(f)
-        def call_f(*args, **kwargs):
-            try:
-                return f(*args, **kwargs)
-            except KeyboardInterrupt:
-                raise SystemExit(0)
-            except Exception as e:
-                try:
-                    logs = self.session.output.read_logs()
-                    log_path = self.session.output.logfile_path
-                except AttributeError:
-                    # No session or no output
-                    logs = "Not available"
-                    log_path = "-"
-                errorf = StringIO()
-                print_exc(file=errorf)
-                error = errorf.getvalue()
-                report_crash(error, log_path, logs)
-
-        return call_f
-
-
 def path_or_bool(value: str) -> Union[Path, bool]:
     """Parse value as a Path or a boolean"""
     path = Path(value)
@@ -179,7 +148,6 @@ def path_or_bool(value: str) -> Union[Path, bool]:
     )
 
 
-@handle_unexpected_errors("-")
 def parse_args(args=None) -> argparse.Namespace:
     """Create a new ArgumentParser and parse sys.argv."""
     parser = argparse.ArgumentParser(
