@@ -11,21 +11,30 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import atexit
+import os
+import signal
 import sys
 import textwrap
-from subprocess import Popen, PIPE, DEVNULL, CalledProcessError, check_output
+import typing
+from contextlib import contextmanager
+from inspect import currentframe, getframeinfo
+from subprocess import CalledProcessError, DEVNULL, PIPE, Popen, check_output
 from threading import Thread
-from time import time, sleep
-from typing import List, Optional
-
-from inspect import getframeinfo, currentframe
-import os
+from time import sleep, time
 
 from telepresence.cache import Cache
 from telepresence.output import Output
 from telepresence.span import Span
 from telepresence.utilities import str_command
+
+_CleanupItem = typing.NamedTuple(
+    "_CleanupItem", [
+        ("name", str),
+        ("callable", typing.Callable),
+        ("args", typing.Tuple),
+        ("kwargs", typing.Dict[str, typing.Any]),
+    ]
+)
 
 
 class Runner(object):
@@ -44,9 +53,9 @@ class Runner(object):
         self.kubectl_cmd = kubectl_cmd
         self.verbose = verbose
         self.start_time = time()
-        Optional  # Avoid Pyflakes F401
-        self.current_span = None  # type: Optional[Span]
+        self.current_span = None  # type: typing.Optional[Span]
         self.counter = 0
+        self.cleanup_stack = []  # type: typing.List[_CleanupItem]
 
         if sys.stderr.isatty():
             try:
@@ -194,7 +203,7 @@ class Runner(object):
     def get_output(self, args, reveal=False, **kwargs) -> str:
         """Return (stripped) command result as unicode string."""
         self.counter = track = self.counter + 1
-        capture = []  # type: List[str]
+        capture = []  # type: typing.List[str]
         if reveal or self.verbose:
             out_cb = self.make_logger(track, capture=capture)
         else:
@@ -238,7 +247,7 @@ class Runner(object):
             self.output.write("[{}] exit {}".format(track, retcode))
 
     def kubectl(self, context: str, namespace: str,
-                args: List[str]) -> List[str]:
+                args: typing.List[str]) -> typing.List[str]:
         """Return command-line for running kubectl."""
         result = [self.kubectl_cmd]
         if self.verbose:
@@ -249,7 +258,11 @@ class Runner(object):
         return result
 
     def get_kubectl(
-        self, context: str, namespace: str, args: List[str], stderr=None
+        self,
+        context: str,
+        namespace: str,
+        args: typing.List[str],
+        stderr=None
     ) -> str:
         """Return output of running kubectl."""
         return self.get_output(
@@ -257,7 +270,8 @@ class Runner(object):
         )
 
     def check_kubectl(
-        self, context: str, namespace: str, kubectl_args: List[str], **kwargs
+        self, context: str, namespace: str, kubectl_args: typing.List[str],
+        **kwargs
     ) -> None:
         """Check exit code of running kubectl."""
         self.check_call(
@@ -273,12 +287,48 @@ class Runner(object):
         :param name: Logged for debugging
         :param callback: What to call during cleanup
         """
+        cleanup_item = _CleanupItem(name, callback, args, kwargs)
+        self.cleanup_stack.append(cleanup_item)
 
-        def cleanup():
-            self.output.write("(Cleanup) {}".format(name))
-            callback(*args, **kwargs)
+    def _signal_received(self, sig_num, frame):
+        try:
+            sig_name = signal.Signals(sig_num).name
+        except (ValueError, AttributeError):
+            sig_name = str(sig_num)
+        try:
+            frame_name = frame.f_code.co_name
+        except AttributeError:
+            frame_name = "(unknown)"
+        self.show(
+            "Received signal {} while in function {}".format(
+                sig_name, frame_name
+            )
+        )
+        self.exit()
 
-        atexit.register(cleanup)
+    def _do_cleanup(self):
+        failures = []
+        self.show("Exit cleanup in progress")
+        for name, callback, args, kwargs in reversed(self.cleanup_stack):
+            self.write("(Cleanup) {}".format(name))
+            try:
+                callback(*args, **kwargs)
+            except BaseException as exc:
+                self.write("(Cleanup) {} failed:".format(name))
+                self.write("(Cleanup)   {}".format(exc))
+                failures.append((name, exc))
+        return failures
+
+    @contextmanager
+    def cleanup_handling(self):
+        signal.signal(signal.SIGTERM, self._signal_received)
+        signal.signal(signal.SIGHUP, self._signal_received)
+        try:
+            yield
+        finally:
+            failures = self._do_cleanup()
+        if failures:
+            self.show("WARNING: Failures during cleanup. See above.")
 
     # Exit
 

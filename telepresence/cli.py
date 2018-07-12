@@ -15,14 +15,12 @@
 import argparse
 import sys
 import webbrowser
-from traceback import print_exc
-from urllib.parse import quote_plus
-
-from io import StringIO
-from subprocess import check_output
-from typing import List, Set, Tuple, Union
+from contextlib import contextmanager
 from pathlib import Path
-from functools import wraps
+from subprocess import check_output
+from traceback import format_exc
+from typing import List, Set, Tuple, Union
+from urllib.parse import quote_plus
 
 import telepresence
 from telepresence.utilities import random_name
@@ -67,80 +65,72 @@ class PortMapping(object):
         return set(self._mapping.items())
 
 
-class handle_unexpected_errors(object):
-    """Decorator that catches unexpected errors."""
+def safe_output(args: List[str]) -> str:
+    """
+    Capture output from a command but try to avoid crashing
+    :param args: Command to run
+    :return: Output from the command
+    """
+    try:
+        return str(check_output(args), "utf-8").strip().replace("\n", " // ")
+    except Exception as e:
+        return "(error: {})".format(e)
 
-    def __init__(self, session):
-        self.session = session
 
-    def __call__(self, f):
-        def safe_output(args):
-            try:
-                return str(check_output(args),
-                           "utf-8").strip().replace("\n", " // ")
-            except Exception as e:
-                return "(error: {})".format(e)
+def report_crash(error, log_path, logs):
+    print(
+        "\nLooks like there's a bug in our code. Sorry about that!\n\n"
+        "Here's the traceback:\n\n" + error + "\n"
+    )
+    if log_path != "-":
+        log_ref = " (see {} for the complete logs):".format(log_path)
+    else:
+        log_ref = ""
+    if "\n" in logs:
+        print(
+            "And here are the last few lines of the logfile" + log_ref +
+            "\n\n" + "\n".join(logs.splitlines()[-20:]) + "\n"
+        )
+    if sys.stdout.isatty() and input(
+        "Would you like to file an issue in our issue tracker?"
+        " You'll be able to review and edit before anything is"
+        " posted to the public."
+        " We'd really appreciate the help improving our product. [Y/n]: ",
+    ).lower() in ("y", ""):
+        url = "https://github.com/datawire/telepresence/issues/new?body="
+        body = quote_plus(
+            BUG_REPORT_TEMPLATE.format(
+                sys.argv,
+                telepresence.__version__,
+                sys.version,
+                safe_output(["kubectl", "version", "--short"]),
+                safe_output(["oc", "version"]),
+                safe_output(["uname", "-a"]),
+                error,
+                logs[-1000:],
+            )[:4000]
+        )  # Overly long URLs won't work
+        webbrowser.open_new(url + body)
 
-        @wraps(f)
-        def call_f(*args, **kwargs):
-            try:
-                return f(*args, **kwargs)
-            except KeyboardInterrupt:
-                raise SystemExit(0)
-            except Exception as e:
-                try:
-                    logs = self.session.output.read_logs()
-                    log_path = self.session.output.logfile_path
-                except AttributeError:
-                    # No session or no output
-                    logs = "Not available"
-                    log_path = "-"
-                errorf = StringIO()
-                print_exc(file=errorf)
-                error = errorf.getvalue()
-                print(
-                    "\nLooks like there's a bug in our code. Sorry about that!"
-                    "\n\n"
-                    "Here's the traceback:\n\n" + error + "\n"
-                )
-                if log_path != "-":
-                    log_ref = " (see {} for the complete logs):".format(
-                        log_path
-                    )
-                else:
-                    log_ref = ""
-                if "\n" in logs:
-                    print(
-                        "And here are the last few lines of the logfile" +
-                        log_ref + "\n\n" + "\n".join(logs.splitlines()[-20:]) +
-                        "\n"
-                    )
 
-                if sys.stdout.isatty() and input(
-                    "Would you like to file an issue in our issue tracker?"
-                    " You'll be able to review and edit before anything is"
-                    " posted to the public."
-                    " We'd really appreciate the help improving our "
-                    "product. [Y/n]: ",
-                ).lower() in ("y", ""):
-                    url = (
-                        "https://github.com/datawire/telepresence/issues/" +
-                        "new?body="
-                    )
-                    body = quote_plus(
-                        # Overly long URLs won't work:
-                        BUG_REPORT_TEMPLATE.format(
-                            sys.argv, telepresence.__version__, sys.version,
-                            safe_output(["kubectl", "version", "--short"]),
-                            safe_output(["oc", "version"]),
-                            safe_output(["uname", "-a"]), error, logs[-1000:]
-                        )[:4000]
-                    )
-                    webbrowser.open_new(url + body)
-                else:
-                    raise SystemExit(1)
-
-        return call_f
+@contextmanager
+def crash_reporting(runner=None):
+    """
+    Decorator that catches unexpected errors
+    """
+    try:
+        yield
+    except KeyboardInterrupt:
+        print("Keyboard interrupt (Ctrl-C/Ctrl-Break) pressed")
+        raise SystemExit(0)
+    except Exception:
+        error = format_exc()
+        logs = "Not available"
+        log_path = "-"
+        if runner is not None:
+            logs = runner.output.read_logs()
+            log_path = runner.output.logfile_path
+        report_crash(error, log_path, logs)
 
 
 def path_or_bool(value: str) -> Union[Path, bool]:
@@ -158,7 +148,6 @@ def path_or_bool(value: str) -> Union[Path, bool]:
     )
 
 
-@handle_unexpected_errors("-")
 def parse_args(args=None) -> argparse.Namespace:
     """Create a new ArgumentParser and parse sys.argv."""
     parser = argparse.ArgumentParser(

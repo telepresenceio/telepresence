@@ -399,7 +399,13 @@ def httpbin_ip():
 def probe_also_proxy(probe_result, hostname):
     probe_result.write("probe-also-proxy {}".format(hostname))
     success, request_ip = loads(probe_result.read())
-    return success, IPv4Address(request_ip)
+    try:
+        address = IPv4Address(request_ip)
+    except ValueError as exc:
+        print("Request IP: {}".format(request_ip))
+        assert not success, (request_ip, exc)
+        address = None
+    return success, address
 
 
 def _get_swap_result(probe):
