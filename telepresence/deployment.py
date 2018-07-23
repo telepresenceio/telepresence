@@ -35,13 +35,13 @@ def create_new_deployment(runner: Runner,
     run_id = str(uuid4())
 
     def remove_existing_deployment():
-        runner.get_kubectl(
-            args.context, args.namespace, [
+        runner.get_output(
+            runner.kubectl(
                 "delete",
                 "--ignore-not-found",
                 "svc,deploy",
                 "--selector=telepresence=" + run_id,
-            ]
+            )
         )
 
     runner.add_cleanup("Delete new deployment", remove_existing_deployment)
@@ -73,7 +73,7 @@ def create_new_deployment(runner: Runner,
         command.append(
             "--env=TELEPRESENCE_NAMESERVER=" + get_alternate_nameserver()
         )
-    runner.get_kubectl(args.context, args.namespace, command)
+    runner.get_output(runner.kubectl(command))
     span.end()
     return args.new_deployment, run_id
 
@@ -137,11 +137,11 @@ def supplant_deployment(runner: Runner,
 
     def resize_original(replicas):
         """Resize the original deployment (kubectl scale)"""
-        runner.check_kubectl(
-            args.context, args.namespace, [
+        runner.check_call(
+            runner.kubectl(
                 "scale", "deployment", deployment_name,
                 "--replicas={}".format(replicas)
-            ]
+            )
         )
 
     def delete_new_deployment(check):
@@ -149,17 +149,17 @@ def supplant_deployment(runner: Runner,
         ignore = []
         if not check:
             ignore = ["--ignore-not-found"]
-        runner.check_kubectl(
-            args.context, args.namespace,
-            ["delete", "deployment", new_deployment_name] + ignore
+        runner.check_call(
+            runner.kubectl(
+                "delete", "deployment", new_deployment_name, *ignore
+            )
         )
 
     # Launch the new deployment
     runner.add_cleanup("Delete new deployment", delete_new_deployment, True)
     delete_new_deployment(False)  # Just in case
-    runner.check_kubectl(
-        args.context,
-        args.namespace, ["apply", "-f", "-"],
+    runner.check_call(
+        runner.kubectl("apply", "-f", "-"),
         input=json.dumps(new_deployment_json).encode("utf-8")
     )
 
@@ -274,34 +274,33 @@ def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
     deployment_name, *container_name = args.swap_deployment.split(":", 1)
     if container_name:
         container_name = container_name[0]
-    rcs = runner.get_kubectl(
-        args.context, args.namespace, [
+    rcs = runner.get_output(
+        runner.kubectl(
             "get", "rc", "-o", "name", "--selector",
             "openshift.io/deployment-config.name=" + deployment_name
-        ]
+        )
     )
     rc_name = sorted(
         rcs.split(), key=lambda n: int(n.split("-")[-1])
     )[0].split("/", 1)[1]
     rc_json = json.loads(
-        runner.get_kubectl(
-            args.context,
-            args.namespace, ["get", "rc", "-o", "json", "--export", rc_name],
+        runner.get_output(
+            runner.kubectl("get", "rc", "-o", "json", "--export", rc_name),
             stderr=STDOUT
         )
     )
 
     def apply_json(json_config):
-        runner.check_kubectl(
-            args.context,
-            args.namespace, ["apply", "-f", "-"],
+        runner.check_call(
+            runner.kubectl("apply", "-f", "-"),
             input=json.dumps(json_config).encode("utf-8")
         )
         # Now that we've updated the replication controller, delete pods to
         # make sure changes get applied:
-        runner.check_kubectl(
-            args.context, args.namespace,
-            ["delete", "pod", "--selector", "deployment=" + rc_name]
+        runner.check_call(
+            runner.kubectl(
+                "delete", "pod", "--selector", "deployment=" + rc_name
+            )
         )
 
     runner.add_cleanup(

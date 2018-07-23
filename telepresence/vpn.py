@@ -134,12 +134,12 @@ def k8s_resolve(
     if hostnames:
         try:
             resolved_ips = json.loads(
-                runner.get_kubectl(
-                    args.context, args.namespace, [
+                runner.get_output(
+                    runner.kubectl(
                         "exec", "--container=" + remote_info.container_name,
                         remote_info.pod_name, "--", "python3", "-c",
-                        _GET_IPS_PY
-                    ] + hostnames
+                        _GET_IPS_PY, *hostnames
+                    )
                 )
             )
         except CalledProcessError as e:
@@ -167,17 +167,13 @@ def podCIDRs(runner: Runner):
     cidrs = set()
     try:
         nodes = json.loads(
-            runner.get_output([
-                runner.kubectl_cmd, "get", "nodes", "-o", "json"
-            ])
+            runner.get_output(runner.kubectl("get", "nodes", "-o", "json"))
         )["items"]
     except CalledProcessError as e:
         runner.write("Failed to get nodes: {}".format(e))
         # Fallback to using pod IPs:
         pods = json.loads(
-            runner.get_output([
-                runner.kubectl_cmd, "get", "pods", "-o", "json"
-            ])
+            runner.get_output(runner.kubectl("get", "pods", "-o", "json"))
         )["items"]
         pod_ips = []
         for pod in pods:
@@ -205,9 +201,7 @@ def serviceCIDR(runner: Runner):
 
     def get_service_ips():
         services = json.loads(
-            runner.get_output([
-                runner.kubectl_cmd, "get", "services", "-o", "json"
-            ])
+            runner.get_output(runner.kubectl("get", "services", "-o", "json"))
         )["items"]
         # FIXME: Add test(s) here so we don't crash on, e.g., ExternalName
         return [
@@ -220,10 +214,11 @@ def serviceCIDR(runner: Runner):
     # Ensure we have at least 8 ClusterIP Services:
     while len(service_ips) + len(new_services) < 8:
         new_service = random_name()
-        runner.check_call([
-            runner.kubectl_cmd, "create", "service", "clusterip", new_service,
-            "--tcp=3000"
-        ])
+        runner.check_call(
+            runner.kubectl(
+                "create", "service", "clusterip", new_service, "--tcp=3000"
+            )
+        )
         new_services.append(new_service)
     if new_services:
         service_ips = get_service_ips()
@@ -231,9 +226,7 @@ def serviceCIDR(runner: Runner):
     service_cidr = covering_cidr(service_ips)
     # Delete new services:
     for new_service in new_services:
-        runner.check_call([
-            runner.kubectl_cmd, "delete", "service", new_service
-        ])
+        runner.check_call(runner.kubectl("delete", "service", new_service))
 
     if sys.stderr.isatty():
         runner.show(

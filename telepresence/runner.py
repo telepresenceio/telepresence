@@ -40,9 +40,7 @@ _CleanupItem = typing.NamedTuple(
 class Runner(object):
     """Context for running subprocesses."""
 
-    def __init__(
-        self, output: Output, kubectl_cmd: str, verbose: bool
-    ) -> None:
+    def __init__(self, output: Output, kubeinfo, verbose: bool) -> None:
         """
         :param output: The Output instance for the session
         :param kubectl_cmd: Command to run for kubectl, either "kubectl" or
@@ -50,7 +48,7 @@ class Runner(object):
         :param verbose: Whether subcommand should run in verbose mode.
         """
         self.output = output
-        self.kubectl_cmd = kubectl_cmd
+        self.kubectl = kubeinfo
         self.verbose = verbose
         self.start_time = time()
         self.current_span = None  # type: typing.Optional[Span]
@@ -244,40 +242,6 @@ class Runner(object):
         retcode = process.poll()
         if retcode is not None:
             self.output.write("[{}] exit {}".format(track, retcode))
-
-    # kubectl
-
-    def kubectl(self, context: str, namespace: str,
-                args: typing.List[str]) -> typing.List[str]:
-        """Return command-line for running kubectl."""
-        result = [self.kubectl_cmd]
-        if self.verbose:
-            result.append("--v=4")
-        result.extend(["--context", context])
-        result.extend(["--namespace", namespace])
-        result += args
-        return result
-
-    def get_kubectl(
-        self,
-        context: str,
-        namespace: str,
-        args: typing.List[str],
-        stderr=None
-    ) -> str:
-        """Return output of running kubectl."""
-        return self.get_output(
-            self.kubectl(context, namespace, args), stderr=stderr
-        )
-
-    def check_kubectl(
-        self, context: str, namespace: str, kubectl_args: typing.List[str],
-        **kwargs
-    ) -> None:
-        """Check exit code of running kubectl."""
-        self.check_call(
-            self.kubectl(context, namespace, kubectl_args), **kwargs
-        )
 
     # Cleanup
 
