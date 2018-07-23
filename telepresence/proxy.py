@@ -44,10 +44,8 @@ def connect(
     processes.append(
         runner.popen(
             runner.kubectl(
-                cmdline_args.context, remote_info.namespace, [
-                    "logs", "-f", remote_info.pod_name, "--container",
-                    remote_info.container_name
-                ]
+                "logs", "-f", remote_info.pod_name, "--container",
+                remote_info.container_name
             ),
             bufsize=0,
         )
@@ -59,10 +57,8 @@ def connect(
     processes.append(
         runner.popen(
             runner.kubectl(
-                cmdline_args.context, remote_info.namespace, [
-                    "port-forward", remote_info.pod_name,
-                    "{}:8022".format(ssh.port)
-                ]
+                "port-forward", remote_info.pod_name,
+                "{}:8022".format(ssh.port)
             )
         )
     )
@@ -182,7 +178,7 @@ def start_proxy(runner: Runner, args: argparse.Namespace) -> RemoteInfo:
 
     if args.swap_deployment is not None:
         # This implies --swap-deployment
-        if runner.kubectl_cmd == "oc":
+        if runner.kubectl.command == "oc":
             args.deployment, run_id, container_json = (
                 swap_deployment_openshift(runner, args)
             )
@@ -196,7 +192,7 @@ def start_proxy(runner: Runner, args: argparse.Namespace) -> RemoteInfo:
         ])
 
     deployment_type = "deployment"
-    if runner.kubectl_cmd == "oc":
+    if runner.kubectl.command == "oc":
         # OpenShift Origin uses DeploymentConfig instead, but for swapping we
         # mess with ReplicationController instead because mutating DC doesn't
         # work:

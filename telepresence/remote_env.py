@@ -22,32 +22,29 @@ from telepresence.remote import RemoteInfo
 from telepresence.runner import Runner
 
 
-def _get_remote_env(
-    runner: Runner, context: str, namespace: str, pod_name: str,
-    container_name: str
-) -> Dict[str, str]:
+def _get_remote_env(runner: Runner, pod_name: str,
+                    container_name: str) -> Dict[str, str]:
     """Get the environment variables in the remote pod."""
-    env = runner.get_kubectl(
-        context, namespace, [
+    env = runner.get_output(
+        runner.kubectl(
             "exec", pod_name, "--container", container_name, "--", "python3",
             "-c", "import json, os; print(json.dumps(dict(os.environ)))"
-        ]
+        )
     )
     result = {}  # type: Dict[str,str]
     result.update(loads(env))
     return result
 
 
-def get_env_variables(runner: Runner, remote_info: RemoteInfo,
-                      context: str) -> Dict[str, str]:
+def get_env_variables(runner: Runner,
+                      remote_info: RemoteInfo) -> Dict[str, str]:
     """
     Generate environment variables that match kubernetes.
     """
     span = runner.span()
     # Get the environment:
     remote_env = _get_remote_env(
-        runner, context, remote_info.namespace, remote_info.pod_name,
-        remote_info.container_name
+        runner, remote_info.pod_name, remote_info.container_name
     )
     # Tell local process about the remote setup, useful for testing and
     # debugging:
@@ -73,7 +70,7 @@ def get_remote_env(
     start = time()
     while time() - start < 10:
         try:
-            env = get_env_variables(runner, remote_info, args.context)
+            env = get_env_variables(runner, remote_info)
             break
         except CalledProcessError:
             sleep(0.25)

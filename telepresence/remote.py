@@ -90,20 +90,18 @@ def get_deployment_json(
         ]
         if run_id is None:
             return json.loads(
-                runner.get_kubectl(
-                    context,
-                    namespace,
-                    get_deployment + [deployment_name],
+                runner.get_output(
+                    runner.kubectl(get_deployment + [deployment_name]),
                     stderr=STDOUT
                 )
             )
         else:
             # When using a selector we get a list of objects, not just one:
             return json.loads(
-                runner.get_kubectl(
-                    context,
-                    namespace,
-                    get_deployment + ["--selector=telepresence=" + run_id],
+                runner.get_output(
+                    runner.kubectl(
+                        get_deployment + ["--selector=telepresence=" + run_id]
+                    ),
                     stderr=STDOUT
                 )
             )["items"][0]
@@ -124,9 +122,10 @@ def wait_for_pod(runner: Runner, remote_info: RemoteInfo) -> None:
     while time() - start < 120:
         try:
             pod = json.loads(
-                runner.get_kubectl(
-                    remote_info.context, remote_info.namespace,
-                    ["get", "pod", remote_info.pod_name, "-o", "json"]
+                runner.get_output(
+                    runner.kubectl(
+                        "get", "pod", remote_info.pod_name, "-o", "json"
+                    )
                 )
             )
         except CalledProcessError:
@@ -189,7 +188,7 @@ def get_remote_info(
 
     start = time()
     while time() - start < 120:
-        pods = json.loads(runner.get_kubectl(context, namespace, cmd))["items"]
+        pods = json.loads(runner.get_output(runner.kubectl(cmd)))["items"]
         for pod in pods:
             name = pod["metadata"]["name"]
             phase = pod["status"]["phase"]
