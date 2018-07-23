@@ -131,6 +131,7 @@ def crash_reporting(runner=None):
             logs = runner.output.read_logs()
             log_path = runner.output.logfile_path
         report_crash(error, log_path, logs)
+        raise SystemExit(1)
 
 
 def path_or_bool(value: str) -> Union[Path, bool]:
