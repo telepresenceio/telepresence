@@ -91,12 +91,19 @@ def report_crash(error, log_path, logs):
             "And here are the last few lines of the logfile" + log_ref +
             "\n\n" + "\n".join(logs.splitlines()[-20:]) + "\n"
         )
-    if sys.stdout.isatty() and input(
-        "Would you like to file an issue in our issue tracker?"
-        " You'll be able to review and edit before anything is"
-        " posted to the public."
-        " We'd really appreciate the help improving our product. [Y/n]: ",
-    ).lower() in ("y", ""):
+    report = "no"
+    if sys.stdout.isatty():
+        message = (
+            "Would you like to file an issue in our issue tracker?"
+            " You'll be able to review and edit before anything is"
+            " posted to the public."
+            " We'd really appreciate the help improving our product. [Y/n]: "
+        )
+        try:
+            report = input(message).lower()[:1]
+        except EOFError:
+            print("(EOF)")
+    if report in ("y", ""):
         url = "https://github.com/datawire/telepresence/issues/new?body="
         body = quote_plus(
             BUG_REPORT_TEMPLATE.format(
@@ -131,6 +138,7 @@ def crash_reporting(runner=None):
             logs = runner.output.read_logs()
             log_path = runner.output.logfile_path
         report_crash(error, log_path, logs)
+        raise SystemExit(1)
 
 
 def path_or_bool(value: str) -> Union[Path, bool]:

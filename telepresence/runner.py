@@ -137,14 +137,9 @@ class Runner(object):
         for line in message.splitlines():
             print(self.wrapper.fill(line), file=sys.stderr)
 
-    def command_span(self, track, args):
-        return self.span(
-            "{} {}".format(track, str_command(args))[:80],
-            False,
-            verbose=False
-        )
+    # Subprocesses
 
-    def make_logger(self, track, capture=None):
+    def _make_logger(self, track, capture=None):
         """Create a logger that optionally captures what is logged"""
         prefix = "{:>3d}".format(track)
 
@@ -164,21 +159,25 @@ class Runner(object):
 
         return logger
 
-    def launch_command(self, track, out_cb, err_cb, args, **kwargs) -> Popen:
+    def _launch_command(self, track, out_cb, err_cb, args, **kwargs) -> Popen:
         """Call a command, generate stamped, logged output."""
         try:
-            process = launch_command(args, out_cb, err_cb, **kwargs)
+            process = _launch_command(args, out_cb, err_cb, **kwargs)
         except OSError as exc:
             self.output.write("[{}] {}".format(track, exc))
             raise
         # Grep-able log: self.output.write("CMD: {}".format(str_command(args)))
         return process
 
-    def run_command(self, track, msg1, msg2, out_cb, err_cb, args, **kwargs):
+    def _run_command(self, track, msg1, msg2, out_cb, err_cb, args, **kwargs):
         """Run a command synchronously"""
         self.output.write("[{}] {}: {}".format(track, msg1, str_command(args)))
-        span = self.command_span(track, args)
-        process = self.launch_command(track, out_cb, err_cb, args, **kwargs)
+        span = self.span(
+            "{} {}".format(track, str_command(args))[:80],
+            False,
+            verbose=False
+        )
+        process = self._launch_command(track, out_cb, err_cb, args, **kwargs)
         process.wait()
         spent = span.end()
         retcode = process.poll()
@@ -195,8 +194,8 @@ class Runner(object):
     def check_call(self, args, **kwargs):
         """Run a subprocess, make sure it exited with 0."""
         self.counter = track = self.counter + 1
-        out_cb = err_cb = self.make_logger(track)
-        self.run_command(
+        out_cb = err_cb = self._make_logger(track)
+        self._run_command(
             track, "Running", "ran", out_cb, err_cb, args, **kwargs
         )
 
@@ -205,13 +204,13 @@ class Runner(object):
         self.counter = track = self.counter + 1
         capture = []  # type: typing.List[str]
         if reveal or self.verbose:
-            out_cb = self.make_logger(track, capture=capture)
+            out_cb = self._make_logger(track, capture=capture)
         else:
             out_cb = capture.append
-        err_cb = self.make_logger(track)
+        err_cb = self._make_logger(track)
         cpe_exc = None
         try:
-            self.run_command(
+            self._run_command(
                 track, "Capturing", "captured", out_cb, err_cb, args, **kwargs
             )
         except CalledProcessError as exc:
@@ -228,7 +227,7 @@ class Runner(object):
     def popen(self, args, **kwargs) -> Popen:
         """Return Popen object."""
         self.counter = track = self.counter + 1
-        out_cb = err_cb = self.make_logger(track)
+        out_cb = err_cb = self._make_logger(track)
 
         def done(proc):
             self._popen_done(track, proc)
@@ -236,7 +235,7 @@ class Runner(object):
         self.output.write(
             "[{}] Launching: {}".format(track, str_command(args))
         )
-        process = self.launch_command(
+        process = self._launch_command(
             track, out_cb, err_cb, args, done=done, **kwargs
         )
         return process
@@ -245,6 +244,8 @@ class Runner(object):
         retcode = process.poll()
         if retcode is not None:
             self.output.write("[{}] exit {}".format(track, retcode))
+
+    # kubectl
 
     def kubectl(self, context: str, namespace: str,
                 args: typing.List[str]) -> typing.List[str]:
@@ -356,7 +357,7 @@ class Runner(object):
         return SystemExit(0)  # Not reached; just here for the linters
 
 
-def launch_command(args, out_cb, err_cb, done=None, **kwargs):
+def _launch_command(args, out_cb, err_cb, done=None, **kwargs):
     """
     Launch subprocess with args, kwargs.
     Log stdout and stderr by calling respective callbacks.
