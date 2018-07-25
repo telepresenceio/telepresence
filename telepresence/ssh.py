@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from subprocess import Popen, CalledProcessError
+from subprocess import CalledProcessError
 from time import time, sleep
 from typing import List
 
@@ -53,23 +53,20 @@ class SSH(object):
             "telepresence@" + self.host,
         ] + additional_args
 
-    def popen(self, additional_args: List[str]) -> Popen:
-        """Connect to remote pod via SSH.
-
-        Returns Popen object.
+    def bg_command(self, additional_args: List[str]) -> List[str]:
         """
-        return self.runner.popen(
-            self.command(
-                additional_args,
-                [
-                    # No remote command, since this intended for things like -L
-                    # or -R where we don't want to run a remote command.
-                    "-N",
-                    # Ping once a second; after ten retries will disconnect:
-                    "-oServerAliveInterval=1",
-                    "-oServerAliveCountMax=10",
-                ]
-            )
+        Return command line argument list for running ssh for port forwards.
+        """
+        return self.command(
+            additional_args,
+            [
+                # No remote command, since this intended for things like -L
+                # or -R where we don't want to run a remote command.
+                "-N",
+                # Ping once a second; after ten retries will disconnect:
+                "-oServerAliveInterval=1",
+                "-oServerAliveCountMax=10",
+            ]
         )
 
     def wait(self) -> None:

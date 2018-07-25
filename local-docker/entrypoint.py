@@ -55,8 +55,7 @@ from time import time, sleep
 
 from telepresence.expose import expose_local_services
 from telepresence.ssh import SSH
-from telepresence.cleanup import Subprocesses, wait_for_exit
-from telepresence.runner import Runner
+from telepresence.runner import Runner, wait_for_exit
 
 
 def main():
@@ -98,12 +97,11 @@ def proxy(config: dict):
     ] + cidrs)
     # Start the SSH tunnels to expose local services:
     runner = Runner.open("-", "kubectl", False)
-    subps = Subprocesses(runner)
     ssh = SSH(runner, port, ip)
-    expose_local_services(runner, subps, ssh, expose_ports)
+    expose_local_services(runner, ssh, expose_ports)
 
     # Wait for everything to exit:
-    wait_for_exit(runner, main_process, subps)
+    wait_for_exit(runner, main_process)
 
 
 def wait():

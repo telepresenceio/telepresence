@@ -22,6 +22,7 @@ from subprocess import CalledProcessError, DEVNULL, PIPE, Popen, check_output
 from threading import Thread
 from time import sleep, time
 
+from telepresence.background import Background, BackgroundProcess, TrackedBG
 from telepresence.cache import Cache
 from telepresence.output import Output
 from telepresence.span import Span
@@ -43,8 +44,7 @@ class Runner(object):
     def __init__(self, output: Output, kubeinfo, verbose: bool) -> None:
         """
         :param output: The Output instance for the session
-        :param kubectl_cmd: Command to run for kubectl, either "kubectl" or
-            "oc" (for OpenShift Origin).
+        :param kubeinfo: How to run kubectl or equivalent
         :param verbose: Whether subcommand should run in verbose mode.
         """
         self.output = output
@@ -54,6 +54,7 @@ class Runner(object):
         self.current_span = None  # type: typing.Optional[Span]
         self.counter = 0
         self.cleanup_stack = []  # type: typing.List[_CleanupItem]
+        self.tracked = None  # type: typing.Optional[TrackedBG]
 
         if sys.stderr.isatty():
             try:
@@ -78,7 +79,7 @@ class Runner(object):
         )
         for command in report:
             try:
-                self.popen(command)
+                self._popen("report", command)
             except OSError:
                 pass
         self.output.write("Python {}".format(sys.version))
@@ -222,26 +223,35 @@ class Runner(object):
             raise CalledProcessError(cpe_exc.returncode, cpe_exc.cmd, output)
         return output
 
-    def popen(self, args, **kwargs) -> Popen:
+    def _popen(self, name: str, args, **kwargs) -> typing.Tuple[int, Popen]:
         """Return Popen object."""
         self.counter = track = self.counter + 1
         out_cb = err_cb = self._make_logger(track)
 
         def done(proc):
-            self._popen_done(track, proc)
+            retcode = proc.wait()
+            self.output.write("[{}] exit {}".format(track, retcode))
 
         self.output.write(
-            "[{}] Launching: {}".format(track, str_command(args))
+            "[{}] Launching {}: {}".format(track, name, str_command(args))
         )
         process = self._launch_command(
             track, out_cb, err_cb, args, done=done, **kwargs
         )
-        return process
+        return track, process
 
-    def _popen_done(self, track, process):
-        retcode = process.poll()
-        if retcode is not None:
-            self.output.write("[{}] exit {}".format(track, retcode))
+    def launch(
+        self, name: str, args, killer=None, critical=True, **kwargs
+    ) -> None:
+        job_id, process = self._popen(name, args, **kwargs)
+        name = "[{}] {}".format(job_id, name)
+        bg = BackgroundProcess(name, process, killer, critical)
+        self.track_background(bg)
+
+    def track_background(self, bg: Background) -> None:
+        if self.tracked is None:
+            self.tracked = TrackedBG(self)
+        self.tracked.append(bg)
 
     # Cleanup
 
@@ -370,3 +380,37 @@ def _launch_command(args, out_cb, err_cb, done=None, **kwargs):
         process.stdin.write(str(in_data, "utf-8"))
         process.stdin.close()
     return process
+
+
+def wait_for_exit(runner: Runner, main_process: Popen) -> None:
+    """
+    Monitor main process and background items until done
+    """
+    runner.write("Everything launched. Waiting to exit...")
+    main_command = str_command(str(arg) for arg in main_process.args)
+    span = runner.span()
+    while True:
+        sleep(0.1)
+        main_code = main_process.poll()
+        if main_code is not None:
+            # Shell exited, we're done. Automatic shutdown cleanup will kill
+            # subprocesses.
+            runner.write(
+                "Main process ({})\n exited with code {}.".format(
+                    main_command, main_code
+                )
+            )
+            span.end()
+            runner.set_success(True)
+            raise SystemExit(main_code)
+        dead_bg = runner.tracked.which_dead()
+        if dead_bg:
+            # Unfortunately torsocks doesn't deal well with connections
+            # being lost, so best we can do is shut down.
+            # FIXME: Look at bg.critical and do something smarter
+            runner.show(
+                "Proxy to Kubernetes exited. This is typically due to"
+                " a lost connection."
+            )
+            span.end()
+            raise runner.fail("Exiting...", code=3)

@@ -21,7 +21,6 @@ from time import time, sleep
 from typing import List, Dict
 
 from telepresence.ssh import SSH
-from telepresence.cleanup import Subprocesses
 from telepresence.remote import RemoteInfo
 from telepresence.utilities import random_name
 from telepresence.runner import Runner
@@ -240,7 +239,7 @@ def serviceCIDR(runner: Runner):
 
 def connect_sshuttle(
     runner: Runner, remote_info: RemoteInfo, args: argparse.Namespace,
-    subprocesses: Subprocesses, env: Dict[str, str], ssh: SSH
+    env: Dict[str, str], ssh: SSH
 ):
     """Connect to Kubernetes using sshuttle."""
     # Make sure we have sudo credentials by doing a small sudo in advance
@@ -251,8 +250,9 @@ def connect_sshuttle(
     if sys.platform.startswith("linux"):
         # sshuttle tproxy mode seems to have issues:
         sshuttle_method = "nat"
-    subprocesses.append(
-        runner.popen([
+    runner.launch(
+        "sshuttle",
+        [
             "sshuttle-telepresence",
             "-v",
             "--dns",
@@ -270,7 +270,7 @@ def connect_sshuttle(
             "telepresence@localhost:" + str(ssh.port),
         ] + get_proxy_cidrs(
             runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
-        ))
+        )
     )
 
     # sshuttle will take a while to startup. We can detect it being up when

@@ -23,7 +23,6 @@ import os
 import os.path
 
 from telepresence import TELEPRESENCE_LOCAL_IMAGE
-from telepresence.cleanup import Subprocesses
 from telepresence.remote import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.ssh import SSH
@@ -74,7 +73,6 @@ def run_docker_command(
     remote_info: RemoteInfo,
     args: argparse.Namespace,
     remote_env: Dict[str, str],
-    subprocesses: Subprocesses,
     ssh: SSH,
     mount_dir: Optional[str],
 ) -> Popen:
@@ -112,16 +110,16 @@ def run_docker_command(
         config["ip"] = MAC_LOOPBACK_IP
     # Image already has tini init so doesn't need --init option:
     span = runner.span()
-    subprocesses.append(
-        runner.popen(
-            docker_runify(
-                publish_args + [
-                    "--rm", "--privileged", "--name=" +
-                    name, TELEPRESENCE_LOCAL_IMAGE, "proxy",
-                    json.dumps(config)
-                ]
-            )
-        ), make_docker_kill(runner, name)
+    runner.launch(
+        "Network container",
+        docker_runify(
+            publish_args + [
+                "--rm", "--privileged", "--name=" +
+                name, TELEPRESENCE_LOCAL_IMAGE, "proxy",
+                json.dumps(config)
+            ]
+        ),
+        killer=make_docker_kill(runner, name)
     )
 
     # Wait for sshuttle to be running:
