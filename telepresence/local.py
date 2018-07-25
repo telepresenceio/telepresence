@@ -16,13 +16,13 @@ import argparse
 import sys
 from subprocess import CalledProcessError, Popen
 from time import time, sleep
-from typing import Dict, Optional
+from typing import Dict
 
 import os
 from shutil import rmtree, copy
 from tempfile import mkdtemp, NamedTemporaryFile
 
-from telepresence.cleanup import Subprocesses, kill_process
+from telepresence.utilities import kill_process
 from telepresence.remote import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.ssh import SSH
@@ -136,10 +136,8 @@ def run_local_command(
     remote_info: RemoteInfo,
     args: argparse.Namespace,
     env_overrides: Dict[str, str],
-    subprocesses: Subprocesses,
     socks_port: int,
     ssh: SSH,
-    mount_dir: Optional[str],
 ) -> Popen:
     """--run-shell/--run support, run command locally."""
     env = os.environ.copy()
@@ -167,7 +165,7 @@ def run_local_command(
         setup_torsocks(runner, env, socks_port, unsupported_tools_path)
         p = Popen(["torsocks"] + command, env=env)
     elif args.method == "vpn-tcp":
-        connect_sshuttle(runner, remote_info, args, subprocesses, env, ssh)
+        connect_sshuttle(runner, remote_info, args, env, ssh)
         p = Popen(command, env=env)
 
     def terminate_if_alive():

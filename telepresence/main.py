@@ -18,7 +18,7 @@ Telepresence: local development environment for a remote Kubernetes cluster.
 import sys
 from types import SimpleNamespace
 
-from telepresence.cleanup import wait_for_exit
+from telepresence.runner import wait_for_exit
 from telepresence.cli import parse_args, crash_reporting
 from telepresence.container import run_docker_command
 from telepresence.local import run_local_command
@@ -63,7 +63,7 @@ def main(session):
         remote_info = start_proxy(runner, args)
 
         # Connect to the proxy (pod name -> ssh object)
-        subprocesses, socks_port, ssh = connect(runner, remote_info, args)
+        socks_port, ssh = connect(runner, remote_info, args)
 
         # Capture remote environment information (ssh object -> env info)
         env = get_remote_env(runner, args, remote_info)
@@ -87,17 +87,15 @@ def main(session):
                 remote_info,
                 args,
                 env,
-                subprocesses,
                 ssh,
                 mount_dir,
             )
         else:
             user_process = run_local_command(
-                runner, remote_info, args, env, subprocesses, socks_port, ssh,
-                mount_dir
+                runner, remote_info, args, env, socks_port, ssh
             )
 
-        wait_for_exit(runner, user_process, subprocesses)
+        wait_for_exit(runner, user_process)
 
 
 def run_telepresence():

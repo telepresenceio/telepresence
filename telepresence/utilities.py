@@ -14,8 +14,9 @@
 
 import socket
 import shlex
+from subprocess import Popen, TimeoutExpired
 from time import time
-from typing import List
+from typing import List, Iterable
 
 import os
 
@@ -65,7 +66,7 @@ def get_alternate_nameserver() -> str:
     raise RuntimeError("All known public nameservers are in /etc/resolv.conf.")
 
 
-def str_command(args: List[str]):
+def str_command(args: Iterable[str]):
     """
     Return a string representing the shell command and its arguments.
 
@@ -79,3 +80,14 @@ def str_command(args: List[str]):
         else:
             res.append(shlex.quote(arg))
     return " ".join(res)
+
+
+def kill_process(process: Popen) -> None:
+    """Kill a process, make sure it's a dead."""
+    if process.poll() is None:
+        process.terminate()
+    try:
+        process.wait(timeout=1)
+    except TimeoutExpired:
+        process.kill()
+        process.wait()

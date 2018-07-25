@@ -18,8 +18,7 @@ import sys
 from shutil import which
 from typing import Tuple
 
-from telepresence.background import LocalServer
-from telepresence.cleanup import Subprocesses
+from telepresence.background import launch_local_server
 from telepresence.container import MAC_LOOPBACK_IP
 from telepresence.deployment import create_new_deployment, \
     swap_deployment_openshift, supplant_deployment
@@ -32,34 +31,30 @@ from telepresence.utilities import find_free_port
 
 def connect(
     runner: Runner, remote_info: RemoteInfo, cmdline_args: argparse.Namespace
-) -> Tuple[Subprocesses, int, SSH]:
+) -> Tuple[int, SSH]:
     """
     Start all the processes that handle remote proxying.
 
-    Return (Subprocesses, local port of SOCKS proxying tunnel, SSH instance).
+    Return (local port of SOCKS proxying tunnel, SSH instance).
     """
     span = runner.span()
-    processes = Subprocesses(runner)
     # Keep local copy of pod logs, for debugging purposes:
-    processes.append(
-        runner.popen(
-            runner.kubectl(
-                "logs", "-f", remote_info.pod_name, "--container",
-                remote_info.container_name
-            ),
-            bufsize=0,
-        )
+    runner.launch(
+        "kubectl logs",
+        runner.kubectl(
+            "logs", "-f", remote_info.pod_name, "--container",
+            remote_info.container_name
+        ),
+        bufsize=0,
     )
 
     ssh = SSH(runner, find_free_port())
 
     # forward remote port to here, by tunneling via remote SSH server:
-    processes.append(
-        runner.popen(
-            runner.kubectl(
-                "port-forward", remote_info.pod_name,
-                "{}:8022".format(ssh.port)
-            )
+    runner.launch(
+        "kubectl port-forward",
+        runner.kubectl(
+            "port-forward", remote_info.pod_name, "{}:8022".format(ssh.port)
         )
     )
     if cmdline_args.method == "container":
@@ -105,13 +100,14 @@ def connect(
                 ["sudo", "ifconfig", "lo0", "-alias", MAC_LOOPBACK_IP]
             )
             docker_interface = MAC_LOOPBACK_IP
-        processes.append(
-            runner.popen([
+
+        runner.launch(
+            "socat for docker", [
                 "socat", "TCP4-LISTEN:{},bind={},reuseaddr,fork".format(
                     ssh.port,
                     docker_interface,
                 ), "TCP4:127.0.0.1:{}".format(ssh.port)
-            ])
+            ]
         )
 
     ssh.wait()
@@ -120,7 +116,6 @@ def connect(
     if cmdline_args.method != "container":
         expose_local_services(
             runner,
-            processes,
             ssh,
             cmdline_args.expose.local_to_remote(),
         )
@@ -129,16 +124,20 @@ def connect(
     # and the local server for the proxy to poll (remote -> local).
     socks_port = find_free_port()
     local_server_port = find_free_port()
-    local_server = LocalServer(local_server_port, runner.output)
-    processes.append(local_server, local_server.kill)
+    runner.track_background(
+        launch_local_server(local_server_port, runner.output)
+    )
     forward_args = [
         "-L127.0.0.1:{}:127.0.0.1:9050".format(socks_port),
         "-R9055:127.0.0.1:{}".format(local_server_port)
     ]
-    processes.append(ssh.popen(forward_args))
+    runner.launch(
+        "SSH port forward (socks and proxy poll)",
+        ssh.bg_command(forward_args)
+    )
 
     span.end()
-    return processes, socks_port, ssh
+    return socks_port, ssh
 
 
 def start_proxy(runner: Runner, args: argparse.Namespace) -> RemoteInfo:

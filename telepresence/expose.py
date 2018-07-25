@@ -15,18 +15,16 @@
 import sys
 from typing import List, Tuple
 
-from telepresence.cleanup import Subprocesses
 from telepresence.runner import Runner
 from telepresence.ssh import SSH
 
 
 def expose_local_services(
-    runner: Runner, processes: Subprocesses, ssh: SSH,
-    port_numbers: List[Tuple[int, int]]
+    runner: Runner, ssh: SSH, port_numbers: List[Tuple[int, int]]
 ) -> None:
     """Create SSH tunnels from remote proxy pod to local host.
 
-    :param processes: A `Subprocesses` instance.
+    :param runner: The runner
     :param ssh: A 'SSH` instance.
     :param port_numbers: List of pairs of (local port, remote port).
     """
@@ -51,6 +49,9 @@ def expose_local_services(
             "*:{}:127.0.0.1:{}".format(remote_port, local_port),
         ])
     if remote_forward_arguments:
-        processes.append(ssh.popen(remote_forward_arguments))
+        runner.launch(
+            "SSH port forward (exposed ports)",
+            ssh.bg_command(remote_forward_arguments)
+        )
     if output:
         runner.show("")
