@@ -20,6 +20,7 @@
 * [Minikube VPN access](tutorials/minikube-vpn.md)
 * [Using Telepresence with Golang](howto/golang.md)
 * [Local Java development](tutorials/java.md)
+* [Using Telepresnece with IntelliJ](tutorials/intellij.md)
 
 ## Reference
 
