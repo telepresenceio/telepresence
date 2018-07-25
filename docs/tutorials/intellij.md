@@ -8,7 +8,7 @@ The fundamental benefit of Telepresence is that it provides a [two-way proxy](ht
 
 The video below provides more information, and also demonstrates how to debug a locally run Rate Limiter service (that is integrated with a remotely deployed Ambassador API Gateway) via Telepresence and IntelliJ IDEA. All of the example code can be found in my [Docker Java Shopping](https://github.com/danielbryantuk/oreilly-docker-java-shopping) sample microservices-based application on GitHub. 
 
-video
+https://youtu.be/74ZJ1GKoZiU
 
 ### Video Instruction TL;DR
 
