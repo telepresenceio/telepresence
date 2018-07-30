@@ -40,7 +40,7 @@ class Cache(object):
         try:
             with open(filename, "r") as f:
                 cache = json.load(f)
-        except FileNotFoundError:
+        except (FileNotFoundError, ValueError):
             cache = {}
 
         result = Cache(cache)

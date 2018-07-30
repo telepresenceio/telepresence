@@ -1,0 +1,1 @@
+Telepresence no longer crashes in the presence of an empty or corrupted cache file.
