@@ -14,7 +14,6 @@
 
 import argparse
 import re
-import sys
 from shutil import which
 from typing import Tuple
 
@@ -143,7 +142,7 @@ def connect(
 def start_proxy(runner: Runner, args: argparse.Namespace) -> RemoteInfo:
     """Start the kubectl port-forward and SSH clients that do the proxying."""
     span = runner.span()
-    if sys.stdout.isatty() and args.method != "container":
+    if runner.chatty and args.method != "container":
         runner.show(
             "Starting proxy with method '{}', which has the following "
             "limitations:".format(args.method)
@@ -163,7 +162,7 @@ def start_proxy(runner: Runner, args: argparse.Namespace) -> RemoteInfo:
             "For a full list of method limitations see "
             "https://telepresence.io/reference/methods.html\n"
         )
-    if args.mount and sys.stdout.isatty():
+    if args.mount and runner.chatty:
         runner.show(
             "\nVolumes are rooted at $TELEPRESENCE_ROOT. See "
             "https://telepresence.io/howto/volumes.html for details."

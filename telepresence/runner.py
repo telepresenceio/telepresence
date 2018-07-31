@@ -21,7 +21,7 @@ from contextlib import contextmanager
 from inspect import currentframe, getframeinfo
 from pathlib import Path
 from shutil import rmtree
-from subprocess import CalledProcessError, DEVNULL, PIPE, Popen, check_output
+from subprocess import CalledProcessError, DEVNULL, PIPE, Popen
 from tempfile import mkdtemp
 from threading import Thread
 from time import sleep, time
@@ -69,13 +69,15 @@ class Runner(object):
             self.platform = sys.platform
         self.output.write("Platform: {}".format(self.platform))
 
+        term_width = 99999
+        self.chatty = False
         if sys.stderr.isatty():
+            err_fd = sys.stderr.fileno()
             try:
-                term_width = int(check_output(["tput", "cols"]))
-            except (CalledProcessError, OSError):
-                term_width = 79
-        else:
-            term_width = 99999
+                term_width = os.get_terminal_size(err_fd).columns - 1
+                self.chatty = True
+            except OSError:
+                pass
         self.wrapper = textwrap.TextWrapper(
             width=term_width,
             initial_indent="T: ",

@@ -15,7 +15,6 @@
 import argparse
 import ipaddress
 import json
-import sys
 from subprocess import CalledProcessError, Popen
 from time import time, sleep
 from typing import List, Dict
@@ -227,7 +226,7 @@ def serviceCIDR(runner: Runner):
     for new_service in new_services:
         runner.check_call(runner.kubectl("delete", "service", new_service))
 
-    if sys.stderr.isatty():
+    if runner.chatty:
         runner.show(
             "Guessing that Services IP range is {}. Services started after"
             " this point will be inaccessible if are outside this range;"
