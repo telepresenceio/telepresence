@@ -19,7 +19,7 @@ from time import time, sleep
 from typing import Dict
 
 import os
-from shutil import rmtree, copy
+from shutil import copy
 
 from telepresence.utilities import kill_process
 from telepresence.remote import RemoteInfo
@@ -102,7 +102,7 @@ def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
     """Setup environment variables to make torsocks work correctly."""
     # Create custom torsocks.conf, since some options we want (in particular,
     # port) aren't accessible via env variables in older versions of torconf:
-    with open(runner.temp / "tel_torsocks.conf", "w") as tor_conffile:
+    with open(str(runner.temp / "tel_torsocks.conf"), "w") as tor_conffile:
         tor_conffile.write(TORSOCKS_CONFIG.format(socks_port))
     env["TORSOCKS_CONF_FILE"] = tor_conffile.name
     if runner.output.logfile is not sys.stdout:
