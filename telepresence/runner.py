@@ -118,6 +118,12 @@ class Runner(object):
     @classmethod
     def open(cls, logfile_path, kubectl_cmd: str, verbose: bool):
         """
+        FIXME: This is bogus now.
+
+        The second argument to the constructor should be a KubeInfo instance.
+        This method is used by the local-docker entrypoint script. Maybe we can
+        kill this method and have it just pass None instead?
+
         :return: File-like object for the given logfile path.
         """
         output = Output(logfile_path)
