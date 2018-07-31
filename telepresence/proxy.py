@@ -91,6 +91,7 @@ def connect(
             # an IP range that is assigned for testing network devices and
             # therefore shouldn't conflict with real IPs or local private
             # networks (https://tools.ietf.org/html/rfc6890).
+            runner.require_sudo()
             runner.check_call([
                 "sudo", "ifconfig", "lo0", "alias", MAC_LOOPBACK_IP
             ])

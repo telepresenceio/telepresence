@@ -30,7 +30,11 @@ def mount_remote_volumes(
     Returns (path to mounted directory, callable that will unmount it).
     """
     span = runner.span()
-    sudo_prefix = ["sudo"] if allow_all_users else []
+    if allow_all_users:
+        runner.require_sudo()
+        sudo_prefix = ["sudo"]
+    else:
+        sudo_prefix = []
     middle = ["-o", "allow_other"] if allow_all_users else []
     try:
         runner.get_output(

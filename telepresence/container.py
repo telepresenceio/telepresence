@@ -86,6 +86,9 @@ def run_docker_command(
     :param mount_dir: Path to local directory where remote pod's filesystem is
         mounted.
     """
+    if SUDO_FOR_DOCKER:
+        runner.require_sudo()
+
     # Update environment:
     remote_env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
 

@@ -15,7 +15,7 @@
 import argparse
 import ipaddress
 import json
-from subprocess import CalledProcessError, Popen
+from subprocess import CalledProcessError
 from time import time, sleep
 from typing import List, Dict
 
@@ -241,9 +241,7 @@ def connect_sshuttle(
     env: Dict[str, str], ssh: SSH
 ):
     """Connect to Kubernetes using sshuttle."""
-    # Make sure we have sudo credentials by doing a small sudo in advance
-    # of sshuttle using it:
-    Popen(["sudo", "true"]).wait()
+    runner.require_sudo()
     span = runner.span()
     sshuttle_method = "auto"
     if runner.platform == "linux":
