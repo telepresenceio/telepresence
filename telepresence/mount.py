@@ -13,9 +13,7 @@
 # limitations under the License.
 
 import sys
-from pathlib import Path
 from subprocess import STDOUT, CalledProcessError
-from tempfile import mkdtemp
 from typing import Tuple, Callable
 
 from telepresence.runner import Runner
@@ -78,10 +76,6 @@ def mount_remote_volumes(
             )
         else:
             runner.get_output(sudo_prefix + ["umount", "-f", mount_dir])
-        try:
-            Path(mount_dir).rmdir()
-        except OSError:
-            pass
 
     span.end()
     return mount_dir, cleanup if mounted else no_cleanup
@@ -94,9 +88,7 @@ def mount_remote(session):
         # The mount directory is made here, removed by mount_cleanup if
         # mount succeeds, leaked if mount fails.
         if args.mount is True:
-            # Docker for Mac only shares some folders; the default TMPDIR
-            # on OS X is not one of them, so make sure we use /tmp:
-            mount_dir = mkdtemp(dir="/tmp")
+            mount_dir = str(session.runner.make_temp("fs"))
         else:
             # FIXME: Maybe warn if args.mount doesn't start with /tmp?
             try:

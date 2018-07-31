@@ -19,7 +19,10 @@ import typing
 import uuid
 from contextlib import contextmanager
 from inspect import currentframe, getframeinfo
+from pathlib import Path
+from shutil import rmtree
 from subprocess import CalledProcessError, DEVNULL, PIPE, Popen, check_output
+from tempfile import mkdtemp
 from threading import Thread
 from time import sleep, time
 
@@ -92,6 +95,12 @@ class Runner(object):
         self.cache.invalidate(12 * 60 * 60)
         self.add_cleanup("Save caches", self.cache.save)
 
+        # Docker for Mac only shares some folders; the default TMPDIR
+        # on OS X is not one of them, so make sure we use /tmp:
+        self.temp = Path(mkdtemp(prefix="tel-", dir="/tmp"))
+        (self.temp / "session_id.txt").write_text(self.session_id)
+        self.add_cleanup("Remove temporary directory", rmtree, self.temp)
+
     @classmethod
     def open(cls, logfile_path, kubectl_cmd: str, verbose: bool):
         """
@@ -137,6 +146,11 @@ class Runner(object):
         self.write(message, prefix=">>>")
         for line in message.splitlines():
             print(self.wrapper.fill(line), file=sys.stderr)
+
+    def make_temp(self, name: str) -> Path:
+        res = self.temp / name
+        res.mkdir()
+        return res
 
     # Subprocesses
 
