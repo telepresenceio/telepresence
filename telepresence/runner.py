@@ -16,6 +16,7 @@ import signal
 import sys
 import textwrap
 import typing
+import uuid
 from contextlib import contextmanager
 from inspect import currentframe, getframeinfo
 from subprocess import CalledProcessError, DEVNULL, PIPE, Popen, check_output
@@ -70,6 +71,7 @@ class Runner(object):
             replace_whitespace=False,
             drop_whitespace=False,
         )
+        self.session_id = uuid.uuid4().hex
 
         # Log some version info
         report = (

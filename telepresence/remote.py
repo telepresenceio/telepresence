@@ -74,8 +74,8 @@ def get_deployment_json(
     """Get the decoded JSON for a deployment.
 
     If this is a Deployment we created, the run_id is also passed in - this is
-    the uuid we set for the telepresence label. Otherwise run_id is None and
-    the Deployment name must be used to locate the Deployment.
+    the session id we set for the telepresence label. Otherwise run_id is None
+    and the Deployment name must be used to locate the Deployment.
     """
     assert context is not None
     assert namespace is not None
@@ -157,8 +157,8 @@ def get_remote_info(
     Given the deployment name, return a RemoteInfo object.
 
     If this is a Deployment we created, the run_id is also passed in - this is
-    the uuid we set for the telepresence label. Otherwise run_id is None and
-    the Deployment name must be used to locate the Deployment.
+    the session identifier we set for the telepresence label. Otherwise run_id
+    is None and the Deployment name must be used to locate the Deployment.
     """
     span = runner.span()
     deployment = get_deployment_json(
