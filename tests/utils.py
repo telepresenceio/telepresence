@@ -189,15 +189,15 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
         ]).decode("utf-8")
         print("query output:")
         print(_indent(res))
-        if res:
+        if delimiter in res:
             before, res, after = res.split(delimiter + "\n")
             return res
-        print("... empty response")
+        print("... empty response (no delimiter)")
     return res
 
 
 def _indent(text):
-    return "\t" + text.replace("\n", "\t\n")
+    return ">\t" + text.replace("\n", "\n>\t")
 
 
 def run_webserver(namespace=None):
