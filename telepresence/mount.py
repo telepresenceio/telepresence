@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
 from subprocess import STDOUT, CalledProcessError
 from typing import Tuple, Callable
 
@@ -70,7 +69,7 @@ def mount_remote_volumes(
         pass
 
     def cleanup():
-        if sys.platform.startswith("linux"):
+        if runner.platform == "linux":
             runner.check_call(
                 sudo_prefix + ["fusermount", "-z", "-u", mount_dir]
             )

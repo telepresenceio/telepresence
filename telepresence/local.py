@@ -107,7 +107,7 @@ def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
     env["TORSOCKS_CONF_FILE"] = tor_conffile.name
     if runner.output.logfile is not sys.stdout:
         env["TORSOCKS_LOG_FILE_PATH"] = runner.output.logfile.name
-    if sys.platform == "darwin":
+    if runner.platform == "darwin":
         env["PATH"] = sip_workaround(
             runner, env["PATH"], unsupported_tools_path
         )

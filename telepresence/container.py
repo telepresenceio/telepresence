@@ -14,7 +14,6 @@
 
 import argparse
 import json
-import sys
 from subprocess import CalledProcessError, Popen
 from time import sleep
 from typing import List, Callable, Dict, Tuple, Optional
@@ -106,7 +105,7 @@ def run_docker_command(
         "expose_ports":
         list(args.expose.local_to_remote()),
     }
-    if sys.platform == "darwin":
+    if runner.platform == "darwin":
         config["ip"] = MAC_LOOPBACK_IP
     # Image already has tini init so doesn't need --init option:
     span = runner.span()

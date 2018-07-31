@@ -239,7 +239,7 @@ def analyze_args(session):
         require_command(runner, "sshfs")
 
     # Need conntrack for sshuttle on Linux:
-    if sys.platform.startswith("linux") and args.method == "vpn-tcp":
+    if runner.platform == "linux" and args.method == "vpn-tcp":
         require_command(runner, "conntrack")
 
     return kube_info, runner

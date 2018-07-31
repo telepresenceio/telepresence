@@ -60,6 +60,15 @@ class Runner(object):
         self.cleanup_stack = []  # type: typing.List[_CleanupItem]
         self.tracked = None  # type: typing.Optional[TrackedBG]
 
+        if sys.platform.startswith("linux"):
+            self.platform = "linux"
+        elif sys.platform.startswith("darwin"):
+            self.platform = "darwin"
+        else:
+            # For untested platforms...
+            self.platform = sys.platform
+        self.output.write("Platform: {}".format(self.platform))
+
         if sys.stderr.isatty():
             try:
                 term_width = int(check_output(["tput", "cols"]))

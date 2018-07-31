@@ -65,7 +65,7 @@ def connect(
         # https://github.com/kubernetes/kubernetes/pull/46517, or all our users
         # have latest version of Docker for Mac, which has nicer solution -
         # https://github.com/datawire/telepresence/issues/224).
-        if sys.platform == "linux":
+        if runner.platform == "linux":
 
             # If ip addr is available use it if not fall back to ifconfig.
             if which("ip"):

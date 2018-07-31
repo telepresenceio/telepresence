@@ -247,7 +247,7 @@ def connect_sshuttle(
     Popen(["sudo", "true"]).wait()
     span = runner.span()
     sshuttle_method = "auto"
-    if sys.platform.startswith("linux"):
+    if runner.platform == "linux":
         # sshuttle tproxy mode seems to have issues:
         sshuttle_method = "nat"
     runner.launch(
