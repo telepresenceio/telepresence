@@ -14,7 +14,6 @@
 
 import argparse
 import re
-from shutil import which
 from typing import Tuple
 
 from telepresence.background import launch_local_server
@@ -67,18 +66,22 @@ def connect(
         if runner.platform == "linux":
 
             # If ip addr is available use it if not fall back to ifconfig.
-            if which("ip"):
+            missing = runner.depend(["ip", "ifconfig"])
+            if "ip" not in missing:
                 docker_interfaces = re.findall(
                     r"(\d+\.\d+\.\d+\.\d+)",
                     runner.get_output(["ip", "addr", "show", "dev", "docker0"])
                 )
-            elif which("ifconfig"):
+            elif "ifconfig" not in missing:
                 docker_interfaces = re.findall(
                     r"(\d+\.\d+\.\d+\.\d+)",
                     runner.get_output(["ifconfig", "docker0"])
                 )
             else:
-                raise runner.fail("'ip addr' nor 'ifconfig' available")
+                raise runner.fail(
+                    """At least one of "ip addr" or "ifconfig" must be """ +
+                    "available to retrieve Docker interface info."
+                )
 
             if len(docker_interfaces) == 0:
                 raise runner.fail("No interface for docker found")
@@ -91,6 +94,10 @@ def connect(
             # an IP range that is assigned for testing network devices and
             # therefore shouldn't conflict with real IPs or local private
             # networks (https://tools.ietf.org/html/rfc6890).
+            runner.require(
+                ["ifconfig"],
+                "Needed to manage networking with the container method.",
+            )
             runner.require_sudo()
             runner.check_call([
                 "sudo", "ifconfig", "lo0", "alias", MAC_LOOPBACK_IP
@@ -101,6 +108,10 @@ def connect(
             )
             docker_interface = MAC_LOOPBACK_IP
 
+        runner.require(
+            ["socat"],
+            "Needed to manage networking with the container method.",
+        )
         runner.launch(
             "socat for docker", [
                 "socat", "TCP4-LISTEN:{},bind={},reuseaddr,fork".format(

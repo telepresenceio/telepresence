@@ -20,7 +20,7 @@ import uuid
 from contextlib import contextmanager
 from inspect import currentframe, getframeinfo
 from pathlib import Path
-from shutil import rmtree
+from shutil import rmtree, which
 from subprocess import CalledProcessError, DEVNULL, PIPE, Popen
 from tempfile import mkdtemp
 from threading import Thread
@@ -219,6 +219,37 @@ class Runner(object):
                 "sudo privileges holder", thread, killer=self._drop_sudo
             )
         )
+
+    # Dependencies
+
+    def depend(self, commands: typing.Iterable[str]) -> typing.List[str]:
+        """
+        Find unavailable commands from a set of dependencies
+        """
+        # Adjust PATH to cover common locations for conntrack, ifconfig, etc.
+        path = os.environ.get("PATH", os.defpath)
+        path_elements = path.split(os.pathsep)
+        for additional in "/usr/sbin", "/sbin":
+            if additional not in path_elements:
+                path += ":" + additional
+        os.environ["PATH"] = path
+        return [command for command in commands if which(command) is None]
+
+    def require(self, commands: typing.Iterable[str], message: str) -> None:
+        """
+        Verify that a set of dependencies (commands that can be called from the
+        shell) are available. Fail with an explanation if any is unavailable.
+        """
+        missing = self.depend(commands)
+        if missing:
+            self.show("Required dependencies not found in your PATH:")
+            self.show("  {}".format(" ".join(missing)))
+            self.show(message)
+            raise self.fail(
+                "Please see " +
+                "https://www.telepresence.io/reference/install#dependencies " +
+                "for more information."
+            )
 
     # Subprocesses
 
