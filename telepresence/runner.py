@@ -183,7 +183,7 @@ class Runner(object):
                 counter += 1
             else:
                 try:
-                    self.check_call(["sudo", "-nv"])
+                    self.check_call(["sudo", "-n", "echo", "-n"])
                     counter = 0
                 except CalledProcessError:
                     self.sudo_held = False
@@ -202,12 +202,12 @@ class Runner(object):
 
         try:
             # See whether we can grab privileges without a password
-            self.check_call(["sudo", "-nv"])
+            self.check_call(["sudo", "-n", "echo", "-n"])
         except CalledProcessError:
             # Apparently not. Prompt clearly then sudo again.
             self.show("Invoking sudo. Please enter your sudo password.")
             try:
-                self.check_call(["sudo", "-v"])
+                self.check_call(["sudo", "echo", "-n"])
             except CalledProcessError:
                 raise self.fail("Unable to escalate privileges with sudo")
 
