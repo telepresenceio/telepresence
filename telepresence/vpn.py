@@ -15,8 +15,7 @@
 import argparse
 import ipaddress
 import json
-import sys
-from subprocess import CalledProcessError, Popen
+from subprocess import CalledProcessError
 from time import time, sleep
 from typing import List, Dict
 
@@ -227,7 +226,7 @@ def serviceCIDR(runner: Runner):
     for new_service in new_services:
         runner.check_call(runner.kubectl("delete", "service", new_service))
 
-    if sys.stderr.isatty():
+    if runner.chatty:
         runner.show(
             "Guessing that Services IP range is {}. Services started after"
             " this point will be inaccessible if are outside this range;"
@@ -242,12 +241,10 @@ def connect_sshuttle(
     env: Dict[str, str], ssh: SSH
 ):
     """Connect to Kubernetes using sshuttle."""
-    # Make sure we have sudo credentials by doing a small sudo in advance
-    # of sshuttle using it:
-    Popen(["sudo", "true"]).wait()
+    runner.require_sudo()
     span = runner.span()
     sshuttle_method = "auto"
-    if sys.platform.startswith("linux"):
+    if runner.platform == "linux":
         # sshuttle tproxy mode seems to have issues:
         sshuttle_method = "nat"
     runner.launch(

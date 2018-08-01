@@ -16,32 +16,13 @@ import ssl
 import sys
 
 import json
-from shutil import which
 from subprocess import check_output, CalledProcessError, STDOUT, DEVNULL
-from typing import List, Optional
+from shutil import which
+from typing import List
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 from telepresence.runner import Runner
-
-
-def require_command(
-    runner: Runner, command: str, message: Optional[str] = None
-):
-    if message is None:
-        message = "Please install " + command
-    try:
-        runner.get_output(["which", command])
-    except CalledProcessError as e:
-        sys.stderr.write(message + "\n")
-        sys.stderr.write(
-            '(Ran "which {}" to check in your $PATH.)\n'.format(command)
-        )
-        sys.stderr.write(
-            "See the documentation at https://telepresence.io "
-            "for more details.\n"
-        )
-        raise runner.fail("Missing required command: {}".format(command))
 
 
 def kubectl_or_oc(server: str) -> str:
@@ -232,14 +213,15 @@ def analyze_args(session):
         raise runner.fail("Error running ssh: {}\n".format(e))
 
     # Other requirements:
-    require_command(
-        runner, "torsocks", "Please install torsocks (v2.1 or later)"
-    )
+    if args.method == "inject-tcp":
+        runner.require(["torsocks"], "Please install torsocks (v2.1 or later)")
+
     if args.mount:
-        require_command(runner, "sshfs")
+        runner.require(["sshfs"], "Required for volume mounts")
 
     # Need conntrack for sshuttle on Linux:
-    if sys.platform.startswith("linux") and args.method == "vpn-tcp":
-        require_command(runner, "conntrack")
+    if runner.platform == "linux" and args.method == "vpn-tcp":
+        runner.require(["conntrack", "iptables"],
+                       "Required for the vpn-tcp method")
 
     return kube_info, runner

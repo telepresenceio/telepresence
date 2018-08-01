@@ -14,8 +14,6 @@
 
 import argparse
 import re
-import sys
-from shutil import which
 from typing import Tuple
 
 from telepresence.background import launch_local_server
@@ -65,21 +63,25 @@ def connect(
         # https://github.com/kubernetes/kubernetes/pull/46517, or all our users
         # have latest version of Docker for Mac, which has nicer solution -
         # https://github.com/datawire/telepresence/issues/224).
-        if sys.platform == "linux":
+        if runner.platform == "linux":
 
             # If ip addr is available use it if not fall back to ifconfig.
-            if which("ip"):
+            missing = runner.depend(["ip", "ifconfig"])
+            if "ip" not in missing:
                 docker_interfaces = re.findall(
                     r"(\d+\.\d+\.\d+\.\d+)",
                     runner.get_output(["ip", "addr", "show", "dev", "docker0"])
                 )
-            elif which("ifconfig"):
+            elif "ifconfig" not in missing:
                 docker_interfaces = re.findall(
                     r"(\d+\.\d+\.\d+\.\d+)",
                     runner.get_output(["ifconfig", "docker0"])
                 )
             else:
-                raise runner.fail("'ip addr' nor 'ifconfig' available")
+                raise runner.fail(
+                    """At least one of "ip addr" or "ifconfig" must be """ +
+                    "available to retrieve Docker interface info."
+                )
 
             if len(docker_interfaces) == 0:
                 raise runner.fail("No interface for docker found")
@@ -92,6 +94,11 @@ def connect(
             # an IP range that is assigned for testing network devices and
             # therefore shouldn't conflict with real IPs or local private
             # networks (https://tools.ietf.org/html/rfc6890).
+            runner.require(
+                ["ifconfig"],
+                "Needed to manage networking with the container method.",
+            )
+            runner.require_sudo()
             runner.check_call([
                 "sudo", "ifconfig", "lo0", "alias", MAC_LOOPBACK_IP
             ])
@@ -101,6 +108,10 @@ def connect(
             )
             docker_interface = MAC_LOOPBACK_IP
 
+        runner.require(
+            ["socat"],
+            "Needed to manage networking with the container method.",
+        )
         runner.launch(
             "socat for docker", [
                 "socat", "TCP4-LISTEN:{},bind={},reuseaddr,fork".format(
@@ -143,7 +154,7 @@ def connect(
 def start_proxy(runner: Runner, args: argparse.Namespace) -> RemoteInfo:
     """Start the kubectl port-forward and SSH clients that do the proxying."""
     span = runner.span()
-    if sys.stdout.isatty() and args.method != "container":
+    if runner.chatty and args.method != "container":
         runner.show(
             "Starting proxy with method '{}', which has the following "
             "limitations:".format(args.method)
@@ -163,7 +174,7 @@ def start_proxy(runner: Runner, args: argparse.Namespace) -> RemoteInfo:
             "For a full list of method limitations see "
             "https://telepresence.io/reference/methods.html\n"
         )
-    if args.mount and sys.stdout.isatty():
+    if args.mount and runner.chatty:
         runner.show(
             "\nVolumes are rooted at $TELEPRESENCE_ROOT. See "
             "https://telepresence.io/howto/volumes.html for details."

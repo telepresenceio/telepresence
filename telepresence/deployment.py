@@ -16,7 +16,6 @@ import argparse
 import json
 from subprocess import STDOUT
 from typing import Tuple, Dict
-from uuid import uuid4
 
 from copy import deepcopy
 
@@ -32,7 +31,7 @@ def create_new_deployment(runner: Runner,
                           args: argparse.Namespace) -> Tuple[str, str]:
     """Create a new Deployment, return its name and Kubernetes label."""
     span = runner.span()
-    run_id = str(uuid4())
+    run_id = runner.session_id
 
     def remove_existing_deployment():
         runner.get_output(
@@ -89,7 +88,7 @@ def supplant_deployment(runner: Runner,
     was swapped out.)
     """
     span = runner.span()
-    run_id = str(uuid4())
+    run_id = runner.session_id
 
     deployment_name, *container_name = args.swap_deployment.split(":", 1)
     if container_name:
@@ -270,7 +269,7 @@ def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
     current ReplicationController with one that uses the Telepresence image,
     then restores it. We delete the pods to force the RC to do its thing.
     """
-    run_id = str(uuid4())
+    run_id = runner.session_id
     deployment_name, *container_name = args.swap_deployment.split(":", 1)
     if container_name:
         container_name = container_name[0]

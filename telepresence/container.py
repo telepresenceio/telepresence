@@ -14,7 +14,6 @@
 
 import argparse
 import json
-import sys
 from subprocess import CalledProcessError, Popen
 from time import sleep
 from typing import List, Callable, Dict, Tuple, Optional
@@ -87,6 +86,9 @@ def run_docker_command(
     :param mount_dir: Path to local directory where remote pod's filesystem is
         mounted.
     """
+    if SUDO_FOR_DOCKER:
+        runner.require_sudo()
+
     # Update environment:
     remote_env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
 
@@ -106,7 +108,7 @@ def run_docker_command(
         "expose_ports":
         list(args.expose.local_to_remote()),
     }
-    if sys.platform == "darwin":
+    if runner.platform == "darwin":
         config["ip"] = MAC_LOOPBACK_IP
     # Image already has tini init so doesn't need --init option:
     span = runner.span()

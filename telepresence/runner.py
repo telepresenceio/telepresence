@@ -16,13 +16,19 @@ import signal
 import sys
 import textwrap
 import typing
+import uuid
 from contextlib import contextmanager
 from inspect import currentframe, getframeinfo
-from subprocess import CalledProcessError, DEVNULL, PIPE, Popen, check_output
+from pathlib import Path
+from shutil import rmtree, which
+from subprocess import CalledProcessError, DEVNULL, PIPE, Popen
+from tempfile import mkdtemp
 from threading import Thread
 from time import sleep, time
 
-from telepresence.background import Background, BackgroundProcess, TrackedBG
+from telepresence.background import (
+    Background, BackgroundThread, BackgroundProcess, TrackedBG
+)
 from telepresence.cache import Cache
 from telepresence.output import Output
 from telepresence.span import Span
@@ -55,14 +61,26 @@ class Runner(object):
         self.counter = 0
         self.cleanup_stack = []  # type: typing.List[_CleanupItem]
         self.tracked = None  # type: typing.Optional[TrackedBG]
+        self.sudo_held = False
 
-        if sys.stderr.isatty():
-            try:
-                term_width = int(check_output(["tput", "cols"]))
-            except (CalledProcessError, OSError):
-                term_width = 79
+        if sys.platform.startswith("linux"):
+            self.platform = "linux"
+        elif sys.platform.startswith("darwin"):
+            self.platform = "darwin"
         else:
-            term_width = 99999
+            # For untested platforms...
+            self.platform = sys.platform
+        self.output.write("Platform: {}".format(self.platform))
+
+        term_width = 99999
+        self.chatty = False
+        if sys.stderr.isatty():
+            err_fd = sys.stderr.fileno()
+            try:
+                term_width = os.get_terminal_size(err_fd).columns - 1
+                self.chatty = True
+            except OSError:
+                pass
         self.wrapper = textwrap.TextWrapper(
             width=term_width,
             initial_indent="T: ",
@@ -70,6 +88,7 @@ class Runner(object):
             replace_whitespace=False,
             drop_whitespace=False,
         )
+        self.session_id = uuid.uuid4().hex
 
         # Log some version info
         report = (
@@ -90,9 +109,21 @@ class Runner(object):
         self.cache.invalidate(12 * 60 * 60)
         self.add_cleanup("Save caches", self.cache.save)
 
+        # Docker for Mac only shares some folders; the default TMPDIR
+        # on OS X is not one of them, so make sure we use /tmp:
+        self.temp = Path(mkdtemp(prefix="tel-", dir="/tmp"))
+        (self.temp / "session_id.txt").write_text(self.session_id)
+        self.add_cleanup("Remove temporary directory", rmtree, self.temp)
+
     @classmethod
     def open(cls, logfile_path, kubectl_cmd: str, verbose: bool):
         """
+        FIXME: This is bogus now.
+
+        The second argument to the constructor should be a KubeInfo instance.
+        This method is used by the local-docker entrypoint script. Maybe we can
+        kill this method and have it just pass None instead?
+
         :return: File-like object for the given logfile path.
         """
         output = Output(logfile_path)
@@ -135,6 +166,90 @@ class Runner(object):
         self.write(message, prefix=">>>")
         for line in message.splitlines():
             print(self.wrapper.fill(line), file=sys.stderr)
+
+    def make_temp(self, name: str) -> Path:
+        res = self.temp / name
+        res.mkdir()
+        return res
+
+    # Privilege escalation (sudo)
+
+    def _hold_sudo(self) -> None:
+        counter = 0
+        while self.sudo_held:
+            # Sleep between calls to sudo
+            if counter < 30:
+                sleep(1)
+                counter += 1
+            else:
+                try:
+                    self.check_call(["sudo", "-n", "echo", "-n"])
+                    counter = 0
+                except CalledProcessError:
+                    self.sudo_held = False
+                    self.write("Attempt to hold on to sudo privileges failed")
+        self.write("(sudo privileges holder thread exiting)")
+
+    def _drop_sudo(self) -> None:
+        self.sudo_held = False
+
+    def require_sudo(self) -> None:
+        """
+        Grab sudo and hold on to it. Show a clear prompt to the user.
+        """
+        if self.sudo_held:
+            return
+
+        try:
+            # See whether we can grab privileges without a password
+            self.check_call(["sudo", "-n", "echo", "-n"])
+        except CalledProcessError:
+            # Apparently not. Prompt clearly then sudo again.
+            self.show("Invoking sudo. Please enter your sudo password.")
+            try:
+                self.check_call(["sudo", "echo", "-n"])
+            except CalledProcessError:
+                raise self.fail("Unable to escalate privileges with sudo")
+
+        self.sudo_held = True
+        thread = Thread(target=self._hold_sudo)
+        thread.start()
+        self.track_background(
+            BackgroundThread(
+                "sudo privileges holder", thread, killer=self._drop_sudo
+            )
+        )
+
+    # Dependencies
+
+    def depend(self, commands: typing.Iterable[str]) -> typing.List[str]:
+        """
+        Find unavailable commands from a set of dependencies
+        """
+        # Adjust PATH to cover common locations for conntrack, ifconfig, etc.
+        path = os.environ.get("PATH", os.defpath)
+        path_elements = path.split(os.pathsep)
+        for additional in "/usr/sbin", "/sbin":
+            if additional not in path_elements:
+                path += ":" + additional
+        os.environ["PATH"] = path
+        return [command for command in commands if which(command) is None]
+
+    def require(self, commands: typing.Iterable[str], message: str) -> None:
+        """
+        Verify that a set of dependencies (commands that can be called from the
+        shell) are available. Fail with an explanation if any is unavailable.
+        """
+        missing = self.depend(commands)
+        if missing:
+            self.show("Required dependencies not found in your PATH:")
+            self.show("  {}".format(" ".join(missing)))
+            self.show(message)
+            raise self.fail(
+                "Please see " +
+                "https://www.telepresence.io/reference/install#dependencies " +
+                "for more information."
+            )
 
     # Subprocesses
 

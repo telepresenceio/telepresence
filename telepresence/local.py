@@ -19,8 +19,7 @@ from time import time, sleep
 from typing import Dict
 
 import os
-from shutil import rmtree, copy
-from tempfile import mkdtemp, NamedTemporaryFile
+from shutil import copy
 
 from telepresence.utilities import kill_process
 from telepresence.remote import RemoteInfo
@@ -47,9 +46,8 @@ def sip_workaround(
     # Remove protected paths from $PATH:
     paths = [p for p in existing_paths.split(":") if p not in protected]
     # Add temp dir
-    bin_dir = mkdtemp(dir="/tmp")
+    bin_dir = str(runner.make_temp("sip_bin"))
     paths.insert(0, bin_dir)
-    runner.add_cleanup("Remove SIP workaround binaries", rmtree, bin_dir)
     for directory in protected:
         for file in os.listdir(directory):
             try:
@@ -72,7 +70,7 @@ exit 55
 """
 
 
-def get_unsupported_tools(dns_supported: bool) -> str:
+def get_unsupported_tools(runner: Runner, dns_supported: bool) -> str:
     """
     Create replacement command-line tools that just error out, in a nice way.
 
@@ -81,7 +79,7 @@ def get_unsupported_tools(dns_supported: bool) -> str:
     commands = ["ping", "traceroute"]
     if not dns_supported:
         commands += ["nslookup", "dig", "host"]
-    unsupported_bin = mkdtemp(dir="/tmp")
+    unsupported_bin = str(runner.make_temp("unsup_bin"))
     for command in commands:
         path = unsupported_bin + "/" + command
         with open(path, "w") as f:
@@ -104,13 +102,12 @@ def setup_torsocks(runner, env, socks_port, unsupported_tools_path):
     """Setup environment variables to make torsocks work correctly."""
     # Create custom torsocks.conf, since some options we want (in particular,
     # port) aren't accessible via env variables in older versions of torconf:
-    with NamedTemporaryFile(mode="w+", delete=False) as tor_conffile:
+    with open(str(runner.temp / "tel_torsocks.conf"), "w") as tor_conffile:
         tor_conffile.write(TORSOCKS_CONFIG.format(socks_port))
-    runner.add_cleanup("Remove TOR config", os.remove, tor_conffile.name)
     env["TORSOCKS_CONF_FILE"] = tor_conffile.name
     if runner.output.logfile is not sys.stdout:
         env["TORSOCKS_LOG_FILE_PATH"] = runner.output.logfile.name
-    if sys.platform == "darwin":
+    if runner.platform == "darwin":
         env["PATH"] = sip_workaround(
             runner, env["PATH"], unsupported_tools_path
         )
@@ -149,7 +146,9 @@ def run_local_command(
         ] = ('PS1="@{}|$PS1";unset PROMPT_COMMAND'.format(args.context))
 
     # Inject replacements for unsupported tools like ping:
-    unsupported_tools_path = get_unsupported_tools(args.method != "inject-tcp")
+    unsupported_tools_path = get_unsupported_tools(
+        runner, args.method != "inject-tcp"
+    )
     env["PATH"] = unsupported_tools_path + ":" + env["PATH"]
 
     # Make sure we use "bash", no "/bin/bash", so we get the copied version on

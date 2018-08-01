@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
 from typing import List, Tuple
 
 from telepresence.runner import Runner
@@ -28,8 +27,7 @@ def expose_local_services(
     :param ssh: A 'SSH` instance.
     :param port_numbers: List of pairs of (local port, remote port).
     """
-    output = sys.stderr.isatty()
-    if not port_numbers and output:
+    if not port_numbers and runner.chatty:
         runner.show(
             "No traffic is being forwarded from the remote Deployment to your"
             " local machine. You can use the --expose option to specify which"
@@ -37,7 +35,7 @@ def expose_local_services(
         )
     remote_forward_arguments = []
     for local_port, remote_port in port_numbers:
-        if output:
+        if runner.chatty:
             runner.show(
                 "Forwarding remote port {} to local port {}.".format(
                     remote_port,
@@ -53,5 +51,5 @@ def expose_local_services(
             "SSH port forward (exposed ports)",
             ssh.bg_command(remote_forward_arguments)
         )
-    if output:
+    if runner.chatty:
         runner.show("")
