@@ -1,0 +1,135 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Verloop Case Study - Telepresence</title>
+    <meta name="description" content="Telepresence: a local development environment for a remote Kubernetes cluster">
+    <meta name="keywords" content="Telepresence, Kubernetes, microservices">
+    <meta name="author" content="Datawire.io">
+
+    <link rel="shortcut icon" href="/favicon.ico">
+
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,900"
+          type="text/css" media="all" />
+    <link rel="stylesheet" href="/styles/home.css">
+
+    <!--[if lte IE 8]>
+    <script charset="utf-8" type="text/javascript" src="https://js.hsforms.net/forms/v2-legacy.js"></script>
+    <![endif]-->
+    <script charset="utf-8" type="text/javascript" src="https://js.hsforms.net/forms/v2.js"></script>
+
+    <!-- Google Tag Manager -->
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start': new Date().getTime(),event:'gtm.js'});
+        var f=d.getElementsByTagName(s)[0], j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';
+        j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-KMVFH7G');</script>
+    <!-- End Google Tag Manager -->
+
+</head>
+<body>
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KMVFH7G"
+                  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+
+<header class="white-bg">
+    <div class="navigation-left">
+        <a class="datawire-link" href="/">
+            <img alt="Telepresence" src="/images/telepresence-logo.png">
+        </a>
+        <ul class="main-navigation">
+            <li>
+                <a href="/tutorials/docker">Get Started</a>
+            </li>
+            <li>
+                <a href="/discussion/overview">Docs</a>
+            </li>
+            <li>
+                <a href="/case-studies">Case Studies</a>
+            </li>
+            <li>
+                <a href="/about">About</a>
+            </li>
+            <li>
+                <a target="_blank" href="https://github.com/datawire/telepresence">GitHub</a>
+            </li>
+        </ul>
+    </div>
+    <div class="navigation-right">
+        <ul class="main-navigation right">
+            <li>
+                <div class="dropdown">
+                    <button class="dropbtn">▾ Need Help?</button>
+                    <div class="dropdown-content">
+                        <a target="_blank" href="https://gitter.im/datawire/telepresence">Community Gitter</a>
+                        <a target="_blank" href="https://www.datawire.io/pricing">Enterprise Support</a>
+                    </div>
+                </div>
+            </li>
+        </ul>
+    </div>
+</header>
+<section id="case-study" class="bg-white">
+
+    <div class="container">
+        <h1 class="title">Engel & Völkers</h1>
+
+        <h2>Can you tell us about yourself and what your company does?</h2>
+
+        <p>I am Christian Roggia, a DevOps Backend Engineer for the company <a href="Engel & Völkers">https://evusa.com/en/</a>., one of the largest real estate company in the world and the most active in Europe. We are currently undergoing a migration process from legacy infrastructure to Google Cloud Platform and we are using Google Kubernetes Engine (GKE) heavily. This is where Telepresence has been a great help.
+
+        <h2>What was your pre-Telepresence development experience? What challenges did you face?</h2>
+
+        <p>As the main developer of the synchronization services between the legacy and the new infrastructures, I faced many issues due to the nature of the legacy systems (i.e., dozens of different protocols, drivers, and APIs). Testing new code changes meant either waiting for a new deployment or manually setting up port-forwarding, SSH tunnels, and SSH proxies.
+
+        <h2>How are you using Telepresence in your workflow today?</h2>
+
+        <p>After we setup Telepresence and understood its main features we started to integrate it into our development process. Now we don't have to wait for new deployments and we can just run Telepresence for connecting and debugging our services. We also no longer need to configure manually proxies or tunnels of any kind - Telepresence will do it for us.
+
+        <h2>What benefits have you seen since adopting Telepresence?</h2>
+
+        <p>The average time required for testing and debugging was dramatically reduced. The overall complexity for the development of services has decreased and we no longer need to maintain docker-compose files for local development.
+
+        <h2>Do you have any advice for people looking to adopt Telepresence?</h2>
+
+        <p>Try to adopt Telepresence for a few weeks, it will be immediately clear how much easier it is to develop (micro)services using Kubernetes and Docker technologies. We were skeptical at the beginning but now more and more developers inside our company are starting to use Telepresence in their daily routine. There are many advantages and the installation is extremely simple and lightweight.
+
+        <div class="text-center">
+            <a href="/#get-started" class="btn btn-black">Get Started</a>
+        </div>
+    </div>
+
+</section>
+<footer class="white-bg">
+    <ul class="main-navigation flex-center">
+        <li>
+            <a href="/">Home</a>
+        </li>
+        <li>
+            <a href="/tutorials/kubernetes">Get Started</a>
+        </li>
+        <li>
+            <a href="/discussion/overview">Docs</a>
+        </li>
+        <li>
+            <a href="/case-studies">Case Studies</a>
+        </li>
+        <li>
+            <a href="/about">About</a>
+        </li>
+        <li>
+            <a target="_blank" href="https://github.com/datawire/telepresence">GitHub</a>
+        </li>
+        <li>
+            <a target="_blank" href="https://gitter.im/datawire/telepresence">Gitter</a>
+        </li>
+    </ul>
+</footer>
+<script async defer src="https://buttons.github.io/buttons.js"></script>
+<script src="/js/jquery-3.2.1.min.js"></script>
+</body>
+</html>
