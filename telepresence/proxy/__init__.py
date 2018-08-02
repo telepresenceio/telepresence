@@ -43,11 +43,6 @@ def start_proxy(runner: Runner, args: argparse.Namespace) -> RemoteInfo:
             "For a full list of method limitations see "
             "https://telepresence.io/reference/methods.html\n"
         )
-    if args.mount and runner.chatty:
-        runner.show(
-            "\nVolumes are rooted at $TELEPRESENCE_ROOT. See "
-            "https://telepresence.io/howto/volumes.html for details."
-        )
 
     run_id = None
 

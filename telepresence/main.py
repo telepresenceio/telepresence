@@ -18,6 +18,7 @@ Telepresence: local development environment for a remote Kubernetes cluster.
 import sys
 from types import SimpleNamespace
 
+from telepresence import mount
 from telepresence.runner import wait_for_exit
 from telepresence.cli import parse_args, crash_reporting
 from telepresence.container import run_docker_command
@@ -25,7 +26,6 @@ from telepresence.local import run_local_command
 from telepresence.output import Output
 from telepresence.proxy import start_proxy
 from telepresence.connect import connect
-from telepresence.mount import mount_remote
 from telepresence.remote_env import get_remote_env, write_env_files
 from telepresence.startup import analyze_args
 from telepresence.usage_tracking import call_scout
@@ -49,6 +49,10 @@ def main(session):
 
         span = session.runner.span()
         session.runner.add_cleanup("Stop time tracking", span.end)
+
+        runner = session.runner
+        args = session.args
+        mount_remote = mount.setup(runner, args)
 
         # Usage tracking
         call_scout(session)
@@ -74,8 +78,8 @@ def main(session):
         session.remote_info = remote_info
         session.env = env
 
-        # Handle filesystem stuff (pod name, ssh object)
-        mount_dir = mount_remote(session)
+        # Handle filesystem stuff
+        mount_dir = mount_remote(env, ssh)
 
         # Maybe write environment files
         write_env_files(session)
