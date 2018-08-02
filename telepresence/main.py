@@ -23,7 +23,8 @@ from telepresence.cli import parse_args, crash_reporting
 from telepresence.container import run_docker_command
 from telepresence.local import run_local_command
 from telepresence.output import Output
-from telepresence.proxy import start_proxy, connect
+from telepresence.proxy import start_proxy
+from telepresence.connect import connect
 from telepresence.mount import mount_remote
 from telepresence.remote_env import get_remote_env, write_env_files
 from telepresence.startup import analyze_args

@@ -24,6 +24,9 @@ from urllib.request import urlopen
 
 from telepresence.runner import Runner
 
+# IP that shouldn't be in use on Internet, *or* local networks:
+MAC_LOOPBACK_IP = "198.18.0.254"
+
 
 def kubectl_or_oc(server: str) -> str:
     """

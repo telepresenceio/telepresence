@@ -22,9 +22,9 @@ import os
 from shutil import copy
 
 from telepresence.utilities import kill_process
-from telepresence.remote import RemoteInfo
+from telepresence.proxy.remote import RemoteInfo
 from telepresence.runner import Runner
-from telepresence.ssh import SSH
+from telepresence.connect.ssh import SSH
 from telepresence.vpn import connect_sshuttle
 
 

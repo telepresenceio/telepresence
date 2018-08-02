@@ -26,12 +26,12 @@ from tempfile import mkdtemp
 from threading import Thread
 from time import sleep, time
 
-from telepresence.background import (
+from telepresence.runner.background import (
     Background, BackgroundThread, BackgroundProcess, TrackedBG
 )
-from telepresence.cache import Cache
+from telepresence.runner.cache import Cache
 from telepresence.output import Output
-from telepresence.span import Span
+from telepresence.runner.span import Span
 from telepresence.utilities import str_command
 
 _CleanupItem = typing.NamedTuple(

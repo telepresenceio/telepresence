@@ -24,12 +24,12 @@ import yaml
 
 import telepresence.cli
 import telepresence.container
-import telepresence.deployment
+import telepresence.proxy.deployment
 import telepresence.output
 import telepresence.vpn
 import telepresence.main
 
-from telepresence.cache import Cache
+from telepresence.runner.cache import Cache
 
 COMPLEX_DEPLOYMENT = """\
 apiVersion: extensions/v1beta1
@@ -189,7 +189,7 @@ def test_swap_deployment_changes():
     """
     original = yaml.safe_load(COMPLEX_DEPLOYMENT)
     expected = yaml.safe_load(SWAPPED_DEPLOYMENT)
-    assert telepresence.deployment.new_swapped_deployment(
+    assert telepresence.proxy.deployment.new_swapped_deployment(
         original,
         "nginxhttps",
         "random_id_123",

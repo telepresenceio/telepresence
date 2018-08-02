@@ -22,14 +22,12 @@ import os
 import os.path
 
 from telepresence import TELEPRESENCE_LOCAL_IMAGE
-from telepresence.remote import RemoteInfo
+from telepresence.proxy.remote import RemoteInfo
 from telepresence.runner import Runner
-from telepresence.ssh import SSH
+from telepresence.connect.ssh import SSH
+from telepresence.startup import MAC_LOOPBACK_IP
 from telepresence.utilities import random_name
 from telepresence.vpn import get_proxy_cidrs
-
-# IP that shouldn't be in use on Internet, *or* local networks:
-MAC_LOOPBACK_IP = "198.18.0.254"
 
 # Whether Docker requires sudo
 SUDO_FOR_DOCKER = os.path.exists("/var/run/docker.sock") and not os.access(

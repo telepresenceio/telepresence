@@ -19,8 +19,8 @@ from subprocess import CalledProcessError
 from time import time, sleep
 from typing import List, Dict
 
-from telepresence.ssh import SSH
-from telepresence.remote import RemoteInfo
+from telepresence.connect.ssh import SSH
+from telepresence.proxy.remote import RemoteInfo
 from telepresence.utilities import random_name
 from telepresence.runner import Runner
 

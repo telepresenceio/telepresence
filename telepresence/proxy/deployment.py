@@ -22,7 +22,7 @@ from copy import deepcopy
 from telepresence import (
     TELEPRESENCE_REMOTE_IMAGE, TELEPRESENCE_REMOTE_IMAGE_PRIV
 )
-from telepresence.remote import get_deployment_json
+from telepresence.proxy.remote import get_deployment_json
 from telepresence.runner import Runner
 from telepresence.utilities import get_alternate_nameserver
 
