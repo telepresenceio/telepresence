@@ -37,14 +37,10 @@ class RemoteInfo(object):
     def __init__(
         self,
         runner: Runner,
-        context: str,
-        namespace: str,
         deployment_name: str,
         pod_name: str,
         deployment_config: dict,
     ) -> None:
-        self.context = context
-        self.namespace = namespace
         self.deployment_name = deployment_name
         self.pod_name = pod_name
         self.deployment_config = deployment_config
@@ -66,8 +62,6 @@ class RemoteInfo(object):
 def get_deployment_json(
     runner: Runner,
     deployment_name: str,
-    context: str,
-    namespace: str,
     deployment_type: str,
     run_id: Optional[str] = None,
 ) -> Dict:
@@ -77,8 +71,6 @@ def get_deployment_json(
     the session id we set for the telepresence label. Otherwise run_id is None
     and the Deployment name must be used to locate the Deployment.
     """
-    assert context is not None
-    assert namespace is not None
     span = runner.span()
     try:
         get_deployment = [
@@ -148,8 +140,6 @@ def wait_for_pod(runner: Runner, remote_info: RemoteInfo) -> None:
 def get_remote_info(
     runner: Runner,
     deployment_name: str,
-    context: str,
-    namespace: str,
     deployment_type: str,
     run_id: Optional[str] = None,
 ) -> RemoteInfo:
@@ -162,25 +152,14 @@ def get_remote_info(
     """
     span = runner.span()
     deployment = get_deployment_json(
-        runner,
-        deployment_name,
-        context,
-        namespace,
-        deployment_type,
-        run_id=run_id
+        runner, deployment_name, deployment_type, run_id=run_id
     )
     dst_metadata = deployment["spec"]["template"]["metadata"]
     expected_labels = dst_metadata.get("labels", {})
 
-    # Metadata for Deployment will hopefully have a namespace. If not,
-    # fall back to one we were given. If we weren't given one, best we
-    # can do is choose "default".
-    deployment_namespace = deployment["metadata"].get("namespace", namespace)
-
     runner.write("Searching for Telepresence pod:")
     runner.write("  with name {}-*".format(deployment_name))
     runner.write("  with labels {}".format(expected_labels))
-    runner.write("  with namespace {}".format(deployment_namespace))
 
     cmd = "get pod -o json --export".split()
     if run_id:
@@ -193,7 +172,6 @@ def get_remote_info(
             name = pod["metadata"]["name"]
             phase = pod["status"]["phase"]
             labels = pod["metadata"].get("labels", {})
-            pod_ns = pod["metadata"]["namespace"]
             runner.write("Checking {}".format(name))
             if not name.startswith(deployment_name + "-"):
                 runner.write("--> Name does not match")
@@ -204,15 +182,10 @@ def get_remote_info(
             if not set(expected_labels.items()).issubset(set(labels.items())):
                 runner.write("--> Labels don't match: {}".format(labels))
                 continue
-            if pod_ns != deployment_namespace:
-                runner.write("--> Wrong namespace: {}".format(pod_ns))
-                continue
 
             runner.write("Looks like we've found our pod!\n")
             remote_info = RemoteInfo(
                 runner,
-                context,
-                namespace,
                 deployment_name,
                 name,
                 deployment,
