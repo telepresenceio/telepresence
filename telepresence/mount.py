@@ -31,11 +31,11 @@ def mount_remote_volumes(
     """
     span = runner.span()
     if allow_all_users:
-        runner.require_sudo()
         sudo_prefix = ["sudo"]
+        middle = ["-o", "allow_other"]
     else:
         sudo_prefix = []
-    middle = ["-o", "allow_other"] if allow_all_users else []
+        middle = []
     try:
         runner.get_output(
             sudo_prefix + [
@@ -121,11 +121,16 @@ def setup(runner, args):
     - Mount onto a specified mount point
     """
     if args.mount and runner.chatty:
-        runner.show("Volumes are rooted at $TELEPRESENCE_ROOT. See "
-                    "https://telepresence.io/howto/volumes.html for details.")
+        runner.show(
+            "Volumes are rooted at $TELEPRESENCE_ROOT. See "
+            "https://telepresence.io/howto/volumes.html for details."
+        )
     # We allow all users if we're using Docker because we don't know
     # what uid the Docker container will use.
     allow_all_users = args.method == "container"
-    return lambda env, ssh: mount_remote(
-        runner, args.mount, ssh, allow_all_users, env
+    if allow_all_users:
+        runner.require_sudo()
+
+    return lambda runner_, env, ssh: mount_remote(
+        runner_, args.mount, ssh, allow_all_users, env
     )

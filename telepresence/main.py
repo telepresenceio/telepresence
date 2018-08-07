@@ -79,7 +79,7 @@ def main(session):
         session.env = env
 
         # Handle filesystem stuff
-        mount_dir = mount_remote(env, ssh)
+        mount_dir = mount_remote(runner, env, ssh)
 
         # Maybe write environment files
         write_env_files(session)
