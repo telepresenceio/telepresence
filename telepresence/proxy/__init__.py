@@ -12,59 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
-
-from telepresence.proxy.deployment import create_new_deployment, \
-    swap_deployment_openshift, supplant_deployment
+from telepresence import (
+    TELEPRESENCE_REMOTE_IMAGE, TELEPRESENCE_REMOTE_IMAGE_PRIV
+)
+from telepresence.proxy.deployment import (
+    existing_deployment, create_new_deployment, swap_deployment_openshift,
+    supplant_deployment
+)
 from telepresence.proxy.remote import RemoteInfo, get_remote_info
 from telepresence.runner import Runner
 
 
-def start_proxy(runner: Runner, args: argparse.Namespace) -> RemoteInfo:
-    """Start the kubectl port-forward and SSH clients that do the proxying."""
-    span = runner.span()
-    if runner.chatty and args.method != "container":
-        runner.show(
-            "Starting proxy with method '{}', which has the following "
-            "limitations:".format(args.method)
-        )
-        if args.method == "vpn-tcp":
-            runner.show(
-                "All processes are affected, only one telepresence"
-                " can run per machine, and you can't use other VPNs."
-                " You may need to add cloud hosts with --also-proxy."
-            )
-        elif args.method == "inject-tcp":
-            runner.show(
-                "Go programs, static binaries, suid programs, and custom DNS"
-                " implementations are not supported."
-            )
-        runner.show(
-            "For a full list of method limitations see "
-            "https://telepresence.io/reference/methods.html\n"
-        )
-
-    run_id = None
-
-    if args.new_deployment is not None:
-        # This implies --new-deployment:
-        args.deployment, run_id = create_new_deployment(runner, args)
-
-    if args.swap_deployment is not None:
-        # This implies --swap-deployment
-        if runner.kubectl.command == "oc":
-            args.deployment, run_id, container_json = (
-                swap_deployment_openshift(runner, args)
-            )
-        else:
-            args.deployment, run_id, container_json = supplant_deployment(
-                runner, args
-            )
-        args.expose.merge_automatic_ports([
-            p["containerPort"] for p in container_json.get("ports", [])
-            if p["protocol"] == "TCP"
-        ])
-
+def setup(runner: Runner, args):
+    """
+    Determine how the user wants to set up the proxy in the cluster.
+    """
     deployment_type = "deployment"
     if runner.kubectl.command == "oc":
         # OpenShift Origin uses DeploymentConfig instead, but for swapping we
@@ -75,14 +37,41 @@ def start_proxy(runner: Runner, args: argparse.Namespace) -> RemoteInfo:
         else:
             deployment_type = "deploymentconfig"
 
-    remote_info = get_remote_info(
-        runner,
-        args.deployment,
-        args.context,
-        args.namespace,
-        deployment_type,
-        run_id=run_id,
-    )
-    span.end()
+    if args.needs_root:
+        image_name = TELEPRESENCE_REMOTE_IMAGE_PRIV
+    else:
+        image_name = TELEPRESENCE_REMOTE_IMAGE
 
-    return remote_info
+    add_custom_nameserver = args.method == "vpn-tcp" and args.in_local_vm
+
+    # Handle --deployment case
+    deployment_arg = args.deployment
+    operation = existing_deployment
+
+    if args.new_deployment is not None:
+        # This implies --new-deployment
+        deployment_arg = args.new_deployment
+        operation = create_new_deployment
+
+    if args.swap_deployment is not None:
+        # This implies --swap-deployment
+        deployment_arg = args.swap_deployment
+        if runner.kubectl.command == "oc":
+            operation = swap_deployment_openshift
+        else:
+            operation = supplant_deployment
+
+    def start_proxy(runner_: Runner) -> RemoteInfo:
+        tel_deployment, run_id = operation(
+            runner_, deployment_arg, image_name, args.expose,
+            add_custom_nameserver
+        )
+        remote_info = get_remote_info(
+            runner,
+            tel_deployment,
+            deployment_type,
+            run_id=run_id,
+        )
+        return remote_info
+
+    return start_proxy
