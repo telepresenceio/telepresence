@@ -149,15 +149,6 @@ def analyze_args(output, args):
         )
     )
 
-    # Figure out if we need capability that allows for ports < 1024:
-    if any([p < 1024 for p in args.expose.remote()]):
-        if kube_info.command == "oc":
-            # OpenShift doesn't support running as root:
-            raise SystemExit("OpenShift does not support ports <1024.")
-        args.needs_root = True
-    else:
-        args.needs_root = False
-
     runner = Runner(output, kube_info, args.verbose)
 
     # minikube/minishift break DNS because DNS gets captured, sent to

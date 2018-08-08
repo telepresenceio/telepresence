@@ -37,10 +37,13 @@ def setup(runner: Runner, args):
         else:
             deployment_type = "deploymentconfig"
 
-    if args.needs_root:
+    # Figure out if we need capability that allows for ports < 1024:
+    image_name = TELEPRESENCE_REMOTE_IMAGE
+    if any([p < 1024 for p in args.expose.remote()]):
+        if runner.kubectl.command == "oc":
+            # OpenShift doesn't support running as root:
+            raise runner.fail("OpenShift does not support ports <1024.")
         image_name = TELEPRESENCE_REMOTE_IMAGE_PRIV
-    else:
-        image_name = TELEPRESENCE_REMOTE_IMAGE
 
     add_custom_nameserver = args.method == "vpn-tcp" and args.in_local_vm
 
