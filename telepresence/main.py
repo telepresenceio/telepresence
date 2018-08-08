@@ -16,15 +16,14 @@ Telepresence: local development environment for a remote Kubernetes cluster.
 """
 
 import sys
-from types import SimpleNamespace
 
 from telepresence import connect, mount, outbound, proxy, remote_env
-from telepresence.runner import wait_for_exit
+from telepresence.runner import wait_for_exit, Runner
 from telepresence.cli import parse_args, crash_reporting
 from telepresence.container import run_docker_command
 from telepresence.local import run_local_command
 from telepresence.output import Output
-from telepresence.startup import analyze_args
+from telepresence.startup import KubeInfo, final_checks
 from telepresence.usage_tracking import call_scout
 
 
@@ -40,17 +39,18 @@ def main():
     with crash_reporting():
         args = parse_args()  # tab-completion stuff goes here
 
-        output = Output(args.logfile)
-        kube_info, runner = analyze_args(output, args)
-
+        runner = Runner(Output(args.logfile), None, args.verbose)
         span = runner.span()
         runner.add_cleanup("Stop time tracking", span.end)
+        runner.kubectl = KubeInfo(runner, args)
 
         start_proxy = proxy.setup(runner, args)
         do_connect = connect.setup(runner, args)
         mount_remote = mount.setup(runner, args)
         get_remote_env, write_env_files = remote_env.setup(runner, args)
         outbound.setup(runner, args)
+
+        final_checks(runner, args)
 
         # Usage tracking
         call_scout(runner, args)

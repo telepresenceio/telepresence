@@ -16,7 +16,7 @@ import ssl
 import sys
 
 import json
-from subprocess import check_output, CalledProcessError, STDOUT
+from subprocess import CalledProcessError, STDOUT
 from shutil import which
 from typing import List
 from urllib.error import HTTPError, URLError
@@ -53,23 +53,27 @@ def kubectl_or_oc(server: str) -> str:
 class KubeInfo(object):
     """Record the local machine Kubernetes configuration"""
 
-    def __init__(self, args):
+    def __init__(self, runner: Runner, args) -> None:
+        span = runner.span()
         # We don't quite know yet if we want kubectl or oc (if someone has both
         # it depends on the context), so until we know the context just guess.
         # We prefer kubectl over oc insofar as (1) kubectl commands we do in
         # this prelim setup stage don't require oc and (2) sometimes oc is a
         # different binary unrelated to OpenShift.
-        if which("kubectl"):
+        missing = runner.depend(["kubectl", "oc"])
+        if "kubectl" not in missing:
             prelim_command = "kubectl"
-        elif which("oc"):
+        elif "oc" not in missing:
             prelim_command = "oc"
         else:
-            raise SystemExit("Found neither 'kubectl' nor 'oc' in your $PATH.")
+            raise runner.fail(
+                "Found neither 'kubectl' nor 'oc' in your $PATH."
+            )
 
         try:
-            kubectl_version_output = str(
-                check_output([prelim_command, "version", "--short"]), "utf-8"
-            ).split("\n")
+            kubectl_version_output = runner.get_output([
+                prelim_command, "version", "--short"
+            ]).split("\n")
             self.kubectl_version = kubectl_version_output[0].split(": v")[1]
             self.cluster_version = kubectl_version_output[1].split(": v")[1]
         except CalledProcessError as exc:
@@ -80,12 +84,12 @@ class KubeInfo(object):
         # in kubeconfig:
         if args.context is None:
             try:
-                args.context = str(
-                    check_output([prelim_command, "config", "current-context"],
-                                 stderr=STDOUT), "utf-8"
-                ).strip()
+                args.context = runner.get_output(
+                    [prelim_command, "config", "current-context"],
+                    stderr=STDOUT,
+                )
             except CalledProcessError:
-                raise SystemExit(
+                raise runner.fail(
                     "No current-context set. "
                     "Please use the --context option to explicitly set the "
                     "context."
@@ -96,10 +100,7 @@ class KubeInfo(object):
         # address (we use the server address to determine for good whether we
         # want oc or kubectl):
         kubectl_config = json.loads(
-            str(
-                check_output([prelim_command, "config", "view", "-o", "json"]),
-                "utf-8"
-            )
+            runner.get_output([prelim_command, "config", "view", "-o", "json"])
         )
         for context_setting in kubectl_config["contexts"]:
             if context_setting["name"] == args.context:
@@ -110,7 +111,7 @@ class KubeInfo(object):
                 self.cluster = context_setting["context"]["cluster"]
                 break
         else:
-            raise SystemExit("Error: Unable to find cluster information")
+            raise runner.fail("Error: Unable to find cluster information")
         self.namespace = args.namespace
 
         for cluster_setting in kubectl_config["clusters"]:
@@ -118,10 +119,21 @@ class KubeInfo(object):
                 self.server = cluster_setting["cluster"]["server"]
                 break
         else:
-            raise SystemExit("Error: Unable to find server information")
+            raise runner.fail("Error: Unable to find server information")
 
         self.command = kubectl_or_oc(self.server)
         self.verbose = args.verbose
+
+        runner.write(
+            "Command: {} {}".format(self.command, self.kubectl_version)
+        )
+        runner.write(
+            "Context: {}, namespace: {}, version: {}\n".format(
+                self.context, self.namespace, self.cluster_version
+            )
+        )
+
+        span.end()
 
     def __call__(self, *in_args) -> List[str]:
         """Return command-line for running kubectl."""
@@ -139,44 +151,38 @@ class KubeInfo(object):
         result += args
         return result
 
+    def check_if_in_local_vm(self, runner: Runner) -> bool:
+        # Minikube just has 'minikube' as context'
+        if self.context == "minikube":
+            return True
+        # Minishift has complex context name, so check by server:
+        if self.command == "oc":
+            try:
+                ip = runner.get_output(["minishift", "ip"]).strip()
+            except (OSError, CalledProcessError):
+                return False
+            if ip and ip in runner.kubectl.server:
+                return True
+        return False
 
-def analyze_args(output, args):
-    """Construct session info based on user arguments"""
-    kube_info = KubeInfo(args)
-    output.write(
-        "Context: {}, namespace: {}, kubectl_command: {}\n".format(
-            kube_info.context, kube_info.namespace, kube_info.command
-        )
-    )
 
-    runner = Runner(output, kube_info, args.verbose)
+def final_checks(runner: Runner, args):
+    """
+    Perform some last cross-cutting checks
+    """
 
     # minikube/minishift break DNS because DNS gets captured, sent to
     # minikube, which sends it back to DNS server set by host, resulting in
     # loop... we've fixed that for most cases, but not --deployment.
-    def check_if_in_local_vm() -> bool:
-        # Minikube just has 'minikube' as context'
-        if args.context == "minikube":
-            return True
-        # Minishift has complex context name, so check by server:
-        if runner.kubectl.command == "oc" and which("minishift"):
-            ip = runner.get_output(["minishift", "ip"]).strip()
-            if ip and ip in kube_info.server:
-                return True
-        return False
-
-    args.in_local_vm = check_if_in_local_vm()
+    args.in_local_vm = runner.kubectl.check_if_in_local_vm(runner)
     if args.in_local_vm:
-        output.write("Looks like we're in a local VM, e.g. minikube.\n")
-    if (
-        args.in_local_vm and args.method == "vpn-tcp"
-        and args.new_deployment is None and args.swap_deployment is None
-    ):
-        raise runner.fail(
-            "vpn-tcp method doesn't work with minikube/minishift when"
-            " using --deployment. Use --swap-deployment or"
-            " --new-deployment instead."
-        )
+        runner.write("Looks like we're in a local VM, e.g. minikube.\n")
+        if args.method == "vpn-tcp" and args.operation == "deployment":
+            raise runner.fail(
+                "vpn-tcp method doesn't work with minikube/minishift when"
+                " using --deployment. Use --swap-deployment or"
+                " --new-deployment instead."
+            )
 
     # Make sure we can access Kubernetes:
     try:
@@ -187,10 +193,12 @@ def analyze_args(output, args):
             ),
             stderr=STDOUT,
         )
-    except (CalledProcessError, OSError, IOError) as exc:
+    except CalledProcessError as exc:
         sys.stderr.write("Error accessing Kubernetes: {}\n".format(exc))
         if exc.output:
             sys.stderr.write("{}\n".format(exc.output.strip()))
         raise runner.fail("Cluster access failed")
-
-    return kube_info, runner
+    except (OSError, IOError) as exc:
+        raise runner.fail(
+            "Unexpected error accessing Kubernetes: {}\n".format(exc)
+        )
