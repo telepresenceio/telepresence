@@ -207,9 +207,6 @@ def analyze_args(output, args):
     if args.method == "inject-tcp":
         runner.require(["torsocks"], "Please install torsocks (v2.1 or later)")
 
-    if args.mount:
-        runner.require(["sshfs"], "Required for volume mounts")
-
     # Need conntrack for sshuttle on Linux:
     if runner.platform == "linux" and args.method == "vpn-tcp":
         runner.require(["conntrack", "iptables"],

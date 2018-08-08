@@ -120,17 +120,25 @@ def setup(runner, args):
     - Mount onto a temporary directory
     - Mount onto a specified mount point
     """
-    if args.mount and runner.chatty:
-        runner.show(
-            "Volumes are rooted at $TELEPRESENCE_ROOT. See "
-            "https://telepresence.io/howto/volumes.html for details."
-        )
+    if args.mount:
+        needed = ["sshfs"]
+        if runner.platform == "linux":
+            needed.append("fusermount")
+        else:
+            needed.append("umount")
+        runner.require(needed, "Required for volume mounts")
+
     # We allow all users if we're using Docker because we don't know
     # what uid the Docker container will use.
     allow_all_users = args.method == "container"
     if allow_all_users:
         runner.require_sudo()
 
+    if args.mount and runner.chatty:
+        runner.show(
+            "Volumes are rooted at $TELEPRESENCE_ROOT. See "
+            "https://telepresence.io/howto/volumes.html for details."
+        )
     return lambda runner_, env, ssh: mount_remote(
         runner_, args.mount, ssh, allow_all_users, env
     )
