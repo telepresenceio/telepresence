@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 import re
 from typing import Tuple
 
 from telepresence.runner.background import launch_local_server
+from telepresence.cli import PortMapping
 from telepresence.connect.expose import expose_local_services
 from telepresence.connect.ssh import SSH
 from telepresence.startup import MAC_LOOPBACK_IP
@@ -26,7 +26,8 @@ from telepresence.utilities import find_free_port
 
 
 def connect(
-    runner: Runner, remote_info: RemoteInfo, cmdline_args: argparse.Namespace
+    runner: Runner, remote_info: RemoteInfo, is_container_mode: bool,
+    expose: PortMapping
 ) -> Tuple[int, SSH]:
     """
     Start all the processes that handle remote proxying.
@@ -53,7 +54,7 @@ def connect(
             "port-forward", remote_info.pod_name, "{}:8022".format(ssh.port)
         )
     )
-    if cmdline_args.method == "container":
+    if is_container_mode:
         # kubectl port-forward currently only listens on loopback. So we
         # portforward from the docker0 interface on Linux, and the lo0 alias we
         # added on OS X, to loopback (until we can use kubectl port-forward
@@ -122,11 +123,11 @@ def connect(
     ssh.wait()
 
     # In Docker mode this happens inside the local Docker container:
-    if cmdline_args.method != "container":
+    if not is_container_mode:
         expose_local_services(
             runner,
             ssh,
-            cmdline_args.expose.local_to_remote(),
+            expose.local_to_remote(),
         )
 
     # Start tunnels for the SOCKS proxy (local -> remote)
@@ -147,3 +148,12 @@ def connect(
 
     span.end()
     return socks_port, ssh
+
+
+def setup(runner: Runner, args):
+    is_container_mode = args.method == "container"
+
+    def do_connect(runner_: Runner, remote_info: RemoteInfo):
+        return connect(runner_, remote_info, is_container_mode, args.expose)
+
+    return do_connect
