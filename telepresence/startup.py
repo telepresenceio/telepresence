@@ -203,13 +203,4 @@ def analyze_args(output, args):
     except (CalledProcessError, OSError, IOError) as e:
         raise runner.fail("Error running ssh: {}\n".format(e))
 
-    # Other requirements:
-    if args.method == "inject-tcp":
-        runner.require(["torsocks"], "Please install torsocks (v2.1 or later)")
-
-    # Need conntrack for sshuttle on Linux:
-    if runner.platform == "linux" and args.method == "vpn-tcp":
-        runner.require(["conntrack", "iptables"],
-                       "Required for the vpn-tcp method")
-
     return kube_info, runner
