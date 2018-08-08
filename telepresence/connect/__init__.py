@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import re
+from subprocess import STDOUT, CalledProcessError
 from typing import Tuple
 
 from telepresence.runner.background import launch_local_server
@@ -151,6 +152,15 @@ def connect(
 
 
 def setup(runner: Runner, args):
+    # Make sure we can run openssh:
+    runner.require(["ssh"], "Please install the OpenSSH client")
+    try:
+        version = runner.get_output(["ssh", "-V"], stderr=STDOUT)
+        if not version.startswith("OpenSSH"):
+            raise runner.fail("'ssh' is not the OpenSSH client, apparently.")
+    except (CalledProcessError, OSError, IOError) as e:
+        raise runner.fail("Error running ssh: {}\n".format(e))
+
     is_container_mode = args.method == "container"
 
     def do_connect(runner_: Runner, remote_info: RemoteInfo):

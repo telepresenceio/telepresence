@@ -16,7 +16,7 @@ import ssl
 import sys
 
 import json
-from subprocess import check_output, CalledProcessError, STDOUT, DEVNULL
+from subprocess import check_output, CalledProcessError, STDOUT
 from shutil import which
 from typing import List
 from urllib.error import HTTPError, URLError
@@ -192,15 +192,5 @@ def analyze_args(output, args):
         if exc.output:
             sys.stderr.write("{}\n".format(exc.output.strip()))
         raise runner.fail("Cluster access failed")
-
-    # Make sure we can run openssh:
-    try:
-        version = runner.get_output(["ssh", "-V"],
-                                    stdin=DEVNULL,
-                                    stderr=STDOUT)
-        if not version.startswith("OpenSSH"):
-            raise runner.fail("'ssh' is not the OpenSSH client, apparently.")
-    except (CalledProcessError, OSError, IOError) as e:
-        raise runner.fail("Error running ssh: {}\n".format(e))
 
     return kube_info, runner
