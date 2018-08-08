@@ -127,7 +127,7 @@ def connect(
         expose_local_services(
             runner,
             ssh,
-            expose.local_to_remote(),
+            list(expose.local_to_remote()),
         )
 
     # Start tunnels for the SOCKS proxy (local -> remote)
