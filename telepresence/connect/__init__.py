@@ -94,11 +94,6 @@ def connect(
             # an IP range that is assigned for testing network devices and
             # therefore shouldn't conflict with real IPs or local private
             # networks (https://tools.ietf.org/html/rfc6890).
-            runner.require(
-                ["ifconfig"],
-                "Needed to manage networking with the container method.",
-            )
-            runner.require_sudo()
             runner.check_call([
                 "sudo", "ifconfig", "lo0", "alias", MAC_LOOPBACK_IP
             ])
@@ -108,10 +103,6 @@ def connect(
             )
             docker_interface = MAC_LOOPBACK_IP
 
-        runner.require(
-            ["socat"],
-            "Needed to manage networking with the container method.",
-        )
         runner.launch(
             "socat for docker", [
                 "socat", "TCP4-LISTEN:{},bind={},reuseaddr,fork".format(
