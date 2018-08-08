@@ -45,8 +45,7 @@ def setup(runner: Runner, args):
             raise runner.fail("OpenShift does not support ports <1024.")
         image_name = TELEPRESENCE_REMOTE_IMAGE_PRIV
 
-    add_custom_nameserver = args.method == "vpn-tcp" and args.in_local_vm
-
+    # Figure out which operation the user wants
     # Handle --deployment case
     deployment_arg = args.deployment
     operation = existing_deployment
@@ -67,10 +66,22 @@ def setup(runner: Runner, args):
             operation = supplant_deployment
         args.operation = "swap_deployment"
 
+    # minikube/minishift break DNS because DNS gets captured, sent to minikube,
+    # which sends it back to the DNS server set by host, resulting in a DNS
+    # loop... We've fixed that for most cases by setting a distinct name server
+    # for the proxy to use when making a new proxy pod, but that does not work
+    # for --deployment.
+    add_custom_ns = args.method == "vpn-tcp" and runner.kubectl.in_local_vm
+    if add_custom_ns and args.operation == "deployment":
+        raise runner.fail(
+            "vpn-tcp method doesn't work with minikube/minishift when"
+            " using --deployment. Use --swap-deployment or"
+            " --new-deployment instead."
+        )
+
     def start_proxy(runner_: Runner) -> RemoteInfo:
         tel_deployment, run_id = operation(
-            runner_, deployment_arg, image_name, args.expose,
-            add_custom_nameserver
+            runner_, deployment_arg, image_name, args.expose, add_custom_ns
         )
         remote_info = get_remote_info(
             runner,

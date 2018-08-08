@@ -132,6 +132,9 @@ class KubeInfo(object):
                 self.context, self.namespace, self.cluster_version
             )
         )
+        self.in_local_vm = self._check_if_in_local_vm(runner)
+        if self.in_local_vm:
+            runner.write("Looks like we're in a local VM, e.g. minikube.\n")
 
         span.end()
 
@@ -151,7 +154,7 @@ class KubeInfo(object):
         result += args
         return result
 
-    def check_if_in_local_vm(self, runner: Runner) -> bool:
+    def _check_if_in_local_vm(self, runner: Runner) -> bool:
         # Minikube just has 'minikube' as context'
         if self.context == "minikube":
             return True
@@ -170,19 +173,6 @@ def final_checks(runner: Runner, args):
     """
     Perform some last cross-cutting checks
     """
-
-    # minikube/minishift break DNS because DNS gets captured, sent to
-    # minikube, which sends it back to DNS server set by host, resulting in
-    # loop... we've fixed that for most cases, but not --deployment.
-    args.in_local_vm = runner.kubectl.check_if_in_local_vm(runner)
-    if args.in_local_vm:
-        runner.write("Looks like we're in a local VM, e.g. minikube.\n")
-        if args.method == "vpn-tcp" and args.operation == "deployment":
-            raise runner.fail(
-                "vpn-tcp method doesn't work with minikube/minishift when"
-                " using --deployment. Use --swap-deployment or"
-                " --new-deployment instead."
-            )
 
     # Make sure we can access Kubernetes:
     try:
