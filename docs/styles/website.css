@@ -21,6 +21,10 @@ button.copy-to-clipboard {
     font-size: 11px;
 }
 
+#datawire-breadcrumb {
+    display: none;
+}
+
 
 /*
 *

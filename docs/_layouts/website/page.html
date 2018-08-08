@@ -7,3 +7,15 @@
 
 {{ super() }}
 {% endblock %}
+
+{% block page %}
+<a id="datawire-breadcrumb" href="https://datawire.io/learn/open-source-docs">
+    ← Back to Datawire Open Source Documentation
+</a>
+{{ super() }}
+{% endblock %}
+
+{% block javascript %}
+{{ super() }}
+<script src="/js/datawire-breadcrumb.js" type="text/javascript"></script>
+{% endblock %}
