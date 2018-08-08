@@ -140,13 +140,10 @@ class KubeInfo(object):
         return result
 
 
-def analyze_args(session):
+def analyze_args(output, args):
     """Construct session info based on user arguments"""
-    args = session.args
-    output = session.output
     kube_info = KubeInfo(args)
-
-    session.output.write(
+    output.write(
         "Context: {}, namespace: {}, kubectl_command: {}\n".format(
             kube_info.context, kube_info.namespace, kube_info.command
         )

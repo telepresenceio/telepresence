@@ -28,27 +28,24 @@ from telepresence.startup import analyze_args
 from telepresence.usage_tracking import call_scout
 
 
-def main(session):
+def main():
     """
     Top-level function for Telepresence
     """
 
     ########################################
     # Preliminaries: No changes to the machine or the cluster, no cleanup
+    # Capture environment info and the user's intent
 
     with crash_reporting():
-        session.args = parse_args()  # tab-completion stuff goes here
+        args = parse_args()  # tab-completion stuff goes here
 
-        session.output = Output(session.args.logfile)
-        del session.args.logfile
+        output = Output(args.logfile)
+        kube_info, runner = analyze_args(output, args)
 
-        session.kube_info, session.runner = analyze_args(session)
+        span = runner.span()
+        runner.add_cleanup("Stop time tracking", span.end)
 
-        span = session.runner.span()
-        session.runner.add_cleanup("Stop time tracking", span.end)
-
-        runner = session.runner
-        args = session.args
         start_proxy = proxy.setup(runner, args)
         do_connect = connect.setup(runner, args)
         mount_remote = mount.setup(runner, args)
@@ -56,15 +53,12 @@ def main(session):
         outbound.setup(runner, args)
 
         # Usage tracking
-        call_scout(session)
+        call_scout(runner, args)
 
     ########################################
     # Now it's okay to change things
 
-    with session.runner.cleanup_handling(), crash_reporting(session.runner):
-        runner = session.runner
-        args = session.args
-
+    with runner.cleanup_handling(), crash_reporting(runner):
         # Set up the proxy pod (operation -> pod name)
         remote_info = start_proxy(runner)
 
@@ -73,11 +67,6 @@ def main(session):
 
         # Capture remote environment information (ssh object -> env info)
         env = get_remote_env(runner, remote_info)
-
-        # Used by mount_remote
-        session.ssh = ssh
-        session.remote_info = remote_info
-        session.env = env
 
         # Handle filesystem stuff
         mount_dir = mount_remote(runner, env, ssh)
@@ -108,9 +97,7 @@ def run_telepresence():
     """Run telepresence"""
     if sys.version_info[:2] < (3, 5):
         raise SystemExit("Telepresence requires Python 3.5 or later.")
-
-    session = SimpleNamespace()
-    main(session)
+    main()
 
 
 if __name__ == '__main__':
