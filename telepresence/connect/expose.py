@@ -12,20 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Collection, Tuple
+from typing import List, Tuple
 
 from telepresence.runner import Runner
 from telepresence.connect.ssh import SSH
 
 
 def expose_local_services(
-    runner: Runner, ssh: SSH, port_numbers: Collection[Tuple[int, int]]
+    runner: Runner, ssh: SSH, port_numbers: List[Tuple[int, int]]
 ) -> None:
     """Create SSH tunnels from remote proxy pod to local host.
 
     :param runner: The runner
     :param ssh: A 'SSH` instance.
-    :param port_numbers: Collection of pairs of (local port, remote port).
+    :param port_numbers: List of pairs of (local port, remote port).
     """
     if not port_numbers and runner.chatty:
         runner.show(
