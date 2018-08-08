@@ -91,17 +91,8 @@ class Runner(object):
         self.session_id = uuid.uuid4().hex
 
         # Log some version info
-        report = (
-            ["kubectl", "version", "--short"],
-            ["oc", "version"],
-            ["uname", "-a"],
-        )
-        for command in report:
-            try:
-                self._popen("report", command)
-            except OSError:
-                pass
         self.output.write("Python {}".format(sys.version))
+        self.check_call(["uname", "-a"])
 
         cache_dir = os.path.expanduser("~/.cache/telepresence")
         os.makedirs(cache_dir, exist_ok=True)
