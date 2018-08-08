@@ -47,11 +47,13 @@ def setup(runner: Runner, args):
     # Handle --deployment case
     deployment_arg = args.deployment
     operation = existing_deployment
+    args.operation = "deployment"
 
     if args.new_deployment is not None:
         # This implies --new-deployment
         deployment_arg = args.new_deployment
         operation = create_new_deployment
+        args.operation = "new_deployment"
 
     if args.swap_deployment is not None:
         # This implies --swap-deployment
@@ -60,6 +62,7 @@ def setup(runner: Runner, args):
             operation = swap_deployment_openshift
         else:
             operation = supplant_deployment
+        args.operation = "swap_deployment"
 
     def start_proxy(runner_: Runner) -> RemoteInfo:
         tel_deployment, run_id = operation(

@@ -115,19 +115,10 @@ def call_scout(runner, args):
     config_root.mkdir(parents=True, exist_ok=True)
     id_file = Path(config_root / "id")
 
-    if args.deployment:
-        operation = "deployment"
-    elif args.new_deployment:
-        operation = "new_deployment"
-    elif args.swap_deployment:
-        operation = "swap_deployment"
-    else:
-        operation = "bad_args"
-
     scout_kwargs = dict(
         kubectl_version=runner.kubectl.kubectl_version,
         kubernetes_version=runner.kubectl.cluster_version,
-        operation=operation,
+        operation=args.operation,
         method=args.method
     )
 
