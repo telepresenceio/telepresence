@@ -158,6 +158,10 @@ func main() {
 	flag.Parse()
 
 	if *kubeconfig == "" {
+		*kubeconfig = os.Getenv("KUBECONFIG")
+	}
+
+	if *kubeconfig == "" {
 		current, err := user.Current()
 		if err != nil { panic(err) }
 		home := current.HomeDir

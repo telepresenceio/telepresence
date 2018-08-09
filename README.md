@@ -133,7 +133,7 @@ Step 2:
 
 ```
 go get github.com/datawire/teleproxy/cmd/teleproxy
-sudo teleproxy -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }') -remote $(kubectl get svc teleproxy -o go-template='{{with index .status.loadBalancer.ingress 0}}{{or .ip .hostname}}{{end}}')
+sudo teleproxy -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }')
 ```
 
 Note: If you are using the google cloud auth plugin for kubectl, then
@@ -146,7 +146,7 @@ invoke it directly instead of via sudo, e.g.:
 ```
 sudo chown root:wheel $(which teleproxy)
 sudo chmod u+s $(which teleproxy)
-teleproxy -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }')
+teleproxy -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }')
 ```
 
 Step 3:
@@ -165,7 +165,6 @@ To Do
 UX:
 
  - instead of supply dns manually we could watch resolv.conf for changes and load it automatically
- - instead of supply remote endpoint manually we could query it out of kubernetes
  - we could watch the supplied kubeconfig for changes... when combined with the prior two options and the suid installation, the invocation would require no args, e.g.:
    ```
    # automatically (re)connect me to whatever cluster my context points to

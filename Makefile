@@ -27,7 +27,5 @@ test-docker:
 
 test: test-go test-docker
 
-KUBECONFIG ?= ~/.kube/config
-
 run: build
-	./teleproxy -kubeconfig ${KUBECONFIG} -dns $(shell fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $$2 }')
+	./teleproxy -dns $(shell fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $$2 }')
