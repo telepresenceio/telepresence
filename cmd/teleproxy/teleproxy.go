@@ -151,6 +151,30 @@ func dnsMain() {
 	}
 }
 
+func rlimit() {
+	var rLimit syscall.Rlimit
+	err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
+	if err != nil {
+		log.Println("Error getting rlimit:", err)
+	} else {
+		log.Println("Initial rlimit:", rLimit)
+	}
+
+	rLimit.Max = 999999
+	rLimit.Cur = 999999
+	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit)
+	if err != nil {
+		log.Println("Error setting rlimit:", err)
+	}
+
+	err = syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
+	if err != nil {
+		log.Println("Error getting rlimit:", err)
+	} else {
+		log.Println("Final rlimit", rLimit)
+	}
+}
+
 var dnsIP = flag.String("dns", "", "dns ip address")
 var fallbackIP = flag.String("fallback", "", "dns fallback")
 
@@ -208,6 +232,8 @@ func main() {
 		}
 	}
 
+	rlimit()
+
 	kubeWatch()
 	go dnsMain()
 
@@ -246,9 +272,10 @@ spec:
 		"-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", "8022")
 	defer ssh.Shutdown()
 
-	log.Println("Listening...")
+	limit := 10000
+	log.Printf("Listening (limit %v)...", limit)
 	go func() {
-		sem := tpu.NewSemaphore(256)
+		sem := tpu.NewSemaphore(limit)
 		for {
 			conn, err := ln.Accept();
 			if err != nil {
