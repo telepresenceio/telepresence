@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -151,7 +152,7 @@ func dnsMain() {
 	}
 }
 
-var dnsIP = flag.String("dns", "10.0.0.1", "dns ip address")
+var dnsIP = flag.String("dns", "", "dns ip address")
 var fallbackIP = flag.String("fallback", "", "dns fallback")
 
 func main() {
@@ -166,6 +167,23 @@ func main() {
 		if err != nil { panic(err) }
 		home := current.HomeDir
 		*kubeconfig = filepath.Join(home, ".kube/config")
+	}
+
+	if *dnsIP == "" {
+		dat, err := ioutil.ReadFile("/etc/resolv.conf")
+		if err != nil { panic(err) }
+		for _, line := range strings.Split(string(dat), "\n") {
+			if strings.Contains(line, "nameserver") {
+				fields := strings.Fields(line)
+				*dnsIP = fields[1]
+				log.Printf("Automatically set -dns to %v", *dnsIP)
+				break
+			}
+		}
+	}
+
+	if *dnsIP == "" {
+		panic("couldn't determine dns ip from /etc/resolv.conf")
 	}
 
 	if *fallbackIP == "" {

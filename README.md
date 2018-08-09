@@ -133,7 +133,7 @@ Step 2:
 
 ```
 go get github.com/datawire/teleproxy/cmd/teleproxy
-sudo teleproxy -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }')
+sudo teleproxy -kubeconfig ~/.kube/config
 ```
 
 Note: If you are using the google cloud auth plugin for kubectl, then
@@ -146,7 +146,7 @@ invoke it directly instead of via sudo, e.g.:
 ```
 sudo chown root:wheel $(which teleproxy)
 sudo chmod u+s $(which teleproxy)
-teleproxy -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }')
+teleproxy
 ```
 
 Step 3:

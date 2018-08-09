@@ -28,4 +28,4 @@ test-docker:
 test: test-go test-docker
 
 run: build
-	./teleproxy -dns $(shell fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $$2 }')
+	./teleproxy
