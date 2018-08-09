@@ -85,7 +85,7 @@ func removeRoute(key string) {
 
 func updateRoute(svc *v1.Service) {
 	if svc.Spec.ClusterIP == "None" { return }
-	domainsToAddresses.Store(svc.Name + ".", svc.Spec.ClusterIP)
+	domainsToAddresses.Store(strings.ToLower(svc.Name + "."), svc.Spec.ClusterIP)
 	translator.ForwardTCP(svc.Spec.ClusterIP, "1234")
 	kickDNS()
 }
@@ -93,9 +93,9 @@ func updateRoute(svc *v1.Service) {
 type handler struct{}
 func (this *handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	log.Println(r.Question[0].Qtype, "DNS request for", r.Question[0].Name)
+	domain := strings.ToLower(r.Question[0].Name)
 	switch r.Question[0].Qtype {
 	case dns.TypeA:
-		domain := r.Question[0].Name
 		log.Println("Looking up", domain)
 		address, ok := domainsToAddresses.Load(domain)
 		if ok {
@@ -119,7 +119,6 @@ func (this *handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			return
 		}
 	default:
-		domain := r.Question[0].Name
 		_, ok := domainsToAddresses.Load(domain)
 		if ok {
 			log.Println("Found:", domain)
