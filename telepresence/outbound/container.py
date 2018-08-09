@@ -97,14 +97,9 @@ def run_docker_command(
     # Start the sshuttle container:
     name = random_name()
     config = {
-        "port":
-        ssh.port,
-        "cidrs":
-        get_proxy_cidrs(
-            runner, args, remote_info, remote_env["KUBERNETES_SERVICE_HOST"]
-        ),
-        "expose_ports":
-        list(args.expose.local_to_remote()),
+        "port": ssh.port,
+        "cidrs": get_proxy_cidrs(runner, remote_info, args.also_proxy),
+        "expose_ports": list(args.expose.local_to_remote()),
     }
     if runner.platform == "darwin":
         config["ip"] = MAC_LOOPBACK_IP
