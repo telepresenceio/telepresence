@@ -27,7 +27,7 @@ from telepresence.runner import Runner
 from telepresence.connect.ssh import SSH
 from telepresence.startup import MAC_LOOPBACK_IP
 from telepresence.utilities import random_name
-from telepresence.vpn import get_proxy_cidrs
+from telepresence.outbound.vpn import get_proxy_cidrs
 
 # Whether Docker requires sudo
 SUDO_FOR_DOCKER = os.path.exists("/var/run/docker.sock") and not os.access(

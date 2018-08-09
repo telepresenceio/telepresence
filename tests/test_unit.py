@@ -23,10 +23,10 @@ from hypothesis import strategies as st, given, example
 import yaml
 
 import telepresence.cli
-import telepresence.container
+import telepresence.outbound.container
 import telepresence.proxy.deployment
 import telepresence.output
-import telepresence.vpn
+import telepresence.outbound.vpn
 import telepresence.main
 
 from telepresence.runner.cache import Cache
@@ -226,7 +226,7 @@ def test_covering_cidr(ips):
 
     In particular, that means any subnets should *not* cover all given IPs.
     """
-    cidr = telepresence.vpn.covering_cidr(ips)
+    cidr = telepresence.outbound.vpn.covering_cidr(ips)
     assert isinstance(cidr, str)
     cidr = ipaddress.IPv4Network(cidr)
     assert cidr.prefixlen <= 24
@@ -261,7 +261,7 @@ def test_output_file():
 
 def test_docker_publish_args():
     """Test extraction of docker publish arguments"""
-    parse_docker_args = telepresence.container.parse_docker_args
+    parse_docker_args = telepresence.outbound.container.parse_docker_args
 
     expected_docker = ['--rm', '-it', 'fedora:latest', 'curl', 'qotm']
     expected_publish = ['-p=8000:localhost:8000']

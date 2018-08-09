@@ -20,8 +20,8 @@ import sys
 from telepresence import connect, mount, outbound, proxy, remote_env
 from telepresence.runner import wait_for_exit, Runner
 from telepresence.cli import parse_args, crash_reporting
-from telepresence.container import run_docker_command
-from telepresence.local import run_local_command
+from telepresence.outbound.container import run_docker_command
+from telepresence.outbound.local import run_local_command
 from telepresence.output import Output
 from telepresence.startup import KubeInfo, final_checks
 from telepresence.usage_tracking import call_scout

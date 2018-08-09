@@ -25,7 +25,7 @@ from telepresence.utilities import kill_process
 from telepresence.proxy.remote import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.connect.ssh import SSH
-from telepresence.vpn import connect_sshuttle
+from telepresence.outbound.vpn import connect_sshuttle
 
 
 def sip_workaround(
