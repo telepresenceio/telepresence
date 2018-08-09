@@ -81,8 +81,10 @@ anywhere else) and together they provide these basic functions:
    - forwards any requests that don't match kubernetes entities to
      your original dns server
 
- * The ip interceptor forwards connections to an auto-reconnecting
-   SOCKS5 proxy into the kubernetes cluster.
+ * The ip interceptor forwards connections to a SOCKS5 proxy. The
+   SOCKS5 proxy is also a tunnel into the cluster (one endpoint is
+   local, the other endpoint is in the cluster). The SOCKS5 proxy is
+   automatically restarted on failure.
 
  * Both of the above components depend on the view of dns-addressible
    entities maintained by the kubernetes event notifier.
