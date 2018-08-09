@@ -233,7 +233,6 @@ def connect_sshuttle(
     runner: Runner, remote_info: RemoteInfo, hosts_or_ips: List[str], ssh: SSH
 ):
     """Connect to Kubernetes using sshuttle."""
-    runner.require_sudo()
     span = runner.span()
     sshuttle_method = "auto"
     if runner.platform == "linux":
