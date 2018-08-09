@@ -123,14 +123,6 @@ How to use
 
 Step 1:
 
-Install the proxy endpoint into your cluster:
-
-```
-kubectl apply -f https://raw.githubusercontent.com/datawire/teleproxy/master/proxy.yaml
-```
-
-Step 2:
-
 ```
 go get github.com/datawire/teleproxy/cmd/teleproxy
 sudo teleproxy -kubeconfig ~/.kube/config
@@ -149,7 +141,7 @@ sudo chmod u+s $(which teleproxy)
 teleproxy
 ```
 
-Step 3:
+Step 2:
 
 Now you should be able to access any kubernetes services:
 
@@ -172,25 +164,12 @@ UX:
    ```
 Features:
 
- - Security: Right now it deploys the existing telepresence proxy as a
-   permanent endpoint in the cluster and exposes the sshd service as a
-   LoadBalancer. This sshd is configured to permit no-password
-   logins. This is obviously not ideal from a security perspective. We
-   could do something better than this like generate a keypair, but
-   there is a bunch of UX to work out in this area. We could also
-   consider using kubectl port-forward instead of solving this
-   problem, but kubectl port-forward seems to have not great
-   reliability around long-lived connections. One possible way to
-   avoid the UX would be to generate and store a keypair and then use
-   kubectl (port-forward, cp, or just grab the secret) to access
-   it. This would let you control access via rbac and require no
-   additional administration beyond the current situation.
  - Currently only kubernetes clusterIP services are supported. Need to
    watch other kinds of services and pods as well.
  - Right now all lookups are on the name as supplied. We need to
    support the proper lookup logic for
    "blah.namespace.svc.cluster.local".
- - Right now only A records are interecepted, should handle other
+ - Right now only A records are intercepted, should handle other
    types of DNS queries as well.
 
 Diagnostics:
