@@ -146,7 +146,7 @@ invoke it directly instead of via sudo, e.g.:
 ```
 sudo chown root:wheel $(which teleproxy)
 sudo chmod u+s $(which teleproxy)
-teleproxy -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }') -remote $(kubectl get svc teleproxy -o go-template='{{with index .status.loadBalancer.ingress 0}}{{or .ip .hostname}}{{end}}')
+teleproxy -kubeconfig ~/.kube/config -dns $(fgrep nameserver /etc/resolv.conf | head -1 | awk '{ print $2 }')
 ```
 
 Step 3:
