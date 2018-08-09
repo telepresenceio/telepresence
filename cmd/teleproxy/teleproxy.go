@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 	"github.com/datawire/teleproxy/internal/pkg/nat"
+	"github.com/datawire/teleproxy/internal/pkg/tpu"
 	"github.com/miekg/dns"
 	"golang.org/x/net/proxy"
 	"k8s.io/api/core/v1"
@@ -152,7 +153,6 @@ func dnsMain() {
 
 var dnsIP = flag.String("dns", "10.0.0.1", "dns ip address")
 var fallbackIP = flag.String("fallback", "", "dns fallback")
-var remote = flag.String("remote", "", "remote host")
 
 func main() {
 	flag.Parse()
@@ -200,57 +200,34 @@ func main() {
 	translator.ForwardUDP(*dnsIP, "1233")
 	defer translator.Disable()
 
-	sshch := make(chan bool)
-	defer func() { sshch<-true }()
+	apply := tpu.Keepalive(1, `
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: teleproxy
+spec:
+  containers:
+  - name: proxy
+    image: datawire/telepresence-k8s:0.75
+    ports:
+    - protocol: TCP
+      containerPort: 8022
+`, "kubectl", "apply", "-f", "-")
+	apply.Wait()
 
+	pf := tpu.Keepalive(0, "", "kubectl", "port-forward", "pod/teleproxy", "8022")
+        defer pf.Shutdown()
 	// XXX: probably need some kind of keepalive check for ssh, first
 	// curl after wakeup seems to trigger detection of death
-	go func() {
-		OUTER:
-		for {
-			ssh := exec.Command("ssh", "-D", "localhost:1080", "-C", "-N", "-oExitOnForwardFailure=yes",
-				"-oStrictHostKeyChecking=no", "telepresence@" + *remote)
-
-			pipe, err := ssh.StderrPipe()
-			if err != nil { panic(err) }
-			go reader(pipe)
-
-			pipe, err = ssh.StdoutPipe()
-			if err != nil { panic(err) }
-			go reader(pipe)
-
-			log.Println(strings.Join(ssh.Args, " "))
-			err = ssh.Start()
-			if err != nil { panic(err) }
-
-			exitch := make(chan bool)
-
-			go func() {
-				err = ssh.Wait()
-				if err != nil {
-					log.Println(err)
-				}
-				exitch<-true
-			}()
-
-			select {
-			case <-sshch:
-				log.Println("Killing ssh...")
-				err = ssh.Process.Kill()
-				if err != nil {
-					log.Println(err)
-				}
-				break OUTER
-			case <-exitch:
-				log.Println("Waiting 1 second before restarting ssh...")
-				time.Sleep(time.Second)
-				continue OUTER
-			}
-		}
-	}()
+//	ssh := tpu.Keepalive(0, "", "ssh", "-D", "localhost:1080", "-L", "localhost:9050:localhost:9050", "-C", "-N", "-oConnectTimeout=5", "-oExitOnForwardFailure=yes",
+	ssh := tpu.Keepalive(0, "", "ssh", "-D", "localhost:1080", "-C", "-N", "-oConnectTimeout=5", "-oExitOnForwardFailure=yes",
+		"-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", "8022")
+	defer ssh.Shutdown()
 
 	log.Println("Listening...")
 	go func() {
+		sem := tpu.NewSemaphore(256)
 		for {
 			conn, err := ln.Accept();
 			if err != nil {
@@ -258,7 +235,9 @@ func main() {
 			} else {
 				switch conn.(type) {
 				case *net.TCPConn:
-					go handleConnection(conn.(*net.TCPConn))
+					log.Println("AVAILABLE:", len(sem))
+					sem.Acquire()
+					go handleConnection(conn.(*net.TCPConn), sem)
 				default:
 					log.Println("Don't know how to handle conn:", conn)
 				}
@@ -273,20 +252,8 @@ func main() {
 	defer kickDNS()
 }
 
-func reader(pipe io.ReadCloser) {
-	const size = 64*1024
-	var buf [size]byte
-	for {
-		n, err := pipe.Read(buf[:size])
-		if err != nil {
-			pipe.Close()
-			return
-		}
-		log.Printf("%s", buf[:n])
-	}
-}
-
-func handleConnection(conn *net.TCPConn) {
+func handleConnection(conn *net.TCPConn, sem tpu.Semaphore) {
+	defer sem.Release()
 	// hmm, we may not actually need to get the original destination,
 	// we could just forward each ip to a unique port and either
 	// listen on that port or run port-forward
@@ -301,6 +268,7 @@ func handleConnection(conn *net.TCPConn) {
 	// setting up an ssh tunnel with dynamic socks proxy at this end
 	// seems faster than connecting directly to a socks proxy
 	dialer, err := proxy.SOCKS5("tcp", "localhost:1080", nil, proxy.Direct)
+//	dialer, err := proxy.SOCKS5("tcp", "localhost:9050", nil, proxy.Direct)
 	if err != nil {
 		log.Println(err)
 		conn.Close()
@@ -315,11 +283,15 @@ func handleConnection(conn *net.TCPConn) {
 	}
 	proxy := _proxy.(*net.TCPConn)
 
-	go pipe(conn, proxy)
-	go pipe(proxy, conn)
+	done := tpu.NewLatch(2)
+
+	go pipe(conn, proxy, done)
+	go pipe(proxy, conn, done)
+
+	done.Wait()
 }
 
-func pipe(from, to *net.TCPConn) {
+func pipe(from, to *net.TCPConn, done tpu.Latch) {
 	defer func() {
 		log.Println("CLOSED WRITE:", to.RemoteAddr())
 		to.CloseWrite()
@@ -328,6 +300,7 @@ func pipe(from, to *net.TCPConn) {
 		log.Println("CLOSED READ:", from.RemoteAddr())
 		from.CloseRead()
 	}()
+	defer done.Notify()
 
 	const size = 64*1024
 	var buf [size]byte
