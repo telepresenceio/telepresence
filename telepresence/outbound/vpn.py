@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 import ipaddress
 import json
 from subprocess import CalledProcessError
 from time import time, sleep
-from typing import List, Dict
+from typing import List
 
 from telepresence.connect.ssh import SSH
 from telepresence.proxy.remote import RemoteInfo
@@ -231,8 +230,7 @@ def serviceCIDR(runner: Runner):
 
 
 def connect_sshuttle(
-    runner: Runner, remote_info: RemoteInfo, args: argparse.Namespace,
-    env: Dict[str, str], ssh: SSH
+    runner: Runner, remote_info: RemoteInfo, hosts_or_ips: List[str], ssh: SSH
 ):
     """Connect to Kubernetes using sshuttle."""
     runner.require_sudo()
@@ -259,7 +257,7 @@ def connect_sshuttle(
             "127.0.0.1:9053",
             "-r",
             "telepresence@localhost:" + str(ssh.port),
-        ] + get_proxy_cidrs(runner, remote_info, args.also_proxy)
+        ] + get_proxy_cidrs(runner, remote_info, hosts_or_ips)
     )
 
     # sshuttle will take a while to startup. We can detect it being up when

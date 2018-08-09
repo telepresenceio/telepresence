@@ -74,7 +74,7 @@ def get_unsupported_tools(runner: Runner, dns_supported: bool) -> str:
     """
     Create replacement command-line tools that just error out, in a nice way.
 
-    Returns path to directory where overriden tools are stored.
+    Returns path to directory where overridden tools are stored.
     """
     commands = ["ping", "traceroute"]
     if not dns_supported:
@@ -164,7 +164,7 @@ def run_local_command(
         setup_torsocks(runner, env, socks_port, unsupported_tools_path)
         p = Popen(["torsocks"] + command, env=env)
     elif args.method == "vpn-tcp":
-        connect_sshuttle(runner, remote_info, args, env, ssh)
+        connect_sshuttle(runner, remote_info, args.also_proxy, ssh)
         p = Popen(command, env=env)
 
     def terminate_if_alive():
