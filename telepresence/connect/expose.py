@@ -29,9 +29,9 @@ def expose_local_services(
     """
     if not port_numbers and runner.chatty:
         runner.show(
-            "No traffic is being forwarded from the remote Deployment to your"
-            " local machine. You can use the --expose option to specify which"
-            " ports you want to forward."
+            "\nNo traffic is being forwarded from the remote Deployment to "
+            "your local machine. You can use the --expose option to specify "
+            "which ports you want to forward."
         )
     remote_forward_arguments = []
     for local_port, remote_port in port_numbers:
@@ -52,4 +52,4 @@ def expose_local_services(
             ssh.bg_command(remote_forward_arguments)
         )
     if runner.chatty:
-        runner.show("")
+        runner.show("\n")

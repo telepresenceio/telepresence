@@ -21,14 +21,9 @@ def setup_inject(runner: Runner, args):
     if runner.chatty:
         runner.show(
             "Starting proxy with method 'inject-tcp', which has the following "
-            "limitations:"
-        )
-        runner.show(
-            "Go programs, static binaries, suid programs, and custom DNS "
-            "implementations are not supported."
-        )
-        runner.show(
-            "For a full list of method limitations see "
+            "limitations: Go programs, static binaries, suid programs, and "
+            "custom DNS implementations are not supported. For a full list of "
+            "method limitations see "
             "https://telepresence.io/reference/methods.html"
         )
     command = ["torsocks"] + (args.run or ["bash" "--norc"])
@@ -52,15 +47,10 @@ def setup_vpn(runner: Runner, args):
     if runner.chatty:
         runner.show(
             "Starting proxy with method 'vpn-tcp', which has the following "
-            "limitations:"
-        )
-        runner.show(
-            "All processes are affected, only one telepresence can run per "
-            "machine, and you can't use other VPNs. You may need to add cloud "
-            "hosts and headless services with --also-proxy."
-        )
-        runner.show(
-            "For a full list of method limitations see "
+            "limitations: All processes are affected, only one telepresence "
+            "can run per machine, and you can't use other VPNs. You may need "
+            "to add cloud hosts and headless services with --also-proxy. For "
+            "a full list of method limitations see "
             "https://telepresence.io/reference/methods.html"
         )
     command = args.run or ["bash" "--norc"]
