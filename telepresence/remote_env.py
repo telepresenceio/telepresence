@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 from json import loads, dump
 from subprocess import CalledProcessError
 from time import time, sleep
@@ -41,7 +40,6 @@ def get_env_variables(runner: Runner,
     """
     Generate environment variables that match kubernetes.
     """
-    span = runner.span()
     # Get the environment:
     remote_env = _get_remote_env(
         runner, remote_info.pod_name, remote_info.container_name
@@ -58,15 +56,15 @@ def get_env_variables(runner: Runner,
         if key in remote_env:
             del remote_env[key]
     result.update(remote_env)
-    span.end()
     return result
 
 
-def get_remote_env(
-    runner: Runner, args: argparse.Namespace, remote_info: RemoteInfo
-) -> Dict[str, str]:
-    # Get the environment variables we want to copy from the remote pod; it may
-    # take a few seconds for the SSH proxies to get going:
+def get_remote_env(runner: Runner, remote_info: RemoteInfo) -> Dict[str, str]:
+    """
+    Get the environment variables we want to copy from the remote pod
+    """
+    span = runner.span()
+    # It may take a few seconds for the SSH proxies to get going:
     start = time()
     while time() - start < 10:
         try:
@@ -76,10 +74,11 @@ def get_remote_env(
             sleep(0.25)
     else:
         raise runner.fail("Error: Failed to get environment variables")
+    span.end()
     return env
 
 
-def serialize_as_env_file(env: Dict[str, str]) -> Tuple[str, List[str]]:
+def _serialize_as_env_file(env: Dict[str, str]) -> Tuple[str, List[str]]:
     """
     Render an env file as defined by Docker Compose
     https://docs.docker.com/compose/env-file/
@@ -102,30 +101,35 @@ def serialize_as_env_file(env: Dict[str, str]) -> Tuple[str, List[str]]:
     return "".join(res), skipped
 
 
-def write_env_files(session) -> None:
-    args = session.args
-    env = session.env
-    runner = session.runner
-    if args.env_json:
-        try:
-            with open(args.env_json, "w") as env_json_file:
-                dump(env, env_json_file, sort_keys=True, indent=4)
-        except IOError as exc:
-            runner.show("Failed to write environment as JSON: {}".format(exc))
-
-    if args.env_file:
-        try:
-            data, skipped = serialize_as_env_file(env)
-            with open(args.env_file, "w") as env_file:
-                env_file.write(data)
-            if skipped:
-                runner.show(
-                    "Skipped these environment keys when writing env "
-                    "file because the associated values have newlines:"
-                )
-                for key in skipped:
-                    runner.show(key)
-        except IOError as exc:
+def write_env_file(runner: Runner, env: Dict[str, str], env_file: str) -> None:
+    try:
+        data, skipped = _serialize_as_env_file(env)
+        with open(env_file, "w") as env_file_file:
+            env_file_file.write(data)
+        if skipped:
             runner.show(
-                "Failed to write environment as env file: {}".format(exc)
+                "Skipped these environment keys when writing env "
+                "file because the associated values have newlines:"
             )
+            for key in skipped:
+                runner.show(key)
+    except IOError as exc:
+        runner.show("Failed to write environment as env file: {}".format(exc))
+
+
+def write_env_json(runner: Runner, env: Dict[str, str], env_json: str) -> None:
+    try:
+        with open(env_json, "w") as env_json_file:
+            dump(env, env_json_file, sort_keys=True, indent=4)
+    except IOError as exc:
+        runner.show("Failed to write environment as JSON: {}".format(exc))
+
+
+def setup(_: Runner, args):
+    def write_env_files(runner_: Runner, env: Dict[str, str]):
+        if args.env_json:
+            write_env_json(runner_, env, args.env_json)
+        if args.env_file:
+            write_env_file(runner_, env, args.env_file)
+
+    return get_remote_env, write_env_files

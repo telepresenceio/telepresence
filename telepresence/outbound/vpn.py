@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 import ipaddress
 import json
 from subprocess import CalledProcessError
 from time import time, sleep
-from typing import List, Dict
+from typing import List
 
 from telepresence.connect.ssh import SSH
 from telepresence.proxy.remote import RemoteInfo
@@ -64,8 +63,7 @@ sys.stdout.flush()
 
 
 def get_proxy_cidrs(
-    runner: Runner, args: argparse.Namespace, remote_info: RemoteInfo,
-    service_address: str
+    runner: Runner, remote_info: RemoteInfo, hosts_or_ips: List[str]
 ) -> List[str]:
     """
     Figure out which IP ranges to route via sshuttle.
@@ -84,15 +82,11 @@ def get_proxy_cidrs(
     # Run script to convert --also-proxy hostnames to IPs, doing name
     # resolution inside Kubernetes, so we get cloud-local IP addresses for
     # cloud resources:
-    result = set(k8s_resolve(runner, args, remote_info, args.also_proxy))
-    result.update(
-        runner.cache.child(args.context
-                           ).lookup("podCIDRs", lambda: podCIDRs(runner))
-    )
+    result = set(k8s_resolve(runner, remote_info, hosts_or_ips))
+    context_cache = runner.cache.child(runner.kubectl.context)
+    result.update(context_cache.lookup("podCIDRs", lambda: podCIDRs(runner)))
     result.add(
-        runner.cache.child(
-            args.context
-        ).lookup("serviceCIDR", lambda: serviceCIDR(runner))
+        context_cache.lookup("serviceCIDR", lambda: serviceCIDR(runner))
     )
 
     span.end()
@@ -100,8 +94,7 @@ def get_proxy_cidrs(
 
 
 def k8s_resolve(
-    runner: Runner, args: argparse.Namespace, remote_info: RemoteInfo,
-    hosts_or_ips: List[str]
+    runner: Runner, remote_info: RemoteInfo, hosts_or_ips: List[str]
 ) -> List[str]:
     """
     Resolve a list of host and/or ip addresses inside the cluster
@@ -112,7 +105,7 @@ def k8s_resolve(
     hostnames = []
     ip_ranges = []
 
-    ipcache = runner.cache.child(args.context).child("ips")
+    ipcache = runner.cache.child(runner.kubectl.context).child("ips")
 
     for proxy_target in hosts_or_ips:
         try:
@@ -146,7 +139,7 @@ def k8s_resolve(
                 "We failed to do a DNS lookup inside Kubernetes for the "
                 "hostname(s) you listed in "
                 "--also-proxy ({}). Maybe you mistyped one of them?".format(
-                    ", ".join(args.also_proxy)
+                    ", ".join(hosts_or_ips)
                 )
             )
     else:
@@ -237,11 +230,9 @@ def serviceCIDR(runner: Runner):
 
 
 def connect_sshuttle(
-    runner: Runner, remote_info: RemoteInfo, args: argparse.Namespace,
-    env: Dict[str, str], ssh: SSH
+    runner: Runner, remote_info: RemoteInfo, hosts_or_ips: List[str], ssh: SSH
 ):
     """Connect to Kubernetes using sshuttle."""
-    runner.require_sudo()
     span = runner.span()
     sshuttle_method = "auto"
     if runner.platform == "linux":
@@ -265,9 +256,7 @@ def connect_sshuttle(
             "127.0.0.1:9053",
             "-r",
             "telepresence@localhost:" + str(ssh.port),
-        ] + get_proxy_cidrs(
-            runner, args, remote_info, env["KUBERNETES_SERVICE_HOST"]
-        )
+        ] + get_proxy_cidrs(runner, remote_info, hosts_or_ips)
     )
 
     # sshuttle will take a while to startup. We can detect it being up when

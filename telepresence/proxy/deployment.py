@@ -12,24 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import argparse
 import json
-from subprocess import STDOUT
-from typing import Tuple, Dict
-
 from copy import deepcopy
+from subprocess import STDOUT
+from typing import Tuple, Dict, Optional
 
-from telepresence import (
-    TELEPRESENCE_REMOTE_IMAGE, TELEPRESENCE_REMOTE_IMAGE_PRIV
-)
+from telepresence.cli import PortMapping
 from telepresence.proxy.remote import get_deployment_json
 from telepresence.runner import Runner
 from telepresence.utilities import get_alternate_nameserver
 
 
-def create_new_deployment(runner: Runner,
-                          args: argparse.Namespace) -> Tuple[str, str]:
-    """Create a new Deployment, return its name and Kubernetes label."""
+def existing_deployment(
+    runner: Runner, deployment_arg: str, image_name: str, expose: PortMapping,
+    add_custom_nameserver: bool
+) -> Tuple[str, Optional[str]]:
+    """
+    Handle an existing deployment by doing nothing
+    """
+    run_id = None
+    return deployment_arg, run_id
+
+
+def create_new_deployment(
+    runner: Runner, deployment_arg: str, image_name: str, expose: PortMapping,
+    add_custom_nameserver: bool
+) -> Tuple[str, str]:
+    """
+    Create a new Deployment, return its name and Kubernetes label.
+    """
     span = runner.span()
     run_id = runner.session_id
 
@@ -45,40 +56,59 @@ def create_new_deployment(runner: Runner,
 
     runner.add_cleanup("Delete new deployment", remove_existing_deployment)
     remove_existing_deployment()
-    if args.needs_root:
-        image_name = TELEPRESENCE_REMOTE_IMAGE_PRIV
-    else:
-        image_name = TELEPRESENCE_REMOTE_IMAGE
     command = [
-        "run",
-        # This will result in using Deployment:
+        "run",  # This will result in using Deployment:
         "--restart=Always",
         "--limits=cpu=100m,memory=256Mi",
         "--requests=cpu=25m,memory=64Mi",
-        args.new_deployment,
+        deployment_arg,
         "--image=" + image_name,
         "--labels=telepresence=" + run_id,
     ]
     # Provide a stable argument ordering.  Reverse it because that happens to
     # make some current tests happy but in the long run that's totally
     # arbitrary and doesn't need to be maintained.  See issue 494.
-    for port in sorted(args.expose.remote(), reverse=True):
+    for port in sorted(expose.remote(), reverse=True):
         command.append("--port={}".format(port))
-    if args.expose.remote():
+    if expose.remote():
         command.append("--expose")
     # If we're on local VM we need to use different nameserver to prevent
     # infinite loops caused by sshuttle:
-    if args.method == "vpn-tcp" and args.in_local_vm:
+    if add_custom_nameserver:
         command.append(
             "--env=TELEPRESENCE_NAMESERVER=" + get_alternate_nameserver()
         )
     runner.get_output(runner.kubectl(command))
     span.end()
-    return args.new_deployment, run_id
+    return deployment_arg, run_id
 
 
-def supplant_deployment(runner: Runner,
-                        args: argparse.Namespace) -> Tuple[str, str, Dict]:
+def _split_deployment_container(deployment_arg):
+    deployment, *container = deployment_arg.split(":", 1)
+    if container:
+        container = container[0]
+    return deployment, container
+
+
+def _get_container_name(container, deployment_json):
+    # If no container name was given, just use the first one:
+    if not container:
+        container = deployment_json["spec"]["template"]["spec"]["containers"
+                                                                ][0]["name"]
+    return container
+
+
+def _merge_expose_ports(expose, container_json):
+    expose.merge_automatic_ports([
+        port["containerPort"] for port in container_json.get("ports", [])
+        if port["protocol"] == "TCP"
+    ])
+
+
+def supplant_deployment(
+    runner: Runner, deployment_arg: str, image_name: str, expose: PortMapping,
+    add_custom_nameserver: bool
+) -> Tuple[str, str]:
     """
     Swap out an existing Deployment, supplant method.
 
@@ -90,35 +120,17 @@ def supplant_deployment(runner: Runner,
     span = runner.span()
     run_id = runner.session_id
 
-    deployment_name, *container_name = args.swap_deployment.split(":", 1)
-    if container_name:
-        container_name = container_name[0]
+    deployment, container = _split_deployment_container(deployment_arg)
     deployment_json = get_deployment_json(
         runner,
-        deployment_name,
-        args.context,
-        args.namespace,
+        deployment,
         "deployment",
     )
-
-    # If no container name was given, just use the first one:
-    if not container_name:
-        container_name = deployment_json["spec"]["template"]["spec"][
-            "containers"
-        ][0]["name"]
-
-    # If we're on local VM we need to use different nameserver to
-    # prevent infinite loops caused by sshuttle.
-    add_custom_nameserver = args.method == "vpn-tcp" and args.in_local_vm
-
-    if args.needs_root:
-        image_name = TELEPRESENCE_REMOTE_IMAGE_PRIV
-    else:
-        image_name = TELEPRESENCE_REMOTE_IMAGE
+    container = _get_container_name(container, deployment_json)
 
     new_deployment_json, orig_container_json = new_swapped_deployment(
         deployment_json,
-        container_name,
+        container,
         run_id,
         image_name,
         add_custom_nameserver,
@@ -138,7 +150,7 @@ def supplant_deployment(runner: Runner,
         """Resize the original deployment (kubectl scale)"""
         runner.check_call(
             runner.kubectl(
-                "scale", "deployment", deployment_name,
+                "scale", "deployment", deployment,
                 "--replicas={}".format(replicas)
             )
         )
@@ -169,8 +181,10 @@ def supplant_deployment(runner: Runner,
     )
     resize_original(0)
 
+    _merge_expose_ports(expose, orig_container_json)
+
     span.end()
-    return new_deployment_name, run_id, orig_container_json
+    return new_deployment_name, run_id
 
 
 def new_swapped_deployment(
@@ -252,8 +266,10 @@ def new_swapped_deployment(
     )
 
 
-def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
-                              ) -> Tuple[str, str, Dict]:
+def swap_deployment_openshift(
+    runner: Runner, deployment_arg: str, image_name: str, expose: PortMapping,
+    add_custom_nameserver: bool
+) -> Tuple[str, str]:
     """
     Swap out an existing DeploymentConfig.
 
@@ -270,13 +286,11 @@ def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
     then restores it. We delete the pods to force the RC to do its thing.
     """
     run_id = runner.session_id
-    deployment_name, *container_name = args.swap_deployment.split(":", 1)
-    if container_name:
-        container_name = container_name[0]
+    deployment, container = _split_deployment_container(deployment_arg)
     rcs = runner.get_output(
         runner.kubectl(
             "get", "rc", "-o", "name", "--selector",
-            "openshift.io/deployment-config.name=" + deployment_name
+            "openshift.io/deployment-config.name=" + deployment
         )
     )
     rc_name = sorted(
@@ -306,17 +320,17 @@ def swap_deployment_openshift(runner: Runner, args: argparse.Namespace
         "Restore original replication controller", apply_json, rc_json
     )
 
-    # If no container name was given, just use the first one:
-    if not container_name:
-        container_name = rc_json["spec"]["template"]["spec"]["containers"
-                                                             ][0]["name"]
+    container = _get_container_name(container, rc_json)
 
     new_rc_json, orig_container_json = new_swapped_deployment(
         rc_json,
-        container_name,
+        container,
         run_id,
-        TELEPRESENCE_REMOTE_IMAGE,
-        args.method == "vpn-tcp" and args.in_local_vm,
+        image_name,
+        add_custom_nameserver,
     )
     apply_json(new_rc_json)
-    return deployment_name, run_id, orig_container_json
+
+    _merge_expose_ports(expose, orig_container_json)
+
+    return deployment, run_id

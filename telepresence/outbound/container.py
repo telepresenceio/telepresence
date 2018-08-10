@@ -22,12 +22,13 @@ import os
 import os.path
 
 from telepresence import TELEPRESENCE_LOCAL_IMAGE
+from telepresence.cli import PortMapping
 from telepresence.proxy.remote import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.connect.ssh import SSH
 from telepresence.startup import MAC_LOOPBACK_IP
 from telepresence.utilities import random_name
-from telepresence.vpn import get_proxy_cidrs
+from telepresence.outbound.vpn import get_proxy_cidrs
 
 # Whether Docker requires sudo
 SUDO_FOR_DOCKER = os.path.exists("/var/run/docker.sock") and not os.access(
@@ -68,7 +69,9 @@ def parse_docker_args(docker_run: List[str]) -> Tuple[List[str], List[str]]:
 def run_docker_command(
     runner: Runner,
     remote_info: RemoteInfo,
-    args: argparse.Namespace,
+    docker_run: List[str],
+    expose: PortMapping,
+    also_proxy: List[str],
     remote_env: Dict[str, str],
     ssh: SSH,
     mount_dir: Optional[str],
@@ -79,32 +82,23 @@ def run_docker_command(
     Connect using sshuttle running in a Docker container, and then run user
     container.
 
-    :param args: Command-line args to telepresence binary.
     :param remote_env: Dictionary with environment on remote pod.
     :param mount_dir: Path to local directory where remote pod's filesystem is
         mounted.
     """
-    if SUDO_FOR_DOCKER:
-        runner.require_sudo()
-
     # Update environment:
     remote_env["TELEPRESENCE_METHOD"] = "container"  # mostly just for tests :(
 
     # Extract --publish flags and add them to the sshuttle container, which is
     # responsible for defining the network entirely.
-    docker_args, publish_args = parse_docker_args(args.docker_run)
+    docker_args, publish_args = parse_docker_args(docker_run)
 
     # Start the sshuttle container:
     name = random_name()
     config = {
-        "port":
-        ssh.port,
-        "cidrs":
-        get_proxy_cidrs(
-            runner, args, remote_info, remote_env["KUBERNETES_SERVICE_HOST"]
-        ),
-        "expose_ports":
-        list(args.expose.local_to_remote()),
+        "port": ssh.port,
+        "cidrs": get_proxy_cidrs(runner, remote_info, also_proxy),
+        "expose_ports": list(expose.local_to_remote()),
     }
     if runner.platform == "darwin":
         config["ip"] = MAC_LOOPBACK_IP
@@ -177,13 +171,13 @@ def run_docker_command(
     docker_command += docker_args
     span.end()
 
-    p = Popen(docker_command, env=docker_env)
+    process = Popen(docker_command, env=docker_env)
 
     def terminate_if_alive():
         runner.write("Shutting down containers...\n")
-        if p.poll() is None:
+        if process.poll() is None:
             runner.write("Killing local container...\n")
             make_docker_kill(runner, container_name)()
 
     runner.add_cleanup("Terminate local container", terminate_if_alive)
-    return p
+    return process

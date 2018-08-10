@@ -31,11 +31,11 @@ def mount_remote_volumes(
     """
     span = runner.span()
     if allow_all_users:
-        runner.require_sudo()
         sudo_prefix = ["sudo"]
+        middle = ["-o", "allow_other"]
     else:
         sudo_prefix = []
-    middle = ["-o", "allow_other"] if allow_all_users else []
+        middle = []
     try:
         runner.get_output(
             sudo_prefix + [
@@ -84,33 +84,61 @@ def mount_remote_volumes(
     return mount_dir, cleanup if mounted else no_cleanup
 
 
-def mount_remote(session):
+def mount_remote(runner, mount, ssh, allow_all_users, env):
     """Handle filesystem stuff (pod name, ssh object)"""
-    args = session.args
-    if args.mount:
+    if mount:
         # The mount directory is made here, removed by mount_cleanup if
         # mount succeeds, leaked if mount fails.
-        if args.mount is True:
-            mount_dir = str(session.runner.make_temp("fs"))
+        if mount is True:
+            mount_dir = str(runner.make_temp("fs"))
         else:
-            # FIXME: Maybe warn if args.mount doesn't start with /tmp?
+            # Try to create the mount point as a sanity check. If we do create
+            # it, we leave it behind. This is sort of a leak. Kind of.
+            # FIXME: Maybe warn if mount doesn't start with /tmp?
             try:
-                args.mount.mkdir(parents=True, exist_ok=True)
+                mount.mkdir(parents=True, exist_ok=True)
             except OSError as exc:
-                raise session.runner.fail(
-                    "Unable to use mount path: {}".format(exc)
-                )
-            mount_dir = str(args.mount)
-        # We allow all users if we're using Docker because we don't know
-        # what uid the Docker container will use.
+                raise runner.fail("Unable to use mount path: {}".format(exc))
+            mount_dir = str(mount)
         mount_dir, mount_cleanup = mount_remote_volumes(
-            session.runner,
-            session.ssh,
-            args.method == "container",  # allow all users
+            runner,
+            ssh,
+            allow_all_users,
             mount_dir,
         )
-        session.env["TELEPRESENCE_ROOT"] = mount_dir
-        session.runner.add_cleanup("Unmount remote filesystem", mount_cleanup)
+        env["TELEPRESENCE_ROOT"] = mount_dir
+        runner.add_cleanup("Unmount remote filesystem", mount_cleanup)
     else:
         mount_dir = None
     return mount_dir
+
+
+def setup(runner, args):
+    """
+    Set up one of three mount_remote implementations:
+    - Do nothing
+    - Mount onto a temporary directory
+    - Mount onto a specified mount point
+    """
+    if args.mount:
+        needed = ["sshfs"]
+        if runner.platform == "linux":
+            needed.append("fusermount")
+        else:
+            needed.append("umount")
+        runner.require(needed, "Required for volume mounts")
+
+    # We allow all users if we're using Docker because we don't know
+    # what uid the Docker container will use.
+    allow_all_users = args.method == "container"
+    if allow_all_users:
+        runner.require_sudo()
+
+    if args.mount and runner.chatty:
+        runner.show(
+            "Volumes are rooted at $TELEPRESENCE_ROOT. See "
+            "https://telepresence.io/howto/volumes.html for details."
+        )
+    return lambda runner_, env, ssh: mount_remote(
+        runner_, args.mount, ssh, allow_all_users, env
+    )
