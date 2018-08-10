@@ -20,7 +20,6 @@ import sys
 from telepresence import connect, mount, outbound, proxy, remote_env
 from telepresence.runner import wait_for_exit, Runner
 from telepresence.cli import parse_args, crash_reporting
-from telepresence.outbound.container import run_docker_command
 from telepresence.output import Output
 from telepresence.startup import KubeInfo, final_checks
 from telepresence.usage_tracking import call_scout
@@ -75,17 +74,9 @@ def main():
 
         # Set up outbound networking (pod name, ssh object)
         # Launch user command with the correct environment (...)
-        if args.method == "container":
-            user_process = run_docker_command(
-                runner,
-                remote_info,
-                args,
-                env,
-                ssh,
-                mount_dir,
-            )
-        else:
-            user_process = launch(runner, remote_info, env, socks_port, ssh)
+        user_process = launch(
+            runner, remote_info, env, socks_port, ssh, mount_dir
+        )
 
         wait_for_exit(runner, user_process)
 

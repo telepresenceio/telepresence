@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from telepresence.outbound.container import SUDO_FOR_DOCKER, run_docker_command
 from telepresence.outbound.local import launch_inject, launch_vpn
 from telepresence.runner import Runner
 
@@ -33,7 +33,7 @@ def setup_inject(runner: Runner, args):
         )
     command = ["torsocks"] + (args.run or ["bash" "--norc"])
 
-    def launch(runner_, _remote_info, env, socks_port, _ssh):
+    def launch(runner_, _remote_info, env, socks_port, _ssh, _mount_dir):
         return launch_inject(runner_, command, socks_port, env)
 
     return launch
@@ -65,7 +65,7 @@ def setup_vpn(runner: Runner, args):
         )
     command = args.run or ["bash" "--norc"]
 
-    def launch(runner_, remote_info, env, _socks_port, ssh):
+    def launch(runner_, remote_info, env, _socks_port, ssh, _mount_dir):
         return launch_vpn(
             runner_, remote_info, command, args.also_proxy, env, ssh
         )
@@ -89,6 +89,16 @@ def setup_container(runner: Runner, args):
             "Needed to manage networking with the container method.",
         )
         runner.require_sudo()
+    if SUDO_FOR_DOCKER:
+        runner.require_sudo()
+
+    def launch(runner_, remote_info, env, _socks_port, ssh, mount_dir):
+        return run_docker_command(
+            runner_, remote_info, args.docker_run, args.expose,
+            args.also_proxy, env, ssh, mount_dir
+        )
+
+    return launch
 
 
 def setup(runner: Runner, args):
