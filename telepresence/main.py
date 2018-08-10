@@ -44,9 +44,9 @@ def main():
 
         start_proxy = proxy.setup(runner, args)
         do_connect = connect.setup(runner, args)
-        mount_remote = mount.setup(runner, args)
         get_remote_env, write_env_files = remote_env.setup(runner, args)
         launch = outbound.setup(runner, args)
+        mount_remote = mount.setup(runner, args)
 
         final_checks(runner, args)
 
