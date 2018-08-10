@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from telepresence.outbound.local import launch_inject, launch_vpn
 from telepresence.runner import Runner
 
 
@@ -30,6 +31,12 @@ def setup_inject(runner: Runner, args):
             "For a full list of method limitations see "
             "https://telepresence.io/reference/methods.html"
         )
+    command = ["torsocks"] + (args.run or ["bash" "--norc"])
+
+    def launch(runner_, _remote_info, env, socks_port, _ssh):
+        return launch_inject(runner_, command, socks_port, env)
+
+    return launch
 
 
 def setup_vpn(runner: Runner, args):
@@ -56,6 +63,14 @@ def setup_vpn(runner: Runner, args):
             "For a full list of method limitations see "
             "https://telepresence.io/reference/methods.html"
         )
+    command = args.run or ["bash" "--norc"]
+
+    def launch(runner_, remote_info, env, _socks_port, ssh):
+        return launch_vpn(
+            runner_, remote_info, command, args.also_proxy, env, ssh
+        )
+
+    return launch
 
 
 def setup_container(runner: Runner, args):

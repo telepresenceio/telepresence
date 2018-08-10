@@ -21,7 +21,6 @@ from telepresence import connect, mount, outbound, proxy, remote_env
 from telepresence.runner import wait_for_exit, Runner
 from telepresence.cli import parse_args, crash_reporting
 from telepresence.outbound.container import run_docker_command
-from telepresence.outbound.local import run_local_command
 from telepresence.output import Output
 from telepresence.startup import KubeInfo, final_checks
 from telepresence.usage_tracking import call_scout
@@ -48,7 +47,7 @@ def main():
         do_connect = connect.setup(runner, args)
         mount_remote = mount.setup(runner, args)
         get_remote_env, write_env_files = remote_env.setup(runner, args)
-        outbound.setup(runner, args)
+        launch = outbound.setup(runner, args)
 
         final_checks(runner, args)
 
@@ -86,9 +85,7 @@ def main():
                 mount_dir,
             )
         else:
-            user_process = run_local_command(
-                runner, remote_info, args, env, socks_port, ssh
-            )
+            user_process = launch(runner, remote_info, env, socks_port, ssh)
 
         wait_for_exit(runner, user_process)
 
