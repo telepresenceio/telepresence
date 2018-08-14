@@ -253,6 +253,8 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: teleproxy
+  labels:
+    name: teleproxy
 spec:
   containers:
   - name: proxy
@@ -260,10 +262,10 @@ spec:
     ports:
     - protocol: TCP
       containerPort: 8022
-`, "kubectl", "apply", "-f", "-")
+`, "kubectl", "--kubeconfig", *kubeconfig, "apply", "-f", "-")
 	apply.Wait()
 
-	pf := tpu.Keepalive(0, "", "kubectl", "port-forward", "pod/teleproxy", "8022")
+	pf := tpu.Keepalive(0, "", "kubectl", "--kubeconfig", *kubeconfig, "port-forward", "pod/teleproxy", "8022")
         defer pf.Shutdown()
 	// XXX: probably need some kind of keepalive check for ssh, first
 	// curl after wakeup seems to trigger detection of death
