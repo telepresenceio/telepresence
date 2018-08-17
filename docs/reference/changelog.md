@@ -1,6 +1,15 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.91 (August 17, 2018)
+
+Bug fixes:
+
+* Conntrack, iptables, and a few other dependencies are automatically found on more Linux distributions now.
+  ([#278](https://github.com/telepresenceio/telepresence/issues/278))
+* Telepresence no longer crashes in the presence of an empty or corrupted cache file.
+  ([#713](https://github.com/telepresenceio/telepresence/issues/713))
+
 #### 0.90 (June 12, 2018)
 
 Bug fixes:
