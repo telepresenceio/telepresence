@@ -1,6 +1,13 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.92 (August 21, 2018)
+
+Bug fixes:
+
+* Fixed the `bash--norc` typo introduced in 0.91.
+  ([#738](https://github.com/telepresenceio/telepresence/issues/738))
+
 #### 0.91 (August 17, 2018)
 
 Bug fixes:
