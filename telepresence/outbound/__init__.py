@@ -26,7 +26,7 @@ def setup_inject(runner: Runner, args):
             "method limitations see "
             "https://telepresence.io/reference/methods.html"
         )
-    command = ["torsocks"] + (args.run or ["bash" "--norc"])
+    command = ["torsocks"] + (args.run or ["bash", "--norc"])
 
     def launch(runner_, _remote_info, env, socks_port, _ssh, _mount_dir):
         return launch_inject(runner_, command, socks_port, env)
@@ -53,7 +53,7 @@ def setup_vpn(runner: Runner, args):
             "a full list of method limitations see "
             "https://telepresence.io/reference/methods.html"
         )
-    command = args.run or ["bash" "--norc"]
+    command = args.run or ["bash", "--norc"]
 
     def launch(runner_, remote_info, env, _socks_port, ssh, _mount_dir):
         return launch_vpn(
