@@ -509,7 +509,10 @@ def wait_for_exit(runner: Runner, main_process: Popen) -> None:
             span.end()
             runner.set_success(True)
             raise SystemExit(main_code)
-        dead_bg = runner.tracked.which_dead()
+        if runner.tracked:
+            dead_bg = runner.tracked.which_dead()
+        else:
+            dead_bg = None
         if dead_bg:
             # Unfortunately torsocks doesn't deal well with connections
             # being lost, so best we can do is shut down.
