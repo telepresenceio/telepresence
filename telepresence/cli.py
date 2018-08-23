@@ -128,15 +128,22 @@ def crash_reporting(runner=None):
     try:
         yield
     except KeyboardInterrupt:
-        print("Keyboard interrupt (Ctrl-C/Ctrl-Break) pressed")
+        if runner is not None:
+            show = runner.show
+        else:
+            show = print
+        show("Keyboard interrupt (Ctrl-C/Ctrl-Break) pressed")
         raise SystemExit(0)
-    except Exception:
+    except Exception as exc:
         error = format_exc()
         logs = "Not available"
         log_path = "-"
         if runner is not None:
             logs = runner.output.read_logs()
             log_path = runner.output.logfile_path
+            runner.write("CRASH: {}".format(exc))
+            runner.write(error)
+            runner.write("(calling crash reporter...)")
         report_crash(error, log_path, logs)
         raise SystemExit(1)
 
