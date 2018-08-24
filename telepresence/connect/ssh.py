@@ -69,7 +69,7 @@ class SSH(object):
             ]
         )
 
-    def wait(self) -> None:
+    def wait(self) -> bool:
         """Return when SSH server can be reached."""
         start = time()
         while time() - start < 30:
@@ -78,5 +78,5 @@ class SSH(object):
             except CalledProcessError:
                 sleep(0.25)
             else:
-                return
-        raise RuntimeError("SSH isn't starting.")
+                return True
+        return False

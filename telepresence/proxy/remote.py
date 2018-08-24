@@ -58,6 +58,13 @@ class RemoteInfo(object):
         """Return the version used by the remote Telepresence container."""
         return self.container_config["image"].split(":")[-1]
 
+    def probe(self, runner: Runner):
+        info = runner.get_output(
+            runner.kubectl(["describe", "pod", self.deployment_name]),
+            stderr=STDOUT
+        )
+        runner.show(info)
+
 
 def get_deployment_json(
     runner: Runner,

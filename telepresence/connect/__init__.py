@@ -112,7 +112,9 @@ def connect(
             ]
         )
 
-    ssh.wait()
+    if ssh.wait():
+        remote_info.probe(runner)
+        raise RuntimeError("SSH isn't starting.")
 
     # In Docker mode this happens inside the local Docker container:
     if not is_container_mode:
