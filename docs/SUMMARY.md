@@ -45,6 +45,6 @@
 
 ## Need Help?
 
-* [Ask on Gitter](https://gitter.im/datawire/telepresence)
+* [Ask on Slack](https://d6e.co/slack)
 * [File a GitHub Issue](https://github.com/datawire/telepresence/issues/new)
 * [Visit Datawire.io](https://www.datawire.io)

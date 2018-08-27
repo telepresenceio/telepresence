@@ -172,7 +172,7 @@ def parse_args(args=None) -> argparse.Namespace:
             "Telepresence: local development proxied to a remote Kubernetes "
             "cluster.\n\n"
             "Documentation: https://telepresence.io\n"
-            "Real-time help: https://gitter.im/datawire/telepresence\n"
+            "Real-time help: https://d6e.co/slack\n"
             "Issue tracker: https://github.com/datawire/telepresence/issues\n"
             "\n" + HELP_EXAMPLES + "\n\n"
         )
