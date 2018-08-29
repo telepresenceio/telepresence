@@ -30,7 +30,7 @@ from telepresence.runner.background import (
     Background, BackgroundThread, BackgroundProcess, TrackedBG
 )
 from telepresence.runner.cache import Cache
-from telepresence.output import Output
+from telepresence.runner.output import Output
 from telepresence.runner.span import Span
 from telepresence.utilities import str_command
 

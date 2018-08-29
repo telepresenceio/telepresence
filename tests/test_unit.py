@@ -25,7 +25,7 @@ import yaml
 import telepresence.cli
 import telepresence.outbound.container
 import telepresence.proxy.deployment
-import telepresence.output
+import telepresence.runner.output
 import telepresence.outbound.vpn
 import telepresence.main
 
@@ -242,15 +242,15 @@ def test_covering_cidr(ips):
 def test_output_file():
     """Test some reasonable values for the log file"""
     # stdout
-    lf_dash = telepresence.output.Output("-")
+    lf_dash = telepresence.runner.output.Output("-")
     assert lf_dash.logfile is sys.stdout, lf_dash.logfile
     # /dev/null -- just make sure we don't crash
-    telepresence.output.Output("/dev/null")
+    telepresence.runner.output.Output("/dev/null")
     # Regular file -- make sure the file has been truncated
     o_content = "original content\n"
     with tempfile.NamedTemporaryFile(mode="w", delete=False) as out:
         out.write(o_content + "This should be truncated away.\nThis too.\n")
-    lf_file = telepresence.output.Output(out.name)
+    lf_file = telepresence.runner.output.Output(out.name)
     n_content = "replacement content\n"
     lf_file.write(n_content)
     with open(out.name) as in_again:
