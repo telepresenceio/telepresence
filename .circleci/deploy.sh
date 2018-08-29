@@ -30,5 +30,5 @@ source <(go env)
 
 DESTINATION=teleproxy/$TELEPROXY_VERSION/${GOOS}/${GO_ARCH}/teleproxy
 
-aws s3 cp --acl public-read dist/teleproxy s3://datawire-static-files/${DESTINATION}
-echo "Uploaded dist/teleproxy to ${DESTINATION}"
+aws s3 cp --acl public-read teleproxy s3://datawire-static-files/${DESTINATION}
+echo "Uploaded teleproxy to ${DESTINATION}"
