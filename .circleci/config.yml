@@ -30,6 +30,7 @@ jobs:
 
       - checkout
       - run: make test
+      - run: make build
       - run: .circleci/deploy.sh
 
   machine-build:
@@ -59,6 +60,7 @@ jobs:
 
       - checkout
       - run: make test
+      - run: make build
       - run: .circleci/deploy.sh
 
 workflows:
