@@ -242,6 +242,27 @@ class Runner(object):
                 "for more information."
             )
 
+    # Time
+
+    def loop_until(self, loop_seconds: float,
+                   sleep_seconds: float) -> typing.Iterable[int]:
+        """
+        Yield a loop counter during the loop time, then end. Sleep the
+        specified amount between loops. Always run at least once.
+
+        :param loop_seconds: How long the loop should run
+        :param sleep_seconds: How long to sleep between loops
+        :return: yields the loop counter, 0 onward
+        """
+        end_time = time() + loop_seconds
+        counter = 0
+        yield counter
+        sleep(sleep_seconds)
+        while time() < end_time:
+            counter += 1
+            yield counter
+            sleep(sleep_seconds)
+
     # Subprocesses
 
     def _make_logger(self, track, capture=None):
