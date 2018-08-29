@@ -62,7 +62,7 @@ $ telepresence --run curl http://helloworld.default
 ...
 ```
 
-> **Having trouble?** Ask us a question in our [Gitter chatroom](https://gitter.im/datawire/telepresence).
+> **Having trouble?** Ask us a question in our [Slack chatroom](https://d6e.co/slack).
 
 ### Networking access to cloud resources
 
