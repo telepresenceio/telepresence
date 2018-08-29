@@ -7,6 +7,9 @@ jobs:
       xcode: "9.0"
     working_directory: ~/go/src/github.com/datawire/teleproxy
     steps:
+      - run: |
+          sudo pip install awscli
+
       # Golang install
 
       # For some reason it is faster to curl into a file than to just
@@ -32,6 +35,9 @@ jobs:
     machine: true
     working_directory: ~/go/src/github.com/datawire/teleproxy
     steps:
+      - run: |
+          sudo pip install awscli
+
       # Golang install
 
       # For some reason it is faster to curl into a file than to just
