@@ -15,7 +15,6 @@
 import ipaddress
 import json
 from subprocess import CalledProcessError
-from time import sleep
 from typing import List
 
 from telepresence.connect.ssh import SSH
@@ -285,7 +284,6 @@ def connect_sshuttle(
         except CalledProcessError:
             pass
 
-    sleep(1)  # just in case there's more to startup
     get_hellotelepresence()
     subspan.end()
     span.end()
