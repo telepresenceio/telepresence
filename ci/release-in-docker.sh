@@ -45,5 +45,5 @@ env TELEPRESENCE_VERSION=$VERSION dist/homebrew-package.sh
 # Scout blobs
 dist/s3_uploader.sh
 
-# Ask user to post on Gitter
+# Ask user to post on Slack
 cat dist/announcement.md

@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/bin/sh
 
 # Prepare a development environment for running telepresence and its test
 # suite.  These steps should typically only be required once to prepare the
@@ -9,6 +9,8 @@ if [ "$#" -ne 4 ]; then
     echo "  (See .circleci/config.yml for sample values)"
     exit 1
 fi
+
+set -ex
 
 PROJECT_NAME=$1
 CLUSTER_NAME=$2

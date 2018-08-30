@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from subprocess import CalledProcessError
-from time import time, sleep
 from typing import List
 
 from telepresence.runner import Runner
@@ -70,13 +69,11 @@ class SSH(object):
         )
 
     def wait(self) -> bool:
-        """Return when SSH server can be reached."""
-        start = time()
-        while time() - start < 30:
+        """Return whether SSH server can be reached within 30 seconds."""
+        for _ in self.runner.loop_until(30, 0.25):
             try:
                 self.runner.check_call(self.command(["/bin/true"]))
-            except CalledProcessError:
-                sleep(0.25)
-            else:
                 return True
+            except CalledProcessError:
+                pass
         return False

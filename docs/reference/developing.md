@@ -237,7 +237,7 @@ $ virtualenv/bin/yapf -r -i telepresence
 
 #### Overview
 
-Every commit to the master branch results in CI building a set of deployable artifacts: Docker images, Linux packages, a JSON blob for [Scout](https://www.telepresence.io/reference/usage_reporting), and a markdown blob for announcing a release on Gitter et al.
+Every commit to the master branch results in CI building a set of deployable artifacts: Docker images, Linux packages, a JSON blob for [Scout](https://www.telepresence.io/reference/usage_reporting), and a markdown blob for announcing a release on Slack et al.
 The artifacts are available for download as a tarball `telepresence-dist.tbz` from the CircleCI artifacts tab on the `deploy` job page.
 The release process pushes a set of those artifacts into production.
 

@@ -1,7 +1,7 @@
 # [Documentation](https://telepresence.io) - start here!
 
 [![Build Status](https://circleci.com/gh/telepresenceio/telepresence.svg?style=shield)](https://circleci.com/gh/telepresenceio/workflows)
-[![Join the chat at https://gitter.im/datawire/telepresence](https://badges.gitter.im/datawire/telepresence.svg)](https://gitter.im/datawire/telepresence?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Join the chat at https://d6e.co/slack](https://img.shields.io/badge/chat-on%20Slack-blue.svg)](https://d6e.co/slack)
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/1863/badge)](https://bestpractices.coreinfrastructure.org/projects/1863)
 
 ## Demo

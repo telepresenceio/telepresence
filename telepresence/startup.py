@@ -112,7 +112,16 @@ class KubeInfo(object):
                 break
         else:
             raise runner.fail("Error: Unable to find cluster information")
-        self.namespace = args.namespace
+
+        # Check if the requested namespace exists
+        try:
+            runner.get_output([prelim_command, "get", "ns",
+                               args.namespace]).split("\n")
+            self.namespace = args.namespace
+        except CalledProcessError:
+            raise runner.fail(
+                "Error: Namespace '{}' does not exist".format(args.namespace)
+            )
 
         for cluster_setting in kubectl_config["clusters"]:
             if cluster_setting["name"] == self.cluster:

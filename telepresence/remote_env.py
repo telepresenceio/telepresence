@@ -14,7 +14,6 @@
 
 from json import loads, dump
 from subprocess import CalledProcessError
-from time import time, sleep
 from typing import Dict, Tuple, List
 
 from telepresence.proxy.remote import RemoteInfo
@@ -64,18 +63,16 @@ def get_remote_env(runner: Runner, remote_info: RemoteInfo) -> Dict[str, str]:
     Get the environment variables we want to copy from the remote pod
     """
     span = runner.span()
-    # It may take a few seconds for the SSH proxies to get going:
-    start = time()
-    while time() - start < 10:
-        try:
-            env = get_env_variables(runner, remote_info)
-            break
-        except CalledProcessError:
-            sleep(0.25)
-    else:
+    try:
+        # It may take a few seconds for the SSH proxies to get going:
+        for _ in runner.loop_until(10, 0.25):
+            try:
+                return get_env_variables(runner, remote_info)
+            except CalledProcessError:
+                pass
         raise runner.fail("Error: Failed to get environment variables")
-    span.end()
-    return env
+    finally:
+        span.end()
 
 
 def _serialize_as_env_file(env: Dict[str, str]) -> Tuple[str, List[str]]:

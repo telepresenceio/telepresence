@@ -14,7 +14,6 @@
 
 import json
 from subprocess import STDOUT, CalledProcessError
-from time import time, sleep
 from typing import Optional, Dict
 
 from telepresence import image_version
@@ -117,8 +116,7 @@ def get_deployment_json(
 def wait_for_pod(runner: Runner, remote_info: RemoteInfo) -> None:
     """Wait for the pod to start running."""
     span = runner.span()
-    start = time()
-    while time() - start < 120:
+    for _ in runner.loop_until(120, 0.25):
         try:
             pod = json.loads(
                 runner.get_output(
@@ -128,7 +126,6 @@ def wait_for_pod(runner: Runner, remote_info: RemoteInfo) -> None:
                 )
             )
         except CalledProcessError:
-            sleep(0.25)
             continue
         if pod["status"]["phase"] == "Running":
             for container in pod["status"]["containerStatuses"]:
@@ -137,7 +134,6 @@ def wait_for_pod(runner: Runner, remote_info: RemoteInfo) -> None:
                 ):
                     span.end()
                     return
-        sleep(0.25)
     span.end()
     raise RuntimeError(
         "Pod isn't starting or can't be found: {}".format(pod["status"])
@@ -172,8 +168,7 @@ def get_remote_info(
     if run_id:
         cmd.append("--selector=telepresence={}".format(run_id))
 
-    start = time()
-    while time() - start < 120:
+    for _ in runner.loop_until(120, 1):
         pods = json.loads(runner.get_output(runner.kubectl(cmd)))["items"]
         for pod in pods:
             name = pod["metadata"]["name"]
@@ -214,7 +209,6 @@ def get_remote_info(
             return remote_info
 
         # Didn't find pod...
-        sleep(1)
 
     span.end()
     raise RuntimeError(
