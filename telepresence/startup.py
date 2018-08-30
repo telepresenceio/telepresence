@@ -14,6 +14,7 @@
 
 import ssl
 import sys
+import os
 
 import json
 from subprocess import CalledProcessError, STDOUT
@@ -89,10 +90,18 @@ class KubeInfo(object):
                     stderr=STDOUT,
                 )
             except CalledProcessError:
+                sudo_used = ""
+                if os.geteuid() == 0:
+                    sudo_used = "Sudo user detected. " + \
+                        "We can't find a context " + \
+                        "and maybe that's because we're running as root. " + \
+                        "Try running without sudo."
+
                 raise runner.fail(
                     "No current-context set. "
                     "Please use the --context option to explicitly set the "
                     "context."
+                    "\n{}".format(sudo_used)
                 )
         self.context = args.context
 
