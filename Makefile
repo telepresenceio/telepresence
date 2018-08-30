@@ -1,8 +1,11 @@
 
 all: test build
 
-build:
-	go build cmd/teleproxy/teleproxy.go && sudo chown root:wheel ./teleproxy && sudo chmod u+s ./teleproxy
+teleproxy:
+	go build cmd/teleproxy/teleproxy.go
+
+build: teleproxy
+	sudo chown root:wheel ./teleproxy && sudo chmod u+s ./teleproxy
 
 get:
 	go get -t -d ./...
