@@ -15,7 +15,6 @@
 import argparse
 import json
 from subprocess import CalledProcessError, Popen
-from time import sleep
 from typing import List, Callable, Dict, Tuple, Optional
 
 import os
@@ -117,7 +116,8 @@ def run_docker_command(
     )
 
     # Wait for sshuttle to be running:
-    while True:
+    sshuttle_ok = False
+    for _ in runner.loop_until(120, 1):
         try:
             runner.check_call(
                 docker_runify([
@@ -128,11 +128,11 @@ def run_docker_command(
         except CalledProcessError as e:
             if e.returncode == 100:
                 # We're good!
+                sshuttle_ok = True
                 break
             elif e.returncode == 125:
                 # Docker failure, probably due to original container not
-                # starting yet... so sleep and try again:
-                sleep(1)
+                # starting yet... so try again:
                 continue
             else:
                 raise
@@ -140,6 +140,11 @@ def run_docker_command(
             raise RuntimeError(
                 "Waiting container exited prematurely. File a bug, please!"
             )
+    if not sshuttle_ok:
+        # This used to loop forever. Now we time out after two minutes.
+        raise RuntimeError(
+            "Waiting for network container timed out. File a bug, please!"
+        )
 
     # Start the container specified by the user:
     container_name = random_name()

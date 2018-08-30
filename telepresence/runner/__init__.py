@@ -30,7 +30,7 @@ from telepresence.runner.background import (
     Background, BackgroundThread, BackgroundProcess, TrackedBG
 )
 from telepresence.runner.cache import Cache
-from telepresence.output import Output
+from telepresence.runner.output import Output
 from telepresence.runner.span import Span
 from telepresence.utilities import str_command
 
@@ -241,6 +241,39 @@ class Runner(object):
                 "https://www.telepresence.io/reference/install#dependencies " +
                 "for more information."
             )
+
+    # Time
+
+    def time(self) -> float:
+        """
+        Return the time in seconds since the epoch.
+        """
+        return time()
+
+    def sleep(self, seconds: float) -> None:
+        """
+        Suspend execution for the given number of seconds.
+        """
+        sleep(seconds)
+
+    def loop_until(self, loop_seconds: float,
+                   sleep_seconds: float) -> typing.Iterable[int]:
+        """
+        Yield a loop counter during the loop time, then end. Sleep the
+        specified amount between loops. Always run at least once.
+
+        :param loop_seconds: How long the loop should run
+        :param sleep_seconds: How long to sleep between loops
+        :return: yields the loop counter, 0 onward
+        """
+        end_time = self.time() + loop_seconds - sleep_seconds
+        counter = 0
+        while True:
+            yield counter
+            counter += 1
+            if self.time() >= end_time:
+                break
+            self.sleep(sleep_seconds)
 
     # Subprocesses
 

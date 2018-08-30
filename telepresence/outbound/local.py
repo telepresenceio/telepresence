@@ -15,7 +15,6 @@
 import os
 import sys
 from subprocess import CalledProcessError, Popen
-from time import time, sleep
 from typing import Dict, List
 
 from telepresence.outbound.workarounds import apply_workarounds
@@ -60,16 +59,16 @@ def set_up_torsocks(runner: Runner, socks_port: int) -> Dict[str, str]:
     ]
     launch_env = os.environ.copy()
     launch_env.update(torsocks_env)
-    start = time()
-    while time() - start < 10:
-        try:
-            runner.check_call(test_proxying_cmd, env=launch_env)
-            span.end()
-            return torsocks_env
-        except CalledProcessError:
-            sleep(0.1)
-    span.end()
-    raise RuntimeError("SOCKS network proxying failed to start...")
+    try:
+        for _ in runner.loop_until(10, 0.1):
+            try:
+                runner.check_call(test_proxying_cmd, env=launch_env)
+                return torsocks_env
+            except CalledProcessError:
+                pass
+        raise RuntimeError("SOCKS network proxying failed to start...")
+    finally:
+        span.end()
 
 
 def terminate_local_process(runner, process):

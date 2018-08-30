@@ -15,7 +15,6 @@
 import ipaddress
 import json
 from subprocess import CalledProcessError
-from time import time, sleep
 from typing import List
 
 from telepresence.connect.ssh import SSH
@@ -275,18 +274,16 @@ def connect_sshuttle(
         ])
 
     subspan = runner.span("sshuttle-wait")
-    start = time()
     probes = 0
-    while time() - start < 20:
+    for _ in runner.loop_until(20, 0.1):
         probes += 1
         try:
             get_hellotelepresence()
             if probes >= REQUIRED_HELLOTELEPRESENCE_DNS_PROBES:
                 break
         except CalledProcessError:
-            sleep(0.1)
+            pass
 
-    sleep(1)  # just in case there's more to startup
     get_hellotelepresence()
     subspan.end()
     span.end()
