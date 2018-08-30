@@ -22,6 +22,7 @@ import json
 from pathlib import Path
 from shutil import rmtree
 import subprocess
+import tarfile
 
 import package_linux
 from container import Container
@@ -51,6 +52,10 @@ aws s3api put-object \\
     --bucket datawire-static-files \\
     --key telepresence/{version}/sshuttle-telepresence \\
     --body {sshuttle_executable_path.name}
+aws s3api put-object \\
+    --bucket datawire-static-files \\
+    --key telepresence/telepresence-{version}.tar.gz \\
+    --body {tarball_path.name}
 """
 _S3_RELEASE = """
 aws s3api put-object \\
@@ -68,6 +73,7 @@ def emit_release_info(version, notices=None):
     """Generate files in dist that handle scout and release info"""
     executable_path = DIST / "telepresence"
     sshuttle_executable_path = DIST / "sshuttle-telepresence"
+    tarball_path = DIST / "telepresence-{}.tar.gz".format(version)
     s3_uploader_path = DIST / "s3_uploader.sh"
     with s3_uploader_path.open(mode="w", encoding="UTF-8") as out:
         out.write(_S3_UPLOADER.format(**locals()))
@@ -145,6 +151,18 @@ def build_executables():
     con.copy_from("/source/dist/sshuttle-telepresence", str(DIST))
 
 
+def make_archive(version):
+    """Make a tar archive of the binaries in dist"""
+    name_ver = "telepresence-{}".format(version)
+    tf_path = DIST / "{}.tar.gz".format(name_ver)
+    tf = tarfile.open(str(tf_path), "x:gz")
+    for binary in "telepresence", "sshuttle-telepresence":
+        src = DIST / binary
+        dst = str(Path(name_ver) / binary)
+        with src.open("rb") as fp:
+            tf.addfile(tf.gettarinfo(arcname=dst, fileobj=fp), fp)
+
+
 def main():
     """
     Perform the steps required to build and deploy, but not release, a new
@@ -156,6 +174,7 @@ def main():
     version = get_version()
     release = "-" not in version  # Is this a release version?
     build_executables()
+    make_archive(version)
     emit_release_info(version)
     package_linux.main(version)
 
