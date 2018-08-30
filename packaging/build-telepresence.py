@@ -51,13 +51,15 @@ def build_telepresence(project: Path, output: Path):
     print("Built {}".format(output))
 
 
-def main(output):
+def main():
     """
     Set things up then call the code that builds the executable.
     """
     project = Path(__file__).absolute().resolve().parent.parent
 
-    if output is None:
+    if len(sys.argv) > 1:
+        output = Path(sys.argv[1])
+    else:
         version_bytes = check_output(
             ["python3", "-Wignore", "setup.py", "--version"],
             cwd=str(project),
@@ -74,8 +76,4 @@ def main(output):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        _output = Path(sys.argv[1])
-    else:
-        _output = None
-    main(_output)
+    main()

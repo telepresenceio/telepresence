@@ -33,9 +33,8 @@ VENV_BIN = PROJECT / "virtualenv" / "bin"
 
 def get_version():
     """Retrieve the current version number in the standard Python way"""
-    version_bytes = subprocess.check_output(
-        ["python3", "-Wignore", "setup.py", "--version"], cwd=str(PROJECT)
-    )
+    cmd = ["python3", "-Wignore", "setup.py", "--version"]
+    version_bytes = subprocess.check_output(cmd, cwd=str(PROJECT))
     version = str(version_bytes, "utf-8").strip()
     return version
 

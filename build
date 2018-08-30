@@ -335,18 +335,19 @@ def _license_check():
 
 def _lint():
     _license_check()
-    _virtualenv("yapf", "-dr", "telepresence", "build")
+    _virtualenv("yapf", "-dr", "telepresence", "build", "packaging")
     _virtualenv(
         "flake8", "--isolated", "local-docker", "k8s-proxy", "telepresence",
-        "build", "setup.py"
+        "build", "setup.py", "packaging"
     )
+    packaging = [str(path) for path in Path("packaging").glob("*.py")]
     _virtualenv(
         "pylint", "-f", "parseable", "-E", "local-docker", "k8s-proxy",
-        "telepresence", "build", "setup.py"
+        "telepresence", "build", "setup.py", *packaging
     )
     _virtualenv(
         "mypy", "--strict-optional", "telepresence",
-        "local-docker/entrypoint.py", "build"
+        "local-docker/entrypoint.py", "build", *packaging
     )
     # Couldn't figure out how to make this work well, so it's not very useful
     # cause of the skip:

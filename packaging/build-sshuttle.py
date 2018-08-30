@@ -2,7 +2,9 @@
 """
 Create a standalone sshuttle.
 
-We use a particular commit off of upstream master since at the moment there is no release with the feature we want (as of July 18, 2017). Once a new release is made we can pin that.
+We use a particular commit off of upstream master since at the moment there is
+no release with the feature we want (as of July 18, 2017). Once a new release
+is made we can pin that.
 
 For now we have a fork with a branch; hope is to upstream our changes
 eventually.
@@ -54,11 +56,13 @@ def build_sshuttle(output: Path):
     print("Built {}".format(output))
 
 
-def main(output):
+def main():
     """
     Set things up then call the code that builds the executable.
     """
-    if output is None:
+    if len(sys.argv) > 1:
+        output = Path(sys.argv[1])
+    else:
         project = Path(__file__).absolute().resolve().parent.parent
         output = project / "dist" / "sshuttle-telepresence"
 
@@ -70,8 +74,4 @@ def main(output):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        _output = Path(sys.argv[1])
-    else:
-        _output = None
-    main(_output)
+    main()
