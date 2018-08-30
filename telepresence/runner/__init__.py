@@ -244,6 +244,18 @@ class Runner(object):
 
     # Time
 
+    def time(self) -> float:
+        """
+        Return the time in seconds since the epoch.
+        """
+        return time()
+
+    def sleep(self, seconds: float) -> None:
+        """
+        Suspend execution for the given number of seconds.
+        """
+        sleep(seconds)
+
     def loop_until(self, loop_seconds: float,
                    sleep_seconds: float) -> typing.Iterable[int]:
         """
@@ -254,14 +266,14 @@ class Runner(object):
         :param sleep_seconds: How long to sleep between loops
         :return: yields the loop counter, 0 onward
         """
-        end_time = time() + loop_seconds
+        end_time = self.time() + loop_seconds - sleep_seconds
         counter = 0
-        yield counter
-        sleep(sleep_seconds)
-        while time() < end_time:
-            counter += 1
+        while True:
             yield counter
-            sleep(sleep_seconds)
+            counter += 1
+            if self.time() >= end_time:
+                break
+            self.sleep(sleep_seconds)
 
     # Subprocesses
 
