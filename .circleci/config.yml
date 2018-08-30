@@ -68,5 +68,11 @@ workflows:
 
   multibuild:
     jobs:
-      - machine-build
-      - macos-build
+      - machine-build:
+          filters:
+            tags:
+              only: /.*/
+      - macos-build:
+          filters:
+            tags:
+              only: /.*/
