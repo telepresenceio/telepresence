@@ -270,7 +270,7 @@ class Runner(object):
         counter = 0
         while True:
             yield counter
-s            counter += 1
+            counter += 1
             if self.time() >= end_time:
                 break
             self.sleep(sleep_seconds)
