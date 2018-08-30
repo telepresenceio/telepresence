@@ -26,10 +26,7 @@ TELEPROXY_VERSION_URL=$(python -c "import sys, urllib; print urllib.quote(\"${TE
 export AWS_ACCESS_KEY_ID=$DEPLOY_KEY_ID
 export AWS_SECRET_ACCESS_KEY=$DEPLOY_KEY
 
-go env
-source <(go env)
-
-DESTINATION=teleproxy/$TELEPROXY_VERSION/${GOOS}/${GOARCH}/teleproxy
+DESTINATION=teleproxy/$TELEPROXY_VERSION/$(go env GOOS)/$(go env GOARCH)/teleproxy
 
 aws s3 cp --acl public-read teleproxy s3://datawire-static-files/${DESTINATION}
 echo "Uploaded teleproxy to ${DESTINATION}"
