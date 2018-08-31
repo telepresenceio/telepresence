@@ -112,7 +112,7 @@ def connect(
             ]
         )
 
-    if ssh.wait():
+    if not ssh.wait():
         remote_info.probe(runner)
         raise RuntimeError("SSH isn't starting.")
 
