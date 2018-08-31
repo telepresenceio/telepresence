@@ -14,7 +14,7 @@
 
 import json
 from copy import deepcopy
-from subprocess import STDOUT
+from subprocess import STDOUT, CalledProcessError
 from typing import Tuple, Dict, Optional
 
 from telepresence.cli import PortMapping
@@ -78,9 +78,20 @@ def create_new_deployment(
         command.append(
             "--env=TELEPRESENCE_NAMESERVER=" + get_alternate_nameserver()
         )
-    runner.get_output(runner.kubectl(command))
-    span.end()
-    return deployment_arg, run_id
+    try:
+        runner.get_output(runner.kubectl(command))
+        span.end()
+        return deployment_arg, run_id
+    except CalledProcessError:
+        command = [
+            "get",
+            "deployment",
+            deployment_arg,
+        ]
+        deployment_already_exists = runner.get_output(runner.kubectl(command))
+        if deployment_already_exists:
+            raise runner.fail("Deployment already exixts")
+        raise
 
 
 def _split_deployment_container(deployment_arg):

@@ -1,0 +1,1 @@
+Fix Telepresence crashes if --new-deployment names an existing deployment.
