@@ -14,7 +14,8 @@
 
 import json
 from subprocess import STDOUT, CalledProcessError
-from typing import Optional, Dict
+from typing import Optional, Dict, List
+from string import Template
 
 from telepresence import image_version
 from telepresence.runner import Runner
@@ -106,31 +107,178 @@ def get_deployment_json(
         span.end()
 
 
+def find_ready_container(containers: List[dict], container_name: str) -> dict:
+    """Find a ready container with a specified name."""
+
+    for container in containers:
+        # check the container name
+        if container["name"] != container_name:
+            return None
+
+        # check if the target is ready
+        if not container["ready"]:
+            return None
+
+        # we found the ready container
+        return container
+
+    # we did not find the ready container
+    return None
+
+
+def get_pod(runner: Runner, pod_name: str) -> dict:
+    """Get info for a pod by name."""
+
+    command = runner.kubectl("get", "pod", pod_name, "-o", "json")
+    output = runner.get_output(command)
+    return json.loads(output)
+
+
+def find_waiting_container(containers: List[dict],
+                           container_name: str) -> dict:
+    """Find a waiting container with a specified name."""
+
+    # try to find the target container
+    for container in containers:
+        # check the container name
+        if container["name"] != container_name:
+            continue
+
+        # check if the target is ready
+        if container["ready"]:
+            continue
+
+        # check if the target is not in a waiting state
+        if container["state"]["waiting"] is None:
+            continue
+
+        # we found the waiting container
+        return container
+
+    # we did not find the waiting container
+    return None
+
+
+def get_container_waiting_log_message(
+    container: dict, container_name: str
+) -> str:
+    """Generate a log message for a waiting container.
+    
+    If a waiting container has a recognized waiting reason, this function will return a user-friendly log message for it.
+    """
+
+    # message templates by reason
+    message_templates = {
+        "CreateContainerConfigError":
+        "Waiting on pod because of container config error:\n  Container: $container_name\n  Reason: $waiting_reason\n  Message: $waiting_message"
+    }
+
+    # collect values used by message templates
+    reason = container["state"]["waiting"]["reason"]
+    message = container["state"]["waiting"][
+        "message"
+    ] if "message" in container["state"]["waiting"] else ""
+
+    # all values used by every message template
+    message_values = {
+        "container_name": container_name,
+        "waiting_reason": reason,
+        "waiting_message": message
+    }
+
+    message_template = message_templates[
+        reason
+    ] if reason in message_templates else ""
+
+    if message_template is "":
+        return ""
+
+    message = Template(message_template).substitute(message_values)
+    return message
+
+
+def check_if_container_is_ready(
+    runner: Runner, pod: dict, container_name: str,
+    has_displayed_waiting_log_message: bool
+) -> dict:
+    """Check if a container in a pod is ready."""
+
+    containers = pod["status"]["containerStatuses"]
+
+    pod_status_phase = pod["status"]["phase"]
+
+    if pod_status_phase == "Running":
+        ready_container = find_ready_container(containers, container_name)
+
+        # stop looking once we've found the ready container
+        if ready_container is not None:
+            return {
+                "is_ready":
+                True,
+                "has_displayed_waiting_log_message":
+                has_displayed_waiting_log_message
+            }
+    elif pod_status_phase == "Pending":
+        waiting_container = find_waiting_container(containers, container_name)
+
+        if waiting_container is not None:
+            # don't display a log message if we already showed one
+            if has_displayed_waiting_log_message is True:
+                return {
+                    "is_ready":
+                    False,
+                    "has_displayed_waiting_log_message":
+                    has_displayed_waiting_log_message
+                }
+
+            log_message = get_container_waiting_log_message(
+                waiting_container, container_name
+            )
+
+            if log_message != "":
+                runner.show(log_message)
+                has_displayed_waiting_log_message = True
+
+    return {
+        "is_ready": False,
+        "has_displayed_waiting_log_message": has_displayed_waiting_log_message
+    }
+
+
 def wait_for_pod(runner: Runner, remote_info: RemoteInfo) -> None:
     """Wait for the pod to start running."""
+
+    pod_name = remote_info.pod_name
+    container_name = remote_info.container_name
     span = runner.span()
+    is_container_ready = False
+    has_displayed_waiting_log_message = False
+
     for _ in runner.loop_until(120, 0.25):
         try:
-            pod = json.loads(
-                runner.get_output(
-                    runner.kubectl(
-                        "get", "pod", remote_info.pod_name, "-o", "json"
-                    )
-                )
-            )
+            pod = get_pod(runner, pod_name)
         except CalledProcessError:
-            continue
-        if pod["status"]["phase"] == "Running":
-            for container in pod["status"]["containerStatuses"]:
-                if container["name"] == remote_info.container_name and (
-                    container["ready"]
-                ):
-                    span.end()
-                    return
+            return False
+
+        container_check_status = check_if_container_is_ready(
+            runner, pod, container_name, has_displayed_waiting_log_message
+        )
+
+        has_displayed_waiting_log_message = container_check_status[
+            "has_displayed_waiting_log_message"
+        ]
+
+        is_container_ready = container_check_status["is_ready"]
+
+        if is_container_ready:
+            break
+
     span.end()
-    raise RuntimeError(
-        "Pod isn't starting or can't be found: {}".format(pod["status"])
-    )
+
+    if not is_container_ready:
+        raise RuntimeError(
+            "Pod isn't starting or can't be found: {}".format(pod["status"])
+        )
 
 
 def get_remote_info(
