@@ -163,7 +163,9 @@ func dnsMain() {
 		// originates from, which in the case of containers is
 		// the docker bridge. Without this dns won't work from
 		// inside containers.
-		srv := &dns.Server{Addr: "172.17.0.1:" + strconv.Itoa(1233), Net: "udp"}
+
+		// XXX: setting this to 127.0.0.1 for blch to try out
+		srv := &dns.Server{Addr: "127.0.0.1:" + strconv.Itoa(1233), Net: "udp"}
 		srv.Handler = &h
 		if err := srv.ListenAndServe(); err != nil {
 			log.Fatalf("Failed to set udp listener %s\n", err.Error())
