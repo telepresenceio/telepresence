@@ -154,21 +154,23 @@ func dnsMain() {
 		}
 	}()
 
-	go func() {
-		// This is the default docker bridge. We should
-		// probably figure out how to query this out of docker
-		// instead of hardcoding it. We need to listen here
-		// because the nat logic we use to intercept dns
-		// packets will divert the packet to the interface it
-		// originates from, which in the case of containers is
-		// the docker bridge. Without this dns won't work from
-		// inside containers.
-		srv := &dns.Server{Addr: "172.17.0.1:" + strconv.Itoa(1233), Net: "udp"}
-		srv.Handler = &h
-		if err := srv.ListenAndServe(); err != nil {
-			log.Fatalf("Failed to set udp listener %s\n", err.Error())
-		}
-	}()
+	if runtime.GOOS == "linux" {
+		go func() {
+			// This is the default docker bridge. We should
+			// probably figure out how to query this out of docker
+			// instead of hardcoding it. We need to listen here
+			// because the nat logic we use to intercept dns
+			// packets will divert the packet to the interface it
+			// originates from, which in the case of containers is
+			// the docker bridge. Without this dns won't work from
+			// inside containers.
+			srv := &dns.Server{Addr: "172.17.0.1:" + strconv.Itoa(1233), Net: "udp"}
+			srv.Handler = &h
+			if err := srv.ListenAndServe(); err != nil {
+				log.Fatalf("Failed to set udp listener %s\n", err.Error())
+			}
+		}()
+	}
 }
 
 func rlimit() {
