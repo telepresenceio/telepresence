@@ -154,7 +154,8 @@ func dnsMain() {
 		}
 	}()
 
-	go func() {
+	// XXX: commenting this out for blch to try out
+	/*go func() {
 		// This is the default docker bridge. We should
 		// probably figure out how to query this out of docker
 		// instead of hardcoding it. We need to listen here
@@ -163,14 +164,12 @@ func dnsMain() {
 		// originates from, which in the case of containers is
 		// the docker bridge. Without this dns won't work from
 		// inside containers.
-
-		// XXX: setting this to 127.0.0.1 for blch to try out
-		srv := &dns.Server{Addr: "127.0.0.1:" + strconv.Itoa(1233), Net: "udp"}
+		srv := &dns.Server{Addr: "172.17.0.1:" + strconv.Itoa(1233), Net: "udp"}
 		srv.Handler = &h
 		if err := srv.ListenAndServe(); err != nil {
 			log.Fatalf("Failed to set udp listener %s\n", err.Error())
 		}
-	}()
+	}()*/
 }
 
 func rlimit() {
