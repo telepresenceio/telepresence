@@ -1,1 +1,0 @@
-Fixed the container method crash when no ports are exposed.

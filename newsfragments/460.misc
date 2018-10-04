@@ -1,1 +1,0 @@
-Detect that telepresence is running as root and suggest the user not launch Telepresence under sudo

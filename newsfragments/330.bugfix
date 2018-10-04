@@ -1,1 +1,0 @@
-Print a happy little error message instead of a traceback when the namespace cannot be found.

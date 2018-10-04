@@ -1,6 +1,21 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.93 (October 4, 2018)
+
+Bug fixes:
+
+* Telepresence reports an error message when the specified namespace is not found.
+  ([#330](https://github.com/telepresenceio/telepresence/issues/330))
+* The container method no longer crashes when no ports are exposed.
+  ([#750](https://github.com/telepresenceio/telepresence/issues/750))
+
+Misc:
+
+* Telepresences detects that it is running as root and suggests the user not launch Telepresence under sudo if there is trouble talking to the cluster.
+  Thanks to Rohan Gupta for the patch.
+  ([#460](https://github.com/telepresenceio/telepresence/issues/460))
+
 #### 0.92 (August 21, 2018)
 
 Bug fixes:
