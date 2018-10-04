@@ -93,8 +93,8 @@ def _split_deployment_container(deployment_arg):
 def _get_container_name(container, deployment_json):
     # If no container name was given, just use the first one:
     if not container:
-        container = deployment_json["spec"]["template"]["spec"]["containers"
-                                                                ][0]["name"]
+        spec = deployment_json["spec"]["template"]["spec"]
+        container = spec["containers"][0]["name"]
     return container
 
 
