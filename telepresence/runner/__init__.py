@@ -26,6 +26,7 @@ from tempfile import mkdtemp
 from threading import Thread
 from time import sleep, time
 
+from telepresence import TELEPRESENCE_BINARY
 from telepresence.runner.background import (
     Background, BackgroundThread, BackgroundProcess, TrackedBG
 )
@@ -105,6 +106,18 @@ class Runner(object):
         self.temp = Path(mkdtemp(prefix="tel-", dir="/tmp"))
         (self.temp / "session_id.txt").write_text(self.session_id)
         self.add_cleanup("Remove temporary directory", rmtree, self.temp)
+
+        # Adjust PATH to cover common locations for conntrack, ifconfig, etc.
+        # Also maybe prepend Telepresence's libexec directory.
+        path = os.environ.get("PATH", os.defpath)
+        path_elements = path.split(os.pathsep)
+        for additional in "/usr/sbin", "/sbin":
+            if additional not in path_elements:
+                path += ":" + additional
+        libexec = TELEPRESENCE_BINARY.parents[1] / "libexec"
+        if libexec.exists():
+            path = "{}:{}".format(libexec, path)
+        os.environ["PATH"] = path
 
     @classmethod
     def open(cls, logfile_path, kubectl_cmd: str, verbose: bool):
@@ -217,13 +230,6 @@ class Runner(object):
         """
         Find unavailable commands from a set of dependencies
         """
-        # Adjust PATH to cover common locations for conntrack, ifconfig, etc.
-        path = os.environ.get("PATH", os.defpath)
-        path_elements = path.split(os.pathsep)
-        for additional in "/usr/sbin", "/sbin":
-            if additional not in path_elements:
-                path += ":" + additional
-        os.environ["PATH"] = path
         return [command for command in commands if which(command) is None]
 
     def require(self, commands: typing.Iterable[str], message: str) -> None:
