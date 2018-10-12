@@ -5,6 +5,8 @@ https://github.com/alanfranz/fpm-within-docker/blob/master/distributions.yml
 
 https://wiki.ubuntu.com/Releases
 
+https://www.debian.org/releases/
+
 https://fedoraproject.org/wiki/Releases
 https://fedoraproject.org/wiki/End_of_life
 """
