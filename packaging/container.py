@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import shlex
-from subprocess import check_output
+from subprocess import check_output, CalledProcessError
 from typing import List, Optional
 
 
@@ -59,7 +59,11 @@ class Container(object):
             if self.container:
                 cmd = cmd.replace(self.container, "CNTNR")
             print("+ {}".format(cmd))
-        res_bytes = check_output(*args, **kwargs)
+        try:
+            res_bytes = check_output(*args, **kwargs)
+        except CalledProcessError as exc:
+            print(str(exc.output, "utf-8").rstrip())
+            raise
         res = str(res_bytes, "utf-8")
         if self.verbose and res.rstrip():
             print(res.rstrip())
