@@ -19,10 +19,11 @@ trap "rm -rf $BLDDIR" EXIT
 DIST="${BLDDIR}/dist"
 mkdir -p "${DIST}"
 
-# Build executables in dist
+# Build/retrieve executables into dist
 cd "${SRCDIR}"
 python3 packaging/build-telepresence.py "${DIST}/telepresence"
 python3 packaging/build-sshuttle.py "${DIST}/sshuttle-telepresence"
+python3 packaging/retrieve-teleproxy.py "${DIST}/teleproxy"
 
 # Place binaries
 install -d "${BINDIR}"
@@ -32,6 +33,7 @@ install \
 install -d "${LIBEXECDIR}"
 install \
     "${DIST}/sshuttle-telepresence" \
+    "${DIST}/teleproxy" \
     "${LIBEXECDIR}"
 
 # Make sure things appear to run

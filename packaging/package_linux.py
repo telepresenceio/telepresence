@@ -51,6 +51,8 @@ def prep_to_build() -> Container:
     con.execute_sh("gem install -q --no-ri --no-rdoc fpm")
     con.copy_to(str(DIST / "telepresence"), "/usr/bin")
     con.copy_to(str(DIST / "sshuttle-telepresence"), "/usr/libexec")
+    con.copy_to(str(DIST / "teleproxy-linux-amd64"), "/usr/libexec")
+    con.execute_sh("mv teleproxy-linux-amd64 teleproxy", cwd="/usr/libexec")
     return con
 
 
@@ -73,6 +75,7 @@ def build_package(
     fpm_trailer = [
         "/usr/bin/telepresence",
         "/usr/libexec/sshuttle-telepresence",
+        "/usr/libexec/teleproxy",
     ]
     target_path = DIST / name
     target_path.mkdir()
@@ -100,6 +103,13 @@ def test_package(image: str, package: Path, install_cmd: str):
     con.execute_sh("python3 --version")
     con.execute_sh("telepresence --version")
     con.execute_sh("/usr/libexec/sshuttle-telepresence --version")
+    teleproxy_smoke_test = (
+        "[ $(/usr/libexec/teleproxy --help 2>&1 | " +
+        "  sed 's/ .*//') = 'Usage' ] && " +
+        "echo 'Teleproxy smoke test succeeded' || " +
+        "(echo 'Teleproxy smoke test failed' ; exit 1)"
+    )
+    con.execute_sh(teleproxy_smoke_test)
 
 
 def get_upload_commands(system, release, package):
