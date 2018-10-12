@@ -12,8 +12,8 @@ class Telepresence < Formula
   depends_on "sshfs"
 
   def install
-    bin.install "telepresence"
-    bin.install "sshuttle-telepresence"
+    bin.install "bin/telepresence"
+    libexec.install Dir["libexec/*"]
   end
 
   def caveats
@@ -25,6 +25,5 @@ class Telepresence < Formula
 
   test do
     system "#{bin}/telepresence", "--help"
-    system "#{bin}/sshuttle-telepresence", "--version"
   end
 end

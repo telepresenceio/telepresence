@@ -156,9 +156,13 @@ def make_archive(version):
     name_ver = "telepresence-{}".format(version)
     tf_path = DIST / "{}.tar.gz".format(name_ver)
     tf = tarfile.open(str(tf_path), "x:gz")
-    for binary in "telepresence", "sshuttle-telepresence":
-        src = DIST / binary
-        dst = str(Path(name_ver) / binary)
+    contents = (
+        ("telepresence", "bin/telepresence"),
+        ("sshuttle-telepresence", "libexec/sshuttle-telepresence"),
+    )
+    for src_name, dst_name in contents:
+        src = DIST / src_name
+        dst = str(Path(name_ver) / dst_name)
         with src.open("rb") as fp:
             tf.addfile(tf.gettarinfo(arcname=dst, fileobj=fp), fp)
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Install Telepresence binaries in ${PREFIX}/bin.
+# Install Telepresence binaries in ${PREFIX}/bin and ${PREFIX}/libexec.
 
 set -o errexit
 set -o pipefail
@@ -11,6 +11,7 @@ echo "Installing Telepresence in ${PREFIX}"
 
 SRCDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 BINDIR="${BINDIR:-${PREFIX}/bin}"
+LIBEXECDIR="${LIBEXECDIR:-${PREFIX}/libexec}"
 
 # Setup
 BLDDIR=$(mktemp -d)
@@ -26,9 +27,12 @@ python3 packaging/build-sshuttle.py "${DIST}/sshuttle-telepresence"
 # Place binaries
 install -d "${BINDIR}"
 install \
-    "${DIST}/sshuttle-telepresence" \
     "${DIST}/telepresence" \
     "${BINDIR}"
+install -d "${LIBEXECDIR}"
+install \
+    "${DIST}/sshuttle-telepresence" \
+    "${LIBEXECDIR}"
 
 # Make sure things appear to run
 VERSION=$("${BINDIR}/telepresence" --version)

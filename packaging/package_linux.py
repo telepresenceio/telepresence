@@ -50,7 +50,7 @@ def prep_to_build() -> Container:
     con.execute_sh("apk add -q alpine-sdk dpkg-dev rpm-dev ruby ruby-dev")
     con.execute_sh("gem install -q --no-ri --no-rdoc fpm")
     con.copy_to(str(DIST / "telepresence"), "/usr/bin")
-    con.copy_to(str(DIST / "sshuttle-telepresence"), "/usr/bin")
+    con.copy_to(str(DIST / "sshuttle-telepresence"), "/usr/libexec")
     return con
 
 
@@ -71,8 +71,8 @@ def build_package(
     fpm_deps = ["--depends={}".format(dep) for dep in dependencies]
     fpm_type = ["--output-type={}".format(package_type)]
     fpm_trailer = [
-        "/usr/bin/sshuttle-telepresence",
         "/usr/bin/telepresence",
+        "/usr/libexec/sshuttle-telepresence",
     ]
     target_path = DIST / name
     target_path.mkdir()
@@ -99,7 +99,7 @@ def test_package(image: str, package: Path, install_cmd: str):
     con.execute(["sh", "-c", command])
     con.execute_sh("python3 --version")
     con.execute_sh("telepresence --version")
-    con.execute_sh("sshuttle-telepresence --version")
+    con.execute_sh("/usr/libexec/sshuttle-telepresence --version")
 
 
 def get_upload_commands(system, release, package):
