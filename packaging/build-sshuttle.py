@@ -50,7 +50,7 @@ def build_sshuttle(output: Path):
             "--python-shebang=/usr/bin/env python3",
             "--script=sshuttle-telepresence",
             "--output-file={}".format(output),
-            tarball,
+            str(tarball),
         ])
 
     print("Built {}".format(output))

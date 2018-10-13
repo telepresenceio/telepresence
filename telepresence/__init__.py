@@ -15,6 +15,7 @@
 Telepresence: local development environment for a remote Kubernetes cluster.
 """
 
+from pathlib import Path
 import os
 
 # Version number computed by Versioneer. See _version.py for info.
@@ -44,3 +45,9 @@ TELEPRESENCE_REMOTE_IMAGE = "{}/telepresence-k8s:{}".format(
 TELEPRESENCE_REMOTE_IMAGE_PRIV = "{}/telepresence-k8s-priv:{}".format(
     REGISTRY, image_version
 )
+
+# This path points to one of
+# - the telepresence executable zip file, for an installed telepresence
+# - the directory that contains the telepresence Python package (which is
+#   a directory containing this __init__.py file)
+TELEPRESENCE_BINARY = Path(__file__).parents[1].resolve()

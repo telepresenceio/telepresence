@@ -70,7 +70,6 @@ def labels():
     return st.text(
         alphabet=ascii_lowercase,
         min_size=1,
-        average_size=2,
     )
 
 
@@ -108,7 +107,7 @@ def test_prefer_longest_suffix(resolver, first, second, third):
     assert [b"example"] == stripped
 
 
-@given(st.lists(st.integers(), average_size=5))
+@given(st.lists(st.integers()))
 def test_insort(values):
     """
     ``insort`` inserts a new element into a sorted list in the correct

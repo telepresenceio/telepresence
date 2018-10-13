@@ -147,18 +147,28 @@ def build_executables():
         cwd="/source"
     )
     con.execute_sh("python3 packaging/build-sshuttle.py", cwd="/source")
+    con.execute_sh("python3 packaging/retrieve-teleproxy.py", cwd="/source")
     con.copy_from("/source/dist/telepresence", str(DIST))
     con.copy_from("/source/dist/sshuttle-telepresence", str(DIST))
+    con.copy_from("/source/dist/teleproxy-darwin-amd64", str(DIST))
+    con.copy_from("/source/dist/teleproxy-linux-amd64", str(DIST))
 
 
 def make_archive(version):
-    """Make a tar archive of the binaries in dist"""
+    """
+    Make a Mac-specific tar archive of the appropriate executables in dist.
+    """
     name_ver = "telepresence-{}".format(version)
     tf_path = DIST / "{}.tar.gz".format(name_ver)
     tf = tarfile.open(str(tf_path), "x:gz")
-    for binary in "telepresence", "sshuttle-telepresence":
-        src = DIST / binary
-        dst = str(Path(name_ver) / binary)
+    contents = (
+        ("telepresence", "bin/telepresence"),
+        ("sshuttle-telepresence", "libexec/sshuttle-telepresence"),
+        ("teleproxy-darwin-amd64", "libexec/teleproxy"),
+    )
+    for src_name, dst_name in contents:
+        src = DIST / src_name
+        dst = str(Path(name_ver) / dst_name)
         with src.open("rb") as fp:
             tf.addfile(tf.gettarinfo(arcname=dst, fileobj=fp), fp)
 
