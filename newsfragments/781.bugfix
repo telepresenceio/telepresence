@@ -1,0 +1,1 @@
+fixes #781. Somewhere between 6b793 and 407ba the call to check if in local vm moved from final checks inside KubeInfo instantiation, whereas runner.kubectl is the final output of KubeInfo instantiation.

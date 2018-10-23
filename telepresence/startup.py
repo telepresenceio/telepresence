@@ -182,7 +182,7 @@ class KubeInfo(object):
                 ip = runner.get_output(["minishift", "ip"]).strip()
             except (OSError, CalledProcessError):
                 return False
-            if ip and ip in runner.kubectl.server:
+            if ip and ip in self.server:
                 return True
         return False
 
