@@ -124,3 +124,15 @@ def launch_vpn(
         "Terminate local process", terminate_local_process, runner, process
     )
     return process
+
+
+def launch_none(
+        runner: Runner,
+        command: List[str],
+        env_overrides: Dict[str, str]):
+    env = get_local_env(runner, env_overrides, False)
+    process = Popen(command, env=env)
+    runner.add_cleanup(
+        "Terminate local process", terminate_local_process, runner, process
+    )
+    return process

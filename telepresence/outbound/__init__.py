@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from telepresence.outbound.container import SUDO_FOR_DOCKER, run_docker_command
-from telepresence.outbound.local import launch_inject, launch_vpn
+from telepresence.outbound.local import launch_inject, launch_vpn, launch_none
 from telepresence.runner import Runner
 
 
@@ -91,6 +91,24 @@ def setup_container(runner: Runner, args):
     return launch
 
 
+def setup_none(runner: Runner, args):
+    if runner.chatty:
+        runner.show(
+            "Starting proxy with method 'none', which has the following "
+            "limitations: No network connections are made. "
+            "It assumes you're managing network independent of telepresence. "
+            "For a full list of method limitations see "
+            "https://telepresence.io/reference/methods.html"
+        )
+    command = args.run or ["bash", "--norc"]
+
+    def launch(runner_, _remote_info, env, _socks_port, _ssh, _mount_dir):
+        return launch_none(
+            runner_, command, env
+        )
+    return launch
+
+
 def setup(runner: Runner, args):
     if args.method == "inject-tcp":
         return setup_inject(runner, args)
@@ -100,5 +118,8 @@ def setup(runner: Runner, args):
 
     if args.method == "container":
         return setup_container(runner, args)
+
+    if args.method == "none":
+        return setup_none(runner, args)
 
     assert False, args.method

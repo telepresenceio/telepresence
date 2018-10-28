@@ -203,6 +203,7 @@ def parse_args(args=None) -> argparse.Namespace:
             "'vpn-tcp': all local processes can route TCP "
             "traffic to the remote cluster. Requires root.\n"
             "'container': used with --docker-run.\n"
+            "'none': traffic routing is not handled by this process.\n"
             "\n"
             "Default is 'vpn-tcp', or 'container' when --docker-run is used.\n"
             "\nFor more details see "
