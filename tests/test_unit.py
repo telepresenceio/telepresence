@@ -195,6 +195,7 @@ def test_swap_deployment_changes():
         "random_id_123",
         "datawire/telepresence-k8s:0.777",
         False,
+        True
     ) == (expected, original["spec"]["template"]["spec"]["containers"][1])
 
 

@@ -232,7 +232,6 @@ def parse_args(args=None) -> argparse.Namespace:
             "swap back on exit. If there are multiple containers in the pod "
             "then add the optional container name to indicate which container"
             " to use.\n"
-            "This automatically sets --forward-traffic to true"
         )
     )
 
@@ -388,10 +387,6 @@ def parse_args(args=None) -> argparse.Namespace:
         and args.copy_deployment is None
     ):
         args.new_deployment = random_name()
-
-    if args.swap_deployment is not None:
-        args.copy_deployment = args.swap_deployment
-        args.forward_traffic = True
 
     if args.method == "container" and args.docker_run is None:
         raise SystemExit(

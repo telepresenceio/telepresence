@@ -17,7 +17,7 @@ from telepresence import (
 )
 from telepresence.proxy.deployment import (
     existing_deployment, create_new_deployment, swap_deployment_openshift,
-    supplant_deployment
+    swap_deployment, copy_deployment
 )
 from telepresence.proxy.remote import RemoteInfo, get_remote_info
 from telepresence.runner import Runner
@@ -63,9 +63,18 @@ def setup(runner: Runner, args):
         if runner.kubectl.command == "oc":
             operation = swap_deployment_openshift
         else:
-            operation = supplant_deployment
+            operation = swap_deployment
         args.operation = "swap_deployment"
 
+    if args.copy_deployment is not None:
+        # This implies --copy-deployment
+        deployment_arg = args.copy_deployment
+        if runner.kubectl.command == "oc":
+            # Todo:
+            operation = swap_deployment_openshift
+        else:
+            operation = copy_deployment
+        args.operation = "copy_deployment"
     # minikube/minishift break DNS because DNS gets captured, sent to minikube,
     # which sends it back to the DNS server set by host, resulting in a DNS
     # loop... We've fixed that for most cases by setting a distinct name server
@@ -81,7 +90,8 @@ def setup(runner: Runner, args):
 
     def start_proxy(runner_: Runner) -> RemoteInfo:
         tel_deployment, run_id = operation(
-            runner_, deployment_arg, image_name, args.expose, add_custom_ns
+            runner_, deployment_arg, image_name, args.expose, add_custom_ns,
+            args.forward_traffic
         )
         remote_info = get_remote_info(
             runner,
