@@ -29,8 +29,8 @@ The reporting code can be found in [`telepresence/usage_tracking.py`][1].
 
 Telepresence collects and reports usage every time a session is launched.
 
-## Can it be disabled?
+## Can it be enabled?
 
 Yes. Set the environment variable `SCOUT_DISABLE`.
 
-    export SCOUT_DISABLE=1
+    export SCOUT_DISABLE=0
