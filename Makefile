@@ -1,7 +1,8 @@
 
 all: test build
 
-teleproxy:
+.PHONY: teleproxy
+teleproxy: $(GO_FILES)
 	go build cmd/teleproxy/teleproxy.go
 
 build: teleproxy
@@ -10,13 +11,16 @@ build: teleproxy
 get:
 	go get -t -d ./...
 
-tpu-tests:
-	go test -v -exec sudo github.com/datawire/teleproxy/internal/pkg/tpu/
+
+
+other-tests:
+	go test -v $(shell go list ./... | fgrep -v github.com/datawire/teleproxy/internal/pkg/nat)
 
 nat-tests:
 	go test -v -exec sudo github.com/datawire/teleproxy/internal/pkg/nat/
 
-run-tests: tpu-tests nat-tests
+run-tests: nat-tests other-tests
+
 
 test-go: get run-tests
 
