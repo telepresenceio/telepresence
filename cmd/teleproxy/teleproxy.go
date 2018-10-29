@@ -15,190 +15,42 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
-	"time"
-	"github.com/datawire/teleproxy/internal/pkg/nat"
+	"github.com/datawire/teleproxy/internal/pkg/dns"
+	"github.com/datawire/teleproxy/internal/pkg/interceptor"
+	"github.com/datawire/teleproxy/internal/pkg/k8s"
+	"github.com/datawire/teleproxy/internal/pkg/route"
 	"github.com/datawire/teleproxy/internal/pkg/tpu"
-	"github.com/miekg/dns"
 	"golang.org/x/net/proxy"
 	"k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/client-go/kubernetes"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/tools/cache"
 )
 
+var iceptor = interceptor.NewInterceptor("teleproxy")
 var kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-
-func kubeWatch() {
-	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
-	if err != nil {
-		panic(err.Error())
-	}
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		panic(err.Error())
-	}
-	
-	watchlist := cache.NewListWatchFromClient(clientset.Core().RESTClient(), "services", v1.NamespaceAll,
-		fields.Everything())
-	_, controller := cache.NewInformer(
-		watchlist,
-		&v1.Service{},
-		time.Second * 0,
-		cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-				svc := obj.(*v1.Service)
-				log.Printf("ADDED: %s->%s\n", svc.Name, svc.Spec.ClusterIP)
-				updateRoute(svc)
-			},
-			DeleteFunc: func(obj interface{}) {
-				svc := obj.(*v1.Service)
-				log.Printf("DELETED: %s\n", svc.Name)
-				key := svc.Name + "."
-				removeRoute(key)
-				domainsToAddresses.Delete(key)
-			},
-			UpdateFunc:func(oldObj, newObj interface{}) {
-				svc := newObj.(*v1.Service)
-				log.Printf("CHANGED: %s->%s\n", svc.Name, svc.Spec.ClusterIP)
-				updateRoute(svc)
-			},
-		},
-	)
-	stop := make(chan struct{})
-	go controller.Run(stop)
-}
-
-
-var domainsToAddresses sync.Map
-// XXX: need to do better than teleproxy
-var translator = nat.NewTranslator("teleproxy")
-
-func removeRoute(key string) {
-	if old, ok := domainsToAddresses.Load(key); ok {
-		translator.ClearTCP(old.(string))
-	}
-}
-
-func updateRoute(svc *v1.Service) {
-	if svc.Spec.ClusterIP == "None" { return }
-	domainsToAddresses.Store(strings.ToLower(svc.Name + "."), svc.Spec.ClusterIP)
-	translator.ForwardTCP(svc.Spec.ClusterIP, "1234")
-	kickDNS()
-}
-
-type handler struct{}
-func (this *handler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
-	log.Println(r.Question[0].Qtype, "DNS request for", r.Question[0].Name)
-	domain := strings.ToLower(r.Question[0].Name)
-	switch r.Question[0].Qtype {
-	case dns.TypeA:
-		log.Println("Looking up", domain)
-		address, ok := domainsToAddresses.Load(domain)
-		if ok {
-			log.Println("Found:", domain)
-			msg := dns.Msg{}
-			msg.SetReply(r)
-			msg.Authoritative = true
-			// mac dns seems to fallback if you don't
-			// support recursion, if you have more than a
-			// single dns server, this will prevent us
-			// from intercepting all queries
-			msg.RecursionAvailable = true
-			// if we don't give back the same domain
-			// requested, then mac dns seems to return an
-			// nxdomain
-			msg.Answer = append(msg.Answer, &dns.A{
-				Hdr: dns.RR_Header{ Name: r.Question[0].Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60 },
-				A: net.ParseIP(address.(string)),
-			})
-			w.WriteMsg(&msg)
-			return
-		}
-	default:
-		_, ok := domainsToAddresses.Load(domain)
-		if ok {
-			log.Println("Found:", domain)
-			msg := dns.Msg{}
-			msg.SetReply(r)
-			msg.Authoritative = true
-			msg.RecursionAvailable = true
-			w.WriteMsg(&msg)
-			log.Println("replied with empty")
-			return
-		}
-	}
-	in, err := dns.Exchange(r, *fallbackIP + ":53")
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	w.WriteMsg(in)
-}
-
-func dnsMain() {
-	h := handler{}
-
-	go func() {
-		// turns out you need to listen on localhost for nat to work
-		// properly for udp, otherwise you get an "unexpected source
-		// blah thingy" because the dns reply packets look like they
-		// are coming from the wrong place
-		srv := &dns.Server{Addr: "127.0.0.1:" + strconv.Itoa(1233), Net: "udp"}
-		srv.Handler = &h
-		if err := srv.ListenAndServe(); err != nil {
-			log.Fatalf("Failed to set udp listener %s\n", err.Error())
-		}
-	}()
-
-	if runtime.GOOS == "linux" {
-		go func() {
-			// This is the default docker bridge. We should
-			// probably figure out how to query this out of docker
-			// instead of hardcoding it. We need to listen here
-			// because the nat logic we use to intercept dns
-			// packets will divert the packet to the interface it
-			// originates from, which in the case of containers is
-			// the docker bridge. Without this dns won't work from
-			// inside containers.
-			srv := &dns.Server{Addr: "172.17.0.1:" + strconv.Itoa(1233), Net: "udp"}
-			srv.Handler = &h
-			if err := srv.ListenAndServe(); err != nil {
-				log.Fatalf("Failed to set udp listener %s\n", err.Error())
-			}
-		}()
-	}
-}
-
-func rlimit() {
-	var rLimit syscall.Rlimit
-	err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
-	if err != nil {
-		log.Println("Error getting rlimit:", err)
-	} else {
-		log.Println("Initial rlimit:", rLimit)
-	}
-
-	rLimit.Max = 999999
-	rLimit.Cur = 999999
-	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit)
-	if err != nil {
-		log.Println("Error setting rlimit:", err)
-	}
-
-	err = syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
-	if err != nil {
-		log.Println("Error getting rlimit:", err)
-	} else {
-		log.Println("Final rlimit", rLimit)
-	}
-}
-
 var dnsIP = flag.String("dns", "", "dns ip address")
 var fallbackIP = flag.String("fallback", "", "dns fallback")
+
+func dnsListeners(port string) (listeners []string) {
+	// turns out you need to listen on localhost for nat to work
+	// properly for udp, otherwise you get an "unexpected source
+	// blah thingy" because the dns reply packets look like they
+	// are coming from the wrong place
+	listeners = append(listeners, "127.0.0.1:" + port)
+
+	if runtime.GOOS == "linux" {
+		// This is the default docker bridge. We should
+		// probably figure out how to query this out of docker
+		// instead of hardcoding it. We need to listen here
+		// because the nat logic we use to intercept dns
+		// packets will divert the packet to the interface it
+		// originates from, which in the case of containers is
+		// the docker bridge. Without this dns won't work from
+		// inside containers.
+		listeners = append(listeners, "172.17.0.1:" + port)
+	}
+
+	return
+}
 
 func main() {
 	flag.Parse()
@@ -254,10 +106,35 @@ func main() {
 		}
 	}
 
-	rlimit()
+	tpu.Rlimit()
+	k8s.Watch(*kubeconfig, func(svcs []*v1.Service) {
+		table := route.Table{Name: "kubernetes"}
+		for _, svc := range svcs {
+			if svc.Spec.ClusterIP == "None" { continue }
+			table.Add(route.Route{
+				Name: svc.Name,
+				Ip: svc.Spec.ClusterIP,
+				Proto: "tcp",
+				Target: "1234",
+			})
+		}
+		iceptor.Update(table)
+		kickDNS()
+	})
 
-	kubeWatch()
-	dnsMain()
+	srv := dns.Server{
+		Listeners: dnsListeners("1233"),
+		Fallback: *fallbackIP + ":53",
+		Resolve: func(domain string) string {
+			route := iceptor.Resolve(domain)
+			if route != nil {
+				return route.Ip
+			} else {
+				return ""
+			}
+		},
+	}
+	srv.Start()
 
 	ln, err := net.Listen("tcp", ":1234")
 	if err != nil {
@@ -265,9 +142,21 @@ func main() {
 		return
 	}
 
-	translator.Enable()
-	translator.ForwardUDP(*dnsIP, "1233")
-	defer translator.Disable()
+	bootstrap := route.Table{Name: "bootstrap"}
+	bootstrap.Add(route.Route{
+		Ip: *dnsIP,
+		Target: "1233",
+		Proto: "udp",
+	})
+	bootstrap.Add(route.Route{
+		Name: "teleproxy",
+		Ip: "1.2.3.4",
+		Proto: "tcp",
+	})
+
+	iceptor.Start()
+	defer iceptor.Stop()
+	iceptor.Update(bootstrap)
 
 	apply := tpu.Keepalive(1, `
 ---
@@ -309,7 +198,10 @@ spec:
 				case *net.TCPConn:
 					log.Println("AVAILABLE:", len(sem))
 					sem.Acquire()
-					go handleConnection(conn.(*net.TCPConn), sem)
+					go func() {
+						defer sem.Release()
+						handleConnection(conn.(*net.TCPConn))
+					}()
 				default:
 					log.Println("Don't know how to handle conn:", conn)
 				}
@@ -324,12 +216,11 @@ spec:
 	defer kickDNS()
 }
 
-func handleConnection(conn *net.TCPConn, sem tpu.Semaphore) {
-	defer sem.Release()
+func handleConnection(conn *net.TCPConn) {
 	// hmm, we may not actually need to get the original destination,
 	// we could just forward each ip to a unique port and either
 	// listen on that port or run port-forward
-	_, host, err := translator.GetOriginalDst(conn)
+	host, err := iceptor.Destination(conn)
 	if err != nil {
 		log.Println("GetOriginalDst:", err)
 		return
