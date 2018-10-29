@@ -127,6 +127,11 @@ func (t *Translator) ClearTCP(ip string) {
 	pf("-a " + t.Name + " -f /dev/stdin", t.rules())
 }
 
+func (t *Translator) ClearUDP(ip string) {
+	t.clear("udp", ip)
+	pf("-a " + t.Name + " -f /dev/stdin", t.rules())
+}
+
 func (t *Translator) clear(protocol, ip string) {
 	if _, exists := t.Mappings[Address{protocol, ip}]; exists {
 		delete(t.Mappings, Address{protocol, ip})
