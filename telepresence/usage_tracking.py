@@ -107,7 +107,7 @@ class Scout:
         if str(os.getenv("TRAVIS_REPO_SLUG")).startswith("datawire/"):
             return True
 
-        return os.getenv("SCOUT_DISABLE", "0").lower() in {"1", "true", "yes"}
+        return os.getenv("SCOUT_DISABLE", "1").lower() in {"1", "true", "yes"}
 
 
 def call_scout(runner, args):
