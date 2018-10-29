@@ -25,7 +25,6 @@ import (
 	"k8s.io/api/core/v1"
 )
 
-var iceptor = interceptor.NewInterceptor("teleproxy")
 var kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 var dnsIP = flag.String("dns", "", "dns ip address")
 var fallbackIP = flag.String("fallback", "", "dns fallback")
@@ -107,6 +106,8 @@ func main() {
 	}
 
 	tpu.Rlimit()
+
+	iceptor := interceptor.NewInterceptor("teleproxy")
 	k8s.Watch(*kubeconfig, func(svcs []*v1.Service) {
 		table := route.Table{Name: "kubernetes"}
 		for _, svc := range svcs {
@@ -200,7 +201,7 @@ spec:
 					sem.Acquire()
 					go func() {
 						defer sem.Release()
-						handleConnection(conn.(*net.TCPConn))
+						handleConnection(iceptor, conn.(*net.TCPConn))
 					}()
 				default:
 					log.Println("Don't know how to handle conn:", conn)
@@ -216,7 +217,7 @@ spec:
 	defer kickDNS()
 }
 
-func handleConnection(conn *net.TCPConn) {
+func handleConnection(iceptor *interceptor.Interceptor, conn *net.TCPConn) {
 	// hmm, we may not actually need to get the original destination,
 	// we could just forward each ip to a unique port and either
 	// listen on that port or run port-forward
