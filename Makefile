@@ -1,5 +1,12 @@
 
+include kubernaut.mk
+
 all: test build
+
+shell: cluster.knaut
+	PATH=${PATH}:${PWD} \
+	KUBECONFIG=${PWD}/cluster.knaut \
+	PS1="(dev) [\W]$$ " bash
 
 .PHONY: teleproxy
 teleproxy: $(GO_FILES)
@@ -11,8 +18,6 @@ build: teleproxy
 get:
 	go get -t -d ./...
 
-
-
 other-tests:
 	go test -v $(shell go list ./... | fgrep -v github.com/datawire/teleproxy/internal/pkg/nat)
 
@@ -20,7 +25,6 @@ nat-tests:
 	go test -v -exec sudo github.com/datawire/teleproxy/internal/pkg/nat/
 
 run-tests: nat-tests other-tests
-
 
 test-go: get run-tests
 
@@ -36,3 +40,9 @@ test: test-go test-docker
 
 run: build
 	./teleproxy
+
+clean: cluster.knaut.clean
+	rm -f ./teleproxy
+
+clobber: clean cluster.knaut.clobber kubernaut.clobber
+	rm -rf kubernaut
