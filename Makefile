@@ -45,4 +45,3 @@ clean: cluster.knaut.clean
 	rm -f ./teleproxy
 
 clobber: clean cluster.knaut.clobber kubernaut.clobber
-	rm -rf kubernaut

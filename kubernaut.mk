@@ -76,4 +76,6 @@ KUBERNAUT_DISCARD=$(KUBERNAUT) claims delete $(KUBERNAUT_CLAIM_NAME)
 	rm -f $(@:%.clobber=%.claim)
 
 .PHONY: kubernaut.clobber
+
+kubernaut.clobber:
 	rm -f $(KUBERNAUT)
