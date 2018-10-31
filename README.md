@@ -33,7 +33,7 @@ Telepresence collects some basic information about its users so it can send impo
 
     export SCOUT_DISABLE=1
 
-To know more reporting, check the [documentation](https://www.telepresence.io/reference/usage_reporting) on usgae reporting.
+To know more, check the [documentation](https://www.telepresence.io/reference/usage_reporting) on usgae reporting.
 
 ## About Telepresence
 
