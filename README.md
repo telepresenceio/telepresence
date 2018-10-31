@@ -29,7 +29,7 @@ For more about Telepresence, and the various options, [read the documentation](h
 
 ## Usage Reporting
 
-Telepresence collects some basic information about its users so it can send important client notices, such as new version availability and security bulletins. We also use the information to aggregate basic usage analytics anonymously. To disable this behaviour set the environment variable `SCOUT_DISABLE`:
+Telepresence collects some basic information about its users so it can send important client notices, such as new version availability and security bulletins. We also use the information to aggregate basic usage analytics anonymously. To disable this behavior set the environment variable `SCOUT_DISABLE`:
 
     export SCOUT_DISABLE=1
 
