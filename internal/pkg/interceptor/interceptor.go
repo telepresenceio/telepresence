@@ -92,13 +92,15 @@ func (i *Interceptor) Update(table rt.Table) {
 
 			if !ok || route != existing {
 
-				switch route.Proto {
-				case "tcp":
-					i.translator.ForwardTCP(route.Ip, route.Target)
-				case "udp":
-					i.translator.ForwardUDP(route.Ip, route.Target)
-				default:
-					panic("unrecognized protocol")
+				if route.Target != "" {
+					switch route.Proto {
+					case "tcp":
+						i.translator.ForwardTCP(route.Ip, route.Target)
+					case "udp":
+						i.translator.ForwardUDP(route.Ip, route.Target)
+					default:
+						panic("unrecognized protocol")
+					}
 				}
 
 				if route.Name != "" {
