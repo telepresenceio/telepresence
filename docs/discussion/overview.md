@@ -32,7 +32,7 @@ Typical alternatives to Telepresence include:
 
 ## Getting started
 
-Telepresence offers a broad set of [proxying options](reference/methods.md) which have different strengths and weaknesses. Generally speaking, we recommend you:
+Telepresence offers a broad set of [proxying options](https://www.telepresence.io/reference/methods) which have different strengths and weaknesses. Generally speaking, we recommend you:
 
-* Start with the container method, which provides the most consistent environment for your code. Here is a [container quick start](tutorials/docker).
-* Use the VPN method, which lets you use an IDE or debugger with your code. Here is a [quick start that uses the VPN method](tutorials/kubernetes-rapid)
+* Start with the container method, which provides the most consistent environment for your code. Here is a [container quick start](https://www.telepresence.io/tutorials/docker).
+* Use the VPN method, which lets you use an IDE or debugger with your code. Here is a [quick start that uses the VPN method](https://www.telepresence.io/tutorials/kubernetes-rapid)
