@@ -105,8 +105,6 @@ func main() {
 		if err != nil { log.Fatal(err) }
 	}
 
-	fmt.Printf("%v\n", rset)
-
 	listener := func(w *watcher.Watcher) {
 		for kind, names := range rset.kinds {
 			for name := range names {
@@ -135,9 +133,14 @@ func main() {
 
 	w.Wait()
 
+	code := 0
+
 	for kind, names := range rset.kinds {
 		for name := range names {
 			fmt.Printf("not ready: %s/%s\n", kind, name)
+			code = 1
 		}
 	}
+
+	os.Exit(code)
 }
