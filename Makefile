@@ -1,7 +1,12 @@
 
+all: test build
+
 include kubernaut.mk
 
-all: test build
+.PHONY: manifests
+manifests: cluster.knaut kubewait
+	kubectl apply -f k8s
+	./kubewait -f k8s
 
 shell: cluster.knaut
 	@exec env -u MAKELEVEL PATH=${PATH}:${PWD} KUBECONFIG=${PWD}/cluster.knaut PS1="(dev) [\W]$$ " bash
@@ -15,6 +20,10 @@ build: teleproxy
 
 get:
 	go get -t -d ./...
+
+.PHONY: kubewait
+kubewait: $(GO_FILES)
+	go build cmd/kubewait/kubewait.go
 
 other-tests:
 	go test -v $(shell go list ./... | fgrep -v github.com/datawire/teleproxy/internal/pkg/nat)
