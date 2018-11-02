@@ -16,22 +16,18 @@
 #  5. If you care, the claim name is in foo.knaut.claim. This will use
 #     a UUID if the CI environment variable is set.
 #
-#  6. Run `make foo.knaut.clobber` to discard the claim name in
-#     addition to releasing the cluster.
-#
-#  7. Incorporate <blah>.knaut{.clean,.clobber) targets into your
-#     Makefile as needed
+#  6. Incorporate <blah>.knaut[.clean] targets into your Makefile as
+#     needed
 #
 #     tests: test-cluster.knaut
 #             KUBECONFIG=test-cluster.knaut py.test ...
 #
 #     clean: test-cluster.knaut.clean
 #
-#
-#  8. Use the kubernaut.clobber target to delete the kubernaut binary
+#  7. Use the kubernaut.clobber target to delete the kubernaut binary
 #     itself:
 #
-#     clobber: test-cluster.knaut.clobber kubernaut.clobber
+#     clobber: kubernaut.clobber
 #
 
 KUBERNAUT_BASE=.
@@ -66,14 +62,12 @@ KUBERNAUT_DISCARD=$(KUBERNAUT) claims delete $(KUBERNAUT_CLAIM_NAME)
 	$(KUBERNAUT_CLAIM)
 	cp ~/.kube/$(KUBERNAUT_CLAIM_NAME).yaml $@
 
-.PHONY: %.knaut.clean %.knaut.clobber
+.PHONY: %.knaut.clean
 
 %.knaut.clean :
-	if [ -e $(@:%.clean=%.claim) ]; then $(KUBERNAUT) claims delete $(shell cat $(@:%.clean=%.claim)); fi
+	if [ -e $(@:%.clean=%.claim) ]; then $(KUBERNAUT) claims delete $$(cat $(@:%.clean=%.claim)); fi
 	rm -f $(@:%.knaut.clean=%.knaut)
-
-%.knaut.clobber : %.knaut.clean
-	rm -f $(@:%.clobber=%.claim)
+	rm -f $(@:%.clean=%.claim)
 
 .PHONY: kubernaut.clobber
 

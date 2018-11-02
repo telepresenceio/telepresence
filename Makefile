@@ -4,9 +4,7 @@ include kubernaut.mk
 all: test build
 
 shell: cluster.knaut
-	PATH=${PATH}:${PWD} \
-	KUBECONFIG=${PWD}/cluster.knaut \
-	PS1="(dev) [\W]$$ " bash
+	@exec env -u MAKELEVEL PATH=${PATH}:${PWD} KUBECONFIG=${PWD}/cluster.knaut PS1="(dev) [\W]$$ " bash
 
 .PHONY: teleproxy
 teleproxy: $(GO_FILES)
@@ -44,4 +42,4 @@ run: build
 clean: cluster.knaut.clean
 	rm -f ./teleproxy
 
-clobber: clean cluster.knaut.clobber kubernaut.clobber
+clobber: clean kubernaut.clobber
