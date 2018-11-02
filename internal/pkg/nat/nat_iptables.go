@@ -71,6 +71,10 @@ func (t *Translator) ClearTCP(ip string) {
 	t.clear("tcp", ip)
 }
 
+func (t *Translator) ClearUDP(ip string) {
+	t.clear("udp", ip)
+}
+
 func (t *Translator) clear(protocol, ip string) {
 	if previous, exists := t.Mappings[Address{protocol, ip}]; exists {
 		ipt("-D " + t.Name + " -j REDIRECT --dest " + ip + "/32 -p " + protocol + " --to-ports " +

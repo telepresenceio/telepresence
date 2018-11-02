@@ -1,7 +1,18 @@
 
 all: test build
 
-teleproxy:
+include kubernaut.mk
+
+.PHONY: manifests
+manifests: cluster.knaut kubewait
+	kubectl apply -f k8s
+	./kubewait -f k8s
+
+shell: cluster.knaut
+	@exec env -u MAKELEVEL PATH=${PATH}:${PWD} KUBECONFIG=${PWD}/cluster.knaut PS1="(dev) [\W]$$ " bash
+
+.PHONY: teleproxy
+teleproxy: $(GO_FILES)
 	go build cmd/teleproxy/teleproxy.go
 
 build: teleproxy
@@ -10,13 +21,17 @@ build: teleproxy
 get:
 	go get -t -d ./...
 
-tpu-tests:
-	go test -v -exec sudo github.com/datawire/teleproxy/internal/pkg/tpu/
+.PHONY: kubewait
+kubewait: $(GO_FILES)
+	go build cmd/kubewait/kubewait.go
+
+other-tests:
+	go test -v $(shell go list ./... | fgrep -v github.com/datawire/teleproxy/internal/pkg/nat)
 
 nat-tests:
 	go test -v -exec sudo github.com/datawire/teleproxy/internal/pkg/nat/
 
-run-tests: tpu-tests nat-tests
+run-tests: nat-tests other-tests
 
 test-go: get run-tests
 
@@ -32,3 +47,8 @@ test: test-go test-docker
 
 run: build
 	./teleproxy
+
+clean: cluster.knaut.clean
+	rm -f ./teleproxy
+
+clobber: clean kubernaut.clobber
