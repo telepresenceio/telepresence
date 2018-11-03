@@ -8,6 +8,11 @@ jobs:
     working_directory: ~/go/src/github.com/datawire/teleproxy
     steps:
       - run: |
+          # update with:
+          # openssl aes-256-cbc -e -in ~/.config/kubernaut/config -out .circleci/kubernaut-config.enc -k $KEY
+          openssl aes-256-cbc -d -out ~/.config/kubernaut/config -in .circleci/kubernaut-config.enc -k $KEY
+
+      - run: |
           sudo pip install awscli
 
       # Golang install
@@ -37,6 +42,11 @@ jobs:
     machine: true
     working_directory: ~/go/src/github.com/datawire/teleproxy
     steps:
+      - run: |
+          # update with:
+          # openssl aes-256-cbc -e -in ~/.config/kubernaut/config -out .circleci/kubernaut-config.enc -k $KEY
+          openssl aes-256-cbc -d -out ~/.config/kubernaut/config -in .circleci/kubernaut-config.enc -k $KEY
+
       - run: |
           sudo pip install awscli
 
