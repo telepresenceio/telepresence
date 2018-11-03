@@ -18,11 +18,10 @@ import (
 	"syscall"
 	"github.com/datawire/teleproxy/internal/pkg/dns"
 	"github.com/datawire/teleproxy/internal/pkg/interceptor"
-	"github.com/datawire/teleproxy/internal/pkg/k8s"
+	"github.com/datawire/teleproxy/internal/pkg/k8s/watcher"
 	"github.com/datawire/teleproxy/internal/pkg/route"
 	"github.com/datawire/teleproxy/internal/pkg/tpu"
 	"golang.org/x/net/proxy"
-	"k8s.io/api/core/v1"
 )
 
 var kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
@@ -108,16 +107,20 @@ func main() {
 	tpu.Rlimit()
 
 	iceptor := interceptor.NewInterceptor("teleproxy")
-	k8s.Watch(*kubeconfig, func(svcs []*v1.Service) {
+	w := watcher.NewWatcher(*kubeconfig)
+	defer w.Stop()
+	w.Watch("services", func(w *watcher.Watcher) {
 		table := route.Table{Name: "kubernetes"}
-		for _, svc := range svcs {
-			if svc.Spec.ClusterIP == "None" { continue }
-			table.Add(route.Route{
-				Name: svc.Name,
-				Ip: svc.Spec.ClusterIP,
-				Proto: "tcp",
-				Target: "1234",
-			})
+		for _, svc := range w.List("services") {
+			ip, ok := svc.Spec()["clusterIP"]
+			if ok {
+				table.Add(route.Route{
+					Name: svc.Name(),
+					Ip: ip.(string),
+					Proto: "tcp",
+					Target: "1234",
+				})
+			}
 		}
 		iceptor.Update(table)
 		kickDNS()
