@@ -1,4 +1,44 @@
-version: 2
+version: 2.1
+
+commands:
+  aws-install:
+    steps:
+      - run: |
+          sudo pip install awscli
+
+  golang-install:
+    parameters:
+      os:
+        type: string
+    steps:
+      # Golang install
+
+      # For some reason it is faster to curl into a file than to just
+      # pipe the curl straight to tar.
+      - run: |
+          sudo rm -rf /usr/local/go &&
+          curl https://dl.google.com/go/go1.10.2.<<os>>-amd64.tar.gz -o /tmp/go.tgz &&
+          sudo tar -C /usr/local -xzf /tmp/go.tgz
+
+      # Golang paths
+      - run: |
+          echo 'export PATH=${PATH}:/usr/local/go/bin' >> ${BASH_ENV} &&
+          echo 'export GOPATH=${HOME}/go' >> ${BASH_ENV}
+
+      - run: 'echo PATH: ${PATH} || true'
+      - run: 'echo GOPATH: ${GOPATH} || true'
+      - run: go version
+
+  main:
+    steps:
+      - checkout
+      - run: |
+          # update with:
+          # openssl aes-256-cbc -e -in ~/.config/kubernaut/config -out .circleci/kubernaut-config.enc -k $KEY
+          openssl aes-256-cbc -d -out ~/.config/kubernaut/config -in .circleci/kubernaut-config.enc -k $KEY
+      - run: make test
+      - run: make teleproxy
+      - run: .circleci/deploy.sh
 
 jobs:
 
@@ -7,71 +47,19 @@ jobs:
       xcode: "9.0"
     working_directory: ~/go/src/github.com/datawire/teleproxy
     steps:
-      - run: |
-          # update with:
-          # openssl aes-256-cbc -e -in ~/.config/kubernaut/config -out .circleci/kubernaut-config.enc -k $KEY
-          openssl aes-256-cbc -d -out ~/.config/kubernaut/config -in .circleci/kubernaut-config.enc -k $KEY
-
-      - run: |
-          sudo pip install awscli
-
-      # Golang install
-
-      # For some reason it is faster to curl into a file than to just
-      # pipe the curl straight to tar.
-      - run: |
-          sudo rm -rf /usr/local/go &&
-          curl https://dl.google.com/go/go1.10.2.darwin-amd64.tar.gz -o /tmp/go.tgz &&
-          sudo tar -C /usr/local -xzf /tmp/go.tgz
-
-      # Golang paths
-      - run: |
-          echo 'export PATH=${PATH}:/usr/local/go/bin' >> ${BASH_ENV} &&
-          echo 'export GOPATH=${HOME}/go' >> ${BASH_ENV}
-
-      - run: 'echo PATH: ${PATH} || true'
-      - run: 'echo GOPATH: ${GOPATH} || true'
-      - run: go version
-
-      - checkout
-      - run: make test
-      - run: make teleproxy
-      - run: .circleci/deploy.sh
+      - aws-install
+      - golang-install:
+          os: darwin
+      - main
 
   machine-build:
     machine: true
     working_directory: ~/go/src/github.com/datawire/teleproxy
     steps:
-      - run: |
-          # update with:
-          # openssl aes-256-cbc -e -in ~/.config/kubernaut/config -out .circleci/kubernaut-config.enc -k $KEY
-          openssl aes-256-cbc -d -out ~/.config/kubernaut/config -in .circleci/kubernaut-config.enc -k $KEY
-
-      - run: |
-          sudo pip install awscli
-
-      # Golang install
-
-      # For some reason it is faster to curl into a file than to just
-      # pipe the curl straight to tar.
-      - run: |
-          sudo rm -rf /usr/local/go &&
-          curl https://dl.google.com/go/go1.10.2.linux-amd64.tar.gz -o /tmp/go.tgz &&
-          sudo tar -C /usr/local -xzf /tmp/go.tgz
-
-      # Golang paths
-      - run: |
-          echo 'export PATH=${PATH}:/usr/local/go/bin' >> ${BASH_ENV} &&
-          echo 'export GOPATH=${HOME}/go' >> ${BASH_ENV}
-
-      - run: 'echo PATH: ${PATH} || true'
-      - run: 'echo GOPATH: ${GOPATH} || true'
-      - run: go version
-
-      - checkout
-      - run: make test
-      - run: make teleproxy
-      - run: .circleci/deploy.sh
+      - aws-install
+      - golang-install:
+          os: linux
+      - main
 
 workflows:
   version: 2
