@@ -9,7 +9,7 @@ export PATH:=${PATH}:${PWD}
 .PHONY: manifests
 manifests: cluster.knaut kubewait
 	kubectl apply -f k8s
-	./kubewait -f k8s
+	kubewait -f k8s
 
 shell: cluster.knaut
 	@exec env -u MAKELEVEL PS1="(dev) [\W]$$ " bash
