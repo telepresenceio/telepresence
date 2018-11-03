@@ -62,8 +62,7 @@ func (t *Translator) ForwardUDP(ip, toPort string) {
 
 func (t *Translator) forward(protocol, ip, toPort string) {
 	t.clear(protocol, ip)
-	ipt("-A " + t.Name + " -j REDIRECT --dest " + ip + "/32 -p " + protocol + " --to-ports " + toPort +
-		" -m ttl ! --ttl 42")
+	ipt("-A " + t.Name + " -j REDIRECT --dest " + ip + "/32 -p " + protocol + " --to-ports " + toPort)
 	t.Mappings[Address{protocol, ip}] = toPort
 }
 
@@ -77,8 +76,7 @@ func (t *Translator) ClearUDP(ip string) {
 
 func (t *Translator) clear(protocol, ip string) {
 	if previous, exists := t.Mappings[Address{protocol, ip}]; exists {
-		ipt("-D " + t.Name + " -j REDIRECT --dest " + ip + "/32 -p " + protocol + " --to-ports " +
-			previous + " -m ttl ! --ttl 42")
+		ipt("-D " + t.Name + " -j REDIRECT --dest " + ip + "/32 -p " + protocol + " --to-ports " + previous)
 		delete(t.Mappings, Address{protocol, ip})
 	}
 }
