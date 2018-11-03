@@ -26,12 +26,19 @@ kubewait: $(GO_FILES)
 	go build cmd/kubewait/kubewait.go
 
 other-tests:
-	go test -v $(shell go list ./... | fgrep -v github.com/datawire/teleproxy/internal/pkg/nat)
+	go test -v $(shell go list ./... \
+		| fgrep -v github.com/datawire/teleproxy/internal/pkg/nat \
+		| fgrep -v github.com/datawire/teleproxy/cmd/teleproxy)
 
 nat-tests:
 	go test -v -exec sudo github.com/datawire/teleproxy/internal/pkg/nat/
 
-run-tests: nat-tests other-tests
+smoke-tests: manifests
+	go test -v -exec "sudo env PATH=${PATH} KUBECONFIG=${PWD}/cluster.knaut" github.com/datawire/teleproxy/cmd/teleproxy
+
+sudo-tests: nat-tests smoke-tests
+
+run-tests: sudo-tests other-tests
 
 test-go: get run-tests
 
