@@ -32,6 +32,7 @@ commands:
   main:
     steps:
       - checkout
+      - run: mkdir -p ~/.config/kubernaut
       - run: |
           # update with:
           # openssl aes-256-cbc -e -in ~/.config/kubernaut/config -out .circleci/kubernaut-config.enc -k $KEY
