@@ -29,6 +29,12 @@ commands:
       - run: 'echo GOPATH: ${GOPATH} || true'
       - run: go version
 
+  kubectl-install:
+    steps:
+      - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.12.2/bin/$(go env GOOS)/$(go env GOARCH)/kubectl
+      - chmod a+x ./kubectl
+      - mv kubectl /usr/local/bin
+
   main:
     steps:
       - checkout
@@ -36,7 +42,7 @@ commands:
       - run: |
           # update with:
           # openssl aes-256-cbc -e -in ~/.config/kubernaut/config -out .circleci/kubernaut-config.enc -nosalt -p
-          openssl aes-256-cbc -md md5 -d -out ~/.config/kubernaut/config -in .circleci/kubernaut-config.enc -K $ENC_KEY -iv $ENC_IV
+          openssl aes-256-cbc -d -out ~/.config/kubernaut/config -in .circleci/kubernaut-config.enc -K $ENC_KEY -iv $ENC_IV
       - run: make test
       - run: make teleproxy
       - run: .circleci/deploy.sh
@@ -51,6 +57,7 @@ jobs:
       - aws-install
       - golang-install:
           os: darwin
+      - kubectl-install
       - main
 
   machine-build:
@@ -60,6 +67,7 @@ jobs:
       - aws-install
       - golang-install:
           os: linux
+      - kubectl-install
       - main
 
 workflows:
