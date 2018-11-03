@@ -3,13 +3,16 @@ all: test build
 
 include kubernaut.mk
 
+export KUBECONFIG=${PWD}/cluster.knaut
+export PATH:=${PATH}:${PWD}
+
 .PHONY: manifests
 manifests: cluster.knaut kubewait
 	kubectl apply -f k8s
 	./kubewait -f k8s
 
 shell: cluster.knaut
-	@exec env -u MAKELEVEL PATH=${PATH}:${PWD} KUBECONFIG=${PWD}/cluster.knaut PS1="(dev) [\W]$$ " bash
+	@exec env -u MAKELEVEL PS1="(dev) [\W]$$ " bash
 
 .PHONY: teleproxy
 teleproxy: $(GO_FILES)
@@ -34,7 +37,7 @@ nat-tests:
 	go test -v -exec sudo github.com/datawire/teleproxy/internal/pkg/nat/
 
 smoke-tests: manifests
-	go test -v -exec "sudo env PATH=${PATH} KUBECONFIG=${PWD}/cluster.knaut" github.com/datawire/teleproxy/cmd/teleproxy
+	go test -v -exec "sudo env PATH=${PATH} KUBECONFIG=${KUBECONFIG}" github.com/datawire/teleproxy/cmd/teleproxy
 
 sudo-tests: nat-tests smoke-tests
 
