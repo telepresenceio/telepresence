@@ -38,11 +38,6 @@ commands:
   main:
     steps:
       - checkout
-      - run: mkdir -p ~/.config/kubernaut
-      - run: |
-          # update with:
-          # openssl aes-256-cbc -e -in ~/.config/kubernaut/config -out .circleci/kubernaut-config.enc -nosalt -p
-          openssl aes-256-cbc -d -out ~/.config/kubernaut/config -in .circleci/kubernaut-config.enc -K $ENC_KEY -iv $ENC_IV
       - run: make test
       - run:
           command: make cluster.knaut.clean
