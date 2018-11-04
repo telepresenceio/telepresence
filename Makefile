@@ -4,12 +4,12 @@ all: test build
 include kubernaut.mk
 
 export KUBECONFIG=${PWD}/cluster.knaut
-export PATH:=${PATH}:${PWD}
+export PATH:=${PATH}
 
 .PHONY: manifests
 manifests: cluster.knaut kubewait
 	kubectl apply -f k8s
-	kubewait -f k8s
+	./kubewait -f k8s
 
 shell: cluster.knaut
 	@exec env -u MAKELEVEL PS1="(dev) [\W]$$ " bash
