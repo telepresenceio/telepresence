@@ -40,7 +40,7 @@
 		echo $(@:%.knaut.claim=%)-$${USER}-$(shell uuidgen) > $@; \
 	fi
 
-KUBERNAUT=gubernaut
+KUBERNAUT=./gubernaut
 KUBERNAUT_CLAIM_FILE=$(@:%.knaut=%.knaut.claim)
 KUBERNAUT_CLAIM_NAME=$(shell cat $(KUBERNAUT_CLAIM_FILE))
 
