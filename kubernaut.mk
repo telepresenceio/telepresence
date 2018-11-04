@@ -30,18 +30,6 @@
 #     clobber: kubernaut.clobber
 #
 
-KUBERNAUT_BASE=.
-KUBERNAUT_VERSION=2018.10.24-d46c1f1
-KUBERNAUT=$(KUBERNAUT_BASE)/kubernaut
-
-GOOS=$(shell go env GOOS)
-GOARCH=$(shell go env GOARCH)
-
-$(KUBERNAUT):
-	mkdir -p $(shell dirname $(KUBERNAUT))
-	curl -o $(KUBERNAUT) http://releases.datawire.io/kubernaut/$(KUBERNAUT_VERSION)/$(GOOS)/$(GOARCH)/kubernaut
-	chmod +x $(KUBERNAUT)
-
 .PRECIOUS: %.knaut.claim
 .SECONDARY: %.knaut.claim
 
@@ -52,24 +40,26 @@ $(KUBERNAUT):
 		echo $(@:%.knaut.claim=%)-$${USER}-$(shell uuidgen) > $@; \
 	fi
 
+KUBERNAUT=./gubernaut
 KUBERNAUT_CLAIM_FILE=$(@:%.knaut=%.knaut.claim)
 KUBERNAUT_CLAIM_NAME=$(shell cat $(KUBERNAUT_CLAIM_FILE))
-KUBERNAUT_CLAIM=$(KUBERNAUT) claims create --name $(KUBERNAUT_CLAIM_NAME) --cluster-group main
-KUBERNAUT_DISCARD=$(KUBERNAUT) claims delete $(KUBERNAUT_CLAIM_NAME)
 
 %.knaut : %.knaut.claim $(KUBERNAUT)
-	$(KUBERNAUT_DISCARD)
-	$(KUBERNAUT_CLAIM)
-	cp ~/.kube/$(KUBERNAUT_CLAIM_NAME).yaml $@
+	$(KUBERNAUT) -release $(KUBERNAUT_CLAIM_NAME)
+	$(KUBERNAUT) -claim $(KUBERNAUT_CLAIM_NAME) -output $@
 
 .PHONY: %.knaut.clean
 
-%.knaut.clean :
-	if [ -e $(@:%.clean=%.claim) ]; then $(KUBERNAUT) claims delete $$(cat $(@:%.clean=%.claim)); fi
+%.knaut.clean : $(KUBERNAUT)
+	if [ -e $(@:%.clean=%.claim) ]; then $(KUBERNAUT) -release $$(cat $(@:%.clean=%.claim)); fi
 	rm -f $(@:%.knaut.clean=%.knaut)
 	rm -f $(@:%.clean=%.claim)
+
+gubernaut: cmd/gubernaut/gubernaut.go
+	go build cmd/gubernaut/gubernaut.go
 
 .PHONY: kubernaut.clobber
 
 kubernaut.clobber:
-	rm -f $(KUBERNAUT)
+	rm -f gubernaut gubernaut.go
+
