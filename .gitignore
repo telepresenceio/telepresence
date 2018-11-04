@@ -1,4 +1,5 @@
 /teleproxy
 /kubewait
-/kubernaut
+/gubernaut
+/gubernaut.go
 cluster.knaut*
