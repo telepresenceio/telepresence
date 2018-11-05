@@ -2,26 +2,21 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
-	"net"
 	"os"
 	"os/user"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"syscall"
 	"github.com/datawire/teleproxy/internal/pkg/dns"
 	"github.com/datawire/teleproxy/internal/pkg/interceptor"
 	"github.com/datawire/teleproxy/internal/pkg/k8s/watcher"
+	"github.com/datawire/teleproxy/internal/pkg/proxy"
 	"github.com/datawire/teleproxy/internal/pkg/route"
 	"github.com/datawire/teleproxy/internal/pkg/tpu"
-	"golang.org/x/net/proxy"
 )
 
 var kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
@@ -93,20 +88,55 @@ func main() {
 		panic("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
 	}
 
-	if runtime.GOOS == "darwin" {
-		ifaces, _ := getIfaces()
-		for _, iface := range ifaces {
-			// setup dns search path
-			domain, _ := getSearchDomains(iface)
-			setSearchDomains(iface, ".")
-			// restore dns search path
-			defer setSearchDomains(iface, domain)
-		}
-	}
-
-	tpu.Rlimit()
-
 	iceptor := interceptor.NewInterceptor("teleproxy")
+
+	srv := dns.Server{
+		Listeners: dnsListeners("1233"),
+		Fallback: *fallbackIP + ":53",
+		Resolve: func(domain string) string {
+			route := iceptor.Resolve(domain)
+			if route != nil {
+				return route.Ip
+			} else {
+				return ""
+			}
+		},
+	}
+	srv.Start()
+
+	// hmm, we may not actually need to get the original
+	// destination, we could just forward each ip to a unique port
+	// and either listen on that port or run port-forward
+	proxy, err := proxy.NewProxy(":1234", iceptor.Destination)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	proxy.Start(10000)
+
+	bootstrap := route.Table{Name: "bootstrap"}
+	bootstrap.Add(route.Route{
+		Ip: *dnsIP,
+		Target: "1233",
+		Proto: "udp",
+	})
+	bootstrap.Add(route.Route{
+		Name: "teleproxy",
+		Ip: "1.2.3.4",
+		Proto: "tcp",
+	})
+
+	restore := dns.OverrideSearchDomains(".")
+	defer restore()
+
+	iceptor.Start()
+	defer iceptor.Stop()
+	iceptor.Update(bootstrap)
+
+	disconnect := connect()
+	defer disconnect()
+
+	// setup kubernetes bridge
 	w := watcher.NewWatcher(*kubeconfig)
 	defer w.Stop()
 	w.Watch("services", func(w *watcher.Watcher) {
@@ -123,46 +153,17 @@ func main() {
 			}
 		}
 		iceptor.Update(table)
-		kickDNS()
+		dns.Flush()
 	})
 
-	srv := dns.Server{
-		Listeners: dnsListeners("1233"),
-		Fallback: *fallbackIP + ":53",
-		Resolve: func(domain string) string {
-			route := iceptor.Resolve(domain)
-			if route != nil {
-				return route.Ip
-			} else {
-				return ""
-			}
-		},
-	}
-	srv.Start()
+	ch := make(chan os.Signal)
+	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+	log.Println(<-ch)
 
-	ln, err := net.Listen("tcp", ":1234")
-	if err != nil {
-		log.Println(err)
-		return
-	}
+	defer dns.Flush()
+}
 
-	bootstrap := route.Table{Name: "bootstrap"}
-	bootstrap.Add(route.Route{
-		Ip: *dnsIP,
-		Target: "1233",
-		Proto: "udp",
-	})
-	bootstrap.Add(route.Route{
-		Name: "teleproxy",
-		Ip: "1.2.3.4",
-		Proto: "tcp",
-	})
-
-	iceptor.Start()
-	defer iceptor.Stop()
-	iceptor.Update(bootstrap)
-
-	apply := tpu.Keepalive(1, `
+const TELEPROXY_POD = `
 ---
 apiVersion: v1
 kind: Pod
@@ -177,188 +178,20 @@ spec:
     ports:
     - protocol: TCP
       containerPort: 8022
-`, "kubectl", "--kubeconfig", *kubeconfig, "apply", "-f", "-")
+`
+
+func connect() func() {
+	// setup remote teleproxy pod
+	apply := tpu.Keepalive(1, TELEPROXY_POD, "kubectl", "--kubeconfig", *kubeconfig, "apply", "-f", "-")
 	apply.Wait()
 
 	pf := tpu.Keepalive(0, "", "kubectl", "--kubeconfig", *kubeconfig, "port-forward", "pod/teleproxy", "8022")
-        defer pf.Shutdown()
 	// XXX: probably need some kind of keepalive check for ssh, first
 	// curl after wakeup seems to trigger detection of death
-//	ssh := tpu.Keepalive(0, "", "ssh", "-D", "localhost:1080", "-L", "localhost:9050:localhost:9050", "-C", "-N", "-oConnectTimeout=5", "-oExitOnForwardFailure=yes",
 	ssh := tpu.Keepalive(0, "", "ssh", "-D", "localhost:1080", "-C", "-N", "-oConnectTimeout=5", "-oExitOnForwardFailure=yes",
 		"-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", "8022")
-	defer ssh.Shutdown()
-
-	limit := 10000
-	log.Printf("Listening (limit %v)...", limit)
-	go func() {
-		sem := tpu.NewSemaphore(limit)
-		for {
-			conn, err := ln.Accept();
-			if err != nil {
-				log.Println(err)
-			} else {
-				switch conn.(type) {
-				case *net.TCPConn:
-					log.Println("AVAILABLE:", len(sem))
-					sem.Acquire()
-					go func() {
-						defer sem.Release()
-						handleConnection(iceptor, conn.(*net.TCPConn))
-					}()
-				default:
-					log.Println("Don't know how to handle conn:", conn)
-				}
-			}
-		}
-	}()
-
-	ch := make(chan os.Signal)
-	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-	log.Println(<-ch)
-
-	defer kickDNS()
-}
-
-func handleConnection(iceptor *interceptor.Interceptor, conn *net.TCPConn) {
-	// hmm, we may not actually need to get the original destination,
-	// we could just forward each ip to a unique port and either
-	// listen on that port or run port-forward
-	host, err := iceptor.Destination(conn)
-	if err != nil {
-		log.Println("GetOriginalDst:", err)
-		return
+	return func() {
+		ssh.Shutdown()
+		pf.Shutdown()
 	}
-
-	log.Println("CONNECT:", conn.RemoteAddr(), host)
-
-	// setting up an ssh tunnel with dynamic socks proxy at this end
-	// seems faster than connecting directly to a socks proxy
-	dialer, err := proxy.SOCKS5("tcp", "localhost:1080", nil, proxy.Direct)
-//	dialer, err := proxy.SOCKS5("tcp", "localhost:9050", nil, proxy.Direct)
-	if err != nil {
-		log.Println(err)
-		conn.Close()
-		return
-	}
-
-	_proxy, err := dialer.Dial("tcp", host)
-	if err != nil {
-		log.Println(err)
-		conn.Close()
-		return
-	}
-	proxy := _proxy.(*net.TCPConn)
-
-	done := tpu.NewLatch(2)
-
-	go pipe(conn, proxy, done)
-	go pipe(proxy, conn, done)
-
-	done.Wait()
-}
-
-func pipe(from, to *net.TCPConn, done tpu.Latch) {
-	defer func() {
-		log.Println("CLOSED WRITE:", to.RemoteAddr())
-		to.CloseWrite()
-	}()
-	defer func() {
-		log.Println("CLOSED READ:", from.RemoteAddr())
-		from.CloseRead()
-	}()
-	defer done.Notify()
-
-	const size = 64*1024
-	var buf [size]byte
-	for {
-		n, err := from.Read(buf[0:size])
-		if err != nil {
-			if err != io.EOF {
-				log.Println(err)
-			}
-			break
-		} else {
-			_, err := to.Write(buf[0:n])
-
-			if err != nil {
-				log.Println(err)
-				break
-			}
-		}
-	}
-}
-
-func getPIDs() (pids []int, err error) {
-	cmd := exec.Command("ps", "-axo", "pid=,command=")
-	out, err := cmd.CombinedOutput()
-	if err != nil { return }
-	if !cmd.ProcessState.Success() {
-		err = fmt.Errorf("%s", out)
-		return
-	}
-
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.Contains(strings.ToLower(line), "mdnsresponder") {
-			parts := strings.Fields(line)
-			var pid int
-			pid, err = strconv.Atoi(parts[0])
-			if err != nil { return }
-			pids = append(pids, pid)
-		}
-	}
-
-	return
-}
-
-func kickDNS() {
-	pids, err := getPIDs()
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	log.Printf("Kicking DNS: %v\n", pids)
-	for _, pid := range pids {
-		proc, err := os.FindProcess(pid)
-		if err != nil { log.Println(err) }
-		err = proc.Signal(syscall.SIGHUP)
-		if err != nil { log.Println(err) }
-	}
-}
-
-func shell(command string) (result string, err error) {
-	log.Println(command)
-	cmd := exec.Command("sh", "-c", command)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	log.Printf("%s", out)
-	result = string(out)
-	return
-}
-
-func getIfaces() (ifaces []string, err error) {
-	lines, err := shell("networksetup -listallnetworkservices | fgrep -v '*'")
-	if err != nil { return }
-	for _, line := range strings.Split(lines, "\n") {
-		line = strings.TrimSpace(line)
-		if len(line) > 0 {
-			ifaces = append(ifaces, line)
-		}
-	}
-	return
-}
-
-func getSearchDomains(iface string) (domains string, err error) {
-	domains, err = shell(fmt.Sprintf("networksetup -getsearchdomains '%s'", iface))
-	domains = strings.TrimSpace(domains)
-	return
-}
-
-func setSearchDomains(iface, domains string) (err error) {
-	_, err = shell(fmt.Sprintf("networksetup -setsearchdomains '%s' '%s'", iface, domains))
-	return
 }
