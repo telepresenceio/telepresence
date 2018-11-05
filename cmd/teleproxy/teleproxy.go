@@ -138,38 +138,8 @@ func main() {
 	disconnect := connect()
 	defer disconnect()
 
-	// setup kubernetes bridge
-	w := watcher.NewWatcher(*kubeconfig)
-	defer w.Stop()
-	w.Watch("services", func(w *watcher.Watcher) {
-		table := route.Table{Name: "kubernetes"}
-		for _, svc := range w.List("services") {
-			ip, ok := svc.Spec()["clusterIP"]
-			if ok {
-				table.Add(route.Route{
-					Name: svc.Name(),
-					Ip: ip.(string),
-					Proto: "tcp",
-					Target: "1234",
-				})
-			}
-		}
-		iceptor.Update(table)
-		dns.Flush()
-	})
-
-	// setup docker bridge
-	dw := docker.NewWatcher()
-	dw.Start(func(w *docker.Watcher) {
-		table := route.Table{Name: "docker"}
-		for name, ip := range w.Containers {
-			table.Add(route.Route{Name: name, Ip: ip, Proto: "tcp"})
-		}
-		// this sometimes panics with a send on a closed channel
-		iceptor.Update(table)
-		dns.Flush()
-	})
-	defer dw.Stop()
+	shutdown := bridges(iceptor)
+	defer shutdown()
 
 	ch := make(chan os.Signal)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
@@ -208,5 +178,43 @@ func connect() func() {
 	return func() {
 		ssh.Shutdown()
 		pf.Shutdown()
+	}
+}
+
+func bridges(iceptor *interceptor.Interceptor) func() {
+	// setup kubernetes bridge
+	w := watcher.NewWatcher(*kubeconfig)
+	w.Watch("services", func(w *watcher.Watcher) {
+		table := route.Table{Name: "kubernetes"}
+		for _, svc := range w.List("services") {
+			ip, ok := svc.Spec()["clusterIP"]
+			if ok {
+				table.Add(route.Route{
+					Name: svc.Name(),
+					Ip: ip.(string),
+					Proto: "tcp",
+					Target: "1234",
+				})
+			}
+		}
+		iceptor.Update(table)
+		dns.Flush()
+	})
+
+	// setup docker bridge
+	dw := docker.NewWatcher()
+	dw.Start(func(w *docker.Watcher) {
+		table := route.Table{Name: "docker"}
+		for name, ip := range w.Containers {
+			table.Add(route.Route{Name: name, Ip: ip, Proto: "tcp"})
+		}
+		// this sometimes panics with a send on a closed channel
+		iceptor.Update(table)
+		dns.Flush()
+	})
+
+	return func() {
+		dw.Stop()
+		w.Stop()
 	}
 }
