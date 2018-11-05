@@ -2,10 +2,10 @@ package dns
 
 import (
 	"fmt"
-	"log"
-	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/datawire/teleproxy/internal/pkg/tpu"
 )
 
 type searchDomains struct {
@@ -35,7 +35,7 @@ func OverrideSearchDomains(domains string) func() {
 }
 
 func getIfaces() (ifaces []string, err error) {
-	lines, err := shell("networksetup -listallnetworkservices | fgrep -v '*'")
+	lines, err := tpu.Shell("networksetup -listallnetworkservices | fgrep -v '*'")
 	if err != nil { return }
 	for _, line := range strings.Split(lines, "\n") {
 		line = strings.TrimSpace(line)
@@ -47,25 +47,12 @@ func getIfaces() (ifaces []string, err error) {
 }
 
 func getSearchDomains(iface string) (domains string, err error) {
-	domains, err = shell(fmt.Sprintf("networksetup -getsearchdomains '%s'", iface))
+	domains, err = tpu.Shell(fmt.Sprintf("networksetup -getsearchdomains '%s'", iface))
 	domains = strings.TrimSpace(domains)
 	return
 }
 
 func setSearchDomains(iface, domains string) (err error) {
-	_, err = shell(fmt.Sprintf("networksetup -setsearchdomains '%s' '%s'", iface, domains))
-	return
-}
-
-func shell(command string) (result string, err error) {
-	log.Println(command)
-	cmd := exec.Command("sh", "-c", command)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	log.Printf("%s", out)
-	result = string(out)
+	_, err = tpu.Shell(fmt.Sprintf("networksetup -setsearchdomains '%s' '%s'", iface, domains))
 	return
 }

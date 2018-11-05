@@ -120,6 +120,7 @@ func (i *Interceptor) Update(table rt.Table) {
 		}
 
 		for _, route := range routes {
+			log.Printf("Clearing %v->%v", route.Domain(), route)
 			i.domains.Delete(route.Domain())
 
 			switch route.Proto {
