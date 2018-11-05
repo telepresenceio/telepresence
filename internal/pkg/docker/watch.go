@@ -2,28 +2,95 @@ package docker
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"log"
-	"reflect"
 	"strings"
 	"os/exec"
 
 	"github.com/datawire/teleproxy/internal/pkg/tpu"
 )
 
-func Watch(listener func(map[string]string)) {
+type empty struct{}
+
+type Watcher struct {
+	Containers map[string]string
+	stop chan empty
+	done chan empty
+}
+
+func NewWatcher() *Watcher {
+	return &Watcher{
+		Containers: make(map[string]string),
+		stop: make(chan empty),
+		done: make(chan empty),
+	}
+}
+
+func (w *Watcher) Start(listener func(w *Watcher)) {
 	go func() {
-		var prev map[string]string
+		wakeup := waiter()
+		OUTER: for {
+			select {
+			case <- w.stop:
+				break OUTER
+			case <- wakeup:
+				containers, err := containers()
+				if err == nil {
+					updated := false
+					for key := range w.Containers {
+						if containers[key] == "" {
+							delete(w.Containers, key)
+							updated = true
+						}
+					}
+					for key, value := range containers {
+						prev := w.Containers[key]
+						if value != prev {
+							w.Containers[key] = value
+							updated = true
+						}
+					}
+					if updated {
+						listener(w)
+					}
+				}
+			}
+		}
+		close(w.done)
+	}()
+}
+
+func (w *Watcher) Stop() {
+	close(w.stop)
+	<- w.done
+}
+
+func containers() (result map[string]string, err error) {
+	lines, err := tpu.Shell("docker inspect -f '{{.Name}} {{.NetworkSettings.IPAddress}}'  $(docker ps -q)")
+	if err != nil { return }
+
+	result = make(map[string]string)
+	for _, line := range strings.Split(lines, "\n") {
+		parts := strings.Fields(line)
+		if len(parts) == 2 {
+			name := strings.TrimLeft(parts[0], "/")
+			ip := parts[1]
+			result[name] = ip
+		} else if len(parts) > 2 {
+			log.Printf("error parsing: %v", line)
+		}
+	}
+
+	return
+}
+
+func waiter() chan empty {
+	result := make(chan empty)
+	go func() {
 		var events *bufio.Reader
 
 		for {
-			current, err := containers()
-			if !reflect.DeepEqual(current, prev) {
-				listener(current)
-				prev = current
-			}
-
+			result <- empty{}
 			if events == nil {
 				events = containerEvents()
 			}
@@ -43,26 +110,7 @@ func Watch(listener func(map[string]string)) {
 			}
 		}
 	}()
-}
-
-func containers() (result map[string]string, err error) {
-	lines, err := tpu.Shell("docker inspect -f '{{.Name}} {{.NetworkSettings.IPAddress}}'  $(docker ps -q)")
-	if err != nil { return }
-
-	result = make(map[string]string)
-	for _, line := range strings.Split(lines, "\n") {
-		parts := strings.Fields(line)
-		if len(parts) == 2 {
-			name := strings.TrimLeft(parts[0], "/")
-			ip := parts[1]
-			result[name] = ip
-		} else if len(parts) != 0 {
-			err = fmt.Errorf("error parsing: %v", line)
-			return
-		}
-	}
-
-	return
+	return result
 }
 
 func containerEvents() *bufio.Reader {

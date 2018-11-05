@@ -159,14 +159,17 @@ func main() {
 	})
 
 	// setup docker bridge
-	docker.Watch(func(containers map[string]string) {
+	dw := docker.NewWatcher()
+	dw.Start(func(w *docker.Watcher) {
 		table := route.Table{Name: "docker"}
-		for name, ip := range containers {
+		for name, ip := range w.Containers {
 			table.Add(route.Route{Name: name, Ip: ip, Proto: "tcp"})
 		}
+		// this sometimes panics with a send on a closed channel
 		iceptor.Update(table)
 		dns.Flush()
 	})
+	defer dw.Stop()
 
 	ch := make(chan os.Signal)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
