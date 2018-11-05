@@ -11,7 +11,9 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+
 	"github.com/datawire/teleproxy/internal/pkg/dns"
+	"github.com/datawire/teleproxy/internal/pkg/docker"
 	"github.com/datawire/teleproxy/internal/pkg/interceptor"
 	"github.com/datawire/teleproxy/internal/pkg/k8s/watcher"
 	"github.com/datawire/teleproxy/internal/pkg/proxy"
@@ -151,6 +153,16 @@ func main() {
 					Target: "1234",
 				})
 			}
+		}
+		iceptor.Update(table)
+		dns.Flush()
+	})
+
+	// setup docker bridge
+	docker.Watch(func(containers map[string]string) {
+		table := route.Table{Name: "docker"}
+		for name, ip := range containers {
+			table.Add(route.Route{Name: name, Ip: ip, Proto: "tcp"})
 		}
 		iceptor.Update(table)
 		dns.Flush()
