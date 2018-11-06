@@ -167,68 +167,17 @@ func intercept() func() {
 	iceptor.Start()
 	iceptor.Update(bootstrap)
 
-	disconnect := connect()
-
 	return func() {
 		iceptor.Stop()
 		apis.Stop()
-		disconnect()
 		restore()
 		dns.Flush()
 	}
 }
 
-const TELEPROXY_POD = `
----
-apiVersion: v1
-kind: Pod
-metadata:
-  name: teleproxy
-  labels:
-    name: teleproxy
-spec:
-  containers:
-  - name: proxy
-    image: datawire/telepresence-k8s:0.75
-    ports:
-    - protocol: TCP
-      containerPort: 8022
-`
-
-func connect() func() {
-	// setup remote teleproxy pod
-	apply := tpu.Keepalive(1, TELEPROXY_POD, "kubectl", "--kubeconfig", *kubeconfig, "apply", "-f", "-")
-	apply.Wait()
-
-	pf := tpu.Keepalive(0, "", "kubectl", "--kubeconfig", *kubeconfig, "port-forward", "pod/teleproxy", "8022")
-	// XXX: probably need some kind of keepalive check for ssh, first
-	// curl after wakeup seems to trigger detection of death
-	ssh := tpu.Keepalive(0, "", "ssh", "-D", "localhost:1080", "-C", "-N", "-oConnectTimeout=5", "-oExitOnForwardFailure=yes",
-		"-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", "8022")
-	return func() {
-		ssh.Shutdown()
-		pf.Shutdown()
-	}
-}
-
-func post(tables ...route.Table) {
-	names := make([]string, len(tables))
-	for i, t := range tables {
-		names[i] = t.Name
-	}
-	jnames := strings.Join(names, ", ")
-
-	body, err := json.Marshal(tables)
-	if err != nil { panic(err) }
-	resp, err := http.Post("http://teleproxy/api/tables/", "application/json", bytes.NewReader(body))
-	if err != nil {
-		log.Printf("error posting update to %s: %v", jnames, err)
-	} else {
-		log.Printf("posted update to %s: %v", jnames, resp.StatusCode)
-	}
-}
-
 func bridges() func() {
+	disconnect := connect()
+
 	if *kubeconfig == "" {
 		*kubeconfig = os.Getenv("KUBECONFIG")
 	}
@@ -272,5 +221,56 @@ func bridges() func() {
 		dw.Stop()
 		w.Stop()
 		post(route.Table{Name: "kubernetes"}, route.Table{Name: "docker"})
+		disconnect()
+	}
+}
+
+func post(tables ...route.Table) {
+	names := make([]string, len(tables))
+	for i, t := range tables {
+		names[i] = t.Name
+	}
+	jnames := strings.Join(names, ", ")
+
+	body, err := json.Marshal(tables)
+	if err != nil { panic(err) }
+	resp, err := http.Post("http://teleproxy/api/tables/", "application/json", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("error posting update to %s: %v", jnames, err)
+	} else {
+		log.Printf("posted update to %s: %v", jnames, resp.StatusCode)
+	}
+}
+
+const TELEPROXY_POD = `
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: teleproxy
+  labels:
+    name: teleproxy
+spec:
+  containers:
+  - name: proxy
+    image: datawire/telepresence-k8s:0.75
+    ports:
+    - protocol: TCP
+      containerPort: 8022
+`
+
+func connect() func() {
+	// setup remote teleproxy pod
+	apply := tpu.Keepalive(1, TELEPROXY_POD, "kubectl", "--kubeconfig", *kubeconfig, "apply", "-f", "-")
+	apply.Wait()
+
+	pf := tpu.Keepalive(0, "", "kubectl", "--kubeconfig", *kubeconfig, "port-forward", "pod/teleproxy", "8022")
+	// XXX: probably need some kind of keepalive check for ssh, first
+	// curl after wakeup seems to trigger detection of death
+	ssh := tpu.Keepalive(0, "", "ssh", "-D", "localhost:1080", "-C", "-N", "-oConnectTimeout=5", "-oExitOnForwardFailure=yes",
+		"-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", "8022")
+	return func() {
+		ssh.Shutdown()
+		pf.Shutdown()
 	}
 }
