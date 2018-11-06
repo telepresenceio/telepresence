@@ -156,7 +156,7 @@ Advanced Usage
 
 The teleproxy binary provides a REST API as an integration and
 inspection point. When teleproxy is running, it diverts requests to
-https://teleproxy to a locally running REST API. You can see what
+http://teleproxy to a locally running REST API. You can see what
 traffic teleproxy is intercepting like so:
 
 ```
