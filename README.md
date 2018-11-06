@@ -191,8 +191,9 @@ curl -X POST http://teleproxy/api/tables/ -d@- <<EOF
   "name": "my-routing-table",
   "routes": [
     {"name": "myhostname", "proto": "tcp", "ip": "1.2.3.4", "target": "1234"},
-    {"name": "myotherhostname", "proto": "tcp", "ip": "1.2.3.5", "target": "1234"},
-]
+    {"name": "myotherhostname", "proto": "tcp", "ip": "1.2.3.5", "target": "1234"}
+  ]
+}]
 EOF
 ```
 
@@ -202,6 +203,11 @@ those ips to a socks5 proxy running on port "1234" (this is the socks5
 proxy that is run by the kubernetes/docker bridge). If you wanted to
 run your own socks5 proxy on a different port, you could supply that
 instead.
+
+Note that you can supply as many tables as you like with different
+names. If you supply the name of an existing table, then *all* the
+routes in the existing table are replaced with the routes in the
+supplied table.
 
 To Do
 -----
