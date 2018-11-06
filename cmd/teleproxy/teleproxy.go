@@ -204,18 +204,20 @@ func bridges(kubeinfo *k8s.KubeInfo) func() {
 		post(table)
 	})
 
-	// setup docker bridge
-	dw := docker.NewWatcher()
-	dw.Start(func(w *docker.Watcher) {
-		table := route.Table{Name: "docker"}
-		for name, ip := range w.Containers {
-			table.Add(route.Route{Name: name, Ip: ip, Proto: "tcp"})
-		}
-		post(table)
-	})
+	if false {
+		// setup docker bridge
+		dw := docker.NewWatcher()
+		dw.Start(func(w *docker.Watcher) {
+			table := route.Table{Name: "docker"}
+			for name, ip := range w.Containers {
+				table.Add(route.Route{Name: name, Ip: ip, Proto: "tcp"})
+			}
+			post(table)
+		})
+	}
 
 	return func() {
-		dw.Stop()
+		//dw.Stop()
 		w.Stop()
 		post(route.Table{Name: "kubernetes"}, route.Table{Name: "docker"})
 		disconnect()
