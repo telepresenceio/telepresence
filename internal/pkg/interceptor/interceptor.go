@@ -1,6 +1,7 @@
 package interceptor
 
 import (
+	"encoding/json"
 	"log"
 	"net"
 	"strings"
@@ -64,76 +65,139 @@ func (i *Interceptor) Destination(conn *net.TCPConn) (string, error) {
 	return host, err
 }
 
+func (i *Interceptor) Render(table string) string {
+	result := make(chan string, 1)
+	i.work <- func() {
+		var obj interface{}
+
+		if table == "" {
+			var tables []rt.Table
+			for _, t := range i.tables {
+				tables = append(tables, t)
+			}
+			obj = tables
+		} else {
+			var ok bool
+			obj, ok = i.tables[table]
+			if !ok {
+				result <- ""
+				return
+			}
+		}
+
+		bytes, err := json.MarshalIndent(obj, "", "  ")
+		if err != nil {
+			result <- err.Error()
+		} else {
+			result <- string(bytes)
+		}
+	}
+	return <- result
+}
+
+func (i *Interceptor) Delete(table string) bool {
+	result := make(chan bool, 1)
+	i.work <- func() {
+		var names []string
+		if table == "" {
+			for name := range i.tables {
+				names = append(names, name)
+			}
+		} else if _, ok := i.tables[table]; ok {
+			names = []string{table}
+		} else {
+			result <- false
+		}
+
+		for _, name := range names {
+			if name != "bootstrap" {
+				i.update(rt.Table{Name: name})
+			}
+		}
+
+		result <- true
+	}
+	return <- result
+}
+
 func (i *Interceptor) Update(table rt.Table) {
 	i.work <- func() {
-		old, ok := i.tables[table.Name]
+		i.update(table)
+	}
+}
 
-		routes := make(map[string]rt.Route)
-		if ok {
-			for _, route := range old.Routes {
-				routes[route.Name] = route
-			}
+func (i *Interceptor) update(table rt.Table) {
+	old, ok := i.tables[table.Name]
+
+	routes := make(map[string]rt.Route)
+	if ok {
+		for _, route := range old.Routes {
+			routes[route.Name] = route
 		}
+	}
 
-		for _, route := range table.Routes {
-			existing, ok := routes[route.Name]
-			if ok && route != existing {
-
-				switch route.Proto {
-				case "tcp":
-					i.translator.ClearTCP(existing.Ip)
-				case "udp":
-					i.translator.ClearUDP(existing.Ip)
-				default:
-					panic("unrecognized protocol")
-				}
-
-			}
-
-			if !ok || route != existing {
-
-				if route.Target != "" {
-					switch route.Proto {
-					case "tcp":
-						i.translator.ForwardTCP(route.Ip, route.Target)
-					case "udp":
-						i.translator.ForwardUDP(route.Ip, route.Target)
-					default:
-						panic("unrecognized protocol")
-					}
-				}
-
-				if route.Name != "" {
-					log.Printf("Storing %v->%v", route.Domain(), route)
-					copy := route
-					i.domains.Store(route.Domain(), &copy)
-				}
-
-			}
-
-			if ok {
-				// remove the route from our map of
-				// old routes so we don't end up
-				// deleting it below
-				delete(routes, route.Name)
-			}
-		}
-
-		for _, route := range routes {
-			log.Printf("Clearing %v->%v", route.Domain(), route)
-			i.domains.Delete(route.Domain())
+	for _, route := range table.Routes {
+		existing, ok := routes[route.Name]
+		if ok && route != existing {
 
 			switch route.Proto {
 			case "tcp":
-				i.translator.ClearTCP(route.Ip)
+				i.translator.ClearTCP(existing.Ip)
 			case "udp":
-				i.translator.ClearUDP(route.Ip)
+				i.translator.ClearUDP(existing.Ip)
 			default:
-				panic("unrecognized protocol")
+				log.Printf("unrecognized protocol: %v", route)
 			}
 
 		}
 
+		if !ok || route != existing {
+
+			if route.Target != "" {
+				switch route.Proto {
+				case "tcp":
+					i.translator.ForwardTCP(route.Ip, route.Target)
+				case "udp":
+					i.translator.ForwardUDP(route.Ip, route.Target)
+				default:
+					log.Printf("unrecognized protocol: %v", route)
+				}
+			}
+
+			if route.Name != "" {
+				log.Printf("Storing %v->%v", route.Domain(), route)
+				copy := route
+				i.domains.Store(route.Domain(), &copy)
+			}
+
+		}
+
+		if ok {
+			// remove the route from our map of
+			// old routes so we don't end up
+			// deleting it below
+			delete(routes, route.Name)
+		}
+	}
+
+	for _, route := range routes {
+		log.Printf("Clearing %v->%v", route.Domain(), route)
+		i.domains.Delete(route.Domain())
+
+		switch route.Proto {
+		case "tcp":
+			i.translator.ClearTCP(route.Ip)
+		case "udp":
+			i.translator.ClearUDP(route.Ip)
+		default:
+			log.Printf("unrecognized protocol: %v", route)
+		}
+
+	}
+
+	if table.Routes == nil || len(table.Routes) == 0 {
+		delete(i.tables, table.Name)
+	} else {
 		i.tables[table.Name] = table
 	}
 }

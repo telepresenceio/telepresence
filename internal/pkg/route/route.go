@@ -5,8 +5,8 @@ import (
 )
 
 type Table struct {
-	Name string
-	Routes []Route
+	Name string `json:"name"`
+	Routes []Route `json:"routes"`
 }
 
 func (t *Table)  Add(route Route) {
@@ -14,7 +14,11 @@ func (t *Table)  Add(route Route) {
 }
 
 type Route struct {
-	Name, Ip, Proto, Target, Action string
+	Name string `json:"name,omitempty"`
+	Ip string `json:"ip"`
+	Proto string `json:"proto"`
+	Target string `json:"target"`
+	Action string `json:"action,omitempty"`
 }
 
 func (r Route) Domain() string {
