@@ -151,6 +151,64 @@ curl -k https://kubernetes/api
 ...
 ```
 
+Advanced Usage
+--------------
+
+The teleproxy binary provides a REST API as an integration and
+inspection point. When teleproxy is running, it diverts requests to
+http://teleproxy to a locally running REST API. You can see what
+traffic teleproxy is intercepting like so:
+
+```
+# dump all routing tables
+curl http://teleproxy/api/tables/
+# dump a specific routing table
+curl http://teleproxy/api/tables/<name>
+```
+
+You can use the API to shutdown teleproxy:
+
+```
+curl http://teleproxy/api/shutdown
+```
+
+If you want to run the intercepter and docker/kubernetes bridge
+portion separately (this is useful for avoiding the suid binary thing
+above, you can do it like so:
+
+```
+# as root
+sudo teleproxy -mode intercept
+# as user
+teleproxy -mode bridge
+```
+
+You can extend teleproxy by adding additional routing tables, e.g.:
+
+```
+curl -X POST http://teleproxy/api/tables/ -d@- <<EOF
+[{
+  "name": "my-routing-table",
+  "routes": [
+    {"name": "myhostname", "proto": "tcp", "ip": "1.2.3.4", "target": "1234"},
+    {"name": "myotherhostname", "proto": "tcp", "ip": "1.2.3.5", "target": "1234"}
+  ]
+}]
+EOF
+```
+
+The above will cause teleproxy to resolve `myhostname` and
+`myotherhostname` to `1.2.3.4`, and `1.2.3.5`, and divert traffic from
+those ips to a socks5 proxy running on port "1234" (this is the socks5
+proxy that is run by the kubernetes/docker bridge). If you wanted to
+run your own socks5 proxy on a different port, you could supply that
+instead.
+
+Note that you can supply as many tables as you like with different
+names. If you supply the name of an existing table, then *all* the
+routes in the existing table are replaced with the routes in the
+supplied table.
+
 To Do
 -----
 
