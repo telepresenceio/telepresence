@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/datawire/teleproxy/internal/pkg/api"
 	"github.com/datawire/teleproxy/internal/pkg/dns"
 	"github.com/datawire/teleproxy/internal/pkg/docker"
 	"github.com/datawire/teleproxy/internal/pkg/interceptor"
@@ -90,6 +92,11 @@ func main() {
 		panic("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
 	}
 
+	// do this up front so we don't miss out on cleanup if someone
+	// Control-C's just after starting us
+	signalChan := make(chan os.Signal)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+
 	iceptor := interceptor.NewInterceptor("teleproxy")
 
 	srv := dns.Server{
@@ -105,6 +112,13 @@ func main() {
 		},
 	}
 	srv.Start()
+
+	apis, err := api.NewAPIServer(iceptor)
+	if err != nil {
+		panic(fmt.Sprintf("API Server: %v", err))
+	}
+	apis.Start()
+	defer apis.Stop()
 
 	// hmm, we may not actually need to get the original
 	// destination, we could just forward each ip to a unique port
@@ -124,7 +138,8 @@ func main() {
 	})
 	bootstrap.Add(route.Route{
 		Name: "teleproxy",
-		Ip: "1.2.3.4",
+		Ip: "127.254.254.254",
+		Target: apis.Port(),
 		Proto: "tcp",
 	})
 
@@ -141,9 +156,7 @@ func main() {
 	shutdown := bridges(iceptor)
 	defer shutdown()
 
-	ch := make(chan os.Signal)
-	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-	log.Println(<-ch)
+	log.Println(<-signalChan)
 
 	defer dns.Flush()
 }
