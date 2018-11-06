@@ -2,31 +2,31 @@ package interceptor
 
 import (
 	"encoding/json"
+	"github.com/datawire/teleproxy/internal/pkg/nat"
+	rt "github.com/datawire/teleproxy/internal/pkg/route"
 	"log"
 	"net"
 	"strings"
 	"sync"
-	"github.com/datawire/teleproxy/internal/pkg/nat"
-	rt "github.com/datawire/teleproxy/internal/pkg/route"
 )
 
 type Interceptor struct {
-	port string
-	tables map[string]rt.Table
+	port       string
+	tables     map[string]rt.Table
 	translator *nat.Translator
-	domains sync.Map
-	work chan func()
-	done chan empty
+	domains    sync.Map
+	work       chan func()
+	done       chan empty
 }
 
-type empty interface {}
+type empty interface{}
 
 func NewInterceptor(name string) *Interceptor {
 	return &Interceptor{
-		tables: make(map[string]rt.Table),
+		tables:     make(map[string]rt.Table),
 		translator: nat.NewTranslator(name),
-		work: make(chan func()),
-		done: make(chan empty),
+		work:       make(chan func()),
+		done:       make(chan empty),
 	}
 }
 
@@ -36,7 +36,7 @@ func (i *Interceptor) Start() {
 		i.translator.Enable()
 		defer i.translator.Disable()
 		for {
-			action, ok := <- i.work
+			action, ok := <-i.work
 			if ok {
 				action()
 			} else {
@@ -48,7 +48,7 @@ func (i *Interceptor) Start() {
 
 func (i *Interceptor) Stop() {
 	close(i.work)
-	<- i.done
+	<-i.done
 }
 
 func (i *Interceptor) Resolve(name string) *rt.Route {
@@ -92,7 +92,7 @@ func (i *Interceptor) Render(table string) string {
 			result <- string(bytes)
 		}
 	}
-	return <- result
+	return <-result
 }
 
 func (i *Interceptor) Delete(table string) bool {
@@ -117,7 +117,7 @@ func (i *Interceptor) Delete(table string) bool {
 
 		result <- true
 	}
-	return <- result
+	return <-result
 }
 
 func (i *Interceptor) Update(table rt.Table) {

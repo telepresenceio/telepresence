@@ -11,11 +11,11 @@ import (
 
 const (
 	GOOD = "GOOD"
-	BAD = "BAD"
+	BAD  = "BAD"
 )
 
 func checkForwardTCP(t *testing.T, tr *Translator, fromIP string, ports []string, toPort string) {
-	ln, err := net.Listen("tcp", ":" + toPort)
+	ln, err := net.Listen("tcp", ":"+toPort)
 	if err != nil {
 		t.Error(err)
 		return
@@ -25,15 +25,15 @@ func checkForwardTCP(t *testing.T, tr *Translator, fromIP string, ports []string
 	for _, port := range ports {
 		from := fmt.Sprintf("%s:%s", fromIP, port)
 
-		deadline := time.Now().Add(3*time.Second)
+		deadline := time.Now().Add(3 * time.Second)
 		ln.(*net.TCPListener).SetDeadline(deadline)
 
 		result := make(chan bool)
-		defer func() {<-result}()
+		defer func() { <-result }()
 
 		go func() {
 			defer close(result)
-			conn, err := ln.Accept();
+			conn, err := ln.Accept()
 			if err != nil {
 				t.Error(err)
 				return
@@ -120,9 +120,9 @@ var networks = []string{
 	"203.0.113",
 }
 
-var mappings = [] struct {
+var mappings = []struct {
 	from string
-	to string
+	to   string
 }{
 	{"1", "4321"},
 	{"2", "1234"},
@@ -171,7 +171,7 @@ func TestSorted(t *testing.T) {
 	tr.ForwardTCP("192.0.2.2", "4322")
 	tr.ForwardUDP("192.0.2.4", "1234")
 	entries := tr.sorted()
-	if !reflect.DeepEqual(entries, []Entry {
+	if !reflect.DeepEqual(entries, []Entry{
 		{Address{"tcp", "192.0.2.1"}, "4321"},
 		{Address{"tcp", "192.0.2.2"}, "4322"},
 		{Address{"tcp", "192.0.2.3"}, "4323"},

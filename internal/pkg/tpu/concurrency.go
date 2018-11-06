@@ -15,7 +15,7 @@ func NewSemaphore(n int) Semaphore {
 }
 
 func (s Semaphore) Acquire() {
-	<- s
+	<-s
 }
 
 func (s Semaphore) Release() {
@@ -25,13 +25,13 @@ func (s Semaphore) Release() {
 // Latch
 
 type Latch struct {
-	ch chan empty
+	ch    chan empty
 	count int
-} 
+}
 
 func NewLatch(n int) Latch {
-	return Latch {
-		ch: make(chan empty),
+	return Latch{
+		ch:    make(chan empty),
 		count: n,
 	}
 }
@@ -42,7 +42,7 @@ func (l Latch) Notify() {
 
 func (l Latch) Wait() {
 	for l.count > 0 {
-		<- l.ch
+		<-l.ch
 		l.count -= 1
 	}
 }

@@ -55,6 +55,9 @@ test-docker:
 
 test: test-go test-docker
 
+format:
+	gofmt -w -s cmd internal
+
 run: build
 	./teleproxy
 

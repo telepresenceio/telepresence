@@ -3,18 +3,18 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"github.com/datawire/teleproxy/internal/pkg/dns"
+	"github.com/datawire/teleproxy/internal/pkg/interceptor"
+	"github.com/datawire/teleproxy/internal/pkg/route"
 	"log"
 	"net"
 	"net/http"
 	"os"
-	"github.com/datawire/teleproxy/internal/pkg/dns"
-	"github.com/datawire/teleproxy/internal/pkg/interceptor"
-	"github.com/datawire/teleproxy/internal/pkg/route"
 )
 
 type APIServer struct {
 	listener net.Listener
-	server http.Server
+	server   http.Server
 }
 
 func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
@@ -50,12 +50,16 @@ func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
 	handler.HandleFunc("/api/shutdown", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Goodbye!\n"))
 		p, err := os.FindProcess(os.Getpid())
-		if err != nil { panic(err) }
+		if err != nil {
+			panic(err)
+		}
 		p.Signal(os.Interrupt)
 	})
 
 	ln, err := net.Listen("tcp", ":0")
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	return &APIServer{
 		listener: ln,
@@ -67,7 +71,9 @@ func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
 
 func (a *APIServer) Port() string {
 	_, port, err := net.SplitHostPort(a.listener.Addr().String())
-	if err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
 	return port
 }
 

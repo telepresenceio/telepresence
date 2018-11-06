@@ -1,16 +1,16 @@
 package dns
 
 import (
+	"github.com/miekg/dns"
 	"log"
 	"net"
 	"strings"
-	"github.com/miekg/dns"
 )
 
 type Server struct {
 	Listeners []string
-	Fallback string
-	Resolve func(string) string
+	Fallback  string
+	Resolve   func(string) string
 }
 
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
@@ -34,8 +34,8 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			// requested, then mac dns seems to return an
 			// nxdomain
 			msg.Answer = append(msg.Answer, &dns.A{
-				Hdr: dns.RR_Header{ Name: r.Question[0].Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60 },
-				A: net.ParseIP(ip),
+				Hdr: dns.RR_Header{Name: r.Question[0].Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60},
+				A:   net.ParseIP(ip),
 			})
 			w.WriteMsg(&msg)
 			return

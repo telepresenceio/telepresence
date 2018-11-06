@@ -18,13 +18,15 @@ func isYaml(name string) bool {
 	for _, ext := range []string{
 		".yaml",
 	} {
-		if strings.HasSuffix(name, ext) { return true }
+		if strings.HasSuffix(name, ext) {
+			return true
+		}
 	}
 	return false
 }
 
 type ResourceSet struct {
-	w *watcher.Watcher
+	w     *watcher.Watcher
 	kinds map[string]map[string]bool
 }
 
@@ -48,18 +50,24 @@ func (rs *ResourceSet) add(resource string) error {
 
 func (rs *ResourceSet) scan(path string) (err error) {
 	file, err := os.Open(path)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 	d := yaml.NewDecoder(file)
 	for {
 		var uns map[interface{}]interface{}
 		err = d.Decode(&uns)
 		if err != nil {
-			if err == io.EOF { err = nil }
+			if err == io.EOF {
+				err = nil
+			}
 			return
 		}
 		res := watcher.NewResourceFromYaml(uns)
 		err = rs.add(fmt.Sprintf("%s/%s", res.Kind(), res.Name()))
-		if err != nil { return }
+		if err != nil {
+			return
+		}
 	}
 }
 
@@ -88,21 +96,29 @@ func main() {
 
 	if *file != "" {
 		err := filepath.Walk(*file, func(path string, info os.FileInfo, err error) error {
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 
 			if !info.IsDir() && isYaml(path) {
 				err := rset.scan(path)
-				if err != nil { log.Fatal(err) }
+				if err != nil {
+					log.Fatal(err)
+				}
 			}
 
 			return nil
 		})
-		if err != nil { log.Fatal(err) }
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	for _, resource := range flag.Args() {
 		err := rset.add(resource)
-		if err != nil { log.Fatal(err) }
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	listener := func(w *watcher.Watcher) {
@@ -123,11 +139,13 @@ func main() {
 
 	for k := range rset.kinds {
 		err := w.Watch(k, listener)
-		if err != nil { log.Fatal(err) }
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	go func() {
-		time.Sleep(time.Duration(*timeout)*time.Second)
+		time.Sleep(time.Duration(*timeout) * time.Second)
 		w.Stop()
 	}()
 

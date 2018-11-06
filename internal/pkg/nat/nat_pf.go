@@ -4,12 +4,12 @@ package nat
 
 import (
 	"fmt"
+	ppf "github.com/datawire/pf"
+	"github.com/google/shlex"
 	"log"
 	"net"
 	"os/exec"
 	"strings"
-	ppf "github.com/datawire/pf"
-	"github.com/google/shlex"
 )
 
 type Translator struct {
@@ -19,7 +19,9 @@ type Translator struct {
 
 func pf(argline, stdin string) (err error) {
 	args, err := shlex.Split(argline)
-	if err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
 	args = append([]string{}, args...)
 	cmd := exec.Command("pfctl", args...)
 	cmd.Stdin = strings.NewReader(stdin)
@@ -37,7 +39,9 @@ func pf(argline, stdin string) (err error) {
 }
 
 func (t *Translator) rules() string {
-	if t.dev == nil { return "" }
+	if t.dev == nil {
+		return ""
+	}
 
 	entries := t.sorted()
 
@@ -63,22 +67,28 @@ var actions = []ppf.Action{ppf.ActionPass, ppf.ActionRDR}
 func (t *Translator) Enable() {
 	var err error
 	t.dev, err = ppf.Open()
-	if err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
 
 	for _, action := range actions {
 		var rule ppf.Rule
 		err = rule.SetAnchorCall(t.Name)
-		if err != nil { panic(err) }
+		if err != nil {
+			panic(err)
+		}
 		rule.SetAction(action)
 		rule.SetQuick(true)
 		err = t.dev.PrependRule(rule)
-		if err != nil { panic(err) }
+		if err != nil {
+			panic(err)
+		}
 	}
 
-	pf("-a " + t.Name + " -F all", "")
+	pf("-a "+t.Name+" -F all", "")
 
 	pf("-f /dev/stdin", "pass on lo0")
-	pf("-a " + t.Name + " -f /dev/stdin", t.rules())
+	pf("-a "+t.Name+" -f /dev/stdin", t.rules())
 
 	t.dev.Start()
 }
@@ -88,15 +98,20 @@ func (t *Translator) Disable() {
 		t.dev.Stop()
 
 		for _, action := range actions {
-			OUTER: for {
+		OUTER:
+			for {
 				rules, err := t.dev.Rules(action)
-				if err != nil { panic(err) }
+				if err != nil {
+					panic(err)
+				}
 
 				for _, rule := range rules {
 					if rule.AnchorCall() == t.Name {
 						log.Printf("Removing rule: %v\n", rule)
 						err = t.dev.RemoveRule(rule)
-						if err != nil { panic(err) }
+						if err != nil {
+							panic(err)
+						}
 						continue OUTER
 					}
 				}
@@ -105,7 +120,7 @@ func (t *Translator) Disable() {
 		}
 	}
 
-	pf("-a " + t.Name + " -F all", "")
+	pf("-a "+t.Name+" -F all", "")
 }
 
 func (t *Translator) ForwardTCP(ip, toPort string) {
@@ -119,17 +134,17 @@ func (t *Translator) ForwardUDP(ip, toPort string) {
 func (t *Translator) forward(protocol, ip, toPort string) {
 	t.clear(protocol, ip)
 	t.Mappings[Address{protocol, ip}] = toPort
-	pf("-a " + t.Name + " -f /dev/stdin", t.rules())
+	pf("-a "+t.Name+" -f /dev/stdin", t.rules())
 }
 
 func (t *Translator) ClearTCP(ip string) {
 	t.clear("tcp", ip)
-	pf("-a " + t.Name + " -f /dev/stdin", t.rules())
+	pf("-a "+t.Name+" -f /dev/stdin", t.rules())
 }
 
 func (t *Translator) ClearUDP(ip string) {
 	t.clear("udp", ip)
-	pf("-a " + t.Name + " -f /dev/stdin", t.rules())
+	pf("-a "+t.Name+" -f /dev/stdin", t.rules())
 }
 
 func (t *Translator) clear(protocol, ip string) {
