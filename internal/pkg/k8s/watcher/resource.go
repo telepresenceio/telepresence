@@ -6,7 +6,7 @@ import (
 	ms "github.com/mitchellh/mapstructure"
 )
 
-var READY = map[string]func(Resource) bool {
+var READY = map[string]func(Resource) bool{
 	"": func(Resource) bool { return false },
 	"Deployment": func(r Resource) bool {
 		return r.Status().getInt64("readyReplicas") > 0
@@ -43,7 +43,7 @@ func (m Map) getMaps(name string) []map[string]interface{} {
 	if ok {
 		lst := v.([]interface{})
 		result = make([]map[string]interface{}, len(lst))
-		for idx, obj := range(lst) {
+		for idx, obj := range lst {
 			result[idx] = obj.(map[string]interface{})
 		}
 	}
@@ -102,7 +102,9 @@ func (r Resource) Spec() Map {
 }
 
 func (r Resource) Ready() bool {
-	if r.Empty() { return false }
+	if r.Empty() {
+		return false
+	}
 	kind := r.Kind()
 	f, ok := READY[kind]
 	if ok {
@@ -121,7 +123,6 @@ func (r Resource) Metadata() Metadata {
 
 func (m Metadata) Name() string { return Map(m).getString("name") }
 func (r Resource) Name() string { return r.Metadata().Name() }
-
 
 func (m Metadata) Namespace() string { return Map(m).getString("namespace") }
 func (r Resource) Namespace() string { return r.Metadata().Namespace() }

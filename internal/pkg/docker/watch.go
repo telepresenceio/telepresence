@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"io"
 	"log"
-	"strings"
 	"os/exec"
+	"strings"
 
 	"github.com/datawire/teleproxy/internal/pkg/tpu"
 )
@@ -14,26 +14,27 @@ type empty struct{}
 
 type Watcher struct {
 	Containers map[string]string
-	stop chan empty
-	done chan empty
+	stop       chan empty
+	done       chan empty
 }
 
 func NewWatcher() *Watcher {
 	return &Watcher{
 		Containers: make(map[string]string),
-		stop: make(chan empty),
-		done: make(chan empty),
+		stop:       make(chan empty),
+		done:       make(chan empty),
 	}
 }
 
 func (w *Watcher) Start(listener func(w *Watcher)) {
 	go func() {
 		wakeup := waiter()
-		OUTER: for {
+	OUTER:
+		for {
 			select {
-			case <- w.stop:
+			case <-w.stop:
 				break OUTER
-			case <- wakeup:
+			case <-wakeup:
 				containers, err := containers()
 				if err == nil {
 					updated := false
@@ -62,12 +63,14 @@ func (w *Watcher) Start(listener func(w *Watcher)) {
 
 func (w *Watcher) Stop() {
 	close(w.stop)
-	<- w.done
+	<-w.done
 }
 
 func containers() (result map[string]string, err error) {
 	lines, err := tpu.Shell("docker inspect -f '{{.Name}} {{.NetworkSettings.IPAddress}}'  $(docker ps -q)")
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	result = make(map[string]string)
 	for _, line := range strings.Split(lines, "\n") {

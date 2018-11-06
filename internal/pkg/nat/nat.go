@@ -7,18 +7,18 @@ import (
 )
 
 type commonTranslator struct {
-	Name string
+	Name     string
 	Mappings map[Address]string
 }
 
 type Address struct {
 	Proto string
-	Ip string
+	Ip    string
 }
 
 type Entry struct {
 	Destination Address
-	Port string
+	Port        string
 }
 
 func (e *Entry) String() string {
@@ -34,7 +34,7 @@ func (t *Translator) sorted() []Entry {
 		index += 1
 	}
 
-	sort.Slice(entries, func (i, j int) bool {
+	sort.Slice(entries, func(i, j int) bool {
 		return strings.Compare(entries[i].String(), entries[j].String()) < 0
 	})
 

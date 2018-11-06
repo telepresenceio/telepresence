@@ -16,9 +16,11 @@ func TestSmoke(t *testing.T) {
 	}()
 	defer func() {
 		p, err := os.FindProcess(os.Getpid())
-		if err != nil { panic(err) }
+		if err != nil {
+			panic(err)
+		}
 		p.Signal(os.Interrupt)
-		<- ch
+		<-ch
 	}()
 
 	start := time.Now()

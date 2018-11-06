@@ -38,11 +38,11 @@ func (lw listWatchAdapter) Watch(options v1.ListOptions) (watch.Interface, error
 }
 
 type Watcher struct {
-	config *rest.Config
-	resources []*v1.APIResourceList
-	stores map[string]cache.Store
-	stop chan empty
-	stopChans []chan struct{}
+	config       *rest.Config
+	resources    []*v1.APIResourceList
+	stores       map[string]cache.Store
+	stop         chan empty
+	stopChans    []chan struct{}
 	stoppedChans []chan empty
 }
 
@@ -57,33 +57,43 @@ func NewWatcher(kubeconfig string) *Watcher {
 	} else {
 		if kubeconfig == "" {
 			current, err := user.Current()
-			if err != nil { log.Fatal(err) }
+			if err != nil {
+				log.Fatal(err)
+			}
 			home := current.HomeDir
 			kubeconfig = filepath.Join(home, ".kube/config")
 		}
 		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-		if err != nil { log.Fatal(err) }
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	disco, err := discovery.NewDiscoveryClientForConfig(config)
-	if err != nil { log.Fatal(err) }
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	resources, err := disco.ServerResources()
-	if err != nil { log.Fatal(err) }
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	w := &Watcher {
-		config: config,
+	w := &Watcher{
+		config:    config,
 		resources: resources,
-		stores: make(map[string]cache.Store),
-		stop: make(chan empty),
+		stores:    make(map[string]cache.Store),
+		stop:      make(chan empty),
 	}
 
 	go func() {
-		<- w.stop
+		<-w.stop
 		for _, c := range w.stopChans {
 			close(c)
 		}
-		for { <- w.stop }
+		for {
+			<-w.stop
+		}
 	}()
 
 	return w
@@ -96,7 +106,7 @@ func (w *Watcher) resolve(resource string) (string, string, v1.APIResource) {
 	}
 	for _, rl := range w.resources {
 		for _, r := range rl.APIResources {
-			candidates := []string {
+			candidates := []string{
 				r.Name,
 				r.Kind,
 				r.SingularName,
@@ -216,6 +226,6 @@ func (w *Watcher) Stop() {
 
 func (w *Watcher) Wait() {
 	for _, c := range w.stoppedChans {
-		<- c
+		<-c
 	}
 }

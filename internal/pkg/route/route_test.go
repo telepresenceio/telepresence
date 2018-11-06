@@ -7,10 +7,10 @@ import (
 )
 
 var tables = []struct {
-	in string
+	in  string
 	out *Table
 	err string
-} {
+}{
 	{"", nil, "unexpected end of JSON input"},
 	{`
 {
@@ -22,7 +22,7 @@ var tables = []struct {
 `,
 		&Table{
 			Name: "table",
-			Routes: []Route {
+			Routes: []Route{
 				{Name: "foo", Ip: "bar", Proto: "baz"},
 			},
 		}, ""},

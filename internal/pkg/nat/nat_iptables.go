@@ -4,11 +4,11 @@ package nat
 
 import (
 	"fmt"
+	"github.com/google/shlex"
 	"log"
 	"net"
 	"os/exec"
 	"syscall"
-	"github.com/google/shlex"
 )
 
 type Translator struct {
@@ -17,7 +17,9 @@ type Translator struct {
 
 func ipt(argline string) {
 	args, err := shlex.Split(argline)
-	if err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
 	args = append([]string{"-t", "nat"}, args...)
 	cmd := exec.Command("iptables", args...)
 	log.Printf("iptables -t nat %s\n", argline)
@@ -86,7 +88,7 @@ const (
 	IP6T_SO_ORIGINAL_DST = 80
 )
 
-// get the original destination for the socket when redirect by linux iptables 
+// get the original destination for the socket when redirect by linux iptables
 // refer to https://raw.githubusercontent.com/missdeer/avege/master/src/inbound/redir/redir_iptables.go
 //
 func (t *Translator) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host string, err error) {
@@ -100,12 +102,16 @@ func (t *Translator) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host str
 	//addr, err := syscall.GetsockoptIPv6Mreq(int(fd), syscall.IPPROTO_IPV6, IP6T_SO_ORIGINAL_DST)
 	// IPv4 address starts at the 5th byte, 4 bytes long (206 190 36 45)
 	rawConn, err := conn.SyscallConn()
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	err = rawConn.Control(func(fd uintptr) {
 		addr, err = syscall.GetsockoptIPv6Mreq(int(fd), syscall.IPPROTO_IP, SO_ORIGINAL_DST)
 	})
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	// \attention: IPv4 only!!!
 	// address type, 1 - IPv4, 4 - IPv6, 3 - hostname, only IPv4 is supported now

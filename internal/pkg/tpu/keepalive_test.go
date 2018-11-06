@@ -11,10 +11,12 @@ import (
 func TestKeepalive(t *testing.T) {
 	os.Remove("/tmp/lines")
 	k := Keepalive(0, "", "sh", "-c", "echo hi >> /tmp/lines")
-	time.Sleep(3500*time.Millisecond)
+	time.Sleep(3500 * time.Millisecond)
 	k.Shutdown()
 	dat, err := ioutil.ReadFile("/tmp/lines")
-	if err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
 	lines := bytes.Count(dat, []byte("\n"))
 	if lines != 4 {
 		t.Errorf("incorrect number of lines: %v", 4)

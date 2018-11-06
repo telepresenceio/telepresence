@@ -10,11 +10,13 @@ import (
 
 type searchDomains struct {
 	Interface string
-	Domains string
+	Domains   string
 }
 
 func OverrideSearchDomains(domains string) func() {
-	if runtime.GOOS != "darwin" { return func() {} }
+	if runtime.GOOS != "darwin" {
+		return func() {}
+	}
 
 	ifaces, _ := getIfaces()
 	previous := []searchDomains{}
@@ -36,7 +38,9 @@ func OverrideSearchDomains(domains string) func() {
 
 func getIfaces() (ifaces []string, err error) {
 	lines, err := tpu.Shell("networksetup -listallnetworkservices | fgrep -v '*'")
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 	for _, line := range strings.Split(lines, "\n") {
 		line = strings.TrimSpace(line)
 		if len(line) > 0 {

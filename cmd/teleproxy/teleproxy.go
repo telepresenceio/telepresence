@@ -9,8 +9,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/user"
 	"os/signal"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -36,7 +36,7 @@ func dnsListeners(port string) (listeners []string) {
 	// properly for udp, otherwise you get an "unexpected source
 	// blah thingy" because the dns reply packets look like they
 	// are coming from the wrong place
-	listeners = append(listeners, "127.0.0.1:" + port)
+	listeners = append(listeners, "127.0.0.1:"+port)
 
 	if runtime.GOOS == "linux" {
 		// This is the default docker bridge. We should
@@ -47,16 +47,16 @@ func dnsListeners(port string) (listeners []string) {
 		// originates from, which in the case of containers is
 		// the docker bridge. Without this dns won't work from
 		// inside containers.
-		listeners = append(listeners, "172.17.0.1:" + port)
+		listeners = append(listeners, "172.17.0.1:"+port)
 	}
 
 	return
 }
 
 const (
-	DEFAULT = ""
+	DEFAULT   = ""
 	INTERCEPT = "intercept"
-	BRIDGE = "bridge"
+	BRIDGE    = "bridge"
 )
 
 func main() {
@@ -91,7 +91,9 @@ func main() {
 func intercept() func() {
 	if *dnsIP == "" {
 		dat, err := ioutil.ReadFile("/etc/resolv.conf")
-		if err != nil { panic(err) }
+		if err != nil {
+			panic(err)
+		}
 		for _, line := range strings.Split(string(dat), "\n") {
 			if strings.Contains(line, "nameserver") {
 				fields := strings.Fields(line)
@@ -127,7 +129,7 @@ func intercept() func() {
 
 	srv := dns.Server{
 		Listeners: dnsListeners("1233"),
-		Fallback: *fallbackIP + ":53",
+		Fallback:  *fallbackIP + ":53",
 		Resolve: func(domain string) string {
 			route := iceptor.Resolve(domain)
 			if route != nil {
@@ -148,15 +150,15 @@ func intercept() func() {
 
 	bootstrap := route.Table{Name: "bootstrap"}
 	bootstrap.Add(route.Route{
-		Ip: *dnsIP,
+		Ip:     *dnsIP,
 		Target: "1233",
-		Proto: "udp",
+		Proto:  "udp",
 	})
 	bootstrap.Add(route.Route{
-		Name: "teleproxy",
-		Ip: "127.254.254.254",
+		Name:   "teleproxy",
+		Ip:     "127.254.254.254",
 		Target: apis.Port(),
-		Proto: "tcp",
+		Proto:  "tcp",
 	})
 
 	apis.Start()
@@ -184,7 +186,9 @@ func bridges() func() {
 
 	if *kubeconfig == "" {
 		current, err := user.Current()
-		if err != nil { panic(err) }
+		if err != nil {
+			panic(err)
+		}
 		home := current.HomeDir
 		*kubeconfig = filepath.Join(home, ".kube/config")
 	}
@@ -197,9 +201,9 @@ func bridges() func() {
 			ip, ok := svc.Spec()["clusterIP"]
 			if ok {
 				table.Add(route.Route{
-					Name: svc.Name(),
-					Ip: ip.(string),
-					Proto: "tcp",
+					Name:   svc.Name(),
+					Ip:     ip.(string),
+					Proto:  "tcp",
 					Target: "1234",
 				})
 			}
@@ -233,7 +237,9 @@ func post(tables ...route.Table) {
 	jnames := strings.Join(names, ", ")
 
 	body, err := json.Marshal(tables)
-	if err != nil { panic(err) }
+	if err != nil {
+		panic(err)
+	}
 	resp, err := http.Post("http://teleproxy/api/tables/", "application/json", bytes.NewReader(body))
 	if err != nil {
 		log.Printf("error posting update to %s: %v", jnames, err)

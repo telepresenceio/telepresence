@@ -12,22 +12,30 @@ import (
 )
 
 func claims(method, name, body string) Response {
-	req, err := http.NewRequest(method, "https://next.kubernaut.io/claims" + name, strings.NewReader(body))
-	if err != nil { log.Fatal(err) }
-	req.Header.Add("Authorization", "Bearer " + *token)
+	req, err := http.NewRequest(method, "https://next.kubernaut.io/claims"+name, strings.NewReader(body))
+	if err != nil {
+		log.Fatal(err)
+	}
+	req.Header.Add("Authorization", "Bearer "+*token)
 	req.Header.Add("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
-	if err != nil { log.Fatal(err) }
-	if resp.StatusCode / 100 != 2 {
+	if err != nil {
+		log.Fatal(err)
+	}
+	if resp.StatusCode/100 != 2 {
 		log.Fatal(resp)
 	}
 	respbody, err := ioutil.ReadAll(resp.Body)
-	if err != nil { log.Fatal(err) }
+	if err != nil {
+		log.Fatal(err)
+	}
 	var response Response
 	if len(respbody) > 0 {
 		err = json.Unmarshal(respbody, &response)
-		if err != nil { log.Fatal(err) }
+		if err != nil {
+			log.Fatal(err)
+		}
 		response.Raw = string(respbody)
 	}
 
@@ -36,11 +44,11 @@ func claims(method, name, body string) Response {
 
 type Response struct {
 	Claim struct {
-		Name string
+		Name       string
 		Kubeconfig string
 	}
 	Claims []struct {
-		Name string
+		Name      string
 		ClusterId string
 	}
 	Raw string
@@ -72,11 +80,13 @@ func main() {
 `, *claim))
 
 		err := ioutil.WriteFile(*output, []byte(response.Claim.Kubeconfig), 0644)
-		if err != nil { log.Fatal(err) }
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	if *release != "" {
-		claims("DELETE", "/" + *release,"")
+		claims("DELETE", "/"+*release, "")
 	}
 
 	if *list {

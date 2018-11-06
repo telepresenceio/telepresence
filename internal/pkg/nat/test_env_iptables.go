@@ -4,9 +4,9 @@ package nat
 
 // we don't yet have any iptables config cases to test against
 
-type env struct {}
+type env struct{}
 
-var environments = []env {
+var environments = []env{
 	{},
 }
 
