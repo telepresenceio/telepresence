@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"os/user"
 	"os/signal"
@@ -23,6 +26,7 @@ import (
 	"github.com/datawire/teleproxy/internal/pkg/tpu"
 )
 
+var mode = flag.String("mode", "", "mode of operation")
 var kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 var dnsIP = flag.String("dns", "", "dns ip address")
 var fallbackIP = flag.String("fallback", "", "dns fallback")
@@ -49,20 +53,42 @@ func dnsListeners(port string) (listeners []string) {
 	return
 }
 
+const (
+	DEFAULT = ""
+	INTERCEPT = "intercept"
+	BRIDGE = "bridge"
+)
+
 func main() {
 	flag.Parse()
 
-	if *kubeconfig == "" {
-		*kubeconfig = os.Getenv("KUBECONFIG")
+	switch *mode {
+	case "":
+	case INTERCEPT:
+	case BRIDGE:
+		break
+	default:
+		log.Fatalf("unrecognized mode: %v", *mode)
 	}
 
-	if *kubeconfig == "" {
-		current, err := user.Current()
-		if err != nil { panic(err) }
-		home := current.HomeDir
-		*kubeconfig = filepath.Join(home, ".kube/config")
+	// do this up front so we don't miss out on cleanup if someone
+	// Control-C's just after starting us
+	signalChan := make(chan os.Signal)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+
+	if *mode == DEFAULT || *mode == INTERCEPT {
+		shutdown := intercept()
+		defer shutdown()
+	}
+	if *mode == DEFAULT || *mode == BRIDGE {
+		shutdown := bridges()
+		defer shutdown()
 	}
 
+	log.Println(<-signalChan)
+}
+
+func intercept() func() {
 	if *dnsIP == "" {
 		dat, err := ioutil.ReadFile("/etc/resolv.conf")
 		if err != nil { panic(err) }
@@ -92,12 +118,12 @@ func main() {
 		panic("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
 	}
 
-	// do this up front so we don't miss out on cleanup if someone
-	// Control-C's just after starting us
-	signalChan := make(chan os.Signal)
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
-
 	iceptor := interceptor.NewInterceptor("teleproxy")
+
+	apis, err := api.NewAPIServer(iceptor)
+	if err != nil {
+		panic(fmt.Sprintf("API Server: %v", err))
+	}
 
 	srv := dns.Server{
 		Listeners: dnsListeners("1233"),
@@ -111,24 +137,14 @@ func main() {
 			}
 		},
 	}
-	srv.Start()
-
-	apis, err := api.NewAPIServer(iceptor)
-	if err != nil {
-		panic(fmt.Sprintf("API Server: %v", err))
-	}
-	apis.Start()
-	defer apis.Stop()
 
 	// hmm, we may not actually need to get the original
 	// destination, we could just forward each ip to a unique port
 	// and either listen on that port or run port-forward
 	proxy, err := proxy.NewProxy(":1234", iceptor.Destination)
 	if err != nil {
-		log.Println(err)
-		return
+		panic(err)
 	}
-	proxy.Start(10000)
 
 	bootstrap := route.Table{Name: "bootstrap"}
 	bootstrap.Add(route.Route{
@@ -143,22 +159,23 @@ func main() {
 		Proto: "tcp",
 	})
 
+	apis.Start()
+	srv.Start()
+	proxy.Start(10000)
 	restore := dns.OverrideSearchDomains(".")
-	defer restore()
 
 	iceptor.Start()
-	defer iceptor.Stop()
 	iceptor.Update(bootstrap)
 
 	disconnect := connect()
-	defer disconnect()
 
-	shutdown := bridges(iceptor)
-	defer shutdown()
-
-	log.Println(<-signalChan)
-
-	defer dns.Flush()
+	return func() {
+		iceptor.Stop()
+		apis.Stop()
+		disconnect()
+		restore()
+		dns.Flush()
+	}
 }
 
 const TELEPROXY_POD = `
@@ -194,7 +211,35 @@ func connect() func() {
 	}
 }
 
-func bridges(iceptor *interceptor.Interceptor) func() {
+func post(tables ...route.Table) {
+	names := make([]string, len(tables))
+	for i, t := range tables {
+		names[i] = t.Name
+	}
+	jnames := strings.Join(names, ", ")
+
+	body, err := json.Marshal(tables)
+	if err != nil { panic(err) }
+	resp, err := http.Post("http://teleproxy/api/tables/", "application/json", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("error posting update to %s: %v", jnames, err)
+	} else {
+		log.Printf("posted update to %s: %v", jnames, resp.StatusCode)
+	}
+}
+
+func bridges() func() {
+	if *kubeconfig == "" {
+		*kubeconfig = os.Getenv("KUBECONFIG")
+	}
+
+	if *kubeconfig == "" {
+		current, err := user.Current()
+		if err != nil { panic(err) }
+		home := current.HomeDir
+		*kubeconfig = filepath.Join(home, ".kube/config")
+	}
+
 	// setup kubernetes bridge
 	w := watcher.NewWatcher(*kubeconfig)
 	w.Watch("services", func(w *watcher.Watcher) {
@@ -210,8 +255,7 @@ func bridges(iceptor *interceptor.Interceptor) func() {
 				})
 			}
 		}
-		iceptor.Update(table)
-		dns.Flush()
+		post(table)
 	})
 
 	// setup docker bridge
@@ -221,13 +265,12 @@ func bridges(iceptor *interceptor.Interceptor) func() {
 		for name, ip := range w.Containers {
 			table.Add(route.Route{Name: name, Ip: ip, Proto: "tcp"})
 		}
-		// this sometimes panics with a send on a closed channel
-		iceptor.Update(table)
-		dns.Flush()
+		post(table)
 	})
 
 	return func() {
 		dw.Stop()
 		w.Stop()
+		post(route.Table{Name: "kubernetes"}, route.Table{Name: "docker"})
 	}
 }
