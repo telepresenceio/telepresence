@@ -103,10 +103,11 @@ func waiter() chan empty {
 					log.Print(st)
 				}
 			}
-			if err == io.EOF {
+			if err != nil {
+				if err != io.EOF {
+					log.Println(err)
+				}
 				events = nil
-			} else if err != nil {
-				log.Println(err)
 			}
 		}
 	}()
