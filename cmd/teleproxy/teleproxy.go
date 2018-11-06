@@ -10,11 +10,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"os/user"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
+
+	"github.com/datawire/teleproxy/internal/pkg/k8s"
 
 	"github.com/datawire/teleproxy/internal/pkg/api"
 	"github.com/datawire/teleproxy/internal/pkg/dns"
@@ -25,11 +25,6 @@ import (
 	"github.com/datawire/teleproxy/internal/pkg/route"
 	"github.com/datawire/teleproxy/internal/pkg/tpu"
 )
-
-var mode = flag.String("mode", "", "mode of operation")
-var kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-var dnsIP = flag.String("dns", "", "dns ip address")
-var fallbackIP = flag.String("fallback", "", "dns fallback")
 
 func dnsListeners(port string) (listeners []string) {
 	// turns out you need to listen on localhost for nat to work
@@ -60,6 +55,13 @@ const (
 )
 
 func main() {
+	var mode = flag.String("mode", "", "mode of operation")
+	var kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	var context = flag.String("context", "", "context to use (default: the current context)")
+	var namespace = flag.String("namespace", "", "namespace to use (default: the current namespace for the context")
+	var dnsIP = flag.String("dns", "", "dns ip address")
+	var fallbackIP = flag.String("fallback", "", "dns fallback")
+
 	flag.Parse()
 
 	switch *mode {
@@ -77,18 +79,22 @@ func main() {
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
 	if *mode == DEFAULT || *mode == INTERCEPT {
-		shutdown := intercept()
+		shutdown := intercept(dnsIP, fallbackIP)
 		defer shutdown()
 	}
 	if *mode == DEFAULT || *mode == BRIDGE {
-		shutdown := bridges()
+		kubeinfo, err := k8s.NewKubeInfo(*kubeconfig, *context, *namespace)
+		if err != nil {
+			log.Fatalln("KubeInfo failed:", err)
+		}
+		shutdown := bridges(kubeinfo)
 		defer shutdown()
 	}
 
 	log.Println(<-signalChan)
 }
 
-func intercept() func() {
+func intercept(dnsIP, fallbackIP *string) func() {
 	if *dnsIP == "" {
 		dat, err := ioutil.ReadFile("/etc/resolv.conf")
 		if err != nil {
@@ -177,24 +183,11 @@ func intercept() func() {
 	}
 }
 
-func bridges() func() {
-	disconnect := connect()
-
-	if *kubeconfig == "" {
-		*kubeconfig = os.Getenv("KUBECONFIG")
-	}
-
-	if *kubeconfig == "" {
-		current, err := user.Current()
-		if err != nil {
-			panic(err)
-		}
-		home := current.HomeDir
-		*kubeconfig = filepath.Join(home, ".kube/config")
-	}
+func bridges(kubeinfo *k8s.KubeInfo) func() {
+	disconnect := connect(kubeinfo)
 
 	// setup kubernetes bridge
-	w := watcher.NewWatcher(*kubeconfig)
+	w := watcher.NewWatcher(kubeinfo)
 	w.Watch("services", func(w *watcher.Watcher) {
 		table := route.Table{Name: "kubernetes"}
 		for _, svc := range w.List("services") {
@@ -265,12 +258,12 @@ spec:
       containerPort: 8022
 `
 
-func connect() func() {
+func connect(kubeinfo *k8s.KubeInfo) func() {
 	// setup remote teleproxy pod
-	apply := tpu.Keepalive(1, TELEPROXY_POD, "kubectl", "--kubeconfig", *kubeconfig, "apply", "-f", "-")
+	apply := tpu.Keepalive(1, TELEPROXY_POD, "kubectl", kubeinfo.GetKubectl("apply", "-f", "-")...)
 	apply.Wait()
 
-	pf := tpu.Keepalive(0, "", "kubectl", "--kubeconfig", *kubeconfig, "port-forward", "pod/teleproxy", "8022")
+	pf := tpu.Keepalive(0, "", "kubectl", kubeinfo.GetKubectl("port-forward", "pod/teleproxy", "8022")...)
 	// XXX: probably need some kind of keepalive check for ssh, first
 	// curl after wakeup seems to trigger detection of death
 	ssh := tpu.Keepalive(0, "", "ssh", "-D", "localhost:1080", "-C", "-N", "-oConnectTimeout=5", "-oExitOnForwardFailure=yes",
