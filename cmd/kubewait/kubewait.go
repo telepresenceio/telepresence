@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/datawire/teleproxy/internal/pkg/k8s"
 	"github.com/datawire/teleproxy/internal/pkg/k8s/watcher"
 	"gopkg.in/yaml.v2"
 )
@@ -91,7 +92,11 @@ var file = flag.String("f", "", "path to yaml file")
 func main() {
 	flag.Parse()
 
-	w := watcher.NewWatcher(os.Getenv("KUBECONFIG"))
+	kubeinfo, err := k8s.NewKubeInfo("", "", "") // Empty file/ctx/ns for defaults
+	if err != nil {
+		log.Fatalln("KubeInfo failed:", err)
+	}
+	w := watcher.NewWatcher(kubeinfo)
 	rset := ResourceSet{w, make(map[string]map[string]bool)}
 
 	if *file != "" {
