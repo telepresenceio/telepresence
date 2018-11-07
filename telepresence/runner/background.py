@@ -67,6 +67,7 @@ class BackgroundThread(Background):
     def join(self, timeout: Optional[float] = None) -> None:
         self.thread.join(timeout)
         if self.thread.is_alive():
+            assert timeout is not None
             raise TimeoutExpired(["Thread", self.name], timeout)
 
     def kill(self) -> None:
