@@ -206,7 +206,7 @@ class LocalResolver(object):
         self,
         query: dns.Query,
         timeout=None,  # FIXME: What type? Usage seems inconsistent.
-        real_name: Optional[bytes]=None
+        real_name: Optional[bytes] = None
     ) -> DNSQueryResult:
         # Preserve real name asked in query, in case we need to truncate suffix
         # during lookup:
