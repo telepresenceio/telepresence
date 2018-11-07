@@ -6,6 +6,7 @@ import (
 	"log"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/datawire/teleproxy/internal/pkg/tpu"
 )
@@ -67,9 +68,19 @@ func (w *Watcher) Stop() {
 }
 
 func containers() (result map[string]string, err error) {
-	lines, err := tpu.Shell("docker inspect -f '{{.Name}} {{.NetworkSettings.IPAddress}}'  $(docker ps -q)")
+	ids, err := tpu.ShellQ("docker ps -q")
 	if err != nil {
 		return
+	}
+
+	ids = strings.Join(strings.Fields(ids), " ")
+
+	lines := ""
+	if ids != "" {
+		lines, err = tpu.Shell("docker inspect -f '{{.Name}} {{.NetworkSettings.IPAddress}}' " + ids)
+		if err != nil {
+			return
+		}
 	}
 
 	result = make(map[string]string)
@@ -87,15 +98,38 @@ func containers() (result map[string]string, err error) {
 	return
 }
 
+func checkDocker(warn bool) bool {
+	output, err := tpu.ShellQ("docker version")
+	if err != nil {
+		if warn {
+			log.Print(output)
+			log.Println(err)
+			log.Println("docker is required for docker bridge functionality")
+		}
+		return false
+	}
+	return true
+}
+
 func waiter() chan empty {
 	result := make(chan empty)
 	go func() {
+		var pipe io.ReadCloser
 		var events *bufio.Reader
 
 		for {
+			for count := 0; true; count += 1 {
+				if checkDocker((count % 60) == 0) {
+					break
+				} else {
+					time.Sleep(1 * time.Second)
+				}
+			}
+
 			result <- empty{}
-			if events == nil {
-				events = containerEvents()
+			if pipe == nil {
+				pipe = containerEvents()
+				events = bufio.NewReader(pipe)
 			}
 
 			st, err := events.ReadString('\n')
@@ -110,18 +144,20 @@ func waiter() chan empty {
 				if err != io.EOF {
 					log.Println(err)
 				}
-				events = nil
+				pipe.Close()
+				pipe = nil
+				time.Sleep(1 * time.Second)
 			}
 		}
 	}()
 	return result
 }
 
-func containerEvents() *bufio.Reader {
+func containerEvents() io.ReadCloser {
 	command := "docker events --filter 'type=container' --filter 'event=start' --filter 'event=die'"
 	log.Println(command)
 	cmd := exec.Command("sh", "-c", command)
-	ubevents, err := cmd.StdoutPipe()
+	events, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Println(err)
 		return nil
@@ -133,5 +169,5 @@ func containerEvents() *bufio.Reader {
 		return nil
 	}
 
-	return bufio.NewReader(ubevents)
+	return events
 }
