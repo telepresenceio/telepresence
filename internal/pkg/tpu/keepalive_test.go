@@ -10,9 +10,11 @@ import (
 
 func TestKeepalive(t *testing.T) {
 	os.Remove("/tmp/lines")
-	k := Keepalive(0, "", "sh", "-c", "echo hi >> /tmp/lines")
+	k := NewKeeper("TST", "echo hi >> /tmp/lines")
+	k.Start()
 	time.Sleep(3500 * time.Millisecond)
-	k.Shutdown()
+	k.Stop()
+	k.Wait()
 	dat, err := ioutil.ReadFile("/tmp/lines")
 	if err != nil {
 		panic(err)

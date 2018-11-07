@@ -1,30 +1,33 @@
 package tpu
 
 import (
-	"log"
 	"os/exec"
+	"strings"
 )
 
 func Shell(command string) (result string, err error) {
-	return shell(command, false)
+	return ShellLog(command, func(string) {})
 }
 
-func ShellQ(command string) (result string, err error) {
-	return shell(command, true)
-}
-
-func shell(command string, quiet bool) (string, error) {
-	if !quiet {
-		log.Println(command)
-	}
+func ShellLog(command string, logln func(string)) (string, error) {
+	logln(command)
 	cmd := exec.Command("sh", "-c", command)
 	out, err := cmd.CombinedOutput()
 	str := string(out)
-	if !quiet {
-		log.Print(str)
-		if err != nil {
-			log.Println(err)
+	lines := strings.Split(str, "\n")
+	for idx, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			logln(line)
+		} else if idx != len(lines)-1 {
+			logln(line)
 		}
 	}
+	if err != nil {
+		logln(err.Error())
+	}
 	return str, err
+}
+
+func ShellLogf(command string, logf func(string, ...interface{})) (string, error) {
+	return ShellLog(command, func(line string) { logf("%s", line) })
 }

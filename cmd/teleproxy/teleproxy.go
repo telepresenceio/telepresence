@@ -71,7 +71,7 @@ func main() {
 	case BRIDGE:
 		break
 	default:
-		log.Fatalf("unrecognized mode: %v", *mode)
+		log.Fatalf("TPY: unrecognized mode: %v", *mode)
 	}
 
 	// do this up front so we don't miss out on cleanup if someone
@@ -88,7 +88,7 @@ func main() {
 		defer shutdown()
 	}
 
-	log.Println(<-signalChan)
+	log.Printf("TPY: %v", <-signalChan)
 }
 
 func kubeDie(err error) {
@@ -99,7 +99,7 @@ func kubeDie(err error) {
 }
 
 func checkKubectl() {
-	output, err := tpu.ShellQ("kubectl version --client -o json")
+	output, err := tpu.Shell("kubectl version --client -o json")
 	if err != nil {
 		kubeDie(err)
 	}
@@ -140,7 +140,7 @@ func intercept() func() {
 			if strings.Contains(line, "nameserver") {
 				fields := strings.Fields(line)
 				*dnsIP = fields[1]
-				log.Printf("Automatically set -dns to %v", *dnsIP)
+				log.Printf("TPY: Automatically set -dns to %v", *dnsIP)
 				break
 			}
 		}
@@ -220,8 +220,6 @@ func intercept() func() {
 }
 
 func bridges() func() {
-	disconnect := connect()
-
 	if *kubeconfig == "" {
 		*kubeconfig = os.Getenv("KUBECONFIG")
 	}
@@ -234,6 +232,8 @@ func bridges() func() {
 		home := current.HomeDir
 		*kubeconfig = filepath.Join(home, ".kube/config")
 	}
+
+	disconnect := connect()
 
 	// setup kubernetes bridge
 	w := watcher.NewWatcher(*kubeconfig)
@@ -284,9 +284,9 @@ func post(tables ...route.Table) {
 	}
 	resp, err := http.Post("http://teleproxy/api/tables/", "application/json", bytes.NewReader(body))
 	if err != nil {
-		log.Printf("error posting update to %s: %v", jnames, err)
+		log.Printf("BRG: error posting update to %s: %v", jnames, err)
 	} else {
-		log.Printf("posted update to %s: %v", jnames, resp.StatusCode)
+		log.Printf("BRG: posted update to %s: %v", jnames, resp.StatusCode)
 	}
 }
 
@@ -309,16 +309,24 @@ spec:
 
 func connect() func() {
 	// setup remote teleproxy pod
-	apply := tpu.Keepalive(1, TELEPROXY_POD, "kubectl", "--kubeconfig", *kubeconfig, "apply", "-f", "-")
+	apply := tpu.NewKeeper("KAP", "kubectl --kubeconfig "+*kubeconfig+" apply -f -")
+	apply.Input = TELEPROXY_POD
+	apply.Limit = 1
+	apply.Start()
 	apply.Wait()
 
-	pf := tpu.Keepalive(0, "", "kubectl", "--kubeconfig", *kubeconfig, "port-forward", "pod/teleproxy", "8022")
+	pf := tpu.NewKeeper("KPF", "kubectl --kubeconfig "+*kubeconfig+" port-forward pod/teleproxy 8022")
+	pf.Inspect = "kubectl get --kubeconfig " + *kubeconfig + " pod/teleproxy"
 	// XXX: probably need some kind of keepalive check for ssh, first
 	// curl after wakeup seems to trigger detection of death
-	ssh := tpu.Keepalive(0, "", "ssh", "-D", "localhost:1080", "-C", "-N", "-oConnectTimeout=5", "-oExitOnForwardFailure=yes",
-		"-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", "8022")
+	ssh := tpu.NewKeeper("SSH", "ssh -D localhost:1080 -C -N -oConnectTimeout=5 -oExitOnForwardFailure=yes "+
+		"-oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null telepresence@localhost -p 8022")
+
+	pf.Start()
+	ssh.Start()
+
 	return func() {
-		ssh.Shutdown()
-		pf.Shutdown()
+		ssh.Stop()
+		pf.Stop()
 	}
 }

@@ -37,7 +37,7 @@ func OverrideSearchDomains(domains string) func() {
 }
 
 func getIfaces() (ifaces []string, err error) {
-	lines, err := tpu.Shell("networksetup -listallnetworkservices | fgrep -v '*'")
+	lines, err := tpu.ShellLogf("networksetup -listallnetworkservices | fgrep -v '*'", log)
 	if err != nil {
 		return
 	}
@@ -51,12 +51,12 @@ func getIfaces() (ifaces []string, err error) {
 }
 
 func getSearchDomains(iface string) (domains string, err error) {
-	domains, err = tpu.Shell(fmt.Sprintf("networksetup -getsearchdomains '%s'", iface))
+	domains, err = tpu.ShellLogf(fmt.Sprintf("networksetup -getsearchdomains '%s'", iface), log)
 	domains = strings.TrimSpace(domains)
 	return
 }
 
 func setSearchDomains(iface, domains string) (err error) {
-	_, err = tpu.Shell(fmt.Sprintf("networksetup -setsearchdomains '%s' '%s'", iface, domains))
+	_, err = tpu.ShellLogf(fmt.Sprintf("networksetup -setsearchdomains '%s' '%s'", iface, domains), log)
 	return
 }

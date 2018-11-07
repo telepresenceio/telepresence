@@ -146,7 +146,7 @@ func (i *Interceptor) update(table rt.Table) {
 			case "udp":
 				i.translator.ClearUDP(existing.Ip)
 			default:
-				log.Printf("unrecognized protocol: %v", route)
+				log.Printf("INT: unrecognized protocol: %v", route)
 			}
 
 		}
@@ -160,12 +160,12 @@ func (i *Interceptor) update(table rt.Table) {
 				case "udp":
 					i.translator.ForwardUDP(route.Ip, route.Target)
 				default:
-					log.Printf("unrecognized protocol: %v", route)
+					log.Printf("INT: unrecognized protocol: %v", route)
 				}
 			}
 
 			if route.Name != "" {
-				log.Printf("Storing %v->%v", route.Domain(), route)
+				log.Printf("INT: STORE %v->%v", route.Domain(), route)
 				copy := route
 				i.domains.Store(route.Domain(), &copy)
 			}
@@ -181,7 +181,7 @@ func (i *Interceptor) update(table rt.Table) {
 	}
 
 	for _, route := range routes {
-		log.Printf("Clearing %v->%v", route.Domain(), route)
+		log.Printf("INT: CLEAR %v->%v", route.Domain(), route)
 		i.domains.Delete(route.Domain())
 
 		switch route.Proto {
@@ -190,7 +190,7 @@ func (i *Interceptor) update(table rt.Table) {
 		case "udp":
 			i.translator.ClearUDP(route.Ip)
 		default:
-			log.Printf("unrecognized protocol: %v", route)
+			log.Printf("INT: unrecognized protocol: %v", route)
 		}
 
 	}
