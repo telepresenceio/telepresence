@@ -13,6 +13,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -62,6 +63,8 @@ const (
 func main() {
 	flag.Parse()
 
+	checkKubectl()
+
 	switch *mode {
 	case "":
 	case INTERCEPT:
@@ -86,6 +89,45 @@ func main() {
 	}
 
 	log.Println(<-signalChan)
+}
+
+func kubeDie(err error) {
+	if err != nil {
+		log.Println(err)
+	}
+	log.Fatal("kubectl version 1.10 or greater is required")
+}
+
+func checkKubectl() {
+	output, err := tpu.ShellQ("kubectl version --client -o json")
+	if err != nil {
+		kubeDie(err)
+	}
+
+	var info struct {
+		ClientVersion struct {
+			Major string
+			Minor string
+		}
+	}
+
+	err = json.Unmarshal([]byte(output), &info)
+	if err != nil {
+		kubeDie(err)
+	}
+
+	major, err := strconv.Atoi(info.ClientVersion.Major)
+	if err != nil {
+		kubeDie(err)
+	}
+	minor, err := strconv.Atoi(info.ClientVersion.Minor)
+	if err != nil {
+		kubeDie(err)
+	}
+
+	if major != 1 || minor < 10 {
+		kubeDie(err)
+	}
 }
 
 func intercept() func() {
