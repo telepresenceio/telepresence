@@ -186,3 +186,31 @@ def run_docker_command(
 
     runner.add_cleanup("Terminate local container", terminate_if_alive)
     return process
+
+
+def setup_container(runner: Runner, args):
+    runner.require(["docker", "socat"], "Needed for the container method.")
+    if runner.platform == "linux":
+        needed = ["ip", "ifconfig"]
+        missing = runner.depend(needed)
+        if set(needed) == set(missing):
+            raise runner.fail(
+                """At least one of "ip addr" or "ifconfig" must be """ +
+                "available to retrieve Docker interface info."
+            )
+    if runner.platform == "darwin":
+        runner.require(
+            ["ifconfig"],
+            "Needed to manage networking with the container method.",
+        )
+        runner.require_sudo()
+    if SUDO_FOR_DOCKER:
+        runner.require_sudo()
+
+    def launch(runner_, remote_info, env, _socks_port, ssh, mount_dir):
+        return run_docker_command(
+            runner_, remote_info, args.docker_run, args.expose,
+            args.also_proxy, env, ssh, mount_dir
+        )
+
+    return launch
