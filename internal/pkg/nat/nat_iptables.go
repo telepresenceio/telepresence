@@ -20,7 +20,7 @@ func (t *Translator) log(line string, args ...interface{}) {
 }
 
 func (t *Translator) ipt(argline string) {
-	tpu.ShellLogf("iptables -t nat "+argline, t.log)
+	tpu.ShlexLogf("iptables -t nat "+argline, t.log)
 }
 
 func (t *Translator) Enable() {
