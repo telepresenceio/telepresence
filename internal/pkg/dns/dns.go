@@ -22,14 +22,12 @@ func die(line string, args ...interface{}) {
 }
 
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
-	log("%v request for %s", r.Question[0].Qtype, r.Question[0].Name)
 	domain := strings.ToLower(r.Question[0].Name)
 	switch r.Question[0].Qtype {
 	case dns.TypeA:
-		log("QUERY %s", domain)
 		ip := s.Resolve(domain)
 		if ip != "" {
-			log("REPLY %s", domain)
+			log("QUERY %s -> %s", domain, ip)
 			msg := dns.Msg{}
 			msg.SetReply(r)
 			msg.Authoritative = true
@@ -51,7 +49,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	default:
 		ip := s.Resolve(domain)
 		if ip != "" {
-			log("EMPTY %s", domain)
+			log("QTYPE[%v] %s -> EMPTY", r.Question[0].Qtype, domain)
 			msg := dns.Msg{}
 			msg.SetReply(r)
 			msg.Authoritative = true
