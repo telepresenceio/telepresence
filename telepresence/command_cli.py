@@ -80,7 +80,6 @@ def parse_args(argv=None, only_for_commands=False):
         title="commands",
         prog="{} [options]".format(prog),
         description="The following commands are EXPERIMENTAL as of Nov 2018",
-        required=True,
         metavar="COMMAND",
         dest="command"
     )
