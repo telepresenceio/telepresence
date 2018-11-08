@@ -22,25 +22,29 @@ func NewProxy(address string, router func(*net.TCPConn) (string, error)) (proxy 
 	return
 }
 
+func (p *Proxy) log(line string, args ...interface{}) {
+	log.Printf("PXY: "+line+"\n", args...)
+}
+
 func (p *Proxy) Start(limit int) {
-	log.Printf("Listening (limit %v)...", limit)
+	p.log("listening limit=%v", limit)
 	go func() {
 		sem := tpu.NewSemaphore(limit)
 		for {
 			conn, err := p.listener.Accept()
 			if err != nil {
-				log.Println(err)
+				p.log(err.Error())
 			} else {
 				switch conn.(type) {
 				case *net.TCPConn:
-					log.Println("AVAILABLE:", len(sem))
+					p.log("CAPACITY: %v", len(sem))
 					sem.Acquire()
 					go func() {
 						defer sem.Release()
 						p.handleConnection(conn.(*net.TCPConn))
 					}()
 				default:
-					log.Println("Don't know how to handle conn:", conn)
+					p.log("unknown connection type: %v", conn)
 				}
 			}
 		}
@@ -50,25 +54,25 @@ func (p *Proxy) Start(limit int) {
 func (p *Proxy) handleConnection(conn *net.TCPConn) {
 	host, err := p.router(conn)
 	if err != nil {
-		log.Println("router:", err)
+		p.log("router error: %v", err)
 		return
 	}
 
-	log.Println("CONNECT:", conn.RemoteAddr(), host)
+	p.log("CONNECT %s %s", conn.RemoteAddr(), host)
 
 	// setting up an ssh tunnel with dynamic socks proxy at this end
 	// seems faster than connecting directly to a socks proxy
 	dialer, err := proxy.SOCKS5("tcp", "localhost:1080", nil, proxy.Direct)
 	//	dialer, err := proxy.SOCKS5("tcp", "localhost:9050", nil, proxy.Direct)
 	if err != nil {
-		log.Println(err)
+		p.log(err.Error())
 		conn.Close()
 		return
 	}
 
 	_proxy, err := dialer.Dial("tcp", host)
 	if err != nil {
-		log.Println(err)
+		p.log(err.Error())
 		conn.Close()
 		return
 	}
@@ -76,19 +80,19 @@ func (p *Proxy) handleConnection(conn *net.TCPConn) {
 
 	done := tpu.NewLatch(2)
 
-	go pipe(conn, proxy, done)
-	go pipe(proxy, conn, done)
+	go p.pipe(conn, proxy, done)
+	go p.pipe(proxy, conn, done)
 
 	done.Wait()
 }
 
-func pipe(from, to *net.TCPConn, done tpu.Latch) {
+func (p *Proxy) pipe(from, to *net.TCPConn, done tpu.Latch) {
 	defer func() {
-		log.Println("CLOSED WRITE:", to.RemoteAddr())
+		p.log("CLOSED WRITE %v", to.RemoteAddr())
 		to.CloseWrite()
 	}()
 	defer func() {
-		log.Println("CLOSED READ:", from.RemoteAddr())
+		p.log("CLOSED READ %v", from.RemoteAddr())
 		from.CloseRead()
 	}()
 	defer done.Notify()
@@ -99,14 +103,14 @@ func pipe(from, to *net.TCPConn, done tpu.Latch) {
 		n, err := from.Read(buf[0:size])
 		if err != nil {
 			if err != io.EOF {
-				log.Println(err)
+				p.log(err.Error())
 			}
 			break
 		} else {
 			_, err := to.Write(buf[0:n])
 
 			if err != nil {
-				log.Println(err)
+				p.log(err.Error())
 				break
 			}
 		}

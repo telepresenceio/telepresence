@@ -10,12 +10,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"os/user"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/datawire/teleproxy/internal/pkg/k8s"
 
 	"github.com/datawire/teleproxy/internal/pkg/api"
 	"github.com/datawire/teleproxy/internal/pkg/dns"
@@ -26,11 +26,6 @@ import (
 	"github.com/datawire/teleproxy/internal/pkg/route"
 	"github.com/datawire/teleproxy/internal/pkg/tpu"
 )
-
-var mode = flag.String("mode", "", "mode of operation")
-var kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-var dnsIP = flag.String("dns", "", "dns ip address")
-var fallbackIP = flag.String("fallback", "", "dns fallback")
 
 func dnsListeners(port string) (listeners []string) {
 	// turns out you need to listen on localhost for nat to work
@@ -61,6 +56,13 @@ const (
 )
 
 func main() {
+	var mode = flag.String("mode", "", "mode of operation")
+	var kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	var context = flag.String("context", "", "context to use (default: the current context)")
+	var namespace = flag.String("namespace", "", "namespace to use (default: the current namespace for the context")
+	var dnsIP = flag.String("dns", "", "dns ip address")
+	var fallbackIP = flag.String("fallback", "", "dns fallback")
+
 	flag.Parse()
 
 	checkKubectl()
@@ -71,7 +73,7 @@ func main() {
 	case BRIDGE:
 		break
 	default:
-		log.Fatalf("unrecognized mode: %v", *mode)
+		log.Fatalf("TPY: unrecognized mode: %v", *mode)
 	}
 
 	// do this up front so we don't miss out on cleanup if someone
@@ -80,15 +82,19 @@ func main() {
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
 	if *mode == DEFAULT || *mode == INTERCEPT {
-		shutdown := intercept()
+		shutdown := intercept(dnsIP, fallbackIP)
 		defer shutdown()
 	}
 	if *mode == DEFAULT || *mode == BRIDGE {
-		shutdown := bridges()
+		kubeinfo, err := k8s.NewKubeInfo(*kubeconfig, *context, *namespace)
+		if err != nil {
+			log.Fatalln("KubeInfo failed:", err)
+		}
+		shutdown := bridges(kubeinfo)
 		defer shutdown()
 	}
 
-	log.Println(<-signalChan)
+	log.Printf("TPY: %v", <-signalChan)
 }
 
 func kubeDie(err error) {
@@ -99,7 +105,7 @@ func kubeDie(err error) {
 }
 
 func checkKubectl() {
-	output, err := tpu.ShellQ("kubectl version --client -o json")
+	output, err := tpu.Shell("kubectl version --client -o json")
 	if err != nil {
 		kubeDie(err)
 	}
@@ -130,7 +136,7 @@ func checkKubectl() {
 	}
 }
 
-func intercept() func() {
+func intercept(dnsIP, fallbackIP *string) func() {
 	if *dnsIP == "" {
 		dat, err := ioutil.ReadFile("/etc/resolv.conf")
 		if err != nil {
@@ -140,7 +146,7 @@ func intercept() func() {
 			if strings.Contains(line, "nameserver") {
 				fields := strings.Fields(line)
 				*dnsIP = fields[1]
-				log.Printf("Automatically set -dns to %v", *dnsIP)
+				log.Printf("TPY: Automatically set -dns to %v", *dnsIP)
 				break
 			}
 		}
@@ -219,24 +225,11 @@ func intercept() func() {
 	}
 }
 
-func bridges() func() {
-	disconnect := connect()
-
-	if *kubeconfig == "" {
-		*kubeconfig = os.Getenv("KUBECONFIG")
-	}
-
-	if *kubeconfig == "" {
-		current, err := user.Current()
-		if err != nil {
-			panic(err)
-		}
-		home := current.HomeDir
-		*kubeconfig = filepath.Join(home, ".kube/config")
-	}
+func bridges(kubeinfo *k8s.KubeInfo) func() {
+	disconnect := connect(kubeinfo)
 
 	// setup kubernetes bridge
-	w := watcher.NewWatcher(*kubeconfig)
+	w := watcher.NewWatcher(kubeinfo)
 	w.Watch("services", func(w *watcher.Watcher) {
 		table := route.Table{Name: "kubernetes"}
 		for _, svc := range w.List("services") {
@@ -264,7 +257,7 @@ func bridges() func() {
 	})
 
 	return func() {
-		dw.Stop()
+		//dw.Stop()
 		w.Stop()
 		post(route.Table{Name: "kubernetes"}, route.Table{Name: "docker"})
 		disconnect()
@@ -284,9 +277,9 @@ func post(tables ...route.Table) {
 	}
 	resp, err := http.Post("http://teleproxy/api/tables/", "application/json", bytes.NewReader(body))
 	if err != nil {
-		log.Printf("error posting update to %s: %v", jnames, err)
+		log.Printf("BRG: error posting update to %s: %v", jnames, err)
 	} else {
-		log.Printf("posted update to %s: %v", jnames, resp.StatusCode)
+		log.Printf("BRG: posted update to %s: %v", jnames, resp.StatusCode)
 	}
 }
 
@@ -307,18 +300,27 @@ spec:
       containerPort: 8022
 `
 
-func connect() func() {
+func connect(kubeinfo *k8s.KubeInfo) func() {
 	// setup remote teleproxy pod
-	apply := tpu.Keepalive(1, TELEPROXY_POD, "kubectl", "--kubeconfig", *kubeconfig, "apply", "-f", "-")
+	apply := tpu.NewKeeper("KAP", "kubectl "+kubeinfo.GetKubectl("apply -f -"))
+	apply.Input = TELEPROXY_POD
+	apply.Limit = 1
+	apply.Start()
 	apply.Wait()
 
-	pf := tpu.Keepalive(0, "", "kubectl", "--kubeconfig", *kubeconfig, "port-forward", "pod/teleproxy", "8022")
+	pf := tpu.NewKeeper("KPF", "kubectl "+kubeinfo.GetKubectl("port-forward pod/teleproxy 8022"))
+	pf.Inspect = "kubectl " + kubeinfo.GetKubectl("get pod/teleproxy")
+
 	// XXX: probably need some kind of keepalive check for ssh, first
 	// curl after wakeup seems to trigger detection of death
-	ssh := tpu.Keepalive(0, "", "ssh", "-D", "localhost:1080", "-C", "-N", "-oConnectTimeout=5", "-oExitOnForwardFailure=yes",
-		"-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", "8022")
+	ssh := tpu.NewKeeper("SSH", "ssh -D localhost:1080 -C -N -oConnectTimeout=5 -oExitOnForwardFailure=yes "+
+		"-oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null telepresence@localhost -p 8022")
+
+	pf.Start()
+	ssh.Start()
+
 	return func() {
-		ssh.Shutdown()
-		pf.Shutdown()
+		ssh.Stop()
+		pf.Stop()
 	}
 }

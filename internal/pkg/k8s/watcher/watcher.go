@@ -3,11 +3,10 @@ package watcher
 import (
 	"fmt"
 	"log"
-	"os"
-	"os/user"
-	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/datawire/teleproxy/internal/pkg/k8s"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -20,7 +19,6 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 type empty struct{}
@@ -46,27 +44,11 @@ type Watcher struct {
 	stoppedChans []chan empty
 }
 
-func NewWatcher(kubeconfig string) *Watcher {
-	var config *rest.Config
-	var err error
-	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
-		config, err = rest.InClusterConfig()
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else {
-		if kubeconfig == "" {
-			current, err := user.Current()
-			if err != nil {
-				log.Fatal(err)
-			}
-			home := current.HomeDir
-			kubeconfig = filepath.Join(home, ".kube/config")
-		}
-		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-		if err != nil {
-			log.Fatal(err)
-		}
+// NewWatcher returns a Kubernetes Watcher for the specified cluster
+func NewWatcher(kubeinfo *k8s.KubeInfo) *Watcher {
+	config, err := kubeinfo.GetRestConfig()
+	if err != nil {
+		log.Fatalln("Failed to get REST config:", err)
 	}
 
 	disco, err := discovery.NewDiscoveryClientForConfig(config)

@@ -2,7 +2,7 @@ package dns
 
 import (
 	"github.com/miekg/dns"
-	"log"
+	_log "log"
 	"net"
 	"strings"
 )
@@ -13,15 +13,21 @@ type Server struct {
 	Resolve   func(string) string
 }
 
+func log(line string, args ...interface{}) {
+	_log.Printf("DNS: "+line, args...)
+}
+
+func die(line string, args ...interface{}) {
+	_log.Fatalf("DNS: "+line, args...)
+}
+
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
-	log.Println(r.Question[0].Qtype, "DNS request for", r.Question[0].Name)
 	domain := strings.ToLower(r.Question[0].Name)
 	switch r.Question[0].Qtype {
 	case dns.TypeA:
-		log.Println("Looking up", domain)
 		ip := s.Resolve(domain)
 		if ip != "" {
-			log.Println("Found:", domain)
+			log("QUERY %s -> %s", domain, ip)
 			msg := dns.Msg{}
 			msg.SetReply(r)
 			msg.Authoritative = true
@@ -43,19 +49,18 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	default:
 		ip := s.Resolve(domain)
 		if ip != "" {
-			log.Println("Found:", domain)
+			log("QTYPE[%v] %s -> EMPTY", r.Question[0].Qtype, domain)
 			msg := dns.Msg{}
 			msg.SetReply(r)
 			msg.Authoritative = true
 			msg.RecursionAvailable = true
 			w.WriteMsg(&msg)
-			log.Println("replied with empty")
 			return
 		}
 	}
 	in, err := dns.Exchange(r, s.Fallback)
 	if err != nil {
-		log.Println(err)
+		log(err.Error())
 		return
 	}
 	w.WriteMsg(in)
@@ -66,9 +71,9 @@ func (s *Server) Start() {
 		go func(addr string) {
 			srv := &dns.Server{Addr: addr, Net: "udp"}
 			srv.Handler = s
-			log.Printf("DNS server listening on %s", addr)
+			log("listening on %s", addr)
 			if err := srv.ListenAndServe(); err != nil {
-				log.Fatalf("Failed to set udp listener %s\n", err.Error())
+				die("failed to set udp listener: %v", err)
 			}
 		}(addr)
 	}

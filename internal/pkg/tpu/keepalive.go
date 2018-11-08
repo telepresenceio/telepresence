@@ -1,6 +1,7 @@
 package tpu
 
 import (
+	"bufio"
 	"io"
 	"log"
 	"os/exec"
@@ -9,36 +10,51 @@ import (
 	"time"
 )
 
-type keeper struct {
-	shutdown chan empty
-	done     chan empty
+type Keeper struct {
+	Prefix  string
+	Command string
+	Input   string
+	Inspect string
+	Limit   int
+	stop    chan empty
+	done    chan empty
 }
 
-func (k keeper) Shutdown() {
-	k.shutdown <- nil
+func NewKeeper(prefix, command string) (k *Keeper) {
+	return &Keeper{
+		Prefix:  prefix,
+		Command: command,
+		stop:    make(chan empty),
+		done:    make(chan empty),
+	}
+}
+
+func (k *Keeper) Stop() {
+	k.stop <- nil
 	k.Wait()
 }
 
-func (k keeper) Wait() {
+func (k *Keeper) Wait() {
 	<-k.done
 }
 
-func Keepalive(limit int, input string, program string, args ...string) (k keeper) {
-	k = keeper{
-		shutdown: make(chan empty),
-		done:     make(chan empty),
-	}
+func (k *Keeper) log(line string, args ...interface{}) {
+	log.Printf(k.Prefix+": "+line, args...)
+}
+
+func (k *Keeper) Start() {
 	go func() {
 		count := 0
 	OUTER:
 		for {
-			cmd := exec.Command(program, args...)
+			cmd := exec.Command("sh", "-c", k.Command)
 			cmd.SysProcAttr = &syscall.SysProcAttr{
 				Setpgid: true,
 			}
-			l := forwardOutput(cmd)
+			k.log(k.Command)
+			l := k.forwardOutput(cmd)
 
-			err := writeInput(cmd, input)
+			err := writeInput(cmd, k.Input)
 			if err != nil {
 				panic(err)
 			}
@@ -52,7 +68,7 @@ func Keepalive(limit int, input string, program string, args ...string) (k keepe
 			go func() {
 				err = cmd.Wait()
 				if err != nil {
-					log.Println(program, err)
+					k.log(err.Error())
 				}
 				died <- nil
 			}()
@@ -62,37 +78,39 @@ func Keepalive(limit int, input string, program string, args ...string) (k keepe
 			select {
 			case <-died:
 				l.Wait()
-				if count < limit || limit == 0 {
-					log.Println(program, "restarting...")
+				if count < k.Limit || k.Limit == 0 {
+					k.log("%s restarting...", strings.Fields(k.Command)[0])
+					ShellLog(k.Inspect, func(line string) {
+						k.log(line)
+					})
 					time.Sleep(time.Second)
 				} else {
 					break OUTER
 				}
-			case <-k.shutdown:
+			case <-k.stop:
 				cmd.Process.Kill()
 				l.Wait()
 				break OUTER
 			}
 
 		}
-		k.done <- nil
+		close(k.done)
 	}()
 	return
 }
 
-func forwardOutput(cmd *exec.Cmd) Latch {
-	log.Println(strings.Join(cmd.Args, " "))
+func (k *Keeper) forwardOutput(cmd *exec.Cmd) Latch {
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
 		panic(err)
 	}
 	l := NewLatch(2)
-	go reader(pipe, l)
+	go k.reader(pipe, l)
 	pipe, err = cmd.StderrPipe()
 	if err != nil {
 		panic(err)
 	}
-	go reader(pipe, l)
+	go k.reader(pipe, l)
 	return l
 }
 
@@ -109,16 +127,22 @@ func writeInput(cmd *exec.Cmd, input string) error {
 	return err
 }
 
-func reader(pipe io.ReadCloser, l Latch) {
-	const size = 64 * 1024
-	var buf [size]byte
+func (k *Keeper) reader(pipe io.ReadCloser, l Latch) {
+	defer pipe.Close()
+	buf := bufio.NewReader(pipe)
 	for {
-		n, err := pipe.Read(buf[:size])
+		line, err := buf.ReadString('\n')
 		if err != nil {
-			pipe.Close()
+			if strings.TrimSpace(line) != "" {
+				k.log(line)
+			}
+			if err != io.EOF {
+				k.log(err.Error())
+			}
 			l.Notify()
 			return
+		} else {
+			k.log(line)
 		}
-		log.Printf("%s", buf[:n])
 	}
 }
