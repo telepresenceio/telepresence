@@ -99,9 +99,10 @@ def command_main(args):
         runner.add_cleanup("Stop time tracking", span.end)
         runner.kubectl = KubeInfo(runner, args)
 
-        runner.show("Executing {}".format(args.command))
+    if args.command == "outbound":
+        return outbound.command(runner)
 
-    runner.fail("Not implemented!")
+    raise runner.fail("Not implemented!")
 
 
 def run_telepresence():

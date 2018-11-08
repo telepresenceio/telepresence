@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from telepresence.outbound.command import command
 from telepresence.outbound.setup import setup
 
-__all__ = "setup",
+__all__ = "setup", "command"
