@@ -6,6 +6,7 @@ import (
 	"log"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/datawire/teleproxy/internal/pkg/tpu"
 )
@@ -26,16 +27,20 @@ func NewWatcher() *Watcher {
 	}
 }
 
+func (w *Watcher) log(line string, args ...interface{}) {
+	log.Printf("DKR: "+line, args...)
+}
+
 func (w *Watcher) Start(listener func(w *Watcher)) {
 	go func() {
-		wakeup := waiter()
+		wakeup := w.waiter()
 	OUTER:
 		for {
 			select {
 			case <-w.stop:
 				break OUTER
 			case <-wakeup:
-				containers, err := containers()
+				containers, err := w.containers()
 				if err == nil {
 					updated := false
 					for key := range w.Containers {
@@ -66,10 +71,20 @@ func (w *Watcher) Stop() {
 	<-w.done
 }
 
-func containers() (result map[string]string, err error) {
-	lines, err := tpu.Shell("docker inspect -f '{{.Name}} {{.NetworkSettings.IPAddress}}'  $(docker ps -q)")
+func (w *Watcher) containers() (result map[string]string, err error) {
+	ids, err := tpu.ShellLogf("docker ps -q", w.log)
 	if err != nil {
 		return
+	}
+
+	ids = strings.Join(strings.Fields(ids), " ")
+
+	lines := ""
+	if ids != "" {
+		lines, err = tpu.ShellLogf("docker inspect -f '{{.Name}} {{.NetworkSettings.IPAddress}}' "+ids, w.log)
+		if err != nil {
+			return
+		}
 	}
 
 	result = make(map[string]string)
@@ -80,58 +95,79 @@ func containers() (result map[string]string, err error) {
 			ip := parts[1]
 			result[name] = ip
 		} else if len(parts) > 2 {
-			log.Printf("error parsing: %v", line)
+			w.log("error parsing: %s", line)
 		}
 	}
 
 	return
 }
 
-func waiter() chan empty {
+func (w *Watcher) checkDocker(warn bool) bool {
+	output, err := tpu.Shell("docker version")
+	if err != nil {
+		if warn {
+			w.log(output)
+			w.log(err.Error())
+			w.log("docker is required for docker bridge functionality")
+		}
+		return false
+	}
+	return true
+}
+
+func (w *Watcher) waiter() chan empty {
 	result := make(chan empty)
 	go func() {
+		var pipe io.ReadCloser
 		var events *bufio.Reader
 
 		for {
+			for count := 0; true; count += 1 {
+				if w.checkDocker((count % 60) == 0) {
+					break
+				} else {
+					time.Sleep(1 * time.Second)
+				}
+			}
+
 			result <- empty{}
-			if events == nil {
-				events = containerEvents()
+			if pipe == nil {
+				pipe = w.containerEvents()
+				events = bufio.NewReader(pipe)
 			}
 
 			st, err := events.ReadString('\n')
 			if st != "" {
-				if st[len(st)-1] != '\n' {
-					log.Println(st)
-				} else {
-					log.Print(st)
-				}
+				w.log(st)
 			}
 			if err != nil {
 				if err != io.EOF {
 					log.Println(err)
 				}
-				events = nil
+				pipe.Close()
+				pipe = nil
+				time.Sleep(1 * time.Second)
 			}
 		}
 	}()
 	return result
 }
 
-func containerEvents() *bufio.Reader {
+func (w *Watcher) containerEvents() io.ReadCloser {
 	command := "docker events --filter 'type=container' --filter 'event=start' --filter 'event=die'"
-	log.Println(command)
+	w.log(command)
 	cmd := exec.Command("sh", "-c", command)
-	ubevents, err := cmd.StdoutPipe()
+	events, err := cmd.StdoutPipe()
 	if err != nil {
-		log.Println(err)
+		w.log(err.Error())
 		return nil
 	}
 
 	err = cmd.Start()
 	if err != nil {
-		log.Println(err)
+		w.log(err.Error())
 		return nil
 	}
 
-	return bufio.NewReader(ubevents)
+	return events
 }

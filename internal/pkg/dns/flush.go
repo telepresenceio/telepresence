@@ -2,7 +2,6 @@ package dns
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strconv"
@@ -13,19 +12,19 @@ import (
 func Flush() {
 	pids, err := getPIDs()
 	if err != nil {
-		log.Println(err)
+		log("%v", err)
 		return
 	}
 
-	log.Printf("Flushing DNS: %v\n", pids)
+	log("flushing PIDS%v", pids)
 	for _, pid := range pids {
 		proc, err := os.FindProcess(pid)
 		if err != nil {
-			log.Println(err)
+			log("%v", err)
 		}
 		err = proc.Signal(syscall.SIGHUP)
 		if err != nil {
-			log.Println(err)
+			log("%v", err)
 		}
 	}
 }

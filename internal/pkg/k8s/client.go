@@ -1,6 +1,8 @@
 package k8s
 
 import (
+	"strings"
+
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -80,12 +82,12 @@ func (info *KubeInfo) GetRestConfig() (*rest.Config, error) {
 }
 
 // GetKubectl returns the arguents for a runnable kubectl command
-func (info *KubeInfo) GetKubectl(args ...string) []string {
+func (info *KubeInfo) GetKubectl(args string) string {
 	res := []string{"kubectl"}
 	if len(info.Kubeconfig) != 0 {
 		res = append(res, "--kubeconfig", info.Kubeconfig)
 	}
 	res = append(res, "--context", info.Context, "--namespace", info.Namespace)
-	res = append(res, args...)
-	return res[1:] // Drop leading "kubectl" because reasons...
+	res = append(res, args)
+	return strings.Join(res[1:], " ") // Drop leading "kubectl" because reasons...
 }

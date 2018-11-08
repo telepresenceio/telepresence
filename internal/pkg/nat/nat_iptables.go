@@ -4,54 +4,45 @@ package nat
 
 import (
 	"fmt"
-	"github.com/google/shlex"
 	"log"
 	"net"
-	"os/exec"
 	"syscall"
+
+	"github.com/datawire/teleproxy/internal/pkg/tpu"
 )
 
 type Translator struct {
 	commonTranslator
 }
 
-func ipt(argline string) {
-	args, err := shlex.Split(argline)
-	if err != nil {
-		panic(err)
-	}
-	args = append([]string{"-t", "nat"}, args...)
-	cmd := exec.Command("iptables", args...)
-	log.Printf("iptables -t nat %s\n", argline)
-	out, err := cmd.CombinedOutput()
-	if len(out) > 0 {
-		log.Printf("%s", out)
-	}
-	if err != nil {
-		log.Println(err)
-	}
+func (t *Translator) log(line string, args ...interface{}) {
+	log.Printf("NAT: "+line, args...)
+}
+
+func (t *Translator) ipt(argline string) {
+	tpu.ShlexLogf("iptables -t nat "+argline, t.log)
 }
 
 func (t *Translator) Enable() {
 	// XXX: -D only removes one copy of the rule, need to figure out how to remove all copies just in case
-	ipt("-D OUTPUT -j " + t.Name)
+	t.ipt("-D OUTPUT -j " + t.Name)
 	// we need to be in the PREROUTING chain in order to get traffic
 	// from docker containers, not sure you would *always* want this,
 	// but probably makes sense as a default
-	ipt("-D PREROUTING -j " + t.Name)
-	ipt("-N " + t.Name)
-	ipt("-F " + t.Name)
-	ipt("-I OUTPUT 1 -j " + t.Name)
-	ipt("-I PREROUTING 1 -j " + t.Name)
-	ipt("-A " + t.Name + " -j RETURN --dest 127.0.0.1/32 -p tcp")
+	t.ipt("-D PREROUTING -j " + t.Name)
+	t.ipt("-N " + t.Name)
+	t.ipt("-F " + t.Name)
+	t.ipt("-I OUTPUT 1 -j " + t.Name)
+	t.ipt("-I PREROUTING 1 -j " + t.Name)
+	t.ipt("-A " + t.Name + " -j RETURN --dest 127.0.0.1/32 -p tcp")
 }
 
 func (t *Translator) Disable() {
 	// XXX: -D only removes one copy of the rule, need to figure out how to remove all copies just in case
-	ipt("-D OUTPUT -j " + t.Name)
-	ipt("-D PREROUTING -j " + t.Name)
-	ipt("-F " + t.Name)
-	ipt("-X " + t.Name)
+	t.ipt("-D OUTPUT -j " + t.Name)
+	t.ipt("-D PREROUTING -j " + t.Name)
+	t.ipt("-F " + t.Name)
+	t.ipt("-X " + t.Name)
 }
 
 func (t *Translator) ForwardTCP(ip, toPort string) {
@@ -64,7 +55,7 @@ func (t *Translator) ForwardUDP(ip, toPort string) {
 
 func (t *Translator) forward(protocol, ip, toPort string) {
 	t.clear(protocol, ip)
-	ipt("-A " + t.Name + " -j REDIRECT --dest " + ip + "/32 -p " + protocol + " --to-ports " + toPort)
+	t.ipt("-A " + t.Name + " -j REDIRECT --dest " + ip + "/32 -p " + protocol + " --to-ports " + toPort)
 	t.Mappings[Address{protocol, ip}] = toPort
 }
 
@@ -78,7 +69,7 @@ func (t *Translator) ClearUDP(ip string) {
 
 func (t *Translator) clear(protocol, ip string) {
 	if previous, exists := t.Mappings[Address{protocol, ip}]; exists {
-		ipt("-D " + t.Name + " -j REDIRECT --dest " + ip + "/32 -p " + protocol + " --to-ports " + previous)
+		t.ipt("-D " + t.Name + " -j REDIRECT --dest " + ip + "/32 -p " + protocol + " --to-ports " + previous)
 		delete(t.Mappings, Address{protocol, ip})
 	}
 }
