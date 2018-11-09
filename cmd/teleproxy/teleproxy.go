@@ -237,7 +237,11 @@ func bridges(kubeinfo *k8s.KubeInfo) func() {
 		table := route.Table{Name: "kubernetes"}
 		for _, svc := range w.List("services") {
 			ip, ok := svc.Spec()["clusterIP"]
-			if ok {
+			// for headless services the IP is None, we
+			// should properly handle these by listening
+			// for endpoints and returning multiple A
+			// records at some point
+			if ok && ip != "None" {
 				qualName := svc.Name() + "." + svc.Namespace() + ".svc.cluster.local"
 				table.Add(route.Route{
 					Name:   qualName,
