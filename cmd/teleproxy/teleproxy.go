@@ -249,6 +249,23 @@ func bridges(kubeinfo *k8s.KubeInfo) func() {
 		post(table)
 	})
 
+	// Set up DNS search path based on current Kubernetes namespace
+	paths := []string{
+		kubeinfo.Namespace + ".svc.cluster.local.",
+		"svc.cluster.local.",
+		"cluster.local.",
+		"",
+	}
+	body, err := json.Marshal(paths)
+	if err != nil {
+		panic(err)
+	}
+	_, err = http.Post("http://teleproxy/api/search", "application/json", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("BRG: error setting up search path: %v", err)
+		panic(err) // Because this will fail if we win the startup race
+	}
+
 	// setup docker bridge
 	dw := docker.NewWatcher()
 	dw.Start(func(w *docker.Watcher) {
