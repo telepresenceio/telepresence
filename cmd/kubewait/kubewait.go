@@ -32,12 +32,14 @@ type ResourceSet struct {
 }
 
 func (rs *ResourceSet) add(resource string) error {
+	resource = rs.w.Canonical(resource)
+
 	parts := strings.Split(resource, "/")
 	if len(parts) != 2 {
-		return fmt.Errorf("expecting <kind>/<name>, got %s", resource)
+		return fmt.Errorf("expecting <kind>/<name>[.<namespace>], got %s", resource)
 	}
 
-	kind := rs.w.Canonical(parts[0])
+	kind := parts[0]
 	name := parts[1]
 
 	resources, ok := rs.kinds[kind]
@@ -65,7 +67,7 @@ func (rs *ResourceSet) scan(path string) (err error) {
 			return
 		}
 		res := watcher.NewResourceFromYaml(uns)
-		err = rs.add(fmt.Sprintf("%s/%s", res.Kind(), res.Name()))
+		err = rs.add(fmt.Sprintf("%s/%s", res.Kind(), res.QName()))
 		if err != nil {
 			return
 		}
@@ -131,7 +133,7 @@ func main() {
 			for name := range names {
 				r := w.Get(kind, name)
 				if r.Ready() {
-					fmt.Printf("ready: %s/%s\n", w.Canonical(r.Kind()), r.Name())
+					fmt.Printf("ready: %s/%s\n", w.Canonical(r.Kind()), r.QName())
 					rset.remove(kind, name)
 				}
 			}

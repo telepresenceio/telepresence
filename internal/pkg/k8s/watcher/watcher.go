@@ -120,9 +120,51 @@ func (w *Watcher) resolve(resource string) (string, string, v1.APIResource) {
 
 func (w *Watcher) Canonical(name string) string {
 	parts := strings.Split(name, "/")
-	_, _, res := w.resolve(parts[0])
-	parts[0] = strings.ToLower(res.Kind)
-	return strings.Join(parts, "/")
+
+	var kind string
+	switch len(parts) {
+	case 1:
+		kind = parts[0]
+		name = ""
+	case 2:
+		kind = parts[0]
+		name = parts[1]
+	default:
+		return ""
+	}
+
+	var namespace string
+	parts = strings.Split(name, ".")
+	switch len(parts) {
+	case 0:
+	case 1:
+		namespace = "default"
+	case 2:
+		name = parts[0]
+		namespace = parts[1]
+	default:
+		return ""
+	}
+
+	_, _, res := w.resolve(kind)
+	kind = strings.ToLower(res.Kind)
+
+	if name == "" {
+		return kind
+	}
+
+	if res.Kind == "Namespace" {
+		switch namespace {
+		case "":
+			fallthrough
+		case "default":
+			return fmt.Sprintf("%s/%s", kind, name)
+		default:
+			return ""
+		}
+	} else {
+		return fmt.Sprintf("%s/%s.%s", kind, name, namespace)
+	}
 }
 
 func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
@@ -188,18 +230,18 @@ func (w *Watcher) List(kind string) []Resource {
 	}
 }
 
-func (w *Watcher) Get(kind, name string) Resource {
+func (w *Watcher) Get(kind, qname string) Resource {
 	resources := w.List(kind)
 	for _, res := range resources {
-		if strings.ToLower(res.Name()) == strings.ToLower(name) {
+		if strings.ToLower(res.QName()) == strings.ToLower(qname) {
 			return res
 		}
 	}
 	return Resource{}
 }
 
-func (w *Watcher) Exists(kind, name string) bool {
-	return w.Get(kind, name).Name() != ""
+func (w *Watcher) Exists(kind, qname string) bool {
+	return w.Get(kind, qname).Name() != ""
 }
 
 func (w *Watcher) Stop() {

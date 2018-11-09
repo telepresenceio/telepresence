@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"fmt"
 	"log"
 
 	ms "github.com/mitchellh/mapstructure"
@@ -23,6 +24,9 @@ var READY = map[string]func(Resource) bool{
 			}
 		}
 		return true
+	},
+	"Namespace": func(r Resource) bool {
+		return r.Status().getString("phase") == "Active"
 	},
 }
 
@@ -126,6 +130,17 @@ func (r Resource) Name() string { return r.Metadata().Name() }
 
 func (m Metadata) Namespace() string { return Map(m).getString("namespace") }
 func (r Resource) Namespace() string { return r.Metadata().Namespace() }
+
+func (m Metadata) QName() string {
+	ns := m.Namespace()
+	if ns == "" {
+		return m.Name()
+	} else {
+		return fmt.Sprintf("%s.%s", m.Name(), ns)
+	}
+}
+
+func (r Resource) QName() string { return r.Metadata().QName() }
 
 func (r Resource) Decode(output interface{}) error {
 	return ms.Decode(r, output)
