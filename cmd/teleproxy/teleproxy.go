@@ -231,6 +231,7 @@ func bridges(kubeinfo *k8s.KubeInfo) func() {
 	disconnect := connect(kubeinfo)
 
 	// setup kubernetes bridge
+	log.Printf("BRG: kubernetes ctx=%s ns=%s", kubeinfo.Context, kubeinfo.Namespace)
 	w := watcher.NewWatcher(kubeinfo)
 	w.Watch("services", func(w *watcher.Watcher) {
 		table := route.Table{Name: "kubernetes"}
@@ -256,6 +257,7 @@ func bridges(kubeinfo *k8s.KubeInfo) func() {
 		"cluster.local.",
 		"",
 	}
+	log.Println("BRG: Setting DNS search path:", paths[0])
 	body, err := json.Marshal(paths)
 	if err != nil {
 		panic(err)
