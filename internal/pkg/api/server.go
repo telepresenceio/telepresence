@@ -3,13 +3,14 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"github.com/datawire/teleproxy/internal/pkg/dns"
-	"github.com/datawire/teleproxy/internal/pkg/interceptor"
-	"github.com/datawire/teleproxy/internal/pkg/route"
 	"log"
 	"net"
 	"net/http"
 	"os"
+
+	"github.com/datawire/teleproxy/internal/pkg/dns"
+	"github.com/datawire/teleproxy/internal/pkg/interceptor"
+	"github.com/datawire/teleproxy/internal/pkg/route"
 )
 
 type APIServer struct {
@@ -45,6 +46,27 @@ func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
 			}
 		case http.MethodDelete:
 			iceptor.Delete(table)
+		}
+	})
+	handler.HandleFunc("/api/search", func(w http.ResponseWriter, r *http.Request) {
+		var paths []string
+		switch r.Method {
+		case http.MethodGet:
+			paths = iceptor.GetSearchPath()
+			result, err := json.Marshal(paths)
+			if err != nil {
+				panic(err)
+			} else {
+				w.Write([]byte(result))
+			}
+		case http.MethodPost:
+			d := json.NewDecoder(r.Body)
+			err := d.Decode(&paths)
+			if err != nil {
+				http.Error(w, err.Error(), 400)
+			} else {
+				iceptor.SetSearchPath(paths)
+			}
 		}
 	})
 	handler.HandleFunc("/api/shutdown", func(w http.ResponseWriter, r *http.Request) {
