@@ -237,8 +237,9 @@ func bridges(kubeinfo *k8s.KubeInfo) func() {
 		for _, svc := range w.List("services") {
 			ip, ok := svc.Spec()["clusterIP"]
 			if ok {
+				qualName := svc.Name() + "." + svc.Namespace() + ".svc.cluster.local"
 				table.Add(route.Route{
-					Name:   svc.Name(),
+					Name:   qualName,
 					Ip:     ip.(string),
 					Proto:  "tcp",
 					Target: "1234",
