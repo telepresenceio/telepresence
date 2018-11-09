@@ -218,8 +218,10 @@ func intercept(dnsIP, fallbackIP *string) func() {
 	iceptor.Update(bootstrap)
 
 	return func() {
-		iceptor.Stop()
+		// stop the api server first since it makes calls into
+		// the interceptor
 		apis.Stop()
+		iceptor.Stop()
 		restore()
 		dns.Flush()
 	}
@@ -257,7 +259,7 @@ func bridges(kubeinfo *k8s.KubeInfo) func() {
 	})
 
 	return func() {
-		//dw.Stop()
+		dw.Stop()
 		w.Stop()
 		post(route.Table{Name: "kubernetes"}, route.Table{Name: "docker"})
 		disconnect()
