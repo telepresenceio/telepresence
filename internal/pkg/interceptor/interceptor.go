@@ -17,6 +17,7 @@ type Interceptor struct {
 	domains    sync.Map
 	work       chan func()
 	done       chan empty
+	search     []string
 }
 
 type empty interface{}
@@ -27,6 +28,7 @@ func NewInterceptor(name string) *Interceptor {
 		translator: nat.NewTranslator(name),
 		work:       make(chan func()),
 		done:       make(chan empty),
+		search:     []string{""},
 	}
 }
 
@@ -51,13 +53,22 @@ func (i *Interceptor) Stop() {
 	<-i.done
 }
 
-func (i *Interceptor) Resolve(name string) *rt.Route {
-	value, ok := i.domains.Load(strings.ToLower(name))
-	if ok {
-		return value.(*rt.Route)
-	} else {
-		return nil
+// Resolve looks up the given query in the (FIXME: somewhere), trying
+// all the suffixes in the search path, and returns a Route on success
+// or nil on failure. This implementation does not count the number of
+// dots in the query.
+func (i *Interceptor) Resolve(query string) *rt.Route {
+	if !strings.HasSuffix(query, ".") {
+		query += "."
 	}
+	for _, suffix := range i.GetSearchPath() {
+		name := query + suffix
+		value, ok := i.domains.Load(strings.ToLower(name))
+		if ok {
+			return value.(*rt.Route)
+		}
+	}
+	return nil
 }
 
 func (i *Interceptor) Destination(conn *net.TCPConn) (string, error) {
@@ -200,4 +211,20 @@ func (i *Interceptor) update(table rt.Table) {
 	} else {
 		i.tables[table.Name] = table
 	}
+}
+
+// SetSearchPath updates the DNS search path used by the resolver
+func (i *Interceptor) SetSearchPath(paths []string) {
+	i.work <- func() {
+		i.search = paths
+	}
+}
+
+// GetSearchPath retrieves the current search path
+func (i *Interceptor) GetSearchPath() []string {
+	result := make(chan []string, 1)
+	i.work <- func() {
+		result <- i.search
+	}
+	return <-result
 }
