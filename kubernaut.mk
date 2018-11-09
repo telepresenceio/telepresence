@@ -61,5 +61,5 @@ gubernaut: cmd/gubernaut/gubernaut.go
 .PHONY: kubernaut.clobber
 
 kubernaut.clobber:
-	rm -f gubernaut gubernaut.go
+	rm -f gubernaut
 
