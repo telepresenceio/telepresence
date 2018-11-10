@@ -153,7 +153,9 @@ func (w *Watcher) Canonical(name string) string {
 		return kind
 	}
 
-	if res.Kind == "Namespace" {
+	if res.Namespaced {
+		return fmt.Sprintf("%s/%s.%s", kind, name, namespace)
+	} else {
 		switch namespace {
 		case "":
 			fallthrough
@@ -162,8 +164,6 @@ func (w *Watcher) Canonical(name string) string {
 		default:
 			return ""
 		}
-	} else {
-		return fmt.Sprintf("%s/%s.%s", kind, name, namespace)
 	}
 }
 
