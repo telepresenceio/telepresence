@@ -28,6 +28,16 @@ var READY = map[string]func(Resource) bool{
 	"Namespace": func(r Resource) bool {
 		return r.Status().getString("phase") == "Active"
 	},
+	"ServiceAccount": func(r Resource) bool {
+		_, ok := r["secrets"]
+		return ok
+	},
+	"ClusterRole": func(r Resource) bool {
+		return true
+	},
+	"ClusterRoleBinding": func(r Resource) bool {
+		return true
+	},
 }
 
 type Map map[string]interface{}
