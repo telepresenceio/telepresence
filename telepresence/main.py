@@ -99,6 +99,10 @@ def command_main(args):
         runner.add_cleanup("Stop time tracking", span.end)
         runner.kubectl = KubeInfo(runner, args)
 
+        args.operation = args.command
+        args.method = "teleproxy"
+        call_scout(runner, args)
+
     if args.command == "outbound":
         return outbound.command(runner)
 

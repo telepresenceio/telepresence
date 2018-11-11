@@ -21,7 +21,7 @@ from telepresence.runner import wait_for_exit
 
 def kill_intercept():
     try:
-        with urlopen("http://teleproxy/api/shutdown", timeout=30.0) as fd:
+        with urlopen("http://teleproxy/api/shutdown", timeout=2.0) as fd:
             fd.read()
     except OSError:
         pass
