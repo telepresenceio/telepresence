@@ -8,7 +8,7 @@ Telepresence is an open source tool that lets you run a single service locally, 
 
 3. Make your local development machine operate as if it's part of your Kubernetes cluster. If you've got an application on your machine that you want to run against a service in the cluster -- it's easy to do.
 
-Telepresence works on both Mac OS X and Linux, with [OS-native packages](https://www.telepresence.io/reference/install).
+Telepresence works on both Mac OS X and Linux, with [OS-native packages](/reference/install.html).
 
 ## How it works
 
@@ -20,7 +20,7 @@ This approach gives:
 * your local service full access to Kubernetes environment variables, secrets, and ConfigMap
 * your remote services full access to your local service
 
-How Telepresence works is discussed in more detail [here](https://www.telepresence.io/discussion/how-it-works).
+How Telepresence works is discussed in more detail [here](/discussion/how-it-works.html).
 
 ## Alternatives to Telepresence
 
@@ -32,7 +32,7 @@ Typical alternatives to Telepresence include:
 
 ## Getting started
 
-Telepresence offers a broad set of [proxying options](reference/methods.md) which have different strengths and weaknesses. Generally speaking, we recommend you:
+Telepresence offers a broad set of [proxying options](/reference/methods.html) which have different strengths and weaknesses. Generally speaking, we recommend you:
 
-* Start with the container method, which provides the most consistent environment for your code. Here is a [container quick start](tutorials/docker).
-* Use the VPN method, which lets you use an IDE or debugger with your code. Here is a [quick start that uses the VPN method](tutorials/kubernetes-rapid)
+* Start with the container method, which provides the most consistent environment for your code. Here is a [container quick start](/tutorials/docker.html).
+* Use the VPN method, which lets you use an IDE or debugger with your code. Here is a [quick start that uses the VPN method](/tutorials/kubernetes-rapid.html)
