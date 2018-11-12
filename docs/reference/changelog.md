@@ -1,6 +1,19 @@
 # Changelog
 
 <!--- towncrier start line -->
+
+#### 0.94 (November 12, 2018)
+
+Bug fixes:
+
+* Telepresence no longer crashes at launch for OpenShift/MiniShift users. Thanks to Tom Ellis for the patch.
+  ([#781](https://github.com/telepresenceio/telepresence/issues/781))
+
+Misc:
+
+* When a new version is available, Telepresence will tell you at the end of the session.
+  ([#285](https://github.com/telepresenceio/telepresence/issues/285))
+
 #### 0.93 (October 4, 2018)
 
 Bug fixes:
