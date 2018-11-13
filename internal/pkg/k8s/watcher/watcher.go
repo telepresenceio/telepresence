@@ -133,19 +133,6 @@ func (w *Watcher) Canonical(name string) string {
 		return ""
 	}
 
-	var namespace string
-	parts = strings.Split(name, ".")
-	switch len(parts) {
-	case 0:
-	case 1:
-		namespace = "default"
-	case 2:
-		name = parts[0]
-		namespace = parts[1]
-	default:
-		return ""
-	}
-
 	_, _, res := w.resolve(kind)
 	kind = strings.ToLower(res.Kind)
 
@@ -154,16 +141,22 @@ func (w *Watcher) Canonical(name string) string {
 	}
 
 	if res.Namespaced {
-		return fmt.Sprintf("%s/%s.%s", kind, name, namespace)
-	} else {
-		switch namespace {
-		case "":
-			fallthrough
-		case "default":
-			return fmt.Sprintf("%s/%s", kind, name)
+		var namespace string
+
+		parts = strings.Split(name, ".")
+		switch len(parts) {
+		case 1:
+			namespace = "default"
+		case 2:
+			name = parts[0]
+			namespace = parts[1]
 		default:
 			return ""
 		}
+
+		return fmt.Sprintf("%s/%s.%s", kind, name, namespace)
+	} else {
+		return fmt.Sprintf("%s/%s", kind, name)
 	}
 }
 
