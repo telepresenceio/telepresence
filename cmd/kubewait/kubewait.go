@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/datawire/teleproxy/internal/pkg/k8s"
-	"github.com/datawire/teleproxy/internal/pkg/k8s/watcher"
+	"github.com/datawire/teleproxy/pkg/k8s"
+	"github.com/datawire/teleproxy/pkg/k8s/watcher"
 	"gopkg.in/yaml.v2"
 )
 

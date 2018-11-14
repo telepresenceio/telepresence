@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/datawire/teleproxy/internal/pkg/k8s"
+	"github.com/datawire/teleproxy/pkg/k8s"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

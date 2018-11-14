@@ -37,4 +37,6 @@ func TestSmoke(t *testing.T) {
 			break
 		}
 	}
+
+	// XXX: should figure out how to test cleanup stuff also
 }
