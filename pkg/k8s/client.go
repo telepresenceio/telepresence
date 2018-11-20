@@ -25,7 +25,9 @@ func NewKubeInfo(configfile, context, namespace string) (*KubeInfo, error) {
 	}
 
 	// Possibly override context and namespace
-	overrides := &clientcmd.ConfigOverrides{}
+	overrides := &clientcmd.ConfigOverrides{
+		Timeout: "10s",
+	}
 	if len(context) != 0 {
 		overrides.CurrentContext = context
 	}
