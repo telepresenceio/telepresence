@@ -12,45 +12,111 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-.PHONY: default version registry format lint unit e2e help
+TELEPRESENCE_REGISTRY ?=
+VERSION_SUFFIX        ?= -$(OS)-$(TIME)
+DOCKER_PUSH           ?= docker-push
+PYTEST_ARGS           ?=
 
-VERSION=$(shell git describe --tags)${TELEPRESENCE_VER_SUFFIX}
-TELEPRESENCE_REGISTRY?=${USER}
-SHELL:=/bin/bash
+#
+
+ifeq ($(filter check,$(or $(MAKECMDGOALS),default)),check)
+ifeq ($(shell which kubectl 2>/dev/null),)
+$(error Required executable 'kubectl' not found on $$PATH)
+endif
+endif
+
+ifneq ($(filter check docker-build docker-push,$(or $(MAKECMDGOALS),default)),)
+ifeq ($(TELEPRESENCE_REGISTRY),)
+$(error You must specify a registry with TELEPRESENCE_REGISTRY=)
+endif
+endif
+
+_OS := $(shell python3 -c 'from time import time; from sys import platform; print({"linux": "LNX", "darwin": "OSX"}.get(platform))')
+_TIME := $(shell date +%s)
+TELEPRESENCE_VERSION := $(shell git describe --tags)$(foreach OS,$(_OS),$(foreach TIME,$(_TIME),$(VERSION_SUFFIX)))
+
+# Attempt to get credentials cached early on while the user is still
+# looking at the terminal.  They'll be required later on during the test
+# suite run and the prompt is likely to be buried in test output at that
+# point.
+ifeq ($(filter check,$(or $(MAKECMDGOALS),default)),check)
+_ = $(shell sudo echo -n)
+endif
 
 default: help
 	@echo
-	@echo "See https://telepresence.io/reference/developing.html"
+	@echo "See                 ./docs/reference/developing.md"
+	@echo "or https://telepresence.io/reference/developing.html"
+.PHONY: default
 
-version:
-	@echo $(VERSION)
+#
 
-registry:
-	@echo $(TELEPRESENCE_REGISTRY)
+_pytest_env  = TELEPRESENCE_REGISTRY=$(TELEPRESENCE_REGISTRY)
+_pytest_env += TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)
+_pytest_env += SCOUT_DISABLE=1
+check: virtualenv $(DOCKER_PUSH)  ## Run the test suite (implies 'virtualenv' and '$(DOCKER_PUSH)')
+	sudo echo -n
+	$(VIRTUALENV) $(_pytest_env) py.test -v --timeout=360 --timeout-method=thread $(PYTEST_ARGS)
+.PHONY: check
 
-## Setup dependencies ##
+docker-build:  ## Build Docker images
+	docker build --file local-docker/Dockerfile . -t $(TELEPRESENCE_REGISTRY)/telepresence-local:$(TELEPRESENCE_VERSION)
+	docker build k8s-proxy -t $(TELEPRESENCE_REGISTRY)/telepresence-k8s:$(TELEPRESENCE_VERSION)
+	docker build k8s-proxy --file k8s-proxy/Dockerfile.privileged -t $(TELEPRESENCE_REGISTRY)/telepresence-k8s-priv:$(TELEPRESENCE_VERSION)
+.PHONY: docker-build
 
-virtualenv:  ## Set up Python3 virtual environment for development
-	./build virtualenv
+docker-push: docker-build  ## Push Docker images to TELEPRESENCE_REGISTRY (implies 'docker-build')
+	docker push $(TELEPRESENCE_REGISTRY)/telepresence-k8s:$(TELEPRESENCE_VERSION)
+	docker push $(TELEPRESENCE_REGISTRY)/telepresence-k8s-priv:$(TELEPRESENCE_VERSION)
+	docker push $(TELEPRESENCE_REGISTRY)/telepresence-local:$(TELEPRESENCE_VERSION)
+.PHONY: docker-push
 
-## Development ##
+VIRTUALENV = PATH=$$PWD/virtualenv/bin:$$PATH
+# Presence of __PYENV_LAUNCHER__ in pip processes we launch causes pip
+# to write the wrong #! line.  Only expected to be set on OS X.
+# https://bugs.python.org/issue22490
+PIP = $(VIRTUALENV) env -u __PYENV_LAUNCHER__ pip
+virtualenv: dev-requirements.txt k8s-proxy/requirements.txt  ## Set up Python3 virtual environment for development
+	rm -rf $@ || true
+	virtualenv --python=python3 $@
+	$(PIP) install flake8
+	$(PIP) install -r dev-requirements.txt
+	$(PIP) install -r k8s-proxy/requirements.txt
+	$(PIP) install git+https://github.com/datawire/sshuttle.git@telepresence
+	$(PIP) install -e .
 
-format:  ## Format source code in-place
-format: virtualenv
-	virtualenv/bin/yapf -ir telepresence
+lint: virtualenv  ## Run the linters used by CI (implies 'virtualenv')
+	./tools/license-check
+	$(VIRTUALENV) yapf -dr telepresence packaging
+	$(VIRTUALENV) flake8 --isolated local-docker k8s-proxy telepresence setup.py packaging
+	$(VIRTUALENV) pylint -f parseable -E local-docker k8s-proxy telepresence setup.py packaging/*.py
+	$(VIRTUALENV) mypy --strict-optional telepresence local-docker/entrypoint.py packaging/*.py
+	$(VIRTUALENV) mypy --ignore-missing-imports k8s-proxy
+	$(VIRTUALENV) telepresence --help
+.PHONY: lint
 
-lint:  ## Run the linters used by CI
-	./build lint
+#
 
-unit:  ## Run the unit tests
-	./build TELEPRESENCE_REGISTRY=$(TELEPRESENCE_REGISTRY) PYTEST_ARGS='-x -k "not endtoend"'
+check-unit:  ## Like 'check', but only run unit tests
+	$(MAKE) check PYTEST_ARGS='-x -k "not endtoend"'
+.PHONY: check-unit
 
-e2e:  ## Run the end-to-end tests
-	./build TELEPRESENCE_registry=$(TELEPRESENCE_REGISTRY) PYTEST_ARGS='-x -k "endtoend"'
+check-e2e:  ## Like 'check', but only run end-to-end tests
+	$(MAKE) check PYTEST_ARGS='-x -k "endtoend"'
+.PHONY: check-e2e
 
-## Help - https://gist.github.com/prwhite/8168133#gistcomment-1737630
+format: virtualenv  ## Format source code in-place
+	$(VIRTUALENV) yapf -ir telepresence
+.PHONY: format
+
+#
 
 help:  ## Show this message
-	@echo 'usage: make [target] ...'
+	@echo 'usage: make [TARGETS...] [VARIABLES...]'
 	@echo
-	@egrep '^(.+)\:  ##\ (.+)' ${MAKEFILE_LIST} | column -t -c 2 -s ':#'
+	@echo VARIABLES:
+	@sed -n '/[?]=/s/^/  /p' ${MAKEFILE_LIST}
+	@echo
+	@echo TARGETS:
+	@sed -n 's/:.*[#]#/:#/p' ${MAKEFILE_LIST} | column -t -c 2 -s ':#' | sed 's/^/  /'
+.PHONY: help
