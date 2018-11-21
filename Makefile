@@ -31,22 +31,22 @@ registry:
 ## Setup dependencies ##
 
 virtualenv:  ## Set up Python3 virtual environment for development
-	./build --manage-virtualenv --no-tests
+	./build virtualenv
 
 ## Development ##
 
 format:  ## Format source code in-place
 format: virtualenv
-	virtualenv/bin/yapf -ir telepresence build
+	virtualenv/bin/yapf -ir telepresence
 
 lint:  ## Run the linters used by CI
-	./build --lint --no-tests
+	./build lint
 
 unit:  ## Run the unit tests
-	./build --registry $(TELEPRESENCE_REGISTRY) -- -x -k "not endtoend"
+	./build TELEPRESENCE_REGISTRY=$(TELEPRESENCE_REGISTRY) PYTEST_ARGS='-x -k "not endtoend"'
 
 e2e:  ## Run the end-to-end tests
-	./build --registry $(TELEPRESENCE_REGISTRY) -- -x -k "endtoend"
+	./build TELEPRESENCE_registry=$(TELEPRESENCE_REGISTRY) PYTEST_ARGS='-x -k "endtoend"'
 
 ## Help - https://gist.github.com/prwhite/8168133#gistcomment-1737630
 
