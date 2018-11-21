@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/make -f
 
 # Copyright 2018 Datawire. All rights reserved.
 #
@@ -14,342 +14,90 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from time import time
-from os import (
-    environ,
-    pathsep,
-)
-from sys import (
-    platform,
-    stdout,
-    stderr,
-)
-from os.path import (
-    abspath,
-)
-from shlex import (
-    quote,
-)
-from shutil import (
-    rmtree,
-    which,
-)
-from argparse import ArgumentParser
-from subprocess import (
-    CalledProcessError,
-    check_call,
-    check_output,
-)
-from pathlib import Path
+TELEPRESENCE_REGISTRY ?=
+VERSION_SUFFIX        ?= -$(OS)-$(TIME)
+PYTEST_ARGS           ?=
 
+#
 
-def main():
-    parser = ArgumentParser(description="Test Telepresence")
-    parser.add_argument(
-        '--registry',
-        metavar='REGISTRY',
-        dest='registry',
-        type=str,
-        help='Docker registry for pushing/pulling Telepresence images',
-    )
-    parser.add_argument(
-        '--build-and-push',
-        action='store_true',
-        dest='build_and_push',
-        help='build the Docker images and push them to the registry',
-    )
-    parser.add_argument(
-        '--version-suffix',
-        dest='version_suffix',
-        default="-{OS}-{TIME}",
-        help='include a unique-ish suffix on the version number/image tag',
-    )
-    parser.add_argument(
-        "--manage-virtualenv",
-        action='store_true',
-        dest='manage_virtualenv',
-    )
-    parser.add_argument(
-        "--no-tests",
-        action='store_false',
-        dest='tests',
-        default=True,
-    )
-    parser.add_argument(
-        '--lint',
-        action='store_true',
-        dest='lint',
-        help='run linters on the code base (yapf, flake8, pylint, mypy)',
-    )
-    parser.add_argument(
-        'test_args',
-        metavar='test-args',
-        nargs='*',
-        help='pass additional arguments to py.test',
-    )
+ifeq ($(shell which kubectl 2>/dev/null),)
+$(error Required executable 'kubectl' not found on $$PATH)
+endif
 
-    args = parser.parse_args()
+ifneq ($(filter check docker-build docker-push,$(or $(MAKECMDGOALS),check)),)
+ifeq ($(TELEPRESENCE_REGISTRY),)
+$(error You must specify a registry with TELEPRESENCE_REGISTRY=)
+endif
+endif
 
-    if args.tests and not args.build_and_push:
-        print(
-            "Some tests will run, behaving as though"
-            " --build-and-push supplied."
-        )
-        args.build_and_push = True
+# Presence of this variable in pip processes we launch causes pip to
+# write the wrong #! line.  Only expected to be set on OS X.
+# https://bugs.python.org/issue22490
+undefine __PYENV_LAUNCHER__
 
-    if args.tests:
-        if which("kubectl") is None:
-            raise SystemExit(
-                "Required executable 'kubectl' not found on $PATH.",
-            )
+_OS := $(shell python3 -c 'from time import time; from sys import platform; print({"linux": "LNX", "darwin": "OSX"}.get(platform))')
+_TIME := $(shell date +%s)
+TELEPRESENCE_VERSION := $(shell git describe --tags)$(foreach OS,$(_OS),$(foreach TIME,$(_TIME),$(VERSION_SUFFIX)))
 
-    if args.registry is None and args.build_and_push:
-        raise SystemExit(
-            "You must specify a registry with --registry"
-        )
+# Attempt to get credentials cached early on while the user is still
+# looking at the terminal.  They'll be required later on during the test
+# suite run and the prompt is likely to be buried in test output at that
+# point.
+ifeq ($(filter check,$(or $(MAKECMDGOALS),check)),check)
+_ = $(shell sudo echo -n)
+endif
 
-    try:
-        # Presence of this variable in pip processes we launch causes pip to
-        # write the wrong #! line.  Only expected to be set on OS X.
-        # https://bugs.python.org/issue22490
-        del environ['__PYVENV_LAUNCHER__']
-    except KeyError:
-        pass
+#
 
-    # Attempt to get credentials cached early on while the user is still
-    # looking at the terminal.  They'll be required later on during the test
-    # suite run and the prompt is likely to be buried in test output at that
-    # point.
-    if args.tests:
-        _sudo("echo", "-n")
+check: private export TELEPRESENCE_REGISTRY := $(TELEPRESENCE_REGISTRY)
+check: private export TELEPRESENCE_VERSION  := $(TELEPRESENCE_VERSION)
+check: private export SCOUT_DISABLE         := 1
+check: virtualenv docker-push  ## Run the test suite (implies 'virtualenv' and 'docker-push')
+	sudo echo -n
+	$(VIRTUALENV) py.test -v --timeout=360 --timeout-method=thread $(PYTEST_ARGS)
+.PHONY: check
 
-    if args.manage_virtualenv:
-        _setup_virtualenv()
+docker-build:  ## Build Docker images
+	docker build --file local-docker/Dockerfile . -t $(TELEPRESENCE_REGISTRY)/telepresence-local:$(TELEPRESENCE_VERSION)
+	docker build k8s-proxy -t $(TELEPRESENCE_REGISTRY)/telepresence-k8s:$(TELEPRESENCE_VERSION)
+	docker build k8s-proxy --file k8s-proxy/Dockerfile.privileged -t $(TELEPRESENCE_REGISTRY)/telepresence-k8s-priv:$(TELEPRESENCE_VERSION)
+.PHONY: docker-build
 
-    if args.lint:
-        _lint()
+docker-push: docker-build  ## Push Docker images to TELEPRESENCE_REGISTRY (implies 'docker-build')
+	docker push $(TELEPRESENCE_REGISTRY)/telepresence-k8s:$(TELEPRESENCE_VERSION)
+	docker push $(TELEPRESENCE_REGISTRY)/telepresence-k8s-priv:$(TELEPRESENCE_VERSION)
+	docker push $(TELEPRESENCE_REGISTRY)/telepresence-local:$(TELEPRESENCE_VERSION)
+.PHONY: docker-push
 
-    version = _get_version(args.version_suffix)
+VIRTUALENV = PATH=$$PWD/virtualenv/bin:$$PATH
+PIP = $(VIRTUALENV) pip
+virtualenv: dev-requirements.txt k8s-proxy/requirements.txt  ## Set up Python3 virtual environment for development
+	rm -rf $@ || true
+	virtualenv --python=python3 $@
+	$(PIP) install flake8
+	$(PIP) install -r dev-requirements.txt
+	$(PIP) install -r k8s-proxy/requirements.txt
+	$(PIP) install git+https://github.com/datawire/sshuttle.git@telepresence
+	$(PIP) install -e .
 
-    if args.build_and_push:
-        _build(args.registry, version)
-        # build_images implies pushing because the tests that want to consume
-        # the images are run remotely and aren't going to be able to pull from
-        # our _local_ Docker image repository.
-        _push(args.registry, version)
+lint: virtualenv  ## Run the linters used by CI (implies 'virtualenv')
+	./tools/license-check
+	$(VIRTUALENV) yapf -dr telepresence packaging
+	$(VIRTUALENV) flake8 --isolated local-docker k8s-proxy telepresence setup.py packaging
+	$(VIRTUALENV) pylint -f parseable -E local-docker k8s-proxy telepresence setup.py packaging/*.py
+	$(VIRTUALENV) mypy --strict-optional telepresence local-docker/entrypoint.py packaging/*.py
+	$(VIRTUALENV) mypy --ignore-missing-imports k8s-proxy
+	$(VIRTUALENV) telepresence --help
+.PHONY: lint
 
-    if args.tests:
-        # Run the rest of the test suite, including the new end-to-end tests
-        # which manage the Telepresence method in use without our help.
-        _test(args.registry, version, {}, args.test_args or [])
+#
 
-
-def _get_version(suffix_format):
-    git_tag = check_output(["git", "describe",
-                            "--tags"]).decode("utf-8").strip()
-    os = {"linux": "LNX", "darwin": "OSX"}.get(platform)
-    now = str(int(time()))
-    return git_tag + suffix_format.format(OS=os, TIME=now)
-
-
-# _test() ######################################################################
-
-
-def _test(registry, version, test_env, test_args):
-    """
-    Run the test suite.
-
-    :param registry: A Docker registry where necessary images can be found.
-    :param version: The Telepresence version to test.
-    :param test_env: Extra items to add to the test process environment.
-    :param test_args: Extra args to add to the py.test command line.
-    """
-    # Refresh the credentials
-    _sudo("echo", "-n")
-    test_env = _test_env_for_telepresence(test_env, registry, version)
-    _pytest(*test_args, test_env=test_env)
-
-
-def _pytest(*args, test_env=None):
-    _virtualenv(
-        "py.test",
-        "-v",
-        "--timeout=360",
-        "--timeout-method=thread",
-        *args,
-        env=test_env
-    )
-
-
-def _test_env_for_telepresence(test_env, registry, version):
-    """
-    Construct the additional environment variables which must be set in
-    Telepresence's environment for it to behave as we wish.
-
-    :param test_env: More variables to include in the result.
-
-    :param registry: The location of the registry holding Telepresence Docker
-        images to test.
-
-    :param version: The version of Telepresence (as indicated by Docker image
-        tags) to test.
-    """
-    if test_env is None:
-        test_env = {}
-    if registry is not None:
-        test_env.update({
-            "TELEPRESENCE_REGISTRY": registry,
-        })
-    test_env.update({
-        "TELEPRESENCE_VERSION": version,
-
-        # We don't want to collect test runs as real usage data.
-        "SCOUT_DISABLE": "1",
-    })
-    return test_env
-
-
-# _build() #####################################################################
-
-
-def _build(registry, version):
-    _run(
-        "docker",
-        "build",
-        "--file",
-        "local-docker/Dockerfile",
-        ".",
-        "-t",
-        "{}/telepresence-local:{}".format(registry, version),
-    )
-    _run(
-        "docker",
-        "build",
-        "k8s-proxy",
-        "-t",
-        "{}/telepresence-k8s:{}".format(registry, version),
-    )
-    _run(
-        "docker",
-        "build",
-        "k8s-proxy",
-        "--file",
-        "k8s-proxy/Dockerfile.privileged",
-        "-t",
-        "{}/telepresence-k8s-priv:{}".format(registry, version),
-    )
-
-
-# _push() ######################################################################
-
-
-def _push(registry, version):
-    for image in [
-        "telepresence-k8s", "telepresence-k8s-priv", "telepresence-local"
-    ]:
-        image = registry + "/" + image + ":" + version
-        _run(
-            "docker",
-            "push",
-            image,
-        )
-
-
-# _setup_virtualenv() ##########################################################
-
-
-def _setup_virtualenv():
-    rmtree("virtualenv", ignore_errors=True)
-    _run("virtualenv", "--python=python3", "virtualenv")
-    _pip("--version")
-    _pip("install", "flake8")
-    _pip("install", "-r", "dev-requirements.txt")
-    _pip("install", "-r", "k8s-proxy/requirements.txt")
-    _pip(
-        "install", "git+https://github.com/datawire/sshuttle.git@telepresence"
-    )
-    _pip("install", "-e", ".")
-
-
-# _lint() ######################################################################
-
-
-def _license_check():
-    license_text = "Licensed under the Apache License, Version 2.0"
-    dirs = ["telepresence", "local-docker"]  # XXX k8s-proxy
-    patterns = ["*.py"]  # Future: check other file types
-    license_missing = []
-    for dirname in dirs:
-        for pattern in patterns:
-            for filepath in Path(dirname).glob("**/" + pattern):
-                if license_text not in filepath.read_text():
-                    license_missing.append(filepath)
-    if license_missing:
-        print("License header not found in file(s):")
-        for filepath in license_missing:
-            print("- {}".format(filepath))
-        exit(1)
-
-
-def _lint():
-    _license_check()
-    _virtualenv("yapf", "-dr", "telepresence", "build", "packaging")
-    _virtualenv(
-        "flake8", "--isolated", "local-docker", "k8s-proxy", "telepresence",
-        "build", "setup.py", "packaging"
-    )
-    packaging = [str(path) for path in Path("packaging").glob("*.py")]
-    _virtualenv(
-        "pylint", "-f", "parseable", "-E", "local-docker", "k8s-proxy",
-        "telepresence", "build", "setup.py", *packaging
-    )
-    _virtualenv(
-        "mypy", "--strict-optional", "telepresence",
-        "local-docker/entrypoint.py", "build", *packaging
-    )
-    # Couldn't figure out how to make this work well, so it's not very useful
-    # cause of the skip:
-    _virtualenv("mypy", "--ignore-missing-imports", "k8s-proxy")
-    _virtualenv('telepresence', '--help')
-
-
-# execution helpers ############################################################
-
-
-def _pip(*argv)
-    _virtualenv("pip", *argv)
-
-
-def _virtualenv(*argv, env=None):
-    bindir = abspath("virtualenv/bin")
-    if env is None:
-        env = {}
-    env.update({"PATH": bindir + pathsep + environ["PATH"]})
-    _run("/".join((bindir, argv[0])), *argv[1:], env=env)
-
-
-def _sudo(*argv):
-    _run("sudo", *argv)
-
-
-def _run(*argv, env=None):
-    pass_env = environ.copy()
-    if env is not None:
-        pass_env.update(env)
-    print(
-        "+ {}".format(
-            " ".join(quote(arg) for arg in (
-                ["{}={}".format(k, v) for (k, v) in (env or {}).items()] +
-                list(argv))
-            ),
-        ),
-        flush=True,
-    )
-    try:
-        check_call(argv, stdout=stdout, stderr=stderr, env=pass_env)
-    except CalledProcessError as e:
-        raise SystemExit(e.returncode)
-
-
-if __name__ == '__main__':
-    main()
+help:  ## Show this message
+	@echo 'usage: ./build [TARGETS...] [VARIABLES...]'
+	@echo
+	@echo VARIABLES:
+	@sed -n '/[?]=/s/^/  /p' ${MAKEFILE_LIST}
+	@echo
+	@echo TARGETS:
+	@sed -n 's/:.*[#]#/:#/p' ${MAKEFILE_LIST} | column -t -c 2 -s ':#' | sed 's/^/  /'
+.PHONY: help
