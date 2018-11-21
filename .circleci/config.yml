@@ -86,7 +86,7 @@ jobs:
           name: "build and push image"
           command: |
             docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
-            make docker-push TELEPRESENCE_REGISTRY=datawire VERSION_SUFFIX=''
+            make docker-push TELEPRESENCE_REGISTRY=docker.io/datawire VERSION_SUFFIX=''
 
   deploy:
     docker:
@@ -165,7 +165,7 @@ jobs:
       - run:
           name: "run tests"
           command: |
-            make check TELEPRESENCE_REGISTRY=datawire VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
+            make check TELEPRESENCE_REGISTRY=docker.io/datawire VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
 
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
@@ -247,7 +247,7 @@ jobs:
       - run:
           name: "run tests"
           command: |
-            make check TELEPRESENCE_REGISTRY=datawire VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
+            make check TELEPRESENCE_REGISTRY=docker.io/datawire VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
 
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
