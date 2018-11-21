@@ -54,35 +54,20 @@ def main():
 
     run_tests = args.tests
 
-    if args.circle:
-        manage_virtualenv = False
-        registry = "datawire"
-        version_suffix = ""
-        lint = False
-        build_and_push = False
-        test_args = ["--junitxml=test-reports/junit.xml"]
-        test_env = {
-            # Magic incantation to make kubectl work, because apparently
-            # gcloud can't do that correctly (see
-            # https://github.com/kubernetes/kubernetes/issues/30617)
-            "GOOGLE_APPLICATION_CREDENTIALS":
-            abspath("gcloud-service-key.json"),
-        }
-    else:
-        manage_virtualenv = args.manage_virtualenv
-        lint = args.lint
-        registry = args.registry
-        build_and_push = args.build_and_push
-        version_suffix = args.version_suffix
-        test_args = args.test_args or []
-        test_env = {}
+    manage_virtualenv = args.manage_virtualenv
+    lint = args.lint
+    registry = args.registry
+    build_and_push = args.build_and_push
+    version_suffix = args.version_suffix
+    test_args = args.test_args or []
+    test_env = {}
 
-        if run_tests and not build_and_push:
-            print(
-                "Some tests will run, behaving as though"
-                " --build-and-push supplied."
-            )
-            build_and_push = True
+    if run_tests and not build_and_push and not args.no_build_and_push:
+        print(
+            "Some tests will run, behaving as though"
+            " --build-and-push supplied."
+        )
+        build_and_push = True
 
     if run_tests:
         if which("kubectl") is None:
@@ -92,7 +77,7 @@ def main():
 
     if registry is None and build_and_push:
         raise SystemExit(
-            "You must specify a registry with --registry (or --circle)"
+            "You must specify a registry with --registry"
         )
 
     # Attempt to get credentials cached early on while the user is still
@@ -245,11 +230,6 @@ def _push(registry, version):
 def _parser():
     parser = ArgumentParser(description="Test Telepresence")
     parser.add_argument(
-        '--circle',
-        action='store_true',
-        help='do all the things CircleCI should do',
-    )
-    parser.add_argument(
         '--registry',
         metavar='REGISTRY',
         dest='registry',
@@ -261,6 +241,12 @@ def _parser():
         action='store_true',
         dest='build_and_push',
         help='build the Docker images and push them to the registry',
+    )
+    parser.add_argument(
+        '--no-build-and-push',
+        action='store_true',
+        dest='no_build_and_push',
+        help='Do not build the Docker images and push them to the registry, even if running the tests',
     )
     parser.add_argument(
         '--version-suffix',

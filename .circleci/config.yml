@@ -152,6 +152,10 @@ jobs:
             ./environment-setup.sh datawireio telepresence-testing us-central1-a linux
             # If we installed kubectl, it was into ${PWD}
             echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
+            # Magic incantation to make kubectl work, because apparently
+            # gcloud can't do that correctly (see
+            # https://github.com/kubernetes/kubernetes/issues/30617)
+            echo 'export GOOGLE_APPLICATION_CREDENTIALS=${PWD}/gcloud-service-key.json' >> ${BASH_ENV}
 
       - run:
           name: "setup Python environment"
@@ -161,7 +165,7 @@ jobs:
       - run:
           name: "run tests"
           command: |
-            ./build --circle
+            ./build --no-build-and-push --registry=datawire --version-suffix='' -- --junitxml=test-reports/junit.xml
 
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
@@ -223,6 +227,10 @@ jobs:
             echo 'PATH=${HOME}/google-cloud-sdk/bin:${PATH}' >> ${BASH_ENV}
             # If we installed kubectl, it was into ${PWD}
             echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
+            # Magic incantation to make kubectl work, because apparently
+            # gcloud can't do that correctly (see
+            # https://github.com/kubernetes/kubernetes/issues/30617)
+            echo 'export GOOGLE_APPLICATION_CREDENTIALS=${PWD}/gcloud-service-key.json' >> ${BASH_ENV}
 
       - run:
           name: "setup Python environment"
@@ -239,7 +247,7 @@ jobs:
       - run:
           name: "run tests"
           command: |
-            ./build --circle
+            ./build --no-build-and-push --registry=datawire --version-suffix='' -- --junitxml=test-reports/junit.xml
 
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
