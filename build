@@ -141,31 +141,6 @@ def main():
         _test(args.registry, version, {}, args.test_args or [])
 
 
-def _limit_for_openshift(maximum):
-    """
-    Select a testing parallelism level, taking into consideration the limits
-    of OpenShift if that's where we're running.
-    """
-    if environ.get("TELEPRESENCE_OPENSHIFT"):
-        # Don't want parallism for OpenShift (causes problems with OpenShift
-        # Online's limited free plan).
-        return 1
-    return maximum
-
-
-def _limit_for_method(method, maximum):
-    """
-    Select a testing parallelism level, taking into consideration the limits
-    of the given Telepresence method.
-    """
-    if method == "vpn-tcp" or method == "container":
-        # And don't want parallelism for VPN-y method since should only have
-        # one running a time.  Or for container method because it confuses
-        # checking in the tests for leaked resources.
-        return 1
-    return maximum
-
-
 def _test(registry, version, test_env, test_args):
     """
     Run the test suite.
