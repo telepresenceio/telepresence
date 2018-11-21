@@ -1,0 +1,29 @@
+[Distribution]
+Distribution=debian
+
+[Output]
+Bootable=yes
+
+[Partitions]
+RootSize=4G
+
+[Packages]
+Packages=
+	# Base OS
+	ca-certificates
+	make
+	network-manager
+	sudo
+
+	# For tests/utils.py
+	git
+
+	# For Telepresence
+	conntrack
+	docker.io
+	kubernetes-client
+	libpython3.7
+	python3-setuptools
+	sshfs
+	torsocks
+WithNetwork=yes

@@ -1,0 +1,27 @@
+[Distribution]
+Distribution=arch
+
+[Output]
+Bootable=yes
+
+[Partitions]
+RootSize=4G
+
+[Packages]
+Packages=
+	# Base OS
+	base
+	base-devel
+	networkmanager
+
+	# For AUR and for tests/utils.py
+	git
+
+	# For Telepresence
+	conntrack-tools
+	docker
+	fuse2
+	python-setuptools
+	sshfs
+	torsocks
+WithNetwork=yes

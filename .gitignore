@@ -17,6 +17,12 @@ gcloud-service-key.json
 .idea
 .vscode
 
+# testbench
+/mkosi.cache/
+/testbench.html
+*.tap
+.mkosi*
+
 # --- Docs ---
 docs/book.json
 docs/_book

@@ -1,0 +1,28 @@
+[Distribution]
+Distribution=fedora
+
+[Output]
+Bootable=yes
+
+[Partitions]
+RootSize=4G
+
+[Packages]
+Packages=
+	# Base OS
+	@core
+	@standard
+	make
+
+	# For tests/utils.py
+	git
+
+	# For Telepresence
+	conntrack-tools
+	docker
+	fuse
+	kubernetes-client
+	python3-setuptools
+	sshfs
+	torsocks
+WithNetwork=yes

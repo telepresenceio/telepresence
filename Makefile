@@ -60,8 +60,16 @@ _pytest_env += TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)
 _pytest_env += SCOUT_DISABLE=1
 check: virtualenv $(DOCKER_PUSH)  ## Run the test suite (implies 'virtualenv' and '$(DOCKER_PUSH)')
 	sudo echo -n
-	$(VIRTUALENV) $(_pytest_env) py.test -v --timeout=360 --timeout-method=thread $(PYTEST_ARGS)
+	$(VIRTUALENV) $(_pytest_env) py.test -v --timeout=360 --timeout-method=thread $(PYTEST_ARGS) tests
 .PHONY: check
+
+_testbench_vars  = TELEPRESENCE_REGISTRY=$(TELEPRESENCE_REGISTRY)
+_testbench_vars += TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)
+_testbench_vars += DOCKER_PUSH=''
+_testbench_vars += PYTEST_ARGS='$(call escape_squotes,--tap-combined $(PYTEST_ARGS))'
+testbench-check: virtualenv $(DOCKER_PUSH)  ## Run the test suite in testbench (implies 'virtualenv' and '$(DOCKER_PUSH)')
+	+testbench CMD='make check $(call escape_squotes,$(_testbench_vars)) >&2; cat testresults.tap'
+.PHONY: testbench-check
 
 docker-build:  ## Build Docker images
 	docker build --file local-docker/Dockerfile . -t $(TELEPRESENCE_REGISTRY)/telepresence-local:$(TELEPRESENCE_VERSION)
@@ -82,7 +90,8 @@ VIRTUALENV = PATH=$$PWD/virtualenv/bin:$$PATH
 PIP = $(VIRTUALENV) env -u __PYENV_LAUNCHER__ pip
 virtualenv: dev-requirements.txt k8s-proxy/requirements.txt  ## Set up Python3 virtual environment for development
 	rm -rf $@ || true
-	virtualenv --python=python3 $@
+	virtualenv --python=python3 --always-copy $@
+	if [ ! -d virtualenv/lib64 ]; then ln -s lib virtualenv/lib64; fi
 	$(PIP) install flake8
 	$(PIP) install -r dev-requirements.txt
 	$(PIP) install -r k8s-proxy/requirements.txt
@@ -124,3 +133,8 @@ help:  ## Show this message
 	@echo TARGETS:
 	@sed -n 's/:.*[#]#/:#/p' ${MAKEFILE_LIST} | column -t -c 2 -s ':#' | sed 's/^/  /'
 .PHONY: help
+
+# I put this as the last line in the file because it confuses Emacs
+# syntax highlighting and makes the remainder of the file difficult to
+# edit.
+escape_squotes = $(subst ','\'',$1)
