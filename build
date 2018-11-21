@@ -150,6 +150,17 @@ def main():
         _test(args.registry, version, {}, args.test_args or [])
 
 
+def _get_version(suffix_format):
+    git_tag = check_output(["git", "describe",
+                            "--tags"]).decode("utf-8").strip()
+    os = {"linux": "LNX", "darwin": "OSX"}.get(platform)
+    now = str(int(time()))
+    return git_tag + suffix_format.format(OS=os, TIME=now)
+
+
+# _test() ######################################################################
+
+
 def _test(registry, version, test_env, test_args):
     """
     Run the test suite.
@@ -204,6 +215,9 @@ def _test_env_for_telepresence(test_env, registry, version):
     return test_env
 
 
+# _build() #####################################################################
+
+
 def _build(registry, version):
     _run(
         "docker",
@@ -232,6 +246,9 @@ def _build(registry, version):
     )
 
 
+# _push() ######################################################################
+
+
 def _push(registry, version):
     for image in [
         "telepresence-k8s", "telepresence-k8s-priv", "telepresence-local"
@@ -244,12 +261,7 @@ def _push(registry, version):
         )
 
 
-def _get_version(suffix_format):
-    git_tag = check_output(["git", "describe",
-                            "--tags"]).decode("utf-8").strip()
-    os = {"linux": "LNX", "darwin": "OSX"}.get(platform)
-    now = str(int(time()))
-    return git_tag + suffix_format.format(OS=os, TIME=now)
+# _setup_virtualenv() ##########################################################
 
 
 def _setup_virtualenv():
@@ -263,6 +275,9 @@ def _setup_virtualenv():
         "install", "git+https://github.com/datawire/sshuttle.git@telepresence"
     )
     _pip("install", "-e", ".")
+
+
+# _lint() ######################################################################
 
 
 def _license_check():
@@ -304,7 +319,10 @@ def _lint():
     _virtualenv('telepresence', '--help')
 
 
-def _pip(*argv):
+# execution helpers ############################################################
+
+
+def _pip(*argv)
     _virtualenv("pip", *argv)
 
 
