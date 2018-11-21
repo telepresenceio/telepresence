@@ -27,6 +27,9 @@ from sys import (
 from os.path import (
     abspath,
 )
+from shlex import (
+    quote,
+)
 from shutil import (
     rmtree,
     which,
@@ -322,11 +325,11 @@ def _run(*argv, env=None):
     if env is not None:
         pass_env.update(env)
     print(
-        "+ {} {}".format(
-            " ".join(
-                list("{}={}".format(k, v) for (k, v) in (env or {}).items())
+        "+ {}".format(
+            " ".join(quote(arg) for arg in (
+                ["{}={}".format(k, v) for (k, v) in (env or {}).items()] +
+                list(argv))
             ),
-            " ".join(argv),
         ),
         flush=True,
     )
