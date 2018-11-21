@@ -38,37 +38,6 @@ jobs:
           command: |
             make lint
 
-  build-image-gcloud:
-    docker:
-      # https://circleci.com/docs/2.0/circleci-images/
-      # https://hub.docker.com/r/circleci/python/
-      - image: "circleci/python:3"
-
-    steps:
-      # https://circleci.com/docs/2.0/building-docker-images/
-      - setup_remote_docker:
-          docker_layer_caching: true
-
-      - run:
-          name: "update system"
-          command: |
-            sudo apt-get -qq update
-            sudo apt-get -qq install lsb-release
-
-      - "checkout"
-
-      - run:
-          name: "setup gcloud"
-          command: |
-            ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
-            ci/setup-gcloud.sh datawireio telepresence-testing us-central1-a linux
-            echo 'PATH=${HOME}/google-cloud-sdk/bin:${PWD}/ci:${PATH}' >> ${BASH_ENV}
-
-      - run:
-          name: "build and push image"
-          command: |
-            make docker-push TELEPRESENCE_REGISTRY=gcr.io/datawireio VERSION_SUFFIX=''
-
   build-image:
     docker:
       # https://circleci.com/docs/2.0/circleci-images/
@@ -80,13 +49,28 @@ jobs:
       - setup_remote_docker:
           docker_layer_caching: true
 
+      #- run:
+      #    name: "install dependencies"
+      #    # `ci/setup-gcloud.sh` requires `lsb-release`
+      #    command: |
+      #      sudo apt-get -qq update
+      #      sudo apt-get -qq install lsb-release
+
       - "checkout"
+
+      - run:
+          name: "setup Docker registry autnetication"
+          command: |
+            docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
+          #command: |
+          #  ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
+          #  ci/setup-gcloud.sh datawireio telepresence-testing us-central1-a linux
+          #  echo 'PATH=${HOME}/google-cloud-sdk/bin:${PWD}/ci:${PATH}' >> ${BASH_ENV}
 
       - run:
           name: "build and push image"
           command: |
-            docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
-            make docker-push TELEPRESENCE_REGISTRY=docker.io/datawire VERSION_SUFFIX=''
+            make docker-push VERSION_SUFFIX=''
 
   deploy:
     docker:
@@ -165,7 +149,7 @@ jobs:
       - run:
           name: "run tests"
           command: |
-            make check TELEPRESENCE_REGISTRY=docker.io/datawire VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
+            make check VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
 
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
@@ -247,7 +231,7 @@ jobs:
       - run:
           name: "run tests"
           command: |
-            make check TELEPRESENCE_REGISTRY=docker.io/datawire VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
+            make check VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
 
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest

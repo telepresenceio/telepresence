@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-TELEPRESENCE_REGISTRY ?=
+# If switching from docker.io back to gcr.io, then you must also
+# uncomment .circleci/config.yml's 'build-image' job's gcloud
+# authentication.
+TELEPRESENCE_REGISTRY ?= docker.io/datawire
+#TELEPRESENCE_REGISTRY ?= gcr.io/$(PROJECT_NAME)
 VERSION_SUFFIX        ?= -$(OS)-$(TIME)
 PYTEST_ARGS           ?=
 
