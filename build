@@ -41,8 +41,75 @@ from pathlib import Path
 
 
 def main():
-    parser = _parser()
+    parser = ArgumentParser(description="Test Telepresence")
+    parser.add_argument(
+        '--registry',
+        metavar='REGISTRY',
+        dest='registry',
+        type=str,
+        help='Docker registry for pushing/pulling Telepresence images',
+    )
+    parser.add_argument(
+        '--build-and-push',
+        action='store_true',
+        dest='build_and_push',
+        help='build the Docker images and push them to the registry',
+    )
+    parser.add_argument(
+        '--no-build-and-push',
+        action='store_true',
+        dest='no_build_and_push',
+        help='Do not build the Docker images and push them to the registry, even if running the tests',
+    )
+    parser.add_argument(
+        '--version-suffix',
+        dest='version_suffix',
+        default="-{OS}-{TIME}",
+        help='include a unique-ish suffix on the version number/image tag',
+    )
+    parser.add_argument(
+        "--manage-virtualenv",
+        action='store_true',
+        dest='manage_virtualenv',
+    )
+    parser.add_argument(
+        "--no-tests",
+        action='store_false',
+        dest='tests',
+        default=True,
+    )
+    parser.add_argument(
+        '--lint',
+        action='store_true',
+        dest='lint',
+        help='run linters on the code base (yapf, flake8, pylint, mypy)',
+    )
+    parser.add_argument(
+        'test_args',
+        metavar='test-args',
+        nargs='*',
+        help='pass additional arguments to py.test',
+    )
+
     args = parser.parse_args()
+
+    if args.tests and not args.build_and_push and not args.no_build_and_push:
+        print(
+            "Some tests will run, behaving as though"
+            " --build-and-push supplied."
+        )
+        args.build_and_push = True
+
+    if args.tests:
+        if which("kubectl") is None:
+            raise SystemExit(
+                "Required executable 'kubectl' not found on $PATH.",
+            )
+
+    if args.registry is None and args.build_and_push:
+        raise SystemExit(
+            "You must specify a registry with --registry"
+        )
 
     try:
         # Presence of this variable in pip processes we launch causes pip to
@@ -52,60 +119,32 @@ def main():
     except KeyError:
         pass
 
-    run_tests = args.tests
-
-    manage_virtualenv = args.manage_virtualenv
-    lint = args.lint
-    registry = args.registry
-    build_and_push = args.build_and_push
-    version_suffix = args.version_suffix
-    test_args = args.test_args or []
-    test_env = {}
-
-    if run_tests and not build_and_push and not args.no_build_and_push:
-        print(
-            "Some tests will run, behaving as though"
-            " --build-and-push supplied."
-        )
-        build_and_push = True
-
-    if run_tests:
-        if which("kubectl") is None:
-            raise SystemExit(
-                "Required executable 'kubectl' not found on $PATH.",
-            )
-
-    if registry is None and build_and_push:
-        raise SystemExit(
-            "You must specify a registry with --registry"
-        )
-
     # Attempt to get credentials cached early on while the user is still
     # looking at the terminal.  They'll be required later on during the test
     # suite run and the prompt is likely to be buried in test output at that
     # point.
-    if run_tests:
+    if args.tests:
         _sudo("echo", "-n")
 
-    if manage_virtualenv:
+    if args.manage_virtualenv:
         _setup_virtualenv()
 
-    if lint:
+    if args.lint:
         _lint()
 
-    version = _get_version(version_suffix)
+    version = _get_version(args.version_suffix)
 
-    if build_and_push:
-        _build(registry, version)
+    if args.build_and_push:
+        _build(args.registry, version)
         # build_images implies pushing because the tests that want to consume
         # the images are run remotely and aren't going to be able to pull from
         # our _local_ Docker image repository.
-        _push(registry, version)
+        _push(args.registry, version)
 
-    if run_tests:
+    if args.tests:
         # Run the rest of the test suite, including the new end-to-end tests
         # which manage the Telepresence method in use without our help.
-        _test(registry, version, test_env, test_args)
+        _test(args.registry, version, {}, args.test_args or [])
 
 
 def _limit_for_openshift(maximum):
@@ -225,60 +264,6 @@ def _push(registry, version):
             "push",
             image,
         )
-
-
-def _parser():
-    parser = ArgumentParser(description="Test Telepresence")
-    parser.add_argument(
-        '--registry',
-        metavar='REGISTRY',
-        dest='registry',
-        type=str,
-        help='Docker registry for pushing/pulling Telepresence images',
-    )
-    parser.add_argument(
-        '--build-and-push',
-        action='store_true',
-        dest='build_and_push',
-        help='build the Docker images and push them to the registry',
-    )
-    parser.add_argument(
-        '--no-build-and-push',
-        action='store_true',
-        dest='no_build_and_push',
-        help='Do not build the Docker images and push them to the registry, even if running the tests',
-    )
-    parser.add_argument(
-        '--version-suffix',
-        dest='version_suffix',
-        default="-{OS}-{TIME}",
-        help='include a unique-ish suffix on the version number/image tag',
-    )
-    parser.add_argument(
-        "--manage-virtualenv",
-        action='store_true',
-        dest='manage_virtualenv',
-    )
-    parser.add_argument(
-        "--no-tests",
-        action='store_false',
-        dest='tests',
-        default=True,
-    )
-    parser.add_argument(
-        '--lint',
-        action='store_true',
-        dest='lint',
-        help='run linters on the code base (yapf, flake8, pylint, mypy)',
-    )
-    parser.add_argument(
-        'test_args',
-        metavar='test-args',
-        nargs='*',
-        help='pass additional arguments to py.test',
-    )
-
-    return parser
 
 
 def _get_version(suffix_format):
