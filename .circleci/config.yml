@@ -31,12 +31,12 @@ jobs:
           name: "setup Python environment"
           command: |
             sudo pip install --upgrade virtualenv
-            ./build virtualenv
+            make virtualenv
 
       - run:
           name: "run lint checks"
           command: |
-            ./build lint
+            make lint
 
   build-image-gcloud:
     docker:
@@ -67,7 +67,7 @@ jobs:
       - run:
           name: "build and push image"
           command: |
-            ./build docker-push TELEPRESENCE_REGISTRY=gcr.io/datawireio VERSION_SUFFIX=''
+            make docker-push TELEPRESENCE_REGISTRY=gcr.io/datawireio VERSION_SUFFIX=''
 
   build-image:
     docker:
@@ -86,7 +86,7 @@ jobs:
           name: "build and push image"
           command: |
             docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
-            ./build docker-push TELEPRESENCE_REGISTRY=datawire VERSION_SUFFIX=''
+            make docker-push TELEPRESENCE_REGISTRY=datawire VERSION_SUFFIX=''
 
   deploy:
     docker:
@@ -160,12 +160,12 @@ jobs:
       - run:
           name: "setup Python environment"
           command: |
-            ./build virtualenv
+            make virtualenv
 
       - run:
           name: "run tests"
           command: |
-            ./build check TELEPRESENCE_REGISTRY=datawire VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
+            make check TELEPRESENCE_REGISTRY=datawire VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
 
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
@@ -235,7 +235,7 @@ jobs:
       - run:
           name: "setup Python environment"
           command: |
-            ./build virtualenv
+            make virtualenv
 
       - save_cache:
           key: |
@@ -247,7 +247,7 @@ jobs:
       - run:
           name: "run tests"
           command: |
-            ./build check TELEPRESENCE_REGISTRY=datawire VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
+            make check TELEPRESENCE_REGISTRY=datawire VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
 
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
