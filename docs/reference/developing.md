@@ -17,7 +17,7 @@ The arguments required for `environment-setup.sh` are Google Cloud configuration
 $ git clone git@github.com:datawire/telepresence.git
 $ cd telepresence
 $ ./environment-setup.sh $PROJECT $CLUSTER $ZONE <linux|osx>
-$ ./build --manage-virtualenv --no-tests --registry unused
+$ make virtualenv
 ```
 
 You may want to activate the virtualenv (for the duration of your shell):
@@ -34,7 +34,7 @@ This will give you access to the Telepresence executables:
 You can test your modifications to Telepresence with the `build` tool:
 
 ```console
-$ ./build --registry <Docker registry for tag and push> [-- <pytest args>]
+$ make check TELEPRESENCE_REGISTRY=<Docker registry for tag and push> [PYTEST_ARGS=<pytest args>]
 ```
 
 You can run a subset of the tests using the pytest features for selecting tests
@@ -43,31 +43,31 @@ End-to-end tests are marked with the method and operation they exercise.
 So, for example, you can run all of the tests in the vpn-tcp, swap-deployment configuration:
 
 ```console
-$ ./build --registry <Docker registry for tag and push> -- -m 'vpn_tcp and swap_deployment'
+$ make check TELEPRESENCE_REGISTRY=<Docker registry for tag and push> PYTEST_ARGS="-m 'vpn_tcp and swap_deployment'"
 ```
 
 Note that `-` must be replaced with `_` due to pytest limitations.
 
-See `./build --help` for details about how to run specific tests.
+See `make help` for details about how to run specific tests.
 
 You can also build images and push them to a registry without running any tests:
 
 ```console
-$ ./build --registry <Docker registry for tag and push> --build-and-push --no-tests
+$ make docker-push TELEPRESENCE_REGISTRY=<Docker registry for tag and push>
 ```
 
 Or if you want to build images using minikube (untested):
 
 ```console
 $ eval $(minikube docker-env --shell bash)
-$ ./build --registry <Docker registry for tag and push> --build-and-push --no-tests
+$ make docker-push TELEPRESENCE_REGISTRY=<Docker registry for tag and push>
 ```
 
 Or using minishift (untested):
 
 ```console
 $ eval $(minishift docker-env --shell bash)
-$ ./build --registry <Docker registry for tag and push> --build-and-push --no-tests
+$ make docker-push TELEPRESENCE_REGISTRY=<Docker registry for tag and push>
 ```
 
 ### End-to-End Testing
@@ -247,7 +247,7 @@ At the moment, the Linux packages are not tested, other than a minor smoke test.
 
 0. Recreate your Python virtual environment from scratch and re-run the linters.
    This avoids the frustration of having your release fail in the lint stage in CI, which rebuilds its virtualenv every time.  
-   `rm -r virtualenv && ./build --manage-virtualenv --lint --no-tests`
+   `rm -r virtualenv && make lint`
 1. Make sure `docs/reference/changelog.md` has changelog entries for the next release, and today's release date.
    If changelog entries are in the `newsfragments` directory, use [towncrier](https://pypi.org/project/towncrier/) to construct the changelog update.
    towncrier's version management is incompatible with the rest of the universe; specify the new version explicitly.

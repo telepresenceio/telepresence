@@ -31,43 +31,12 @@ jobs:
           name: "setup Python environment"
           command: |
             sudo pip install --upgrade virtualenv
-            ./build --no-tests --manage-virtualenv
+            make virtualenv
 
       - run:
           name: "run lint checks"
           command: |
-            ./build --no-tests --lint
-
-  build-image-gcloud:
-    docker:
-      # https://circleci.com/docs/2.0/circleci-images/
-      # https://hub.docker.com/r/circleci/python/
-      - image: "circleci/python:3"
-
-    steps:
-      # https://circleci.com/docs/2.0/building-docker-images/
-      - setup_remote_docker:
-          docker_layer_caching: true
-
-      - run:
-          name: "update system"
-          command: |
-            sudo apt-get -qq update
-            sudo apt-get -qq install lsb-release
-
-      - "checkout"
-
-      - run:
-          name: "setup gcloud"
-          command: |
-            ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
-            ci/setup-gcloud.sh datawireio telepresence-testing us-central1-a linux
-            echo 'PATH=${HOME}/google-cloud-sdk/bin:${PWD}/ci:${PATH}' >> ${BASH_ENV}
-
-      - run:
-          name: "build and push image"
-          command: |
-            ./build --registry gcr.io/datawireio --version-suffix "" --build-and-push --no-tests
+            make lint
 
   build-image:
     docker:
@@ -80,13 +49,28 @@ jobs:
       - setup_remote_docker:
           docker_layer_caching: true
 
+      #- run:
+      #    name: "install dependencies"
+      #    # `ci/setup-gcloud.sh` requires `lsb-release`
+      #    command: |
+      #      sudo apt-get -qq update
+      #      sudo apt-get -qq install lsb-release
+
       - "checkout"
+
+      - run:
+          name: "setup Docker registry autnetication"
+          command: |
+            docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
+          #command: |
+          #  ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
+          #  ci/setup-gcloud.sh datawireio telepresence-testing us-central1-a linux
+          #  echo 'PATH=${HOME}/google-cloud-sdk/bin:${PWD}/ci:${PATH}' >> ${BASH_ENV}
 
       - run:
           name: "build and push image"
           command: |
-            docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
-            ./build --registry datawire --version-suffix="" --build-and-push --no-tests
+            make docker-push VERSION_SUFFIX=''
 
   deploy:
     docker:
@@ -152,16 +136,20 @@ jobs:
             ./environment-setup.sh datawireio telepresence-testing us-central1-a linux
             # If we installed kubectl, it was into ${PWD}
             echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
+            # Magic incantation to make kubectl work, because apparently
+            # gcloud can't do that correctly (see
+            # https://github.com/kubernetes/kubernetes/issues/30617)
+            echo 'export GOOGLE_APPLICATION_CREDENTIALS=${PWD}/gcloud-service-key.json' >> ${BASH_ENV}
 
       - run:
           name: "setup Python environment"
           command: |
-            ./build --manage-virtualenv --no-tests
+            make virtualenv
 
       - run:
           name: "run tests"
           command: |
-            ./build --circle
+            make check DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
 
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
@@ -223,11 +211,15 @@ jobs:
             echo 'PATH=${HOME}/google-cloud-sdk/bin:${PATH}' >> ${BASH_ENV}
             # If we installed kubectl, it was into ${PWD}
             echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
+            # Magic incantation to make kubectl work, because apparently
+            # gcloud can't do that correctly (see
+            # https://github.com/kubernetes/kubernetes/issues/30617)
+            echo 'export GOOGLE_APPLICATION_CREDENTIALS=${PWD}/gcloud-service-key.json' >> ${BASH_ENV}
 
       - run:
           name: "setup Python environment"
           command: |
-            ./build --manage-virtualenv --no-tests
+            make virtualenv
 
       - save_cache:
           key: |
@@ -239,7 +231,7 @@ jobs:
       - run:
           name: "run tests"
           command: |
-            ./build --circle
+            make check DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
 
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest

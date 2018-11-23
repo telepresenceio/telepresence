@@ -1,0 +1,1 @@
+The `./build` development script no longer exists, and has been merged in to the Makefile.  See `make help` for the new usage information.
