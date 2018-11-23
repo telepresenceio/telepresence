@@ -124,8 +124,10 @@ class KubeInfo(object):
 
         # Check if the requested namespace exists
         try:
-            runner.get_output([prelim_command, "get", "ns",
-                               args.namespace]).split("\n")
+            runner.get_output([
+                prelim_command, "--context", self.context, "get", "ns",
+                args.namespace
+            ]).split("\n")
             self.namespace = args.namespace
         except CalledProcessError:
             raise runner.fail(
