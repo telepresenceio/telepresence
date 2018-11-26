@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/watch"
+	pwatch "k8s.io/apimachinery/pkg/watch"
 
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
@@ -31,17 +31,22 @@ func (lw listWatchAdapter) List(options v1.ListOptions) (runtime.Object, error) 
 	return lw.resource.List(options)
 }
 
-func (lw listWatchAdapter) Watch(options v1.ListOptions) (watch.Interface, error) {
+func (lw listWatchAdapter) Watch(options v1.ListOptions) (pwatch.Interface, error) {
 	return lw.resource.Watch(options)
 }
 
 type Watcher struct {
 	config       *rest.Config
 	resources    []*v1.APIResourceList
-	stores       map[string]cache.Store
+	watches      map[string]watch
 	stop         chan empty
 	stopChans    []chan struct{}
 	stoppedChans []chan empty
+}
+
+type watch struct {
+	resource dynamic.NamespaceableResourceInterface
+	store    cache.Store
 }
 
 // NewWatcher returns a Kubernetes Watcher for the specified cluster
@@ -64,7 +69,7 @@ func NewWatcher(kubeinfo *k8s.KubeInfo) *Watcher {
 	w := &Watcher{
 		config:    config,
 		resources: resources,
-		stores:    make(map[string]cache.Store),
+		watches:   make(map[string]watch),
 		stop:      make(chan empty),
 	}
 
@@ -186,7 +191,15 @@ func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
 				listener(w)
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				listener(w)
+				oldUn := oldObj.(*unstructured.Unstructured)
+				newUn := newObj.(*unstructured.Unstructured)
+				// we ignore updates for objects
+				// already in our store because we
+				// assume this means we made the
+				// change to them
+				if oldUn.GetResourceVersion() != newUn.GetResourceVersion() {
+					listener(w)
+				}
 			},
 			DeleteFunc: func(obj interface{}) {
 				listener(w)
@@ -194,7 +207,10 @@ func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
 		},
 	)
 
-	w.stores[w.Canonical(res.Kind)] = store
+	w.watches[w.Canonical(res.Kind)] = watch{
+		resource: resource,
+		store:    store,
+	}
 
 	stopChan := make(chan struct{})
 	stoppedChan := make(chan empty)
@@ -210,9 +226,9 @@ func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
 
 func (w *Watcher) List(kind string) []Resource {
 	kind = w.Canonical(kind)
-	store, ok := w.stores[kind]
+	watch, ok := w.watches[kind]
 	if ok {
-		objs := store.List()
+		objs := watch.store.List()
 		result := make([]Resource, len(objs))
 		for idx, obj := range objs {
 			result[idx] = obj.(*unstructured.Unstructured).UnstructuredContent()
@@ -220,6 +236,29 @@ func (w *Watcher) List(kind string) []Resource {
 		return result
 	} else {
 		return nil
+	}
+}
+
+func (w *Watcher) UpdateStatus(resource Resource) (Resource, error) {
+	kind := w.Canonical(resource.Kind())
+	if kind == "" {
+		return nil, fmt.Errorf("unknow resource: %v", resource.Kind())
+	}
+	watch, ok := w.watches[kind]
+	if !ok {
+		return nil, fmt.Errorf("no watch: %s", kind)
+	}
+
+	var uns unstructured.Unstructured
+	uns.SetUnstructuredContent(resource)
+
+	// XXX: should we have an if Namespaced here?
+	result, err := watch.resource.Namespace(uns.GetNamespace()).UpdateStatus(&uns, v1.UpdateOptions{})
+	if err != nil {
+		return nil, err
+	} else {
+		watch.store.Update(result)
+		return result.UnstructuredContent(), nil
 	}
 }
 

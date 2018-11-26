@@ -141,6 +141,9 @@ func (r Resource) Name() string { return r.Metadata().Name() }
 func (m Metadata) Namespace() string { return Map(m).getString("namespace") }
 func (r Resource) Namespace() string { return r.Metadata().Namespace() }
 
+func (m Metadata) ResourceVersion() string { return Map(m).getString("resourceVersion") }
+func (r Resource) ResourceVersion() string { return r.Metadata().ResourceVersion() }
+
 func (m Metadata) QName() string {
 	ns := m.Namespace()
 	if ns == "" {
