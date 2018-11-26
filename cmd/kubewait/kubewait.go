@@ -32,9 +32,9 @@ type ResourceSet struct {
 }
 
 func (rs *ResourceSet) add(resource string) error {
-	resource = rs.w.Canonical(resource)
+	cresource := rs.w.Canonical(resource)
 
-	parts := strings.Split(resource, "/")
+	parts := strings.Split(cresource, "/")
 	if len(parts) != 2 {
 		return fmt.Errorf("expecting <kind>/<name>[.<namespace>], got %s", resource)
 	}
@@ -89,9 +89,22 @@ func (rs *ResourceSet) isEmpty() bool {
 }
 
 var timeout = flag.Int("t", 60, "timeout in seconds")
-var file = flag.String("f", "", "path to yaml file")
+
+type arrayFlags []string
+
+func (i *arrayFlags) String() string {
+	return strings.Join(*i, " ")
+}
+
+func (i *arrayFlags) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
+var files arrayFlags
 
 func main() {
+	flag.Var(&files, "f", "path to yaml file")
 	flag.Parse()
 
 	kubeinfo, err := k8s.NewKubeInfo("", "", "") // Empty file/ctx/ns for defaults
@@ -101,8 +114,8 @@ func main() {
 	w := watcher.NewWatcher(kubeinfo)
 	rset := ResourceSet{w, make(map[string]map[string]bool)}
 
-	if *file != "" {
-		err := filepath.Walk(*file, func(path string, info os.FileInfo, err error) error {
+	for _, file := range files {
+		err := filepath.Walk(file, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
