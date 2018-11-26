@@ -38,6 +38,19 @@ var READY = map[string]func(Resource) bool{
 	"ClusterRoleBinding": func(r Resource) bool {
 		return true
 	},
+	"CustomResourceDefinition": func(r Resource) bool {
+		conditions := r.Status().getMaps("conditions")
+		if len(conditions) > 0 {
+			last := conditions[len(conditions)-1]
+			if last["status"] == "True" {
+				return true
+			} else {
+				return false
+			}
+		} else {
+			return false
+		}
+	},
 }
 
 type Map map[string]interface{}
