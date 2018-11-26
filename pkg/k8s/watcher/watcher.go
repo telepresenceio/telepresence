@@ -51,6 +51,13 @@ type watch struct {
 
 // NewWatcher returns a Kubernetes Watcher for the specified cluster
 func NewWatcher(kubeinfo *k8s.KubeInfo) *Watcher {
+	if kubeinfo == nil {
+		var err error
+		kubeinfo, err = k8s.NewKubeInfo("", "", "") // Empty file/ctx/ns for defaults
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 	config, err := kubeinfo.GetRestConfig()
 	if err != nil {
 		log.Fatalln("Failed to get REST config:", err)

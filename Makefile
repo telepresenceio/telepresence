@@ -7,9 +7,10 @@ export KUBECONFIG=${PWD}/cluster.knaut
 export PATH:=${PATH}
 
 .PHONY: manifests
-manifests: cluster.knaut kubewait
-	kubectl apply -f k8s
-	./kubewait -f k8s
+manifests: cluster.knaut kubeapply kubewait
+	./kubeapply -f k8s
+
+claim: cluster.knaut.clean cluster.knaut
 
 shell: cluster.knaut
 	@exec env -u MAKELEVEL PS1="(dev) [\W]$$ " bash
@@ -27,6 +28,10 @@ get:
 .PHONY: kubewait
 kubewait: $(GO_FILES)
 	go build cmd/kubewait/kubewait.go
+
+.PHONY: kubeapply
+kubeapply: $(GO_FILES)
+	go build cmd/kubeapply/kubeapply.go
 
 other-tests:
 	go test -v $(shell go list ./... \
@@ -62,6 +67,6 @@ run: build
 	./teleproxy
 
 clean: cluster.knaut.clean
-	rm -f ./teleproxy
+	rm -f ./teleproxy ./kubeapply ./kubewait
 
 clobber: clean kubernaut.clobber
