@@ -7,7 +7,7 @@ export KUBECONFIG=${PWD}/cluster.knaut
 export PATH:=${PATH}
 
 .PHONY: manifests
-manifests: cluster.knaut kubeapply kubewait
+manifests: cluster.knaut kubeapply
 	./kubeapply -f k8s
 
 claim: cluster.knaut.clean cluster.knaut

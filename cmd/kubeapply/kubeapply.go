@@ -9,21 +9,16 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
+
+	"github.com/datawire/teleproxy/internal/pkg/tpu"
+
+	"github.com/datawire/teleproxy/pkg/k8s/waiter"
 )
 
-type arrayFlags []string
-
-func (i *arrayFlags) String() string {
-	return strings.Join(*i, " ")
-}
-
-func (i *arrayFlags) Set(value string) error {
-	*i = append(*i, value)
-	return nil
-}
-
-var files arrayFlags
+var timeout = flag.Int("t", 60, "timeout in seconds")
+var files tpu.ArrayFlags
 
 func main() {
 	flag.Var(&files, "f", "path to yaml file")
@@ -114,7 +109,7 @@ func phase(names []string) {
 		args = append(args, "-f", n)
 	}
 	run("kubectl", args...)
-	run("kubewait", args[1:]...)
+	wait(names)
 }
 
 func run(command string, args ...string) {
@@ -125,4 +120,16 @@ func run(command string, args ...string) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func wait(names []string) {
+	w := waiter.NewWaiter(nil)
+	err := w.ScanPaths(names)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if !w.Wait(time.Duration(*timeout) * time.Second) {
+		panic("not ready")
+	}
+
 }
