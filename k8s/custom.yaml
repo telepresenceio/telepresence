@@ -1,0 +1,6 @@
+apiVersion: example.org/v1beta1
+kind: Custom
+metadata:
+  name: xmas
+spec:
+  deck: the halls

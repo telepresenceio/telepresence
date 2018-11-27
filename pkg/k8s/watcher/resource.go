@@ -38,6 +38,19 @@ var READY = map[string]func(Resource) bool{
 	"ClusterRoleBinding": func(r Resource) bool {
 		return true
 	},
+	"CustomResourceDefinition": func(r Resource) bool {
+		conditions := r.Status().getMaps("conditions")
+		if len(conditions) > 0 {
+			last := conditions[len(conditions)-1]
+			if last["status"] == "True" {
+				return true
+			} else {
+				return false
+			}
+		} else {
+			return false
+		}
+	},
 }
 
 type Map map[string]interface{}
@@ -140,6 +153,9 @@ func (r Resource) Name() string { return r.Metadata().Name() }
 
 func (m Metadata) Namespace() string { return Map(m).getString("namespace") }
 func (r Resource) Namespace() string { return r.Metadata().Namespace() }
+
+func (m Metadata) ResourceVersion() string { return Map(m).getString("resourceVersion") }
+func (r Resource) ResourceVersion() string { return r.Metadata().ResourceVersion() }
 
 func (m Metadata) QName() string {
 	ns := m.Namespace()
