@@ -55,6 +55,4 @@ run: build
 	./teleproxy
 
 clean: cluster.knaut.clean
-	rm -f ./teleproxy ./kubeapply ./kubewait
-
-clobber: clean kubernaut.clobber
+	rm -f ./teleproxy ./kubeapply
