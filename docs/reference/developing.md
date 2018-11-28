@@ -14,7 +14,7 @@ The arguments required for `environment-setup.sh` are Google Cloud configuration
 
 
 ```console
-$ git clone git@github.com:datawire/telepresence.git
+$ git clone git@github.com:telepresenceio/telepresence.git
 $ cd telepresence
 $ ./environment-setup.sh $PROJECT $CLUSTER $ZONE <linux|osx>
 $ make virtualenv
