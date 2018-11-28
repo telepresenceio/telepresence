@@ -1,48 +1,36 @@
 
 all: test build
 
-include kubernaut.mk
+pkg = github.com/datawire/teleproxy
+bins = teleproxy kubeapply
 
+include build-aux/go.mk
+include build-aux/kubernaut.mk
+
+export GOPATH
+export GOBIN
+export PATH:=$(GOBIN):$(PATH)
 export KUBECONFIG=${PWD}/cluster.knaut
-export PATH:=${PATH}
 
-.PHONY: manifests
 manifests: cluster.knaut kubeapply
 	./kubeapply -f k8s
+.PHONY: manifests
 
 claim: cluster.knaut.clean cluster.knaut
 
 shell: cluster.knaut
 	@exec env -u MAKELEVEL PS1="(dev) [\W]$$ " bash
 
-.PHONY: teleproxy
-teleproxy: $(GO_FILES)
-	go build cmd/teleproxy/teleproxy.go
-
-build: teleproxy
-	sudo chown root:wheel ./teleproxy && sudo chmod u+s ./teleproxy
-
-get:
-	go get -t -d ./...
-
-.PHONY: kubewait
-kubewait: $(GO_FILES)
-	go build cmd/kubewait/kubewait.go
-
-.PHONY: kubeapply
-kubeapply: $(GO_FILES)
-	go build cmd/kubeapply/kubeapply.go
-
 other-tests:
-	go test -v $(shell go list ./... \
+	$(GO) test -v $(shell $(GO) list ./.go-workspace/src/$(pkg)/... \
 		| fgrep -v github.com/datawire/teleproxy/internal/pkg/nat \
 		| fgrep -v github.com/datawire/teleproxy/cmd/teleproxy)
 
 nat-tests:
-	go test -v -exec sudo github.com/datawire/teleproxy/internal/pkg/nat/
+	$(GO) test -v -exec sudo github.com/datawire/teleproxy/internal/pkg/nat/
 
 smoke-tests: manifests
-	go test -v -exec "sudo env PATH=${PATH} KUBECONFIG=${KUBECONFIG}" github.com/datawire/teleproxy/cmd/teleproxy
+	$(GO) test -v -exec "sudo env PATH=${PATH} KUBECONFIG=${KUBECONFIG}" github.com/datawire/teleproxy/cmd/teleproxy
 
 sudo-tests: nat-tests smoke-tests
 

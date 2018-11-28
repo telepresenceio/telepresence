@@ -1,5 +1,5 @@
+.go-workspace
+!.go-workspace/src/github/datawire/teleproxy
 /teleproxy
-/kubewait
 /kubeapply
-/gubernaut
 cluster.knaut*

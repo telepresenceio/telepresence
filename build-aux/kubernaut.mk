@@ -24,14 +24,6 @@
 #
 #     clean: test-cluster.knaut.clean
 #
-#  7. Use the kubernaut.clobber target to delete the kubernaut binary
-#     itself:
-#
-#     clobber: kubernaut.clobber
-#
-
-.PRECIOUS: %.knaut.claim
-.SECONDARY: %.knaut.claim
 
 %.knaut.claim :
 	@if [ -z $${CI+x} ]; then \
@@ -39,27 +31,18 @@
 	else \
 		echo $(@:%.knaut.claim=%)-$${USER}-$(shell uuidgen) > $@; \
 	fi
+.PRECIOUS: %.knaut.claim
+.SECONDARY: %.knaut.claim
 
-KUBERNAUT=./gubernaut
-KUBERNAUT_CLAIM_FILE=$(@:%.knaut=%.knaut.claim)
-KUBERNAUT_CLAIM_NAME=$(shell cat $(KUBERNAUT_CLAIM_FILE))
+KUBERNAUT=go run build-aux/gubernaut.go
+KUBERNAUT_CLAIM_NAME=$(shell cat $(@:%.knaut=%.knaut.claim))
 
-%.knaut : %.knaut.claim $(KUBERNAUT)
+%.knaut : %.knaut.claim
 	$(KUBERNAUT) -release $(KUBERNAUT_CLAIM_NAME)
 	$(KUBERNAUT) -claim $(KUBERNAUT_CLAIM_NAME) -output $@
 
-.PHONY: %.knaut.clean
-
-%.knaut.clean : $(KUBERNAUT)
+%.knaut.clean :
 	if [ -e $(@:%.clean=%.claim) ]; then $(KUBERNAUT) -release $$(cat $(@:%.clean=%.claim)); fi
 	rm -f $(@:%.knaut.clean=%.knaut)
 	rm -f $(@:%.clean=%.claim)
-
-gubernaut: cmd/gubernaut/gubernaut.go
-	go build cmd/gubernaut/gubernaut.go
-
-.PHONY: kubernaut.clobber
-
-kubernaut.clobber:
-	rm -f gubernaut
-
+.PHONY: %.knaut.clean
