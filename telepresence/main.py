@@ -39,7 +39,7 @@ def main():
     with crash_reporting():
         args = command_parse_args(None, only_for_commands=True)
     if args is not None:
-        command_main(args)
+        return command_main(args)
 
     with crash_reporting():
         args = parse_args()  # tab-completion stuff goes here
