@@ -17,7 +17,7 @@ Telepresence: local development environment for a remote Kubernetes cluster.
 
 import sys
 
-from telepresence import connect, mount, outbound, proxy, remote_env
+from telepresence import connect, mount, outbound, proxy, remote_env, intercept
 from telepresence.runner import wait_for_exit, Runner
 from telepresence.cli import parse_args, crash_reporting
 from telepresence.command_cli import parse_args as command_parse_args
@@ -105,6 +105,9 @@ def command_main(args):
 
     if args.command == "outbound":
         return outbound.command(runner)
+
+    if args.command == "intercept":
+        return intercept.command(runner, args)
 
     raise runner.fail("Not implemented!")
 
