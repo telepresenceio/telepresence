@@ -25,8 +25,9 @@ class Background(ABC):
     A process or thread running separately from the main thread
     """
 
-    def __init__(self, name: str, killer: Optional[Callable],
-                 critical: bool) -> None:
+    def __init__(
+        self, name: str, killer: Optional[Callable], critical: bool
+    ) -> None:
         """
         :param name: Always useful for identification in messages
         :param killer: Optional callable to kill this background thing
