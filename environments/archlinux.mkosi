@@ -17,11 +17,14 @@ Packages=
 	# For AUR and for tests/utils.py
 	git
 
+	# Python
+	python-setuptools
+	python-virtualenv
+
 	# For Telepresence
 	conntrack-tools
 	docker
 	fuse2
-	python-setuptools
 	sshfs
 	torsocks
 WithNetwork=yes

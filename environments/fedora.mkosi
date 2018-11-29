@@ -12,17 +12,20 @@ Packages=
 	# Base OS
 	@core
 	@standard
-	make
+	@development-tools
 
 	# For tests/utils.py
 	git
+
+	# Python
+	python3-setuptools
+	python3-virtualenv
 
 	# For Telepresence
 	conntrack-tools
 	docker
 	fuse
 	kubernetes-client
-	python3-setuptools
 	sshfs
 	torsocks
 WithNetwork=yes

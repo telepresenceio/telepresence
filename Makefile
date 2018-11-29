@@ -67,8 +67,8 @@ _testbench_vars  = TELEPRESENCE_REGISTRY=$(TELEPRESENCE_REGISTRY)
 _testbench_vars += TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)
 _testbench_vars += DOCKER_PUSH=''
 _testbench_vars += PYTEST_ARGS='$(call escape_squotes,--tap-combined $(PYTEST_ARGS))'
-testbench-check: virtualenv $(DOCKER_PUSH)  ## Run the test suite in testbench (implies 'virtualenv' and '$(DOCKER_PUSH)')
-	+testbench CMD='make check $(call escape_squotes,$(_testbench_vars)) >&2; cat testresults.tap'
+testbench-check: $(DOCKER_PUSH)  ## Run the test suite in testbench (implies '$(DOCKER_PUSH)')
+	+testbench CMD='rm -rf virtualenv; make check $(call escape_squotes,$(_testbench_vars)) >&2; cat testresults.tap'
 .PHONY: testbench-check
 
 docker-build:  ## Build Docker images
@@ -90,8 +90,7 @@ VIRTUALENV = PATH=$$PWD/virtualenv/bin:$$PATH
 PIP = $(VIRTUALENV) env -u __PYENV_LAUNCHER__ pip
 virtualenv: dev-requirements.txt k8s-proxy/requirements.txt  ## Set up Python3 virtual environment for development
 	rm -rf $@ || true
-	virtualenv --python=python3 --always-copy $@
-	if [ ! -d virtualenv/lib64 ]; then ln -s lib virtualenv/lib64; fi
+	virtualenv --python=python3 $@
 	$(PIP) install flake8
 	$(PIP) install -r dev-requirements.txt
 	$(PIP) install -r k8s-proxy/requirements.txt

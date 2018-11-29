@@ -10,20 +10,23 @@ RootSize=4G
 [Packages]
 Packages=
 	# Base OS
+	build-essential
 	ca-certificates
-	make
 	network-manager
 	sudo
 
 	# For tests/utils.py
 	git
 
+	# Python
+	libpython3-dev
+	python3-setuptools
+	virtualenv
+
 	# For Telepresence
 	conntrack
 	docker.io
 	kubernetes-client
-	libpython3.7
-	python3-setuptools
 	sshfs
 	torsocks
 WithNetwork=yes
