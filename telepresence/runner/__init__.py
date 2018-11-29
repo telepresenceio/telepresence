@@ -388,6 +388,7 @@ class Runner(object):
     def launch(
         self, name: str, args, killer=None, critical=True, **kwargs
     ) -> None:
+        kwargs["start_new_session"] = True  # Avoid signals getting forwarded
         job_id, process = self._popen(name, args, **kwargs)
         name = "[{}] {}".format(job_id, name)
         bg = BackgroundProcess(name, process, killer, critical)
