@@ -41,7 +41,7 @@ def connect(
         "kubectl logs",
         runner.kubectl(
             "logs", "-f", remote_info.pod_name, "--container",
-            remote_info.container_name
+            remote_info.container_name, "--tail=10"
         ),
         bufsize=0,
     )

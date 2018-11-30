@@ -46,6 +46,8 @@ class RemoteInfo(object):
         cs = deployment_config["spec"]["template"]["spec"]["containers"]
         containers = [c for c in cs if "telepresence-k8s" in c["image"]]
         if not containers:
+            containers = [c for c in cs if "telepresence-proxy" in c["image"]]
+        if not containers:
             raise RuntimeError(
                 "Could not find container with image "
                 "'datawire/telepresence-k8s' in pod {}.".format(pod_name)
@@ -55,7 +57,10 @@ class RemoteInfo(object):
 
     def remote_telepresence_version(self) -> str:
         """Return the version used by the remote Telepresence container."""
-        return self.container_config["image"].split(":")[-1]
+        name, version = self.container_config["image"].split(":")
+        if name.endswith("telepresence-proxy"):
+            return image_version
+        return version
 
 
 def get_deployment_json(

@@ -104,8 +104,42 @@ def parse_args(argv=None, only_for_commands=False):
     cluster. This operation will run a subprocess using "sudo", which may
     prompt you for your password.
     """
-    # outbound_parser =
+    # outbound_parser =  # commented out because we aren't using this yet
     add_command("outbound", description=outbound_desc, help=outbound_desc)
+
+    intercept_desc = """
+    Arrange for a subset of requests to be diverted to the local machine.
+    Requires the Telepresence Sidecar on the deployment and the Telepresence
+    Proxy running in the cluster in the same namespace.
+    See (docs) for more info.
+    """
+    intercept_parser = add_command(
+        "intercept", description=intercept_desc, help=intercept_desc
+    )
+    intercept_parser.add_argument(
+        "deployment",
+        help="The deployment to intercept",
+    )
+    intercept_parser.add_argument(
+        "--name",
+        "-n",
+        help="Name of session (visible in the logs)",
+    )
+    intercept_parser.add_argument(
+        "--port",
+        "-p",
+        type=int,
+        required=True,
+        help="Local port where your code listens"
+    )
+    intercept_parser.add_argument(
+        "--match",
+        "-m",
+        nargs=2,
+        action="append",
+        required=True,
+        help="Match the value of this header against the regular expression ",
+    )
 
     add_command("version")
 
