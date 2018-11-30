@@ -14,7 +14,7 @@ import (
 
 	"github.com/datawire/teleproxy/internal/pkg/tpu"
 
-	"github.com/datawire/teleproxy/pkg/k8s/waiter"
+	"github.com/datawire/teleproxy/pkg/k8s"
 )
 
 var timeout = flag.Int("t", 60, "timeout in seconds")
@@ -123,7 +123,7 @@ func run(command string, args ...string) {
 }
 
 func wait(names []string) {
-	w := waiter.NewWaiter(nil)
+	w := k8s.NewWaiter(nil)
 	err := w.ScanPaths(names)
 	if err != nil {
 		log.Fatal(err)

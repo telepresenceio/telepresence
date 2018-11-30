@@ -1,4 +1,4 @@
-package waiter
+package k8s
 
 import (
 	"fmt"
@@ -11,22 +11,20 @@ import (
 
 	"github.com/datawire/teleproxy/internal/pkg/tpu"
 
-	"github.com/datawire/teleproxy/pkg/k8s/watcher"
-
 	"gopkg.in/yaml.v2"
 )
 
 type Waiter struct {
-	watcher *watcher.Watcher
+	watcher *Watcher
 	kinds   map[string]map[string]bool
 }
 
-func NewWaiter(watchr *watcher.Watcher) (w *Waiter) {
-	if watchr == nil {
-		watchr = watcher.NewWatcher(nil)
+func NewWaiter(watcher *Watcher) (w *Waiter) {
+	if watcher == nil {
+		watcher = NewClient(nil).Watcher()
 	}
 	return &Waiter{
-		watcher: watchr,
+		watcher: watcher,
 		kinds:   make(map[string]map[string]bool),
 	}
 }
@@ -66,7 +64,7 @@ func (w *Waiter) Scan(path string) (err error) {
 			}
 			return
 		}
-		res := watcher.NewResourceFromYaml(uns)
+		res := NewResourceFromYaml(uns)
 		err = w.Add(fmt.Sprintf("%s/%s", res.Kind(), res.QName()))
 		if err != nil {
 			return
@@ -113,7 +111,7 @@ func (w *Waiter) isEmpty() bool {
 }
 
 func (w *Waiter) Wait(timeout time.Duration) bool {
-	listener := func(watcher *watcher.Watcher) {
+	listener := func(watcher *Watcher) {
 		for kind, names := range w.kinds {
 			for name := range names {
 				r := watcher.Get(kind, name)

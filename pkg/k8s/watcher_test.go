@@ -1,4 +1,4 @@
-package watcher
+package k8s
 
 import (
 	"testing"
@@ -33,7 +33,7 @@ func (w *Watcher) fetch(resource, qname string) (result Resource) {
 }
 
 func TestUpdateStatus(t *testing.T) {
-	w := NewWatcher(nil)
+	w := NewClient(nil).Watcher()
 
 	svc := w.fetch("services", "kubernetes.default")
 	svc.Status()["loadBalancer"].(map[string]interface{})["ingress"] = []map[string]interface{}{{"hostname": "foo", "ip": "1.2.3.4"}}
@@ -45,7 +45,7 @@ func TestUpdateStatus(t *testing.T) {
 		t.Logf("updated %s status, result: %v\n", svc.QName(), result.ResourceVersion())
 	}
 
-	svc = NewWatcher(nil).fetch("services", "kubernetes.default")
+	svc = NewClient(nil).Watcher().fetch("services", "kubernetes.default")
 	ingresses := svc.Status()["loadBalancer"].(map[string]interface{})["ingress"].([]interface{})
 	ingress := ingresses[0].(map[string]interface{})
 	if ingress["hostname"] != "foo" {
@@ -58,7 +58,7 @@ func TestUpdateStatus(t *testing.T) {
 }
 
 func TestWatchCustom(t *testing.T) {
-	w := NewWatcher(nil)
+	w := NewClient(nil).Watcher()
 
 	// XXX: we can only watch custom resources... k8s doesn't
 	// support status for CRDs until 1.12

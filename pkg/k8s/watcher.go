@@ -1,4 +1,4 @@
-package watcher
+package k8s
 
 import (
 	"fmt"
@@ -6,18 +6,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/datawire/teleproxy/pkg/k8s"
-
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	pwatch "k8s.io/apimachinery/pkg/watch"
 
-	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -36,8 +32,7 @@ func (lw listWatchAdapter) Watch(options v1.ListOptions) (pwatch.Interface, erro
 }
 
 type Watcher struct {
-	config       *rest.Config
-	resources    []*v1.APIResourceList
+	client       *Client
 	watches      map[string]watch
 	stop         chan empty
 	stopChans    []chan struct{}
@@ -50,34 +45,11 @@ type watch struct {
 }
 
 // NewWatcher returns a Kubernetes Watcher for the specified cluster
-func NewWatcher(kubeinfo *k8s.KubeInfo) *Watcher {
-	if kubeinfo == nil {
-		var err error
-		kubeinfo, err = k8s.NewKubeInfo("", "", "") // Empty file/ctx/ns for defaults
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-	config, err := kubeinfo.GetRestConfig()
-	if err != nil {
-		log.Fatalln("Failed to get REST config:", err)
-	}
-
-	disco, err := discovery.NewDiscoveryClientForConfig(config)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	resources, err := disco.ServerResources()
-	if err != nil {
-		log.Fatal(err)
-	}
-
+func (c *Client) Watcher() *Watcher {
 	w := &Watcher{
-		config:    config,
-		resources: resources,
-		watches:   make(map[string]watch),
-		stop:      make(chan empty),
+		client:  c,
+		watches: make(map[string]watch),
+		stop:    make(chan empty),
 	}
 
 	go func() {
@@ -91,43 +63,6 @@ func NewWatcher(kubeinfo *k8s.KubeInfo) *Watcher {
 	}()
 
 	return w
-}
-
-func (w *Watcher) resolve(resource string) (string, string, v1.APIResource) {
-	resource = strings.ToLower(resource)
-	if resource == "" {
-		return "", "", v1.APIResource{}
-	}
-	for _, rl := range w.resources {
-		for _, r := range rl.APIResources {
-			candidates := []string{
-				r.Name,
-				r.Kind,
-				r.SingularName,
-			}
-			candidates = append(candidates, r.ShortNames...)
-
-			for _, c := range candidates {
-				if resource == strings.ToLower(c) {
-					var group string
-					var version string
-					parts := strings.Split(rl.GroupVersion, "/")
-					switch len(parts) {
-					case 1:
-						group = ""
-						version = parts[0]
-					case 2:
-						group = parts[0]
-						version = parts[1]
-					default:
-						panic("unrecognized GroupVersion")
-					}
-					return group, version, r
-				}
-			}
-		}
-	}
-	return "", "", v1.APIResource{}
 }
 
 func (w *Watcher) Canonical(name string) string {
@@ -145,14 +80,14 @@ func (w *Watcher) Canonical(name string) string {
 		return ""
 	}
 
-	_, _, res := w.resolve(kind)
-	kind = strings.ToLower(res.Kind)
+	ri := w.client.resolve(kind)
+	kind = strings.ToLower(ri.Kind)
 
 	if name == "" {
 		return kind
 	}
 
-	if res.Namespaced {
+	if ri.Namespaced {
 		var namespace string
 
 		parts = strings.Split(name, ".")
@@ -173,20 +108,16 @@ func (w *Watcher) Canonical(name string) string {
 }
 
 func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
-	group, version, res := w.resolve(resources)
-	if version == "" {
-		return fmt.Errorf("unknown resource: '%s'", resources)
-	}
-
-	dyn, err := dynamic.NewForConfig(w.config)
+	ri := w.client.resolve(resources)
+	dyn, err := dynamic.NewForConfig(w.client.config)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	resource := dyn.Resource(schema.GroupVersionResource{
-		Group:    group,
-		Version:  version,
-		Resource: res.Name,
+		Group:    ri.Group,
+		Version:  ri.Version,
+		Resource: ri.Name,
 	})
 
 	store, controller := cache.NewInformer(
@@ -214,7 +145,7 @@ func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
 		},
 	)
 
-	w.watches[w.Canonical(res.Kind)] = watch{
+	w.watches[w.Canonical(ri.Kind)] = watch{
 		resource: resource,
 		store:    store,
 	}
