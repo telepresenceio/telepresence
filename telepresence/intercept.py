@@ -30,15 +30,18 @@ def command(runner, args):
         name = args.name or runner.session_id
         local_port = args.port
         deployment = args.deployment
-        match = args.match
+        patterns = [
+            dict(name=header, regex_match=pattern)
+            for header, pattern in args.match
+        ]
 
         # Inform the user
         runner.show("Setting up intercept session {}".format(name))
         runner.show("Intercepting requests to {}".format(deployment))
         runner.show("and redirecting them to localhost:{}".format(local_port))
         runner.show("when the following headers match:")
-        for header, pattern in match:
-            runner.show("  {}: {}".format(header, pattern))
+        for obj in patterns:
+            runner.show("  {name}: {regex_match}".format(**obj))
 
         # Check the deployment exists and has the sidecar
         # FIXME: implement
@@ -52,6 +55,7 @@ def command(runner, args):
         _, ssh = connect(runner, remote_info, False, PortMapping())
         runner.chatty = old_chatty
 
+        # Forward local port to the proxy's API server
         api_server_port = find_free_port()
         forward_args = [
             "-L127.0.0.1:{}:127.0.0.1:8081".format(api_server_port)
@@ -64,14 +68,16 @@ def command(runner, args):
         )
         runner.write("Proxy URL is {}".format(url))
 
-        data = json.dumps(dict(name=name, patterns=str(match)))
+        # Start the intercept, get the remote port on the proxy
+        data = json.dumps(dict(name=name, patterns=patterns))
         response = proxy_request(runner, url, data, "POST")
-
         try:
             remote_port = int(response)
         except ValueError:
             raise runner.fail("Unexpected response from the proxy")
 
+        # Forward remote proxy port to the local port. This is how the
+        # intercepted requests will get from the proxy to the user's code.
         forward_args = ["-R{}:127.0.0.1:{}".format(remote_port, local_port)]
         runner.launch(
             "SSH port forward (proxy to user code)",
@@ -82,6 +88,7 @@ def command(runner, args):
             "Delete intercept", proxy_request, runner, url, str(remote_port),
             "DELETE"
         )
+
         runner.show("Intercept is running. Press Ctrl-C/Ctrl-Break to quit.")
         user_process = Popen(["cat"], stdout=DEVNULL)
         wait_for_exit(runner, user_process)
