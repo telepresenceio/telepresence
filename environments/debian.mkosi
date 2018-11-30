@@ -3,6 +3,8 @@ Distribution=debian
 
 [Output]
 Bootable=yes
+Cache=
+	/home/testbench/.cache/pip
 
 [Partitions]
 RootSize=4G
@@ -12,6 +14,7 @@ Packages=
 	# Base OS
 	build-essential
 	ca-certificates
+	haveged
 	network-manager
 	sudo
 

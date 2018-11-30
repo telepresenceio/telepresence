@@ -3,6 +3,8 @@ Distribution=fedora
 
 [Output]
 Bootable=yes
+Cache=
+	/home/testbench/.cache/pip
 
 [Partitions]
 RootSize=4G

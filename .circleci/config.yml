@@ -348,7 +348,7 @@ jobs:
       - run:
           name: "run testbench"
           command: |
-            make -j$(nproc) testbench-check DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='-m "new and inject_tcp"'
+            DISPLAY='' make -j$(nproc) testbench-check DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='-m "new and inject_tcp"'
 
       - run:
           name: "Delete kubernaut claims"

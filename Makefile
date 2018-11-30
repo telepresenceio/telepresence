@@ -68,7 +68,7 @@ _testbench_vars += TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)
 _testbench_vars += DOCKER_PUSH=''
 _testbench_vars += PYTEST_ARGS='$(call escape_squotes,--tap-combined $(PYTEST_ARGS))'
 testbench-check: $(DOCKER_PUSH)  ## Run the test suite in testbench (implies '$(DOCKER_PUSH)')
-	+testbench CMD='rm -rf virtualenv; make check $(call escape_squotes,$(_testbench_vars)) >&2; cat testresults.tap'
+	+testbench CMD='make check $(call escape_squotes,$(_testbench_vars)) >&2; cat testresults.tap'
 .PHONY: testbench-check
 
 docker-build:  ## Build Docker images
