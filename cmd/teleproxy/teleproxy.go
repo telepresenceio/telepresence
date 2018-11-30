@@ -16,7 +16,6 @@ import (
 	"syscall"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
-	"github.com/datawire/teleproxy/pkg/k8s/watcher"
 
 	"github.com/datawire/teleproxy/internal/pkg/api"
 	"github.com/datawire/teleproxy/internal/pkg/dns"
@@ -232,8 +231,8 @@ func bridges(kubeinfo *k8s.KubeInfo) func() {
 
 	// setup kubernetes bridge
 	log.Printf("BRG: kubernetes ctx=%s ns=%s", kubeinfo.Context, kubeinfo.Namespace)
-	w := watcher.NewWatcher(kubeinfo)
-	w.Watch("services", func(w *watcher.Watcher) {
+	w := k8s.NewClient(kubeinfo).Watcher()
+	w.Watch("services", func(w *k8s.Watcher) {
 		table := route.Table{Name: "kubernetes"}
 		for _, svc := range w.List("services") {
 			ip, ok := svc.Spec()["clusterIP"]

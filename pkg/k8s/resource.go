@@ -1,4 +1,4 @@
-package watcher
+package k8s
 
 import (
 	"fmt"
