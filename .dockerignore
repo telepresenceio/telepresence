@@ -1,4 +1,5 @@
 .git
+dist
 docs/node_modules
 docs/_book
 docs/.bundle
