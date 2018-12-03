@@ -65,8 +65,8 @@ check: virtualenv $(DOCKER_PUSH)  ## Run the test suite (implies 'virtualenv' an
 
 docker-build:  ## Build Docker images
 	docker build --file local-docker/Dockerfile . -t $(TELEPRESENCE_REGISTRY)/telepresence-local:$(TELEPRESENCE_VERSION)
-	docker build k8s-proxy -t $(TELEPRESENCE_REGISTRY)/telepresence-k8s:$(TELEPRESENCE_VERSION)
-	docker build k8s-proxy --file k8s-proxy/Dockerfile.privileged -t $(TELEPRESENCE_REGISTRY)/telepresence-k8s-priv:$(TELEPRESENCE_VERSION)
+	docker build k8s-proxy -t $(TELEPRESENCE_REGISTRY)/telepresence-k8s:$(TELEPRESENCE_VERSION) --target telepresence-k8s
+	docker build k8s-proxy -t $(TELEPRESENCE_REGISTRY)/telepresence-k8s-priv:$(TELEPRESENCE_VERSION) --target telepresence-k8s-priv
 .PHONY: docker-build
 
 docker-push: docker-build  ## Push Docker images to TELEPRESENCE_REGISTRY (implies 'docker-build')

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM alpine:3.6
+FROM alpine:3.6 as common
 
 RUN mkdir -p /usr/src/app
 WORKDIR /usr/src/app
@@ -27,11 +27,6 @@ RUN apk add --no-cache python3 python3-dev openssh gcc libc-dev && \
     pip3 install --no-cache-dir -r requirements.txt && \
     apk del --no-cache -r gcc libc-dev python3-dev
 
-# Set the permissions necessary to run as a non-root user
-RUN chmod -R g+r /etc/ssh && \
-    chmod g+w /etc/passwd && \
-    chmod -R g+w /usr/src/app
-
 # Make a /usr/bin/python for sshuttle
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
@@ -39,8 +34,26 @@ COPY forwarder.py /usr/src/app
 COPY socks.py /usr/src/app
 COPY . /usr/src/app
 
-# Running as root will now fail due with a permissions error, so default to some
-# other UID
-USER 1000
+#
+# The normal (non-root) image
+#
+FROM common as telepresence-k8s
+
+# Set up to run as the telepresence user (1000:0)
+RUN chmod -R g+r /etc/ssh && \
+    chmod -R g+w /usr/src/app && \
+    echo "telepresence::1000:0:Telepresence User:/app:/bin/ash" >> /etc/passwd
+USER 1000:0
+
+CMD /usr/src/app/run.sh
+
+#
+# The privileged (running-as-root) image
+#
+FROM common as telepresence-k8s-priv
+
+# Set up to run as the telepresence user (1000:0)
+RUN echo "telepresence::0:0:Telepresence User:/app:/bin/ash" >> /etc/passwd
+#RUN chmod -R 0600 /etc/ssh/*
 
 CMD /usr/src/app/run.sh
