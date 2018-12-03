@@ -18,7 +18,7 @@ Telepresence: local development environment for a remote Kubernetes cluster.
 import sys
 
 from telepresence import connect, mount, outbound, proxy, remote_env, intercept
-from telepresence.runner import wait_for_exit, Runner
+from telepresence.runner import Runner
 from telepresence.cli import parse_args, crash_reporting
 from telepresence.command_cli import parse_args as command_parse_args
 from telepresence.runner.output import Output
@@ -85,7 +85,7 @@ def main():
             runner, remote_info, env, socks_port, ssh, mount_dir
         )
 
-        wait_for_exit(runner, user_process)
+        runner.wait_for_exit(user_process)
 
 
 def command_main(args):
