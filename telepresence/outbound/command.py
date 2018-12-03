@@ -35,6 +35,7 @@ def command(runner):
             "teleproxy intercept",
             ["sudo", "teleproxy", "-mode", "intercept"],
             killer=kill_intercept,
+            keep_session=True,  # Avoid trouble with interactive sudo
         )
         runner.launch(
             "teleproxy bridge",

@@ -255,7 +255,8 @@ def connect_sshuttle(
             "127.0.0.1:9053",
             "-r",
             "telepresence@localhost:" + str(ssh.port),
-        ] + get_proxy_cidrs(runner, remote_info, hosts_or_ips)
+        ] + get_proxy_cidrs(runner, remote_info, hosts_or_ips),
+        keep_session=True,  # Avoid trouble with interactive sudo
     )
 
     # sshuttle will take a while to startup. We can detect it being up when

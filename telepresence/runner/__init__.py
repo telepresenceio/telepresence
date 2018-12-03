@@ -386,9 +386,18 @@ class Runner(object):
         return track, process
 
     def launch(
-        self, name: str, args, killer=None, critical=True, **kwargs
+        self,
+        name: str,
+        args,
+        killer=None,
+        critical=True,
+        keep_session=False,
+        **kwargs
     ) -> None:
-        kwargs["start_new_session"] = True  # Avoid signals getting forwarded
+        if not keep_session:
+            # This prevents signals from getting forwarded, but breaks sudo
+            # if it is configured to ask for a password.
+            kwargs["start_new_session"] = True
         job_id, process = self._popen(name, args, **kwargs)
         name = "[{}] {}".format(job_id, name)
         bg = BackgroundProcess(name, process, killer, critical)
