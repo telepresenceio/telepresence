@@ -106,11 +106,9 @@ def random_name(suffix=""):
     ).replace(".", "-")
 
 
-def telepresence_version():
-    """Return the version of Telepresence we're testing."""
-    return str(
-        check_output(["telepresence", "--version"], stderr=STDOUT), "utf-8"
-    ).strip()
+def telepresence_image_version():
+    """Return the version of the Telepresence image we're testing."""
+    return os.environ["TELEPRESENCE_VERSION"]
 
 
 def query_in_k8s(namespace, url, process_to_poll):
