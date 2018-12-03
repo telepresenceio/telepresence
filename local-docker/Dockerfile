@@ -2,6 +2,7 @@
 FROM alpine:3.6
 
 RUN apk add --no-cache python3 openssh-client iptables tini conntrack-tools git && \
+    pip3 install --upgrade pip && \
     pip3 install git+https://github.com/datawire/sshuttle.git@telepresence && \
     apk del --no-cache -r git
 

@@ -377,6 +377,9 @@ def create_deployment(deployment_ident, image, args, environ, ports, replicas):
             "name": "podinfo",
             "mountPath": "/podinfo",
         }],
+        "securityContext": {
+            "readOnlyRootFilesystem": True
+        }
     }
     if args is not None:
         container["args"] = args
