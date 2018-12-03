@@ -44,7 +44,7 @@ from .utils import (
     run_webserver,
     create_namespace,
     cleanup_namespace,
-    telepresence_version,
+    telepresence_image_version,
 )
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
@@ -232,7 +232,7 @@ class _ExistingDeploymentOperation(object):
             self.name = "existing"
             self.image = "{}/telepresence-k8s:{}".format(
                 REGISTRY,
-                telepresence_version(),
+                telepresence_image_version(),
             )
             self.replicas = 1
             self.container_args = None
