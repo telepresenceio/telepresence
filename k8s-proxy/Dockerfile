@@ -23,6 +23,7 @@ COPY requirements.txt /usr/src/app
 RUN apk add --no-cache python3 python3-dev openssh gcc libc-dev && \
     ssh-keygen -A && \
     echo -e "ClientAliveInterval 1\nGatewayPorts yes\nPermitEmptyPasswords yes\nPort 8022\nClientAliveCountMax 10\nPermitRootLogin yes\n" >> /etc/ssh/sshd_config && \
+    pip3 install --no-cache-dir --upgrade pip && \
     pip3 install --no-cache-dir incremental && \
     pip3 install --no-cache-dir -r requirements.txt && \
     apk del --no-cache -r gcc libc-dev python3-dev
