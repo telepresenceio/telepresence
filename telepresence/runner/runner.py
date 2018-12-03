@@ -47,7 +47,7 @@ _CleanupItem = typing.NamedTuple(
 )
 
 
-class RunnerX(object):
+class Runner(object):
     """Context for running subprocesses."""
 
     def __init__(self, logfile_path: str, kubeinfo, verbose: bool) -> None:

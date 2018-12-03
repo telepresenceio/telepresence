@@ -12,6 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from telepresence.runner.runner import RunnerX as Runner
+from telepresence.runner.runner import Runner
 
 __all__ = "Runner",
