@@ -47,6 +47,7 @@ jobs:
     steps:
       # https://circleci.com/docs/2.0/building-docker-images/
       - setup_remote_docker:
+          version: 18.05.0-ce
           docker_layer_caching: true
 
       #- run:
@@ -59,7 +60,7 @@ jobs:
       - "checkout"
 
       - run:
-          name: "setup Docker registry autnetication"
+          name: "setup Docker registry authentication"
           command: |
             docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
           #command: |
