@@ -1,0 +1,33 @@
+[Distribution]
+Distribution=fedora
+
+[Output]
+Bootable=yes
+Cache=
+	/home/testbench/.cache/pip
+
+[Partitions]
+RootSize=4G
+
+[Packages]
+Packages=
+	# Base OS
+	@core
+	@standard
+	@development-tools
+
+	# For tests/utils.py
+	git
+
+	# Python
+	python3-setuptools
+	python3-virtualenv
+
+	# For Telepresence
+	conntrack-tools
+	docker
+	fuse
+	kubernetes-client
+	sshfs
+	torsocks
+WithNetwork=yes

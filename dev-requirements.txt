@@ -4,6 +4,7 @@ mypy
 pytest
 pytest-xdist
 pytest-timeout
+pytest-tap
 pyyaml
 yapf
 pylint

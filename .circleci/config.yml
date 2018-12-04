@@ -17,6 +17,9 @@ workflows:
           requires:
             - "build-image"
 
+      - build-testbench:
+          requires:
+            - "build-image"
 jobs:
   lint:
     docker:
@@ -104,6 +107,7 @@ jobs:
     machine:
       enabled: true
       # https://circleci.com/docs/2.0/configuration-reference/#machine
+      # Ubuntu 14.04 + docker 17.11.0-ce + docker-compose 1.17.1
       image: "circleci/classic:201711-01"
 
     environment:
@@ -237,3 +241,152 @@ jobs:
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
           path: test-reports
+
+  build-testbench:
+    # Use the Machine executor for now.
+    #  https://circleci.com/docs/2.0/configuration-reference/#machine
+    #
+    # We use Machine instead of Docker because testbench-mkosi needs
+    # to run privileged Docker containers, which the Docker executor
+    # doesn't support.
+    #  https://circleci.com/docs/2.0/executor-types/
+    #
+    # We may switch to the macOS executor in the future, to enable
+    # testbench to run macOS guests.
+    machine:
+      enabled: true
+      # Ubuntu 14.04 + docker 17.11.0-ce + docker-compose 1.17.1
+      # If you change this be sure to change the restore_cache/save_cache steps below
+      image: "circleci/classic:201711-01"
+
+    steps:
+
+      - restore_cache:
+          key: "pyenv-201711-01-3.6.3"
+      - run:
+          name: "Install Python 3.6"
+          command: |
+            pyenv versions
+            pyenv install --skip-existing 3.6.3
+            pyenv global 2.7.12 3.6.3
+            pyenv versions
+      - save_cache:
+          key: "pyenv-201711-01-3.6.3"
+          paths:
+            - "/opt/circleci/.pyenv"
+
+      - restore_cache:
+          key: "qemu-201711-01-3.0.0"
+      - run:
+          name: "Install QEMU 3.0.0"
+          command: |
+            set -x
+            cd ~
+            curl -OL https://download.qemu.org/qemu-3.0.0.tar.xz
+            tar xf qemu-3.0.0.tar.xz
+            cd qemu-3.0.0
+            ./configure --prefix=$HOME/.local \
+                        --target-list=x86_64-softmmu \
+                        --audio-drv-list='' \
+                        --disable-user
+            make -j$(nproc)
+            make install
+      - save_cache:
+          key: "qemu-201711-01-3.0.0"
+          paths:
+            - "/home/circleci/qemu-3.0.0.tar.xz"
+            - "/home/circleci/qemu-3.0.0"
+
+      - run:
+          name: "Update APT"
+          command: |
+            sudo apt-get --quiet update
+
+      - run:
+          name: "Install testbench"
+          command: |
+            set -x
+            cd ~
+
+            curl -OL http://releases.datawire.io/kubernaut/$(curl http://releases.datawire.io/kubernaut/latest.txt)/linux/amd64/kubernaut
+            sudo install -m755 kubernaut /usr/bin/kubernaut
+            mkdir -p ~/.config/kubernaut
+            # To update:
+            #   1) Get a new token from https://kubernaut.io/token
+            #   2) Update KUBERNAUT_TOKEN in CircleCI "Environment
+            #      Variables" configuration for Telepresence project.
+            #      <https://circleci.com/gh/telepresenceio/telepresence/edit#env-vars>
+            kubernaut config backend create --url="https://next.kubernaut.io" --name="v2" --activate "$KUBERNAUT_TOKEN"
+
+            sudo apt-get install python3-setuptools qemu-system-x86 ovmf curl haveged
+
+            git clone https://github.com/datawire/testbench
+            cd testbench
+            python3 setup.py install --user
+            echo 'PATH=$HOME/.local/bin:$PATH' >> ${BASH_ENV}
+
+      - "checkout"
+
+      - run:
+          name: "decrypt gcloud keys"
+          command: |
+            # To update:
+            #   1) Generate a new key and IV:
+            #      $ dd if=/dev/urandom count=64 bs=1 | md5sum
+            #   2) Update GCLOUD_KEY and GCLOUD_IV in CircleCI "Environment
+            #      Variables" configuration for Telepresence project.
+            #   3) Encrypt the new gcloud key:
+            #      $ ci/encrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
+            ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
+
+      - run:
+          name: "setup non-Python environment"
+          command: |
+            # Note hard-coded GNU/Linux platform
+            ./environment-setup.sh datawireio telepresence-testing us-central1-a linux
+            # If we installed kubectl, it was into ${PWD}
+            echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
+            # Magic incantation to make kubectl work, because apparently
+            # gcloud can't do that correctly (see
+            # https://github.com/kubernetes/kubernetes/issues/30617)
+            echo 'export GOOGLE_APPLICATION_CREDENTIALS=${PWD}/gcloud-service-key.json' >> ${BASH_ENV}
+
+      - restore-cache:
+          key: "mkosi.cache-"
+      - run:
+          name: Prepare testbench
+          command: |
+            testbench -j$(nproc) prepare
+            # Remove cache files that weren't accessed in the last 24
+            # hours, to avoid having the the cache keep growing
+            # without bound.
+            sudo find mkosi.cache -atime +0 -type f -delete
+            sudo find mkosi.cache -depth -type d -empty -exec rmdir -- {} \;
+      - save_cache:
+          key: "mkosi.cache-{{ epoch }}"
+          paths:
+            - "mkosi.cache"
+
+      - run:
+          name: "run testbench"
+          command: |
+            DISPLAY='' make -j$(nproc) testbench-check DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='-m "new and inject_tcp"'
+
+      - run:
+          name: "Delete kubernaut claims"
+          when: always
+          command: |
+            testbench delete-claims
+
+      #- store_test_results:
+      #    path: testbench.junit4.xml
+      - run:
+          name: "Gather testbench report"
+          when: always
+          command: |
+            mkdir -p /tmp/testbench/environments
+            cp -t /tmp/testbench --  testbench.html || true
+            cp -t /tmp/testbench/environments -- environments/*.tap || true
+      - store_artifacts:
+          path: /tmp/testbench
+          destination: testbench-report

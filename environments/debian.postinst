@@ -1,0 +1,9 @@
+#!/bin/sh
+
+# On 2018-12-03, Debian Sid updated pip 9->18, but didn't update
+# virtualenv 15->16.  The pip update breaks virtualenv.
+wget -c http://ftp.us.debian.org/debian/pool/main/p/python-pip/python-pip-whl_9.0.1-2.3_all.deb
+dpkg -i python-pip-whl_9.0.1-2.3_all.deb
+
+gpasswd -a testbench docker
+systemctl enable NetworkManager

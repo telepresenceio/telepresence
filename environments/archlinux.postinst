@@ -1,0 +1,4 @@
+#!/bin/sh
+gpasswd -a testbench docker
+systemctl enable docker
+sudo -u testbench sh -c 'cd ~ && git clone https://aur.archlinux.org/kubectl-bin.git && cd kubectl-bin && makepkg --syncdeps --install --noconfirm --rmdeps'
