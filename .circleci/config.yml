@@ -275,6 +275,28 @@ jobs:
           paths:
             - "/opt/circleci/.pyenv"
 
+      - restore_cache:
+          key: "qemu-201711-01-3.0.0"
+      - run:
+          name: "Install QEMU 3.0.0"
+          command: |
+            set -x
+            cd ~
+            curl -OL https://download.qemu.org/qemu-3.0.0.tar.xz
+            tar xf qemu-3.0.0.tar.xz
+            cd qemu-3.0.0
+            ./configure --prefix=$HOME/.local \
+                        --target-list=x86_64-softmmu \
+                        --audio-drv-list='' \
+                        --disable-user
+            make -j$(nproc)
+            make install
+      - save_cache:
+          key: "qemu-201711-01-3.0.0"
+          paths:
+            - "/home/circleci/qemu-3.0.0.tar.xz"
+            - "/home/circleci/qemu-3.0.0"
+
       - run:
           name: "Update APT"
           command: |
