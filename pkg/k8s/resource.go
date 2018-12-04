@@ -2,7 +2,6 @@ package k8s
 
 import (
 	"fmt"
-	"log"
 
 	ms "github.com/mitchellh/mapstructure"
 )
@@ -68,10 +67,12 @@ func (m Map) getMaps(name string) []map[string]interface{} {
 	var result []map[string]interface{}
 	v, ok := m[name]
 	if ok {
-		lst := v.([]interface{})
-		result = make([]map[string]interface{}, len(lst))
-		for idx, obj := range lst {
-			result[idx] = obj.(map[string]interface{})
+		lst, ok := v.([]interface{})
+		if ok {
+			result = make([]map[string]interface{}, len(lst))
+			for idx, obj := range lst {
+				result[idx] = obj.(map[string]interface{})
+			}
 		}
 	}
 	return result
@@ -128,6 +129,15 @@ func (r Resource) Spec() Map {
 	return Map(r).getMap("spec")
 }
 
+func (r Resource) ReadyImplemented() bool {
+	if r.Empty() {
+		return false
+	}
+	kind := r.Kind()
+	_, ok := READY[kind]
+	return ok
+}
+
 func (r Resource) Ready() bool {
 	if r.Empty() {
 		return false
@@ -137,7 +147,6 @@ func (r Resource) Ready() bool {
 	if ok {
 		return f(r)
 	} else {
-		log.Printf("warning: don't know how to tell if a %s is ready", kind)
 		return true
 	}
 }

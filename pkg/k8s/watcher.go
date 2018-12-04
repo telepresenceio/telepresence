@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,6 +35,7 @@ func (lw listWatchAdapter) Watch(options v1.ListOptions) (pwatch.Interface, erro
 type Watcher struct {
 	client       *Client
 	watches      map[string]watch
+	mutex        sync.Mutex
 	stop         chan empty
 	stopChans    []chan struct{}
 	stoppedChans []chan empty
@@ -120,13 +122,19 @@ func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
 		Resource: ri.Name,
 	})
 
+	invoke := func() {
+		w.mutex.Lock()
+		defer w.mutex.Unlock()
+		listener(w)
+	}
+
 	store, controller := cache.NewInformer(
 		listWatchAdapter{resource},
 		nil,
 		5*time.Minute,
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				listener(w)
+				invoke()
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				oldUn := oldObj.(*unstructured.Unstructured)
@@ -136,11 +144,11 @@ func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
 				// assume this means we made the
 				// change to them
 				if oldUn.GetResourceVersion() != newUn.GetResourceVersion() {
-					listener(w)
+					invoke()
 				}
 			},
 			DeleteFunc: func(obj interface{}) {
-				listener(w)
+				invoke()
 			},
 		},
 	)
