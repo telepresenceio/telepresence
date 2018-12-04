@@ -116,7 +116,12 @@ func (w *Waiter) Wait(timeout time.Duration) bool {
 			for name := range names {
 				r := watcher.Get(kind, name)
 				if r.Ready() {
-					fmt.Printf("ready: %s/%s\n", watcher.Canonical(r.Kind()), r.QName())
+					if r.ReadyImplemented() {
+						fmt.Printf("ready: %s/%s\n", watcher.Canonical(r.Kind()), r.QName())
+					} else {
+						fmt.Printf("ready: %s/%s (UNIMPLEMENTED)\n",
+							watcher.Canonical(r.Kind()), r.QName())
+					}
 					w.remove(kind, name)
 				}
 			}
