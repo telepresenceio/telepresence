@@ -88,14 +88,15 @@ VIRTUALENV = PATH=$$PWD/virtualenv/bin:$$PATH
 # to write the wrong #! line.  Only expected to be set on OS X.
 # https://bugs.python.org/issue22490
 PIP = $(VIRTUALENV) env -u __PYENV_LAUNCHER__ pip
+DIRFAIL = { r=$$?; rm -rf $@; exit $$r; }
 virtualenv: dev-requirements.txt k8s-proxy/requirements.txt  ## Set up Python3 virtual environment for development
 	rm -rf $@ || true
-	virtualenv --python=python3 $@
-	$(PIP) install flake8
-	$(PIP) install -r dev-requirements.txt
-	$(PIP) install -r k8s-proxy/requirements.txt
-	$(PIP) install git+https://github.com/datawire/sshuttle.git@telepresence
-	$(PIP) install -e .
+	virtualenv --python=python3 $@ || $(DIRFAIL)
+	$(PIP) install flake8 || $(DIRFAIL)
+	$(PIP) install -r dev-requirements.txt || $(DIRFAIL)
+	$(PIP) install -r k8s-proxy/requirements.txt || $(DIRFAIL)
+	$(PIP) install git+https://github.com/datawire/sshuttle.git@telepresence || $(DIRFAIL)
+	$(PIP) install -e . || $(DIRFAIL)
 
 lint: virtualenv  ## Run the linters used by CI (implies 'virtualenv')
 	./tools/license-check
