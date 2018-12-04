@@ -19,6 +19,7 @@ import textwrap
 import typing
 import uuid
 from contextlib import contextmanager
+from functools import partial
 from inspect import currentframe, getframeinfo
 from pathlib import Path
 from shutil import rmtree, which
@@ -28,10 +29,7 @@ from threading import Thread
 from time import sleep, time
 
 from telepresence import TELEPRESENCE_BINARY
-from telepresence.utilities import str_command
-from .background import (
-    Background, BackgroundProcess, BackgroundThread, TrackedBG
-)
+from telepresence.utilities import kill_process, str_command
 from .cache import Cache
 from .launch import _launch_command
 from .output import Output
@@ -63,8 +61,8 @@ class Runner(object):
         self.current_span = None  # type: typing.Optional[Span]
         self.counter = 0
         self.cleanup_stack = []  # type: typing.List[_CleanupItem]
-        self.tracked = None  # type: typing.Optional[TrackedBG]
         self.sudo_held = False
+        self.quitting = False
 
         if sys.platform.startswith("linux"):
             self.platform = "linux"
@@ -204,13 +202,8 @@ class Runner(object):
                 raise self.fail("Unable to escalate privileges with sudo")
 
         self.sudo_held = True
-        thread = Thread(target=self._hold_sudo)
-        thread.start()
-        self.track_background(
-            BackgroundThread(
-                "sudo privileges holder", thread, killer=self._drop_sudo
-            )
-        )
+        Thread(target=self._hold_sudo).start()
+        self.add_cleanup("Kill sudo privileges holder", self._drop_sudo)
 
     # Dependencies
 
@@ -254,7 +247,8 @@ class Runner(object):
                    sleep_seconds: float) -> typing.Iterable[int]:
         """
         Yield a loop counter during the loop time, then end. Sleep the
-        specified amount between loops. Always run at least once.
+        specified amount between loops. Always run at least once. Check for
+        early exit while looping.
 
         :param loop_seconds: How long the loop should run
         :param sleep_seconds: How long to sleep between loops
@@ -264,6 +258,8 @@ class Runner(object):
         counter = 0
         while True:
             yield counter
+            if self.quitting:
+                raise self.fail("Background process failed during setup")
             counter += 1
             if self.time() >= end_time:
                 break
@@ -357,13 +353,7 @@ class Runner(object):
         return output
 
     def launch(
-        self,
-        name: str,
-        args,
-        killer=None,
-        critical=True,
-        keep_session=False,
-        **kwargs
+        self, name: str, args, killer=None, keep_session=False, **kwargs
     ) -> None:
         if not keep_session:
             # This prevents signals from getting forwarded, but breaks sudo
@@ -375,6 +365,7 @@ class Runner(object):
         def done(proc):
             retcode = proc.wait()
             self.output.write("[{}] exit {}".format(track, retcode))
+            self.quitting = True
 
         self.output.write(
             "[{}] Launching {}: {}".format(track, name, str_command(args))
@@ -382,15 +373,10 @@ class Runner(object):
         process = self._launch_command(
             track, out_cb, err_cb, args, done=done, **kwargs
         )
-
-        name = "[{}] {}".format(track, name)
-        bg = BackgroundProcess(name, process, killer, critical)
-        self.track_background(bg)
-
-    def track_background(self, bg: Background) -> None:
-        if self.tracked is None:
-            self.tracked = TrackedBG(self)
-        self.tracked.append(bg)
+        self.add_cleanup(
+            "Kill BG process [{}] {}".format(track, name),
+            killer if killer else partial(kill_process, process),
+        )
 
     # Cleanup
 
@@ -455,6 +441,7 @@ class Runner(object):
         :param message: So the user knows what happened
         :param code: Process exit code
         """
+        self.quitting = True
         self.show(message)
         self.write("EXITING with status code {}".format(code))
         exit(code)
@@ -465,6 +452,8 @@ class Runner(object):
         Exit after a successful session. Does not return. Cleanup will run
         before the process ends.
         """
+        self.quitting = True
+        Span.emit_summary = True
         self.write("EXITING successful session.")
         exit(0)
         return SystemExit(0)  # Not reached; just here for the linters
@@ -474,30 +463,26 @@ class Runner(object):
         Monitor main process and background items until done
         """
         self.write("Everything launched. Waiting to exit...")
-        main_command = str_command(str(arg) for arg in main_process.args)
+        main_code = None
         span = self.span()
-        while True:
+        while not self.quitting and main_code is None:
             sleep(0.1)
             main_code = main_process.poll()
-            if main_code is not None:
-                # Shell exited, we're done. Automatic shutdown cleanup
-                # will kill subprocesses.
-                self.write("Main process ({})".format(main_command))
-                self.write(" exited with code {}.".format(main_code))
-                span.end()
-                self.set_success(True)
-                raise SystemExit(main_code)
-            if self.tracked:
-                dead_bg = self.tracked.which_dead()
-            else:
-                dead_bg = None
-            if dead_bg:
-                # Unfortunately torsocks doesn't deal well with connections
-                # being lost, so best we can do is shut down.
-                # FIXME: Look at bg.critical and do something smarter
-                self.show(
-                    "Proxy to Kubernetes exited. This is typically due to"
-                    " a lost connection."
-                )
-                span.end()
-                raise self.fail("Exiting...", code=3)
+        span.end()
+
+        if main_code is not None:
+            # Shell exited, we're done. Automatic shutdown cleanup
+            # will kill subprocesses.
+            main_command = str_command(str(arg) for arg in main_process.args)
+            self.write("Main process ({})".format(main_command))
+            self.write(" exited with code {}.".format(main_code))
+            raise self.exit()
+
+        # Something else exited, setting the quitting flag.
+        # Unfortunately torsocks doesn't deal well with connections
+        # being lost, so best we can do is shut down.
+        message = (
+            "Proxy to Kubernetes exited. This is typically due to"
+            " a lost connection."
+        )
+        raise self.fail(message, code=3)
