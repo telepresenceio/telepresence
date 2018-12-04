@@ -25,6 +25,7 @@ Packages=
 	libpython3-dev
 	python3-setuptools
 	virtualenv
+	wget
 
 	# For Telepresence
 	conntrack
