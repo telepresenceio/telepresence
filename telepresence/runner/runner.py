@@ -28,14 +28,14 @@ from threading import Thread
 from time import sleep, time
 
 from telepresence import TELEPRESENCE_BINARY
-from telepresence.runner.background import (
+from telepresence.utilities import str_command
+from .background import (
     Background, BackgroundProcess, BackgroundThread, TrackedBG
 )
-from telepresence.runner.cache import Cache
-from telepresence.runner.launch import _launch_command
-from telepresence.runner.output import Output
-from telepresence.runner.span import Span
-from telepresence.utilities import str_command
+from .cache import Cache
+from .launch import _launch_command
+from .output import Output
+from .span import Span
 
 _CleanupItem = typing.NamedTuple(
     "_CleanupItem", [
@@ -356,23 +356,6 @@ class Runner(object):
             raise CalledProcessError(cpe_exc.returncode, cpe_exc.cmd, output)
         return output
 
-    def _popen(self, name: str, args, **kwargs) -> typing.Tuple[int, Popen]:
-        """Return Popen object."""
-        self.counter = track = self.counter + 1
-        out_cb = err_cb = self._make_logger(track)
-
-        def done(proc):
-            retcode = proc.wait()
-            self.output.write("[{}] exit {}".format(track, retcode))
-
-        self.output.write(
-            "[{}] Launching {}: {}".format(track, name, str_command(args))
-        )
-        process = self._launch_command(
-            track, out_cb, err_cb, args, done=done, **kwargs
-        )
-        return track, process
-
     def launch(
         self,
         name: str,
@@ -386,8 +369,21 @@ class Runner(object):
             # This prevents signals from getting forwarded, but breaks sudo
             # if it is configured to ask for a password.
             kwargs["start_new_session"] = True
-        job_id, process = self._popen(name, args, **kwargs)
-        name = "[{}] {}".format(job_id, name)
+        self.counter = track = self.counter + 1
+        out_cb = err_cb = self._make_logger(track)
+
+        def done(proc):
+            retcode = proc.wait()
+            self.output.write("[{}] exit {}".format(track, retcode))
+
+        self.output.write(
+            "[{}] Launching {}: {}".format(track, name, str_command(args))
+        )
+        process = self._launch_command(
+            track, out_cb, err_cb, args, done=done, **kwargs
+        )
+
+        name = "[{}] {}".format(track, name)
         bg = BackgroundProcess(name, process, killer, critical)
         self.track_background(bg)
 
