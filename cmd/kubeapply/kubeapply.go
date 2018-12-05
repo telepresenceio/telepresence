@@ -52,6 +52,11 @@ func main() {
 	flag.Var(&files, "f", "path to yaml file")
 	flag.Parse()
 
+	if len(files) == 0 {
+		fmt.Printf("at least one file argument is required")
+		os.Exit(1)
+	}
+
 	p := NewPhaser()
 
 	for _, file := range files {
