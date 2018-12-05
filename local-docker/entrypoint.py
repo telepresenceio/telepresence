@@ -86,6 +86,10 @@ def proxy(config: dict):
     cidrs = config["cidrs"]
     expose_ports = config["expose_ports"]
 
+    # Launch local sshd so Tel outside can forward 38023 to the cluster
+    runner = Runner("-", "-", False)
+    runner.check_call(["/usr/sbin/sshd", "-e"])
+
     # Start the sshuttle VPN-like thing:
     # XXX duplicates code in telepresence, remove duplication
     main_process = Popen([
@@ -96,7 +100,6 @@ def proxy(config: dict):
         "telepresence@{}:{}".format(ip, port)
     ] + cidrs)
     # Start the SSH tunnels to expose local services:
-    runner = Runner("-", "-", False)
     ssh = SSH(runner, port, ip)
     expose_local_services(runner, ssh, expose_ports)
 
