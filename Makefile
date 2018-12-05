@@ -60,7 +60,7 @@ _pytest_env += TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)
 _pytest_env += SCOUT_DISABLE=1
 check: virtualenv $(DOCKER_PUSH)  ## Run the test suite (implies 'virtualenv' and '$(DOCKER_PUSH)')
 	sudo echo -n
-	$(VIRTUALENV) $(_pytest_env) py.test -v --timeout=360 --timeout-method=thread $(PYTEST_ARGS) tests
+	$(VIRTUALENV) $(_pytest_env) py.test -v --timeout=360 --timeout-method=thread $(PYTEST_ARGS)
 .PHONY: check
 
 _testbench_vars  = TELEPRESENCE_REGISTRY=$(TELEPRESENCE_REGISTRY)
