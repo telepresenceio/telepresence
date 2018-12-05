@@ -16,13 +16,6 @@ class Telepresence < Formula
     libexec.install Dir["libexec/*"]
   end
 
-  def caveats
-    <<~EOS
-      Use of the container method requires socat.
-        brew install socat
-    EOS
-  end
-
   test do
     system "#{bin}/telepresence", "--help"
   end

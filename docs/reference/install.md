@@ -16,4 +16,3 @@ If you install Telepresence using a pre-built package, dependencies other than [
 - `conntrack` and `iptables` on Linux for the vpn-tcp method
 - `torsocks` for the inject-tcp method
 - Docker for the container method
-- `socat` for the container method
