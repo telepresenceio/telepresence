@@ -14,9 +14,6 @@
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from threading import Thread
-from typing import Any
-
-from .runner import Runner
 
 
 class DumbHandler(BaseHTTPRequestHandler):
@@ -24,7 +21,7 @@ class DumbHandler(BaseHTTPRequestHandler):
     HTTP handler that returns success for any HEAD request
     """
 
-    tel_output: Any = print
+    tel_output = print
 
     def do_HEAD(self) -> None:
         "Handle head"
@@ -41,7 +38,7 @@ class DumbHandler(BaseHTTPRequestHandler):
         self.tel_output(message)
 
 
-def launch_local_server(runner: Runner, port: int) -> None:
+def launch_local_server(runner, port: int) -> None:
     """
     Make a dumb web server for the proxy pod to poll.
     """
