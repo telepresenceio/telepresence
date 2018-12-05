@@ -1,7 +1,9 @@
 # docker build --file local-docker/Dockerfile .
 FROM alpine:3.6
 
-RUN apk add --no-cache python3 openssh-client iptables tini conntrack-tools git && \
+RUN apk add --no-cache python3 openssh iptables tini conntrack-tools git && \
+    ssh-keygen -A && \
+    echo -e "ClientAliveInterval 1\nGatewayPorts yes\nPermitEmptyPasswords yes\nPort 38022\nClientAliveCountMax 10\nPermitRootLogin yes\n" >> /etc/ssh/sshd_config && \
     pip3 install --upgrade pip && \
     pip3 install git+https://github.com/datawire/sshuttle.git@telepresence && \
     apk del --no-cache -r git

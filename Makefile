@@ -119,7 +119,7 @@ check-e2e:  ## Like 'check', but only run end-to-end tests
 .PHONY: check-e2e
 
 format: virtualenv  ## Format source code in-place
-	$(VIRTUALENV) yapf -ir telepresence
+	$(VIRTUALENV) yapf -ir telepresence packaging
 .PHONY: format
 
 #

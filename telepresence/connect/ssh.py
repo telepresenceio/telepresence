@@ -22,11 +22,14 @@ class SSH(object):
     """Run ssh to k8s-proxy with appropriate arguments."""
 
     def __init__(
-        self, runner: Runner, port: int, host: str = "localhost"
+        self,
+        runner: Runner,
+        port: int,
+        user_at_host: str = "telepresence@localhost",
     ) -> None:
         self.runner = runner
         self.port = port
-        self.host = host
+        self.user_at_host = user_at_host
 
     def command(
         self, additional_args: List[str], prepend_arguments: List[str] = []
@@ -49,7 +52,7 @@ class SSH(object):
             "-oUserKnownHostsFile=/dev/null",
             "-p",
             str(self.port),
-            "telepresence@" + self.host,
+            self.user_at_host,
         ] + additional_args
 
     def bg_command(self, additional_args: List[str]) -> List[str]:

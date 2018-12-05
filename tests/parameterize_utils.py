@@ -104,7 +104,7 @@ class _ContainerMethod(object):
 
     def unsupported(self):
         missing = set()
-        for exe in {"socat", "docker"}:
+        for exe in {"docker"}:
             if which(exe) is None:
                 missing.add(exe)
         if missing:

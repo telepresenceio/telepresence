@@ -65,21 +65,7 @@ def setup_vpn(runner: Runner, args):
 
 
 def setup_container(runner: Runner, args):
-    runner.require(["docker", "socat"], "Needed for the container method.")
-    if runner.platform == "linux":
-        needed = ["ip", "ifconfig"]
-        missing = runner.depend(needed)
-        if set(needed) == set(missing):
-            raise runner.fail(
-                """At least one of "ip addr" or "ifconfig" must be """ +
-                "available to retrieve Docker interface info."
-            )
-    if runner.platform == "darwin":
-        runner.require(
-            ["ifconfig"],
-            "Needed to manage networking with the container method.",
-        )
-        runner.require_sudo()
+    runner.require(["docker"], "Needed for the container method.")
     if SUDO_FOR_DOCKER:
         runner.require_sudo()
 

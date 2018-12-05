@@ -49,7 +49,7 @@ When the process exits with exit code 100 that means the proxy is active.
 
 import sys
 from json import loads
-from subprocess import check_output, Popen
+from subprocess import Popen
 from socket import gethostbyname, gaierror
 from time import time, sleep
 
@@ -69,22 +69,16 @@ def main():
 
 def proxy(config: dict):
     """Start sshuttle proxy to Kubernetes."""
-    port = config["port"]
-    if "ip" in config:
-        # Typically host is macOS:
-        ip = config["ip"]
-    else:
-        # Typically host is Linux, use default route:
-        ip = None
-        route_output = str(check_output(["route", "-n"]), "ascii")
-        for line in route_output.splitlines():
-            parts = line.split()
-            if parts[0] == "default" or parts[0] == "0.0.0.0":
-                ip = parts[1]
-                break
-        assert ip is not None, route_output
     cidrs = config["cidrs"]
     expose_ports = config["expose_ports"]
+
+    # Launch local sshd so Tel outside can forward 38023 to the cluster
+    runner = Runner("-", "-", False)
+    runner.check_call(["/usr/sbin/sshd", "-e"])
+
+    # Wait for the cluster to be available
+    ssh = SSH(runner, 38023, "telepresence@localhost")
+    ssh.wait()
 
     # Start the sshuttle VPN-like thing:
     # XXX duplicates code in telepresence, remove duplication
@@ -93,11 +87,10 @@ def proxy(config: dict):
             "ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null " +
             "-F /dev/null"
         ), "--to-ns", "127.0.0.1:9053", "-r",
-        "telepresence@{}:{}".format(ip, port)
+        "telepresence@localhost:38023"
     ] + cidrs)
+
     # Start the SSH tunnels to expose local services:
-    runner = Runner("-", "-", False)
-    ssh = SSH(runner, port, ip)
     expose_local_services(runner, ssh, expose_ports)
 
     # Wait for everything to exit:

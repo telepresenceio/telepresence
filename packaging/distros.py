@@ -11,9 +11,7 @@ https://fedoraproject.org/wiki/Releases
 https://fedoraproject.org/wiki/End_of_life
 """
 
-ubuntu_deps = [
-    "torsocks", "python3", "openssh-client", "sshfs", "socat", "conntrack"
-]
+ubuntu_deps = ["torsocks", "python3", "openssh-client", "sshfs", "conntrack"]
 
 install_deb = """
     apt-get -qq update
@@ -22,8 +20,7 @@ install_deb = """
 """
 
 fedora_deps = [
-    "python3", "torsocks", "openssh-clients", "sshfs", "socat",
-    "conntrack-tools"
+    "python3", "torsocks", "openssh-clients", "sshfs", "conntrack-tools"
 ]
 
 install_rpm = """

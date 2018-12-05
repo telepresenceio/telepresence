@@ -130,7 +130,7 @@ def setup(runner, args):
 
     # We allow all users if we're using Docker because we don't know
     # what uid the Docker container will use.
-    allow_all_users = args.method == "container"
+    allow_all_users = args.mount and args.method == "container"
     if allow_all_users:
         runner.require_sudo()
 

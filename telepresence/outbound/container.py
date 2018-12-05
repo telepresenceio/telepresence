@@ -25,8 +25,7 @@ from telepresence.cli import PortMapping
 from telepresence.proxy.remote import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.connect.ssh import SSH
-from telepresence.startup import MAC_LOOPBACK_IP
-from telepresence.utilities import random_name
+from telepresence.utilities import find_free_port, random_name
 from telepresence.outbound.vpn import get_proxy_cidrs
 
 # Whether Docker requires sudo
@@ -92,15 +91,19 @@ def run_docker_command(
     # responsible for defining the network entirely.
     docker_args, publish_args = parse_docker_args(docker_run)
 
+    # Point a host port to the network container's sshd
+    container_sshd_port = find_free_port()
+    publish_args.append(
+        "--publish=127.0.0.1:{}:38022/tcp".format(container_sshd_port)
+    )
+    local_ssh = SSH(runner, container_sshd_port, "root@localhost")
+
     # Start the sshuttle container:
     name = random_name()
     config = {
-        "port": ssh.port,
         "cidrs": get_proxy_cidrs(runner, remote_info, also_proxy),
         "expose_ports": list(expose.local_to_remote()),
     }
-    if runner.platform == "darwin":
-        config["ip"] = MAC_LOOPBACK_IP
     # Image already has tini init so doesn't need --init option:
     span = runner.span()
     runner.launch(
@@ -113,6 +116,13 @@ def run_docker_command(
             ]
         ),
         killer=make_docker_kill(runner, name)
+    )
+
+    # Set up ssh tunnel to allow the container to reach the cluster
+    local_ssh.wait()
+    runner.launch(
+        "Local SSH port forward",
+        local_ssh.bg_command(["-R", "38023:localhost:{}".format(ssh.port)])
     )
 
     # Wait for sshuttle to be running:
