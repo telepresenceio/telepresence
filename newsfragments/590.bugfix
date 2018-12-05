@@ -1,0 +1,1 @@
+When a background process dies unexpectedly, Telepresence will notice much sooner. This is particularly helpful during session start, as Telepresence can sometimes avoid waiting through a long timeout before crashing.
