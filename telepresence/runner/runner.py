@@ -63,6 +63,7 @@ class Runner(object):
         self.cleanup_stack = []  # type: typing.List[_CleanupItem]
         self.sudo_held = False
         self.quitting = False
+        self.ended = []  # type: typing.List[str]
 
         if sys.platform.startswith("linux"):
             self.platform = "linux"
@@ -248,7 +249,7 @@ class Runner(object):
         """
         Yield a loop counter during the loop time, then end. Sleep the
         specified amount between loops. Always run at least once. Check for
-        early exit while looping.
+        background process early exit while looping.
 
         :param loop_seconds: How long the loop should run
         :param sleep_seconds: How long to sleep between loops
@@ -259,7 +260,8 @@ class Runner(object):
         while True:
             yield counter
             if self.quitting:
-                raise self.fail("Background process failed during setup")
+                self.bg_process_crash()
+                # Not reached
             counter += 1
             if self.time() >= end_time:
                 break
@@ -366,6 +368,7 @@ class Runner(object):
             retcode = proc.wait()
             self.output.write("[{}] exit {}".format(track, retcode))
             self.quitting = True
+            self.ended.append("{} exit {}".format(name, retcode))
 
         self.output.write(
             "[{}] Launching {}: {}".format(track, name, str_command(args))
@@ -431,6 +434,17 @@ class Runner(object):
             self.show("WARNING: Failures during cleanup. See above.")
 
     # Exit
+
+    def bg_process_crash(self) -> None:
+        """
+        Invoke the crash reporter, emitting additional information about the
+        background process early exit(s) that prompted this crash.
+        """
+        self.quitting = True  # should be a no-op
+        self.show("Background process(es) failed during setup:")
+        for item in self.ended:
+            self.show(item)
+        raise RuntimeError("Background process(es) failed during setup")
 
     def fail(self, message: str, code=1) -> SystemExit:
         """
