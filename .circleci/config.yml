@@ -42,7 +42,7 @@ commands:
       - run:
           command: make cluster.knaut.clean
           when: always
-      - run: make teleproxy
+      - run: make build
       - run: .circleci/deploy.sh
 
 jobs:
