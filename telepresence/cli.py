@@ -90,7 +90,7 @@ def report_crash(error, log_path, logs):
     if "\n" in logs:
         print(
             "And here are the last few lines of the logfile" + log_ref +
-            "\n\n" + "\n".join(logs.splitlines()[-20:]) + "\n"
+            "\n\n" + "\n".join(logs.splitlines()[-12:]) + "\n"
         )
     report = "no"
     if sys.stdout.isatty():

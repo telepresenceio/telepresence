@@ -20,7 +20,6 @@ from urllib.request import urlopen, Request
 from telepresence.cli import crash_reporting, PortMapping
 from telepresence.connect import connect
 from telepresence.proxy import get_remote_info
-from telepresence.runner import wait_for_exit
 from telepresence.utilities import find_free_port
 
 
@@ -91,7 +90,7 @@ def command(runner, args):
 
         runner.show("Intercept is running. Press Ctrl-C/Ctrl-Break to quit.")
         user_process = Popen(["cat"], stdout=DEVNULL)
-        wait_for_exit(runner, user_process)
+        runner.wait_for_exit(user_process)
 
 
 def proxy_request(runner, url: str, data_str: str, method: str):

@@ -16,7 +16,6 @@ from subprocess import DEVNULL, Popen
 from urllib.request import urlopen
 
 from telepresence.cli import crash_reporting
-from telepresence.runner import wait_for_exit
 
 
 def kill_intercept():
@@ -46,4 +45,4 @@ def command(runner):
         )
         runner.show("Outbound is running. Press Ctrl-C/Ctrl-Break to quit.")
         user_process = Popen(["cat"], stdout=DEVNULL)
-        wait_for_exit(runner, user_process)
+        runner.wait_for_exit(user_process)
