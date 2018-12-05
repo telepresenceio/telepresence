@@ -90,6 +90,10 @@ def proxy(config: dict):
     runner = Runner("-", "-", False)
     runner.check_call(["/usr/sbin/sshd", "-e"])
 
+    # Wait for the cluster to be available
+    ssh = SSH(runner, 38023, "telepresence@localhost")
+    ssh.wait()
+
     # Start the sshuttle VPN-like thing:
     # XXX duplicates code in telepresence, remove duplication
     main_process = Popen([
@@ -99,8 +103,8 @@ def proxy(config: dict):
         ), "--to-ns", "127.0.0.1:9053", "-r",
         "telepresence@{}:{}".format(ip, port)
     ] + cidrs)
+
     # Start the SSH tunnels to expose local services:
-    ssh = SSH(runner, port, ip)
     expose_local_services(runner, ssh, expose_ports)
 
     # Wait for everything to exit:
