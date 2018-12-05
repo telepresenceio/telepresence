@@ -101,7 +101,7 @@ def proxy(config: dict):
             "ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null " +
             "-F /dev/null"
         ), "--to-ns", "127.0.0.1:9053", "-r",
-        "telepresence@{}:{}".format(ip, port)
+        "telepresence@localhost:38023"
     ] + cidrs)
 
     # Start the SSH tunnels to expose local services:
