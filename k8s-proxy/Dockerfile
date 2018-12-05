@@ -43,7 +43,7 @@ FROM common as telepresence-k8s
 # Set up to run as the telepresence user (1000:0)
 RUN chmod -R g+r /etc/ssh && \
     chmod -R g+w /usr/src/app && \
-    echo "telepresence::1000:0:Telepresence User:/app:/bin/ash" >> /etc/passwd
+    echo "telepresence::1000:0:Telepresence User:/usr/src/app:/bin/ash" >> /etc/passwd
 USER 1000:0
 
 CMD /usr/src/app/run.sh
@@ -54,7 +54,7 @@ CMD /usr/src/app/run.sh
 FROM common as telepresence-k8s-priv
 
 # Set up to run as the telepresence user (1000:0)
-RUN echo "telepresence::0:0:Telepresence User:/app:/bin/ash" >> /etc/passwd
+RUN echo "telepresence::0:0:Telepresence User:/usr/src/app:/bin/ash" >> /etc/passwd
 #RUN chmod -R 0600 /etc/ssh/*
 
 CMD /usr/src/app/run.sh
