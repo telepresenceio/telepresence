@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 from subprocess import CalledProcessError, STDOUT
 from typing import Tuple
 
@@ -20,7 +19,6 @@ from telepresence.cli import PortMapping
 from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.runner.background import launch_local_server
-from telepresence.startup import MAC_LOOPBACK_IP
 from telepresence.utilities import find_free_port
 from .expose import expose_local_services
 from .ssh import SSH
@@ -55,62 +53,6 @@ def connect(
             "port-forward", remote_info.pod_name, "{}:8022".format(ssh.port)
         )
     )
-    if is_container_mode:
-        # kubectl port-forward currently only listens on loopback. So we
-        # portforward from the docker0 interface on Linux, and the lo0 alias we
-        # added on OS X, to loopback (until we can use kubectl port-forward
-        # option to listen on docker0 -
-        # https://github.com/kubernetes/kubernetes/pull/46517, or all our users
-        # have latest version of Docker for Mac, which has nicer solution -
-        # https://github.com/datawire/telepresence/issues/224).
-        if runner.platform == "linux":
-
-            # If ip addr is available use it if not fall back to ifconfig.
-            missing = runner.depend(["ip", "ifconfig"])
-            if "ip" not in missing:
-                docker_interfaces = re.findall(
-                    r"(\d+\.\d+\.\d+\.\d+)",
-                    runner.get_output(["ip", "addr", "show", "dev", "docker0"])
-                )
-            elif "ifconfig" not in missing:
-                docker_interfaces = re.findall(
-                    r"(\d+\.\d+\.\d+\.\d+)",
-                    runner.get_output(["ifconfig", "docker0"])
-                )
-            else:
-                raise runner.fail(
-                    """At least one of "ip addr" or "ifconfig" must be """ +
-                    "available to retrieve Docker interface info."
-                )
-
-            if len(docker_interfaces) == 0:
-                raise runner.fail("No interface for docker found")
-
-            docker_interface = docker_interfaces[0]
-
-        else:
-            # The way to get routing from container to host is via an alias on
-            # lo0 (https://docs.docker.com/docker-for-mac/networking/). We use
-            # an IP range that is assigned for testing network devices and
-            # therefore shouldn't conflict with real IPs or local private
-            # networks (https://tools.ietf.org/html/rfc6890).
-            runner.check_call([
-                "sudo", "ifconfig", "lo0", "alias", MAC_LOOPBACK_IP
-            ])
-            runner.add_cleanup(
-                "Mac Loopback", runner.check_call,
-                ["sudo", "ifconfig", "lo0", "-alias", MAC_LOOPBACK_IP]
-            )
-            docker_interface = MAC_LOOPBACK_IP
-
-        runner.launch(
-            "socat for docker", [
-                "socat", "TCP4-LISTEN:{},bind={},reuseaddr,fork".format(
-                    ssh.port,
-                    docker_interface,
-                ), "TCP4:127.0.0.1:{}".format(ssh.port)
-            ]
-        )
 
     ssh.wait()
 

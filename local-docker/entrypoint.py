@@ -49,7 +49,7 @@ When the process exits with exit code 100 that means the proxy is active.
 
 import sys
 from json import loads
-from subprocess import check_output, Popen
+from subprocess import Popen
 from socket import gethostbyname, gaierror
 from time import time, sleep
 
@@ -69,20 +69,6 @@ def main():
 
 def proxy(config: dict):
     """Start sshuttle proxy to Kubernetes."""
-    port = config["port"]
-    if "ip" in config:
-        # Typically host is macOS:
-        ip = config["ip"]
-    else:
-        # Typically host is Linux, use default route:
-        ip = None
-        route_output = str(check_output(["route", "-n"]), "ascii")
-        for line in route_output.splitlines():
-            parts = line.split()
-            if parts[0] == "default" or parts[0] == "0.0.0.0":
-                ip = parts[1]
-                break
-        assert ip is not None, route_output
     cidrs = config["cidrs"]
     expose_ports = config["expose_ports"]
 
