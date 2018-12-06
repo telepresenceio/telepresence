@@ -70,7 +70,7 @@ def main():
         socks_port, ssh = do_connect(runner, remote_info)
 
         # Capture remote environment information (ssh object -> env info)
-        env = get_remote_env(runner, remote_info)
+        env, pod_info = get_remote_env(runner, ssh, remote_info)
 
         # Handle filesystem stuff
         mount_dir = mount_remote(runner, env, ssh)
