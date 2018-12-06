@@ -22,7 +22,7 @@ type Interceptor struct {
 	searchLock sync.RWMutex
 }
 
-type empty interface{}
+type empty struct{}
 
 func NewInterceptor(name string) *Interceptor {
 	return &Interceptor{
