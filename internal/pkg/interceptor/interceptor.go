@@ -11,7 +11,6 @@ import (
 )
 
 type Interceptor struct {
-	port       string
 	tables     map[string]rt.Table
 	translator *nat.Translator
 	work       chan func()
