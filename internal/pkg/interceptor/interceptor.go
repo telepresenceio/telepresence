@@ -17,7 +17,9 @@ type Interceptor struct {
 	domains    sync.Map
 	work       chan func()
 	done       chan empty
+
 	search     []string
+	searchLock sync.RWMutex
 }
 
 type empty interface{}
@@ -215,16 +217,16 @@ func (i *Interceptor) update(table rt.Table) {
 
 // SetSearchPath updates the DNS search path used by the resolver
 func (i *Interceptor) SetSearchPath(paths []string) {
-	i.work <- func() {
-		i.search = paths
-	}
+	i.searchLock.Lock()
+	defer i.searchLock.Unlock()
+
+	i.search = paths
 }
 
 // GetSearchPath retrieves the current search path
 func (i *Interceptor) GetSearchPath() []string {
-	result := make(chan []string, 1)
-	i.work <- func() {
-		result <- i.search
-	}
-	return <-result
+	i.searchLock.RLock()
+	defer i.searchLock.RUnlock()
+
+	return i.search
 }
