@@ -28,7 +28,12 @@ def get_remote_env(runner: Runner, ssh: SSH, remote_info: RemoteInfo
     span = runner.span()
     try:
         # Get the environment:
-        json_data = runner.get_output(ssh.command(["python3", "podinfo.py"]))
+        json_data = runner.get_output(
+            runner.kubectl(
+                "exec", remote_info.pod_name, "--container",
+                remote_info.container_name, "--", "python3", "podinfo.py"
+            )
+        )
         pod_info = loads(json_data)
         remote_env = pod_info["env"]  # type: Dict[str,str]
 
