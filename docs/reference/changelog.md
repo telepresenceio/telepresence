@@ -2,6 +2,34 @@
 
 <!--- towncrier start line -->
 
+#### 0.95 (December 6, 2018)
+
+Bug fixes:
+
+* Telepresence no longer ignores the context argument when checking whether the selected namespace exists.
+  ([#787](https://github.com/telepresenceio/telepresence/issues/787))
+* Telepresence functions in more restrictive cluster environments because the proxy pod no longer tries to modify the filesystem.
+  ([#848](https://github.com/telepresenceio/telepresence/issues/848))
+* When a background process dies unexpectedly, Telepresence will notice much sooner.
+  This is particularly helpful during session start, as Telepresence can sometimes avoid waiting through a long timeout before crashing.
+  ([#590](https://github.com/telepresenceio/telepresence/issues/590))
+* Cleanup of background processes is more robust to individual failures.
+  ([#586](https://github.com/telepresenceio/telepresence/issues/586))
+
+Misc:
+
+* The container method no longer uses `ifconfig` magic and `socat` to connect the local container to the cluster, relying on `ssh` port forwarding instead.
+  If you've had trouble with Telepresence's use of the Docker bridge interface (typically `docker0` on Linux, unavailable on Windows), this change avoids all of that.
+  This is technically a breaking change, as ports 38022 and 38023 are used by the new machinery.
+  Those ports are now unavailable for user code.
+  In practice, most users should not notice a difference.
+  ([#726](https://github.com/telepresenceio/telepresence/issues/726))
+* The `./build` development script no longer exists.
+  Its functionality has been merged into the Makefile.
+  See `make help` for the new usage information.
+  ([#839](https://github.com/telepresenceio/telepresence/issues/839))
+
+
 #### 0.94 (November 12, 2018)
 
 Bug fixes:
@@ -25,7 +53,7 @@ Bug fixes:
 
 Misc:
 
-* Telepresences detects that it is running as root and suggests the user not launch Telepresence under sudo if there is trouble talking to the cluster.
+* Telepresence detects that it is running as root and suggests the user not launch Telepresence under sudo if there is trouble talking to the cluster.
   Thanks to Rohan Gupta for the patch.
   ([#460](https://github.com/telepresenceio/telepresence/issues/460))
 

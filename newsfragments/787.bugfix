@@ -1,1 +1,0 @@
-Telepresence no longer ignores the context argument when checking whether the selected namespace exists.

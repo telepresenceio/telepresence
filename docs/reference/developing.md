@@ -256,13 +256,13 @@ At the moment, the Linux packages are not tested, other than a minor smoke test.
    `# Edit the change log`  
    `git commit docs/reference/changelog.md`
 2. Mark the new version number for Telepresence by tagging in Git.  
-   `git tag 0.xx`
+   `git tag -a 0.xx`
 3. Push the new commit and tag to GitHub.  
    `git push origin master --tags`
 4. Wait for [CircleCI](https://circleci.com/gh/telepresenceio/workflows/telepresence/tree/master) to finish.
    Make sure all the test pass.
 5. Download the tarball of deployable artifacts and unarchive into container in your project directory. It will populate the `dist` subdirectory.  
-   `curl -s https://.../telepresence-dist.tbz | tar xf -`
+   `curl -s https://.../telepresence-dist.tbz | tar xjf -`
 6. Set up release credentials in the environment:
    * `HOMEBREW_KEY` to push to GitHub
    * `PACKAGECLOUD_TOKEN` to push Linux packages

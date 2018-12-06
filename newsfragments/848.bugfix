@@ -1,1 +1,0 @@
-Telepresence swap deployment functions in more restrictive environments because the proxy pod no longer tries to modify the filesystem.
