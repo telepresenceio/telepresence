@@ -13,64 +13,38 @@
 # limitations under the License.
 
 from json import loads, dump
-from subprocess import CalledProcessError
 from typing import Dict, Tuple, List
 
-from telepresence.proxy.remote import RemoteInfo
+from telepresence.connect import SSH
+from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
 
 
-def _get_remote_env(runner: Runner, pod_name: str,
-                    container_name: str) -> Dict[str, str]:
-    """Get the environment variables in the remote pod."""
-    env = runner.get_output(
-        runner.kubectl(
-            "exec", pod_name, "--container", container_name, "--", "python3",
-            "-c", "import json, os; print(json.dumps(dict(os.environ)))"
-        )
-    )
-    result = {}  # type: Dict[str,str]
-    result.update(loads(env))
-    return result
-
-
-def get_env_variables(runner: Runner,
-                      remote_info: RemoteInfo) -> Dict[str, str]:
-    """
-    Generate environment variables that match kubernetes.
-    """
-    # Get the environment:
-    remote_env = _get_remote_env(
-        runner, remote_info.pod_name, remote_info.container_name
-    )
-    # Tell local process about the remote setup, useful for testing and
-    # debugging:
-    result = {
-        "TELEPRESENCE_POD": remote_info.pod_name,
-        "TELEPRESENCE_CONTAINER": remote_info.container_name
-    }
-    # Alpine, which we use for telepresence-k8s image, automatically sets these
-    # HOME, PATH, HOSTNAME. The rest are from Kubernetes:
-    for key in ("HOME", "PATH", "HOSTNAME"):
-        if key in remote_env:
-            del remote_env[key]
-    result.update(remote_env)
-    return result
-
-
-def get_remote_env(runner: Runner, remote_info: RemoteInfo) -> Dict[str, str]:
+def get_remote_env(runner: Runner, ssh: SSH, remote_info: RemoteInfo
+                   ) -> Tuple[Dict[str, str], Dict[str, Dict[str, str]]]:
     """
     Get the environment variables we want to copy from the remote pod
     """
     span = runner.span()
     try:
-        # It may take a few seconds for the SSH proxies to get going:
-        for _ in runner.loop_until(10, 0.25):
-            try:
-                return get_env_variables(runner, remote_info)
-            except CalledProcessError:
-                pass
-        raise runner.fail("Error: Failed to get environment variables")
+        # Get the environment:
+        json_data = runner.get_output(ssh.command(["python3", "podinfo.py"]))
+        pod_info = loads(json_data)
+        remote_env = pod_info["env"]  # type: Dict[str,str]
+
+        # Tell local process about the remote setup, useful for testing and
+        # debugging:
+        result = {
+            "TELEPRESENCE_POD": remote_info.pod_name,
+            "TELEPRESENCE_CONTAINER": remote_info.container_name
+        }
+        # Alpine, which we use for telepresence-k8s image, automatically sets
+        # HOME, PATH, HOSTNAME. The rest are from Kubernetes:
+        for key in ("HOME", "PATH", "HOSTNAME"):
+            if key in remote_env:
+                del remote_env[key]
+        result.update(remote_env)
+        return result, pod_info
     finally:
         span.end()
 
