@@ -11,9 +11,6 @@ import (
 )
 
 type Interceptor struct {
-	work chan func()
-	done chan empty
-
 	translator *nat.Translator
 	tables     map[string]rt.Table
 	tablesLock sync.RWMutex
@@ -25,14 +22,10 @@ type Interceptor struct {
 	searchLock sync.RWMutex
 }
 
-type empty struct{}
-
 func NewInterceptor(name string) *Interceptor {
 	ret := &Interceptor{
 		tables:     make(map[string]rt.Table),
 		translator: nat.NewTranslator(name),
-		work:       make(chan func()),
-		done:       make(chan empty),
 		domains:    make(map[string]rt.Route),
 		search:     []string{""},
 	}
@@ -42,27 +35,15 @@ func NewInterceptor(name string) *Interceptor {
 
 func (i *Interceptor) Start() {
 	go func() {
-		defer close(i.done)
 		i.translator.Enable()
 		i.tablesLock.Unlock()
-		defer func() {
-			i.tablesLock.Lock()
-			i.translator.Disable()
-		}()
-		for {
-			action, ok := <-i.work
-			if ok {
-				action()
-			} else {
-				return
-			}
-		}
 	}()
 }
 
 func (i *Interceptor) Stop() {
-	close(i.work)
-	<-i.done
+	i.tablesLock.Lock()
+	i.translator.Disable()
+	// leave it locked
 }
 
 // Resolve looks up the given query in the (FIXME: somewhere), trying
