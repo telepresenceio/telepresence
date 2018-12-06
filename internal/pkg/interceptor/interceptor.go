@@ -34,10 +34,8 @@ func NewInterceptor(name string) *Interceptor {
 }
 
 func (i *Interceptor) Start() {
-	go func() {
-		i.translator.Enable()
-		i.tablesLock.Unlock()
-	}()
+	i.translator.Enable()
+	i.tablesLock.Unlock()
 }
 
 func (i *Interceptor) Stop() {
