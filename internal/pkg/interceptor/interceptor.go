@@ -150,22 +150,22 @@ func (i *Interceptor) update(table rt.Table) {
 	}
 
 	for _, newRoute := range table.Routes {
-		oldRoute, ok := oldRoutes[newRoute.Name]
-		if ok && newRoute != oldRoute {
-
-			switch newRoute.Proto {
-			case "tcp":
-				i.translator.ClearTCP(oldRoute.Ip)
-			case "udp":
-				i.translator.ClearUDP(oldRoute.Ip)
-			default:
-				log.Printf("INT: unrecognized protocol: %v", newRoute)
+		oldRoute, oldRouteOk := oldRoutes[newRoute.Name]
+		// A nil Route (when oldRouteOk != true) will compare
+		// inequal to any valid new Route.
+		if newRoute != oldRoute {
+			// delete the old version
+			if oldRouteOk {
+				switch newRoute.Proto {
+				case "tcp":
+					i.translator.ClearTCP(oldRoute.Ip)
+				case "udp":
+					i.translator.ClearUDP(oldRoute.Ip)
+				default:
+					log.Printf("INT: unrecognized protocol: %v", newRoute)
+				}
 			}
-
-		}
-
-		if !ok || newRoute != oldRoute {
-
+			// and add the new version
 			if newRoute.Target != "" {
 				switch newRoute.Proto {
 				case "tcp":
@@ -182,15 +182,11 @@ func (i *Interceptor) update(table rt.Table) {
 				copy := newRoute
 				i.domains.Store(newRoute.Domain(), &copy)
 			}
-
 		}
 
-		if ok {
-			// remove the route from our map of
-			// old routes so we don't end up
-			// deleting it below
-			delete(oldRoutes, newRoute.Name)
-		}
+		// remove the route from our map of old routes so we
+		// don't end up deleting it below
+		delete(oldRoutes, newRoute.Name)
 	}
 
 	for _, route := range oldRoutes {
