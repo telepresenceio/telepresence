@@ -14,9 +14,11 @@ type Interceptor struct {
 	port       string
 	tables     map[string]rt.Table
 	translator *nat.Translator
-	domains    sync.Map
 	work       chan func()
 	done       chan empty
+
+	domains     map[string]rt.Route
+	domainsLock sync.RWMutex
 
 	search     []string
 	searchLock sync.RWMutex
@@ -30,6 +32,7 @@ func NewInterceptor(name string) *Interceptor {
 		translator: nat.NewTranslator(name),
 		work:       make(chan func()),
 		done:       make(chan empty),
+		domains:    make(map[string]rt.Route),
 		search:     []string{""},
 	}
 }
@@ -63,11 +66,17 @@ func (i *Interceptor) Resolve(query string) *rt.Route {
 	if !strings.HasSuffix(query, ".") {
 		query += "."
 	}
-	for _, suffix := range i.GetSearchPath() {
+
+	i.searchLock.RLock()
+	defer i.searchLock.RUnlock()
+	i.domainsLock.RLock()
+	defer i.domainsLock.RUnlock()
+
+	for _, suffix := range i.search {
 		name := query + suffix
-		value, ok := i.domains.Load(strings.ToLower(name))
+		value, ok := i.domains[strings.ToLower(name)]
 		if ok {
-			return value.(*rt.Route)
+			return &value
 		}
 	}
 	return nil
@@ -140,6 +149,9 @@ func (i *Interceptor) Update(table rt.Table) {
 }
 
 func (i *Interceptor) update(table rt.Table) {
+	i.domainsLock.Lock()
+	defer i.domainsLock.Unlock()
+
 	oldTable, ok := i.tables[table.Name]
 
 	oldRoutes := make(map[string]rt.Route)
@@ -179,8 +191,7 @@ func (i *Interceptor) update(table rt.Table) {
 
 			if newRoute.Name != "" {
 				log.Printf("INT: STORE %v->%v", newRoute.Domain(), newRoute)
-				copy := newRoute
-				i.domains.Store(newRoute.Domain(), &copy)
+				i.domains[newRoute.Domain()] = newRoute
 			}
 		}
 
@@ -191,7 +202,7 @@ func (i *Interceptor) update(table rt.Table) {
 
 	for _, route := range oldRoutes {
 		log.Printf("INT: CLEAR %v->%v", route.Domain(), route)
-		i.domains.Delete(route.Domain())
+		delete(i.domains, route.Domain())
 
 		switch route.Proto {
 		case "tcp":
