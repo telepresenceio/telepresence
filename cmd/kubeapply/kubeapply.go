@@ -132,7 +132,9 @@ func (p *Phaser) phases() (result [][]string) {
 		result = append(result, p.prefixes[k])
 	}
 
-	result = append(result, p.last)
+	if len(p.last) > 0 {
+		result = append(result, p.last)
+	}
 	return
 }
 

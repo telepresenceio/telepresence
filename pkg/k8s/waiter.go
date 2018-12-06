@@ -111,6 +111,42 @@ func (w *Waiter) isEmpty() bool {
 }
 
 func (w *Waiter) Wait(timeout time.Duration) bool {
+	start := time.Now()
+	printed := make(map[string]bool)
+	w.watcher.Watch("events", func(watcher *Watcher) {
+		for _, r := range watcher.List("events") {
+			lastIf, ok := r["lastTimestamp"]
+			if ok {
+				last, err := time.Parse("2006-01-02T15:04:05Z", lastIf.(string))
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+				if last.Before(start) {
+					continue
+				}
+			}
+			if !printed[r.QName()] {
+				var name string
+				objIf, ok := r["involvedObject"]
+				if ok {
+					obj, ok := objIf.(map[string]interface{})
+					if ok {
+						name = fmt.Sprintf("%s/%v.%v", obj["kind"], obj["name"],
+							obj["namespace"])
+						name = watcher.Canonical(name)
+					} else {
+						name = r.QName()
+					}
+				} else {
+					name = r.QName()
+				}
+				fmt.Printf("event: %s %s\n", name, r["message"])
+				printed[r.QName()] = true
+			}
+		}
+	})
+
 	listener := func(watcher *Watcher) {
 		for kind, names := range w.kinds {
 			for name := range names {
