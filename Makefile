@@ -1,5 +1,5 @@
 include build-aux/common.mk
-include build-aux/go.mk
+include build-aux/go-mod.mk
 include build-aux/go-version.mk
 include build-aux/flock.mk
 include build-aux/kubernaut-ui.mk
@@ -21,7 +21,7 @@ go-test-nat: go-get
 go-test-teleproxy: go-get test-cluster
 	$(FLOCK) firewall.lock $(FLOCK) cluster.lock go test -v -exec "sudo env PATH=${PATH} KUBECONFIG=$(abspath ${KUBECONFIG})" $(go.module)/cmd/teleproxy
 go-test-other: go-get test-cluster
-	KUBECONFIG=$(abspath ${KUBECONFIG}) $(FLOCK) cluster.lock go test -v $(filter-out $(go.module)/internal/pkg/nat $(go.module)/cmd/teleproxy,$(go.pkgs))
+	KUBECONFIG=$(abspath ${KUBECONFIG}) $(FLOCK) cluster.lock go test -v $$(go list ./... | grep -vF -e $(go.module)/internal/pkg/nat -e $(go.module)/cmd/teleproxy)
 .PHONY: go-test-nat go-test-teleproxy go-test-other
 go-test: go-test-nat go-test-teleproxy go-test-other
 
