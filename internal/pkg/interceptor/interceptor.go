@@ -11,10 +11,12 @@ import (
 )
 
 type Interceptor struct {
-	tables     map[string]rt.Table
-	translator *nat.Translator
 	work       chan func()
 	done       chan empty
+
+	translator *nat.Translator
+	tables     map[string]rt.Table
+	tablesLock sync.RWMutex
 
 	domains     map[string]rt.Route
 	domainsLock sync.RWMutex
@@ -26,7 +28,7 @@ type Interceptor struct {
 type empty struct{}
 
 func NewInterceptor(name string) *Interceptor {
-	return &Interceptor{
+	ret := &Interceptor{
 		tables:     make(map[string]rt.Table),
 		translator: nat.NewTranslator(name),
 		work:       make(chan func()),
@@ -34,13 +36,19 @@ func NewInterceptor(name string) *Interceptor {
 		domains:    make(map[string]rt.Route),
 		search:     []string{""},
 	}
+	ret.tablesLock.Lock() // leave it locked until .Start() unlocks it
+	return ret
 }
 
 func (i *Interceptor) Start() {
 	go func() {
 		defer close(i.done)
 		i.translator.Enable()
-		defer i.translator.Disable()
+		i.tablesLock.Unlock()
+		defer func() {
+			i.tablesLock.Lock()
+			i.translator.Disable()
+		}()
 		for {
 			action, ok := <-i.work
 			if ok {
@@ -87,38 +95,44 @@ func (i *Interceptor) Destination(conn *net.TCPConn) (string, error) {
 }
 
 func (i *Interceptor) Render(table string) string {
-	result := make(chan string, 1)
-	i.work <- func() {
+	if true {
 		var obj interface{}
 
 		if table == "" {
 			var tables []rt.Table
+			i.tablesLock.RLock()
 			for _, t := range i.tables {
 				tables = append(tables, t)
 			}
+			i.tablesLock.RUnlock()
 			obj = tables
 		} else {
 			var ok bool
+			i.tablesLock.RLock()
 			obj, ok = i.tables[table]
+			i.tablesLock.RUnlock()
 			if !ok {
-				result <- ""
-				return
+				return ""
 			}
 		}
 
 		bytes, err := json.MarshalIndent(obj, "", "  ")
 		if err != nil {
-			result <- err.Error()
+			return err.Error()
 		} else {
-			result <- string(bytes)
+			return string(bytes)
 		}
 	}
-	return <-result
+	panic("not reached")
 }
 
 func (i *Interceptor) Delete(table string) bool {
-	result := make(chan bool, 1)
-	i.work <- func() {
+	i.tablesLock.Lock()
+	defer i.tablesLock.Unlock()
+	i.domainsLock.Lock()
+	defer i.domainsLock.Unlock()
+
+	if true {
 		var names []string
 		if table == "" {
 			for name := range i.tables {
@@ -127,7 +141,7 @@ func (i *Interceptor) Delete(table string) bool {
 		} else if _, ok := i.tables[table]; ok {
 			names = []string{table}
 		} else {
-			result <- false
+			return false
 		}
 
 		for _, name := range names {
@@ -136,21 +150,24 @@ func (i *Interceptor) Delete(table string) bool {
 			}
 		}
 
-		result <- true
+		return true
 	}
-	return <-result
+	panic("not reached")
 }
 
 func (i *Interceptor) Update(table rt.Table) {
-	i.work <- func() {
-		i.update(table)
-	}
-}
-
-func (i *Interceptor) update(table rt.Table) {
+	i.tablesLock.Lock()
+	defer i.tablesLock.Unlock()
 	i.domainsLock.Lock()
 	defer i.domainsLock.Unlock()
 
+	i.update(table)
+}
+
+// .update() assumes that both .tablesLock and .domainsLock are held
+// for writing.  Ensuring that is the case is the caller's
+// responsibility.
+func (i *Interceptor) update(table rt.Table) {
 	oldTable, ok := i.tables[table.Name]
 
 	oldRoutes := make(map[string]rt.Route)
