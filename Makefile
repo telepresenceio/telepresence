@@ -32,12 +32,12 @@ run-tests: sudo-tests other-tests
 test-go: go-get run-tests
 
 test-docker:
-	@if [[ "$(shell which docker)-no" != "-no" ]]; then \
-		docker build -f scripts/Dockerfile . -t teleproxy-make && \
-		docker run --cap-add=NET_ADMIN teleproxy-make nat-tests ; \
-	else \
-		echo "SKIPPING DOCKER TESTS" ; \
-	fi
+ifneq ($(shell which docker 2>/dev/null),)
+	docker build -f scripts/Dockerfile . -t teleproxy-make
+	docker run --cap-add=NET_ADMIN teleproxy-make nat-tests
+else
+	@echo "SKIPPING DOCKER TESTS"
+endif
 
 test: test-go test-docker
 check: test
