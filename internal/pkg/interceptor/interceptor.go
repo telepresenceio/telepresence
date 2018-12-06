@@ -11,8 +11,8 @@ import (
 )
 
 type Interceptor struct {
-	work       chan func()
-	done       chan empty
+	work chan func()
+	done chan empty
 
 	translator *nat.Translator
 	tables     map[string]rt.Table
@@ -95,35 +95,32 @@ func (i *Interceptor) Destination(conn *net.TCPConn) (string, error) {
 }
 
 func (i *Interceptor) Render(table string) string {
-	if true {
-		var obj interface{}
+	var obj interface{}
 
-		if table == "" {
-			var tables []rt.Table
-			i.tablesLock.RLock()
-			for _, t := range i.tables {
-				tables = append(tables, t)
-			}
-			i.tablesLock.RUnlock()
-			obj = tables
-		} else {
-			var ok bool
-			i.tablesLock.RLock()
-			obj, ok = i.tables[table]
-			i.tablesLock.RUnlock()
-			if !ok {
-				return ""
-			}
+	if table == "" {
+		var tables []rt.Table
+		i.tablesLock.RLock()
+		for _, t := range i.tables {
+			tables = append(tables, t)
 		}
-
-		bytes, err := json.MarshalIndent(obj, "", "  ")
-		if err != nil {
-			return err.Error()
-		} else {
-			return string(bytes)
+		i.tablesLock.RUnlock()
+		obj = tables
+	} else {
+		var ok bool
+		i.tablesLock.RLock()
+		obj, ok = i.tables[table]
+		i.tablesLock.RUnlock()
+		if !ok {
+			return ""
 		}
 	}
-	panic("not reached")
+
+	bytes, err := json.MarshalIndent(obj, "", "  ")
+	if err != nil {
+		return err.Error()
+	} else {
+		return string(bytes)
+	}
 }
 
 func (i *Interceptor) Delete(table string) bool {
@@ -132,27 +129,24 @@ func (i *Interceptor) Delete(table string) bool {
 	i.domainsLock.Lock()
 	defer i.domainsLock.Unlock()
 
-	if true {
-		var names []string
-		if table == "" {
-			for name := range i.tables {
-				names = append(names, name)
-			}
-		} else if _, ok := i.tables[table]; ok {
-			names = []string{table}
-		} else {
-			return false
+	var names []string
+	if table == "" {
+		for name := range i.tables {
+			names = append(names, name)
 		}
-
-		for _, name := range names {
-			if name != "bootstrap" {
-				i.update(rt.Table{Name: name})
-			}
-		}
-
-		return true
+	} else if _, ok := i.tables[table]; ok {
+		names = []string{table}
+	} else {
+		return false
 	}
-	panic("not reached")
+
+	for _, name := range names {
+		if name != "bootstrap" {
+			i.update(rt.Table{Name: name})
+		}
+	}
+
+	return true
 }
 
 func (i *Interceptor) Update(table rt.Table) {
