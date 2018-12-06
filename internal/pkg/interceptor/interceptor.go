@@ -140,47 +140,47 @@ func (i *Interceptor) Update(table rt.Table) {
 }
 
 func (i *Interceptor) update(table rt.Table) {
-	old, ok := i.tables[table.Name]
+	oldTable, ok := i.tables[table.Name]
 
-	routes := make(map[string]rt.Route)
+	oldRoutes := make(map[string]rt.Route)
 	if ok {
-		for _, route := range old.Routes {
-			routes[route.Name] = route
+		for _, route := range oldTable.Routes {
+			oldRoutes[route.Name] = route
 		}
 	}
 
-	for _, route := range table.Routes {
-		existing, ok := routes[route.Name]
-		if ok && route != existing {
+	for _, newRoute := range table.Routes {
+		oldRoute, ok := oldRoutes[newRoute.Name]
+		if ok && newRoute != oldRoute {
 
-			switch route.Proto {
+			switch newRoute.Proto {
 			case "tcp":
-				i.translator.ClearTCP(existing.Ip)
+				i.translator.ClearTCP(oldRoute.Ip)
 			case "udp":
-				i.translator.ClearUDP(existing.Ip)
+				i.translator.ClearUDP(oldRoute.Ip)
 			default:
-				log.Printf("INT: unrecognized protocol: %v", route)
+				log.Printf("INT: unrecognized protocol: %v", newRoute)
 			}
 
 		}
 
-		if !ok || route != existing {
+		if !ok || newRoute != oldRoute {
 
-			if route.Target != "" {
-				switch route.Proto {
+			if newRoute.Target != "" {
+				switch newRoute.Proto {
 				case "tcp":
-					i.translator.ForwardTCP(route.Ip, route.Target)
+					i.translator.ForwardTCP(newRoute.Ip, newRoute.Target)
 				case "udp":
-					i.translator.ForwardUDP(route.Ip, route.Target)
+					i.translator.ForwardUDP(newRoute.Ip, newRoute.Target)
 				default:
-					log.Printf("INT: unrecognized protocol: %v", route)
+					log.Printf("INT: unrecognized protocol: %v", newRoute)
 				}
 			}
 
-			if route.Name != "" {
-				log.Printf("INT: STORE %v->%v", route.Domain(), route)
-				copy := route
-				i.domains.Store(route.Domain(), &copy)
+			if newRoute.Name != "" {
+				log.Printf("INT: STORE %v->%v", newRoute.Domain(), newRoute)
+				copy := newRoute
+				i.domains.Store(newRoute.Domain(), &copy)
 			}
 
 		}
@@ -189,11 +189,11 @@ func (i *Interceptor) update(table rt.Table) {
 			// remove the route from our map of
 			// old routes so we don't end up
 			// deleting it below
-			delete(routes, route.Name)
+			delete(oldRoutes, newRoute.Name)
 		}
 	}
 
-	for _, route := range routes {
+	for _, route := range oldRoutes {
 		log.Printf("INT: CLEAR %v->%v", route.Domain(), route)
 		i.domains.Delete(route.Domain())
 
