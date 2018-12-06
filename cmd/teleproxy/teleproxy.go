@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -14,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/pkg/errors"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/tpu"
@@ -81,7 +82,10 @@ func main() {
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
 	if *mode == DEFAULT || *mode == INTERCEPT {
-		shutdown := intercept(dnsIP, fallbackIP)
+		shutdown, err := intercept(*dnsIP, *fallbackIP)
+		if err != nil {
+			log.Printf("TPY: Error: %v", err)
+		}
 		defer shutdown()
 	}
 	if *mode == DEFAULT || *mode == BRIDGE {
@@ -135,48 +139,54 @@ func checkKubectl() {
 	}
 }
 
-func intercept(dnsIP, fallbackIP *string) func() {
-	if *dnsIP == "" {
+// intercept starts the interceptor, and only returns once the
+// interceptor is successfully running in another goroutine.  It
+// returns a function to call to shut down that goroutine.
+//
+// If dnsIP is empty, it will be detected from /etc/resolv.conf
+//
+// If fallbackIP is empty, it will default to Google DNS.
+func intercept(dnsIP string, fallbackIP string) (func(), error) {
+	if dnsIP == "" {
 		dat, err := ioutil.ReadFile("/etc/resolv.conf")
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		for _, line := range strings.Split(string(dat), "\n") {
 			if strings.Contains(line, "nameserver") {
 				fields := strings.Fields(line)
-				*dnsIP = fields[1]
-				log.Printf("TPY: Automatically set -dns to %v", *dnsIP)
+				dnsIP = fields[1]
+				log.Printf("TPY: Automatically set -dns=%v", dnsIP)
 				break
 			}
 		}
 	}
-
-	if *dnsIP == "" {
-		panic("couldn't determine dns ip from /etc/resolv.conf")
+	if dnsIP == "" {
+		return nil, errors.New("couldn't determine dns ip from /etc/resolv.conf")
 	}
 
-	if *fallbackIP == "" {
-		if *dnsIP == "8.8.8.8" {
-			*fallbackIP = "8.8.4.4"
+	if fallbackIP == "" {
+		if dnsIP == "8.8.8.8" {
+			fallbackIP = "8.8.4.4"
 		} else {
-			*fallbackIP = "8.8.8.8"
+			fallbackIP = "8.8.8.8"
 		}
+		log.Printf("TPY: Automatically set -fallback=%v", dnsIP)
 	}
-
-	if *fallbackIP == *dnsIP {
-		panic("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
+	if fallbackIP == dnsIP {
+		return nil, errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
 	}
 
 	iceptor := interceptor.NewInterceptor("teleproxy")
 
 	apis, err := api.NewAPIServer(iceptor)
 	if err != nil {
-		panic(fmt.Sprintf("API Server: %v", err))
+		return nil, errors.Wrap(err, "API Server")
 	}
 
 	srv := dns.Server{
 		Listeners: dnsListeners("1233"),
-		Fallback:  *fallbackIP + ":53",
+		Fallback:  fallbackIP + ":53",
 		Resolve: func(domain string) string {
 			route := iceptor.Resolve(domain)
 			if route != nil {
@@ -192,12 +202,12 @@ func intercept(dnsIP, fallbackIP *string) func() {
 	// and either listen on that port or run port-forward
 	proxy, err := proxy.NewProxy(":1234", iceptor.Destination)
 	if err != nil {
-		panic(err)
+		return nil, errors.Wrap(err, "Proxy")
 	}
 
 	bootstrap := route.Table{Name: "bootstrap"}
 	bootstrap.Add(route.Route{
-		Ip:     *dnsIP,
+		Ip:     dnsIP,
 		Target: "1233",
 		Proto:  "udp",
 	})
@@ -223,7 +233,7 @@ func intercept(dnsIP, fallbackIP *string) func() {
 		iceptor.Stop()
 		restore()
 		dns.Flush()
-	}
+	}, nil
 }
 
 func bridges(kubeinfo *k8s.KubeInfo) func() {
