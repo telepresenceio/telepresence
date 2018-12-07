@@ -14,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 
+	"git.lukeshu.com/go/libsystemd/sd_daemon"
 	"github.com/pkg/errors"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
@@ -96,6 +97,7 @@ func main() {
 		shutdown := bridges(kubeinfo)
 		defer shutdown()
 	}
+	sd_daemon.Notification{State: "READY=1"}.Send(false)
 
 	log.Printf("TPY: %v", <-signalChan)
 }
