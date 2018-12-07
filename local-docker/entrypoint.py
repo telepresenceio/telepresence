@@ -77,7 +77,7 @@ def proxy(config: dict):
     runner.check_call(["/usr/sbin/sshd", "-e"])
 
     # Wait for the cluster to be available
-    ssh = SSH(runner, 38023, "telepresence@localhost")
+    ssh = SSH(runner, 38023, "telepresence@127.0.0.1")
     ssh.wait()
 
     # Start the sshuttle VPN-like thing:
@@ -87,7 +87,7 @@ def proxy(config: dict):
             "ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null " +
             "-F /dev/null"
         ), "-r",
-        "telepresence@localhost:38023"
+        "telepresence@127.0.0.1:38023"
     ] + cidrs)
 
     # Start the SSH tunnels to expose local services:
