@@ -86,7 +86,7 @@ def proxy(config: dict):
         "sshuttle-telepresence", "-v", "--dns", "--method", "nat", "-e", (
             "ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null " +
             "-F /dev/null"
-        ), "--to-ns", "127.0.0.1:9053", "-r",
+        ), "-r",
         "telepresence@localhost:38023"
     ] + cidrs)
 
@@ -102,7 +102,7 @@ def wait():
     start = time()
     while time() - start < 30:
         try:
-            gethostbyname("hellotelepresence")
+            gethostbyname("kubernetes.default.svc.cluster.local")
             sleep(1)  # just in case there's more to startup
             sys.exit(100)
         except gaierror:
