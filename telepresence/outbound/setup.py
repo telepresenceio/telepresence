@@ -73,12 +73,18 @@ def setup_container(runner: Runner, args):
     if SUDO_FOR_DOCKER:
         runner.require_sudo()
 
+    if args.also_proxy:
+        runner.show(
+            "Note: --also-proxy is no longer required with --docker-run. "
+            "The container method sends all network traffic to the cluster."
+        )
+
     def launch(
         runner_, remote_info, env, _socks_port, ssh, mount_dir, pod_info
     ):
         return run_docker_command(
             runner_, remote_info, args.docker_run, args.expose,
-            args.also_proxy, env, ssh, mount_dir, pod_info
+            env, ssh, mount_dir, pod_info
         )
 
     return launch

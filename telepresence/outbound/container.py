@@ -95,7 +95,6 @@ def run_docker_command(
     remote_info: RemoteInfo,
     docker_run: List[str],
     expose: PortMapping,
-    also_proxy: List[str],
     remote_env: Dict[str, str],
     ssh: SSH,
     mount_dir: Optional[str],
