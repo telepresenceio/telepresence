@@ -77,8 +77,18 @@ def proxy(config: dict):
     runner.check_call(["/usr/sbin/sshd", "-e"])
 
     # Wait for the cluster to be available
-    ssh = SSH(runner, 38023, "telepresence@localhost")
+    ssh = SSH(runner, 38023, "telepresence@127.0.0.1")
     ssh.wait()
+
+    # Figure out IP address to exclude, from the incoming ssh
+    ip = None
+    route_output = runner.get_output(["route", "-n"])
+    for line in route_output.splitlines():
+        parts = line.split()
+        if parts[0] == "default" or parts[0] == "0.0.0.0":
+            ip = parts[1]
+            break
+    assert ip is not None, route_output
 
     # Start the sshuttle VPN-like thing:
     # XXX duplicates code in telepresence, remove duplication
@@ -86,8 +96,8 @@ def proxy(config: dict):
         "sshuttle-telepresence", "-v", "--dns", "--method", "nat", "-e", (
             "ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null " +
             "-F /dev/null"
-        ), "--to-ns", "127.0.0.1:9053", "-r",
-        "telepresence@localhost:38023"
+        ), "-x", ip, "-r",
+        "telepresence@127.0.0.1:38023"
     ] + cidrs)
 
     # Start the SSH tunnels to expose local services:
@@ -102,7 +112,7 @@ def wait():
     start = time()
     while time() - start < 30:
         try:
-            gethostbyname("hellotelepresence")
+            gethostbyname("kubernetes.default.svc.cluster.local")
             sleep(1)  # just in case there's more to startup
             sys.exit(100)
         except gaierror:

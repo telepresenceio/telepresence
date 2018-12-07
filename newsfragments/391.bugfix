@@ -1,0 +1,1 @@
+When using the container method, all outgoing traffic is directed to the cluster. It is no longer necessary or meaningful to use `--also-proxy` with `--docker-run`.
