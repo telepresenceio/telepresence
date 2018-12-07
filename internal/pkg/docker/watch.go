@@ -154,9 +154,12 @@ func (w *Watcher) waiter() chan empty {
 }
 
 func (w *Watcher) containerEvents() io.ReadCloser {
-	command := "docker events --filter 'type=container' --filter 'event=start' --filter 'event=die'"
-	w.log(command)
-	cmd := exec.Command("sh", "-c", command)
+	command := []string{"docker", "events",
+		"--filter", "type=container",
+		"--filter", "event=start",
+		"--filter", "event=die"}
+	w.log(strings.Join(command, " "))
+	cmd := exec.Command(command[0], command[1:]...)
 	events, err := cmd.StdoutPipe()
 	if err != nil {
 		w.log(err.Error())
