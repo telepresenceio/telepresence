@@ -26,7 +26,6 @@ from telepresence.proxy.remote import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.connect.ssh import SSH
 from telepresence.utilities import find_free_port, random_name
-from telepresence.outbound.vpn import get_proxy_cidrs
 
 # Whether Docker requires sudo
 SUDO_FOR_DOCKER = os.path.exists("/var/run/docker.sock") and not os.access(
@@ -129,7 +128,7 @@ def run_docker_command(
     # Start the sshuttle container:
     name = random_name()
     config = {
-        "cidrs": get_proxy_cidrs(runner, remote_info, also_proxy),
+        "cidrs": ["0/0"],
         "expose_ports": list(expose.local_to_remote()),
     }
     dns_args = []
