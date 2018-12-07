@@ -17,10 +17,10 @@ import json
 from subprocess import CalledProcessError
 from typing import List
 
-from telepresence.connect.ssh import SSH
-from telepresence.proxy.remote import RemoteInfo
-from telepresence.utilities import random_name
+from telepresence.connect import SSH
+from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
+from telepresence.utilities import random_name
 
 # The number of DNS probes which must be issued during startup before the
 # sshuttle-proxied DNS system is considered properly "primed" with respect to

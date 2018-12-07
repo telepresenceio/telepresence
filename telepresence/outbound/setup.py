@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from telepresence.outbound.container import SUDO_FOR_DOCKER, run_docker_command
-from telepresence.outbound.local import launch_inject, launch_vpn
 from telepresence.runner import Runner
+
+from .container import SUDO_FOR_DOCKER, run_docker_command
+from .local import launch_inject, launch_vpn
 
 
 def setup_inject(runner: Runner, args):

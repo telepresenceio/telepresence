@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from telepresence.runner.runner import Runner
+from .background import launch_local_server
+from .runner import Runner
 
-__all__ = "Runner",
+__all__ = "Runner", "launch_local_server"

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from telepresence.connect.connect import connect, setup
-from telepresence.connect.ssh import SSH
+from .connect import connect, setup
+from .ssh import SSH
 
 __all__ = "connect", "setup", "SSH"

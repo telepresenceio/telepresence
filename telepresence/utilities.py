@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import socket
+import os
 import shlex
+import socket
 from subprocess import Popen, TimeoutExpired
 from time import time
-from typing import List, Iterable
-
-import os
+from typing import Iterable, List
 
 
 def random_name() -> str:

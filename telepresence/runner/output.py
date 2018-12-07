@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import deque
 import os
 import sys
-from time import time as curtime, ctime
+from collections import deque
+from time import ctime
+from time import time as curtime
 from typing import TextIO
 
 from telepresence import __version__, image_version, version_override

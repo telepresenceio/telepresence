@@ -15,11 +15,11 @@
 from telepresence import (
     TELEPRESENCE_REMOTE_IMAGE, TELEPRESENCE_REMOTE_IMAGE_PRIV
 )
-from telepresence.proxy.deployment import (
+from .deployment import (
     existing_deployment, create_new_deployment, swap_deployment_openshift,
     supplant_deployment
 )
-from telepresence.proxy.remote import RemoteInfo, get_remote_info
+from .remote import RemoteInfo, get_remote_info
 from telepresence.runner import Runner
 
 

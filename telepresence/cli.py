@@ -140,8 +140,8 @@ def crash_reporting(runner=None):
         logs = "Not available"
         log_path = "-"
         if runner is not None:
-            logs = runner.output.read_logs()
-            log_path = runner.output.logfile_path
+            logs = runner.read_logs()
+            log_path = runner.logfile_path
             runner.write("CRASH: {}".format(exc))
             runner.write(error)
             runner.write("(calling crash reporter...)")

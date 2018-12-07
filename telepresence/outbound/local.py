@@ -13,16 +13,16 @@
 # limitations under the License.
 
 import os
-import sys
 from subprocess import CalledProcessError, Popen
 from typing import Dict, List
 
-from telepresence.outbound.workarounds import apply_workarounds
-from telepresence.utilities import kill_process
-from telepresence.proxy.remote import RemoteInfo
+from telepresence.connect import SSH
+from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
-from telepresence.connect.ssh import SSH
-from telepresence.outbound.vpn import connect_sshuttle
+from telepresence.utilities import kill_process
+
+from .vpn import connect_sshuttle
+from .workarounds import apply_workarounds
 
 TORSOCKS_CONFIG = """
 # Allow process to listen on ports:
@@ -47,8 +47,8 @@ def set_up_torsocks(runner: Runner, socks_port: int) -> Dict[str, str]:
 
     torsocks_env = dict()
     torsocks_env["TORSOCKS_CONF_FILE"] = str(tor_conffile)
-    if runner.output.logfile is not sys.stdout:
-        torsocks_env["TORSOCKS_LOG_FILE_PATH"] = runner.output.logfile.name
+    if runner.logfile_path != "-":
+        torsocks_env["TORSOCKS_LOG_FILE_PATH"] = runner.logfile_path
 
     # Wait until DNS resolution via torsocks succeeds
     # FIXME: Make this lookup for google.com configurable

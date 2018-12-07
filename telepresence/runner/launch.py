@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from subprocess import PIPE, DEVNULL, Popen
+from subprocess import DEVNULL, PIPE, Popen
 from threading import Thread
 
 

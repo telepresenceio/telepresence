@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import os
 import ssl
 import sys
-import os
-
-import json
-from subprocess import CalledProcessError, STDOUT
 from shutil import which
+from subprocess import STDOUT, CalledProcessError
 from typing import List
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen

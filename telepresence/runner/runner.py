@@ -30,6 +30,7 @@ from time import sleep, time
 
 from telepresence import TELEPRESENCE_BINARY
 from telepresence.utilities import kill_process, str_command
+
 from .cache import Cache
 from .launch import _launch_command
 from .output import Output
@@ -55,6 +56,7 @@ class Runner(object):
         :param verbose: Whether subcommand should run in verbose mode.
         """
         self.output = Output(logfile_path)
+        self.logfile_path = self.output.logfile_path
         self.kubectl = kubeinfo
         self.verbose = verbose
         self.start_time = time()
@@ -146,11 +148,6 @@ class Runner(object):
         """Return the end of the contents of the log"""
         sleep(2.0)
         return self.output.read_logs()
-
-    def set_success(self, flag: bool) -> None:
-        """Indicate whether the command succeeded"""
-        Span.emit_summary = flag
-        self.output.write("Success. Starting cleanup.")
 
     def show(self, message: str) -> None:
         """Display a message to the user on stderr"""

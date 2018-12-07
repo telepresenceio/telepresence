@@ -17,10 +17,10 @@ Telepresence: local development environment for a remote Kubernetes cluster.
 
 import sys
 
-from telepresence import connect, mount, outbound, proxy, remote_env, intercept
-from telepresence.runner import Runner
-from telepresence.cli import parse_args, crash_reporting
+from telepresence import connect, intercept, mount, outbound, proxy, remote_env
+from telepresence.cli import crash_reporting, parse_args
 from telepresence.command_cli import parse_args as command_parse_args
+from telepresence.runner import Runner
 from telepresence.startup import KubeInfo, final_checks
 from telepresence.usage_tracking import call_scout
 
