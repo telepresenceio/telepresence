@@ -6,9 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/datawire/teleproxy/internal/pkg/tpu"
-
 	"github.com/datawire/teleproxy/pkg/k8s"
+	"github.com/datawire/teleproxy/pkg/tpu"
 )
 
 var timeout = flag.Int("t", 60, "timeout in seconds")

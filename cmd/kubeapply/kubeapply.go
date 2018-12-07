@@ -13,8 +13,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/datawire/teleproxy/internal/pkg/tpu"
 	"github.com/datawire/teleproxy/pkg/k8s"
+	"github.com/datawire/teleproxy/pkg/tpu"
 )
 
 func envBool(name string) bool {

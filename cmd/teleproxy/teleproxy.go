@@ -16,6 +16,7 @@ import (
 	"syscall"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
+	"github.com/datawire/teleproxy/pkg/tpu"
 
 	"github.com/datawire/teleproxy/internal/pkg/api"
 	"github.com/datawire/teleproxy/internal/pkg/dns"
@@ -23,7 +24,6 @@ import (
 	"github.com/datawire/teleproxy/internal/pkg/interceptor"
 	"github.com/datawire/teleproxy/internal/pkg/proxy"
 	"github.com/datawire/teleproxy/internal/pkg/route"
-	"github.com/datawire/teleproxy/internal/pkg/tpu"
 )
 
 func dnsListeners(port string) (listeners []string) {
