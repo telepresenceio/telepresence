@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-import sys
 from subprocess import CalledProcessError, Popen
 from typing import Dict, List
 
@@ -47,8 +46,8 @@ def set_up_torsocks(runner: Runner, socks_port: int) -> Dict[str, str]:
 
     torsocks_env = dict()
     torsocks_env["TORSOCKS_CONF_FILE"] = str(tor_conffile)
-    if runner.output.logfile is not sys.stdout:
-        torsocks_env["TORSOCKS_LOG_FILE_PATH"] = runner.output.logfile.name
+    if runner.logfile_path != "-":
+        torsocks_env["TORSOCKS_LOG_FILE_PATH"] = runner.logfile_path
 
     # Wait until DNS resolution via torsocks succeeds
     # FIXME: Make this lookup for google.com configurable

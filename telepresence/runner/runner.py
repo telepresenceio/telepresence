@@ -55,6 +55,7 @@ class Runner(object):
         :param verbose: Whether subcommand should run in verbose mode.
         """
         self.output = Output(logfile_path)
+        self.logfile_path = self.output.logfile_path
         self.kubectl = kubeinfo
         self.verbose = verbose
         self.start_time = time()
