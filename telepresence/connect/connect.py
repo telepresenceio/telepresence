@@ -17,8 +17,7 @@ from typing import Tuple
 
 from telepresence.cli import PortMapping
 from telepresence.proxy import RemoteInfo
-from telepresence.runner import Runner
-from telepresence.runner.background import launch_local_server
+from telepresence.runner import Runner, launch_local_server
 from telepresence.utilities import find_free_port
 from .expose import expose_local_services
 from .ssh import SSH
