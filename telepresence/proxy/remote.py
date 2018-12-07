@@ -14,7 +14,7 @@
 
 import json
 from subprocess import STDOUT, CalledProcessError
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 from telepresence import image_version
 from telepresence.runner import Runner

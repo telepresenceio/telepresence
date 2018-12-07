@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from subprocess import CalledProcessError, STDOUT
+from subprocess import STDOUT, CalledProcessError
 from typing import Tuple
 
 from telepresence.cli import PortMapping
 from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner, launch_local_server
 from telepresence.utilities import find_free_port
+
 from .expose import expose_local_services
 from .ssh import SSH
 

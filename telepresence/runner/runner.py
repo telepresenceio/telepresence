@@ -30,6 +30,7 @@ from time import sleep, time
 
 from telepresence import TELEPRESENCE_BINARY
 from telepresence.utilities import kill_process, str_command
+
 from .cache import Cache
 from .launch import _launch_command
 from .output import Output

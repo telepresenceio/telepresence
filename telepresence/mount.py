@@ -13,10 +13,10 @@
 # limitations under the License.
 
 from subprocess import STDOUT, CalledProcessError
-from typing import Tuple, Callable
+from typing import Callable, Tuple
 
-from telepresence.runner import Runner
 from telepresence.connect import SSH
+from telepresence.runner import Runner
 
 
 def mount_remote_volumes(

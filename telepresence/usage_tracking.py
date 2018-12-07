@@ -13,12 +13,11 @@
 # limitations under the License.
 
 import json
+import os
 import platform
 from pathlib import Path
 from urllib import request
 from uuid import uuid4
-
-import os
 
 from telepresence import __version__
 

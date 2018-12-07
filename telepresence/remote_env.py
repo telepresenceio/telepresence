@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from json import loads, dump
-from typing import Dict, Tuple, List
+from json import dump, loads
+from typing import Dict, List, Tuple
 
 from telepresence.connect import SSH
 from telepresence.proxy import RemoteInfo

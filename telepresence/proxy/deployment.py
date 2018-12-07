@@ -15,12 +15,13 @@
 import json
 from copy import deepcopy
 from subprocess import STDOUT
-from typing import Tuple, Dict, Optional
+from typing import Dict, Optional, Tuple
 
 from telepresence.cli import PortMapping
-from .remote import get_deployment_json
 from telepresence.runner import Runner
 from telepresence.utilities import get_alternate_nameserver
+
+from .remote import get_deployment_json
 
 
 def existing_deployment(

@@ -15,9 +15,9 @@
 import json
 from subprocess import DEVNULL, Popen
 from urllib.error import HTTPError
-from urllib.request import urlopen, Request
+from urllib.request import Request, urlopen
 
-from telepresence.cli import crash_reporting, PortMapping
+from telepresence.cli import PortMapping, crash_reporting
 from telepresence.connect import connect
 from telepresence.proxy import get_remote_info
 from telepresence.utilities import find_free_port
