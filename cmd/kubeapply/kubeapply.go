@@ -1,25 +1,20 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
-	"text/template"
 	"time"
 	"unicode"
 
 	"github.com/datawire/teleproxy/internal/pkg/tpu"
 	"github.com/datawire/teleproxy/pkg/k8s"
-
-	"github.com/Masterminds/sprig"
 )
 
 func envBool(name string) bool {
@@ -188,20 +183,14 @@ func expand(names []string, data interface{}) ([]string, error) {
 	fmt.Printf("expanding %s\n", strings.Join(names, " "))
 	var result []string
 	for _, n := range names {
-		tmpl := template.New("base").Funcs(sprig.TxtFuncMap())
-		_, err := tmpl.ParseFiles(n)
+		resources, err := k8s.LoadResources(n)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %v", n, err)
-		}
-		buf := bytes.NewBuffer(nil)
-		err = tmpl.ExecuteTemplate(buf, filepath.Base(n), data)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %v", n, err)
+			return nil, err
 		}
 		out := n + ".o"
-		err = ioutil.WriteFile(out, buf.Bytes(), 0644)
+		err = k8s.SaveResources(out, resources)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %v", out, err)
+			return nil, err
 		}
 		result = append(result, out)
 	}
