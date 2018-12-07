@@ -73,6 +73,7 @@ def run_docker_command(
     remote_env: Dict[str, str],
     ssh: SSH,
     mount_dir: Optional[str],
+    pod_info: Dict[str, str],
 ) -> Popen:
     """
     --docker-run support.

@@ -29,7 +29,9 @@ def setup_inject(runner: Runner, args):
         )
     command = ["torsocks"] + (args.run or ["bash", "--norc"])
 
-    def launch(runner_, _remote_info, env, socks_port, _ssh, _mount_dir):
+    def launch(
+        runner_, _remote_info, env, socks_port, _ssh, _mount_dir, _pod_info
+    ):
         return launch_inject(runner_, command, socks_port, env)
 
     return launch
@@ -56,7 +58,9 @@ def setup_vpn(runner: Runner, args):
         )
     command = args.run or ["bash", "--norc"]
 
-    def launch(runner_, remote_info, env, _socks_port, ssh, _mount_dir):
+    def launch(
+        runner_, remote_info, env, _socks_port, ssh, _mount_dir, _pod_info
+    ):
         return launch_vpn(
             runner_, remote_info, command, args.also_proxy, env, ssh
         )
@@ -69,10 +73,12 @@ def setup_container(runner: Runner, args):
     if SUDO_FOR_DOCKER:
         runner.require_sudo()
 
-    def launch(runner_, remote_info, env, _socks_port, ssh, mount_dir):
+    def launch(
+        runner_, remote_info, env, _socks_port, ssh, mount_dir, pod_info
+    ):
         return run_docker_command(
             runner_, remote_info, args.docker_run, args.expose,
-            args.also_proxy, env, ssh, mount_dir
+            args.also_proxy, env, ssh, mount_dir, pod_info
         )
 
     return launch
