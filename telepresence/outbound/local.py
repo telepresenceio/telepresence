@@ -16,12 +16,12 @@ import os
 from subprocess import CalledProcessError, Popen
 from typing import Dict, List
 
-from telepresence.outbound.workarounds import apply_workarounds
+from .workarounds import apply_workarounds
 from telepresence.utilities import kill_process
 from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.connect import SSH
-from telepresence.outbound.vpn import connect_sshuttle
+from .vpn import connect_sshuttle
 
 TORSOCKS_CONFIG = """
 # Allow process to listen on ports:
