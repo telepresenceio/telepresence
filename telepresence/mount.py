@@ -16,7 +16,7 @@ from subprocess import STDOUT, CalledProcessError
 from typing import Tuple, Callable
 
 from telepresence.runner import Runner
-from telepresence.connect.ssh import SSH
+from telepresence.connect import SSH
 
 
 def mount_remote_volumes(

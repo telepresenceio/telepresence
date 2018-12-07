@@ -15,7 +15,7 @@
 from typing import List, Tuple
 
 from telepresence.runner import Runner
-from telepresence.connect.ssh import SSH
+from .ssh import SSH
 
 
 def expose_local_services(
