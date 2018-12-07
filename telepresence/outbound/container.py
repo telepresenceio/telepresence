@@ -22,7 +22,7 @@ import os.path
 
 from telepresence import TELEPRESENCE_LOCAL_IMAGE
 from telepresence.cli import PortMapping
-from telepresence.proxy.remote import RemoteInfo
+from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.connect import SSH
 from telepresence.utilities import find_free_port, random_name

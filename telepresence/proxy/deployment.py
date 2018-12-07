@@ -18,7 +18,7 @@ from subprocess import STDOUT
 from typing import Tuple, Dict, Optional
 
 from telepresence.cli import PortMapping
-from telepresence.proxy.remote import get_deployment_json
+from .remote import get_deployment_json
 from telepresence.runner import Runner
 from telepresence.utilities import get_alternate_nameserver
 

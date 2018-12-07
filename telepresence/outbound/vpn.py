@@ -18,7 +18,7 @@ from subprocess import CalledProcessError
 from typing import List
 
 from telepresence.connect import SSH
-from telepresence.proxy.remote import RemoteInfo
+from telepresence.proxy import RemoteInfo
 from telepresence.utilities import random_name
 from telepresence.runner import Runner
 
