@@ -148,11 +148,6 @@ class Runner(object):
         sleep(2.0)
         return self.output.read_logs()
 
-    def set_success(self, flag: bool) -> None:
-        """Indicate whether the command succeeded"""
-        Span.emit_summary = flag
-        self.output.write("Success. Starting cleanup.")
-
     def show(self, message: str) -> None:
         """Display a message to the user on stderr"""
         self.write(message, prefix=">>>")
