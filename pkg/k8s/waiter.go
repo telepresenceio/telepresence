@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/datawire/teleproxy/internal/pkg/tpu"
+	"github.com/datawire/teleproxy/pkg/tpu"
 )
 
 type Waiter struct {

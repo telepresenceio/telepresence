@@ -1,7 +1,7 @@
 package proxy
 
 import (
-	"github.com/datawire/teleproxy/internal/pkg/tpu"
+	"github.com/datawire/teleproxy/pkg/tpu"
 	"golang.org/x/net/proxy"
 	"io"
 	"log"
