@@ -64,6 +64,33 @@ def parse_docker_args(docker_run: List[str]) -> Tuple[List[str], List[str]]:
     return docker_args, publish_args
 
 
+def parse_resolv_conf(contents: str) -> List[str]:
+    """
+    Try to extract nameserver, search path, and ndots info from the pod's
+    resolv.conf file.
+    """
+    res = []
+    for line in contents.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        tokens = line.split()
+        keyword = tokens[0].lower()
+        args = tokens[1:]
+
+        if keyword == "nameserver":
+            res.append("--dns={}".format(args[0]))
+        elif keyword == "search":
+            for arg in args:
+                res.append("--dns-search={}".format(arg))
+        elif keyword == "options":
+            for arg in args:
+                res.append("--dns-opt={}".format(arg))
+        else:
+            pass  # Ignore the rest
+    return res
+
+
 def run_docker_command(
     runner: Runner,
     remote_info: RemoteInfo,
@@ -105,12 +132,18 @@ def run_docker_command(
         "cidrs": get_proxy_cidrs(runner, remote_info, also_proxy),
         "expose_ports": list(expose.local_to_remote()),
     }
+    dns_args = []
+    if "hostname" in pod_info:
+        dns_args.append("--hostname={}".format(pod_info["hostname"].strip()))
+    if "resolv" in pod_info:
+        dns_args.extend(parse_resolv_conf(pod_info["resolv"]))
+
     # Image already has tini init so doesn't need --init option:
     span = runner.span()
     runner.launch(
         "Network container",
         docker_runify(
-            publish_args + [
+            publish_args + dns_args + [
                 "--rm", "--privileged", "--name=" +
                 name, TELEPRESENCE_LOCAL_IMAGE, "proxy",
                 json.dumps(config)
