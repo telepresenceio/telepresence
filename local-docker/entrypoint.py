@@ -80,13 +80,23 @@ def proxy(config: dict):
     ssh = SSH(runner, 38023, "telepresence@127.0.0.1")
     ssh.wait()
 
+    # Figure out IP address to exclude, from the incoming ssh
+    ip = None
+    route_output = runner.get_output(["route", "-n"])
+    for line in route_output.splitlines():
+        parts = line.split()
+        if parts[0] == "default" or parts[0] == "0.0.0.0":
+            ip = parts[1]
+            break
+    assert ip is not None, route_output
+
     # Start the sshuttle VPN-like thing:
     # XXX duplicates code in telepresence, remove duplication
     main_process = Popen([
         "sshuttle-telepresence", "-v", "--dns", "--method", "nat", "-e", (
             "ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null " +
             "-F /dev/null"
-        ), "-r",
+        ), "-x", ip, "-r",
         "telepresence@127.0.0.1:38023"
     ] + cidrs)
 
