@@ -1,9 +1,18 @@
 package k8s
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"strings"
+	"text/template"
 
+	"github.com/Masterminds/sprig"
 	ms "github.com/mitchellh/mapstructure"
+	"gopkg.in/yaml.v2"
 )
 
 var READY = map[string]func(Resource) bool{
@@ -208,4 +217,108 @@ func fixup(obj interface{}) interface{} {
 
 func NewResourceFromYaml(yaml map[interface{}]interface{}) Resource {
 	return Resource(fixup(yaml).(map[string]interface{}))
+}
+
+func isTemplate(input []byte) bool {
+	return strings.Contains(string(input), "@TEMPLATE@")
+}
+
+func ExpandResource(path string) (result []byte, err error) {
+	input, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %v", path, err)
+	}
+	if isTemplate(input) {
+		tmpl := template.New(filepath.Base(path)).Funcs(sprig.TxtFuncMap())
+		_, err := tmpl.Parse(string(input))
+		if err != nil {
+			return nil, fmt.Errorf("%s: %v", path, err)
+		}
+
+		buf := bytes.NewBuffer(nil)
+		err = tmpl.ExecuteTemplate(buf, filepath.Base(path), nil)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %v", path, err)
+		}
+
+		result = buf.Bytes()
+	} else {
+		result = input
+	}
+
+	return
+}
+
+func LoadResources(path string) (result []Resource, err error) {
+	var input []byte
+	input, err = ExpandResource(path)
+	if err != nil {
+		return
+	}
+	d := yaml.NewDecoder(bytes.NewReader(input))
+	for {
+		var uns map[interface{}]interface{}
+		err = d.Decode(&uns)
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			} else {
+				err = fmt.Errorf("%s: %v", path, err)
+			}
+			return
+		}
+		res := NewResourceFromYaml(uns)
+		result = append(result, res)
+	}
+}
+
+func SaveResources(path string, resources []Resource) error {
+	output, err := MarshalResources(resources)
+	if err != nil {
+		return fmt.Errorf("%s: %v", path, err)
+	}
+	err = ioutil.WriteFile(path, output, 0644)
+	if err != nil {
+		return fmt.Errorf("%s: %v", path, err)
+	}
+	return nil
+}
+
+func WalkResources(filter func(name string) bool, roots ...string) (result []Resource, err error) {
+	for _, root := range roots {
+		err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if !info.IsDir() && filter(path) {
+				rsrcs, err := LoadResources(path)
+				if err != nil {
+					return err
+				} else {
+					result = append(result, rsrcs...)
+				}
+			}
+
+			return nil
+		})
+		if err != nil {
+			return
+		}
+	}
+
+	return
+}
+
+func MarshalResources(resources []Resource) ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	e := yaml.NewEncoder(buf)
+	for _, r := range resources {
+		err := e.Encode(r)
+		if err != nil {
+			return nil, err
+		}
+	}
+	e.Close()
+	return buf.Bytes(), nil
 }

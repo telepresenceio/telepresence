@@ -2,16 +2,11 @@ package k8s
 
 import (
 	"fmt"
-	"io"
 	"log"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/datawire/teleproxy/internal/pkg/tpu"
-
-	"gopkg.in/yaml.v2"
 )
 
 type Waiter struct {
@@ -50,50 +45,25 @@ func (w *Waiter) Add(resource string) error {
 }
 
 func (w *Waiter) Scan(path string) (err error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return
-	}
-	d := yaml.NewDecoder(file)
-	for {
-		var uns map[interface{}]interface{}
-		err = d.Decode(&uns)
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
-			return
-		}
-		res := NewResourceFromYaml(uns)
+	resources, err := LoadResources(path)
+	for _, res := range resources {
 		err = w.Add(fmt.Sprintf("%s/%s", res.Kind(), res.QName()))
 		if err != nil {
 			return
 		}
 	}
+	return
 }
 
-func (w *Waiter) ScanPaths(files []string) error {
-	for _, file := range files {
-		err := filepath.Walk(file, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-
-			if !info.IsDir() && tpu.IsYaml(path) {
-				err := w.Scan(path)
-				if err != nil {
-					return err
-				}
-			}
-
-			return nil
-		})
+func (w *Waiter) ScanPaths(files []string) (err error) {
+	resources, err := WalkResources(tpu.IsYaml, files...)
+	for _, res := range resources {
+		err = w.Add(fmt.Sprintf("%s/%s", res.Kind(), res.QName()))
 		if err != nil {
-			return err
+			return
 		}
 	}
-
-	return nil
+	return
 }
 
 func (w *Waiter) remove(kind, name string) {

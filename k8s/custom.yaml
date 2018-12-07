@@ -1,3 +1,4 @@
+# @TEMPLATE@
 apiVersion: example.org/v1beta1
 kind: Custom
 metadata:
