@@ -286,16 +286,6 @@ class Runner(object):
 
         return logger
 
-    def _launch_command(self, track, out_cb, err_cb, args, **kwargs) -> Popen:
-        """Call a command, generate stamped, logged output."""
-        try:
-            process = _launch_command(args, out_cb, err_cb, **kwargs)
-        except OSError as exc:
-            self.output.write("[{}] {}".format(track, exc))
-            raise
-        # Grep-able log: self.output.write("CMD: {}".format(str_command(args)))
-        return process
-
     def _run_command(self, track, msg1, msg2, out_cb, err_cb, args, **kwargs):
         """Run a command synchronously"""
         self.output.write("[{}] {}: {}".format(track, msg1, str_command(args)))
@@ -304,10 +294,13 @@ class Runner(object):
             False,
             verbose=False
         )
-        process = self._launch_command(track, out_cb, err_cb, args, **kwargs)
-        process.wait()
+        try:
+            process = _launch_command(args, out_cb, err_cb, **kwargs)
+        except OSError as exc:
+            self.output.write("[{}] {}".format(track, exc))
+            raise
+        retcode = process.wait()
         spent = span.end()
-        retcode = process.poll()
         if retcode:
             self.output.write(
                 "[{}] exit {} in {:0.2f} secs.".format(track, retcode, spent)
@@ -370,9 +363,13 @@ class Runner(object):
         self.output.write(
             "[{}] Launching {}: {}".format(track, name, str_command(args))
         )
-        process = self._launch_command(
-            track, out_cb, err_cb, args, done=done, **kwargs
-        )
+        try:
+            process = _launch_command(
+                args, out_cb, err_cb, done=done, **kwargs
+            )
+        except OSError as exc:
+            self.output.write("[{}] {}".format(track, exc))
+            raise
         self.add_cleanup(
             "Kill BG process [{}] {}".format(track, name),
             killer if killer else partial(kill_process, process),
