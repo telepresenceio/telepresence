@@ -24,6 +24,7 @@ from urllib.parse import quote_plus
 
 import telepresence
 from telepresence.command_cli import show_command_help_and_quit
+from telepresence.runner import BackgroundProcessCrash
 from telepresence.utilities import random_name
 
 
@@ -80,8 +81,8 @@ def safe_output(args: List[str]) -> str:
 
 def report_crash(error, log_path, logs):
     print(
-        "\nLooks like there's a bug in our code. Sorry about that!\n\n"
-        "Here's the traceback:\n\n" + error + "\n"
+        "\nLooks like there's a bug in our code. Sorry about that!\n\n" +
+        error + "\n"
     )
     if log_path != "-":
         log_ref = " (see {} for the complete logs):".format(log_path)
@@ -89,8 +90,8 @@ def report_crash(error, log_path, logs):
         log_ref = ""
     if "\n" in logs:
         print(
-            "And here are the last few lines of the logfile" + log_ref +
-            "\n\n" + "\n".join(logs.splitlines()[-12:]) + "\n"
+            "Here are the last few lines of the logfile" + log_ref + "\n\n" +
+            "\n".join(logs.splitlines()[-12:]) + "\n"
         )
     report = "no"
     if sys.stdout.isatty():
@@ -136,7 +137,10 @@ def crash_reporting(runner=None):
         show("Keyboard interrupt (Ctrl-C/Ctrl-Break) pressed")
         raise SystemExit(0)
     except Exception as exc:
-        error = format_exc()
+        if isinstance(exc, BackgroundProcessCrash):
+            error = exc.details
+        else:
+            error = format_exc()
         logs = "Not available"
         log_path = "-"
         if runner is not None:
@@ -426,7 +430,8 @@ BUG_REPORT_TEMPLATE = u"""\
 
 ### What happened instead?
 
-(please tell us - the traceback is automatically included, see below)
+(please tell us - the traceback is automatically included, see below.
+use https://gist.github.com to pass along full telepresence.log)
 
 ### Automatically included information
 
@@ -436,7 +441,6 @@ Python version: `{}`
 kubectl version: `{}`
 oc version: `{}`
 OS: `{}`
-Traceback:
 
 ```
 {}
