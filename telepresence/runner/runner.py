@@ -92,6 +92,13 @@ class Runner(object):
             replace_whitespace=False,
             drop_whitespace=False,
         )
+        self.raw_wrapper = textwrap.TextWrapper(
+            width=99999,
+            initial_indent="T: ",
+            subsequent_indent="T: ",
+            replace_whitespace=False,
+            drop_whitespace=False,
+        )
         self.session_id = uuid.uuid4().hex
 
         # Log some version info
@@ -154,6 +161,12 @@ class Runner(object):
         self.write(message, prefix=">>>")
         for line in message.splitlines():
             print(self.wrapper.fill(line), file=sys.stderr)
+
+    def show_raw(self, message: str) -> None:
+        """Display a message to the user on stderr (no reformatting)"""
+        self.write(message, prefix=">>>")
+        for line in message.splitlines():
+            print(self.raw_wrapper.fill(line), file=sys.stderr)
 
     def make_temp(self, name: str) -> Path:
         res = self.temp / name
