@@ -23,7 +23,7 @@ from functools import partial
 from inspect import currentframe, getframeinfo
 from pathlib import Path
 from shutil import rmtree, which
-from subprocess import CalledProcessError, Popen
+from subprocess import STDOUT, CalledProcessError, Popen
 from tempfile import mkdtemp
 from threading import Thread
 from time import sleep, time
@@ -351,14 +351,25 @@ class Runner(object):
             # This prevents signals from getting forwarded, but breaks sudo
             # if it is configured to ask for a password.
             kwargs["start_new_session"] = True
+        assert "stderr" not in kwargs
+        kwargs["stderr"] = STDOUT
         self.counter = track = self.counter + 1
-        out_cb = err_cb = self._make_logger(track)
+        capture = typing.Deque[str](maxlen=10)
+        out_cb = err_cb = self._make_logger(track, capture=capture)
 
         def done(proc):
             retcode = proc.wait()
             self.output.write("[{}] exit {}".format(track, retcode))
             self.quitting = True
-            self.ended.append("{} exit {}".format(name, retcode))
+            recent_lines = [line for line in capture if line is not None]
+            recent = "  ".join(recent_lines).strip()
+            if recent:
+                recent = "\nRecent output was:\n  {}".format(recent)
+            message = (
+                "Background process ({}) exited with return code {}. "
+                "Command was:\n  {}\n{}"
+            ).format(name, retcode, str_command(args), recent)
+            self.ended.append(message)
 
         self.output.write(
             "[{}] Launching {}: {}".format(track, name, str_command(args))
