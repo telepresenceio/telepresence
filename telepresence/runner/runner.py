@@ -18,12 +18,13 @@ import sys
 import textwrap
 import typing
 import uuid
+from collections import deque
 from contextlib import contextmanager
 from functools import partial
 from inspect import currentframe, getframeinfo
 from pathlib import Path
 from shutil import rmtree, which
-from subprocess import CalledProcessError, Popen
+from subprocess import STDOUT, CalledProcessError, Popen
 from tempfile import mkdtemp
 from threading import Thread
 from time import sleep, time
@@ -32,7 +33,7 @@ from telepresence import TELEPRESENCE_BINARY
 from telepresence.utilities import kill_process, str_command
 
 from .cache import Cache
-from .launch import _launch_command
+from .launch import BackgroundProcessCrash, _launch_command
 from .output import Output
 from .span import Span
 
@@ -87,6 +88,13 @@ class Runner(object):
                 pass
         self.wrapper = textwrap.TextWrapper(
             width=term_width,
+            initial_indent="T: ",
+            subsequent_indent="T: ",
+            replace_whitespace=False,
+            drop_whitespace=False,
+        )
+        self.raw_wrapper = textwrap.TextWrapper(
+            width=99999,
             initial_indent="T: ",
             subsequent_indent="T: ",
             replace_whitespace=False,
@@ -154,6 +162,12 @@ class Runner(object):
         self.write(message, prefix=">>>")
         for line in message.splitlines():
             print(self.wrapper.fill(line), file=sys.stderr)
+
+    def show_raw(self, message: str) -> None:
+        """Display a message to the user on stderr (no reformatting)"""
+        self.write(message, prefix=">>>")
+        for line in message.splitlines():
+            print(self.raw_wrapper.fill(line), file=sys.stderr)
 
     def make_temp(self, name: str) -> Path:
         res = self.temp / name
@@ -286,16 +300,6 @@ class Runner(object):
 
         return logger
 
-    def _launch_command(self, track, out_cb, err_cb, args, **kwargs) -> Popen:
-        """Call a command, generate stamped, logged output."""
-        try:
-            process = _launch_command(args, out_cb, err_cb, **kwargs)
-        except OSError as exc:
-            self.output.write("[{}] {}".format(track, exc))
-            raise
-        # Grep-able log: self.output.write("CMD: {}".format(str_command(args)))
-        return process
-
     def _run_command(self, track, msg1, msg2, out_cb, err_cb, args, **kwargs):
         """Run a command synchronously"""
         self.output.write("[{}] {}: {}".format(track, msg1, str_command(args)))
@@ -304,10 +308,13 @@ class Runner(object):
             False,
             verbose=False
         )
-        process = self._launch_command(track, out_cb, err_cb, args, **kwargs)
-        process.wait()
+        try:
+            process = _launch_command(args, out_cb, err_cb, **kwargs)
+        except OSError as exc:
+            self.output.write("[{}] {}".format(track, exc))
+            raise
+        retcode = process.wait()
         spent = span.end()
-        retcode = process.poll()
         if retcode:
             self.output.write(
                 "[{}] exit {} in {:0.2f} secs.".format(track, retcode, spent)
@@ -358,21 +365,36 @@ class Runner(object):
             # This prevents signals from getting forwarded, but breaks sudo
             # if it is configured to ask for a password.
             kwargs["start_new_session"] = True
+        assert "stderr" not in kwargs
+        kwargs["stderr"] = STDOUT
         self.counter = track = self.counter + 1
-        out_cb = err_cb = self._make_logger(track)
+        capture = deque(maxlen=10)  # type: typing.MutableSequence[str]
+        out_cb = err_cb = self._make_logger(track, capture=capture)
 
         def done(proc):
             retcode = proc.wait()
             self.output.write("[{}] exit {}".format(track, retcode))
             self.quitting = True
-            self.ended.append("{} exit {}".format(name, retcode))
+            recent_lines = [str(line) for line in capture if line is not None]
+            recent = "  ".join(recent_lines).strip()
+            if recent:
+                recent = "\nRecent output was:\n  {}".format(recent)
+            message = (
+                "Background process ({}) exited with return code {}. "
+                "Command was:\n  {}\n{}"
+            ).format(name, retcode, str_command(args), recent)
+            self.ended.append(message)
 
         self.output.write(
             "[{}] Launching {}: {}".format(track, name, str_command(args))
         )
-        process = self._launch_command(
-            track, out_cb, err_cb, args, done=done, **kwargs
-        )
+        try:
+            process = _launch_command(
+                args, out_cb, err_cb, done=done, **kwargs
+            )
+        except OSError as exc:
+            self.output.write("[{}] {}".format(track, exc))
+            raise
         self.add_cleanup(
             "Kill BG process [{}] {}".format(track, name),
             killer if killer else partial(kill_process, process),
@@ -438,10 +460,9 @@ class Runner(object):
         background process early exit(s) that prompted this crash.
         """
         self.quitting = True  # should be a no-op
-        self.show("Background process(es) failed during setup:")
-        for item in self.ended:
-            self.show(item)
-        raise RuntimeError("Background process(es) failed during setup")
+        message = "{} background process(es) crashed".format(len(self.ended))
+        failures = "\n\n".join(self.ended)
+        raise BackgroundProcessCrash(message, failures)
 
     def fail(self, message: str, code=1) -> SystemExit:
         """
@@ -492,6 +513,10 @@ class Runner(object):
         # Something else exited, setting the quitting flag.
         # Unfortunately torsocks doesn't deal well with connections
         # being lost, so best we can do is shut down.
+        if self.ended:
+            self.show("\n")
+            self.show_raw(self.ended[0])
+        self.show("\n")
         message = (
             "Proxy to Kubernetes exited. This is typically due to"
             " a lost connection."

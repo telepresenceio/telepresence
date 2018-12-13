@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from .background import launch_local_server
+from .launch import BackgroundProcessCrash
 from .runner import Runner
 
-__all__ = "Runner", "launch_local_server"
+__all__ = "BackgroundProcessCrash", "Runner", "launch_local_server"
