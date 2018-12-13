@@ -119,7 +119,10 @@ def launch_vpn(
     """
     connect_sshuttle(runner, remote_info, also_proxy, ssh)
     env = get_local_env(runner, env_overrides, False)
-    process = Popen(command, env=env)
+    try:
+        process = Popen(command, env=env)
+    except OSError as exc:
+        raise runner.fail("Failed to launch your command: {}".format(exc))
     runner.add_cleanup(
         "Terminate local process", terminate_local_process, runner, process
     )
