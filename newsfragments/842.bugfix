@@ -1,0 +1,1 @@
+Telepresence shows more information when a background process dies unexpectedly, including the last few lines of output. If this happens during startup, the output is included in the crash report.
