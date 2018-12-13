@@ -20,7 +20,7 @@ from pathlib import Path
 def _license_check():
     license_text = "Licensed under the Apache License, Version 2.0"
     dirs = ["telepresence", "local-docker"]  # XXX k8s-proxy
-    patterns = ["*.py"]  # Future: check other file types
+    patterns = ["*.py", "Dockerfile"]  # Future: check other file types
     license_missing = []
     for dirname in dirs:
         for pattern in patterns:
