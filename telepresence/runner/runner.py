@@ -32,7 +32,7 @@ from telepresence import TELEPRESENCE_BINARY
 from telepresence.utilities import kill_process, str_command
 
 from .cache import Cache
-from .launch import _launch_command
+from .launch import BackgroundProcessCrash, _launch_command
 from .output import Output
 from .span import Span
 
@@ -459,10 +459,9 @@ class Runner(object):
         background process early exit(s) that prompted this crash.
         """
         self.quitting = True  # should be a no-op
-        self.show("Background process(es) failed during setup:")
-        for item in self.ended:
-            self.show(item)
-        raise RuntimeError("Background process(es) failed during setup")
+        message = "{} background process(es) crashed".format(len(self.ended))
+        failures = "\n\n".join(self.ended)
+        raise BackgroundProcessCrash(message, failures)
 
     def fail(self, message: str, code=1) -> SystemExit:
         """

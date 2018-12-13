@@ -16,6 +16,12 @@ from subprocess import DEVNULL, PIPE, Popen
 from threading import Thread
 
 
+class BackgroundProcessCrash(Exception):
+    def __init__(self, message: str, details: str) -> None:
+        super().__init__(message)
+        self.details = details
+
+
 def _launch_command(args, out_cb, err_cb, done=None, **kwargs):
     """
     Launch subprocess with args, kwargs.
