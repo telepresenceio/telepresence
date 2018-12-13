@@ -80,15 +80,21 @@ def proxy(config: dict):
     ssh = SSH(runner, 38023, "telepresence@127.0.0.1")
     ssh.wait()
 
-    # Figure out IP address to exclude, from the incoming ssh
-    ip = None
-    route_output = runner.get_output(["route", "-n"])
-    for line in route_output.splitlines():
+    # Figure out IP addresses to exclude, from the incoming ssh
+    exclusions = []
+    netstat_output = runner.get_output(["netstat", "-n"])
+    for line in netstat_output.splitlines():
+        if not line.startswith("tcp") or "ESTABLISHED" not in line:
+            continue
         parts = line.split()
-        if parts[0] == "default" or parts[0] == "0.0.0.0":
-            ip = parts[1]
-            break
-    assert ip is not None, route_output
+        try:
+            for address in (parts[3], parts[4]):
+                ip, port = address.split(":")
+                exclusions.extend(["-x", ip])
+        except (IndexError, ValueError):
+            runner.write("Failed on line: " + line)
+            raise
+    assert exclusions, netstat_output
 
     # Start the sshuttle VPN-like thing:
     # XXX duplicates code in telepresence, remove duplication
@@ -96,9 +102,9 @@ def proxy(config: dict):
         "sshuttle-telepresence", "-v", "--dns", "--method", "nat", "-e", (
             "ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null " +
             "-F /dev/null"
-        ), "-x", ip, "-r",
+        ), "-r",
         "telepresence@127.0.0.1:38023"
-    ] + cidrs)
+    ] + exclusions + cidrs)
 
     # Start the SSH tunnels to expose local services:
     expose_local_services(runner, ssh, expose_ports)
