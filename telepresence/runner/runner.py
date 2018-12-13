@@ -18,6 +18,7 @@ import sys
 import textwrap
 import typing
 import uuid
+from collections import deque
 from contextlib import contextmanager
 from functools import partial
 from inspect import currentframe, getframeinfo
@@ -367,14 +368,14 @@ class Runner(object):
         assert "stderr" not in kwargs
         kwargs["stderr"] = STDOUT
         self.counter = track = self.counter + 1
-        capture = typing.Deque[str](maxlen=10)
+        capture = deque(maxlen=10)  # type: typing.MutableSequence[str]
         out_cb = err_cb = self._make_logger(track, capture=capture)
 
         def done(proc):
             retcode = proc.wait()
             self.output.write("[{}] exit {}".format(track, retcode))
             self.quitting = True
-            recent_lines = [line for line in capture if line is not None]
+            recent_lines = [str(line) for line in capture if line is not None]
             recent = "  ".join(recent_lines).strip()
             if recent:
                 recent = "\nRecent output was:\n  {}".format(recent)
