@@ -51,7 +51,7 @@ def mount_remote_volumes(
                 # Don't store host key:
                 "-o",
                 "UserKnownHostsFile=/dev/null",
-            ] + middle + ["telepresence@localhost:/", mount_dir],
+            ] + middle + ["telepresence@127.0.0.1:/", mount_dir],
             stderr=STDOUT
         )
         mounted = True

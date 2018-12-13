@@ -121,7 +121,7 @@ def run_docker_command(
     publish_args.append(
         "--publish=127.0.0.1:{}:38022/tcp".format(container_sshd_port)
     )
-    local_ssh = SSH(runner, container_sshd_port, "root@localhost")
+    local_ssh = SSH(runner, container_sshd_port, "root@127.0.0.1")
 
     # Start the sshuttle container:
     name = random_name()
@@ -153,7 +153,7 @@ def run_docker_command(
     local_ssh.wait()
     runner.launch(
         "Local SSH port forward",
-        local_ssh.bg_command(["-R", "38023:localhost:{}".format(ssh.port)])
+        local_ssh.bg_command(["-R", "38023:127.0.0.1:{}".format(ssh.port)])
     )
 
     # Wait for sshuttle to be running:

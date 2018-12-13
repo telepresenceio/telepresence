@@ -25,7 +25,7 @@ class SSH(object):
         self,
         runner: Runner,
         port: int,
-        user_at_host: str = "telepresence@localhost",
+        user_at_host: str = "telepresence@127.0.0.1",
     ) -> None:
         self.runner = runner
         self.port = port

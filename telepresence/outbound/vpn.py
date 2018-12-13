@@ -254,7 +254,7 @@ def connect_sshuttle(
             "--to-ns",
             "127.0.0.1:9053",
             "-r",
-            "telepresence@localhost:" + str(ssh.port),
+            "telepresence@127.0.0.1:" + str(ssh.port),
         ] + get_proxy_cidrs(runner, remote_info, hosts_or_ips),
         keep_session=True,  # Avoid trouble with interactive sudo
     )
