@@ -7,5 +7,4 @@ pytest-timeout
 pytest-tap
 pyyaml
 yapf
-pylint
 towncrier
