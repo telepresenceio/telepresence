@@ -513,6 +513,10 @@ class Runner(object):
         # Something else exited, setting the quitting flag.
         # Unfortunately torsocks doesn't deal well with connections
         # being lost, so best we can do is shut down.
+        if self.ended:
+            self.show("\n")
+            self.show_raw(self.ended[0])
+        self.show("\n")
         message = (
             "Proxy to Kubernetes exited. This is typically due to"
             " a lost connection."
