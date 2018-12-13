@@ -202,6 +202,7 @@ class Runner(object):
         if self.sudo_held:
             return
 
+        self.require(["sudo"], "Some operations require elevated privileges")
         try:
             # See whether we can grab privileges without a password
             self.check_call(["sudo", "-n", "echo", "-n"])
@@ -223,7 +224,14 @@ class Runner(object):
         """
         Find unavailable commands from a set of dependencies
         """
-        return [command for command in commands if which(command) is None]
+        missing = []
+        for command in commands:
+            path = which(command)
+            if path:
+                self.write("Found {} -> {}".format(command, path))
+            else:
+                missing.append(command)
+        return missing
 
     def require(self, commands: typing.Iterable[str], message: str) -> None:
         """
