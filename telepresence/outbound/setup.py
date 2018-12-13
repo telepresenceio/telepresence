@@ -18,7 +18,14 @@ from .container import SUDO_FOR_DOCKER, run_docker_command
 from .local import launch_inject, launch_vpn
 
 
+def check_local_command(runner: Runner, command: str) -> None:
+    if runner.depend([command]):
+        raise runner.fail("{}: command not found".format(command))
+
+
 def setup_inject(runner: Runner, args):
+    command = ["torsocks"] + (args.run or ["bash", "--norc"])
+    check_local_command(runner, command[1])
     runner.require(["torsocks"], "Please install torsocks (v2.1 or later)")
     if runner.chatty:
         runner.show(
@@ -28,7 +35,6 @@ def setup_inject(runner: Runner, args):
             "method limitations see "
             "https://telepresence.io/reference/methods.html"
         )
-    command = ["torsocks"] + (args.run or ["bash", "--norc"])
 
     def launch(
         runner_, _remote_info, env, socks_port, _ssh, _mount_dir, _pod_info
@@ -39,6 +45,8 @@ def setup_inject(runner: Runner, args):
 
 
 def setup_vpn(runner: Runner, args):
+    command = args.run or ["bash", "--norc"]
+    check_local_command(runner, command[0])
     runner.require(["sshuttle-telepresence"],
                    "Part of the Telepresence package. Try reinstalling.")
     if runner.platform == "linux":
@@ -57,7 +65,6 @@ def setup_vpn(runner: Runner, args):
             "a full list of method limitations see "
             "https://telepresence.io/reference/methods.html"
         )
-    command = args.run or ["bash", "--norc"]
 
     def launch(
         runner_, remote_info, env, _socks_port, ssh, _mount_dir, _pod_info
