@@ -202,6 +202,7 @@ class Runner(object):
         if self.sudo_held:
             return
 
+        self.require(["sudo"], "Some operations require elevated privileges")
         try:
             # See whether we can grab privileges without a password
             self.check_call(["sudo", "-n", "echo", "-n"])
