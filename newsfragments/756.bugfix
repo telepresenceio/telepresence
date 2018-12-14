@@ -1,0 +1,1 @@
+Telepresence reports if the deployment named by `--new-deployment` already exists.

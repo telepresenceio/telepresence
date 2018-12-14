@@ -103,7 +103,7 @@ def get_deployment_json(
             )["items"][0]
     except CalledProcessError as e:
         raise runner.fail(
-            "Failed to find Deployment '{}':\n{}".format(
+            "Failed to find deployment {}:\n{}".format(
                 deployment_name, e.stdout
             )
         )
