@@ -14,6 +14,7 @@
 
 import ipaddress
 import json
+from socket import gethostbyname, gaierror
 from subprocess import CalledProcessError
 from typing import List
 
@@ -21,11 +22,6 @@ from telepresence.connect import SSH
 from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.utilities import random_name
-
-# The number of DNS probes which must be issued during startup before the
-# sshuttle-proxied DNS system is considered properly "primed" with respect to
-# search domains.
-REQUIRED_HELLOTELEPRESENCE_DNS_PROBES = 10
 
 
 def covering_cidr(ips: List[str]) -> str:
@@ -264,27 +260,34 @@ def connect_sshuttle(
     # segment so any search/domain statements in resolv.conf are applied,
     # which then allows the DNS proxy to detect the suffix domain and
     # filter it out.
-    def get_hellotelepresence(counter=iter(range(10000))):
-        # On Macs, and perhaps elsewhere, there is OS-level caching of
-        # NXDOMAIN, so bypass caching by sending new domain each time. Another,
-        # less robust alternative, is to `killall -HUP mDNSResponder`.
-        runner.get_output([
-            "python3", "-c",
-            "import socket; socket.gethostbyname('hellotelepresence{}')".
-            format(next(counter))
-        ])
-
+    # On Macs, and perhaps elsewhere, there is OS-level caching of
+    # NXDOMAIN, so bypass caching by sending new domain each time. Another,
+    # less robust alternative, is to `killall -HUP mDNSResponder`.
     subspan = runner.span("sshuttle-wait")
-    probes = 0
-    for _ in runner.loop_until(20, 0.1):
-        probes += 1
+    countdown = 3
+    for idx in runner.loop_until(20, 0.1):
+        # Construct a different name each time to avoid NXDOMAIN caching.
+        name = "hellotelepresence-{}".format(idx)
+        runner.write("Wait for vpn-tcp connection: {}".format(name))
         try:
-            get_hellotelepresence()
-            if probes >= REQUIRED_HELLOTELEPRESENCE_DNS_PROBES:
+            gethostbyname(name)
+            countdown -= 1
+            runner.write("Resolved {}. {} more...".format(name, countdown))
+            if countdown == 0:
                 break
-        except CalledProcessError:
+            # The loop uses a single segment to try to capture suffix or
+            # search path in the proxy. However, in some network setups,
+            # single-segment names don't get resolved the normal way. To see
+            # whether we're running into this, also try to resolve a name with
+            # many dots. This won't resolve successfully but will show up in
+            # the logs. See also:
+            # https://github.com/telepresenceio/telepresence/issues/242
+            gethostbyname("x-{}.probe.to.check.sanity".format(name))
+        except gaierror:
             pass
 
-    get_hellotelepresence()
+    if countdown != 0:
+        raise RuntimeError("vpn-tcp tunnel did not connect")
+
     subspan.end()
     span.end()
