@@ -482,7 +482,9 @@ class Runner(object):
         :param code: Process exit code
         """
         self.quitting = True
+        self.show("\n")
         self.show(message)
+        self.show("\n")
         self.write("EXITING with status code {}".format(code))
         exit(code)
         return SystemExit(code)  # Not reached; just here for the linters
