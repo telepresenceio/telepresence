@@ -91,7 +91,14 @@ def create_new_deployment(
         command.append(
             "--env=TELEPRESENCE_NAMESERVER=" + get_alternate_nameserver()
         )
-    runner.get_output(runner.kubectl(command))
+    try:
+        runner.get_output(runner.kubectl(command), reveal=True, stderr=STDOUT)
+    except CalledProcessError as exc:
+        raise runner.fail(
+            "Failed to create deployment {}:\n{}".format(
+                deployment_arg, exc.stdout
+            )
+        )
     span.end()
     return deployment_arg, run_id
 
