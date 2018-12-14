@@ -2,6 +2,28 @@
 
 <!--- towncrier start line -->
 
+#### 0.96 (December 14, 2018)
+
+Bug fixes:
+
+* When using the container method, all outgoing traffic is directed to the cluster.
+  It is no longer necessary or meaningful to use `--also-proxy` with `--docker-run`.
+  ([#391](https://github.com/telepresenceio/telepresence/issues/391))
+* Telepresence shows more information when a background process dies unexpectedly, including the last few lines of output.
+  If this happens during startup, the output is included in the crash report.
+  ([#842](https://github.com/telepresenceio/telepresence/issues/842))
+* Telepresence is less likely to get confused by network setups that have IPv6 enabled.
+  ([#783](https://github.com/telepresenceio/telepresence/issues/783))
+* Telepresence outputs a warning if cluster and client versions differ greatly.
+  ([#426](https://github.com/telepresenceio/telepresence/issues/426))
+* Instead of crashing, Telepresence reports an error when
+  * the deployment named by `--deployment` does not exist.
+    ([#592](https://github.com/telepresenceio/telepresence/issues/592))
+  * the deployment named by `--new-deployment` already exists.
+    ([#756](https://github.com/telepresenceio/telepresence/issues/756))
+  * your command cannot be launched.
+    ([#869](https://github.com/telepresenceio/telepresence/issues/869))
+
 #### 0.95 (December 6, 2018)
 
 Bug fixes:
