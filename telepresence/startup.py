@@ -18,7 +18,7 @@ import ssl
 import sys
 from shutil import which
 from subprocess import STDOUT, CalledProcessError
-from typing import List
+from typing import List, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
@@ -45,6 +45,23 @@ def kubectl_or_oc(server: str) -> str:
         return "kubectl"
     else:
         return "oc"
+
+
+def _parse_version_component(comp: str) -> int:
+    digits = []
+    for ch in comp:
+        if ch in "0123456789":
+            digits.append(ch)
+        else:
+            break
+    return int("".join(digits))  # or raise ValueError on empty string
+
+
+def _parse_version(version: str) -> Tuple[int, int, int]:
+    components = version.split(".", maxsplit=2)
+    ints = [_parse_version_component(comp) for comp in components]
+    major, minor, patch = ints  # or raise ValueError on number of items
+    return major, minor, patch
 
 
 class KubeInfo(object):
@@ -148,6 +165,8 @@ class KubeInfo(object):
                 self.context, self.namespace, self.cluster_version
             )
         )
+        self._check_versions(runner)
+
         self.in_local_vm = self._check_if_in_local_vm(runner)
         if self.in_local_vm:
             runner.write("Looks like we're in a local VM, e.g. minikube.\n")
@@ -183,6 +202,40 @@ class KubeInfo(object):
             if ip and ip in self.server:
                 return True
         return False
+
+    def _check_versions(self, runner: Runner) -> None:
+        try:
+            cluster = _parse_version(self.cluster_version)
+        except ValueError:
+            runner.write("Warning: Unable to parse cluster version number")
+            return
+
+        try:
+            client = _parse_version(self.kubectl_version)
+        except ValueError:
+            runner.write("Warning: Unable to parse client version number")
+            return
+
+        testing_message = "Warning: Telepresence has only been testing on "
+        if cluster[0] != 1:
+            runner.show(testing_message + "version 1.* clusters")
+        if client[0] != 1:
+            runner.show(testing_message + "kubectl version 1.*")
+
+        warning_message = (
+            "Warning: kubectl {} may not work correctly with cluster "
+            "version {} due to the version discrepancy. See "
+            "https://kubernetes.io/docs/setup/version-skew-policy/ "
+            "for more information."
+        ).format(self.kubectl_version, self.cluster_version)
+
+        major_is_diff = cluster[0] != client[0]
+        minor_diff = abs(cluster[1] - client[1])
+        if major_is_diff or minor_diff > 2:
+            runner.show(warning_message)
+            runner.show("\n")
+        elif minor_diff > 1:
+            runner.write(warning_message)
 
 
 def final_checks(runner: Runner, args):
