@@ -8,7 +8,7 @@ from urllib.request import urlopen
 import sys
 
 TELEPROXY_BASE = "https://s3.amazonaws.com/datawire-static-files/teleproxy/"
-TELEPROXY_VERSION = "0.2.0"
+TELEPROXY_VERSION = "0.3.6"
 
 
 def retrieve_teleproxy(version, go_os, go_arch, output):
