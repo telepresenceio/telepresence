@@ -34,10 +34,15 @@ distros = [
         "ubuntu", "bionic", "deb", ubuntu_deps + ["python3-distutils"],
         install_deb
     ),
+    (
+        "ubuntu", "cosmic", "deb", ubuntu_deps + ["python3-distutils"],
+        install_deb
+    ),
     ("debian", "stretch", "deb", ubuntu_deps, install_deb),
     ("fedora", "26", "rpm", fedora_deps, install_rpm),
     ("fedora", "27", "rpm", fedora_deps, install_rpm),
     ("fedora", "28", "rpm", fedora_deps, install_rpm),
+    ("fedora", "29", "rpm", fedora_deps, install_rpm),
 ]
 
 # Ubuntu: above plus yakkety zesty bionic
