@@ -265,7 +265,7 @@ def connect_sshuttle(
     # less robust alternative, is to `killall -HUP mDNSResponder`.
     subspan = runner.span("sshuttle-wait")
     countdown = 3
-    for idx in runner.loop_until(20, 0.1):
+    for idx in runner.loop_until(25, 0.1):
         # Construct a different name each time to avoid NXDOMAIN caching.
         name = "hellotelepresence-{}".format(idx)
         runner.write("Wait for vpn-tcp connection: {}".format(name))
@@ -275,6 +275,9 @@ def connect_sshuttle(
             runner.write("Resolved {}. {} more...".format(name, countdown))
             if countdown == 0:
                 break
+        except gaierror:
+            pass
+        try:
             # The loop uses a single segment to try to capture suffix or
             # search path in the proxy. However, in some network setups,
             # single-segment names don't get resolved the normal way. To see
@@ -282,7 +285,7 @@ def connect_sshuttle(
             # many dots. This won't resolve successfully but will show up in
             # the logs. See also:
             # https://github.com/telepresenceio/telepresence/issues/242
-            gethostbyname("x-{}.probe.to.check.sanity".format(name))
+            gethostbyname("{}.a.sanity.check.telepresence.io".format(name))
         except gaierror:
             pass
 

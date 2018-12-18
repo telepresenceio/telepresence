@@ -160,6 +160,14 @@ class LocalResolver(object):
         d.addErrback(fallback)
         return d
 
+    def _identify_sanity_check(self, real_name):
+        if (
+            real_name.startswith(b"hellotelepresence")
+            and real_name.endswith(b"telepresence.io")
+        ):
+            print("Sanity check: {}".format(real_name))
+            return defer.fail(error.AuthoritativeDomainError("Sanity check"))
+
     def _identify_suffix_probe(self, real_name, parts):
         if parts[0].startswith(b"hellotelepresence"):
             suffix = tuple(parts[1:])
@@ -220,6 +228,10 @@ class LocalResolver(object):
         # on the client machine we will want to lookup 'kubernetes' if we get
         # 'kubernetes.wework.com'.
         parts = query.name.name.split(b".")
+
+        result = self._identify_sanity_check(real_name)
+        if result is not None:
+            return result
 
         result = self._identify_suffix_probe(real_name, parts)
         if result is not None:
