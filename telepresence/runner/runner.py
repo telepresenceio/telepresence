@@ -13,7 +13,9 @@
 # limitations under the License.
 
 import os
+import select
 import signal
+import socket
 import sys
 import textwrap
 import typing
@@ -371,6 +373,7 @@ class Runner(object):
         name: str,
         args: typing.List[str],
         killer: typing.Callable[[], None] = None,
+        notify: bool = False,
         keep_session: bool = False,
         bufsize: int = -1
     ) -> None:
@@ -383,6 +386,10 @@ class Runner(object):
         :param killer: How to signal to the process that it should
         stop.  The default is to call Popen.terminate(), which on
         POSIX OSs sends SIGTERM.
+
+        :param notify: Whether to synchronously wait for the process
+        to send "READY=1" via the ``sd_notify(3)`` interface before
+        returning.
 
         :param keep_session: Whether to run the process in the current
         session (as in ``setsid()``), or in a new session.  The
@@ -417,6 +424,12 @@ class Runner(object):
         self.output.write(
             "[{}] Launching {}: {}".format(track, name, str_command(args))
         )
+        env = os.environ.copy()
+        if notify:
+            sockname = str(self.temp / "notify-{}".format(track))
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+            sock.bind(sockname)
+            env["NOTIFY_SOCKET"] = sockname
         try:
             process = _launch_command(
                 args,
@@ -426,7 +439,8 @@ class Runner(object):
                 # kwargs
                 start_new_session=not keep_session,
                 stderr=STDOUT,
-                bufsize=bufsize
+                bufsize=bufsize,
+                env=env
             )
         except OSError as exc:
             self.output.write("[{}] {}".format(track, exc))
@@ -435,6 +449,33 @@ class Runner(object):
             "Kill BG process [{}] {}".format(track, name),
             killer if killer else partial(kill_process, process),
         )
+        if notify:
+            # We need a select()able notification of death in case the
+            # process dies before sending READY=1.  In C, I'd do this
+            # same pipe trick, but close the pipe from a SIGCHLD
+            # handler, which is lighter than a thread.  But I fear
+            # that a SIGCHLD handler would interfere with the Python
+            # runtime?  We're already using several threads per
+            # launched process, so what's the harm in one more?
+            pr, pw = os.pipe()
+
+            def pipewait():
+                process.wait()
+                os.close(pw)
+
+            Thread(target=pipewait, daemon=True).start()
+
+            # Block until either the process exits or we get a READY=1
+            # line on the socket.
+            while process.poll() is None:
+                r, _, x = select.select([pr, sock], [], [pr, sock])
+                if sock in r or sock in x:
+                    lines = sock.recv(4096).decode("utf-8").split("\n")
+                    if "READY=1" in lines:
+                        break
+
+            os.close(pr)
+            sock.close()
 
     # Cleanup
 
