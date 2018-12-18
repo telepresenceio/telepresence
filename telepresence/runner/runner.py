@@ -367,14 +367,35 @@ class Runner(object):
         return output
 
     def launch(
-        self, name: str, args, killer=None, keep_session=False, **kwargs
+        self,
+        name: str,
+        args: typing.List[str],
+        killer: typing.Callable[[], None] = None,
+        keep_session: bool = False,
+        bufsize: int = -1
     ) -> None:
-        if not keep_session:
-            # This prevents signals from getting forwarded, but breaks sudo
-            # if it is configured to ask for a password.
-            kwargs["start_new_session"] = True
-        assert "stderr" not in kwargs
-        kwargs["stderr"] = STDOUT
+        """Asyncrounously run a process.
+
+        :param name: A human-friendly name to describe the process.
+
+        :param args: The command to run.
+
+        :param killer: How to signal to the process that it should
+        stop.  The default is to call Popen.terminate(), which on
+        POSIX OSs sends SIGTERM.
+
+        :param keep_session: Whether to run the process in the current
+        session (as in ``setsid()``), or in a new session.  The
+        default is to run in a new session, in order to prevent
+        keyboard signals from getting forwarded.  However, running in
+        a new session breaks sudo if it is configured to ask for a
+        password.
+
+        :parmam bufsize: See ``subprocess.Popen()`.
+
+        :return: ``None``.
+
+        """
         self.counter = track = self.counter + 1
         capture = deque(maxlen=10)  # type: typing.MutableSequence[str]
         out_cb = err_cb = self._make_logger(track, capture=capture)
@@ -398,7 +419,14 @@ class Runner(object):
         )
         try:
             process = _launch_command(
-                args, out_cb, err_cb, done=done, **kwargs
+                args,
+                out_cb,
+                err_cb,
+                done=done,
+                # kwargs
+                start_new_session=not keep_session,
+                stderr=STDOUT,
+                bufsize=bufsize
             )
         except OSError as exc:
             self.output.write("[{}] {}".format(track, exc))
