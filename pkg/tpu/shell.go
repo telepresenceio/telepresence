@@ -3,8 +3,6 @@ package tpu
 import (
 	"os/exec"
 	"strings"
-
-	"github.com/google/shlex"
 )
 
 func Shell(command string) (result string, err error) {
@@ -17,19 +15,6 @@ func ShellLogf(command string, logf func(string, ...interface{})) (string, error
 
 func ShellLog(command string, logln func(string)) (string, error) {
 	return CmdLog([]string{"sh", "-c", command}, logln)
-}
-
-func ShlexLogf(command string, logf func(string, ...interface{})) (string, error) {
-	return ShlexLog(command, func(line string) { logf("%s", line) })
-}
-
-func ShlexLog(command string, logln func(string)) (string, error) {
-	parts, err := shlex.Split(command)
-	if err != nil {
-		logln(err.Error())
-		return "", err
-	}
-	return CmdLog(parts, logln)
 }
 
 func CmdLogf(command []string, logf func(string, ...interface{})) (string, error) {

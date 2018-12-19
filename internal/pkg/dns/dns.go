@@ -67,14 +67,21 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 }
 
 func (s *Server) Start() {
-	for _, addr := range s.Listeners {
-		go func(addr string) {
-			srv := &dns.Server{Addr: addr, Net: "udp"}
-			srv.Handler = s
-			log("listening on %s", addr)
-			if err := srv.ListenAndServe(); err != nil {
+	listeners := make([]net.PacketConn, len(s.Listeners))
+	for i, addr := range s.Listeners {
+		var err error
+		listeners[i], err = net.ListenPacket("udp", addr)
+		if err != nil {
+			die("failed to set up udp listener: %v", err)
+		}
+		log("listening on %s", addr)
+	}
+	for _, listener := range listeners {
+		go func(listener net.PacketConn) {
+			srv := &dns.Server{PacketConn: listener, Handler: s}
+			if err := srv.ActivateAndServe(); err != nil {
 				die("failed to set udp listener: %v", err)
 			}
-		}(addr)
+		}(listener)
 	}
 }

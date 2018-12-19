@@ -20,16 +20,16 @@ var environments = []env{
 }
 
 func (e *env) setup() {
-	err := pf("-F all", "")
+	err := pf([]string{"-F", "all"}, "")
 	if err != nil {
 		panic(err)
 	}
-	err = pf("-f /dev/stdin", e.pfconf)
+	err = pf([]string{"-f", "/dev/stdin"}, e.pfconf)
 	if err != nil {
 		panic(err)
 	}
 }
 
 func (e *env) teardown() {
-	pf("-F all", "")
+	pf([]string{"-F", "all"}, "")
 }

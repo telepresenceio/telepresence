@@ -5,7 +5,6 @@ package nat
 import (
 	"fmt"
 	ppf "github.com/datawire/pf"
-	"github.com/google/shlex"
 	"log"
 	"net"
 	"os/exec"
@@ -17,15 +16,10 @@ type Translator struct {
 	dev *ppf.Handle
 }
 
-func pf(argline, stdin string) (err error) {
-	args, err := shlex.Split(argline)
-	if err != nil {
-		panic(err)
-	}
-	args = append([]string{}, args...)
+func pf(args []string, stdin string) (err error) {
 	cmd := exec.Command("pfctl", args...)
 	cmd.Stdin = strings.NewReader(stdin)
-	log.Printf("pfctl %s < %s\n", argline, stdin)
+	log.Printf("pfctl %s < %s\n", strings.Join(args, " "), stdin)
 	out, err := cmd.CombinedOutput()
 	if len(out) > 0 {
 		log.Printf("%s", out)
@@ -85,10 +79,10 @@ func (t *Translator) Enable() {
 		}
 	}
 
-	pf("-a "+t.Name+" -F all", "")
+	pf([]string{"-a", t.Name, "-F", "all"}, "")
 
-	pf("-f /dev/stdin", "pass on lo0")
-	pf("-a "+t.Name+" -f /dev/stdin", t.rules())
+	pf([]string{"-f", "/dev/stdin"}, "pass on lo0")
+	pf([]string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 
 	t.dev.Start()
 }
@@ -120,7 +114,7 @@ func (t *Translator) Disable() {
 		}
 	}
 
-	pf("-a "+t.Name+" -F all", "")
+	pf([]string{"-a", t.Name, "-F", "all"}, "")
 }
 
 func (t *Translator) ForwardTCP(ip, toPort string) {
@@ -134,17 +128,17 @@ func (t *Translator) ForwardUDP(ip, toPort string) {
 func (t *Translator) forward(protocol, ip, toPort string) {
 	t.clear(protocol, ip)
 	t.Mappings[Address{protocol, ip}] = toPort
-	pf("-a "+t.Name+" -f /dev/stdin", t.rules())
+	pf([]string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
 func (t *Translator) ClearTCP(ip string) {
 	t.clear("tcp", ip)
-	pf("-a "+t.Name+" -f /dev/stdin", t.rules())
+	pf([]string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
 func (t *Translator) ClearUDP(ip string) {
 	t.clear("udp", ip)
-	pf("-a "+t.Name+" -f /dev/stdin", t.rules())
+	pf([]string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
 func (t *Translator) clear(protocol, ip string) {

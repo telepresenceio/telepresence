@@ -11,46 +11,37 @@ import (
 )
 
 type Interceptor struct {
-	port       string
-	tables     map[string]rt.Table
 	translator *nat.Translator
-	domains    sync.Map
-	work       chan func()
-	done       chan empty
+	tables     map[string]rt.Table
+	tablesLock sync.RWMutex
+
+	domains     map[string]rt.Route
+	domainsLock sync.RWMutex
+
 	search     []string
+	searchLock sync.RWMutex
 }
 
-type empty interface{}
-
 func NewInterceptor(name string) *Interceptor {
-	return &Interceptor{
+	ret := &Interceptor{
 		tables:     make(map[string]rt.Table),
 		translator: nat.NewTranslator(name),
-		work:       make(chan func()),
-		done:       make(chan empty),
+		domains:    make(map[string]rt.Route),
 		search:     []string{""},
 	}
+	ret.tablesLock.Lock() // leave it locked until .Start() unlocks it
+	return ret
 }
 
 func (i *Interceptor) Start() {
-	go func() {
-		defer close(i.done)
-		i.translator.Enable()
-		defer i.translator.Disable()
-		for {
-			action, ok := <-i.work
-			if ok {
-				action()
-			} else {
-				return
-			}
-		}
-	}()
+	i.translator.Enable()
+	i.tablesLock.Unlock()
 }
 
 func (i *Interceptor) Stop() {
-	close(i.work)
-	<-i.done
+	i.tablesLock.Lock()
+	i.translator.Disable()
+	// leave it locked
 }
 
 // Resolve looks up the given query in the (FIXME: somewhere), trying
@@ -61,11 +52,17 @@ func (i *Interceptor) Resolve(query string) *rt.Route {
 	if !strings.HasSuffix(query, ".") {
 		query += "."
 	}
-	for _, suffix := range i.GetSearchPath() {
+
+	i.searchLock.RLock()
+	defer i.searchLock.RUnlock()
+	i.domainsLock.RLock()
+	defer i.domainsLock.RUnlock()
+
+	for _, suffix := range i.search {
 		name := query + suffix
-		value, ok := i.domains.Load(strings.ToLower(name))
+		value, ok := i.domains[strings.ToLower(name)]
 		if ok {
-			return value.(*rt.Route)
+			return &value
 		}
 	}
 	return nil
@@ -77,123 +74,124 @@ func (i *Interceptor) Destination(conn *net.TCPConn) (string, error) {
 }
 
 func (i *Interceptor) Render(table string) string {
-	result := make(chan string, 1)
-	i.work <- func() {
-		var obj interface{}
+	var obj interface{}
 
-		if table == "" {
-			var tables []rt.Table
-			for _, t := range i.tables {
-				tables = append(tables, t)
-			}
-			obj = tables
-		} else {
-			var ok bool
-			obj, ok = i.tables[table]
-			if !ok {
-				result <- ""
-				return
-			}
+	if table == "" {
+		var tables []rt.Table
+		i.tablesLock.RLock()
+		for _, t := range i.tables {
+			tables = append(tables, t)
 		}
-
-		bytes, err := json.MarshalIndent(obj, "", "  ")
-		if err != nil {
-			result <- err.Error()
-		} else {
-			result <- string(bytes)
+		i.tablesLock.RUnlock()
+		obj = tables
+	} else {
+		var ok bool
+		i.tablesLock.RLock()
+		obj, ok = i.tables[table]
+		i.tablesLock.RUnlock()
+		if !ok {
+			return ""
 		}
 	}
-	return <-result
+
+	bytes, err := json.MarshalIndent(obj, "", "  ")
+	if err != nil {
+		return err.Error()
+	} else {
+		return string(bytes)
+	}
 }
 
 func (i *Interceptor) Delete(table string) bool {
-	result := make(chan bool, 1)
-	i.work <- func() {
-		var names []string
-		if table == "" {
-			for name := range i.tables {
-				names = append(names, name)
-			}
-		} else if _, ok := i.tables[table]; ok {
-			names = []string{table}
-		} else {
-			result <- false
-		}
+	i.tablesLock.Lock()
+	defer i.tablesLock.Unlock()
+	i.domainsLock.Lock()
+	defer i.domainsLock.Unlock()
 
-		for _, name := range names {
-			if name != "bootstrap" {
-				i.update(rt.Table{Name: name})
-			}
+	var names []string
+	if table == "" {
+		for name := range i.tables {
+			names = append(names, name)
 		}
-
-		result <- true
+	} else if _, ok := i.tables[table]; ok {
+		names = []string{table}
+	} else {
+		return false
 	}
-	return <-result
+
+	for _, name := range names {
+		if name != "bootstrap" {
+			i.update(rt.Table{Name: name})
+		}
+	}
+
+	return true
 }
 
 func (i *Interceptor) Update(table rt.Table) {
-	i.work <- func() {
-		i.update(table)
-	}
+	i.tablesLock.Lock()
+	defer i.tablesLock.Unlock()
+	i.domainsLock.Lock()
+	defer i.domainsLock.Unlock()
+
+	i.update(table)
 }
 
+// .update() assumes that both .tablesLock and .domainsLock are held
+// for writing.  Ensuring that is the case is the caller's
+// responsibility.
 func (i *Interceptor) update(table rt.Table) {
-	old, ok := i.tables[table.Name]
+	oldTable, ok := i.tables[table.Name]
 
-	routes := make(map[string]rt.Route)
+	oldRoutes := make(map[string]rt.Route)
 	if ok {
-		for _, route := range old.Routes {
-			routes[route.Name] = route
+		for _, route := range oldTable.Routes {
+			oldRoutes[route.Name] = route
 		}
 	}
 
-	for _, route := range table.Routes {
-		existing, ok := routes[route.Name]
-		if ok && route != existing {
-
-			switch route.Proto {
-			case "tcp":
-				i.translator.ClearTCP(existing.Ip)
-			case "udp":
-				i.translator.ClearUDP(existing.Ip)
-			default:
-				log.Printf("INT: unrecognized protocol: %v", route)
-			}
-
-		}
-
-		if !ok || route != existing {
-
-			if route.Target != "" {
-				switch route.Proto {
+	for _, newRoute := range table.Routes {
+		oldRoute, oldRouteOk := oldRoutes[newRoute.Name]
+		// A nil Route (when oldRouteOk != true) will compare
+		// inequal to any valid new Route.
+		if newRoute != oldRoute {
+			// delete the old version
+			if oldRouteOk {
+				switch newRoute.Proto {
 				case "tcp":
-					i.translator.ForwardTCP(route.Ip, route.Target)
+					i.translator.ClearTCP(oldRoute.Ip)
 				case "udp":
-					i.translator.ForwardUDP(route.Ip, route.Target)
+					i.translator.ClearUDP(oldRoute.Ip)
 				default:
-					log.Printf("INT: unrecognized protocol: %v", route)
+					log.Printf("INT: unrecognized protocol: %v", newRoute)
+				}
+			}
+			// and add the new version
+			if newRoute.Target != "" {
+				switch newRoute.Proto {
+				case "tcp":
+					i.translator.ForwardTCP(newRoute.Ip, newRoute.Target)
+				case "udp":
+					i.translator.ForwardUDP(newRoute.Ip, newRoute.Target)
+				default:
+					log.Printf("INT: unrecognized protocol: %v", newRoute)
 				}
 			}
 
-			if route.Name != "" {
-				log.Printf("INT: STORE %v->%v", route.Domain(), route)
-				copy := route
-				i.domains.Store(route.Domain(), &copy)
+			if newRoute.Name != "" {
+				log.Printf("INT: STORE %v->%v", newRoute.Domain(), newRoute)
+				i.domains[newRoute.Domain()] = newRoute
 			}
-
 		}
 
-		if ok {
-			// remove the route from our map of
-			// old routes so we don't end up
-			// deleting it below
-			delete(routes, route.Name)
-		}
+		// remove the route from our map of old routes so we
+		// don't end up deleting it below
+		delete(oldRoutes, newRoute.Name)
 	}
 
-	for _, route := range routes {
+	for _, route := range oldRoutes {
 		log.Printf("INT: CLEAR %v->%v", route.Domain(), route)
-		i.domains.Delete(route.Domain())
+		delete(i.domains, route.Domain())
 
 		switch route.Proto {
 		case "tcp":
@@ -215,16 +213,16 @@ func (i *Interceptor) update(table rt.Table) {
 
 // SetSearchPath updates the DNS search path used by the resolver
 func (i *Interceptor) SetSearchPath(paths []string) {
-	i.work <- func() {
-		i.search = paths
-	}
+	i.searchLock.Lock()
+	defer i.searchLock.Unlock()
+
+	i.search = paths
 }
 
 // GetSearchPath retrieves the current search path
 func (i *Interceptor) GetSearchPath() []string {
-	result := make(chan []string, 1)
-	i.work <- func() {
-		result <- i.search
-	}
-	return <-result
+	i.searchLock.RLock()
+	defer i.searchLock.RUnlock()
+
+	return i.search
 }
