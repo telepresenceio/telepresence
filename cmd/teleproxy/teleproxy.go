@@ -120,7 +120,7 @@ func kubeDie(err error) {
 }
 
 func checkKubectl() {
-	output, err := tpu.Shell("kubectl version --client -o json")
+	output, err := tpu.Cmd("kubectl", "version", "--client", "-o", "json")
 	if err != nil {
 		kubeDie(err)
 	}

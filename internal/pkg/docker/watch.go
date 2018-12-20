@@ -71,7 +71,7 @@ func (w *Watcher) Stop() {
 }
 
 func (w *Watcher) containers() (result map[string]string, err error) {
-	ids, err := tpu.ShellLogf("docker ps -q", w.log)
+	ids, err := tpu.CmdLogf([]string{"docker", "container", "list", "-q"}, w.log)
 	if err != nil {
 		return
 	}
@@ -80,7 +80,7 @@ func (w *Watcher) containers() (result map[string]string, err error) {
 
 	lines := ""
 	if ids != "" {
-		lines, err = tpu.ShellLogf("docker inspect -f '{{.Name}} {{.NetworkSettings.IPAddress}}' "+ids, w.log)
+		lines, err = tpu.CmdLogf(append([]string{"docker", "inspect", "--format={{.Name}} {{.NetworkSettings.IPAddress}}", "--"}, ids), w.log)
 		if err != nil {
 			return
 		}
@@ -102,7 +102,7 @@ func (w *Watcher) containers() (result map[string]string, err error) {
 }
 
 func (w *Watcher) checkDocker(warn bool) bool {
-	output, err := tpu.Shell("docker version")
+	output, err := tpu.Cmd("docker", "version")
 	if err != nil {
 		if warn {
 			w.log(output)
