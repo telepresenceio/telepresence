@@ -36,11 +36,14 @@ func OverrideSearchDomains(domains string) func() {
 }
 
 func getIfaces() (ifaces []string, err error) {
-	lines, err := tpu.ShellLogf("networksetup -listallnetworkservices | fgrep -v '*'", log)
+	lines, err := tpu.CmdLogf([]string{"networksetup", "-listallnetworkservices"}, log)
 	if err != nil {
 		return
 	}
 	for _, line := range strings.Split(lines, "\n") {
+		if strings.Contains(line, "*") {
+			continue
+		}
 		line = strings.TrimSpace(line)
 		if len(line) > 0 {
 			ifaces = append(ifaces, line)

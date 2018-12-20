@@ -5,10 +5,6 @@ import (
 	"strings"
 )
 
-func ShellLogf(command string, logf func(string, ...interface{})) (string, error) {
-	return ShellLog(command, func(line string) { logf("%s", line) })
-}
-
 func ShellLog(command string, logln func(string)) (string, error) {
 	return CmdLog([]string{"sh", "-c", command}, logln)
 }
