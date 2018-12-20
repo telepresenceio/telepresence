@@ -34,11 +34,11 @@ func (w *Watcher) log(line string, args ...interface{}) {
 func (w *Watcher) Start(listener func(w *Watcher)) {
 	go func() {
 		wakeup := w.waiter()
-	OUTER:
+		defer close(w.done)
 		for {
 			select {
 			case <-w.stop:
-				break OUTER
+				return
 			case <-wakeup:
 				containers, err := w.containers()
 				if err == nil {
@@ -62,7 +62,6 @@ func (w *Watcher) Start(listener func(w *Watcher)) {
 				}
 			}
 		}
-		close(w.done)
 	}()
 }
 
