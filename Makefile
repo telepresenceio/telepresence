@@ -31,11 +31,12 @@ run-tests: sudo-tests other-tests
 
 test-go: go-get run-tests
 
-test-docker:
 ifneq ($(shell which docker 2>/dev/null),)
+test-docker: $(addprefix bin_linux_amd64/,$(notdir $(go.bins)))
 	docker build -f scripts/Dockerfile . -t teleproxy-make
 	docker run --cap-add=NET_ADMIN teleproxy-make nat-tests
 else
+test-docker:
 	@echo "SKIPPING DOCKER TESTS"
 endif
 
