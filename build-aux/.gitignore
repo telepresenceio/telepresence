@@ -1,0 +1,6 @@
+# teleproxy.mk
+/teleproxy
+/teleproxy.log
+
+# kubeapply.mk
+/kubeapply

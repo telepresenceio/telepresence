@@ -1,4 +1,25 @@
-## Quickstart (and pretty much everything else you need to know)
+# Copyright 2018 Datawire. All rights reserved.
+#
+# Makefile snippet for managing kubernaut.io clusters.
+#
+## Inputs ##
+#   - Variable: GUBERNAUT ?= gubernaut
+## Outputs ##
+#   - Target       : `%.knaut`
+#   - .PHONY Target: `%.knaut.clean`
+## common.mk targets ##
+#   - clobber
+#
+# Creating the NAME.knaut creates the Kubernaut claim.  The file may
+# be used as a KUBECONFIG file.
+#
+# Calling the NAME.knaut.clean file releases the claim, and removes
+# the NAME.knaut file.
+#
+# The GUBERNAUT variable may be used to adjust the gubernaut command
+# called; by default it looks up 'gubernaut' in $PATH.
+#
+## Quickstart ##
 #
 #  1. Put this file in your source tree and include it from your
 #     Makefile, e.g.:
@@ -25,24 +46,17 @@
 #     clean: test-cluster.knaut.clean
 #
 
-%.knaut.claim :
-	@if [ -z $${CI+x} ]; then \
-		echo $(@:%.knaut.claim=%)-$${USER} > $@; \
-	else \
-		echo $(@:%.knaut.claim=%)-$${USER}-$(shell uuidgen) > $@; \
-	fi
-.PRECIOUS: %.knaut.claim
-.SECONDARY: %.knaut.claim
+GUBERNAUT = GO111MODULE=off go run build-aux/gubernaut.go
 
-KUBERNAUT=go run build-aux/gubernaut.go
-KUBERNAUT_CLAIM_NAME=$(shell cat $(@:%.knaut=%.knaut.claim))
+%.knaut.claim:
+	echo $(subst /,_,$*)-$${USER}-$$(uuidgen) > $@
+%.knaut: %.knaut.claim
+	$(GUBERNAUT) -release $$(cat $<)
+	$(GUBERNAUT) -claim $$(cat $<) -output $@
 
-%.knaut : %.knaut.claim
-	$(KUBERNAUT) -release $(KUBERNAUT_CLAIM_NAME)
-	$(KUBERNAUT) -claim $(KUBERNAUT_CLAIM_NAME) -output $@
-
-%.knaut.clean :
-	if [ -e $(@:%.clean=%.claim) ]; then $(KUBERNAUT) -release $$(cat $(@:%.clean=%.claim)); fi
-	rm -f $(@:%.knaut.clean=%.knaut)
-	rm -f $(@:%.clean=%.claim)
+%.knaut.clean:
+	if [ -e $*.claim ]; then $(GUBERNAUT) -release $$(cat $*.claim); fi
+	rm -f $*.knaut $*.knaut.claim
 .PHONY: %.knaut.clean
+
+clobber: $(addsuffix .clean,$(wildcard *.knaut))
