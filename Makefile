@@ -16,13 +16,13 @@ claim: cluster.knaut.clean cluster.knaut
 shell: cluster.knaut
 	@exec env -u MAKELEVEL PS1="(dev) [\W]$$ " bash
 
-other-tests:
+other-tests: build
 	go test -v $(filter-out $(go.module)/internal/pkg/nat $(go.module)/cmd/teleproxy,$(go.pkgs))
 
-nat-tests:
+nat-tests: build
 	go test -v -exec sudo $(go.module)/internal/pkg/nat
 
-smoke-tests: manifests
+smoke-tests: build manifests
 	go test -v -exec "sudo env PATH=${PATH} KUBECONFIG=${KUBECONFIG}" $(go.module)/cmd/teleproxy
 
 sudo-tests: nat-tests smoke-tests
@@ -31,12 +31,12 @@ run-tests: sudo-tests other-tests
 
 test-go: go-get run-tests
 
+test-docker: build
 ifneq ($(shell which docker 2>/dev/null),)
 test-docker: $(addprefix bin_linux_amd64/,$(notdir $(go.bins)))
 	docker build -f scripts/Dockerfile . -t teleproxy-make
 	docker run --cap-add=NET_ADMIN teleproxy-make nat-tests
 else
-test-docker:
 	@echo "SKIPPING DOCKER TESTS"
 endif
 
