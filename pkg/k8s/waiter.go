@@ -146,7 +146,7 @@ func (w *Waiter) Wait(timeout time.Duration) bool {
 	}
 
 	go func() {
-		time.Sleep(time.Duration(timeout) * time.Second)
+		time.Sleep(timeout)
 		w.watcher.Stop()
 	}()
 
