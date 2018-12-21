@@ -26,7 +26,7 @@ VERSION_URL=$(python -c "import sys, urllib; print urllib.quote(\"${VERSION}\")"
 export AWS_ACCESS_KEY_ID=$DEPLOY_KEY_ID
 export AWS_SECRET_ACCESS_KEY=$DEPLOY_KEY
 
-BINS="teleproxy kubeapply"
+BINS="teleproxy kubeapply kubewatch"
 
 for BIN in ${BINS}; do
     DESTINATION=${BIN}/${VERSION}/$(go env GOOS)/$(go env GOARCH)/${BIN}

@@ -2,7 +2,7 @@
 all: test build
 
 pkg = github.com/datawire/teleproxy
-bins = teleproxy kubeapply
+bins = teleproxy kubeapply kubewatch
 
 include build-aux/go.mk
 include build-aux/kubernaut.mk

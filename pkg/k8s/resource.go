@@ -322,3 +322,7 @@ func MarshalResources(resources []Resource) ([]byte, error) {
 	e.Close()
 	return buf.Bytes(), nil
 }
+
+func MarshalResource(resource Resource) ([]byte, error) {
+	return MarshalResources([]Resource{resource})
+}

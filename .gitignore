@@ -2,4 +2,5 @@
 !.go-workspace/src/github/datawire/teleproxy
 /teleproxy
 /kubeapply
+/kubewatch
 cluster.knaut*
