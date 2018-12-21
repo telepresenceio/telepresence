@@ -1,0 +1,3 @@
+#!/bin/sh
+set -x
+git subtree pull --squash --prefix=build-aux git@github.com:datawire/build-aux.git master

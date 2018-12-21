@@ -1,6 +1,6 @@
-.go-workspace
-!.go-workspace/src/github/datawire/teleproxy
+# teleproxy.mk
 /teleproxy
+/teleproxy.log
+
+# kubeapply.mk
 /kubeapply
-/kubewatch
-cluster.knaut*
