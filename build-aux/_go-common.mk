@@ -55,15 +55,15 @@ go-fmt: ## Fixup the code with `go fmt`
 	go fmt ./...
 .PHONY: go-fmt
 
-go-test: ## Check the code with `go test`
-go-test: go-build
-	go test $(go.pkgs)
-.PHONY: go-test
+#go-test: ## Check the code with `go test`
+#go-test: go-build
+#	go test $(go.pkgs)
+#.PHONY: go-test
 
 #
 # Hook in to common.mk
 
 build: go-build
 lint: check-go-fmt go-vet
-check: go-test
+#check: go-test
 format: go-fmt

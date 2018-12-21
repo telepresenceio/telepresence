@@ -1,6 +1,5 @@
-.go-workspace
-!.go-workspace/src/github/datawire/teleproxy
-/teleproxy
-/kubeapply
-/kubewatch
-cluster.knaut*
+/.go-workspace
+!/.go-workspace/src/github/datawire/teleproxy
+*.knaut
+*.knaut.claim
+/bin_*
