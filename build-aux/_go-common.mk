@@ -23,7 +23,7 @@ _go.submods := $(patsubst %/go.mod,%,$(shell git ls-files '*/go.mod'))
 go.list = $(call path.addprefix,$(go.module),\
                                 $(filter-out $(foreach d,$(_go.submods),$d $d/%),\
                                              $(call path.trimprefix,_$(CURDIR),\
-                                                                    $(shell GO111MODULE=off GOCACHE=off go list $1))))
+                                                                    $(shell GO111MODULE=off GOCACHE=off GOPATH=$(GOPATH) go list $1))))
 go.bins := $(call go.list,-f='{{if eq .Name "main"}}{{.ImportPath}}{{end}}' ./...)
 
 #
