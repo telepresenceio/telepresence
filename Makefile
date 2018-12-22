@@ -11,14 +11,14 @@ manifests: $(KUBECONFIG) bin_$(GOOS)_$(GOARCH)/kubeapply
 	bin_$(GOOS)_$(GOARCH)/kubeapply -f k8s
 .PHONY: manifests
 
-other-tests: build
-	go test -v $(filter-out $(go.module)/internal/pkg/nat $(go.module)/cmd/teleproxy,$(go.pkgs))
-
 nat-tests: build
 	go test -v -exec sudo $(go.module)/internal/pkg/nat
 
 smoke-tests: build manifests
 	go test -v -exec "sudo env PATH=${PATH} KUBECONFIG=${KUBECONFIG}" $(go.module)/cmd/teleproxy
+
+other-tests: build
+	go test -v $(filter-out $(go.module)/internal/pkg/nat $(go.module)/cmd/teleproxy,$(go.pkgs))
 
 sudo-tests: nat-tests smoke-tests
 
