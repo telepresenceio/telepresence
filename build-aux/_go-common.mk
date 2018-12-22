@@ -3,7 +3,16 @@
 # Makefile snippet of common bits between go-mod.mk and
 # go-workspace.mk.  Don't include this directly from your Makefile,
 # include either go-mod.mk or go-workspace.mk!
-
+#
+# _go-common.mk needs 3 things of the calling go-FOO.mk:
+#  1. set $(go.module) to github.com/datawire/whatever
+#  2. set $(go.pkgs) to something morally equivalent to `./...`.  When
+#     using modules, it's literally `./...`.  But when using
+#     workspaces, './...` doesn't respect `./vendor/`, so the we have
+#     to expand the list before passing it to Go.
+#  3. write the recipe for `go-get`
+#
+# It is acceptable to set $(go.pkgs) *after* including _go-common.mk
 ifeq ($(go.module),)
 $(error Do not include _go-common.mk directly, include go-mod.mk or go-workspace.mk)
 endif
