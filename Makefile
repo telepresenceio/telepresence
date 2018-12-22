@@ -1,6 +1,5 @@
 all: build check
 
-NAME = teleproxy
 include build-aux/common.mk
 include build-aux/go.mk
 include build-aux/kubernaut.mk

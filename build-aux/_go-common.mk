@@ -8,6 +8,8 @@ ifeq ($(go.module),)
 $(error Do not include _go-common.mk directly, include go-mod.mk or go-workspace.mk)
 endif
 
+NAME ?= $(notdir $(go.module))
+
 go.DISABLE_GO_TEST ?=
 
 # It would be simpler to create this list if we could use Go modules:

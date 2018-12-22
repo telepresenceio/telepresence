@@ -8,6 +8,7 @@
 ## Outputs ##
 #  - Variable: go.module = EXAMPLE.COM/YOU/YOURREPO
 #  - Variable: go.bins = List of "main" Go packages
+#  - Variable: NAME ?= $(notdir $(go.module))
 #  - .PHONY Target: go-get
 #  - .PHONY Target: go-build
 #  - .PHONY Target: check-go-fmt
