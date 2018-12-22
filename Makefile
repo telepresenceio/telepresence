@@ -5,9 +5,9 @@ include build-aux/go.mk
 include build-aux/kubernaut.mk
 
 export PATH:=$(CURDIR)/bin_$(GOOS)_$(GOARCH):$(PATH)
-export KUBECONFIG=${PWD}/cluster.knaut
+export KUBECONFIG = $(CURDIR)/cluster.knaut
 
-manifests: cluster.knaut bin_$(GOOS)_$(GOARCH)/kubeapply
+manifests: $(KUBECONFIG) bin_$(GOOS)_$(GOARCH)/kubeapply
 	bin_$(GOOS)_$(GOARCH)/kubeapply -f k8s
 .PHONY: manifests
 
@@ -42,9 +42,9 @@ clean: cluster.knaut.clean
 
 # Utility targets
 
-claim: cluster.knaut.clean cluster.knaut
+claim: $(KUBECONFIG)
 
-shell: cluster.knaut
+shell: $(KUBECONFIG)
 	@exec env -u MAKELEVEL PS1="(dev) [\W]$$ " bash
 
 run: build
