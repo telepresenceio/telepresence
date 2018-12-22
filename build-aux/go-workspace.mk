@@ -6,6 +6,7 @@
 #
 ## Inputs ##
 #  - Symlink: ./.go-workspace/src/EXAMPLE.COM/YOU/YOURREPO -> (git topdir)
+#  - Variable: go.DISABLE_GO_TEST ?=
 ## Outputs ##
 #  - Variable: go.module = EXAMPLE.COM/YOU/YOURREPO
 #  - Variable: go.bins = List of "main" Go packages

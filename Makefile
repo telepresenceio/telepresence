@@ -11,6 +11,10 @@ test-cluster: $(KUBECONFIG) bin_$(GOOS)_$(GOARCH)/kubeapply
 	bin_$(GOOS)_$(GOARCH)/kubeapply -f k8s
 .PHONY: test-cluster
 
+# We need to pass special `-exec …` flags to to `go test` for certain
+# packages, so disable go.mk's built-in go-test, and define our own.
+go.DISABLE_GO_TEST = y
+
 go-test-nat: build
 	go test -v -exec sudo $(go.module)/internal/pkg/nat
 

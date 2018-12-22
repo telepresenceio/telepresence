@@ -8,6 +8,8 @@ ifeq ($(go.module),)
 $(error Do not include _go-common.mk directly, include go-mod.mk or go-workspace.mk)
 endif
 
+go.DISABLE_GO_TEST ?=
+
 # It would be simpler to create this list if we could use Go modules:
 #
 #     go.bins := $(shell $(GO) list -f='{{if eq .Name "main"}}{{.ImportPath}}{{end}}' ./...)
@@ -55,10 +57,10 @@ go-fmt: ## Fixup the code with `go fmt`
 	go fmt ./...
 .PHONY: go-fmt
 
-#go-test: ## Check the code with `go test`
-#go-test: go-build
-#	go test $(go.pkgs)
-#.PHONY: go-test
+go-test: ## Check the code with `go test`
+go-test: go-get
+	$(if $(not $(go.DISABLE_GO_TEST)),go test $(go.pkgs))
+.PHONY: go-test
 
 #
 # Hook in to common.mk
