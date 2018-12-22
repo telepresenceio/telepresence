@@ -1,11 +1,12 @@
 all: build check
 
+NAME = teleproxy
 include build-aux/common.mk
 include build-aux/go.mk
 include build-aux/kubernaut.mk
+include build-aux/kubernaut-ui.mk
 
 export PATH:=$(CURDIR)/bin_$(GOOS)_$(GOARCH):$(PATH)
-export KUBECONFIG = $(CURDIR)/cluster.knaut
 
 test-cluster: $(KUBECONFIG) bin_$(GOOS)_$(GOARCH)/kubeapply
 	bin_$(GOOS)_$(GOARCH)/kubeapply -f k8s
@@ -34,16 +35,9 @@ endif
 .PHONY: check-docker
 check: check-docker
 
-clean: cluster.knaut.clean
+clean: release
 
 # Utility targets
-
-claim: $(KUBECONFIG)
-.PHONY: claim
-
-shell: $(KUBECONFIG)
-	@exec env -u MAKELEVEL PS1="(dev) [\W]$$ " bash
-.PHONY: shell
 
 run: build
 	bin_$(GOOS)_$(GOARCH)/teleproxy
