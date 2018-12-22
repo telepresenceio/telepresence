@@ -36,11 +36,6 @@ include $(dir $(lastword $(MAKEFILE_LIST)))/common.mk
 export GO111MODULE = off
 export GOPATH = $(CURDIR)/.go-workspace
 
-# .NOTPARALLEL is important, as having multiple `go install`s going at
-# once can corrupt `$(GOPATH)/pkg`.  Setting .NOTPARALLEL is simpler
-# than mucking with multi-target pattern rules.
-.NOTPARALLEL:
-
 _go-clobber:
 	find .go-workspace -exec chmod +w {} +
 	rm -rf .go-workspace
