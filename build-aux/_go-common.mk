@@ -65,5 +65,5 @@ go-fmt: ## Fixup the code with `go fmt`
 
 build: go-build
 lint: check-go-fmt go-vet
-#check: go-test
+check: go-test
 format: go-fmt

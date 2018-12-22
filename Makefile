@@ -7,36 +7,31 @@ include build-aux/kubernaut.mk
 export PATH:=$(CURDIR)/bin_$(GOOS)_$(GOARCH):$(PATH)
 export KUBECONFIG = $(CURDIR)/cluster.knaut
 
-manifests: $(KUBECONFIG) bin_$(GOOS)_$(GOARCH)/kubeapply
+test-cluster: $(KUBECONFIG) bin_$(GOOS)_$(GOARCH)/kubeapply
 	bin_$(GOOS)_$(GOARCH)/kubeapply -f k8s
-.PHONY: manifests
+.PHONY: test-cluster
 
-nat-tests: build
+go-test-nat: build
 	go test -v -exec sudo $(go.module)/internal/pkg/nat
 
-smoke-tests: build manifests
+go-test-teleproxy: build test-cluster
 	go test -v -exec "sudo env PATH=${PATH} KUBECONFIG=${KUBECONFIG}" $(go.module)/cmd/teleproxy
 
-other-tests: build
+go-test-other: build
 	go test -v $(filter-out $(go.module)/internal/pkg/nat $(go.module)/cmd/teleproxy,$(go.pkgs))
 
-sudo-tests: nat-tests smoke-tests
+go-test: go-test-nat go-test-teleproxy go-test-other
 
-run-tests: sudo-tests other-tests
-
-test-go: go-get run-tests
-
-test-docker: build
+check-docker: build
 ifneq ($(shell which docker 2>/dev/null),)
-test-docker: $(addprefix bin_linux_amd64/,$(notdir $(go.bins)))
+check-docker: $(addprefix bin_linux_amd64/,$(notdir $(go.bins)))
 	docker build -f scripts/Dockerfile . -t teleproxy-make
-	docker run --cap-add=NET_ADMIN teleproxy-make nat-tests
+	docker run --cap-add=NET_ADMIN teleproxy-make go-test-nat
 else
 	@echo "SKIPPING DOCKER TESTS"
 endif
 
-test: test-go test-docker
-check: test
+check: check-docker
 
 clean: cluster.knaut.clean
 
