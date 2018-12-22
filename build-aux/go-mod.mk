@@ -20,6 +20,11 @@
 #  - lint
 #  - check
 #  - format
+ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
+ifneq ($(go.module),)
+$(error Only include one of go-mod.mk or go-workspace.mk)
+endif
+include $(dir $(lastword $(MAKEFILE_LIST)))/common.mk
 
 #
 
@@ -67,3 +72,5 @@ go-get:
 .NOTPARALLEL:
 
 include $(dir $(lastword $(MAKEFILE_LIST)))/_go-common.mk
+
+endif

@@ -14,11 +14,14 @@
 ## common.mk targets ##
 #  - clean
 #  - clobber
+ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
 
 TELEPROXY ?= $(dir $(lastword $(MAKEFILE_LIST)))/teleproxy
 TELEPROXY_LOG ?= $(dir $(lastword $(MAKEFILE_LIST)))/teleproxy.log
 TELEPROXY_VERSION = 0.3.2
 KUBE_URL = https://kubernetes/api/
+
+include $(dir $(lastword $(MAKEFILE_LIST)))/common.mk
 
 $(TELEPROXY):
 	curl -o $(TELEPROXY) https://s3.amazonaws.com/datawire-static-files/teleproxy/$(TELEPROXY_VERSION)/$(GOOS)/$(GOARCH)/teleproxy
@@ -54,3 +57,5 @@ clobber: _clobber-teleproxy
 _clobber-teleproxy:
 	rm -f $(TELEPROXY)
 .PHONY: _clobber-teleproxy
+
+endif

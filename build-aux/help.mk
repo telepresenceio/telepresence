@@ -41,6 +41,7 @@
 #     my-rule: dep1 dep2
 #             recipe
 #     .PHONY: my-rule
+ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
 
 help.body ?=
 
@@ -57,3 +58,5 @@ help:  ## Show this message
 # syntax highlighting and makes the remainder of the file difficult to
 # edit.
 _help.escape_squotes = $(subst ','\'',$1)
+
+endif

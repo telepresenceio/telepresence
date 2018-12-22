@@ -24,6 +24,11 @@
 #  - check
 #  - format
 #  - clobber
+ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
+ifneq ($(go.module),)
+$(error Only include one of go-mod.mk or go-workspace.mk)
+endif
+include $(dir $(lastword $(MAKEFILE_LIST)))/common.mk
 
 go.module := $(patsubst src/%,%,$(shell cd .go-workspace && find src \( -name '.*' -prune \) -o -type l -print))
 ifneq ($(words $(go.module)),1)
@@ -77,3 +82,5 @@ clobber: _go-clobber
 
 include $(dir $(lastword $(MAKEFILE_LIST)))/_go-common.mk
 go.pkgs := $(call go.list,./...)
+
+endif
