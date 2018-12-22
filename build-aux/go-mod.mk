@@ -31,18 +31,6 @@ include $(dir $(lastword $(MAKEFILE_LIST)))/common.mk
 
 export GO111MODULE = on
 
-# .NOTPARALLEL is important, because (as of Go 1.11) `go` commands
-# that write to the module cache are not safe to invoke concurrently
-# (this should be fixed in Go 1.12, scheduled for February 2019[1]).
-# We could try working around that with a multi-target pattern rule[2]
-# and using `GOBIN=$(@D) go install` instead of `go build -o`, but you
-# can't use GOBIN when cross-compiling.  So, until we can depend on Go
-# 1.12, just disable parallel builds.
-#
-# [1]: https://tip.golang.org/doc/go1.12
-# [2]: https://www.gnu.org/software/make/manual/html_node/Pattern-Examples.html#Pattern-Examples
-.NOTPARALLEL:
-
 #
 # 1. Set go.module
 

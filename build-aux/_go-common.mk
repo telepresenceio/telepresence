@@ -65,6 +65,7 @@ go-vet: go-get
 .PHONY: go-vet
 
 go-fmt: ## Fixup the code with `go fmt`
+go-fmt: go-get
 	go fmt ./...
 .PHONY: go-fmt
 
