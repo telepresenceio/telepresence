@@ -11,11 +11,6 @@ manifests: cluster.knaut bin_$(GOOS)_$(GOARCH)/kubeapply
 	bin_$(GOOS)_$(GOARCH)/kubeapply -f k8s
 .PHONY: manifests
 
-claim: cluster.knaut.clean cluster.knaut
-
-shell: cluster.knaut
-	@exec env -u MAKELEVEL PS1="(dev) [\W]$$ " bash
-
 other-tests: build
 	go test -v $(filter-out $(go.module)/internal/pkg/nat $(go.module)/cmd/teleproxy,$(go.pkgs))
 
@@ -43,7 +38,14 @@ endif
 test: test-go test-docker
 check: test
 
+clean: cluster.knaut.clean
+
+# Utility targets
+
+claim: cluster.knaut.clean cluster.knaut
+
+shell: cluster.knaut
+	@exec env -u MAKELEVEL PS1="(dev) [\W]$$ " bash
+
 run: build
 	bin_$(GOOS)_$(GOARCH)/teleproxy
-
-clean: cluster.knaut.clean
