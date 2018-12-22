@@ -1,9 +1,10 @@
-all: build check
-
 include build-aux/common.mk
 include build-aux/go.mk
 include build-aux/kubernaut.mk
 include build-aux/kubernaut-ui.mk
+include build-aux/help.mk
+
+.DEFAULT_GOAL = help
 
 export PATH:=$(CURDIR)/bin_$(GOOS)_$(GOARCH):$(PATH)
 
