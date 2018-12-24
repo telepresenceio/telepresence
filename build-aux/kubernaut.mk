@@ -45,6 +45,8 @@
 #
 #     clean: test-cluster.knaut.clean
 #
+ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
+include $(dir $(lastword $(MAKEFILE_LIST)))/common.mk
 
 GUBERNAUT = GO111MODULE=off go run build-aux/gubernaut.go
 
@@ -60,3 +62,5 @@ GUBERNAUT = GO111MODULE=off go run build-aux/gubernaut.go
 .PHONY: %.knaut.clean
 
 clobber: $(addsuffix .clean,$(wildcard *.knaut))
+
+endif

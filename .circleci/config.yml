@@ -38,7 +38,7 @@ commands:
   main:
     steps:
       - checkout
-      - run: make test
+      - run: make check
       - run:
           command: make cluster.knaut.clean
           when: always

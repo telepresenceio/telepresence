@@ -3,3 +3,4 @@
 *.knaut
 *.knaut.claim
 /bin_*
+/firewall.lock
