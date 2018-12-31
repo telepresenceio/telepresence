@@ -17,15 +17,15 @@ include $(dir $(lastword $(MAKEFILE_LIST)))kubernaut.mk
 _KUBECONFIG := $(or $(NAME),cluster).knaut
 export KUBECONFIG = $(_KUBECONFIG)
 
-claim: ## Obtain an ephemeral k8s cluster from kubernaut.io
+claim: ## (Kubernaut) Obtain an ephemeral k8s cluster from kubernaut.io
 claim: $(KUBECONFIG)
 .PHONY: claim
 
-release: ## Release the cluster claimed by 'claim'
+release: ## (Kubernaut) Release the cluster claimed by 'claim'
 release: $(_KUBECONFIG).clean
 .PHONY: release
 
-shell: ## Run an interactive Bash shell with KUBECONFIG= set to a Kubernaut claim
+shell: ## (Kubernaut) Run an interactive Bash shell with KUBECONFIG= set to a Kubernaut claim
 shell: $(KUBECONFIG)
 	@exec env -u MAKELEVEL PS1="(dev) [\W]$$ " bash
 .PHONY: shell

@@ -19,9 +19,15 @@
 #             recipe
 #     .PHONY: my-rule
 #
+#     my-other-rule: ## (Category) A description of my-other-rule
+#     my-other-rule: dep1 dep2
+#             recipe
+#     .PHONY: my-other-rule
+#
 # The double "##" is important.  It is also important that there be no
 # dependencies between the ":" and the "##"; any ammount of whitespace
-# is acceptable, though.
+# is acceptable, though.  The "##" may optionally be followed by a
+# category in parenthesis.
 #
 ## Advanced example ##
 #
@@ -55,7 +61,7 @@ help:  ## Show this message
 	@printf '%s\n' $(call quote.shell,$(help.body)) | sed -e 's/^# //' -e 's/^#//'
 	@echo
 	@echo TARGETS:
-	@sed -En 's/^([^#]*) *: *[#]# */\1	/p' $(sort $(abspath $(MAKEFILE_LIST))) | column -t -s '	' | sed 's/^/  /'
+	@sed -En 's/^([^#]*) *: *[#]# *(\([^)]*\))? */\2	\1	/p' $(sort $(abspath $(MAKEFILE_LIST))) | sort | column -t -s '	' | sed 's/^/  /'
 .PHONY: help
 
 endif
