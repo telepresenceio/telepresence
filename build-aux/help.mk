@@ -55,7 +55,7 @@ help:  ## Show this message
 	@printf '%s\n' $(call quote.shell,$(help.body)) | sed -e 's/^# //' -e 's/^#//'
 	@echo
 	@echo TARGETS:
-	@sed -En 's/^([^#]*) *: *[#]# */\1	/p' ${MAKEFILE_LIST} | column -t -s '	' | sed 's/^/  /'
+	@sed -En 's/^([^#]*) *: *[#]# */\1	/p' $(sort $(abspath $(MAKEFILE_LIST))) | column -t -s '	' | sed 's/^/  /'
 .PHONY: help
 
 endif
