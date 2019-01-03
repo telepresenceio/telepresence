@@ -116,6 +116,7 @@ func (s *Syncer) Run() {
 			s.ModTime = time.Now()
 		})
 	}
+	s.Watcher.Start()
 	s.Watcher.Wait()
 }
 
@@ -151,7 +152,7 @@ func init() {
 	KUBEWATCH.Flags().StringVarP(&SYNC_COMMAND, "sync", "s", "ls -R", "sync command")
 	KUBEWATCH.Flags().DurationVarP(&MIN_INTERVAL, "min-interval", "m", 250*time.Millisecond, "min sync interval")
 	KUBEWATCH.Flags().DurationVarP(&MAX_INTERVAL, "max-interval", "M", time.Second, "max sync interval")
-	KUBEWATCH.Flags().DurationVarP(&WARMUP_DELAY, "warmup-delay", "w", time.Second, "warmup delay")
+	KUBEWATCH.Flags().DurationVarP(&WARMUP_DELAY, "warmup-delay", "w", 0, "warmup delay")
 }
 
 var (
