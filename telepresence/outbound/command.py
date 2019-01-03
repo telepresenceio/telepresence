@@ -32,9 +32,13 @@ def command(runner):
         runner.show("Setting up outbound connectivity...")
         runner.launch(
             "teleproxy intercept",
-            ["sudo", "teleproxy", "-mode", "intercept"],
+            [
+                "sh", "-c", 'exec sudo NOTIFY_SOCKET="$NOTIFY_SOCKET" "$@"',
+                "--", "teleproxy", "-mode", "intercept"
+            ],
             killer=kill_intercept,
             keep_session=True,  # Avoid trouble with interactive sudo
+            notify=True,
         )
         runner.launch(
             "teleproxy bridge",
@@ -42,6 +46,7 @@ def command(runner):
                 "teleproxy", "-mode", "bridge", "-context",
                 runner.kubectl.context, "-namespace", runner.kubectl.namespace
             ],
+            notify=True,
         )
         runner.show("Outbound is running. Press Ctrl-C/Ctrl-Break to quit.")
         user_process = Popen(["cat"], stdout=DEVNULL)
