@@ -28,6 +28,7 @@ func (w *Watcher) fetch(resource, qname string) (result Resource) {
 		panic(err)
 	}
 
+	w.Start()
 	w.Wait()
 	return result
 }
