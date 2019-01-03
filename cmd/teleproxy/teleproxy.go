@@ -264,6 +264,7 @@ func bridges(kubeinfo *k8s.KubeInfo) func() {
 		}
 		post(table)
 	})
+	w.Start()
 
 	// Set up DNS search path based on current Kubernetes namespace
 	paths := []string{
