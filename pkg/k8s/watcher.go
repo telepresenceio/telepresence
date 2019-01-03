@@ -36,6 +36,7 @@ type Watcher struct {
 	client       *Client
 	watches      map[string]watch
 	mutex        sync.Mutex
+	started      bool
 	stop         chan empty
 	stopChans    []chan struct{}
 	stoppedChans []chan empty
@@ -177,6 +178,14 @@ func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
 }
 
 func (w *Watcher) Start() {
+	w.mutex.Lock()
+	if w.started {
+		w.mutex.Unlock()
+		return
+	} else {
+		w.started = true
+		w.mutex.Unlock()
+	}
 	for kind, _ := range w.watches {
 		w.sync(kind)
 	}
@@ -263,6 +272,7 @@ func (w *Watcher) Stop() {
 }
 
 func (w *Watcher) Wait() {
+	w.Start()
 	for _, c := range w.stoppedChans {
 		<-c
 	}
