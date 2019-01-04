@@ -582,11 +582,17 @@ class Runner(object):
         span.end()
 
         if main_code is not None:
-            # Shell exited, we're done. Automatic shutdown cleanup
+            # User process exited, we're done. Automatic shutdown cleanup
             # will kill subprocesses.
             main_command = str_command(str(arg) for arg in main_process.args)
             self.write("Main process ({})".format(main_command))
             self.write(" exited with code {}.".format(main_code))
+            message = "Your process "
+            if main_code:
+                message += "exited with return code {}.".format(main_code)
+            else:
+                message += "has exited."
+            self.show(message)
             raise self.exit()
 
         # Something else exited, setting the quitting flag.
