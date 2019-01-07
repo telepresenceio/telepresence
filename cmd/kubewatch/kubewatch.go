@@ -141,6 +141,8 @@ func (s *Syncer) writeResource(root, kind string, r k8s.Resource) {
 	}
 }
 
+var Version = "(unknown version)"
+
 var KUBEWATCH = &cobra.Command{
 	Use:  "kubewatch [options] <resources>",
 	Args: cobra.MinimumNArgs(1),
@@ -148,6 +150,7 @@ var KUBEWATCH = &cobra.Command{
 }
 
 func init() {
+	KUBEWATCH.Version = Version
 	KUBEWATCH.Flags().StringVarP(&ROOT, "root", "r", "/tmp/kubewatch", "root directory for resource files")
 	KUBEWATCH.Flags().StringVarP(&SYNC_COMMAND, "sync", "s", "ls -R", "sync command")
 	KUBEWATCH.Flags().DurationVarP(&MIN_INTERVAL, "min-interval", "m", 250*time.Millisecond, "min sync interval")

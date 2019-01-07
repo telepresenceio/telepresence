@@ -1,5 +1,6 @@
 include build-aux/common.mk
 include build-aux/go.mk
+include build-aux/go-version.mk
 include build-aux/flock.mk
 include build-aux/kubernaut-ui.mk
 include build-aux/help.mk
