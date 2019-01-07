@@ -165,4 +165,4 @@ def _is_after_probe_item(item):
     """
     Determine if a test item (Function) was marked with ``after_probe``.
     """
-    return item.get_marker("after_probe") is not None
+    return item.get_closest_marker("after_probe") is not None
