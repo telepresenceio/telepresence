@@ -20,6 +20,7 @@ endif
 NAME ?= $(notdir $(go.module))
 
 go.DISABLE_GO_TEST ?=
+go.LDFLAGS ?=
 
 # It would be simpler to create this list if we could use Go modules:
 #
@@ -48,7 +49,7 @@ go-get: ## Download Go dependencies
 
 define _go.bin.rule
 bin_%/$(notdir $(go.bin)): go-get FORCE
-	go build -o $$@ $(go.bin)
+	go build $$(if $$(go.LDFLAGS),--ldflags $$(call quote.shell,$$(go.LDFLAGS))) -o $$@ $(go.bin)
 endef
 $(foreach go.bin,$(go.bins),$(eval $(_go.bin.rule)))
 
