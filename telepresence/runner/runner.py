@@ -32,6 +32,7 @@ from threading import Thread
 from time import sleep, time
 
 from telepresence import TELEPRESENCE_BINARY
+from telepresence.output_mask import mask_sensitive_data
 from telepresence.utilities import kill_process, str_command
 
 from .cache import Cache
@@ -299,14 +300,14 @@ class Runner(object):
             def logger(line):
                 """Just log"""
                 if line is not None:
-                    self.output.write(line, prefix=prefix)
+                    self.output.write(mask_sensitive_data(line), prefix=prefix)
         else:
 
             def logger(line):
                 """Log and capture"""
                 capture.append(line)
                 if line is not None:
-                    self.output.write(line, prefix=prefix)
+                    self.output.write(mask_sensitive_data(line), prefix=prefix)
 
         return logger
 
