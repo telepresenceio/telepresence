@@ -28,7 +28,7 @@ ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEF
 ifneq ($(go.module),)
 $(error Only include one of go-mod.mk or go-workspace.mk)
 endif
-include $(dir $(lastword $(MAKEFILE_LIST)))/common.mk
+include $(dir $(lastword $(MAKEFILE_LIST)))common.mk
 
 #
 # 0. configure the `go` command
@@ -47,7 +47,7 @@ clobber: _go-clobber
 #
 # 1. Set go.module
 
-go.module := $(patsubst src/%,%,$(shell cd .go-workspace && find src \( -name '.*' -prune \) -o -type l -print))
+go.module := $(patsubst src/%,%,$(shell cd ./.go-workspace && find src \( -name '.*' -prune \) -o -type l -print))
 ifneq ($(words $(go.module)),1)
   # Print a helpful message
   ifeq ($(wildcard .go-workspace/),)
@@ -69,7 +69,7 @@ endif
 #
 # Include _go-common.mk
 
-include $(dir $(lastword $(MAKEFILE_LIST)))/_go-common.mk
+include $(dir $(lastword $(MAKEFILE_LIST)))_go-common.mk
 
 #
 # 2. Set go.pkgs

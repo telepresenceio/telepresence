@@ -46,7 +46,7 @@
 #     clean: test-cluster.knaut.clean
 #
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
-include $(dir $(lastword $(MAKEFILE_LIST)))/common.mk
+include $(dir $(lastword $(MAKEFILE_LIST)))common.mk
 
 GUBERNAUT = GO111MODULE=off go run build-aux/gubernaut.go
 
@@ -57,7 +57,7 @@ GUBERNAUT = GO111MODULE=off go run build-aux/gubernaut.go
 	$(GUBERNAUT) -claim $$(cat $<) -output $@
 
 %.knaut.clean:
-	if [ -e $*.claim ]; then $(GUBERNAUT) -release $$(cat $*.claim); fi
+	if [ -e $*.knaut.claim ]; then $(GUBERNAUT) -release $$(cat $*.knaut.claim); fi
 	rm -f $*.knaut $*.knaut.claim
 .PHONY: %.knaut.clean
 
