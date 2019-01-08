@@ -24,7 +24,7 @@ ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEF
 ifneq ($(go.module),)
 $(error Only include one of go-mod.mk or go-workspace.mk)
 endif
-include $(dir $(lastword $(MAKEFILE_LIST)))/common.mk
+include $(dir $(lastword $(MAKEFILE_LIST)))common.mk
 
 #
 # 0. configure the `go` command
@@ -72,7 +72,7 @@ go-get:
 #
 # Include _go-common.mk
 
-include $(dir $(lastword $(MAKEFILE_LIST)))/_go-common.mk
+include $(dir $(lastword $(MAKEFILE_LIST)))_go-common.mk
 
 #
 endif
