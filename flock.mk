@@ -8,10 +8,10 @@
 #  - Variable: FLOCK
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
 
-ifneq ($(shell which flock &>/dev/null),)
+ifneq ($(shell which flock 2>/dev/null),)
 FLOCK = flock
 else
-FLOCK := GO111MODULE=off go run $(dir $(lastword $(MAKEFILE_LIST)))flock.go
+FLOCK := $(dir $(lastword $(MAKEFILE_LIST)))flock
 endif
 
 endif

@@ -44,7 +44,7 @@ go.bins := $(call go.list,-f='{{if eq .Name "main"}}{{.ImportPath}}{{end}}' ./..
 # Rules
 
 # go-FOO.mk is responsible for implementing go-get
-go-get: ## Download Go dependencies
+go-get: ## (Go) Download Go dependencies
 .PHONY: go-get
 
 define _go.bin.rule
@@ -56,21 +56,21 @@ $(foreach go.bin,$(go.bins),$(eval $(_go.bin.rule)))
 go-build: $(addprefix bin_$(GOOS)_$(GOARCH)/,$(notdir $(go.bins)))
 .PHONY: go-build
 
-check-go-fmt: ## Check whether the code conforms to `gofmt`
+check-go-fmt: ## (Go) Check whether the code conforms to `gofmt`
 	test -z "$$(git ls-files '*.go' | grep -v -e ^vendor/ -e /vendor/ | xargs gofmt -d | tee /dev/stderr)"
 .PHONY: check-go-fmt
 
-go-vet: ## Check the code with `go vet`
+go-vet: ## (Go) Check the code with `go vet`
 go-vet: go-get
 	go vet $(go.pkgs)
 .PHONY: go-vet
 
-go-fmt: ## Fixup the code with `go fmt`
+go-fmt: ## (Go) Fixup the code with `go fmt`
 go-fmt: go-get
 	go fmt ./...
 .PHONY: go-fmt
 
-go-test: ## Check the code with `go test`
+go-test: ## (Go) Check the code with `go test`
 go-test: go-get
 	$(if $(not $(go.DISABLE_GO_TEST)),go test $(go.pkgs))
 .PHONY: go-test
