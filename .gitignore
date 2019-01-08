@@ -4,3 +4,4 @@
 *.knaut.claim
 /bin_*
 /firewall.lock
+/cluster.lock
