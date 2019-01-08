@@ -19,9 +19,9 @@ go.DISABLE_GO_TEST = y
 go-test-nat: go-get
 	$(FLOCK) firewall.lock go test -v -exec sudo $(go.module)/internal/pkg/nat
 go-test-teleproxy: go-get test-cluster
-	$(FLOCK) firewall.lock go test -v -exec "sudo env PATH=${PATH} KUBECONFIG=${KUBECONFIG}" $(go.module)/cmd/teleproxy
-go-test-other: go-get
-	go test -v $(filter-out $(go.module)/internal/pkg/nat $(go.module)/cmd/teleproxy,$(go.pkgs))
+	$(FLOCK) firewall.lock $(FLOCK) cluster.lock go test -v -exec "sudo env PATH=${PATH} KUBECONFIG=${KUBECONFIG}" $(go.module)/cmd/teleproxy
+go-test-other: go-get test-cluster
+	$(FLOCK) cluster.lock go test -v $(filter-out $(go.module)/internal/pkg/nat $(go.module)/cmd/teleproxy,$(go.pkgs))
 .PHONY: go-test-nat go-test-teleproxy go-test-other
 go-test: go-test-nat go-test-teleproxy go-test-other
 
@@ -38,6 +38,7 @@ check: check-docker
 
 clean: release
 	$(FLOCK) firewall.lock rm firewall.lock
+	$(FLOCK) cluster.lock rm cluster.lock
 
 # Utility targets
 

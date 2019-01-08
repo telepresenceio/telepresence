@@ -11,7 +11,7 @@ ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEF
 ifneq ($(shell which flock &>/dev/null),)
 FLOCK = flock
 else
-FLOCK = GO111MODULE=off go run $(dir $(lastword $(MAKEFILE_LIST)))/flock.go
+FLOCK = env GO111MODULE=off go run $(dir $(lastword $(MAKEFILE_LIST)))/flock.go
 endif
 
 endif
