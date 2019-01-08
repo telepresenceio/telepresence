@@ -29,7 +29,8 @@ export AWS_SECRET_ACCESS_KEY=$DEPLOY_KEY
 BINS="teleproxy kubeapply kubewatch"
 
 for BIN in ${BINS}; do
+    FQBIN="bin_$(go env GOOS)_$(go env GOARCH)/${BIN}"
     DESTINATION=${BIN}/${VERSION}/$(go env GOOS)/$(go env GOARCH)/${BIN}
-    aws s3 cp --acl public-read ${BIN} s3://datawire-static-files/${DESTINATION}
-    echo "Uploaded ${BIN} to ${DESTINATION}"
+    aws s3 cp --acl public-read ${FQBIN} s3://datawire-static-files/${DESTINATION}
+    echo "Uploaded ${FQBIN} to ${DESTINATION}"
 done

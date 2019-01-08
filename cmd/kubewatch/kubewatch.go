@@ -27,6 +27,7 @@ type Syncer struct {
 	SyncCount   int
 	MinInterval time.Duration
 	MaxInterval time.Duration
+	WarmupDelay time.Duration
 }
 
 func (s *Syncer) maybeSync() {
@@ -96,6 +97,7 @@ func (s *Syncer) invoke(dir string) {
 
 func (s *Syncer) Run() {
 	go func() {
+		time.Sleep(s.WarmupDelay)
 		for {
 			s.maybeSync()
 			time.Sleep(s.MinInterval)
@@ -114,6 +116,7 @@ func (s *Syncer) Run() {
 			s.ModTime = time.Now()
 		})
 	}
+	s.Watcher.Start()
 	s.Watcher.Wait()
 }
 
@@ -138,6 +141,8 @@ func (s *Syncer) writeResource(root, kind string, r k8s.Resource) {
 	}
 }
 
+var Version = "(unknown version)"
+
 var KUBEWATCH = &cobra.Command{
 	Use:  "kubewatch [options] <resources>",
 	Args: cobra.MinimumNArgs(1),
@@ -145,10 +150,12 @@ var KUBEWATCH = &cobra.Command{
 }
 
 func init() {
+	KUBEWATCH.Version = Version
 	KUBEWATCH.Flags().StringVarP(&ROOT, "root", "r", "/tmp/kubewatch", "root directory for resource files")
 	KUBEWATCH.Flags().StringVarP(&SYNC_COMMAND, "sync", "s", "ls -R", "sync command")
 	KUBEWATCH.Flags().DurationVarP(&MIN_INTERVAL, "min-interval", "m", 250*time.Millisecond, "min sync interval")
 	KUBEWATCH.Flags().DurationVarP(&MAX_INTERVAL, "max-interval", "M", time.Second, "max sync interval")
+	KUBEWATCH.Flags().DurationVarP(&WARMUP_DELAY, "warmup-delay", "w", 0, "warmup delay")
 }
 
 var (
@@ -156,6 +163,7 @@ var (
 	SYNC_COMMAND string
 	MIN_INTERVAL time.Duration
 	MAX_INTERVAL time.Duration
+	WARMUP_DELAY time.Duration
 )
 
 func kubewatch(cmd *cobra.Command, args []string) {
@@ -166,6 +174,7 @@ func kubewatch(cmd *cobra.Command, args []string) {
 		Kinds:       args,
 		MinInterval: MIN_INTERVAL,
 		MaxInterval: MAX_INTERVAL,
+		WarmupDelay: WARMUP_DELAY,
 	}
 
 	s.Run()

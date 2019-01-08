@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -50,14 +51,18 @@ func dnsListeners(port string) (listeners []string) {
 	return
 }
 
+var Version = "(unknown version)"
+
 const (
 	DEFAULT   = ""
 	INTERCEPT = "intercept"
 	BRIDGE    = "bridge"
+	VERSION   = "version"
 )
 
 func main() {
-	var mode = flag.String("mode", "", "mode of operation")
+	var version = flag.Bool("version", false, "alias for '-mode=version'")
+	var mode = flag.String("mode", "", "mode of operation ('intercept', 'bridge', or 'version')")
 	var kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	var context = flag.String("context", "", "context to use (default: the current context)")
 	var namespace = flag.String("namespace", "", "namespace to use (default: the current namespace for the context")
@@ -66,16 +71,21 @@ func main() {
 
 	flag.Parse()
 
-	checkKubectl()
+	if *version {
+		*mode = VERSION
+	}
 
 	switch *mode {
-	case "":
-	case INTERCEPT:
-	case BRIDGE:
-		break
+	case DEFAULT, INTERCEPT, BRIDGE:
+		// do nothing
+	case VERSION:
+		fmt.Println("kubeapply", "version", Version)
+		os.Exit(0)
 	default:
 		log.Fatalf("TPY: unrecognized mode: %v", *mode)
 	}
+
+	checkKubectl()
 
 	// do this up front so we don't miss out on cleanup if someone
 	// Control-C's just after starting us
@@ -264,6 +274,7 @@ func bridges(kubeinfo *k8s.KubeInfo) func() {
 		}
 		post(table)
 	})
+	w.Start()
 
 	// Set up DNS search path based on current Kubernetes namespace
 	paths := []string{

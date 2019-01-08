@@ -5,6 +5,7 @@
 ## Inputs ##
 #  - File: ./go.mod
 #  - Variable: go.DISABLE_GO_TEST ?=
+#  - Variable: go.LDFLAGS ?=
 ## Outputs ##
 #  - Variable: go.module = EXAMPLE.COM/YOU/YOURREPO
 #  - Variable: go.bins = List of "main" Go packages

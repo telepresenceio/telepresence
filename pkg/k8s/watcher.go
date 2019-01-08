@@ -36,6 +36,7 @@ type Watcher struct {
 	client       *Client
 	watches      map[string]watch
 	mutex        sync.Mutex
+	started      bool
 	stop         chan empty
 	stopChans    []chan struct{}
 	stoppedChans []chan empty
@@ -44,6 +45,8 @@ type Watcher struct {
 type watch struct {
 	resource dynamic.NamespaceableResourceInterface
 	store    cache.Store
+	invoke   func()
+	runner   func()
 }
 
 // NewWatcher returns a Kubernetes Watcher for the specified cluster
@@ -153,21 +156,63 @@ func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
 		},
 	)
 
-	w.watches[w.Canonical(ri.Kind)] = watch{
-		resource: resource,
-		store:    store,
-	}
-
 	stopChan := make(chan struct{})
 	stoppedChan := make(chan empty)
 	w.stoppedChans = append(w.stoppedChans, stoppedChan)
-	go func() {
-		controller.Run(stopChan)
-		close(stoppedChan)
-	}()
 	w.stopChans = append(w.stopChans, stopChan)
 
+	runner := func() {
+		controller.Run(stopChan)
+		close(stoppedChan)
+	}
+
+	kind := w.Canonical(ri.Kind)
+	w.watches[kind] = watch{
+		resource: resource,
+		store:    store,
+		invoke:   invoke,
+		runner:   runner,
+	}
+
 	return nil
+}
+
+func (w *Watcher) Start() {
+	w.mutex.Lock()
+	if w.started {
+		w.mutex.Unlock()
+		return
+	} else {
+		w.started = true
+		w.mutex.Unlock()
+	}
+	for kind, _ := range w.watches {
+		w.sync(kind)
+	}
+
+	for _, watch := range w.watches {
+		watch.invoke()
+	}
+
+	for _, watch := range w.watches {
+		go watch.runner()
+	}
+}
+
+func (w *Watcher) sync(kind string) {
+	watch := w.watches[kind]
+	resources, err := w.client.List(kind)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, rsrc := range resources {
+		var uns unstructured.Unstructured
+		uns.SetUnstructuredContent(rsrc)
+		err = watch.store.Update(&uns)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }
 
 func (w *Watcher) List(kind string) []Resource {
@@ -227,6 +272,7 @@ func (w *Watcher) Stop() {
 }
 
 func (w *Watcher) Wait() {
+	w.Start()
 	for _, c := range w.stoppedChans {
 		<-c
 	}
