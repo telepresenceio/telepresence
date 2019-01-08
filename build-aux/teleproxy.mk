@@ -5,7 +5,7 @@
 ## Inputs ##
 #  - Variable: TELEPROXY     ?= ./build-aux/teleproxy
 #  - Variable: TELEPROXY_LOG ?= ./build-aux/teleproxy.log
-#  - Variable: CLUSTER
+#  - Variable: KUBECONFIG
 #  - Variable: KUBE_URL
 ## Outputs ##
 #  - Target       : $(TELERPOXY)
@@ -15,22 +15,24 @@
 #  - clean
 #  - clobber
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
+_teleproxy.mk := $(lastword $(MAKEFILE_LIST))
+include $(dir $(lastword $(MAKEFILE_LIST)))common.mk
 
-TELEPROXY ?= $(dir $(lastword $(MAKEFILE_LIST)))/teleproxy
-TELEPROXY_LOG ?= $(dir $(lastword $(MAKEFILE_LIST)))/teleproxy.log
-TELEPROXY_VERSION = 0.3.2
+TELEPROXY ?= $(dir $(_teleproxy.mk))teleproxy
+TELEPROXY_LOG ?= $(dir $(_teleproxy.mk))teleproxy.log
+TELEPROXY_VERSION = 0.3.8
 KUBE_URL = https://kubernetes/api/
 
-include $(dir $(lastword $(MAKEFILE_LIST)))/common.mk
-
-$(TELEPROXY):
-	curl -o $(TELEPROXY) https://s3.amazonaws.com/datawire-static-files/teleproxy/$(TELEPROXY_VERSION)/$(GOOS)/$(GOARCH)/teleproxy
-	sudo chown root $(TELEPROXY)
-	sudo chmod go-w,a+sx $(TELEPROXY)
+$(TELEPROXY): $(_teleproxy.mk)
+	sudo rm -f $@
+	curl -o $@ https://s3.amazonaws.com/datawire-static-files/teleproxy/$(TELEPROXY_VERSION)/$(GOOS)/$(GOARCH)/teleproxy
+	sudo chown root $@
+	sudo chmod go-w,a+sx $@
 
 proxy: ## Launch teleproxy in the background
-proxy: $(CLUSTER) $(TELEPROXY) unproxy
-	KUBECONFIG=$(CLUSTER) $(TELEPROXY) > $(TELEPROXY_LOG) 2>&1 &
+proxy: $(KUBECONFIG) $(TELEPROXY) unproxy
+# NB: we say KUBECONFIG=$(KUBECONFIG) here because it might not be exported
+	KUBECONFIG=$(KUBECONFIG) $(TELEPROXY) > $(TELEPROXY_LOG) 2>&1 &
 	@for i in 1 2 4 8 16 32 64 x; do \
 		if [ "$$i" == "x" ]; then echo "ERROR: proxy did not come up"; exit 1; fi; \
 		echo "Checking proxy: $(KUBE_URL)"; \

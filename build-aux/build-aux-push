@@ -4,3 +4,4 @@ origin=$(git remote get-url origin)
 name=$(printf '%s\n' "$origin" | sed -e 's,\.git/*$,,' -e 's,.*/,,')
 commit=$(git subtree split --annotate="(${name}) " --prefix=build-aux HEAD)
 git push git@github.com:datawire/build-aux.git "${commit}:master"
+"${0%-push}-pull" "$commit"
