@@ -39,6 +39,8 @@ func envBool(name string) bool {
 	return true
 }
 
+var Version = "(unknown version)"
+var show_version = flag.Bool("version", false, "output version information and exit")
 var debug = flag.Bool("debug", envBool("KUBEAPPLY_DEBUG"), "enable debug mode, expanded files will be preserved")
 var timeout = flag.Int("t", 60, "timeout in seconds")
 var files tpu.ArrayFlags
@@ -46,6 +48,11 @@ var files tpu.ArrayFlags
 func main() {
 	flag.Var(&files, "f", "path to yaml file")
 	flag.Parse()
+
+	if *show_version {
+		fmt.Println("kubeapply", "version", Version)
+		os.Exit(0)
+	}
 
 	if len(files) == 0 {
 		fmt.Printf("at least one file argument is required")

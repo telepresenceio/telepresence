@@ -80,6 +80,14 @@ path.trimprefix = $(patsubst $1/%,%,$(patsubst $1,$1/.,$2))
 # Example: $(call path.addprefix,foo/bar,. baz) => foo/bar foo/bar/baz
 path.addprefix = $(patsubst %/.,%,$(addprefix $1/,$2))
 
+# Usage: $(call quote.shell,STRING)
+# Example: $(call quote.shell,some'string"with`special characters) => "some'string\"with\`special characters"
+#
+# Based on
+# https://git.lukeshu.com/autothing/tree/build-aux/Makefile.once.head/00-quote.mk?id=9384e763b00774603208b3d44977ed0e6762a09a
+# but modified to make newlines work with shells other than Bash.
+quote.shell = "$$(printf '%s\n' $(subst $(NL),' ','$(subst ','\'',$1)'))"
+
 #
 # Configure how Make works
 
