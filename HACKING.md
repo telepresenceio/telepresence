@@ -8,6 +8,14 @@
    with `include $(dir $(lastword $(MAKEFILE_LIST)))/common.mk`.
  - `.PHONY` targets that you wish to be user-visible should have a `##
    Help text` usage comment.  See `help.mk` for more information.
+ - Wrap your .mk files in
+
+       ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
+       …
+	   endif
+
+   include guards to make sure they are only included once; similar to
+   how you would with a C header file.
 
 ## Naming conventions
 

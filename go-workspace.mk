@@ -6,9 +6,11 @@
 #
 ## Inputs ##
 #  - Symlink: ./.go-workspace/src/EXAMPLE.COM/YOU/YOURREPO -> (git topdir)
+#  - Variable: go.DISABLE_GO_TEST ?=
 ## Outputs ##
 #  - Variable: go.module = EXAMPLE.COM/YOU/YOURREPO
 #  - Variable: go.bins = List of "main" Go packages
+#  - Variable: NAME ?= $(notdir $(go.module))
 #  - Target: vendor/ (if `./glade.yaml` is present)
 #  - .PHONY Target: go-get
 #  - .PHONY Target: go-build
@@ -22,6 +24,28 @@
 #  - check
 #  - format
 #  - clobber
+ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
+ifneq ($(go.module),)
+$(error Only include one of go-mod.mk or go-workspace.mk)
+endif
+include $(dir $(lastword $(MAKEFILE_LIST)))/common.mk
+
+#
+# 0. configure the `go` command
+
+export GO111MODULE = off
+export GOPATH = $(CURDIR)/.go-workspace
+
+_go-clobber:
+	find .go-workspace -exec chmod +w {} +
+	rm -rf .go-workspace
+	mkdir -p $(dir .go-workspace/src/$(go.module))
+	ln -s $(call joinlist,/,$(patsubst %,..,$(subst /, ,$(dir .go-workspace/src/$(go.module))))) .go-workspace/src/$(go.module)
+.PHONY: _go-clobber
+clobber: _go-clobber
+
+#
+# 1. Set go.module
 
 go.module := $(patsubst src/%,%,$(shell cd .go-workspace && find src \( -name '.*' -prune \) -o -type l -print))
 ifneq ($(words $(go.module)),1)
@@ -42,8 +66,21 @@ ifneq ($(words $(go.module)),1)
   $(error Could not extract $$(go.module) from ./.go-workspace/src/)
 endif
 
-export GO111MODULE = off
-export GOPATH = $(CURDIR)/.go-workspace
+#
+# Include _go-common.mk
+
+include $(dir $(lastword $(MAKEFILE_LIST)))/_go-common.mk
+
+#
+# 2. Set go.pkgs
+#
+# We do this *after* including _go-common.mk so that we can make use
+# of the $(call go.list,…) function, which is defined there.
+
+go.pkgs := $(call go.list,./...)
+
+#
+# 3. Recipe for go-get
 
 go-get:
 	go get -d $(go.bins)
@@ -60,18 +97,5 @@ _go-clobber-vendor:
 clobber: _go-clobber-vendor
 endif
 
-_go-clobber:
-	find .go-workspace -exec chmod +w {} +
-	rm -rf .go-workspace
-	mkdir -p $(dir .go-workspace/src/$(go.module))
-	ln -s $(call joinlist,/,$(patsubst %,..,$(subst /, ,$(dir .go-workspace/src/$(go.module))))) .go-workspace/src/$(go.module)
-.PHONY: _go-clobber
-clobber: _go-clobber
-
-# .NOTPARALLEL is important, as having multiple `go install`s going at
-# once can corrupt `$(GOPATH)/pkg`.  Setting .NOTPARALLEL is simpler
-# than mucking with multi-target pattern rules.
-.NOTPARALLEL:
-
-include $(dir $(lastword $(MAKEFILE_LIST)))/_go-common.mk
-go.pkgs := $(call go.list,./...)
+#
+endif

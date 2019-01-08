@@ -1,6 +1,7 @@
 # Copyright 2018 Datawire. All rights reserved.
 #
 # Makefile snippet for bits common bits we always want.
+ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
 
 #
 # Variables
@@ -109,3 +110,5 @@ path.addprefix = $(patsubst %/.,%,$(addprefix $1/,$2))
 # a .PHONY target (which we'll name "FORCE"), so that they are always
 # considered out-of-date by Make, but without being .PHONY themselves.
 .PHONY: FORCE
+
+endif
