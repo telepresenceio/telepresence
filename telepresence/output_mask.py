@@ -16,7 +16,6 @@ import re
 from functools import partial
 from typing import Iterable
 
-
 # See https://regex101.com/r/pHbVhO/2 for usage with "token" keys
 KEY_VALUE_REGEX = r'(?:[\"\']*)(?P<key>%s)(?:[\"\']*)(?:\s*)(?=:)(?:\:\s*)' \
                   r'(?:(?:"(?P<in_double_quotes>' \
@@ -28,7 +27,9 @@ KEY_VALUE_REGEX = r'(?:[\"\']*)(?P<key>%s)(?:[\"\']*)(?:\s*)(?=:)(?:\:\s*)' \
 
 def _replace_closure(replacement, m):
     def _replace_group(index):
-        return m.group()[:(m.span(index)[0] - m.span()[0])] + replacement + m.group()[(m.span(index)[1] - m.span()[0]):]
+        return m.group()[:(m.span(index)[0] -
+                           m.span()[0])] + replacement + m.group()[
+                               (m.span(index)[1] - m.span()[0]):]
 
     if m.group('in_double_quotes') is not None:
         return _replace_group(2)
@@ -53,5 +54,3 @@ def mask_values(source: str, keys: Iterable[str], mask: str):
 
 def mask_sensitive_data(source) -> str:
     return mask_values(source, ['token'], 'Masked-by-Telepresence')
-
-
