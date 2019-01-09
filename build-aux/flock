@@ -1,0 +1,8 @@
+#!/bin/sh
+# Copyright 2018 Datawire. All rights reserved.
+#
+# Wrapper around `go run ./flock.go` to set GO111MODULe appropriately.
+
+lockfile=$1
+shift
+GO111MODULE=off go run "$0.go" "$lockfile" env GO111MODULE="${GO111MODULE}" "$@"
