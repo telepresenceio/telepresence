@@ -12,6 +12,7 @@ TEST_JSON = ("  {\n"
              "    \"_id\": \"56af331efbeca6240c61b2ca\",\n"
              "    \"index\": 120000,\n"
              "    \"token\": \"bedb2018-c017-429E-b520-696ea3666692\",\n"
+             "    \"access-token\": \"ed0e4b34-13f9-11e9-80f6-80fa5b27636b\",\n"
              "    \"isActive\": false,\n"
              "    \"object\": {\n"
              "		\"token\": \"123am af   asd\"\n"
@@ -21,13 +22,15 @@ TEST_JSON = ("  {\n"
 TEST_YAML = ("_id: 56af331efbeca6240c61b2ca\n"
              "index: 120000\n"
              "token: bedb2018-c017-429E-b520-696ea3666692\n"
+             "access-token: ed0e4b34-13f9-11e9-80f6-80fa5b27636b\n"
              "isActive: false\n"
              "object:\n"
              "  token: \"123am af   asd\"\n")
 
 simple_test_data = [
-    ('{ "token"     : "6e0438a8-10bb-11e9-bc54-80fa5b27636b" }', lambda source: json.loads(source)),
-    ('token    : "9b5af948-10ea-11e9-ab67-80fa5b27636b"', lambda source: yaml.load(source)),
+    ('{ "token"     : "6e0438a8-10bb-11e9-bc54-80fa5b27636b", "access-token": "ed0e4b34-13f9-11e9-80f6-80fa5b27636b" }', lambda source: json.loads(source)),
+    ('token    : "9b5af948-10ea-11e9-ab67-80fa5b27636b"\n'
+     'access-token: "ed0e4b34-13f9-11e9-80f6-80fa5b27636b"', lambda source: yaml.load(source)),
 ]
 
 complex_test_data = [
@@ -60,6 +63,7 @@ def test_should_mask_multiple_keys(source, unmarshall):
 def test_should_mask_token(source, unmarshall):
     masked_key = mask_sensitive_data(source)
     assert_that(unmarshall(masked_key)['token'], equal_to('Masked-by-Telepresence'))
+    assert_that(unmarshall(masked_key)['access-token'], equal_to('Masked-by-Telepresence'))
 
 
 """

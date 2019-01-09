@@ -53,4 +53,4 @@ def mask_values(source: str, keys: Iterable[str], mask: str):
 
 
 def mask_sensitive_data(source) -> str:
-    return mask_values(source, ['token'], 'Masked-by-Telepresence')
+    return mask_values(source, ['token', 'access-token'], 'Masked-by-Telepresence')
