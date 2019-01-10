@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -211,27 +210,9 @@ func apply(names []string) {
 	}
 	fmt.Printf("kubectl %s\n", strings.Join(args, " "))
 	cmd := exec.Command("kubectl", args...)
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		panic(err)
-	}
-	go copy(os.Stdout, stdout)
-
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		panic(err)
-	}
-	go copy(os.Stderr, stderr)
-
-	err = cmd.Run()
-	if err != nil {
-		panic(err)
-	}
-}
-
-func copy(dst io.Writer, src io.Reader) {
-	_, err := io.Copy(dst, src)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
 	if err != nil {
 		panic(err)
 	}
