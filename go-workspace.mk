@@ -89,7 +89,19 @@ go-get:
 ifneq ($(wildcard glide.yaml),)
 vendor: glide.yaml $(wildcard glide.lock)
 	rm -rf $@
-	glide install || { r=$?; rm -rf $@; exit $?; }
+	glide install || { r=$$?; rm -rf $@; exit $$r; }
+go-get: vendor
+
+_go-clobber-vendor:
+	rm -rf vendor
+.PHONY: _go-clobber-vendor
+clobber: _go-clobber-vendor
+endif
+
+ifneq ($(wildcard Gopkg.toml),)
+vendor: Gopkg.toml $(wildcard Gopkg.yaml)
+	rm -rf $@
+	cd $(GOPATH)/src/$(go.module) && dep ensure -v -vendor-only || { r=$$?; rm -rf $@; exit $$r; }
 go-get: vendor
 
 _go-clobber-vendor:

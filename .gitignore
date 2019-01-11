@@ -4,3 +4,7 @@
 
 # kubeapply.mk
 /kubeapply
+
+# kubernaut.mk
+*.knaut
+*.knaut.claim

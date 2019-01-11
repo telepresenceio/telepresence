@@ -13,7 +13,7 @@ _kubeapply.mk := $(lastword $(MAKEFILE_LIST))
 include $(dir $(lastword $(MAKEFILE_LIST)))common.mk
 
 KUBEAPPLY ?= $(dir $(_kubeapply.mk))kubeapply
-KUBEAPPLY_VERSION = 0.3.8
+KUBEAPPLY_VERSION = 0.3.10
 
 $(KUBEAPPLY): $(_kubeapply.mk)
 	curl -o $@ https://s3.amazonaws.com/datawire-static-files/kubeapply/$(KUBEAPPLY_VERSION)/$(GOOS)/$(GOARCH)/kubeapply
