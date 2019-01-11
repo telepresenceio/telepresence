@@ -1,3 +1,4 @@
+*.docker
 *.knaut
 *.knaut.claim
 /bin_*
