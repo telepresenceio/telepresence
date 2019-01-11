@@ -305,51 +305,59 @@ def swap_deployment_openshift(
     current ReplicationController with one that uses the Telepresence image,
     then restores it. We delete the pods to force the RC to do its thing.
     """
+
     run_id = runner.session_id
     deployment, container = _split_deployment_container(deployment_arg)
-    rcs = runner.get_output(
-        runner.kubectl(
-            "get", "rc", "-o", "name", "--selector",
-            "openshift.io/deployment-config.name=" + deployment
+
+    dc_json_with_triggers = json.loads(
+        runner.get_output(
+            runner.kubectl(
+                "get", 'dc/%s' % deployment, "-o", "json", "--export"
+            )
         )
     )
-    rc_name = sorted(
-        rcs.split(), key=lambda n: int(n.split("-")[-1])
-    )[0].split("/", 1)[1]
-    rc_json = json.loads(
+
+    runner.check_call(
+        runner.kubectl(
+            "set", "triggers", "dc/%s" % deployment, "--remove-all"
+        )
+    )
+
+    dc_json = json.loads(
         runner.get_output(
-            runner.kubectl("get", "rc", "-o", "json", "--export", rc_name),
-            stderr=STDOUT
+            runner.kubectl(
+                "get", 'dc/%s' % deployment, "-o", "json", "--export"
+            )
         )
     )
 
     def apply_json(json_config):
         runner.check_call(
-            runner.kubectl("apply", "-f", "-"),
+            runner.kubectl("replace", "-f", "-"),
             input=json.dumps(json_config).encode("utf-8")
         )
         # Now that we've updated the replication controller, delete pods to
         # make sure changes get applied:
         runner.check_call(
-            runner.kubectl(
-                "delete", "pod", "--selector", "deployment=" + rc_name
-            )
+            runner.kubectl("rollout", "latest", "dc/%s" % deployment)
         )
 
     runner.add_cleanup(
-        "Restore original replication controller", apply_json, rc_json
+        "Restore original replication controller", apply_json,
+        dc_json_with_triggers
     )
 
-    container = _get_container_name(container, rc_json)
+    container = _get_container_name(container, dc_json)
 
-    new_rc_json, orig_container_json = new_swapped_deployment(
-        rc_json,
+    new_dc_json, orig_container_json = new_swapped_deployment(
+        dc_json,
         container,
         run_id,
         image_name,
         add_custom_nameserver,
     )
-    apply_json(new_rc_json)
+
+    apply_json(new_dc_json)
 
     _merge_expose_ports(expose, orig_container_json)
 
