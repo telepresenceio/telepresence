@@ -1,8 +1,8 @@
 include build-aux/common.mk
-include build-aux/go.mk
+include build-aux/go-mod.mk
 include build-aux/go-version.mk
 include build-aux/flock.mk
-include build-aux/kubernaut-ui.mk
+include build-aux/docker.mk
 include build-aux/help.mk
 
 .DEFAULT_GOAL = help
@@ -21,22 +21,34 @@ go-test-nat: go-get
 go-test-teleproxy: go-get test-cluster
 	$(FLOCK) firewall.lock $(FLOCK) cluster.lock go test -v -exec "sudo env PATH=${PATH} KUBECONFIG=$(abspath ${KUBECONFIG})" $(go.module)/cmd/teleproxy
 go-test-other: go-get test-cluster
-	KUBECONFIG=$(abspath ${KUBECONFIG}) $(FLOCK) cluster.lock go test -v $(filter-out $(go.module)/internal/pkg/nat $(go.module)/cmd/teleproxy,$(go.pkgs))
+	KUBECONFIG=$(abspath ${KUBECONFIG}) $(FLOCK) cluster.lock go test -v $$(go list ./... | grep -vF -e $(go.module)/internal/pkg/nat -e $(go.module)/cmd/teleproxy)
 .PHONY: go-test-nat go-test-teleproxy go-test-other
 go-test: go-test-nat go-test-teleproxy go-test-other
 
 check-docker:
 ifneq ($(shell which docker 2>/dev/null),)
-check-docker: $(addprefix bin_linux_amd64/,$(notdir $(go.bins)))
-	docker build -f scripts/Dockerfile . -t teleproxy-make
-	$(if $(filter linux,$(GOOS)),$(FLOCK) firewall.lock) docker run --cap-add=NET_ADMIN teleproxy-make go-test-nat
+check-docker: docker/teleproxy-check.docker
+check-docker:
+	$(if $(filter linux,$(GOOS)),$(FLOCK) firewall.lock) docker run --rm --cap-add=NET_ADMIN $(docker.LOCALHOST):31000/teleproxy-check:$(VERSION) go-test-nat
+docker/teleproxy-check.docker: docker/teleproxy-check/teleproxy.tar
+docker/teleproxy-check/teleproxy.tar: go-get
+	rm -f $@
+	{ git ls-files; git ls-files --others --exclude-standard; } | while IFS='' read -r file; do \
+	    if [ -e "$$file" -o -L "$$file" ]; then \
+	        mkdir -p "$$(dirname "$(@D)/.tmp/teleproxy/$$file")"; \
+	        cp "$$file" "$(@D)/.tmp/teleproxy/$$file"; \
+	    fi; \
+	done; \
+	cd $(@D)/.tmp/teleproxy && go mod vendor
+	tar -c -f $@ -C $(@D)/.tmp/teleproxy .
+	rm -rf $(@D)/.tmp
 else
 	@echo "SKIPPING DOCKER TESTS"
 endif
 .PHONY: check-docker
 check: check-docker
 
-clean: release
+clean:
 	$(FLOCK) firewall.lock rm firewall.lock
 	$(FLOCK) cluster.lock rm cluster.lock
 

@@ -1,5 +1,4 @@
-/.go-workspace
-!/.go-workspace/src/github/datawire/teleproxy
+*.docker
 *.knaut
 *.knaut.claim
 /bin_*

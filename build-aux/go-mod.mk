@@ -32,6 +32,8 @@ include $(dir $(lastword $(MAKEFILE_LIST)))common.mk
 
 export GO111MODULE = on
 
+.NOTPARALLEL:
+
 #
 # 1. Set go.module
 

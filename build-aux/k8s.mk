@@ -2,24 +2,13 @@ ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEF
 include $(dir $(lastword $(MAKEFILE_LIST)))kubernaut-ui.mk
 include $(dir $(lastword $(MAKEFILE_LIST)))kubeapply.mk
 
-PROFILE?=dev
-
 IMAGE_VARS=$(filter %_IMAGE,$(.VARIABLES))
 IMAGES=$(foreach var,$(IMAGE_VARS),$($(var)))
 IMAGE_DEFS=$(foreach var,$(IMAGE_VARS),$(var)=$($(var))$(NL))
 IMAGE_DEFS_SH="$(subst $(SPACE),\n,$(foreach var,$(IMAGE_VARS),$(var)=$($(var))))\n"
 MANIFESTS?=$(wildcard k8s/*.yaml)
 
-env:
-	$(eval $(subst @NL,$(NL), $(shell go run build-aux/env.go -profile $(PROFILE) -newline "@NL" -input config.json)))
-.PHONY: env
-
-hash: ## Show the computed version hash. The hash is based on non gitignored files.
-hash: env
-	@echo HASH=$(HASH)
-.PHONY: hash
-
-push_ok: env
+push_ok:
 	@if [ "$(PROFILE)" == "prod" ]; then echo "CANNOT PUSH TO PROD"; exit 1; fi
 .PHONY: push_ok
 
@@ -37,7 +26,9 @@ apply: $(KUBECONFIG) $(KUBEAPPLY)
 .PHONY: apply
 
 deploy: ## Shorthand for `make push apply`.
-deploy: push apply
+deploy:
+	$(MAKE) push
+	$(MAKE) apply
 .PHONY: deploy
 
 endif
