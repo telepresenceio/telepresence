@@ -39,12 +39,15 @@ def kubectl_or_oc(server: str) -> str:
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     try:
-        with urlopen(server + "/version/openshift", context=ctx) as u:
-            u.read()
+        with urlopen(server + "/apis", context=ctx) as response:
+            api_group_list = str(response.read())
     except (URLError, HTTPError):
         return "kubectl"
-    else:
+
+    if "openshift" in api_group_list:
         return "oc"
+    else:
+        return "kubectl"
 
 
 def _parse_version_component(comp: str) -> int:
