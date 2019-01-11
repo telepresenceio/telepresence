@@ -36,7 +36,7 @@ endif
 .PHONY: check-docker
 check: check-docker
 
-clean: release
+clean:
 	$(FLOCK) firewall.lock rm firewall.lock
 	$(FLOCK) cluster.lock rm cluster.lock
 
