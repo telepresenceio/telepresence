@@ -74,7 +74,7 @@ go-fmt: go-get
 
 go-test: ## (Go) Check the code with `go test`
 go-test: go-get
-	$(if $(not $(go.DISABLE_GO_TEST)),go test $(go.pkgs))
+	$(if $(go.DISABLE_GO_TEST),,go test $(go.pkgs))
 .PHONY: go-test
 
 #

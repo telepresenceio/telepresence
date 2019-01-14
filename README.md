@@ -64,6 +64,6 @@ understand the `-r` flag.
 	$ go mod init EXAMPLE.COM/YOU/GITREPO
 
 	$ make clobber
-	$ rm -rf -- .go-workspace vendor glide.*
+	$ rm -rf -- .go-workspace vendor glide.* Gopkg.*
 	$ sed -E 's,/go(-workspace)?\.mk,/go-mod.mk,' Makefile
 	$ sed -e '/\.go-workspace/d' .gitignore

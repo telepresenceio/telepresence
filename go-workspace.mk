@@ -99,7 +99,7 @@ clobber: _go-clobber-vendor
 endif
 
 ifneq ($(wildcard Gopkg.toml),)
-vendor: Gopkg.toml $(wildcard Gopkg.yaml)
+vendor: Gopkg.toml $(wildcard Gopkg.lock)
 	rm -rf $@
 	cd $(GOPATH)/src/$(go.module) && dep ensure -v -vendor-only || { r=$$?; rm -rf $@; exit $$r; }
 go-get: vendor

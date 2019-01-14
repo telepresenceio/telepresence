@@ -1,34 +1,56 @@
+# Copyright 2018 Datawire. All rights reserved.
+#
+# Makefile snippet for building Docker images, and for pushing them to
+# kubernaut.io clusters.
+#
+## Inputs ##
+#  - Variable: K8S_ENV ?=
+#  - Variable: K8S_DIR ?= k8s
+#  - Variable: K8S_IMAGES ?=
+## Outputs ##
+#  - .PHONY Target: push
+#  - .PHONY Target: apply
+#  - .PHONY Target: deploy
+## common.mk targets ##
+#  - build
+#  - clean
+#
+# Each IMAGE in $(K8S_IMAGES) is a path to a directory containing a
+# Dockerfile; each of $(addsuffix /Dockerfile,$(K8S_IMAGES)) should
+# exist.
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
-include $(dir $(lastword $(MAKEFILE_LIST)))kubernaut-ui.mk
-include $(dir $(lastword $(MAKEFILE_LIST)))kubeapply.mk
+include $(dir $(lastword $(MAKEFILE_LIST)))docker.mk
 
-IMAGE_VARS=$(filter %_IMAGE,$(.VARIABLES))
-IMAGES=$(foreach var,$(IMAGE_VARS),$($(var)))
-IMAGE_DEFS=$(foreach var,$(IMAGE_VARS),$(var)=$($(var))$(NL))
-IMAGE_DEFS_SH="$(subst $(SPACE),\n,$(foreach var,$(IMAGE_VARS),$(var)=$($(var))))\n"
-MANIFESTS?=$(wildcard k8s/*.yaml)
+K8S_IMAGES ?=
+K8S_ENV ?=
+K8S_DIR ?= k8s
 
-push_ok:
-	@if [ "$(PROFILE)" == "prod" ]; then echo "CANNOT PUSH TO PROD"; exit 1; fi
-.PHONY: push_ok
+ifneq ($(shell which docker 2>/dev/null),)
+build: $(addsuffix .docker,$(K8S_IMAGES))
+else
+build: _build-k8s
+_build-k8s:
+	@echo 'SKIPPING DOCKER BUILD'
+.PHONY: _build-k8s
+endif
+clean: $(addsuffix .docker.clean,$(K8S_IMAGES))
 
-push: ## Build docker images, tag them with the computed hash, and push them to the docker repo specified in config.json.
-push: push_ok docker
-	@for IMAGE in $(IMAGES); do \
-		docker push $${IMAGE}; \
-	done
-	printf $(IMAGE_DEFS_SH) > pushed.txt
+push: ## (k8s) Push Docker images to kubernaut.io cluster
+push: $(addsuffix .docker.knaut-push,$(K8S_IMAGES))
 .PHONY: push
 
-apply: ## Apply the most recently pushed images. (This is useful for quickly deploying yaml only changes without rebuilding & pushing containers.)
-apply: $(KUBECONFIG) $(KUBEAPPLY)
-	KUBECONFIG=$(KUBECONFIG) $(sort $(shell cat pushed.txt)) $(KUBEAPPLY) $(MANIFESTS:%=-f %)
-.PHONY: apply
+apply:  ## (k8s) Apply YAML to kubernaut.io cluster, without pushing newer Docker images the (this is useful for quickly deploying YAML-only changes)
+deploy: ## (k8s) Apply YAML to kubernaut.io cluster, pushing newer Docker images
+_k8s.push = $(addsuffix .docker.knaut-push,$(K8S_IMAGES))
+apply: $(filter-out $(wildcard $(_k8s.push)),$(_k8s.push))
+deploy: $(_k8s.push)
+apply deploy: $(KUBECONFIG) $(KUBEAPPLY) $(K8S_ENV)
+	$(if $(K8S_ENV),set -a && . $(abspath $(K8S_ENV)) && )$(KUBEAPPLY) $(addprefix -f ,$(K8S_DIR))
+.PHONY: apply deploy
 
-deploy: ## Shorthand for `make push apply`.
-deploy:
-	$(MAKE) push
-	$(MAKE) apply
-.PHONY: deploy
+$(KUBECONFIG).clean: _clean-k8s
+_clean-k8s:
+	rm -f $(addsuffix .docker.knaut-push,$(K8S_IMAGES))
+.PHONY: _clean-k8s
 
 endif

@@ -1,4 +1,4 @@
-# Copyright 2018 Datawire. All rights reserved.
+# Copyright 2019 Datawire. All rights reserved.
 #
 # Makefile snippet for automatically setting VERSION.
 #
