@@ -20,7 +20,7 @@ include $(dir $(lastword $(MAKEFILE_LIST)))common.mk
 
 TELEPROXY ?= $(dir $(_teleproxy.mk))teleproxy
 TELEPROXY_LOG ?= $(dir $(_teleproxy.mk))teleproxy.log
-TELEPROXY_VERSION = 0.3.8
+TELEPROXY_VERSION = 0.3.11
 KUBE_URL = https://kubernetes/api/
 
 $(TELEPROXY): $(_teleproxy.mk)
