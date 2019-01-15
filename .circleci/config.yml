@@ -45,6 +45,8 @@ commands:
       - run: make build
       - run: |
           if git describe --exact-match --tags >/dev/null 2>&1; then
+              export AWS_ACCESS_KEY_ID=$DEPLOY_KEY_ID
+              export AWS_SECRET_ACCESS_KEY=$DEPLOY_KEY
               make release
           fi
 
