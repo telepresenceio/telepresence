@@ -52,7 +52,7 @@ include $(dir $(lastword $(MAKEFILE_LIST)))common.mk
 GUBERNAUT = GO111MODULE=off go run $(dir $(_kubernaut.mk))gubernaut.go
 
 %.knaut.claim:
-	echo $(subst /,_,$*)-$${USER}-$$(uuidgen) > $@
+	echo $(*F)-$${USER}-$$(uuidgen) > $@
 %.knaut: %.knaut.claim
 	$(GUBERNAUT) -release $$(cat $<)
 	$(GUBERNAUT) -claim $$(cat $<) -output $@

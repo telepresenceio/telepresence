@@ -12,9 +12,10 @@
 ## common.mk targets ##
 #  - clean
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
-include $(dir $(lastword $(MAKEFILE_LIST)))kubernaut.mk
+_kubernaut-ui.mk := $(lastword $(MAKEFILE_LIST))
+include $(dir $(_kubernaut-ui.mk))kubernaut.mk
 
-_KUBECONFIG := build-aux/$(or $(NAME),cluster).knaut
+_KUBECONFIG := $(abspath $(dir $(_kubernaut-ui.mk))$(or $(NAME),cluster).knaut)
 export KUBECONFIG = $(_KUBECONFIG)
 
 claim: ## (Kubernaut) Obtain an ephemeral k8s cluster from kubernaut.io
