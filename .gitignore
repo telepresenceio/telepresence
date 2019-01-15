@@ -2,5 +2,5 @@
 *.knaut
 *.knaut.claim
 /bin_*
-/firewall.lock
-/cluster.lock
+/.firewall.lock
+/.cluster.lock

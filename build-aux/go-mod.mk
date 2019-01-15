@@ -70,7 +70,7 @@ go.pkgs := ./...
 # 3. Recipe for go-get
 
 go-get:
-	go list ./...
+	go mod download
 
 #
 # Include _go-common.mk

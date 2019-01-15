@@ -8,3 +8,7 @@
 # kubernaut.mk
 *.knaut
 *.knaut.claim
+
+# docker.mk
+/docker-port-forward.lock
+/docker-port-forward.log

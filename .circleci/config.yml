@@ -43,7 +43,10 @@ commands:
           command: make cluster.knaut.clean
           when: always
       - run: make build
-      - run: .circleci/deploy.sh
+      - run: |
+          if git describe --exact-match --tags >/dev/null 2>&1; then
+              make release
+          fi
 
 jobs:
 

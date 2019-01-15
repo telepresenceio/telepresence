@@ -17,11 +17,11 @@ test-cluster: $(KUBECONFIG) bin_$(GOOS)_$(GOARCH)/kubeapply
 # packages, so disable go.mk's built-in go-test, and define our own.
 go.DISABLE_GO_TEST = y
 go-test-nat: go-get
-	$(FLOCK) firewall.lock go test -v -exec sudo $(go.module)/internal/pkg/nat
+	$(FLOCK) .firewall.lock go test -v -exec sudo $(go.module)/internal/pkg/nat
 go-test-teleproxy: go-get test-cluster
-	$(FLOCK) firewall.lock $(FLOCK) cluster.lock go test -v -exec "sudo env PATH=${PATH} KUBECONFIG=$(abspath ${KUBECONFIG})" $(go.module)/cmd/teleproxy
+	$(FLOCK) .firewall.lock $(FLOCK) .cluster.lock go test -v -exec "sudo env KUBECONFIG=$${KUBECONFIG}" $(go.module)/cmd/teleproxy
 go-test-other: go-get test-cluster
-	KUBECONFIG=$(abspath ${KUBECONFIG}) $(FLOCK) cluster.lock go test -v $$(go list ./... | grep -vF -e $(go.module)/internal/pkg/nat -e $(go.module)/cmd/teleproxy)
+	$(FLOCK) .cluster.lock go test -v $$(go list ./... | grep -vF -e $(go.module)/internal/pkg/nat -e $(go.module)/cmd/teleproxy)
 .PHONY: go-test-nat go-test-teleproxy go-test-other
 go-test: go-test-nat go-test-teleproxy go-test-other
 
@@ -29,7 +29,7 @@ check-docker:
 ifneq ($(shell which docker 2>/dev/null),)
 check-docker: docker/teleproxy-check.docker
 check-docker:
-	$(if $(filter linux,$(GOOS)),$(FLOCK) firewall.lock) docker run --rm --cap-add=NET_ADMIN $(docker.LOCALHOST):31000/teleproxy-check:$(VERSION) go-test-nat
+	$(if $(filter linux,$(GOOS)),$(FLOCK) .firewall.lock) docker run --rm --cap-add=NET_ADMIN $(docker.LOCALHOST):31000/teleproxy-check:$(VERSION) go-test-nat
 docker/teleproxy-check.docker: docker/teleproxy-check/teleproxy.tar
 docker/teleproxy-check/teleproxy.tar: go-get
 	rm -f $@
@@ -49,11 +49,17 @@ endif
 check: check-docker
 
 clean:
-	$(FLOCK) firewall.lock rm firewall.lock
-	$(FLOCK) cluster.lock rm cluster.lock
+	$(FLOCK) .firewall.lock rm .firewall.lock
+	$(FLOCK) .cluster.lock rm .cluster.lock
 
 # Utility targets
 
 run: build
 	bin_$(GOOS)_$(GOARCH)/teleproxy
 .PHONY: run
+
+release: ## Upload binaries to S3
+release: release-teleproxy release-kubeapply release-kubewatch
+release-%: bin_$(GOOS)_$(GOARCH)/%
+	aws s3 cp --acl public-read $< 's3://datawire-static-files/$*/$(VERSION)/$(GOOS)/$(GOARCH)/$*'
+.PHONY: release release-%
