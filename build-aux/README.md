@@ -33,9 +33,6 @@ Currently, there are 2 options for Go projects:
  - `go-workspace.mk`: For GOPATH workspaces
  - `go-mod.mk`: For Go 1.11 modules
 
-`go.mk` is a symlink that currently points to `go-workspace.mk`, but
-at some point in the future it will change to point to `go-mod.mk`
-
 ### Initializing a `go-workspace.mk` project
 
 	$ MODULE=EXAMPLE.COM/YOU/GITREPO
@@ -65,5 +62,5 @@ understand the `-r` flag.
 
 	$ make clobber
 	$ rm -rf -- .go-workspace vendor glide.* Gopkg.*
-	$ sed -E 's,/go(-workspace)?\.mk,/go-mod.mk,' Makefile
+	$ sed -E 's,/go-workspace\.mk,/go-mod.mk,' Makefile
 	$ sed -e '/\.go-workspace/d' .gitignore

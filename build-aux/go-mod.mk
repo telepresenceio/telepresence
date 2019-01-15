@@ -61,6 +61,10 @@ ifneq ($(words $(go.module)),1)
   $(error Could not extract $$(go.module) from ./go.mod)
 endif
 
+ifneq ($(shell git ls-tree -rl HEAD | grep '^120000 ' | tee /dev/stderr),)
+$(error You may not use symlinks with Go modules)
+endif
+
 #
 # 2. Set go.pkgs
 
