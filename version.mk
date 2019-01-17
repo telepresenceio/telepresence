@@ -11,6 +11,6 @@ _version.mk := $(lastword $(MAKEFILE_LIST))
 
 VERSION ?= $(patsubst v%,%,$(shell git describe --tags --always))$(if $(shell git status -s),-dirty$(_version.dirty_hash))
 
-_version.dirty_hash = $(shell GO111MODULE=off go run $(dir $(_version.mk))version.go)
+_version.dirty_hash = $(if $(CI),$(error This should not happen in CI: the build should not be dirty))$(shell GO111MODULE=off go run $(dir $(_version.mk))version.go)
 
 endif
