@@ -38,6 +38,11 @@ _docker.port-forward = $(dir $(_docker.mk))docker-port-forward
 
 %.docker: %/Dockerfile
 	docker build -t $(docker.LOCALHOST):31000/$(notdir $*):$(or $(VERSION),latest) $*
+ifneq ($(CI),)
+	docker image inspect $(docker.LOCALHOST):31000/$(notdir $*):$(or $(VERSION),latest) --format='{{.Id}}' > $(@D)/.tmp.$(@F).tmp
+	if test -e $@; then cmp -s $(@D)/.tmp.$(@F).tmp $@; fi
+	rm -f $(@D)/.tmp.$(@F).tmp
+endif
 	docker image inspect $(docker.LOCALHOST):31000/$(notdir $*):$(or $(VERSION),latest) --format='{{.Id}}' > $@
 
 %.docker.clean:

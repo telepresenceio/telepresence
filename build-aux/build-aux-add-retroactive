@@ -20,7 +20,7 @@ git-subtree-split: ${BUILD_AUX_COMMIT}"
 # Initialize for merge ###############################################
 
 git ls-files -z|grep -z -v ^build-aux/|xargs -r0 git rm -f --
-git mv build-aux/* .
+git mv $(git ls-files build-aux) .
 rmdir build-aux
 
 git commit -m "git-subtree init (for merge)
