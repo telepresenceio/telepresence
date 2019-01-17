@@ -40,7 +40,7 @@ commands:
       - checkout
       - run: make check
       - run:
-          command: make cluster.knaut.clean
+          command: make unclaim
           when: always
       - run: make build
       - run: |
