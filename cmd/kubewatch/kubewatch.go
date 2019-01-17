@@ -109,7 +109,7 @@ func (s *Syncer) Run() {
 		// value from the current iteration instead of the
 		// value from the last iteration
 		kind := k
-		s.Watcher.Watch(kind, func(_ *k8s.Watcher) {
+		s.Watcher.WatchNamespace(NAMESPACE, kind, func(_ *k8s.Watcher) {
 			s.Mux.Lock()
 			defer s.Mux.Unlock()
 			s.Dirty = true
@@ -153,6 +153,7 @@ func init() {
 	KUBEWATCH.Version = Version
 	KUBEWATCH.Flags().StringVarP(&ROOT, "root", "r", "/tmp/kubewatch", "root directory for resource files")
 	KUBEWATCH.Flags().StringVarP(&SYNC_COMMAND, "sync", "s", "ls -R", "sync command")
+	KUBEWATCH.Flags().StringVarP(&NAMESPACE, "namespace", "n", "", "namespace to watch (defaults to all)")
 	KUBEWATCH.Flags().DurationVarP(&MIN_INTERVAL, "min-interval", "m", 250*time.Millisecond, "min sync interval")
 	KUBEWATCH.Flags().DurationVarP(&MAX_INTERVAL, "max-interval", "M", time.Second, "max sync interval")
 	KUBEWATCH.Flags().DurationVarP(&WARMUP_DELAY, "warmup-delay", "w", 0, "warmup delay")
@@ -161,6 +162,7 @@ func init() {
 var (
 	ROOT         string
 	SYNC_COMMAND string
+	NAMESPACE    string
 	MIN_INTERVAL time.Duration
 	MAX_INTERVAL time.Duration
 	WARMUP_DELAY time.Duration

@@ -179,6 +179,10 @@ func (c *Client) resolve(resource string) ResourceInfo {
 }
 
 func (c *Client) List(resource string) ([]Resource, error) {
+	return c.ListNamespace("", resource)
+}
+
+func (c *Client) ListNamespace(namespace, resource string) ([]Resource, error) {
 	ri := c.resolve(resource)
 
 	dyn, err := dynamic.NewForConfig(c.config)
@@ -192,7 +196,14 @@ func (c *Client) List(resource string) ([]Resource, error) {
 		Resource: ri.Name,
 	})
 
-	uns, err := cli.List(v1.ListOptions{})
+	var filtered dynamic.ResourceInterface
+	if namespace != "" {
+		filtered = cli.Namespace(namespace)
+	} else {
+		filtered = cli
+	}
+
+	uns, err := filtered.List(v1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}

@@ -21,7 +21,7 @@ import (
 type empty struct{}
 
 type listWatchAdapter struct {
-	resource dynamic.NamespaceableResourceInterface
+	resource dynamic.ResourceInterface
 }
 
 func (lw listWatchAdapter) List(options v1.ListOptions) (runtime.Object, error) {
@@ -43,10 +43,11 @@ type Watcher struct {
 }
 
 type watch struct {
-	resource dynamic.NamespaceableResourceInterface
-	store    cache.Store
-	invoke   func()
-	runner   func()
+	namespace string
+	resource  dynamic.NamespaceableResourceInterface
+	store     cache.Store
+	invoke    func()
+	runner    func()
 }
 
 // NewWatcher returns a Kubernetes Watcher for the specified cluster
@@ -113,6 +114,10 @@ func (w *Watcher) Canonical(name string) string {
 }
 
 func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
+	return w.WatchNamespace("", resources, listener)
+}
+
+func (w *Watcher) WatchNamespace(namespace, resources string, listener func(*Watcher)) error {
 	ri := w.client.resolve(resources)
 	dyn, err := dynamic.NewForConfig(w.client.config)
 	if err != nil {
@@ -124,6 +129,12 @@ func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
 		Version:  ri.Version,
 		Resource: ri.Name,
 	})
+	var watched dynamic.ResourceInterface
+	if namespace != "" {
+		watched = resource.Namespace(namespace)
+	} else {
+		watched = resource
+	}
 
 	invoke := func() {
 		w.mutex.Lock()
@@ -132,7 +143,7 @@ func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
 	}
 
 	store, controller := cache.NewInformer(
-		listWatchAdapter{resource},
+		listWatchAdapter{watched},
 		nil,
 		5*time.Minute,
 		cache.ResourceEventHandlerFuncs{
@@ -168,10 +179,11 @@ func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
 
 	kind := w.Canonical(ri.Kind)
 	w.watches[kind] = watch{
-		resource: resource,
-		store:    store,
-		invoke:   invoke,
-		runner:   runner,
+		namespace: namespace,
+		resource:  resource,
+		store:     store,
+		invoke:    invoke,
+		runner:    runner,
 	}
 
 	return nil
