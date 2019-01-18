@@ -51,7 +51,7 @@ func (k *Keeper) Start() {
 			cmd.SysProcAttr = &syscall.SysProcAttr{
 				Setpgid: true,
 			}
-			k.log(k.Command)
+			k.log("%s", k.Command)
 			l := k.forwardOutput(cmd)
 
 			err := writeInput(cmd, k.Input)
@@ -68,7 +68,7 @@ func (k *Keeper) Start() {
 			go func() {
 				err = cmd.Wait()
 				if err != nil {
-					k.log(err.Error())
+					k.log("%s", err.Error())
 				}
 				died <- nil
 			}()
@@ -81,7 +81,7 @@ func (k *Keeper) Start() {
 				if count < k.Limit || k.Limit == 0 {
 					k.log("%s restarting...", strings.Fields(k.Command)[0])
 					ShellLog(k.Inspect, func(line string) {
-						k.log(line)
+						k.log("%s", line)
 					})
 					time.Sleep(time.Second)
 				} else {
@@ -134,15 +134,15 @@ func (k *Keeper) reader(pipe io.ReadCloser, l Latch) {
 		line, err := buf.ReadString('\n')
 		if err != nil {
 			if strings.TrimSpace(line) != "" {
-				k.log(line)
+				k.log("%s", line)
 			}
 			if err != io.EOF {
-				k.log(err.Error())
+				k.log("%s", err.Error())
 			}
 			l.Notify()
 			return
 		} else {
-			k.log(line)
+			k.log("%s", line)
 		}
 	}
 }
