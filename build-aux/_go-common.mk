@@ -48,10 +48,16 @@ go-get: ## (Go) Download Go dependencies
 .PHONY: go-get
 
 define _go.bin.rule
-bin_%/.tmp.$(notdir $(go.bin)).tmp: go-get FORCE
+bin_%/.cache.$(notdir $(go.bin)): go-get FORCE
 	go build $$(if $$(go.LDFLAGS),--ldflags $$(call quote.shell,$$(go.LDFLAGS))) -o $$@ $(go.bin)
-bin_%/$(notdir $(go.bin)): bin_%/.tmp.$(notdir $(go.bin)).tmp
-	if cmp -s $$< $$@; then rm -f $$< || true; else $(if $(CI),test ! -e $$@ && )mv -f $$< $$@; fi
+bin_%/$(notdir $(go.bin)): bin_%/.cache.$(notdir $(go.bin))
+	@{ \
+		PS4=''; set -x; \
+		if ! cmp -s $$< $$@; then \
+			$(if $(CI),if test -e $$@; then false This should not happen in CI: $$@ should not change; fi, true) && \
+			cp -f $$< $$@; \
+		fi; \
+	}
 endef
 $(foreach go.bin,$(go.bins),$(eval $(_go.bin.rule)))
 
