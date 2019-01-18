@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
-	"os"
-	"path/filepath"
+	"net"
+	"net/http"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -17,10 +17,9 @@ import (
 
 type Syncer struct {
 	Watcher     *k8s.Watcher
-	Root        string
 	SyncCommand string
 	Kinds       []string
-	Mux         sync.Mutex
+	Mux         sync.Mutex // protects the whole data structure
 	Dirty       bool
 	ModTime     time.Time
 	SyncTime    time.Time
@@ -28,6 +27,10 @@ type Syncer struct {
 	MinInterval time.Duration
 	MaxInterval time.Duration
 	WarmupDelay time.Duration
+	router      *http.ServeMux
+	port        string
+	snapshotMux sync.Mutex // protects just the snapshot map
+	snapshots   map[string]map[string][]byte
 }
 
 func (s *Syncer) maybeSync() {
@@ -48,48 +51,53 @@ func (s *Syncer) maybeSync() {
 
 func (s *Syncer) sync() {
 	s.SyncCount += 1
-	path := s.write()
-	s.cleanup()
-	s.invoke(path)
+	snapshot_id := s.write()
+	s.invoke(snapshot_id)
 }
 
 func (s *Syncer) write() string {
-	root := filepath.Join(s.Root, fmt.Sprintf("sync-%d", s.SyncCount))
-	err := os.RemoveAll(root)
-	if err != nil {
-		log.Printf("error removing %s: %v", root, err)
-	}
+	s.snapshotMux.Lock()
+	defer s.snapshotMux.Unlock()
+	snapshot_id := fmt.Sprintf("%d", s.SyncCount)
+	s.snapshots[snapshot_id] = make(map[string][]byte)
 	for _, kind := range s.Kinds {
-		for _, rsrc := range s.Watcher.List(kind) {
-			s.writeResource(root, kind, rsrc)
+		resources := s.Watcher.List(kind)
+		bytes, err := k8s.MarshalResources(resources)
+		if err != nil {
+			panic(err)
+		}
+		s.snapshots[snapshot_id][kind] = bytes
+		for _, rsrc := range resources {
+			qname := path.Join(kind, rsrc.Namespace(), rsrc.Name())
+			bytes, err := k8s.MarshalResource(rsrc)
+			if err != nil {
+				panic(err)
+			}
+			s.snapshots[snapshot_id][qname] = bytes
 		}
 	}
-	return root
+	s.cleanup()
+	return snapshot_id
 }
 
 func (s *Syncer) cleanup() {
-	dirs, err := filepath.Glob(filepath.Join(s.Root, "sync-*"))
-	if err != nil {
-		log.Printf("error listing sync directories: %v", err)
-	}
-	for _, d := range dirs {
+	for k, _ := range s.snapshots {
 		keep := false
 		for c := s.SyncCount; c > s.SyncCount-10; c-- {
-			if strings.HasSuffix(d, fmt.Sprintf("sync-%d", c)) {
+			id := fmt.Sprintf("%d", c)
+			if id == k {
 				keep = true
 			}
 		}
 		if !keep {
-			err = os.RemoveAll(d)
-			if err != nil {
-				log.Printf("error removing %s: %v", d, err)
-			}
+			delete(s.snapshots, k)
+			log.Printf("deleting snapshot %s", k)
 		}
 	}
 }
 
-func (s *Syncer) invoke(dir string) {
-	k := tpu.NewKeeper("SYNC", fmt.Sprintf("%s %s", s.SyncCommand, dir))
+func (s *Syncer) invoke(snapshot_id string) {
+	k := tpu.NewKeeper("SYNC", fmt.Sprintf("%s http://localhost:%s/api/snapshot/%s", s.SyncCommand, s.port, snapshot_id))
 	k.Limit = 1
 	k.Start()
 	k.Wait()
@@ -117,27 +125,74 @@ func (s *Syncer) Run() {
 		})
 	}
 	s.Watcher.Start()
-	s.Watcher.Wait()
+	s.serve()
 }
 
-func (s *Syncer) writeResource(root, kind string, r k8s.Resource) {
-	dir := filepath.Join(root, r.Namespace(), kind)
-	path := filepath.Join(dir, r.Name()+".yaml")
-	log.Printf("writing %s/%s to %s", kind, r.QName(), path)
-	err := os.MkdirAll(dir, 0755)
+func (s *Syncer) serve() {
+	s.routes()
+
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%s", PORT))
 	if err != nil {
-		log.Println(err)
-		return
+		// Error starting or closing listener:
+		log.Fatalf("kubewatch: %v", err)
 	}
-	bytes, err := k8s.MarshalResource(r)
+
+	_, port, err := net.SplitHostPort(ln.Addr().String())
 	if err != nil {
-		log.Println(err)
-		return
+		log.Fatalf("kubewatch: %v", err)
 	}
-	err = ioutil.WriteFile(path, bytes, 0644)
-	if err != nil {
-		log.Println(err)
-		return
+	s.port = port
+
+	server := http.Server{
+		Handler: s.router,
+	}
+
+	if err := server.Serve(ln); err != http.ErrServerClosed {
+		// Error starting or closing listener:
+		log.Fatalf("kubewatch: %v", err)
+	}
+}
+
+func (s *Syncer) routes() {
+	s.router.HandleFunc("/api/snapshot/", s.safe(s.handleSnapshot()))
+}
+
+func (s *Syncer) safe(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				var msg string
+				switch e := r.(type) {
+				case error:
+					msg = e.Error()
+				default:
+					msg = fmt.Sprintf("%v", r)
+				}
+				http.Error(w, fmt.Sprintf("Server Error: %s", msg), http.StatusInternalServerError)
+			}
+		}()
+		h(w, r)
+	}
+}
+
+func (s *Syncer) handleSnapshot() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		s.snapshotMux.Lock()
+		defer s.snapshotMux.Unlock()
+		parts := strings.Split(r.URL.Path, "/")
+		parts = parts[3:]
+		snapshot_id := parts[0]
+		snapshot, ok := s.snapshots[snapshot_id]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		qname := strings.Join(parts[1:], "/")
+		body, ok := snapshot[qname]
+		if !ok {
+			http.NotFound(w, r)
+		}
+		w.Write(body)
 	}
 }
 
@@ -151,8 +206,8 @@ var KUBEWATCH = &cobra.Command{
 
 func init() {
 	KUBEWATCH.Version = Version
-	KUBEWATCH.Flags().StringVarP(&ROOT, "root", "r", "/tmp/kubewatch", "root directory for resource files")
-	KUBEWATCH.Flags().StringVarP(&SYNC_COMMAND, "sync", "s", "ls -R", "sync command")
+	KUBEWATCH.Flags().StringVarP(&PORT, "port", "p", "0", "port for kubewatch api")
+	KUBEWATCH.Flags().StringVarP(&SYNC_COMMAND, "sync", "s", "curl", "sync command")
 	KUBEWATCH.Flags().StringVarP(&NAMESPACE, "namespace", "n", "", "namespace to watch (defaults to all)")
 	KUBEWATCH.Flags().DurationVarP(&MIN_INTERVAL, "min-interval", "m", 250*time.Millisecond, "min sync interval")
 	KUBEWATCH.Flags().DurationVarP(&MAX_INTERVAL, "max-interval", "M", time.Second, "max sync interval")
@@ -160,7 +215,7 @@ func init() {
 }
 
 var (
-	ROOT         string
+	PORT         string
 	SYNC_COMMAND string
 	NAMESPACE    string
 	MIN_INTERVAL time.Duration
@@ -171,12 +226,13 @@ var (
 func kubewatch(cmd *cobra.Command, args []string) {
 	s := Syncer{
 		Watcher:     k8s.NewClient(nil).Watcher(),
-		Root:        ROOT,
 		SyncCommand: SYNC_COMMAND,
 		Kinds:       args,
 		MinInterval: MIN_INTERVAL,
 		MaxInterval: MAX_INTERVAL,
 		WarmupDelay: WARMUP_DELAY,
+		router:      http.NewServeMux(),
+		snapshots:   make(map[string]map[string][]byte),
 	}
 
 	s.Run()
