@@ -88,6 +88,8 @@ class Runner(object):
                 self.chatty = True
             except OSError:
                 pass
+        if term_width < 25:
+            term_width = 99999
         self.wrapper = textwrap.TextWrapper(
             width=term_width,
             initial_indent="T: ",
