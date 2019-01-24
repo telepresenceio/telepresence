@@ -54,7 +54,8 @@ def connect(
         )
     )
 
-    ssh.wait()
+    if not ssh.wait():
+        raise RuntimeError("SSH to the cluster failed to start.")
 
     # In Docker mode this happens inside the local Docker container:
     if not is_container_mode:

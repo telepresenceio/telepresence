@@ -78,7 +78,10 @@ def proxy(config: dict):
 
     # Wait for the cluster to be available
     ssh = SSH(runner, 38023, "telepresence@127.0.0.1")
-    ssh.wait()
+    if not ssh.wait():
+        raise RuntimeError(
+            "SSH from local container to the cluster failed to start."
+        )
 
     # Figure out IP addresses to exclude, from the incoming ssh
     exclusions = []

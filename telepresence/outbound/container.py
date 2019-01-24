@@ -150,7 +150,9 @@ def run_docker_command(
     )
 
     # Set up ssh tunnel to allow the container to reach the cluster
-    local_ssh.wait()
+    if not local_ssh.wait():
+        raise RuntimeError("SSH to the network container failed to start.")
+
     runner.launch(
         "Local SSH port forward",
         local_ssh.bg_command(["-R", "38023:127.0.0.1:{}".format(ssh.port)])
