@@ -23,7 +23,6 @@ from typing import List, Set, Tuple, Union
 from urllib.parse import quote_plus
 
 import telepresence
-from telepresence.command_cli import show_command_help_and_quit
 from telepresence.runner import BackgroundProcessCrash
 from telepresence.utilities import random_name
 
@@ -184,11 +183,6 @@ def parse_args(args=None) -> argparse.Namespace:
     )
     parser.add_argument(
         '--version', action='version', version=telepresence.__version__
-    )
-    parser.add_argument(
-        "--help-experimental",
-        action="store_true",
-        help="Show help for experimental commands and exit"
     )
     parser.add_argument(
         "--verbose",
@@ -362,10 +356,6 @@ def parse_args(args=None) -> argparse.Namespace:
         )
     )
     args = parser.parse_args(args)
-
-    # Delegate subcommand help to the other parser
-    if args.help_experimental:
-        show_command_help_and_quit()
 
     # Fill in defaults:
     if args.method is None:
