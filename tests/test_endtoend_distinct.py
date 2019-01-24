@@ -23,9 +23,14 @@ from .parameterize_utils import (
     Probe,
 )
 
+
 def test_disconnect(request):
     """
-    Telepresence exits with code 3 if its connection to the cluster is lost.
+    Telepresence exits with code 255 if its connection to the cluster is lost.
+
+    FIXME: This is the standard failure exit code. We should decide if we want
+    to go back to Telepresence indicating disconnect in a manner that's
+    distinguishable from other failures.
     """
     # Avoid using the Probe fixture because it is scoped for multi-test use to
     # allow a Telepresence session to be used by multiple tests.  This test is
@@ -55,7 +60,7 @@ def test_disconnect(request):
         # okay.
         probe_result.read()
 
-    assert returncode == 3, (
+    assert returncode == 255, (
         "Telepresence returncode did not indicate disconnection detected."
     )
 
