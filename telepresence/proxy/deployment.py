@@ -312,21 +312,21 @@ def swap_deployment_openshift(
     dc_json_with_triggers = json.loads(
         runner.get_output(
             runner.kubectl(
-                "get", 'dc/%s' % deployment, "-o", "json", "--export"
+                "get", "dc/{}".format(deployment), "-o", "json", "--export"
             )
         )
     )
 
     runner.check_call(
         runner.kubectl(
-            "set", "triggers", "dc/%s" % deployment, "--remove-all"
+            "set", "triggers", "dc/{}".format(deployment), "--remove-all"
         )
     )
 
     dc_json = json.loads(
         runner.get_output(
             runner.kubectl(
-                "get", 'dc/%s' % deployment, "-o", "json", "--export"
+                "get", "dc/{}".format(deployment), "-o", "json", "--export"
             )
         )
     )
@@ -339,7 +339,7 @@ def swap_deployment_openshift(
         # Now that we've updated the replication controller, delete pods to
         # make sure changes get applied:
         runner.check_call(
-            runner.kubectl("rollout", "latest", "dc/%s" % deployment)
+            runner.kubectl("rollout", "latest", "dc/{}".format(deployment))
         )
 
     runner.add_cleanup(
