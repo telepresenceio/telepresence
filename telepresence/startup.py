@@ -193,6 +193,9 @@ class KubeInfo(object):
         return result
 
     def _check_if_in_local_vm(self, runner: Runner) -> bool:
+        # Running Docker Desktop on macOS (or maybe Windows?)
+        if self.context == "docker-for-desktop":
+            return True
         # Minikube just has 'minikube' as context'
         if self.context == "minikube":
             return True
