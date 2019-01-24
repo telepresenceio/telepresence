@@ -50,20 +50,20 @@ def test_should_leave_source_unchanged_when_masking_non_existing_key(source):
     assert_that(masked, equal_to(source))
 
 
-@pytest.mark.parametrize('source,unmarshall', complex_test_data)
-def test_should_mask_multiple_keys(source, unmarshall):
+@pytest.mark.parametrize('source,unmarshal', complex_test_data)
+def test_should_mask_multiple_keys(source, unmarshal):
     masked_key = mask_values(source, ['_id', 'token'], 'telepresence')
-    as_json = unmarshall(masked_key)
+    as_json = unmarshal(masked_key)
     assert_that(as_json['_id'], equal_to('telepresence'))
     assert_that(as_json['token'], equal_to('telepresence'))
     assert_that(as_json['object']['token'], equal_to('telepresence'))
 
 
-@pytest.mark.parametrize('source,unmarshall', simple_test_data + complex_test_data)
-def test_should_mask_token(source, unmarshall):
+@pytest.mark.parametrize('source,unmarshal', simple_test_data + complex_test_data)
+def test_should_mask_token(source, unmarshal):
     masked_key = mask_sensitive_data(source)
-    assert_that(unmarshall(masked_key)['token'], equal_to('Masked-by-Telepresence'))
-    assert_that(unmarshall(masked_key)['access-token'], equal_to('Masked-by-Telepresence'))
+    assert_that(unmarshal(masked_key)['token'], equal_to('Masked-by-Telepresence'))
+    assert_that(unmarshal(masked_key)['access-token'], equal_to('Masked-by-Telepresence'))
 
 
 """
