@@ -96,7 +96,7 @@ virtualenv: dev-requirements.txt k8s-proxy/requirements.txt  ## Set up Python3 v
 	$(PIP) install -r dev-requirements.txt || $(DIRFAIL)
 	$(PIP) install -r k8s-proxy/requirements.txt || $(DIRFAIL)
 	$(PIP) install git+https://github.com/datawire/sshuttle.git@telepresence || $(DIRFAIL)
-	$(PIP) install -e . || $(DIRFAIL)
+	$(PIP) install --no-use-pep517 -e . || $(DIRFAIL)
 
 lint: virtualenv  ## Run the linters used by CI (implies 'virtualenv')
 	./tools/license-check
