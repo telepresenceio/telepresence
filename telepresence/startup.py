@@ -186,7 +186,8 @@ class KubeInfo(object):
             args = in_args
         result = [self.command]
         if self.verbose:
-            result.append("--v=4")
+            # result.append("--v=4")  # See issue #807
+            pass
         result.extend(["--context", self.context])
         result.extend(["--namespace", self.namespace])
         result += args
