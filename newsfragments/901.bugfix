@@ -1,0 +1,1 @@
+Telepresence should no longer crash if the terminal width is unavailable.

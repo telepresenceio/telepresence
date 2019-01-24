@@ -89,6 +89,8 @@ class Runner(object):
                 self.chatty = True
             except OSError:
                 pass
+        if term_width < 25:
+            term_width = 99999
         self.wrapper = textwrap.TextWrapper(
             width=term_width,
             initial_indent="T: ",
@@ -504,7 +506,7 @@ class Runner(object):
                 sig_name, frame_name
             )
         )
-        self.exit()
+        self.exit(0)
 
     def _do_cleanup(self):
         failures = []
@@ -542,33 +544,38 @@ class Runner(object):
         failures = "\n\n".join(self.ended)
         raise BackgroundProcessCrash(message, failures)
 
-    def fail(self, message: str, code=1) -> SystemExit:
+    def fail(self, message: str) -> SystemExit:
         """
         Report failure to the user and exit. Does not return. Cleanup will run
         before the process ends. This does not invoke the crash reporter; an
         uncaught exception will achieve that, e.g., RuntimeError.
 
+        Failure is indicated with exit code 255 (like ssh). The user process's
+        exit code is propagated by successful sessions.
+
         :param message: So the user knows what happened
-        :param code: Process exit code
         """
         self.quitting = True
         self.show("\n")
         self.show(message)
         self.show("\n")
+        code = 255
         self.write("EXITING with status code {}".format(code))
         exit(code)
         return SystemExit(code)  # Not reached; just here for the linters
 
-    def exit(self) -> SystemExit:
+    def exit(self, code) -> SystemExit:
         """
         Exit after a successful session. Does not return. Cleanup will run
         before the process ends.
+
+        Success means exiting with the user process's exit code.
         """
         self.quitting = True
         Span.emit_summary = True
         self.write("EXITING successful session.")
-        exit(0)
-        return SystemExit(0)  # Not reached; just here for the linters
+        exit(code)
+        return SystemExit(code)  # Not reached; just here for the linters
 
     def wait_for_exit(self, main_process: Popen) -> None:
         """
@@ -594,7 +601,7 @@ class Runner(object):
             else:
                 message += "has exited."
             self.show(message)
-            raise self.exit()
+            raise self.exit(main_code)
 
         # Something else exited, setting the quitting flag.
         # Unfortunately torsocks doesn't deal well with connections
@@ -607,4 +614,4 @@ class Runner(object):
             "Proxy to Kubernetes exited. This is typically due to"
             " a lost connection."
         )
-        raise self.fail(message, code=3)
+        raise self.fail(message)

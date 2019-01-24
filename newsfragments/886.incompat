@@ -1,0 +1,1 @@
+A successful Telepresence session now exits with the return code of your process. This should make it easier to use Telepresence in scripts.

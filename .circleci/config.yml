@@ -17,9 +17,10 @@ workflows:
           requires:
             - "build-image"
 
-      - build-testbench:
-          requires:
-            - "build-image"
+      #- build-testbench:
+      #    requires:
+      #      - "build-image"
+
 jobs:
   lint:
     docker:

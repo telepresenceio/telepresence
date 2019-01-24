@@ -71,9 +71,9 @@ inside a Telepresence-proxied shell.
 5. The custom Telepresence DNS server hands this back, `sshuttle` forwards it back, and eventually `curl` gets the Service IP.
 6. `curl` opens connection to that IP, `sshuttle` forwards it to the Kubernetes cluster.
 
-#### minikube/minishift
+#### minikube/minishift and Docker Desktop
 
-When using minikube or minishift to run a cluster locally in a VM there is an additional complication.
+There is an additional complication when running a cluster locally in a VM, using something like minikube, minishift, or Docker Desktop.
 Let's say you lookup `google.com`.
 
 1. `sshuttle` forwards `google.com` to Kubernetes (via Telepresence DNS server).
@@ -82,10 +82,11 @@ Let's say you lookup `google.com`.
 4. `sshuttle` captures all DNS lookups going from the host machine.
 5. Your DNS lookup is now in an infinite loop.
 
-To solve this Telepresence will detect minikube and minishift, and when it does the Telepresence DNS server will forward DNS requests that aren't Kubernetes-specific to an external DNS server that is different than the ones your host machine is using.
+To solve this Telepresence will detect minikube, minishift, and Docker Desktop.
+When it does, the Telepresence DNS server will forward DNS requests that aren't Kubernetes-specific to an external DNS server that is different than the ones your host machine is using.
 E.g. it might use Google's public DNS if your host isn't.
 As a result these DNS lookups aren't captured by `sshuttle` and the infinite loop is prevented.
- 
+
 ### inject-tcp method in detail
 
 A custom SOCKS proxy is run on the Kubernetes pod, which uses [Tor's extended SOCKSv5 protocol](https://gitweb.torproject.org/torsocks.git/tree/doc/socks/socks-extensions.txt) which adds support for DNS lookups.

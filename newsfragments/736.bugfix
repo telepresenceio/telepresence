@@ -1,0 +1,1 @@
+Telepresence no longer breaks all outbound network access when running on macOS with Docker Desktop.

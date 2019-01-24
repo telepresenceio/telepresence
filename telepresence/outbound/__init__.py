@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .command import command
 from .setup import setup
 
-__all__ = "setup", "command"
+__all__ = "setup",
