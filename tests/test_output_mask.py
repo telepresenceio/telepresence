@@ -6,7 +6,7 @@ import yaml
 from hamcrest import *
 from hypothesis import given, strategies as st, settings
 
-from telepresence.output_mask import mask_values, mask_sensitive_data
+from telepresence.runner.output_mask import mask_values, mask_sensitive_data
 
 TEST_JSON = ("  {\n"
              "    \"_id\": \"56af331efbeca6240c61b2ca\",\n"

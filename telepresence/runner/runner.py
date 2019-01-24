@@ -32,12 +32,12 @@ from threading import Thread
 from time import sleep, time
 
 from telepresence import TELEPRESENCE_BINARY
-from telepresence.output_mask import mask_sensitive_data
 from telepresence.utilities import kill_process, str_command
 
 from .cache import Cache
 from .launch import BackgroundProcessCrash, _launch_command
 from .output import Output
+from .output_mask import mask_sensitive_data
 from .span import Span
 
 _CleanupItem = typing.NamedTuple(
