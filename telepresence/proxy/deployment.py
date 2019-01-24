@@ -291,65 +291,68 @@ def swap_deployment_openshift(
     add_custom_nameserver: bool
 ) -> Tuple[str, str]:
     """
-    Swap out an existing DeploymentConfig.
+    Swap out an existing DeploymentConfig and also clears any triggers
+    which were registered, otherwise replaced telepresence pod would
+    be immediately swapped back to the original one because of
+    image change trigger.
 
     Returns (Deployment name, unique K8s label, JSON of original container that
     was swapped out.)
 
-    In practice OpenShift doesn't seem to do the right thing when a
-    DeploymentConfig is updated. In particular, we need to disable the image
-    trigger so that we can use the new image, but the replicationcontroller
-    then continues to deploy the existing image.
-
-    So instead we use a different approach than for Kubernetes, replacing the
-    current ReplicationController with one that uses the Telepresence image,
-    then restores it. We delete the pods to force the RC to do its thing.
     """
+
     run_id = runner.session_id
     deployment, container = _split_deployment_container(deployment_arg)
-    rcs = runner.get_output(
-        runner.kubectl(
-            "get", "rc", "-o", "name", "--selector",
-            "openshift.io/deployment-config.name=" + deployment
+
+    dc_json_with_triggers = json.loads(
+        runner.get_output(
+            runner.kubectl(
+                "get", "dc/{}".format(deployment), "-o", "json", "--export"
+            )
         )
     )
-    rc_name = sorted(
-        rcs.split(), key=lambda n: int(n.split("-")[-1])
-    )[0].split("/", 1)[1]
-    rc_json = json.loads(
+
+    runner.check_call(
+        runner.kubectl(
+            "set", "triggers", "dc/{}".format(deployment), "--remove-all"
+        )
+    )
+
+    dc_json = json.loads(
         runner.get_output(
-            runner.kubectl("get", "rc", "-o", "json", "--export", rc_name),
-            stderr=STDOUT
+            runner.kubectl(
+                "get", "dc/{}".format(deployment), "-o", "json", "--export"
+            )
         )
     )
 
     def apply_json(json_config):
         runner.check_call(
-            runner.kubectl("apply", "-f", "-"),
+            runner.kubectl("replace", "-f", "-"),
             input=json.dumps(json_config).encode("utf-8")
         )
-        # Now that we've updated the replication controller, delete pods to
-        # make sure changes get applied:
+        # Now that we've updated the deployment config,
+        # let's rollout latest version to apply the changes
         runner.check_call(
-            runner.kubectl(
-                "delete", "pod", "--selector", "deployment=" + rc_name
-            )
+            runner.kubectl("rollout", "latest", "dc/{}".format(deployment))
         )
 
     runner.add_cleanup(
-        "Restore original replication controller", apply_json, rc_json
+        "Restore original deployment config", apply_json,
+        dc_json_with_triggers
     )
 
-    container = _get_container_name(container, rc_json)
+    container = _get_container_name(container, dc_json)
 
-    new_rc_json, orig_container_json = new_swapped_deployment(
-        rc_json,
+    new_dc_json, orig_container_json = new_swapped_deployment(
+        dc_json,
         container,
         run_id,
         image_name,
         add_custom_nameserver,
     )
-    apply_json(new_rc_json)
+
+    apply_json(new_dc_json)
 
     _merge_expose_ports(expose, orig_container_json)
 
