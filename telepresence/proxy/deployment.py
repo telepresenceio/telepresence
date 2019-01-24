@@ -291,19 +291,14 @@ def swap_deployment_openshift(
     add_custom_nameserver: bool
 ) -> Tuple[str, str]:
     """
-    Swap out an existing DeploymentConfig.
+    Swap out an existing DeploymentConfig and also clears any triggers
+    which were registered, otherwise replaced telepresence pod would
+    be immediately swapped back to the original one because of
+    image change trigger.
 
     Returns (Deployment name, unique K8s label, JSON of original container that
     was swapped out.)
 
-    In practice OpenShift doesn't seem to do the right thing when a
-    DeploymentConfig is updated. In particular, we need to disable the image
-    trigger so that we can use the new image, but the replicationcontroller
-    then continues to deploy the existing image.
-
-    So instead we use a different approach than for Kubernetes, replacing the
-    current ReplicationController with one that uses the Telepresence image,
-    then restores it. We delete the pods to force the RC to do its thing.
     """
 
     run_id = runner.session_id
@@ -336,14 +331,14 @@ def swap_deployment_openshift(
             runner.kubectl("replace", "-f", "-"),
             input=json.dumps(json_config).encode("utf-8")
         )
-        # Now that we've updated the replication controller, delete pods to
-        # make sure changes get applied:
+        # Now that we've updated the deployment config,
+        # let's rollout latest version to apply the changes
         runner.check_call(
             runner.kubectl("rollout", "latest", "dc/{}".format(deployment))
         )
 
     runner.add_cleanup(
-        "Restore original replication controller", apply_json,
+        "Restore original deployment config", apply_json,
         dc_json_with_triggers
     )
 
