@@ -55,13 +55,15 @@ def setup(runner: Runner, args):
         if args.swap_deployment:
             try:
                 runner.get_output(
-                    runner.kubectl("get", "dc/%s" % args.swap_deployment),
+                    runner.kubectl(
+                        "get", "dc/{}".format(args.swap_deployment)
+                    ),
                     reveal=True,
                     stderr=STDOUT
                 )
                 deployment_type = "deploymentconfig"
             except CalledProcessError as exc:
-                print(
+                runner.show(
                     "Failed to find OpenShift deploymentconfig {}. "
                     "Will try regular k8s deployment. Reason:\n{}".format(
                         deployment_arg, exc.stdout
