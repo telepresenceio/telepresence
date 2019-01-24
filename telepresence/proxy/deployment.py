@@ -338,8 +338,7 @@ def swap_deployment_openshift(
         )
 
     runner.add_cleanup(
-        "Restore original deployment config", apply_json,
-        dc_json_with_triggers
+        "Restore original deployment config", apply_json, dc_json_with_triggers
     )
 
     container = _get_container_name(container, dc_json)

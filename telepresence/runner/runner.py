@@ -37,6 +37,7 @@ from telepresence.utilities import kill_process, str_command
 from .cache import Cache
 from .launch import BackgroundProcessCrash, _launch_command
 from .output import Output
+from .output_mask import mask_sensitive_data
 from .span import Span
 
 _CleanupItem = typing.NamedTuple(
@@ -301,14 +302,14 @@ class Runner(object):
             def logger(line):
                 """Just log"""
                 if line is not None:
-                    self.output.write(line, prefix=prefix)
+                    self.output.write(mask_sensitive_data(line), prefix=prefix)
         else:
 
             def logger(line):
                 """Log and capture"""
                 capture.append(line)
                 if line is not None:
-                    self.output.write(line, prefix=prefix)
+                    self.output.write(mask_sensitive_data(line), prefix=prefix)
 
         return logger
 
