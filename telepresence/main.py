@@ -17,9 +17,8 @@ Telepresence: local development environment for a remote Kubernetes cluster.
 
 import sys
 
-from telepresence import connect, intercept, mount, outbound, proxy, remote_env
+from telepresence import connect, mount, outbound, proxy, remote_env
 from telepresence.cli import crash_reporting, parse_args
-from telepresence.command_cli import parse_args as command_parse_args
 from telepresence.runner import Runner
 from telepresence.startup import KubeInfo, final_checks
 from telepresence.usage_tracking import call_scout
@@ -33,12 +32,6 @@ def main():
     ########################################
     # Preliminaries: No changes to the machine or the cluster, no cleanup
     # Capture environment info and the user's intent
-
-    # Check for a subcommand
-    with crash_reporting():
-        args = command_parse_args(None, only_for_commands=True)
-    if args is not None:
-        return command_main(args)
 
     with crash_reporting():
         args = parse_args()  # tab-completion stuff goes here
@@ -85,30 +78,6 @@ def main():
         )
 
         runner.wait_for_exit(user_process)
-
-
-def command_main(args):
-    """
-    Top-level function for Telepresence when executing subcommands
-    """
-
-    with crash_reporting():
-        runner = Runner(args.logfile, None, args.verbose)
-        span = runner.span()
-        runner.add_cleanup("Stop time tracking", span.end)
-        runner.kubectl = KubeInfo(runner, args)
-
-        args.operation = args.command
-        args.method = "teleproxy"
-        call_scout(runner, args)
-
-    if args.command == "outbound":
-        return outbound.command(runner)
-
-    if args.command == "intercept":
-        return intercept.command(runner, args)
-
-    raise runner.fail("Not implemented!")
 
 
 def run_telepresence():
