@@ -71,12 +71,12 @@ class SSH(object):
             ]
         )
 
-    def wait(self) -> None:
-        """Return when SSH server can be reached."""
+    def wait(self) -> bool:
+        """Return whether SSH server can be reached within 30 seconds."""
         for _ in self.runner.loop_until(30, 0.25):
             try:
                 self.runner.check_call(self.command(["/bin/true"]))
-                return
+                return True
             except CalledProcessError:
                 pass
-        raise RuntimeError("SSH isn't starting.")
+        return False
