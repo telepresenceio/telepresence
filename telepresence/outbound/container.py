@@ -191,11 +191,13 @@ def run_docker_command(
 
     # Start the container specified by the user:
     container_name = random_name()
-    docker_command = docker_runify([
-        "--name=" + container_name,
-        "--network=container:" + name,
-    ],
-                                   env=True)
+    docker_command = docker_runify(
+        [
+            "--name=" + container_name,
+            "--network=container:" + name,
+        ],
+        env=True,
+    )
 
     # Prepare container environment
     for key in remote_env:
@@ -212,13 +214,13 @@ def run_docker_command(
         if arg == "--init" or arg.startswith("--init=")
     ]
     # Older versions of Docker don't have --init:
-    if not init_args and "--init" in runner.get_output([
-        "docker", "run", "--help"
-    ]):
+    docker_run_help = runner.get_output(["docker", "run", "--help"])
+    if not init_args and "--init" in docker_run_help:
         docker_command += ["--init"]
     docker_command += docker_args
     span.end()
 
+    runner.show("Setup complete. Launching your container.")
     process = Popen(docker_command, env=docker_env)
 
     def terminate_if_alive():

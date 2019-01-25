@@ -57,13 +57,15 @@ def connect(
     if not ssh.wait():
         raise RuntimeError("SSH to the cluster failed to start.")
 
-    # In Docker mode this happens inside the local Docker container:
-    if not is_container_mode:
-        expose_local_services(
-            runner,
-            ssh,
-            list(expose.local_to_remote()),
-        )
+    # Create ssh tunnels. In the case of the container method, just show the
+    # associated messages; the tunnels will be created in the network
+    # container, where those messages are not visible to the user.
+    expose_local_services(
+        runner,
+        ssh,
+        list(expose.local_to_remote()),
+        show_only=is_container_mode
+    )
 
     # Start tunnels for the SOCKS proxy (local -> remote)
     # and the local server for the proxy to poll (remote -> local).

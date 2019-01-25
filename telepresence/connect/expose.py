@@ -20,13 +20,21 @@ from .ssh import SSH
 
 
 def expose_local_services(
-    runner: Runner, ssh: SSH, port_numbers: List[Tuple[int, int]]
+    runner: Runner,
+    ssh: SSH,
+    port_numbers: List[Tuple[int, int]],
+    show_only: bool = False,
 ) -> None:
     """Create SSH tunnels from remote proxy pod to local host.
 
     :param runner: The runner
     :param ssh: A 'SSH` instance.
     :param port_numbers: List of pairs of (local port, remote port).
+    :param show_only: Don't create the tunnels, just output info for the user
+
+    The show_only param is used to show messages for the container method; the
+    tunnels are created in the network container, where those messages are not
+    visible to the user.
     """
     if not port_numbers and runner.chatty:
         runner.show(
@@ -47,7 +55,7 @@ def expose_local_services(
             "-R",
             "*:{}:127.0.0.1:{}".format(remote_port, local_port),
         ])
-    if remote_forward_arguments:
+    if remote_forward_arguments and not show_only:
         runner.launch(
             "SSH port forward (exposed ports)",
             ssh.bg_command(remote_forward_arguments)
