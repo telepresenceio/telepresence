@@ -30,6 +30,15 @@ class SSH(object):
         self.runner = runner
         self.port = port
         self.user_at_host = user_at_host
+        self.required_args = [
+            # Ignore local configuration (~/.ssh/config)
+            "-F",
+            "/dev/null",
+            # Don't validate host key:
+            "-oStrictHostKeyChecking=no",
+            # Don't store host key:
+            "-oUserKnownHostsFile=/dev/null",
+        ]
 
     def command(
         self, additional_args: List[str], prepend_arguments: List[str] = []
@@ -40,16 +49,9 @@ class SSH(object):
         Takes command line arguments to run on remote machine, and optional
         arguments to ssh itself.
         """
-        return ["ssh"] + prepend_arguments + [
-            # Ignore local configuration (~/.ssh/config)
-            "-F",
-            "/dev/null",
+        return ["ssh"] + prepend_arguments + self.required_args + [
             # SSH with no warnings:
             "-vv" if self.runner.verbose else "-q",
-            # Don't validate host key:
-            "-oStrictHostKeyChecking=no",
-            # Don't store host key:
-            "-oUserKnownHostsFile=/dev/null",
             "-p",
             str(self.port),
             self.user_at_host,

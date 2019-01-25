@@ -232,10 +232,7 @@ def get_sshuttle_command(ssh: SSH, method: str = "auto") -> List[str]:
         "--method",
         method,
         "-e",
-        (
-            "ssh -oStrictHostKeyChecking=no " +
-            "-oUserKnownHostsFile=/dev/null -F /dev/null"
-        ),
+        "ssh {}".format(" ".join(ssh.required_args)),
         "-r",
         "{}:{}".format(ssh.user_at_host, ssh.port),
     ]
