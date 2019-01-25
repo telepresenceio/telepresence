@@ -198,7 +198,7 @@ func (w *Watcher) Start() {
 		w.started = true
 		w.mutex.Unlock()
 	}
-	for kind, _ := range w.watches {
+	for kind := range w.watches {
 		w.sync(kind)
 	}
 
