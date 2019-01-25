@@ -31,6 +31,10 @@ def existing_deployment(
     """
     Handle an existing deployment by doing nothing
     """
+    runner.show(
+        "Starting network proxy to cluster using the existing proxy "
+        "Deployment {}".format(deployment_arg)
+    )
     try:
         runner.get_output(
             runner.kubectl("get", "deployment", deployment_arg),
@@ -56,8 +60,14 @@ def create_new_deployment(
     """
     span = runner.span()
     run_id = runner.session_id
+    runner.show(
+        "Starting network proxy to cluster using "
+        "new Deployment {}".format(deployment_arg)
+    )
 
-    def remove_existing_deployment():
+    def remove_existing_deployment(quiet=False):
+        if not quiet:
+            runner.show("Cleaning up Deployment {}".format(deployment_arg))
         runner.get_output(
             runner.kubectl(
                 "delete",
@@ -68,7 +78,7 @@ def create_new_deployment(
         )
 
     runner.add_cleanup("Delete new deployment", remove_existing_deployment)
-    remove_existing_deployment()
+    remove_existing_deployment(quiet=True)
     command = [
         "run",  # This will result in using Deployment:
         "--restart=Always",
@@ -140,6 +150,11 @@ def supplant_deployment(
     span = runner.span()
     run_id = runner.session_id
 
+    runner.show(
+        "Starting network proxy to cluster by swapping out "
+        "Deployment {} with a proxy".format(deployment_arg)
+    )
+
     deployment, container = _split_deployment_container(deployment_arg)
     deployment_json = get_deployment_json(
         runner,
@@ -180,6 +195,11 @@ def supplant_deployment(
         ignore = []
         if not check:
             ignore = ["--ignore-not-found"]
+        else:
+            runner.show(
+                "Swapping Deployment {} back to its original state".
+                format(deployment_arg)
+            )
         runner.check_call(
             runner.kubectl(
                 "delete", "deployment", new_deployment_name, *ignore
