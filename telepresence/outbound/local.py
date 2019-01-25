@@ -99,6 +99,7 @@ def launch_inject(
     torsocks_env = set_up_torsocks(runner, socks_port)
     env_overrides.update(torsocks_env)
     env = get_local_env(runner, env_overrides, True)
+    runner.show("Setup complete. Launching your command.")
     process = Popen(command, env=env)
     runner.add_cleanup(
         "Terminate local process", terminate_local_process, runner, process
@@ -119,6 +120,7 @@ def launch_vpn(
     """
     connect_sshuttle(runner, remote_info, also_proxy, ssh)
     env = get_local_env(runner, env_overrides, False)
+    runner.show("Setup complete. Launching your command.")
     try:
         process = Popen(command, env=env)
     except OSError as exc:
