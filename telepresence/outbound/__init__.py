@@ -13,5 +13,6 @@
 # limitations under the License.
 
 from .setup import setup
+from .vpn import get_sshuttle_command
 
-__all__ = "setup",
+__all__ = "setup", "get_sshuttle_command"

@@ -49,13 +49,12 @@ When the process exits with exit code 100 that means the proxy is active.
 
 import sys
 from json import loads
+from socket import gaierror, gethostbyname
 from subprocess import Popen
-from socket import gethostbyname, gaierror
-from time import time, sleep
+from time import sleep, time
 
-from telepresence.connect.expose import expose_local_services
-from telepresence.connect.ssh import SSH
-from telepresence.outbound.vpn import get_sshuttle_command
+from telepresence.connect import SSH, expose_local_services
+from telepresence.outbound import get_sshuttle_command
 from telepresence.runner import Runner
 
 
