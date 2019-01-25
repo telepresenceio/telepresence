@@ -224,9 +224,26 @@ def serviceCIDR(runner: Runner):
     return service_cidr
 
 
+def get_sshuttle_command(ssh: SSH, method: str = "auto") -> List[str]:
+    return [
+        "sshuttle-telepresence",
+        "-v",
+        "--dns",
+        "--method",
+        method,
+        "-e",
+        (
+            "ssh -oStrictHostKeyChecking=no " +
+            "-oUserKnownHostsFile=/dev/null -F /dev/null"
+        ),
+        "-r",
+        "{}:{}".format(ssh.user_at_host, ssh.port),
+    ]
+
+
 def connect_sshuttle(
     runner: Runner, remote_info: RemoteInfo, hosts_or_ips: List[str], ssh: SSH
-):
+) -> None:
     """Connect to Kubernetes using sshuttle."""
     span = runner.span()
     sshuttle_method = "auto"
@@ -235,22 +252,10 @@ def connect_sshuttle(
         sshuttle_method = "nat"
     runner.launch(
         "sshuttle",
-        [
-            "sshuttle-telepresence",
-            "-v",
-            "--dns",
-            "--method",
-            sshuttle_method,
-            "-e",
-            (
-                "ssh -oStrictHostKeyChecking=no " +
-                "-oUserKnownHostsFile=/dev/null -F /dev/null"
-            ),
+        get_sshuttle_command(ssh, sshuttle_method) + [
             # DNS proxy running on remote pod:
             "--to-ns",
             "127.0.0.1:9053",
-            "-r",
-            "telepresence@127.0.0.1:" + str(ssh.port),
         ] + get_proxy_cidrs(runner, remote_info, hosts_or_ips),
         keep_session=True,  # Avoid trouble with interactive sudo
     )

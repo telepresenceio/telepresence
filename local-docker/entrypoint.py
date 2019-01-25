@@ -55,6 +55,7 @@ from time import time, sleep
 
 from telepresence.connect.expose import expose_local_services
 from telepresence.connect.ssh import SSH
+from telepresence.outbound.vpn import get_sshuttle_command
 from telepresence.runner import Runner
 
 
@@ -100,14 +101,8 @@ def proxy(config: dict):
     assert exclusions, netstat_output
 
     # Start the sshuttle VPN-like thing:
-    # XXX duplicates code in telepresence, remove duplication
-    main_process = Popen([
-        "sshuttle-telepresence", "-v", "--dns", "--method", "nat", "-e", (
-            "ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null " +
-            "-F /dev/null"
-        ), "-r",
-        "telepresence@127.0.0.1:38023"
-    ] + exclusions + cidrs)
+    sshuttle_cmd = get_sshuttle_command(ssh, "nat") + exclusions + cidrs
+    main_process = Popen(sshuttle_cmd)
 
     # Start the SSH tunnels to expose local services:
     expose_local_services(runner, ssh, expose_ports)
