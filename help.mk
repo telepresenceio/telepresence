@@ -3,7 +3,7 @@
 # Makefile snippet to auto-generate a `make help` rule.
 #
 ## Inputs: ##
-#   - Variable: help.body ?=
+#   - Variable: help.body ?= …
 ## Outputs: ##
 #   - .PHONY Target: help
 #
@@ -53,7 +53,7 @@
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
 include $(dir $(lastword $(MAKEFILE_LIST)))common.mk
 
-help.body ?=
+help.body ?= $(if $(NAME),  NAME    = $(NAME))$(if $(and $(NAME),$(VERSION)),$(NL))$(if $(VERSION),  VERSION = $(VERSION))
 
 help:  ## Show this message
 	@echo 'Usage: make [TARGETS...]'

@@ -16,11 +16,15 @@
 ifeq ($(go.module),)
 $(error Do not include _go-common.mk directly, include go-mod.mk or go-workspace.mk)
 endif
+_go-common.mk := $(lastword $(MAKEFILE_LIST))
 
 NAME ?= $(notdir $(go.module))
 
 go.DISABLE_GO_TEST ?=
 go.LDFLAGS ?=
+go.PLATFORMS ?= $(GOOS)_$(GOARCH)
+go.GOLANG_LINT_VERSION ?= 1.13.1
+go.GOLANG_LINT_FLAGS ?= $(if $(wildcard .golangci.yml .golangci.toml .golangci.json),,--disable-all --enable=gofmt --enable=govet)
 
 # It would be simpler to create this list if we could use Go modules:
 #
@@ -61,21 +65,20 @@ bin_%/$(notdir $(go.bin)): bin_%/.cache.$(notdir $(go.bin))
 endef
 $(foreach go.bin,$(go.bins),$(eval $(_go.bin.rule)))
 
-go-build: $(addprefix bin_$(GOOS)_$(GOARCH)/,$(notdir $(go.bins)))
+go-build: $(foreach _go.PLATFORM,$(go.PLATFORMS),$(addprefix bin_$(_go.PLATFORM)/,$(notdir $(go.bins))))
 .PHONY: go-build
 
-check-go-fmt: ## (Go) Check whether the code conforms to `gofmt`
-	test -z "$$(git ls-files '*.go' | grep -v -e ^vendor/ -e /vendor/ | xargs gofmt -d | tee /dev/stderr)"
-.PHONY: check-go-fmt
+$(dir $(_go-common.mk))golangci-lint: $(_go-common.mk)
+	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(@D) v$(go.GOLANG_LINT_VERSION)
 
-go-vet: ## (Go) Check the code with `go vet`
-go-vet: go-get
-	go vet $(go.pkgs)
-.PHONY: go-vet
+go-lint: ## (Go) Check the code with `golangci-lint`
+go-lint: $(dir $(_go-common.mk))golangci-lint go-get
+	$(dir $(_go-common.mk))golangci-lint run $(go.GOLANG_LINT_FLAGS) $(go.pkgs)
+.PHONY: go-lint
 
 go-fmt: ## (Go) Fixup the code with `go fmt`
 go-fmt: go-get
-	go fmt ./...
+	go fmt $(go.pkgs)
 .PHONY: go-fmt
 
 go-test: ## (Go) Check the code with `go test`
@@ -87,6 +90,11 @@ go-test: go-get
 # Hook in to common.mk
 
 build: go-build
-lint: check-go-fmt go-vet
+lint: go-lint
 check: go-test
 format: go-fmt
+
+clobber: _clobber-go-common
+_clobber-go-common:
+	rm -f $(dir $(_go-common.mk))golangci-lint
+.PHONY: _clobber-go-common
