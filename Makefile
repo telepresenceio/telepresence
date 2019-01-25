@@ -123,6 +123,16 @@ format: virtualenv  ## Format source code in-place
 
 #
 
+docs: ## Builds documentation
+	@exec docs/build-website.sh
+.PHONY: docs
+
+docs-serve: docs ## Serves documentation under localhost for easy editing with preview
+	@exec npm start --prefix docs/
+.PHONY: docs
+
+#
+
 help:  ## Show this message
 	@echo 'usage: make [TARGETS...] [VARIABLES...]'
 	@echo
