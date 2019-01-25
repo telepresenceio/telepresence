@@ -40,6 +40,14 @@ $ oc new-app --docker-image=datawire/hello-world --name=hello-world
 $ oc expose service hello-world
 ```
 
+**Important:** It might be necessary to define security context constraint in order for Telepresence to run privileged
+containers. Execute following using an account with sufficient permission (i.e. for local cluster login first as `system:admin`):
+
+```console
+$ oc adm policy add-scc-to-user anyuid -z default -n hello-world
+$ oc adm policy add-scc-to-user privileged -z default -n hello-world
+```
+
 The service will be running once the following shows a pod with `Running` status that *doesn't* have "deploy" in its name:
 
 ```console
