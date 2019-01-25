@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from .connect import connect, setup
+from .expose import expose_local_services
 from .ssh import SSH
 
-__all__ = "connect", "setup", "SSH"
+__all__ = "connect", "expose_local_services", "setup", "SSH"

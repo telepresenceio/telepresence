@@ -38,20 +38,8 @@ def mount_remote_volumes(
         middle = []
     try:
         runner.get_output(
-            sudo_prefix + [
-                "sshfs",
-                "-p",
-                str(ssh.port),
-                # Don't load config file so it doesn't break us:
-                "-F",
-                "/dev/null",
-                # Don't validate host key:
-                "-o",
-                "StrictHostKeyChecking=no",
-                # Don't store host key:
-                "-o",
-                "UserKnownHostsFile=/dev/null",
-            ] + middle + ["telepresence@127.0.0.1:/", mount_dir],
+            sudo_prefix + ["sshfs", "-p", str(ssh.port)] + ssh.required_args +
+            middle + ["{}:/".format(ssh.user_at_host), mount_dir],
             stderr=STDOUT
         )
         mounted = True
