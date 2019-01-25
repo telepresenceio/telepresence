@@ -62,5 +62,5 @@ understand the `-r` flag.
 
 	$ make clobber
 	$ rm -rf -- .go-workspace vendor glide.* Gopkg.*
-	$ sed -E 's,/go-workspace\.mk,/go-mod.mk,' Makefile
-	$ sed -e '/\.go-workspace/d' .gitignore
+	$ sed -i -E 's,/go-workspace\.mk,/go-mod.mk,' Makefile
+	$ sed -i -e '/\.go-workspace/d' .gitignore
