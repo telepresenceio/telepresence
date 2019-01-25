@@ -1,4 +1,4 @@
-# Development info
+# Development Guide
 
 ### Known issues
 
@@ -55,6 +55,14 @@ You can also build images and push them to a registry without running any tests:
 ```console
 $ make docker-push TELEPRESENCE_REGISTRY=<Docker registry for tag and push>
 ```
+
+If you want to push images to the local registry, start the container first:
+
+```console
+$ docker run -d -p 5000:5000 --restart=always --name docker-local-registry registry
+```
+
+and then simply use `TELEPRESENCE_REGISTRY=localhost:5000`.
 
 Or if you want to build images using minikube (untested):
 
@@ -230,7 +238,7 @@ A single end-to-end test to verify a gross code path combined with many unit tes
 Formatting is enforced by the installed `yapf` tool; to reformat the code, you can do:
 
 ```console
-$ virtualenv/bin/yapf -r -i telepresence
+$ make format
 ```
 
 ### Releasing Telepresence
