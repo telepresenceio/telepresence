@@ -81,7 +81,7 @@ func (s *Syncer) write() string {
 }
 
 func (s *Syncer) cleanup() {
-	for k, _ := range s.snapshots {
+	for k := range s.snapshots {
 		keep := false
 		for c := s.SyncCount; c > s.SyncCount-10; c-- {
 			id := fmt.Sprintf("%d", c)

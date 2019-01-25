@@ -12,3 +12,6 @@
 # docker.mk
 /docker-port-forward.lock
 /docker-port-forward.log
+
+# _go-common.mk
+/golangci-lint

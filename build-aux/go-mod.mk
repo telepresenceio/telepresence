@@ -6,14 +6,15 @@
 #  - File: ./go.mod
 #  - Variable: go.DISABLE_GO_TEST ?=
 #  - Variable: go.LDFLAGS ?=
+#  - Variable: go.PLATFORMS ?= $(GOOS)_$(GOARCH)
+#  - Variable: go.GOLANG_LINT_FLAGS ?= …
 ## Outputs ##
 #  - Variable: go.module = EXAMPLE.COM/YOU/YOURREPO
 #  - Variable: go.bins = List of "main" Go packages
 #  - Variable: NAME ?= $(notdir $(go.module))
 #  - .PHONY Target: go-get
 #  - .PHONY Target: go-build
-#  - .PHONY Target: check-go-fmt
-#  - .PHONY Target: go-vet
+#  - .PHONY Target: go-lint
 #  - .PHONY Target: go-fmt
 #  - .PHONY Target: go-test
 ## common.mk targets ##
@@ -21,6 +22,11 @@
 #  - lint
 #  - check
 #  - format
+#  - clobber
+#
+# `go.PLATFORMS` is a list of OS_ARCH pairs that specifies which
+# platforms `make build` should compile for.  Unlike most variables,
+# it must be specified *before* including go-workspace.mk.
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
 ifneq ($(go.module),)
 $(error Only include one of go-mod.mk or go-workspace.mk)

@@ -5,7 +5,7 @@
 #
 ## Inputs ##
 #  - Variable: VERSION
-#  - Variable: DOCKER_IMAGE ?= $(DOCKER_REGISTRY)/$(notdir $*):$(VERSION)
+#  - Variable: DOCKER_IMAGE ?= $(DOCKER_REGISTRY)/$(notdir $*):$(or $(VERSION),latest)
 ## Outputs ##
 #  - Target        : %.docker: %/Dockerfile  # tags image as localhost:31000/$(notdir $*):$(VERSION)
 #  - .PHONY Target : %.docker.clean
@@ -24,7 +24,6 @@ _docker.mk := $(lastword $(MAKEFILE_LIST))
 include $(dir $(_docker.mk))flock.mk
 include $(dir $(_docker.mk))kubeapply.mk
 include $(dir $(_docker.mk))kubernaut-ui.mk
-include $(dir $(_docker.mk))version.mk
 
 ifeq ($(GOOS),darwin)
 docker.LOCALHOST = host.docker.internal
@@ -32,37 +31,51 @@ else
 docker.LOCALHOST = localhost
 endif
 
-DOCKER_IMAGE ?= $(DOCKER_REGISTRY)/$(notdir $*):$(VERSION)
+DOCKER_IMAGE ?= $(DOCKER_REGISTRY)/$(notdir $*):$(or $(VERSION),latest)
 
 _docker.port-forward = $(dir $(_docker.mk))docker-port-forward
 
+# %.docker file contents:
+#
+#  line 1: local tag name
+#  line 2: image hash
 %.docker: %/Dockerfile
-	docker build -t $(docker.LOCALHOST):31000/$(notdir $*):$(or $(VERSION),latest) $*
-ifneq ($(CI),)
-	docker image inspect $(docker.LOCALHOST):31000/$(notdir $*):$(or $(VERSION),latest) --format='{{.Id}}' > $(@D)/.tmp.$(@F).tmp
-	if test -e $@; then cmp -s $(@D)/.tmp.$(@F).tmp $@; fi
-	rm -f $(@D)/.tmp.$(@F).tmp
-endif
-	docker image inspect $(docker.LOCALHOST):31000/$(notdir $*):$(or $(VERSION),latest) --format='{{.Id}}' > $@
+	printf '%s\n' '$(docker.LOCALHOST):31000/$(notdir $*):$(or $(VERSION),latest)' > $(@D)/.tmp.$(@F).tmp
+	docker build -t "$$(head -n1 $(@D)/.tmp.$(@F).tmp)" $*
+	docker image inspect "$$(head -n1 $(@D)/.tmp.$(@F).tmp)" --format='{{.Id}}' >> $(@D)/.tmp.$(@F).tmp
+	@{ \
+		PS4=''; set -x; \
+		if cmp -s $(@D)/.tmp.$(@F).tmp $@; then \
+			rm -f $(@D)/.tmp.$(@F).tmp || true; \
+		else \
+			if test -e $@; then \
+				$(if $(CI),false This should not happen in CI: $@ should not change,docker image rm "$$(head -n1 $@)" || true); \
+			fi && \
+			$(if $(VERSION),docker tag "$$(tail -n1 $(@D)/.tmp.$(@F).tmp)" '$(docker.LOCALHOST):31000/$(notdir $*):latest', true) && \
+			mv -f $(@D)/.tmp.$(@F).tmp $@; \
+		fi; \
+	}
 
 %.docker.clean:
-	if [ -e $*.docker ]; then docker image rm $$(cat $*.docker); fi
+	if [ -e $*.docker ]; then docker image rm "$$(head -n1 $*.docker)" || true; fi
 	rm -f $*.docker
 .PHONY: %.docker.clean
 
+# %.docker.knaut-push file contents:
+#
+#  line 1: in-cluster tag name
 %.docker.knaut-push: %.docker $(KUBEAPPLY) $(KUBECONFIG)
 	$(KUBEAPPLY) -f $(dir $(_docker.mk))docker-registry.yaml
 	{ \
-	    $(FLOCK) $(_docker.port-forward).lock kubectl port-forward --namespace=docker-registry deployment/registry 31000:5000 >$(_docker.port-forward).log 2>&1 & \
-	    trap "kill $$!; wait" EXIT; \
+	    trap "kill $$($(FLOCK) $(_docker.port-forward).lock sh -c 'kubectl port-forward --namespace=docker-registry deployment/registry 31000:5000 >$(_docker.port-forward).log 2>&1 & echo $$!')" EXIT; \
 	    while ! curl -i http://localhost:31000/ 2>/dev/null; do sleep 1; done; \
-	    docker push $(docker.LOCALHOST):31000/$(notdir $*):$(VERSION); \
+	    docker push "$$(head -n1 $<)"; \
 	}
-	echo localhost:31000/$(notdir $*):$(VERSION) > $@
+	sed '1{ s/^host\.docker\.internal:/localhost:/; q; }' $< > $@
 
 %.docker.push: %.docker
-	docker tag $$(cat $<) $(DOCKER_IMAGE)
-	docker push $(DOCKER_IMAGE)
+	docker tag "$$(tail -n1 $<)" '$(DOCKER_IMAGE)'
+	docker push '$(DOCKER_IMAGE)'
 .PHONY: %.docker.push
 
 _clean-docker:
