@@ -1,6 +1,33 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.97 (January 25, 2019)
+
+Backwards incompatible changes:
+
+* A successful Telepresence session now exits with the return code of your process. This should make it easier to use Telepresence in scripts.
+  ([#886](https://github.com/telepresenceio/telepresence/issues/886))
+
+Bug fixes:
+
+* Telepresence should no longer crash if the terminal width is unavailable.
+  ([#901](https://github.com/telepresenceio/telepresence/issues/901))
+* The container method now outputs the same helpful text about which ports are exposed as the other methods do.
+  ([#235](https://github.com/telepresenceio/telepresence/issues/235))
+* Telepresence tries to detect Kubernetes in Docker Desktop and work around networking issues the same way as for Minikube.
+  Thanks to Rohan Singh for the patch.
+  ([#736](https://github.com/telepresenceio/telepresence/issues/736))
+
+Misc:
+
+* Support for OpenShift has been brought up to date.
+  Thanks to Bartosz Majsak for the patch.
+* Telepresence masks (hides) Kubernetes access tokens in the log file.
+  Previously, access tokens would be logged when running in verbose mode.
+  Thanks to Bartosz Majsak for the patch.
+  ([#889](https://github.com/telepresenceio/telepresence/issues/889))
+* Telepresence has native packages for the recently-released Fedora 29 and Ubuntu Cosmic.
+  ([#876](https://github.com/telepresenceio/telepresence/issues/876))
 
 #### 0.96 (December 14, 2018)
 
