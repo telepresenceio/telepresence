@@ -25,6 +25,8 @@ type listWatchAdapter struct {
 }
 
 func (lw listWatchAdapter) List(options v1.ListOptions) (runtime.Object, error) {
+	// silently coerce the returned *unstructured.UnstructuredList
+	// struct to a runtime.Object interface.
 	return lw.resource.List(options)
 }
 
