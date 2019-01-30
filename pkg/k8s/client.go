@@ -1,3 +1,10 @@
+// Package k8s is a facade over (super-terrible, very difficult to understand)
+// client-go to provide a higher-level interface to Kubernetes, with support
+// for simple, high-level APIs for watching resources (including from stable,
+// long-running processes) and implementing basic controllers.
+//
+// It is intended to offer the same API for (nearly) every Kubernetes resource,
+// including easy CRD access without codegen.
 package k8s
 
 import (
@@ -12,6 +19,8 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/pkg/errors"
 )
 
 // KubeInfo holds the data required to talk to a cluster
@@ -88,7 +97,8 @@ func (info *KubeInfo) GetRestConfig() (*rest.Config, error) {
 	return config, nil
 }
 
-// GetKubectl returns the arguents for a runnable kubectl command
+// GetKubectl returns the arguents for a runnable kubectl command that talks to
+// the same cluster as the associated ClientConfig.
 func (info *KubeInfo) GetKubectl(args string) string {
 	res := []string{"kubectl"}
 	if len(info.Kubeconfig) != 0 {
@@ -99,11 +109,14 @@ func (info *KubeInfo) GetKubectl(args string) string {
 	return strings.Join(res[1:], " ") // Drop leading "kubectl" because reasons...
 }
 
+// Client is the top-level handle to the Kubernetes cluster.
 type Client struct {
 	config    *rest.Config
 	resources []*v1.APIResourceList
 }
 
+// NewClient constructs a k8s.Client, optionally using a previously-constructed
+// KubeInfo.
 func NewClient(info *KubeInfo) *Client {
 	if info == nil {
 		var err error
@@ -133,15 +146,22 @@ func NewClient(info *KubeInfo) *Client {
 	}
 }
 
-type ResourceInfo struct {
+// resourceInfo describes a Kubernetes resource type in a particular cluster.
+// See resolve() for more information.
+type resourceInfo struct {
 	Group      string
 	Version    string
-	Name       string
-	Kind       string
+	Name       string // lowercase plural
+	Kind       string // uppercase singular
 	Namespaced bool
 }
 
-func (c *Client) resolve(resource string) ResourceInfo {
+// resolve takes a specially-formatted string (like you might pass to kubectl
+// get) and returns cluster-specific canonical information about that resource
+// type. E.g.,
+//   "pod" --> {"", "v1", "pods", "Pod", true}
+//   "deployment" --> {"extensions", "v1beta1", "deployments", "Deployment", true}
+func (c *Client) resolve(resource string) resourceInfo {
 	if resource == "" {
 		panic("empty resource string")
 	}
@@ -170,7 +190,7 @@ func (c *Client) resolve(resource string) ResourceInfo {
 					default:
 						panic("unrecognized GroupVersion")
 					}
-					return ResourceInfo{group, version, r.Name, r.Kind, r.Namespaced}
+					return resourceInfo{group, version, r.Name, r.Kind, r.Namespaced}
 				}
 			}
 		}
@@ -178,16 +198,21 @@ func (c *Client) resolve(resource string) ResourceInfo {
 	panic(fmt.Sprintf("unrecognized resource: %s", resource))
 }
 
+// List calls ListNamespace(...) with the empty string as the namespace, which
+// means all namespaces if the resource is namespaced.
 func (c *Client) List(resource string) ([]Resource, error) {
 	return c.ListNamespace("", resource)
 }
 
+// ListNamespace returns a slice of Resources.
+// If the resource is not namespaced, the namespace must be the empty string.
+// If the resource is namespaced, the empty string lists across all namespaces.
 func (c *Client) ListNamespace(namespace, resource string) ([]Resource, error) {
 	ri := c.resolve(resource)
 
 	dyn, err := dynamic.NewForConfig(c.config)
 	if err != nil {
-		log.Fatal(err)
+		return nil, errors.Wrap(err, "failed to create dynamic context")
 	}
 
 	cli := dyn.Resource(schema.GroupVersionResource{
