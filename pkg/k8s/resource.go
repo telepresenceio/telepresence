@@ -114,6 +114,8 @@ func (m Map) getBool(key string) bool {
 	}
 }
 
+// Resource is map from strings to any with some convenience methods for
+// accessing typical Kubernetes resource fields.
 type Resource map[string]interface{}
 
 func (r Resource) Kind() string {
