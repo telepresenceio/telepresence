@@ -213,7 +213,7 @@ func (w *Watcher) Start() {
 
 func (w *Watcher) sync(kind string) {
 	watch := w.watches[kind]
-	resources, err := w.client.List(kind)
+	resources, err := w.client.ListNamespace(watch.namespace, kind)
 	if err != nil {
 		log.Fatal(err)
 	}
