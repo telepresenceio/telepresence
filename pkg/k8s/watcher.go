@@ -38,7 +38,6 @@ type Watcher struct {
 	mutex        sync.Mutex
 	started      bool
 	stop         chan struct{}
-	stopChans    []chan struct{}
 	stoppedChans []chan struct{}
 }
 
@@ -57,16 +56,6 @@ func (c *Client) Watcher() *Watcher {
 		watches: make(map[string]watch),
 		stop:    make(chan struct{}),
 	}
-
-	go func() {
-		<-w.stop
-		for _, c := range w.stopChans {
-			close(c)
-		}
-		for {
-			<-w.stop
-		}
-	}()
 
 	return w
 }
@@ -177,13 +166,11 @@ func (w *Watcher) WatchNamespace(namespace, resources string, listener func(*Wat
 		},
 	)
 
-	stopChan := make(chan struct{})
 	stoppedChan := make(chan struct{})
 	w.stoppedChans = append(w.stoppedChans, stoppedChan)
-	w.stopChans = append(w.stopChans, stopChan)
 
 	runner := func() {
-		controller.Run(stopChan)
+		controller.Run(w.stop)
 		close(stoppedChan)
 	}
 
@@ -290,7 +277,7 @@ func (w *Watcher) Exists(kind, qname string) bool {
 }
 
 func (w *Watcher) Stop() {
-	w.stop <- struct{}{}
+	close(w.stop)
 }
 
 func (w *Watcher) Wait() {
