@@ -87,7 +87,7 @@ func (w *Watcher) Canonical(name string) string {
 	}
 
 	ri := w.client.ResolveResourceType(kind)
-	kind = strings.ToLower(ri.Kind)
+	kind = ri.Name
 
 	if name == "" {
 		return kind
