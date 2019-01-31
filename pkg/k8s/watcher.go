@@ -86,7 +86,7 @@ func (w *Watcher) Canonical(name string) string {
 		return ""
 	}
 
-	ri := w.client.resolve(kind)
+	ri := w.client.ResolveResourceType(kind)
 	kind = strings.ToLower(ri.Kind)
 
 	if name == "" {
@@ -118,7 +118,7 @@ func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
 }
 
 func (w *Watcher) WatchNamespace(namespace, resources string, listener func(*Watcher)) error {
-	ri := w.client.resolve(resources)
+	ri := w.client.ResolveResourceType(resources)
 	dyn, err := dynamic.NewForConfig(w.client.config)
 	if err != nil {
 		log.Fatal(err)
