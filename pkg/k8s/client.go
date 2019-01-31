@@ -97,7 +97,7 @@ func (info *KubeInfo) GetRestConfig() (*rest.Config, error) {
 	return config, nil
 }
 
-// GetKubectl returns the arguents for a runnable kubectl command that talks to
+// GetKubectl returns the arguments for a runnable kubectl command that talks to
 // the same cluster as the associated ClientConfig.
 func (info *KubeInfo) GetKubectl(args string) string {
 	res := []string{"kubectl"}
