@@ -18,13 +18,13 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-type empty struct{}
-
 type listWatchAdapter struct {
 	resource dynamic.ResourceInterface
 }
 
 func (lw listWatchAdapter) List(options v1.ListOptions) (runtime.Object, error) {
+	// silently coerce the returned *unstructured.UnstructuredList
+	// struct to a runtime.Object interface.
 	return lw.resource.List(options)
 }
 
@@ -33,13 +33,12 @@ func (lw listWatchAdapter) Watch(options v1.ListOptions) (pwatch.Interface, erro
 }
 
 type Watcher struct {
-	client       *Client
-	watches      map[string]watch
-	mutex        sync.Mutex
-	started      bool
-	stop         chan empty
-	stopChans    []chan struct{}
-	stoppedChans []chan empty
+	client  *Client
+	watches map[string]watch
+	mutex   sync.Mutex
+	started bool
+	stop    chan struct{}
+	wg      sync.WaitGroup
 }
 
 type watch struct {
@@ -55,22 +54,21 @@ func (c *Client) Watcher() *Watcher {
 	w := &Watcher{
 		client:  c,
 		watches: make(map[string]watch),
-		stop:    make(chan empty),
+		stop:    make(chan struct{}),
 	}
-
-	go func() {
-		<-w.stop
-		for _, c := range w.stopChans {
-			close(c)
-		}
-		for {
-			<-w.stop
-		}
-	}()
 
 	return w
 }
 
+// Canonical returns the canonical form of either a resource name or a
+// resource type name:
+//
+//   ResourceName: TYPE/NAME[.NAMESPACE]
+//   ResourceType: TYPE
+//
+// BUG(lukeshu): Canonical's TYPE is just the resource type
+// name/kind/shortname; it does NOT include the version or API group.
+// This is because of limitations in Client.ResolveResourceType.
 func (w *Watcher) Canonical(name string) string {
 	parts := strings.Split(name, "/")
 
@@ -86,8 +84,9 @@ func (w *Watcher) Canonical(name string) string {
 		return ""
 	}
 
-	ri := w.client.resolve(kind)
-	kind = strings.ToLower(ri.Kind)
+	ri := w.client.ResolveResourceType(kind)
+	//kind = ri.Name + "." + ri.Version + "." + ri.Group
+	kind = ri.Name
 
 	if name == "" {
 		return kind
@@ -118,10 +117,10 @@ func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
 }
 
 func (w *Watcher) WatchNamespace(namespace, resources string, listener func(*Watcher)) error {
-	ri := w.client.resolve(resources)
+	ri := w.client.ResolveResourceType(resources)
 	dyn, err := dynamic.NewForConfig(w.client.config)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	resource := dyn.Resource(schema.GroupVersionResource{
@@ -167,14 +166,9 @@ func (w *Watcher) WatchNamespace(namespace, resources string, listener func(*Wat
 		},
 	)
 
-	stopChan := make(chan struct{})
-	stoppedChan := make(chan empty)
-	w.stoppedChans = append(w.stoppedChans, stoppedChan)
-	w.stopChans = append(w.stopChans, stopChan)
-
 	runner := func() {
-		controller.Run(stopChan)
-		close(stoppedChan)
+		controller.Run(w.stop)
+		w.wg.Done()
 	}
 
 	kind := w.Canonical(ri.Kind)
@@ -206,6 +200,7 @@ func (w *Watcher) Start() {
 		watch.invoke()
 	}
 
+	w.wg.Add(len(w.watches))
 	for _, watch := range w.watches {
 		go watch.runner()
 	}
@@ -245,7 +240,7 @@ func (w *Watcher) List(kind string) []Resource {
 func (w *Watcher) UpdateStatus(resource Resource) (Resource, error) {
 	kind := w.Canonical(resource.Kind())
 	if kind == "" {
-		return nil, fmt.Errorf("unknow resource: %v", resource.Kind())
+		return nil, fmt.Errorf("unknown resource: %v", resource.Kind())
 	}
 	watch, ok := w.watches[kind]
 	if !ok {
@@ -280,12 +275,10 @@ func (w *Watcher) Exists(kind, qname string) bool {
 }
 
 func (w *Watcher) Stop() {
-	w.stop <- empty{}
+	close(w.stop)
 }
 
 func (w *Watcher) Wait() {
 	w.Start()
-	for _, c := range w.stoppedChans {
-		<-c
-	}
+	w.wg.Wait()
 }

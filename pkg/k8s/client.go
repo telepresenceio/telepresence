@@ -97,7 +97,7 @@ func (info *KubeInfo) GetRestConfig() (*rest.Config, error) {
 	return config, nil
 }
 
-// GetKubectl returns the arguents for a runnable kubectl command that talks to
+// GetKubectl returns the arguments for a runnable kubectl command that talks to
 // the same cluster as the associated ClientConfig.
 func (info *KubeInfo) GetKubectl(args string) string {
 	res := []string{"kubectl"}
@@ -146,9 +146,14 @@ func NewClient(info *KubeInfo) *Client {
 	}
 }
 
-// resourceInfo describes a Kubernetes resource type in a particular cluster.
-// See resolve() for more information.
-type resourceInfo struct {
+// ResourceType describes a Kubernetes resource type in a particular cluster.
+// See ResolveResourceType() for more information.
+//
+// It is morally equivalent to a:
+//  - k8s.io/apimachinery/pkg/apis/meta/v1.APIResource
+//  - k8s.io/apimachinery/pkg/runtime/schema.GroupVersionKind (+Namespaced bool)
+//  - k8s.io/apimachinery/pkg/runtime/schema.GroupVersionResource (+Namespaced bool)
+type ResourceType struct {
 	Group      string
 	Version    string
 	Name       string // lowercase plural
@@ -156,12 +161,30 @@ type resourceInfo struct {
 	Namespaced bool
 }
 
-// resolve takes a specially-formatted string (like you might pass to kubectl
-// get) and returns cluster-specific canonical information about that resource
-// type. E.g.,
-//   "pod" --> {"", "v1", "pods", "Pod", true}
-//   "deployment" --> {"extensions", "v1beta1", "deployments", "Deployment", true}
-func (c *Client) resolve(resource string) resourceInfo {
+// ResolveResourceType takes the name of a resource type (singular,
+// plural, or an abbreviation; like you might pass to `kubectl get`)
+// and returns cluster-specific canonical information about that
+// resource type.
+//
+// For example, with Kubernetes v1.10.5:
+//   "pod"        --> {Group: "",           Version: "v1",      Name: "pods",        Kind: "Pod",        Namespaced: true}
+//   "deployment" --> {Group: "extensions", Version: "v1beta1", Name: "deployments", Kind: "Deployment", Namespaced: true}
+//
+// Newer versions of Kubernetes might instead put "pod" in the "core"
+// group, or put "deployment" in apps/v1 instead of
+// extensions/v1beta1.  Because of discrepancies between different
+// clusters, it may be a good idea to use this even for internal
+// callers, rather than treating it purely as a UI concern.
+//
+// BUG(lukeshu): ResolveResourceType currently only takes the type name, it should
+// accept TYPE[[.VERSION].GROUP], like `kubectl`.
+//
+// BUG(lukeshu): ResolveResourceType currently returns the first
+// match.  In the event of multiple resource types with the same name
+// (multiple API groups, multiple versions), it should do something
+// more intelligent than that; it should at least pay attention to the
+// API group's PreferredVersion.
+func (c *Client) ResolveResourceType(resource string) ResourceType {
 	if resource == "" {
 		panic("empty resource string")
 	}
@@ -169,9 +192,9 @@ func (c *Client) resolve(resource string) resourceInfo {
 	for _, rl := range c.resources {
 		for _, r := range rl.APIResources {
 			candidates := []string{
-				r.Name,
-				r.Kind,
-				r.SingularName,
+				r.Name,         // lowercase plural
+				r.Kind,         // uppercase singular
+				r.SingularName, // lowercase singular
 			}
 			candidates = append(candidates, r.ShortNames...)
 
@@ -190,7 +213,7 @@ func (c *Client) resolve(resource string) resourceInfo {
 					default:
 						panic("unrecognized GroupVersion")
 					}
-					return resourceInfo{group, version, r.Name, r.Kind, r.Namespaced}
+					return ResourceType{group, version, r.Name, r.Kind, r.Namespaced}
 				}
 			}
 		}
@@ -208,7 +231,7 @@ func (c *Client) List(resource string) ([]Resource, error) {
 // If the resource is not namespaced, the namespace must be the empty string.
 // If the resource is namespaced, the empty string lists across all namespaces.
 func (c *Client) ListNamespace(namespace, resource string) ([]Resource, error) {
-	ri := c.resolve(resource)
+	ri := c.ResolveResourceType(resource)
 
 	dyn, err := dynamic.NewForConfig(c.config)
 	if err != nil {
