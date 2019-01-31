@@ -18,8 +18,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-type empty struct{}
-
 type listWatchAdapter struct {
 	resource dynamic.ResourceInterface
 }
@@ -39,9 +37,9 @@ type Watcher struct {
 	watches      map[string]watch
 	mutex        sync.Mutex
 	started      bool
-	stop         chan empty
+	stop         chan struct{}
 	stopChans    []chan struct{}
-	stoppedChans []chan empty
+	stoppedChans []chan struct{}
 }
 
 type watch struct {
@@ -57,7 +55,7 @@ func (c *Client) Watcher() *Watcher {
 	w := &Watcher{
 		client:  c,
 		watches: make(map[string]watch),
-		stop:    make(chan empty),
+		stop:    make(chan struct{}),
 	}
 
 	go func() {
@@ -180,7 +178,7 @@ func (w *Watcher) WatchNamespace(namespace, resources string, listener func(*Wat
 	)
 
 	stopChan := make(chan struct{})
-	stoppedChan := make(chan empty)
+	stoppedChan := make(chan struct{})
 	w.stoppedChans = append(w.stoppedChans, stoppedChan)
 	w.stopChans = append(w.stopChans, stopChan)
 
@@ -292,7 +290,7 @@ func (w *Watcher) Exists(kind, qname string) bool {
 }
 
 func (w *Watcher) Stop() {
-	w.stop <- empty{}
+	w.stop <- struct{}{}
 }
 
 func (w *Watcher) Wait() {
