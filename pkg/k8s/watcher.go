@@ -120,7 +120,7 @@ func (w *Watcher) WatchNamespace(namespace, resources string, listener func(*Wat
 	ri := w.client.ResolveResourceType(resources)
 	dyn, err := dynamic.NewForConfig(w.client.config)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	resource := dyn.Resource(schema.GroupVersionResource{
