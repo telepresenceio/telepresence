@@ -33,12 +33,12 @@ func (lw listWatchAdapter) Watch(options v1.ListOptions) (pwatch.Interface, erro
 }
 
 type Watcher struct {
-	client       *Client
-	watches      map[string]watch
-	mutex        sync.Mutex
-	started      bool
-	stop         chan struct{}
-	stoppedChans []chan struct{}
+	client  *Client
+	watches map[string]watch
+	mutex   sync.Mutex
+	started bool
+	stop    chan struct{}
+	wg      sync.WaitGroup
 }
 
 type watch struct {
@@ -166,12 +166,9 @@ func (w *Watcher) WatchNamespace(namespace, resources string, listener func(*Wat
 		},
 	)
 
-	stoppedChan := make(chan struct{})
-	w.stoppedChans = append(w.stoppedChans, stoppedChan)
-
 	runner := func() {
 		controller.Run(w.stop)
-		close(stoppedChan)
+		w.wg.Done()
 	}
 
 	kind := w.Canonical(ri.Kind)
@@ -203,6 +200,7 @@ func (w *Watcher) Start() {
 		watch.invoke()
 	}
 
+	w.wg.Add(len(w.watches))
 	for _, watch := range w.watches {
 		go watch.runner()
 	}
@@ -282,7 +280,5 @@ func (w *Watcher) Stop() {
 
 func (w *Watcher) Wait() {
 	w.Start()
-	for _, c := range w.stoppedChans {
-		<-c
-	}
+	w.wg.Wait()
 }
