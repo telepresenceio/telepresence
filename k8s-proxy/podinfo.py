@@ -17,6 +17,32 @@ Emit information about the pod as a JSON blob
 
 import json
 import os
+import re
+
+IGNORED_MOUNTS = [
+    r'/sys($|/.*)', r'/proc($|/.*)', r'/dev($|/.*)', r'/etc/hostname$',
+    r'/etc/resolv.conf$', r'/etc/hosts$', r'/$'
+]
+
+
+def get_mount_points():
+    "Returns a filtered list of mount-points"
+    ret = []
+
+    ignore = re.compile('(' + '|'.join(IGNORED_MOUNTS) + ')')
+    splitter = re.compile(r'\s+')
+
+    try:
+        with open('/proc/mounts', 'r') as mount_fp:
+            for line in mount_fp:
+                mount_point = splitter.split(line)[1]
+                if not ignore.match(mount_point):
+                    ret.append(mount_point)
+    except IOError:
+        return []
+
+    return ret
+
 
 print(
     json.dumps(
@@ -24,6 +50,7 @@ print(
             env=dict(os.environ),
             hostname=open("/etc/hostname").read(),
             resolv=open("/etc/resolv.conf").read(),
+            mountpoints=get_mount_points(),
         )
     )
 )

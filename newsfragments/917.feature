@@ -1,0 +1,1 @@
+Add a `TELEPRESENCE_MOUNTS` env var with a automatically generated list of remote mount points.

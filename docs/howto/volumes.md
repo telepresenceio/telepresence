@@ -4,6 +4,10 @@ Volume support requires a small amount of work on your part.
 The root directory where all the volumes can be found will be set to the `TELEPRESENCE_ROOT` environment variable in the shell run by `telepresence`.
 You will then need to use that env variable as the root for volume paths you are opening.
 
+Telepresence will attempt to gather a list of all mount points that exist and put them into
+the `TELEPRESENCE_MOUNTS` variable, seperated by `:` characters.  This allows automated discovery
+of mount-points.  (See below for an example).
+
 For example, all Kubernetes containers have a volume mounted at `/var/run/secrets` with the service account details.
 Those files are accessible from Telepresence:
 
@@ -65,4 +69,23 @@ That means code doesn't need to be modified as the paths are in the expected loc
 @minikube|$ proot -b $TELEPRESENCE_ROOT/var/run/secrets/:/var/run/secrets bash
 $ ls /var/run/secrets/kubernetes.io/serviceaccount/
 ca.crt  namespace  token
+```
+
+Using the `TELEPRESENCE_MOUNTS` environment variable allows for automatic discovery and handling of mount
+points.  For example, the following Python code will create sym-links so that any mounted volumes
+appear in their normal locations:
+```python
+def telepresence_remote_mounts():
+    mounts = os.environ.get('TELEPRESENCE_MOUNTS')
+    if not mounts:
+        return
+
+    tele_root = os.environ.get('TELEPRESENCE_ROOT')
+
+    for mount in mounts.split(':'):
+        dir_name, link_name = os.path.split(mount)
+        os.makedirs(dir_name, exist_ok=True)
+        
+        link_src = os.path.join(tele_root, mount[1:])
+        os.symlink(link_src, mount)
 ```
