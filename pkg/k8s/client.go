@@ -149,10 +149,7 @@ func NewClient(info *KubeInfo) *Client {
 // ResourceType describes a Kubernetes resource type in a particular cluster.
 // See ResolveResourceType() for more information.
 //
-// It is morally equivalent to a:
-//  - k8s.io/apimachinery/pkg/apis/meta/v1.APIResource
-//  - k8s.io/apimachinery/pkg/runtime/schema.GroupVersionKind (+Namespaced bool)
-//  - k8s.io/apimachinery/pkg/runtime/schema.GroupVersionResource (+Namespaced bool)
+// It is equivalent to a k8s.io/apimachinery/pkg/api/meta.RESTMapping
 type ResourceType struct {
 	Group      string
 	Version    string
@@ -184,6 +181,12 @@ type ResourceType struct {
 // (multiple API groups, multiple versions), it should do something
 // more intelligent than that; it should at least pay attention to the
 // API group's PreferredVersion.
+//
+// Should be equivalent to
+// k8s.io/cli-runtime/pkg/genericclioptions/resource.Builder.mappingFor(),
+// which calls
+// k8s.io/apimachinery/pkg/runtime/schema.ParseResourceArg() and
+// k8s.io/client-go/restmapper.shortcutExpander.expandResourceShortcut()
 func (c *Client) ResolveResourceType(resource string) ResourceType {
 	if resource == "" {
 		panic("empty resource string")
