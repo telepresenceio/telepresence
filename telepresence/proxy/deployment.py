@@ -357,6 +357,10 @@ def swap_deployment_openshift(
             runner.kubectl("rollout", "latest", "dc/{}".format(deployment))
         )
 
+        runner.check_call(
+            runner.kubectl("rollout", "status", "-w", "dc/{}".format(deployment))
+        )
+
     runner.add_cleanup(
         "Restore original deployment config", apply_json, dc_json_with_triggers
     )
