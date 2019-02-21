@@ -40,9 +40,11 @@ require (
 	google.golang.org/genproto v0.0.0-20190123001331-8819c946db44 // indirect
 	google.golang.org/grpc v1.18.0 // indirect
 	gopkg.in/yaml.v2 v2.2.2
-	k8s.io/api v0.0.0-20181221193117-173ce66c1e39 // indirect
 	k8s.io/apimachinery v0.0.0-20190119020841-d41becfba9ee
-	k8s.io/client-go v10.0.0+incompatible
 	k8s.io/klog v0.1.0 // indirect
 	sigs.k8s.io/yaml v1.1.0 // indirect
+	// We need to pin k8s.io/api and k8s.io/client-go to their respective releases
+	// because api has been removed from master
+	k8s.io/api kubernetes-1.13.2
+	k8s.io/client-go v10.0.0
 )
