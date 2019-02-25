@@ -157,6 +157,18 @@ func (w *Watcher) WatchNamespace(namespace, resources string, listener func(*Wat
 				// assume this means we made the
 				// change to them
 				if oldUn.GetResourceVersion() != newUn.GetResourceVersion() {
+					// kube-scheduler and kube-controller-manager endpoints are
+					// updated almost every second, leading to terrible noise,
+					// and hence constant listener invokation. So, here we
+					// ignore endpoint updates from kube-system namespace. More:
+					// https://github.com/kubernetes/kubernetes/issues/41635
+					// https://github.com/kubernetes/kubernetes/issues/34627
+					if oldUn.GetKind() == "Endpoints" &&
+						newUn.GetKind() == "Endpoints" &&
+						oldUn.GetNamespace() == "kube-system" &&
+						newUn.GetNamespace() == "kube-system" {
+						return
+					}
 					invoke()
 				}
 			},
