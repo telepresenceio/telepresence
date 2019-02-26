@@ -38,7 +38,11 @@ include $(dir $(lastword $(MAKEFILE_LIST)))common.mk
 
 export GO111MODULE = on
 
+# Disable parallel builds on Go 1.11; the module cache is not
+# concurrency-safe.  This is fixed in 1.12.
+ifneq ($(filter go1.11.%,$(shell go version)),)
 .NOTPARALLEL:
+endif
 
 #
 # 1. Set go.module

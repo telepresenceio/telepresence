@@ -59,6 +59,17 @@ in_array() {
 	return 1
 }
 
+trim() {
+	local str=$1
+	while [[ $str == ' '* ]]; do
+		str=${str# }
+	done
+	while [[ $str == *' ' ]]; do
+		str=${str% }
+	done
+	printf '%s' "$str"
+}
+
 main() {
 	if test -t 1 && tput setaf 0 &>/dev/null; then
 		ALL_OFF=$(tput sgr0)
@@ -186,7 +197,7 @@ tap12_parse() {
 		elif [[ "$tap_line" =~ $tap_test_re ]]; then
 			tap_test_status=${BASH_REMATCH[1]}
 			tap_test_number=${BASH_REMATCH[2]:-$((tap_prev_test_number+1))}
-			tap_test_description=${BASH_REMATCH[3]:-}
+			tap_test_description=$(trim "${BASH_REMATCH[3]:-}")
 			tap_test_comment=${BASH_REMATCH[4]:-}
 
 			tap_test_yaml=''
@@ -280,7 +291,7 @@ tap13_parse() {
 		elif [[ "$tap_line" =~ $tap_test_re ]]; then
 			tap_test_status=${BASH_REMATCH[1]}
 			tap_test_number=${BASH_REMATCH[2]:-$((tap_prev_test_number+1))}
-			tap_test_description=${BASH_REMATCH[3]:-}
+			tap_test_description=$(trim "${BASH_REMATCH[3]:-}")
 			tap_test_comment=${BASH_REMATCH[4]:-}
 
 			tap_test_yaml=''
@@ -370,7 +381,7 @@ cmd_stream() {
 
 		output+=": $arg_name $test_number"
 		if [[ -n "${test_description}${test_comment}" ]]; then
-			output+=" - ${test_description}${test_comment}"
+			output+=" - ${test_description}"
 		fi
 		printf '%s\n' "$output"
 

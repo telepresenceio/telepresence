@@ -45,7 +45,7 @@ _k8s.push = $(addsuffix .docker.knaut-push,$(K8S_IMAGES))
 apply: $(filter-out $(wildcard $(_k8s.push)),$(_k8s.push))
 deploy: $(_k8s.push)
 apply deploy: $(KUBECONFIG) $(KUBEAPPLY) $(K8S_ENVS)
-	$(if $(K8S_ENVS),set -a && $(foreach k8s_env,$(abspath $(K8S_ENVS)), . $(k8s_env) && ))$(KUBEAPPLY) $(addprefix -f ,$(K8S_DIRS))
+	$(if $(K8S_ENVS),set -a && $(foreach k8s_env,$(abspath $(K8S_ENVS)), . $(k8s_env) && ))$(KUBEAPPLY) -t 300 $(addprefix -f ,$(K8S_DIRS))
 .PHONY: apply deploy
 
 $(KUBECONFIG).clean: _clean-k8s

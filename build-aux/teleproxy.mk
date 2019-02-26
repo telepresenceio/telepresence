@@ -24,7 +24,7 @@ include $(dir $(lastword $(MAKEFILE_LIST)))kubernaut-ui.mk
 
 TELEPROXY ?= $(dir $(_teleproxy.mk))teleproxy
 TELEPROXY_LOG ?= $(dir $(_teleproxy.mk))teleproxy.log
-TELEPROXY_VERSION = 0.3.11
+TELEPROXY_VERSION = 0.3.16
 KUBE_URL = https://kubernetes/api/
 
 $(TELEPROXY): $(_teleproxy.mk)
