@@ -58,7 +58,7 @@ _docker.port-forward = $(dir $(_docker.mk))docker-port-forward
 			$(if $(CI),if test -e $@; then false This should not happen in CI: $@ should not change; fi &&) \
 			docker tag "$$(sed -n 2p $(@D)/.tmp.$(@F).tmp)" "$$(sed -n 3p $(@D)/.tmp.$(@F).tmp)" && \
 			$(if $(VERSION),docker tag "$$(sed -n 2p $(@D)/.tmp.$(@F).tmp)" '$(docker.LOCALHOST):31000/$(notdir $*):latest' &&) \
-			if test -e $@; then docker image rm $$(cat $@) || true; fi && \
+			if test -e $@; then docker image rm $$(grep -vFx -f $(@D)/.tmp.$(@F).tmp $@) || true; fi && \
 			mv -f $(@D)/.tmp.$(@F).tmp $@; \
 		fi; \
 	}
