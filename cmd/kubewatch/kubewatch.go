@@ -196,7 +196,7 @@ func (s *Syncer) handleSnapshot() http.HandlerFunc {
 			}
 		} else {
 			var keys []string
-			for k, _ := range snapshot {
+			for k := range snapshot {
 				keys = append(keys, k)
 			}
 			body = []byte(fmt.Sprintf("Available snapshot keys:\n - %s\n", strings.Join(keys, "\n - ")))
