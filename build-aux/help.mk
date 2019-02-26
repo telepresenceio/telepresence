@@ -53,15 +53,22 @@
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
 include $(dir $(lastword $(MAKEFILE_LIST)))common.mk
 
-help.body ?= $(if $(NAME),  NAME    = $(NAME))$(if $(and $(NAME),$(VERSION)),$(NL))$(if $(VERSION),  VERSION = $(VERSION))
+# Usage: $(call _help.genbody.line,VAR)
+_help.genbody.line = $(if $(filter-out undefined,$(origin $1)),  $1 = $($1))
 
-help:  ## Show this message
+# Usage: $(call _help.genbody,CUR,VARSLEFT)
+_help.genbody = $(if $2,$(call _help.genbody,$1$(if $(and $1,$(call _help.genbody.line,$(firstword $2))),$(NL))$(call _help.genbody.line,$(firstword $2)),$(wordlist 2,$(words $2),$2)),$1)
+
+help.body.vars = NAME VERSION KUBECONFIG
+help.body ?= $(call _help.genbody,,$(help.body.vars))
+
+help:  ## (Common) Show this message
 	@echo 'Usage: make [TARGETS...]'
 	@echo
 	@printf '%s\n' $(call quote.shell,$(help.body)) | sed -e 's/^# //' -e 's/^#//'
 	@echo
 	@echo TARGETS:
-	@sed -En 's/^([^#]*) *: *[#]# *(\([^)]*\))? */\2	\1	/p' $(sort $(abspath $(MAKEFILE_LIST))) | sort | column -t -s '	' | sed 's/^/  /'
+	@sed -En 's/^([^#]*) *: *[#]# *(\([^)]*\))? */\2	\1	/p' $(sort $(abspath $(MAKEFILE_LIST))) | sed 's/^	/($(or $(NAME),this project))&/' | column -t -s '	' | sed 's/^/  /' | sort
 .PHONY: help
 
 endif

@@ -58,7 +58,7 @@ bin_%/$(notdir $(go.bin)): bin_%/.cache.$(notdir $(go.bin))
 	@{ \
 		PS4=''; set -x; \
 		if ! cmp -s $$< $$@; then \
-			$(if $(CI),if test -e $$@; then false This should not happen in CI: $$@ should not change; fi, true) && \
+			$(if $(CI),if test -e $$@; then false This should not happen in CI: $$@ should not change; fi &&) \
 			cp -f $$< $$@; \
 		fi; \
 	}
@@ -82,19 +82,31 @@ go-fmt: go-get
 .PHONY: go-fmt
 
 go-test: ## (Go) Check the code with `go test`
-go-test: go-get
-	$(if $(go.DISABLE_GO_TEST),,go test $(go.pkgs))
-.PHONY: go-test
+go-test: go-get $(if $(go.DISABLE_GO_TEST),,$(dir $(_go-common.mk))go-test.tap.summary)
+
+$(dir $(_go-common.mk))go-test.tap: go-build FORCE
+	go test -json $(go.pkgs) 2>&1 | GO111MODULE=off go run $(dir $(_go-common.mk))gotest2tap.go | tee $@ | $(dir $(_go-common.mk))tap-driver stream -n go-test
 
 #
 # Hook in to common.mk
 
 build: go-build
 lint: go-lint
-check: go-test
 format: go-fmt
+
+clean: _clean-go-common
+_clean-go-common:
+	rm -f $(dir $(_go-common.mk))go-test.tap
+# Files made by older versions.  Remove the tail of this list when the
+# commit making the change gets far enough in to the past.
+#
+# 2019-02-06
+	rm -f $(dir $(_go-common.mk))patter.go $(dir $(_go-common.mk))patter.go.tmp
+.PHONY: _clean-go-common
 
 clobber: _clobber-go-common
 _clobber-go-common:
 	rm -f $(dir $(_go-common.mk))golangci-lint
 .PHONY: _clobber-go-common
+
+test-suite.tap: $(if $(go.DISABLE_GO_TEST),,$(dir $(_go-common.mk))go-test.tap)
