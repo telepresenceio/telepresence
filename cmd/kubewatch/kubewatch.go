@@ -188,9 +188,18 @@ func (s *Syncer) handleSnapshot() http.HandlerFunc {
 			return
 		}
 		qname := strings.Join(parts[1:], "/")
-		body, ok := snapshot[qname]
-		if !ok {
-			http.NotFound(w, r)
+		var body []byte
+		if qname != "" {
+			body, ok = snapshot[qname]
+			if !ok {
+				http.NotFound(w, r)
+			}
+		} else {
+			var keys []string
+			for k, _ := range snapshot {
+				keys = append(keys, k)
+			}
+			body = []byte(fmt.Sprintf("Available snapshot keys:\n - %s\n", strings.Join(keys, "\n - ")))
 		}
 		w.Write(body)
 	}
