@@ -9,6 +9,7 @@
 #  - .PHONY Target: claim
 #  - .PHONY Target: unclaim
 #  - .PHONY Target: shell
+#  - .PHONY Target: status-cluster
 ## common.mk targets ##
 #  - clean
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
@@ -18,18 +19,32 @@ include $(dir $(_kubernaut-ui.mk))kubernaut.mk
 _KUBECONFIG := $(abspath $(dir $(_kubernaut-ui.mk))$(or $(NAME),cluster).knaut)
 export KUBECONFIG = $(_KUBECONFIG)
 
-claim: ## (Kubernaut) Obtain an ephemeral k8s cluster from kubernaut.io
+claim: ## (Kubernaut) Obtain an ephemeral cluster from kubernaut.io
 claim: $(KUBECONFIG)
 .PHONY: claim
 
-unclaim: ## (Kubernaut) Release the cluster claimed by 'claim'
+unclaim: ## (Kubernaut) Destroy the cluster
 unclaim: $(_KUBECONFIG).clean
 .PHONY: unclaim
 
-shell: ## (Kubernaut) Run an interactive Bash shell with KUBECONFIG= set to a Kubernaut claim
+shell: ## (Kubernaut) Run an interactive Bash shell with KUBECONFIG= set to the Kubernaut claim
 shell: $(KUBECONFIG)
 	@exec env -u MAKELEVEL PS1="(dev) [\W]$$ " bash
 .PHONY: shell
+
+status-cluster: ## (Kubernaut) Fail if the cluster is not reachable or not claimed
+	@if [ -e $(KUBECONFIG) ] ; then \
+		if kubectl --request-timeout=1 get pods connectivity-check --ignore-not-found; then \
+			echo "Cluster okay!"; \
+		else \
+			echo "Cluster claimed but connectivity check failed."; \
+			exit 1; \
+		fi \
+	else \
+		echo "Cluster not claimed."; \
+		exit 1; \
+	fi
+.PHONY: status-cluster
 
 clean: unclaim
 

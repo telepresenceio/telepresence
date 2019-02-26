@@ -37,50 +37,58 @@ _docker.port-forward = $(dir $(_docker.mk))docker-port-forward
 
 # %.docker file contents:
 #
-#  line 1: local tag name
+#  line 1: local tag name (version-based)
 #  line 2: image hash
+#  line 3: local tag name (hash-based)
+#
+# Note: We test for changes for CI early, but test for changes for
+# cleanup late.  If we did the cleanup test early because of :latest,
+# it would leave dangling untagged images.  If we did the CI test
+# late, it would remove the evidence for debugging.
 %.docker: %/Dockerfile
 	printf '%s\n' '$(docker.LOCALHOST):31000/$(notdir $*):$(or $(VERSION),latest)' > $(@D)/.tmp.$(@F).tmp
-	docker build -t "$$(head -n1 $(@D)/.tmp.$(@F).tmp)" $*
-	docker image inspect "$$(head -n1 $(@D)/.tmp.$(@F).tmp)" --format='{{.Id}}' >> $(@D)/.tmp.$(@F).tmp
+	docker build -t "$$(sed -n 1p $(@D)/.tmp.$(@F).tmp)" $*
+	docker image inspect "$$(sed -n 1p $(@D)/.tmp.$(@F).tmp)" --format='{{.Id}}' >> $(@D)/.tmp.$(@F).tmp
+	printf '%s\n' '$(docker.LOCALHOST):31000/$(notdir $*)':"id-$$(sed -n '2{ s/:/-/g; p; }' $(@D)/.tmp.$(@F).tmp)" >> $(@D)/.tmp.$(@F).tmp
 	@{ \
 		PS4=''; set -x; \
 		if cmp -s $(@D)/.tmp.$(@F).tmp $@; then \
 			rm -f $(@D)/.tmp.$(@F).tmp || true; \
 		else \
-			if test -e $@; then \
-				$(if $(CI),false This should not happen in CI: $@ should not change,docker image rm "$$(head -n1 $@)" || true); \
-			fi && \
-			$(if $(VERSION),docker tag "$$(tail -n1 $(@D)/.tmp.$(@F).tmp)" '$(docker.LOCALHOST):31000/$(notdir $*):latest', true) && \
+			$(if $(CI),if test -e $@; then false This should not happen in CI: $@ should not change; fi &&) \
+			docker tag "$$(sed -n 2p $(@D)/.tmp.$(@F).tmp)" "$$(sed -n 3p $(@D)/.tmp.$(@F).tmp)" && \
+			$(if $(VERSION),docker tag "$$(sed -n 2p $(@D)/.tmp.$(@F).tmp)" '$(docker.LOCALHOST):31000/$(notdir $*):latest' &&) \
+			if test -e $@; then docker image rm $$(cat $@) || true; fi && \
 			mv -f $(@D)/.tmp.$(@F).tmp $@; \
 		fi; \
 	}
 
 %.docker.clean:
-	if [ -e $*.docker ]; then docker image rm "$$(head -n1 $*.docker)" || true; fi
+	if [ -e $*.docker ]; then docker image rm $$(cat $*.docker) || true; fi
 	rm -f $*.docker
 .PHONY: %.docker.clean
 
 # %.docker.knaut-push file contents:
 #
-#  line 1: in-cluster tag name
+#  line 1: in-cluster tag name (hash-based)
 %.docker.knaut-push: %.docker $(KUBEAPPLY) $(KUBECONFIG)
 	$(KUBEAPPLY) -f $(dir $(_docker.mk))docker-registry.yaml
 	{ \
 	    trap "kill $$($(FLOCK) $(_docker.port-forward).lock sh -c 'kubectl port-forward --namespace=docker-registry deployment/registry 31000:5000 >$(_docker.port-forward).log 2>&1 & echo $$!')" EXIT; \
 	    while ! curl -i http://localhost:31000/ 2>/dev/null; do sleep 1; done; \
-	    docker push "$$(head -n1 $<)"; \
+	    docker push "$$(sed -n 3p $<)"; \
 	}
-	sed '1{ s/^host\.docker\.internal:/localhost:/; q; }' $< > $@
+	sed -n '3{ s/^host\.docker\.internal:/localhost:/; p; }' $< > $@
 
 %.docker.push: %.docker
-	docker tag "$$(tail -n1 $<)" '$(DOCKER_IMAGE)'
+	docker tag "$$(sed -n 2p $<)" '$(DOCKER_IMAGE)'
 	docker push '$(DOCKER_IMAGE)'
 .PHONY: %.docker.push
 
 _clean-docker:
 	$(FLOCK) $(_docker.port-forward).lock rm $(_docker.port-forward).lock
 	rm -f $(_docker.port-forward).log
+	rm -f $(dir $(_docker.mk))docker-registry.yaml.o
 clean: _clean-docker
 .PHONY: _clean-docker
 

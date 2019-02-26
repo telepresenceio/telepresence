@@ -12,6 +12,16 @@
 # docker.mk
 /docker-port-forward.lock
 /docker-port-forward.log
+/docker-registry.yaml.o
 
 # _go-common.mk
 /golangci-lint
+/go-test.tap
+
+# --- Files ignored by older versions ---
+# Remove the tail of this list when the commit making the change gets
+# far enough in to the past.
+
+# 2019-02-06
+/patter.go
+/patter.go.tmp
