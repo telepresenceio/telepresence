@@ -115,7 +115,7 @@ def wait():
     start = time()
     while time() - start < 30:
         try:
-            gethostbyname("kubernetes.default.svc.cluster.local")
+            gethostbyname("kubernetes.default")
             sleep(1)  # just in case there's more to startup
             sys.exit(100)
         except gaierror:
