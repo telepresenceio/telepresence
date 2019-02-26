@@ -79,7 +79,7 @@ func main() {
 	case DEFAULT, INTERCEPT, BRIDGE:
 		// do nothing
 	case VERSION:
-		fmt.Println("kubeapply", "version", Version)
+		fmt.Println("teleproxy", "version", Version)
 		os.Exit(0)
 	default:
 		log.Fatalf("TPY: unrecognized mode: %v", *mode)
