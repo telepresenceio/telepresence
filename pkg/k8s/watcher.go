@@ -37,7 +37,9 @@ type Watcher struct {
 	watches map[string]watch
 	mutex   sync.Mutex
 	started bool
+	stopMu  sync.Mutex
 	stop    chan struct{}
+	stopped bool
 	wg      sync.WaitGroup
 }
 
@@ -275,7 +277,12 @@ func (w *Watcher) Exists(kind, qname string) bool {
 }
 
 func (w *Watcher) Stop() {
-	close(w.stop)
+	w.stopMu.Lock()
+	defer w.stopMu.Unlock()
+	if !w.stopped {
+		close(w.stop)
+		w.stopped = true
+	}
 }
 
 func (w *Watcher) Wait() {
