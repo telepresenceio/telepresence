@@ -142,6 +142,7 @@ def get_remote_info(
     runner: Runner,
     deployment_name: str,
     deployment_type: str,
+    timeout: float,
     run_id: Optional[str] = None,
 ) -> RemoteInfo:
     """
@@ -166,7 +167,7 @@ def get_remote_info(
     if run_id:
         cmd.append("--selector=telepresence={}".format(run_id))
 
-    for _ in runner.loop_until(120, 1):
+    for _ in runner.loop_until(timeout, 1):
         pods = json.loads(runner.get_output(runner.kubectl(cmd)))["items"]
         for pod in pods:
             name = pod["metadata"]["name"]

@@ -327,6 +327,15 @@ def parse_args(args=None) -> argparse.Namespace:
         )
     )
 
+    parser.add_argument(
+        "--timeout",
+        default=120,
+        type=float,
+        help=(
+            "Number of seconds to wait for the Telepresence pod to become ready."
+        )
+    )
+
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--run-shell",

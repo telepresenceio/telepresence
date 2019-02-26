@@ -101,6 +101,7 @@ def setup(runner: Runner, args):
             runner,
             tel_deployment,
             deployment_type,
+            args.timeout,
             run_id=run_id,
         )
         return remote_info
