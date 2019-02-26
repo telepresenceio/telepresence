@@ -29,7 +29,7 @@ unclaim: $(_KUBECONFIG).clean
 
 shell: ## (Kubernaut) Run an interactive Bash shell with KUBECONFIG= set to the Kubernaut claim
 shell: $(KUBECONFIG)
-	@exec env -u MAKELEVEL PS1="(dev) [\W]$$ " bash
+	+exec env -u MAKELEVEL PS1="(dev) [\W]$$ " bash
 .PHONY: shell
 
 status-cluster: ## (Kubernaut) Fail if the cluster is not reachable or not claimed

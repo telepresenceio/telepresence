@@ -65,16 +65,17 @@ _common_clean:
 	rm -f test-suite.tap
 .PHONY: _common_clean
 
-check: test-suite.tap.summary lint build
+check: lint build
+	$(MAKE) test-suite.tap.summary
 test-suite.tap:
 	@$(dir $(_common.mk))tap-driver cat $(sort $(filter %.tap,$^)) > $@
 
 %.tap.summary: %.tap
 	@$(dir $(_common.mk))tap-driver summarize $<
 
-%.tap: %.tap.gen build FORCE
+%.tap: %.tap.gen FORCE
 	@$(abspath $<) 2>&1 | tee $@ | $(dir $(_common.mk))tap-driver stream -n $<
-%.log: %.test build FORCE
+%.log: %.test FORCE
 	@$(abspath $<) >$@ 2>&1; echo :exit-status: $$? >>$@
 %.tap: %.log %.test
 	@{ \

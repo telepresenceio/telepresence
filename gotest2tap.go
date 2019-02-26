@@ -29,6 +29,7 @@ func main() {
 	fmt.Println("TAP version 13")
 
 	testCnt := 0
+	pkgTestCnt := map[string]int{}
 	bailed := false
 
 	stdin := bufio.NewScanner(os.Stdin)
@@ -43,24 +44,32 @@ func main() {
 		Elapsed := time.Duration(float64(time.Second) * event.Elapsed)
 		Output := strings.TrimSuffix(event.Output, "\n")
 		if event.Test == "" {
-			fmt.Println("#",
-				Time,
-				"(took "+Elapsed.String()+")",
-				fmt.Sprintf("%-6s", event.Action),
-				event.Package,
-				Output)
+			if event.Action == "fail" && pkgTestCnt[event.Package] == 0 {
+				fmt.Println("Bail out!", event.Package)
+				bailed = true
+			} else {
+				fmt.Println("#",
+					Time,
+					"(took "+Elapsed.String()+")",
+					fmt.Sprintf("%-6s", event.Action),
+					event.Package,
+					Output)
+			}
 		} else {
 			Name := event.Package + "." + event.Test
-			// TODO(lukeshu): I think maybe this should also handel "bench"?
+			// TODO(lukeshu): I think maybe this should also handle "bench"?
 			switch event.Action {
 			case "pass":
 				testCnt++
+				pkgTestCnt[event.Package] = pkgTestCnt[event.Package] + 1
 				fmt.Printf("ok %d %v # %v (%v) %v\n", testCnt, Name, Time, Elapsed, Output)
 			case "fail":
 				testCnt++
+				pkgTestCnt[event.Package] = pkgTestCnt[event.Package] + 1
 				fmt.Printf("not ok %d %v.%v # %v (%v) %v\n", testCnt, Name, Time, Elapsed, Output)
 			case "skip":
 				testCnt++
+				pkgTestCnt[event.Package] = pkgTestCnt[event.Package] + 1
 				fmt.Printf("ok %d %v.%v # SKIP %v (%v) %v\n", testCnt, Name, Time, Elapsed, Output)
 			default:
 				fmt.Sprintln("#",
