@@ -94,14 +94,14 @@ func (t *Translator) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host str
 	// IPv4 address starts at the 5th byte, 4 bytes long (206 190 36 45)
 	rawConn, err := conn.SyscallConn()
 	if err != nil {
-		return
+		return nil, "", err
 	}
 
 	err = rawConn.Control(func(fd uintptr) {
 		addr, err = syscall.GetsockoptIPv6Mreq(int(fd), syscall.IPPROTO_IP, SO_ORIGINAL_DST)
 	})
 	if err != nil {
-		return
+		return nil, "", err
 	}
 
 	// \attention: IPv4 only!!!
@@ -123,5 +123,5 @@ func (t *Translator) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host str
 		addr.Multiaddr[7],
 		uint16(addr.Multiaddr[2])<<8+uint16(addr.Multiaddr[3]))
 
-	return
+	return rawaddr, host, nil
 }

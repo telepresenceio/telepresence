@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -35,12 +35,12 @@ func (lw listWatchAdapter) Watch(options v1.ListOptions) (pwatch.Interface, erro
 type Watcher struct {
 	client  *Client
 	watches map[string]watch
-	mutex   sync.Mutex
-	started bool
-	stopMu  sync.Mutex
 	stop    chan struct{}
-	stopped bool
 	wg      sync.WaitGroup
+	mutex   sync.Mutex
+	stopMu  sync.Mutex
+	started bool
+	stopped bool
 }
 
 type watch struct {
@@ -265,7 +265,7 @@ func (w *Watcher) UpdateStatus(resource Resource) (Resource, error) {
 func (w *Watcher) Get(kind, qname string) Resource {
 	resources := w.List(kind)
 	for _, res := range resources {
-		if strings.ToLower(res.QName()) == strings.ToLower(qname) {
+		if strings.EqualFold(res.QName(), qname) {
 			return res
 		}
 	}

@@ -4,11 +4,12 @@ package nat
 
 import (
 	"fmt"
-	ppf "github.com/datawire/pf"
 	"log"
 	"net"
 	"os/exec"
 	"strings"
+
+	ppf "github.com/datawire/pf"
 )
 
 type Translator struct {
@@ -26,7 +27,7 @@ func pf(args []string, stdin string) (err error) {
 	}
 	if err != nil {
 		log.Println(err)
-		return fmt.Errorf("IN:%s\nOUT:%s\nERR:%s\n", strings.TrimSpace(stdin), strings.TrimSpace(string(out)),
+		return fmt.Errorf("IN:%s\nOUT:%s\nERR:%s", strings.TrimSpace(stdin), strings.TrimSpace(string(out)),
 			err)
 	}
 	return
@@ -142,9 +143,7 @@ func (t *Translator) ClearUDP(ip string) {
 }
 
 func (t *Translator) clear(protocol, ip string) {
-	if _, exists := t.Mappings[Address{protocol, ip}]; exists {
-		delete(t.Mappings, Address{protocol, ip})
-	}
+	delete(t.Mappings, Address{protocol, ip})
 }
 
 func (t *Translator) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host string, err error) {
