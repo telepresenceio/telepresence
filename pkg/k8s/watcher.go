@@ -276,7 +276,15 @@ func (w *Watcher) Exists(kind, qname string) bool {
 	return w.Get(kind, qname).Name() != ""
 }
 
+// Stop stops a watch. It is safe to call Stop from multiple
+// goroutines and call it multiple times. This is useful, e.g. for
+// implementing a timed wait pattern. You can have your watch callback
+// test for a condition and invoke Stop() when that condition is met,
+// while simultaneously havin a background goroutine call Stop() when
+// a timeout is exceeded and not worry about these two things racing
+// each other (at least with respect to invoking Stop()).
 func (w *Watcher) Stop() {
+	// Use a separate lock for Stop so it is safe to call from a watch callback.
 	w.stopMu.Lock()
 	defer w.stopMu.Unlock()
 	if !w.stopped {
