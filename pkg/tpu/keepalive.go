@@ -45,7 +45,7 @@ func (k *Keeper) log(line string, args ...interface{}) {
 func (k *Keeper) Start() {
 	go func() {
 		count := 0
-	OUTER:
+		defer close(k.done)
 		for {
 			cmd := exec.Command("sh", "-c", k.Command)
 			cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -85,18 +85,16 @@ func (k *Keeper) Start() {
 					})
 					time.Sleep(time.Second)
 				} else {
-					break OUTER
+					return
 				}
 			case <-k.stop:
 				cmd.Process.Kill()
 				l.Wait()
-				break OUTER
+				return
 			}
 
 		}
-		close(k.done)
 	}()
-	return
 }
 
 func (k *Keeper) forwardOutput(cmd *exec.Cmd) Latch {

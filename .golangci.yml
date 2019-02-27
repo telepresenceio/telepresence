@@ -1,0 +1,18 @@
+linters:
+  enable-all: true
+  disable:
+    - errcheck
+    - gochecknoglobals
+    - gochecknoinits
+    - golint
+    - gosec
+    - interfacer # author says it's deprecated, gives very subjective advice
+    - lll
+    - prealloc
+    - scopelint
+    - unparam
+linters-settings:
+  goconst:
+    min-len: 5
+  maligned:
+    suggest-new: true
