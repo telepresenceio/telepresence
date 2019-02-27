@@ -11,7 +11,6 @@ import (
 
 const (
 	GOOD = "GOOD"
-	BAD  = "BAD"
 )
 
 func checkForwardTCP(t *testing.T, tr *Translator, fromIP string, ports []string, toPort string) {

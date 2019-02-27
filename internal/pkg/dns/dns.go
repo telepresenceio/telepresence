@@ -1,10 +1,11 @@
 package dns
 
 import (
-	"github.com/miekg/dns"
 	_log "log"
 	"net"
 	"strings"
+
+	"github.com/miekg/dns"
 )
 
 type Server struct {

@@ -89,7 +89,7 @@ func main() {
 
 	// do this up front so we don't miss out on cleanup if someone
 	// Control-C's just after starting us
-	signalChan := make(chan os.Signal)
+	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
 	if *mode == DEFAULT || *mode == INTERCEPT {

@@ -21,6 +21,9 @@ func TestList(t *testing.T) {
 	}
 
 	customs, err := c.List("customs")
+	if err != nil {
+		t.Error(err)
+	}
 	found = false
 	for _, cust := range customs {
 		if cust.Name() == "xmas" {

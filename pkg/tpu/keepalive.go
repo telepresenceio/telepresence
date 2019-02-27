@@ -95,7 +95,6 @@ func (k *Keeper) Start() {
 
 		}
 	}()
-	return
 }
 
 func (k *Keeper) forwardOutput(cmd *exec.Cmd) Latch {

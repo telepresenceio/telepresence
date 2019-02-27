@@ -1,11 +1,12 @@
 package proxy
 
 import (
-	"github.com/datawire/teleproxy/pkg/tpu"
-	"golang.org/x/net/proxy"
 	"io"
 	"log"
 	"net"
+
+	"github.com/datawire/teleproxy/pkg/tpu"
+	"golang.org/x/net/proxy"
 )
 
 type Proxy struct {
@@ -35,13 +36,13 @@ func (p *Proxy) Start(limit int) {
 			if err != nil {
 				p.log(err.Error())
 			} else {
-				switch conn.(type) {
+				switch conn := conn.(type) {
 				case *net.TCPConn:
 					p.log("CAPACITY: %v", len(sem))
 					sem.Acquire()
 					go func() {
 						defer sem.Release()
-						p.handleConnection(conn.(*net.TCPConn))
+						p.handleConnection(conn)
 					}()
 				default:
 					p.log("unknown connection type: %v", conn)
