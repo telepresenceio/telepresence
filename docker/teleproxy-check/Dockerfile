@@ -6,4 +6,3 @@ ADD teleproxy.tar .
 
 ENV CGO_ENABLED=0
 ENV GOFLAGS=-mod=vendor
-ENTRYPOINT [ "make" ]

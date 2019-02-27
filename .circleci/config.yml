@@ -43,6 +43,14 @@ commands:
           command: make unclaim
           when: always
       - run: make build
+      - run:
+          name: "gather logs"
+          when: always
+          command: |
+            rsync -ma --include='*/' --include='*.tap' --include='*.log' --exclude='*' . /tmp/test-logs
+      - store_artifacts:
+          path: /tmp/test-logs
+          destination: test-logs
       - run: |
           if test -n "$CIRCLE_TAG"; then
               export AWS_ACCESS_KEY_ID=$DEPLOY_KEY_ID
@@ -55,7 +63,7 @@ jobs:
   macos-build:
     macos:
       xcode: "9.0"
-    working_directory: ~/go/src/github.com/datawire/teleproxy
+    working_directory: ~/repo
     steps:
       - aws-install
       - golang-install:
@@ -65,7 +73,7 @@ jobs:
 
   machine-build:
     machine: true
-    working_directory: ~/go/src/github.com/datawire/teleproxy
+    working_directory: ~/repo
     steps:
       - aws-install
       - golang-install:
