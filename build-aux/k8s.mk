@@ -35,22 +35,23 @@ _build-k8s:
 endif
 clean: $(addsuffix .docker.clean,$(K8S_IMAGES))
 
-push: ## (Kubernaut) Push Docker images to kubernaut.io cluster
+push: ## (Kubernaut) Push Docker images to the cluster
 push: $(addsuffix .docker.knaut-push,$(K8S_IMAGES))
 .PHONY: push
 
-apply:  ## (Kubernaut) Apply YAML to kubernaut.io cluster, without pushing newer Docker images (this is useful for quickly deploying YAML-only changes)
-deploy: ## (Kubernaut) Apply YAML to kubernaut.io cluster, pushing newer Docker images
+apply:  ## (Kubernaut) Apply YAML to the cluster, WITHOUT pushing newer Docker images
+deploy: ## (Kubernaut) Apply YAML to the cluster, pushing newer Docker images
 _k8s.push = $(addsuffix .docker.knaut-push,$(K8S_IMAGES))
 apply: $(filter-out $(wildcard $(_k8s.push)),$(_k8s.push))
 deploy: $(_k8s.push)
 apply deploy: $(KUBECONFIG) $(KUBEAPPLY) $(K8S_ENVS)
-	$(if $(K8S_ENVS),set -a && $(foreach k8s_env,$(abspath $(K8S_ENVS)), . $(k8s_env) && ))$(KUBEAPPLY) $(addprefix -f ,$(K8S_DIRS))
+	$(if $(K8S_ENVS),set -a && $(foreach k8s_env,$(abspath $(K8S_ENVS)), . $(k8s_env) && ))$(KUBEAPPLY) -t 300 $(addprefix -f ,$(K8S_DIRS))
 .PHONY: apply deploy
 
 $(KUBECONFIG).clean: _clean-k8s
 _clean-k8s:
 	rm -f $(addsuffix .docker.knaut-push,$(K8S_IMAGES))
+	rm -f -- $(addsuffix /*.yaml.o,$(K8S_DIRS))
 .PHONY: _clean-k8s
 
 endif

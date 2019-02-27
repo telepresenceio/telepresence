@@ -79,7 +79,7 @@ func main() {
 	case DEFAULT, INTERCEPT, BRIDGE:
 		// do nothing
 	case VERSION:
-		fmt.Println("kubeapply", "version", Version)
+		fmt.Println("teleproxy", "version", Version)
 		os.Exit(0)
 	default:
 		log.Fatalf("TPY: unrecognized mode: %v", *mode)
@@ -159,6 +159,8 @@ func checkKubectl() {
 //
 // If fallbackIP is empty, it will default to Google DNS.
 func intercept(dnsIP string, fallbackIP string) (func(), error) {
+	// xxx check that we are root
+
 	if dnsIP == "" {
 		dat, err := ioutil.ReadFile("/etc/resolv.conf")
 		if err != nil {

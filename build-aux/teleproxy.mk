@@ -8,9 +8,10 @@
 #  - Variable: KUBECONFIG
 #  - Variable: KUBE_URL
 ## Outputs ##
-#  - Target       : $(TELERPOXY)
+#  - Target       : $(TELEPROXY)
 #  - .PHONY Target: proxy
 #  - .PHONY Target: unproxy
+#  - .PHONY Target: status-proxy
 ## common.mk targets ##
 #  - clean
 #  - clobber
@@ -23,7 +24,7 @@ include $(dir $(lastword $(MAKEFILE_LIST)))kubernaut-ui.mk
 
 TELEPROXY ?= $(dir $(_teleproxy.mk))teleproxy
 TELEPROXY_LOG ?= $(dir $(_teleproxy.mk))teleproxy.log
-TELEPROXY_VERSION = 0.3.11
+TELEPROXY_VERSION = 0.3.16
 KUBE_URL = https://kubernetes/api/
 
 $(TELEPROXY): $(_teleproxy.mk)
@@ -51,6 +52,21 @@ unproxy: ## (Kubernaut) Shut down 'proxy'
 	curl -s --connect-timeout 5 127.254.254.254/api/shutdown || true
 	@sleep 1
 .PHONY: unproxy
+
+status-proxy: ## (Kubernaut) Fail if cluster connectivity is broken or Teleproxy is not running
+status-proxy: status-cluster
+	@if curl -o /dev/null -s --connect-timeout 1 127.254.254.254; then \
+		if curl -o /dev/null -sk $(KUBE_URL); then \
+			echo "Proxy okay!"; \
+		else \
+			echo "Proxy up but connectivity check failed."; \
+			exit 1; \
+		fi; \
+	else \
+		echo "Proxy not running."; \
+		exit 1; \
+	fi
+.PHONY: status-proxy
 
 $(KUBECONFIG).clean: unproxy
 

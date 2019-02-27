@@ -3,6 +3,29 @@
 This is a collection of Makefile snippets (and associated utilities)
 for use in Datawire projects.
 
+It has the following downsides:
+ 1. It does not support out-of-tree builds.
+ 2. It has no notion of nesting.  You cannot `cd` to a sub-directory,
+    run `make`, and have it just build the stuff in that directory.
+ 3. It has no notion of nesting.  If you want per-directory build
+    descriptions, you'll have to build that functionality yourself, or
+    offload it to a separate build-system, like `go` or `setup.py`.
+ 4. Most of the `.mk` snippets have a hard dependency on the `go`
+    program being in `PATH`, even if none of the sources are Go.
+
+If any of those are a bummer, but you still want the "Make snippets in
+a `./build-aux/` folder" concept, consider
+[Autothing](https://git.lukeshu.com/autothing/) (which has the
+downsides that it requires GNU Make 3.82 or above, and is slow).
+
+At Datawire, those are good trade-offs, since:
+ - We're mostly a Python and Go shop (we don't care about #2 or #3,
+   and only care about #4 for Python-only projects).
+ - I've never heard anyone here even mention out-of-tree builds (#1).
+ - We need to support macOS (which still ships GNU Make 3.81, as it's
+   the last GPLv2 version) and the Ubuntu 14.04 images that CircleCI
+   uses (which ship 3.81) (so Autothing is ruled out).
+
 ## How to use
 
 Add `build-aux.git` as `build-aux/` in the git repository of the
@@ -16,51 +39,29 @@ common bit of functionality that you want to make use of.
 
  - Start using build-aux:
 
-       $ git subtree add --squash --prefix=build-aux git@github.com:datawire/build-aux.git master
+		$ git subtree add --squash --prefix=build-aux git@github.com:datawire/build-aux.git master
 
  - Update to latest build-aux:
 
-       $ ./build-aux/build-aux-pull
+		$ ./build-aux/build-aux-pull
 
  - Push "vendored" changes upstream to build-aux.git:
 
-       $ ./build-aux/build-aux-push
+		$ ./build-aux/build-aux-push
 
-## Go
+### Documentation
 
-Currently, there are 2 options for Go projects:
-
- - `go-workspace.mk`: For GOPATH workspaces
- - `go-mod.mk`: For Go 1.11 modules
-
-### Initializing a `go-workspace.mk` project
-
-	$ MODULE=EXAMPLE.COM/YOU/GITREPO
-
-	$ echo 'include build-aux/go-workspace.mk' >> Makefile
-	$ echo /.go-workpsace >> .gitignore
-	$ echo "!/.go-workspace/src/${MODULE}" >> .gitignore
-	$ mkdir -p $(dirname .go-workspace/src/${MODULE})
-	$ ln -s $(dirname .go-workspace/src/${MODULE} | sed -E 's,[^/]+,..,g') .go-workspace/src/${MODULE}
-
-What's that big expression in the `ln -s` command!?  It's the same as
-
-	$ ln -sr . .go-workspace/src/${MODULE}
-
-but for lame operating systems that ship an `ln` that doesn't
-understand the `-r` flag.
-
-### Initializing a `go-mod.mk` project
-
-	$ go mod init EXAMPLE.COM/YOU/GITREPO
-
-	$ echo 'include build-aux/go-mod.mk' >> Makefile
-
-### Migrating from `go-workspace.mk` to `go-mod.mk`
-
-	$ go mod init EXAMPLE.COM/YOU/GITREPO
-
-	$ make clobber
-	$ rm -rf -- .go-workspace vendor glide.* Gopkg.*
-	$ sed -i -E 's,/go-workspace\.mk,/go-mod.mk,' Makefile
-	$ sed -i -e '/\.go-workspace/d' .gitignore
+ - Each `.mk` snippet contains a reference-quality header comment
+   identifying
+    - any inputs (mostly variables)
+    - any outputs (targets, variables)
+    - which targets from other snippets it hooks in to (mostly hooking
+      in to `common.mk` targets)
+ - [`docs/intro.md`](./docs/intro.md) is an introduction to
+   big-picture ideas in `*.mk` snippets.
+ - [`docs/golang.md`](./docs/golang.md) discusses support for building
+   software written in Go.
+ - [`docs/testing.md`](./docs/testing.md) discusses adding tests to
+   `make check`.
+ - [`HACKING.md`](./HACKING.md) has guidelines for contributing to
+   `build-aux.git`.

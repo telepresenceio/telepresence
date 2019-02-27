@@ -2,6 +2,7 @@
 #
 # Makefile snippet for bits common bits we always want.
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
+_common.mk := $(lastword $(MAKEFILE_LIST))
 
 #
 # Variables
@@ -26,7 +27,7 @@ define SPACE
 endef
 
 #
-# Targets
+# User-facing targets
 
 # To the extent reasonable, use target names that agree with the GNU
 # standards.
@@ -36,24 +37,22 @@ endef
 all: build
 .PHONY: all
 
-build: ## Build the software
+build: ## (Common) Build the software
 .PHONY: build
 
-check: ## Check whether the software works; run the tests
-check: lint
+check: ## (Common) Check whether the software works; run the tests
 .PHONY: check
 
-lint: ## Perform static analysis of the software
+lint: ## (Common) Perform static analysis of the software
 .PHONY: lint
 
-format: ## Apply automatic formatting+cleanup to source code
+format: ## (Common) Apply automatic formatting+cleanup to source code
 .PHONY: format
 
-clean: ## Delete all files that are normally created by building the software
+clean: ## (Common) Delete all files that are normally created by building the software
 .PHONY: clean
-
 # XXX: Rename this to maintainer-clean, per GNU?
-clobber: ## Delete all files that this Makefile can re-generate
+clobber: ## (Common) Delete all files that this Makefile can re-generate
 clobber: clean
 .PHONY: clobber
 
@@ -63,7 +62,27 @@ clobber: clean
 clean: _common_clean
 _common_clean:
 	rm -rf -- bin_*
+	rm -f test-suite.tap
 .PHONY: _common_clean
+
+check: lint build
+	$(MAKE) test-suite.tap.summary
+test-suite.tap:
+	@$(dir $(_common.mk))tap-driver cat $(sort $(filter %.tap,$^)) > $@
+
+%.tap.summary: %.tap
+	@$(dir $(_common.mk))tap-driver summarize $<
+
+%.tap: %.tap.gen FORCE
+	@$(abspath $<) 2>&1 | tee $@ | $(dir $(_common.mk))tap-driver stream -n $<
+%.log: %.test FORCE
+	@$(abspath $<) >$@ 2>&1; echo :exit-status: $$? >>$@
+%.tap: %.log %.test
+	@{ \
+		printf '%s\n' 'TAP version 13' '1..1' && \
+		sed 's/^/#/' < $< && \
+		sed -n '$${ s/^:exit-status: 0$$/ok 1/; s/^:exit-status: 77$$/ok 1 # SKIP/; s/^:exit-status: .*/not ok 1/; p; }' < $<; \
+	} | tee $@ | $(dir $(_common.mk))tap-driver stream -n $*.test
 
 #
 # Functions
@@ -112,7 +131,7 @@ quote.shell = "$$(printf '%s\n' $(subst $(NL),' ','$(subst ','\'',$1)'))"
 # re-generate (such as compiling a Go program; we would like to let
 # `go install` decide whether it is up-to-date or not, rather than
 # trying to teach Make how to do that).  We could mark it as .PHONY,
-# but that tells make that "this isn't a "this isn't a real file that
+# but that tells Make that "this isn't a "this isn't a real file that
 # I expect to ever exist", which has a several implications for Make,
 # most of which we don't want.  Instead, we can have them *depend* on
 # a .PHONY target (which we'll name "FORCE"), so that they are always
