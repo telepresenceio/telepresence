@@ -12,7 +12,7 @@ import (
 
 	"github.com/Masterminds/sprig"
 	ms "github.com/mitchellh/mapstructure"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 var READY = map[string]func(Resource) bool{
@@ -206,9 +206,8 @@ func fixup(obj interface{}) interface{} {
 	case map[interface{}]interface{}:
 		result := make(map[string]interface{})
 		for k, v := range obj {
-			switch k := k.(type) {
-			case string:
-				result[k] = fixup(v)
+			if kStr, kIsStr := k.(string); kIsStr {
+				result[kStr] = fixup(v)
 			}
 		}
 		return result

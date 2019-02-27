@@ -30,7 +30,7 @@ func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
 			if result == "" {
 				http.NotFound(w, r)
 			} else {
-				w.Write([]byte(result + "\n"))
+				w.Write(append([]byte(result), '\n'))
 			}
 		case http.MethodPost:
 			d := json.NewDecoder(r.Body)
@@ -57,7 +57,7 @@ func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
 			if err != nil {
 				panic(err)
 			} else {
-				w.Write([]byte(result))
+				w.Write(result)
 			}
 		case http.MethodPost:
 			d := json.NewDecoder(r.Body)

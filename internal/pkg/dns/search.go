@@ -1,7 +1,6 @@
 package dns
 
 import (
-	"fmt"
 	"runtime"
 	"strings"
 
@@ -37,11 +36,14 @@ func OverrideSearchDomains(domains string) func() {
 }
 
 func getIfaces() (ifaces []string, err error) {
-	lines, err := tpu.ShellLogf("networksetup -listallnetworkservices | fgrep -v '*'", log)
+	lines, err := tpu.CmdLogf([]string{"networksetup", "-listallnetworkservices"}, log)
 	if err != nil {
 		return
 	}
 	for _, line := range strings.Split(lines, "\n") {
+		if strings.Contains(line, "*") {
+			continue
+		}
 		line = strings.TrimSpace(line)
 		if len(line) > 0 {
 			ifaces = append(ifaces, line)
@@ -51,12 +53,12 @@ func getIfaces() (ifaces []string, err error) {
 }
 
 func getSearchDomains(iface string) (domains string, err error) {
-	domains, err = tpu.ShellLogf(fmt.Sprintf("networksetup -getsearchdomains '%s'", iface), log)
+	domains, err = tpu.CmdLogf([]string{"networksetup", "-getsearchdomains", iface}, log)
 	domains = strings.TrimSpace(domains)
 	return
 }
 
 func setSearchDomains(iface, domains string) (err error) {
-	_, err = tpu.ShellLogf(fmt.Sprintf("networksetup -setsearchdomains '%s' '%s'", iface, domains), log)
+	_, err = tpu.CmdLogf([]string{"networksetup", "-setsearchdomains", iface, domains}, log)
 	return
 }
