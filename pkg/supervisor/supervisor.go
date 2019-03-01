@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"sync"
+
+	"github.com/pkg/errors"
 )
 
 // A supervisor provides an abstraction for managing a group of
@@ -178,7 +180,15 @@ func (s *Supervisor) launch(worker *Worker) {
 	}
 	worker.process = process
 	go func() {
-		err := worker.Work(process)
+		var err error
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					err = errors.Errorf("PANIC: %v", r)
+				}
+			}()
+			err = worker.Work(process)
+		}()
 		s.mutex.Lock()
 		defer s.mutex.Unlock()
 		worker.process = nil
@@ -205,12 +215,12 @@ func (s *Supervisor) launch(worker *Worker) {
 type Process struct {
 	Supervisor *Supervisor
 	Worker     *Worker
-	ready      bool
 	// Used for hard cancel.
 	Context context.Context
 	cancel  context.CancelFunc
 	// Used to signal graceful shutdown.
 	shutdown       chan struct{}
+	ready          bool
 	shutdownClosed bool
 }
 

@@ -74,6 +74,7 @@ func (spec *Spec) assertRequiredReady() {
 
 func (r Root) worker(spec Spec) *Worker {
 	r[spec.Name] = &spec
+	spec.state = UNSTARTED
 	spec.coworkers = r
 	return &Worker{
 		Name: spec.Name,
@@ -81,6 +82,7 @@ func (r Root) worker(spec Spec) *Worker {
 			spec.process = p
 			spec.state = SETUP
 			p.Log("setting up...")
+			spec.assertRequiredReady()
 			if spec.OnStartup != nil {
 				spec.OnStartup(&spec)
 			}
@@ -151,9 +153,9 @@ func TestErrorExit(t *testing.T) {
 		}))
 	}
 	errors := s.Run()
-	for _, count := range counts {
+	for i, count := range counts {
 		if count != 1 {
-			t.Fail()
+			t.Errorf("unexpected count %d: %d", i, count)
 		}
 	}
 	if len(errors) != N {
@@ -162,6 +164,37 @@ func TestErrorExit(t *testing.T) {
 	for _, err := range errors {
 		if !strings.HasPrefix(err.Error(), "boo-") {
 			t.Fail()
+		}
+	}
+}
+
+func TestPanicExit(t *testing.T) {
+	r := newRoot()
+	s := WithContext(context.Background())
+	N := 3
+	counts := make([]int, N)
+	for i := 0; i < N; i++ {
+		num := i
+		s.Supervise(r.worker(Spec{
+			Name: fmt.Sprintf("minion-%d", num),
+			OnReady: func(spec *Spec) {
+				counts[num]++
+				panic(fmt.Sprintf("boo-%d", num))
+			},
+		}))
+	}
+	errors := s.Run()
+	for i, count := range counts {
+		if count != 1 {
+			t.Errorf("unexpected count %d: %d", i, count)
+		}
+	}
+	if len(errors) != N {
+		t.Fail()
+	}
+	for _, err := range errors {
+		if !strings.HasPrefix(err.Error(), "PANIC: boo-") {
+			t.Errorf("unexpected error: %v", err)
 		}
 	}
 }
@@ -206,7 +239,24 @@ func TestShutdownOnError(t *testing.T) {
 		Error: "bug",
 	}))
 	errors := s.Run()
-	if len(errors) != 1 && errors[0].Error() != "bug" {
+	if !(len(errors) == 1 && errors[0].Error() == "bug") {
+		t.Errorf("unexpected errors: %v", errors)
+	}
+}
+
+func TestShutdownOnPanic(t *testing.T) {
+	r := newRoot()
+	s := WithContext(context.Background())
+	s.Supervise(r.worker(Spec{
+		Name:    "forever",
+		OnReady: func(spec *Spec) { spec.wait(-1) },
+	}))
+	s.Supervise(r.worker(Spec{
+		Name:    "buggy",
+		OnReady: func(spec *Spec) { panic("bug") },
+	}))
+	errors := s.Run()
+	if !(len(errors) == 1 && errors[0].Error() == "PANIC: bug") {
 		t.Errorf("unexpected errors: %v", errors)
 	}
 }
