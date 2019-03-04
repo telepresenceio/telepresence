@@ -96,7 +96,10 @@ func (s *Supervisor) Run() []error {
 	defer s.mutex.Unlock()
 	for len(s.workers) > 0 {
 		s.reconcile()
-		s.changed.Wait()
+		// reconcile may delete workers
+		if len(s.workers) > 0 {
+			s.changed.Wait()
+		}
 	}
 	return s.errors
 }
@@ -135,6 +138,7 @@ func (s *Supervisor) reconcile() {
 
 // shutdown anything that is safe to shutdown and not already shutdown
 func (s *Supervisor) reconcileShutdown() {
+	var cleanup []string
 OUTER:
 	for _, n := range s.names {
 		w := s.workers[n]
@@ -148,6 +152,14 @@ OUTER:
 			close(w.process.shutdown)
 			w.process.shutdownClosed = true
 		}
+		if w.process == nil {
+			cleanup = append(cleanup, w.Name)
+		}
+	}
+
+	for _, n := range cleanup {
+		w := s.workers[n]
+		s.remove(w)
 	}
 }
 

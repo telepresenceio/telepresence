@@ -227,6 +227,29 @@ func TestDependency(t *testing.T) {
 	}
 }
 
+func TestDependencyPanic(t *testing.T) {
+	r := newRoot()
+	s := WithContext(context.Background())
+	s.Supervise(r.worker(Spec{
+		Name: "minion",
+		OnStartup: func(spec *Spec) {
+			panic("oops")
+		},
+		OnReady: func(spec *Spec) { spec.wait(-1) },
+	}))
+	s.Supervise(r.worker(Spec{
+		Name:     "dependent-minion",
+		Requires: []string{"minion"},
+	}))
+	errors := s.Run()
+	if !(len(errors) == 1 && errors[0].Error() == "PANIC: oops") {
+		t.Errorf("unexpected errors: %v", errors)
+	}
+	if r["dependent-minion"].state != UNSTARTED {
+		t.Errorf("dependent-minion was started")
+	}
+}
+
 func TestShutdownOnError(t *testing.T) {
 	r := newRoot()
 	s := WithContext(context.Background())
