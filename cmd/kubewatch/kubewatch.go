@@ -117,12 +117,15 @@ func (s *Syncer) Run() {
 		// value from the current iteration instead of the
 		// value from the last iteration
 		kind := k
-		s.Watcher.WatchNamespace(NAMESPACE, kind, func(_ *k8s.Watcher) {
+		err := s.Watcher.WatchNamespace(NAMESPACE, kind, func(_ *k8s.Watcher) {
 			s.Mux.Lock()
 			defer s.Mux.Unlock()
 			s.Dirty = true
 			s.ModTime = time.Now()
 		})
+		if err != nil {
+			log.Fatalf("kubewatch: %v", err)
+		}
 	}
 	s.Watcher.Start()
 	s.serve()
