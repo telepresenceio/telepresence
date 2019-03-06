@@ -102,6 +102,14 @@ func (s *Supervisor) remove(worker *Worker) {
 func (s *Supervisor) Run() []error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+
+	// we make cancel trigger shutdown so that simple cases only
+	// need to worry about shutdown
+	go func() {
+		<-s.context.Done()
+		s.Shutdown()
+	}()
+
 	// reconcile may delete workers
 	s.reconcile()
 	for len(s.workers) > 0 {
@@ -196,12 +204,9 @@ OUTER:
 }
 
 func (s *Supervisor) launch(worker *Worker) {
-	context, cancel := context.WithCancel(s.context)
 	process := &Process{
 		supervisor: s,
 		worker:     worker,
-		Context:    context,
-		cancel:     cancel,
 		shutdown:   make(chan struct{}),
 	}
 	worker.process = process
@@ -242,9 +247,6 @@ func (s *Supervisor) launch(worker *Worker) {
 type Process struct {
 	supervisor *Supervisor
 	worker     *Worker
-	// Used for hard cancel.
-	Context context.Context
-	cancel  context.CancelFunc
 	// Used to signal graceful shutdown.
 	shutdown       chan struct{}
 	ready          bool
@@ -257,6 +259,10 @@ func (p *Process) Supervisor() *Supervisor {
 
 func (p *Process) Worker() *Worker {
 	return p.worker
+}
+
+func (p *Process) Context() context.Context {
+	return p.supervisor.context
 }
 
 // Invoked by a worker to signal it is ready.

@@ -47,12 +47,8 @@ func Example() {
 			// signal that we are ready
 			p.Ready()
 
-			select {
-			case <-p.Shutdown(): // await graceful shutdown signal
-				return srv.Shutdown(p.Context)
-			case <-p.Context.Done(): // await hard shutdown signal
-				return srv.Shutdown(p.Context)
-			}
+			<-p.Shutdown() // await graceful shutdown signal
+			return srv.Shutdown(p.Context())
 		},
 	})
 	s.Supervise(&Worker{

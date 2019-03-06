@@ -52,7 +52,7 @@ func (spec *Spec) wait(timeout time.Duration) {
 			spec.OnShutdown(spec)
 		}
 		p.Log("shut down")
-	case <-p.Context.Done():
+	case <-p.Context().Done():
 		spec.state = CANCEL
 		p.Log("hard shutdown")
 		if spec.OnCancel != nil {
@@ -357,6 +357,29 @@ func TestCancelPostRun(t *testing.T) {
 			spec.wait(-1)
 		},
 	}))
+
+	errors := s.Run()
+	if len(errors) != 0 {
+		t.Errorf("unexpected errors: %v", errors)
+	}
+	if !ran {
+		t.Fail()
+	}
+}
+
+func TestCancelTriggersShutdown(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	s := WithContext(ctx)
+	ran := false
+	s.Supervise(&Worker{
+		Name: "forever",
+		Work: func(p *Process) error {
+			cancel()
+			<-p.Shutdown()
+			ran = true
+			return nil
+		},
+	})
 
 	errors := s.Run()
 	if len(errors) != 0 {
