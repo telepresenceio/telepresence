@@ -66,13 +66,13 @@ func main() {
 			case "fail":
 				testCnt++
 				pkgTestCnt[event.Package] = pkgTestCnt[event.Package] + 1
-				fmt.Printf("not ok %d %v.%v # %v (%v) %v\n", testCnt, Name, Time, Elapsed, Output)
+				fmt.Printf("not ok %d %v # %v (%v) %v\n", testCnt, Name, Time, Elapsed, Output)
 			case "skip":
 				testCnt++
 				pkgTestCnt[event.Package] = pkgTestCnt[event.Package] + 1
-				fmt.Printf("ok %d %v.%v # SKIP %v (%v) %v\n", testCnt, Name, Time, Elapsed, Output)
+				fmt.Printf("ok %d %v # SKIP %v (%v) %v\n", testCnt, Name, Time, Elapsed, Output)
 			default:
-				fmt.Sprintln("#",
+				fmt.Println("#",
 					Time,
 					"(took "+Elapsed.String()+")",
 					fmt.Sprintf("%-6s", event.Action),
