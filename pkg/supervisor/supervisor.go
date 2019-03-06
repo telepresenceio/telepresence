@@ -64,6 +64,7 @@ func (s *Supervisor) Supervise(worker *Worker) {
 	s.names = append(s.names, worker.Name)
 }
 
+// this assumes that s.mutex is already held
 func (s *Supervisor) remove(worker *Worker) {
 	delete(s.workers, worker.Name)
 	var newNames []string
