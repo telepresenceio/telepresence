@@ -445,7 +445,9 @@ func TestGoPanic(t *testing.T) {
 		OnReady: func(spec *Spec) {
 			spec.process.Go(func(p *Process) error {
 				went = true
-				panic("boo")
+				if true {
+					panic("boo")
+				}
 				return nil
 			})
 		},

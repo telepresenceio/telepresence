@@ -283,5 +283,4 @@ func (p *Process) Go(fn func(*Process) error) {
 		Name: fmt.Sprintf("%s[%d]", p.Worker().Name, id),
 		Work: fn,
 	})
-	return
 }
