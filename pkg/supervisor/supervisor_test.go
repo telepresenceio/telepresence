@@ -162,7 +162,8 @@ func TestErrorExit(t *testing.T) {
 		t.Fail()
 	}
 	for _, err := range errors {
-		if !strings.HasPrefix(err.Error(), "boo-") {
+		wrk := err.(*Worker)
+		if !strings.HasPrefix(err.Error(), fmt.Sprintf("%s: boo-", wrk.Name)) {
 			t.Fail()
 		}
 	}
@@ -193,7 +194,8 @@ func TestPanicExit(t *testing.T) {
 		t.Fail()
 	}
 	for _, err := range errors {
-		if !strings.HasPrefix(err.Error(), "PANIC: boo-") {
+		wrk := err.(*Worker)
+		if !strings.HasPrefix(err.Error(), fmt.Sprintf("%s: PANIC: boo-", wrk.Name)) {
 			t.Errorf("unexpected error: %v", err)
 		}
 	}
@@ -242,7 +244,7 @@ func TestDependencyPanic(t *testing.T) {
 		Requires: []string{"minion"},
 	}))
 	errors := s.Run()
-	if !(len(errors) == 1 && errors[0].Error() == "PANIC: oops") {
+	if !(len(errors) == 1 && errors[0].Error() == "minion: PANIC: oops") {
 		t.Errorf("unexpected errors: %v", errors)
 	}
 	if r["dependent-minion"].state != UNSTARTED {
@@ -262,7 +264,7 @@ func TestShutdownOnError(t *testing.T) {
 		Error: "bug",
 	}))
 	errors := s.Run()
-	if !(len(errors) == 1 && errors[0].Error() == "bug") {
+	if !(len(errors) == 1 && errors[0].Error() == "buggy: bug") {
 		t.Errorf("unexpected errors: %v", errors)
 	}
 }
@@ -279,7 +281,7 @@ func TestShutdownOnPanic(t *testing.T) {
 		OnReady: func(spec *Spec) { panic("bug") },
 	}))
 	errors := s.Run()
-	if !(len(errors) == 1 && errors[0].Error() == "PANIC: bug") {
+	if !(len(errors) == 1 && errors[0].Error() == "buggy: PANIC: bug") {
 		t.Errorf("unexpected errors: %v", errors)
 	}
 }
@@ -387,5 +389,72 @@ func TestRetry(t *testing.T) {
 	}
 	if count != N {
 		t.Errorf("unexpected count: %d", count)
+	}
+}
+
+func TestGo(t *testing.T) {
+	r := newRoot()
+	s := WithContext(context.Background())
+	went := false
+	s.Supervise(r.worker(Spec{
+		Name: "entry",
+		OnReady: func(spec *Spec) {
+			spec.process.Go(func(p *Process) error {
+				went = true
+				return nil
+			})
+		},
+	}))
+	errors := s.Run()
+	if len(errors) != 0 {
+		t.Errorf("unexpected errors: %v", errors)
+	}
+	if !went {
+		t.Fail()
+	}
+}
+
+func TestGoError(t *testing.T) {
+	r := newRoot()
+	s := WithContext(context.Background())
+	went := false
+	s.Supervise(r.worker(Spec{
+		Name: "entry",
+		OnReady: func(spec *Spec) {
+			spec.process.Go(func(p *Process) error {
+				went = true
+				return fmt.Errorf("boo")
+			})
+		},
+	}))
+	errors := s.Run()
+	if !(len(errors) == 1 && errors[0].Error() == "entry[1]: boo") {
+		t.Errorf("unexpected errors: %v", errors)
+	}
+	if !went {
+		t.Fail()
+	}
+}
+
+func TestGoPanic(t *testing.T) {
+	r := newRoot()
+	s := WithContext(context.Background())
+	went := false
+	s.Supervise(r.worker(Spec{
+		Name: "entry",
+		OnReady: func(spec *Spec) {
+			spec.process.Go(func(p *Process) error {
+				went = true
+				panic("boo")
+				return nil
+			})
+		},
+	}))
+	errors := s.Run()
+	if !(len(errors) == 1 && errors[0].Error() == "entry[1]: PANIC: boo") {
+		t.Errorf("unexpected errors: %v", errors)
+	}
+	if !went {
+		t.Fail()
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 
 	"github.com/pkg/errors"
 )
@@ -43,7 +44,13 @@ type Worker struct {
 	Work     func(*Process) error // the function to perform the work
 	Requires []string             // a list of required worker names
 	Retry    bool                 // whether or not to retry on error
+	children int64                // atomic counter for naming children
 	process  *Process             // nil if the worker is not currently running
+	error    error
+}
+
+func (w *Worker) Error() string {
+	return fmt.Sprintf("%s: %s", w.Name, w.error.Error())
 }
 
 func (s *Supervisor) Supervise(worker *Worker) {
@@ -149,6 +156,7 @@ OUTER:
 					continue OUTER
 				}
 			}
+			log.Printf("shutting down %s", n)
 			close(w.process.shutdown)
 			w.process.shutdownClosed = true
 		}
@@ -176,6 +184,7 @@ OUTER:
 					continue OUTER
 				}
 			}
+			log.Printf("starting %s", n)
 			s.launch(w)
 		}
 	}
@@ -214,7 +223,8 @@ func (s *Supervisor) launch(worker *Worker) {
 				}
 			} else {
 				s.remove(worker)
-				s.errors = append(s.errors, err)
+				worker.error = err
+				s.errors = append(s.errors, worker)
 				s.shuttingDown = true
 			}
 		} else {
@@ -256,4 +266,13 @@ func (p *Process) Log(obj interface{}) {
 
 func (p *Process) Logf(format string, args ...interface{}) {
 	log.Printf("%s: %v", p.Worker.Name, fmt.Sprintf(format, args...))
+}
+
+func (p *Process) Go(fn func(*Process) error) {
+	id := atomic.AddInt64(&p.Worker.children, 1)
+	p.Supervisor.Supervise(&Worker{
+		Name: fmt.Sprintf("%s[%d]", p.Worker.Name, id),
+		Work: fn,
+	})
+	return
 }
