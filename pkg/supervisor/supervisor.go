@@ -102,12 +102,11 @@ func (s *Supervisor) remove(worker *Worker) {
 func (s *Supervisor) Run() []error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	// reconcile may delete workers
+	s.reconcile()
 	for len(s.workers) > 0 {
+		s.changed.Wait()
 		s.reconcile()
-		// reconcile may delete workers
-		if len(s.workers) > 0 {
-			s.changed.Wait()
-		}
 	}
 	return s.errors
 }
