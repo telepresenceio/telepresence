@@ -178,7 +178,12 @@ OUTER:
 		w := s.workers[n]
 		if w.process == nil {
 			for _, r := range w.Requires {
-				process := s.workers[r].process
+				required := s.workers[r]
+				if required == nil {
+					log.Printf("cannot start %s, required worker missing: %s", n, r)
+					continue OUTER
+				}
+				process := required.process
 				if process == nil || !process.ready {
 					log.Printf("cannot start %s, %s not ready", n, r)
 					continue OUTER
