@@ -10,6 +10,16 @@ import (
 	"github.com/pkg/errors"
 )
 
+type Logger interface {
+	Printf(format string, v ...interface{})
+}
+
+type DefaultLogger struct{}
+
+func (d *DefaultLogger) Printf(format string, v ...interface{}) {
+	log.Printf(format, v...)
+}
+
 // A supervisor provides an abstraction for managing a group of
 // related goroutines, and provides:
 //
@@ -27,6 +37,7 @@ type Supervisor struct {
 	names        []string           // list of worker names in order added
 	workers      map[string]*Worker // keyed by worker name
 	errors       []error
+	Logger       Logger
 }
 
 func WithContext(ctx context.Context) *Supervisor {
@@ -36,6 +47,7 @@ func WithContext(ctx context.Context) *Supervisor {
 		changed: sync.NewCond(mu),
 		context: ctx,
 		workers: make(map[string]*Worker),
+		Logger:  &DefaultLogger{},
 	}
 }
 
@@ -160,11 +172,11 @@ OUTER:
 		if w.process != nil && !w.process.shutdownClosed {
 			for _, d := range s.dependents(w) {
 				if s.workers[d.Name].process != nil {
-					log.Printf("cannot shutdown %s, %s still running", n, d.Name)
+					s.Logger.Printf("cannot shutdown %s, %s still running", n, d.Name)
 					continue OUTER
 				}
 			}
-			log.Printf("shutting down %s", n)
+			s.Logger.Printf("shutting down %s", n)
 			close(w.process.shutdown)
 			w.process.shutdownClosed = true
 		}
@@ -188,16 +200,16 @@ OUTER:
 			for _, r := range w.Requires {
 				required := s.workers[r]
 				if required == nil {
-					log.Printf("cannot start %s, required worker missing: %s", n, r)
+					s.Logger.Printf("cannot start %s, required worker missing: %s", n, r)
 					continue OUTER
 				}
 				process := required.process
 				if process == nil || !process.ready {
-					log.Printf("cannot start %s, %s not ready", n, r)
+					s.Logger.Printf("cannot start %s, %s not ready", n, r)
 					continue OUTER
 				}
 			}
-			log.Printf("starting %s", n)
+			s.Logger.Printf("starting %s", n)
 			s.launch(w)
 		}
 	}
@@ -280,11 +292,11 @@ func (p *Process) Shutdown() <-chan struct{} {
 
 // Used for logging...
 func (p *Process) Log(obj interface{}) {
-	log.Printf("%s: %v", p.Worker().Name, obj)
+	p.supervisor.Logger.Printf("%s: %v", p.Worker().Name, obj)
 }
 
 func (p *Process) Logf(format string, args ...interface{}) {
-	log.Printf("%s: %v", p.Worker().Name, fmt.Sprintf(format, args...))
+	p.supervisor.Logger.Printf("%s: %v", p.Worker().Name, fmt.Sprintf(format, args...))
 }
 
 func (p *Process) Go(fn func(*Process) error) {
