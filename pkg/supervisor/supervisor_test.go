@@ -220,7 +220,7 @@ func TestDependency(t *testing.T) {
 			if r["minion"].state != READY {
 				panic("minion not ready")
 			}
-			spec.process.Supervisor.Shutdown()
+			spec.process.Supervisor().Shutdown()
 		},
 	}))
 	errors := s.Run()
@@ -296,7 +296,7 @@ func TestShutdown(t *testing.T) {
 	s.Supervise(r.worker(Spec{
 		Name: "quitter",
 		OnReady: func(spec *Spec) {
-			spec.process.Supervisor.Shutdown()
+			spec.process.Supervisor().Shutdown()
 			spec.wait(-1)
 		},
 	}))
@@ -379,7 +379,7 @@ func TestRetry(t *testing.T) {
 		OnReady: func(spec *Spec) {
 			count += 1
 			if count == N {
-				spec.process.Supervisor.Shutdown()
+				spec.process.Supervisor().Shutdown()
 			}
 		},
 	}))

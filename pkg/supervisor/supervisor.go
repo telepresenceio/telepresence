@@ -194,8 +194,8 @@ OUTER:
 func (s *Supervisor) launch(worker *Worker) {
 	context, cancel := context.WithCancel(s.context)
 	process := &Process{
-		Supervisor: s,
-		Worker:     worker,
+		supervisor: s,
+		worker:     worker,
 		Context:    context,
 		cancel:     cancel,
 		shutdown:   make(chan struct{}),
@@ -236,8 +236,8 @@ func (s *Supervisor) launch(worker *Worker) {
 }
 
 type Process struct {
-	Supervisor *Supervisor
-	Worker     *Worker
+	supervisor *Supervisor
+	worker     *Worker
 	// Used for hard cancel.
 	Context context.Context
 	cancel  context.CancelFunc
@@ -247,12 +247,20 @@ type Process struct {
 	shutdownClosed bool
 }
 
+func (p *Process) Supervisor() *Supervisor {
+	return p.supervisor
+}
+
+func (p *Process) Worker() *Worker {
+	return p.worker
+}
+
 // Invoked by a worker to signal it is ready.
 func (p *Process) Ready() {
-	p.Supervisor.mutex.Lock()
-	defer p.Supervisor.mutex.Unlock()
+	p.Supervisor().mutex.Lock()
+	defer p.Supervisor().mutex.Unlock()
 	p.ready = true
-	p.Supervisor.changed.Broadcast()
+	p.Supervisor().changed.Broadcast()
 }
 
 // Used for graceful shutdown...
@@ -262,17 +270,17 @@ func (p *Process) Shutdown() <-chan struct{} {
 
 // Used for logging...
 func (p *Process) Log(obj interface{}) {
-	log.Printf("%s: %v", p.Worker.Name, obj)
+	log.Printf("%s: %v", p.Worker().Name, obj)
 }
 
 func (p *Process) Logf(format string, args ...interface{}) {
-	log.Printf("%s: %v", p.Worker.Name, fmt.Sprintf(format, args...))
+	log.Printf("%s: %v", p.Worker().Name, fmt.Sprintf(format, args...))
 }
 
 func (p *Process) Go(fn func(*Process) error) {
-	id := atomic.AddInt64(&p.Worker.children, 1)
-	p.Supervisor.Supervise(&Worker{
-		Name: fmt.Sprintf("%s[%d]", p.Worker.Name, id),
+	id := atomic.AddInt64(&p.Worker().children, 1)
+	p.Supervisor().Supervise(&Worker{
+		Name: fmt.Sprintf("%s[%d]", p.Worker().Name, id),
 		Work: fn,
 	})
 	return
