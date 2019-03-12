@@ -47,13 +47,15 @@ There are THREE major logical components in this design. All of these names tent
       |  Watchers  |----------->|  Assembler  |---> <SNAPSHOT>
       |            | N        1 |             |
       +------------+            +-------------+
-    
+```
 
-Notes:
-======
+## ThOP Notes
 
 1. "Watchers" is a generic catch all for Kubernetes/Consul/Whatever resource watcher. 
-
 2. How the Assembler gets info about changes in the Watches is not important at this phase. They may push them over a Channel or the Assembler may query them somehow. It has not yet been decided. 
-    
-```
+
+## Next Steps
+
+1. [Phil] Toy implementation of the diagram and description from above.
+2. [Rafi, Phil] Poke at PoC. Decide if this path makes sense.
+3. [Team] Assuming `<2>` is a success get broader feedback and sketch work to move from PoC to "real".
