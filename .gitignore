@@ -5,3 +5,6 @@
 /bin_*
 /.firewall.lock
 /.cluster.lock
+
+# --- IntelliJ IDEA ---
+.idea
