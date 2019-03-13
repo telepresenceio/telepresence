@@ -30,14 +30,14 @@ func (d *DefaultLogger) Printf(format string, v ...interface{}) {
 // - logging
 //
 type Supervisor struct {
-	mutex        *sync.Mutex
-	changed      *sync.Cond // used to signal when a worker is ready or done
-	context      context.Context
-	shuttingDown bool               // signals we are in shutdown mode
-	names        []string           // list of worker names in order added
-	workers      map[string]*Worker // keyed by worker name
-	errors       []error
-	Logger       Logger
+	mutex         *sync.Mutex
+	changed       *sync.Cond // used to signal when a worker is ready or done
+	context       context.Context
+	wantsShutdown bool               // signals we are in shutdown mode
+	names         []string           // list of worker names in order added
+	workers       map[string]*Worker // keyed by worker name
+	errors        []error
+	Logger        Logger
 }
 
 func WithContext(ctx context.Context) *Supervisor {
@@ -52,13 +52,15 @@ func WithContext(ctx context.Context) *Supervisor {
 }
 
 type Worker struct {
-	Name     string               // the name of the worker
-	Work     func(*Process) error // the function to perform the work
-	Requires []string             // a list of required worker names
-	Retry    bool                 // whether or not to retry on error
-	children int64                // atomic counter for naming children
-	process  *Process             // nil if the worker is not currently running
-	error    error
+	Name          string               // the name of the worker
+	Work          func(*Process) error // the function to perform the work
+	Requires      []string             // a list of required worker names
+	Retry         bool                 // whether or not to retry on error
+	wantsShutdown bool                 // true if the worker wants to shut down
+	supervisor    *Supervisor          //
+	children      int64                // atomic counter for naming children
+	process       *Process             // nil if the worker is not currently running
+	error         error
 }
 
 func (w *Worker) Error() string {
@@ -73,6 +75,7 @@ func (s *Supervisor) Supervise(worker *Worker) {
 		panic(fmt.Sprintf("worker already exists: %s", worker.Name))
 	}
 	s.workers[worker.Name] = worker
+	worker.supervisor = s
 	s.names = append(s.names, worker.Name)
 }
 
@@ -136,7 +139,26 @@ func (s *Supervisor) Run() []error {
 func (s *Supervisor) Shutdown() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	s.shuttingDown = true
+	s.wantsShutdown = true
+	s.changed.Broadcast()
+}
+
+// Gets the worker with the specified name. Will return nil if no such
+// worker exists.
+func (s *Supervisor) Get(name string) *Worker {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.workers[name]
+}
+
+// Shuts down the worker. Note that if the worker has other workers
+// that depend on it, the shutdown won't actually be initiated until
+// those dependent workers exit.
+func (w *Worker) Shutdown() {
+	s := w.supervisor
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	w.wantsShutdown = true
 	s.changed.Broadcast()
 }
 
@@ -156,31 +178,11 @@ func (s *Supervisor) dependents(worker *Worker) (result []*Worker) {
 // make sure anything that would like to be running is actually
 // running
 func (s *Supervisor) reconcile() {
-	if s.shuttingDown {
-		s.reconcileShutdown()
-	} else {
-		s.reconcileNormal()
-	}
-}
-
-// shutdown anything that is safe to shutdown and not already shutdown
-func (s *Supervisor) reconcileShutdown() {
 	var cleanup []string
-OUTER:
 	for _, n := range s.names {
 		w := s.workers[n]
-		if w.process != nil && !w.process.shutdownClosed {
-			for _, d := range s.dependents(w) {
-				if s.workers[d.Name].process != nil {
-					s.Logger.Printf("cannot shutdown %s, %s still running", n, d.Name)
-					continue OUTER
-				}
-			}
-			s.Logger.Printf("shutting down %s", n)
-			close(w.process.shutdown)
-			w.process.shutdownClosed = true
-		}
-		if w.process == nil {
+		remove := w.reconcile()
+		if remove {
 			cleanup = append(cleanup, w.Name)
 		}
 	}
@@ -191,28 +193,48 @@ OUTER:
 	}
 }
 
-// launch anything that is safe to launch and not already launched
-func (s *Supervisor) reconcileNormal() {
-OUTER:
-	for _, n := range s.names {
-		w := s.workers[n]
+func (w *Worker) shuttingDown() bool {
+	return w.wantsShutdown || w.supervisor.wantsShutdown
+}
+
+// returns true if the worker is done and should be removed from the supervisor
+func (w *Worker) reconcile() bool {
+	s := w.supervisor
+	if w.shuttingDown() {
+		if w.process != nil && !w.process.shutdownClosed {
+			for _, d := range s.dependents(w) {
+				if s.workers[d.Name].process != nil {
+					s.Logger.Printf("cannot shutdown %s, %s still running", w.Name, d.Name)
+					return false
+				}
+			}
+			s.Logger.Printf("shutting down %s", w.Name)
+			close(w.process.shutdown)
+			w.process.shutdownClosed = true
+		}
+		if w.process == nil {
+			return true
+		}
+	} else if true { // I really just wanted an else here, but lint wouldn't let me do that.
 		if w.process == nil {
 			for _, r := range w.Requires {
 				required := s.workers[r]
 				if required == nil {
-					s.Logger.Printf("cannot start %s, required worker missing: %s", n, r)
-					continue OUTER
+					s.Logger.Printf("cannot start %s, required worker missing: %s", w.Name, r)
+					return false
 				}
 				process := required.process
 				if process == nil || !process.ready {
-					s.Logger.Printf("cannot start %s, %s not ready", n, r)
-					continue OUTER
+					s.Logger.Printf("cannot start %s, %s not ready", w.Name, r)
+					return false
 				}
 			}
-			s.Logger.Printf("starting %s", n)
+			s.Logger.Printf("starting %s", w.Name)
 			s.launch(w)
 		}
+
 	}
+	return false
 }
 
 func (s *Supervisor) launch(worker *Worker) {
@@ -238,7 +260,7 @@ func (s *Supervisor) launch(worker *Worker) {
 		if err != nil {
 			process.Log(err)
 			if worker.Retry {
-				if s.shuttingDown {
+				if worker.shuttingDown() {
 					s.remove(worker)
 				} else {
 					process.Log("retrying...")
@@ -247,7 +269,7 @@ func (s *Supervisor) launch(worker *Worker) {
 				s.remove(worker)
 				worker.error = err
 				s.errors = append(s.errors, worker)
-				s.shuttingDown = true
+				s.wantsShutdown = true
 			}
 		} else {
 			s.remove(worker)
@@ -299,10 +321,12 @@ func (p *Process) Logf(format string, args ...interface{}) {
 	p.supervisor.Logger.Printf("%s: %v", p.Worker().Name, fmt.Sprintf(format, args...))
 }
 
-func (p *Process) Go(fn func(*Process) error) {
+func (p *Process) Go(fn func(*Process) error) *Worker {
 	id := atomic.AddInt64(&p.Worker().children, 1)
-	p.Supervisor().Supervise(&Worker{
+	w := &Worker{
 		Name: fmt.Sprintf("%s[%d]", p.Worker().Name, id),
 		Work: fn,
-	})
+	}
+	p.Supervisor().Supervise(w)
+	return w
 }
