@@ -150,7 +150,9 @@ func runWatt(_ *cobra.Command, _ []string) {
 				}(snapshot)
 
 				wg.Wait()
-				w.Write([]byte(res))
+				if _, err := w.Write([]byte(res)); err != nil {
+					p.Logf("write snapshot errored: %v", err)
+				}
 			})
 			listenHostAndPort := fmt.Sprintf(":%d", port)
 			p.Logf("snapshot server listening on: %s", listenHostAndPort)
