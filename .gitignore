@@ -8,3 +8,6 @@
 
 # --- IntelliJ IDEA ---
 .idea
+
+# --- Binaries ---
+bin

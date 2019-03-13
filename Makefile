@@ -41,3 +41,9 @@ clean:
 
 test.fast:
 	go test -tags=gorgonzola -v ./...
+
+consul.local:
+	docker run --rm -it -p8500:8500 --name=consul consul:1.4.3
+
+consul.attach:
+	docker exec -it consul /bin/sh
