@@ -6,11 +6,14 @@ import (
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/datawire/teleproxy/pkg/watt"
 	"github.com/spf13/cobra"
+	"net/http"
 	"os"
+	"sync"
 	"time"
 )
 
 var initialSources = make([]string, 0)
+var port int
 
 var rootCmd = &cobra.Command{
 	Use:              "watt",
@@ -20,13 +23,13 @@ var rootCmd = &cobra.Command{
 	Run:              runWatt,
 }
 
-func init() {
-	rootCmd.Flags().StringSliceVarP(&initialSources, "source", "s", []string{}, "")
+type getSnapshotRequest struct {
+	snapshot chan string
 }
 
-func assembler(p *supervisor.Process) error {
-	fmt.Println("I am the assembler")
-	return nil
+func init() {
+	rootCmd.Flags().StringSliceVarP(&initialSources, "source", "s", []string{}, "configure an initial static source")
+	rootCmd.Flags().IntVarP(&port, "port", "p", 7000, "configure the snapshot server port")
 }
 
 func makeWatchman(staticSources []string, sources <-chan []string) func(p *supervisor.Process) error {
@@ -50,12 +53,14 @@ func makeWatchman(staticSources []string, sources <-chan []string) func(p *super
 	}
 }
 
-func makeAssembler(recordsCh <-chan []string) func(p *supervisor.Process) error {
+func makeAssembler(getSnapshotCh <-chan *getSnapshotRequest, recordsCh <-chan []string) func(p *supervisor.Process) error {
 	return func(p *supervisor.Process) error {
 		snapshots := make([]watt.Snapshot, 0)
 
 		for {
 			select {
+			case req := <-getSnapshotCh:
+				req.snapshot <- "THIS IS A SNAPSHOT"
 			case records := <-recordsCh:
 				fmt.Println(records)
 				snapshots = append(snapshots)
@@ -89,6 +94,8 @@ func runWatt(_ *cobra.Command, _ []string) {
 	sourcesChan := make(chan []string)
 	recordsChan := make(chan []string)
 
+	getSnapshotChan := make(chan *getSnapshotRequest)
+
 	fmt.Println(initialSources)
 
 	ctx := context.Background()
@@ -102,7 +109,7 @@ func runWatt(_ *cobra.Command, _ []string) {
 
 	s.Supervise(&supervisor.Worker{
 		Name:  "assembler",
-		Work:  makeAssembler(recordsChan),
+		Work:  makeAssembler(getSnapshotChan, recordsChan),
 		Retry: false,
 	})
 
@@ -122,6 +129,33 @@ func runWatt(_ *cobra.Command, _ []string) {
 		Name:  cwm.ID(),
 		Work:  cwmFunc,
 		Retry: false,
+	})
+
+	s.Supervise(&supervisor.Worker{
+		Name: "snapshot server",
+		Work: func(p *supervisor.Process) error {
+			http.HandleFunc("/snapshot", func(w http.ResponseWriter, r *http.Request) {
+				wg := &sync.WaitGroup{}
+				snapshot := make(chan string)
+				getSnapshotChan <- &getSnapshotRequest{snapshot: snapshot}
+
+				res := ""
+				wg.Add(1)
+				go func(replyChan chan string) {
+					defer wg.Done()
+					for v := range snapshot {
+						res = v
+						close(snapshot)
+					}
+				}(snapshot)
+
+				wg.Wait()
+				w.Write([]byte(res))
+			})
+			listenHostAndPort := fmt.Sprintf(":%d", port)
+			p.Logf("snapshot server listening on: %s", listenHostAndPort)
+			return http.ListenAndServe(listenHostAndPort, nil)
+		},
 	})
 
 	if errs := s.Run(); len(errs) > 0 {
