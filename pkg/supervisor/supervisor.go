@@ -143,12 +143,17 @@ func (s *Supervisor) Shutdown() {
 	s.changed.Broadcast()
 }
 
+// Gets the worker with the specified name. Will return nil if no such
+// worker exists.
 func (s *Supervisor) Get(name string) *Worker {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.workers[name]
 }
 
+// Shuts down the worker. Note that if the worker has other workers
+// that depend on it, the shutdown won't actually be initiated until
+// those dependent workers exit.
 func (w *Worker) Shutdown() {
 	s := w.supervisor
 	s.mutex.Lock()
