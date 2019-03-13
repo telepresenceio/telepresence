@@ -483,3 +483,31 @@ func TestGoPanic(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestWorkerShutdown(t *testing.T) {
+	r := newRoot()
+	s := WithContext(context.Background())
+	fooRan := false
+	s.Supervise(r.worker(Spec{
+		Name: "foo",
+		OnReady: func(spec *Spec) {
+			fooRan = true
+			// wait until we are shutdown
+			<-spec.process.Shutdown()
+		},
+	}))
+	s.Supervise(r.worker(Spec{
+		Name:     "bar",
+		Requires: []string{"foo"},
+		OnReady: func(spec *Spec) {
+			s.Get("foo").Shutdown()
+		},
+	}))
+	errors := s.Run()
+	if len(errors) != 0 {
+		t.Errorf("unexpected errors: %v", errors)
+	}
+	if !fooRan {
+		t.Fail()
+	}
+}
