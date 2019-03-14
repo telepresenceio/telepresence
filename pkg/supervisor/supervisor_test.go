@@ -511,3 +511,36 @@ func TestWorkerShutdown(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestSuperviseAfterRun(t *testing.T) {
+	s := WithContext(context.Background())
+	running := make(chan struct{})
+	ran := false
+	go func() {
+		// wait until the supervisor is running
+		<-running
+		s.Supervise(&Worker{
+			Name: "late",
+			Work: func(p *Process) error {
+				s.Shutdown()
+				ran = true
+				return nil
+			},
+		})
+	}()
+	s.Supervise(&Worker{
+		Name: "forever",
+		Work: func(p *Process) error {
+			close(running)
+			<-p.Shutdown()
+			return nil
+		},
+	})
+	errors := s.Run()
+	if len(errors) != 0 {
+		t.Errorf("unexpected errors: %v", errors)
+	}
+	if !ran {
+		t.Fail()
+	}
+}
