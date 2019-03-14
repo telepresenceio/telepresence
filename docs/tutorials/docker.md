@@ -14,7 +14,7 @@ In this HOWTO, we'll walk through how to use Telepresence with a containerized D
 We'll start with a quick example. Start by running a service in the cluster:
 
 ```console
-$ kubectl run qotm --image=datawire/qotm:1.3 --port=5000 --expose
+$ kubectl run qotm --image=datawire/qotm:1.5 --port=5000 --expose
 $ kubectl get service qotm
 NAME        CLUSTER-IP   EXTERNAL-IP   PORT(S)    AGE
 qotm        10.0.0.12    <none>        8000/TCP   1m
@@ -83,7 +83,7 @@ $ kubectl run -i --tty alpine --image=alpine -- sh
 Let's change the version in `qotm.py`. Run the following:
 
 ```
-sed -i -e 's@1.3@'"1.4"'@' qotm/qotm.py
+sed -i -e 's@1.5@'"1.6"'@' qotm/qotm.py
 ```
 
 Rerun the `curl` command from your remote pod:
