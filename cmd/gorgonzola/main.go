@@ -87,11 +87,8 @@ func makeKubeWatcher(namespace string,
 					resources = append(resources, watcher.List(kind)...)
 				}
 
-				p.Logf("sending to watchman and assembler")
 				watchman <- resources
-				p.Logf("sent to watchman")
 				assembler <- resources
-				p.Logf("sent to assembler")
 			})
 
 			if err != nil {
