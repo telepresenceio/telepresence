@@ -130,6 +130,7 @@ func (w *Watcher) WatchNamespace(namespace, resources string, listener func(*Wat
 		Version:  ri.Version,
 		Resource: ri.Name,
 	})
+
 	var watched dynamic.ResourceInterface
 	if namespace != "" {
 		watched = resource.Namespace(namespace)

@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -114,6 +115,15 @@ func (m Map) getBool(key string) bool {
 	}
 }
 
+func (m Map) getArray(key string) []interface{} {
+	v, ok := m[key]
+	if ok {
+		return v.([]interface{})
+	} else {
+		return []interface{}{}
+	}
+}
+
 // Resource is map from strings to any with some convenience methods for
 // accessing typical Kubernetes resource fields.
 type Resource map[string]interface{}
@@ -134,6 +144,10 @@ func (r Resource) Empty() bool {
 
 func (r Resource) Status() Map {
 	return Map(r).getMap("status")
+}
+
+func (r Resource) Data() Map {
+	return Map(r).getMap("data")
 }
 
 func (r Resource) Spec() Map {
@@ -176,6 +190,10 @@ func (r Resource) Namespace() string { return r.Metadata().Namespace() }
 
 func (m Metadata) ResourceVersion() string { return Map(m).getString("resourceVersion") }
 func (r Resource) ResourceVersion() string { return r.Metadata().ResourceVersion() }
+
+func (m Metadata) Annotations() map[string]interface{} {
+	return Map(m).getMap("annotations")
+}
 
 func (m Metadata) QName() string {
 	ns := m.Namespace()
@@ -326,4 +344,21 @@ func MarshalResources(resources []Resource) ([]byte, error) {
 
 func MarshalResource(resource Resource) ([]byte, error) {
 	return MarshalResources([]Resource{resource})
+}
+
+func MarshalResourcesJSON(resources []Resource) ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	e := json.NewEncoder(buf)
+	for _, r := range resources {
+		err := e.Encode(r)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return buf.Bytes(), nil
+}
+
+func MarshalResourceJSON(resource Resource) ([]byte, error) {
+	return MarshalResourcesJSON([]Resource{resource})
 }
