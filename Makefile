@@ -11,7 +11,7 @@ BINARY_BASENAME=watt
 all: clean build
 
 build:
-	$(GOBUILD) cmd/gorgonzola/main.go
+	$(GOBUILD) cmd/$(BINARY_BASENAME)/main.go
 	ln -sf $(BINARY_BASENAME)-$(GOOS)-$(GOARCH) bin/$(BINARY_BASENAME)
 
 build.image:
