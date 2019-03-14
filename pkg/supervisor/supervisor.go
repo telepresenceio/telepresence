@@ -77,6 +77,7 @@ func (s *Supervisor) Supervise(worker *Worker) {
 	s.workers[worker.Name] = worker
 	worker.supervisor = s
 	s.names = append(s.names, worker.Name)
+	s.changed.Broadcast()
 }
 
 // this assumes that s.mutex is already held
