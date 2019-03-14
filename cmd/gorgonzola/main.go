@@ -11,7 +11,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 )
 
 var kubernetesNamespace string
@@ -24,11 +23,6 @@ var rootCmd = &cobra.Command{
 	Long:             "watt - watch all the things",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {},
 	Run:              runWatt,
-}
-
-type KubernetesSource struct {
-	Namespace string
-	Kind      string
 }
 
 type getSnapshotRequest struct {
@@ -71,10 +65,10 @@ func extractAmbassadorAnnotation(r k8s.Resource) string {
 	return ""
 }
 
-// makeKubewatcher returns a function that sets up a series of watches to the Kubernetes API for different
+// makeKubeWatcher returns a function that sets up a series of watches to the Kubernetes API for different
 // kubernetes resources. When a change occurs the function gets the state of all resources that are being watched
 // and sends a message to the watchman and assembler channels for further processing.
-func makeKubewatcher(namespace string,
+func makeKubeWatcher(namespace string,
 	kinds []string,
 	watchman chan<- []k8s.Resource,
 	assembler chan<- []k8s.Resource) func(p *supervisor.Process) error {
@@ -83,19 +77,29 @@ func makeKubewatcher(namespace string,
 		kubeWatcher := k8s.NewClient(nil).Watcher()
 
 		for _, kind := range kinds {
+			p.Logf("adding watch for %q", kind)
 			err := kubeWatcher.WatchNamespace(namespace, kind, func(watcher *k8s.Watcher) {
+				k := kinds
+				p.Logf("change in watched resources")
+
 				resources := make([]k8s.Resource, 0)
-				for _, kind := range kinds {
+				for _, kind := range k {
 					resources = append(resources, watcher.List(kind)...)
 				}
 
+				p.Logf("sending to watchman and assembler")
 				watchman <- resources
+				p.Logf("sent to watchman")
 				assembler <- resources
+				p.Logf("sent to assembler")
 			})
 
 			if err != nil {
+				p.Logf("failed to add watch for %q", kind)
 				return err
 			}
+
+			p.Logf("added watch for %q", kind)
 		}
 
 		kubeWatcher.Start()
@@ -103,6 +107,7 @@ func makeKubewatcher(namespace string,
 		for {
 			select {
 			case <-p.Shutdown():
+				p.Logf("shutdown initiated\n")
 				kubeWatcher.Stop()
 				return nil
 			}
@@ -112,9 +117,6 @@ func makeKubewatcher(namespace string,
 
 func makeConsulWatcher(config k8s.Resource, assembler chan<- []k8s.Resource) (string, *supervisor.Worker) {
 	data := config.Data()
-
-	fmt.Println(data)
-
 	cwm := &watt.ConsulServiceNodeWatchMaker{
 		Service:     data["service"].(string),
 		Datacenter:  data["datacenter"].(string),
@@ -130,26 +132,39 @@ func makeConsulWatcher(config k8s.Resource, assembler chan<- []k8s.Resource) (st
 }
 
 func makeWatchman(resourcesChan <-chan []k8s.Resource, assembler chan<- []k8s.Resource) func(p *supervisor.Process) error {
-	watched := make([]string, 0)
-
 	return func(p *supervisor.Process) error {
+		p.Ready()
+
+		watched := make(map[string]*supervisor.Worker)
+
 		for {
 			select {
 			case resources := <-resourcesChan:
+				reported := make(map[string]*supervisor.Worker, 0)
 				for _, r := range resources {
 					rType, _ := isAmbassadorConfiguration(r)
 					if rType == "consul-resolver" {
-						fmt.Println(r)
-
 						ID, worker := makeConsulWatcher(r, assembler)
+						if _, exists := watched[ID]; !exists {
+							p.Logf("add consul watcher %s\n", ID)
+							p.Supervisor().Supervise(worker)
+							watched[ID] = worker
+						}
 
-						fmt.Println(2)
-						watched = append(watched, ID)
-
-						fmt.Println(3)
-						p.Supervisor().Supervise(worker)
+						reported[ID] = worker
 					}
 				}
+
+				// purge the watches that no longer are needed because they did not come through the in the latest
+				// report
+				for k, worker := range watched {
+					if _, exists := reported[k]; !exists {
+						p.Logf("remove consul watcher %s\n", k)
+						worker.Shutdown()
+					}
+				}
+
+				watched = reported
 			case <-p.Shutdown():
 				return nil
 			}
@@ -157,35 +172,22 @@ func makeWatchman(resourcesChan <-chan []k8s.Resource, assembler chan<- []k8s.Re
 	}
 }
 
-func makeAssembler(getSnapshotCh <-chan *getSnapshotRequest, recordsCh <-chan []string) func(p *supervisor.Process) error {
+func makeAssembler(getSnapshotCh <-chan *getSnapshotRequest, recordsCh <-chan []k8s.Resource) func(p *supervisor.Process) error {
 	return func(p *supervisor.Process) error {
+		p.Ready()
 		snapshots := make([]watt.Snapshot, 0)
 
 		for {
 			select {
 			case req := <-getSnapshotCh:
-				req.snapshot <- "THIS IS A SNAPSHOT" // ignore this for now.
+				p.Logf("returning snapshot")
+				req.snapshot <- "{ }" // ignore this for now.
 
-			case records := <-recordsCh:
-				fmt.Println(records)
-				snapshots = append(snapshots)
+			case <-recordsCh:
+				p.Logf("creating snapshot")
 				if len(snapshots) > 10 {
 					snapshots = snapshots[1:]
 				}
-			case <-p.Shutdown():
-				return nil
-			}
-		}
-	}
-}
-
-func makeTicker(frequency time.Duration, work func()) func(p *supervisor.Process) error {
-	return func(p *supervisor.Process) error {
-		ticker := time.NewTicker(frequency).C
-		for {
-			select {
-			case <-ticker:
-				work()
 			case <-p.Shutdown():
 				return nil
 			}
@@ -201,54 +203,35 @@ func runWatt(_ *cobra.Command, _ []string) {
 	watchman := make(chan []k8s.Resource)
 	assembler := make(chan []k8s.Resource)
 
-	sourcesChan := make(chan []string)
-	recordsChan := make(chan []string)
-
-	getSnapshotChan := make(chan *getSnapshotRequest)
-
 	fmt.Println(initialSources)
 
 	ctx := context.Background()
 
 	s := supervisor.WithContext(ctx)
 	s.Supervise(&supervisor.Worker{
-		Name:  "kubewatcher",
-		Work:  makeKubewatcher(kubernetesNamespace, initialSources, watchman, assembler),
-		Retry: false,
+		Name:     "kubewatcher",
+		Work:     makeKubeWatcher(kubernetesNamespace, initialSources, watchman, assembler),
+		Requires: []string{"watchman"},
+		Retry:    false,
 	})
 
 	s.Supervise(&supervisor.Worker{
-		Name:  "watchman",
-		Work:  makeWatchman(watchman, assembler),
-		Retry: false,
+		Name:     "watchman",
+		Work:     makeWatchman(watchman, assembler),
+		Requires: []string{"assembler"},
+		Retry:    false,
 	})
 
+	getSnapshotChan := make(chan *getSnapshotRequest)
 	s.Supervise(&supervisor.Worker{
 		Name:  "assembler",
-		Work:  makeAssembler(getSnapshotChan, recordsChan),
+		Work:  makeAssembler(getSnapshotChan, assembler),
 		Retry: false,
 	})
 
 	s.Supervise(&supervisor.Worker{
-		Name: "sim-dynamic",
-		Work: makeTicker(1*time.Second, func() { sourcesChan <- []string{"dynamic"} }),
-	})
-
-	//cwm := &watt.ConsulServiceNodeWatchMaker{
-	//	Service:     "foo",
-	//	Datacenter:  "dc1",
-	//	OnlyHealthy: true,
-	//}
-	//
-	//cwmFunc, _ := cwm.Make(recordsChan)
-	//s.Supervise(&supervisor.Worker{
-	//	Name:  cwm.ID(),
-	//	Work:  cwmFunc,
-	//	Retry: false,
-	//})
-
-	s.Supervise(&supervisor.Worker{
-		Name: "snapshot server",
+		Name:     "snapshot server",
+		Requires: []string{"assembler"},
 		Work: func(p *supervisor.Process) error {
 			http.HandleFunc("/snapshot", func(w http.ResponseWriter, r *http.Request) {
 				wg := &sync.WaitGroup{}

@@ -14,16 +14,18 @@ func main() {
 	//	fmt.Println("namespaces changed!")
 	//})
 
-	err = w.WatchNamespace("", "endpoints", func(watcher *k8s.Watcher) {
+	err = w.WatchNamespace("", "configmap", func(watcher *k8s.Watcher) {
 		fmt.Println("stuff changed!")
+
+		services := w.List("configmap")
+		for _, s := range services {
+			fmt.Println(s.Name())
+		}
+
+		fmt.Println("===")
 	})
 
 	w.Start()
-
-	services := w.List("endpoints")
-	for _, s := range services {
-		fmt.Println(s.Name())
-	}
 
 	if err != nil {
 		panic(err)

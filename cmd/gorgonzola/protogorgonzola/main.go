@@ -24,7 +24,7 @@ func (r Resources) MarshalJSON() ([]byte, error) {
 type ResourceSlug struct {
 	Type      ResourceType `json:",string"`
 	Name      string       `json:""`
-	Namespace string	   `json:""`
+	Namespace string       `json:""`
 }
 
 func (s *ResourceSlug) String() string {
@@ -44,7 +44,7 @@ type Resource struct {
 func ResourceManager(wg *sync.WaitGroup,
 	created <-chan *Resource,
 	deleted <-chan *ResourceSlug,
-	subscribers []chan <- map[ResourceType]Resources) {
+	subscribers []chan<- map[ResourceType]Resources) {
 
 	defer wg.Done()
 
@@ -101,7 +101,7 @@ func subscriber(name string, wg *sync.WaitGroup, notifications chan map[Resource
 
 	for {
 		select {
-		case n := <- notifications:
+		case n := <-notifications:
 			jsonBytes, err := json.MarshalIndent(n, "", "    ")
 			if err != nil {
 				fmt.Println(err)
@@ -152,11 +152,11 @@ type event struct {
 }
 
 type simConfig struct {
-	wg *sync.WaitGroup
-	rand *rand.Rand
-	tickSpeed time.Duration
-	created chan<- *Resource
-	deleted chan<- *ResourceSlug
+	wg          *sync.WaitGroup
+	rand        *rand.Rand
+	tickSpeed   time.Duration
+	created     chan<- *Resource
+	deleted     chan<- *ResourceSlug
 	newResource func() Resource
 }
 
@@ -197,8 +197,8 @@ func launchSimulators(wg *sync.WaitGroup, configs []simConfig) {
 func serviceResourceGenerator(namespace string, baseName string) func() Resource {
 	return func() Resource {
 		slug := ResourceSlug{
-			Type: "v1.Service",
-			Name: fmt.Sprintf("%s-%s", baseName, randAlphanum(6)),
+			Type:      "v1.Service",
+			Name:      fmt.Sprintf("%s-%s", baseName, randAlphanum(6)),
 			Namespace: namespace,
 		}
 
@@ -209,8 +209,8 @@ func serviceResourceGenerator(namespace string, baseName string) func() Resource
 func deploymentResourceGenerator(namespace string, baseName string) func() Resource {
 	return func() Resource {
 		slug := ResourceSlug{
-			Type: "apps/v1.Deployment",
-			Name: fmt.Sprintf("%s-%s", baseName, randAlphanum(6)),
+			Type:      "apps/v1.Deployment",
+			Name:      fmt.Sprintf("%s-%s", baseName, randAlphanum(6)),
 			Namespace: namespace,
 		}
 
@@ -239,7 +239,7 @@ func kubeAPISimulator(wg *sync.WaitGroup, config simConfig) {
 	createdResources := make([]Resource, 0)
 	for {
 		select {
-		case <- ticker:
+		case <-ticker:
 			ev := event{name: "create"}
 			if len(createdResources) != 0 {
 				ev = randomWeightedSelect(config.rand, events)
