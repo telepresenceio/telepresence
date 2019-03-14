@@ -172,16 +172,22 @@ func makeWatchman(resourcesChan <-chan []k8s.Resource, assembler chan<- []k8s.Re
 func makeAssembler(getSnapshotCh <-chan *getSnapshotRequest, recordsCh <-chan []k8s.Resource) func(p *supervisor.Process) error {
 	return func(p *supervisor.Process) error {
 		p.Ready()
-		snapshots := make([]watt.Snapshot, 0)
+		snapshots := make([][]k8s.Resource, 0)
 
 		for {
 			select {
 			case req := <-getSnapshotCh:
 				p.Logf("returning snapshot")
-				req.snapshot <- "{ }" // ignore this for now.
+				if len(snapshots) != 0 {
+					snapshotBytes, _ := k8s.MarshalResources(snapshots[len(snapshots) - 1])
+					req.snapshot <- string(snapshotBytes)
+				} else {
+					req.snapshot <- ""
+				}
 
-			case <-recordsCh:
+			case resources := <-recordsCh:
 				p.Logf("creating snapshot")
+				snapshots = append(snapshots, resources)
 				if len(snapshots) > 10 {
 					snapshots = snapshots[1:]
 				}
