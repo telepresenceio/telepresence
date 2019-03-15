@@ -7,4 +7,4 @@ metadata:
     "getambassador.io/consul-resolver": "true"
 data:
   datacenter: "dc1"
-  service: "foo"
+  service: "bar"

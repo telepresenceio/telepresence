@@ -13,7 +13,7 @@ import (
 
 	"github.com/Masterminds/sprig"
 	ms "github.com/mitchellh/mapstructure"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 var READY = map[string]func(Resource) bool{
@@ -341,6 +341,22 @@ func MarshalResources(resources []Resource) ([]byte, error) {
 	e.Close()
 	return buf.Bytes(), nil
 }
+
+//func (r *Resource) MarshalJSON() ([]byte, error) {
+//	return json.Marshal(r)
+//}
+//
+//func (r *Resource) UnmarshalJSON(data []byte) error {
+//	return json.Unmarshal(data, r)
+//}
+
+//func (r Resource) MarshalJSON() ([]byte, error) {
+//	return json.Marshal(r)
+//}
+//
+//func (r Resource) UnmarshalJSON(data []byte) error {
+//	return json.Unmarshal(data, &Resource{})
+//}
 
 func MarshalResource(resource Resource) ([]byte, error) {
 	return MarshalResources([]Resource{resource})

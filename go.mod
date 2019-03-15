@@ -13,6 +13,7 @@ require (
 	github.com/census-instrumentation/opencensus-proto v0.1.0 // indirect
 	github.com/datawire/consul-x v0.0.0-20190305163622-7683365ac879
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
+	github.com/davecgh/go-spew v1.1.1
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
 	github.com/gogo/protobuf v1.2.0 // indirect
 	github.com/golang/groupcache v0.0.0-20181024230925-c65c006176ff // indirect

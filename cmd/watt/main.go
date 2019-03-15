@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/datawire/consul-x/pkg/consulwatch"
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/datawire/teleproxy/pkg/watt"
@@ -71,7 +73,7 @@ func extractAmbassadorAnnotation(r k8s.Resource) string {
 func makeKubeWatcher(namespace string,
 	kinds []string,
 	watchman chan<- []k8s.Resource,
-	assembler chan<- []k8s.Resource) func(p *supervisor.Process) error {
+	kubernetesResources chan<- []k8s.Resource) func(p *supervisor.Process) error {
 
 	return func(p *supervisor.Process) error {
 		kubeWatcher := k8s.NewClient(nil).Watcher()
@@ -88,7 +90,7 @@ func makeKubeWatcher(namespace string,
 				}
 
 				watchman <- resources
-				assembler <- resources
+				kubernetesResources <- resources
 			})
 
 			if err != nil {
@@ -112,7 +114,7 @@ func makeKubeWatcher(namespace string,
 	}
 }
 
-func makeConsulWatcher(config k8s.Resource, assembler chan<- []k8s.Resource) (string, *supervisor.Worker) {
+func makeConsulWatcher(config k8s.Resource, assembler chan<- consulwatch.Endpoints) (string, *supervisor.Worker, error) {
 	data := config.Data()
 	cwm := &watt.ConsulServiceNodeWatchMaker{
 		Service:     data["service"].(string),
@@ -120,15 +122,19 @@ func makeConsulWatcher(config k8s.Resource, assembler chan<- []k8s.Resource) (st
 		OnlyHealthy: true,
 	}
 
-	cwmFunc, _ := cwm.Make(assembler)
+	cwmFunc, err := cwm.Make(assembler)
+	if err != nil {
+		return "", nil, err
+	}
+
 	return cwm.ID(), &supervisor.Worker{
 		Name:  cwm.ID(),
 		Work:  cwmFunc,
 		Retry: false,
-	}
+	}, nil
 }
 
-func makeWatchman(resourcesChan <-chan []k8s.Resource, assembler chan<- []k8s.Resource) func(p *supervisor.Process) error {
+func makeWatchman(resourcesChan <-chan []k8s.Resource, endpoints chan<- consulwatch.Endpoints) func(p *supervisor.Process) error {
 	return func(p *supervisor.Process) error {
 		p.Ready()
 
@@ -141,7 +147,12 @@ func makeWatchman(resourcesChan <-chan []k8s.Resource, assembler chan<- []k8s.Re
 				for _, r := range resources {
 					rType, _ := isAmbassadorConfiguration(r)
 					if rType == "consul-resolver" {
-						ID, worker := makeConsulWatcher(r, assembler)
+						ID, worker, err := makeConsulWatcher(r, endpoints)
+						if err != nil {
+							p.Logf("failed to create consul watch %v", err)
+							continue
+						}
+
 						if _, exists := watched[ID]; !exists {
 							p.Logf("add consul watcher %s\n", ID)
 							p.Supervisor().Supervise(worker)
@@ -169,28 +180,79 @@ func makeWatchman(resourcesChan <-chan []k8s.Resource, assembler chan<- []k8s.Re
 	}
 }
 
-func makeAssembler(getSnapshotCh <-chan *getSnapshotRequest, recordsCh <-chan []k8s.Resource) func(p *supervisor.Process) error {
+func makeAssembler(
+	snapshotRequest <-chan *getSnapshotRequest,
+	consulEndpoints <-chan consulwatch.Endpoints,
+	kubernetesResources <-chan []k8s.Resource) func(p *supervisor.Process) error {
+
 	return func(p *supervisor.Process) error {
+		s := watt.Snapshot{
+			Consul: watt.ConsulSnapshot{
+				Endpoints: make([]consulwatch.Endpoints, 0),
+			},
+			Kubernetes: []k8s.Resource{},
+		}
+
+		snapshotJSONBytes, err := json.MarshalIndent(s, "", "    ")
+		if err != nil {
+			p.Logf("error: failed to serialize snapshot")
+		}
+
+		snapshots := []string{string(snapshotJSONBytes)}
 		p.Ready()
-		snapshots := make([][]k8s.Resource, 0)
 
 		for {
 			select {
-			case req := <-getSnapshotCh:
-				p.Logf("returning snapshot")
-				if len(snapshots) != 0 {
-					snapshotBytes, _ := k8s.MarshalResources(snapshots[len(snapshots)-1])
-					req.snapshot <- string(snapshotBytes)
-				} else {
-					req.snapshot <- ""
+			case req := <-snapshotRequest:
+				req.snapshot <- snapshots[len(snapshots)-1]
+			case items := <-consulEndpoints:
+				p.Logf("creating new snapshot with updated consul endpoints")
+				latest := snapshots[len(snapshots)-1]
+
+				snapshot := &watt.Snapshot{}
+				err := json.Unmarshal([]byte(latest), snapshot)
+				if err != nil {
+					p.Logf("error: failed to unmarshal snapshot", err)
 				}
 
-			case resources := <-recordsCh:
-				p.Logf("creating snapshot")
-				snapshots = append(snapshots, resources)
-				if len(snapshots) > 10 {
-					snapshots = snapshots[1:]
+				found := false
+				for idx, service := range snapshot.Consul.Endpoints {
+					if items.Service == service.Service {
+						p.Logf("adding endpoints for known service")
+						snapshot.Consul.Endpoints[idx] = items
+						found = true
+						break
+					}
 				}
+
+				if !found {
+					p.Logf("registering a new service and adding endpoints")
+					snapshot.Consul.Endpoints = []consulwatch.Endpoints{items}
+				}
+
+				snapshotJSONBytes, err := json.MarshalIndent(snapshot, "", "    ")
+				if err != nil {
+					p.Logf("error: failed to serialize snapshot")
+				}
+
+				snapshots = append(snapshots, string(snapshotJSONBytes))
+			case items := <-kubernetesResources:
+				p.Logf("creating new snapshot with updated kubernetes resources")
+				latest := snapshots[len(snapshots)-1]
+
+				snapshot := &watt.Snapshot{}
+				err := json.Unmarshal([]byte(latest), snapshot)
+				if err != nil {
+					p.Logf("error: failed to unmarshal snapshot", err)
+				}
+
+				snapshot.Kubernetes = items
+				snapshotJSONBytes, err := json.MarshalIndent(snapshot, "", "    ")
+				if err != nil {
+					p.Logf("error: failed to serialize snapshot")
+				}
+
+				snapshots = append(snapshots, string(snapshotJSONBytes))
 			case <-p.Shutdown():
 				return nil
 			}
@@ -204,7 +266,9 @@ func runWatt(_ *cobra.Command, _ []string) {
 	// 1. construct an initial list of things to watch
 	// 2. feed them to the watch controller
 	watchman := make(chan []k8s.Resource)
-	assembler := make(chan []k8s.Resource)
+
+	kubernetesResourcesUpdate := make(chan []k8s.Resource)
+	consulServiceEndpointsUpdate := make(chan consulwatch.Endpoints)
 
 	fmt.Println(initialSources)
 
@@ -213,14 +277,14 @@ func runWatt(_ *cobra.Command, _ []string) {
 	s := supervisor.WithContext(ctx)
 	s.Supervise(&supervisor.Worker{
 		Name:     "kubewatcher",
-		Work:     makeKubeWatcher(kubernetesNamespace, initialSources, watchman, assembler),
+		Work:     makeKubeWatcher(kubernetesNamespace, initialSources, watchman, kubernetesResourcesUpdate),
 		Requires: []string{"watchman"},
 		Retry:    false,
 	})
 
 	s.Supervise(&supervisor.Worker{
 		Name:     "watchman",
-		Work:     makeWatchman(watchman, assembler),
+		Work:     makeWatchman(watchman, consulServiceEndpointsUpdate),
 		Requires: []string{"assembler"},
 		Retry:    false,
 	})
@@ -228,7 +292,7 @@ func runWatt(_ *cobra.Command, _ []string) {
 	getSnapshotChan := make(chan *getSnapshotRequest)
 	s.Supervise(&supervisor.Worker{
 		Name:  "assembler",
-		Work:  makeAssembler(getSnapshotChan, assembler),
+		Work:  makeAssembler(getSnapshotChan, consulServiceEndpointsUpdate, kubernetesResourcesUpdate),
 		Retry: false,
 	})
 
@@ -252,6 +316,7 @@ func runWatt(_ *cobra.Command, _ []string) {
 				}(snapshot)
 
 				wg.Wait()
+				w.Header().Set("content-type", "application/json")
 				if _, err := w.Write([]byte(res)); err != nil {
 					p.Logf("write snapshot errored: %v", err)
 				}
