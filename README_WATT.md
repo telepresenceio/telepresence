@@ -25,7 +25,9 @@ Register a Consul Resolver configuration with Watt (pretend this is a CRD)
 
 ## Terminal 3 (consul.attach)
 
-`consul services register -name=bar -address=10.10.0.1 -port=9000 -id0`
+Register a an endpoint. The `-id` is what makes them unique. So to register several endpoints change the value of `-id`
+
+`consul services register -name=bar -address=10.10.0.1 -port=9000 -id bar0`
 
 ## Terminal 4
 
