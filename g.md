@@ -39,15 +39,75 @@ There are THREE major logical components in this design. All of these names tent
     | WatchController |               | (updated Sources parsed from SNAPSHOT)
     |                 |               |
     +-----------------+               |
-             | 1                      |
-             |                        |
-             |                        |
-             | N                      ^
-      +------------+   NOTIFY   +-------------+
-      |  Watchers  |----------->|  Assembler  |---> <SNAPSHOT>
-      |            | N        1 |             |
-      +------------+            +-------------+
+             | 1                      |            +-----+
+             |                        |          +-|Timer|-+
+             |                        |          | +-----+ |
+             | N                      ^          |         |
+      +------------+   NOTIFY   +-------------+  v   +-------------+        +-------------+
+      |  Watchers  |----------->|  Aggregator |----->|  Filter     |------->|  Assembler  |--><SNAPSHOT>
+      |            | N        1 |             |      |             |        |             |
+      +------------+            +-------------+      +-------------+        +-------------+
 ```
+
+## Notes from pow-wow with Phil
+
+constraints:
+ - we can't fire off the sync hook until the world is bootstrappped
+
+ - we know the world is bootstrapped with respect to k8s because the
+   k8s watcher won't invoke its callbacks until it is synced with the
+   k8s api server
+
+ - we need to compute when the world is bootstrapped with respect to
+   consul by waiting until each consul service that we learn about
+   from k8s has endpoint info
+   + this does not mean populated endpoint info necessarily, it just
+     means we have interacted with consul and have a recent view of
+     what consul believes about the given service
+
+ - we can't invoke overlapping sync hooks (or hook sets as the case
+   may be), i.e. we need to wait until the prior hook (or hook sets)
+   has finished before invoking another one
+
+desirement/opinion:
+
+ - rhs: it would be nice to not have this logic too distributed across
+   multiple python/go processes... ideally it would be nice if
+   watt+ambex were the only long running processes and the ambassador
+   compiler could just be directly slotted in as a hook (as opposed to
+   notifying another long running process that does the actual work)
+
+ - this is not entirely in our control because there are other moving
+   parts, but it would be nice if it were easy to use in this way
+
+aggregator -> filter:
+
+  func worldChanged(world World) {
+     if world.NotBootstrapped() {
+       return
+     }
+
+     delay := limiter.Limit(world.Timestamp())
+     if delay == 0 {
+        produceSnapshot(world)
+     } else if delay > 0 {
+        time.AfterFunc(answer, func() {
+           worldChanged(world)
+        })
+     } else {
+       // delay is less than zero so we drop the event entirely
+       return
+     }
+  }
+
+filter -> assembler:
+
+  func produceSnapshot(world World) {
+     blobl := world.Serialize()
+     id := NewId()
+     // save stuff
+     invoke(id, blob)
+  }
 
 ## ThOP Notes
 
