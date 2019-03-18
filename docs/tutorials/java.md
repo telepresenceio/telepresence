@@ -72,9 +72,7 @@ For more details about the `mount` command check the [documentation](/howto/volu
 
 If you need to debug your code with your favourite IDE that's super easy too. You only need to pass a JVM argument and forward the remote port:
 
-* `-e MAVEN_OPTS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005` Creates a
-* Docker environment variable that Maven will use to set a JVM argument and awaits for a remote
-* connection on port `5005`. This is for Java 9+.
+* `-e MAVEN_OPTS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005` Creates a Docker environment variable that Maven will use to set a JVM argument and awaits for a remote connection on port `5005`. This is for Java 9+.
   * `-e MAVEN_OPTS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005` Should be used for JDK 5-8.
 * `-p 5005:5005` Tells docker to forward that ports from your local machine.
 
