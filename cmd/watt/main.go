@@ -7,16 +7,19 @@ import (
 	"github.com/datawire/consul-x/pkg/consulwatch"
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
+	"github.com/datawire/teleproxy/pkg/tpu"
 	"github.com/datawire/teleproxy/pkg/watt"
 	"github.com/spf13/cobra"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 )
 
 var kubernetesNamespace string
 var initialSources = make([]string, 0)
+var notifyReceivers = make([]string, 0)
 var port int
 
 var rootCmd = &cobra.Command{
@@ -28,13 +31,19 @@ var rootCmd = &cobra.Command{
 }
 
 type getSnapshotRequest struct {
+	id       int
 	snapshot chan string
 }
 
 func init() {
-	rootCmd.Flags().StringVarP(&kubernetesNamespace, "namespace", "", "", "namespace to watch (default: all)")
+	rootCmd.Flags().StringVarP(&kubernetesNamespace, "namespace", "n", "", "namespace to watch (default: all)")
 	rootCmd.Flags().StringSliceVarP(&initialSources, "source", "s", []string{}, "configure an initial static source")
+	rootCmd.Flags().StringSliceVar(&notifyReceivers, "notify", []string{}, "invoke the program with the given arguments as a receiver")
 	rootCmd.Flags().IntVarP(&port, "port", "p", 7000, "configure the snapshot server port")
+}
+
+func notify(program string, url string) {
+
 }
 
 // determine if we're dealing with a potential piece of Ambassador configuration. Right now that comes through in
@@ -186,6 +195,9 @@ func makeAssembler(
 	kubernetesResources <-chan []k8s.Resource) func(p *supervisor.Process) error {
 
 	return func(p *supervisor.Process) error {
+		snapshotID := 0
+		snapshots := make(map[int]string)
+
 		s := watt.Snapshot{
 			Consul: watt.ConsulSnapshot{
 				Endpoints: make([]consulwatch.Endpoints, 0),
@@ -198,13 +210,19 @@ func makeAssembler(
 			p.Logf("error: failed to serialize snapshot")
 		}
 
-		snapshots := []string{string(snapshotJSONBytes)}
+		snapshots[snapshotID] = string(snapshotJSONBytes)
 		p.Ready()
 
 		for {
+			addedNewSnapshot := false
+
 			select {
 			case req := <-snapshotRequest:
-				req.snapshot <- snapshots[len(snapshots)-1]
+				if _, found := snapshots[req.id]; found {
+					req.snapshot <- snapshots[req.id]
+				} else {
+					req.snapshot <- snapshots[snapshotID]
+				}
 			case items := <-consulEndpoints:
 				p.Logf("creating new snapshot with updated consul endpoints")
 				latest := snapshots[len(snapshots)-1]
@@ -235,7 +253,9 @@ func makeAssembler(
 					p.Logf("error: failed to serialize snapshot")
 				}
 
-				snapshots = append(snapshots, string(snapshotJSONBytes))
+				snapshotID += 1
+				snapshots[snapshotID] = string(snapshotJSONBytes)
+				addedNewSnapshot = true
 			case items := <-kubernetesResources:
 				p.Logf("creating new snapshot with updated kubernetes resources")
 				latest := snapshots[len(snapshots)-1]
@@ -252,9 +272,31 @@ func makeAssembler(
 					p.Logf("error: failed to serialize snapshot")
 				}
 
-				snapshots = append(snapshots, string(snapshotJSONBytes))
+				snapshotID += 1
+				snapshots[snapshotID] = string(snapshotJSONBytes)
+				addedNewSnapshot = true
 			case <-p.Shutdown():
 				return nil
+			}
+
+			// purge the oldest record from the snapshot cache
+			if len(snapshots) > 10 {
+				delete(snapshots, snapshotID-10)
+			}
+
+			if addedNewSnapshot {
+				for _, n := range notifyReceivers {
+					p.Supervisor().Supervise(&supervisor.Worker{
+						Name: fmt.Sprintf("notify-%s", n),
+						Work: func(process *supervisor.Process) error {
+							k := tpu.NewKeeper("SYNC", fmt.Sprintf("%s http://127.0.0.1:%d/snapshots/%d", n, port, snapshotID))
+							k.Limit = 1
+							k.Start()
+							k.Wait()
+							return nil
+						},
+					})
+				}
 			}
 		}
 	}
@@ -270,7 +312,9 @@ func runWatt(_ *cobra.Command, _ []string) {
 	kubernetesResourcesUpdate := make(chan []k8s.Resource)
 	consulServiceEndpointsUpdate := make(chan consulwatch.Endpoints)
 
-	fmt.Println(initialSources)
+	if len(notifyReceivers) == 0 {
+		notifyReceivers = append(notifyReceivers, "curl")
+	}
 
 	ctx := context.Background()
 
@@ -300,10 +344,15 @@ func runWatt(_ *cobra.Command, _ []string) {
 		Name:     "snapshot server",
 		Requires: []string{"assembler"},
 		Work: func(p *supervisor.Process) error {
-			http.HandleFunc("/snapshot", func(w http.ResponseWriter, r *http.Request) {
+			http.HandleFunc("/snapshots/", func(w http.ResponseWriter, r *http.Request) {
+				id, err := strconv.Atoi(strings.TrimPrefix(r.URL.Path, "/snapshots/"))
+				if err != nil {
+					p.Logf("ID is not an integer")
+				}
+
 				wg := &sync.WaitGroup{}
 				snapshot := make(chan string)
-				getSnapshotChan <- &getSnapshotRequest{snapshot: snapshot}
+				getSnapshotChan <- &getSnapshotRequest{snapshot: snapshot, id: id}
 
 				res := ""
 				wg.Add(1)
