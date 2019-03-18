@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
+	"github.com/datawire/teleproxy/pkg/limiter"
 	"github.com/datawire/teleproxy/pkg/tpu"
 	"github.com/spf13/cobra"
 )
@@ -19,13 +20,12 @@ type Syncer struct {
 	Watcher     *k8s.Watcher
 	SyncCommand string
 	Kinds       []string
-	Mux         sync.Mutex // protects the whole data structure
+	Mux         *sync.Mutex // protects the whole data structure
+	Changed     *sync.Cond
 	Dirty       bool
+	Limiter     limiter.Limiter
 	ModTime     time.Time
-	SyncTime    time.Time
 	SyncCount   int
-	MinInterval time.Duration
-	MaxInterval time.Duration
 	WarmupDelay time.Duration
 	router      *http.ServeMux
 	port        string
@@ -34,18 +34,27 @@ type Syncer struct {
 }
 
 func (s *Syncer) maybeSync() {
-	s.Mux.Lock()
-	defer s.Mux.Unlock()
-
-	if !s.Dirty {
-		return
-	}
-
-	now := time.Now()
-	if now.Sub(s.ModTime) > s.MinInterval || now.Sub(s.SyncTime) > s.MaxInterval {
-		s.SyncTime = now
-		s.Dirty = false
-		s.sync()
+	if s.Dirty {
+		delay := s.Limiter.Limit(s.ModTime)
+		if delay == 0 {
+			s.Dirty = false
+			s.sync()
+		} else if delay > 0 {
+			// if we are delaying an event we need an
+			// artificial wakeup just in case there are no
+			// more events to trigger syncing... if there
+			// are events prior to this, then this should
+			// end up being a noop because s.Dirty will be
+			// false
+			log.Printf("rate limiting, will sync after %s", delay.String())
+			time.AfterFunc(delay, func() {
+				s.Mux.Lock()
+				defer s.Mux.Unlock()
+				log.Printf("triggering delayed sync")
+				s.ModTime = time.Now()
+				s.Changed.Broadcast()
+			})
+		}
 	}
 }
 
@@ -106,9 +115,11 @@ func (s *Syncer) invoke(snapshot_id string) {
 func (s *Syncer) Run() {
 	go func() {
 		time.Sleep(s.WarmupDelay)
+		s.Mux.Lock()
+		defer s.Mux.Unlock()
 		for {
+			s.Changed.Wait()
 			s.maybeSync()
-			time.Sleep(s.MinInterval)
 		}
 	}()
 
@@ -122,6 +133,7 @@ func (s *Syncer) Run() {
 			defer s.Mux.Unlock()
 			s.Dirty = true
 			s.ModTime = time.Now()
+			s.Changed.Broadcast()
 		})
 		if err != nil {
 			log.Fatalf("kubewatch: %v", err)
@@ -222,7 +234,6 @@ func init() {
 	KUBEWATCH.Flags().StringVarP(&SYNC_COMMAND, "sync", "s", "curl", "sync command")
 	KUBEWATCH.Flags().StringVarP(&NAMESPACE, "namespace", "n", "", "namespace to watch (defaults to all)")
 	KUBEWATCH.Flags().DurationVarP(&MIN_INTERVAL, "min-interval", "m", 250*time.Millisecond, "min sync interval")
-	KUBEWATCH.Flags().DurationVarP(&MAX_INTERVAL, "max-interval", "M", time.Second, "max sync interval")
 	KUBEWATCH.Flags().DurationVarP(&WARMUP_DELAY, "warmup-delay", "w", 0, "warmup delay")
 }
 
@@ -231,17 +242,19 @@ var (
 	SYNC_COMMAND string
 	NAMESPACE    string
 	MIN_INTERVAL time.Duration
-	MAX_INTERVAL time.Duration
 	WARMUP_DELAY time.Duration
 )
 
 func kubewatch(cmd *cobra.Command, args []string) {
+	mux := &sync.Mutex{}
+	cond := sync.NewCond(mux)
 	s := Syncer{
+		Mux:         mux,
+		Changed:     cond,
 		Watcher:     k8s.NewClient(nil).Watcher(),
 		SyncCommand: SYNC_COMMAND,
 		Kinds:       args,
-		MinInterval: MIN_INTERVAL,
-		MaxInterval: MAX_INTERVAL,
+		Limiter:     limiter.NewIntervalLimiter(MIN_INTERVAL),
 		WarmupDelay: WARMUP_DELAY,
 		router:      http.NewServeMux(),
 		snapshots:   make(map[string]map[string][]byte),
