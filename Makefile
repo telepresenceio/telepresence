@@ -10,6 +10,10 @@ BINARY_BASENAME=watt
 
 all: clean build
 
+build.watt2:
+	$(GOBUILD) cmd/watt2/main.go
+	ln -sf watt2-$(GOOS)-$(GOARCH) bin/watt2
+
 build:
 	$(GOBUILD) cmd/$(BINARY_BASENAME)/main.go
 	ln -sf $(BINARY_BASENAME)-$(GOOS)-$(GOARCH) bin/$(BINARY_BASENAME)

@@ -7,6 +7,8 @@ require (
 	github.com/Azure/go-autorest v11.3.2+incompatible // indirect
 	github.com/Masterminds/semver v1.4.2 // indirect
 	github.com/Masterminds/sprig v2.17.1+incompatible
+	github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc // indirect
+	github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf // indirect
 	github.com/aokoli/goutils v1.1.0 // indirect
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
@@ -41,9 +43,10 @@ require (
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/posener/complete v1.2.1 // indirect
+	github.com/prometheus/common v0.0.0-20181218105931-67670fe90761
+	github.com/sirupsen/logrus v1.4.0 // indirect
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/pflag v1.0.3 // indirect
-	github.com/stretchr/objx v0.1.1 // indirect
 	go.opencensus.io v0.19.0 // indirect
 	golang.org/x/crypto v0.0.0-20190313024323-a1f597ede03a // indirect
 	golang.org/x/net v0.0.0-20190313082753-5c2c250b6a70
@@ -52,6 +55,7 @@ require (
 	golang.org/x/sys v0.0.0-20190312061237-fead79001313 // indirect
 	google.golang.org/genproto v0.0.0-20190123001331-8819c946db44 // indirect
 	google.golang.org/grpc v1.18.0 // indirect
+	gopkg.in/alecthomas/kingpin.v2 v2.2.6 // indirect
 	gopkg.in/yaml.v2 v2.2.2
 	// We need to pin k8s.io/api and k8s.io/client-go to their respective releases
 	// because api has been removed from master
