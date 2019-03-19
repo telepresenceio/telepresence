@@ -4,7 +4,7 @@ import "time"
 
 // A limiter can be used to rate limit and/or coalesce a series of
 // time-based events. This just captures the logic of deciding whether
-// an event occuring at a specific time T should be ignored, acted
+// an event occurring at a specific time T should be ignored, acted
 // upon, or delayed.
 type Limiter interface {
 	// The Limit() method works kinda like an 8 ball. You pass it
@@ -30,7 +30,7 @@ type limiter struct {
 	lastAction time.Time
 }
 
-// Constructs a new limiter that will coalesce any events occuring
+// Constructs a new limiter that will coalesce any events occurring
 // within the specified interval.
 func NewIntervalLimiter(interval time.Duration) Limiter {
 	return &limiter{
