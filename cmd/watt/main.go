@@ -80,8 +80,8 @@ func (b *bootstrappah) Work(p *supervisor.Process) error {
 			}
 		}
 
-		p.Logf("bootstrapped!")
 		if bootstrapped {
+			p.Logf("bootstrapped!")
 			break
 		}
 	}
