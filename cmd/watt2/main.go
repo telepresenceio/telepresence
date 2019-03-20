@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/datawire/consul-x/pkg/consulwatch"
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/datawire/teleproxy/pkg/watt"
-	"github.com/prometheus/common/log"
 	"github.com/spf13/cobra"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
 	"strings"
 )
 
@@ -26,11 +30,19 @@ var rootCmd = &cobra.Command{
 
 type assembler struct {
 	aggregatorNotifyCh <-chan struct{}
+	snapshotRequestCh  <-chan getSnapshotRequest
+	snapshots          map[int]string
 }
 
 func (a *assembler) Work(p *supervisor.Process) error {
+	snapshots := make(map[int]string)
+	snapshots[1] = `{"TODO": "Rafi!"}`
+
+	p.Ready()
 	for {
 		select {
+		case snapshotRequest := <-a.snapshotRequestCh:
+			snapshotRequest.result <- getSnapshotResult{found: true, snapshot: snapshots[1]}
 		case <-p.Shutdown():
 			p.Logf("shutdown initiated")
 			return nil
@@ -46,8 +58,9 @@ type bootstrappah struct {
 
 func (b *bootstrappah) Work(p *supervisor.Process) error {
 	p.Ready()
-
 	requiredConsulServices := make(map[string]*consulwatch.Endpoints)
+
+	var bootstrapped = false
 	for {
 		select {
 		case resources := <-b.kubernetesResourcesCh:
@@ -56,18 +69,20 @@ func (b *bootstrappah) Work(p *supervisor.Process) error {
 				// this is all kinds of type unsafe most likely
 				requiredConsulServices[v.Data()["service"].(string)] = nil
 			}
+
+			p.Logf("discovered %d consul resolver configurations", len(requiredConsulServices))
 		case endpoints := <-b.consulEndpointsCh:
 			requiredConsulServices[endpoints.Service] = &endpoints
-		}
 
-		for _, v := range requiredConsulServices {
-			if v == nil { // keep going until none of these are nil... there probably needs to be a timeout somewhere
-				continue
+			if !MapHasNilValues(requiredConsulServices) {
+				bootstrapped = true
 			}
 		}
 
-		p.Logf("Bootstrapped!")
-		break
+		p.Logf("bootstrapped!")
+		if bootstrapped {
+			break
+		}
 	}
 
 	for _, v := range requiredConsulServices {
@@ -75,12 +90,21 @@ func (b *bootstrappah) Work(p *supervisor.Process) error {
 	}
 
 	p.Supervisor().Supervise(&supervisor.Worker{
-		Name:     "aggregator",
-		Work:     b.aggregator.Work,
-		Requires: []string{"bootstrappah"},
+		Name: "aggregator",
+		Work: b.aggregator.Work,
 	})
 
 	return nil
+}
+
+func MapHasNilValues(m map[string]*consulwatch.Endpoints) bool {
+	for _, v := range m {
+		if v == nil {
+			return true
+		}
+	}
+
+	return false
 }
 
 type aggregator struct {
@@ -95,17 +119,19 @@ func (a *aggregator) Work(p *supervisor.Process) error {
 	p.Ready()
 
 	for {
+		a.notifyAssemblerCh <- struct{}{}
+
 		select {
 		case resources := <-a.kubernetesResourcesCh:
 			a.setKubernetesResources(resources)
 		case endpoints := <-a.consulEndpointsCh:
 			a.updateConsulEndpoints(endpoints)
 		}
-		a.notifyAssemblerCh <- struct{}{}
 	}
 }
 
 func (a *aggregator) updateConsulEndpoints(endpoints consulwatch.Endpoints) {
+	fmt.Println(endpoints)
 	a.consulEndpoints[endpoints.Service] = endpoints
 }
 
@@ -136,10 +162,13 @@ type consulwatchman struct {
 }
 
 func (w *consulwatchman) Work(p *supervisor.Process) error {
+	p.Ready()
+
 	for {
 		select {
 		case resources := <-w.kubernetes:
 			found := make(map[string]*supervisor.Worker)
+			p.Logf("processing %d kubernetes resources", len(resources))
 			for _, r := range resources {
 				if isConsulResolver(r) {
 					worker, err := w.makeConsulWatcher(r)
@@ -168,9 +197,6 @@ func (w *consulwatchman) Work(p *supervisor.Process) error {
 			}
 
 			w.watched = found
-			if !w.ready {
-				p.Ready()
-			}
 		case <-p.Shutdown():
 			p.Logf("shutdown initiated")
 			return nil
@@ -204,15 +230,32 @@ type kubewatchman struct {
 	notify    []chan<- []k8s.Resource
 }
 
+func fmtNamespace(ns string) string {
+	if ns == "" {
+		return "*"
+	}
+
+	return ns
+}
+
 func (w *kubewatchman) Work(p *supervisor.Process) error {
 	kubeAPIWatcher := k8s.NewClient(nil).Watcher()
+
 	for _, kind := range w.kinds {
-		err := kubeAPIWatcher.WatchNamespace(w.namespace, kind, func(watcher *k8s.Watcher) {
-			resources := watcher.List(kind)
-			for _, n := range w.notify {
-				n <- resources
+		p.Logf("adding kubernetes watch for %q in namespace %q", kind, fmtNamespace(kubernetesNamespace))
+
+		watcherFunc := func(ns, kind string) func(watcher *k8s.Watcher) {
+			return func(watcher *k8s.Watcher) {
+				resources := watcher.List(kind)
+				p.Logf("found %d %q in namespace %q", len(resources), kind, fmtNamespace(ns))
+				for _, n := range w.notify {
+					n <- resources
+				}
+				p.Logf("sent %q to %d receivers", kind, len(w.notify))
 			}
-		})
+		}
+
+		err := kubeAPIWatcher.WatchNamespace(w.namespace, kind, watcherFunc(w.namespace, kind))
 
 		if err != nil {
 			return err
@@ -220,6 +263,7 @@ func (w *kubewatchman) Work(p *supervisor.Process) error {
 	}
 
 	kubeAPIWatcher.Start()
+	p.Ready()
 
 	for {
 		select {
@@ -244,6 +288,50 @@ func isConsulResolver(r k8s.Resource) bool {
 	return false
 }
 
+type apiServer struct {
+	port        int
+	assemblerCh chan<- getSnapshotRequest
+}
+
+type getSnapshotResult struct {
+	found    bool
+	snapshot string
+}
+
+type getSnapshotRequest struct {
+	id     int
+	result chan<- getSnapshotResult
+}
+
+func (s *apiServer) Work(p *supervisor.Process) error {
+	p.Ready()
+
+	http.HandleFunc("/snapshots/", func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.Atoi(strings.TrimPrefix(r.URL.Path, "/snapshots/"))
+		if err != nil {
+			p.Logf("ID is not an integer")
+		}
+
+		resultCh := make(chan getSnapshotResult)
+		s.assemblerCh <- getSnapshotRequest{id: id, result: resultCh}
+
+		result := <-resultCh
+		if !result.found {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("content-type", "application/json")
+		if _, err := w.Write([]byte(result.snapshot)); err != nil {
+			p.Logf("write snapshot error: %v", err)
+		}
+	})
+
+	listenHostAndPort := fmt.Sprintf(":%d", port)
+	p.Logf("snapshot server listening on: %s", listenHostAndPort)
+	return http.ListenAndServe(listenHostAndPort, nil)
+}
+
 func init() {
 	rootCmd.Flags().StringVarP(&kubernetesNamespace, "namespace", "n", "", "namespace to watch (default: all)")
 	rootCmd.Flags().StringSliceVarP(&initialSources, "source", "s", []string{}, "configure an initial static source")
@@ -252,6 +340,8 @@ func init() {
 }
 
 func runWatt(cmd *cobra.Command, args []string) {
+	log.Printf("starting watt...")
+
 	consulWatchmanCh := make(chan []k8s.Resource)
 	kubernetesResourceAggregatorCh := make(chan []k8s.Resource)
 	consulEndpointsAggregatorCh := make(chan consulwatch.Endpoints)
@@ -283,27 +373,35 @@ func runWatt(cmd *cobra.Command, args []string) {
 		watched:                   make(map[string]*supervisor.Worker),
 	}
 
-	assembler := assembler{
+	snapshotRequestCh := make(chan getSnapshotRequest)
+	assembler := &assembler{
 		aggregatorNotifyCh: notifyAssembler,
+		snapshotRequestCh:  snapshotRequestCh,
+	}
+
+	apiServer := &apiServer{
+		port:        port,
+		assemblerCh: snapshotRequestCh,
 	}
 
 	ctx := context.Background()
 	s := supervisor.WithContext(ctx)
 
 	s.Supervise(&supervisor.Worker{
-		Name: "kubewatchman",
-		Work: kubewatchman.Work,
+		Name:     "kubewatchman",
+		Work:     kubewatchman.Work,
+		Requires: []string{"bootstrappah"},
 	})
 
 	s.Supervise(&supervisor.Worker{
-		Name: "consulwatchman",
-		Work: consulwatchman.Work,
+		Name:     "consulwatchman",
+		Work:     consulwatchman.Work,
+		Requires: []string{"bootstrappah"},
 	})
 
 	s.Supervise(&supervisor.Worker{
-		Name:     "bootstrappah",
-		Work:     bootstrappah.Work,
-		Requires: []string{"kubewatchman", "consulwatchman"},
+		Name: "bootstrappah",
+		Work: bootstrappah.Work,
 	})
 
 	s.Supervise(&supervisor.Worker{
@@ -311,6 +409,19 @@ func runWatt(cmd *cobra.Command, args []string) {
 		Work:     assembler.Work,
 		Requires: []string{"aggregator"},
 	})
+
+	s.Supervise(&supervisor.Worker{
+		Name:     "api",
+		Work:     apiServer.Work,
+		Requires: []string{"assembler"},
+	})
+
+	if errs := s.Run(); len(errs) > 0 {
+		for _, err := range errs {
+			log.Println(err)
+		}
+		os.Exit(1)
+	}
 }
 
 func main() {
