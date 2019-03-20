@@ -31,24 +31,45 @@ var rootCmd = &cobra.Command{
 
 type invoker struct {
 	aggregatorNotifyCh <-chan struct{}
+	// used by the api server to request snapshots by id
 	snapshotRequestCh  <-chan getSnapshotRequest
 	snapshots          map[int]string
+	generateSnapshotCh chan<- chan<- string
 }
 
 func (a *invoker) Work(p *supervisor.Process) error {
 	snapshots := make(map[int]string)
-	snapshots[1] = `{"TODO": "Rafi!"}`
+	id := 0
+	reply := make(chan string)
 
 	p.Ready()
 	for {
 		select {
 		case snapshotRequest := <-a.snapshotRequestCh:
-			snapshotRequest.result <- getSnapshotResult{found: true, snapshot: snapshots[1]}
+			snapshot, ok := snapshots[snapshotRequest.id]
+			if ok {
+				snapshotRequest.result <- getSnapshotResult{found: true, snapshot: snapshot}
+			} else {
+				snapshotRequest.result <- getSnapshotResult{found: false}
+			}
+		case <-a.aggregatorNotifyCh:
+			a.generateSnapshotCh <- reply
+			snapshot := <-reply
+			id = id + 1
+			snapshots[id] = snapshot
+			// XXX: we should add garbage collection to
+			// avoid running out of memory due to
+			// snapshots
+			a.invoke(id, snapshot)
 		case <-p.Shutdown():
 			p.Logf("shutdown initiated")
 			return nil
 		}
 	}
+}
+
+func (a *invoker) invoke(id int, snapshot string) {
+	fmt.Printf("invoke stub: %d, %s\n", id, snapshot)
 }
 
 type bootstrappah struct {
@@ -114,19 +135,25 @@ type aggregator struct {
 	consulEndpointsCh     <-chan consulwatch.Endpoints
 	consulEndpoints       map[string]consulwatch.Endpoints
 	notifyInvokerCh       chan<- struct{}
+	generateSnapshotCh    <-chan chan<- string
 }
 
 func (a *aggregator) Work(p *supervisor.Process) error {
 	p.Ready()
 
+	a.notifyInvokerCh <- struct{}{}
 	for {
-		a.notifyInvokerCh <- struct{}{}
-
 		select {
 		case resources := <-a.kubernetesResourcesCh:
 			a.setKubernetesResources(resources)
+			a.notifyInvokerCh <- struct{}{}
 		case endpoints := <-a.consulEndpointsCh:
 			a.updateConsulEndpoints(endpoints)
+			a.notifyInvokerCh <- struct{}{}
+		case reply := <-a.generateSnapshotCh:
+			reply <- a.generateSnapshot()
+			// we cannot notify in this case because that
+			// will generate an infinite loop
 		}
 	}
 }
@@ -153,6 +180,10 @@ func (a *aggregator) setKubernetesResources(resources []k8s.Resource) {
 	}
 
 	a.kubernetesResources = replacement
+}
+
+func (a *aggregator) generateSnapshot() string {
+	return "generate snapshot stub"
 }
 
 type consulwatchman struct {
@@ -347,6 +378,7 @@ func runWatt(cmd *cobra.Command, args []string) {
 	consulWatchmanCh := make(chan []k8s.Resource)
 	kubernetesResourceAggregatorCh := make(chan []k8s.Resource)
 	consulEndpointsAggregatorCh := make(chan consulwatch.Endpoints)
+	generateSnapshotCh := make(chan chan<- string)
 
 	notifyInvoker := make(chan struct{})
 
@@ -360,6 +392,7 @@ func runWatt(cmd *cobra.Command, args []string) {
 			consulEndpointsCh:     consulEndpointsAggregatorCh,
 			consulEndpoints:       make(map[string]consulwatch.Endpoints),
 			notifyInvokerCh:       notifyInvoker,
+			generateSnapshotCh:    generateSnapshotCh,
 		},
 	}
 
@@ -379,6 +412,7 @@ func runWatt(cmd *cobra.Command, args []string) {
 	invoker := &invoker{
 		aggregatorNotifyCh: notifyInvoker,
 		snapshotRequestCh:  snapshotRequestCh,
+		generateSnapshotCh: generateSnapshotCh,
 	}
 
 	apiServer := &apiServer{
