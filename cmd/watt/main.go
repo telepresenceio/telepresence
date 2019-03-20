@@ -3,16 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/datawire/consul-x/pkg/consulwatch"
-	"github.com/datawire/teleproxy/pkg/k8s"
-	"github.com/datawire/teleproxy/pkg/supervisor"
-	"github.com/datawire/teleproxy/pkg/watt"
-	"github.com/spf13/cobra"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/datawire/consul-x/pkg/consulwatch"
+	"github.com/datawire/teleproxy/pkg/k8s"
+	"github.com/datawire/teleproxy/pkg/supervisor"
+	"github.com/datawire/teleproxy/pkg/watt"
+	"github.com/spf13/cobra"
 )
 
 var kubernetesNamespace string
@@ -28,13 +29,13 @@ var rootCmd = &cobra.Command{
 	Run:              runWatt,
 }
 
-type assembler struct {
+type invoker struct {
 	aggregatorNotifyCh <-chan struct{}
 	snapshotRequestCh  <-chan getSnapshotRequest
 	snapshots          map[int]string
 }
 
-func (a *assembler) Work(p *supervisor.Process) error {
+func (a *invoker) Work(p *supervisor.Process) error {
 	snapshots := make(map[int]string)
 	snapshots[1] = `{"TODO": "Rafi!"}`
 
@@ -112,14 +113,14 @@ type aggregator struct {
 	kubernetesResources   map[string][]k8s.Resource
 	consulEndpointsCh     <-chan consulwatch.Endpoints
 	consulEndpoints       map[string]consulwatch.Endpoints
-	notifyAssemblerCh     chan<- struct{}
+	notifyInvokerCh       chan<- struct{}
 }
 
 func (a *aggregator) Work(p *supervisor.Process) error {
 	p.Ready()
 
 	for {
-		a.notifyAssemblerCh <- struct{}{}
+		a.notifyInvokerCh <- struct{}{}
 
 		select {
 		case resources := <-a.kubernetesResourcesCh:
@@ -289,8 +290,8 @@ func isConsulResolver(r k8s.Resource) bool {
 }
 
 type apiServer struct {
-	port        int
-	assemblerCh chan<- getSnapshotRequest
+	port      int
+	invokerCh chan<- getSnapshotRequest
 }
 
 type getSnapshotResult struct {
@@ -313,7 +314,7 @@ func (s *apiServer) Work(p *supervisor.Process) error {
 		}
 
 		resultCh := make(chan getSnapshotResult)
-		s.assemblerCh <- getSnapshotRequest{id: id, result: resultCh}
+		s.invokerCh <- getSnapshotRequest{id: id, result: resultCh}
 
 		result := <-resultCh
 		if !result.found {
@@ -346,7 +347,7 @@ func runWatt(cmd *cobra.Command, args []string) {
 	kubernetesResourceAggregatorCh := make(chan []k8s.Resource)
 	consulEndpointsAggregatorCh := make(chan consulwatch.Endpoints)
 
-	notifyAssembler := make(chan struct{})
+	notifyInvoker := make(chan struct{})
 
 	// bootstrapper waits for steady state then launches the aggregator
 	bootstrappah := &bootstrappah{
@@ -357,7 +358,7 @@ func runWatt(cmd *cobra.Command, args []string) {
 			kubernetesResources:   make(map[string][]k8s.Resource),
 			consulEndpointsCh:     consulEndpointsAggregatorCh,
 			consulEndpoints:       make(map[string]consulwatch.Endpoints),
-			notifyAssemblerCh:     notifyAssembler,
+			notifyInvokerCh:       notifyInvoker,
 		},
 	}
 
@@ -374,14 +375,14 @@ func runWatt(cmd *cobra.Command, args []string) {
 	}
 
 	snapshotRequestCh := make(chan getSnapshotRequest)
-	assembler := &assembler{
-		aggregatorNotifyCh: notifyAssembler,
+	invoker := &invoker{
+		aggregatorNotifyCh: notifyInvoker,
 		snapshotRequestCh:  snapshotRequestCh,
 	}
 
 	apiServer := &apiServer{
-		port:        port,
-		assemblerCh: snapshotRequestCh,
+		port:      port,
+		invokerCh: snapshotRequestCh,
 	}
 
 	ctx := context.Background()
@@ -405,15 +406,15 @@ func runWatt(cmd *cobra.Command, args []string) {
 	})
 
 	s.Supervise(&supervisor.Worker{
-		Name:     "assembler",
-		Work:     assembler.Work,
+		Name:     "invoker",
+		Work:     invoker.Work,
 		Requires: []string{"aggregator"},
 	})
 
 	s.Supervise(&supervisor.Worker{
 		Name:     "api",
 		Work:     apiServer.Work,
-		Requires: []string{"assembler"},
+		Requires: []string{"invoker"},
 	})
 
 	if errs := s.Run(); len(errs) > 0 {
