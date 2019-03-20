@@ -8,10 +8,10 @@ GOBUILD = go build -o bin/$(BINARY_BASENAME)-$(GOOS)-$(GOARCH)
 
 BINARY_BASENAME=watt
 
-all: clean build
+all: clean build.watt2
 
 build.watt2:
-	$(GOBUILD) cmd/watt2/main.go
+	go build -o bin/watt2-$(GOOS)-$(GOARCH) cmd/watt2/main.go
 	ln -sf watt2-$(GOOS)-$(GOARCH) bin/watt2
 
 build:
