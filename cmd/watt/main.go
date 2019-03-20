@@ -99,6 +99,8 @@ func (b *bootstrappah) Work(p *supervisor.Process) error {
 			if !MapHasNilValues(requiredConsulServices) {
 				bootstrapped = true
 			}
+		case <-p.Shutdown():
+			return nil
 		}
 
 		if bootstrapped {
