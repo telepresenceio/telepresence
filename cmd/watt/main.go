@@ -208,9 +208,10 @@ func (w *consulwatchman) Work(p *supervisor.Process) error {
 func (w *consulwatchman) makeConsulWatcher(r k8s.Resource) (*supervisor.Worker, error) {
 	data := r.Data()
 	cwm := &watt.ConsulServiceNodeWatchMaker{
-		Service:     data["service"].(string),
-		Datacenter:  data["datacenter"].(string),
-		OnlyHealthy: true,
+		ConsulAddress: data["consulAddress"].(string),
+		Service:       data["service"].(string),
+		Datacenter:    data["datacenter"].(string),
+		OnlyHealthy:   true,
 	}
 
 	cwmFunc, err := cwm.Make(w.consulEndpointsAggregator)
