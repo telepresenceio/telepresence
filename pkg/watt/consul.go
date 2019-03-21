@@ -2,6 +2,7 @@ package watt
 
 import (
 	"fmt"
+
 	"github.com/datawire/consul-x/pkg/consulwatch"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	consulapi "github.com/hashicorp/consul/api"
@@ -36,12 +37,17 @@ func (m *ConsulServiceNodeWatchMaker) Make(notify chan<- consulwatch.Endpoints) 
 		}
 
 		serviceWatcher.Watch(func(endpoints consulwatch.Endpoints, e error) { notify <- endpoints })
-		err = serviceWatcher.Start()
-		if err != nil {
-			p.Logf("failed to start service watcher %v", err)
-			return err
-		}
+		p.Go(func(p *supervisor.Process) error {
+			err = serviceWatcher.Start()
+			if err != nil {
+				p.Logf("failed to start service watcher %v", err)
+				return err
+			}
+			return nil
+		})
 
+		<-p.Shutdown()
+		serviceWatcher.Stop()
 		return nil
 	}, nil
 }
