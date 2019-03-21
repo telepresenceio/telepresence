@@ -61,10 +61,23 @@ type Worker struct {
 	children      int64                // atomic counter for naming children
 	process       *Process             // nil if the worker is not currently running
 	error         error
+	done          bool
 }
 
 func (w *Worker) Error() string {
 	return fmt.Sprintf("%s: %s", w.Name, w.error.Error())
+}
+
+func (w *Worker) Wait() error {
+	s := w.supervisor
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	for !w.done {
+		s.changed.Wait()
+	}
+
+	return w
 }
 
 func (s *Supervisor) Supervise(worker *Worker) {
@@ -263,6 +276,7 @@ func (s *Supervisor) launch(worker *Worker) {
 			if worker.Retry {
 				if worker.shuttingDown() {
 					s.remove(worker)
+					worker.done = true
 				} else {
 					process.Log("retrying...")
 				}
@@ -271,9 +285,11 @@ func (s *Supervisor) launch(worker *Worker) {
 				worker.error = err
 				s.errors = append(s.errors, worker)
 				s.wantsShutdown = true
+				worker.done = true
 			}
 		} else {
 			s.remove(worker)
+			worker.done = true
 		}
 		s.changed.Broadcast()
 	}()

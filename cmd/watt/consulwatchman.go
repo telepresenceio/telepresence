@@ -47,6 +47,7 @@ func (w *consulwatchman) Work(p *supervisor.Process) error {
 				if _, exists := found[k]; !exists {
 					p.Logf("remove consul watcher %s\n", k)
 					worker.Shutdown()
+					worker.Wait()
 				}
 			}
 
