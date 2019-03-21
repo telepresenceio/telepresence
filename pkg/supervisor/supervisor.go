@@ -250,7 +250,7 @@ func (s *Supervisor) launch(worker *Worker) {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					err = errors.Errorf("PANIC: %v", r)
+					err = errors.Errorf("WORKER PANICKED: %v", r)
 				}
 			}()
 			err = worker.Work(process)

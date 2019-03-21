@@ -101,6 +101,19 @@ func (a *aggregator) setKubernetesResources(event k8sEvent) {
 	}
 }
 
+func isConsulResolver(r k8s.Resource) bool {
+	kind := strings.ToLower(r.Kind())
+	switch kind {
+	case "configmap":
+		a := r.Metadata().Annotations()
+		if _, ok := a["getambassador.io/consul-resolver"]; ok {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (a *aggregator) generateSnapshot() string {
 	return "generate snapshot stub\n"
 }

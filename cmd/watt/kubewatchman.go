@@ -1,8 +1,6 @@
 package main
 
 import (
-	"strings"
-
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 )
@@ -61,17 +59,4 @@ func (w *kubewatchman) Work(p *supervisor.Process) error {
 			return nil
 		}
 	}
-}
-
-func isConsulResolver(r k8s.Resource) bool {
-	kind := strings.ToLower(r.Kind())
-	switch kind {
-	case "configmap":
-		a := r.Metadata().Annotations()
-		if _, ok := a["getambassador.io/consul-resolver"]; ok {
-			return true
-		}
-	}
-
-	return false
 }
