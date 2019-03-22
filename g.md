@@ -125,8 +125,7 @@ filter -> assembler:
  - fill out stubs:
    + invoker
    + snapshot
-
- - build system
+ - fix initialSources test for bootstrappedness
 
  - criteria for integration testing:
    + we should be confident that any bugs we find in integration
