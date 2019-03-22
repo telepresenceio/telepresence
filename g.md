@@ -116,6 +116,19 @@ filter -> assembler:
 
 ## Next Steps
 
-1. [Phil] Toy implementation of the diagram and description from above.
-2. [Rafi, Phil] Poke at PoC. Decide if this path makes sense.
-3. [Team] Assuming `<2>` is a success get broader feedback and sketch work to move from PoC to "real".
+ - transcript-style tests for aggregator (rhs)
+ - fix reconciliation logic with tests: (phil)
+   + transcript-style + mock tests for consulwatcher
+   + other possibility would be to just write the reconciliation logic
+     with data structures/functions that can be tested directly
+   + both might make sense
+ - fill out stubs:
+   + invoker
+   + snapshot
+
+ - build system
+
+ - criteria for integration testing:
+   + we should be confident that any bugs we find in integration
+     testing can be relatively quickly captured in test cases
+

@@ -58,11 +58,11 @@ type Worker struct {
 	Requires      []string             // a list of required worker names
 	Retry         bool                 // whether or not to retry on error
 	wantsShutdown bool                 // true if the worker wants to shut down
-	supervisor    *Supervisor          //
-	children      int64                // atomic counter for naming children
-	process       *Process             // nil if the worker is not currently running
-	error         error
 	done          bool
+	supervisor    *Supervisor //
+	children      int64       // atomic counter for naming children
+	process       *Process    // nil if the worker is not currently running
+	error         error
 }
 
 func (w *Worker) Error() string {

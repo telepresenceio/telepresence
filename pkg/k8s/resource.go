@@ -268,13 +268,8 @@ func ExpandResource(path string) (result []byte, err error) {
 	return
 }
 
-func LoadResources(path string) (result []Resource, err error) {
-	var input []byte
-	input, err = ExpandResource(path)
-	if err != nil {
-		return
-	}
-	d := yaml.NewDecoder(bytes.NewReader(input))
+func ParseResources(name, input string) (result []Resource, err error) {
+	d := yaml.NewDecoder(bytes.NewReader([]byte(input)))
 	for {
 		var uns map[interface{}]interface{}
 		err = d.Decode(&uns)
@@ -282,13 +277,23 @@ func LoadResources(path string) (result []Resource, err error) {
 			if err == io.EOF {
 				err = nil
 			} else {
-				err = fmt.Errorf("%s: %v", path, err)
+				err = fmt.Errorf("%s: %v", name, err)
 			}
 			return
 		}
 		res := NewResourceFromYaml(uns)
 		result = append(result, res)
 	}
+}
+
+func LoadResources(path string) (result []Resource, err error) {
+	var input []byte
+	input, err = ExpandResource(path)
+	if err != nil {
+		return
+	}
+	result, err = ParseResources(path, string(input))
+	return
 }
 
 func SaveResources(path string, resources []Resource) error {

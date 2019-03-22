@@ -11,7 +11,6 @@ type consulwatchman struct {
 	watchesCh                 <-chan []k8s.Resource
 	consulEndpointsAggregator chan<- consulwatch.Endpoints
 	watched                   map[string]*supervisor.Worker
-	ready                     bool
 }
 
 func (w *consulwatchman) Work(p *supervisor.Process) error {

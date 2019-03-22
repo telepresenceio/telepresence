@@ -168,7 +168,7 @@ func randomWeightedSelect(rand *rand.Rand, events []event) event {
 
 	r := rand.Intn(totalWeight)
 	for _, e := range events {
-		r = r - e.weight
+		r -= e.weight
 		if r <= 0 {
 			return e
 		}

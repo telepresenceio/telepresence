@@ -4,18 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/datawire/consul-x/pkg/consulwatch"
-	"github.com/datawire/teleproxy/pkg/k8s"
-	"github.com/datawire/teleproxy/pkg/supervisor"
-	"github.com/datawire/teleproxy/pkg/tpu"
-	"github.com/datawire/teleproxy/pkg/watt"
-	"github.com/spf13/cobra"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/datawire/consul-x/pkg/consulwatch"
+	"github.com/datawire/teleproxy/pkg/k8s"
+	"github.com/datawire/teleproxy/pkg/supervisor"
+	"github.com/datawire/teleproxy/pkg/tpu"
+	"github.com/datawire/teleproxy/pkg/watt"
+	"github.com/spf13/cobra"
 )
 
 var kubernetesNamespace string
@@ -43,10 +44,6 @@ func init() {
 	rootCmd.Flags().IntVarP(&port, "port", "p", 7000, "configure the snapshot server port")
 }
 
-func notify(program string, url string) {
-
-}
-
 // determine if we're dealing with a potential piece of Ambassador configuration. Right now that comes through in
 // annotations of a Service. In the future it will likely be done via CRD. For this PoC I use a ConfigMap as pseudo-CRD.
 func isAmbassadorConfiguration(r k8s.Resource) (string, bool) {
@@ -69,12 +66,6 @@ func isAmbassadorConfiguration(r k8s.Resource) (string, bool) {
 	}
 
 	return "", false
-}
-
-// this thing here would extract Ambassador annotation data from the metadata and then do something useful with it...
-// let's pretend this is not important right now.
-func extractAmbassadorAnnotation(r k8s.Resource) string {
-	return ""
 }
 
 // makeKubeWatcher returns a function that sets up a series of watches to the Kubernetes API for different
@@ -389,4 +380,11 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+
+}
+
+func init() {
+	// for lint
+	NewSimKnife()
+	NewSimKnifeUsingSeed(1)
 }

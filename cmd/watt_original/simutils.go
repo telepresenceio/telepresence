@@ -31,7 +31,7 @@ func (s *SimKnife) randomWeightedSelect(events []Event) Event {
 
 	r := s.rand.Intn(totalWeight)
 	for _, e := range events {
-		r = r - e.Weight
+		r -= e.Weight
 		if r <= 0 {
 			return e
 		}

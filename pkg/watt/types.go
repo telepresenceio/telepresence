@@ -2,6 +2,7 @@ package watt
 
 import (
 	"encoding/json"
+
 	"github.com/datawire/consul-x/pkg/consulwatch"
 	"github.com/datawire/teleproxy/pkg/k8s"
 )
@@ -19,7 +20,7 @@ func (s *ConsulSnapshot) DeepCopy() (*ConsulSnapshot, error) {
 	res := &ConsulSnapshot{}
 	err = json.Unmarshal(jsonBytes, res)
 
-	return res, nil
+	return res, err
 }
 
 type Snapshot struct {
