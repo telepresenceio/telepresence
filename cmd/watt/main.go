@@ -66,6 +66,7 @@ func runWatt(cmd *cobra.Command, args []string) {
 	}
 
 	consulwatchman := consulwatchman{
+		WatchMaker:                &ConsulWatchMaker{},
 		watchesCh:                 aggregatorToConsulwatchmanCh,
 		consulEndpointsAggregator: consulwatchesToAggregatorCh,
 		watched:                   make(map[string]*supervisor.Worker),
