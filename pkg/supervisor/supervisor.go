@@ -66,7 +66,11 @@ type Worker struct {
 }
 
 func (w *Worker) Error() string {
-	return fmt.Sprintf("%s: %s", w.Name, w.error.Error())
+	if w.error == nil {
+		return "worker without an error"
+	} else {
+		return fmt.Sprintf("%s: %s", w.Name, w.error.Error())
+	}
 }
 
 func (w *Worker) Wait() error {
