@@ -11,11 +11,11 @@ import (
 
 type aggregator struct {
 	kubernetesEventsCh  <-chan k8sEvent
-	kubernetesResources map[string][]k8s.Resource
 	consulEndpointsCh   <-chan consulwatch.Endpoints
-	consulEndpoints     map[string]consulwatch.Endpoints
 	consulWatchesCh     chan<- []k8s.Resource
 	snapshotCh          chan<- string
+	kubernetesResources map[string][]k8s.Resource
+	consulEndpoints     map[string]consulwatch.Endpoints
 	bootstrapped        bool
 }
 
@@ -33,6 +33,8 @@ func (a *aggregator) Work(p *supervisor.Process) error {
 		case endpoints := <-a.consulEndpointsCh:
 			a.updateConsulEndpoints(endpoints)
 			a.maybeNotify(p)
+		case <-p.Shutdown():
+			return nil
 		}
 	}
 }
