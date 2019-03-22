@@ -87,11 +87,6 @@ func (m *ConsulWatchMaker) MakeWatch(r k8s.Resource, aggregatorCh chan<- consulw
 				return nil
 			})
 
-			//if worker != nil {
-			//	// DO NOT remove unless you want warnings about not handling an error as Worker implements the
-			//	// error interface.
-			//}
-
 			<-p.Shutdown()
 			w.Stop()
 			return nil
@@ -142,9 +137,7 @@ func (w *consulwatchman) Work(p *supervisor.Process) error {
 				if _, exists := found[workerName]; !exists {
 					p.Logf("remove consul watcher %s\n", workerName)
 					worker.Shutdown()
-					if err := worker.Wait(); err != nil {
-						p.Logf("failed to remove consul watcher %s\n", workerName)
-					}
+					worker.Wait()
 				}
 			}
 

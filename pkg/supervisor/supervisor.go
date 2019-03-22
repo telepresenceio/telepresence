@@ -73,7 +73,7 @@ func (w *Worker) Error() string {
 	}
 }
 
-func (w *Worker) Wait() error {
+func (w *Worker) Wait() {
 	s := w.supervisor
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -81,8 +81,6 @@ func (w *Worker) Wait() error {
 	for !w.done {
 		s.changed.Wait()
 	}
-
-	return w
 }
 
 func (s *Supervisor) Supervise(worker *Worker) {
