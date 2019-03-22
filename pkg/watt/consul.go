@@ -30,7 +30,10 @@ func (m *ConsulServiceNodeWatchMaker) Make(notify chan<- consulwatch.Endpoints) 
 	return func(p *supervisor.Process) error {
 		var err error
 
-		serviceWatcher, err := consulwatch.New(consul, m.Service, m.OnlyHealthy)
+		// TODO: Pass a logger to Consul but right now we don't have one available from the supervisor.
+		// The consulwatch lib will initialize a default logger but if we want sane formatting that's not a good long
+		// term solution.
+		serviceWatcher, err := consulwatch.New(consul, nil, m.Service, m.OnlyHealthy)
 		if err != nil {
 			p.Logf("error setting up new consul watch %v", err)
 			return err
