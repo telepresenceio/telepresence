@@ -244,7 +244,7 @@ func TestDependencyPanic(t *testing.T) {
 		Requires: []string{"minion"},
 	}))
 	errors := s.Run()
-	if !(len(errors) == 1 && errors[0].Error() == "minion: WORKER PANICKED: oops") {
+	if !(len(errors) == 1 && strings.HasPrefix(errors[0].Error(), "minion: WORKER PANICKED: oops")) {
 		t.Errorf("unexpected errors: %v", errors)
 	}
 	if r["dependent-minion"].state != UNSTARTED {
@@ -281,7 +281,7 @@ func TestShutdownOnPanic(t *testing.T) {
 		OnReady: func(spec *Spec) { panic("bug") },
 	}))
 	errors := s.Run()
-	if !(len(errors) == 1 && errors[0].Error() == "buggy: WORKER PANICKED: bug") {
+	if !(len(errors) == 1 && strings.HasPrefix(errors[0].Error(), "buggy: WORKER PANICKED: bug")) {
 		t.Errorf("unexpected errors: %v", errors)
 	}
 }
@@ -476,7 +476,7 @@ func TestGoPanic(t *testing.T) {
 		},
 	}))
 	errors := s.Run()
-	if !(len(errors) == 1 && errors[0].Error() == "entry[1]: WORKER PANICKED: boo") {
+	if !(len(errors) == 1 && strings.HasPrefix(errors[0].Error(), "entry[1]: WORKER PANICKED: boo")) {
 		t.Errorf("unexpected errors: %v", errors)
 	}
 	if !went {

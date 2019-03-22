@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 
@@ -263,7 +264,8 @@ func (s *Supervisor) launch(worker *Worker) {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					err = errors.Errorf("WORKER PANICKED: %v", r)
+					stack := string(debug.Stack())
+					err = errors.Errorf("WORKER PANICKED: %v\n%s", r, stack)
 				}
 			}()
 			err = worker.Work(process)
