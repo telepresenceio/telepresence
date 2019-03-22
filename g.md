@@ -126,6 +126,7 @@ filter -> assembler:
    + invoker
    + snapshot
  - fix initialSources test for bootstrappedness
+ - consul-x needs to get on the build train
 
  - criteria for integration testing:
    + we should be confident that any bugs we find in integration
