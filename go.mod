@@ -29,8 +29,9 @@ require (
 	github.com/coreos/go-semver v0.2.0 // indirect
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/dancannon/gorethink v4.0.0+incompatible // indirect
-	github.com/datawire/consul-x v0.0.0-20190322142701-d29c167a85c7
+	github.com/datawire/consul-x v0.0.0-20190322185636-536b2059a492
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
+	github.com/davecgh/go-spew v1.1.1
 	github.com/denisenkom/go-mssqldb v0.0.0-20190315220205-a8ed825ac853 // indirect
 	github.com/dimchansky/utfbom v1.1.0 // indirect
 	github.com/duosecurity/duo_api_golang v0.0.0-20190308151101-6c680f768e74 // indirect
@@ -46,7 +47,7 @@ require (
 	github.com/go-stomp/stomp v2.0.2+incompatible // indirect
 	github.com/gocql/gocql v0.0.0-20190319151216-6bdac5e86117 // indirect
 	github.com/gogo/googleapis v1.1.0 // indirect
-	github.com/gogo/protobuf v1.2.0 // indirect
+	github.com/gogo/protobuf v1.2.0
 	github.com/golang/groupcache v0.0.0-20181024230925-c65c006176ff // indirect
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/google/btree v1.0.0 // indirect
@@ -100,6 +101,7 @@ require (
 	github.com/michaelklishin/rabbit-hole v1.5.0 // indirect
 	github.com/miekg/dns v1.1.6
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
+	github.com/mitchellh/gox v1.0.0 // indirect
 	github.com/mitchellh/hashstructure v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/mitchellh/pointerstructure v0.0.0-20170205204203-f2329fcfa9e2 // indirect
