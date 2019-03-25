@@ -10,13 +10,32 @@ import (
 )
 
 type aggregator struct {
-	kubernetesEventsCh  <-chan k8sEvent
-	consulEndpointsCh   <-chan consulwatch.Endpoints
-	consulWatchesCh     chan<- []k8s.Resource
-	snapshotCh          chan<- string
+	// Input channel used to tell us about kubernetes state.
+	KubernetesEvents chan k8sEvent
+	// Input channel used to tell us about consul endpoints.
+	ConsulEndpoints chan consulwatch.Endpoints
+	// Output channel used to communicate with the consul watch manager.
+	watches chan<- []k8s.Resource
+	// Output channel used to communicate with the invoker.
+	snapshots chan<- string
+	// We won't consider ourselves "bootstrapped" until we hear
+	// about all these kinds.
+	requiredKinds       []string
 	kubernetesResources map[string][]k8s.Resource
 	consulEndpoints     map[string]consulwatch.Endpoints
 	bootstrapped        bool
+}
+
+func NewAggregator(snapshots chan<- string, watches chan<- []k8s.Resource, requiredKinds []string) *aggregator {
+	return &aggregator{
+		KubernetesEvents:    make(chan k8sEvent),
+		ConsulEndpoints:     make(chan consulwatch.Endpoints),
+		watches:             watches,
+		snapshots:           snapshots,
+		requiredKinds:       requiredKinds,
+		kubernetesResources: make(map[string][]k8s.Resource),
+		consulEndpoints:     make(map[string]consulwatch.Endpoints),
+	}
 }
 
 func (a *aggregator) Work(p *supervisor.Process) error {
@@ -25,12 +44,12 @@ func (a *aggregator) Work(p *supervisor.Process) error {
 	for {
 		a.maybeNotify(p)
 		select {
-		case event := <-a.kubernetesEventsCh:
+		case event := <-a.KubernetesEvents:
 			a.setKubernetesResources(event)
 			watches := a.kubernetesResources["ConsulResolver"]
-			a.consulWatchesCh <- watches
+			a.watches <- watches
 			a.maybeNotify(p)
-		case endpoints := <-a.consulEndpointsCh:
+		case endpoints := <-a.ConsulEndpoints:
 			a.updateConsulEndpoints(endpoints)
 			a.maybeNotify(p)
 		case <-p.Shutdown():
@@ -81,7 +100,7 @@ func (a *aggregator) maybeNotify(p *supervisor.Process) {
 	}
 
 	if a.bootstrapped {
-		a.snapshotCh <- a.generateSnapshot()
+		a.snapshots <- a.generateSnapshot()
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/datawire/consul-x/pkg/consulwatch"
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/spf13/cobra"
@@ -34,14 +33,6 @@ func init() {
 func runWatt(cmd *cobra.Command, args []string) {
 	log.Printf("starting watt...")
 
-	// Kubernetes resource events flow along this channel from the
-	// individaul k8s watches to the aggregator.
-	kubewatchesToAggregatorCh := make(chan k8sEvent)
-
-	// Consul endpoint information flows along this channel from
-	// the individual consul watches to the aggregator.
-	consulwatchesToAggregatorCh := make(chan consulwatch.Endpoints)
-
 	// The aggregator sends the current consul resolver set to the
 	// consul watch manager.
 	aggregatorToConsulwatchmanCh := make(chan []k8s.Resource)
@@ -50,25 +41,18 @@ func runWatt(cmd *cobra.Command, args []string) {
 	// invoker along this channel.
 	aggregatorToInvokerCh := make(chan string)
 
-	aggregator := &aggregator{
-		kubernetesEventsCh:  kubewatchesToAggregatorCh,
-		consulEndpointsCh:   consulwatchesToAggregatorCh,
-		consulWatchesCh:     aggregatorToConsulwatchmanCh,
-		snapshotCh:          aggregatorToInvokerCh,
-		kubernetesResources: make(map[string][]k8s.Resource),
-		consulEndpoints:     make(map[string]consulwatch.Endpoints),
-	}
+	aggregator := NewAggregator(aggregatorToInvokerCh, aggregatorToConsulwatchmanCh, initialSources)
 
 	kubewatchman := kubewatchman{
 		namespace: kubernetesNamespace,
 		kinds:     initialSources,
-		notify:    []chan<- k8sEvent{kubewatchesToAggregatorCh},
+		notify:    []chan<- k8sEvent{aggregator.KubernetesEvents},
 	}
 
 	consulwatchman := consulwatchman{
 		WatchMaker:                &ConsulWatchMaker{},
 		watchesCh:                 aggregatorToConsulwatchmanCh,
-		consulEndpointsAggregator: consulwatchesToAggregatorCh,
+		consulEndpointsAggregator: aggregator.ConsulEndpoints,
 		watched:                   make(map[string]*supervisor.Worker),
 	}
 

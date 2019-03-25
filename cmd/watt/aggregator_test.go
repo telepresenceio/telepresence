@@ -6,52 +6,34 @@ import (
 	"testing"
 	"time"
 
-	"github.com/datawire/consul-x/pkg/consulwatch"
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 type aggIsolator struct {
-	// input channels
-	kubewatchesToAggregatorCh   chan k8sEvent
-	consulwatchesToAggregatorCh chan consulwatch.Endpoints
-	// output channels
-	aggregatorToConsulwatchmanCh chan []k8s.Resource
-	aggregatorToInvokerCh        chan string
-	aggregator                   *aggregator
-	sup                          *supervisor.Supervisor
-	done                         chan struct{}
-	t                            *testing.T
-	cancel                       context.CancelFunc
+	snapshots  chan string
+	watches    chan []k8s.Resource
+	aggregator *aggregator
+	sup        *supervisor.Supervisor
+	done       chan struct{}
+	t          *testing.T
+	cancel     context.CancelFunc
 }
 
 func newAggIsolator(t *testing.T) *aggIsolator {
+	// aggregator uses zero length channels for its inputs so we can
+	// control the total ordering of all inputs and therefore
+	// intentionally trigger any order of events we want to test
 	iso := &aggIsolator{
-		// by using zero length channels for inputs here, we can
-		// control the total ordering of all inputs and therefore
-		// intentionally trigger any order of events we want to test
-		kubewatchesToAggregatorCh:   make(chan k8sEvent),
-		consulwatchesToAggregatorCh: make(chan consulwatch.Endpoints),
-		// we need to create buffered channels for outputs because
-		// nothing is asynchronously reading them in the test
-		aggregatorToConsulwatchmanCh: make(chan []k8s.Resource, 100),
-		aggregatorToInvokerCh:        make(chan string, 100),
+		// we need to create buffered channels for outputs
+		// because nothing is asynchronously reading them in
+		// the test
+		watches:   make(chan []k8s.Resource, 100),
+		snapshots: make(chan string, 100),
 		// for signaling when the isolator is done
 		done: make(chan struct{}),
 	}
-	iso.aggregator = &aggregator{
-		kubernetesEventsCh: iso.kubewatchesToAggregatorCh,
-		consulEndpointsCh:  iso.consulwatchesToAggregatorCh,
-		consulWatchesCh:    iso.aggregatorToConsulwatchmanCh,
-		snapshotCh:         iso.aggregatorToInvokerCh,
-		// XXX: the stuff below is really initializing
-		// internal data structures of the aggregator, we
-		// should probably have a constructor or something so
-		// this kind of stuff doesn't need to appear in the
-		// tests
-		kubernetesResources: make(map[string][]k8s.Resource),
-		consulEndpoints:     make(map[string]consulwatch.Endpoints),
-	}
+	iso.aggregator = NewAggregator(iso.snapshots, iso.watches, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	iso.cancel = cancel
 	iso.sup = supervisor.WithContext(ctx)
@@ -139,18 +121,18 @@ func TestAggregatorBug1(t *testing.T) {
 	defer iso.Stop()
 
 	// initial kubernetes state is just services
-	iso.kubewatchesToAggregatorCh <- k8sEvent{"service", SERVICES}
+	iso.aggregator.KubernetesEvents <- k8sEvent{"service", SERVICES}
 	// we expect aggregator to generate a snapshot after the first event
-	expect(t, iso.aggregatorToInvokerCh, func(value string) bool {
+	expect(t, iso.snapshots, func(value string) bool {
 		return strings.Contains(value, "snapshot")
 	})
 	// whenever the aggregator sees updated k8s state, it
 	// should send an update to the consul watch manager,
 	// in this case it will be empty
-	expect(t, iso.aggregatorToConsulwatchmanCh, []k8s.Resource(nil))
+	expect(t, iso.watches, []k8s.Resource(nil))
 
-	iso.kubewatchesToAggregatorCh <- k8sEvent{"configmap", RESOLVER}
-	expect(t, iso.aggregatorToConsulwatchmanCh, func(watches []k8s.Resource) bool {
+	iso.aggregator.KubernetesEvents <- k8sEvent{"configmap", RESOLVER}
+	expect(t, iso.watches, func(watches []k8s.Resource) bool {
 		if len(watches) != 1 {
 			return false
 		}
