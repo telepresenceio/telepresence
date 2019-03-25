@@ -576,3 +576,12 @@ func TestWorkerWait(t *testing.T) {
 		t.Errorf("first=%s, second=%s", first, second)
 	}
 }
+
+func TestWaitOnWorkerStartedAfterShutdown(t *testing.T) {
+	s := WithContext(context.Background())
+	w := &Worker{Name: "noop", Work: func(p *Process) error { return nil }}
+	s.Supervise(w)
+	s.Shutdown()
+	s.Run()
+	w.Wait()
+}

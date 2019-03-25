@@ -230,6 +230,10 @@ func (w *Worker) reconcile() bool {
 			w.process.shutdownClosed = true
 		}
 		if w.process == nil {
+			if !w.done {
+				w.done = true
+				s.changed.Broadcast()
+			}
 			return true
 		}
 	} else if true { // I really just wanted an else here, but lint wouldn't let me do that.
