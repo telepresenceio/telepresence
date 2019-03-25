@@ -14,6 +14,33 @@ var (
 	CLOSE interface{} = &struct{}{}
 )
 
+func panics(f func()) (success bool) {
+	defer func() {
+		if e := recover(); e != nil {
+			success = true
+		}
+	}()
+
+	f()
+	return
+}
+
+func Eventually(t *testing.T, timeoutAfter time.Duration, f func()) {
+	timeout := time.After(timeoutAfter)
+	tick := time.Tick(100 * time.Millisecond)
+
+	for {
+		select {
+		case <-timeout:
+			t.Fatal("timed out")
+		case <-tick:
+			if !panics(f) {
+				return
+			}
+		}
+	}
+}
+
 func expect(t *testing.T, ch interface{}, values ...interface{}) {
 	timer := time.NewTimer(10 * time.Second)
 	rch := reflect.ValueOf(ch)

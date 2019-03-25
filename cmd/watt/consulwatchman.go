@@ -10,7 +10,6 @@ import (
 	"github.com/datawire/consul-x/pkg/consulwatch"
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
-	"github.com/davecgh/go-spew/spew"
 	consulapi "github.com/hashicorp/consul/api"
 )
 
@@ -94,8 +93,6 @@ func (m *ConsulWatchMaker) MakeWatch(r k8s.Resource, aggregatorCh chan<- consulw
 		Retry: true,
 	}
 
-	//fmt.Println("===")
-	//spew.Dump(worker)
 	return worker, nil
 }
 
@@ -109,18 +106,15 @@ func (w *consulwatchman) Work(p *supervisor.Process) error {
 			p.Logf("processing %d kubernetes resources", len(resources))
 			for _, r := range resources {
 				if !isConsulResolver(r) {
+					p.Logf("resource is not a ConsulResolver, skipped")
 					continue
-					//panic(r)
 				}
+
 				worker, err := w.WatchMaker.MakeWatch(r, w.consulEndpointsAggregator)
 				if err != nil {
 					p.Logf("failed to create consul watch %v", err)
 					continue
 				}
-
-				fmt.Println("===")
-				spew.Dump(worker)
-				fmt.Println("===")
 
 				if _, exists := w.watched[worker.Name]; !exists {
 					p.Logf("add consul watcher %s\n", worker.Name)
