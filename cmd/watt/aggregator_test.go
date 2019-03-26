@@ -129,7 +129,7 @@ func TestAggregatorBug1(t *testing.T) {
 	expect(t, iso.snapshots, func(value string) bool {
 		s := &watt.Snapshot{}
 		err := json.Unmarshal([]byte(value), s)
-		return err != nil
+		return err == nil
 	})
 
 	// whenever the aggregator sees updated k8s state, it
