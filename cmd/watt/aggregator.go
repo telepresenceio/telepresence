@@ -1,8 +1,10 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
 	"strings"
+
+	"github.com/datawire/teleproxy/pkg/watt"
 
 	"github.com/datawire/consul-x/pkg/consulwatch"
 	"github.com/datawire/teleproxy/pkg/k8s"
@@ -46,7 +48,7 @@ func (a *aggregator) Work(p *supervisor.Process) error {
 		select {
 		case event := <-a.KubernetesEvents:
 			a.setKubernetesResources(event)
-			watches := a.kubernetesResources["ConsulResolver"]
+			watches := a.kubernetesResources["consulresolver"]
 			a.watches <- watches
 			a.maybeNotify(p)
 		case endpoints := <-a.ConsulEndpoints:
@@ -72,7 +74,7 @@ func (a *aggregator) isKubernetesBootstrapped(p *supervisor.Process) bool {
 func (a *aggregator) isComplete(p *supervisor.Process) bool {
 	var requiredConsulServices []string
 
-	for _, v := range a.kubernetesResources["ConsulResolver"] {
+	for _, v := range a.kubernetesResources["consulresolver"] {
 		// this is all kinds of type unsafe most likely
 		requiredConsulServices = append(requiredConsulServices, v.Data()["service"].(string))
 	}
@@ -100,25 +102,30 @@ func (a *aggregator) maybeNotify(p *supervisor.Process) {
 	}
 
 	if a.bootstrapped {
-		a.snapshots <- a.generateSnapshot()
+		snapshot, err := a.generateSnapshot()
+		if err != nil {
+			p.Logf("generate snapshot failed %v", err)
+			return
+		}
+
+		a.snapshots <- snapshot
 	}
 }
 
 func (a *aggregator) updateConsulEndpoints(endpoints consulwatch.Endpoints) {
-	fmt.Println(endpoints)
 	a.consulEndpoints[endpoints.Service] = endpoints
 }
 
 func (a *aggregator) setKubernetesResources(event k8sEvent) {
 	a.kubernetesResources[event.kind] = event.resources
 	if strings.ToLower(event.kind) == "configmap" {
-		var resolvers []k8s.Resource
+		resolvers := make([]k8s.Resource, 0)
 		for _, r := range event.resources {
 			if isConsulResolver(r) {
 				resolvers = append(resolvers, r)
 			}
 		}
-		a.kubernetesResources["ConsulResolver"] = resolvers
+		a.kubernetesResources["consulresolver"] = resolvers
 	}
 }
 
@@ -134,6 +141,16 @@ func isConsulResolver(r k8s.Resource) bool {
 	return false
 }
 
-func (a *aggregator) generateSnapshot() string {
-	return "generate snapshot stub\n"
+func (a *aggregator) generateSnapshot() (string, error) {
+	s := watt.Snapshot{
+		Consul:     watt.ConsulSnapshot{Endpoints: a.consulEndpoints},
+		Kubernetes: a.kubernetesResources,
+	}
+
+	jsonBytes, err := json.MarshalIndent(s, "", "    ")
+	if err != nil {
+		return "{}", err
+	}
+
+	return string(jsonBytes), nil
 }

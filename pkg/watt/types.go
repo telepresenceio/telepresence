@@ -8,7 +8,7 @@ import (
 )
 
 type ConsulSnapshot struct {
-	Endpoints []consulwatch.Endpoints `json:",omitempty"`
+	Endpoints map[string]consulwatch.Endpoints `json:",omitempty"`
 }
 
 func (s *ConsulSnapshot) DeepCopy() (*ConsulSnapshot, error) {
@@ -24,6 +24,6 @@ func (s *ConsulSnapshot) DeepCopy() (*ConsulSnapshot, error) {
 }
 
 type Snapshot struct {
-	Consul     ConsulSnapshot `json:""`
-	Kubernetes []k8s.Resource `json:""`
+	Consul     ConsulSnapshot            `json:",omitempty"`
+	Kubernetes map[string][]k8s.Resource `json:",omitempty"`
 }

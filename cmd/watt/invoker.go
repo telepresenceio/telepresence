@@ -8,14 +8,18 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/datawire/teleproxy/pkg/tpu"
+
 	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 type invoker struct {
-	snapshotCh <-chan string
-	mux        sync.Mutex
-	snapshots  map[int]string
-	id         int
+	snapshotCh    <-chan string
+	mux           sync.Mutex
+	snapshots     map[int]string
+	id            int
+	notify        []string
+	apiServerPort int
 }
 
 func (a *invoker) Work(p *supervisor.Process) error {
@@ -50,7 +54,12 @@ func (a *invoker) getSnapshot(id int) string {
 }
 
 func (a *invoker) invoke(id int, snapshot string) {
-	fmt.Printf("invoke stub: %d, %s\n", id, snapshot)
+	for _, n := range a.notify {
+		k := tpu.NewKeeper("notify", fmt.Sprintf("%s http://localhost:%d/snapshots/%d", n, a.apiServerPort, id))
+		k.Limit = 1
+		k.Start()
+		k.Wait()
+	}
 }
 
 type apiServer struct {

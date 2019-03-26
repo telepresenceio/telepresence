@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
-	"strings"
+	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/datawire/teleproxy/pkg/watt"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
@@ -122,10 +124,18 @@ func TestAggregatorBug1(t *testing.T) {
 
 	// initial kubernetes state is just services
 	iso.aggregator.KubernetesEvents <- k8sEvent{"service", SERVICES}
+
 	// we expect aggregator to generate a snapshot after the first event
 	expect(t, iso.snapshots, func(value string) bool {
-		return strings.Contains(value, "snapshot")
+		s := &watt.Snapshot{}
+		err := json.Unmarshal([]byte(value), s)
+		if err != nil {
+			return false
+		}
+
+		return true
 	})
+
 	// whenever the aggregator sees updated k8s state, it
 	// should send an update to the consul watch manager,
 	// in this case it will be empty

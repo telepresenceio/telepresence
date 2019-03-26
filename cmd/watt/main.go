@@ -57,8 +57,10 @@ func runWatt(cmd *cobra.Command, args []string) {
 	}
 
 	invoker := &invoker{
-		snapshotCh: aggregatorToInvokerCh,
-		snapshots:  make(map[int]string),
+		snapshotCh:    aggregatorToInvokerCh,
+		snapshots:     make(map[int]string),
+		notify:        notifyReceivers,
+		apiServerPort: port,
 	}
 
 	apiServer := &apiServer{
