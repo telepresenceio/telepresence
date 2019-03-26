@@ -51,12 +51,20 @@ func (w *kubewatchman) Work(p *supervisor.Process) error {
 	kubeAPIWatcher.Start()
 	p.Ready()
 
-	for {
-		select {
-		case <-p.Shutdown():
-			p.Logf("shutdown initiated")
-			kubeAPIWatcher.Stop()
-			return nil
-		}
+	for range p.Shutdown() {
+		p.Logf("shutdown initiated")
+		kubeAPIWatcher.Stop()
 	}
+
+	return nil
+
+	// gosimple complains this is unnecessary compared to above
+	//for {
+	//	select {
+	//	case <-p.Shutdown():
+	//		p.Logf("shutdown initiated")
+	//		kubeAPIWatcher.Stop()
+	//		return nil
+	//	}
+	//}
 }

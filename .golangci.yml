@@ -11,10 +11,10 @@ linters:
     - prealloc
     - scopelint
     - unparam
-    - deadcode # phil to remove this and everything after
-    - unused
-    - structcheck
-    - gosimple
+#    - deadcode # phil to remove this and everything after
+#    - unused
+#    - structcheck
+#    - gosimple
 linters-settings:
   goconst:
     min-len: 5

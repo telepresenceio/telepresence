@@ -115,15 +115,6 @@ func (m Map) getBool(key string) bool {
 	}
 }
 
-func (m Map) getArray(key string) []interface{} {
-	v, ok := m[key]
-	if ok {
-		return v.([]interface{})
-	} else {
-		return []interface{}{}
-	}
-}
-
 // Resource is map from strings to any with some convenience methods for
 // accessing typical Kubernetes resource fields.
 type Resource map[string]interface{}

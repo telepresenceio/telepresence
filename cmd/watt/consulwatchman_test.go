@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math/rand"
 	"testing"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 )
 
 var standardTimeout = 10 * time.Second
-var random = rand.New(rand.NewSource(42))
 
 var RegularConfigMap = `---
 apiVersion: v1
@@ -153,17 +151,6 @@ func (m *NOOPWatchMaker) MakeWatch(r k8s.Resource, aggregatorCh chan<- consulwat
 		},
 		Retry: false,
 	}, nil
-}
-
-// RandomString returns a random string of the given length from a standard lowercase-only alphanumeric alphabet.
-func randomString(length int) string {
-	alphabet := []rune("0123456789abcdefghijklmnopqrstuvwxyz")
-	res := make([]rune, length)
-	for i := range res {
-		res[i] = alphabet[random.Intn(len(alphabet))]
-	}
-
-	return string(res)
 }
 
 func CreateConfigMap(name, namespace string) k8s.Resource {
