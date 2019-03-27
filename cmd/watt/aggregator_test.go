@@ -6,7 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/datawire/consul-x/pkg/consulwatch"
+	"github.com/datawire/teleproxy/pkg/consulwatch"
+
 	"github.com/datawire/teleproxy/pkg/watt"
 
 	"github.com/datawire/teleproxy/pkg/k8s"

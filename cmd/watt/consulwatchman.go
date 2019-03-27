@@ -7,7 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/datawire/consul-x/pkg/consulwatch"
+	"github.com/datawire/teleproxy/pkg/consulwatch"
+
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	consulapi "github.com/hashicorp/consul/api"

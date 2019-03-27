@@ -3,7 +3,8 @@ package watt
 import (
 	"encoding/json"
 
-	"github.com/datawire/consul-x/pkg/consulwatch"
+	"github.com/datawire/teleproxy/pkg/consulwatch"
+
 	"github.com/datawire/teleproxy/pkg/k8s"
 )
 

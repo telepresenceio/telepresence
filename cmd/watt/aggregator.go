@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/datawire/teleproxy/pkg/consulwatch"
+
 	"github.com/datawire/teleproxy/pkg/watt"
 
-	"github.com/datawire/consul-x/pkg/consulwatch"
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 )
