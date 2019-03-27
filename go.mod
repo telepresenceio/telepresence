@@ -29,9 +29,7 @@ require (
 	github.com/coreos/go-semver v0.2.0 // indirect
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/dancannon/gorethink v4.0.0+incompatible // indirect
-	github.com/datawire/consul-x v0.0.0-20190322185636-536b2059a492
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
-	github.com/davecgh/go-spew v1.1.1
 	github.com/denisenkom/go-mssqldb v0.0.0-20190315220205-a8ed825ac853 // indirect
 	github.com/dimchansky/utfbom v1.1.0 // indirect
 	github.com/duosecurity/duo_api_golang v0.0.0-20190308151101-6c680f768e74 // indirect
@@ -47,7 +45,7 @@ require (
 	github.com/go-stomp/stomp v2.0.2+incompatible // indirect
 	github.com/gocql/gocql v0.0.0-20190319151216-6bdac5e86117 // indirect
 	github.com/gogo/googleapis v1.1.0 // indirect
-	github.com/gogo/protobuf v1.2.0
+	github.com/gogo/protobuf v1.2.0 // indirect
 	github.com/golang/groupcache v0.0.0-20181024230925-c65c006176ff // indirect
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/google/btree v1.0.0 // indirect
@@ -66,6 +64,7 @@ require (
 	github.com/hashicorp/go-memdb v0.0.0-20190306140544-eea0b16292ad // indirect
 	github.com/hashicorp/go-plugin v0.0.0-20190220160451-3f118e8ee104 // indirect
 	github.com/hashicorp/go-retryablehttp v0.5.2 // indirect
+	github.com/hashicorp/go-rootcerts v1.0.0 // indirect
 	github.com/hashicorp/go-sockaddr v1.0.2 // indirect
 	github.com/hashicorp/go-version v1.1.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.1 // indirect
@@ -73,6 +72,7 @@ require (
 	github.com/hashicorp/net-rpc-msgpackrpc v0.0.0-20151116020338-a14192a58a69 // indirect
 	github.com/hashicorp/nomad v0.8.7 // indirect
 	github.com/hashicorp/raft-boltdb v0.0.0-20171010151810-6e5ba93211ea // indirect
+	github.com/hashicorp/serf v0.8.2 // indirect
 	github.com/hashicorp/vault v1.1.0 // indirect
 	github.com/hashicorp/vault-plugin-auth-alicloud v0.0.0-20190320211238-36e70c54375f // indirect
 	github.com/hashicorp/vault-plugin-auth-azure v0.0.0-20190320211138-f34b96803f04 // indirect
@@ -101,7 +101,6 @@ require (
 	github.com/michaelklishin/rabbit-hole v1.5.0 // indirect
 	github.com/miekg/dns v1.1.6
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
-	github.com/mitchellh/gox v1.0.0 // indirect
 	github.com/mitchellh/hashstructure v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/mitchellh/pointerstructure v0.0.0-20170205204203-f2329fcfa9e2 // indirect
