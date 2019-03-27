@@ -4,8 +4,10 @@ import (
 	"context"
 	"log"
 	"os"
+	"time"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
+	"github.com/datawire/teleproxy/pkg/limiter"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/spf13/cobra"
 )
@@ -14,6 +16,7 @@ var kubernetesNamespace string
 var initialSources = make([]string, 0)
 var notifyReceivers = make([]string, 0)
 var port int
+var interval time.Duration
 
 var rootCmd = &cobra.Command{
 	Use:              "watt",
@@ -26,8 +29,11 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Flags().StringVarP(&kubernetesNamespace, "namespace", "n", "", "namespace to watch (default: all)")
 	rootCmd.Flags().StringSliceVarP(&initialSources, "source", "s", []string{}, "configure an initial static source")
-	rootCmd.Flags().StringSliceVar(&notifyReceivers, "notify", []string{}, "invoke the program with the given arguments as a receiver")
+	rootCmd.Flags().StringSliceVar(&notifyReceivers, "notify", []string{},
+		"invoke the program with the given arguments as a receiver")
 	rootCmd.Flags().IntVarP(&port, "port", "p", 7000, "configure the snapshot server port")
+	rootCmd.Flags().DurationVarP(&interval, "interval", "i", 250*time.Millisecond,
+		"configure the rate limit interval")
 }
 
 func runWatt(cmd *cobra.Command, args []string) {
@@ -37,11 +43,8 @@ func runWatt(cmd *cobra.Command, args []string) {
 	// consul watch manager.
 	aggregatorToConsulwatchmanCh := make(chan []k8s.Resource)
 
-	// The aggregator generates snapshots and sends them to the
-	// invoker along this channel.
-	aggregatorToInvokerCh := make(chan string)
-
-	aggregator := NewAggregator(aggregatorToInvokerCh, aggregatorToConsulwatchmanCh, initialSources)
+	invoker := NewInvoker(port, notifyReceivers, limiter.NewIntervalLimiter(interval))
+	aggregator := NewAggregator(invoker.Snapshots, aggregatorToConsulwatchmanCh, initialSources)
 
 	kubewatchman := kubewatchman{
 		namespace: kubernetesNamespace,
@@ -54,13 +57,6 @@ func runWatt(cmd *cobra.Command, args []string) {
 		watchesCh:                 aggregatorToConsulwatchmanCh,
 		consulEndpointsAggregator: aggregator.ConsulEndpoints,
 		watched:                   make(map[string]*supervisor.Worker),
-	}
-
-	invoker := &invoker{
-		snapshotCh:    aggregatorToInvokerCh,
-		snapshots:     make(map[int]string),
-		notify:        notifyReceivers,
-		apiServerPort: port,
 	}
 
 	apiServer := &apiServer{

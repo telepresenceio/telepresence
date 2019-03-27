@@ -7,31 +7,52 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
-	"github.com/datawire/teleproxy/pkg/tpu"
-
+	"github.com/datawire/teleproxy/pkg/limiter"
 	"github.com/datawire/teleproxy/pkg/supervisor"
+	"github.com/datawire/teleproxy/pkg/tpu"
 )
 
 type invoker struct {
-	snapshotCh    <-chan string
-	mux           sync.Mutex
-	snapshots     map[int]string
-	id            int
-	notify        []string
-	apiServerPort int
+	Snapshots        chan string
+	mux              sync.Mutex
+	invokedSnapshots map[int]string
+	id               int
+	notify           []string
+	apiServerPort    int
+	limiter          limiter.Limiter
+
+	// This stores the latest snapshot, but we don't assign an id
+	// unless/until we invoke... some of these will be discarded
+	// by the rate limiting/coalescing logic
+	latestSnapshot string
+}
+
+func NewInvoker(port int, notify []string, limiter limiter.Limiter) *invoker {
+	return &invoker{
+		Snapshots:        make(chan string),
+		invokedSnapshots: make(map[int]string),
+		notify:           notify,
+		apiServerPort:    port,
+		limiter:          limiter,
+	}
 }
 
 func (a *invoker) Work(p *supervisor.Process) error {
 	p.Ready()
 	for {
 		select {
-		case snapshot := <-a.snapshotCh:
-			id := a.storeSnapshot(snapshot)
-			// XXX: we should add garbage collection to
-			// avoid running out of memory due to
-			// snapshots
-			a.invoke(id, snapshot)
+		case a.latestSnapshot = <-a.Snapshots:
+			now := time.Now()
+			delay := a.limiter.Limit(now)
+			if delay == 0 {
+				a.invoke()
+			} else if delay > 0 {
+				time.AfterFunc(delay, func() {
+					a.invoke()
+				})
+			}
 		case <-p.Shutdown():
 			p.Logf("shutdown initiated")
 			return nil
@@ -42,18 +63,22 @@ func (a *invoker) Work(p *supervisor.Process) error {
 func (a *invoker) storeSnapshot(snapshot string) int {
 	a.mux.Lock()
 	defer a.mux.Unlock()
+	// XXX: we should add garbage collection to
+	// avoid running out of memory due to
+	// snapshots
 	a.id += 1
-	a.snapshots[a.id] = snapshot
+	a.invokedSnapshots[a.id] = snapshot
 	return a.id
 }
 
 func (a *invoker) getSnapshot(id int) string {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	return a.snapshots[id]
+	return a.invokedSnapshots[id]
 }
 
-func (a *invoker) invoke(id int, snapshot string) {
+func (a *invoker) invoke() {
+	id := a.storeSnapshot(a.latestSnapshot)
 	for _, n := range a.notify {
 		k := tpu.NewKeeper("notify", fmt.Sprintf("%s http://localhost:%d/snapshots/%d", n, a.apiServerPort, id))
 		k.Limit = 1
