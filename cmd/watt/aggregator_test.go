@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/datawire/consul-x/pkg/consulwatch"
 	"github.com/datawire/teleproxy/pkg/watt"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
@@ -22,7 +23,7 @@ type aggIsolator struct {
 	cancel     context.CancelFunc
 }
 
-func newAggIsolator(t *testing.T) *aggIsolator {
+func newAggIsolator(t *testing.T, requiredKinds []string) *aggIsolator {
 	// aggregator uses zero length channels for its inputs so we can
 	// control the total ordering of all inputs and therefore
 	// intentionally trigger any order of events we want to test
@@ -35,7 +36,7 @@ func newAggIsolator(t *testing.T) *aggIsolator {
 		// for signaling when the isolator is done
 		done: make(chan struct{}),
 	}
-	iso.aggregator = NewAggregator(iso.snapshots, iso.watches, nil)
+	iso.aggregator = NewAggregator(iso.snapshots, iso.watches, requiredKinds)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	iso.cancel = cancel
 	iso.sup = supervisor.WithContext(ctx)
@@ -43,11 +44,12 @@ func newAggIsolator(t *testing.T) *aggIsolator {
 		Name: "aggregator",
 		Work: iso.aggregator.Work,
 	})
+	iso.t = t
 	return iso
 }
 
-func startAggIsolator(t *testing.T) *aggIsolator {
-	iso := newAggIsolator(t)
+func startAggIsolator(t *testing.T, requiredKinds []string) *aggIsolator {
+	iso := newAggIsolator(t, requiredKinds)
 	iso.Start()
 	return iso
 }
@@ -106,38 +108,38 @@ data:
 `)
 )
 
-// Bugs:
-//
-//  0. shutdown happens prior to bootstrap state being achieved
-//
-//  1. start up against an empty cluster
-//     + we end up never achieving a bootstrapped state
-//
-//  2. start up against a changing cluster
-//     + we learn about an initial set of consul services
-//     + one of them gets deleted before its watcher gets an answer for us
-//     + we will always have a nil entry in the required services map
+// make sure we shutdown even before achieving a bootstrapped state
+func TestAggregatorShutdown(t *testing.T) {
+	iso := startAggIsolator(t, nil)
+	defer iso.Stop()
+}
 
-func TestAggregatorBug1(t *testing.T) {
-	iso := startAggIsolator(t)
+// Check that we bootstrap properly... this means *not* emitting a
+// snapshot until we have:
+//
+//   a) achieved synchronization with the kubernetes API server
+//
+//   b) received (possibly empty) endpoint info about all referenced
+//      consul services...
+func TestAggregatorBootstrap(t *testing.T) {
+	iso := startAggIsolator(t, []string{"service", "configmap"})
 	defer iso.Stop()
 
 	// initial kubernetes state is just services
 	iso.aggregator.KubernetesEvents <- k8sEvent{"service", SERVICES}
-
-	// we expect aggregator to generate a snapshot after the first event
-	expect(t, iso.snapshots, func(value string) bool {
-		s := &watt.Snapshot{}
-		err := json.Unmarshal([]byte(value), s)
-		return err == nil
-	})
-
-	// whenever the aggregator sees updated k8s state, it
-	// should send an update to the consul watch manager,
-	// in this case it will be empty
+	// whenever the aggregator sees updated k8s state, it should
+	// send an update to the consul watch manager, in this case it
+	// will be empty because there are no resolvers yet
 	expect(t, iso.watches, []k8s.Resource(nil))
 
+	// we should not generate a snapshot yet because we specified
+	// configmaps are required
+	expect(t, iso.snapshots, Timeout(100*time.Millisecond))
+
+	// the configmap references a consul service, so we shouldn't
+	// get a snapshot yet, but we should get watches
 	iso.aggregator.KubernetesEvents <- k8sEvent{"configmap", RESOLVER}
+	expect(t, iso.snapshots, Timeout(100*time.Millisecond))
 	expect(t, iso.watches, func(watches []k8s.Resource) bool {
 		if len(watches) != 1 {
 			return false
@@ -148,5 +150,28 @@ func TestAggregatorBug1(t *testing.T) {
 		}
 
 		return true
+	})
+
+	// now lets send in the first endpoints, and we should get a
+	// snapshot
+	iso.aggregator.ConsulEndpoints <- consulwatch.Endpoints{
+		Service: "bar",
+		Endpoints: []consulwatch.Endpoint{
+			{
+				Service: "bar",
+				Address: "1.2.3.4",
+				Port:    80,
+			},
+		},
+	}
+
+	expect(t, iso.snapshots, func(snapshot string) bool {
+		s := &watt.Snapshot{}
+		err := json.Unmarshal([]byte(snapshot), s)
+		if err != nil {
+			return false
+		}
+		_, ok := s.Consul.Endpoints["bar"]
+		return ok
 	})
 }

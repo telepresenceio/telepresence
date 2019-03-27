@@ -61,8 +61,13 @@ func (a *aggregator) Work(p *supervisor.Process) error {
 }
 
 func (a *aggregator) isKubernetesBootstrapped(p *supervisor.Process) bool {
-	// XXX: initialSources is a global
-	return len(a.kubernetesResources) >= len(initialSources)
+	for _, k := range a.requiredKinds {
+		_, ok := a.kubernetesResources[k]
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // Returns true if the current state of the world is complete. The

@@ -41,22 +41,44 @@ func Eventually(t *testing.T, timeoutAfter time.Duration, f func()) {
 	}
 }
 
+type Timeout time.Duration
+
 func expect(t *testing.T, ch interface{}, values ...interface{}) {
-	timer := time.NewTimer(10 * time.Second)
 	rch := reflect.ValueOf(ch)
 
 	for idx, expected := range values {
-		chosen, value, ok := reflect.Select([]reflect.SelectCase{{
-			Dir:  reflect.SelectRecv,
-			Chan: rch,
-		},
+		var timeoutExpected bool
+		var timer *time.Timer
+		switch exp := expected.(type) {
+		case Timeout:
+			timeoutExpected = true
+			timer = time.NewTimer(time.Duration(exp))
+		default:
+			timeoutExpected = false
+			timer = time.NewTimer(10 * time.Second)
+		}
+
+		chosen, value, ok := reflect.Select([]reflect.SelectCase{
+			{
+				Dir:  reflect.SelectRecv,
+				Chan: rch,
+			},
 			{
 				Dir:  reflect.SelectRecv,
 				Chan: reflect.ValueOf(timer.C),
-			}})
+			},
+		})
 
-		if chosen == 1 {
-			panic("timed out")
+		if timeoutExpected && chosen != 1 {
+			if ok {
+				panic(fmt.Sprintf("expected timeout, got %v", value.Interface()))
+			} else {
+				panic("expected timeout, got CLOSE")
+			}
+		}
+
+		if timeoutExpected && chosen == 1 {
+			continue
 		}
 
 		if ok {
@@ -80,9 +102,8 @@ func expect(t *testing.T, ch interface{}, values ...interface{}) {
 			default:
 				require.Equal(t, expected, value.Interface(), "read unexpected value from channel")
 			}
-
 		} else if expected != CLOSE {
-			panic(fmt.Sprintf("expected CLOSE, got %v", value))
+			panic(fmt.Sprintf("expected %v, got CLOSE", expected))
 		}
 	}
 }
