@@ -69,7 +69,7 @@ func (w *ServiceWatcher) Watch(handler func(endpoints Endpoints, err error)) {
 				Service:  item.Service.Service,
 				SystemID: fmt.Sprintf("consul::%s", item.Node.ID),
 				ID:       item.Service.ID,
-				Address:  item.Node.Address,
+				Address:  item.Service.Address,
 				Port:     item.Service.Port,
 				Tags:     tags,
 			})
