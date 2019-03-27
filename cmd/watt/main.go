@@ -37,6 +37,15 @@ func init() {
 }
 
 func runWatt(cmd *cobra.Command, args []string) {
+	if len(initialSources) == 0 {
+		log.Fatalln("no initial sources configured")
+	}
+
+	kubeAPIWatcher := k8s.NewClient(nil).Watcher()
+	for idx := range initialSources {
+		initialSources[idx] = kubeAPIWatcher.Canonical(initialSources[idx])
+	}
+
 	log.Printf("starting watt...")
 
 	// The aggregator sends the current consul resolver set to the
@@ -47,9 +56,10 @@ func runWatt(cmd *cobra.Command, args []string) {
 	aggregator := NewAggregator(invoker.Snapshots, aggregatorToConsulwatchmanCh, initialSources)
 
 	kubewatchman := kubewatchman{
-		namespace: kubernetesNamespace,
-		kinds:     initialSources,
-		notify:    []chan<- k8sEvent{aggregator.KubernetesEvents},
+		namespace:      kubernetesNamespace,
+		kinds:          initialSources,
+		kubeAPIWatcher: kubeAPIWatcher,
+		notify:         []chan<- k8sEvent{aggregator.KubernetesEvents},
 	}
 
 	consulwatchman := consulwatchman{

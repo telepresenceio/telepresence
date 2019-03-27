@@ -124,7 +124,7 @@ func (a *aggregator) updateConsulEndpoints(endpoints consulwatch.Endpoints) {
 
 func (a *aggregator) setKubernetesResources(event k8sEvent) {
 	a.kubernetesResources[event.kind] = event.resources
-	if strings.ToLower(event.kind) == "configmap" {
+	if strings.HasPrefix(strings.ToLower(event.kind), "configmap") {
 		resolvers := make([]k8s.Resource, 0)
 		for _, r := range event.resources {
 			if isConsulResolver(r) {

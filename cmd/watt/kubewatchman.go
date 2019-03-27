@@ -11,9 +11,10 @@ type k8sEvent struct {
 }
 
 type kubewatchman struct {
-	namespace string
-	kinds     []string
-	notify    []chan<- k8sEvent
+	namespace      string
+	kinds          []string
+	notify         []chan<- k8sEvent
+	kubeAPIWatcher *k8s.Watcher
 }
 
 func fmtNamespace(ns string) string {
@@ -25,14 +26,12 @@ func fmtNamespace(ns string) string {
 }
 
 func (w *kubewatchman) Work(p *supervisor.Process) error {
-	kubeAPIWatcher := k8s.NewClient(nil).Watcher()
-
 	for _, kind := range w.kinds {
 		p.Logf("adding kubernetes watch for %q in namespace %q", kind, fmtNamespace(kubernetesNamespace))
 
 		watcherFunc := func(ns, kind string) func(watcher *k8s.Watcher) {
 			return func(watcher *k8s.Watcher) {
-				resources := watcher.List(kind)
+				resources := watcher.List(watcher.Canonical(kind))
 				p.Logf("found %d %q in namespace %q", len(resources), kind, fmtNamespace(ns))
 				for _, n := range w.notify {
 					n <- k8sEvent{kind: kind, resources: resources}
@@ -41,19 +40,19 @@ func (w *kubewatchman) Work(p *supervisor.Process) error {
 			}
 		}
 
-		err := kubeAPIWatcher.WatchNamespace(w.namespace, kind, watcherFunc(w.namespace, kind))
+		err := w.kubeAPIWatcher.WatchNamespace(w.namespace, kind, watcherFunc(w.namespace, kind))
 
 		if err != nil {
 			return err
 		}
 	}
 
-	kubeAPIWatcher.Start()
+	w.kubeAPIWatcher.Start()
 	p.Ready()
 
 	for range p.Shutdown() {
 		p.Logf("shutdown initiated")
-		kubeAPIWatcher.Stop()
+		w.kubeAPIWatcher.Stop()
 	}
 
 	return nil
