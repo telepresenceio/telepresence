@@ -1,34 +1,38 @@
 # Watt - Watch All The Things
 
-## Terminal 1
+# Build Watt
 
-1. `git clone git@github.com:datawire/teleproxy`
-2. `git checkout lomb/gorgonzola`
-3. `make`
-4. `kubernaut claims create --name=watt --cluster-group=main`
-5. `export KUBECONFIG=~/.kube/watt.yaml`
-6. `bin/watt -s configmap -s services`
+Compiles binaries into `bin_$GOOS_$GOARCH`
 
-## Terminal 2
+```bash
+make build
+bin_linux_amd64/watt --help
+```
 
-`make consul.local`
+# Deploy Cluster and Setup Teleproxy
 
-## Terminal 3
+```bash
+make deploy
+export KUBECONFIG=build-aux/teleproxy.knaut
+```
 
-`make consul.attach`
+# Run Watt
 
-## Terminal 4
+- Add the appropriate `-s` switches for initial sources.
+- Set `--notify` to whatever makes you happy.
 
-Register a Consul Resolver configuration with Watt (pretend this is a CRD)
+`bin_linux_amd64/watt -s service -s configmap -s secrets --notify printf`
 
-`kubectl apply -f consul-resolver.yaml`
+# Register and Deregister Services from Consul
 
-## Terminal 3 (consul.attach)
+Make sure you're using the right `KUBECONFIG` if you switch terminals
 
-Register a an endpoint. The `-id` is what makes them unique. So to register several endpoints change the value of `-id`
+**NOTE**: Change `-id` as needed
 
-`consul services register -name=bar -address=10.10.0.1 -port=9000 -id bar0`
+## Register
 
-## Terminal 4
+`kubectl exec $(kubectl get pods --selector=app=consul --output=jsonpath='{.items[0].metadata.name}') -- consul services register -name=foobar -address=10.10.0.1 -port=9000 -id fb0`
 
-`curl -v http://localhost:7000/snapshot`
+## Deregister
+
+`kubectl exec $(kubectl get pods --selector=app=consul --output=jsonpath='{.items[0].metadata.name}') -- consul services deregister -id fb0`
