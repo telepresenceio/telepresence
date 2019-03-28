@@ -116,19 +116,4 @@ filter -> assembler:
 
 ## Next Steps
 
- - transcript-style tests for aggregator (rhs)
- - fix reconciliation logic with tests: (phil)
-   + transcript-style + mock tests for consulwatcher
-   + other possibility would be to just write the reconciliation logic
-     with data structures/functions that can be tested directly
-   + both might make sense
- - fill out stubs:
-   + invoker
-   + snapshot
- - fix initialSources test for bootstrappedness
- - consul-x needs to get on the build train
-
- - criteria for integration testing:
-   + we should be confident that any bugs we find in integration
-     testing can be relatively quickly captured in test cases
-
+ - ???
