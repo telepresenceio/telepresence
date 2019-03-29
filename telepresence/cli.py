@@ -19,7 +19,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from subprocess import check_output
 from traceback import format_exc
-from typing import List, Set, Tuple, Union
+from typing import Dict, List, Set, Tuple, Union
 from urllib.parse import quote_plus
 
 import telepresence

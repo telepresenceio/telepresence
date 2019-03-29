@@ -290,8 +290,7 @@ def new_swapped_deployment(
             # automountServiceAccountToken: false. To be used by forwarder.py
             # in the k8s-proxy.
             container.setdefault("env", []).append({
-                "name":
-                "TELEPRESENCE_CONTAINER_NAMESPACE",
+                "name": "TELEPRESENCE_CONTAINER_NAMESPACE",
                 "valueFrom": {
                     "fieldRef": {
                         "fieldPath": "metadata.namespace"
