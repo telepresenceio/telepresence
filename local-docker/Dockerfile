@@ -20,7 +20,8 @@ RUN apk add --no-cache python3 openssh iptables tini conntrack-tools git && \
     echo -e "ClientAliveInterval 1\nGatewayPorts yes\nPermitEmptyPasswords yes\nPort 38022\nClientAliveCountMax 10\nPermitRootLogin yes\n" >> /etc/ssh/sshd_config && \
     pip3 install --upgrade pip && \
     pip3 install git+https://github.com/datawire/sshuttle.git@telepresence && \
-    apk del --no-cache -r git
+    apk del --no-cache -r git && \
+    passwd -d root
 
 COPY setup.* versioneer.py /tmp/build/
 COPY telepresence /tmp/build/telepresence
