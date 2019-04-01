@@ -57,7 +57,7 @@ class RemoteInfo(object):
 
     def remote_telepresence_version(self) -> str:
         """Return the version used by the remote Telepresence container."""
-        name, version = self.container_config["image"].split(":")
+        name, version = self.container_config["image"].rsplit(":", 1)
         if name.endswith("telepresence-proxy"):
             return image_version
         return version
