@@ -83,6 +83,8 @@ def test_environment_from_deployment(probe):
             )
         )
         assert "TELEPRESENCE_ROOT" in probe_json_env, probe_json_env
+        assert "/podinfo" in probe_json_env["TELEPRESENCE_MOUNTS"], probe_json_env
+        assert "/var/run/secrets/kubernetes.io/serviceaccount" in probe_json_env["TELEPRESENCE_MOUNTS"], probe_json_env
 
         probe_envfile = probe.operation.envfile.read_text()
         for key, value in probe.DESIRED_ENVIRONMENT.items():
@@ -92,6 +94,7 @@ def test_environment_from_deployment(probe):
             else:
                 assert "{}={}\n".format(key, value) in probe_envfile
         assert "TELEPRESENCE_ROOT=" in probe_envfile, probe_envfile
+        assert "TELEPRESENCE_MOUNTS=" in probe_envfile, probe_envfile
 
 
     if probe.method.inherits_client_environment():
