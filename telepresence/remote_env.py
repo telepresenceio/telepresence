@@ -42,7 +42,7 @@ def get_remote_env(runner: Runner, ssh: SSH, remote_info: RemoteInfo
         result = {
             "TELEPRESENCE_POD": remote_info.pod_name,
             "TELEPRESENCE_CONTAINER": remote_info.container_name,
-            "TELEPRESENCE_MOUNTS": ":".join(pod_info["mountpoints"])
+            "TELEPRESENCE_MOUNTS": ":".join(pod_info["mountpoints"]),
         }
         # Alpine, which we use for telepresence-k8s image, automatically sets
         # HOME, PATH, HOSTNAME. The rest are from Kubernetes:

@@ -18,10 +18,16 @@ Emit information about the pod as a JSON blob
 import json
 import os
 import re
+import sys
 
 IGNORED_MOUNTS = [
-    r'/sys($|/.*)', r'/proc($|/.*)', r'/dev($|/.*)', r'/etc/hostname$',
-    r'/etc/resolv.conf$', r'/etc/hosts$', r'/$'
+    r'/sys($|/.*)',
+    r'/proc($|/.*)',
+    r'/dev($|/.*)',
+    r'/etc/hostname$',
+    r'/etc/resolv.conf$',
+    r'/etc/hosts$',
+    r'/$',
 ]
 
 
@@ -38,7 +44,9 @@ def get_mount_points():
                 mount_point = splitter.split(line)[1]
                 if not ignore.match(mount_point):
                     ret.append(mount_point)
-    except IOError:
+    except Exception as exc:
+        print("//Failed to get mount points: {}".format(exc), file=sys.stderr)
+        print("//Retrieved so far: {}".format(ret), file=sys.stderr)
         return []
 
     return ret
