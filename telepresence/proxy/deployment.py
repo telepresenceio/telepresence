@@ -357,7 +357,9 @@ def swap_deployment_openshift(
         )
 
         runner.check_call(
-            runner.kubectl("rollout", "status", "-w", "dc/{}".format(deployment))
+            runner.kubectl(
+                "rollout", "status", "-w", "dc/{}".format(deployment)
+            )
         )
 
     runner.add_cleanup(
