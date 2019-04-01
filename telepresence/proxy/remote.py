@@ -82,7 +82,6 @@ def get_deployment_json(
             deployment_type,
             "-o",
             "json",
-            "--export",
         ]
         if run_id is None:
             return json.loads(
@@ -160,7 +159,7 @@ def get_remote_info(
     runner.write("  with name {}-*".format(deployment_name))
     runner.write("  with labels {}".format(expected_labels))
 
-    cmd = "get pod -o json --export".split()
+    cmd = "get pod -o json".split()
     if run_id:
         cmd.append("--selector=telepresence={}".format(run_id))
 
