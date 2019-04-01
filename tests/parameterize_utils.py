@@ -847,7 +847,7 @@ class Probe(object):
         80,
         AF_INET,
         SOCK_STREAM,
-    ))
+    ) * 2)
 
     #
     # Also notice that each ALSO_PROXY_... uses non-overlapping addresses

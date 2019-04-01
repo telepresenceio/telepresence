@@ -390,15 +390,22 @@ def query_http_server(probe_result, http):
     )
 
 
+def fix_httpbin_ip(maybe_ip):
+    if "," in maybe_ip:
+        return maybe_ip.split(",")[0].strip()
+    return maybe_ip
+
+
 def httpbin_ip():
     result = str(urlopen("http://httpbin.org/ip", timeout=30).read(), "utf-8")
-    origin = loads(result)["origin"]
+    origin = fix_httpbin_ip(loads(result)["origin"])
     return origin
 
 
 def probe_also_proxy(probe_result, hostname):
     probe_result.write("probe-also-proxy {}".format(hostname))
     success, request_ip = loads(probe_result.read())
+    request_ip = fix_httpbin_ip(request_ip)
     try:
         address = IPv4Address(request_ip)
     except ValueError as exc:
