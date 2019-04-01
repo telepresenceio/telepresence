@@ -4,20 +4,22 @@ Volume support requires a small amount of work on your part.
 The root directory where all the volumes can be found will be set to the `TELEPRESENCE_ROOT` environment variable in the shell run by `telepresence`.
 You will then need to use that env variable as the root for volume paths you are opening.
 
-Telepresence will attempt to gather a list of all mount points that exist and put them into
-the `TELEPRESENCE_MOUNTS` variable, seperated by `:` characters.  This allows automated discovery
-of mount-points.  (See below for an example).
+Telepresence will attempt to gather the mount points that exist in the remote pod and list them in the `TELEPRESENCE_MOUNTS` environment variable, separated by `:` characters.
+This allows automated discovery of remote volumes.
 
 For example, all Kubernetes containers have a volume mounted at `/var/run/secrets` with the service account details.
 Those files are accessible from Telepresence:
 
 ```console
-$ telepresence --run-shell
-Starting proxy...
-@minikube|$ echo $TELEPRESENCE_ROOT
-/tmp/tmpk_svwt_5
-@minikube|$ ls $TELEPRESENCE_ROOT/var/run/secrets/kubernetes.io/serviceaccount/
-ca.crt  namespace  token
+$ telepresence
+T: [...]
+T: Setup complete. Launching your command.
+@tel-testing|bash-3.2$ echo $TELEPRESENCE_ROOT
+/tmp/tel-6cjjs3ba/fs
+@tel-testing|bash-3.2$ echo $TELEPRESENCE_MOUNTS
+/var/run/secrets/kubernetes.io/serviceaccount
+@tel-testing|bash-3.2$ ls $TELEPRESENCE_ROOT/var/run/secrets/kubernetes.io/serviceaccount/
+ca.crt          namespace       token
 ```
 
 The files are available at a different path than they are on the actual Kubernetes environment.
@@ -71,21 +73,21 @@ $ ls /var/run/secrets/kubernetes.io/serviceaccount/
 ca.crt  namespace  token
 ```
 
-Using the `TELEPRESENCE_MOUNTS` environment variable allows for automatic discovery and handling of mount
-points.  For example, the following Python code will create sym-links so that any mounted volumes
-appear in their normal locations:
+Using the `TELEPRESENCE_MOUNTS` environment variable allows for automatic discovery and handling of mount points.
+For example, the following Python code will create symlinks so that any mounted volumes appear in their normal locations:
+
 ```python
 def telepresence_remote_mounts():
     mounts = os.environ.get('TELEPRESENCE_MOUNTS')
     if not mounts:
         return
 
-    tele_root = os.environ.get('TELEPRESENCE_ROOT')
+    tel_root = os.environ.get('TELEPRESENCE_ROOT')
 
     for mount in mounts.split(':'):
         dir_name, link_name = os.path.split(mount)
         os.makedirs(dir_name, exist_ok=True)
-        
-        link_src = os.path.join(tele_root, mount[1:])
+
+        link_src = os.path.join(tel_root, mount[1:])
         os.symlink(link_src, mount)
 ```
