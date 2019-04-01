@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import json
-from subprocess import STDOUT, CalledProcessError
+from subprocess import CalledProcessError
 from typing import Dict, Optional
 
 from telepresence import image_version
@@ -87,8 +87,7 @@ def get_deployment_json(
         if run_id is None:
             return json.loads(
                 runner.get_output(
-                    runner.kubectl(get_deployment + [deployment_name]),
-                    stderr=STDOUT
+                    runner.kubectl(get_deployment + [deployment_name])
                 )
             )
         else:
@@ -97,8 +96,7 @@ def get_deployment_json(
                 runner.get_output(
                     runner.kubectl(
                         get_deployment + ["--selector=telepresence=" + run_id]
-                    ),
-                    stderr=STDOUT
+                    )
                 )
             )["items"][0]
     except CalledProcessError as e:
