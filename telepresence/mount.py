@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from subprocess import STDOUT, CalledProcessError
+from subprocess import CalledProcessError
 from typing import Callable, Tuple
 
 from telepresence.connect import SSH
@@ -37,10 +37,9 @@ def mount_remote_volumes(
         sudo_prefix = []
         middle = []
     try:
-        runner.get_output(
+        runner.check_call(
             sudo_prefix + ["sshfs", "-p", str(ssh.port)] + ssh.required_args +
             middle + ["{}:/".format(ssh.user_at_host), mount_dir],
-            stderr=STDOUT
         )
         mounted = True
     except CalledProcessError as exc:
@@ -53,8 +52,8 @@ def mount_remote_volumes(
             " the bug report:"
             " https://github.com/datawire/telepresence/issues/new"
         )
-        if exc.output:
-            runner.show("\nMount error was: {}\n".format(exc.output.strip()))
+        if exc.stderr:
+            runner.show("\nMount error was: {}\n".format(exc.stderr.strip()))
         mounted = False
 
     def no_cleanup():
@@ -66,7 +65,7 @@ def mount_remote_volumes(
                 sudo_prefix + ["fusermount", "-z", "-u", mount_dir]
             )
         else:
-            runner.get_output(sudo_prefix + ["umount", "-f", mount_dir])
+            runner.check_call(sudo_prefix + ["umount", "-f", mount_dir])
 
     span.end()
     return mount_dir, cleanup if mounted else no_cleanup
