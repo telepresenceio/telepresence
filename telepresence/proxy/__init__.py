@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from subprocess import CalledProcessError
+from subprocess import CalledProcessError, STDOUT
 
 from telepresence import (
     TELEPRESENCE_REMOTE_IMAGE, TELEPRESENCE_REMOTE_IMAGE_PRIV
@@ -54,17 +54,19 @@ def setup(runner: Runner, args):
         # OpenShift Origin might be using DeploymentConfig instead
         if args.swap_deployment:
             try:
-                runner.check_call(
+                runner.get_output(
                     runner.kubectl(
                         "get", "dc/{}".format(args.swap_deployment)
                     ),
+                    reveal=True,
+                    stderr=STDOUT
                 )
                 deployment_type = "deploymentconfig"
             except CalledProcessError as exc:
                 runner.show(
                     "Failed to find OpenShift deploymentconfig {}. "
                     "Will try regular k8s deployment. Reason:\n{}".format(
-                        deployment_arg, exc.stderr
+                        deployment_arg, exc.stdout
                     )
                 )
 

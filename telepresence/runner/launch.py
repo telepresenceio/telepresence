@@ -12,10 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import typing
-from collections import deque
 from subprocess import DEVNULL, PIPE, Popen
-from threading import Lock, Thread
+from threading import Thread
 
 
 class BackgroundProcessCrash(Exception):
@@ -24,63 +22,23 @@ class BackgroundProcessCrash(Exception):
         self.details = details
 
 
-class _Logger:
-    """Logger that optionally captures what is logged"""
-
-    def __init__(
-        self,
-        write: typing.Callable[[str], None],
-        do_log: bool,
-        do_capture: bool,
-        max_capture: int,
-    ):
-        self.write = write
-        self.do_log = do_log
-        self.do_capture = do_capture
-        self.finished = Lock()
-        self.capture = deque(
-            maxlen=max_capture
-        )  # type: typing.MutableSequence[str]
-        self.finished.acquire()
-
-    def log(self, line: str) -> None:
-        if self.do_log:
-            self.write(line)
-        if self.do_capture:
-            self.capture.append(line)
-
-    def finish(self) -> None:
-        self.finished.release()
-
-    def get_captured(self) -> str:
-        self.finished.acquire()  # Block until finish is called
-        return "".join(self.capture).strip()
-
-
-def _launch_command(
-    args: typing.List[str],
-    out_logger: _Logger,
-    err_logger: _Logger,
-    done: typing.Optional[typing.Callable[[Popen], None]] = None,
-    **kwargs: typing.Any,
-) -> Popen:
+def _launch_command(args, out_cb, err_cb, done=None, **kwargs):
     """
     Launch subprocess with args, kwargs.
     Log stdout and stderr by calling respective callbacks.
     """
 
-    def pump_stream(logger: _Logger, stream: typing.Iterable[str]) -> None:
+    def pump_stream(callback, stream):
         """Pump the stream"""
         for line in stream:
-            logger.log(line)
-        logger.finish()
+            callback(line)
+        callback(None)
 
-    def joiner() -> None:
+    def joiner():
         """Wait for streams to finish, then call done callback"""
         for th in threads:
             th.join()
-        if done:
-            done(process)
+        done(process)
 
     kwargs = kwargs.copy()
     in_data = kwargs.get("input")
@@ -97,13 +55,13 @@ def _launch_command(
     threads = []
     if process.stdout:
         thread = Thread(
-            target=pump_stream, args=(out_logger, process.stdout), daemon=True
+            target=pump_stream, args=(out_cb, process.stdout), daemon=True
         )
         thread.start()
         threads.append(thread)
     if process.stderr:
         thread = Thread(
-            target=pump_stream, args=(err_logger, process.stderr), daemon=True
+            target=pump_stream, args=(err_cb, process.stderr), daemon=True
         )
         thread.start()
         threads.append(thread)

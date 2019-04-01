@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from subprocess import CalledProcessError
+from subprocess import STDOUT, CalledProcessError
 from typing import Tuple
 
 from telepresence.cli import PortMapping
@@ -90,7 +90,7 @@ def setup(runner: Runner, args):
     # Make sure we can run openssh:
     runner.require(["ssh"], "Please install the OpenSSH client")
     try:
-        version = runner.get_output(["ssh", "-V"], stderr_to_stdout=True)
+        version = runner.get_output(["ssh", "-V"], stderr=STDOUT)
         if not version.startswith("OpenSSH"):
             raise runner.fail("'ssh' is not the OpenSSH client, apparently.")
     except (CalledProcessError, OSError, IOError) as e:

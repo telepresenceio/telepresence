@@ -14,7 +14,7 @@
 
 import json
 from copy import deepcopy
-from subprocess import CalledProcessError
+from subprocess import STDOUT, CalledProcessError
 from typing import Dict, Optional, Tuple
 
 from telepresence.cli import PortMapping
@@ -36,11 +36,15 @@ def existing_deployment(
         "Deployment {}".format(deployment_arg)
     )
     try:
-        runner.check_call(runner.kubectl("get", "deployment", deployment_arg))
+        runner.get_output(
+            runner.kubectl("get", "deployment", deployment_arg),
+            reveal=True,
+            stderr=STDOUT
+        )
     except CalledProcessError as exc:
         raise runner.fail(
             "Failed to find deployment {}:\n{}".format(
-                deployment_arg, exc.stderr
+                deployment_arg, exc.stdout
             )
         )
     run_id = None
@@ -64,7 +68,7 @@ def create_new_deployment(
     def remove_existing_deployment(quiet=False):
         if not quiet:
             runner.show("Cleaning up Deployment {}".format(deployment_arg))
-        runner.check_call(
+        runner.get_output(
             runner.kubectl(
                 "delete",
                 "--ignore-not-found",
@@ -98,11 +102,11 @@ def create_new_deployment(
             "--env=TELEPRESENCE_NAMESERVER=" + get_alternate_nameserver()
         )
     try:
-        runner.check_call(runner.kubectl(command))
+        runner.get_output(runner.kubectl(command), reveal=True, stderr=STDOUT)
     except CalledProcessError as exc:
         raise runner.fail(
             "Failed to create deployment {}:\n{}".format(
-                deployment_arg, exc.stderr
+                deployment_arg, exc.stdout
             )
         )
     span.end()

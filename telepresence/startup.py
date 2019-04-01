@@ -17,7 +17,7 @@ import os
 import ssl
 import sys
 from shutil import which
-from subprocess import CalledProcessError
+from subprocess import STDOUT, CalledProcessError
 from typing import List, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
@@ -101,9 +101,10 @@ class KubeInfo(object):
         # in kubeconfig:
         if args.context is None:
             try:
-                args.context = runner.get_output([
-                    prelim_command, "config", "current-context"
-                ])
+                args.context = runner.get_output(
+                    [prelim_command, "config", "current-context"],
+                    stderr=STDOUT,
+                )
             except CalledProcessError:
                 sudo_used = ""
                 if os.geteuid() == 0:
@@ -254,16 +255,17 @@ def final_checks(runner: Runner, args):
 
     # Make sure we can access Kubernetes:
     try:
-        runner.check_call(
+        runner.get_output(
             runner.kubectl(
                 "get", "pods", "telepresence-connectivity-check",
                 "--ignore-not-found"
-            )
+            ),
+            stderr=STDOUT,
         )
     except CalledProcessError as exc:
         sys.stderr.write("Error accessing Kubernetes: {}\n".format(exc))
-        if exc.stderr:
-            sys.stderr.write("{}\n".format(exc.stderr.strip()))
+        if exc.output:
+            sys.stderr.write("{}\n".format(exc.output.strip()))
         raise runner.fail("Cluster access failed")
     except (OSError, IOError) as exc:
         raise runner.fail(
