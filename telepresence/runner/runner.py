@@ -20,7 +20,6 @@ import sys
 import textwrap
 import typing
 import uuid
-from collections import deque
 from contextlib import contextmanager
 from functools import partial
 from inspect import currentframe, getframeinfo
@@ -35,7 +34,7 @@ from telepresence import TELEPRESENCE_BINARY
 from telepresence.utilities import kill_process, str_command
 
 from .cache import Cache
-from .launch import BackgroundProcessCrash, _launch_command
+from .launch import BackgroundProcessCrash, _launch_command, _Logger
 from .output import Output
 from .output_mask import mask_sensitive_data
 from .span import Span
@@ -293,82 +292,111 @@ class Runner(object):
 
     # Subprocesses
 
-    def _make_logger(self, track, capture=None):
+    def _make_logger(
+        self, track: int, do_log: bool, do_capture: bool, limit_capture=99999
+    ) -> _Logger:
         """Create a logger that optionally captures what is logged"""
         prefix = "{:>3d}".format(track)
 
-        if capture is None:
+        def write(line: str):
+            self.output.write(mask_sensitive_data(line), prefix=prefix)
 
-            def logger(line):
-                """Just log"""
-                if line is not None:
-                    self.output.write(mask_sensitive_data(line), prefix=prefix)
-        else:
+        return _Logger(write, do_log, do_capture, limit_capture)
 
-            def logger(line):
-                """Log and capture"""
-                capture.append(line)
-                if line is not None:
-                    self.output.write(mask_sensitive_data(line), prefix=prefix)
-
-        return logger
-
-    def _run_command(self, track, msg1, msg2, out_cb, err_cb, args, **kwargs):
-        """Run a command synchronously"""
-        self.output.write("[{}] {}: {}".format(track, msg1, str_command(args)))
+    def _run_command_sync(
+        self,
+        messages: typing.Tuple[str, str],
+        log_stdout: bool,
+        stderr_to_stdout: bool,
+        args: typing.List[str],
+        input: typing.Optional[bytes],
+        env: typing.Optional[typing.Dict[str, str]],
+    ) -> str:
+        """
+        Run a command synchronously. Log stdout (optionally) and stderr (if not
+        redirected to stdout). Capture stdout and stderr, at least for
+        exceptions. Return output.
+        """
+        self.counter = track = self.counter + 1
+        self.output.write(
+            "[{}] {}: {}".format(track, messages[0], str_command(args))
+        )
         span = self.span(
             "{} {}".format(track, str_command(args))[:80],
             False,
             verbose=False
         )
+        kwargs = {}  # type: typing.Dict[str, typing.Any]
+        if env is not None:
+            kwargs["env"] = env
+        if input is not None:
+            kwargs["input"] = input
+
+        # Set up capture/logging
+        out_logger = self._make_logger(track, log_stdout or self.verbose, True)
+        if stderr_to_stdout:
+            # This logger won't be used
+            err_logger = self._make_logger(track, False, False)
+            kwargs["stderr"] = STDOUT
+        else:
+            err_logger = self._make_logger(track, True, True)
+
+        # Launch the process and wait for it to finish
         try:
-            process = _launch_command(args, out_cb, err_cb, **kwargs)
+            process = _launch_command(args, out_logger, err_logger, **kwargs)
         except OSError as exc:
+            # Failed to launch, so no need to wrap up capture stuff.
             self.output.write("[{}] {}".format(track, exc))
             raise
         retcode = process.wait()
+        output = out_logger.get_captured()
         spent = span.end()
+
         if retcode:
+            # Command failed. Need to raise CPE.
             self.output.write(
                 "[{}] exit {} in {:0.2f} secs.".format(track, retcode, spent)
             )
-            raise CalledProcessError(retcode, args)
-        if spent > 1:
-            self.output.write(
-                "[{}] {} in {:0.2f} secs.".format(track, msg2, spent)
+            raise CalledProcessError(
+                retcode,
+                args,
+                output,
+                None if stderr_to_stdout else err_logger.get_captured(),
             )
 
-    def check_call(self, args, **kwargs):
-        """Run a subprocess, make sure it exited with 0."""
-        self.counter = track = self.counter + 1
-        out_cb = err_cb = self._make_logger(track)
-        self._run_command(
-            track, "Running", "ran", out_cb, err_cb, args, **kwargs
+        # Command succeeded. Just return the output
+        self.output.write(
+            "[{}] {} in {:0.2f} secs.".format(track, messages[1], spent)
         )
+        return output
 
-    def get_output(self, args, reveal=False, **kwargs) -> str:
+    def check_call(
+        self,
+        args: typing.List[str],
+        input: typing.Optional[bytes] = None,
+        env: typing.Optional[typing.Dict[str, str]] = None,
+    ):
+        """Run a subprocess, make sure it exited with 0."""
+        self._run_command_sync(("Running", "ran"), True, False, args, input,
+                               env)
+
+    def get_output(
+        self,
+        args: typing.List[str],
+        stderr_to_stdout=False,
+        reveal=False,
+        input: typing.Optional[bytes] = None,
+        env: typing.Optional[typing.Dict[str, str]] = None,
+    ) -> str:
         """Return (stripped) command result as unicode string."""
-        self.counter = track = self.counter + 1
-        capture = []  # type: typing.List[str]
-        if reveal or self.verbose:
-            out_cb = self._make_logger(track, capture=capture)
-        else:
-            out_cb = capture.append
-        err_cb = self._make_logger(track)
-        cpe_exc = None
-        try:
-            self._run_command(
-                track, "Capturing", "captured", out_cb, err_cb, args, **kwargs
-            )
-        except CalledProcessError as exc:
-            cpe_exc = exc
-        # Wait for end of stream to be recorded
-        while not capture or capture[-1] is not None:
-            sleep(0.1)
-        del capture[-1]
-        output = "".join(capture).strip()
-        if cpe_exc:
-            raise CalledProcessError(cpe_exc.returncode, cpe_exc.cmd, output)
+        output = self._run_command_sync(
+            ("Capturing", "captured"),
+            reveal,
+            stderr_to_stdout,
+            args,
+            input,
+            env,
+        )
         return output
 
     def launch(
@@ -407,15 +435,13 @@ class Runner(object):
 
         """
         self.counter = track = self.counter + 1
-        capture = deque(maxlen=10)  # type: typing.MutableSequence[str]
-        out_cb = err_cb = self._make_logger(track, capture=capture)
+        out_logger = self._make_logger(track, True, True, 10)
 
-        def done(proc):
+        def done(proc: Popen) -> None:
             retcode = proc.wait()
             self.output.write("[{}] exit {}".format(track, retcode))
             self.quitting = True
-            recent_lines = [str(line) for line in capture if line is not None]
-            recent = "  ".join(recent_lines).strip()
+            recent = "\n  ".join(out_logger.get_captured().split("\n"))
             if recent:
                 recent = "\nRecent output was:\n  {}".format(recent)
             message = (
@@ -436,8 +462,8 @@ class Runner(object):
         try:
             process = _launch_command(
                 args,
-                out_cb,
-                err_cb,
+                out_logger,
+                out_logger,  # Won't be used
                 done=done,
                 # kwargs
                 start_new_session=not keep_session,
