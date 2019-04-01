@@ -197,6 +197,9 @@ class KubeInfo(object):
         # Running Docker Desktop on macOS (or maybe Windows?)
         if self.context == "docker-for-desktop":
             return True
+        # kind (kube-in-docker) has complex context name, so check by cluster
+        if self.cluster == "kind":
+            return True
         # Minikube just has 'minikube' as context'
         if self.context == "minikube":
             return True

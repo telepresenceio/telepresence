@@ -1,0 +1,2 @@
+Telepresence tries to detect Kubernetes running with `kind` (kube-in-docker) and
+work around networking issues, the same way it does for Minikube.
