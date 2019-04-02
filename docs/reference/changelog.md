@@ -1,6 +1,42 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.98 (April 2, 2019)
+
+Features:
+
+* The `TELEPRESENCE_MOUNTS` environment variable contains a list of remote mount points.
+  See [the documentation](https://www.telepresence.io/howto/volumes) for more information and example usage.
+  Thanks to GitHub user turettn for the patch.
+  ([#917](https://github.com/telepresenceio/telepresence/issues/917))
+
+Bug fixes:
+
+* Telepresence no longer crashes when used with kubectl 1.14.
+  ([#966](https://github.com/telepresenceio/telepresence/issues/966))
+* Telepresence no longer quits if its `kubectl logs` subprocess quits.
+  ([#598](https://github.com/telepresenceio/telepresence/issues/598))
+* Telepresence waits until a deployment config on OpenShift is successfully rolled back to its original state before proceeding with further cleanup.
+  Thanks to Bartosz Majsak for the patch.
+  ([#929](https://github.com/telepresenceio/telepresence/issues/929))
+* Telepresence tries to detect Kubernetes running with `kind` (kube-in-docker) and work around networking issues the same way as for Minikube.
+  Thanks to Rohan Singh for the patch.
+  ([#932](https://github.com/telepresenceio/telepresence/issues/932))
+* Telepresence accepts private Docker registries as sources for required images when using `TELEPRESENCE_REGISTRY`.
+  Thanks to GitHub user arroo for the patch.
+  ([#967](https://github.com/telepresenceio/telepresence/issues/967))
+* Telepresence's container method supports non-standard cluster DNS search domains.
+  Thanks to Loïc Minaudier for the patch.
+  ([#940](https://github.com/telepresenceio/telepresence/pull/940))
+
+
+Misc:
+
+* Telepresence has a native package for the soon-to-be-released Ubuntu Dingo.
+* Improved the [Java development documentation](https://www.telepresence.io/tutorials/java#debugging-your-code) with updated Maven debug options for JDK versions 5-8.
+  Thanks to Sanha Lee for the patch.
+  ([#955](https://github.com/telepresenceio/telepresence/issues/955))
+
 #### 0.97 (January 25, 2019)
 
 Backwards incompatible changes:

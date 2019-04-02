@@ -1,1 +1,0 @@
-Telepresence no longer quits if its `kubectl logs` subprocess quits.

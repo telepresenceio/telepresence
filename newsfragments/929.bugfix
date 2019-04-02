@@ -1,1 +1,0 @@
-Telepresence will wait until deployment config on Openshift is successfully rolled back to its original state (pre Telepresence session)
