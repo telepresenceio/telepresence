@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import json
-from subprocess import STDOUT, CalledProcessError
+from subprocess import CalledProcessError
 from typing import Dict, Optional
 
 from telepresence import image_version
@@ -82,13 +82,11 @@ def get_deployment_json(
             deployment_type,
             "-o",
             "json",
-            "--export",
         ]
         if run_id is None:
             return json.loads(
                 runner.get_output(
-                    runner.kubectl(get_deployment + [deployment_name]),
-                    stderr=STDOUT
+                    runner.kubectl(get_deployment + [deployment_name])
                 )
             )
         else:
@@ -97,8 +95,7 @@ def get_deployment_json(
                 runner.get_output(
                     runner.kubectl(
                         get_deployment + ["--selector=telepresence=" + run_id]
-                    ),
-                    stderr=STDOUT
+                    )
                 )
             )["items"][0]
     except CalledProcessError as e:
@@ -162,7 +159,7 @@ def get_remote_info(
     runner.write("  with name {}-*".format(deployment_name))
     runner.write("  with labels {}".format(expected_labels))
 
-    cmd = "get pod -o json --export".split()
+    cmd = "get pod -o json".split()
     if run_id:
         cmd.append("--selector=telepresence={}".format(run_id))
 
