@@ -62,7 +62,7 @@ def _launch_command(
     out_logger: _Logger,
     err_logger: _Logger,
     done: typing.Optional[typing.Callable[[Popen], None]] = None,
-    **kwargs: typing.Any,
+    **kwargs: typing.Any
 ) -> Popen:
     """
     Launch subprocess with args, kwargs.
