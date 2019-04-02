@@ -409,7 +409,8 @@ class Runner(object):
         killer: typing.Callable[[], None] = None,
         notify: bool = False,
         keep_session: bool = False,
-        bufsize: int = -1
+        bufsize: int = -1,
+        is_critical: bool = True,
     ) -> None:
         """Asyncrounously run a process.
 
@@ -434,6 +435,10 @@ class Runner(object):
 
         :parmam bufsize: See ``subprocess.Popen()`.
 
+        :param is_critical: Whether this process quitting should end this
+        Telepresence session. Default is True because that used to be the
+        only supported behavior.
+
         :return: ``None``.
 
         """
@@ -442,8 +447,7 @@ class Runner(object):
 
         def done(proc: Popen) -> None:
             retcode = proc.wait()
-            self.output.write("[{}] exit {}".format(track, retcode))
-            self.quitting = True
+            self.output.write("[{}] {}: exit {}".format(track, name, retcode))
             recent = "\n  ".join(out_logger.get_captured().split("\n"))
             if recent:
                 recent = "\nRecent output was:\n  {}".format(recent)
@@ -452,6 +456,12 @@ class Runner(object):
                 "Command was:\n  {}\n{}"
             ).format(name, retcode, str_command(args), recent)
             self.ended.append(message)
+            if is_critical:
+                # End the program because this is a critical subprocess
+                self.quitting = True
+            else:
+                # Record the failure but don't quit
+                self.output.write(message)
 
         self.output.write(
             "[{}] Launching {}: {}".format(track, name, str_command(args))

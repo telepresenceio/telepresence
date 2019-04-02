@@ -34,7 +34,8 @@ def connect(
     Return (local port of SOCKS proxying tunnel, SSH instance).
     """
     span = runner.span()
-    # Keep local copy of pod logs, for debugging purposes:
+    # Keep local copy of pod logs, for debugging purposes. Set is_critical to
+    # False so logs failing doesn't bring down the Telepresence session.
     runner.launch(
         "kubectl logs",
         runner.kubectl(
@@ -42,6 +43,7 @@ def connect(
             remote_info.container_name, "--tail=10"
         ),
         bufsize=0,
+        is_critical=False,
     )
 
     ssh = SSH(runner, find_free_port())
