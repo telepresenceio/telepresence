@@ -129,7 +129,10 @@ class Runner(object):
         for additional in "/usr/sbin", "/sbin":
             if additional not in path_elements:
                 path += ":" + additional
-        libexec = TELEPRESENCE_BINARY.parents[1] / "libexec"
+        try:
+            libexec = TELEPRESENCE_BINARY.parents[1] / "libexec"
+        except IndexError:
+            libexec = TELEPRESENCE_BINARY / "does_not_exist_please"
         if libexec.exists():
             path = "{}:{}".format(libexec, path)
         os.environ["PATH"] = path
