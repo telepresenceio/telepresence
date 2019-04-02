@@ -1,8 +1,6 @@
 """
 List of Linux distributions that get packaging
 
-https://github.com/alanfranz/fpm-within-docker/blob/master/distributions.yml
-
 https://wiki.ubuntu.com/Releases
 
 https://www.debian.org/releases/
@@ -12,6 +10,7 @@ https://fedoraproject.org/wiki/End_of_life
 """
 
 ubuntu_deps = ["torsocks", "python3", "openssh-client", "sshfs", "conntrack"]
+ubuntu_deps_2 = ubuntu_deps + ["python3-distutils"]
 
 install_deb = """
     apt-get -qq update
@@ -28,26 +27,14 @@ install_rpm = """
 """
 
 distros = [
-    ("ubuntu", "xenial", "deb", ubuntu_deps, install_deb),
-    ("ubuntu", "artful", "deb", ubuntu_deps, install_deb),
-    (
-        "ubuntu", "bionic", "deb", ubuntu_deps + ["python3-distutils"],
-        install_deb
-    ),
-    (
-        "ubuntu", "cosmic", "deb", ubuntu_deps + ["python3-distutils"],
-        install_deb
-    ),
-    ("debian", "stretch", "deb", ubuntu_deps, install_deb),
-    ("fedora", "26", "rpm", fedora_deps, install_rpm),
-    ("fedora", "27", "rpm", fedora_deps, install_rpm),
+    ("ubuntu", "xenial", "deb", ubuntu_deps, install_deb),  # 16.04
+    ("ubuntu", "artful", "deb", ubuntu_deps, install_deb),  # 17.10 EOL
+    ("ubuntu", "bionic", "deb", ubuntu_deps_2, install_deb),  # 18.04
+    ("ubuntu", "cosmic", "deb", ubuntu_deps_2, install_deb),  # 18.10
+    ("ubuntu", "disco", "deb", ubuntu_deps_2, install_deb),  # 19.04
+    ("debian", "stretch", "deb", ubuntu_deps, install_deb),  # stable
+    ("fedora", "26", "rpm", fedora_deps, install_rpm),  # EOL 2018-05-29
+    ("fedora", "27", "rpm", fedora_deps, install_rpm),  # EOL 2018-11-30
     ("fedora", "28", "rpm", fedora_deps, install_rpm),
     ("fedora", "29", "rpm", fedora_deps, install_rpm),
 ]
-
-# Ubuntu: above plus yakkety zesty bionic
-# y and z are EOL, but ...
-# Fedora: above plus 28
-# 26 is EOL, but ...
-# Consider adding easy Centos/RHEL, Debian,
-# other stuff on PackageCloud
