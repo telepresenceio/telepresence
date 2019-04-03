@@ -14,10 +14,13 @@ In this HOWTO, we'll walk through how to use Telepresence with a containerized D
 We'll start with a quick example. Start by running a service in the cluster:
 
 ```console
-$ kubectl run qotm --image=datawire/qotm:1.5 --port=5000 --expose
-$ kubectl get service qotm
-NAME        CLUSTER-IP   EXTERNAL-IP   PORT(S)    AGE
-qotm        10.0.0.12    <none>        8000/TCP   1m
+$ kubectl run hello-world --image=datawire/hello-world --port 8000 --expose
+[...]
+service/hello-world created
+deployment.apps/hello-world created
+$ kubectl get service hello-world
+NAME          TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+hello-world   ClusterIP   10.111.122.25   <none>        8000/TCP   45s
 ```
 
 It may take a minute or two for the pod running the server to be up and running, depending on how fast your cluster is.
@@ -25,95 +28,120 @@ It may take a minute or two for the pod running the server to be up and running,
 You can now run a Docker container using Telepresence that can access that service, even though the process is local but the service is running in the Kubernetes cluster:
 
 ```console
-$ telepresence --docker-run -i -t alpine /bin/sh
-alpine# apk add --no-cache curl
-alpine# curl http://qotm:5000/
-{
-  "hostname": "qotm-1536849512-ckf1v",
-  "ok": true,
-  "quote": "Nihilism gambles with lives, happiness, and even destiny itself!",
-  "time": "2017-10-25T15:28:51.712799",
-  "version": "1.3"
-}
+$ telepresence --docker-run --rm -it pstauffer/curl curl http://hello-world:8000/
+[...]
+T: Setup complete. Launching your container.
+Hello, world!
+T: Your process has exited.
+[...]
 ```
 
-(This will not work if the QOTM pod hasn't started yet... If so, try again.)
+(This will not work if the hello-world pod hasn't started yet... If so, try again.)
 
 ## Setting up a development environment in Docker
 
-So how would we use Telepresence to do actual *development* of the QOTM service? We'll set up a local Dockerized development environment for QOTM. Clone the QOTM repo:
+So how would we use Telepresence to do actual *development* of the hello-world service? We'll set up a local Dockerized development environment for hello-world. Clone the hello-world repo:
 
-```
-$ git clone https://github.com/datawire/qotm.git
-```
-
-In the repository is a [Dockerfile](https://github.com/datawire/qotm/blob/master/Dockerfile) that builds a runtime environment for the QOTM service.
-
-Build the runtime environment:
-
-```
-$ cd qotm
-$ docker build -t qotm-dev .
+```console
+$ git clone https://github.com/datawire/hello-world
+Cloning into 'hello-world'...
+[...]
+$ cd hello-world
 ```
 
-We'll use Telepresence to swap the QOTM deployment with the local Docker image. Behind the scenes, Telepresence invokes `docker run`, so it supports any arguments you can pass to `docker run`. In this case, we're going to also mount our local directory to `/service` in your Docker container. Make sure your current working directory is the `qotm` directory, since we're going to mount that directly into the container.
+In the repository is a [`Dockerfile`](https://github.com/datawire/hello-world/blob/master/Dockerfile) that builds a runtime environment for the hello-world service.
 
+Build the runtime environment and tag it `hello-dev`:
+
+```console
+$ docker build -t hello-dev .
+Sending build context to Docker daemon  24.58kB
+Step 1/7 : FROM python:3-alpine
+ ---> a93594ce93e7
+[...]
+ ---> 7d692d619894
+Successfully built 7d692d619894
+Successfully tagged hello-dev:latest
 ```
-$ telepresence --swap-deployment qotm --docker-run \
-  --rm -it -v $(pwd):/service qotm-dev:latest
+
+We'll use Telepresence to swap the hello-world deployment with the local Docker image. Behind the scenes, Telepresence invokes `docker run`, so it supports any arguments you can pass to `docker run`. In this case, we're going to also mount our local directory to `/usr/src/app` in your Docker container. Make sure your current working directory is the `hello-world` directory, since we're going to mount that directly into the container.
+
+```console
+$ telepresence --swap-deployment hello-world --docker-run --rm -it -v $(pwd):/usr/src/app hello-dev
+T: Volumes are rooted at $TELEPRESENCE_ROOT. See https://telepresence.io/howto/volumes.html for details.
+T: Starting network proxy to cluster by swapping out Deployment hello-world with a proxy
+T: Forwarding remote port 8000 to local port 8000.
+
+T: Setup complete. Launching your container.
+ * Serving Flask app "server" (lazy loading)
+[...]
 ```
 
 We can test this out. In another terminal, we'll start a pod remotely on the Kubernetes cluster.
 
-```
-$ kubectl run -i --tty alpine --image=alpine -- sh
-/ # apk add --no-cache curl
-...
-/ # curl http://qotm:5000
-{
-  "hostname": "8b4faa7e175c",
-  "ok": true,
-  "quote": "The last sentence you read is often sensible nonsense.",
-  "time": "2017-10-25T19:28:41.038335",
-  "version": "1.3"
-}
-
+```console
+$ kubectl run curler -it --rm --image=pstauffer/curl --restart=Never -- sh
+If you don't see a command prompt, try pressing enter.
+/ # curl http://hello-world:8000
+Hello, world!
+/ #
 ```
 
-Let's change the version in `qotm.py`. Run the following:
+Let's change the message in `server.py`. At a shell prompt in the `hello-world` directory, modify the file using `sed`:
 
+```console
+$ sed -i.bak -e s/Hello/Greetings/ server.py
+[no output]
 ```
-sed -i -e 's@1.5@'"1.6"'@' qotm/qotm.py
+
+or just use your editor to change the file. The change we have made is very simple:
+
+```console
+$ git diff
+diff --git a/server.py b/server.py
+index 04f15e2..7fffeb1 100644
+--- a/server.py
++++ b/server.py
+@@ -1,7 +1,7 @@
+ from flask import Flask
+
+ PORT = 8000
+-MESSAGE = "Hello, world!\n"
++MESSAGE = "Greetings, world!\n"
+
+ app = Flask(__name__)
+
 ```
 
 Rerun the `curl` command from your remote pod:
 
-```
-/ # curl http://qotm:5000
-{
-  "hostname": "8b4faa7e175c",
-  "ok": true,
-  "quote": "The last sentence you read is often sensible nonsense.",
-  "time": "2017-10-25T19:28:41.038335",
-  "version": "1.4"
-}
+```console
+/ # curl http://hello-world:8000
+Greetings, world!
+/ #
 ```
 
 And notice how the code has changed, live. Congratulations! You've now:
 
-* Routed the QOTM service to the Docker container running locally
+* Routed the hello-world service to the Docker container running locally
 * Configured your Docker service to pick up changes from your local filesystem
-* Made a live code edit and see it immediately reflected in production
+* Made a live code edit and seen it immediately reflected in production
 
 ## How it works
 
 Telepresence will start a new proxy container, and then call `docker run` with whatever arguments you pass to `--docker-run` to start a container that will have its networking proxied. All networking is proxied:
 
 * Outgoing to Kubernetes.
-* Outgoing to cloud resources added with `--also-proxy`
-* Incoming connections to ports specified with `--expose`.
+* Outgoing to cloud resources outside the cluster
+* Incoming connections from the cluster to ports specified with `--expose`.
 
 Volumes and environment variables from the remote `Deployment` are also available in the container.
+
+## Cleaning up and next step
+
+* Quit your remote pod shell (`exit`) to clean up that pod.
+* Press Ctrl-C at your Telepresence terminal. Telepresence will swap the deployment back to its original state.
+* In a real development situation, you would commit your development work and let CI do its thing. Or build and deploy your changes however you normally would.
 
 {{ macros.install("https://kubernetes.io/docs/tasks/tools/install-kubectl/", "kubectl", "Kubernetes", "bottom") }}
 
