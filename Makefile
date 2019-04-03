@@ -11,6 +11,7 @@ include build-aux/docker.mk
 include build-aux/help.mk
 include build-aux/k8s.mk
 include build-aux/kubernaut.mk
+include build-aux/teleproxy.mk
 
 .DEFAULT_GOAL = help
 

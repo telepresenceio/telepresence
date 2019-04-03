@@ -1,33 +1,30 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/datawire/teleproxy/pkg/consulwatch"
 
-	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	consulapi "github.com/hashicorp/consul/api"
 )
 
 type consulwatchman struct {
 	WatchMaker                WatchMaker
-	watchesCh                 <-chan []k8s.Resource
+	watchesCh                 <-chan []ConsulWatch
 	consulEndpointsAggregator chan<- consulwatch.Endpoints
 	watched                   map[string]*supervisor.Worker
 }
 
 type WatchMaker interface {
-	MakeWatch(r k8s.Resource, aggregatorCh chan<- consulwatch.Endpoints) (*supervisor.Worker, error)
+	MakeWatch(cw ConsulWatch, aggregatorCh chan<- consulwatch.Endpoints) (*supervisor.Worker, error)
 }
 
 type ConsulWatchMaker struct{}
 
-func (m *ConsulWatchMaker) MakeWatch(r k8s.Resource, aggregatorCh chan<- consulwatch.Endpoints) (*supervisor.Worker, error) {
+func (m *ConsulWatchMaker) MakeWatch(cw ConsulWatch, aggregatorCh chan<- consulwatch.Endpoints) (*supervisor.Worker, error) {
 	//return &supervisor.Worker{
 	//	Name: "Foo",
 	//	Work: func(process *supervisor.Process) error {
@@ -36,17 +33,8 @@ func (m *ConsulWatchMaker) MakeWatch(r k8s.Resource, aggregatorCh chan<- consulw
 	//	},
 	//}, nil
 
-	// TODO: This code will need to be updated once we move to a CRD. The Data() method only works for ConfigMaps.
-	data := r.Data()
-
-	consulAddress, ok := data["consulAddress"].(string)
-	if !ok {
-		return nil, errors.New("failed to cast consulAddress as string")
-	}
-
-	consulAddress = strings.ToLower(consulAddress)
 	consulConfig := consulapi.DefaultConfig()
-	consulConfig.Address = consulAddress
+	consulConfig.Address = cw.ConsulAddress
 
 	// TODO: Should we really allocated a Consul client per Service watch? Not sure... there some design stuff here
 	// May be multiple consul clusters
@@ -57,20 +45,10 @@ func (m *ConsulWatchMaker) MakeWatch(r k8s.Resource, aggregatorCh chan<- consulw
 		return nil, err
 	}
 
-	serviceName, ok := data["service"].(string)
-	if !ok {
-		return nil, errors.New("failed to cast service to a string")
-	}
-
-	datacenter, ok := data["datacenter"].(string)
-	if !ok {
-		return nil, errors.New("failed to cast datacenter to a string")
-	}
-
 	worker := &supervisor.Worker{
-		Name: fmt.Sprintf("%s|%s|%s", consulAddress, datacenter, serviceName),
+		Name: fmt.Sprintf("%s|%s|%s", cw.ConsulAddress, cw.Datacenter, cw.ServiceName),
 		Work: func(p *supervisor.Process) error {
-			w, err := consulwatch.New(consul, log.New(os.Stdout, "", log.LstdFlags), datacenter, serviceName, true)
+			w, err := consulwatch.New(consul, log.New(os.Stdout, "", log.LstdFlags), cw.Datacenter, cw.ServiceName, true)
 			if err != nil {
 				p.Logf("failed to setup new consul watch %v", err)
 				return err
@@ -102,16 +80,11 @@ func (w *consulwatchman) Work(p *supervisor.Process) error {
 
 	for {
 		select {
-		case resources := <-w.watchesCh:
+		case watches := <-w.watchesCh:
 			found := make(map[string]*supervisor.Worker)
-			p.Logf("processing %d kubernetes resources", len(resources))
-			for _, r := range resources {
-				if !isConsulResolver(r) {
-					p.Logf("resource is not a ConsulResolver, skipped")
-					continue
-				}
-
-				worker, err := w.WatchMaker.MakeWatch(r, w.consulEndpointsAggregator)
+			p.Logf("processing %d consul watches", len(watches))
+			for _, cw := range watches {
+				worker, err := w.WatchMaker.MakeWatch(cw, w.consulEndpointsAggregator)
 				if err != nil {
 					p.Logf("failed to create consul watch %v", err)
 					continue

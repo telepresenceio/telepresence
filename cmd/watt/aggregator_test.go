@@ -16,7 +16,7 @@ import (
 
 type aggIsolator struct {
 	snapshots  chan string
-	watches    chan []k8s.Resource
+	watches    chan []ConsulWatch
 	aggregator *aggregator
 	sup        *supervisor.Supervisor
 	done       chan struct{}
@@ -32,7 +32,7 @@ func newAggIsolator(t *testing.T, requiredKinds []string) *aggIsolator {
 		// we need to create buffered channels for outputs
 		// because nothing is asynchronously reading them in
 		// the test
-		watches:   make(chan []k8s.Resource, 100),
+		watches:   make(chan []ConsulWatch, 100),
 		snapshots: make(chan string, 100),
 		// for signaling when the isolator is done
 		done: make(chan struct{}),
@@ -131,7 +131,7 @@ func TestAggregatorBootstrap(t *testing.T) {
 	// whenever the aggregator sees updated k8s state, it should
 	// send an update to the consul watch manager, in this case it
 	// will be empty because there are no resolvers yet
-	expect(t, iso.watches, []k8s.Resource(nil))
+	expect(t, iso.watches, []ConsulWatch(nil))
 
 	// we should not generate a snapshot yet because we specified
 	// configmaps are required
@@ -141,12 +141,12 @@ func TestAggregatorBootstrap(t *testing.T) {
 	// get a snapshot yet, but we should get watches
 	iso.aggregator.KubernetesEvents <- k8sEvent{"configmap", RESOLVER}
 	expect(t, iso.snapshots, Timeout(100*time.Millisecond))
-	expect(t, iso.watches, func(watches []k8s.Resource) bool {
+	expect(t, iso.watches, func(watches []ConsulWatch) bool {
 		if len(watches) != 1 {
 			return false
 		}
 
-		if watches[0].Name() != "bar" {
+		if watches[0].ServiceName != "bar" {
 			return false
 		}
 

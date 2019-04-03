@@ -99,6 +99,14 @@ func expect(t *testing.T, ch interface{}, values ...interface{}) {
 				if !exp(val) {
 					panic(fmt.Sprintf("predicate %d failed value %v", idx, value))
 				}
+			case func([]ConsulWatch) bool:
+				val, ok := value.Interface().([]ConsulWatch)
+				if !ok {
+					panic(fmt.Sprintf("expected a []ConsulWatch, got %v", value.Type()))
+				}
+				if !exp(val) {
+					panic(fmt.Sprintf("predicate %d failed value %v", idx, value))
+				}
 			default:
 				require.Equal(t, expected, value.Interface(), "read unexpected value from channel")
 			}

@@ -50,7 +50,7 @@ func runWatt(cmd *cobra.Command, args []string) {
 
 	// The aggregator sends the current consul resolver set to the
 	// consul watch manager.
-	aggregatorToConsulwatchmanCh := make(chan []k8s.Resource)
+	aggregatorToConsulwatchmanCh := make(chan []ConsulWatch)
 
 	invoker := NewInvoker(port, notifyReceivers, limiter.NewIntervalLimiter(interval))
 	aggregator := NewAggregator(invoker.Snapshots, aggregatorToConsulwatchmanCh, initialSources)
