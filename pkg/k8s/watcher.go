@@ -19,16 +19,22 @@ import (
 )
 
 type listWatchAdapter struct {
-	resource dynamic.ResourceInterface
+	resource      dynamic.ResourceInterface
+	fieldSelector string
+	labelSelector string
 }
 
 func (lw listWatchAdapter) List(options v1.ListOptions) (runtime.Object, error) {
+	options.FieldSelector = lw.fieldSelector
+	options.LabelSelector = lw.labelSelector
 	// silently coerce the returned *unstructured.UnstructuredList
 	// struct to a runtime.Object interface.
 	return lw.resource.List(options)
 }
 
 func (lw listWatchAdapter) Watch(options v1.ListOptions) (pwatch.Interface, error) {
+	options.FieldSelector = lw.fieldSelector
+	options.LabelSelector = lw.labelSelector
 	return lw.resource.Watch(options)
 }
 
@@ -44,11 +50,13 @@ type Watcher struct {
 }
 
 type watch struct {
-	namespace string
-	resource  dynamic.NamespaceableResourceInterface
-	store     cache.Store
-	invoke    func()
-	runner    func()
+	namespace     string
+	resource      dynamic.NamespaceableResourceInterface
+	fieldSelector string
+	labelSelector string
+	store         cache.Store
+	invoke        func()
+	runner        func()
 }
 
 // NewWatcher returns a Kubernetes Watcher for the specified cluster
@@ -119,6 +127,11 @@ func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
 }
 
 func (w *Watcher) WatchNamespace(namespace, resources string, listener func(*Watcher)) error {
+	return w.SelectiveWatch(namespace, resources, "", "", listener)
+}
+
+func (w *Watcher) SelectiveWatch(namespace, resources, fieldSelector, labelSelector string,
+	listener func(*Watcher)) error {
 	ri := w.client.ResolveResourceType(resources)
 	dyn, err := dynamic.NewForConfig(w.client.config)
 	if err != nil {
@@ -145,7 +158,7 @@ func (w *Watcher) WatchNamespace(namespace, resources string, listener func(*Wat
 	}
 
 	store, controller := cache.NewInformer(
-		listWatchAdapter{watched},
+		listWatchAdapter{watched, fieldSelector, labelSelector},
 		nil,
 		5*time.Minute,
 		cache.ResourceEventHandlerFuncs{
@@ -188,11 +201,13 @@ func (w *Watcher) WatchNamespace(namespace, resources string, listener func(*Wat
 
 	kind := w.Canonical(ri.Kind)
 	w.watches[kind] = watch{
-		namespace: namespace,
-		resource:  resource,
-		store:     store,
-		invoke:    invoke,
-		runner:    runner,
+		namespace:     namespace,
+		resource:      resource,
+		fieldSelector: fieldSelector,
+		labelSelector: labelSelector,
+		store:         store,
+		invoke:        invoke,
+		runner:        runner,
 	}
 
 	return nil
@@ -223,7 +238,7 @@ func (w *Watcher) Start() {
 
 func (w *Watcher) sync(kind string) {
 	watch := w.watches[kind]
-	resources, err := w.client.ListNamespace(watch.namespace, kind)
+	resources, err := w.client.SelectiveList(watch.namespace, kind, watch.fieldSelector, watch.labelSelector)
 	if err != nil {
 		log.Fatal(err)
 	}

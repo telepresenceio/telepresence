@@ -234,6 +234,10 @@ func (c *Client) List(resource string) ([]Resource, error) {
 // If the resource is not namespaced, the namespace must be the empty string.
 // If the resource is namespaced, the empty string lists across all namespaces.
 func (c *Client) ListNamespace(namespace, resource string) ([]Resource, error) {
+	return c.SelectiveList(namespace, resource, "", "")
+}
+
+func (c *Client) SelectiveList(namespace, resource, fieldSelector, labelSelector string) ([]Resource, error) {
 	ri := c.ResolveResourceType(resource)
 
 	dyn, err := dynamic.NewForConfig(c.config)
@@ -254,7 +258,10 @@ func (c *Client) ListNamespace(namespace, resource string) ([]Resource, error) {
 		filtered = cli
 	}
 
-	uns, err := filtered.List(v1.ListOptions{})
+	uns, err := filtered.List(v1.ListOptions{
+		FieldSelector: fieldSelector,
+		LabelSelector: labelSelector,
+	})
 	if err != nil {
 		return nil, err
 	}
