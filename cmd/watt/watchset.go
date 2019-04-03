@@ -5,6 +5,7 @@ type WatchSet struct {
 	KubernetesWatches []KubernetesWatch
 	ConsulWatches     []ConsulWatch
 }
+*/
 
 type KubernetesWatch struct {
 	Kind          string
@@ -12,7 +13,6 @@ type KubernetesWatch struct {
 	FieldSelector string
 	LabelSelector string
 }
-*/
 
 type ConsulWatch struct {
 	ConsulAddress string

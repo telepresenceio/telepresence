@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 )
@@ -10,7 +12,101 @@ type k8sEvent struct {
 	resources []k8s.Resource
 }
 
+type KubernetesWatchMaker struct {
+	kubeAPI *k8s.Client
+	notify  chan<- k8sEvent
+}
+
+func (m *KubernetesWatchMaker) MakeWatch(spec *KubernetesWatch) (*supervisor.Worker, error) {
+	var worker *supervisor.Worker
+	var err error
+
+	worker = &supervisor.Worker{
+		Name: fmt.Sprintf("%s|%s|%s|%s", spec.Namespace, spec.Kind, spec.FieldSelector, spec.LabelSelector),
+		Work: func(p *supervisor.Process) error {
+			watcher := m.kubeAPI.Watcher()
+			watchFunc := func(ns, kind string) func(watcher *k8s.Watcher) {
+				return func(watcher *k8s.Watcher) {
+					fmt.Println("2")
+					resources := watcher.List(kind)
+					p.Logf("found %d %q in namespace %q", len(resources), kind, fmtNamespace(ns))
+					m.notify <- k8sEvent{kind: kind, resources: resources}
+					p.Logf("sent %q to receivers", kind)
+				}
+			}
+
+			fmt.Println("1")
+
+			watcherErr := watcher.SelectiveWatch(
+				spec.Namespace, spec.Kind, spec.FieldSelector, spec.LabelSelector,
+				watchFunc(spec.Namespace, spec.Kind))
+			if watcherErr != nil {
+				return watcherErr
+			}
+
+			watcher.Start()
+			<-p.Shutdown()
+			watcher.Stop()
+			return nil
+		},
+
+		Retry: true,
+	}
+
+	return worker, err
+}
+
 type kubewatchman struct {
+	watched map[KubernetesWatch]*supervisor.Worker
+	kubeAPI *k8s.Client
+	in      <-chan []KubernetesWatch
+	out     chan<- k8sEvent
+}
+
+func (w *kubewatchman) Work(p *supervisor.Process) error {
+	p.Ready()
+
+	w.watched = make(map[KubernetesWatch]*supervisor.Worker)
+	watchMaker := &KubernetesWatchMaker{kubeAPI: w.kubeAPI, notify: w.out}
+
+	for {
+		select {
+		case watches := <-w.in:
+			found := make(map[KubernetesWatch]*supervisor.Worker)
+			p.Logf("processing %d kubernetes watch specs", len(watches))
+			for _, spec := range watches {
+				worker, err := watchMaker.MakeWatch(&spec)
+				if err != nil {
+					p.Logf("failed to create kubernetes watcher: %v", err)
+					continue
+				}
+
+				if _, exists := w.watched[spec]; !exists {
+					p.Logf("add kubernetes watcher %s\n", worker.Name)
+					p.Supervisor().Supervise(worker)
+					w.watched[spec] = worker
+				}
+
+				found[spec] = worker
+			}
+
+			for workerName, worker := range w.watched {
+				if _, exists := found[workerName]; !exists {
+					p.Logf("remove consul watcher %s\n", workerName)
+					worker.Shutdown()
+					worker.Wait()
+				}
+			}
+
+			w.watched = found
+		case <-p.Shutdown():
+			p.Logf("shutdown initiated")
+			return nil
+		}
+	}
+}
+
+type kubebootstrap struct {
 	namespace      string
 	kinds          []string
 	notify         []chan<- k8sEvent
@@ -25,45 +121,35 @@ func fmtNamespace(ns string) string {
 	return ns
 }
 
-func (w *kubewatchman) Work(p *supervisor.Process) error {
-	for _, kind := range w.kinds {
+func (b *kubebootstrap) Work(p *supervisor.Process) error {
+	for _, kind := range b.kinds {
 		p.Logf("adding kubernetes watch for %q in namespace %q", kind, fmtNamespace(kubernetesNamespace))
 
 		watcherFunc := func(ns, kind string) func(watcher *k8s.Watcher) {
 			return func(watcher *k8s.Watcher) {
 				resources := watcher.List(watcher.Canonical(kind))
 				p.Logf("found %d %q in namespace %q", len(resources), kind, fmtNamespace(ns))
-				for _, n := range w.notify {
+				for _, n := range b.notify {
 					n <- k8sEvent{kind: kind, resources: resources}
 				}
-				p.Logf("sent %q to %d receivers", kind, len(w.notify))
+				p.Logf("sent %q to %d receivers", kind, len(b.notify))
 			}
 		}
 
-		err := w.kubeAPIWatcher.WatchNamespace(w.namespace, kind, watcherFunc(w.namespace, kind))
+		err := b.kubeAPIWatcher.WatchNamespace(b.namespace, kind, watcherFunc(b.namespace, kind))
 
 		if err != nil {
 			return err
 		}
 	}
 
-	w.kubeAPIWatcher.Start()
+	b.kubeAPIWatcher.Start()
 	p.Ready()
 
 	for range p.Shutdown() {
 		p.Logf("shutdown initiated")
-		w.kubeAPIWatcher.Stop()
+		b.kubeAPIWatcher.Stop()
 	}
 
 	return nil
-
-	// gosimple complains this is unnecessary compared to above
-	//for {
-	//	select {
-	//	case <-p.Shutdown():
-	//		p.Logf("shutdown initiated")
-	//		kubeAPIWatcher.Stop()
-	//		return nil
-	//	}
-	//}
 }

@@ -18,8 +18,10 @@ type aggregator struct {
 	KubernetesEvents chan k8sEvent
 	// Input channel used to tell us about consul endpoints.
 	ConsulEndpoints chan consulwatch.Endpoints
+	// Output channel used to communicate with the k8s watch manager.
+	k8sWatches chan<- []KubernetesWatch
 	// Output channel used to communicate with the consul watch manager.
-	watches chan<- []ConsulWatch
+	consulWatches chan<- []ConsulWatch
 	// Output channel used to communicate with the invoker.
 	snapshots chan<- string
 	// We won't consider ourselves "bootstrapped" until we hear
@@ -30,11 +32,13 @@ type aggregator struct {
 	bootstrapped        bool
 }
 
-func NewAggregator(snapshots chan<- string, watches chan<- []ConsulWatch, requiredKinds []string) *aggregator {
+func NewAggregator(snapshots chan<- string, k8sWatches chan<- []KubernetesWatch, consulWatches chan<- []ConsulWatch,
+	requiredKinds []string) *aggregator {
 	return &aggregator{
 		KubernetesEvents:    make(chan k8sEvent),
 		ConsulEndpoints:     make(chan consulwatch.Endpoints),
-		watches:             watches,
+		k8sWatches:          k8sWatches,
+		consulWatches:       consulWatches,
 		snapshots:           snapshots,
 		requiredKinds:       requiredKinds,
 		kubernetesResources: make(map[string][]k8s.Resource),
@@ -51,7 +55,12 @@ func (a *aggregator) Work(p *supervisor.Process) error {
 		case event := <-a.KubernetesEvents:
 			a.setKubernetesResources(event)
 			watches := a.extractWatches(p, a.kubernetesResources["consulresolver"])
-			a.watches <- watches
+			a.consulWatches <- watches
+			/*a.k8sWatches <- []KubernetesWatch{{
+				Kind:          "endpoints",
+				Namespace:     "",
+				FieldSelector: "metadata.name=consul",
+			}}*/
 			a.maybeNotify(p)
 		case endpoints := <-a.ConsulEndpoints:
 			a.updateConsulEndpoints(endpoints)

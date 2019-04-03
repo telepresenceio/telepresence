@@ -15,13 +15,14 @@ import (
 )
 
 type aggIsolator struct {
-	snapshots  chan string
-	watches    chan []ConsulWatch
-	aggregator *aggregator
-	sup        *supervisor.Supervisor
-	done       chan struct{}
-	t          *testing.T
-	cancel     context.CancelFunc
+	snapshots     chan string
+	k8sWatches    chan []KubernetesWatch
+	consulWatches chan []ConsulWatch
+	aggregator    *aggregator
+	sup           *supervisor.Supervisor
+	done          chan struct{}
+	t             *testing.T
+	cancel        context.CancelFunc
 }
 
 func newAggIsolator(t *testing.T, requiredKinds []string) *aggIsolator {
@@ -32,12 +33,13 @@ func newAggIsolator(t *testing.T, requiredKinds []string) *aggIsolator {
 		// we need to create buffered channels for outputs
 		// because nothing is asynchronously reading them in
 		// the test
-		watches:   make(chan []ConsulWatch, 100),
-		snapshots: make(chan string, 100),
+		k8sWatches:    make(chan []KubernetesWatch, 100),
+		consulWatches: make(chan []ConsulWatch, 100),
+		snapshots:     make(chan string, 100),
 		// for signaling when the isolator is done
 		done: make(chan struct{}),
 	}
-	iso.aggregator = NewAggregator(iso.snapshots, iso.watches, requiredKinds)
+	iso.aggregator = NewAggregator(iso.snapshots, iso.k8sWatches, iso.consulWatches, requiredKinds)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	iso.cancel = cancel
 	iso.sup = supervisor.WithContext(ctx)
@@ -131,7 +133,7 @@ func TestAggregatorBootstrap(t *testing.T) {
 	// whenever the aggregator sees updated k8s state, it should
 	// send an update to the consul watch manager, in this case it
 	// will be empty because there are no resolvers yet
-	expect(t, iso.watches, []ConsulWatch(nil))
+	expect(t, iso.consulWatches, []ConsulWatch(nil))
 
 	// we should not generate a snapshot yet because we specified
 	// configmaps are required
@@ -141,7 +143,7 @@ func TestAggregatorBootstrap(t *testing.T) {
 	// get a snapshot yet, but we should get watches
 	iso.aggregator.KubernetesEvents <- k8sEvent{"configmap", RESOLVER}
 	expect(t, iso.snapshots, Timeout(100*time.Millisecond))
-	expect(t, iso.watches, func(watches []ConsulWatch) bool {
+	expect(t, iso.consulWatches, func(watches []ConsulWatch) bool {
 		if len(watches) != 1 {
 			return false
 		}

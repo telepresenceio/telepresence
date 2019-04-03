@@ -41,7 +41,8 @@ func runWatt(cmd *cobra.Command, args []string) {
 		log.Fatalln("no initial sources configured")
 	}
 
-	kubeAPIWatcher := k8s.NewClient(nil).Watcher()
+	client := k8s.NewClient(nil)
+	kubeAPIWatcher := client.Watcher()
 	for idx := range initialSources {
 		initialSources[idx] = kubeAPIWatcher.Canonical(initialSources[idx])
 	}
@@ -52,10 +53,15 @@ func runWatt(cmd *cobra.Command, args []string) {
 	// consul watch manager.
 	aggregatorToConsulwatchmanCh := make(chan []ConsulWatch)
 
-	invoker := NewInvoker(port, notifyReceivers, limiter.NewIntervalLimiter(interval))
-	aggregator := NewAggregator(invoker.Snapshots, aggregatorToConsulwatchmanCh, initialSources)
+	// The aggregator sends the current k8s watch set to the
+	// kubernetes watch manager.
+	aggregatorToKubewatchmanCh := make(chan []KubernetesWatch)
 
-	kubewatchman := kubewatchman{
+	invoker := NewInvoker(port, notifyReceivers, limiter.NewIntervalLimiter(interval))
+	aggregator := NewAggregator(invoker.Snapshots, aggregatorToKubewatchmanCh, aggregatorToConsulwatchmanCh,
+		initialSources)
+
+	kubebootstrap := kubebootstrap{
 		namespace:      kubernetesNamespace,
 		kinds:          initialSources,
 		kubeAPIWatcher: kubeAPIWatcher,
@@ -69,6 +75,12 @@ func runWatt(cmd *cobra.Command, args []string) {
 		watched:                   make(map[string]*supervisor.Worker),
 	}
 
+	kubewatchman := kubewatchman{
+		kubeAPI: client,
+		in:      aggregatorToKubewatchmanCh,
+		out:     aggregator.KubernetesEvents,
+	}
+
 	apiServer := &apiServer{
 		port:    port,
 		invoker: invoker,
@@ -78,13 +90,18 @@ func runWatt(cmd *cobra.Command, args []string) {
 	s := supervisor.WithContext(ctx)
 
 	s.Supervise(&supervisor.Worker{
-		Name: "kubewatchman",
-		Work: kubewatchman.Work,
+		Name: "kubebootstrap",
+		Work: kubebootstrap.Work,
 	})
 
 	s.Supervise(&supervisor.Worker{
 		Name: "consulwatchman",
 		Work: consulwatchman.Work,
+	})
+
+	s.Supervise(&supervisor.Worker{
+		Name: "kubewatchman",
+		Work: kubewatchman.Work,
 	})
 
 	s.Supervise(&supervisor.Worker{
