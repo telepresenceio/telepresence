@@ -90,7 +90,7 @@ Hello, world!
 Let's change the message in `server.py`. At a shell prompt in the `hello-world` directory, modify the file using `sed`:
 
 ```console
-$ sed -i .bak -e s/Hello/Greetings/ server.py
+$ sed -i.bak -e s/Hello/Greetings/ server.py
 [no output]
 ```
 
