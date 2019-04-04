@@ -19,9 +19,9 @@ type aggregator struct {
 	// Input channel used to tell us about consul endpoints.
 	ConsulEndpoints chan consulwatch.Endpoints
 	// Output channel used to communicate with the k8s watch manager.
-	k8sWatches chan<- []KubernetesWatch
+	k8sWatches chan<- []KubernetesWatchSpec
 	// Output channel used to communicate with the consul watch manager.
-	consulWatches chan<- []ConsulWatch
+	consulWatches chan<- []ConsulWatchSpec
 	// Output channel used to communicate with the invoker.
 	snapshots chan<- string
 	// We won't consider ourselves "bootstrapped" until we hear
@@ -32,7 +32,7 @@ type aggregator struct {
 	bootstrapped        bool
 }
 
-func NewAggregator(snapshots chan<- string, k8sWatches chan<- []KubernetesWatch, consulWatches chan<- []ConsulWatch,
+func NewAggregator(snapshots chan<- string, k8sWatches chan<- []KubernetesWatchSpec, consulWatches chan<- []ConsulWatchSpec,
 	requiredKinds []string) *aggregator {
 	return &aggregator{
 		KubernetesEvents:    make(chan k8sEvent),
@@ -56,7 +56,7 @@ func (a *aggregator) Work(p *supervisor.Process) error {
 			a.setKubernetesResources(event)
 			watches := a.extractWatches(p, a.kubernetesResources["consulresolver"])
 			a.consulWatches <- watches
-			/*a.k8sWatches <- []KubernetesWatch{{
+			/*a.k8sWatches <- []KubernetesWatchSpec{{
 				Kind:          "endpoints",
 				Namespace:     "",
 				FieldSelector: "metadata.name=consul",
@@ -71,7 +71,7 @@ func (a *aggregator) Work(p *supervisor.Process) error {
 	}
 }
 
-func (a *aggregator) extractWatches(p *supervisor.Process, resources []k8s.Resource) (result []ConsulWatch) {
+func (a *aggregator) extractWatches(p *supervisor.Process, resources []k8s.Resource) (result []ConsulWatchSpec) {
 	for _, r := range resources {
 		if !isConsulResolver(r) {
 			p.Logf("resource is not a ConsulResolver, skipped")
@@ -89,27 +89,27 @@ func (a *aggregator) extractWatches(p *supervisor.Process, resources []k8s.Resou
 	return
 }
 
-func makeWatch(r k8s.Resource) (ConsulWatch, error) {
+func makeWatch(r k8s.Resource) (ConsulWatchSpec, error) {
 	// TODO: This code will need to be updated once we move to a CRD. The Data() method only works for ConfigMaps.
 	data := r.Data()
 
 	consulAddress, ok := data["consulAddress"].(string)
 	if !ok {
-		return ConsulWatch{}, errors.New("failed to cast consulAddress as string")
+		return ConsulWatchSpec{}, errors.New("failed to cast consulAddress as string")
 	}
 
 	consulAddress = strings.ToLower(consulAddress)
 	serviceName, ok := data["service"].(string)
 	if !ok {
-		return ConsulWatch{}, errors.New("failed to cast service to a string")
+		return ConsulWatchSpec{}, errors.New("failed to cast service to a string")
 	}
 
 	datacenter, ok := data["datacenter"].(string)
 	if !ok {
-		return ConsulWatch{}, errors.New("failed to cast datacenter to a string")
+		return ConsulWatchSpec{}, errors.New("failed to cast datacenter to a string")
 	}
 
-	return ConsulWatch{ConsulAddress: consulAddress, ServiceName: serviceName, Datacenter: datacenter}, nil
+	return ConsulWatchSpec{ConsulAddress: consulAddress, ServiceName: serviceName, Datacenter: datacenter}, nil
 }
 
 func (a *aggregator) isKubernetesBootstrapped(p *supervisor.Process) bool {

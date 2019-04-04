@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/datawire/teleproxy/pkg/supervisor"
+
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/stretchr/testify/require"
 )
@@ -13,33 +15,6 @@ import (
 var (
 	CLOSE interface{} = &struct{}{}
 )
-
-func panics(f func()) (success bool) {
-	defer func() {
-		if e := recover(); e != nil {
-			success = true
-		}
-	}()
-
-	f()
-	return
-}
-
-func Eventually(t *testing.T, timeoutAfter time.Duration, f func()) {
-	timeout := time.After(timeoutAfter)
-	tick := time.Tick(100 * time.Millisecond)
-
-	for {
-		select {
-		case <-timeout:
-			t.Fatal("timed out")
-		case <-tick:
-			if !panics(f) {
-				return
-			}
-		}
-	}
-}
 
 type Timeout time.Duration
 
@@ -99,10 +74,10 @@ func expect(t *testing.T, ch interface{}, values ...interface{}) {
 				if !exp(val) {
 					panic(fmt.Sprintf("predicate %d failed value %v", idx, value))
 				}
-			case func([]ConsulWatch) bool:
-				val, ok := value.Interface().([]ConsulWatch)
+			case func([]ConsulWatchSpec) bool:
+				val, ok := value.Interface().([]ConsulWatchSpec)
 				if !ok {
-					panic(fmt.Sprintf("expected a []ConsulWatch, got %v", value.Type()))
+					panic(fmt.Sprintf("expected a []ConsulWatchSpec, got %v", value.Type()))
 				}
 				if !exp(val) {
 					panic(fmt.Sprintf("predicate %d failed value %v", idx, value))
@@ -114,4 +89,37 @@ func expect(t *testing.T, ch interface{}, values ...interface{}) {
 			panic(fmt.Sprintf("expected %v, got CLOSE", expected))
 		}
 	}
+}
+
+func createDoNothingWorker(name string) *supervisor.Worker {
+	return &supervisor.Worker{
+		Name: name,
+		Work: func(p *supervisor.Process) error {
+			<-p.Shutdown()
+			time.Sleep(500 * time.Millisecond)
+			return nil
+		},
+		Retry: false,
+	}
+}
+
+type MockWatchMaker struct {
+	errorBeforeCreate bool
+}
+
+func (m *MockWatchMaker) MakeKubernetesWatch(spec *KubernetesWatchSpec) (*supervisor.Worker, error) {
+	if m.errorBeforeCreate {
+		return nil, fmt.Errorf("failed to create watch (errorBeforeCreate: %t)", m.errorBeforeCreate)
+	}
+
+	return createDoNothingWorker(
+		fmt.Sprintf("%s|%s|%s|%s", spec.Namespace, spec.Kind, spec.FieldSelector, spec.LabelSelector)), nil
+}
+
+func (m *MockWatchMaker) MakeConsulWatch(spec *ConsulWatchSpec) (*supervisor.Worker, error) {
+	if m.errorBeforeCreate {
+		return nil, fmt.Errorf("failed to create watch (errorBeforeCreate: %t)", m.errorBeforeCreate)
+	}
+
+	return createDoNothingWorker(fmt.Sprintf("%s|%s|%s", spec.ConsulAddress, spec.Datacenter, spec.ServiceName)), nil
 }

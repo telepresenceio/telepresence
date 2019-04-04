@@ -17,7 +17,7 @@ type KubernetesWatchMaker struct {
 	notify  chan<- k8sEvent
 }
 
-func (m *KubernetesWatchMaker) MakeWatch(spec *KubernetesWatch) (*supervisor.Worker, error) {
+func (m *KubernetesWatchMaker) MakeKubernetesWatch(spec *KubernetesWatchSpec) (*supervisor.Worker, error) {
 	var worker *supervisor.Worker
 	var err error
 
@@ -27,7 +27,6 @@ func (m *KubernetesWatchMaker) MakeWatch(spec *KubernetesWatch) (*supervisor.Wor
 			watcher := m.kubeAPI.Watcher()
 			watchFunc := func(ns, kind string) func(watcher *k8s.Watcher) {
 				return func(watcher *k8s.Watcher) {
-					fmt.Println("2")
 					resources := watcher.List(kind)
 					p.Logf("found %d %q in namespace %q", len(resources), kind, fmtNamespace(ns))
 					m.notify <- k8sEvent{kind: kind, resources: resources}
@@ -35,11 +34,9 @@ func (m *KubernetesWatchMaker) MakeWatch(spec *KubernetesWatch) (*supervisor.Wor
 				}
 			}
 
-			fmt.Println("1")
-
-			watcherErr := watcher.SelectiveWatch(
-				spec.Namespace, spec.Kind, spec.FieldSelector, spec.LabelSelector,
+			watcherErr := watcher.SelectiveWatch(spec.Namespace, spec.Kind, spec.FieldSelector, spec.LabelSelector,
 				watchFunc(spec.Namespace, spec.Kind))
+
 			if watcherErr != nil {
 				return watcherErr
 			}
@@ -57,37 +54,35 @@ func (m *KubernetesWatchMaker) MakeWatch(spec *KubernetesWatch) (*supervisor.Wor
 }
 
 type kubewatchman struct {
-	watched map[KubernetesWatch]*supervisor.Worker
-	kubeAPI *k8s.Client
-	in      <-chan []KubernetesWatch
-	out     chan<- k8sEvent
+	WatchMaker IKubernetesWatchMaker
+	watched    map[string]*supervisor.Worker
+	in         <-chan []KubernetesWatchSpec
 }
 
 func (w *kubewatchman) Work(p *supervisor.Process) error {
 	p.Ready()
 
-	w.watched = make(map[KubernetesWatch]*supervisor.Worker)
-	watchMaker := &KubernetesWatchMaker{kubeAPI: w.kubeAPI, notify: w.out}
+	w.watched = make(map[string]*supervisor.Worker)
 
 	for {
 		select {
 		case watches := <-w.in:
-			found := make(map[KubernetesWatch]*supervisor.Worker)
+			found := make(map[string]*supervisor.Worker)
 			p.Logf("processing %d kubernetes watch specs", len(watches))
 			for _, spec := range watches {
-				worker, err := watchMaker.MakeWatch(&spec)
+				worker, err := w.WatchMaker.MakeKubernetesWatch(&spec)
 				if err != nil {
 					p.Logf("failed to create kubernetes watcher: %v", err)
 					continue
 				}
 
-				if _, exists := w.watched[spec]; !exists {
+				if _, exists := w.watched[worker.Name]; !exists {
 					p.Logf("add kubernetes watcher %s\n", worker.Name)
 					p.Supervisor().Supervise(worker)
-					w.watched[spec] = worker
+					w.watched[worker.Name] = worker
 				}
 
-				found[spec] = worker
+				found[worker.Name] = worker
 			}
 
 			for workerName, worker := range w.watched {

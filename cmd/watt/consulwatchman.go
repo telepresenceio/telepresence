@@ -12,29 +12,18 @@ import (
 )
 
 type consulwatchman struct {
-	WatchMaker                WatchMaker
-	watchesCh                 <-chan []ConsulWatch
-	consulEndpointsAggregator chan<- consulwatch.Endpoints
-	watched                   map[string]*supervisor.Worker
+	WatchMaker IConsulWatchMaker
+	watchesCh  <-chan []ConsulWatchSpec
+	watched    map[string]*supervisor.Worker
 }
 
-type WatchMaker interface {
-	MakeWatch(cw ConsulWatch, aggregatorCh chan<- consulwatch.Endpoints) (*supervisor.Worker, error)
+type ConsulWatchMaker struct {
+	aggregatorCh chan<- consulwatch.Endpoints
 }
 
-type ConsulWatchMaker struct{}
-
-func (m *ConsulWatchMaker) MakeWatch(cw ConsulWatch, aggregatorCh chan<- consulwatch.Endpoints) (*supervisor.Worker, error) {
-	//return &supervisor.Worker{
-	//	Name: "Foo",
-	//	Work: func(process *supervisor.Process) error {
-	//		fmt.Println("foobar")
-	//		return nil
-	//	},
-	//}, nil
-
+func (m *ConsulWatchMaker) MakeConsulWatch(spec *ConsulWatchSpec) (*supervisor.Worker, error) {
 	consulConfig := consulapi.DefaultConfig()
-	consulConfig.Address = cw.ConsulAddress
+	consulConfig.Address = spec.ConsulAddress
 
 	// TODO: Should we really allocated a Consul client per Service watch? Not sure... there some design stuff here
 	// May be multiple consul clusters
@@ -46,15 +35,15 @@ func (m *ConsulWatchMaker) MakeWatch(cw ConsulWatch, aggregatorCh chan<- consulw
 	}
 
 	worker := &supervisor.Worker{
-		Name: fmt.Sprintf("%s|%s|%s", cw.ConsulAddress, cw.Datacenter, cw.ServiceName),
+		Name: fmt.Sprintf("%s|%s|%s", spec.ConsulAddress, spec.Datacenter, spec.ServiceName),
 		Work: func(p *supervisor.Process) error {
-			w, err := consulwatch.New(consul, log.New(os.Stdout, "", log.LstdFlags), cw.Datacenter, cw.ServiceName, true)
+			w, err := consulwatch.New(consul, log.New(os.Stdout, "", log.LstdFlags), spec.Datacenter, spec.ServiceName, true)
 			if err != nil {
 				p.Logf("failed to setup new consul watch %v", err)
 				return err
 			}
 
-			w.Watch(func(endpoints consulwatch.Endpoints, e error) { aggregatorCh <- endpoints })
+			w.Watch(func(endpoints consulwatch.Endpoints, e error) { m.aggregatorCh <- endpoints })
 			_ = p.Go(func(p *supervisor.Process) error {
 				x := w.Start()
 				if x != nil {
@@ -84,7 +73,7 @@ func (w *consulwatchman) Work(p *supervisor.Process) error {
 			found := make(map[string]*supervisor.Worker)
 			p.Logf("processing %d consul watches", len(watches))
 			for _, cw := range watches {
-				worker, err := w.WatchMaker.MakeWatch(cw, w.consulEndpointsAggregator)
+				worker, err := w.WatchMaker.MakeConsulWatch(&cw)
 				if err != nil {
 					p.Logf("failed to create consul watch %v", err)
 					continue

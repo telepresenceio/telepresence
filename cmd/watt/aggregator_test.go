@@ -16,8 +16,8 @@ import (
 
 type aggIsolator struct {
 	snapshots     chan string
-	k8sWatches    chan []KubernetesWatch
-	consulWatches chan []ConsulWatch
+	k8sWatches    chan []KubernetesWatchSpec
+	consulWatches chan []ConsulWatchSpec
 	aggregator    *aggregator
 	sup           *supervisor.Supervisor
 	done          chan struct{}
@@ -33,8 +33,8 @@ func newAggIsolator(t *testing.T, requiredKinds []string) *aggIsolator {
 		// we need to create buffered channels for outputs
 		// because nothing is asynchronously reading them in
 		// the test
-		k8sWatches:    make(chan []KubernetesWatch, 100),
-		consulWatches: make(chan []ConsulWatch, 100),
+		k8sWatches:    make(chan []KubernetesWatchSpec, 100),
+		consulWatches: make(chan []ConsulWatchSpec, 100),
 		snapshots:     make(chan string, 100),
 		// for signaling when the isolator is done
 		done: make(chan struct{}),
@@ -133,7 +133,7 @@ func TestAggregatorBootstrap(t *testing.T) {
 	// whenever the aggregator sees updated k8s state, it should
 	// send an update to the consul watch manager, in this case it
 	// will be empty because there are no resolvers yet
-	expect(t, iso.consulWatches, []ConsulWatch(nil))
+	expect(t, iso.consulWatches, []ConsulWatchSpec(nil))
 
 	// we should not generate a snapshot yet because we specified
 	// configmaps are required
@@ -143,7 +143,7 @@ func TestAggregatorBootstrap(t *testing.T) {
 	// get a snapshot yet, but we should get watches
 	iso.aggregator.KubernetesEvents <- k8sEvent{"configmap", RESOLVER}
 	expect(t, iso.snapshots, Timeout(100*time.Millisecond))
-	expect(t, iso.consulWatches, func(watches []ConsulWatch) bool {
+	expect(t, iso.consulWatches, func(watches []ConsulWatchSpec) bool {
 		if len(watches) != 1 {
 			return false
 		}

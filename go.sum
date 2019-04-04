@@ -170,6 +170,8 @@ github.com/duosecurity/duo_api_golang v0.0.0-20181024123116-92fea9203dbc/go.mod 
 github.com/duosecurity/duo_api_golang v0.0.0-20190308151101-6c680f768e74 h1:2MIhn2R6oXQbgW5yHfS+d6YqyMfXiu2L55rFZC4UD/M=
 github.com/duosecurity/duo_api_golang v0.0.0-20190308151101-6c680f768e74/go.mod h1:UqXY1lYT/ERa4OEAywUqdok1T4RCRdArkhic1Opuavo=
 github.com/dustin/go-humanize v1.0.0/go.mod h1:HtrtbFcZ19U5GC7JDqmcUSB87Iq5E25KnS6fMYU6eOk=
+github.com/ecodia/golang-awaitility v0.0.0-20180710094957-fb55e59708c7 h1:6kl2nUM+awj5vm8m9ES2FtWa7kZSsNMRD4hQosPACKs=
+github.com/ecodia/golang-awaitility v0.0.0-20180710094957-fb55e59708c7/go.mod h1:etn7NbLy5UviLk20XMZbSn/0AigF3Zfx7wwaEZ3fyIk=
 github.com/elazarl/go-bindata-assetfs v1.0.0 h1:G/bYguwHIzWq9ZoyUQqrjTmJbbYn3j3CKKpKinvZLFk=
 github.com/elazarl/go-bindata-assetfs v1.0.0/go.mod h1:v+YaWX3bdea5J/mo8dSETolEo7R71Vk1u8bnjau5yw4=
 github.com/emirpasic/gods v1.9.0/go.mod h1:YfzfFFoVP/catgzJb4IKIqXjX78Ha8FMSDh3ymbK86o=

@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
+
+	"github.com/ecodia/golang-awaitility/awaitility"
 
 	"github.com/datawire/teleproxy/pkg/consulwatch"
 
@@ -12,10 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var standardTimeout = 10 * time.Second
-
 type consulwatchmanIsolator struct {
-	aggregatorToWatchmanCh        chan []ConsulWatch
+	aggregatorToWatchmanCh        chan []ConsulWatchSpec
 	consulEndpointsToAggregatorCh chan consulwatch.Endpoints
 	watchman                      *consulwatchman
 	sup                           *supervisor.Supervisor
@@ -28,29 +27,45 @@ func TestAddAndRemoveConsulWatchers(t *testing.T) {
 	iso := startConsulwatchmanIsolator(t)
 	defer iso.Stop()
 
-	// We always get blasted a big ol' slice of consistent state from Kubernetes.
-	iso.aggregatorToWatchmanCh <- []ConsulWatch{
+	specs := []ConsulWatchSpec{
 		{ConsulAddress: "127.0.0.1", ServiceName: "foo-in-consul", Datacenter: "dc1"},
 		{ConsulAddress: "127.0.0.1", ServiceName: "bar-in-consul", Datacenter: "dc1"},
 		{ConsulAddress: "127.0.0.1", ServiceName: "baz-in-consul", Datacenter: "dc1"},
-		//CreateConfigMap("foo", "default"),
 	}
 
-	Eventually(t, standardTimeout, func() {
-		assert.Len(t, iso.watchman.watched, 3)
+	iso.aggregatorToWatchmanCh <- specs
 
-		for k, worker := range iso.watchman.watched {
-			assert.Equal(t, k, worker.Name)
-		}
+	err := awaitility.Await(100*time.Millisecond, 1000*time.Millisecond, func() bool {
+		return len(iso.watchman.watched) == len(specs)
 	})
 
-	iso.aggregatorToWatchmanCh <- []ConsulWatch{
-		{ConsulAddress: "127.0.0.1", ServiceName: "bar-in-consul", Datacenter: "dc1"},
-		{ConsulAddress: "127.0.0.1", ServiceName: "baz-in-consul", Datacenter: "dc1"},
-		//CreateConfigMap("foo", "default"),
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	Eventually(t, standardTimeout, func() { assert.Len(t, iso.watchman.watched, 2) })
+	assert.Len(t, iso.watchman.watched, len(specs))
+	for k, worker := range iso.watchman.watched {
+		assert.Equal(t, k, worker.Name)
+	}
+
+	specs = []ConsulWatchSpec{
+		{ConsulAddress: "127.0.0.1", ServiceName: "bar-in-consul", Datacenter: "dc1"},
+		{ConsulAddress: "127.0.0.1", ServiceName: "baz-in-consul", Datacenter: "dc1"},
+	}
+
+	iso.aggregatorToWatchmanCh <- specs
+	err = awaitility.Await(100*time.Millisecond, 1000*time.Millisecond, func() bool {
+		return len(iso.watchman.watched) == len(specs)
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.Len(t, iso.watchman.watched, len(specs))
+	for k, worker := range iso.watchman.watched {
+		assert.Equal(t, k, worker.Name)
+	}
 }
 
 func startConsulwatchmanIsolator(t *testing.T) *consulwatchmanIsolator {
@@ -80,7 +95,7 @@ func newConsulwatchmanIsolator(t *testing.T) *consulwatchmanIsolator {
 		// by using zero length channels for inputs here, we can
 		// control the total ordering of all inputs and therefore
 		// intentionally trigger any order of events we want to test
-		aggregatorToWatchmanCh: make(chan []ConsulWatch),
+		aggregatorToWatchmanCh: make(chan []ConsulWatchSpec),
 
 		// we need to create buffered channels for outputs because
 		// nothing is asynchronously reading them in the test
@@ -91,10 +106,9 @@ func newConsulwatchmanIsolator(t *testing.T) *consulwatchmanIsolator {
 	}
 
 	iso.watchman = &consulwatchman{
-		WatchMaker:                &NOOPWatchMaker{},
-		watchesCh:                 iso.aggregatorToWatchmanCh,
-		consulEndpointsAggregator: iso.consulEndpointsToAggregatorCh,
-		watched:                   map[string]*supervisor.Worker{},
+		WatchMaker: &MockWatchMaker{},
+		watchesCh:  iso.aggregatorToWatchmanCh,
+		watched:    map[string]*supervisor.Worker{},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -105,24 +119,4 @@ func newConsulwatchmanIsolator(t *testing.T) *consulwatchmanIsolator {
 		Work: iso.watchman.Work,
 	})
 	return iso
-}
-
-type NOOPWatchMaker struct {
-	errorBeforeCreate bool
-}
-
-func (m *NOOPWatchMaker) MakeWatch(cw ConsulWatch, aggregatorCh chan<- consulwatch.Endpoints) (*supervisor.Worker, error) {
-	if m.errorBeforeCreate {
-		return nil, fmt.Errorf("failed to create watch (errorBeforeCreate: %t)", m.errorBeforeCreate)
-	}
-
-	return &supervisor.Worker{
-		Name: fmt.Sprintf("%s|%s|%s", cw.ConsulAddress, cw.ServiceName, cw.Datacenter),
-		Work: func(p *supervisor.Process) error {
-			//<-p.Shutdown()
-			//time.Sleep(500 * time.Millisecond)
-			return nil
-		},
-		Retry: false,
-	}, nil
 }

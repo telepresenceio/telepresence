@@ -51,11 +51,11 @@ func runWatt(cmd *cobra.Command, args []string) {
 
 	// The aggregator sends the current consul resolver set to the
 	// consul watch manager.
-	aggregatorToConsulwatchmanCh := make(chan []ConsulWatch)
+	aggregatorToConsulwatchmanCh := make(chan []ConsulWatchSpec)
 
 	// The aggregator sends the current k8s watch set to the
 	// kubernetes watch manager.
-	aggregatorToKubewatchmanCh := make(chan []KubernetesWatch)
+	aggregatorToKubewatchmanCh := make(chan []KubernetesWatchSpec)
 
 	invoker := NewInvoker(port, notifyReceivers, limiter.NewIntervalLimiter(interval))
 	aggregator := NewAggregator(invoker.Snapshots, aggregatorToKubewatchmanCh, aggregatorToConsulwatchmanCh,
@@ -69,16 +69,14 @@ func runWatt(cmd *cobra.Command, args []string) {
 	}
 
 	consulwatchman := consulwatchman{
-		WatchMaker:                &ConsulWatchMaker{},
-		watchesCh:                 aggregatorToConsulwatchmanCh,
-		consulEndpointsAggregator: aggregator.ConsulEndpoints,
-		watched:                   make(map[string]*supervisor.Worker),
+		WatchMaker: &ConsulWatchMaker{aggregatorCh: aggregator.ConsulEndpoints},
+		watchesCh:  aggregatorToConsulwatchmanCh,
+		watched:    make(map[string]*supervisor.Worker),
 	}
 
 	kubewatchman := kubewatchman{
-		kubeAPI: client,
-		in:      aggregatorToKubewatchmanCh,
-		out:     aggregator.KubernetesEvents,
+		WatchMaker: &KubernetesWatchMaker{kubeAPI: client, notify: aggregator.KubernetesEvents},
+		in:         aggregatorToKubewatchmanCh,
 	}
 
 	apiServer := &apiServer{

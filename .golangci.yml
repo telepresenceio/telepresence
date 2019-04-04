@@ -1,6 +1,7 @@
 linters:
   enable-all: true
   disable:
+    - dupl # phil: raises false positives for non-duplicate code
     - errcheck
     - gochecknoglobals
     - gochecknoinits
@@ -11,10 +12,6 @@ linters:
     - prealloc
     - scopelint
     - unparam
-#    - deadcode # phil to remove this and everything after
-#    - unused
-#    - structcheck
-#    - gosimple
 linters-settings:
   goconst:
     min-len: 5
