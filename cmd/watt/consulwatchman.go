@@ -11,6 +11,11 @@ import (
 	consulapi "github.com/hashicorp/consul/api"
 )
 
+type consulEvent struct {
+	Id        string
+	Endpoints consulwatch.Endpoints
+}
+
 type consulwatchman struct {
 	WatchMaker IConsulWatchMaker
 	watchesCh  <-chan []ConsulWatchSpec
@@ -18,7 +23,7 @@ type consulwatchman struct {
 }
 
 type ConsulWatchMaker struct {
-	aggregatorCh chan<- consulwatch.Endpoints
+	aggregatorCh chan<- consulEvent
 }
 
 func (m *ConsulWatchMaker) MakeConsulWatch(spec *ConsulWatchSpec) (*supervisor.Worker, error) {
@@ -43,7 +48,9 @@ func (m *ConsulWatchMaker) MakeConsulWatch(spec *ConsulWatchSpec) (*supervisor.W
 				return err
 			}
 
-			w.Watch(func(endpoints consulwatch.Endpoints, e error) { m.aggregatorCh <- endpoints })
+			w.Watch(func(endpoints consulwatch.Endpoints, e error) {
+				m.aggregatorCh <- consulEvent{spec.Id, endpoints}
+			})
 			_ = p.Go(func(p *supervisor.Process) error {
 				x := w.Start()
 				if x != nil {

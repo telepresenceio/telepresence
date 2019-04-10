@@ -2,11 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
+	"os/exec"
 	"strings"
 
 	"github.com/datawire/teleproxy/pkg/consulwatch"
-
+	"github.com/datawire/teleproxy/pkg/limiter"
 	"github.com/datawire/teleproxy/pkg/watt"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
@@ -17,7 +17,7 @@ type aggregator struct {
 	// Input channel used to tell us about kubernetes state.
 	KubernetesEvents chan k8sEvent
 	// Input channel used to tell us about consul endpoints.
-	ConsulEndpoints chan consulwatch.Endpoints
+	ConsulEvents chan consulEvent
 	// Output channel used to communicate with the k8s watch manager.
 	k8sWatches chan<- []KubernetesWatchSpec
 	// Output channel used to communicate with the consul watch manager.
@@ -27,20 +27,26 @@ type aggregator struct {
 	// We won't consider ourselves "bootstrapped" until we hear
 	// about all these kinds.
 	requiredKinds       []string
+	watchHooks          []string
+	limiter             limiter.Limiter
+	ids                 map[string]bool
 	kubernetesResources map[string][]k8s.Resource
 	consulEndpoints     map[string]consulwatch.Endpoints
 	bootstrapped        bool
 }
 
 func NewAggregator(snapshots chan<- string, k8sWatches chan<- []KubernetesWatchSpec, consulWatches chan<- []ConsulWatchSpec,
-	requiredKinds []string) *aggregator {
+	requiredKinds []string, watchHooks []string, limiter limiter.Limiter) *aggregator {
 	return &aggregator{
 		KubernetesEvents:    make(chan k8sEvent),
-		ConsulEndpoints:     make(chan consulwatch.Endpoints),
+		ConsulEvents:        make(chan consulEvent),
 		k8sWatches:          k8sWatches,
 		consulWatches:       consulWatches,
 		snapshots:           snapshots,
 		requiredKinds:       requiredKinds,
+		watchHooks:          watchHooks,
+		limiter:             limiter,
+		ids:                 make(map[string]bool),
 		kubernetesResources: make(map[string][]k8s.Resource),
 		consulEndpoints:     make(map[string]consulwatch.Endpoints),
 	}
@@ -54,16 +60,9 @@ func (a *aggregator) Work(p *supervisor.Process) error {
 		select {
 		case event := <-a.KubernetesEvents:
 			a.setKubernetesResources(event)
-			watches := a.extractWatches(p, a.kubernetesResources["consulresolver"])
-			a.consulWatches <- watches
-			/*a.k8sWatches <- []KubernetesWatchSpec{{
-				Kind:          "endpoints",
-				Namespace:     "",
-				FieldSelector: "metadata.name=consul",
-			}}*/
 			a.maybeNotify(p)
-		case endpoints := <-a.ConsulEndpoints:
-			a.updateConsulEndpoints(endpoints)
+		case event := <-a.ConsulEvents:
+			a.updateConsulResources(event)
 			a.maybeNotify(p)
 		case <-p.Shutdown():
 			return nil
@@ -71,45 +70,28 @@ func (a *aggregator) Work(p *supervisor.Process) error {
 	}
 }
 
-func (a *aggregator) extractWatches(p *supervisor.Process, resources []k8s.Resource) (result []ConsulWatchSpec) {
-	for _, r := range resources {
-		if !isConsulResolver(r) {
-			p.Logf("resource is not a ConsulResolver, skipped")
-			continue
-		}
-
-		cw, err := makeWatch(r)
-		if err != nil {
-			p.Logf("error extracting watch: %v", err)
-			continue
-		}
-
-		result = append(result, cw)
-	}
-	return
+func (a *aggregator) updateConsulResources(event consulEvent) {
+	a.ids[event.Id] = true
+	a.consulEndpoints[event.Endpoints.Service] = event.Endpoints
 }
 
-func makeWatch(r k8s.Resource) (ConsulWatchSpec, error) {
-	// TODO: This code will need to be updated once we move to a CRD. The Data() method only works for ConfigMaps.
-	data := r.Data()
+func (a *aggregator) setKubernetesResources(event k8sEvent) {
+	a.ids[event.id] = true
+	a.kubernetesResources[event.kind] = event.resources
+}
 
-	consulAddress, ok := data["consulAddress"].(string)
-	if !ok {
-		return ConsulWatchSpec{}, errors.New("failed to cast consulAddress as string")
+func (a *aggregator) generateSnapshot() (string, error) {
+	s := watt.Snapshot{
+		Consul:     watt.ConsulSnapshot{Endpoints: a.consulEndpoints},
+		Kubernetes: a.kubernetesResources,
 	}
 
-	consulAddress = strings.ToLower(consulAddress)
-	serviceName, ok := data["service"].(string)
-	if !ok {
-		return ConsulWatchSpec{}, errors.New("failed to cast service to a string")
+	jsonBytes, err := json.MarshalIndent(s, "", "    ")
+	if err != nil {
+		return "{}", err
 	}
 
-	datacenter, ok := data["datacenter"].(string)
-	if !ok {
-		return ConsulWatchSpec{}, errors.New("failed to cast datacenter to a string")
-	}
-
-	return ConsulWatchSpec{ConsulAddress: consulAddress, ServiceName: serviceName, Datacenter: datacenter}, nil
+	return string(jsonBytes), nil
 }
 
 func (a *aggregator) isKubernetesBootstrapped(p *supervisor.Process) bool {
@@ -128,20 +110,20 @@ func (a *aggregator) isKubernetesBootstrapped(p *supervisor.Process) bool {
 // aggregate state of the world is complete when any consul services
 // referenced by kubernetes have populated endpoint information (even
 // if the value of the populated info is an empty set of endpoints).
-func (a *aggregator) isComplete(p *supervisor.Process) bool {
-	var requiredConsulServices []string
+func (a *aggregator) isComplete(p *supervisor.Process, watchset WatchSet) bool {
+	complete := true
 
-	for _, v := range a.kubernetesResources["consulresolver"] {
-		// this is all kinds of type unsafe most likely
-		requiredConsulServices = append(requiredConsulServices, v.Data()["service"].(string))
+	for _, w := range watchset.KubernetesWatches {
+		if _, ok := a.ids[w.Id]; !ok {
+			complete = false
+			p.Logf("waiting for k8s watch: %s", w.Id)
+		}
 	}
 
-	complete := true
-	for _, name := range requiredConsulServices {
-		_, ok := a.consulEndpoints[name]
-		if !ok {
-			p.Logf("waiting for endpoint info for %s", name)
+	for _, w := range watchset.ConsulWatches {
+		if _, ok := a.ids[w.Id]; !ok {
 			complete = false
+			p.Logf("waiting for consul watch: %s", w.Id)
 		}
 	}
 
@@ -149,11 +131,18 @@ func (a *aggregator) isComplete(p *supervisor.Process) bool {
 }
 
 func (a *aggregator) maybeNotify(p *supervisor.Process) {
+	watchset := a.getWatches(p)
+
+	p.Logf("found %d kubernetes watches", len(watchset.KubernetesWatches))
+	p.Logf("found %d consul watches", len(watchset.ConsulWatches))
+	a.k8sWatches <- watchset.KubernetesWatches
+	a.consulWatches <- watchset.ConsulWatches
+
 	if !a.isKubernetesBootstrapped(p) {
 		return
 	}
 
-	if !a.bootstrapped && a.isComplete(p) {
+	if !a.bootstrapped && a.isComplete(p, watchset) {
 		p.Logf("bootstrapped!")
 		a.bootstrapped = true
 	}
@@ -169,45 +158,67 @@ func (a *aggregator) maybeNotify(p *supervisor.Process) {
 	}
 }
 
-func (a *aggregator) updateConsulEndpoints(endpoints consulwatch.Endpoints) {
-	a.consulEndpoints[endpoints.Service] = endpoints
-}
-
-func (a *aggregator) setKubernetesResources(event k8sEvent) {
-	a.kubernetesResources[event.kind] = event.resources
-	if strings.HasPrefix(strings.ToLower(event.kind), "configmap") {
-		resolvers := make([]k8s.Resource, 0)
-		for _, r := range event.resources {
-			if isConsulResolver(r) {
-				resolvers = append(resolvers, r)
-			}
-		}
-		a.kubernetesResources["consulresolver"] = resolvers
-	}
-}
-
-func isConsulResolver(r k8s.Resource) bool {
-	kind := strings.ToLower(r.Kind())
-	if kind == "configmap" {
-		a := r.Metadata().Annotations()
-		if _, ok := a["getambassador.io/consul-resolver"]; ok {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (a *aggregator) generateSnapshot() (string, error) {
-	s := watt.Snapshot{
-		Consul:     watt.ConsulSnapshot{Endpoints: a.consulEndpoints},
-		Kubernetes: a.kubernetesResources,
-	}
-
-	jsonBytes, err := json.MarshalIndent(s, "", "    ")
+func (a *aggregator) getWatches(p *supervisor.Process) WatchSet {
+	snapshot, err := a.generateSnapshot()
 	if err != nil {
-		return "{}", err
+		p.Logf("generate snapshot failed %v", err)
+		return WatchSet{}
 	}
 
-	return string(jsonBytes), nil
+	result := WatchSet{}
+
+	for _, hook := range a.watchHooks {
+		ws := a.invokeHook(p, hook, snapshot)
+		result.KubernetesWatches = append(result.KubernetesWatches, ws.KubernetesWatches...)
+		result.ConsulWatches = append(result.ConsulWatches, ws.ConsulWatches...)
+	}
+
+	for idx, w := range result.KubernetesWatches {
+		result.KubernetesWatches[idx].Id = w.Hash()
+	}
+
+	for idx, w := range result.ConsulWatches {
+		result.ConsulWatches[idx].Id = w.Hash()
+	}
+
+	return result
+}
+
+func lines(st string) []string {
+	return strings.Split(st, "\n")
+}
+
+func (a *aggregator) invokeHook(p *supervisor.Process, hook, snapshot string) WatchSet {
+	cmd := exec.Command(hook)
+	cmd.Stdin = strings.NewReader(snapshot)
+	var watches, errors strings.Builder
+	cmd.Stdout = &watches
+	cmd.Stderr = &errors
+	err := cmd.Run()
+	stderr := errors.String()
+	if stderr != "" {
+		for _, line := range lines(stderr) {
+			p.Logf("watch hook stderr: %s", line)
+		}
+	}
+	if err != nil {
+		p.Logf("watch hook failed: %v", err)
+		return WatchSet{}
+	}
+
+	encoded := watches.String()
+
+	decoder := json.NewDecoder(strings.NewReader(encoded))
+	decoder.DisallowUnknownFields()
+	result := WatchSet{}
+	err = decoder.Decode(&result)
+	if err != nil {
+		for _, line := range lines(encoded) {
+			p.Logf("watch hook: %s", line)
+		}
+		p.Logf("watchset decode failed: %v", err)
+		return WatchSet{}
+	}
+
+	return result
 }

@@ -1,13 +1,12 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 type k8sEvent struct {
+	id        string
 	kind      string
 	resources []k8s.Resource
 }
@@ -22,14 +21,14 @@ func (m *KubernetesWatchMaker) MakeKubernetesWatch(spec *KubernetesWatchSpec) (*
 	var err error
 
 	worker = &supervisor.Worker{
-		Name: fmt.Sprintf("%s|%s|%s|%s", spec.Namespace, spec.Kind, spec.FieldSelector, spec.LabelSelector),
+		Name: spec.Hash(),
 		Work: func(p *supervisor.Process) error {
 			watcher := m.kubeAPI.Watcher()
 			watchFunc := func(ns, kind string) func(watcher *k8s.Watcher) {
 				return func(watcher *k8s.Watcher) {
 					resources := watcher.List(kind)
 					p.Logf("found %d %q in namespace %q", len(resources), kind, fmtNamespace(ns))
-					m.notify <- k8sEvent{kind: kind, resources: resources}
+					m.notify <- k8sEvent{id: spec.Id, kind: kind, resources: resources}
 					p.Logf("sent %q to receivers", kind)
 				}
 			}

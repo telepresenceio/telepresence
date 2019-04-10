@@ -39,7 +39,7 @@ func newAggIsolator(t *testing.T, requiredKinds []string) *aggIsolator {
 		// for signaling when the isolator is done
 		done: make(chan struct{}),
 	}
-	iso.aggregator = NewAggregator(iso.snapshots, iso.k8sWatches, iso.consulWatches, requiredKinds)
+	iso.aggregator = NewAggregator(iso.snapshots, iso.k8sWatches, iso.consulWatches, requiredKinds, nil, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	iso.cancel = cancel
 	iso.sup = supervisor.WithContext(ctx)
@@ -129,7 +129,7 @@ func TestAggregatorBootstrap(t *testing.T) {
 	defer iso.Stop()
 
 	// initial kubernetes state is just services
-	iso.aggregator.KubernetesEvents <- k8sEvent{"service", SERVICES}
+	iso.aggregator.KubernetesEvents <- k8sEvent{"", "service", SERVICES}
 	// whenever the aggregator sees updated k8s state, it should
 	// send an update to the consul watch manager, in this case it
 	// will be empty because there are no resolvers yet
@@ -141,7 +141,7 @@ func TestAggregatorBootstrap(t *testing.T) {
 
 	// the configmap references a consul service, so we shouldn't
 	// get a snapshot yet, but we should get watches
-	iso.aggregator.KubernetesEvents <- k8sEvent{"configmap", RESOLVER}
+	iso.aggregator.KubernetesEvents <- k8sEvent{"", "configmap", RESOLVER}
 	expect(t, iso.snapshots, Timeout(100*time.Millisecond))
 	expect(t, iso.consulWatches, func(watches []ConsulWatchSpec) bool {
 		if len(watches) != 1 {
@@ -157,13 +157,15 @@ func TestAggregatorBootstrap(t *testing.T) {
 
 	// now lets send in the first endpoints, and we should get a
 	// snapshot
-	iso.aggregator.ConsulEndpoints <- consulwatch.Endpoints{
-		Service: "bar",
-		Endpoints: []consulwatch.Endpoint{
-			{
-				Service: "bar",
-				Address: "1.2.3.4",
-				Port:    80,
+	iso.aggregator.ConsulEvents <- consulEvent{"",
+		consulwatch.Endpoints{
+			Service: "bar",
+			Endpoints: []consulwatch.Endpoint{
+				{
+					Service: "bar",
+					Address: "1.2.3.4",
+					Port:    80,
+				},
 			},
 		},
 	}
