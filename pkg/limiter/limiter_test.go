@@ -19,7 +19,7 @@ func (t *MrT) expect(expected, actual time.Duration) {
 
 func TestIntervalLimiter(fool *testing.T) {
 	t := pity(fool)
-	l := NewIntervalLimiter(1 * time.Second)
+	l := NewInterval(1 * time.Second)
 	start := time.Now()
 	t.expect(0, l.Limit(start))
 	t.expect(999*time.Millisecond, l.Limit(start.Add(1*time.Millisecond)))

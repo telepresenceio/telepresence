@@ -1,20 +1,45 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
+type WatchSet struct {
+	KubernetesWatches []KubernetesWatchSpec `json:"kubernetes-watches"`
+	ConsulWatches     []ConsulWatchSpec     `json:"consul-watches"`
+}
+
 type KubernetesWatchSpec struct {
-	Kind          string
-	Namespace     string
-	FieldSelector string
-	LabelSelector string
+	Id            string
+	Kind          string `json:"kind"`
+	Namespace     string `json:"namespace"`
+	FieldSelector string `json:"field-selector"`
+	LabelSelector string `json:"label-selector"`
+}
+
+func star(s string) string {
+	if s == "" {
+		return "*"
+	} else {
+		return s
+	}
+}
+
+func (k KubernetesWatchSpec) Hash() string {
+	return fmt.Sprintf("%s|%s|%s|%s", k.Kind, star(k.Namespace), star(k.FieldSelector), star(k.LabelSelector))
 }
 
 type ConsulWatchSpec struct {
-	ConsulAddress string
-	Datacenter    string
-	ServiceName   string
+	Id            string
+	ConsulAddress string `json:"consul-address"`
+	Datacenter    string `json:"datacenter"`
+	ServiceName   string `json:"service-name"`
+}
+
+func (c ConsulWatchSpec) Hash() string {
+	return fmt.Sprintf("%s|%s|%s", c.ConsulAddress, c.Datacenter, c.ServiceName)
 }
 
 // IKubernetesWatchMaker is an interface for KubernetesWatchMaker implementations. It mostly exists to facilitate the

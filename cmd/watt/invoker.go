@@ -7,9 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/datawire/teleproxy/pkg/limiter"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/datawire/teleproxy/pkg/tpu"
 )
@@ -21,7 +19,6 @@ type invoker struct {
 	id               int
 	notify           []string
 	apiServerPort    int
-	limiter          limiter.Limiter
 
 	// This stores the latest snapshot, but we don't assign an id
 	// unless/until we invoke... some of these will be discarded
@@ -29,13 +26,12 @@ type invoker struct {
 	latestSnapshot string
 }
 
-func NewInvoker(port int, notify []string, limiter limiter.Limiter) *invoker {
+func NewInvoker(port int, notify []string) *invoker {
 	return &invoker{
 		Snapshots:        make(chan string),
 		invokedSnapshots: make(map[int]string),
 		notify:           notify,
 		apiServerPort:    port,
-		limiter:          limiter,
 	}
 }
 
@@ -44,15 +40,7 @@ func (a *invoker) Work(p *supervisor.Process) error {
 	for {
 		select {
 		case a.latestSnapshot = <-a.Snapshots:
-			now := time.Now()
-			delay := a.limiter.Limit(now)
-			if delay == 0 {
-				a.invoke()
-			} else if delay > 0 {
-				time.AfterFunc(delay, func() {
-					a.invoke()
-				})
-			}
+			a.invoke()
 		case <-p.Shutdown():
 			p.Logf("shutdown initiated")
 			return nil
