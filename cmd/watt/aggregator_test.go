@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -159,9 +158,7 @@ func TestAggregatorBootstrap(t *testing.T) {
 	// the configmap references a consul service, so we shouldn't
 	// get a snapshot yet, but we should get watches
 	iso.aggregator.KubernetesEvents <- k8sEvent{"", "configmap", RESOLVER}
-	fmt.Println("1")
 	expect(t, iso.snapshots, Timeout(100*time.Millisecond))
-	fmt.Println("2")
 	expect(t, iso.consulWatches, func(watches []ConsulWatchSpec) bool {
 		if len(watches) != 1 {
 			t.Logf("expected 1 watch, got %d watches", len(watches))
