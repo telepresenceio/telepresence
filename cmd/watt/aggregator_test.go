@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,7 +27,7 @@ type aggIsolator struct {
 	cancel        context.CancelFunc
 }
 
-func newAggIsolator(t *testing.T, requiredKinds []string) *aggIsolator {
+func newAggIsolator(t *testing.T, requiredKinds []string, watchHook WatchHook) *aggIsolator {
 	// aggregator uses zero length channels for its inputs so we can
 	// control the total ordering of all inputs and therefore
 	// intentionally trigger any order of events we want to test
@@ -39,7 +41,7 @@ func newAggIsolator(t *testing.T, requiredKinds []string) *aggIsolator {
 		// for signaling when the isolator is done
 		done: make(chan struct{}),
 	}
-	iso.aggregator = NewAggregator(iso.snapshots, iso.k8sWatches, iso.consulWatches, requiredKinds, nil, nil)
+	iso.aggregator = NewAggregator(iso.snapshots, iso.k8sWatches, iso.consulWatches, requiredKinds, watchHook, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	iso.cancel = cancel
 	iso.sup = supervisor.WithContext(ctx)
@@ -51,8 +53,8 @@ func newAggIsolator(t *testing.T, requiredKinds []string) *aggIsolator {
 	return iso
 }
 
-func startAggIsolator(t *testing.T, requiredKinds []string) *aggIsolator {
-	iso := newAggIsolator(t, requiredKinds)
+func startAggIsolator(t *testing.T, requiredKinds []string, watchHook WatchHook) *aggIsolator {
+	iso := newAggIsolator(t, requiredKinds, watchHook)
 	iso.Start()
 	return iso
 }
@@ -113,8 +115,14 @@ data:
 
 // make sure we shutdown even before achieving a bootstrapped state
 func TestAggregatorShutdown(t *testing.T) {
-	iso := startAggIsolator(t, nil)
+	iso := startAggIsolator(t, nil, nil)
 	defer iso.Stop()
+}
+
+var WATCH = ConsulWatchSpec{
+	ConsulAddress: "127.0.0.1:8500",
+	Datacenter:    "dc1",
+	ServiceName:   "bar",
 }
 
 // Check that we bootstrap properly... this means *not* emitting a
@@ -125,7 +133,16 @@ func TestAggregatorShutdown(t *testing.T) {
 //   b) received (possibly empty) endpoint info about all referenced
 //      consul services...
 func TestAggregatorBootstrap(t *testing.T) {
-	iso := startAggIsolator(t, []string{"service", "configmap"})
+	watchHook := func(p *supervisor.Process, snapshot string) WatchSet {
+		if strings.Contains(snapshot, "configmap") {
+			return WatchSet{
+				ConsulWatches: []ConsulWatchSpec{WATCH},
+			}
+		} else {
+			return WatchSet{}
+		}
+	}
+	iso := startAggIsolator(t, []string{"service", "configmap"}, watchHook)
 	defer iso.Stop()
 
 	// initial kubernetes state is just services
@@ -142,9 +159,12 @@ func TestAggregatorBootstrap(t *testing.T) {
 	// the configmap references a consul service, so we shouldn't
 	// get a snapshot yet, but we should get watches
 	iso.aggregator.KubernetesEvents <- k8sEvent{"", "configmap", RESOLVER}
+	fmt.Println("1")
 	expect(t, iso.snapshots, Timeout(100*time.Millisecond))
+	fmt.Println("2")
 	expect(t, iso.consulWatches, func(watches []ConsulWatchSpec) bool {
 		if len(watches) != 1 {
+			t.Logf("expected 1 watch, got %d watches", len(watches))
 			return false
 		}
 
@@ -157,7 +177,8 @@ func TestAggregatorBootstrap(t *testing.T) {
 
 	// now lets send in the first endpoints, and we should get a
 	// snapshot
-	iso.aggregator.ConsulEvents <- consulEvent{"",
+	iso.aggregator.ConsulEvents <- consulEvent{
+		WATCH.Hash(),
 		consulwatch.Endpoints{
 			Service: "bar",
 			Endpoints: []consulwatch.Endpoint{

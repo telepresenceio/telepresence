@@ -61,7 +61,7 @@ func runWatt(cmd *cobra.Command, args []string) {
 
 	invoker := NewInvoker(port, notifyReceivers, limiter.NewIntervalLimiter(interval))
 	aggregator := NewAggregator(invoker.Snapshots, aggregatorToKubewatchmanCh, aggregatorToConsulwatchmanCh,
-		initialSources, watchHooks, limiter.NewIntervalLimiter(interval))
+		initialSources, ExecWatchHook(watchHooks), limiter.NewIntervalLimiter(interval))
 
 	kubebootstrap := kubebootstrap{
 		namespace:      kubernetesNamespace,

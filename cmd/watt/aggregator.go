@@ -13,6 +13,8 @@ import (
 	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
+type WatchHook func(p *supervisor.Process, snapshot string) WatchSet
+
 type aggregator struct {
 	// Input channel used to tell us about kubernetes state.
 	KubernetesEvents chan k8sEvent
@@ -27,8 +29,9 @@ type aggregator struct {
 	// We won't consider ourselves "bootstrapped" until we hear
 	// about all these kinds.
 	requiredKinds       []string
-	watchHooks          []string
+	watchHook           WatchHook
 	limiter             limiter.Limiter
+	watchset            WatchSet
 	ids                 map[string]bool
 	kubernetesResources map[string][]k8s.Resource
 	consulEndpoints     map[string]consulwatch.Endpoints
@@ -36,7 +39,7 @@ type aggregator struct {
 }
 
 func NewAggregator(snapshots chan<- string, k8sWatches chan<- []KubernetesWatchSpec, consulWatches chan<- []ConsulWatchSpec,
-	requiredKinds []string, watchHooks []string, limiter limiter.Limiter) *aggregator {
+	requiredKinds []string, watchHook WatchHook, limiter limiter.Limiter) *aggregator {
 	return &aggregator{
 		KubernetesEvents:    make(chan k8sEvent),
 		ConsulEvents:        make(chan consulEvent),
@@ -44,11 +47,25 @@ func NewAggregator(snapshots chan<- string, k8sWatches chan<- []KubernetesWatchS
 		consulWatches:       consulWatches,
 		snapshots:           snapshots,
 		requiredKinds:       requiredKinds,
-		watchHooks:          watchHooks,
+		watchHook:           watchHook,
 		limiter:             limiter,
 		ids:                 make(map[string]bool),
 		kubernetesResources: make(map[string][]k8s.Resource),
 		consulEndpoints:     make(map[string]consulwatch.Endpoints),
+	}
+}
+
+func ExecWatchHook(watchHooks []string) WatchHook {
+	return func(p *supervisor.Process, snapshot string) WatchSet {
+		result := WatchSet{}
+
+		for _, hook := range watchHooks {
+			ws := invokeHook(p, hook, snapshot)
+			result.KubernetesWatches = append(result.KubernetesWatches, ws.KubernetesWatches...)
+			result.ConsulWatches = append(result.ConsulWatches, ws.ConsulWatches...)
+		}
+
+		return result
 	}
 }
 
@@ -60,14 +77,26 @@ func (a *aggregator) Work(p *supervisor.Process) error {
 		select {
 		case event := <-a.KubernetesEvents:
 			a.setKubernetesResources(event)
+			a.updateWatches(p)
 			a.maybeNotify(p)
 		case event := <-a.ConsulEvents:
 			a.updateConsulResources(event)
+			a.updateWatches(p)
 			a.maybeNotify(p)
 		case <-p.Shutdown():
 			return nil
 		}
 	}
+}
+
+func (a *aggregator) updateWatches(p *supervisor.Process) {
+	a.watchset = a.getWatches(p)
+	p.Log(a.watchset)
+
+	p.Logf("found %d kubernetes watches", len(a.watchset.KubernetesWatches))
+	p.Logf("found %d consul watches", len(a.watchset.ConsulWatches))
+	a.k8sWatches <- a.watchset.KubernetesWatches
+	a.consulWatches <- a.watchset.ConsulWatches
 }
 
 func (a *aggregator) updateConsulResources(event consulEvent) {
@@ -131,18 +160,11 @@ func (a *aggregator) isComplete(p *supervisor.Process, watchset WatchSet) bool {
 }
 
 func (a *aggregator) maybeNotify(p *supervisor.Process) {
-	watchset := a.getWatches(p)
-
-	p.Logf("found %d kubernetes watches", len(watchset.KubernetesWatches))
-	p.Logf("found %d consul watches", len(watchset.ConsulWatches))
-	a.k8sWatches <- watchset.KubernetesWatches
-	a.consulWatches <- watchset.ConsulWatches
-
 	if !a.isKubernetesBootstrapped(p) {
 		return
 	}
 
-	if !a.bootstrapped && a.isComplete(p, watchset) {
+	if !a.bootstrapped && a.isComplete(p, a.watchset) {
 		p.Logf("bootstrapped!")
 		a.bootstrapped = true
 	}
@@ -165,13 +187,7 @@ func (a *aggregator) getWatches(p *supervisor.Process) WatchSet {
 		return WatchSet{}
 	}
 
-	result := WatchSet{}
-
-	for _, hook := range a.watchHooks {
-		ws := a.invokeHook(p, hook, snapshot)
-		result.KubernetesWatches = append(result.KubernetesWatches, ws.KubernetesWatches...)
-		result.ConsulWatches = append(result.ConsulWatches, ws.ConsulWatches...)
-	}
+	result := a.watchHook(p, snapshot)
 
 	for idx, w := range result.KubernetesWatches {
 		result.KubernetesWatches[idx].Id = w.Hash()
@@ -188,7 +204,7 @@ func lines(st string) []string {
 	return strings.Split(st, "\n")
 }
 
-func (a *aggregator) invokeHook(p *supervisor.Process, hook, snapshot string) WatchSet {
+func invokeHook(p *supervisor.Process, hook, snapshot string) WatchSet {
 	cmd := exec.Command(hook)
 	cmd.Stdin = strings.NewReader(snapshot)
 	var watches, errors strings.Builder
