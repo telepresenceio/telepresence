@@ -12,6 +12,7 @@ import (
 	"github.com/datawire/teleproxy/pkg/watt"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
+	"github.com/datawire/teleproxy/pkg/limiter"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
@@ -40,7 +41,8 @@ func newAggIsolator(t *testing.T, requiredKinds []string, watchHook WatchHook) *
 		// for signaling when the isolator is done
 		done: make(chan struct{}),
 	}
-	iso.aggregator = NewAggregator(iso.snapshots, iso.k8sWatches, iso.consulWatches, requiredKinds, watchHook, nil)
+	iso.aggregator = NewAggregator(iso.snapshots, iso.k8sWatches, iso.consulWatches, requiredKinds, watchHook,
+		limiter.NewUnlimited())
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	iso.cancel = cancel
 	iso.sup = supervisor.WithContext(ctx)

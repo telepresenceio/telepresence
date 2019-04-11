@@ -41,7 +41,7 @@ type limiter struct {
 
 // Constructs a new limiter that will coalesce any events occurring
 // within the specified interval.
-func NewIntervalLimiter(interval time.Duration) Limiter {
+func NewInterval(interval time.Duration) Limiter {
 	return &limiter{
 		interval: interval,
 	}
@@ -61,3 +61,40 @@ func (l *limiter) Limit(now time.Time) time.Duration {
 		return delay
 	}
 }
+
+type composite struct {
+	first    Limiter
+	second   Limiter
+	delay    time.Duration
+	started  bool
+	deadline time.Time
+}
+
+func NewComposite(first, second Limiter, delay time.Duration) Limiter {
+	return &composite{
+		first:  first,
+		second: second,
+		delay:  delay,
+	}
+}
+
+func (c *composite) Limit(now time.Time) time.Duration {
+	if !c.started {
+		c.started = true
+		c.deadline = now.Add(c.delay)
+	}
+
+	if now.After(c.deadline) {
+		return c.second.Limit(now)
+	} else {
+		return c.first.Limit(now)
+	}
+}
+
+type unlimited struct{}
+
+func NewUnlimited() Limiter {
+	return &unlimited{}
+}
+
+func (u *unlimited) Limit(now time.Time) time.Duration { return 0 }

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os/exec"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/datawire/teleproxy/pkg/consulwatch"
 	"github.com/datawire/teleproxy/pkg/limiter"
@@ -31,11 +33,11 @@ type aggregator struct {
 	requiredKinds       []string
 	watchHook           WatchHook
 	limiter             limiter.Limiter
-	watchset            WatchSet
 	ids                 map[string]bool
 	kubernetesResources map[string][]k8s.Resource
 	consulEndpoints     map[string]consulwatch.Endpoints
 	bootstrapped        bool
+	notifyMux           sync.Mutex
 }
 
 func NewAggregator(snapshots chan<- string, k8sWatches chan<- []KubernetesWatchSpec, consulWatches chan<- []ConsulWatchSpec,
@@ -55,48 +57,21 @@ func NewAggregator(snapshots chan<- string, k8sWatches chan<- []KubernetesWatchS
 	}
 }
 
-func ExecWatchHook(watchHooks []string) WatchHook {
-	return func(p *supervisor.Process, snapshot string) WatchSet {
-		result := WatchSet{}
-
-		for _, hook := range watchHooks {
-			ws := invokeHook(p, hook, snapshot)
-			result.KubernetesWatches = append(result.KubernetesWatches, ws.KubernetesWatches...)
-			result.ConsulWatches = append(result.ConsulWatches, ws.ConsulWatches...)
-		}
-
-		return result
-	}
-}
-
 func (a *aggregator) Work(p *supervisor.Process) error {
 	p.Ready()
 
 	for {
-		a.maybeNotify(p)
 		select {
 		case event := <-a.KubernetesEvents:
 			a.setKubernetesResources(event)
-			a.updateWatches(p)
 			a.maybeNotify(p)
 		case event := <-a.ConsulEvents:
 			a.updateConsulResources(event)
-			a.updateWatches(p)
 			a.maybeNotify(p)
 		case <-p.Shutdown():
 			return nil
 		}
 	}
-}
-
-func (a *aggregator) updateWatches(p *supervisor.Process) {
-	a.watchset = a.getWatches(p)
-	p.Log(a.watchset)
-
-	p.Logf("found %d kubernetes watches", len(a.watchset.KubernetesWatches))
-	p.Logf("found %d consul watches", len(a.watchset.ConsulWatches))
-	a.k8sWatches <- a.watchset.KubernetesWatches
-	a.consulWatches <- a.watchset.ConsulWatches
 }
 
 func (a *aggregator) updateConsulResources(event consulEvent) {
@@ -160,11 +135,33 @@ func (a *aggregator) isComplete(p *supervisor.Process, watchset WatchSet) bool {
 }
 
 func (a *aggregator) maybeNotify(p *supervisor.Process) {
+	now := time.Now()
+	delay := a.limiter.Limit(now)
+	if delay == 0 {
+		a.notify(p)
+	} else if delay > 0 {
+		time.AfterFunc(delay, func() {
+			a.notify(p)
+		})
+	}
+}
+
+func (a *aggregator) notify(p *supervisor.Process) {
+	a.notifyMux.Lock()
+	defer a.notifyMux.Unlock()
+
+	watchset := a.getWatches(p)
+
+	p.Logf("found %d kubernetes watches", len(watchset.KubernetesWatches))
+	p.Logf("found %d consul watches", len(watchset.ConsulWatches))
+	a.k8sWatches <- watchset.KubernetesWatches
+	a.consulWatches <- watchset.ConsulWatches
+
 	if !a.isKubernetesBootstrapped(p) {
 		return
 	}
 
-	if !a.bootstrapped && a.isComplete(p, a.watchset) {
+	if !a.bootstrapped && a.isComplete(p, watchset) {
 		p.Logf("bootstrapped!")
 		a.bootstrapped = true
 	}
@@ -198,6 +195,20 @@ func (a *aggregator) getWatches(p *supervisor.Process) WatchSet {
 	}
 
 	return result
+}
+
+func ExecWatchHook(watchHooks []string) WatchHook {
+	return func(p *supervisor.Process, snapshot string) WatchSet {
+		result := WatchSet{}
+
+		for _, hook := range watchHooks {
+			ws := invokeHook(p, hook, snapshot)
+			result.KubernetesWatches = append(result.KubernetesWatches, ws.KubernetesWatches...)
+			result.ConsulWatches = append(result.ConsulWatches, ws.ConsulWatches...)
+		}
+
+		return result
+	}
 }
 
 func lines(st string) []string {
