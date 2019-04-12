@@ -29,6 +29,7 @@ import telepresence.runner.output
 import telepresence.outbound.vpn
 import telepresence.main
 
+from telepresence.runner.runner import Runner
 from telepresence.runner.cache import Cache
 
 COMPLEX_DEPLOYMENT = """\
@@ -347,3 +348,20 @@ def test_cache_invalidation():
     assert "pi" in cache
     cache.invalidate(-1)
     assert "pi" not in cache
+
+
+def test_get_output():
+    count = 11**5
+    cmd = ["python3", "-c", "for idx in range({}): print(idx)".format(count)]
+
+    # Test verbose == False
+    runner = Runner("/dev/null", None, False)
+    data = runner.get_output(cmd)
+    lines = data.splitlines()
+    assert len(lines) == count
+
+    # Test verbose == True
+    runner = Runner("/dev/null", None, True)
+    data = runner.get_output(cmd)
+    lines = data.splitlines()
+    assert len(lines) == count

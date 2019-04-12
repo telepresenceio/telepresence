@@ -38,9 +38,11 @@ class _Logger:
         self.do_log = do_log
         self.do_capture = do_capture
         self.finished = Lock()
-        self.capture = deque(
-            maxlen=max_capture
-        )  # type: typing.MutableSequence[str]
+        if max_capture < 0:
+            capture = []  # type: typing.MutableSequence[str]
+        else:
+            capture = deque(maxlen=max_capture)
+        self.capture = capture  # type: typing.MutableSequence[str]
         self.finished.acquire()
 
     def log(self, line: str) -> None:

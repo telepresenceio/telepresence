@@ -296,7 +296,7 @@ class Runner(object):
     # Subprocesses
 
     def _make_logger(
-        self, track: int, do_log: bool, do_capture: bool, limit_capture=99999
+        self, track: int, do_log: bool, do_capture: bool, limit_capture=-1
     ) -> _Logger:
         """Create a logger that optionally captures what is logged"""
         prefix = "{:>3d}".format(track)
