@@ -85,8 +85,9 @@ spec:
         workingDir: "/somewhere/over/the/rainbow"
         imagePullPolicy: Latest
         ports:
-        - containerPort: 443
         - containerPort: 80
+          name: http-api
+          protocol: TCP
         livenessProbe:
           httpGet:
             path: /index.html
@@ -163,12 +164,13 @@ spec:
         - mountPath: /etc/nginx/conf.d
           name: configmap-volume
       - name: nginxhttps
-        image: datawire/telepresence-k8s:0.777
+        image: ___replace___me___
         terminationMessagePolicy: "FallbackToLogsOnError"
         imagePullPolicy: "IfNotPresent"
         ports:
-        - containerPort: 443
         - containerPort: 80
+          name: http-api
+          protocol: TCP
         volumeMounts:
         - mountPath: /etc/nginx/ssl
           name: secret-volume
@@ -187,15 +189,37 @@ def test_swap_deployment_changes():
     The modified Deployment used to swap out an existing Deployment replaces
     all values that might break our own image.
     """
+    # Original has a privileged port
     original = yaml.safe_load(COMPLEX_DEPLOYMENT)
     expected = yaml.safe_load(SWAPPED_DEPLOYMENT)
-    assert telepresence.proxy.deployment.new_swapped_deployment(
-        original,
-        "nginxhttps",
-        "random_id_123",
-        "datawire/telepresence-k8s:0.777",
-        False,
-    ) == (expected, original["spec"]["template"]["spec"]["containers"][1])
+    ports = telepresence.cli.PortMapping.parse(["9999"])
+    actual = telepresence.proxy.deployment.new_swapped_deployment(
+        original, "nginxhttps", "random_id_123", ports, False
+    )
+    image = actual["spec"]["template"]["spec"]["containers"][1]["image"]
+    assert "/telepresence-k8s-priv:" in image
+    expected["spec"]["template"]["spec"]["containers"][1]["image"] = image
+    assert actual == expected
+    assert (9999, 9999) in ports.local_to_remote()
+    assert (80, 80) in ports.local_to_remote()
+
+    # Test w/o privileged port.
+    original = yaml.safe_load(COMPLEX_DEPLOYMENT)
+    original["spec"]["template"]["spec"]["containers"][1]["ports"][0][
+        "containerPort"] = 8080
+    expected = yaml.safe_load(SWAPPED_DEPLOYMENT)
+    expected["spec"]["template"]["spec"]["containers"][1]["ports"][0][
+        "containerPort"] = 8080
+    ports = telepresence.cli.PortMapping.parse(["9999"])
+    actual = telepresence.proxy.deployment.new_swapped_deployment(
+        original, "nginxhttps", "random_id_123", ports, False
+    )
+    image = actual["spec"]["template"]["spec"]["containers"][1]["image"]
+    assert "/telepresence-k8s:" in image
+    expected["spec"]["template"]["spec"]["containers"][1]["image"] = image
+    assert actual == expected
+    assert (9999, 9999) in ports.local_to_remote()
+    assert (8080, 8080) in ports.local_to_remote()
 
 
 def test_portmapping():
@@ -210,9 +234,8 @@ def test_portmapping():
 
 
 # Generate a random IPv4 as a string:
-ip = st.integers(
-    min_value=0, max_value=2**32 - 1
-).map(lambda i: str(ipaddress.IPv4Address(i)))
+ip = st.integers(min_value=0, max_value=2**32 -
+                 1).map(lambda i: str(ipaddress.IPv4Address(i)))
 # Generate a list of IPv4 strings:
 ips = st.lists(elements=ip, min_size=1)
 
@@ -292,7 +315,9 @@ def test_docker_run_implies_container_method():
     If a value is given for the ``--docker-run`` argument then the method is
     *container*.
     """
-    args = telepresence.cli.parse_args(["--docker-run", "foo:latest", "/bin/bash"])
+    args = telepresence.cli.parse_args([
+        "--docker-run", "foo:latest", "/bin/bash"
+    ])
     assert args.method == "container"
 
 
@@ -315,10 +340,10 @@ def test_cache():
 
 def test_cache_invalidation():
     cache = Cache({})
-    cache.invalidate(12*60*60)
+    cache.invalidate(12 * 60 * 60)
 
     cache["pi"] = 3
-    cache.invalidate(12*60*60)
+    cache.invalidate(12 * 60 * 60)
     assert "pi" in cache
     cache.invalidate(-1)
     assert "pi" not in cache
