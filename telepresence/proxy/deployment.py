@@ -17,6 +17,9 @@ from copy import deepcopy
 from subprocess import CalledProcessError
 from typing import Dict, Optional, Tuple
 
+from telepresence import (
+    TELEPRESENCE_REMOTE_IMAGE, TELEPRESENCE_REMOTE_IMAGE_PRIV
+)
 from telepresence.cli import PortMapping
 from telepresence.runner import Runner
 from telepresence.utilities import get_alternate_nameserver
@@ -24,8 +27,18 @@ from telepresence.utilities import get_alternate_nameserver
 from .remote import get_deployment_json
 
 
+def get_image_name(expose: PortMapping) -> str:
+    """
+    Return the correct Telepresence image name (privileged or not) depending on
+    whether any privileged ports (< 1024) are used.
+    """
+    if expose.has_privileged_ports():
+        return TELEPRESENCE_REMOTE_IMAGE_PRIV
+    return TELEPRESENCE_REMOTE_IMAGE
+
+
 def existing_deployment(
-    runner: Runner, deployment_arg: str, image_name: str, expose: PortMapping,
+    runner: Runner, deployment_arg: str, expose: PortMapping,
     add_custom_nameserver: bool
 ) -> Tuple[str, Optional[str]]:
     """
@@ -48,7 +61,7 @@ def existing_deployment(
 
 
 def create_new_deployment(
-    runner: Runner, deployment_arg: str, image_name: str, expose: PortMapping,
+    runner: Runner, deployment_arg: str, expose: PortMapping,
     add_custom_nameserver: bool
 ) -> Tuple[str, str]:
     """
@@ -81,7 +94,7 @@ def create_new_deployment(
         "--limits=cpu=100m,memory=256Mi",
         "--requests=cpu=25m,memory=64Mi",
         deployment_arg,
-        "--image=" + image_name,
+        "--image=" + get_image_name(expose),
         "--labels=telepresence=" + run_id,
     ]
     # Provide a stable argument ordering.  Reverse it because that happens to
@@ -124,15 +137,8 @@ def _get_container_name(container, deployment_json):
     return container
 
 
-def _merge_expose_ports(expose, container_json):
-    expose.merge_automatic_ports([
-        port["containerPort"] for port in container_json.get("ports", [])
-        if port["protocol"] == "TCP"
-    ])
-
-
 def supplant_deployment(
-    runner: Runner, deployment_arg: str, image_name: str, expose: PortMapping,
+    runner: Runner, deployment_arg: str, expose: PortMapping,
     add_custom_nameserver: bool
 ) -> Tuple[str, str]:
     """
@@ -159,11 +165,11 @@ def supplant_deployment(
     )
     container = _get_container_name(container, deployment_json)
 
-    new_deployment_json, orig_container_json = new_swapped_deployment(
+    new_deployment_json = new_swapped_deployment(
         deployment_json,
         container,
         run_id,
-        image_name,
+        expose,
         add_custom_nameserver,
     )
 
@@ -217,8 +223,6 @@ def supplant_deployment(
     )
     resize_original(0)
 
-    _merge_expose_ports(expose, orig_container_json)
-
     span.end()
     return new_deployment_name, run_id
 
@@ -227,9 +231,9 @@ def new_swapped_deployment(
     old_deployment: Dict,
     container_to_update: str,
     run_id: str,
-    telepresence_image: str,
+    expose: PortMapping,
     add_custom_nameserver: bool,
-) -> Tuple[Dict, Dict]:
+) -> Dict:
     """
     Create a new Deployment that uses telepresence-k8s image.
 
@@ -244,8 +248,8 @@ def new_swapped_deployment(
     7. Adds TELEPRESENCE_CONTAINER_NAMESPACE env variable so the forwarder does
        not have to access the k8s API from within the pod.
 
-    Returns dictionary that can be encoded to JSON and used with kubectl apply,
-    and contents of swapped out container.
+    Returns dictionary that can be encoded to JSON and used with kubectl apply.
+    Mutates the passed-in PortMapping to include container ports.
     """
     new_deployment_json = deepcopy(old_deployment)
     new_deployment_json["spec"]["replicas"] = 1
@@ -259,7 +263,12 @@ def new_swapped_deployment(
         old_deployment["spec"]["template"]["spec"]["containers"],
     ):
         if container["name"] == container_to_update:
-            container["image"] = telepresence_image
+            # Merge container ports into the expose list
+            expose.merge_automatic_ports([
+                port["containerPort"] for port in container.get("ports", [])
+                if port["protocol"] == "TCP"
+            ])
+            container["image"] = get_image_name(expose)
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
             container["imagePullPolicy"] = "IfNotPresent"
@@ -293,7 +302,7 @@ def new_swapped_deployment(
                     }
                 }
             })
-            return new_deployment_json, old_container
+            return new_deployment_json
 
     raise RuntimeError(
         "Couldn't find container {} in the Deployment.".
@@ -302,7 +311,7 @@ def new_swapped_deployment(
 
 
 def swap_deployment_openshift(
-    runner: Runner, deployment_arg: str, image_name: str, expose: PortMapping,
+    runner: Runner, deployment_arg: str, expose: PortMapping,
     add_custom_nameserver: bool
 ) -> Tuple[str, str]:
     """
@@ -364,16 +373,14 @@ def swap_deployment_openshift(
 
     container = _get_container_name(container, dc_json)
 
-    new_dc_json, orig_container_json = new_swapped_deployment(
+    new_dc_json = new_swapped_deployment(
         dc_json,
         container,
         run_id,
-        image_name,
+        expose,
         add_custom_nameserver,
     )
 
     apply_json(new_dc_json)
-
-    _merge_expose_ports(expose, orig_container_json)
 
     return deployment, run_id

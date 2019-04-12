@@ -13,9 +13,6 @@
 # limitations under the License.
 from subprocess import CalledProcessError
 
-from telepresence import (
-    TELEPRESENCE_REMOTE_IMAGE, TELEPRESENCE_REMOTE_IMAGE_PRIV
-)
 from .deployment import (
     existing_deployment, create_new_deployment, swap_deployment_openshift,
     supplant_deployment
@@ -29,13 +26,9 @@ def setup(runner: Runner, args):
     Determine how the user wants to set up the proxy in the cluster.
     """
 
-    # Figure out if we need capability that allows for ports < 1024:
-    image_name = TELEPRESENCE_REMOTE_IMAGE
-    if any([p < 1024 for p in args.expose.remote()]):
-        if runner.kubectl.command == "oc":
-            # OpenShift doesn't support running as root:
-            raise runner.fail("OpenShift does not support ports <1024.")
-        image_name = TELEPRESENCE_REMOTE_IMAGE_PRIV
+    # OpenShift doesn't support running as root:
+    if args.expose.has_privileged_ports() and runner.kubectl.command == "oc":
+        raise runner.fail("OpenShift does not support ports <1024.")
 
     # Figure out which operation the user wants
     # Handle --deployment case
@@ -93,7 +86,7 @@ def setup(runner: Runner, args):
 
     def start_proxy(runner_: Runner) -> RemoteInfo:
         tel_deployment, run_id = operation(
-            runner_, deployment_arg, image_name, args.expose, add_custom_ns
+            runner_, deployment_arg, args.expose, add_custom_ns
         )
         remote_info = get_remote_info(
             runner,
