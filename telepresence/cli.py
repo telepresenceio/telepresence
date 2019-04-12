@@ -65,6 +65,12 @@ class PortMapping(object):
         """Return set of pairs of local, remote ports."""
         return set(self._mapping.items())
 
+    def has_privileged_ports(self) -> bool:
+        """
+        Return true if any remote port is privileged (< 1024)
+        """
+        return any([p < 1024 for p in self.remote()])
+
 
 def safe_output(args: List[str]) -> str:
     """

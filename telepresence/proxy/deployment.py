@@ -17,6 +17,9 @@ from copy import deepcopy
 from subprocess import CalledProcessError
 from typing import Dict, Optional, Tuple
 
+from telepresence import (
+    TELEPRESENCE_REMOTE_IMAGE, TELEPRESENCE_REMOTE_IMAGE_PRIV
+)
 from telepresence.cli import PortMapping
 from telepresence.runner import Runner
 from telepresence.utilities import get_alternate_nameserver
@@ -24,8 +27,18 @@ from telepresence.utilities import get_alternate_nameserver
 from .remote import get_deployment_json
 
 
+def get_image_name(expose: PortMapping) -> str:
+    """
+    Return the correct Telepresence image name (privileged or not) depending on
+    whether any privileged ports (< 1024) are used.
+    """
+    if expose.has_privileged_ports():
+        return TELEPRESENCE_REMOTE_IMAGE_PRIV
+    return TELEPRESENCE_REMOTE_IMAGE
+
+
 def existing_deployment(
-    runner: Runner, deployment_arg: str, image_name: str, expose: PortMapping,
+    runner: Runner, deployment_arg: str, expose: PortMapping,
     add_custom_nameserver: bool
 ) -> Tuple[str, Optional[str]]:
     """
@@ -48,7 +61,7 @@ def existing_deployment(
 
 
 def create_new_deployment(
-    runner: Runner, deployment_arg: str, image_name: str, expose: PortMapping,
+    runner: Runner, deployment_arg: str, expose: PortMapping,
     add_custom_nameserver: bool
 ) -> Tuple[str, str]:
     """
@@ -81,7 +94,7 @@ def create_new_deployment(
         "--limits=cpu=100m,memory=256Mi",
         "--requests=cpu=25m,memory=64Mi",
         deployment_arg,
-        "--image=" + image_name,
+        "--image=" + get_image_name(expose),
         "--labels=telepresence=" + run_id,
     ]
     # Provide a stable argument ordering.  Reverse it because that happens to
@@ -132,7 +145,7 @@ def _merge_expose_ports(expose, container_json):
 
 
 def supplant_deployment(
-    runner: Runner, deployment_arg: str, image_name: str, expose: PortMapping,
+    runner: Runner, deployment_arg: str, expose: PortMapping,
     add_custom_nameserver: bool
 ) -> Tuple[str, str]:
     """
@@ -163,7 +176,7 @@ def supplant_deployment(
         deployment_json,
         container,
         run_id,
-        image_name,
+        get_image_name(expose),
         add_custom_nameserver,
     )
 
@@ -302,7 +315,7 @@ def new_swapped_deployment(
 
 
 def swap_deployment_openshift(
-    runner: Runner, deployment_arg: str, image_name: str, expose: PortMapping,
+    runner: Runner, deployment_arg: str, expose: PortMapping,
     add_custom_nameserver: bool
 ) -> Tuple[str, str]:
     """
@@ -368,7 +381,7 @@ def swap_deployment_openshift(
         dc_json,
         container,
         run_id,
-        image_name,
+        get_image_name(expose),
         add_custom_nameserver,
     )
 
