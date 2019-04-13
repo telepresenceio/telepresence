@@ -1,6 +1,7 @@
 linters:
   enable-all: true
   disable:
+    - dupl # phil: raises false positives for non-duplicate code
     - errcheck
     - gochecknoglobals
     - gochecknoinits

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 
@@ -57,14 +58,29 @@ type Worker struct {
 	Requires      []string             // a list of required worker names
 	Retry         bool                 // whether or not to retry on error
 	wantsShutdown bool                 // true if the worker wants to shut down
-	supervisor    *Supervisor          //
-	children      int64                // atomic counter for naming children
-	process       *Process             // nil if the worker is not currently running
+	done          bool
+	supervisor    *Supervisor //
+	children      int64       // atomic counter for naming children
+	process       *Process    // nil if the worker is not currently running
 	error         error
 }
 
 func (w *Worker) Error() string {
-	return fmt.Sprintf("%s: %s", w.Name, w.error.Error())
+	if w.error == nil {
+		return "worker without an error"
+	} else {
+		return fmt.Sprintf("%s: %s", w.Name, w.error.Error())
+	}
+}
+
+func (w *Worker) Wait() {
+	s := w.supervisor
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	for !w.done {
+		s.changed.Wait()
+	}
 }
 
 func (s *Supervisor) Supervise(worker *Worker) {
@@ -214,6 +230,10 @@ func (w *Worker) reconcile() bool {
 			w.process.shutdownClosed = true
 		}
 		if w.process == nil {
+			if !w.done {
+				w.done = true
+				s.changed.Broadcast()
+			}
 			return true
 		}
 	} else if true { // I really just wanted an else here, but lint wouldn't let me do that.
@@ -250,7 +270,8 @@ func (s *Supervisor) launch(worker *Worker) {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					err = errors.Errorf("PANIC: %v", r)
+					stack := string(debug.Stack())
+					err = errors.Errorf("WORKER PANICKED: %v\n%s", r, stack)
 				}
 			}()
 			err = worker.Work(process)
@@ -263,6 +284,7 @@ func (s *Supervisor) launch(worker *Worker) {
 			if worker.Retry {
 				if worker.shuttingDown() {
 					s.remove(worker)
+					worker.done = true
 				} else {
 					process.Log("retrying...")
 				}
@@ -271,9 +293,11 @@ func (s *Supervisor) launch(worker *Worker) {
 				worker.error = err
 				s.errors = append(s.errors, worker)
 				s.wantsShutdown = true
+				worker.done = true
 			}
 		} else {
 			s.remove(worker)
+			worker.done = true
 		}
 		s.changed.Broadcast()
 	}()

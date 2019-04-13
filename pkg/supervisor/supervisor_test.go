@@ -195,7 +195,7 @@ func TestPanicExit(t *testing.T) {
 	}
 	for _, err := range errors {
 		wrk := err.(*Worker)
-		if !strings.HasPrefix(err.Error(), fmt.Sprintf("%s: PANIC: boo-", wrk.Name)) {
+		if !strings.HasPrefix(err.Error(), fmt.Sprintf("%s: WORKER PANICKED: boo-", wrk.Name)) {
 			t.Errorf("unexpected error: %v", err)
 		}
 	}
@@ -244,7 +244,7 @@ func TestDependencyPanic(t *testing.T) {
 		Requires: []string{"minion"},
 	}))
 	errors := s.Run()
-	if !(len(errors) == 1 && errors[0].Error() == "minion: PANIC: oops") {
+	if !(len(errors) == 1 && strings.HasPrefix(errors[0].Error(), "minion: WORKER PANICKED: oops")) {
 		t.Errorf("unexpected errors: %v", errors)
 	}
 	if r["dependent-minion"].state != UNSTARTED {
@@ -281,7 +281,7 @@ func TestShutdownOnPanic(t *testing.T) {
 		OnReady: func(spec *Spec) { panic("bug") },
 	}))
 	errors := s.Run()
-	if !(len(errors) == 1 && errors[0].Error() == "buggy: PANIC: bug") {
+	if !(len(errors) == 1 && strings.HasPrefix(errors[0].Error(), "buggy: WORKER PANICKED: bug")) {
 		t.Errorf("unexpected errors: %v", errors)
 	}
 }
@@ -476,7 +476,7 @@ func TestGoPanic(t *testing.T) {
 		},
 	}))
 	errors := s.Run()
-	if !(len(errors) == 1 && errors[0].Error() == "entry[1]: PANIC: boo") {
+	if !(len(errors) == 1 && strings.HasPrefix(errors[0].Error(), "entry[1]: WORKER PANICKED: boo")) {
 		t.Errorf("unexpected errors: %v", errors)
 	}
 	if !went {
@@ -543,4 +543,45 @@ func TestSuperviseAfterRun(t *testing.T) {
 	if !ran {
 		t.Fail()
 	}
+}
+
+func TestWorkerWait(t *testing.T) {
+	s := WithContext(context.Background())
+	exit := make(chan struct{})
+	log := make(chan string)
+	w := &Worker{
+		Name: "doit",
+		Work: func(p *Process) error {
+			<-exit
+			log <- "exiting"
+			return nil
+		},
+	}
+	s.Supervise(w)
+
+	go func() {
+		s.Run()
+	}()
+
+	go func() {
+		w.Wait()
+		log <- "waited"
+	}()
+
+	close(exit)
+	first := <-log
+	second := <-log
+
+	if first != "exiting" && second != "waited" {
+		t.Errorf("first=%s, second=%s", first, second)
+	}
+}
+
+func TestWaitOnWorkerStartedAfterShutdown(t *testing.T) {
+	s := WithContext(context.Background())
+	w := &Worker{Name: "noop", Work: func(p *Process) error { return nil }}
+	s.Supervise(w)
+	s.Shutdown()
+	s.Run()
+	w.Wait()
 }

@@ -254,7 +254,7 @@ func kubewatch(cmd *cobra.Command, args []string) {
 		Watcher:     k8s.NewClient(nil).Watcher(),
 		SyncCommand: SYNC_COMMAND,
 		Kinds:       args,
-		Limiter:     limiter.NewIntervalLimiter(MIN_INTERVAL),
+		Limiter:     limiter.NewInterval(MIN_INTERVAL),
 		WarmupDelay: WARMUP_DELAY,
 		router:      http.NewServeMux(),
 		snapshots:   make(map[string]map[string][]byte),

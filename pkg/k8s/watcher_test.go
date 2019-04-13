@@ -3,6 +3,8 @@ package k8s
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -71,4 +73,22 @@ func TestWatchCustom(t *testing.T) {
 			t.Errorf("expected the halls, got %v", spec["deck"])
 		}
 	}
+}
+
+func TestSelectiveWatch(t *testing.T) {
+	w := NewClient(nil).Watcher()
+	services := []string{}
+	err := w.SelectiveWatch("", "services", "metadata.name=kubernetes", "", func(w *Watcher) {
+		for _, r := range w.List("services") {
+			services = append(services, r.QName())
+		}
+	})
+	if err != nil {
+		panic(err)
+	}
+	time.AfterFunc(1*time.Second, func() {
+		w.Stop()
+	})
+	w.Wait()
+	require.Equal(t, services, []string{"kubernetes.default"})
 }

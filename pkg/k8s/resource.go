@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,7 +13,7 @@ import (
 
 	"github.com/Masterminds/sprig"
 	ms "github.com/mitchellh/mapstructure"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 var READY = map[string]func(Resource) bool{
@@ -136,6 +137,10 @@ func (r Resource) Status() Map {
 	return Map(r).getMap("status")
 }
 
+func (r Resource) Data() Map {
+	return Map(r).getMap("data")
+}
+
 func (r Resource) Spec() Map {
 	return Map(r).getMap("spec")
 }
@@ -176,6 +181,10 @@ func (r Resource) Namespace() string { return r.Metadata().Namespace() }
 
 func (m Metadata) ResourceVersion() string { return Map(m).getString("resourceVersion") }
 func (r Resource) ResourceVersion() string { return r.Metadata().ResourceVersion() }
+
+func (m Metadata) Annotations() map[string]interface{} {
+	return Map(m).getMap("annotations")
+}
 
 func (m Metadata) QName() string {
 	ns := m.Namespace()
@@ -250,13 +259,8 @@ func ExpandResource(path string) (result []byte, err error) {
 	return
 }
 
-func LoadResources(path string) (result []Resource, err error) {
-	var input []byte
-	input, err = ExpandResource(path)
-	if err != nil {
-		return
-	}
-	d := yaml.NewDecoder(bytes.NewReader(input))
+func ParseResources(name, input string) (result []Resource, err error) {
+	d := yaml.NewDecoder(bytes.NewReader([]byte(input)))
 	for {
 		var uns map[interface{}]interface{}
 		err = d.Decode(&uns)
@@ -264,13 +268,23 @@ func LoadResources(path string) (result []Resource, err error) {
 			if err == io.EOF {
 				err = nil
 			} else {
-				err = fmt.Errorf("%s: %v", path, err)
+				err = fmt.Errorf("%s: %v", name, err)
 			}
 			return
 		}
 		res := NewResourceFromYaml(uns)
 		result = append(result, res)
 	}
+}
+
+func LoadResources(path string) (result []Resource, err error) {
+	var input []byte
+	input, err = ExpandResource(path)
+	if err != nil {
+		return
+	}
+	result, err = ParseResources(path, string(input))
+	return
 }
 
 func SaveResources(path string, resources []Resource) error {
@@ -324,6 +338,39 @@ func MarshalResources(resources []Resource) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+//func (r *Resource) MarshalJSON() ([]byte, error) {
+//	return json.Marshal(r)
+//}
+//
+//func (r *Resource) UnmarshalJSON(data []byte) error {
+//	return json.Unmarshal(data, r)
+//}
+
+//func (r Resource) MarshalJSON() ([]byte, error) {
+//	return json.Marshal(r)
+//}
+//
+//func (r Resource) UnmarshalJSON(data []byte) error {
+//	return json.Unmarshal(data, &Resource{})
+//}
+
 func MarshalResource(resource Resource) ([]byte, error) {
 	return MarshalResources([]Resource{resource})
+}
+
+func MarshalResourcesJSON(resources []Resource) ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	e := json.NewEncoder(buf)
+	for _, r := range resources {
+		err := e.Encode(r)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return buf.Bytes(), nil
+}
+
+func MarshalResourceJSON(resource Resource) ([]byte, error) {
+	return MarshalResourcesJSON([]Resource{resource})
 }
