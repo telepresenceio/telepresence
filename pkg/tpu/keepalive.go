@@ -30,7 +30,7 @@ func NewKeeper(prefix, command string) (k *Keeper) {
 }
 
 func (k *Keeper) Stop() {
-	k.stop <- nil
+	close(k.stop)
 	k.Wait()
 }
 
