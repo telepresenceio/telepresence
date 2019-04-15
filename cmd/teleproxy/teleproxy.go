@@ -359,8 +359,9 @@ func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
 			ok := p.Do(func() {
 				w = k8s.NewClient(kubeinfo).Watcher()
 
-				w.Watch("services", func(w *k8s.Watcher) {
+				updateTable := func(w *k8s.Watcher) {
 					table := route.Table{Name: "kubernetes"}
+
 					for _, svc := range w.List("services") {
 						ip, ok := svc.Spec()["clusterIP"]
 						// for headless services the IP is None, we
@@ -377,7 +378,48 @@ func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
 							})
 						}
 					}
+
+					for _, pod := range w.List("pods") {
+						qname := ""
+
+						hostname, ok := pod.Spec()["hostname"]
+						if ok && hostname != "" {
+							qname += hostname.(string)
+						}
+
+						subdomain, ok := pod.Spec()["subdomain"]
+						if ok && subdomain != "" {
+							qname += "." + subdomain.(string)
+						}
+
+						if qname == "" {
+							// Note: this is a departure from kubernetes, kubernetes will
+							// simply not publish a dns name in this case.
+							qname = pod.Name() + "." + pod.Namespace() + ".pod.cluster.local"
+						} else {
+							qname += ".svc.cluster.local"
+						}
+
+						ip, ok := pod.Status()["podIP"]
+						if ok && ip != "" {
+							table.Add(route.Route{
+								Name:   qname,
+								Ip:     ip.(string),
+								Proto:  "tcp",
+								Target: "1234",
+							})
+						}
+					}
+
 					post(table)
+				}
+
+				w.Watch("services", func(w *k8s.Watcher) {
+					updateTable(w)
+				})
+
+				w.Watch("pods", func(w *k8s.Watcher) {
+					updateTable(w)
 				})
 			})
 
