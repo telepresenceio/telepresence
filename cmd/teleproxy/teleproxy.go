@@ -60,6 +60,21 @@ const (
 	INTERCEPT = "intercept"
 	BRIDGE    = "bridge"
 	VERSION   = "version"
+
+	// This is the port to which we redirect dns requests. It should probably eventually be configurable and/or
+	// dynamically chosen
+	DNS_REDIR_PORT = "1233"
+
+	// This is the port to which we redirect proxied ips. It should probably eventually be configurable and/or
+	// dynamically chosen.
+	PROXY_REDIR_PORT = "1234"
+
+	// This is a magic ip from the localhost range that we resolve "teleproxy" to and intercept for convenient
+	// access to the teleproxy api server. This enables things like `curl teleproxy/api/tables/`. In theory this
+	// could be any arbitrary value that is unlikely to conflict with a real world ip, but it is also handy for it
+	// to be fixed so that we can debug even if dns isn't working by doing stuff like `curl
+	// 127.254.254.254/api/...`. This value happens to be the last value in the ipv4 localhost range.
+	MAGIC_IP = "127.254.254.254"
 )
 
 func main() {
@@ -254,12 +269,12 @@ func intercept(p *supervisor.Process, dnsIP string, fallbackIP string) error {
 			bootstrap := route.Table{Name: "bootstrap"}
 			bootstrap.Add(route.Route{
 				Ip:     dnsIP,
-				Target: "1233",
+				Target: DNS_REDIR_PORT,
 				Proto:  "udp",
 			})
 			bootstrap.Add(route.Route{
 				Name:   "teleproxy",
-				Ip:     "127.254.254.254",
+				Ip:     MAGIC_IP,
 				Target: apis.Port(),
 				Proto:  "tcp",
 			})
@@ -289,7 +304,7 @@ func intercept(p *supervisor.Process, dnsIP string, fallbackIP string) error {
 		Requires: []string{},
 		Work: func(p *supervisor.Process) error {
 			srv := dns.Server{
-				Listeners: dnsListeners("1233"),
+				Listeners: dnsListeners(DNS_REDIR_PORT),
 				Fallback:  fallbackIP + ":53",
 				Resolve: func(domain string) string {
 					route := iceptor.Resolve(domain)
@@ -315,7 +330,7 @@ func intercept(p *supervisor.Process, dnsIP string, fallbackIP string) error {
 			// hmm, we may not actually need to get the original
 			// destination, we could just forward each ip to a unique port
 			// and either listen on that port or run port-forward
-			proxy, err := proxy.NewProxy(":1234", iceptor.Destination)
+			proxy, err := proxy.NewProxy(fmt.Sprintf(":%s", PROXY_REDIR_PORT), iceptor.Destination)
 			if err != nil {
 				return errors.Wrap(err, "Proxy")
 			}
@@ -374,7 +389,7 @@ func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
 								Name:   qualName,
 								Ip:     ip.(string),
 								Proto:  "tcp",
-								Target: "1234",
+								Target: PROXY_REDIR_PORT,
 							})
 						}
 					}
@@ -406,7 +421,7 @@ func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
 								Name:   qname,
 								Ip:     ip.(string),
 								Proto:  "tcp",
-								Target: "1234",
+								Target: PROXY_REDIR_PORT,
 							})
 						}
 					}
