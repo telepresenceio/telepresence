@@ -107,7 +107,7 @@ type MockWatchMaker struct {
 	errorBeforeCreate bool
 }
 
-func (m *MockWatchMaker) MakeKubernetesWatch(spec *KubernetesWatchSpec) (*supervisor.Worker, error) {
+func (m *MockWatchMaker) MakeKubernetesWatch(spec KubernetesWatchSpec) (*supervisor.Worker, error) {
 	if m.errorBeforeCreate {
 		return nil, fmt.Errorf("failed to create watch (errorBeforeCreate: %t)", m.errorBeforeCreate)
 	}
@@ -116,7 +116,7 @@ func (m *MockWatchMaker) MakeKubernetesWatch(spec *KubernetesWatchSpec) (*superv
 		fmt.Sprintf("%s|%s|%s|%s", spec.Namespace, spec.Kind, spec.FieldSelector, spec.LabelSelector)), nil
 }
 
-func (m *MockWatchMaker) MakeConsulWatch(spec *ConsulWatchSpec) (*supervisor.Worker, error) {
+func (m *MockWatchMaker) MakeConsulWatch(spec ConsulWatchSpec) (*supervisor.Worker, error) {
 	if m.errorBeforeCreate {
 		return nil, fmt.Errorf("failed to create watch (errorBeforeCreate: %t)", m.errorBeforeCreate)
 	}
