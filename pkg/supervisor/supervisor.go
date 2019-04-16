@@ -195,6 +195,12 @@ func (s *Supervisor) dependents(worker *Worker) (result []*Worker) {
 // make sure anything that would like to be running is actually
 // running
 func (s *Supervisor) reconcile() {
+
+	// XXX: added this for debugging shutdown stalls, need a better way to
+	// log this that doesn't add so much noise normally
+	//
+	//s.Logger.Printf("WORKERS: %v", s.names)
+
 	var cleanup []string
 	for _, n := range s.names {
 		w := s.workers[n]
@@ -346,6 +352,7 @@ func (p *Process) Logf(format string, args ...interface{}) {
 	p.supervisor.Logger.Printf("%s: %v", p.Worker().Name, fmt.Sprintf(format, args...))
 }
 
+// Shorthand for launching a child worker... it is named "<parent>[<child-count>]"
 func (p *Process) Go(fn func(*Process) error) *Worker {
 	id := atomic.AddInt64(&p.Worker().children, 1)
 	w := &Worker{
@@ -354,4 +361,22 @@ func (p *Process) Go(fn func(*Process) error) *Worker {
 	}
 	p.Supervisor().Supervise(w)
 	return w
+}
+
+// Shorthand for proper shutdown handling while doing a potentially
+// blocking activity. This method will return true if the activity
+// completes normally and false if it was abandoned.
+func (p *Process) Do(fn func()) bool {
+	done := make(chan struct{})
+	go func() {
+		fn()
+		close(done)
+	}()
+
+	select {
+	case <-p.Shutdown():
+		return false
+	case <-done:
+		return true
+	}
 }

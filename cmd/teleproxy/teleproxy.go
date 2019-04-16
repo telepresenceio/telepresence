@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
+	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/datawire/teleproxy/pkg/tpu"
 
 	"github.com/datawire/teleproxy/internal/pkg/api"
@@ -58,13 +60,28 @@ const (
 	INTERCEPT = "intercept"
 	BRIDGE    = "bridge"
 	VERSION   = "version"
+
+	// This is the port to which we redirect dns requests. It should probably eventually be configurable and/or
+	// dynamically chosen
+	DNS_REDIR_PORT = "1233"
+
+	// This is the port to which we redirect proxied ips. It should probably eventually be configurable and/or
+	// dynamically chosen.
+	PROXY_REDIR_PORT = "1234"
+
+	// This is a magic ip from the localhost range that we resolve "teleproxy" to and intercept for convenient
+	// access to the teleproxy api server. This enables things like `curl teleproxy/api/tables/`. In theory this
+	// could be any arbitrary value that is unlikely to conflict with a real world ip, but it is also handy for it
+	// to be fixed so that we can debug even if dns isn't working by doing stuff like `curl
+	// 127.254.254.254/api/...`. This value happens to be the last value in the ipv4 localhost range.
+	MAGIC_IP = "127.254.254.254"
 )
 
 func main() {
 	var version = flag.Bool("version", false, "alias for '-mode=version'")
 	var mode = flag.String("mode", "", "mode of operation ('intercept', 'bridge', or 'version')")
 	var kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	var context = flag.String("context", "", "context to use (default: the current context)")
+	var kcontext = flag.String("context", "", "context to use (default: the current context)")
 	var namespace = flag.String("namespace", "", "namespace to use (default: the current namespace for the context")
 	var dnsIP = flag.String("dns", "", "dns ip address")
 	var fallbackIP = flag.String("fallback", "", "dns fallback")
@@ -92,24 +109,65 @@ func main() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
-	if *mode == DEFAULT || *mode == INTERCEPT {
-		shutdown, err := intercept(*dnsIP, *fallbackIP)
-		if err != nil {
-			log.Printf("TPY: Error: %v", err)
-		}
-		defer shutdown()
-	}
-	if *mode == DEFAULT || *mode == BRIDGE {
-		kubeinfo, err := k8s.NewKubeInfo(*kubeconfig, *context, *namespace)
-		if err != nil {
-			log.Fatalln("KubeInfo failed:", err)
-		}
-		shutdown := bridges(kubeinfo)
-		defer shutdown()
-	}
-	sd_daemon.Notification{State: "READY=1"}.Send(false)
+	ctx, cancel := context.WithCancel(context.Background())
+	sup := supervisor.WithContext(ctx)
 
-	log.Printf("TPY: %v", <-signalChan)
+	if *mode == DEFAULT || *mode == INTERCEPT {
+		sup.Supervise(&supervisor.Worker{
+			Name: "setup-intercept",
+			Work: func(p *supervisor.Process) error {
+				return intercept(p, *dnsIP, *fallbackIP)
+			},
+		})
+	}
+
+	if *mode == DEFAULT || *mode == BRIDGE {
+		requires := []string{}
+		if *mode != BRIDGE {
+			requires = append(requires, "interceptor")
+		}
+		sup.Supervise(&supervisor.Worker{
+			Name:     "setup-bridges",
+			Requires: requires,
+			Work: func(p *supervisor.Process) error {
+				kubeinfo, err := k8s.NewKubeInfo(*kubeconfig, *kcontext, *namespace)
+				if err != nil {
+					return errors.Wrap(err, "k8s.NewKubeInfo")
+				}
+				bridges(p, kubeinfo)
+				return nil
+			},
+		})
+	}
+
+	sup.Supervise(&supervisor.Worker{
+		Name:     "ready-notifier",
+		Requires: []string{"interceptor", "api-server", "dns-server", "proxy-server", "search-override"},
+		Work: func(p *supervisor.Process) error {
+			p.Do(func() {
+				sd_daemon.Notification{State: "READY=1"}.Send(false)
+				p.Ready()
+			})
+			<-p.Shutdown()
+			return nil
+		},
+	})
+
+	sup.Supervise(&supervisor.Worker{
+		Name: "signal-handler",
+		Work: func(p *supervisor.Process) error {
+			select {
+			case <-p.Shutdown():
+			case s := <-signalChan:
+				p.Logf("TPY: %v", s)
+				cancel()
+			}
+			return nil
+		},
+	})
+
+	sup.Run()
+	log.Println("done")
 }
 
 func kubeDie(err error) {
@@ -158,13 +216,19 @@ func checkKubectl() {
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
 //
 // If fallbackIP is empty, it will default to Google DNS.
-func intercept(dnsIP string, fallbackIP string) (func(), error) {
+func intercept(p *supervisor.Process, dnsIP string, fallbackIP string) error {
 	// xxx check that we are root
+
+	if os.Geteuid() != 0 {
+		return errors.New("ERROR: teleproxy must be run as root or suid root")
+	}
+
+	sup := p.Supervisor()
 
 	if dnsIP == "" {
 		dat, err := ioutil.ReadFile("/etc/resolv.conf")
 		if err != nil {
-			return nil, err
+			return err
 		}
 		for _, line := range strings.Split(string(dat), "\n") {
 			if strings.Contains(line, "nameserver") {
@@ -176,7 +240,7 @@ func intercept(dnsIP string, fallbackIP string) (func(), error) {
 		}
 	}
 	if dnsIP == "" {
-		return nil, errors.New("couldn't determine dns ip from /etc/resolv.conf")
+		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
 	}
 
 	if fallbackIP == "" {
@@ -185,98 +249,204 @@ func intercept(dnsIP string, fallbackIP string) (func(), error) {
 		} else {
 			fallbackIP = "8.8.8.8"
 		}
-		log.Printf("TPY: Automatically set -fallback=%v", dnsIP)
+		log.Printf("TPY: Automatically set -fallback=%v", fallbackIP)
 	}
 	if fallbackIP == dnsIP {
-		return nil, errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
+		return errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
 	}
 
 	iceptor := interceptor.NewInterceptor("teleproxy")
-
 	apis, err := api.NewAPIServer(iceptor)
 	if err != nil {
-		return nil, errors.Wrap(err, "API Server")
+		return errors.Wrap(err, "API Server")
 	}
 
-	srv := dns.Server{
-		Listeners: dnsListeners("1233"),
-		Fallback:  fallbackIP + ":53",
-		Resolve: func(domain string) string {
-			route := iceptor.Resolve(domain)
-			if route != nil {
-				return route.Ip
-			} else {
-				return ""
-			}
+	sup.Supervise(&supervisor.Worker{
+		Name:     "interceptor",
+		Requires: []string{}, // XXX: this will need to include the api server once it is changed to not bind early
+		Work: func(p *supervisor.Process) error {
+			iceptor.Start()
+			bootstrap := route.Table{Name: "bootstrap"}
+			bootstrap.Add(route.Route{
+				Ip:     dnsIP,
+				Target: DNS_REDIR_PORT,
+				Proto:  "udp",
+			})
+			bootstrap.Add(route.Route{
+				Name:   "teleproxy",
+				Ip:     MAGIC_IP,
+				Target: apis.Port(),
+				Proto:  "tcp",
+			})
+
+			iceptor.Update(bootstrap)
+			p.Ready()
+			<-p.Shutdown()
+			iceptor.Stop()
+			return nil
 		},
-	}
-
-	// hmm, we may not actually need to get the original
-	// destination, we could just forward each ip to a unique port
-	// and either listen on that port or run port-forward
-	proxy, err := proxy.NewProxy(":1234", iceptor.Destination)
-	if err != nil {
-		return nil, errors.Wrap(err, "Proxy")
-	}
-
-	bootstrap := route.Table{Name: "bootstrap"}
-	bootstrap.Add(route.Route{
-		Ip:     dnsIP,
-		Target: "1233",
-		Proto:  "udp",
-	})
-	bootstrap.Add(route.Route{
-		Name:   "teleproxy",
-		Ip:     "127.254.254.254",
-		Target: apis.Port(),
-		Proto:  "tcp",
 	})
 
-	apis.Start()
-	srv.Start()
-	proxy.Start(10000)
-	restore := dns.OverrideSearchDomains(".")
+	sup.Supervise(&supervisor.Worker{
+		Name:     "api-server",
+		Requires: []string{},
+		Work: func(p *supervisor.Process) error {
+			apis.Start()
+			p.Ready()
+			<-p.Shutdown()
+			apis.Stop()
+			return nil
+		},
+	})
 
-	iceptor.Start()
-	iceptor.Update(bootstrap)
+	sup.Supervise(&supervisor.Worker{
+		Name:     "dns-server",
+		Requires: []string{},
+		Work: func(p *supervisor.Process) error {
+			srv := dns.Server{
+				Listeners: dnsListeners(DNS_REDIR_PORT),
+				Fallback:  fallbackIP + ":53",
+				Resolve: func(domain string) string {
+					route := iceptor.Resolve(domain)
+					if route != nil {
+						return route.Ip
+					} else {
+						return ""
+					}
+				},
+			}
+			srv.Start()
+			p.Ready()
+			<-p.Shutdown()
+			// there is no srv.Stop()
+			return nil
+		},
+	})
 
-	return func() {
-		// stop the api server first since it makes calls into
-		// the interceptor
-		apis.Stop()
-		iceptor.Stop()
-		restore()
-		dns.Flush()
-	}, nil
+	sup.Supervise(&supervisor.Worker{
+		Name:     "proxy-server",
+		Requires: []string{},
+		Work: func(p *supervisor.Process) error {
+			// hmm, we may not actually need to get the original
+			// destination, we could just forward each ip to a unique port
+			// and either listen on that port or run port-forward
+			proxy, err := proxy.NewProxy(fmt.Sprintf(":%s", PROXY_REDIR_PORT), iceptor.Destination)
+			if err != nil {
+				return errors.Wrap(err, "Proxy")
+			}
+
+			proxy.Start(10000)
+			p.Ready()
+			<-p.Shutdown()
+			// there is no proxy.Stop()
+			return nil
+		},
+	})
+
+	sup.Supervise(&supervisor.Worker{
+		Name:     "search-override",
+		Requires: []string{"interceptor"},
+		Work: func(p *supervisor.Process) error {
+			restore := dns.OverrideSearchDomains(".")
+			p.Ready()
+			<-p.Shutdown()
+			restore()
+			dns.Flush()
+			return nil
+		},
+	})
+
+	return nil
 }
 
-func bridges(kubeinfo *k8s.KubeInfo) func() {
-	disconnect := connect(kubeinfo)
+func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
+	sup := p.Supervisor()
 
-	// setup kubernetes bridge
-	log.Printf("BRG: kubernetes ctx=%s ns=%s", kubeinfo.Context, kubeinfo.Namespace)
-	w := k8s.NewClient(kubeinfo).Watcher()
-	w.Watch("services", func(w *k8s.Watcher) {
-		table := route.Table{Name: "kubernetes"}
-		for _, svc := range w.List("services") {
-			ip, ok := svc.Spec()["clusterIP"]
-			// for headless services the IP is None, we
-			// should properly handle these by listening
-			// for endpoints and returning multiple A
-			// records at some point
-			if ok && ip != "None" {
-				qualName := svc.Name() + "." + svc.Namespace() + ".svc.cluster.local"
-				table.Add(route.Route{
-					Name:   qualName,
-					Ip:     ip.(string),
-					Proto:  "tcp",
-					Target: "1234",
+	connect(p, kubeinfo)
+
+	sup.Supervise(&supervisor.Worker{
+		Name: "kubernetes-bridge",
+		Work: func(p *supervisor.Process) error {
+			// setup kubernetes bridge
+			p.Logf("kubernetes ctx=%s ns=%s", kubeinfo.Context, kubeinfo.Namespace)
+			var w *k8s.Watcher
+
+			ok := p.Do(func() {
+				w = k8s.NewClient(kubeinfo).Watcher()
+
+				updateTable := func(w *k8s.Watcher) {
+					table := route.Table{Name: "kubernetes"}
+
+					for _, svc := range w.List("services") {
+						ip, ok := svc.Spec()["clusterIP"]
+						// for headless services the IP is None, we
+						// should properly handle these by listening
+						// for endpoints and returning multiple A
+						// records at some point
+						if ok && ip != "None" {
+							qualName := svc.Name() + "." + svc.Namespace() + ".svc.cluster.local"
+							table.Add(route.Route{
+								Name:   qualName,
+								Ip:     ip.(string),
+								Proto:  "tcp",
+								Target: PROXY_REDIR_PORT,
+							})
+						}
+					}
+
+					for _, pod := range w.List("pods") {
+						qname := ""
+
+						hostname, ok := pod.Spec()["hostname"]
+						if ok && hostname != "" {
+							qname += hostname.(string)
+						}
+
+						subdomain, ok := pod.Spec()["subdomain"]
+						if ok && subdomain != "" {
+							qname += "." + subdomain.(string)
+						}
+
+						if qname == "" {
+							// Note: this is a departure from kubernetes, kubernetes will
+							// simply not publish a dns name in this case.
+							qname = pod.Name() + "." + pod.Namespace() + ".pod.cluster.local"
+						} else {
+							qname += ".svc.cluster.local"
+						}
+
+						ip, ok := pod.Status()["podIP"]
+						if ok && ip != "" {
+							table.Add(route.Route{
+								Name:   qname,
+								Ip:     ip.(string),
+								Proto:  "tcp",
+								Target: PROXY_REDIR_PORT,
+							})
+						}
+					}
+
+					post(table)
+				}
+
+				w.Watch("services", func(w *k8s.Watcher) {
+					updateTable(w)
 				})
+
+				w.Watch("pods", func(w *k8s.Watcher) {
+					updateTable(w)
+				})
+			})
+
+			if ok {
+				w.Start()
+				p.Ready()
+				<-p.Shutdown()
+				w.Stop()
 			}
-		}
-		post(table)
+			return nil
+		},
 	})
-	w.Start()
 
 	// Set up DNS search path based on current Kubernetes namespace
 	paths := []string{
@@ -296,22 +466,26 @@ func bridges(kubeinfo *k8s.KubeInfo) func() {
 		panic(err) // Because this will fail if we win the startup race
 	}
 
-	// setup docker bridge
-	dw := docker.NewWatcher()
-	dw.Start(func(w *docker.Watcher) {
-		table := route.Table{Name: "docker"}
-		for name, ip := range w.Containers {
-			table.Add(route.Route{Name: name, Ip: ip, Proto: "tcp"})
-		}
-		post(table)
+	sup.Supervise(&supervisor.Worker{
+		Name: "docker-bridge",
+		Work: func(p *supervisor.Process) error {
+			// setup docker bridge
+			dw := docker.NewWatcher()
+			dw.Start(func(w *docker.Watcher) {
+				table := route.Table{Name: "docker"}
+				for name, ip := range w.Containers {
+					table.Add(route.Route{Name: name, Ip: ip, Proto: "tcp"})
+				}
+				post(table)
+			})
+			p.Ready()
+			<-p.Shutdown()
+			dw.Stop()
+			return nil
+		},
 	})
 
-	return func() {
-		dw.Stop()
-		w.Stop()
-		post(route.Table{Name: "kubernetes"}, route.Table{Name: "docker"})
-		disconnect()
-	}
+	return nil
 }
 
 func post(tables ...route.Table) {
@@ -350,27 +524,58 @@ spec:
       containerPort: 8022
 `
 
-func connect(kubeinfo *k8s.KubeInfo) func() {
-	// setup remote teleproxy pod
-	apply := tpu.NewKeeper("KAP", "kubectl "+kubeinfo.GetKubectl("apply -f -"))
-	apply.Input = TELEPROXY_POD
-	apply.Limit = 1
-	apply.Start()
-	apply.Wait()
+func connect(p *supervisor.Process, kubeinfo *k8s.KubeInfo) {
+	sup := p.Supervisor()
 
-	pf := tpu.NewKeeper("KPF", "kubectl "+kubeinfo.GetKubectl("port-forward pod/teleproxy 8022"))
-	pf.Inspect = "kubectl " + kubeinfo.GetKubectl("get pod/teleproxy")
+	// XXX: the dependencies here are correct, but the keeper
+	// interface is async, so they don't actually accomplish
+	// anything... this will change when keeper dies...
 
-	// XXX: probably need some kind of keepalive check for ssh, first
-	// curl after wakeup seems to trigger detection of death
-	ssh := tpu.NewKeeper("SSH", "ssh -D localhost:1080 -C -N -oConnectTimeout=5 -oExitOnForwardFailure=yes "+
-		"-oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null telepresence@localhost -p 8022")
+	sup.Supervise(&supervisor.Worker{
+		Name: "teleproxy-pod",
+		Work: func(p *supervisor.Process) error {
+			// setup remote teleproxy pod
+			apply := tpu.NewKeeper("KAP", "kubectl "+kubeinfo.GetKubectl("apply -f -"))
+			apply.Input = TELEPROXY_POD
+			apply.Limit = 1
+			apply.Start()
+			p.Do(func() {
+				apply.Wait()
+				p.Ready()
+			})
+			<-p.Shutdown()
+			apply.Stop()
+			return nil
+		},
+	})
 
-	pf.Start()
-	ssh.Start()
+	sup.Supervise(&supervisor.Worker{
+		Name:     "port-forward",
+		Requires: []string{"teleproxy-pod"},
+		Work: func(p *supervisor.Process) error {
+			pf := tpu.NewKeeper("KPF", "kubectl "+kubeinfo.GetKubectl("port-forward pod/teleproxy 8022"))
+			pf.Inspect = "kubectl " + kubeinfo.GetKubectl("get pod/teleproxy")
+			pf.Start()
+			p.Ready()
+			<-p.Shutdown()
+			pf.Stop()
+			return nil
+		},
+	})
 
-	return func() {
-		ssh.Stop()
-		pf.Stop()
-	}
+	sup.Supervise(&supervisor.Worker{
+		Name:     "ssh-tunnel",
+		Requires: []string{"port-forward"},
+		Work: func(p *supervisor.Process) error {
+			// XXX: probably need some kind of keepalive check for ssh, first
+			// curl after wakeup seems to trigger detection of death
+			ssh := tpu.NewKeeper("SSH", "ssh -D localhost:1080 -C -N -oConnectTimeout=5 -oExitOnForwardFailure=yes "+
+				"-oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null telepresence@localhost -p 8022")
+			ssh.Start()
+			p.Ready()
+			<-p.Shutdown()
+			ssh.Stop()
+			return nil
+		},
+	})
 }
