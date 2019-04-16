@@ -25,7 +25,7 @@ from functools import partial
 from inspect import currentframe, getframeinfo
 from pathlib import Path
 from shutil import rmtree, which
-from subprocess import STDOUT, CalledProcessError, Popen
+from subprocess import STDOUT, CalledProcessError, TimeoutExpired, Popen
 from tempfile import mkdtemp
 from threading import Thread
 from time import sleep, time
@@ -317,6 +317,7 @@ class Runner(object):
         stderr_to_stdout: bool,
         args: typing.List[str],
         capture_limit: int,
+        timeout: typing.Optional[float],
         input: typing.Optional[bytes],
         env: typing.Optional[typing.Dict[str, str]],
     ) -> str:
@@ -358,10 +359,34 @@ class Runner(object):
             # Failed to launch, so no need to wrap up capture stuff.
             self.output.write("[{}] {}".format(track, exc))
             raise
-        retcode = process.wait()
+
+        TIMED_OUT_RETCODE = -999
+        try:
+            retcode = process.wait(timeout)
+        except TimeoutExpired:
+            retcode = TIMED_OUT_RETCODE  # sentinal for timeout
+            process.terminate()
+            try:
+                process.wait(timeout=1)
+            except TimeoutExpired:
+                process.kill()
+                process.wait()
+
         output = out_logger.get_captured()
         spent = span.end()
 
+        if retcode == TIMED_OUT_RETCODE:
+            # Command timed out. Need to raise TE.
+            self.output.write(
+                "[{}] timed out after {:0.2f} secs.".format(track, spent)
+            )
+            assert timeout is not None
+            raise TimeoutExpired(
+                args,
+                timeout,
+                output,
+                None if stderr_to_stdout else err_logger.get_captured(),
+            )
         if retcode:
             # Command failed. Need to raise CPE.
             self.output.write(
@@ -383,6 +408,7 @@ class Runner(object):
     def check_call(
         self,
         args: typing.List[str],
+        timeout: typing.Optional[float] = None,
         input: typing.Optional[bytes] = None,
         env: typing.Optional[typing.Dict[str, str]] = None,
     ):
@@ -393,6 +419,7 @@ class Runner(object):
             False,
             args,
             10,  # limited capture, only used for error reporting
+            timeout,
             input,
             env,
         )
@@ -400,6 +427,7 @@ class Runner(object):
     def get_output(
         self,
         args: typing.List[str],
+        timeout: typing.Optional[float] = None,
         stderr_to_stdout=False,
         reveal=False,
         input: typing.Optional[bytes] = None,
@@ -412,6 +440,7 @@ class Runner(object):
             stderr_to_stdout,
             args,
             -1,  # unlimited capture
+            timeout,
             input,
             env,
         )
