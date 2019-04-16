@@ -300,7 +300,7 @@ class Runner(object):
     # Subprocesses
 
     def _make_logger(
-        self, track: int, do_log: bool, do_capture: bool, limit_capture=-1
+        self, track: int, do_log: bool, do_capture: bool, capture_limit
     ) -> _Logger:
         """Create a logger that optionally captures what is logged"""
         prefix = "{:>3d}".format(track)
@@ -308,7 +308,7 @@ class Runner(object):
         def write(line: str):
             self.output.write(mask_sensitive_data(line), prefix=prefix)
 
-        return _Logger(write, do_log, do_capture, limit_capture)
+        return _Logger(write, do_log, do_capture, capture_limit)
 
     def _run_command_sync(
         self,
@@ -316,6 +316,7 @@ class Runner(object):
         log_stdout: bool,
         stderr_to_stdout: bool,
         args: typing.List[str],
+        capture_limit: int,
         input: typing.Optional[bytes],
         env: typing.Optional[typing.Dict[str, str]],
     ) -> str:
@@ -340,13 +341,15 @@ class Runner(object):
             kwargs["input"] = input
 
         # Set up capture/logging
-        out_logger = self._make_logger(track, log_stdout or self.verbose, True)
+        out_logger = self._make_logger(
+            track, log_stdout or self.verbose, True, capture_limit
+        )
         if stderr_to_stdout:
             # This logger won't be used
-            err_logger = self._make_logger(track, False, False)
+            err_logger = self._make_logger(track, False, False, capture_limit)
             kwargs["stderr"] = STDOUT
         else:
-            err_logger = self._make_logger(track, True, True)
+            err_logger = self._make_logger(track, True, True, capture_limit)
 
         # Launch the process and wait for it to finish
         try:
@@ -384,8 +387,15 @@ class Runner(object):
         env: typing.Optional[typing.Dict[str, str]] = None,
     ):
         """Run a subprocess, make sure it exited with 0."""
-        self._run_command_sync(("Running", "ran"), True, False, args, input,
-                               env)
+        self._run_command_sync(
+            ("Running", "ran"),
+            True,
+            False,
+            args,
+            10,  # limited capture, only used for error reporting
+            input,
+            env,
+        )
 
     def get_output(
         self,
@@ -401,6 +411,7 @@ class Runner(object):
             reveal,
             stderr_to_stdout,
             args,
+            -1,  # unlimited capture
             input,
             env,
         )
