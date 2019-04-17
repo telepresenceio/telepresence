@@ -1,0 +1,1 @@
+When calling `sudo`, Telepresence offers a link to [documentation](https://www.telepresence.io/reference/install#dependencies) about why elevated privileges are required.
