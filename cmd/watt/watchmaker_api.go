@@ -45,11 +45,11 @@ func (c ConsulWatchSpec) Hash() string {
 // IKubernetesWatchMaker is an interface for KubernetesWatchMaker implementations. It mostly exists to facilitate the
 // creation of testing mocks.
 type IKubernetesWatchMaker interface {
-	MakeKubernetesWatch(spec *KubernetesWatchSpec) (*supervisor.Worker, error)
+	MakeKubernetesWatch(spec KubernetesWatchSpec) (*supervisor.Worker, error)
 }
 
 // IConsulWatchMaker is an interface for ConsulWatchMaker implementations. It mostly exists to facilitate the
 // creation of testing mocks.
 type IConsulWatchMaker interface {
-	MakeConsulWatch(spec *ConsulWatchSpec) (*supervisor.Worker, error)
+	MakeConsulWatch(spec ConsulWatchSpec) (*supervisor.Worker, error)
 }

@@ -43,11 +43,12 @@ func runWatt(cmd *cobra.Command, args []string) {
 		log.Fatalln("no initial sources configured")
 	}
 
+	// XXX: we don't need to create this here anymore
 	client := k8s.NewClient(nil)
 	kubeAPIWatcher := client.Watcher()
-	for idx := range initialSources {
+	/*for idx := range initialSources {
 		initialSources[idx] = kubeAPIWatcher.Canonical(initialSources[idx])
-	}
+	}*/
 
 	log.Printf("starting watt...")
 

@@ -34,7 +34,7 @@ type aggregator struct {
 	watchHook           WatchHook
 	limiter             limiter.Limiter
 	ids                 map[string]bool
-	kubernetesResources map[string][]k8s.Resource
+	kubernetesResources map[string]map[string][]k8s.Resource
 	consulEndpoints     map[string]consulwatch.Endpoints
 	bootstrapped        bool
 	notifyMux           sync.Mutex
@@ -52,7 +52,7 @@ func NewAggregator(snapshots chan<- string, k8sWatches chan<- []KubernetesWatchS
 		watchHook:           watchHook,
 		limiter:             limiter,
 		ids:                 make(map[string]bool),
-		kubernetesResources: make(map[string][]k8s.Resource),
+		kubernetesResources: make(map[string]map[string][]k8s.Resource),
 		consulEndpoints:     make(map[string]consulwatch.Endpoints),
 	}
 }
@@ -81,13 +81,24 @@ func (a *aggregator) updateConsulResources(event consulEvent) {
 
 func (a *aggregator) setKubernetesResources(event k8sEvent) {
 	a.ids[event.id] = true
-	a.kubernetesResources[event.kind] = event.resources
+	submap, ok := a.kubernetesResources[event.id]
+	if !ok {
+		submap = make(map[string][]k8s.Resource)
+		a.kubernetesResources[event.id] = submap
+	}
+	submap[event.kind] = event.resources
 }
 
 func (a *aggregator) generateSnapshot() (string, error) {
+	k8sResources := make(map[string][]k8s.Resource)
+	for _, submap := range a.kubernetesResources {
+		for k, v := range submap {
+			k8sResources[k] = append(k8sResources[k], v...)
+		}
+	}
 	s := watt.Snapshot{
 		Consul:     watt.ConsulSnapshot{Endpoints: a.consulEndpoints},
-		Kubernetes: a.kubernetesResources,
+		Kubernetes: k8sResources,
 	}
 
 	jsonBytes, err := json.MarshalIndent(s, "", "    ")
@@ -99,8 +110,12 @@ func (a *aggregator) generateSnapshot() (string, error) {
 }
 
 func (a *aggregator) isKubernetesBootstrapped(p *supervisor.Process) bool {
+	submap, sok := a.kubernetesResources[""]
+	if !sok {
+		return false
+	}
 	for _, k := range a.requiredKinds {
-		_, ok := a.kubernetesResources[k]
+		_, ok := submap[k]
 		if !ok {
 			return false
 		}
@@ -118,14 +133,18 @@ func (a *aggregator) isComplete(p *supervisor.Process, watchset WatchSet) bool {
 	complete := true
 
 	for _, w := range watchset.KubernetesWatches {
-		if _, ok := a.ids[w.Id]; !ok {
+		if _, ok := a.ids[w.Id]; ok {
+			p.Logf("initialized k8s watch: %s", w.Id)
+		} else {
 			complete = false
 			p.Logf("waiting for k8s watch: %s", w.Id)
 		}
 	}
 
 	for _, w := range watchset.ConsulWatches {
-		if _, ok := a.ids[w.Id]; !ok {
+		if _, ok := a.ids[w.Id]; ok {
+			p.Logf("initialized k8s watch: %s", w.Id)
+		} else {
 			complete = false
 			p.Logf("waiting for consul watch: %s", w.Id)
 		}

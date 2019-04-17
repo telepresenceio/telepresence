@@ -54,6 +54,24 @@ func TestAddAndRemoveKubernetesWatchers(t *testing.T) {
 	for k, worker := range iso.watchman.watched {
 		assert.Equal(t, k, worker.Name)
 	}
+
+	specs = []KubernetesWatchSpec{
+		{Kind: "Service", Namespace: "", FieldSelector: "metadata.name=foo", LabelSelector: ""},
+	}
+
+	iso.aggregatorToWatchmanCh <- specs
+	err = awaitility.Await(100*time.Millisecond, 1000*time.Millisecond, func() bool {
+		return len(iso.watchman.watched) == len(specs)
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.Len(t, iso.watchman.watched, len(specs))
+	for k, worker := range iso.watchman.watched {
+		assert.Equal(t, k, worker.Name)
+	}
 }
 
 type kubewatchmanIsolator struct {

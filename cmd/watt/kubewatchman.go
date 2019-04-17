@@ -16,7 +16,7 @@ type KubernetesWatchMaker struct {
 	notify  chan<- k8sEvent
 }
 
-func (m *KubernetesWatchMaker) MakeKubernetesWatch(spec *KubernetesWatchSpec) (*supervisor.Worker, error) {
+func (m *KubernetesWatchMaker) MakeKubernetesWatch(spec KubernetesWatchSpec) (*supervisor.Worker, error) {
 	var worker *supervisor.Worker
 	var err error
 
@@ -24,17 +24,17 @@ func (m *KubernetesWatchMaker) MakeKubernetesWatch(spec *KubernetesWatchSpec) (*
 		Name: spec.Hash(),
 		Work: func(p *supervisor.Process) error {
 			watcher := m.kubeAPI.Watcher()
-			watchFunc := func(ns, kind string) func(watcher *k8s.Watcher) {
+			watchFunc := func(id, ns, kind string) func(watcher *k8s.Watcher) {
 				return func(watcher *k8s.Watcher) {
 					resources := watcher.List(kind)
 					p.Logf("found %d %q in namespace %q", len(resources), kind, fmtNamespace(ns))
-					m.notify <- k8sEvent{id: spec.Id, kind: kind, resources: resources}
+					m.notify <- k8sEvent{id: id, kind: kind, resources: resources}
 					p.Logf("sent %q to receivers", kind)
 				}
 			}
 
 			watcherErr := watcher.SelectiveWatch(spec.Namespace, spec.Kind, spec.FieldSelector, spec.LabelSelector,
-				watchFunc(spec.Namespace, spec.Kind))
+				watchFunc(spec.Id, spec.Namespace, spec.Kind))
 
 			if watcherErr != nil {
 				return watcherErr
@@ -69,24 +69,25 @@ func (w *kubewatchman) Work(p *supervisor.Process) error {
 			found := make(map[string]*supervisor.Worker)
 			p.Logf("processing %d kubernetes watch specs", len(watches))
 			for _, spec := range watches {
-				worker, err := w.WatchMaker.MakeKubernetesWatch(&spec)
+				worker, err := w.WatchMaker.MakeKubernetesWatch(spec)
 				if err != nil {
 					p.Logf("failed to create kubernetes watcher: %v", err)
 					continue
 				}
 
-				if _, exists := w.watched[worker.Name]; !exists {
+				if _, exists := w.watched[worker.Name]; exists {
+					found[worker.Name] = w.watched[worker.Name]
+				} else {
 					p.Logf("add kubernetes watcher %s\n", worker.Name)
 					p.Supervisor().Supervise(worker)
 					w.watched[worker.Name] = worker
+					found[worker.Name] = worker
 				}
-
-				found[worker.Name] = worker
 			}
 
 			for workerName, worker := range w.watched {
 				if _, exists := found[workerName]; !exists {
-					p.Logf("remove consul watcher %s\n", workerName)
+					p.Logf("remove kubernetes watcher %s\n", workerName)
 					worker.Shutdown()
 					worker.Wait()
 				}

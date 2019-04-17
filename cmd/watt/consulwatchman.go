@@ -26,7 +26,7 @@ type ConsulWatchMaker struct {
 	aggregatorCh chan<- consulEvent
 }
 
-func (m *ConsulWatchMaker) MakeConsulWatch(spec *ConsulWatchSpec) (*supervisor.Worker, error) {
+func (m *ConsulWatchMaker) MakeConsulWatch(spec ConsulWatchSpec) (*supervisor.Worker, error) {
 	consulConfig := consulapi.DefaultConfig()
 	consulConfig.Address = spec.ConsulAddress
 
@@ -80,19 +80,20 @@ func (w *consulwatchman) Work(p *supervisor.Process) error {
 			found := make(map[string]*supervisor.Worker)
 			p.Logf("processing %d consul watches", len(watches))
 			for _, cw := range watches {
-				worker, err := w.WatchMaker.MakeConsulWatch(&cw)
+				worker, err := w.WatchMaker.MakeConsulWatch(cw)
 				if err != nil {
 					p.Logf("failed to create consul watch %v", err)
 					continue
 				}
 
-				if _, exists := w.watched[worker.Name]; !exists {
+				if _, exists := w.watched[worker.Name]; exists {
+					found[worker.Name] = w.watched[worker.Name]
+				} else {
 					p.Logf("add consul watcher %s\n", worker.Name)
 					p.Supervisor().Supervise(worker)
 					w.watched[worker.Name] = worker
+					found[worker.Name] = worker
 				}
-
-				found[worker.Name] = worker
 			}
 
 			// purge the watches that no longer are needed because they did not come through the in the latest
