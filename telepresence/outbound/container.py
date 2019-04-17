@@ -146,7 +146,8 @@ def run_docker_command(
                 json.dumps(config)
             ]
         ),
-        killer=make_docker_kill(runner, name)
+        killer=make_docker_kill(runner, name),
+        keep_session=SUDO_FOR_DOCKER,
     )
 
     # Set up ssh tunnel to allow the container to reach the cluster
