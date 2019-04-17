@@ -215,6 +215,10 @@ class Runner(object):
             self.check_call(["sudo", "-n", "echo", "-n"])
         except CalledProcessError:
             # Apparently not. Prompt clearly then sudo again.
+            self.show(
+                "How Telepresence uses sudo: " +
+                "https://www.telepresence.io/reference/install#dependencies"
+            )
             self.show("Invoking sudo. Please enter your sudo password.")
             try:
                 self.check_call(["sudo", "echo", "-n"])
