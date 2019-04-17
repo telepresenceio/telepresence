@@ -1,6 +1,25 @@
 # Changelog
 
 <!--- towncrier start line -->
+
+#### 0.99 (April 17, 2019)
+
+Bug fixes:
+
+* Telepresence correctly forwards privileged ports when using swap-deployment.
+  ([#983](https://github.com/telepresenceio/telepresence/issues/983))
+* Telepresence once again operates correctly with large clusters.
+  ([#981](https://github.com/telepresenceio/telepresence/issues/981))
+* Telepresence no longer crashes when the `docker` command requires `sudo`.
+  ([#995](https://github.com/telepresenceio/telepresence/issues/995))
+
+Misc:
+
+* Additional timeouts around DNS lookups should make Telepresence startup more reliable when using the default vpn-tcp method.
+  ([#986](https://github.com/telepresenceio/telepresence/issues/986))
+* When calling `sudo`, Telepresence offers a link to [documentation](https://www.telepresence.io/reference/install#dependencies) about why elevated privileges are required.
+  ([#262](https://github.com/telepresenceio/telepresence/issues/262))
+
 #### 0.98 (April 2, 2019)
 
 Features:
