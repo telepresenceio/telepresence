@@ -14,8 +14,7 @@
 
 import ipaddress
 import json
-from socket import gethostbyname, gaierror
-from subprocess import CalledProcessError
+from subprocess import CalledProcessError, TimeoutExpired
 from typing import List
 
 from telepresence.connect import SSH
@@ -238,6 +237,26 @@ def get_sshuttle_command(ssh: SSH, method: str = "auto") -> List[str]:
     ]
 
 
+def dns_lookup(runner: Runner, name: str, timeout: int) -> bool:
+    """
+    Performs the requested DNS lookup and returns success or failure
+    """
+    code = "import socket; socket.gethostbyname(\"{}\")".format(name)
+    try:
+        # Do the DNS lookup in a subprocess, as this is an easy way to put a
+        # timeout on DNS. But discard the output, as it's just noise in the
+        # logs anyhow. Use get_output to avoid logging.
+        runner.get_output(
+            ["python3", "-c", code],
+            stderr_to_stdout=True,
+            timeout=timeout,
+        )
+        return True
+    except (CalledProcessError, TimeoutExpired):
+        pass
+    return False
+
+
 def connect_sshuttle(
     runner: Runner, remote_info: RemoteInfo, hosts_or_ips: List[str], ssh: SSH
 ) -> None:
@@ -271,25 +290,22 @@ def connect_sshuttle(
         # Construct a different name each time to avoid NXDOMAIN caching.
         name = "hellotelepresence-{}".format(idx)
         runner.write("Wait for vpn-tcp connection: {}".format(name))
-        try:
-            gethostbyname(name)
+        if dns_lookup(runner, name, 5):
             countdown -= 1
             runner.write("Resolved {}. {} more...".format(name, countdown))
             if countdown == 0:
                 break
-        except gaierror:
-            pass
-        try:
-            # The loop uses a single segment to try to capture suffix or
-            # search path in the proxy. However, in some network setups,
-            # single-segment names don't get resolved the normal way. To see
-            # whether we're running into this, also try to resolve a name with
-            # many dots. This won't resolve successfully but will show up in
-            # the logs. See also:
-            # https://github.com/telepresenceio/telepresence/issues/242
-            gethostbyname("{}.a.sanity.check.telepresence.io".format(name))
-        except gaierror:
-            pass
+        # The loop uses a single segment to try to capture suffix or search
+        # path in the proxy. However, in some network setups, single-segment
+        # names don't get resolved the normal way. To see whether we're running
+        # into this, also try to resolve a name with many dots. This won't
+        # resolve successfully but will show up in the logs. See also:
+        # https://github.com/telepresenceio/telepresence/issues/242. We use a
+        # short timeout here because (1) this takes a long time for some users
+        # and (2) we're only looking for a log entry; we don't expect this to
+        # succeed and don't benefit from waiting for the NXDOMAIN.
+        many_dotted_name = "{}.a.sanity.check.telepresence.io".format(name)
+        dns_lookup(runner, many_dotted_name, 1)
 
     if countdown != 0:
         raise RuntimeError("vpn-tcp tunnel did not connect")

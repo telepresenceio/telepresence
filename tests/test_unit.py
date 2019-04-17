@@ -18,8 +18,10 @@ Unit tests (in-memory, small units of code).
 import sys
 import tempfile
 import ipaddress
+import subprocess
 
 from hypothesis import strategies as st, given, example
+import pytest
 import yaml
 
 import telepresence.cli
@@ -365,3 +367,32 @@ def test_get_output():
     data = runner.get_output(cmd)
     lines = data.splitlines()
     assert len(lines) == count
+
+
+def test_check_call_timeout():
+    code = "import time\nfor idx in range(100):\n print(idx)\n time.sleep(0.05)"
+    cmd = ["python3", "-c", code]
+
+    # Test verbose == False
+    runner = Runner("-", None, False)
+    with pytest.raises(subprocess.TimeoutExpired):  # as exc_info
+        runner.check_call(cmd, timeout=0.5)
+    # FIXME output capture is broken. Everything appears at the end, which means
+    # in the timeout case, no output is ever captured.
+    '''
+    output = exc_info.value.output
+    assert "0" in output  # FIXME
+    assert "1" in output
+    '''
+
+    # Test verbose == True
+    runner = Runner("-", None, True)
+    with pytest.raises(subprocess.TimeoutExpired):  # as exc_info
+        runner.check_call(cmd, timeout=0.5)
+    # FIXME output capture is broken. Everything appears at the end, which means
+    # in the timeout case, no output is ever captured.
+    '''
+    output = exc_info.value.output
+    assert "0" in output  # FIXME
+    assert "1" in output
+    '''

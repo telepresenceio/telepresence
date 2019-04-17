@@ -1,0 +1,1 @@
+Additional timeouts around DNS lookups should make Telepresence startup more reliable when using the default vpn-tcp method.
