@@ -120,7 +120,7 @@ class Runner(object):
         # on OS X is not one of them, so make sure we use /tmp:
         self.temp = Path(mkdtemp(prefix="tel-", dir="/tmp"))
         (self.temp / "session_id.txt").write_text(self.session_id)
-        self.add_cleanup("Remove temporary directory", rmtree, self.temp)
+        self.add_cleanup("Remove temporary directory", rmtree, str(self.temp))
 
         # Adjust PATH to cover common locations for conntrack, ifconfig, etc.
         # Also maybe prepend Telepresence's libexec directory.
