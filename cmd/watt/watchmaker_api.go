@@ -12,7 +12,6 @@ type WatchSet struct {
 }
 
 type KubernetesWatchSpec struct {
-	Id            string
 	Kind          string `json:"kind"`
 	Namespace     string `json:"namespace"`
 	FieldSelector string `json:"field-selector"`
@@ -27,18 +26,18 @@ func star(s string) string {
 	}
 }
 
-func (k KubernetesWatchSpec) Hash() string {
+func (k KubernetesWatchSpec) WatchId() string {
 	return fmt.Sprintf("%s|%s|%s|%s", k.Kind, star(k.Namespace), star(k.FieldSelector), star(k.LabelSelector))
 }
 
 type ConsulWatchSpec struct {
-	Id            string
+	Id            string `json:"id"`
 	ConsulAddress string `json:"consul-address"`
 	Datacenter    string `json:"datacenter"`
 	ServiceName   string `json:"service-name"`
 }
 
-func (c ConsulWatchSpec) Hash() string {
+func (c ConsulWatchSpec) WatchId() string {
 	return fmt.Sprintf("%s|%s|%s", c.ConsulAddress, c.Datacenter, c.ServiceName)
 }
 

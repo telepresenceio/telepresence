@@ -75,16 +75,16 @@ func (a *aggregator) Work(p *supervisor.Process) error {
 }
 
 func (a *aggregator) updateConsulResources(event consulEvent) {
-	a.ids[event.Id] = true
+	a.ids[event.WatchId] = true
 	a.consulEndpoints[event.Endpoints.Service] = event.Endpoints
 }
 
 func (a *aggregator) setKubernetesResources(event k8sEvent) {
-	a.ids[event.id] = true
-	submap, ok := a.kubernetesResources[event.id]
+	a.ids[event.watchId] = true
+	submap, ok := a.kubernetesResources[event.watchId]
 	if !ok {
 		submap = make(map[string][]k8s.Resource)
-		a.kubernetesResources[event.id] = submap
+		a.kubernetesResources[event.watchId] = submap
 	}
 	submap[event.kind] = event.resources
 }
@@ -133,20 +133,20 @@ func (a *aggregator) isComplete(p *supervisor.Process, watchset WatchSet) bool {
 	complete := true
 
 	for _, w := range watchset.KubernetesWatches {
-		if _, ok := a.ids[w.Id]; ok {
-			p.Logf("initialized k8s watch: %s", w.Id)
+		if _, ok := a.ids[w.WatchId()]; ok {
+			p.Logf("initialized k8s watch: %s", w.WatchId())
 		} else {
 			complete = false
-			p.Logf("waiting for k8s watch: %s", w.Id)
+			p.Logf("waiting for k8s watch: %s", w.WatchId())
 		}
 	}
 
 	for _, w := range watchset.ConsulWatches {
-		if _, ok := a.ids[w.Id]; ok {
-			p.Logf("initialized k8s watch: %s", w.Id)
+		if _, ok := a.ids[w.WatchId()]; ok {
+			p.Logf("initialized k8s watch: %s", w.WatchId())
 		} else {
 			complete = false
-			p.Logf("waiting for consul watch: %s", w.Id)
+			p.Logf("waiting for consul watch: %s", w.WatchId())
 		}
 	}
 
@@ -204,14 +204,6 @@ func (a *aggregator) getWatches(p *supervisor.Process) WatchSet {
 	}
 
 	result := a.watchHook(p, snapshot)
-
-	for idx, w := range result.KubernetesWatches {
-		result.KubernetesWatches[idx].Id = w.Hash()
-	}
-
-	for idx, w := range result.ConsulWatches {
-		result.ConsulWatches[idx].Id = w.Hash()
-	}
 
 	return result
 }

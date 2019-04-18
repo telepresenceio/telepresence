@@ -12,7 +12,7 @@ import (
 )
 
 type consulEvent struct {
-	Id        string
+	WatchId   string
 	Endpoints consulwatch.Endpoints
 }
 
@@ -40,7 +40,7 @@ func (m *ConsulWatchMaker) MakeConsulWatch(spec ConsulWatchSpec) (*supervisor.Wo
 	}
 
 	worker := &supervisor.Worker{
-		Name: fmt.Sprintf("%s|%s|%s", spec.ConsulAddress, spec.Datacenter, spec.ServiceName),
+		Name: fmt.Sprintf("consul:%s", spec.WatchId()),
 		Work: func(p *supervisor.Process) error {
 			w, err := consulwatch.New(consul, log.New(os.Stdout, "", log.LstdFlags), spec.Datacenter, spec.ServiceName, true)
 			if err != nil {
@@ -49,7 +49,8 @@ func (m *ConsulWatchMaker) MakeConsulWatch(spec ConsulWatchSpec) (*supervisor.Wo
 			}
 
 			w.Watch(func(endpoints consulwatch.Endpoints, e error) {
-				m.aggregatorCh <- consulEvent{spec.Id, endpoints}
+				endpoints.Id = spec.Id
+				m.aggregatorCh <- consulEvent{spec.WatchId(), endpoints}
 			})
 			_ = p.Go(func(p *supervisor.Process) error {
 				x := w.Start()
