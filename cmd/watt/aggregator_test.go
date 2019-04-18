@@ -177,7 +177,7 @@ func TestAggregatorBootstrap(t *testing.T) {
 	// now lets send in the first endpoints, and we should get a
 	// snapshot
 	iso.aggregator.ConsulEvents <- consulEvent{
-		WATCH.Hash(),
+		WATCH.WatchId(),
 		consulwatch.Endpoints{
 			Service: "bar",
 			Endpoints: []consulwatch.Endpoint{
