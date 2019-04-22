@@ -6,6 +6,9 @@ import (
 	"strings"
 
 	"github.com/miekg/dns"
+	"github.com/pkg/errors"
+
+	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 type Server struct {
@@ -16,10 +19,6 @@ type Server struct {
 
 func log(line string, args ...interface{}) {
 	_log.Printf("DNS: "+line, args...)
-}
-
-func die(line string, args ...interface{}) {
-	_log.Fatalf("DNS: "+line, args...)
 }
 
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
@@ -67,13 +66,13 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	w.WriteMsg(in)
 }
 
-func (s *Server) Start() {
+func (s *Server) Start(p *supervisor.Process) error {
 	listeners := make([]net.PacketConn, len(s.Listeners))
 	for i, addr := range s.Listeners {
 		var err error
 		listeners[i], err = net.ListenPacket("udp", addr)
 		if err != nil {
-			die("failed to set up udp listener: %v", err)
+			return errors.Wrap(err, "failed to set up udp listener")
 		}
 		log("listening on %s", addr)
 	}
@@ -81,8 +80,10 @@ func (s *Server) Start() {
 		go func(listener net.PacketConn) {
 			srv := &dns.Server{PacketConn: listener, Handler: s}
 			if err := srv.ActivateAndServe(); err != nil {
-				die("failed to set udp listener: %v", err)
+				log("failed to active udp server: %v", err)
+				p.Supervisor().Shutdown()
 			}
 		}(listener)
 	}
+	return nil
 }

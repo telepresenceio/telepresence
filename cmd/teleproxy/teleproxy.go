@@ -315,7 +315,10 @@ func intercept(p *supervisor.Process, dnsIP string, fallbackIP string) error {
 					}
 				},
 			}
-			srv.Start()
+			err := srv.Start(p)
+			if err != nil {
+				return err
+			}
 			p.Ready()
 			<-p.Shutdown()
 			// there is no srv.Stop()
