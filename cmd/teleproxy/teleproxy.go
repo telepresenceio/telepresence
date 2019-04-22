@@ -85,6 +85,7 @@ func main() {
 	var namespace = flag.String("namespace", "", "namespace to use (default: the current namespace for the context")
 	var dnsIP = flag.String("dns", "", "dns ip address")
 	var fallbackIP = flag.String("fallback", "", "dns fallback")
+	var nosearch = flag.Bool("noSearchOverride", false, "disable dns search override")
 
 	flag.Parse()
 
@@ -116,7 +117,7 @@ func main() {
 		sup.Supervise(&supervisor.Worker{
 			Name: "setup-intercept",
 			Work: func(p *supervisor.Process) error {
-				return intercept(p, *dnsIP, *fallbackIP)
+				return intercept(p, *dnsIP, *fallbackIP, *nosearch)
 			},
 		})
 	}
@@ -216,7 +217,7 @@ func checkKubectl() {
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
 //
 // If fallbackIP is empty, it will default to Google DNS.
-func intercept(p *supervisor.Process, dnsIP string, fallbackIP string) error {
+func intercept(p *supervisor.Process, dnsIP string, fallbackIP string, nosearch bool) error {
 	// xxx check that we are root
 
 	if os.Geteuid() != 0 {
@@ -350,10 +351,18 @@ func intercept(p *supervisor.Process, dnsIP string, fallbackIP string) error {
 		Name:     "search-override",
 		Requires: []string{"interceptor"},
 		Work: func(p *supervisor.Process) error {
-			restore := dns.OverrideSearchDomains(".")
+			var restore func()
+			if !nosearch {
+				restore = dns.OverrideSearchDomains(".")
+			}
+
 			p.Ready()
 			<-p.Shutdown()
-			restore()
+
+			if !nosearch {
+				restore()
+			}
+
 			dns.Flush()
 			return nil
 		},
