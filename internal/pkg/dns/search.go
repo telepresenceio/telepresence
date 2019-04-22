@@ -17,7 +17,10 @@ func OverrideSearchDomains(domains string) func() {
 		return func() {}
 	}
 
-	ifaces, _ := getIfaces()
+	ifaces, err := getIfaces()
+	if err != nil {
+		panic(err)
+	}
 	previous := []searchDomains{}
 
 	for _, iface := range ifaces {
