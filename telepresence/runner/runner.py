@@ -30,9 +30,9 @@ from tempfile import mkdtemp
 from threading import Thread
 from time import sleep, time
 
-from telepresence import TELEPRESENCE_BINARY
 from telepresence.utilities import kill_process, str_command
 
+from telepresence import TELEPRESENCE_BINARY
 from .cache import Cache
 from .launch import BackgroundProcessCrash, _launch_command, _Logger
 from .output import Output
@@ -664,12 +664,34 @@ class Runner(object):
         """
         Monitor main process and background items until done
         """
+
+        def wait_for_pid(pid):
+            """Wait for process to disappear or to become zombie
+
+            When the process really dies sending the 0 signal will result in OSError
+            When the proces is still around, but its status is Zombie the ps command finds it
+
+            In both of these cases the function returns, otherwise it keeps spinning
+            """
+            while True:
+                try:
+                    os.kill(pid, 0)
+                    # Get the process status by parsing the output of the ps command
+                    cmd = 'ps -o stat= -p {}'.format(pid).split()
+                    status = subprocess.check_output(cmd).strip()
+                    if status == b'Z':  # process is a zombie
+                        return
+                except OSError:
+                    return
+                time.sleep(0.1)
+
         self.write("Everything launched. Waiting to exit...")
         main_code = None
         span = self.span()
         while not self.quitting and main_code is None:
             sleep(0.1)
             main_code = main_process.poll()
+        wait_for_pid(main_process.pid)
         span.end()
 
         if main_code is not None:
