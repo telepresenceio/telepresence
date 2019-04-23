@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -21,6 +23,40 @@ type consulwatchmanIsolator struct {
 	done                          chan struct{}
 	t                             *testing.T
 	cancel                        context.CancelFunc
+}
+
+func TestConsulAddressInterpolation(t *testing.T) {
+	iso := startConsulwatchmanIsolator(t)
+	defer iso.Stop()
+
+	_ = os.Setenv("HOST_IP", "172.10.0.1")
+	_ = os.Setenv("ANOTHER_IP", "172.10.0.2")
+
+	specs := []ConsulWatchSpec{
+		{ConsulAddress: "${HOST_IP}", ServiceName: "foo-in-consul", Datacenter: "dc1"},
+		{ConsulAddress: "$ANOTHER_IP", ServiceName: "bar-in-consul", Datacenter: "dc1"},
+		{ConsulAddress: "127.0.0.1", ServiceName: "baz-in-consul", Datacenter: "dc1"},
+	}
+
+	iso.aggregatorToWatchmanCh <- specs
+
+	err := awaitility.Await(100*time.Millisecond, 1000*time.Millisecond, func() bool {
+		return len(iso.watchman.watched) == len(specs)
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.Len(t, iso.watchman.watched, len(specs))
+
+	for k, v := range iso.watchman.watched {
+		fmt.Printf("%s => %s\n", k, v)
+	}
+
+	// the first part of the name (between "consul:" and the first pipe is the address to communicate with.
+	assert.NotNil(t, iso.watchman.watched["consul:172.10.0.1|dc1|foo-in-consul"])
+	assert.NotNil(t, iso.watchman.watched["consul:172.10.0.2|dc1|bar-in-consul"])
 }
 
 func TestAddAndRemoveConsulWatchers(t *testing.T) {
@@ -125,7 +161,7 @@ func newConsulwatchmanIsolator(t *testing.T) *consulwatchmanIsolator {
 	}
 
 	iso.watchman = &consulwatchman{
-		WatchMaker: &MockWatchMaker{},
+		WatchMaker: &ConsulWatchMaker{},
 		watchesCh:  iso.aggregatorToWatchmanCh,
 		watched:    map[string]*supervisor.Worker{},
 	}
