@@ -30,9 +30,9 @@ from tempfile import mkdtemp
 from threading import Thread
 from time import sleep, time
 
-from telepresence import TELEPRESENCE_BINARY
 from telepresence.utilities import kill_process, str_command
 
+from telepresence import TELEPRESENCE_BINARY
 from .cache import Cache
 from .launch import BackgroundProcessCrash, _launch_command, _Logger
 from .output import Output
@@ -665,33 +665,22 @@ class Runner(object):
         Monitor main process and background items until done
         """
 
-        def wait_for_pid(pid):
-            """Wait for process to disappear or to become zombie
+        def wait_for_process(p):
+            """Wait for process and set main_code and self.quitting flag
 
-            When the process really dies sending the 0 signal will result in OSError
-            When the proces is still around, but its status is Zombie the ps command finds it
-
-            In both of these cases the function returns, otherwise it keeps spinning
+            Note that main_code is defined in the parent function,
+            so it is declared as nonlocal
             """
-            while True:
-                try:
-                    os.kill(pid, 0)
-                    # Get the process status by parsing the output of the ps command
-                    cmd = 'ps -o stat= -p {}'.format(pid).split()
-                    status = subprocess.check_output(cmd).strip()
-                    if status == b'Z':  # process is a zombie
-                        return
-                except OSError:
-                    return
-                time.sleep(0.1)
+            nonlocal main_code
+            main_code = p.wait()
+            self.quitting = True
 
         self.write("Everything launched. Waiting to exit...")
         main_code = None
         span = self.span()
-        while not self.quitting and main_code is None:
+        Thread(target=wait_for_process, args=(p,))
+        while not self.quitting:
             sleep(0.1)
-            main_code = main_process.poll()
-        wait_for_pid(main_process.pid)
         span.end()
 
         if main_code is not None:
