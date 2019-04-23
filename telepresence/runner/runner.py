@@ -30,9 +30,9 @@ from tempfile import mkdtemp
 from threading import Thread
 from time import sleep, time
 
+from telepresence import TELEPRESENCE_BINARY
 from telepresence.utilities import kill_process, str_command
 
-from telepresence import TELEPRESENCE_BINARY
 from .cache import Cache
 from .launch import BackgroundProcessCrash, _launch_command, _Logger
 from .output import Output
