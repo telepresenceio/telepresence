@@ -24,6 +24,7 @@ type invoker struct {
 	// unless/until we invoke... some of these will be discarded
 	// by the rate limiting/coalescing logic
 	latestSnapshot string
+	process        *supervisor.Process
 }
 
 func NewInvoker(port int, notify []string) *invoker {
@@ -36,6 +37,7 @@ func NewInvoker(port int, notify []string) *invoker {
 }
 
 func (a *invoker) Work(p *supervisor.Process) error {
+	a.process = p
 	p.Ready()
 	for {
 		select {
@@ -51,12 +53,19 @@ func (a *invoker) Work(p *supervisor.Process) error {
 func (a *invoker) storeSnapshot(snapshot string) int {
 	a.mux.Lock()
 	defer a.mux.Unlock()
-	// XXX: we should add garbage collection to
-	// avoid running out of memory due to
-	// snapshots
 	a.id += 1
 	a.invokedSnapshots[a.id] = snapshot
+	a.gcSnapshots()
 	return a.id
+}
+
+func (a *invoker) gcSnapshots() {
+	for k := range a.invokedSnapshots {
+		if k <= a.id-10 {
+			delete(a.invokedSnapshots, k)
+			a.process.Logf("deleting snapshot %d", k)
+		}
+	}
 }
 
 func (a *invoker) getSnapshot(id int) string {
