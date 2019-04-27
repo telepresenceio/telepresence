@@ -11,7 +11,7 @@ import (
 func TestSmoke(t *testing.T) {
 	ch := make(chan struct{})
 	go func() {
-		main()
+		_main()
 		close(ch)
 	}()
 	defer func() {

@@ -44,18 +44,18 @@ var debug = flag.Bool("debug", envBool("KUBEAPPLY_DEBUG"), "enable debug mode, e
 var timeout = flag.Int("t", 60, "timeout in seconds")
 var files tpu.ArrayFlags
 
-func main() {
+func _main() int {
 	flag.Var(&files, "f", "path to yaml file")
 	flag.Parse()
 
 	if *show_version {
 		fmt.Println("kubeapply", "version", Version)
-		os.Exit(0)
+		return 0
 	}
 
 	if len(files) == 0 {
 		fmt.Printf("at least one file argument is required")
-		os.Exit(1)
+		return 1
 	}
 
 	p := NewPhaser()
@@ -63,13 +63,23 @@ func main() {
 	for _, file := range files {
 		err := p.Add(file)
 		if err != nil {
-			log.Fatal(err)
+			log.Println(err)
+			return 1
 		}
 	}
 
 	for _, names := range p.phases() {
-		phase(names, nil)
+		rc := phase(names, nil)
+		if rc != 0 {
+			return rc
+		}
 	}
+
+	return 0
+}
+
+func main() {
+	os.Exit(_main())
 }
 
 type Phaser struct {
@@ -139,11 +149,11 @@ func (p *Phaser) phases() (result [][]string) {
 	return
 }
 
-func phase(names []string, data interface{}) {
+func phase(names []string, data interface{}) int {
 	expanded, err := expand(names, data)
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		return 1
 	}
 
 	waiter := k8s.NewWaiter(nil)
@@ -177,12 +187,15 @@ func phase(names []string, data interface{}) {
 	}
 
 	if abort {
-		return
+		return 1
 	}
 
 	if !waiter.Wait(time.Duration(*timeout) * time.Second) {
-		panic("not ready")
+		fmt.Printf("not ready after %d seconds\n", *timeout)
+		return 1
 	}
+
+	return 0
 }
 
 func expand(names []string, data interface{}) ([]string, error) {

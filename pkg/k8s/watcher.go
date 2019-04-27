@@ -2,7 +2,6 @@ package k8s
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -240,14 +239,14 @@ func (w *Watcher) sync(kind string) {
 	watch := w.watches[kind]
 	resources, err := w.client.SelectiveList(watch.namespace, kind, watch.fieldSelector, watch.labelSelector)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 	for _, rsrc := range resources {
 		var uns unstructured.Unstructured
 		uns.SetUnstructuredContent(rsrc)
 		err = watch.store.Update(&uns)
 		if err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
 	}
 }

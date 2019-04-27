@@ -136,7 +136,7 @@ func (s *Syncer) Run() {
 			s.Changed.Broadcast()
 		})
 		if err != nil {
-			log.Fatalf("kubewatch: %v", err)
+			panic(fmt.Sprintf("kubewatch: %v", err))
 		}
 	}
 	s.Watcher.Start()
@@ -149,12 +149,12 @@ func (s *Syncer) serve() {
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%s", PORT))
 	if err != nil {
 		// Error starting or closing listener:
-		log.Fatalf("kubewatch: %v", err)
+		panic(fmt.Sprintf("kubewatch: %v", err))
 	}
 
 	_, port, err := net.SplitHostPort(ln.Addr().String())
 	if err != nil {
-		log.Fatalf("kubewatch: %v", err)
+		panic(fmt.Sprintf("kubewatch: %v", err))
 	}
 	s.port = port
 
@@ -164,7 +164,7 @@ func (s *Syncer) serve() {
 
 	if err := server.Serve(ln); err != http.ErrServerClosed {
 		// Error starting or closing listener:
-		log.Fatalf("kubewatch: %v", err)
+		panic(fmt.Sprintf("kubewatch: %v", err))
 	}
 }
 
