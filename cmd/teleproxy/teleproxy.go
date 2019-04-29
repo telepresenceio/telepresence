@@ -125,8 +125,6 @@ func _main() int {
 		panic(fmt.Sprintf("TPY: unrecognized mode: %v", *mode))
 	}
 
-	checkKubectl()
-
 	// do this up front so we don't miss out on cleanup if someone
 	// Control-C's just after starting us
 	signalChan := make(chan os.Signal, 1)
@@ -135,33 +133,12 @@ func _main() int {
 	ctx, cancel := context.WithCancel(context.Background())
 	sup := supervisor.WithContext(ctx)
 
-	if *mode == DEFAULT || *mode == INTERCEPT {
-		sup.Supervise(&supervisor.Worker{
-			Name: TELEPROXY,
-			Work: func(p *supervisor.Process) error {
-				return intercept(p, *dnsIP, *fallbackIP, *nosearch)
-			},
-		})
-	}
-
-	if *mode == DEFAULT || *mode == BRIDGE {
-		requires := []string{}
-		if *mode != BRIDGE {
-			requires = append(requires, INTERCEPTOR)
-		}
-		sup.Supervise(&supervisor.Worker{
-			Name:     BRIDGE_WORKER,
-			Requires: requires,
-			Work: func(p *supervisor.Process) error {
-				kubeinfo, err := k8s.NewKubeInfo(*kubeconfig, *kcontext, *namespace)
-				if err != nil {
-					return errors.Wrap(err, "k8s.NewKubeInfo")
-				}
-				bridges(p, kubeinfo)
-				return nil
-			},
-		})
-	}
+	sup.Supervise(&supervisor.Worker{
+		Name: TELEPROXY,
+		Work: func(p *supervisor.Process) error {
+			return teleproxy(p, *mode, *dnsIP, *fallbackIP, *kubeconfig, *kcontext, *namespace, *nosearch)
+		},
+	})
 
 	sup.Supervise(&supervisor.Worker{
 		Name:     READY,
@@ -206,17 +183,49 @@ func _main() int {
 	}
 }
 
-func kubeDie(err error) {
-	if err != nil {
-		log.Println(err)
+func teleproxy(p *supervisor.Process, mode, dnsIP, fallbackIP, kubeconfig, kcontext, namespace string, nosearch bool) error {
+	if mode == DEFAULT || mode == INTERCEPT {
+		err := intercept(p, dnsIP, fallbackIP, nosearch)
+		if err != nil {
+			return err
+		}
 	}
-	panic("kubectl version 1.10 or greater is required")
+
+	sup := p.Supervisor()
+
+	if mode == DEFAULT || mode == BRIDGE {
+		requires := []string{}
+		if mode != BRIDGE {
+			requires = append(requires, INTERCEPTOR)
+		}
+		sup.Supervise(&supervisor.Worker{
+			Name:     BRIDGE_WORKER,
+			Requires: requires,
+			Work: func(p *supervisor.Process) error {
+				err := checkKubectl(p)
+				if err != nil {
+					return err
+				}
+
+				kubeinfo, err := k8s.NewKubeInfo(kubeconfig, kcontext, namespace)
+				if err != nil {
+					return errors.Wrap(err, "k8s.NewKubeInfo")
+				}
+				bridges(p, kubeinfo)
+				return nil
+			},
+		})
+	}
+
+	return nil
 }
 
-func checkKubectl() {
+const KUBECTL_ERR = "kubectl version 1.10 or greater is required"
+
+func checkKubectl(p *supervisor.Process) error {
 	output, err := tpu.Cmd("kubectl", "version", "--client", "-o", "json")
 	if err != nil {
-		kubeDie(err)
+		return errors.Wrap(err, KUBECTL_ERR)
 	}
 
 	var info struct {
@@ -228,21 +237,23 @@ func checkKubectl() {
 
 	err = json.Unmarshal([]byte(output), &info)
 	if err != nil {
-		kubeDie(err)
+		return errors.Wrap(err, KUBECTL_ERR)
 	}
 
 	major, err := strconv.Atoi(info.ClientVersion.Major)
 	if err != nil {
-		kubeDie(err)
+		return errors.Wrap(err, KUBECTL_ERR)
 	}
 	minor, err := strconv.Atoi(info.ClientVersion.Minor)
 	if err != nil {
-		kubeDie(err)
+		return errors.Wrap(err, KUBECTL_ERR)
 	}
 
 	if major != 1 || minor < 10 {
-		kubeDie(err)
+		return errors.Errorf("%s (found %d.%d)", KUBECTL_ERR, major, minor)
 	}
+
+	return nil
 }
 
 // intercept starts the interceptor, and only returns once the
