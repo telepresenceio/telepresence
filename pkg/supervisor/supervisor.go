@@ -3,8 +3,11 @@ package supervisor
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"os/exec"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -352,11 +355,14 @@ func (p *Process) Logf(format string, args ...interface{}) {
 	p.supervisor.Logger.Printf("%s: %v", p.Worker().Name, fmt.Sprintf(format, args...))
 }
 
+func (p *Process) allocateId() int64 {
+	return atomic.AddInt64(&p.Worker().children, 1)
+}
+
 // Shorthand for launching a child worker... it is named "<parent>[<child-count>]"
 func (p *Process) Go(fn func(*Process) error) *Worker {
-	id := atomic.AddInt64(&p.Worker().children, 1)
 	w := &Worker{
-		Name: fmt.Sprintf("%s[%d]", p.Worker().Name, id),
+		Name: fmt.Sprintf("%s[%d]", p.Worker().Name, p.allocateId()),
 		Work: fn,
 	}
 	p.Supervisor().Supervise(w)
@@ -379,4 +385,131 @@ func (p *Process) Do(fn func()) bool {
 	case <-done:
 		return true
 	}
+}
+
+type logger struct {
+	process   *Process
+	emptyLine bool
+}
+
+func (l *logger) Log(prefix, line string) {
+	if l.emptyLine {
+		l.process.Log(prefix)
+		l.emptyLine = false
+	}
+
+	if line == "" {
+		l.emptyLine = true
+	} else {
+		l.process.Logf("%s%s", prefix, line)
+		l.emptyLine = false
+	}
+}
+
+func (l *logger) LogLines(prefix, str string, err error) {
+	lines := strings.Split(str, "\n")
+	for _, line := range lines {
+		l.Log(prefix, line)
+	}
+
+	if !(err == nil || err == io.EOF) {
+		l.process.Log(fmt.Sprintf("%v", err))
+	}
+}
+
+type loggingWriter struct {
+	logger
+	writer io.Writer
+}
+
+func (l *loggingWriter) Write(bytes []byte) (int, error) {
+	if l.writer == nil {
+		l.LogLines(" <- ", string(bytes), nil)
+		return len(bytes), nil
+	} else {
+		n, err := l.writer.Write(bytes)
+		l.LogLines(" <- ", string(bytes[:n]), err)
+		return n, err
+	}
+}
+
+type loggingReader struct {
+	logger
+	reader io.Reader
+}
+
+func (l *loggingReader) Read(p []byte) (n int, err error) {
+	n, err = l.reader.Read(p)
+	l.LogLines(" -> ", string(p[:n]), err)
+	return n, err
+}
+
+type Cmd struct {
+	*exec.Cmd
+	supervisorProcess *Process
+}
+
+func (c *Cmd) pre() {
+	if c.Stdin != nil {
+		c.Stdin = &loggingReader{logger: logger{process: c.supervisorProcess}, reader: c.Stdin}
+	}
+	c.Stdout = &loggingWriter{logger: logger{process: c.supervisorProcess}, writer: c.Stdout}
+	c.Stderr = &loggingWriter{logger: logger{process: c.supervisorProcess}, writer: c.Stderr}
+
+	c.supervisorProcess.Logf("%s %v", c.Path, c.Args[1:])
+}
+
+func (c *Cmd) post(err error) {
+	if err == nil {
+		c.supervisorProcess.Logf("%s exited successfully", c.Path)
+	} else {
+		if c.ProcessState == nil {
+			c.supervisorProcess.Logf("%v", err)
+		} else {
+			c.supervisorProcess.Logf("%s: %v", c.Path, err)
+		}
+	}
+}
+
+func (c *Cmd) Start() error {
+	c.pre()
+	return c.Cmd.Start()
+}
+
+func (c *Cmd) Wait() error {
+	err := c.Cmd.Wait()
+	c.post(err)
+	return err
+}
+
+func (c *Cmd) Run() error {
+	c.pre()
+	err := c.Cmd.Run()
+	c.post(err)
+	return err
+}
+
+// Creates a command that automatically logs inputs, outputs, and exit
+// codes to the process logger.
+func (p *Process) Command(name string, args ...string) *Cmd {
+	return &Cmd{exec.Command(name, args...), p}
+}
+
+// Runs a command with the supplied input and captures the output as a
+// string.
+func (c *Cmd) Capture(stdin io.Reader) (output string, err error) {
+	c.Stdin = stdin
+	out := strings.Builder{}
+	c.Stdout = &out
+	err = c.Run()
+	output = out.String()
+	return
+}
+
+func (c *Cmd) MustCapture(stdin io.Reader) (output string) {
+	output, err := c.Capture(stdin)
+	if err != nil {
+		panic(err)
+	}
+	return output
 }
