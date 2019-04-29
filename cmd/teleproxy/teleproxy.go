@@ -99,30 +99,43 @@ const (
 	SIGNAL          = "SIG"
 )
 
+type Args struct {
+	mode       string
+	kubeconfig string
+	context    string
+	namespace  string
+	dnsIP      string
+	fallbackIP string
+	nosearch   bool
+	version    bool
+}
+
 func _main() int {
-	var version = flag.Bool("version", false, "alias for '-mode=version'")
-	var mode = flag.String("mode", "", "mode of operation ('intercept', 'bridge', or 'version')")
-	var kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	var kcontext = flag.String("context", "", "context to use (default: the current context)")
-	var namespace = flag.String("namespace", "", "namespace to use (default: the current namespace for the context")
-	var dnsIP = flag.String("dns", "", "dns ip address")
-	var fallbackIP = flag.String("fallback", "", "dns fallback")
-	var nosearch = flag.Bool("noSearchOverride", false, "disable dns search override")
+	args := Args{}
+
+	flag.BoolVar(&args.version, "version", false, "alias for '-mode=version'")
+	flag.StringVar(&args.mode, "mode", "", "mode of operation ('intercept', 'bridge', or 'version')")
+	flag.StringVar(&args.kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
+	flag.StringVar(&args.context, "context", "", "context to use (default: the current context)")
+	flag.StringVar(&args.namespace, "namespace", "", "namespace to use (default: the current namespace for the context")
+	flag.StringVar(&args.dnsIP, "dns", "", "dns ip address")
+	flag.StringVar(&args.fallbackIP, "fallback", "", "dns fallback")
+	flag.BoolVar(&args.nosearch, "noSearchOverride", false, "disable dns search override")
 
 	flag.Parse()
 
-	if *version {
-		*mode = VERSION
+	if args.version {
+		args.mode = VERSION
 	}
 
-	switch *mode {
+	switch args.mode {
 	case DEFAULT, INTERCEPT, BRIDGE:
 		// do nothing
 	case VERSION:
 		fmt.Println("teleproxy", "version", Version)
 		return 0
 	default:
-		panic(fmt.Sprintf("TPY: unrecognized mode: %v", *mode))
+		panic(fmt.Sprintf("TPY: unrecognized mode: %v", args.mode))
 	}
 
 	// do this up front so we don't miss out on cleanup if someone
@@ -136,7 +149,7 @@ func _main() int {
 	sup.Supervise(&supervisor.Worker{
 		Name: TELEPROXY,
 		Work: func(p *supervisor.Process) error {
-			return teleproxy(p, *mode, *dnsIP, *fallbackIP, *kubeconfig, *kcontext, *namespace, *nosearch)
+			return teleproxy(p, args)
 		},
 	})
 
@@ -183,9 +196,9 @@ func _main() int {
 	}
 }
 
-func teleproxy(p *supervisor.Process, mode, dnsIP, fallbackIP, kubeconfig, kcontext, namespace string, nosearch bool) error {
-	if mode == DEFAULT || mode == INTERCEPT {
-		err := intercept(p, dnsIP, fallbackIP, nosearch)
+func teleproxy(p *supervisor.Process, args Args) error {
+	if args.mode == DEFAULT || args.mode == INTERCEPT {
+		err := intercept(p, args)
 		if err != nil {
 			return err
 		}
@@ -193,9 +206,9 @@ func teleproxy(p *supervisor.Process, mode, dnsIP, fallbackIP, kubeconfig, kcont
 
 	sup := p.Supervisor()
 
-	if mode == DEFAULT || mode == BRIDGE {
+	if args.mode == DEFAULT || args.mode == BRIDGE {
 		requires := []string{}
-		if mode != BRIDGE {
+		if args.mode != BRIDGE {
 			requires = append(requires, INTERCEPTOR)
 		}
 		sup.Supervise(&supervisor.Worker{
@@ -207,7 +220,7 @@ func teleproxy(p *supervisor.Process, mode, dnsIP, fallbackIP, kubeconfig, kcont
 					return err
 				}
 
-				kubeinfo, err := k8s.NewKubeInfo(kubeconfig, kcontext, namespace)
+				kubeinfo, err := k8s.NewKubeInfo(args.kubeconfig, args.context, args.namespace)
 				if err != nil {
 					return errors.Wrap(err, "k8s.NewKubeInfo")
 				}
@@ -263,14 +276,14 @@ func checkKubectl(p *supervisor.Process) error {
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
 //
 // If fallbackIP is empty, it will default to Google DNS.
-func intercept(p *supervisor.Process, dnsIP string, fallbackIP string, nosearch bool) error {
+func intercept(p *supervisor.Process, args Args) error {
 	if os.Geteuid() != 0 {
 		return errors.New("ERROR: teleproxy must be run as root or suid root")
 	}
 
 	sup := p.Supervisor()
 
-	if dnsIP == "" {
+	if args.dnsIP == "" {
 		dat, err := ioutil.ReadFile("/etc/resolv.conf")
 		if err != nil {
 			return err
@@ -278,25 +291,25 @@ func intercept(p *supervisor.Process, dnsIP string, fallbackIP string, nosearch 
 		for _, line := range strings.Split(string(dat), "\n") {
 			if strings.Contains(line, "nameserver") {
 				fields := strings.Fields(line)
-				dnsIP = fields[1]
-				log.Printf("TPY: Automatically set -dns=%v", dnsIP)
+				args.dnsIP = fields[1]
+				log.Printf("TPY: Automatically set -dns=%v", args.dnsIP)
 				break
 			}
 		}
 	}
-	if dnsIP == "" {
+	if args.dnsIP == "" {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
 	}
 
-	if fallbackIP == "" {
-		if dnsIP == "8.8.8.8" {
-			fallbackIP = "8.8.4.4"
+	if args.fallbackIP == "" {
+		if args.dnsIP == "8.8.8.8" {
+			args.fallbackIP = "8.8.4.4"
 		} else {
-			fallbackIP = "8.8.8.8"
+			args.fallbackIP = "8.8.8.8"
 		}
-		log.Printf("TPY: Automatically set -fallback=%v", fallbackIP)
+		log.Printf("TPY: Automatically set -fallback=%v", args.fallbackIP)
 	}
-	if fallbackIP == dnsIP {
+	if args.fallbackIP == args.dnsIP {
 		return errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
 	}
 
@@ -313,7 +326,7 @@ func intercept(p *supervisor.Process, dnsIP string, fallbackIP string, nosearch 
 			iceptor.Start()
 			bootstrap := route.Table{Name: "bootstrap"}
 			bootstrap.Add(route.Route{
-				Ip:     dnsIP,
+				Ip:     args.dnsIP,
 				Target: DNS_REDIR_PORT,
 				Proto:  "udp",
 			})
@@ -350,7 +363,7 @@ func intercept(p *supervisor.Process, dnsIP string, fallbackIP string, nosearch 
 		Work: func(p *supervisor.Process) error {
 			srv := dns.Server{
 				Listeners: dnsListeners(DNS_REDIR_PORT),
-				Fallback:  fallbackIP + ":53",
+				Fallback:  args.fallbackIP + ":53",
 				Resolve: func(domain string) string {
 					route := iceptor.Resolve(domain)
 					if route != nil {
@@ -396,14 +409,14 @@ func intercept(p *supervisor.Process, dnsIP string, fallbackIP string, nosearch 
 		Requires: []string{INTERCEPTOR},
 		Work: func(p *supervisor.Process) error {
 			var restore func()
-			if !nosearch {
+			if !args.nosearch {
 				restore = dns.OverrideSearchDomains(".")
 			}
 
 			p.Ready()
 			<-p.Shutdown()
 
-			if !nosearch {
+			if !args.nosearch {
 				restore()
 			}
 
