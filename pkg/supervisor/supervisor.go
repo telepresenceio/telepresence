@@ -230,11 +230,10 @@ func (w *Worker) reconcile() bool {
 		if w.process != nil && !w.process.shutdownClosed {
 			for _, d := range s.dependents(w) {
 				if s.workers[d.Name].process != nil {
-					s.Logger.Printf("cannot shutdown %s, %s still running", w.Name, d.Name)
 					return false
 				}
 			}
-			s.Logger.Printf("shutting down %s", w.Name)
+			s.Logger.Printf("%s: signaling shutdown", w.Name)
 			close(w.process.shutdown)
 			w.process.shutdownClosed = true
 		}
@@ -250,16 +249,14 @@ func (w *Worker) reconcile() bool {
 			for _, r := range w.Requires {
 				required := s.workers[r]
 				if required == nil {
-					s.Logger.Printf("cannot start %s, required worker missing: %s", w.Name, r)
 					return false
 				}
 				process := required.process
 				if process == nil || !process.ready {
-					s.Logger.Printf("cannot start %s, %s not ready", w.Name, r)
 					return false
 				}
 			}
-			s.Logger.Printf("starting %s", w.Name)
+			s.Logger.Printf("%s: starting", w.Name)
 			s.launch(w)
 		}
 
