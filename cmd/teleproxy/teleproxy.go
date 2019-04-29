@@ -81,6 +81,24 @@ func main() {
 	os.Exit(_main())
 }
 
+// worker names
+const (
+	TELEPROXY       = "TPY"
+	INTERCEPTOR     = "INT"
+	PROXY           = "PXY"
+	API             = "API"
+	BRIDGE_WORKER   = "BRG"
+	K8S_BRIDGE      = "K8S"
+	K8S_PORTFORWARD = "KPF"
+	K8S_SSH         = "SSH"
+	K8S_APPLY       = "KAP"
+	DKR_BRIDGE      = "DKR"
+	DNS_SERVER      = "DNS"
+	DNS_CONFIG      = "CFG"
+	READY           = "RDY"
+	SIGNAL          = "SIG"
+)
+
 func _main() int {
 	var version = flag.Bool("version", false, "alias for '-mode=version'")
 	var mode = flag.String("mode", "", "mode of operation ('intercept', 'bridge', or 'version')")
@@ -119,7 +137,7 @@ func _main() int {
 
 	if *mode == DEFAULT || *mode == INTERCEPT {
 		sup.Supervise(&supervisor.Worker{
-			Name: "setup-intercept",
+			Name: TELEPROXY,
 			Work: func(p *supervisor.Process) error {
 				return intercept(p, *dnsIP, *fallbackIP, *nosearch)
 			},
@@ -129,10 +147,10 @@ func _main() int {
 	if *mode == DEFAULT || *mode == BRIDGE {
 		requires := []string{}
 		if *mode != BRIDGE {
-			requires = append(requires, "interceptor")
+			requires = append(requires, INTERCEPTOR)
 		}
 		sup.Supervise(&supervisor.Worker{
-			Name:     "setup-bridges",
+			Name:     BRIDGE_WORKER,
 			Requires: requires,
 			Work: func(p *supervisor.Process) error {
 				kubeinfo, err := k8s.NewKubeInfo(*kubeconfig, *kcontext, *namespace)
@@ -146,8 +164,8 @@ func _main() int {
 	}
 
 	sup.Supervise(&supervisor.Worker{
-		Name:     "ready-notifier",
-		Requires: []string{"interceptor", "api-server", "dns-server", "proxy-server", "search-override"},
+		Name:     READY,
+		Requires: []string{INTERCEPTOR, API, DNS_SERVER, PROXY, DNS_CONFIG},
 		Work: func(p *supervisor.Process) error {
 			p.Do(func() {
 				sd_daemon.Notification{State: "READY=1"}.Send(false)
@@ -159,7 +177,7 @@ func _main() int {
 	})
 
 	sup.Supervise(&supervisor.Worker{
-		Name: "signal-handler",
+		Name: SIGNAL,
 		Work: func(p *supervisor.Process) error {
 			select {
 			case <-p.Shutdown():
@@ -172,10 +190,15 @@ func _main() int {
 	})
 
 	errs := sup.Run()
-	for _, err := range errs {
-		fmt.Println(err)
+	if len(errs) > 0 {
+		fmt.Printf("Teleproxy exited with %d error(s):\n", len(errs))
+	} else {
+		fmt.Println("Teleproxy exited successfully")
 	}
-	log.Println("done")
+
+	for _, err := range errs {
+		fmt.Printf("  %v\n", err)
+	}
 	if len(errs) > 0 {
 		return 1
 	} else {
@@ -230,8 +253,6 @@ func checkKubectl() {
 //
 // If fallbackIP is empty, it will default to Google DNS.
 func intercept(p *supervisor.Process, dnsIP string, fallbackIP string, nosearch bool) error {
-	// xxx check that we are root
-
 	if os.Geteuid() != 0 {
 		return errors.New("ERROR: teleproxy must be run as root or suid root")
 	}
@@ -275,7 +296,7 @@ func intercept(p *supervisor.Process, dnsIP string, fallbackIP string, nosearch 
 	}
 
 	sup.Supervise(&supervisor.Worker{
-		Name:     "interceptor",
+		Name:     INTERCEPTOR,
 		Requires: []string{}, // XXX: this will need to include the api server once it is changed to not bind early
 		Work: func(p *supervisor.Process) error {
 			iceptor.Start()
@@ -301,7 +322,7 @@ func intercept(p *supervisor.Process, dnsIP string, fallbackIP string, nosearch 
 	})
 
 	sup.Supervise(&supervisor.Worker{
-		Name:     "api-server",
+		Name:     API,
 		Requires: []string{},
 		Work: func(p *supervisor.Process) error {
 			apis.Start()
@@ -313,7 +334,7 @@ func intercept(p *supervisor.Process, dnsIP string, fallbackIP string, nosearch 
 	})
 
 	sup.Supervise(&supervisor.Worker{
-		Name:     "dns-server",
+		Name:     DNS_SERVER,
 		Requires: []string{},
 		Work: func(p *supervisor.Process) error {
 			srv := dns.Server{
@@ -340,7 +361,7 @@ func intercept(p *supervisor.Process, dnsIP string, fallbackIP string, nosearch 
 	})
 
 	sup.Supervise(&supervisor.Worker{
-		Name:     "proxy-server",
+		Name:     PROXY,
 		Requires: []string{},
 		Work: func(p *supervisor.Process) error {
 			// hmm, we may not actually need to get the original
@@ -360,8 +381,8 @@ func intercept(p *supervisor.Process, dnsIP string, fallbackIP string, nosearch 
 	})
 
 	sup.Supervise(&supervisor.Worker{
-		Name:     "search-override",
-		Requires: []string{"interceptor"},
+		Name:     DNS_CONFIG,
+		Requires: []string{INTERCEPTOR},
 		Work: func(p *supervisor.Process) error {
 			var restore func()
 			if !nosearch {
@@ -389,7 +410,7 @@ func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
 	connect(p, kubeinfo)
 
 	sup.Supervise(&supervisor.Worker{
-		Name: "kubernetes-bridge",
+		Name: K8S_BRIDGE,
 		Work: func(p *supervisor.Process) error {
 			// setup kubernetes bridge
 			p.Logf("kubernetes ctx=%s ns=%s", kubeinfo.Context, kubeinfo.Namespace)
@@ -491,7 +512,7 @@ func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
 	}
 
 	sup.Supervise(&supervisor.Worker{
-		Name: "docker-bridge",
+		Name: DKR_BRIDGE,
 		Work: func(p *supervisor.Process) error {
 			// setup docker bridge
 			dw := docker.NewWatcher()
@@ -556,7 +577,7 @@ func connect(p *supervisor.Process, kubeinfo *k8s.KubeInfo) {
 	// anything... this will change when keeper dies...
 
 	sup.Supervise(&supervisor.Worker{
-		Name: "teleproxy-pod",
+		Name: K8S_APPLY,
 		Work: func(p *supervisor.Process) error {
 			// setup remote teleproxy pod
 			apply := tpu.NewKeeper("KAP", "kubectl "+kubeinfo.GetKubectl("apply -f -"))
@@ -574,8 +595,8 @@ func connect(p *supervisor.Process, kubeinfo *k8s.KubeInfo) {
 	})
 
 	sup.Supervise(&supervisor.Worker{
-		Name:     "port-forward",
-		Requires: []string{"teleproxy-pod"},
+		Name:     K8S_PORTFORWARD,
+		Requires: []string{K8S_APPLY},
 		Work: func(p *supervisor.Process) error {
 			pf := tpu.NewKeeper("KPF", "kubectl "+kubeinfo.GetKubectl("port-forward pod/teleproxy 8022"))
 			pf.Inspect = "kubectl " + kubeinfo.GetKubectl("get pod/teleproxy")
@@ -588,8 +609,8 @@ func connect(p *supervisor.Process, kubeinfo *k8s.KubeInfo) {
 	})
 
 	sup.Supervise(&supervisor.Worker{
-		Name:     "ssh-tunnel",
-		Requires: []string{"port-forward"},
+		Name:     K8S_SSH,
+		Requires: []string{K8S_PORTFORWARD},
 		Work: func(p *supervisor.Process) error {
 			// XXX: probably need some kind of keepalive check for ssh, first
 			// curl after wakeup seems to trigger detection of death
