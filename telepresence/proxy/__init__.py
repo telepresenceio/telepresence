@@ -14,8 +14,8 @@
 from subprocess import CalledProcessError
 
 from .deployment import (
-    existing_deployment, create_new_deployment, swap_deployment_openshift,
-    supplant_deployment
+    existing_deployment, existing_deployment_openshift, create_new_deployment,
+    swap_deployment_openshift, supplant_deployment
 )
 from .remote import RemoteInfo, get_remote_info
 from telepresence.runner import Runner
@@ -45,14 +45,14 @@ def setup(runner: Runner, args):
     deployment_type = "deployment"
     if runner.kubectl.command == "oc":
         # OpenShift Origin might be using DeploymentConfig instead
-        if args.swap_deployment:
+        def deploymentconfig_exists(name):
             try:
                 runner.check_call(
                     runner.kubectl(
-                        "get", "dc/{}".format(args.swap_deployment)
+                        "get", "dc/{}".format(name)
                     ),
                 )
-                deployment_type = "deploymentconfig"
+                return True
             except CalledProcessError as exc:
                 runner.show(
                     "Failed to find OpenShift deploymentconfig {}. "
@@ -60,6 +60,12 @@ def setup(runner: Runner, args):
                         deployment_arg, exc.stderr
                     )
                 )
+            return False
+
+        if args.deployment and deploymentconfig_exists(args.deployment):
+            deployment_type = "deploymentconfig"
+        elif args.swap_deployment and deploymentconfig_exists(args.swap_deployment):
+            deployment_type = "deploymentconfig"
 
     if args.swap_deployment is not None:
         # This implies --swap-deployment
@@ -70,6 +76,11 @@ def setup(runner: Runner, args):
         else:
             operation = supplant_deployment
         args.operation = "swap_deployment"
+
+    if args.deployment is not None:
+        if runner.kubectl.command == "oc" \
+                and deployment_type == "deploymentconfig":
+            operation = existing_deployment_openshift
 
     # minikube/minishift break DNS because DNS gets captured, sent to minikube,
     # which sends it back to the DNS server set by host, resulting in a DNS
