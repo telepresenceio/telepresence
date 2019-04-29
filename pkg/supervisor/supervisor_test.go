@@ -585,3 +585,71 @@ func TestWaitOnWorkerStartedAfterShutdown(t *testing.T) {
 	s.Run()
 	w.Wait()
 }
+
+func TestMustCapture(t *testing.T) {
+	s := WithContext(context.Background())
+	w := &Worker{Name: "bob", Work: func(p *Process) error {
+		result := p.Command("echo", "this", "is", "a", "test").MustCapture(nil)
+		if result != "this is a test\n" {
+			t.Errorf("unexpected result: %v", result)
+		}
+		return nil
+	}}
+	s.Supervise(w)
+	s.Run()
+}
+
+func TestCaptureError(t *testing.T) {
+	s := WithContext(context.Background())
+	w := &Worker{Name: "bob", Work: func(p *Process) error {
+		_, err := p.Command("nosuchcommand").Capture(nil)
+		if err == nil {
+			t.Errorf("expected an error")
+		}
+		return nil
+	}}
+	s.Supervise(w)
+	s.Run()
+}
+
+func TestCaptureExitError(t *testing.T) {
+	s := WithContext(context.Background())
+	w := &Worker{Name: "bob", Work: func(p *Process) error {
+		_, err := p.Command("test", "1", "==", "0").Capture(nil)
+		if err == nil {
+			t.Errorf("expected an error")
+		}
+		return nil
+	}}
+	s.Supervise(w)
+	s.Run()
+}
+
+func TestCaptureInput(t *testing.T) {
+	s := WithContext(context.Background())
+	w := &Worker{Name: "bob", Work: func(p *Process) error {
+		output, err := p.Command("cat").Capture(strings.NewReader("hello"))
+		if err != nil {
+			t.Errorf("unexpected error")
+		}
+		if output != "hello" {
+			t.Errorf("expected hello, got %v", output)
+		}
+		return nil
+	}}
+	s.Supervise(w)
+	s.Run()
+}
+
+func TestRun(t *testing.T) {
+	s := WithContext(context.Background())
+	w := &Worker{Name: "bob", Work: func(p *Process) error {
+		err := p.Command("ls").Run()
+		if err != nil {
+			t.Errorf("unexpted error: %v", err)
+		}
+		return nil
+	}}
+	s.Supervise(w)
+	s.Run()
+}
