@@ -26,13 +26,12 @@ from inspect import currentframe, getframeinfo
 from pathlib import Path
 from shutil import rmtree, which
 from subprocess import STDOUT, CalledProcessError, TimeoutExpired, Popen
+from telepresence import TELEPRESENCE_BINARY
+from telepresence.utilities import kill_process, str_command
 from tempfile import mkdtemp
 from threading import Thread
 from time import sleep, time
 
-from telepresence.utilities import kill_process, str_command
-
-from telepresence import TELEPRESENCE_BINARY
 from .cache import Cache
 from .launch import BackgroundProcessCrash, _launch_command, _Logger
 from .output import Output
@@ -670,6 +669,8 @@ class Runner(object):
 
             Note that main_code is defined in the parent function,
             so it is declared as nonlocal
+
+            See https://github.com/telepresenceio/telepresence/issues/1003
             """
             nonlocal main_code
             main_code = p.wait()
