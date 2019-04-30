@@ -679,7 +679,7 @@ class Runner(object):
         self.write("Everything launched. Waiting to exit...")
         main_code = None
         span = self.span()
-        Thread(target=wait_for_process, args=(main_process,))
+        Thread(target=wait_for_process, args=(main_process, ))
         while not self.quitting:
             sleep(0.1)
         span.end()
