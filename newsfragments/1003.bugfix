@@ -1,1 +1,1 @@
-Add support for attaching a debugger to services under telepresence (tested on Go and Python)
+Add support for attaching a debugger to processes under telepresence (tested on Go and Python)
