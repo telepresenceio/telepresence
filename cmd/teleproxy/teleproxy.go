@@ -236,7 +236,7 @@ func teleproxy(p *supervisor.Process, args Args) error {
 const KUBECTL_ERR = "kubectl version 1.10 or greater is required"
 
 func checkKubectl(p *supervisor.Process) error {
-	output, err := tpu.Cmd("kubectl", "version", "--client", "-o", "json")
+	output, err := p.Command("kubectl", "version", "--client", "-o", "json").Capture(nil)
 	if err != nil {
 		return errors.Wrap(err, KUBECTL_ERR)
 	}
@@ -322,27 +322,7 @@ func intercept(p *supervisor.Process, args Args) error {
 	sup.Supervise(&supervisor.Worker{
 		Name:     INTERCEPTOR,
 		Requires: []string{}, // XXX: this will need to include the api server once it is changed to not bind early
-		Work: func(p *supervisor.Process) error {
-			iceptor.Start()
-			bootstrap := route.Table{Name: "bootstrap"}
-			bootstrap.Add(route.Route{
-				Ip:     args.dnsIP,
-				Target: DNS_REDIR_PORT,
-				Proto:  "udp",
-			})
-			bootstrap.Add(route.Route{
-				Name:   "teleproxy",
-				Ip:     MAGIC_IP,
-				Target: apis.Port(),
-				Proto:  "tcp",
-			})
-
-			iceptor.Update(bootstrap)
-			p.Ready()
-			<-p.Shutdown()
-			iceptor.Stop()
-			return nil
-		},
+		Work:     iceptor.Work,
 	})
 
 	sup.Supervise(&supervisor.Worker{
@@ -408,6 +388,20 @@ func intercept(p *supervisor.Process, args Args) error {
 		Name:     DNS_CONFIG,
 		Requires: []string{INTERCEPTOR},
 		Work: func(p *supervisor.Process) error {
+			bootstrap := route.Table{Name: "bootstrap"}
+			bootstrap.Add(route.Route{
+				Ip:     args.dnsIP,
+				Target: DNS_REDIR_PORT,
+				Proto:  "udp",
+			})
+			bootstrap.Add(route.Route{
+				Name:   "teleproxy",
+				Ip:     MAGIC_IP,
+				Target: apis.Port(),
+				Proto:  "tcp",
+			})
+			iceptor.Update(bootstrap)
+
 			var restore func()
 			if !args.nosearch {
 				restore = dns.OverrideSearchDomains(".")

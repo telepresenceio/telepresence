@@ -2,6 +2,8 @@
 
 package nat
 
+import "github.com/datawire/teleproxy/pkg/supervisor"
+
 type env struct {
 	pfconf string
 }
@@ -20,16 +22,22 @@ var environments = []env{
 }
 
 func (e *env) setup() {
-	err := pf([]string{"-F", "all"}, "")
-	if err != nil {
-		panic(err)
-	}
-	err = pf([]string{"-f", "/dev/stdin"}, e.pfconf)
-	if err != nil {
-		panic(err)
-	}
+	supervisor.MustRun("setup", func(p *supervisor.Process) error {
+		err := pf(p, []string{"-F", "all"}, "")
+		if err != nil {
+			return err
+		}
+		err = pf(p, []string{"-f", "/dev/stdin"}, e.pfconf)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func (e *env) teardown() {
-	pf([]string{"-F", "all"}, "")
+	supervisor.MustRun("teardown", func(p *supervisor.Process) error {
+		pf(p, []string{"-F", "all"}, "")
+		return nil
+	})
 }
