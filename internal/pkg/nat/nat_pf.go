@@ -4,7 +4,6 @@ package nat
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"strings"
 
@@ -93,7 +92,7 @@ func (t *Translator) Disable(p *supervisor.Process) {
 
 				for _, rule := range rules {
 					if rule.AnchorCall() == t.Name {
-						log.Printf("Removing rule: %v\n", rule)
+						p.Logf("removing rule: %v\n", rule)
 						err = t.dev.RemoveRule(rule)
 						if err != nil {
 							panic(err)
