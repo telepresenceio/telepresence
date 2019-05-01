@@ -429,7 +429,7 @@ func intercept(p *supervisor.Process, args Args) error {
 
 			var restore func()
 			if !args.nosearch {
-				restore = dns.OverrideSearchDomains(".")
+				restore = dns.OverrideSearchDomains(p, ".")
 			}
 
 			p.Ready()

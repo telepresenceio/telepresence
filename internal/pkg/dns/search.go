@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/datawire/teleproxy/pkg/tpu"
+	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 type searchDomains struct {
@@ -12,12 +12,12 @@ type searchDomains struct {
 	Domains   string
 }
 
-func OverrideSearchDomains(domains string) func() {
+func OverrideSearchDomains(p *supervisor.Process, domains string) func() {
 	if runtime.GOOS != "darwin" {
 		return func() {}
 	}
 
-	ifaces, err := getIfaces()
+	ifaces, err := getIfaces(p)
 	if err != nil {
 		panic(err)
 	}
@@ -25,11 +25,11 @@ func OverrideSearchDomains(domains string) func() {
 
 	for _, iface := range ifaces {
 		// setup dns search path
-		domain, err := getSearchDomains(iface)
+		domain, err := getSearchDomains(p, iface)
 		if err != nil {
 			log("DNS: error getting search domain for interface %v: %v", iface, err)
 		} else {
-			setSearchDomains(iface, domains)
+			setSearchDomains(p, iface, domains)
 			previous = append(previous, searchDomains{iface, domain})
 		}
 	}
@@ -37,13 +37,13 @@ func OverrideSearchDomains(domains string) func() {
 	// return function to restore dns search paths
 	return func() {
 		for _, prev := range previous {
-			setSearchDomains(prev.Interface, prev.Domains)
+			setSearchDomains(p, prev.Interface, prev.Domains)
 		}
 	}
 }
 
-func getIfaces() (ifaces []string, err error) {
-	lines, err := tpu.CmdLogf([]string{"networksetup", "-listallnetworkservices"}, log)
+func getIfaces(p *supervisor.Process) (ifaces []string, err error) {
+	lines, err := p.Command("networksetup", "-listallnetworkservices").Capture(nil)
 	if err != nil {
 		return
 	}
@@ -59,13 +59,13 @@ func getIfaces() (ifaces []string, err error) {
 	return
 }
 
-func getSearchDomains(iface string) (domains string, err error) {
-	domains, err = tpu.CmdLogf([]string{"networksetup", "-getsearchdomains", iface}, log)
+func getSearchDomains(p *supervisor.Process, iface string) (domains string, err error) {
+	domains, err = p.Command("networksetup", "-getsearchdomains", iface).Capture(nil)
 	domains = strings.TrimSpace(domains)
 	return
 }
 
-func setSearchDomains(iface, domains string) (err error) {
-	_, err = tpu.CmdLogf([]string{"networksetup", "-setsearchdomains", iface, domains}, log)
+func setSearchDomains(p *supervisor.Process, iface, domains string) (err error) {
+	err = p.Command("networksetup", "-setsearchdomains", iface, domains).Run()
 	return
 }
