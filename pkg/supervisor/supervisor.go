@@ -44,6 +44,19 @@ type Supervisor struct {
 	Logger        Logger
 }
 
+func Run(name string, f func(*Process) error) []error {
+	sup := WithContext(context.Background())
+	sup.Supervise(&Worker{Name: name, Work: f})
+	return sup.Run()
+}
+
+func MustRun(name string, f func(*Process) error) {
+	errs := Run(name, f)
+	if len(errs) > 0 {
+		panic(fmt.Sprintf("%s: %v", name, errs))
+	}
+}
+
 func WithContext(ctx context.Context) *Supervisor {
 	mu := &sync.Mutex{}
 	return &Supervisor{
