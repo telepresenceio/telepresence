@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -79,6 +80,7 @@ type Worker struct {
 	children      int64       // atomic counter for naming children
 	process       *Process    // nil if the worker is not currently running
 	error         error
+	retryDelay    time.Duration // how long to wait to retry
 }
 
 func (w *Worker) Error() string {
@@ -277,6 +279,14 @@ func (w *Worker) reconcile() bool {
 	return false
 }
 
+func nextDelay(delay time.Duration) time.Duration {
+	if delay < 1*time.Second {
+		return delay + 100*time.Millisecond
+	} else {
+		return 1 * time.Second
+	}
+}
+
 func (s *Supervisor) launch(worker *Worker) {
 	process := &Process{
 		supervisor: s,
@@ -293,6 +303,7 @@ func (s *Supervisor) launch(worker *Worker) {
 					err = errors.Errorf("WORKER PANICKED: %v\n%s", r, stack)
 				}
 			}()
+			time.Sleep(worker.retryDelay)
 			err = worker.Work(process)
 		}()
 		s.mutex.Lock()
@@ -305,7 +316,8 @@ func (s *Supervisor) launch(worker *Worker) {
 					s.remove(worker)
 					worker.done = true
 				} else {
-					process.Log("retrying...")
+					worker.retryDelay = nextDelay(worker.retryDelay)
+					process.Logf("retrying after %s...", worker.retryDelay.String())
 				}
 			} else {
 				s.remove(worker)
