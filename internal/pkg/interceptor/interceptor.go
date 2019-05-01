@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/datawire/teleproxy/pkg/supervisor"
+
 	"github.com/datawire/teleproxy/internal/pkg/nat"
 	rt "github.com/datawire/teleproxy/internal/pkg/route"
 )
@@ -21,6 +23,8 @@ type Interceptor struct {
 
 	search     []string
 	searchLock sync.RWMutex
+
+	work chan func(*supervisor.Process) error
 }
 
 func NewInterceptor(name string) *Interceptor {
@@ -29,20 +33,32 @@ func NewInterceptor(name string) *Interceptor {
 		translator: nat.NewTranslator(name),
 		domains:    make(map[string]rt.Route),
 		search:     []string{""},
+		work:       make(chan func(*supervisor.Process) error),
 	}
 	ret.tablesLock.Lock() // leave it locked until .Start() unlocks it
 	return ret
 }
 
-func (i *Interceptor) Start() {
-	i.translator.Enable()
+func (i *Interceptor) Work(p *supervisor.Process) error {
+	i.translator.Enable(p)
 	i.tablesLock.Unlock()
-}
 
-func (i *Interceptor) Stop() {
-	i.tablesLock.Lock()
-	i.translator.Disable()
-	// leave it locked
+	p.Ready()
+
+	for {
+		select {
+		case <-p.Shutdown():
+			i.tablesLock.Lock()
+			i.translator.Disable(p)
+			// leave it locked
+			return nil
+		case f := <-i.work:
+			err := f(p)
+			if err != nil {
+				return err
+			}
+		}
+	}
 }
 
 // Resolve looks up the given query in the (FIXME: somewhere), trying
@@ -104,44 +120,56 @@ func (i *Interceptor) Render(table string) string {
 }
 
 func (i *Interceptor) Delete(table string) bool {
-	i.tablesLock.Lock()
-	defer i.tablesLock.Unlock()
-	i.domainsLock.Lock()
-	defer i.domainsLock.Unlock()
+	result := make(chan bool)
+	i.work <- func(p *supervisor.Process) error {
+		i.tablesLock.Lock()
+		defer i.tablesLock.Unlock()
+		i.domainsLock.Lock()
+		defer i.domainsLock.Unlock()
 
-	var names []string
-	if table == "" {
-		for name := range i.tables {
-			names = append(names, name)
+		var names []string
+		if table == "" {
+			for name := range i.tables {
+				names = append(names, name)
+			}
+		} else if _, ok := i.tables[table]; ok {
+			names = []string{table}
+		} else {
+			result <- false
+			return nil
 		}
-	} else if _, ok := i.tables[table]; ok {
-		names = []string{table}
-	} else {
-		return false
+
+		for _, name := range names {
+			if name != "bootstrap" {
+				err := i.update(p, rt.Table{Name: name})
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		result <- true
+		return nil
 	}
 
-	for _, name := range names {
-		if name != "bootstrap" {
-			i.update(rt.Table{Name: name})
-		}
-	}
-
-	return true
+	return <-result
 }
 
 func (i *Interceptor) Update(table rt.Table) {
-	i.tablesLock.Lock()
-	defer i.tablesLock.Unlock()
-	i.domainsLock.Lock()
-	defer i.domainsLock.Unlock()
+	i.work <- func(p *supervisor.Process) error {
+		i.tablesLock.Lock()
+		defer i.tablesLock.Unlock()
+		i.domainsLock.Lock()
+		defer i.domainsLock.Unlock()
 
-	i.update(table)
+		return i.update(p, table)
+	}
 }
 
 // .update() assumes that both .tablesLock and .domainsLock are held
 // for writing.  Ensuring that is the case is the caller's
 // responsibility.
-func (i *Interceptor) update(table rt.Table) {
+func (i *Interceptor) update(p *supervisor.Process, table rt.Table) error {
 	oldTable, ok := i.tables[table.Name]
 
 	oldRoutes := make(map[string]rt.Route)
@@ -160,9 +188,9 @@ func (i *Interceptor) update(table rt.Table) {
 			if oldRouteOk {
 				switch newRoute.Proto {
 				case "tcp":
-					i.translator.ClearTCP(oldRoute.Ip)
+					i.translator.ClearTCP(p, oldRoute.Ip)
 				case "udp":
-					i.translator.ClearUDP(oldRoute.Ip)
+					i.translator.ClearUDP(p, oldRoute.Ip)
 				default:
 					log.Printf("INT: unrecognized protocol: %v", newRoute)
 				}
@@ -171,9 +199,9 @@ func (i *Interceptor) update(table rt.Table) {
 			if newRoute.Target != "" {
 				switch newRoute.Proto {
 				case "tcp":
-					i.translator.ForwardTCP(newRoute.Ip, newRoute.Target)
+					i.translator.ForwardTCP(p, newRoute.Ip, newRoute.Target)
 				case "udp":
-					i.translator.ForwardUDP(newRoute.Ip, newRoute.Target)
+					i.translator.ForwardUDP(p, newRoute.Ip, newRoute.Target)
 				default:
 					log.Printf("INT: unrecognized protocol: %v", newRoute)
 				}
@@ -196,9 +224,9 @@ func (i *Interceptor) update(table rt.Table) {
 
 		switch route.Proto {
 		case "tcp":
-			i.translator.ClearTCP(route.Ip)
+			i.translator.ClearTCP(p, route.Ip)
 		case "udp":
-			i.translator.ClearUDP(route.Ip)
+			i.translator.ClearUDP(p, route.Ip)
 		default:
 			log.Printf("INT: unrecognized protocol: %v", route)
 		}
@@ -210,6 +238,8 @@ func (i *Interceptor) update(table rt.Table) {
 	} else {
 		i.tables[table.Name] = table
 	}
+
+	return nil
 }
 
 // SetSearchPath updates the DNS search path used by the resolver

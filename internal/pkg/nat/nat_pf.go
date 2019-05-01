@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os/exec"
 	"strings"
 
 	ppf "github.com/datawire/pf"
+
+	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 type Translator struct {
@@ -17,20 +18,10 @@ type Translator struct {
 	dev *ppf.Handle
 }
 
-func pf(args []string, stdin string) (err error) {
-	cmd := exec.Command("pfctl", args...)
+func pf(p *supervisor.Process, args []string, stdin string) (err error) {
+	cmd := p.Command("pfctl", args...)
 	cmd.Stdin = strings.NewReader(stdin)
-	log.Printf("pfctl %s < %s\n", strings.Join(args, " "), stdin)
-	out, err := cmd.CombinedOutput()
-	if len(out) > 0 {
-		log.Printf("%s", out)
-	}
-	if err != nil {
-		log.Println(err)
-		return fmt.Errorf("IN:%s\nOUT:%s\nERR:%s", strings.TrimSpace(stdin), strings.TrimSpace(string(out)),
-			err)
-	}
-	return
+	return cmd.Run()
 }
 
 func (t *Translator) rules() string {
@@ -59,7 +50,7 @@ func (t *Translator) rules() string {
 
 var actions = []ppf.Action{ppf.ActionPass, ppf.ActionRDR}
 
-func (t *Translator) Enable() {
+func (t *Translator) Enable(p *supervisor.Process) {
 	var err error
 	t.dev, err = ppf.Open()
 	if err != nil {
@@ -80,15 +71,15 @@ func (t *Translator) Enable() {
 		}
 	}
 
-	pf([]string{"-a", t.Name, "-F", "all"}, "")
+	pf(p, []string{"-a", t.Name, "-F", "all"}, "")
 
-	pf([]string{"-f", "/dev/stdin"}, "pass on lo0")
-	pf([]string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	pf(p, []string{"-f", "/dev/stdin"}, "pass on lo0")
+	pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 
 	t.dev.Start()
 }
 
-func (t *Translator) Disable() {
+func (t *Translator) Disable(p *supervisor.Process) {
 	if t.dev != nil {
 		t.dev.Stop()
 
@@ -115,31 +106,31 @@ func (t *Translator) Disable() {
 		}
 	}
 
-	pf([]string{"-a", t.Name, "-F", "all"}, "")
+	pf(p, []string{"-a", t.Name, "-F", "all"}, "")
 }
 
-func (t *Translator) ForwardTCP(ip, toPort string) {
-	t.forward("tcp", ip, toPort)
+func (t *Translator) ForwardTCP(p *supervisor.Process, ip, toPort string) {
+	t.forward(p, "tcp", ip, toPort)
 }
 
-func (t *Translator) ForwardUDP(ip, toPort string) {
-	t.forward("udp", ip, toPort)
+func (t *Translator) ForwardUDP(p *supervisor.Process, ip, toPort string) {
+	t.forward(p, "udp", ip, toPort)
 }
 
-func (t *Translator) forward(protocol, ip, toPort string) {
+func (t *Translator) forward(p *supervisor.Process, protocol, ip, toPort string) {
 	t.clear(protocol, ip)
 	t.Mappings[Address{protocol, ip}] = toPort
-	pf([]string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
-func (t *Translator) ClearTCP(ip string) {
+func (t *Translator) ClearTCP(p *supervisor.Process, ip string) {
 	t.clear("tcp", ip)
-	pf([]string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
-func (t *Translator) ClearUDP(ip string) {
+func (t *Translator) ClearUDP(p *supervisor.Process, ip string) {
 	t.clear("udp", ip)
-	pf([]string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
 func (t *Translator) clear(protocol, ip string) {

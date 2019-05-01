@@ -1,12 +1,15 @@
 package nat
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 const (
@@ -131,51 +134,74 @@ var mappings = []struct {
 var ports = []string{"80", "8080"}
 
 func TestTranslator(t *testing.T) {
-	for _, env := range environments {
-		env.setup()
-		for _, network := range networks {
-			tr := NewTranslator("test-table")
+	sup := supervisor.WithContext(context.Background())
+	sup.Supervise(&supervisor.Worker{
+		Name: "test",
+		Work: func(p *supervisor.Process) error {
+			for _, env := range environments {
+				env.setup()
+				for _, network := range networks {
+					tr := NewTranslator("test-table")
 
-			for _, mapping := range mappings {
-				checkNoForwardTCP(t, fmt.Sprintf("%s.%s", network, mapping.from), ports)
+					for _, mapping := range mappings {
+						checkNoForwardTCP(t, fmt.Sprintf("%s.%s", network, mapping.from), ports)
+					}
+
+					tr.Enable(p)
+
+					for _, mapping := range mappings {
+						from := fmt.Sprintf("%s.%s", network, mapping.from)
+
+						checkNoForwardTCP(t, from, ports)
+						tr.ForwardTCP(p, from, mapping.to)
+						checkForwardTCP(t, tr, from, ports, mapping.to)
+					}
+
+					for _, mapping := range mappings {
+						from := fmt.Sprintf("%s.%s", network, mapping.from)
+						tr.ClearTCP(p, from)
+						checkNoForwardTCP(t, from, ports)
+					}
+
+					tr.Disable(p)
+				}
+				env.teardown()
 			}
-
-			tr.Enable()
-
-			for _, mapping := range mappings {
-				from := fmt.Sprintf("%s.%s", network, mapping.from)
-
-				checkNoForwardTCP(t, from, ports)
-				tr.ForwardTCP(from, mapping.to)
-				checkForwardTCP(t, tr, from, ports, mapping.to)
-			}
-
-			for _, mapping := range mappings {
-				from := fmt.Sprintf("%s.%s", network, mapping.from)
-				tr.ClearTCP(from)
-				checkNoForwardTCP(t, from, ports)
-			}
-
-			tr.Disable()
-		}
-		env.teardown()
+			return nil
+		},
+	})
+	errs := sup.Run()
+	if len(errs) > 0 {
+		t.Errorf("unexpected errors: %v", errs)
 	}
 }
 
 func TestSorted(t *testing.T) {
-	tr := NewTranslator("test-table")
-	defer tr.Disable()
-	tr.ForwardTCP("192.0.2.1", "4321")
-	tr.ForwardTCP("192.0.2.3", "4323")
-	tr.ForwardTCP("192.0.2.2", "4322")
-	tr.ForwardUDP("192.0.2.4", "1234")
-	entries := tr.sorted()
-	if !reflect.DeepEqual(entries, []Entry{
-		{Address{"tcp", "192.0.2.1"}, "4321"},
-		{Address{"tcp", "192.0.2.2"}, "4322"},
-		{Address{"tcp", "192.0.2.3"}, "4323"},
-		{Address{"udp", "192.0.2.4"}, "1234"},
-	}) {
-		t.Errorf("not sorted: %s", entries)
+	sup := supervisor.WithContext(context.Background())
+	sup.Supervise(&supervisor.Worker{
+		Name: "test",
+		Work: func(p *supervisor.Process) error {
+			tr := NewTranslator("test-table")
+			defer tr.Disable(p)
+			tr.ForwardTCP(p, "192.0.2.1", "4321")
+			tr.ForwardTCP(p, "192.0.2.3", "4323")
+			tr.ForwardTCP(p, "192.0.2.2", "4322")
+			tr.ForwardUDP(p, "192.0.2.4", "1234")
+			entries := tr.sorted()
+			if !reflect.DeepEqual(entries, []Entry{
+				{Address{"tcp", "192.0.2.1"}, "4321"},
+				{Address{"tcp", "192.0.2.2"}, "4322"},
+				{Address{"tcp", "192.0.2.3"}, "4323"},
+				{Address{"udp", "192.0.2.4"}, "1234"},
+			}) {
+				t.Errorf("not sorted: %s", entries)
+			}
+
+			return nil
+		},
+	})
+	errs := sup.Run()
+	if len(errs) > 0 {
+		t.Errorf("unexpected errors: %v", errs)
 	}
 }
