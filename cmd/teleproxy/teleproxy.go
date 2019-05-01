@@ -84,7 +84,7 @@ func main() {
 // worker names
 const (
 	TELEPROXY       = "TPY"
-	INTERCEPTOR     = "INT"
+	TRANSLATOR      = "NAT"
 	PROXY           = "PXY"
 	API             = "API"
 	BRIDGE_WORKER   = "BRG"
@@ -98,6 +98,24 @@ const (
 	READY           = "RDY"
 	SIGNAL          = "SIG"
 )
+
+var LOG_LEGEND = []struct {
+	Prefix      string
+	Description string
+}{
+	{TELEPROXY, "The setup worker launches all the other workers."},
+	{TRANSLATOR, "The network address translator controls the system firewall settings used to intercept ip addresses."},
+	{PROXY, "The proxy forwards connections to intercepted addresses to the configured destinations."},
+	{API, "The API handles requests that allow viewing and updating the routing table that maintains the set of dns names and ip addresses that should be intercepted."},
+	{BRIDGE_WORKER, "The bridge worker sets up the kubernetes and docker bridges."},
+	{K8S_BRIDGE, "The kubernetes bridge."},
+	{K8S_PORTFORWARD, "The kubernetes port forward used for connectivity."},
+	{K8S_SSH, "The SSH port forward used on top of the kubernetes port forward."},
+	{K8S_APPLY, "The kubernetes apply used to setup the in-cluster pod we talk with."},
+	{DKR_BRIDGE, "The docker bridge."},
+	{DNS_SERVER, "The DNS server teleproxy runs to intercept dns requests."},
+	{READY, "The worker teleproxy uses to signal the system it is ready."},
+}
 
 type Args struct {
 	mode       string
@@ -155,7 +173,7 @@ func _main() int {
 
 	sup.Supervise(&supervisor.Worker{
 		Name:     READY,
-		Requires: []string{INTERCEPTOR, API, DNS_SERVER, PROXY, DNS_CONFIG},
+		Requires: []string{TRANSLATOR, API, DNS_SERVER, PROXY, DNS_CONFIG},
 		Work: func(p *supervisor.Process) error {
 			p.Do(func() {
 				sd_daemon.Notification{State: "READY=1"}.Send(false)
@@ -178,6 +196,13 @@ func _main() int {
 			return nil
 		},
 	})
+
+	log.Println("Log prefixes used by the different teleproxy workers:")
+	log.Println("")
+	for _, entry := range LOG_LEGEND {
+		log.Printf("  %s -> %s\n", entry.Prefix, entry.Description)
+	}
+	log.Println("")
 
 	errs := sup.Run()
 	if len(errs) > 0 {
@@ -209,7 +234,7 @@ func teleproxy(p *supervisor.Process, args Args) error {
 	if args.mode == DEFAULT || args.mode == BRIDGE {
 		requires := []string{}
 		if args.mode != BRIDGE {
-			requires = append(requires, INTERCEPTOR)
+			requires = append(requires, TRANSLATOR)
 		}
 		sup.Supervise(&supervisor.Worker{
 			Name:     BRIDGE_WORKER,
@@ -320,7 +345,7 @@ func intercept(p *supervisor.Process, args Args) error {
 	}
 
 	sup.Supervise(&supervisor.Worker{
-		Name:     INTERCEPTOR,
+		Name:     TRANSLATOR,
 		Requires: []string{}, // XXX: this will need to include the api server once it is changed to not bind early
 		Work:     iceptor.Work,
 	})
@@ -386,7 +411,7 @@ func intercept(p *supervisor.Process, args Args) error {
 
 	sup.Supervise(&supervisor.Worker{
 		Name:     DNS_CONFIG,
-		Requires: []string{INTERCEPTOR},
+		Requires: []string{TRANSLATOR},
 		Work: func(p *supervisor.Process) error {
 			bootstrap := route.Table{Name: "bootstrap"}
 			bootstrap.Add(route.Route{
