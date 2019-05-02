@@ -30,7 +30,7 @@ import (
 	"github.com/datawire/teleproxy/internal/pkg/route"
 )
 
-func dnsListeners(port string) (listeners []string) {
+func dnsListeners(p *supervisor.Process, port string) (listeners []string) {
 	// turns out you need to listen on localhost for nat to work
 	// properly for udp, otherwise you get an "unexpected source
 	// blah thingy" because the dns reply packets look like they
@@ -38,15 +38,16 @@ func dnsListeners(port string) (listeners []string) {
 	listeners = append(listeners, "127.0.0.1:"+port)
 
 	if runtime.GOOS == "linux" {
-		// This is the default docker bridge. We should
-		// probably figure out how to query this out of docker
-		// instead of hardcoding it. We need to listen here
-		// because the nat logic we use to intercept dns
-		// packets will divert the packet to the interface it
-		// originates from, which in the case of containers is
-		// the docker bridge. Without this dns won't work from
-		// inside containers.
-		listeners = append(listeners, "172.17.0.1:"+port)
+		// This is the default docker bridge. We need to listen here because the nat logic we use to intercept
+		// dns packets will divert the packet to the interface it originates from, which in the case of
+		// containers is the docker bridge. Without this dns won't work from inside containers.
+		output, err := p.Command("docker", "inspect", "bridge",
+			"-f", "{{(index .IPAM.Config 0).Gateway}}").Capture(nil)
+		if err != nil {
+			p.Log("not listening on docker bridge")
+			return
+		}
+		listeners = append(listeners, fmt.Sprintf("%s:%s", strings.TrimSpace(output), port))
 	}
 
 	return
@@ -366,7 +367,7 @@ func intercept(p *supervisor.Process, args Args) error {
 		Requires: []string{},
 		Work: func(p *supervisor.Process) error {
 			srv := dns.Server{
-				Listeners: dnsListeners(DNS_REDIR_PORT),
+				Listeners: dnsListeners(p, DNS_REDIR_PORT),
 				Fallback:  args.fallbackIP + ":53",
 				Resolve: func(domain string) string {
 					route := iceptor.Resolve(domain)
