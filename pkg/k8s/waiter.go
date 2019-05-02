@@ -141,7 +141,7 @@ func (w *Waiter) Wait(timeout time.Duration) bool {
 	for k := range w.kinds {
 		err := w.watcher.Watch(k, listener)
 		if err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
 	}
 

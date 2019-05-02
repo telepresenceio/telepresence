@@ -39,8 +39,13 @@ func init() {
 }
 
 func runWatt(cmd *cobra.Command, args []string) {
+	os.Exit(_runWatt(cmd, args))
+}
+
+func _runWatt(cmd *cobra.Command, args []string) int {
 	if len(initialSources) == 0 {
-		log.Fatalln("no initial sources configured")
+		log.Println("no initial sources configured")
+		return 1
 	}
 
 	// XXX: we don't need to create this here anymore
@@ -125,12 +130,15 @@ func runWatt(cmd *cobra.Command, args []string) {
 		for _, err := range errs {
 			log.Println(err)
 		}
-		os.Exit(1)
+		return 1
 	}
+
+	return 0
 }
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatalln(err)
+		log.Println(err)
+		os.Exit(1)
 	}
 }

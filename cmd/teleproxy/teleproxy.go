@@ -78,6 +78,10 @@ const (
 )
 
 func main() {
+	os.Exit(_main())
+}
+
+func _main() int {
 	var version = flag.Bool("version", false, "alias for '-mode=version'")
 	var mode = flag.String("mode", "", "mode of operation ('intercept', 'bridge', or 'version')")
 	var kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
@@ -98,9 +102,9 @@ func main() {
 		// do nothing
 	case VERSION:
 		fmt.Println("teleproxy", "version", Version)
-		os.Exit(0)
+		return 0
 	default:
-		log.Fatalf("TPY: unrecognized mode: %v", *mode)
+		panic(fmt.Sprintf("TPY: unrecognized mode: %v", *mode))
 	}
 
 	checkKubectl()
@@ -167,15 +171,23 @@ func main() {
 		},
 	})
 
-	sup.Run()
+	errs := sup.Run()
+	for _, err := range errs {
+		fmt.Println(err)
+	}
 	log.Println("done")
+	if len(errs) > 0 {
+		return 1
+	} else {
+		return 0
+	}
 }
 
 func kubeDie(err error) {
 	if err != nil {
 		log.Println(err)
 	}
-	log.Fatal("kubectl version 1.10 or greater is required")
+	panic("kubectl version 1.10 or greater is required")
 }
 
 func checkKubectl() {

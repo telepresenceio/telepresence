@@ -9,7 +9,6 @@ package k8s
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -122,22 +121,22 @@ func NewClient(info *KubeInfo) *Client {
 		var err error
 		info, err = NewKubeInfo("", "", "") // Empty file/ctx/ns for defaults
 		if err != nil {
-			log.Fatal(err)
+			panic(err)
 		}
 	}
 	config, err := info.GetRestConfig()
 	if err != nil {
-		log.Fatalln("Failed to get REST config:", err)
+		panic(fmt.Sprintf("Failed to get REST config: %v", err))
 	}
 
 	disco, err := discovery.NewDiscoveryClientForConfig(config)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	resources, err := disco.ServerResources()
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	return &Client{
