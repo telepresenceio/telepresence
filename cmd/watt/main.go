@@ -139,5 +139,6 @@ func _runWatt(cmd *cobra.Command, args []string) int {
 func main() {
 	if err := rootCmd.Execute(); err != nil {
 		log.Println(err)
+		os.Exit(1)
 	}
 }
