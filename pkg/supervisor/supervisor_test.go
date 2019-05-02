@@ -638,3 +638,20 @@ func TestCommandRun(t *testing.T) {
 		return nil
 	})
 }
+
+func TestDoPanic(t *testing.T) {
+	gotHere := false
+	errs := Run("bob", func(p *Process) error {
+		p.Do(func() {
+			panic("blah")
+		})
+		gotHere = true
+		return nil
+	})
+	if len(errs) != 1 {
+		t.Errorf("unexpected errors: %v", errs)
+	}
+	if !gotHere {
+		t.Errorf("did not recover from panic")
+	}
+}

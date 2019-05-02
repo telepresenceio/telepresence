@@ -394,13 +394,27 @@ func (p *Process) Go(fn func(*Process) error) *Worker {
 }
 
 // Shorthand for proper shutdown handling while doing a potentially
-// blocking activity. This method will return true if the activity
-// completes normally and false if it was abandoned.
+// blocking activity. This method will return nil if the activity
+// completes normally and an error if the activity is abandoned or
+// panics.
+
 func (p *Process) Do(fn func()) bool {
+	sup := p.Supervisor()
 	done := make(chan struct{})
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				stack := string(debug.Stack())
+				err := errors.Errorf("FUNCTION PANICKED: %v\n%s", r, stack)
+				sup.mutex.Lock()
+				sup.errors = append(sup.errors, err)
+				sup.wantsShutdown = true
+				sup.mutex.Unlock()
+			}
+			close(done)
+		}()
+
 		fn()
-		close(done)
 	}()
 
 	select {
