@@ -21,7 +21,6 @@ import (
 
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
-	"github.com/datawire/teleproxy/pkg/tpu"
 
 	"github.com/datawire/teleproxy/internal/pkg/api"
 	"github.com/datawire/teleproxy/internal/pkg/dns"
@@ -615,55 +614,74 @@ spec:
 func connect(p *supervisor.Process, kubeinfo *k8s.KubeInfo) {
 	sup := p.Supervisor()
 
-	// XXX: the dependencies here are correct, but the keeper
-	// interface is async, so they don't actually accomplish
-	// anything... this will change when keeper dies...
-
 	sup.Supervise(&supervisor.Worker{
 		Name: K8S_APPLY,
-		Work: func(p *supervisor.Process) error {
+		Work: func(p *supervisor.Process) (err error) {
 			// setup remote teleproxy pod
-			apply := tpu.NewKeeper("KAP", "kubectl "+kubeinfo.GetKubectl("apply -f -"))
-			apply.Input = TELEPROXY_POD
-			apply.Limit = 1
-			apply.Start()
-			p.Do(func() {
-				apply.Wait()
+			apply := p.Command("kubectl", kubeinfo.GetKubectlArray("apply", "-f", "-")...)
+			apply.Stdin = strings.NewReader(TELEPROXY_POD)
+			err = apply.Start()
+			if err != nil {
+				return
+			}
+			if !p.Do(func() {
+				err = apply.Wait()
 				p.Ready()
-			})
+			}) {
+				apply.Process.Kill()
+			}
+			// we need to stay alive so that our dependencies can start
 			<-p.Shutdown()
-			apply.Stop()
-			return nil
+			return
 		},
 	})
 
 	sup.Supervise(&supervisor.Worker{
 		Name:     K8S_PORTFORWARD,
 		Requires: []string{K8S_APPLY},
-		Work: func(p *supervisor.Process) error {
-			pf := tpu.NewKeeper("KPF", "kubectl "+kubeinfo.GetKubectl("port-forward pod/teleproxy 8022"))
-			pf.Inspect = "kubectl " + kubeinfo.GetKubectl("get pod/teleproxy")
-			pf.Start()
+		Retry:    true,
+		Work: func(p *supervisor.Process) (err error) {
+			pf := p.Command("kubectl", kubeinfo.GetKubectlArray("port-forward", "pod/teleproxy", "8022")...)
+			err = pf.Start()
+			if err != nil {
+				return
+			}
 			p.Ready()
-			<-p.Shutdown()
-			pf.Stop()
-			return nil
+			if !p.Do(func() {
+				err = pf.Wait()
+				if err != nil {
+					inspect := p.Command("kubectl",
+						kubeinfo.GetKubectlArray("get", "pod/teleproxy")...)
+					inspect.Run()
+				}
+			}) {
+				pf.Process.Kill()
+			}
+			return
 		},
 	})
 
 	sup.Supervise(&supervisor.Worker{
 		Name:     K8S_SSH,
 		Requires: []string{K8S_PORTFORWARD},
-		Work: func(p *supervisor.Process) error {
+		Retry:    true,
+		Work: func(p *supervisor.Process) (err error) {
 			// XXX: probably need some kind of keepalive check for ssh, first
 			// curl after wakeup seems to trigger detection of death
-			ssh := tpu.NewKeeper("SSH", "ssh -D localhost:1080 -C -N -oConnectTimeout=5 -oExitOnForwardFailure=yes "+
-				"-oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null telepresence@localhost -p 8022")
-			ssh.Start()
+			ssh := p.Command("ssh", "-D", "localhost:1080", "-C", "-N", "-oConnectTimeout=5",
+				"-oExitOnForwardFailure=yes", "-oStrictHostKeyChecking=no",
+				"-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", "8022")
+			err = ssh.Start()
+			if err != nil {
+				return
+			}
 			p.Ready()
-			<-p.Shutdown()
-			ssh.Stop()
-			return nil
+			if !p.Do(func() {
+				err = ssh.Wait()
+			}) {
+				ssh.Process.Kill()
+			}
+			return
 		},
 	})
 }
