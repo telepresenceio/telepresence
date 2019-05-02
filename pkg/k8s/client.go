@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"github.com/google/shlex"
 	"github.com/pkg/errors"
 )
 
@@ -99,13 +100,21 @@ func (info *KubeInfo) GetRestConfig() (*rest.Config, error) {
 // GetKubectl returns the arguments for a runnable kubectl command that talks to
 // the same cluster as the associated ClientConfig.
 func (info *KubeInfo) GetKubectl(args string) string {
+	parts, err := shlex.Split(args)
+	if err != nil {
+		panic(err)
+	}
+	return strings.Join(info.GetKubectlArray(parts...), " ")
+}
+
+func (info *KubeInfo) GetKubectlArray(args ...string) []string {
 	res := []string{"kubectl"}
 	if len(info.Kubeconfig) != 0 {
 		res = append(res, "--kubeconfig", info.Kubeconfig)
 	}
 	res = append(res, "--context", info.Context, "--namespace", info.Namespace)
-	res = append(res, args)
-	return strings.Join(res[1:], " ") // Drop leading "kubectl" because reasons...
+	res = append(res, args...)
+	return res[1:] // Drop leading "kubectl" because reasons...
 }
 
 // Client is the top-level handle to the Kubernetes cluster.
