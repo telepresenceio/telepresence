@@ -35,10 +35,40 @@ commands:
       - run: chmod a+x ./kubectl
       - run: sudo mv kubectl /usr/local/bin
 
+  save-go-mod-cache:
+    steps:
+      - run:
+          command: |
+            mkdir -p "$(go env GOPATH)/pkg/mod/cache/download/"
+            rsync -av --delete "$(go env GOPATH)/pkg/mod/cache/download/" ~/goproxy
+          when: always
+      - save_cache:
+          # Use {{arch}} as a proxy for
+          # {{.Environment.HOME}}... because despite what the CircleCI
+          # docs say, {{.Environment.HOME}} evaluates to "<no value>".
+          #
+          # Why put it in $HOME, instead of /tmp or something, and be
+          # able to share the cache?  Because /tmp is a symlink to
+          # /private/tmp on macOS, and CircleCI is broken on macOS
+          # whenever symlinks are involved.
+          key: go-mod-cache-{{ arch }}-{{ checksum "go.mod" }}-{{ .BuildNum }}
+          paths: "~/goproxy"
+          when: always
+  restore-go-mod-cache:
+    steps:
+      - restore_cache:
+          keys:
+            - go-mod-cache-{{ arch }}-{{ checksum "go.mod" }}-
+            - go-mod-cache-{{ arch }}-
+      - run: |
+          GOPROXY=file://$HOME/goproxy make go-get || true
+
   main:
     steps:
       - checkout
+      - restore-go-mod-cache
       - run: make check
+      - save-go-mod-cache
       - run:
           command: make unclaim
           when: always
