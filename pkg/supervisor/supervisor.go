@@ -280,11 +280,12 @@ func (w *Worker) reconcile() bool {
 }
 
 func nextDelay(delay time.Duration) time.Duration {
-	if delay <= 0 {
+	switch {
+	case delay <= 0:
 		return 100 * time.Millisecond
-	} else if delay < 3*time.Second {
+	case delay < 3*time.Second:
 		return delay * 2
-	} else {
+	default:
 		return 3 * time.Second
 	}
 }
