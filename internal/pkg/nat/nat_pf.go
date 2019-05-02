@@ -17,10 +17,14 @@ type Translator struct {
 	dev *ppf.Handle
 }
 
-func pf(p *supervisor.Process, args []string, stdin string) (err error) {
+func pf(p *supervisor.Process, args []string, stdin string) {
 	cmd := p.Command("pfctl", args...)
 	cmd.Stdin = strings.NewReader(stdin)
-	return cmd.Run()
+	err := cmd.Start()
+	if err != nil {
+		panic(err)
+	}
+	cmd.Wait()
 }
 
 func (t *Translator) rules() string {

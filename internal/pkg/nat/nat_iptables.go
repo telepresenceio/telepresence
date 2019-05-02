@@ -15,7 +15,12 @@ type Translator struct {
 }
 
 func (t *Translator) ipt(p *supervisor.Process, args ...string) {
-	p.Command("iptables", append([]string{"-t", "nat"}, args...)...).Run()
+	cmd := p.Command("iptables", append([]string{"-t", "nat"}, args...)...)
+	err := cmd.Start()
+	if err != nil {
+		panic(err)
+	}
+	cmd.Wait()
 }
 
 func (t *Translator) Enable(p *supervisor.Process) {
