@@ -78,7 +78,7 @@ func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
 		p.Signal(os.Interrupt)
 	})
 
-	ln, err := net.Listen("tcp", ":0")
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
 	}
