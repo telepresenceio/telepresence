@@ -106,6 +106,8 @@ func (w *kubewatchman) Work(p *supervisor.Process) error {
 type kubebootstrap struct {
 	namespace      string
 	kinds          []string
+	fieldSelector  string
+	labelSelector  string
 	notify         []chan<- k8sEvent
 	kubeAPIWatcher *k8s.Watcher
 }
@@ -133,7 +135,7 @@ func (b *kubebootstrap) Work(p *supervisor.Process) error {
 			}
 		}
 
-		err := b.kubeAPIWatcher.WatchNamespace(b.namespace, kind, watcherFunc(b.namespace, kind))
+		err := b.kubeAPIWatcher.SelectiveWatch(b.namespace, kind, b.fieldSelector, b.labelSelector, watcherFunc(b.namespace, kind))
 
 		if err != nil {
 			return err
