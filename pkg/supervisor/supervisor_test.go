@@ -585,3 +585,73 @@ func TestWaitOnWorkerStartedAfterShutdown(t *testing.T) {
 	s.Run()
 	w.Wait()
 }
+
+func TestMustCapture(t *testing.T) {
+	MustRun("bob", func(p *Process) error {
+		result := p.Command("echo", "this", "is", "a", "test").MustCapture(nil)
+		if result != "this is a test\n" {
+			t.Errorf("unexpected result: %v", result)
+		}
+		return nil
+	})
+}
+
+func TestCaptureError(t *testing.T) {
+	MustRun("bob", func(p *Process) error {
+		_, err := p.Command("nosuchcommand").Capture(nil)
+		if err == nil {
+			t.Errorf("expected an error")
+		}
+		return nil
+	})
+}
+
+func TestCaptureExitError(t *testing.T) {
+	MustRun("bob", func(p *Process) error {
+		_, err := p.Command("test", "1", "==", "0").Capture(nil)
+		if err == nil {
+			t.Errorf("expected an error")
+		}
+		return nil
+	})
+}
+
+func TestCaptureInput(t *testing.T) {
+	MustRun("bob", func(p *Process) error {
+		output, err := p.Command("cat").Capture(strings.NewReader("hello"))
+		if err != nil {
+			t.Errorf("unexpected error")
+		}
+		if output != "hello" {
+			t.Errorf("expected hello, got %v", output)
+		}
+		return nil
+	})
+}
+
+func TestCommandRun(t *testing.T) {
+	MustRun("bob", func(p *Process) error {
+		err := p.Command("ls").Run()
+		if err != nil {
+			t.Errorf("unexpted error: %v", err)
+		}
+		return nil
+	})
+}
+
+func TestDoPanic(t *testing.T) {
+	gotHere := false
+	errs := Run("bob", func(p *Process) error {
+		p.Do(func() {
+			panic("blah")
+		})
+		gotHere = true
+		return nil
+	})
+	if len(errs) != 1 {
+		t.Errorf("unexpected errors: %v", errs)
+	}
+	if !gotHere {
+		t.Errorf("did not recover from panic")
+	}
+}

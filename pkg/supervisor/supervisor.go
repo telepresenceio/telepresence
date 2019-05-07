@@ -3,10 +3,14 @@ package supervisor
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"os/exec"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -41,6 +45,19 @@ type Supervisor struct {
 	Logger        Logger
 }
 
+func Run(name string, f func(*Process) error) []error {
+	sup := WithContext(context.Background())
+	sup.Supervise(&Worker{Name: name, Work: f})
+	return sup.Run()
+}
+
+func MustRun(name string, f func(*Process) error) {
+	errs := Run(name, f)
+	if len(errs) > 0 {
+		panic(fmt.Sprintf("%s: %v", name, errs))
+	}
+}
+
 func WithContext(ctx context.Context) *Supervisor {
 	mu := &sync.Mutex{}
 	return &Supervisor{
@@ -63,6 +80,7 @@ type Worker struct {
 	children      int64       // atomic counter for naming children
 	process       *Process    // nil if the worker is not currently running
 	error         error
+	retryDelay    time.Duration // how long to wait to retry
 }
 
 func (w *Worker) Error() string {
@@ -227,11 +245,10 @@ func (w *Worker) reconcile() bool {
 		if w.process != nil && !w.process.shutdownClosed {
 			for _, d := range s.dependents(w) {
 				if s.workers[d.Name].process != nil {
-					s.Logger.Printf("cannot shutdown %s, %s still running", w.Name, d.Name)
 					return false
 				}
 			}
-			s.Logger.Printf("shutting down %s", w.Name)
+			s.Logger.Printf("%s: signaling shutdown", w.Name)
 			close(w.process.shutdown)
 			w.process.shutdownClosed = true
 		}
@@ -247,21 +264,30 @@ func (w *Worker) reconcile() bool {
 			for _, r := range w.Requires {
 				required := s.workers[r]
 				if required == nil {
-					s.Logger.Printf("cannot start %s, required worker missing: %s", w.Name, r)
 					return false
 				}
 				process := required.process
 				if process == nil || !process.ready {
-					s.Logger.Printf("cannot start %s, %s not ready", w.Name, r)
 					return false
 				}
 			}
-			s.Logger.Printf("starting %s", w.Name)
+			s.Logger.Printf("%s: starting", w.Name)
 			s.launch(w)
 		}
 
 	}
 	return false
+}
+
+func nextDelay(delay time.Duration) time.Duration {
+	switch {
+	case delay <= 0:
+		return 100 * time.Millisecond
+	case delay < 3*time.Second:
+		return delay * 2
+	default:
+		return 3 * time.Second
+	}
 }
 
 func (s *Supervisor) launch(worker *Worker) {
@@ -280,6 +306,7 @@ func (s *Supervisor) launch(worker *Worker) {
 					err = errors.Errorf("WORKER PANICKED: %v\n%s", r, stack)
 				}
 			}()
+			time.Sleep(worker.retryDelay)
 			err = worker.Work(process)
 		}()
 		s.mutex.Lock()
@@ -292,7 +319,8 @@ func (s *Supervisor) launch(worker *Worker) {
 					s.remove(worker)
 					worker.done = true
 				} else {
-					process.Log("retrying...")
+					worker.retryDelay = nextDelay(worker.retryDelay)
+					process.Logf("retrying after %s...", worker.retryDelay.String())
 				}
 			} else {
 				s.remove(worker)
@@ -352,11 +380,14 @@ func (p *Process) Logf(format string, args ...interface{}) {
 	p.supervisor.Logger.Printf("%s: %v", p.Worker().Name, fmt.Sprintf(format, args...))
 }
 
+func (p *Process) allocateId() int64 {
+	return atomic.AddInt64(&p.Worker().children, 1)
+}
+
 // Shorthand for launching a child worker... it is named "<parent>[<child-count>]"
 func (p *Process) Go(fn func(*Process) error) *Worker {
-	id := atomic.AddInt64(&p.Worker().children, 1)
 	w := &Worker{
-		Name: fmt.Sprintf("%s[%d]", p.Worker().Name, id),
+		Name: fmt.Sprintf("%s[%d]", p.Worker().Name, p.allocateId()),
 		Work: fn,
 	}
 	p.Supervisor().Supervise(w)
@@ -364,13 +395,27 @@ func (p *Process) Go(fn func(*Process) error) *Worker {
 }
 
 // Shorthand for proper shutdown handling while doing a potentially
-// blocking activity. This method will return true if the activity
-// completes normally and false if it was abandoned.
+// blocking activity. This method will return nil if the activity
+// completes normally and an error if the activity is abandoned or
+// panics.
+
 func (p *Process) Do(fn func()) bool {
+	sup := p.Supervisor()
 	done := make(chan struct{})
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				stack := string(debug.Stack())
+				err := errors.Errorf("FUNCTION PANICKED: %v\n%s", r, stack)
+				sup.mutex.Lock()
+				sup.errors = append(sup.errors, err)
+				sup.wantsShutdown = true
+				sup.mutex.Unlock()
+			}
+			close(done)
+		}()
+
 		fn()
-		close(done)
 	}()
 
 	select {
@@ -379,4 +424,131 @@ func (p *Process) Do(fn func()) bool {
 	case <-done:
 		return true
 	}
+}
+
+type logger struct {
+	process   *Process
+	emptyLine bool
+}
+
+func (l *logger) Log(prefix, line string) {
+	if l.emptyLine {
+		l.process.Log(prefix)
+		l.emptyLine = false
+	}
+
+	if line == "" {
+		l.emptyLine = true
+	} else {
+		l.process.Logf("%s%s", prefix, line)
+		l.emptyLine = false
+	}
+}
+
+func (l *logger) LogLines(prefix, str string, err error) {
+	lines := strings.Split(str, "\n")
+	for _, line := range lines {
+		l.Log(prefix, line)
+	}
+
+	if !(err == nil || err == io.EOF) {
+		l.process.Log(fmt.Sprintf("%v", err))
+	}
+}
+
+type loggingWriter struct {
+	logger
+	writer io.Writer
+}
+
+func (l *loggingWriter) Write(bytes []byte) (int, error) {
+	if l.writer == nil {
+		l.LogLines(" <- ", string(bytes), nil)
+		return len(bytes), nil
+	} else {
+		n, err := l.writer.Write(bytes)
+		l.LogLines(" <- ", string(bytes[:n]), err)
+		return n, err
+	}
+}
+
+type loggingReader struct {
+	logger
+	reader io.Reader
+}
+
+func (l *loggingReader) Read(p []byte) (n int, err error) {
+	n, err = l.reader.Read(p)
+	l.LogLines(" -> ", string(p[:n]), err)
+	return n, err
+}
+
+type Cmd struct {
+	*exec.Cmd
+	supervisorProcess *Process
+}
+
+func (c *Cmd) pre() {
+	if c.Stdin != nil {
+		c.Stdin = &loggingReader{logger: logger{process: c.supervisorProcess}, reader: c.Stdin}
+	}
+	c.Stdout = &loggingWriter{logger: logger{process: c.supervisorProcess}, writer: c.Stdout}
+	c.Stderr = &loggingWriter{logger: logger{process: c.supervisorProcess}, writer: c.Stderr}
+
+	c.supervisorProcess.Logf("%s %v", c.Path, c.Args[1:])
+}
+
+func (c *Cmd) post(err error) {
+	if err == nil {
+		c.supervisorProcess.Logf("%s exited successfully", c.Path)
+	} else {
+		if c.ProcessState == nil {
+			c.supervisorProcess.Logf("%v", err)
+		} else {
+			c.supervisorProcess.Logf("%s: %v", c.Path, err)
+		}
+	}
+}
+
+func (c *Cmd) Start() error {
+	c.pre()
+	return c.Cmd.Start()
+}
+
+func (c *Cmd) Wait() error {
+	err := c.Cmd.Wait()
+	c.post(err)
+	return err
+}
+
+func (c *Cmd) Run() error {
+	c.pre()
+	err := c.Cmd.Run()
+	c.post(err)
+	return err
+}
+
+// Creates a command that automatically logs inputs, outputs, and exit
+// codes to the process logger.
+func (p *Process) Command(name string, args ...string) *Cmd {
+	return &Cmd{exec.Command(name, args...), p}
+}
+
+// Runs a command with the supplied input and captures the output as a
+// string.
+func (c *Cmd) Capture(stdin io.Reader) (output string, err error) {
+	c.Stdin = stdin
+	out := strings.Builder{}
+	c.Stdout = &out
+	err = c.Run()
+	output = out.String()
+	return
+}
+
+func (c *Cmd) MustCapture(stdin io.Reader) (output string) {
+	output, err := c.Capture(stdin)
+	if err != nil {
+		panic(err)
+	}
+	return output
 }
