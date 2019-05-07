@@ -58,6 +58,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			return
 		}
 	}
+	log("QTYPE[%v] %s -> FALLBACK", r.Question[0].Qtype, domain)
 	in, err := dns.Exchange(r, s.Fallback)
 	if err != nil {
 		log(err.Error())
