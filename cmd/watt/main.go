@@ -14,6 +14,8 @@ import (
 
 var kubernetesNamespace string
 var initialSources = make([]string, 0)
+var initialFieldSelector string
+var initialLabelSelector string
 var watchHooks = make([]string, 0)
 var notifyReceivers = make([]string, 0)
 var port int
@@ -30,6 +32,8 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Flags().StringVarP(&kubernetesNamespace, "namespace", "n", "", "namespace to watch (default: all)")
 	rootCmd.Flags().StringSliceVarP(&initialSources, "source", "s", []string{}, "configure an initial static source")
+	rootCmd.Flags().StringVar(&initialFieldSelector, "fields", "", "configure an initial field selector string")
+	rootCmd.Flags().StringVar(&initialLabelSelector, "labels", "", "configure an initial label selector string")
 	rootCmd.Flags().StringSliceVarP(&watchHooks, "watch", "w", []string{}, "configure watch hook(s)")
 	rootCmd.Flags().StringSliceVar(&notifyReceivers, "notify", []string{},
 		"invoke the program with the given arguments as a receiver")
@@ -73,6 +77,8 @@ func _runWatt(cmd *cobra.Command, args []string) int {
 	kubebootstrap := kubebootstrap{
 		namespace:      kubernetesNamespace,
 		kinds:          initialSources,
+		fieldSelector:  initialFieldSelector,
+		labelSelector:  initialLabelSelector,
 		kubeAPIWatcher: kubeAPIWatcher,
 		notify:         []chan<- k8sEvent{aggregator.KubernetesEvents},
 	}

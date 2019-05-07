@@ -76,11 +76,9 @@ func (w *Watcher) containers() (result map[string]string, err error) {
 		return
 	}
 
-	ids = strings.Join(strings.Fields(ids), " ")
-
 	lines := ""
 	if ids != "" {
-		lines, err = tpu.CmdLogf(append([]string{"docker", "inspect", "--format={{.Name}} {{.NetworkSettings.IPAddress}}", "--"}, ids), w.log)
+		lines, err = tpu.CmdLogf(append([]string{"docker", "inspect", "--format={{.Name}} {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", "--"}, strings.Fields(ids)...), w.log)
 		if err != nil {
 			return
 		}
