@@ -131,7 +131,13 @@ func (s *apiServer) Work(p *supervisor.Process) error {
 	if err != nil {
 		return err
 	}
-	defer listener.Close()
+	defer func() {
+		err := listener.Close()
+		if err != nil {
+			p.Logf("listener close error: %v", err)
+		}
+	}()
+
 	p.Ready()
 	p.Logf("snapshot server listening on: %s", listenHostAndPort)
 	srv := &http.Server{
