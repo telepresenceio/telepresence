@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -95,7 +96,7 @@ const (
 	DKR_BRIDGE      = "DKR"
 	DNS_SERVER      = "DNS"
 	DNS_CONFIG      = "CFG"
-	READY           = "RDY"
+	CHECK_READY     = "RDY"
 	SIGNAL          = "SIG"
 )
 
@@ -114,7 +115,7 @@ var LOG_LEGEND = []struct {
 	{K8S_APPLY, "The kubernetes apply used to setup the in-cluster pod we talk with."},
 	{DKR_BRIDGE, "The docker bridge."},
 	{DNS_SERVER, "The DNS server teleproxy runs to intercept dns requests."},
-	{READY, "The worker teleproxy uses to signal the system it is ready."},
+	{CHECK_READY, "The worker teleproxy uses to do a self check and signal the system it is ready."},
 }
 
 type Args struct {
@@ -125,6 +126,7 @@ type Args struct {
 	dnsIP      string
 	fallbackIP string
 	nosearch   bool
+	nocheck    bool
 	version    bool
 }
 
@@ -139,6 +141,7 @@ func _main() int {
 	flag.StringVar(&args.dnsIP, "dns", "", "dns ip address")
 	flag.StringVar(&args.fallbackIP, "fallback", "", "dns fallback")
 	flag.BoolVar(&args.nosearch, "noSearchOverride", false, "disable dns search override")
+	flag.BoolVar(&args.nocheck, "noCheck", false, "disable self check")
 
 	flag.Parse()
 
@@ -172,9 +175,17 @@ func _main() int {
 	})
 
 	sup.Supervise(&supervisor.Worker{
-		Name:     READY,
+		Name:     CHECK_READY,
 		Requires: []string{TRANSLATOR, API, DNS_SERVER, PROXY, DNS_CONFIG},
 		Work: func(p *supervisor.Process) error {
+			err := selfcheck(p)
+			if err != nil {
+				if args.nocheck {
+					p.Logf("WARNING, SELF CHECK FAILED: %v", err)
+				} else {
+					return err
+				}
+			}
 			p.Do(func() {
 				sd_daemon.Notification{State: "READY=1"}.Send(false)
 				p.Ready()
@@ -219,6 +230,44 @@ func _main() int {
 	} else {
 		return 0
 	}
+}
+
+func selfcheck(p *supervisor.Process) error {
+	// XXX: these checks might not make sense if -dns is specified
+	for _, name := range []string{"teleproxy.", "teleproxy"} {
+		ips, err := net.LookupIP(name)
+		if err != nil {
+			return err
+		}
+
+		if len(ips) != 1 {
+			return errors.Errorf("unexpected ips for %s: %v", name, ips)
+		}
+
+		if !ips[0].Equal(net.ParseIP(MAGIC_IP)) {
+			return errors.Errorf("found wrong ip for %s: %v", name, ips)
+		}
+
+		p.Logf("%s resolves to %v", name, ips)
+	}
+
+	curl := p.Command("curl", "-sqI", "teleproxy/api/tables/")
+	err := curl.Start()
+	if err != nil {
+		return err
+	}
+
+	if !p.Do(func() {
+		err = curl.Wait()
+	}) {
+		curl.Process.Kill()
+	}
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func teleproxy(p *supervisor.Process, args Args) error {
