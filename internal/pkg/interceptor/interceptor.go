@@ -156,14 +156,16 @@ func (i *Interceptor) Delete(table string) bool {
 }
 
 func (i *Interceptor) Update(table rt.Table) {
+	result := make(chan struct{})
 	i.work <- func(p *supervisor.Process) error {
+		defer close(result)
 		i.tablesLock.Lock()
 		defer i.tablesLock.Unlock()
 		i.domainsLock.Lock()
 		defer i.domainsLock.Unlock()
-
 		return i.update(p, table)
 	}
+	<-result
 }
 
 // .update() assumes that both .tablesLock and .domainsLock are held
