@@ -28,7 +28,6 @@ type ConsulWatchMaker struct {
 
 func (m *ConsulWatchMaker) MakeConsulWatch(spec ConsulWatchSpec) (*supervisor.Worker, error) {
 	consulConfig := consulapi.DefaultConfig()
-	spec.ConsulAddress = os.ExpandEnv(spec.ConsulAddress)
 	consulConfig.Address = spec.ConsulAddress
 
 	// TODO: Should we really allocated a Consul client per Service watch? Not sure... there some design stuff here

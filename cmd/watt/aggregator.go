@@ -202,10 +202,8 @@ func (a *aggregator) getWatches(p *supervisor.Process) WatchSet {
 		p.Logf("generate snapshot failed %v", err)
 		return WatchSet{}
 	}
-
 	result := a.watchHook(p, snapshot)
-
-	return result
+	return result.interpolate()
 }
 
 func ExecWatchHook(watchHooks []string) WatchHook {
