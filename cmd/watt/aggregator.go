@@ -146,7 +146,6 @@ func (a *aggregator) isComplete(p *supervisor.Process, watchset WatchSet) bool {
 			p.Logf("initialized k8s watch: %s", w.WatchId())
 		} else {
 			complete = false
-			p.Logf("waiting for consul watch: %s", w.WatchId())
 		}
 	}
 
@@ -202,10 +201,8 @@ func (a *aggregator) getWatches(p *supervisor.Process) WatchSet {
 		p.Logf("generate snapshot failed %v", err)
 		return WatchSet{}
 	}
-
 	result := a.watchHook(p, snapshot)
-
-	return result
+	return result.interpolate()
 }
 
 func ExecWatchHook(watchHooks []string) WatchHook {

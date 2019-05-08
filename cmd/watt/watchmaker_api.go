@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/datawire/teleproxy/pkg/supervisor"
 )
@@ -9,6 +10,32 @@ import (
 type WatchSet struct {
 	KubernetesWatches []KubernetesWatchSpec `json:"kubernetes-watches"`
 	ConsulWatches     []ConsulWatchSpec     `json:"consul-watches"`
+}
+
+// Interpolate values into specific watches in specific places. This is not a generic method but could be made one
+// eventually if so desired by implementing interpolate() methods on the various types contained within the WatchSet
+// struct.
+//
+// FIXES:
+// 	- https://github.com/datawire/teleproxy/issues/110
+//	- https://github.com/datawire/ambassador/issues/1508
+func (w *WatchSet) interpolate() WatchSet {
+	modifiedConsulWatchSpecs := make([]ConsulWatchSpec, 0)
+	for _, s := range w.ConsulWatches {
+		modifiedConsulWatchSpecs = append(modifiedConsulWatchSpecs, ConsulWatchSpec{
+			Id:            s.Id,
+			ServiceName:   s.ServiceName,
+			Datacenter:    s.Datacenter,
+			ConsulAddress: os.ExpandEnv(s.ConsulAddress),
+		})
+	}
+
+	result := WatchSet{
+		ConsulWatches:     modifiedConsulWatchSpecs,
+		KubernetesWatches: w.KubernetesWatches,
+	}
+
+	return result
 }
 
 type KubernetesWatchSpec struct {
