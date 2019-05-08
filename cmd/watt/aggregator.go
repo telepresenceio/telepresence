@@ -146,6 +146,7 @@ func (a *aggregator) isComplete(p *supervisor.Process, watchset WatchSet) bool {
 			p.Logf("initialized k8s watch: %s", w.WatchId())
 		} else {
 			complete = false
+			p.Logf("waiting for consul watch: %s", w.WatchId())
 		}
 	}
 
