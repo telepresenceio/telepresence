@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 )
 
+// PPRequest represents a request from the client to the server.
 type PPRequest struct {
 	APIVersion int
 	Command    string
@@ -70,6 +71,16 @@ func doClientRequest(command string) string {
 
 func doStatus() {
 	body := doClientRequest("status")
+	println(body)
+}
+
+func doConnect() {
+	body := doClientRequest("connect")
+	println(body)
+}
+
+func doDisconnect() {
+	body := doClientRequest("disconnect")
 	println(body)
 }
 

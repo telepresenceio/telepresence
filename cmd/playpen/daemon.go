@@ -41,6 +41,14 @@ func daemon(p *supervisor.Process) error {
 		req := retrieveRequest(w, r)
 		w.Write([]byte(daemonStatus(p, req)))
 	})
+	mux.HandleSerially("/connect", "pp", func(w http.ResponseWriter, r *http.Request) {
+		req := retrieveRequest(w, r)
+		w.Write([]byte(daemonConnect(p, req)))
+	})
+	mux.HandleSerially("/disconnect", "pp", func(w http.ResponseWriter, r *http.Request) {
+		req := retrieveRequest(w, r)
+		w.Write([]byte(daemonDisconnect(p, req)))
+	})
 	mux.HandleSerially("/version", "pp", func(w http.ResponseWriter, r *http.Request) {
 		req := retrieveRequest(w, r)
 		w.Write([]byte(daemonVersion(p, req)))
@@ -123,7 +131,15 @@ func runAsDaemon() {
 }
 
 func daemonStatus(p *supervisor.Process, req *PPRequest) string {
-	return "Not connected."
+	return "Not connected"
+}
+
+func daemonConnect(p *supervisor.Process, req *PPRequest) string {
+	return "Not implemented..."
+}
+
+func daemonDisconnect(p *supervisor.Process, req *PPRequest) string {
+	return "Not connected"
 }
 
 func daemonVersion(p *supervisor.Process, req *PPRequest) string {

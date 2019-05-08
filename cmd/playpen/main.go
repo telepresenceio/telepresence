@@ -48,6 +48,22 @@ func main() {
 		},
 	})
 	rootCmd.AddCommand(&cobra.Command{
+		Use:   "connect",
+		Short: "connect to a cluster",
+		Args:  cobra.ExactArgs(0),
+		Run: func(cmd *cobra.Command, args []string) {
+			doConnect()
+		},
+	})
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "disconnect",
+		Short: "disconnect from the connected cluster",
+		Args:  cobra.ExactArgs(0),
+		Run: func(cmd *cobra.Command, args []string) {
+			doDisconnect()
+		},
+	})
+	rootCmd.AddCommand(&cobra.Command{
 		Use:   "quit",
 		Short: "tell Playpen Daemon to quit (for upgrades)",
 		Args:  cobra.ExactArgs(0),
