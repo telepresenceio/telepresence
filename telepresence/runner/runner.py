@@ -26,11 +26,12 @@ from inspect import currentframe, getframeinfo
 from pathlib import Path
 from shutil import rmtree, which
 from subprocess import STDOUT, CalledProcessError, TimeoutExpired, Popen
-from telepresence import TELEPRESENCE_BINARY
-from telepresence.utilities import kill_process, str_command
 from tempfile import mkdtemp
 from threading import Thread
 from time import sleep, time
+
+from telepresence import TELEPRESENCE_BINARY
+from telepresence.utilities import kill_process, str_command
 
 from .cache import Cache
 from .launch import BackgroundProcessCrash, _launch_command, _Logger
