@@ -27,7 +27,7 @@ func main() {
 		Short: "show program's version number and exit",
 		Args:  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("playpen client v%s\n", Version)
+			fmt.Printf("playpen client v%s (api v%d)\n", Version, apiVersion)
 			doVersion()
 		},
 	})

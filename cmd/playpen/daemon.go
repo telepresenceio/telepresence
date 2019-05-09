@@ -143,7 +143,7 @@ func daemonDisconnect(p *supervisor.Process, req *PPRequest) string {
 }
 
 func daemonVersion(p *supervisor.Process, req *PPRequest) string {
-	return fmt.Sprintf("playpen daemon v%s\n", Version)
+	return fmt.Sprintf("playpen daemon v%s (api v%d)\n", Version, apiVersion)
 }
 
 func daemonQuit(p *supervisor.Process, req *PPRequest) string {
