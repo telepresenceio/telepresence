@@ -29,34 +29,21 @@ func retrieveRequest(w http.ResponseWriter, r *http.Request) *PPRequest {
 	return nil
 }
 
+func makeRequestHandler(p *supervisor.Process, handle func(*supervisor.Process, *PPRequest) string) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		req := retrieveRequest(w, r)
+		w.Write([]byte(handle(p, req)))
+	}
+}
 func daemon(p *supervisor.Process) error {
 	var err error
 
 	mux := &SerializingMux{}
-	mux.HandleSerially("/", "pp", func(w http.ResponseWriter, r *http.Request) {
-		req := retrieveRequest(w, r)
-		w.Write([]byte(fmt.Sprintf("Got %s request at path %s.", req.Command, r.URL.Path)))
-	})
-	mux.HandleSerially("/status", "pp", func(w http.ResponseWriter, r *http.Request) {
-		req := retrieveRequest(w, r)
-		w.Write([]byte(daemonStatus(p, req)))
-	})
-	mux.HandleSerially("/connect", "pp", func(w http.ResponseWriter, r *http.Request) {
-		req := retrieveRequest(w, r)
-		w.Write([]byte(daemonConnect(p, req)))
-	})
-	mux.HandleSerially("/disconnect", "pp", func(w http.ResponseWriter, r *http.Request) {
-		req := retrieveRequest(w, r)
-		w.Write([]byte(daemonDisconnect(p, req)))
-	})
-	mux.HandleSerially("/version", "pp", func(w http.ResponseWriter, r *http.Request) {
-		req := retrieveRequest(w, r)
-		w.Write([]byte(daemonVersion(p, req)))
-	})
-	mux.HandleSerially("/quit", "pp", func(w http.ResponseWriter, r *http.Request) {
-		req := retrieveRequest(w, r)
-		w.Write([]byte(daemonQuit(p, req)))
-	})
+	mux.HandleSerially("/status", "pp", makeRequestHandler(p, daemonStatus))
+	mux.HandleSerially("/connect", "pp", makeRequestHandler(p, daemonConnect))
+	mux.HandleSerially("/disconnect", "pp", makeRequestHandler(p, daemonDisconnect))
+	mux.HandleSerially("/version", "pp", makeRequestHandler(p, daemonVersion))
+	mux.HandleSerially("/quit", "pp", makeRequestHandler(p, daemonQuit))
 
 	unixListener, err := net.Listen("unix", socketName)
 	if err != nil {
