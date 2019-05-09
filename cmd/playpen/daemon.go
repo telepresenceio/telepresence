@@ -49,26 +49,17 @@ func daemon(p *supervisor.Process) error {
 	if err != nil {
 		return errors.Wrap(err, "listen")
 	}
-
 	server := &http.Server{
 		Handler: mux,
 	}
-
-	serverErr := make(chan error)
-	go func() {
-		serverErr <- server.Serve(unixListener)
-	}()
-
+	p.Go(func(p *supervisor.Process) error {
+		return server.Serve(unixListener)
+	})
 	p.Ready()
 
-	select {
-	case err = <-serverErr: // Server failed
-		err = errors.Wrap(err, "server failed")
-		p.Supervisor().Shutdown()
-	case <-p.Shutdown(): // Supervisor told us to quit
-		err = errors.Wrap(server.Shutdown(p.Context()), "shutting down server")
-	}
-	return err
+	// Wait for Supervisor to tell us to quit
+	<-p.Shutdown()
+	return server.Shutdown(p.Context())
 }
 
 func waitForSignal(p *supervisor.Process) error {
