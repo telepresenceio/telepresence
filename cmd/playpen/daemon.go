@@ -38,12 +38,13 @@ func makeRequestHandler(p *supervisor.Process, handle func(*supervisor.Process, 
 func daemon(p *supervisor.Process) error {
 	var err error
 
+	apiPath := fmt.Sprintf("/api/v%d", apiVersion)
 	mux := &SerializingMux{}
-	mux.HandleSerially("/status", "pp", makeRequestHandler(p, daemonStatus))
-	mux.HandleSerially("/connect", "pp", makeRequestHandler(p, daemonConnect))
-	mux.HandleSerially("/disconnect", "pp", makeRequestHandler(p, daemonDisconnect))
-	mux.HandleSerially("/version", "pp", makeRequestHandler(p, daemonVersion))
-	mux.HandleSerially("/quit", "pp", makeRequestHandler(p, daemonQuit))
+	mux.HandleSerially(apiPath+"/status", "pp", makeRequestHandler(p, daemonStatus))
+	mux.HandleSerially(apiPath+"/connect", "pp", makeRequestHandler(p, daemonConnect))
+	mux.HandleSerially(apiPath+"/disconnect", "pp", makeRequestHandler(p, daemonDisconnect))
+	mux.HandleSerially(apiPath+"/version", "pp", makeRequestHandler(p, daemonVersion))
+	mux.HandleSerially(apiPath+"/quit", "pp", makeRequestHandler(p, daemonQuit))
 
 	unixListener, err := net.Listen("unix", socketName)
 	if err != nil {
