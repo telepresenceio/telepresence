@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/datawire/apro/lib/logging"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -56,7 +57,7 @@ func daemon(p *supervisor.Process) error {
 		return errors.Wrap(err, "listen")
 	}
 	server := &http.Server{
-		Handler: mux,
+		Handler: logging.LoggingMiddleware(mux),
 	}
 	p.Go(func(p *supervisor.Process) error {
 		err := server.Serve(unixListener)
@@ -124,7 +125,7 @@ func runAsDaemon() {
 		//os.Exit(1)
 	}
 
-	logger := logrus.New()
+	logger := logrus.StandardLogger()
 	logger.Formatter = new(myFormatter)
 	if !terminal.IsTerminal(int(os.Stdout.Fd())) {
 		logger.SetOutput(&lumberjack.Logger{
