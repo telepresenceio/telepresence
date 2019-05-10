@@ -53,7 +53,11 @@ func daemon(p *supervisor.Process) error {
 		Handler: mux,
 	}
 	p.Go(func(p *supervisor.Process) error {
-		return server.Serve(unixListener)
+		err := server.Serve(unixListener)
+		if err != http.ErrServerClosed {
+			return err
+		}
+		return nil
 	})
 	p.Ready()
 
