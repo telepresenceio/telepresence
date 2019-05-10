@@ -56,6 +56,10 @@ func daemon(p *supervisor.Process) error {
 	if err != nil {
 		return errors.Wrap(err, "listen")
 	}
+	err = os.Chmod(socketName, 0777)
+	if err != nil {
+		return errors.Wrap(err, "chmod")
+	}
 	server := &http.Server{
 		Handler: logging.LoggingMiddleware(mux),
 	}
@@ -122,7 +126,7 @@ func (f *myFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 func runAsDaemon() {
 	if os.Geteuid() != 0 {
 		fmt.Println("Playpen Daemon must run as root.")
-		//os.Exit(1)
+		os.Exit(1)
 	}
 
 	logger := logrus.StandardLogger()

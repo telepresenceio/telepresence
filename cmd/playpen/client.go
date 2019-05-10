@@ -53,6 +53,11 @@ func sendRequest(command string) (int, string, error) {
 	return res.StatusCode, string(body), nil
 }
 
+func isServerRunning() bool {
+	_, _, err := sendRequest("version")
+	return err == nil
+}
+
 func doClientRequest(command string) string {
 	statusCode, body, err := sendRequest(command)
 	if err != nil {
