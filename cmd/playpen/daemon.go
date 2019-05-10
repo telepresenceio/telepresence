@@ -105,9 +105,13 @@ func runAsDaemon() {
 
 	sup.Logger.Printf("Playpen daemon %s starting...", displayVersion)
 	errors := sup.Run()
-	sup.Logger.Printf("Daemon has exited")
-	for _, err := range errors {
-		sup.Logger.Printf("- %v", err)
+
+	sup.Logger.Printf("")
+	if len(errors) > 0 {
+		sup.Logger.Printf("Daemon has exited with %d error(s):", len(errors))
+		for _, err := range errors {
+			sup.Logger.Printf("- %v", err)
+		}
 	}
 	sup.Logger.Printf("Playpen daemon %s is done.", displayVersion)
 	os.Exit(1)
