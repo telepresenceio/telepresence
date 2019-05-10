@@ -14,6 +14,8 @@ const socketName = "/tmp/playpen.sock"
 const logfile = "/tmp/playpen.log"
 const apiVersion = 1
 
+var displayVersion = fmt.Sprintf("v%s (api v%d)", Version, apiVersion)
+
 func main() {
 	rootCmd := &cobra.Command{
 		Use: "playpen [command]",
@@ -27,7 +29,7 @@ func main() {
 		Short: "show program's version number and exit",
 		Args:  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("playpen client v%s (api v%d)\n", Version, apiVersion)
+			fmt.Printf("playpen client %s\n", displayVersion)
 			doVersion()
 		},
 	})

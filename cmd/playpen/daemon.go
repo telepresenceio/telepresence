@@ -103,12 +103,13 @@ func runAsDaemon() {
 		Work:     waitForSignal,
 	})
 
+	sup.Logger.Printf("Playpen daemon %s starting...", displayVersion)
 	errors := sup.Run()
 	sup.Logger.Printf("Daemon has exited")
 	for _, err := range errors {
 		sup.Logger.Printf("- %v", err)
 	}
-	sup.Logger.Printf("Daemon is done.")
+	sup.Logger.Printf("Playpen daemon %s is done.", displayVersion)
 	os.Exit(1)
 }
 
@@ -125,7 +126,7 @@ func daemonDisconnect(p *supervisor.Process, req *PPRequest) string {
 }
 
 func daemonVersion(p *supervisor.Process, req *PPRequest) string {
-	return fmt.Sprintf("playpen daemon v%s (api v%d)\n", Version, apiVersion)
+	return fmt.Sprintf("playpen daemon %s\n", displayVersion)
 }
 
 func daemonQuit(p *supervisor.Process, req *PPRequest) string {
