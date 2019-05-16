@@ -5,9 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
-
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -20,89 +20,79 @@ const apiVersion = 1
 
 var displayVersion = fmt.Sprintf("v%s (api v%d)", Version, apiVersion)
 
+func adaptNoArgs(fn func() error) func(*cobra.Command, []string) error {
+	return func(_ *cobra.Command, _ []string) error {
+		return fn()
+	}
+}
+
 func main() {
 	rootCmd := &cobra.Command{
-		Use: "playpen [command]",
-		Run: func(cmd *cobra.Command, args []string) {
-			doStatus()
-		},
+		Use:          "playpen [command]",
+		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
+		RunE:         adaptNoArgs(doStatus),
 	}
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "show program's version number and exit",
 		Args:  cobra.ExactArgs(0),
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("playpen client %s\n", displayVersion)
-			doVersion()
-		},
+		RunE:  adaptNoArgs(doVersion),
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:    "server",
 		Short:  "launch Playpen Daemon in the foreground (debug)",
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
-		Run: func(cmd *cobra.Command, args []string) {
-			runAsDaemon()
-		},
+		RunE:   adaptNoArgs(runAsDaemon),
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "start-server",
 		Short: "launch Playpen Daemon in the background (sudo)",
 		Args:  cobra.ExactArgs(0),
-		Run: func(cmd *cobra.Command, args []string) {
-			launchDaemon()
-		},
+		RunE:  adaptNoArgs(launchDaemon),
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "status",
 		Short: "show connectivity status",
 		Args:  cobra.ExactArgs(0),
-		Run: func(cmd *cobra.Command, args []string) {
-			doStatus()
-		},
+		RunE:  adaptNoArgs(doStatus),
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "connect",
 		Short: "connect to a cluster",
 		Args:  cobra.ExactArgs(0),
-		Run: func(cmd *cobra.Command, args []string) {
-			doConnect()
-		},
+		RunE:  adaptNoArgs(doConnect),
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "disconnect",
 		Short: "disconnect from the connected cluster",
 		Args:  cobra.ExactArgs(0),
-		Run: func(cmd *cobra.Command, args []string) {
-			doDisconnect()
-		},
+		RunE:  adaptNoArgs(doDisconnect),
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "quit",
 		Short: "tell Playpen Daemon to quit (for upgrades)",
 		Args:  cobra.ExactArgs(0),
-		Run: func(cmd *cobra.Command, args []string) {
-			doQuit()
-		},
+		RunE:  adaptNoArgs(doQuit),
 	})
 
 	err := rootCmd.Execute()
 	if err != nil {
-		os.Exit(2)
+		os.Exit(1)
 	}
 }
 
-func launchDaemon() {
+func launchDaemon() error {
 	if isServerRunning() {
 		fmt.Println("It looks like the server is already running.")
 		fmt.Printf("Take a look at %s for more information.\n", logfile)
-		os.Exit(1)
+		return errors.New("server is already running")
 	}
 	if os.Geteuid() != 0 {
 		fmt.Println("Playpen Daemon must be launched as root.")
 		fmt.Println("  sudo playpen start-server") // FIXME: Use cmd.Blah
-		os.Exit(1)
+		return errors.New("root privileges required")
 	}
 	fmt.Printf("Launching Playpen Daemon %s...\n", displayVersion)
 
@@ -115,8 +105,7 @@ func launchDaemon() {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	err := cmd.Start()
 	if err != nil {
-		fmt.Printf("Failed to launch the server: %v\n", err)
-		os.Exit(1)
+		return errors.Wrap(err, "failed to launch the server")
 	}
 
 	success := false
@@ -130,6 +119,7 @@ func launchDaemon() {
 	if !success {
 		fmt.Println("Server did not come up!")
 		fmt.Printf("Take a look at %s for more information.\n", logfile)
-		os.Exit(1)
+		return errors.New("launch failed")
 	}
+	return nil
 }

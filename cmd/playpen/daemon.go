@@ -3,13 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
-
-	"fmt"
-	"os"
 
 	"github.com/datawire/apro/lib/logging"
 	"github.com/datawire/teleproxy/pkg/supervisor"
@@ -109,10 +108,9 @@ func waitForSignal(p *supervisor.Process) error {
 	return nil
 }
 
-func runAsDaemon() {
+func runAsDaemon() error {
 	if os.Geteuid() != 0 {
-		fmt.Println("Playpen Daemon must run as root.")
-		os.Exit(1)
+		return errors.New("playpen daemon must run as root")
 	}
 
 	sup := supervisor.WithContext(context.Background())
@@ -129,17 +127,17 @@ func runAsDaemon() {
 
 	sup.Logger.Printf("---")
 	sup.Logger.Printf("Playpen daemon %s starting...", displayVersion)
-	errors := sup.Run()
+	runErrors := sup.Run()
 
 	sup.Logger.Printf("")
-	if len(errors) > 0 {
-		sup.Logger.Printf("Daemon has exited with %d error(s):", len(errors))
-		for _, err := range errors {
+	if len(runErrors) > 0 {
+		sup.Logger.Printf("Daemon has exited with %d error(s):", len(runErrors))
+		for _, err := range runErrors {
 			sup.Logger.Printf("- %v", err)
 		}
 	}
 	sup.Logger.Printf("Playpen daemon %s is done.", displayVersion)
-	os.Exit(1)
+	return errors.New("playpen daemon has exited")
 }
 
 func daemonStatus(p *supervisor.Process, req *PPRequest) string {

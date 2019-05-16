@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -8,11 +9,23 @@ import (
 	"net/http"
 	"os"
 
-	"bytes"
+	"strings"
 
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/util/json"
 )
+
+// GetClient returns an http.Client that can (only) connect to unix sockets
+func GetClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				dialer := net.Dialer{}
+				return dialer.DialContext(ctx, "unix", socketName)
+			},
+		},
+	}
+}
 
 // PPRequest represents a request from the client to the server.
 type PPRequest struct {
@@ -27,14 +40,7 @@ func newRequest(command string, args ...string) *PPRequest {
 }
 
 func sendRequest(command string) (int, string, error) {
-	client := http.Client{
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				dialer := net.Dialer{}
-				return dialer.DialContext(ctx, "unix", socketName)
-			},
-		},
-	}
+	client := GetClient()
 	req := newRequest(command)
 	reqBody, err := json.Marshal(req)
 	if err != nil {
@@ -43,7 +49,7 @@ func sendRequest(command string) (int, string, error) {
 	url := fmt.Sprintf("http://unix/api/v%d/%s", apiVersion, command)
 	res, err := client.Post(url, "application/json", bytes.NewReader(reqBody))
 	if err != nil {
-		return 0, "", errors.Wrap(err, "request")
+		return 0, "", err
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	res.Body.Close()
@@ -58,51 +64,81 @@ func isServerRunning() bool {
 	return err == nil
 }
 
-func doClientRequest(command string) string {
+var failedToConnect = fmt.Sprintf(`
+Failed to connect to the server. Is it still running? Take a look in %s for more information. You can start the server using "sudo playpen start-server" if it is not running.
+`, logfile)
+
+var apiMismatch = fmt.Sprintf(`
+Failed to communicate with the server. This is usually due to an API version mismatch. Try "playpen version" to see the client and server versions. If that's not the problem, take a look in %s for more information.
+`, logfile)
+
+func doClientRequest(command string) (string, error) {
 	statusCode, body, err := sendRequest(command)
 	if err != nil {
-		fmt.Println(err)
-		fmt.Println()
-		fmt.Println("Failed to connect to the server. Is it still running?")
-		fmt.Printf("Take a look in %s for more information.\n", logfile)
-		fmt.Println("You can start the server using playpen start-server.")
-		fmt.Println()
-		fmt.Println("playpen: Could not connect to server")
-		os.Exit(1)
+		fmt.Println(WordWrapString(failedToConnect))
+		return "", err
 	}
 	if statusCode == 404 {
-		fmt.Println("Failed to communicate with the server. This is usually")
-		fmt.Println("due to an API version mismatch. Take a look at the start")
-		fmt.Printf("of %s for the server version.\n", logfile)
-		fmt.Printf("The client is playpen client %s\n", displayVersion)
-		fmt.Println()
-		fmt.Println("playpen: Could not communicate with server")
-		os.Exit(1)
+		fmt.Println(WordWrapString(apiMismatch))
+		return "", errors.New("could not communicate with server")
 	}
-	return body
+	return body, nil
 }
 
-func doStatus() {
-	body := doClientRequest("status")
+func doStatus() error {
+	body, err := doClientRequest("status")
+	if err != nil {
+		return err
+	}
 	println(body)
+	return nil
 }
 
-func doConnect() {
-	body := doClientRequest("connect")
+func doConnect() error {
+	body, err := doClientRequest("connect")
+	if err != nil {
+		return err
+	}
 	println(body)
+	return nil
 }
 
-func doDisconnect() {
-	body := doClientRequest("disconnect")
+func doDisconnect() error {
+	body, err := doClientRequest("disconnect")
+	if err != nil {
+		return err
+	}
 	println(body)
+	return nil
 }
 
-func doVersion() {
-	body := doClientRequest("version")
-	println(body)
+func fetchResponse(path string) (string, error) {
+	client := GetClient()
+	res, err := client.Get(fmt.Sprintf("http://unix/%s", path))
+	if err != nil {
+		fmt.Println(WordWrapString(failedToConnect))
+		return "", err
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	return string(body), err
 }
 
-func doQuit() {
-	body := doClientRequest("quit")
-	println(body)
+func doVersion() error {
+	fmt.Printf("playpen client %s\n", displayVersion)
+	body, err := fetchResponse("version")
+	if err != nil {
+		return err
+	}
+	fmt.Println(strings.TrimRight(body, "\n"))
+	return nil
+}
+
+func doQuit() error {
+	body, err := fetchResponse("quit")
+	if err != nil {
+		return err
+	}
+	fmt.Println(strings.TrimRight(body, "\n"))
+	return nil
 }
