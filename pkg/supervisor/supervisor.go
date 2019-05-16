@@ -70,17 +70,18 @@ func WithContext(ctx context.Context) *Supervisor {
 }
 
 type Worker struct {
-	Name          string               // the name of the worker
-	Work          func(*Process) error // the function to perform the work
-	Requires      []string             // a list of required worker names
-	Retry         bool                 // whether or not to retry on error
-	wantsShutdown bool                 // true if the worker wants to shut down
-	done          bool
-	supervisor    *Supervisor //
-	children      int64       // atomic counter for naming children
-	process       *Process    // nil if the worker is not currently running
-	error         error
-	retryDelay    time.Duration // how long to wait to retry
+	Name               string               // the name of the worker
+	Work               func(*Process) error // the function to perform the work
+	Requires           []string             // a list of required worker names
+	Retry              bool                 // whether or not to retry on error
+	wantsShutdown      bool                 // true if the worker wants to shut down
+	done               bool
+	supervisor         *Supervisor //
+	children           int64       // atomic counter for naming children
+	process            *Process    // nil if the worker is not currently running
+	error              error
+	retryDelay         time.Duration // how long to wait to retry
+	lastBlockedWarning time.Time     // last time we warned about being blocked
 }
 
 func (w *Worker) Error() string {
@@ -156,8 +157,18 @@ func (s *Supervisor) Run() []error {
 	// we make cancel trigger shutdown so that simple cases only
 	// need to worry about shutdown
 	go func() {
-		<-s.context.Done()
-		s.Shutdown()
+		ticker := time.NewTicker(1 * time.Second)
+
+		for {
+			select {
+			case <-s.context.Done():
+				s.Shutdown()
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				s.changed.Broadcast()
+			}
+		}
 	}()
 
 	// reconcile may delete workers
@@ -213,12 +224,6 @@ func (s *Supervisor) dependents(worker *Worker) (result []*Worker) {
 // make sure anything that would like to be running is actually
 // running
 func (s *Supervisor) reconcile() {
-
-	// XXX: added this for debugging shutdown stalls, need a better way to
-	// log this that doesn't add so much noise normally
-	//
-	//s.Logger.Printf("WORKERS: %v", s.names)
-
 	var cleanup []string
 	for _, n := range s.names {
 		w := s.workers[n]
@@ -264,10 +269,16 @@ func (w *Worker) reconcile() bool {
 			for _, r := range w.Requires {
 				required := s.workers[r]
 				if required == nil {
+					w.maybeWarnBlocked(r, "not created")
 					return false
 				}
 				process := required.process
-				if process == nil || !process.ready {
+				if process == nil {
+					w.maybeWarnBlocked(r, "not started")
+					return false
+				}
+				if !process.ready {
+					w.maybeWarnBlocked(r, "not ready")
 					return false
 				}
 			}
@@ -277,6 +288,19 @@ func (w *Worker) reconcile() bool {
 
 	}
 	return false
+}
+
+func (w *Worker) maybeWarnBlocked(name, cond string) {
+	now := time.Now()
+	if w.lastBlockedWarning == (time.Time{}) {
+		w.lastBlockedWarning = now
+		return
+	}
+
+	if now.Sub(w.lastBlockedWarning) > 3*time.Second {
+		w.supervisor.Logger.Printf("%s: blocked on %s (%s)", w.Name, name, cond)
+		w.lastBlockedWarning = now
+	}
 }
 
 func nextDelay(delay time.Duration) time.Duration {
