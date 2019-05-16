@@ -183,8 +183,10 @@ func _main() int {
 				if args.nocheck {
 					p.Logf("WARNING, SELF CHECK FAILED: %v", err)
 				} else {
-					return err
+					return errors.Wrap(err, "SELF CHECK FAILED")
 				}
+			} else {
+				p.Logf("SELF CHECK PASSED, SIGNALING READY")
 			}
 			p.Do(func() {
 				sd_daemon.Notification{State: "READY=1"}.Send(false)
@@ -283,7 +285,7 @@ func teleproxy(p *supervisor.Process, args Args) error {
 	if args.mode == DEFAULT || args.mode == BRIDGE {
 		requires := []string{}
 		if args.mode != BRIDGE {
-			requires = append(requires, TRANSLATOR)
+			requires = append(requires, CHECK_READY)
 		}
 		sup.Supervise(&supervisor.Worker{
 			Name:     BRIDGE_WORKER,
