@@ -394,12 +394,40 @@ func (p *Process) Go(fn func(*Process) error) *Worker {
 	return w
 }
 
+// Shorthand for launching a named worker... it is named "<parent>.<name>"
+func (p *Process) GoName(name string, fn func(*Process) error) *Worker {
+	w := &Worker{
+		Name: fmt.Sprintf("%s.%s", p.Worker().Name, name),
+		Work: fn,
+	}
+	p.Supervisor().Supervise(w)
+	return w
+}
+
 // Shorthand for proper shutdown handling while doing a potentially
 // blocking activity. This method will return nil if the activity
-// completes normally and an error if the activity is abandoned or
-// panics.
+// completes normally and an error if the activity panics or returns
+// an error.
+//
+// If you want to know whether the work was aborted or might still be
+// running when Do returns, then use DoClean like so:
+//
+//   aborted := errors.New("aborted")
+//
+//   err := p.DoClean(..., func() { return aborted })
+//
+//   if err == aborted {
+//     ...
+//   }
 
-func (p *Process) Do(fn func()) bool {
+func (p *Process) Do(fn func() error) (err error) {
+	return p.DoClean(fn, func() error { return nil })
+}
+
+// Same as Process.Do() but executes the supplied clean function on
+// abort.
+
+func (p *Process) DoClean(fn, clean func() error) (err error) {
 	sup := p.Supervisor()
 	done := make(chan struct{})
 	go func() {
@@ -415,14 +443,14 @@ func (p *Process) Do(fn func()) bool {
 			close(done)
 		}()
 
-		fn()
+		err = fn()
 	}()
 
 	select {
 	case <-p.Shutdown():
-		return false
+		return clean()
 	case <-done:
-		return true
+		return
 	}
 }
 
