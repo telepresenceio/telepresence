@@ -41,6 +41,7 @@ func makeRequestHandler(p *supervisor.Process, handle func(*supervisor.Process, 
 		w.Write([]byte(handle(p, req)))
 	}
 }
+
 func daemon(p *supervisor.Process) error {
 	var err error
 
@@ -70,10 +71,13 @@ func daemon(p *supervisor.Process) error {
 		}
 		return nil
 	})
+	Notify(p, "Running")
 	p.Ready()
 
 	// Wait for Supervisor to tell us to quit
 	<-p.Shutdown()
+
+	Notify(p, "Terminated")
 	return server.Shutdown(p.Context())
 }
 
