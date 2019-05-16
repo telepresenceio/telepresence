@@ -38,15 +38,29 @@ func makeRequestHandler(p *supervisor.Process, handle func(*supervisor.Process, 
 }
 
 func daemon(p *supervisor.Process) error {
-	var err error
+	mux := http.NewServeMux()
 
+	// Operations that are valid irrespective of API version (curl is okay)
+	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "playpen daemon %s\n", displayVersion)
+	})
+	mux.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) {
+		me, err := os.FindProcess(os.Getpid())
+		if err != nil {
+			message := fmt.Sprintf("Error trying to quit: %v", err)
+			p.Log(message)
+			http.Error(w, message, http.StatusInternalServerError)
+			return
+		}
+		me.Signal(syscall.SIGTERM)
+		fmt.Fprintln(w, "Playpen Daemon quitting...")
+	})
+
+	// API-specific operations
 	apiPath := fmt.Sprintf("/api/v%d", apiVersion)
-	mux := &SerializingMux{}
-	mux.HandleSerially(apiPath+"/status", "pp", makeRequestHandler(p, daemonStatus))
-	mux.HandleSerially(apiPath+"/connect", "pp", makeRequestHandler(p, daemonConnect))
-	mux.HandleSerially(apiPath+"/disconnect", "pp", makeRequestHandler(p, daemonDisconnect))
-	mux.HandleSerially(apiPath+"/version", "pp", makeRequestHandler(p, daemonVersion))
-	mux.HandleSerially(apiPath+"/quit", "pp", makeRequestHandler(p, daemonQuit))
+	mux.HandleFunc(apiPath+"/status", makeRequestHandler(p, daemonStatus))
+	mux.HandleFunc(apiPath+"/connect", makeRequestHandler(p, daemonConnect))
+	mux.HandleFunc(apiPath+"/disconnect", makeRequestHandler(p, daemonDisconnect))
 
 	unixListener, err := net.Listen("unix", socketName)
 	if err != nil {
@@ -113,6 +127,7 @@ func runAsDaemon() {
 		Work:     waitForSignal,
 	})
 
+	sup.Logger.Printf("---")
 	sup.Logger.Printf("Playpen daemon %s starting...", displayVersion)
 	errors := sup.Run()
 
@@ -137,19 +152,4 @@ func daemonConnect(p *supervisor.Process, req *PPRequest) string {
 
 func daemonDisconnect(p *supervisor.Process, req *PPRequest) string {
 	return "Not connected"
-}
-
-func daemonVersion(p *supervisor.Process, req *PPRequest) string {
-	return fmt.Sprintf("playpen daemon %s\n", displayVersion)
-}
-
-func daemonQuit(p *supervisor.Process, req *PPRequest) string {
-	me, err := os.FindProcess(os.Getpid())
-	if err != nil {
-		message := fmt.Sprintf("Error trying to quit: %v", err)
-		p.Log(message)
-		return message
-	}
-	me.Signal(syscall.SIGTERM)
-	return "Playpen Daemon quitting..."
 }
