@@ -169,16 +169,16 @@ func (a *aggregator) notify(p *supervisor.Process) {
 	a.notifyMux.Lock()
 	defer a.notifyMux.Unlock()
 
+	if !a.isKubernetesBootstrapped(p) {
+		return
+	}
+
 	watchset := a.getWatches(p)
 
 	p.Logf("found %d kubernetes watches", len(watchset.KubernetesWatches))
 	p.Logf("found %d consul watches", len(watchset.ConsulWatches))
 	a.k8sWatches <- watchset.KubernetesWatches
 	a.consulWatches <- watchset.ConsulWatches
-
-	if !a.isKubernetesBootstrapped(p) {
-		return
-	}
 
 	if !a.bootstrapped && a.isComplete(p, watchset) {
 		p.Logf("bootstrapped!")

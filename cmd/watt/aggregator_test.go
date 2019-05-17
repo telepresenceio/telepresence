@@ -148,14 +148,10 @@ func TestAggregatorBootstrap(t *testing.T) {
 
 	// initial kubernetes state is just services
 	iso.aggregator.KubernetesEvents <- k8sEvent{"", "service", SERVICES}
-	// whenever the aggregator sees updated k8s state, it should
-	// send an update to the consul watch manager, in this case it
-	// will be empty because there are no resolvers yet
-	// TODO: it would be wise to test for emptyness rather than nil
-	expect(t, iso.consulWatches, []ConsulWatchSpec(nil))
 
-	// we should not generate a snapshot yet because we specified
-	// configmaps are required
+	// we should not generate a snapshot or consulWatches yet
+	// because we specified configmaps are required
+	expect(t, iso.consulWatches, Timeout(100*time.Millisecond))
 	expect(t, iso.snapshots, Timeout(100*time.Millisecond))
 
 	// the configmap references a consul service, so we shouldn't
