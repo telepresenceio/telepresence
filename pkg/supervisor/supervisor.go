@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os/exec"
+	"reflect"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -603,4 +604,31 @@ func (c *Cmd) MustCapture(stdin io.Reader) (output string) {
 		panic(err)
 	}
 	return output
+}
+
+// Creates a work function from a function whose signature includes a
+// process plus additional arguments.
+
+func WorkFunc(fn interface{}, args ...interface{}) func(*Process) error {
+	fnv := reflect.ValueOf(fn)
+	return func(p *Process) error {
+		vargs := []reflect.Value{reflect.ValueOf(p)}
+		for _, a := range args {
+			vargs = append(vargs, reflect.ValueOf(a))
+		}
+		result := fnv.Call(vargs)
+		if len(result) != 1 {
+			panic(fmt.Sprintf("unexpected result: %v", result))
+		}
+		v := result[0].Interface()
+		if v == nil {
+			return nil
+		} else {
+			err, ok := v.(error)
+			if !ok {
+				panic(fmt.Sprintf("unrecognized result type: %v", v))
+			}
+			return err
+		}
+	}
 }

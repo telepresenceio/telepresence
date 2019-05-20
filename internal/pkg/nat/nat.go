@@ -14,6 +14,7 @@ type commonTranslator struct {
 type Address struct {
 	Proto string
 	Ip    string
+	Port  string
 }
 
 type Entry struct {

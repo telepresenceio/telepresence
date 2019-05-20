@@ -45,32 +45,42 @@ func (t *Translator) Disable(p *supervisor.Process) {
 	t.ipt(p, "-X", t.Name)
 }
 
-func (t *Translator) ForwardTCP(p *supervisor.Process, ip, toPort string) {
-	t.forward(p, "tcp", ip, toPort)
+func (t *Translator) ForwardTCP(p *supervisor.Process, ip, port, toPort string) {
+	t.forward(p, "tcp", ip, port, toPort)
 }
 
-func (t *Translator) ForwardUDP(p *supervisor.Process, ip, toPort string) {
-	t.forward(p, "udp", ip, toPort)
+func (t *Translator) ForwardUDP(p *supervisor.Process, ip, port, toPort string) {
+	t.forward(p, "udp", ip, port, toPort)
 }
 
-func (t *Translator) forward(p *supervisor.Process, protocol, ip, toPort string) {
-	t.clear(p, protocol, ip)
-	t.ipt(p, "-A", t.Name, "-j", "REDIRECT", "--dest", ip+"/32", "-p", protocol, "--to-ports", toPort)
-	t.Mappings[Address{protocol, ip}] = toPort
+func (t *Translator) forward(p *supervisor.Process, protocol, ip, port, toPort string) {
+	t.clear(p, protocol, ip, port)
+	args := []string{"-A", t.Name, "-j", "REDIRECT", "-p", protocol, "--dest", ip + "/32"}
+	if port != "" {
+		args = append(args, "--dport", port)
+	}
+	args = append(args, "--to-ports", toPort)
+	t.ipt(p, args...)
+	t.Mappings[Address{protocol, ip, port}] = toPort
 }
 
-func (t *Translator) ClearTCP(p *supervisor.Process, ip string) {
-	t.clear(p, "tcp", ip)
+func (t *Translator) ClearTCP(p *supervisor.Process, ip, port string) {
+	t.clear(p, "tcp", ip, port)
 }
 
-func (t *Translator) ClearUDP(p *supervisor.Process, ip string) {
-	t.clear(p, "udp", ip)
+func (t *Translator) ClearUDP(p *supervisor.Process, ip, port string) {
+	t.clear(p, "udp", ip, port)
 }
 
-func (t *Translator) clear(p *supervisor.Process, protocol, ip string) {
-	if previous, exists := t.Mappings[Address{protocol, ip}]; exists {
-		t.ipt(p, "-D", t.Name, "-j", "REDIRECT", "--dest", ip+"/32", "-p", protocol, "--to-ports", previous)
-		delete(t.Mappings, Address{protocol, ip})
+func (t *Translator) clear(p *supervisor.Process, protocol, ip, port string) {
+	if previous, exists := t.Mappings[Address{protocol, ip, port}]; exists {
+		args := []string{"-D", t.Name, "-j", "REDIRECT", "-p", protocol, "--dest", ip + "/32"}
+		if port != "" {
+			args = append(args, "--dport", port)
+		}
+		args = append(args, "--to-ports", previous)
+		t.ipt(p, args...)
+		delete(t.Mappings, Address{protocol, ip, port})
 	}
 }
 
