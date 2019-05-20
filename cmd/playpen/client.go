@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-
 	"strings"
 
 	"github.com/pkg/errors"
@@ -57,11 +56,6 @@ func sendRequest(command string) (int, string, error) {
 		return res.StatusCode, "", errors.Wrap(err, "request read body")
 	}
 	return res.StatusCode, string(body), nil
-}
-
-func isServerRunning() bool {
-	_, _, err := sendRequest("version")
-	return err == nil
 }
 
 var failedToConnect = fmt.Sprintf(`
@@ -122,6 +116,17 @@ func fetchResponse(path string) (string, error) {
 	body, err := ioutil.ReadAll(res.Body)
 	res.Body.Close()
 	return string(body), err
+}
+
+func isServerRunning() bool {
+	client := GetClient()
+	res, err := client.Get("http://unix/version")
+	if err != nil {
+		return false
+	}
+	_, err = ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	return err == nil
 }
 
 func doVersion() error {
