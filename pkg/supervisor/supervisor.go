@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os/exec"
+	"reflect"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -70,17 +71,18 @@ func WithContext(ctx context.Context) *Supervisor {
 }
 
 type Worker struct {
-	Name          string               // the name of the worker
-	Work          func(*Process) error // the function to perform the work
-	Requires      []string             // a list of required worker names
-	Retry         bool                 // whether or not to retry on error
-	wantsShutdown bool                 // true if the worker wants to shut down
-	done          bool
-	supervisor    *Supervisor //
-	children      int64       // atomic counter for naming children
-	process       *Process    // nil if the worker is not currently running
-	error         error
-	retryDelay    time.Duration // how long to wait to retry
+	Name               string               // the name of the worker
+	Work               func(*Process) error // the function to perform the work
+	Requires           []string             // a list of required worker names
+	Retry              bool                 // whether or not to retry on error
+	wantsShutdown      bool                 // true if the worker wants to shut down
+	done               bool
+	supervisor         *Supervisor //
+	children           int64       // atomic counter for naming children
+	process            *Process    // nil if the worker is not currently running
+	error              error
+	retryDelay         time.Duration // how long to wait to retry
+	lastBlockedWarning time.Time     // last time we warned about being blocked
 }
 
 func (w *Worker) Error() string {
@@ -156,8 +158,18 @@ func (s *Supervisor) Run() []error {
 	// we make cancel trigger shutdown so that simple cases only
 	// need to worry about shutdown
 	go func() {
-		<-s.context.Done()
-		s.Shutdown()
+		ticker := time.NewTicker(1 * time.Second)
+
+		for {
+			select {
+			case <-s.context.Done():
+				s.Shutdown()
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				s.changed.Broadcast()
+			}
+		}
 	}()
 
 	// reconcile may delete workers
@@ -213,12 +225,6 @@ func (s *Supervisor) dependents(worker *Worker) (result []*Worker) {
 // make sure anything that would like to be running is actually
 // running
 func (s *Supervisor) reconcile() {
-
-	// XXX: added this for debugging shutdown stalls, need a better way to
-	// log this that doesn't add so much noise normally
-	//
-	//s.Logger.Printf("WORKERS: %v", s.names)
-
 	var cleanup []string
 	for _, n := range s.names {
 		w := s.workers[n]
@@ -264,10 +270,16 @@ func (w *Worker) reconcile() bool {
 			for _, r := range w.Requires {
 				required := s.workers[r]
 				if required == nil {
+					w.maybeWarnBlocked(r, "not created")
 					return false
 				}
 				process := required.process
-				if process == nil || !process.ready {
+				if process == nil {
+					w.maybeWarnBlocked(r, "not started")
+					return false
+				}
+				if !process.ready {
+					w.maybeWarnBlocked(r, "not ready")
 					return false
 				}
 			}
@@ -277,6 +289,19 @@ func (w *Worker) reconcile() bool {
 
 	}
 	return false
+}
+
+func (w *Worker) maybeWarnBlocked(name, cond string) {
+	now := time.Now()
+	if w.lastBlockedWarning == (time.Time{}) {
+		w.lastBlockedWarning = now
+		return
+	}
+
+	if now.Sub(w.lastBlockedWarning) > 3*time.Second {
+		w.supervisor.Logger.Printf("%s: blocked on %s (%s)", w.Name, name, cond)
+		w.lastBlockedWarning = now
+	}
 }
 
 func nextDelay(delay time.Duration) time.Duration {
@@ -394,12 +419,40 @@ func (p *Process) Go(fn func(*Process) error) *Worker {
 	return w
 }
 
+// Shorthand for launching a named worker... it is named "<parent>.<name>"
+func (p *Process) GoName(name string, fn func(*Process) error) *Worker {
+	w := &Worker{
+		Name: fmt.Sprintf("%s.%s", p.Worker().Name, name),
+		Work: fn,
+	}
+	p.Supervisor().Supervise(w)
+	return w
+}
+
 // Shorthand for proper shutdown handling while doing a potentially
 // blocking activity. This method will return nil if the activity
-// completes normally and an error if the activity is abandoned or
-// panics.
+// completes normally and an error if the activity panics or returns
+// an error.
+//
+// If you want to know whether the work was aborted or might still be
+// running when Do returns, then use DoClean like so:
+//
+//   aborted := errors.New("aborted")
+//
+//   err := p.DoClean(..., func() { return aborted })
+//
+//   if err == aborted {
+//     ...
+//   }
 
-func (p *Process) Do(fn func()) bool {
+func (p *Process) Do(fn func() error) (err error) {
+	return p.DoClean(fn, func() error { return nil })
+}
+
+// Same as Process.Do() but executes the supplied clean function on
+// abort.
+
+func (p *Process) DoClean(fn, clean func() error) (err error) {
 	sup := p.Supervisor()
 	done := make(chan struct{})
 	go func() {
@@ -415,14 +468,14 @@ func (p *Process) Do(fn func()) bool {
 			close(done)
 		}()
 
-		fn()
+		err = fn()
 	}()
 
 	select {
 	case <-p.Shutdown():
-		return false
+		return clean()
 	case <-done:
-		return true
+		return
 	}
 }
 
@@ -551,4 +604,31 @@ func (c *Cmd) MustCapture(stdin io.Reader) (output string) {
 		panic(err)
 	}
 	return output
+}
+
+// Creates a work function from a function whose signature includes a
+// process plus additional arguments.
+
+func WorkFunc(fn interface{}, args ...interface{}) func(*Process) error {
+	fnv := reflect.ValueOf(fn)
+	return func(p *Process) error {
+		vargs := []reflect.Value{reflect.ValueOf(p)}
+		for _, a := range args {
+			vargs = append(vargs, reflect.ValueOf(a))
+		}
+		result := fnv.Call(vargs)
+		if len(result) != 1 {
+			panic(fmt.Sprintf("unexpected result: %v", result))
+		}
+		v := result[0].Interface()
+		if v == nil {
+			return nil
+		} else {
+			err, ok := v.(error)
+			if !ok {
+				panic(fmt.Sprintf("unrecognized result type: %v", v))
+			}
+			return err
+		}
+	}
 }

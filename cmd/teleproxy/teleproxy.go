@@ -188,10 +188,16 @@ func _main() int {
 			} else {
 				p.Logf("SELF CHECK PASSED, SIGNALING READY")
 			}
-			p.Do(func() {
+
+			err = p.Do(func() error {
 				sd_daemon.Notification{State: "READY=1"}.Send(false)
 				p.Ready()
+				return nil
 			})
+			if err != nil {
+				return err
+			}
+
 			<-p.Shutdown()
 			return nil
 		},
@@ -259,17 +265,7 @@ func selfcheck(p *supervisor.Process) error {
 		return err
 	}
 
-	if !p.Do(func() {
-		err = curl.Wait()
-	}) {
-		curl.Process.Kill()
-	}
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return p.DoClean(curl.Wait, curl.Process.Kill)
 }
 
 func teleproxy(p *supervisor.Process, args Args) error {
@@ -498,6 +494,10 @@ func intercept(p *supervisor.Process, args Args) error {
 	return nil
 }
 
+var (
+	ABORTED = errors.New("aborted")
+)
+
 func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
 	sup := p.Supervisor()
 
@@ -510,7 +510,7 @@ func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
 			p.Logf("kubernetes ctx=%s ns=%s", kubeinfo.Context, kubeinfo.Namespace)
 			var w *k8s.Watcher
 
-			ok := p.Do(func() {
+			err := p.DoClean(func() error {
 				w = k8s.NewClient(kubeinfo).Watcher()
 
 				updateTable := func(w *k8s.Watcher) {
@@ -575,14 +575,24 @@ func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
 				w.Watch("pods", func(w *k8s.Watcher) {
 					updateTable(w)
 				})
+				return nil
+			}, func() error {
+				return ABORTED
 			})
 
-			if ok {
-				w.Start()
-				p.Ready()
-				<-p.Shutdown()
-				w.Stop()
+			if err == ABORTED {
+				return nil
 			}
+
+			if err != nil {
+				return err
+			}
+
+			w.Start()
+			p.Ready()
+			<-p.Shutdown()
+			w.Stop()
+
 			return nil
 		},
 	})
@@ -676,12 +686,11 @@ func connect(p *supervisor.Process, kubeinfo *k8s.KubeInfo) {
 			if err != nil {
 				return
 			}
-			if !p.Do(func() {
-				err = apply.Wait()
-				p.Ready()
-			}) {
-				apply.Process.Kill()
+			err = p.DoClean(apply.Wait, apply.Process.Kill)
+			if err != nil {
+				return
 			}
+			p.Ready()
 			// we need to stay alive so that our dependencies can start
 			<-p.Shutdown()
 			return
@@ -699,16 +708,17 @@ func connect(p *supervisor.Process, kubeinfo *k8s.KubeInfo) {
 				return
 			}
 			p.Ready()
-			if !p.Do(func() {
-				err = pf.Wait()
+			err = p.DoClean(func() error {
+				err := pf.Wait()
 				if err != nil {
 					inspect := p.Command("kubectl",
 						kubeinfo.GetKubectlArray("get", "pod/teleproxy")...)
 					inspect.Run()
 				}
-			}) {
-				pf.Process.Kill()
-			}
+				return err
+			}, func() error {
+				return pf.Process.Kill()
+			})
 			return
 		},
 	})
@@ -728,12 +738,7 @@ func connect(p *supervisor.Process, kubeinfo *k8s.KubeInfo) {
 				return
 			}
 			p.Ready()
-			if !p.Do(func() {
-				err = ssh.Wait()
-			}) {
-				ssh.Process.Kill()
-			}
-			return
+			return p.DoClean(ssh.Wait, ssh.Process.Kill)
 		},
 	})
 }

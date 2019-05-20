@@ -17,6 +17,7 @@ type Route struct {
 	Name   string `json:"name,omitempty"`
 	Ip     string `json:"ip"`
 	Proto  string `json:"proto"`
+	Port   string `json:"port,omitempty"`
 	Target string `json:"target"`
 	Action string `json:"action,omitempty"`
 }

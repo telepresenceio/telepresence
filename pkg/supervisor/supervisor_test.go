@@ -642,8 +642,11 @@ func TestCommandRun(t *testing.T) {
 func TestDoPanic(t *testing.T) {
 	gotHere := false
 	errs := Run("bob", func(p *Process) error {
-		p.Do(func() {
-			panic("blah")
+		p.Do(func() error {
+			if true {
+				panic("blah")
+			}
+			return nil
 		})
 		gotHere = true
 		return nil
