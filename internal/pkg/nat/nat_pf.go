@@ -27,6 +27,14 @@ func pf(p *supervisor.Process, args []string, stdin string) error {
 	return cmd.Wait()
 }
 
+func fmtDest(a Address) string {
+	result := fmt.Sprintf("proto %s to %s", a.Proto, a.Ip)
+	if a.Port != "" {
+		result += fmt.Sprintf(" port %s", a.Port)
+	}
+	return result
+}
+
 func (t *Translator) rules() string {
 	if t.dev == nil {
 		return ""
@@ -37,15 +45,14 @@ func (t *Translator) rules() string {
 	result := ""
 	for _, entry := range entries {
 		dst := entry.Destination
-		result += ("rdr pass on lo0 inet proto " + dst.Proto + " to " + dst.Ip + " -> 127.0.0.1 port " +
-			entry.Port + "\n")
+		result += ("rdr pass on lo0 inet " + fmtDest(dst) + " -> 127.0.0.1 port " + entry.Port + "\n")
 	}
 
 	result += "pass out quick inet proto tcp to 127.0.0.1/32\n"
 
 	for _, entry := range entries {
 		dst := entry.Destination
-		result += "pass out route-to lo0 inet proto " + dst.Proto + " to " + dst.Ip + " keep state\n"
+		result += "pass out route-to lo0 inet " + fmtDest(dst) + " keep state\n"
 	}
 
 	return result
@@ -76,6 +83,12 @@ func (t *Translator) Enable(p *supervisor.Process) {
 
 	pf(p, []string{"-a", t.Name, "-F", "all"}, "")
 
+	// XXX: blah, this generates a syntax error, but also appears
+	// necessary to make anything work. I'm guessing there is some
+	// sort of side effect, like it is clearing rules or
+	// something, although notably loading an empty ruleset
+	// doesn't seem to work, it has to be a syntax error of some
+	// kind.
 	pf(p, []string{"-f", "/dev/stdin"}, "pass on lo0")
 	pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 
@@ -112,32 +125,32 @@ func (t *Translator) Disable(p *supervisor.Process) {
 	pf(p, []string{"-a", t.Name, "-F", "all"}, "")
 }
 
-func (t *Translator) ForwardTCP(p *supervisor.Process, ip, toPort string) {
-	t.forward(p, "tcp", ip, toPort)
+func (t *Translator) ForwardTCP(p *supervisor.Process, ip, port, toPort string) {
+	t.forward(p, "tcp", ip, port, toPort)
 }
 
-func (t *Translator) ForwardUDP(p *supervisor.Process, ip, toPort string) {
-	t.forward(p, "udp", ip, toPort)
+func (t *Translator) ForwardUDP(p *supervisor.Process, ip, port, toPort string) {
+	t.forward(p, "udp", ip, port, toPort)
 }
 
-func (t *Translator) forward(p *supervisor.Process, protocol, ip, toPort string) {
-	t.clear(protocol, ip)
-	t.Mappings[Address{protocol, ip}] = toPort
+func (t *Translator) forward(p *supervisor.Process, protocol, ip, port, toPort string) {
+	t.clear(protocol, ip, port)
+	t.Mappings[Address{protocol, ip, port}] = toPort
 	pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
-func (t *Translator) ClearTCP(p *supervisor.Process, ip string) {
-	t.clear("tcp", ip)
+func (t *Translator) ClearTCP(p *supervisor.Process, ip, port string) {
+	t.clear("tcp", ip, port)
 	pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
-func (t *Translator) ClearUDP(p *supervisor.Process, ip string) {
-	t.clear("udp", ip)
+func (t *Translator) ClearUDP(p *supervisor.Process, ip, port string) {
+	t.clear("udp", ip, port)
 	pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
-func (t *Translator) clear(protocol, ip string) {
-	delete(t.Mappings, Address{protocol, ip})
+func (t *Translator) clear(protocol, ip, port string) {
+	delete(t.Mappings, Address{protocol, ip, port})
 }
 
 func (t *Translator) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host string, err error) {
