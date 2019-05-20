@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/datawire/apro/lib/logging"
 	"github.com/datawire/teleproxy/pkg/supervisor"
@@ -89,6 +91,23 @@ func daemon(p *supervisor.Process) error {
 	return server.Shutdown(p.Context())
 }
 
+func monitorResources(p *supervisor.Process, resources []Resource) error {
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+	for {
+		for _, resource := range resources {
+			resource.Monitor(p)
+		}
+
+		// Wait a few seconds between loops
+		select {
+		case <-ticker.C:
+		case <-p.Shutdown():
+			return nil
+		}
+	}
+}
+
 func waitForSignal(p *supervisor.Process) error {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
@@ -123,6 +142,38 @@ func runAsDaemon() error {
 		Name:     "signal",
 		Requires: []string{"daemon"},
 		Work:     waitForSignal,
+	})
+
+	teleproxy := "/Users/ark3/datawire/bin/pp-teleproxy-darwin-amd64"
+	netOverride := NewCommandResource("netOverride",
+		[]string{teleproxy, "-mode", "intercept"})
+	netOverride.SetCheckFunction(func(p *supervisor.Process) error {
+		// Check by doing the equivalent of curl http://teleproxy/api/tables/
+		res, err := http.Get("http://teleproxy/api/tables")
+		if err != nil {
+			return err
+		}
+		_, err = ioutil.ReadAll(res.Body)
+		res.Body.Close()
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	resources := []Resource{netOverride}
+	sup.Supervise(&supervisor.Worker{
+		Name:     "monitor",
+		Requires: []string{"daemon"},
+		Work: func(p *supervisor.Process) error {
+			return monitorResources(p, resources)
+		},
+	})
+
+	sup.Supervise(&supervisor.Worker{
+		Name:     "enable",
+		Requires: []string{"daemon"},
+		Work:     netOverride.Enable,
 	})
 
 	sup.Logger.Printf("---")
