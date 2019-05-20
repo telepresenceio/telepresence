@@ -19,6 +19,15 @@ import (
 var READY = map[string]func(Resource) bool{
 	"": func(Resource) bool { return false },
 	"Deployment": func(r Resource) bool {
+		// NOTE - plombardi - (2019-05-20)
+		// a zero-sized deployment never gets status.readyReplicas and friends set by kubernetes deployment controller.
+		// this effectively short-circuits the wait.
+		//
+		// in the future it might be worth porting this change to StatefulSets, ReplicaSets and ReplicationControllers
+		if r.Spec().getInt64("replicas") == 0 {
+			return true
+		}
+
 		return r.Status().getInt64("readyReplicas") > 0
 	},
 	"Service": func(r Resource) bool {
