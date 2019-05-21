@@ -195,9 +195,9 @@ type ResourceType struct {
 // which calls
 // k8s.io/apimachinery/pkg/runtime/schema.ParseResourceArg() and
 // k8s.io/client-go/restmapper.shortcutExpander.expandResourceShortcut()
-func (c *Client) ResolveResourceType(resource string) ResourceType {
+func (c *Client) ResolveResourceType(resource string) (ResourceType, error) {
 	if resource == "" {
-		panic("empty resource string")
+		return ResourceType{}, errors.New("empty resource string")
 	}
 	lresource := strings.ToLower(resource)
 	for _, rl := range c.resources {
@@ -222,14 +222,14 @@ func (c *Client) ResolveResourceType(resource string) ResourceType {
 						group = parts[0]
 						version = parts[1]
 					default:
-						panic("unrecognized GroupVersion")
+						return ResourceType{}, errors.New("unrecognized GroupVersion")
 					}
-					return ResourceType{group, version, r.Name, r.Kind, r.Namespaced}
+					return ResourceType{group, version, r.Name, r.Kind, r.Namespaced}, nil
 				}
 			}
 		}
 	}
-	panic(fmt.Sprintf("unrecognized resource: %s", resource))
+	return ResourceType{}, errors.New(fmt.Sprintf("unrecognized resource: %s", resource))
 }
 
 // List calls ListNamespace(...) with the empty string as the namespace, which
@@ -246,7 +246,10 @@ func (c *Client) ListNamespace(namespace, resource string) ([]Resource, error) {
 }
 
 func (c *Client) SelectiveList(namespace, resource, fieldSelector, labelSelector string) ([]Resource, error) {
-	ri := c.ResolveResourceType(resource)
+	ri, err := c.ResolveResourceType(resource)
+	if err != nil {
+		return nil, err
+	}
 
 	dyn, err := dynamic.NewForConfig(c.config)
 	if err != nil {

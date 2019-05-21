@@ -93,7 +93,10 @@ func (w *Watcher) Canonical(name string) string {
 		return ""
 	}
 
-	ri := w.client.ResolveResourceType(kind)
+	ri, err := w.client.ResolveResourceType(kind)
+	if err != nil {
+		panic(err)
+	}
 	//kind = ri.Name + "." + ri.Version + "." + ri.Group
 	kind = ri.Name
 
@@ -131,7 +134,10 @@ func (w *Watcher) WatchNamespace(namespace, resources string, listener func(*Wat
 
 func (w *Watcher) SelectiveWatch(namespace, resources, fieldSelector, labelSelector string,
 	listener func(*Watcher)) error {
-	ri := w.client.ResolveResourceType(resources)
+	ri, err := w.client.ResolveResourceType(resources)
+	if err != nil {
+		return err
+	}
 	dyn, err := dynamic.NewForConfig(w.client.config)
 	if err != nil {
 		return err
