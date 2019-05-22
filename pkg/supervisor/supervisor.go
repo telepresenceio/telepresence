@@ -338,7 +338,7 @@ func (s *Supervisor) launch(worker *Worker) {
 		defer s.mutex.Unlock()
 		worker.process = nil
 		if err != nil {
-			process.Log(err)
+			process.Logf("ERROR: %v", err)
 			if worker.Retry {
 				if worker.shuttingDown() {
 					s.remove(worker)

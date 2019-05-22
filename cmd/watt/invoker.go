@@ -126,30 +126,27 @@ func (s *apiServer) Work(p *supervisor.Process) error {
 		}
 	})
 
-	listenHostAndPort := fmt.Sprintf(":%d", port)
+	listenHostAndPort := fmt.Sprintf(":%d", s.port)
 	listener, err := net.Listen("tcp", listenHostAndPort)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		err := listener.Close()
-		if err != nil {
-			p.Logf("listener close error: %v", err)
-		}
-	}()
-
 	p.Ready()
 	p.Logf("snapshot server listening on: %s", listenHostAndPort)
 	srv := &http.Server{
 		Addr: listenHostAndPort,
 	}
-	// launch an anonymous child worker to serve requests
-	p.Go(func(p *supervisor.Process) error {
-		return srv.Serve(listener)
-	})
+	return p.DoClean(func() error {
+		err := srv.Serve(listener)
+		if err == http.ErrServerClosed {
+			return nil
+		}
+		return err
+	},
+		func() error {
+			return srv.Shutdown(p.Context())
+		})
 
-	<-p.Shutdown()
-	return srv.Shutdown(p.Context())
 }
 
 func (s *apiServer) index() string {

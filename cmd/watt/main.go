@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
@@ -133,9 +134,11 @@ func _runWatt(cmd *cobra.Command, args []string) int {
 	})
 
 	if errs := s.Run(); len(errs) > 0 {
+		msgs := []string{}
 		for _, err := range errs {
-			log.Println(err)
+			msgs = append(msgs, err.Error())
 		}
+		log.Printf("ERROR(s): %s", strings.Join(msgs, "\n    "))
 		return 1
 	}
 
