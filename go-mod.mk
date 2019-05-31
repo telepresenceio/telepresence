@@ -99,4 +99,32 @@ go-get:
 include $(dir $(lastword $(MAKEFILE_LIST)))_go-common.mk
 
 #
+
+go-doc: ## (Go) Run a `godoc -http` server
+go-doc: $(dir $(_go-common.mk))gopath
+	{ \
+		while sleep 1; do \
+			$(MAKE) --quiet $(dir $(_go-common.mk))gopath/src/$(go.module); \
+		done & \
+		trap "kill $$!" EXIT; \
+		GOPATH=$(dir $(_go-common.mk))gopath godoc -http :8080; \
+	}
+.PHONY: go-doc
+
+vendor: FORCE
+	go mod vendor
+
+$(dir $(_go-common.mk))gopath: FORCE vendor
+	mkdir -p $(dir $(_go-common.mk))gopath/src
+	rsync --archive --delete vendor/ $(dir $(_go-common.mk))gopath/src/
+	$(MAKE) $(dir $(_go-common.mk))gopath/src/$(go.module)
+$(dir $(_go-common.mk))gopath/src/$(go.module): FORCE
+	mkdir -p $@
+	go list ./... | sed -e 's,^$(go.module),,' -e 's,$$,/*.go,' | rsync --archive --prune-empty-dirs --delete-excluded --include='*/' --include-from=/dev/stdin --exclude='*' ./ $@/
+
+clean: _clean-gopath
+_clean-gopath:
+	rm -rf $(dir $(_go-common.mk))gopath vendor
+.PHONY: _clean-gopath
+
 endif
