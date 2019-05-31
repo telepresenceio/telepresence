@@ -18,6 +18,9 @@
 /golangci-lint
 /go-test.tap
 
+# go-mod.mk
+/gopath/
+
 # --- Files ignored by older versions ---
 # Remove the tail of this list when the commit making the change gets
 # far enough in to the past.
