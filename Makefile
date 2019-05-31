@@ -3,14 +3,13 @@
 # our own below
 go.DISABLE_GO_TEST = y
 
+include build-aux/kubernaut-ui.mk
 include build-aux/common.mk
 include build-aux/go-mod.mk
 include build-aux/go-version.mk
-include build-aux/flock.mk
 include build-aux/docker.mk
 include build-aux/help.mk
 include build-aux/k8s.mk
-include build-aux/kubernaut.mk
 include build-aux/teleproxy.mk
 
 .DEFAULT_GOAL = help
