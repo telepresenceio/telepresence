@@ -5,6 +5,7 @@
 /bin_*
 /.firewall.lock
 /.cluster.lock
+/vendor/
 
 # --- IntelliJ IDEA ---
 .idea
