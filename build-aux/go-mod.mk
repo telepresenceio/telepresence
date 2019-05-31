@@ -97,7 +97,7 @@ go-doc: ## (Go) Run a `godoc -http` server
 go-doc: $(dir $(_go-common.mk))gopath
 	{ \
 		while sleep 1; do \
-			$(MAKE) $<; \
+			$(MAKE) --quiet $(dir $(_go-common.mk))gopath/src/$(go.module); \
 		done & \
 		trap "kill $$!" EXIT; \
 		GOPATH=$(dir $(_go-common.mk))gopath godoc -http :8080; \
@@ -110,8 +110,10 @@ vendor: FORCE
 $(dir $(_go-common.mk))gopath: FORCE vendor
 	mkdir -p $(dir $(_go-common.mk))gopath/src
 	rsync --archive --delete vendor/ $(dir $(_go-common.mk))gopath/src/
-	mkdir -p $(dir $(dir $(_go-common.mk))gopath/src/$(go.module))
-	go list ./... | sed -e 's,^$(go.module),,' -e 's,$$,/*.go,' | rsync --archive --prune-empty-dirs --delete-excluded --include='*/' --include-from=/dev/stdin --exclude='*' ./ $(dir $(_go-common.mk))gopath/src/$(go.module)/
+	$(MAKE) $(dir $(_go-common.mk))gopath/src/$(go.module)
+$(dir $(_go-common.mk))gopath/src/$(go.module): FORCE
+	mkdir -p $@
+	go list ./... | sed -e 's,^$(go.module),,' -e 's,$$,/*.go,' | rsync --archive --prune-empty-dirs --delete-excluded --include='*/' --include-from=/dev/stdin --exclude='*' ./ $@/
 
 clean: _clean-gopath
 _clean-gopath:
