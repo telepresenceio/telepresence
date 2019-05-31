@@ -2,12 +2,15 @@
 #
 # Makefile snippet for calling `teleproxy`
 #
-## Inputs ##
+## Eager inputs ##
 #  - Variable: TELEPROXY     ?= ./build-aux/teleproxy
-#  - Variable: TELEPROXY_LOG ?= ./build-aux/teleproxy.log
 #  - Variable: KUBECONFIG
+#  - Variable: TELEPROXY_LOG ?= ./build-aux/teleproxy.log
+## Lazy inputs ##
 #  - Variable: KUBE_URL
 ## Outputs ##
+#  - Variable: TELEPROXY     ?= ./build-aux/teleproxy
+#  - Variable: TELEPROXY_LOG ?= ./build-aux/teleproxy.log
 #  - Target       : $(TELEPROXY)
 #  - .PHONY Target: proxy
 #  - .PHONY Target: unproxy
@@ -16,11 +19,10 @@
 #  - clean
 #  - clobber
 ## kubernaut-ui.mk targets ##
-#  - unclaim
 #  - $(KUBECONFIG).clean
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
 _teleproxy.mk := $(lastword $(MAKEFILE_LIST))
-include $(dir $(lastword $(MAKEFILE_LIST)))kubernaut-ui.mk
+include $(dir $(_teleproxy.mk))prelude.mk
 
 TELEPROXY ?= $(dir $(_teleproxy.mk))teleproxy
 TELEPROXY_LOG ?= $(dir $(_teleproxy.mk))teleproxy.log
@@ -29,7 +31,7 @@ KUBE_URL = https://kubernetes/api/
 
 $(TELEPROXY): $(_teleproxy.mk)
 	sudo rm -f $@
-	curl -o $@ https://s3.amazonaws.com/datawire-static-files/teleproxy/$(TELEPROXY_VERSION)/$(GOOS)/$(GOARCH)/teleproxy
+	curl -o $@ --fail https://s3.amazonaws.com/datawire-static-files/teleproxy/$(TELEPROXY_VERSION)/$(GOHOSTOS)/$(GOHOSTARCH)/teleproxy
 	sudo chown root $@
 	sudo chmod go-w,a+sx $@
 

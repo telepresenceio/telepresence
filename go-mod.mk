@@ -2,16 +2,23 @@
 #
 # Makefile snippet to build Go programs using Go 1.11 modules
 #
-## Inputs ##
+## Eager inputs ##
 #  - File: ./go.mod
 #  - Variable: go.DISABLE_GO_TEST ?=
-#  - Variable: go.LDFLAGS ?=
 #  - Variable: go.PLATFORMS ?= $(GOOS)_$(GOARCH)
-#  - Variable: go.GOLANG_LINT_FLAGS ?= …
+## Lazy inputs ##
+#  - Variable: go.GOBUILD ?= go build
+#  - Variable: go.LDFLAGS ?=
+#  - Variable: go.GOLANG_LINT_VERSION ?= …
+#  - Variable: go.GOLANG_LINT_FLAGS ?= …$(wildcard .golangci.yml .golangci.toml .golangci.json)…
+#  - Variable: CI
 ## Outputs ##
+#  - Variable: NAME ?= $(notdir $(go.module))
 #  - Variable: go.module = EXAMPLE.COM/YOU/YOURREPO
 #  - Variable: go.bins = List of "main" Go packages
-#  - Variable: NAME ?= $(notdir $(go.module))
+#  - Variable: go.pkgs = ./...
+#  - Function: go.list = $(shell go list $1), but ignores submodules and doesn't download things
+#  - Targets: bin_$(OS)_$(ARCH)/$(CMD)
 #  - .PHONY Target: go-get
 #  - .PHONY Target: go-build
 #  - .PHONY Target: go-lint
@@ -20,8 +27,9 @@
 ## common.mk targets ##
 #  - build
 #  - lint
-#  - check
 #  - format
+#  - check
+#  - clean
 #  - clobber
 #
 # `go.PLATFORMS` is a list of OS_ARCH pairs that specifies which
@@ -31,7 +39,6 @@ ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEF
 ifneq ($(go.module),)
 $(error Only include one of go-mod.mk or go-workspace.mk)
 endif
-include $(dir $(lastword $(MAKEFILE_LIST)))common.mk
 
 #
 # 0. configure the `go` command

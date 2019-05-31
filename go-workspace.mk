@@ -4,16 +4,22 @@
 # ("GOPATH").  Go workspaces are scheduled for deprecation in Go 1.13,
 # which is scheduled for August 2019.
 #
-## Inputs ##
+## Eager inputs ##
 #  - Symlink: ./.go-workspace/src/EXAMPLE.COM/YOU/YOURREPO -> (git topdir)
+#  - File: glide.yaml or Gopkg.toml (optional)
 #  - Variable: go.DISABLE_GO_TEST ?=
-#  - Variable: go.LDFLAGS ?=
 #  - Variable: go.PLATFORMS ?= $(GOOS)_$(GOARCH)
-#  - Variable: go.GOLANG_LINT_FLAGS ?= …
+## Lazy inputs ##
+#  - Variable: go.GOBUILD ?= go build
+#  - Variable: go.LDFLAGS ?=
+#  - Variable: go.GOLANG_LINT_VERSION ?= …
+#  - Variable: go.GOLANG_LINT_FLAGS ?= …$(wildcard .golangci.yml .golangci.toml .golangci.json)…
+#  - Variable: CI
 ## Outputs ##
+#  - Variable: NAME ?= $(notdir $(go.module))
 #  - Variable: go.module = EXAMPLE.COM/YOU/YOURREPO
 #  - Variable: go.bins = List of "main" Go packages
-#  - Variable: NAME ?= $(notdir $(go.module))
+#  - Variable: go.pkgs = List of Go packages
 #  - Target: vendor/ (if `./glade.yaml` is present)
 #  - .PHONY Target: go-get
 #  - .PHONY Target: go-build
@@ -23,8 +29,9 @@
 ## common.mk targets ##
 #  - build
 #  - lint
-#  - check
 #  - format
+#  - check
+#  - clean
 #  - clobber
 #
 # `go.PLATFORMS` is a list of OS_ARCH pairs that specifies which

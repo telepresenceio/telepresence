@@ -2,10 +2,14 @@
 #
 # Makefile snippet for managing pid file cleanup.
 #
-## Inputs ##
+## Eager inputs ##
+#  (none)
+## Lazy inputs ##
 #  (none)
 ## Outputs ##
 #  - .PHONY Target: %.pid.clean
+## common.mk targets ##
+#  (none)
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
 
 %.pid.clean:
