@@ -28,13 +28,13 @@ install_rpm = """
 
 distros = [
     ("ubuntu", "xenial", "deb", ubuntu_deps, install_deb),  # 16.04
-    ("ubuntu", "artful", "deb", ubuntu_deps, install_deb),  # 17.10 EOL
     ("ubuntu", "bionic", "deb", ubuntu_deps_2, install_deb),  # 18.04
     ("ubuntu", "cosmic", "deb", ubuntu_deps_2, install_deb),  # 18.10
     ("ubuntu", "disco", "deb", ubuntu_deps_2, install_deb),  # 19.04
     ("debian", "stretch", "deb", ubuntu_deps, install_deb),  # stable
     ("fedora", "26", "rpm", fedora_deps, install_rpm),  # EOL 2018-05-29
     ("fedora", "27", "rpm", fedora_deps, install_rpm),  # EOL 2018-11-30
-    ("fedora", "28", "rpm", fedora_deps, install_rpm),
+    ("fedora", "28", "rpm", fedora_deps, install_rpm),  # EOL 2019-05-28
     ("fedora", "29", "rpm", fedora_deps, install_rpm),
+    ("fedora", "30", "rpm", fedora_deps, install_rpm),
 ]
