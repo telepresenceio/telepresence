@@ -59,6 +59,7 @@ def existing_deployment(
     run_id = None
     return deployment_arg, run_id
 
+
 def existing_deployment_openshift(
     runner: Runner, deployment_arg: str, expose: PortMapping,
     add_custom_nameserver: bool
@@ -71,7 +72,11 @@ def existing_deployment_openshift(
         "DeploymentConfig {}".format(deployment_arg)
     )
     try:
-        runner.check_call(runner.kubectl("get", "deploymentconfig", deployment_arg))
+        # FIXME: This call is redundant, as we already check for an existing dc
+        # just to get to this code path in the first place.
+        runner.check_call(
+            runner.kubectl("get", "deploymentconfig", deployment_arg)
+        )
     except CalledProcessError as exc:
         raise runner.fail(
             "Failed to find deploymentconfig {}:\n{}".format(
@@ -80,6 +85,7 @@ def existing_deployment_openshift(
         )
     run_id = None
     return deployment_arg, run_id
+
 
 def create_new_deployment(
     runner: Runner, deployment_arg: str, expose: PortMapping,
