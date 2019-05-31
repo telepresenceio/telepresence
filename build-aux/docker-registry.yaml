@@ -1,3 +1,4 @@
+# @TEMPLATE@
 ---
 apiVersion: v1
 kind: Namespace
@@ -18,12 +19,17 @@ spec:
       nodePort: 31000
 ---
 apiVersion: apps/v1
-kind: Deployment
+# XXX: Avoid using a StatefulSet if possible, because `kubeapply`
+# doesn't know how to wait for them.
+kind: {{ if env "DOCKER_K8S_ENABLE_PVC" | eq "true" }}StatefulSet{{ else }}Deployment{{ end }}
 metadata:
   namespace: docker-registry
   name: registry
 spec:
   replicas: 1
+{{ if env "DOCKER_K8S_ENABLE_PVC" | eq "true" }} # XXX: StatefulSet
+  serviceName: registry
+{{ end }}
   selector:
     matchLabels:
       app: registry
@@ -43,7 +49,24 @@ spec:
               name: registry-data
       volumes:
         - name: registry-data
+{{ if env "DOCKER_K8S_ENABLE_PVC" | eq "true" | not }}
           # On kubernaut.io clusters, there is only 1 node, so a
           # hostPath is fine.
           hostPath:
             path: /var/lib/registry
+{{ else }}
+          persistentVolumeClaim:
+            claimName: registry-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: registry-data
+  namespace: docker-registry
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+{{ end }}

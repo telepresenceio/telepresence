@@ -3,10 +3,14 @@
 # Makefile snippet for automatically including the version number in
 # Go executables.
 #
-## Inputs ##
-#  - Variable: VERSION ?= …
+## Eager inputs ##
+#  (none)
+## Lazy inputs ##
+#  - Variable: VERSION ?= … (via version.mk)
 ## Outputs ##
-#  - Variable: go.LDFLAGS += …
+#  - Variable: go.LDFLAGS += …$(VERSION)
+## common.mk targets ##
+#  (none)
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
 include $(dir $(lastword $(MAKEFILE_LIST)))version.mk
 

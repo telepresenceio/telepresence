@@ -2,13 +2,16 @@
 #
 # Makefile snippet for managing kubernaut.io clusters.
 #
-## Inputs ##
-#   - Variable: GUBERNAUT ?= gubernaut
+## Eager inputs ##
+#  (none)
+## Lazy inputs ##
+#  - Variable: GUBERNAUT ?= go run …/gubernaut.go
 ## Outputs ##
-#   - Target       : `%.knaut`
-#   - .PHONY Target: `%.knaut.clean`
+#  - Target       : `%.knaut`
+#  - .PHONY Target: `%.knaut.clean`
+#  - Variable: GUBERNAUT ?= go run …/gubernaut.go
 ## common.mk targets ##
-#   - clobber
+#  - clobber
 #
 # Creating the NAME.knaut creates the Kubernaut claim.  The file may
 # be used as a KUBECONFIG file.
@@ -47,7 +50,6 @@
 #
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
 _kubernaut.mk := $(lastword $(MAKEFILE_LIST))
-include $(dir $(lastword $(MAKEFILE_LIST)))common.mk
 
 GUBERNAUT = GO111MODULE=off go run $(dir $(_kubernaut.mk))gubernaut.go
 
