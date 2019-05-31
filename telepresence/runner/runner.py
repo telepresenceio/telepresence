@@ -664,12 +664,25 @@ class Runner(object):
         """
         Monitor main process and background items until done
         """
+
+        def wait_for_process(p):
+            """Wait for process and set main_code and self.quitting flag
+
+            Note that main_code is defined in the parent function,
+            so it is declared as nonlocal
+
+            See https://github.com/telepresenceio/telepresence/issues/1003
+            """
+            nonlocal main_code
+            main_code = p.wait()
+            self.quitting = True
+
         self.write("Everything launched. Waiting to exit...")
         main_code = None
         span = self.span()
-        while not self.quitting and main_code is None:
+        Thread(target=wait_for_process, args=(main_process, ))
+        while not self.quitting:
             sleep(0.1)
-            main_code = main_process.poll()
         span.end()
 
         if main_code is not None:
