@@ -14,11 +14,30 @@
 from subprocess import CalledProcessError
 
 from .deployment import (
-    existing_deployment, create_new_deployment, swap_deployment_openshift,
-    supplant_deployment
+    existing_deployment, existing_deployment_openshift, create_new_deployment,
+    swap_deployment_openshift, supplant_deployment
 )
 from .remote import RemoteInfo, get_remote_info
 from telepresence.runner import Runner
+
+
+def _dc_exists(runner: Runner, name: str) -> bool:
+    """
+    If we're using OpenShift Origin, we may be using a DeploymentConfig instead
+    of a Deployment. Return True if a dc exists with the given name.
+    """
+    if runner.kubectl.command != "oc":
+        return False
+    try:
+        runner.check_call(runner.kubectl("get", "dc/{}".format(name)))
+        return True
+    except CalledProcessError as exc:
+        runner.show(
+            "Failed to find OpenShift deploymentconfig {}:".format(name)
+        )
+        runner.show("  {}".format(str(exc.stderr)))
+        runner.show("Will try regular Kubernetes Deployment.")
+    return False
 
 
 def setup(runner: Runner, args):
@@ -33,42 +52,30 @@ def setup(runner: Runner, args):
     # Figure out which operation the user wants
     # Handle --deployment case
     deployment_arg = args.deployment
-    operation = existing_deployment
+    if _dc_exists(runner, deployment_arg):
+        operation = existing_deployment_openshift
+        deployment_type = "deploymentconfig"
+    else:
+        operation = existing_deployment
+        deployment_type = "deployment"
     args.operation = "deployment"
 
     if args.new_deployment is not None:
         # This implies --new-deployment
         deployment_arg = args.new_deployment
         operation = create_new_deployment
+        deployment_type = "deployment"
         args.operation = "new_deployment"
-
-    deployment_type = "deployment"
-    if runner.kubectl.command == "oc":
-        # OpenShift Origin might be using DeploymentConfig instead
-        if args.swap_deployment:
-            try:
-                runner.check_call(
-                    runner.kubectl(
-                        "get", "dc/{}".format(args.swap_deployment)
-                    ),
-                )
-                deployment_type = "deploymentconfig"
-            except CalledProcessError as exc:
-                runner.show(
-                    "Failed to find OpenShift deploymentconfig {}. "
-                    "Will try regular k8s deployment. Reason:\n{}".format(
-                        deployment_arg, exc.stderr
-                    )
-                )
 
     if args.swap_deployment is not None:
         # This implies --swap-deployment
         deployment_arg = args.swap_deployment
-        if runner.kubectl.command == "oc" \
-                and deployment_type == "deploymentconfig":
+        if _dc_exists(runner, deployment_arg):
             operation = swap_deployment_openshift
+            deployment_type = "deploymentconfig"
         else:
             operation = supplant_deployment
+            deployment_type = "deployment"
         args.operation = "swap_deployment"
 
     # minikube/minishift break DNS because DNS gets captured, sent to minikube,
