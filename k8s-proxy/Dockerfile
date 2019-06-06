@@ -46,7 +46,7 @@ RUN chmod -R g+r /etc/ssh && \
     echo "telepresence::1000:0:Telepresence User:/usr/src/app:/bin/ash" >> /etc/passwd
 USER 1000:0
 
-CMD /usr/src/app/run.sh
+CMD /usr/src/app/pre-run.sh
 
 #
 # The privileged (running-as-root) image
