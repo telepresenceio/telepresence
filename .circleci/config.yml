@@ -99,10 +99,10 @@ jobs:
             packaging/deploy.py
             tar cvjf telepresence-dist.tbz dist
 
-      - store-artifacts:
+      - store_artifacts:
           path: dist
 
-      - store-artifacts:
+      - store_artifacts:
           path: telepresence-dist.tbz
 
   build-linux:
