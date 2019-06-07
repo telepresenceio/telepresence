@@ -18,6 +18,9 @@ workflows:
       #- build-testbench:
       #    requires:
       #      - build-image
+      - build-linux-new:
+          requires:
+            - build-image
 
 commands:
   decrypt-gcloud-keys:
@@ -42,8 +45,42 @@ commands:
               echo "Running for a forked PRs with no credentials, so marking this step successful"
               circleci step halt
             fi
+  setup-for-ci:
+    steps:
+      - run:
+          name: Setup the CI environment
+          command: |
+            ci/setup-for-ci.sh
+            echo 'export KUBECONFIG=${HOME}/.kube/$(cat /tmp/kubernaut-claim-name.txt).yaml' >> ${BASH_ENV}
+            export KUBECONFIG=${HOME}/.kube/$(cat /tmp/kubernaut-claim-name.txt).yaml
+            echo $KUBECONFIG
+            kubectl cluster-info
+  kubernaut-discard:
+    steps:
+      - run:
+          name: Discard the cluster
+          command: |
+            kubernaut claims delete $(cat /tmp/kubernaut-claim-name.txt)
 
 jobs:
+  build-linux-new:
+    machine:
+      enabled: true
+      # https://circleci.com/docs/2.0/configuration-reference/#machine
+      # Ubuntu 14.04 + docker 17.11.0-ce + docker-compose 1.17.1
+      image: "circleci/classic:201711-01"
+    steps:
+      - run: sudo apt-get --quiet update
+      - run: pyenv global 2.7.12 3.5.2
+      - checkout
+      - setup-for-ci
+      - run: make virtualenv
+      - run: make check DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
+      - store_test_results:
+          # https://circleci.com/docs/2.0/collect-test-data/#pytest
+          path: test-reports
+      - kubernaut-discard
+
   check-local:
     docker:
       # https://circleci.com/docs/2.0/circleci-images/
