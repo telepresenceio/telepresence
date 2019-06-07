@@ -21,6 +21,7 @@ create-linux-packages.py <release-version>
 
 import sys
 from pathlib import Path
+from subprocess import check_call
 from typing import List
 
 from container import Container
@@ -117,6 +118,10 @@ def get_upload_commands(system, release, package):
 
 def main(version):
     """Create Linux packages"""
+    show_banner("Pulling images...")
+    for system, release, _, _, _ in distros:
+        check_call(["docker", "pull", "{}:{}".format(system, release)])
+
     show_banner("Building packages...")
     con = prep_to_build()
     uploads = []
