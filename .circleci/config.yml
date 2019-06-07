@@ -30,11 +30,8 @@ jobs:
       - image: "circleci/python:3"
     steps:
       - "checkout"
-      - run:
-          name: "run lint checks"
-          command: |
-            make virtualenv
-            make lint
+      - run: make virtualenv
+      - run: make lint
 
   build-image:
     docker:
@@ -47,11 +44,8 @@ jobs:
           version: 18.05.0-ce
           docker_layer_caching: true
       - "checkout"
-      - run:
-          name: "build and push image"
-          command: |
-            docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
-            make docker-push VERSION_SUFFIX=''
+      - run: docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
+      - run: make docker-push VERSION_SUFFIX=''
 
   deploy:
     docker:
@@ -64,12 +58,8 @@ jobs:
           version: 18.05.0-ce
           docker_layer_caching: true
       - "checkout"
-      - run:
-          name: "deploy"
-          command: |
-            python3 --version
-            packaging/deploy.py
-            tar cvjf telepresence-dist.tbz dist
+      - run: packaging/deploy.py
+      - run: tar cvjf telepresence-dist.tbz dist
       - store_artifacts:
           path: dist
       - store_artifacts:
