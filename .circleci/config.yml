@@ -1,6 +1,7 @@
 # https://circleci.com/docs/2.0/
+# https://circleci.com/docs/2.0/reusing-config/
 
-version: 2
+version: 2.1
 workflows:
   version: 2
   ci:
