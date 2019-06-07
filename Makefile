@@ -85,8 +85,8 @@ PIP = $(VIRTUALENV) env -u __PYENV_LAUNCHER__ pip
 DIRFAIL = { r=$$?; rm -rf $@; exit $$r; }
 virtualenv: dev-requirements.txt k8s-proxy/requirements.txt  ## Set up Python3 virtual environment for development
 	rm -rf $@ || true
-	virtualenv --python=python3 $@ || $(DIRFAIL)
-	$(PIP) install flake8 || $(DIRFAIL)
+	python3 -m venv $@ || $(DIRFAIL)
+	$(PIP) install -U pip || $(DIRFAIL)
 	$(PIP) install -r dev-requirements.txt || $(DIRFAIL)
 	$(PIP) install -r k8s-proxy/requirements.txt || $(DIRFAIL)
 	$(PIP) install git+https://github.com/datawire/sshuttle.git@telepresence || $(DIRFAIL)

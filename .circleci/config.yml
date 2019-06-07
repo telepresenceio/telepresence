@@ -34,7 +34,6 @@ jobs:
       - run:
           name: "setup Python environment"
           command: |
-            sudo pip install --upgrade virtualenv
             make virtualenv
 
       - run:
