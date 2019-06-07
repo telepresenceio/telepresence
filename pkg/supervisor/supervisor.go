@@ -46,6 +46,14 @@ type Supervisor struct {
 	Logger        Logger
 }
 
+// centralize a bit of lock management
+func (s *Supervisor) change(f func()) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	f()
+	s.changed.Broadcast()
+}
+
 func Run(name string, f func(*Process) error) []error {
 	sup := WithContext(context.Background())
 	sup.Supervise(&Worker{Name: name, Work: f})
@@ -93,6 +101,21 @@ func (w *Worker) Error() string {
 	}
 }
 
+func (w *Worker) reset() {
+	w.wantsShutdown = false
+	w.done = false
+	w.error = nil
+	w.lastBlockedWarning = time.Time{}
+}
+
+func (w *Worker) Restart() {
+	s := w.supervisor
+	s.change(func() {
+		w.reset()
+		s.add(w)
+	})
+}
+
 func (w *Worker) Wait() {
 	s := w.supervisor
 	s.mutex.Lock()
@@ -104,16 +127,19 @@ func (w *Worker) Wait() {
 }
 
 func (s *Supervisor) Supervise(worker *Worker) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	_, exists := s.workers[worker.Name]
-	if exists {
-		panic(fmt.Sprintf("worker already exists: %s", worker.Name))
-	}
+	s.change(func() {
+		_, exists := s.workers[worker.Name]
+		if exists {
+			panic(fmt.Sprintf("worker already exists: %s", worker.Name))
+		}
+		worker.supervisor = s
+		s.add(worker)
+	})
+}
+
+func (s *Supervisor) add(worker *Worker) {
 	s.workers[worker.Name] = worker
-	worker.supervisor = s
 	s.names = append(s.names, worker.Name)
-	s.changed.Broadcast()
 }
 
 // this assumes that s.mutex is already held
@@ -184,10 +210,9 @@ func (s *Supervisor) Run() []error {
 // Triggers a graceful shutdown sequence. This can be invoked from any
 // goroutine.
 func (s *Supervisor) Shutdown() {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	s.wantsShutdown = true
-	s.changed.Broadcast()
+	s.change(func() {
+		s.wantsShutdown = true
+	})
 }
 
 // Gets the worker with the specified name. Will return nil if no such
@@ -203,10 +228,9 @@ func (s *Supervisor) Get(name string) *Worker {
 // those dependent workers exit.
 func (w *Worker) Shutdown() {
 	s := w.supervisor
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	w.wantsShutdown = true
-	s.changed.Broadcast()
+	s.change(func() {
+		w.wantsShutdown = true
+	})
 }
 
 func (s *Supervisor) dependents(worker *Worker) (result []*Worker) {
@@ -355,6 +379,7 @@ func (s *Supervisor) launch(worker *Worker) {
 				worker.done = true
 			}
 		} else {
+			process.Logf("exited")
 			s.remove(worker)
 			worker.done = true
 		}
@@ -385,10 +410,9 @@ func (p *Process) Context() context.Context {
 
 // Invoked by a worker to signal it is ready.
 func (p *Process) Ready() {
-	p.Supervisor().mutex.Lock()
-	defer p.Supervisor().mutex.Unlock()
-	p.ready = true
-	p.Supervisor().changed.Broadcast()
+	p.Supervisor().change(func() {
+		p.ready = true
+	})
 }
 
 // Used for graceful shutdown...
