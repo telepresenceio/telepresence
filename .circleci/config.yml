@@ -28,79 +28,40 @@ jobs:
       # https://circleci.com/docs/2.0/circleci-images/
       # https://hub.docker.com/r/circleci/python/
       - image: "circleci/python:3"
-
     steps:
       - "checkout"
-
-      - run:
-          name: "setup Python environment"
-          command: |
-            make virtualenv
-
-      - run:
-          name: "run lint checks"
-          command: |
-            make lint
+      - run: make virtualenv
+      - run: make lint
 
   build-image:
     docker:
       # https://circleci.com/docs/2.0/circleci-images/
       # https://hub.docker.com/r/circleci/python/
       - image: "circleci/python:3"
-
     steps:
       # https://circleci.com/docs/2.0/building-docker-images/
       - setup_remote_docker:
           version: 18.05.0-ce
           docker_layer_caching: true
-
-      #- run:
-      #    name: "install dependencies"
-      #    # `ci/setup-gcloud.sh` requires `lsb-release`
-      #    command: |
-      #      sudo apt-get -qq update
-      #      sudo apt-get -qq install lsb-release
-
       - "checkout"
-
-      - run:
-          name: "setup Docker registry authentication"
-          command: |
-            docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
-          #command: |
-          #  ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
-          #  ci/setup-gcloud.sh datawireio telepresence-testing us-central1-a linux
-          #  echo 'PATH=${HOME}/google-cloud-sdk/bin:${PWD}/ci:${PATH}' >> ${BASH_ENV}
-
-      - run:
-          name: "build and push image"
-          command: |
-            make docker-push VERSION_SUFFIX=''
+      - run: docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
+      - run: make docker-push VERSION_SUFFIX=''
 
   deploy:
     docker:
       # https://circleci.com/docs/2.0/circleci-images/
       # https://hub.docker.com/r/circleci/python/
       - image: "circleci/python:3"
-
     steps:
       # https://circleci.com/docs/2.0/building-docker-images/
       - setup_remote_docker:
-          version: 17.11.0-ce
+          version: 18.05.0-ce
           docker_layer_caching: true
-
       - "checkout"
-
-      - run:
-          name: "deploy"
-          command: |
-            python3 --version
-            packaging/deploy.py
-            tar cvjf telepresence-dist.tbz dist
-
+      - run: packaging/deploy.py
+      - run: tar cvjf telepresence-dist.tbz dist
       - store_artifacts:
           path: dist
-
       - store_artifacts:
           path: telepresence-dist.tbz
 
