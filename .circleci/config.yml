@@ -6,9 +6,9 @@ workflows:
   version: 2
   ci:
     jobs:
-      - lint
-      - build-image
-      - deploy
+      #- lint
+      #- build-image
+      #- deploy
 
       #- build-macos:
       #    requires:
@@ -22,43 +22,21 @@ workflows:
       #    requires:
       #      - "build-image"
 
-      - build-linux-new:
-          requires:
-            - build-image
+      - build-linux-new
+          #:
+          #requires:
+          #  - build-image
 
 commands:
-  kubectl-install:
-    parameters:
-      os:
-        type: string
+  setup-for-ci:
     steps:
       - run:
-          name: Install kubectl
+          name: Setup the CI environment
           command: |
-            curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.12.2/bin/<<parameters.os>>/amd64/kubectl
-            chmod a+x ./kubectl
-            sudo mv kubectl /usr/local/bin
-  kubernaut-install:
-    parameters:
-      os:
-        type: string
-    steps:
-      - run:
-          name: Install Kubernaut
-          command: |
-            curl -LO http://releases.datawire.io/kubernaut/$(curl http://releases.datawire.io/kubernaut/latest.txt)/<<parameters.os>>/amd64/kubernaut
-            chmod a+x ./kubernaut
-            sudo mv kubernaut /usr/local/bin
-            mkdir -p ~/.config/kubernaut
-            kubernaut config backend create --url="https://next.kubernaut.io" --name="v2" --activate "$KUBERNAUT_TOKEN"
-  kubernaut-claim:
-    steps:
-      - run:
-          name: Claim a cluster
-          command: |
-            echo tel-$(uuidgen) > /tmp/kubernaut-claim-name.txt
-            kubernaut claims create --name $(cat /tmp/kubernaut-claim-name.txt) --cluster-group main
-            echo 'export KUBECONFIG=${HOME}/.kube/$(cat /tmp/kubernaut-claim-name.txt)' >> ${BASH_ENV}
+            ci/setup-for-ci.sh
+            echo 'export KUBECONFIG=${HOME}/.kube/$(cat /tmp/kubernaut-claim-name.txt).yaml' >> ${BASH_ENV}
+            export KUBECONFIG=${HOME}/.kube/$(cat /tmp/kubernaut-claim-name.txt).yaml
+            echo $KUBECONFIG
             kubectl cluster-info
   kubernaut-discard:
     steps:
@@ -76,13 +54,9 @@ jobs:
       image: "circleci/classic:201711-01"
     steps:
       - run: sudo apt-get --quiet update
-      - kubectl-install:
-          os: linux
-      - kubernaut-install:
-          os: linux
       - run: pyenv global 2.7.12 3.5.2
       - checkout
-      - kubernaut-claim
+      - setup-for-ci
       - run: make virtualenv
       - run: make check DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
       - store_test_results:
