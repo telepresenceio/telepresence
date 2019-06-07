@@ -7,7 +7,7 @@ workflows:
   ci:
     jobs:
       #- lint
-      #- build-image
+      - build-image
       #- deploy
 
       #- build-macos:
@@ -22,10 +22,9 @@ workflows:
       #    requires:
       #      - "build-image"
 
-      - build-linux-new
-          #:
-          #requires:
-          #  - build-image
+      - build-linux-new:
+          requires:
+            - build-image
 
 commands:
   setup-for-ci:
