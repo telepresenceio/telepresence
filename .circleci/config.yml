@@ -9,18 +9,15 @@ workflows:
       - lint
       - build-image
       - deploy
-
       - build-macos:
           requires:
-            - "build-image"
-
+            - build-image
       - build-linux:
           requires:
-            - "build-image"
-
+            - build-image
       #- build-testbench:
       #    requires:
-      #      - "build-image"
+      #      - build-image
 
 commands:
   decrypt-gcloud-keys:
@@ -44,7 +41,7 @@ jobs:
       # https://hub.docker.com/r/circleci/python/
       - image: "circleci/python:3"
     steps:
-      - "checkout"
+      - checkout
       - run: make virtualenv
       - run: make lint
 
@@ -58,7 +55,7 @@ jobs:
       - setup_remote_docker:
           version: 18.05.0-ce
           docker_layer_caching: true
-      - "checkout"
+      - checkout
       - run: docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
       - run: make docker-push VERSION_SUFFIX=''
 
@@ -72,7 +69,7 @@ jobs:
       - setup_remote_docker:
           version: 18.05.0-ce
           docker_layer_caching: true
-      - "checkout"
+      - checkout
       - run: packaging/deploy.py
       - run: tar cvjf telepresence-dist.tbz dist
       - store_artifacts:
@@ -92,7 +89,7 @@ jobs:
 
     steps:
       - run: sudo apt-get --quiet update
-      - "checkout"
+      - checkout
       - decrypt-gcloud-keys
 
       - run:
@@ -129,7 +126,7 @@ jobs:
       - PROJECT_NAME: "datawireio"
 
     steps:
-      - "checkout"
+      - checkout
       - decrypt-gcloud-keys
 
       - restore_cache:
