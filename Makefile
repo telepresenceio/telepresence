@@ -16,36 +16,15 @@
 # uncomment .circleci/config.yml's 'build-image' job's gcloud
 # authentication.
 TELEPRESENCE_REGISTRY ?= docker.io/datawire
-#TELEPRESENCE_REGISTRY ?= gcr.io/$(PROJECT_NAME)
 VERSION_SUFFIX        ?= -$(OS)-$(TIME)
 DOCKER_PUSH           ?= docker-push
 PYTEST_ARGS           ?=
 
 #
 
-ifeq ($(filter check,$(or $(MAKECMDGOALS),default)),check)
-ifeq ($(shell which kubectl 2>/dev/null),)
-$(error Required executable 'kubectl' not found on $$PATH)
-endif
-endif
-
-ifneq ($(filter check docker-build docker-push,$(or $(MAKECMDGOALS),default)),)
-ifeq ($(TELEPRESENCE_REGISTRY),)
-$(error You must specify a registry with TELEPRESENCE_REGISTRY=)
-endif
-endif
-
-_OS := $(shell python3 -c 'from time import time; from sys import platform; print({"linux": "LNX", "darwin": "OSX"}.get(platform))')
+_OS := $(shell python3 -c 'from sys import platform; print({"linux": "LNX", "darwin": "OSX"}.get(platform))')
 _TIME := $(shell date +%s)
 TELEPRESENCE_VERSION := $(shell git describe --tags)$(foreach OS,$(_OS),$(foreach TIME,$(_TIME),$(VERSION_SUFFIX)))
-
-# Attempt to get credentials cached early on while the user is still
-# looking at the terminal.  They'll be required later on during the test
-# suite run and the prompt is likely to be buried in test output at that
-# point.
-ifeq ($(filter check,$(or $(MAKECMDGOALS),default)),check)
-_ = $(shell sudo echo -n)
-endif
 
 default: help
 	@echo
@@ -53,14 +32,29 @@ default: help
 	@echo "or https://telepresence.io/reference/developing.html"
 .PHONY: default
 
+# Attempt to get credentials cached early on while the user is still looking at
+# the terminal. They'll be required later on during the test suite run and the
+# prompt is likely to be buried in test output at that point.
+acquire-sudo:
+	sudo echo -n
+.PHONY: acquire-sudo
+
 #
+
+check-local: virtualenv  ## Run the local tests (fast, doesn't require a Kubernetes cluster)
+	$(VIRTUALENV) py.test -v --timeout=360 --timeout-method=thread tests/local $(PYTEST_ARGS)
+.PHONY: check-local
+
+check-cluster: acquire-sudo virtualenv $(DOCKER_PUSH)  ## Run the end-to-end tests (requires a cluster, implies '$(DOCKER_PUSH)')
+	$(if $(shell which kubectl 2>/dev/null),,$(error Required executable 'kubectl' not found on $$PATH))
+	sudo echo -n
+	$(VIRTUALENV) $(_pytest_env) py.test -v --timeout=360 --timeout-method=thread tests/cluster $(PYTEST_ARGS)
+.PHONY: check-cluster
 
 _pytest_env  = TELEPRESENCE_REGISTRY=$(TELEPRESENCE_REGISTRY)
 _pytest_env += TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)
 _pytest_env += SCOUT_DISABLE=1
-check: virtualenv $(DOCKER_PUSH)  ## Run the test suite (implies 'virtualenv' and '$(DOCKER_PUSH)')
-	sudo echo -n
-	$(VIRTUALENV) $(_pytest_env) py.test -v --timeout=360 --timeout-method=thread $(PYTEST_ARGS)
+check: acquire-sudo check-local check-cluster  ## Run the full test suite (local and cluster)
 .PHONY: check
 
 _testbench_vars  = TELEPRESENCE_REGISTRY=$(TELEPRESENCE_REGISTRY)
@@ -108,14 +102,6 @@ lint: virtualenv  ## Run the linters used by CI (implies 'virtualenv')
 .PHONY: lint
 
 #
-
-check-unit:  ## Like 'check', but only run unit tests
-	$(MAKE) check PYTEST_ARGS='-x -k "not endtoend"'
-.PHONY: check-unit
-
-check-e2e:  ## Like 'check', but only run end-to-end tests
-	$(MAKE) check PYTEST_ARGS='-x -k "endtoend"'
-.PHONY: check-e2e
 
 format: virtualenv  ## Format source code in-place
 	$(VIRTUALENV) yapf -ir telepresence packaging tests
