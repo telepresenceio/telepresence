@@ -102,6 +102,7 @@ jobs:
     steps:
       - forked-pr-return
       - run: sudo apt-get --quiet update
+      - run: pyenv global 2.7.12 3.5.2
       - checkout
       - decrypt-gcloud-keys
 
@@ -109,7 +110,6 @@ jobs:
           name: "setup non-Python environment"
           command: |
             # https://raw.githubusercontent.com/circleci/image-builder/picard-vm-image/provision.sh
-            pyenv global 2.7.12 3.5.2
             ./environment-setup.sh datawireio telepresence-testing us-central1-a linux
             # If we installed kubectl, it was into ${PWD}
             echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
@@ -150,20 +150,6 @@ jobs:
           command: |
             # Note hard-coded OSX platform
             ./environment-setup.sh datawireio telepresence-testing us-central1-a osx
-
-      - save_cache:
-          key: "system-components"
-          paths:
-            - "~/Library/Caches/Homebrew"
-            - "~/google-cloud-sdk/"
-
-      - restore_cache:
-          key: |
-            pip-http-cache-{{ .Branch }}-{{ checksum "dev-requirements.txt" }}-{{ checksum "k8s-proxy/requirements.txt" }}-{{ checksum "setup.py" }}
-
-      - run:
-          name: "configure gcloud"
-          command: |
             echo 'PATH=${HOME}/google-cloud-sdk/bin:${PATH}' >> ${BASH_ENV}
             # If we installed kubectl, it was into ${PWD}
             echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
@@ -172,17 +158,14 @@ jobs:
             # https://github.com/kubernetes/kubernetes/issues/30617)
             echo 'export GOOGLE_APPLICATION_CREDENTIALS=${PWD}/gcloud-service-key.json' >> ${BASH_ENV}
 
-      - run: make virtualenv
-
       - save_cache:
-          key: |
-            pip-http-cache-{{ .Branch }}-{{ checksum "dev-requirements.txt" }}-{{ checksum "k8s-proxy/requirements.txt" }}-{{ checksum "setup.py" }}
+          key: "system-components"
           paths:
-            # OSX specific
-            - "~/Library/Caches/pip/"
+            - "~/Library/Caches/Homebrew"
+            - "~/google-cloud-sdk/"
 
+      - run: make virtualenv
       - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
-
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
           path: test-reports
