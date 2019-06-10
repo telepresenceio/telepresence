@@ -313,10 +313,8 @@ def new_swapped_deployment(
             # Use custom name server if necessary:
             if add_custom_nameserver:
                 container.setdefault("env", []).append({
-                    "name":
-                    "TELEPRESENCE_NAMESERVER",
-                    "value":
-                    get_alternate_nameserver()
+                    "name": "TELEPRESENCE_NAMESERVER",
+                    "value": get_alternate_nameserver()
                 })
             # Add namespace environment variable to support deployments using
             # automountServiceAccountToken: false. To be used by forwarder.py
