@@ -6,13 +6,13 @@ workflows:
   version: 2
   ci:
     jobs:
-      - lint
+      - check-local
       - build-image
       - deploy
-      - build-macos:
+      - check-cluster-macos:
           requires:
             - build-image
-      - build-linux:
+      - check-cluster-linux:
           requires:
             - build-image
       #- build-testbench:
@@ -35,7 +35,7 @@ commands:
             ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
 
 jobs:
-  lint:
+  check-local:
     docker:
       # https://circleci.com/docs/2.0/circleci-images/
       # https://hub.docker.com/r/circleci/python/
@@ -43,6 +43,7 @@ jobs:
     steps:
       - checkout
       - run: make virtualenv
+      - run: make check-local
       - run: make lint
 
   build-image:
@@ -77,7 +78,7 @@ jobs:
       - store_artifacts:
           path: telepresence-dist.tbz
 
-  build-linux:
+  check-cluster-linux:
     machine:
       enabled: true
       # https://circleci.com/docs/2.0/configuration-reference/#machine
@@ -106,7 +107,7 @@ jobs:
             echo 'export GOOGLE_APPLICATION_CREDENTIALS=${PWD}/gcloud-service-key.json' >> ${BASH_ENV}
 
       - run: make virtualenv
-      - run: make check DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
+      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
           path: test-reports
@@ -117,8 +118,7 @@ jobs:
           # way of a concurrent OS X (or other) build because it only looks at
           # reasonably old resources.
 
-
-  build-macos:
+  check-cluster-macos:
     macos:
       xcode: "9.0"
 
@@ -168,7 +168,7 @@ jobs:
             # OSX specific
             - "~/Library/Caches/pip/"
 
-      - run: make check DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
+      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
 
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
