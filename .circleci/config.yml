@@ -1,109 +1,95 @@
 # https://circleci.com/docs/2.0/
+# https://circleci.com/docs/2.0/reusing-config/
 
-version: 2
+version: 2.1
 workflows:
   version: 2
   ci:
     jobs:
-      - lint
+      - check-local
       - build-image
       - deploy
-
-      - build-macos:
+      - check-cluster-macos:
           requires:
-            - "build-image"
-
-      - build-linux:
+            - build-image
+      - check-cluster-linux:
           requires:
-            - "build-image"
-
+            - build-image
       #- build-testbench:
       #    requires:
-      #      - "build-image"
+      #      - build-image
+
+commands:
+  decrypt-gcloud-keys:
+    steps:
+      - run:
+          name: "decrypt gcloud keys"
+          command: |
+            # To update:
+            #   1) Generate a new key and IV:
+            #      $ dd if=/dev/urandom count=64 bs=1 | md5sum
+            #   2) Update GCLOUD_KEY and GCLOUD_IV in CircleCI "Environment
+            #      Variables" configuration for Telepresence project.
+            #   3) Encrypt the new gcloud key:
+            #      $ ci/encrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
+            ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
+  forked-pr-return:
+    steps:
+      - run:
+          name: Early return if this build is from a forked PR
+          command: |
+            if [ -n "$CIRCLE_PR_NUMBER" ]; then
+              echo "Running for a forked PRs with no credentials, so marking this step successful"
+              circleci step halt
+            fi
 
 jobs:
-  lint:
+  check-local:
     docker:
       # https://circleci.com/docs/2.0/circleci-images/
       # https://hub.docker.com/r/circleci/python/
       - image: "circleci/python:3"
-
     steps:
-      - "checkout"
-
-      - run:
-          name: "setup Python environment"
-          command: |
-            make virtualenv
-
-      - run:
-          name: "run lint checks"
-          command: |
-            make lint
+      - checkout
+      - run: make virtualenv
+      - run: make check-local
+      - run: make lint
 
   build-image:
     docker:
       # https://circleci.com/docs/2.0/circleci-images/
       # https://hub.docker.com/r/circleci/python/
       - image: "circleci/python:3"
-
     steps:
       # https://circleci.com/docs/2.0/building-docker-images/
+      - forked-pr-return
       - setup_remote_docker:
           version: 18.05.0-ce
           docker_layer_caching: true
-
-      #- run:
-      #    name: "install dependencies"
-      #    # `ci/setup-gcloud.sh` requires `lsb-release`
-      #    command: |
-      #      sudo apt-get -qq update
-      #      sudo apt-get -qq install lsb-release
-
-      - "checkout"
-
-      - run:
-          name: "setup Docker registry authentication"
-          command: |
-            docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
-          #command: |
-          #  ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
-          #  ci/setup-gcloud.sh datawireio telepresence-testing us-central1-a linux
-          #  echo 'PATH=${HOME}/google-cloud-sdk/bin:${PWD}/ci:${PATH}' >> ${BASH_ENV}
-
-      - run:
-          name: "build and push image"
-          command: |
-            make docker-push VERSION_SUFFIX=''
+      - checkout
+      - run: docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
+      - run: make docker-push VERSION_SUFFIX=''
 
   deploy:
     docker:
       # https://circleci.com/docs/2.0/circleci-images/
       # https://hub.docker.com/r/circleci/python/
       - image: "circleci/python:3"
-
     steps:
       # https://circleci.com/docs/2.0/building-docker-images/
+      - forked-pr-return
       - setup_remote_docker:
-          version: 17.11.0-ce
+          version: 18.05.0-ce
           docker_layer_caching: true
-
-      - "checkout"
-
-      - run:
-          name: "deploy"
-          command: |
-            python3 --version
-            packaging/deploy.py
-            tar cvjf telepresence-dist.tbz dist
-
-      - store-artifacts:
+      - checkout
+      - run: packaging/deploy.py
+      - run: tar cvjf telepresence-dist.tbz dist
+      - store_artifacts:
           path: dist
-
-      - store-artifacts:
+      - store_artifacts:
           path: telepresence-dist.tbz
 
-  build-linux:
+  check-cluster-linux:
     machine:
       enabled: true
       # https://circleci.com/docs/2.0/configuration-reference/#machine
@@ -114,30 +100,16 @@ jobs:
       - PROJECT_NAME: "datawireio"
 
     steps:
-      - run:
-          name: "update system"
-          command: |
-            sudo apt-get --quiet update
-
-      - "checkout"
-
-      - run:
-          name: "decrypt gcloud keys"
-          command: |
-            # To update:
-            #   1) Generate a new key and IV:
-            #      $ dd if=/dev/urandom count=64 bs=1 | md5sum
-            #   2) Update GCLOUD_KEY and GCLOUD_IV in CircleCI "Environment
-            #      Variables" configuration for Telepresence project.
-            #   3) Encrypt the new gcloud key:
-            #      $ ci/encrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
-            ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
+      - forked-pr-return
+      - run: sudo apt-get --quiet update
+      - run: pyenv global 2.7.12 3.5.2
+      - checkout
+      - decrypt-gcloud-keys
 
       - run:
           name: "setup non-Python environment"
           command: |
             # https://raw.githubusercontent.com/circleci/image-builder/picard-vm-image/provision.sh
-            pyenv global 2.7.12 3.5.2
             ./environment-setup.sh datawireio telepresence-testing us-central1-a linux
             # If we installed kubectl, it was into ${PWD}
             echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
@@ -146,30 +118,19 @@ jobs:
             # https://github.com/kubernetes/kubernetes/issues/30617)
             echo 'export GOOGLE_APPLICATION_CREDENTIALS=${PWD}/gcloud-service-key.json' >> ${BASH_ENV}
 
-      - run:
-          name: "setup Python environment"
-          command: |
-            make virtualenv
-
-      - run:
-          name: "run tests"
-          command: |
-            make check DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
-
+      - run: make virtualenv
+      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
           path: test-reports
 
-      - run:
+      - run: ./ci/clean-cluster.py
           # We can do this at the end of the Linux build because it has a
           # time-based condition for what it cleans up.  It won't get in the
           # way of a concurrent OS X (or other) build because it only looks at
           # reasonably old resources.
-          name: "clean cluster"
-          command: |
-            ./ci/clean-cluster.py
 
-  build-macos:
+  check-cluster-macos:
     macos:
       xcode: "9.0"
 
@@ -177,19 +138,9 @@ jobs:
       - PROJECT_NAME: "datawireio"
 
     steps:
-      - "checkout"
-
-      - run:
-          name: "decrypt gcloud keys"
-          command: |
-            # To update:
-            #   1) Generate a new key and IV:
-            #      $ dd if=/dev/urandom count=64 bs=1 | md5sum
-            #   2) Update GCLOUD_KEY and GCLOUD_IV in CircleCI "Environment
-            #      Variables" configuration for Telepresence project.
-            #   3) Encrypt the new gcloud key:
-            #      $ ci/encrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
-            ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
+      - forked-pr-return
+      - checkout
+      - decrypt-gcloud-keys
 
       - restore_cache:
           key: "system-components"
@@ -199,20 +150,6 @@ jobs:
           command: |
             # Note hard-coded OSX platform
             ./environment-setup.sh datawireio telepresence-testing us-central1-a osx
-
-      - save_cache:
-          key: "system-components"
-          paths:
-            - "~/Library/Caches/Homebrew"
-            - "~/google-cloud-sdk/"
-
-      - restore_cache:
-          key: |
-            pip-http-cache-{{ .Branch }}-{{ checksum "dev-requirements.txt" }}-{{ checksum "k8s-proxy/requirements.txt" }}-{{ checksum "setup.py" }}
-
-      - run:
-          name: "configure gcloud"
-          command: |
             echo 'PATH=${HOME}/google-cloud-sdk/bin:${PATH}' >> ${BASH_ENV}
             # If we installed kubectl, it was into ${PWD}
             echo 'PATH=${PWD}:${PATH}' >> ${BASH_ENV}
@@ -221,23 +158,14 @@ jobs:
             # https://github.com/kubernetes/kubernetes/issues/30617)
             echo 'export GOOGLE_APPLICATION_CREDENTIALS=${PWD}/gcloud-service-key.json' >> ${BASH_ENV}
 
-      - run:
-          name: "setup Python environment"
-          command: |
-            make virtualenv
-
       - save_cache:
-          key: |
-            pip-http-cache-{{ .Branch }}-{{ checksum "dev-requirements.txt" }}-{{ checksum "k8s-proxy/requirements.txt" }}-{{ checksum "setup.py" }}
+          key: "system-components"
           paths:
-            # OSX specific
-            - "~/Library/Caches/pip/"
+            - "~/Library/Caches/Homebrew"
+            - "~/google-cloud-sdk/"
 
-      - run:
-          name: "run tests"
-          command: |
-            make check DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
-
+      - run: make virtualenv
+      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
           path: test-reports
