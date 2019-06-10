@@ -434,8 +434,8 @@ NEW_DEPLOYMENT_OPERATION = _NewDeploymentOperation()
 
 METHODS = [
     _ContainerMethod(),
-    INJECT_TCP_METHOD,
     _VPNTCPMethod(),
+    INJECT_TCP_METHOD,
 ]
 OPERATIONS = [
     _ExistingDeploymentOperation(False),
