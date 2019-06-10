@@ -33,7 +33,8 @@ TEST_YAML = (
 
 simple_test_data = [
     (
-        '{ "token"     : "6e0438a8-10bb-11e9-bc54-80fa5b27636b", "access-token": "ed0e4b34-13f9-11e9-80f6-80fa5b27636b" }',
+        '{ "token"     : "6e0438a8-10bb-11e9-bc54-80fa5b27636b", '
+        '"access-token": "ed0e4b34-13f9-11e9-80f6-80fa5b27636b" }',
         lambda source: json.loads(source)
     ),
     (

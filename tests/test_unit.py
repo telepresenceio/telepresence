@@ -370,15 +370,15 @@ def test_get_output():
 
 
 def test_check_call_timeout():
-    code = "import time\nfor idx in range(100):\n print(idx)\n time.sleep(0.05)"
+    code = "import time\nfor n in range(100):\n print(n)\n time.sleep(0.05)"
     cmd = ["python3", "-c", code]
 
     # Test verbose == False
     runner = Runner("-", None, False)
     with pytest.raises(subprocess.TimeoutExpired):  # as exc_info
         runner.check_call(cmd, timeout=0.5)
-    # FIXME output capture is broken. Everything appears at the end, which means
-    # in the timeout case, no output is ever captured.
+    # FIXME output capture is broken. Everything appears at the end, which
+    # means in the timeout case, no output is ever captured.
     '''
     output = exc_info.value.output
     assert "0" in output  # FIXME
@@ -389,8 +389,8 @@ def test_check_call_timeout():
     runner = Runner("-", None, True)
     with pytest.raises(subprocess.TimeoutExpired):  # as exc_info
         runner.check_call(cmd, timeout=0.5)
-    # FIXME output capture is broken. Everything appears at the end, which means
-    # in the timeout case, no output is ever captured.
+    # FIXME output capture is broken. Everything appears at the end, which
+    # means in the timeout case, no output is ever captured.
     '''
     output = exc_info.value.output
     assert "0" in output  # FIXME

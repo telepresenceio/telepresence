@@ -1,18 +1,13 @@
 """Utilities."""
 
 import atexit
-from pathlib import Path
+import os
 import socket
 import time
-import os
-from json import dumps
 from base64 import b64encode
-from subprocess import (
-    check_output,
-    STDOUT,
-    check_call,
-    CalledProcessError,
-)
+from json import dumps
+from pathlib import Path
+from subprocess import CalledProcessError, check_call, check_output
 
 DIRECTORY = Path(__file__).absolute().parent
 REVISION = str(check_output(["git", "rev-parse", "--short", "HEAD"]),
@@ -193,7 +188,8 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
             #
             # If this request succeeds then we're done and we can break out of
             # the loop.
-            wget --server-response --output-document=output -T3 {url} 2>&1 && break
+            wget --server-response --output-document=output -T3 \
+                {url} 2>&1 && break
         done
 
         # wget output is over.  Put this known string into the output here to

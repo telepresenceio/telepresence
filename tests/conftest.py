@@ -112,7 +112,8 @@ def pytest_collection_modifyitems(session, config, items):
 
     # Remove them from the original collection list.
     items[:] = [item for item in items if item not in marked_items]
-    # Put them back after the other tests which use a probe with the same params.
+    # Put them back immediately after the other tests that use a probe with the
+    # same params.
     for inserting in marked_items:
         found = False
         for i, existing in enumerate(items):

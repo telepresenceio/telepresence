@@ -1,53 +1,22 @@
 import os
-from random import (
-    shuffle,
-    randrange,
-)
-from functools import (
-    partial,
-)
-from time import (
-    sleep,
-)
-from struct import (
-    unpack,
-)
-from socket import (
-    AF_INET,
-    SOCK_STREAM,
-    getaddrinfo,
-    gethostbyaddr,
-)
-from sys import (
-    executable,
-    stdout,
-)
-from json import (
-    JSONDecodeError,
-    loads,
-    dumps,
-)
-from shutil import which
-from subprocess import (
-    CalledProcessError,
-    PIPE,
-    STDOUT,
-    Popen,
-    check_output,
-    check_call,
-)
-
+from functools import partial
+from json import JSONDecodeError, dumps, loads
 from pathlib import Path
+from random import randrange, shuffle
+from shutil import which
+from socket import AF_INET, SOCK_STREAM, getaddrinfo, gethostbyaddr
+from struct import unpack
+from subprocess import (
+    PIPE, STDOUT, CalledProcessError, Popen, check_call, check_output
+)
+from sys import executable, stdout
+from time import sleep
 
 from telepresence.utilities import find_free_port
+
 from .utils import (
-    KUBECTL,
-    DIRECTORY,
-    random_name,
-    run_webserver,
-    create_namespace,
-    cleanup_namespace,
-    telepresence_image_version,
+    DIRECTORY, KUBECTL, cleanup_namespace, create_namespace, random_name,
+    run_webserver, telepresence_image_version
 )
 
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
@@ -131,7 +100,7 @@ class _ContainerMethod(object):
             "--method",
             "container",
             "--docker-run",
-            # The probe wants to use stdio to communicate with the test process.
+            # The probe wants to use stdio to communicate with the test process
             "--interactive",
             # Put the probe into the container filesystem.
             "--volume",
@@ -212,9 +181,9 @@ class _ExistingDeploymentOperation(object):
             self.image = "openshift/hello-openshift"
             self.replicas = 2
             # An argument list to use to override the default command of the
-            # container.  This allows the swap-deployment tests to verify that a
-            # command is restored after Telepresence swaps the original deployment
-            # back in.
+            # container. This allows the swap-deployment tests to verify that a
+            # command is restored after Telepresence swaps the original
+            # deployment back in.
             self.container_args = ["/hello-openshift"]
             self.http_server_auto_expose_same = HTTPServer(
                 random_port(),
@@ -669,10 +638,10 @@ def run_telepresence_probe(
         try:
             initial_result = loads(output)
         except JSONDecodeError as e:
-            assert False, "Could not decode JSON probe result from {}:\n{}".format(
-                ["telepresence"] + args,
-                e.doc,
-            )
+            assert False, \
+                "Could not decode JSON probe result from {}:\n{}".format(
+                    ["telepresence"] + args, e.doc
+                )
         return ProbeResult(
             writer,
             telepresence,
@@ -809,7 +778,7 @@ _json_blob = """{
     "really long key": "really long value",
     "multiline key": "-----BEGIN PGP PUBLIC KEY BLOCK-----\nmQENBFrVHZEBCACuD163edXBofnt8qNyluDufnIp0PucPZmK0lUuaJT/xi5RRki+\ntakVww0LGwPn6mcTI2Tgb2cEIvwk7yyXC5yPOPdWchUCxhfeadIgytDPOm3g51zG\nh/Ob1VH067nZlL1qJ7We4ZP0NGpT+MSVDYwGFROMoliRLe5bqz3SZgCI+GgXiHDU\nNbvkxAHE6Z5ZxkzAjBnJDmOf9kdnIHZvuBAVylHUorjTLN2jxJOQYFx7nqwbaOsA\n6i/5W4/CYm2NwPb09I4H2Hi8qQQ1PN5WV+Ky3PngE6yZTMRk34b1aV5VLJPf3yoi\nfqaqjX9xIetMvg6DZP0FiPqC66DESaEz1rv5ABEBAAG0EHRlc3RAZXhhbXBsZS5j\nb22JARwEEAECAAYFAlrVHZEACgkQ1A1oULTM9GYCigf9EWVBQwsG6LxmjhZ5bFyx\n8WT3H86tUhMgvmPGZEV/jl7VUG69DcGb2mhevN8F3mM/V+6njREwCmF9qKbY5HJj\npgG46Rsm6UrbZVH23CRnHFsQ7M0inyZ1CrhCyMETZYHpKOs7lIdAHH1q9F8fTIW6\n9KTnSe0LQpiV5tNxg2EJzCNYpvyvTOA0mGbi+XbjQJDGKr1xqfMYBr79Os9N/dGe\ncWrpBoHLAzB07ZC5CxdXo7Z21i+cTlTM/2c4tE9dLth3Yzzw9fqXyRqlrG1K8Bmz\n8LKhIHctewW9a6M7JTp48p7fRZiCir7N9Zj0hq6zry8+FHnkZIvFNOHFcbUrfS2Y\n2g==\n=rNSt\n-----END PGP PUBLIC KEY BLOCK-----",
     "one last key": "this last value"
-}"""
+}"""  # noqa: E501
 
 
 class Probe(object):
@@ -943,12 +912,9 @@ class Probe(object):
             self.loopback_url = self.LOOPBACK_URL_TEMPLATE.format(local_port, )
             # This is a local web server that the Telepresence probe can try to
             # interact with to verify network routing to the host.
-            p = Popen(
-                # TODO Just cross our fingers and hope this port is available...
-                [executable, "-m", "http.server",
-                 str(local_port)],
-                cwd=str(DIRECTORY),
-            )
+            # TODO Just cross our fingers and hope this port is available...
+            server_cmd = [executable, "-m", "http.server", str(local_port)]
+            p = Popen(server_cmd, cwd=str(DIRECTORY))
             self._cleanup.append(lambda: _cleanup_process(p))
 
             also_proxy = [

@@ -81,8 +81,8 @@ def test_environment_from_deployment(probe):
         assert "TELEPRESENCE_ROOT" in probe_json_env, probe_json_env
         assert "/podinfo" in probe_json_env["TELEPRESENCE_MOUNTS"
                                             ], probe_json_env
-        assert "/var/run/secrets/kubernetes.io/serviceaccount" in probe_json_env[
-            "TELEPRESENCE_MOUNTS"], probe_json_env
+        assert "/var/run/secrets/kubernetes.io/serviceaccount" in \
+            probe_json_env["TELEPRESENCE_MOUNTS"], probe_json_env
 
         probe_envfile = probe.operation.envfile.read_text()
         for key, value in probe.DESIRED_ENVIRONMENT.items():
@@ -98,11 +98,13 @@ def test_environment_from_deployment(probe):
         # Likewise, make an assertion about client environment being inherited
         # if this method is supposed to do that.
         assert (probe.CLIENT_ENV_VAR in probe_environment), (
-            "Telepresence client environment missing from Telepresence execution context."
+            "Telepresence client environment missing "
+            "from Telepresence execution context."
         )
     else:
         assert (probe.CLIENT_ENV_VAR not in probe_environment), (
-            "Telepresence client environment leaked into Telepresence execution context."
+            "Telepresence client environment leaked "
+            "into Telepresence execution context."
         )
 
 

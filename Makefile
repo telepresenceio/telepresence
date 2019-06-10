@@ -101,7 +101,7 @@ virtualenv: dev-requirements.txt k8s-proxy/requirements.txt  ## Set up Python3 v
 lint: virtualenv  ## Run the linters used by CI (implies 'virtualenv')
 	./tools/license-check
 	$(VIRTUALENV) yapf -dr telepresence packaging tests
-	$(VIRTUALENV) flake8 --isolated local-docker k8s-proxy telepresence setup.py packaging
+	$(VIRTUALENV) flake8 --isolated local-docker k8s-proxy telepresence setup.py packaging tests
 	$(VIRTUALENV) mypy --strict-optional telepresence local-docker/entrypoint.py packaging/*.py
 	$(VIRTUALENV) mypy --ignore-missing-imports k8s-proxy
 	$(VIRTUALENV) telepresence --help
