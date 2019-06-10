@@ -27,6 +27,15 @@ workflows:
             - build-image
 
 commands:
+  forked-PR-return:
+    steps:
+      - run:
+          name: Early return if this build is from a forked PR
+          command: |
+            if [ -n "$CIRCLE_PR_NUMBER" ]; then
+              echo "Running for a forked PRs with no credentials, so marking this step successful"
+              circleci step halt
+            fi
   setup-for-ci:
     steps:
       - run:
