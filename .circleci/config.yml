@@ -22,6 +22,21 @@ workflows:
       #    requires:
       #      - "build-image"
 
+commands:
+  decrypt-gcloud-keys:
+    steps:
+      - run:
+          name: "decrypt gcloud keys"
+          command: |
+            # To update:
+            #   1) Generate a new key and IV:
+            #      $ dd if=/dev/urandom count=64 bs=1 | md5sum
+            #   2) Update GCLOUD_KEY and GCLOUD_IV in CircleCI "Environment
+            #      Variables" configuration for Telepresence project.
+            #   3) Encrypt the new gcloud key:
+            #      $ ci/encrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
+            ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
+
 jobs:
   lint:
     docker:
@@ -76,24 +91,9 @@ jobs:
       - PROJECT_NAME: "datawireio"
 
     steps:
-      - run:
-          name: "update system"
-          command: |
-            sudo apt-get --quiet update
-
+      - run: sudo apt-get --quiet update
       - "checkout"
-
-      - run:
-          name: "decrypt gcloud keys"
-          command: |
-            # To update:
-            #   1) Generate a new key and IV:
-            #      $ dd if=/dev/urandom count=64 bs=1 | md5sum
-            #   2) Update GCLOUD_KEY and GCLOUD_IV in CircleCI "Environment
-            #      Variables" configuration for Telepresence project.
-            #   3) Encrypt the new gcloud key:
-            #      $ ci/encrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
-            ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
+      - decrypt-gcloud-keys
 
       - run:
           name: "setup non-Python environment"
@@ -108,28 +108,18 @@ jobs:
             # https://github.com/kubernetes/kubernetes/issues/30617)
             echo 'export GOOGLE_APPLICATION_CREDENTIALS=${PWD}/gcloud-service-key.json' >> ${BASH_ENV}
 
-      - run:
-          name: "setup Python environment"
-          command: |
-            make virtualenv
-
-      - run:
-          name: "run tests"
-          command: |
-            make check DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
-
+      - run: make virtualenv
+      - run: make check DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
           path: test-reports
 
-      - run:
+      - run: ./ci/clean-cluster.py
           # We can do this at the end of the Linux build because it has a
           # time-based condition for what it cleans up.  It won't get in the
           # way of a concurrent OS X (or other) build because it only looks at
           # reasonably old resources.
-          name: "clean cluster"
-          command: |
-            ./ci/clean-cluster.py
+
 
   build-macos:
     macos:
@@ -140,18 +130,7 @@ jobs:
 
     steps:
       - "checkout"
-
-      - run:
-          name: "decrypt gcloud keys"
-          command: |
-            # To update:
-            #   1) Generate a new key and IV:
-            #      $ dd if=/dev/urandom count=64 bs=1 | md5sum
-            #   2) Update GCLOUD_KEY and GCLOUD_IV in CircleCI "Environment
-            #      Variables" configuration for Telepresence project.
-            #   3) Encrypt the new gcloud key:
-            #      $ ci/encrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
-            ci/decrypt-gcloud-key circleci $GCLOUD_KEY $GCLOUD_IV
+      - decrypt-gcloud-keys
 
       - restore_cache:
           key: "system-components"
@@ -183,10 +162,7 @@ jobs:
             # https://github.com/kubernetes/kubernetes/issues/30617)
             echo 'export GOOGLE_APPLICATION_CREDENTIALS=${PWD}/gcloud-service-key.json' >> ${BASH_ENV}
 
-      - run:
-          name: "setup Python environment"
-          command: |
-            make virtualenv
+      - run: make virtualenv
 
       - save_cache:
           key: |
@@ -195,10 +171,7 @@ jobs:
             # OSX specific
             - "~/Library/Caches/pip/"
 
-      - run:
-          name: "run tests"
-          command: |
-            make check DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
+      - run: make check DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
 
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
