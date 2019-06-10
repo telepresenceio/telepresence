@@ -3,7 +3,7 @@ from string import printable, ascii_letters
 
 import pytest
 import yaml
-from hamcrest import *
+from hamcrest import assert_that, equal_to
 from hypothesis import given, strategies as st, settings
 
 from telepresence.runner.output_mask import mask_values, mask_sensitive_data
@@ -39,17 +39,16 @@ simple_test_data = [
     (
         'token    : "9b5af948-10ea-11e9-ab67-80fa5b27636b"\n'
         'access-token: "ed0e4b34-13f9-11e9-80f6-80fa5b27636b"',
-        lambda source: yaml.load(source)
+        lambda source: yaml.safe_load(source)
     ),
 ]
 
 complex_test_data = [
     (TEST_JSON, lambda source: json.loads(source)),
-    (TEST_YAML, lambda source: yaml.load(source)),
+    (TEST_YAML, lambda source: yaml.safe_load(source)),
 ]
-"""
-Simple parametrized test cases handling both JSON and YAML masking
-"""
+
+# Simple parametrized test cases handling both JSON and YAML masking
 
 
 @pytest.mark.parametrize('source', [TEST_JSON, TEST_YAML])
@@ -81,15 +80,14 @@ def test_should_mask_token(source, unmarshal):
     )
 
 
-"""
-Generated test cases using Hypothesis test engine
-"""
+# Generated test cases using Hypothesis test engine
 
 
 @st.composite
 def generate_dictionary_with_fixed_tokens(draw):
     """
-    Builds random nested dictionary structure which is then used as JSON to mask two fixed "token" keys.
+    Builds random nested dictionary structure which is then used as JSON to
+    mask two fixed "token" keys.
 
     Structure is based on TEST_JSON sample fixture defined above.
     """
