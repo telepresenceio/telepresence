@@ -8,37 +8,45 @@ from hypothesis import given, strategies as st, settings
 
 from telepresence.runner.output_mask import mask_values, mask_sensitive_data
 
-TEST_JSON = ("  {\n"
-             "    \"_id\": \"56af331efbeca6240c61b2ca\",\n"
-             "    \"index\": 120000,\n"
-             "    \"token\": \"bedb2018-c017-429E-b520-696ea3666692\",\n"
-             "    \"access-token\": \"ed0e4b34-13f9-11e9-80f6-80fa5b27636b\",\n"
-             "    \"isActive\": false,\n"
-             "    \"object\": {\n"
-             "		\"token\": \"123am af   asd\"\n"
-             "	}\n"
-             "}\n\n")
+TEST_JSON = (
+    "  {\n"
+    "    \"_id\": \"56af331efbeca6240c61b2ca\",\n"
+    "    \"index\": 120000,\n"
+    "    \"token\": \"bedb2018-c017-429E-b520-696ea3666692\",\n"
+    "    \"access-token\": \"ed0e4b34-13f9-11e9-80f6-80fa5b27636b\",\n"
+    "    \"isActive\": false,\n"
+    "    \"object\": {\n"
+    "		\"token\": \"123am af   asd\"\n"
+    "	}\n"
+    "}\n\n"
+)
 
-TEST_YAML = ("_id: 56af331efbeca6240c61b2ca\n"
-             "index: 120000\n"
-             "token: bedb2018-c017-429E-b520-696ea3666692\n"
-             "access-token: ed0e4b34-13f9-11e9-80f6-80fa5b27636b\n"
-             "isActive: false\n"
-             "object:\n"
-             "  token: \"123am af   asd\"\n")
+TEST_YAML = (
+    "_id: 56af331efbeca6240c61b2ca\n"
+    "index: 120000\n"
+    "token: bedb2018-c017-429E-b520-696ea3666692\n"
+    "access-token: ed0e4b34-13f9-11e9-80f6-80fa5b27636b\n"
+    "isActive: false\n"
+    "object:\n"
+    "  token: \"123am af   asd\"\n"
+)
 
 simple_test_data = [
-    ('{ "token"     : "6e0438a8-10bb-11e9-bc54-80fa5b27636b", "access-token": "ed0e4b34-13f9-11e9-80f6-80fa5b27636b" }', lambda source: json.loads(source)),
-    ('token    : "9b5af948-10ea-11e9-ab67-80fa5b27636b"\n'
-     'access-token: "ed0e4b34-13f9-11e9-80f6-80fa5b27636b"', lambda source: yaml.load(source)),
+    (
+        '{ "token"     : "6e0438a8-10bb-11e9-bc54-80fa5b27636b", "access-token": "ed0e4b34-13f9-11e9-80f6-80fa5b27636b" }',
+        lambda source: json.loads(source)
+    ),
+    (
+        'token    : "9b5af948-10ea-11e9-ab67-80fa5b27636b"\n'
+        'access-token: "ed0e4b34-13f9-11e9-80f6-80fa5b27636b"',
+        lambda source: yaml.load(source)
+    ),
 ]
 
 complex_test_data = [
     (TEST_JSON, lambda source: json.loads(source)),
     (TEST_YAML, lambda source: yaml.load(source)),
 ]
-
-
 """
 Simple parametrized test cases handling both JSON and YAML masking
 """
@@ -59,11 +67,18 @@ def test_should_mask_multiple_keys(source, unmarshal):
     assert_that(as_json['object']['token'], equal_to('telepresence'))
 
 
-@pytest.mark.parametrize('source,unmarshal', simple_test_data + complex_test_data)
+@pytest.mark.parametrize(
+    'source,unmarshal', simple_test_data + complex_test_data
+)
 def test_should_mask_token(source, unmarshal):
     masked_key = mask_sensitive_data(source)
-    assert_that(unmarshal(masked_key)['token'], equal_to('Masked-by-Telepresence'))
-    assert_that(unmarshal(masked_key)['access-token'], equal_to('Masked-by-Telepresence'))
+    assert_that(
+        unmarshal(masked_key)['token'], equal_to('Masked-by-Telepresence')
+    )
+    assert_that(
+        unmarshal(masked_key)['access-token'],
+        equal_to('Masked-by-Telepresence')
+    )
 
 
 """
@@ -78,14 +93,19 @@ def generate_dictionary_with_fixed_tokens(draw):
 
     Structure is based on TEST_JSON sample fixture defined above.
     """
-    base = draw(st.fixed_dictionaries({
-        'token': st.text(printable, min_size=10)
-    }))
+    base = draw(
+        st.fixed_dictionaries({'token': st.text(printable, min_size=10)})
+    )
 
-    optional = draw(st.nothing() | st.dictionaries(st.text(ascii_letters, min_size=1),
-                                                   st.floats() | st.integers() |
-                                                   st.text(printable) | st.booleans() | st.nothing(),
-                                                   min_size=10, max_size=50))
+    optional = draw(
+        st.nothing() | st.dictionaries(
+            st.text(ascii_letters, min_size=1),
+            st.floats() | st.integers() | st.text(printable) | st.booleans()
+            | st.nothing(),
+            min_size=10,
+            max_size=50
+        )
+    )
 
     return {**base, **optional}
 
@@ -103,5 +123,6 @@ def test_fuzzy_should_mask_token_keys(fixture):
     example = json.dumps(fixture)
     masked_key = mask_values(example, ['token'], 'telepresence')
     assert_that(json.loads(masked_key)['token'], equal_to('telepresence'))
-    assert_that(json.loads(masked_key)['object']['token'], equal_to('telepresence'))
-
+    assert_that(
+        json.loads(masked_key)['object']['token'], equal_to('telepresence')
+    )

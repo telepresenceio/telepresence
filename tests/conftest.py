@@ -55,9 +55,9 @@ def _probe_parametrize(fixture_name):
 
         # The parameters are the elements of the cartesian product of methods,
         # operations.
-         [pytest.param(value,marks=_get_marks(value))
-          for value
-          in product(METHODS, OPERATIONS)
+        [
+            pytest.param(value, marks=_get_marks(value))
+            for value in product(METHODS, OPERATIONS)
         ],
 
         # Use the `name` of methods and operations to generate readable
@@ -74,6 +74,8 @@ def _probe_parametrize(fixture_name):
 with_probe = _probe_parametrize("probe")
 
 _after_probe_mark = pytest.mark.after_probe()
+
+
 def after_probe(f):
     """
     Decorate a test method to supply the ``probe`` fixture but only after all
@@ -106,20 +108,10 @@ def pytest_collection_modifyitems(session, config, items):
     allocated for the ``after_probe`` tests.
     """
     # Find all the tests that need to run after the probe is done.
-    marked_items = [
-        item
-        for item
-        in items
-        if _is_after_probe_item(item)
-    ]
+    marked_items = [item for item in items if _is_after_probe_item(item)]
 
     # Remove them from the original collection list.
-    items[:] = [
-        item
-        for item
-        in items
-        if item not in marked_items
-    ]
+    items[:] = [item for item in items if item not in marked_items]
     # Put them back after the other tests which use a probe with the same params.
     for inserting in marked_items:
         found = False

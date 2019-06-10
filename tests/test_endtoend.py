@@ -34,10 +34,10 @@ from .utils import (
     query_from_cluster,
 )
 
+
 @pytest.fixture(scope="session")
 def origin_ip():
     return IPv4Address(httpbin_ip())
-
 
 
 @with_probe
@@ -51,11 +51,9 @@ def test_environment_from_deployment(probe):
         # If the operation is expected to inherit an environment from an
         # existing Deployment, make sure that it did.
         assert (
-            probe.DESIRED_ENVIRONMENT
-            == {
+            probe.DESIRED_ENVIRONMENT == {
                 k: probe_environment.get(k, None)
-                for k
-                in probe.DESIRED_ENVIRONMENT
+                for k in probe.DESIRED_ENVIRONMENT
             }
         ), (
             "Probe environment missing some expected items:\n"
@@ -68,11 +66,9 @@ def test_environment_from_deployment(probe):
 
         probe_json_env = loads(probe.operation.json_env.read_text())
         assert (
-            probe.DESIRED_ENVIRONMENT
-            == {
+            probe.DESIRED_ENVIRONMENT == {
                 k: probe_json_env.get(k, None)
-                for k
-                in probe.DESIRED_ENVIRONMENT
+                for k in probe.DESIRED_ENVIRONMENT
             }
         ), (
             "Probe json env missing some expected items:\n"
@@ -83,8 +79,10 @@ def test_environment_from_deployment(probe):
             )
         )
         assert "TELEPRESENCE_ROOT" in probe_json_env, probe_json_env
-        assert "/podinfo" in probe_json_env["TELEPRESENCE_MOUNTS"], probe_json_env
-        assert "/var/run/secrets/kubernetes.io/serviceaccount" in probe_json_env["TELEPRESENCE_MOUNTS"], probe_json_env
+        assert "/podinfo" in probe_json_env["TELEPRESENCE_MOUNTS"
+                                            ], probe_json_env
+        assert "/var/run/secrets/kubernetes.io/serviceaccount" in probe_json_env[
+            "TELEPRESENCE_MOUNTS"], probe_json_env
 
         probe_envfile = probe.operation.envfile.read_text()
         for key, value in probe.DESIRED_ENVIRONMENT.items():
@@ -96,19 +94,14 @@ def test_environment_from_deployment(probe):
         assert "TELEPRESENCE_ROOT=" in probe_envfile, probe_envfile
         assert "TELEPRESENCE_MOUNTS=" in probe_envfile, probe_envfile
 
-
     if probe.method.inherits_client_environment():
         # Likewise, make an assertion about client environment being inherited
         # if this method is supposed to do that.
-        assert (
-            probe.CLIENT_ENV_VAR in probe_environment
-        ), (
+        assert (probe.CLIENT_ENV_VAR in probe_environment), (
             "Telepresence client environment missing from Telepresence execution context."
         )
     else:
-        assert (
-            probe.CLIENT_ENV_VAR not in probe_environment
-        ), (
+        assert (probe.CLIENT_ENV_VAR not in probe_environment), (
             "Telepresence client environment leaked into Telepresence execution context."
         )
 
@@ -136,16 +129,17 @@ def test_environment_for_services(probe):
     }
 
     assert (
-        desired_environment ==
-        {k: probe_environment.get(k, None) for k in desired_environment}
+        desired_environment == {
+            k: probe_environment.get(k, None)
+            for k in desired_environment
+        }
     ), (
         "Probe environment missing some expected items:\n"
         "Desired: {}\n"
         "Probed: {}\n".format(desired_environment, probe_environment),
     )
     assert (
-        probe_environment[prefix] ==
-        probe_environment[service_env + "_PORT"]
+        probe_environment[prefix] == probe_environment[service_env + "_PORT"]
     )
 
 
@@ -158,9 +152,7 @@ def test_loopback_network_access(probe):
     if probe.method.loopback_is_host():
         probe_result = probe.result()
         (success, response) = next(
-            result
-            for url, result
-            in probe_result.result["probe-urls"]
+            result for url, result in probe_result.result["probe-urls"]
             if url == probe.loopback_url
         )
 
@@ -197,11 +189,8 @@ def test_volumes(probe):
     else:
         assert path_contents["podinfo/labels"] is None
 
-    assert path_contents[
-        "var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-    ].startswith(
-        "-----BEGIN CERT"
-    )
+    assert path_contents["var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+                         ].startswith("-----BEGIN CERT")
 
 
 @with_probe
@@ -239,11 +228,9 @@ def test_network_routing_to_cluster(probe):
         assert success and "Hello" in response
 
 
-
 def probe_url(probe_result, url):
     probe_result.write("probe-url {}".format(url))
     return loads(probe_result.read())[0][1]
-
 
 
 @with_probe
@@ -435,10 +422,12 @@ def test_resolve_names(probe):
     Name resolution is performed in the context of the Kubernetes cluster.
     """
     result = probe.result()
-    result.write("gethostbyname {}.{}".format(
-        result.deployment_ident.name,
-        result.deployment_ident.namespace,
-    ))
+    result.write(
+        "gethostbyname {}.{}".format(
+            result.deployment_ident.name,
+            result.deployment_ident.namespace,
+        )
+    )
     success, reply = loads(result.read())
     assert success and IPv4Address(reply), reply
 
@@ -502,8 +491,7 @@ def test_swapdeployment_restores_container_image(probe):
     deployment = get_deployment(result.deployment_ident)
     images = {
         container["image"]
-        for container
-        in deployment["spec"]["template"]["spec"]["containers"]
+        for container in deployment["spec"]["template"]["spec"]["containers"]
     }
     assert {probe.operation.image} == images
 
@@ -519,8 +507,7 @@ def test_swapdeployment_restores_container_command(probe):
     deployment = get_deployment(result.deployment_ident)
     args = [
         container["args"]
-        for container
-        in deployment["spec"]["template"]["spec"]["containers"]
+        for container in deployment["spec"]["template"]["spec"]["containers"]
     ]
     assert [probe.operation.container_args] == args
 
@@ -537,13 +524,11 @@ def test_swapdeployment_restores_deployment_pods(probe):
         pods = get_pods(result.deployment_ident)["items"]
         image_and_phase = [
             (pod["spec"]["containers"][0]["image"], pod["status"]["phase"])
-            for pod
-            in pods
+            for pod in pods
         ]
         if all(
             image.startswith(probe.operation.image)
-            for (image, phase)
-            in image_and_phase
+            for (image, phase) in image_and_phase
         ):
             # Found the images we want, success.
             return
@@ -571,29 +556,32 @@ def test_swapdeployment_restores_deployment_replicas(probe):
     assert probe.operation.replicas == deployment["spec"]["replicas"]
 
 
-
 def kubectl(*argv):
-    return loads(check_output((KUBECTL,) + argv).decode("utf-8"))
-
+    return loads(check_output((KUBECTL, ) + argv).decode("utf-8"))
 
 
 def get_deployment(ident):
     return kubectl(
         "get",
-        "--namespace", ident.namespace,
-        DEPLOYMENT_TYPE, ident.name,
-        "-o", "json",
+        "--namespace",
+        ident.namespace,
+        DEPLOYMENT_TYPE,
+        ident.name,
+        "-o",
+        "json",
         "--export",
     )
-
 
 
 def get_pods(ident):
     return kubectl(
         "get",
-        "--namespace", ident.namespace,
+        "--namespace",
+        ident.namespace,
         "pod",
-        "--selector", "telepresence-test={}".format(ident.name),
-        "-o", "json",
+        "--selector",
+        "telepresence-test={}".format(ident.name),
+        "-o",
+        "json",
         "--export",
     )

@@ -24,14 +24,17 @@ from sys import (
 )
 from json import (
     JSONDecodeError,
-    loads, dumps,
+    loads,
+    dumps,
 )
 from shutil import which
 from subprocess import (
     CalledProcessError,
-    PIPE, STDOUT,
+    PIPE,
+    STDOUT,
     Popen,
-    check_output, check_call,
+    check_output,
+    check_call,
 )
 
 from pathlib import Path
@@ -64,6 +67,7 @@ class _RandomPortAssigner(object):
     without replacement.  This reduces the chances that concurrent runs
     of the test suite will try to use the same port number.
     """
+
     def __init__(self, low, high):
         self.low = low
         self.high = high
@@ -75,6 +79,8 @@ class _RandomPortAssigner(object):
 
 
 _random_ports = iter(_RandomPortAssigner(20000, 40000))
+
+
 def random_port():
     """
     :return int: A port number which is unique within the scope of this
@@ -91,12 +97,10 @@ class HTTPServer(object):
         self.remote_port = remote_port
         self.value = value
 
-
     def expose_string(self):
         if self.local_port == self.remote_port:
             return str(self.local_port)
         return "{}:{}".format(self.local_port, self.remote_port)
-
 
 
 class _ContainerMethod(object):
@@ -113,30 +117,29 @@ class _ContainerMethod(object):
             )
         return None
 
-
     def command_has_graceful_failure(self, command):
         return False
-
 
     def loopback_is_host(self):
         return False
 
-
     def inherits_client_environment(self):
         return False
 
-
     def telepresence_args(self, probe):
         return [
-            "--method", "container",
+            "--method",
+            "container",
             "--docker-run",
             # The probe wants to use stdio to communicate with the test process.
             "--interactive",
             # Put the probe into the container filesystem.
-            "--volume", "{}:/probe.py".format(probe),
+            "--volume",
+            "{}:/probe.py".format(probe),
             # More or less any image that can run a Python 3 program is fine.
             "python:3-alpine",
-            "python", "/probe.py",
+            "python",
+            "/probe.py",
         ]
 
 
@@ -146,27 +149,29 @@ class _InjectTCPMethod(object):
     def unsupported(self):
         return None
 
-
     def command_has_graceful_failure(self, command):
         return command in {
-            "ping", "traceroute", "nslookup", "host", "dig",
+            "ping",
+            "traceroute",
+            "nslookup",
+            "host",
+            "dig",
         }
-
 
     def loopback_is_host(self):
         return True
 
-
     def inherits_client_environment(self):
         return True
 
-
     def telepresence_args(self, probe):
         return [
-            "--method", "inject-tcp",
-            "--run", executable, probe,
+            "--method",
+            "inject-tcp",
+            "--run",
+            executable,
+            probe,
         ]
-
 
 
 class _VPNTCPMethod(object):
@@ -175,34 +180,33 @@ class _VPNTCPMethod(object):
     def unsupported(self):
         return None
 
-
     def command_has_graceful_failure(self, command):
         return command in {
-            "ping", "traceroute",
+            "ping",
+            "traceroute",
         }
-
 
     def loopback_is_host(self):
         return True
 
-
     def inherits_client_environment(self):
         return True
 
-
     def telepresence_args(self, probe):
         return [
-            "--method", "vpn-tcp",
-            "--run", executable, probe,
+            "--method",
+            "vpn-tcp",
+            "--run",
+            executable,
+            probe,
         ]
-
 
 
 class _ExistingDeploymentOperation(object):
     def __init__(self, swap):
         self.swap = swap
         self.json_env = None  # Filled in below
-        self.envfile = None   # Filled in below
+        self.envfile = None  # Filled in below
         if swap:
             self.name = "swap"
             self.image = "openshift/hello-openshift"
@@ -217,17 +221,21 @@ class _ExistingDeploymentOperation(object):
                 None,
                 random_name("auto-same"),
             )
-            print("HTTP Server auto-expose same-port: {}".format(
-                self.http_server_auto_expose_same.remote_port,
-            ))
+            print(
+                "HTTP Server auto-expose same-port: {}".format(
+                    self.http_server_auto_expose_same.remote_port,
+                )
+            )
             self.http_server_auto_expose_diff = HTTPServer(
                 12330,
                 random_port(),
                 random_name("auto-diff"),
             )
-            print("HTTP Server auto-expose diff-port: {}".format(
-                self.http_server_auto_expose_diff.remote_port,
-            ))
+            print(
+                "HTTP Server auto-expose diff-port: {}".format(
+                    self.http_server_auto_expose_diff.remote_port,
+                )
+            )
         else:
             self.name = "existing"
             self.image = "{}/telepresence-k8s:{}".format(
@@ -237,20 +245,20 @@ class _ExistingDeploymentOperation(object):
             self.replicas = 1
             self.container_args = None
 
-
     def inherits_deployment_environment(self):
         return True
-
 
     def prepare_deployment(self, deployment_ident, environ):
         if self.swap:
             ports = [
                 {
-                    "containerPort": self.http_server_auto_expose_same.local_port,
+                    "containerPort": self.http_server_auto_expose_same.
+                    local_port,
                     "hostPort": self.http_server_auto_expose_same.remote_port,
                 },
                 {
-                    "containerPort": self.http_server_auto_expose_diff.local_port,
+                    "containerPort": self.http_server_auto_expose_diff.
+                    local_port,
                     "hostPort": self.http_server_auto_expose_diff.remote_port,
                 },
             ]
@@ -269,14 +277,12 @@ class _ExistingDeploymentOperation(object):
         self.json_env = ENVFILE_PATH / (deployment_ident.name + ".json")
         self.envfile = ENVFILE_PATH / (deployment_ident.name + ".env")
 
-
     def cleanup_deployment(self, deployment_ident):
         _cleanup_deployment(deployment_ident)
         if self.json_env:
             self.json_env.unlink()
         if self.envfile:
             self.envfile.unlink()
-
 
     def auto_http_servers(self):
         if self.swap:
@@ -286,14 +292,11 @@ class _ExistingDeploymentOperation(object):
             ]
         return []
 
-
     def prepare_service(self, deployment_ident, ports):
         create_service(deployment_ident, ports)
 
-
     def cleanup_service(self, deployment_ident):
         cleanup_service(deployment_ident)
-
 
     def telepresence_args(self, deployment_ident):
         if self.swap:
@@ -301,12 +304,15 @@ class _ExistingDeploymentOperation(object):
         else:
             option = "--deployment"
         return [
-            "--namespace", deployment_ident.namespace,
-            option, deployment_ident.name,
-            "--env-json", str(self.json_env),
-            "--env-file", str(self.envfile),
+            "--namespace",
+            deployment_ident.namespace,
+            option,
+            deployment_ident.name,
+            "--env-json",
+            str(self.json_env),
+            "--env-file",
+            str(self.envfile),
         ]
-
 
 
 class _NewDeploymentOperation(object):
@@ -315,33 +321,28 @@ class _NewDeploymentOperation(object):
     def inherits_deployment_environment(self):
         return False
 
-
     def prepare_deployment(self, deployment_ident, environ):
         pass
-
 
     def cleanup_deployment(self, deployment_ident):
         pass
 
-
     def auto_http_servers(self):
         return []
-
 
     def prepare_service(self, deployment_ident, ports):
         pass
 
-
     def cleanup_service(self, deployment_ident):
         pass
 
-
     def telepresence_args(self, deployment_ident):
         return [
-            "--namespace", deployment_ident.namespace,
-            "--new-deployment", deployment_ident.name,
+            "--namespace",
+            deployment_ident.namespace,
+            "--new-deployment",
+            deployment_ident.name,
         ]
-
 
 
 def create_deployment(deployment_ident, image, args, environ, ports, replicas):
@@ -368,11 +369,10 @@ def create_deployment(deployment_ident, image, args, environ, ports, replicas):
     container = {
         "name": "hello",
         "image": image,
-        "env": list(
-            {"name": k, "value": v}
-            for (k, v)
-            in environ.items()
-        ),
+        "env": list({
+            "name": k,
+            "value": v
+        } for (k, v) in environ.items()),
         "volumeMounts": [{
             "name": "podinfo",
             "mountPath": "/podinfo",
@@ -409,7 +409,9 @@ def create_deployment(deployment_ident, image, args, environ, ports, replicas):
                         "downwardAPI": {
                             "items": [{
                                 "path": "labels",
-                                "fieldRef": {"fieldPath": "metadata.labels"},
+                                "fieldRef": {
+                                    "fieldPath": "metadata.labels"
+                                },
                             }],
                         },
                     }],
@@ -418,7 +420,9 @@ def create_deployment(deployment_ident, image, args, environ, ports, replicas):
             },
         },
     })
-    check_output([KUBECTL, "create", "-f", "-"], input=deployment.encode("utf-8"))
+    check_output([KUBECTL, "create", "-f", "-"],
+                 input=deployment.encode("utf-8"))
+
 
 def create_service(deployment_ident, ports):
     if not ports:
@@ -451,10 +455,8 @@ def create_service(deployment_ident, ports):
 
 def cleanup_service(deployment_ident):
     check_call([
-        KUBECTL, "delete",
-        "--namespace", deployment_ident.namespace,
-        "--ignore-not-found",
-        "service", deployment_ident.name
+        KUBECTL, "delete", "--namespace", deployment_ident.namespace,
+        "--ignore-not-found", "service", deployment_ident.name
     ])
 
 
@@ -472,10 +474,12 @@ OPERATIONS = [
     NEW_DEPLOYMENT_OPERATION,
 ]
 
+
 class ResourceIdent(object):
     """
     Identify a Kubernetes resource.
     """
+
     def __init__(self, namespace, name):
         self.namespace = namespace
         self.name = name
@@ -483,12 +487,14 @@ class ResourceIdent(object):
 
 def _cleanup_deployment(ident):
     check_call([
-        KUBECTL, "delete",
-        "--namespace", ident.namespace,
+        KUBECTL,
+        "delete",
+        "--namespace",
+        ident.namespace,
         "--ignore-not-found",
-        "deployment", ident.name,
+        "deployment",
+        ident.name,
     ])
-
 
 
 def _telepresence(telepresence_args, env=None):
@@ -525,18 +531,17 @@ def _telepresence(telepresence_args, env=None):
     )
 
 
-
 def run_telepresence_probe(
-        request,
-        method,
-        operation,
-        desired_environment,
-        client_environment,
-        probe_urls,
-        probe_commands,
-        probe_paths,
-        also_proxy,
-        http_servers,
+    request,
+    method,
+    operation,
+    desired_environment,
+    client_environment,
+    probe_urls,
+    probe_commands,
+    probe_paths,
+    also_proxy,
+    http_servers,
 ):
     """
     :param request: The pytest mumble mumble whatever.
@@ -613,9 +618,7 @@ def run_telepresence_probe(
     # an existing Deployment are still exposed even if the Telepresence
     # command line doesn't have the arguments to expose them.
     auto_http_servers = operation.auto_http_servers()
-    service_ports.extend([
-        http.remote_port for http in auto_http_servers
-    ])
+    service_ports.extend([http.remote_port for http in auto_http_servers])
 
     # Tell the operation to prepare a service exposing those ports.
     print("Creating service with ports {}".format(service_ports))
@@ -630,8 +633,10 @@ def run_telepresence_probe(
         probe_args.extend(["--probe-path", path])
     for http in http_servers + auto_http_servers:
         probe_args.extend([
-            "--http-port", str(http.local_port),
-            "--http-value", http.value,
+            "--http-port",
+            str(http.local_port),
+            "--http-value",
+            http.value,
         ])
 
     telepresence_args = []
@@ -639,7 +644,8 @@ def run_telepresence_probe(
         telepresence_args.extend(["--also-proxy", addr])
     for http in http_servers:
         telepresence_args.extend([
-            "--expose", http.expose_string(),
+            "--expose",
+            http.expose_string(),
         ])
 
     operation_args = operation.telepresence_args(deployment_ident)
@@ -649,7 +655,9 @@ def run_telepresence_probe(
         telepresence = _telepresence(args, client_environment)
     except CalledProcessError as e:
         assert False, "Failure running {}: {}\n{}".format(
-            ["telepresence"] + args, str(e), e.output.decode("utf-8"),
+            ["telepresence"] + args,
+            str(e),
+            e.output.decode("utf-8"),
         )
     else:
         writer = stdout.buffer
@@ -662,7 +670,8 @@ def run_telepresence_probe(
             initial_result = loads(output)
         except JSONDecodeError as e:
             assert False, "Could not decode JSON probe result from {}:\n{}".format(
-                ["telepresence"] + args, e.doc,
+                ["telepresence"] + args,
+                e.doc,
             )
         return ProbeResult(
             writer,
@@ -671,7 +680,6 @@ def run_telepresence_probe(
             webserver_name,
             initial_result,
         )
-
 
 
 class NoTaggedValue(Exception):
@@ -684,6 +692,8 @@ class NoTaggedValue(Exception):
 
 # See probe_endtoend.py
 MAGIC_PREFIX = b"\xc0\xc1\xfe\xff"
+
+
 def _read_tagged_output(process, output, writer):
     """
     Read some structured data from the ``output`` stream of the
@@ -697,7 +707,7 @@ def _read_tagged_output(process, output, writer):
         if returncode is None:
             # The process hasn't exited.  Try to do a partial read of its
             # output.
-            new_data = output.read(2 ** 16)
+            new_data = output.read(2**16)
             if not new_data:
                 # Don't poll excessively if nothing is coming out.
                 sleep(1)
@@ -752,21 +762,20 @@ def _read_tagged_output(process, output, writer):
     raise NoTaggedValue()
 
 
-
 class ProbeResult(object):
-    def __init__(self, writer, telepresence, deployment_ident, webserver_name, result):
+    def __init__(
+        self, writer, telepresence, deployment_ident, webserver_name, result
+    ):
         self._writer = writer
         self.telepresence = telepresence
         self.deployment_ident = deployment_ident
         self.webserver_name = webserver_name
         self.result = result
 
-
     def write(self, command):
         if "\n" in command:
             raise ValueError("Cannot send multiline command.")
         self.telepresence.stdin.write((command + "\n").encode("utf-8"))
-
 
     def read(self):
         return _read_tagged_output(
@@ -776,11 +785,11 @@ class ProbeResult(object):
         ).decode("utf-8")
 
 
-
 class AlsoProxy(object):
     """
     Represent parameters of a particular case to test of ``--also-proxy``.
     """
+
     def __init__(self, argument, host):
         """
         :param str argument: The value to supply to ``--also-proxy``.
@@ -842,12 +851,14 @@ class Probe(object):
     # Get some httpbin.org addresses.  We avoid the real domain name in the
     # related tests due to
     # <https://github.com/datawire/telepresence/issues/379>.
-    _httpbin = iter(getaddrinfo(
-        "httpbin.org",
-        80,
-        AF_INET,
-        SOCK_STREAM,
-    ) * 2)
+    _httpbin = iter(
+        getaddrinfo(
+            "httpbin.org",
+            80,
+            AF_INET,
+            SOCK_STREAM,
+        ) * 2
+    )
 
     #
     # Also notice that each ALSO_PROXY_... uses non-overlapping addresses
@@ -885,17 +896,21 @@ class Probe(object):
         None,
         random_name("same"),
     )
-    print("HTTP Server same-port: {}".format(
-        HTTP_SERVER_SAME_PORT.remote_port,
-    ))
+    print(
+        "HTTP Server same-port: {}".format(
+            HTTP_SERVER_SAME_PORT.remote_port,
+        )
+    )
     HTTP_SERVER_DIFFERENT_PORT = HTTPServer(
         12360,
         random_port(),
         random_name("diff"),
     )
-    print("HTTP Server diff-port: {}".format(
-        HTTP_SERVER_SAME_PORT.remote_port,
-    ))
+    print(
+        "HTTP Server diff-port: {}".format(
+            HTTP_SERVER_SAME_PORT.remote_port,
+        )
+    )
     HTTP_SERVER_LOW_PORT = HTTPServer(
         12350,
         # This needs to be allocated from the privileged range.  Try to avoid
@@ -920,20 +935,18 @@ class Probe(object):
             self.operation.name,
         )
 
-
     def result(self):
         if self._result is None:
             print("Launching {}".format(self))
 
             local_port = find_free_port()
-            self.loopback_url = self.LOOPBACK_URL_TEMPLATE.format(
-                local_port,
-            )
+            self.loopback_url = self.LOOPBACK_URL_TEMPLATE.format(local_port, )
             # This is a local web server that the Telepresence probe can try to
             # interact with to verify network routing to the host.
             p = Popen(
                 # TODO Just cross our fingers and hope this port is available...
-                [executable, "-m", "http.server", str(local_port)],
+                [executable, "-m", "http.server",
+                 str(local_port)],
                 cwd=str(DIRECTORY),
             )
             self._cleanup.append(lambda: _cleanup_process(p))
@@ -950,28 +963,20 @@ class Probe(object):
             ]
             self._result = "FAILED"
             self._result = run_telepresence_probe(
-                self._request,
-                self.method,
-                self.operation,
-                self.DESIRED_ENVIRONMENT,
-                {self.CLIENT_ENV_VAR: "FOO"},
-                [self.loopback_url],
-                self.QUESTIONABLE_COMMANDS,
-                self.INTERESTING_PATHS,
-                also_proxy,
-                http_servers
+                self._request, self.method, self.operation,
+                self.DESIRED_ENVIRONMENT, {self.CLIENT_ENV_VAR: "FOO"},
+                [self.loopback_url], self.QUESTIONABLE_COMMANDS,
+                self.INTERESTING_PATHS, also_proxy, http_servers
             )
             self._cleanup.append(self.ensure_dead)
             self._cleanup.append(self.cleanup_resources)
         assert self._result != "FAILED"
         return self._result
 
-
     def cleanup(self):
         print("Cleaning up {}".format(self))
         for cleanup in self._cleanup:
             cleanup()
-
 
     def ensure_dead(self):
         """
@@ -988,7 +993,6 @@ class Probe(object):
 
         _cleanup_process(self._result.telepresence)
 
-
     def cleanup_resources(self):
         """
         Delete Kubernetes resources related to this Probe.
@@ -1002,7 +1006,6 @@ class Probe(object):
         self.operation.cleanup_deployment(self._result.deployment_ident)
         self.operation.cleanup_service(self._result.deployment_ident)
         cleanup_namespace(self._result.deployment_ident.namespace)
-
 
 
 def _cleanup_process(process):

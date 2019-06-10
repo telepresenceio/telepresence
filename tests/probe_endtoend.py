@@ -71,6 +71,7 @@ from socket import (
 # the chances that some legitimate output will accidentally duplicate it.
 MAGIC_PREFIX = b"\xc0\xc1\xfe\xff"
 
+
 def main():
     parser = argument_parser()
     args = parser.parse_args()
@@ -97,12 +98,10 @@ class TaggedOutput(object):
     def __init__(self, stdout):
         self.stdout = stdout
 
-
     def write(self, text):
         data = text.encode("utf-8")
         self.stdout.write(MAGIC_PREFIX + pack(">I", len(data)) + data)
         self.stdout.flush()
-
 
 
 def read_and_respond(commands, output):
@@ -119,7 +118,6 @@ def read_and_respond(commands, output):
         response = COMMANDS[command](*argv)
         output.write(dumps(response))
         print("Dumped response.", flush=True)
-
 
 
 def probe_also_proxy(hostname):
@@ -166,12 +164,10 @@ def disconnect_telepresence(namespace):
     # We can't tell if this succeeded, sadly, since it kills ssh session used
     # by kubectl exec!
     command = [
-        "kubectl", "exec",
-        "--namespace=" + namespace,
+        "kubectl", "exec", "--namespace=" + namespace,
         "--container=" + environ["TELEPRESENCE_CONTAINER"],
         environ["TELEPRESENCE_POD"], "--", "/bin/sh", "-c",
-        r"kill $(ps xa | tail -n +2 | " +
-        r"sed 's/ *\([0-9][0-9]*\).*/\1/')"
+        r"kill $(ps xa | tail -n +2 | " + r"sed 's/ *\([0-9][0-9]*\).*/\1/')"
     ]
     print("Using kubectl to kill Telepresence support processes:")
     print("\t{}".format(" ".join(command)), flush=True)
@@ -205,7 +201,6 @@ COMMANDS = {
     "gethostbyname": probe_gethostbyname,
     "gethostbyaddr": probe_gethostbyaddr,
 }
-
 
 
 def probe_urls(urls):

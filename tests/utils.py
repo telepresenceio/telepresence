@@ -14,7 +14,6 @@ from subprocess import (
     CalledProcessError,
 )
 
-
 DIRECTORY = Path(__file__).absolute().parent
 REVISION = str(check_output(["git", "rev-parse", "--short", "HEAD"]),
                "utf-8").strip()
@@ -84,15 +83,19 @@ spec:
 
 if OPENSHIFT:
     KUBECTL = "oc"
-    EXISTING_DEPLOYMENT = EXISTING_DEPLOYMENT % ("""\
+    EXISTING_DEPLOYMENT = EXISTING_DEPLOYMENT % (
+        """\
 apiVersion: v1
-kind: DeploymentConfig""",)
+kind: DeploymentConfig""",
+    )
     DEPLOYMENT_TYPE = "deploymentconfig"
 else:
     KUBECTL = "kubectl"
-    EXISTING_DEPLOYMENT = EXISTING_DEPLOYMENT % ("""\
+    EXISTING_DEPLOYMENT = EXISTING_DEPLOYMENT % (
+        """\
 apiVersion: extensions/v1beta1
-kind: Deployment""",)
+kind: Deployment""",
+    )
     DEPLOYMENT_TYPE = "deployment"
 
 
@@ -102,7 +105,8 @@ def random_name(suffix=""):
         suffix = "-" + suffix
     hostname = socket.gethostname()
     return "testing-{}-{}-{}-{}{}".format(
-        REVISION, hostname[:16], os.getpid(), int(time.time() - START_TIME), suffix
+        REVISION, hostname[:16], os.getpid(), int(time.time() - START_TIME),
+        suffix
     ).replace(".", "-")
 
 
@@ -119,15 +123,39 @@ def query_in_k8s(namespace, url, process_to_poll):
     for i in range(120):
         try:
             return check_output([
-                'kubectl', 'run', '--attach', random_name("q"), "--quiet",
-                '--rm', '--image=alpine', '--restart', 'Never', "--namespace",
-                namespace, '--command', '--', 'wget', "-q", "-O-",
-                "-T", "3", url,
+                'kubectl',
+                'run',
+                '--attach',
+                random_name("q"),
+                "--quiet",
+                '--rm',
+                '--image=alpine',
+                '--restart',
+                'Never',
+                "--namespace",
+                namespace,
+                '--command',
+                '--',
+                'wget',
+                "-q",
+                "-O-",
+                "-T",
+                "3",
+                url,
             ])
         except CalledProcessError as e:
-            if process_to_poll is not None and process_to_poll.poll() is not None:
-                raise RuntimeError("Process exited prematurely: {}".format(process_to_poll.returncode))
-            print("http request failed, sleeping before retry ({}; {})".format(e, e.output))
+            if process_to_poll is not None and process_to_poll.poll(
+            ) is not None:
+                raise RuntimeError(
+                    "Process exited prematurely: {}".format(
+                        process_to_poll.returncode
+                    )
+                )
+            print(
+                "http request failed, sleeping before retry ({}; {})".format(
+                    e, e.output
+                )
+            )
             time.sleep(1)
             continue
     raise RuntimeError("failed to connect to HTTP server " + url)
@@ -173,17 +201,31 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
         echo {delimiter}
         [ -e output ] && cat output
         echo {delimiter}
-        """).format(tries=tries, url=url, delimiter=delimiter)
-    print("Querying {url} (tries={tries} empty-retries={empty})".format(
-        url=url, tries=tries, empty=retries_on_empty,
-    ))
+        """
+    ).format(tries=tries, url=url, delimiter=delimiter)
+    print(
+        "Querying {url} (tries={tries} empty-retries={empty})".format(
+            url=url,
+            tries=tries,
+            empty=retries_on_empty,
+        )
+    )
     for _ in range(retries_on_empty + 1):
         res = check_output([
-            "kubectl", "--namespace={}".format(namespace),
-            "run", random_name("query"),
-            "--attach", "--quiet", "--rm",
-            "--image=alpine", "--restart=Never",
-            "--command", "--", "sh", "-c", shell_command,
+            "kubectl",
+            "--namespace={}".format(namespace),
+            "run",
+            random_name("query"),
+            "--attach",
+            "--quiet",
+            "--rm",
+            "--image=alpine",
+            "--restart=Never",
+            "--command",
+            "--",
+            "sh",
+            "-c",
+            shell_command,
         ]).decode("utf-8")
         print("query output:")
         print(_indent(res))
@@ -243,7 +285,9 @@ def run_webserver(namespace=None):
         print("webserver phase: {}".format(available))
         if available == b"Running":
             # Wait for it to be running
-            query_in_k8s(namespace, "http://{}:8080/".format(webserver_name), None)
+            query_in_k8s(
+                namespace, "http://{}:8080/".format(webserver_name), None
+            )
             return webserver_name
         else:
             time.sleep(1)
@@ -271,7 +315,8 @@ def create_namespace(namespace_name, name):
             },
         },
     })
-    check_output([KUBECTL, "create", "-f", "-"], input=namespace.encode("utf-8"))
+    check_output([KUBECTL, "create", "-f", "-"],
+                 input=namespace.encode("utf-8"))
 
 
 def cleanup_namespace(namespace_name):
