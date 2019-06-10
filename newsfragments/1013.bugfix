@@ -1,1 +1,0 @@
-The unprivileged proxy image switches to the intended UID when unexpectedly running as root.

@@ -1,6 +1,28 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.100 (June 10, 2019)
+
+Features:
+
+* Telepresence can use an OpenShift DeploymentConfig with the `--deployment` option.
+  Thanks to Aslak Knutsen for the patch.
+  ([#1037](https://github.com/telepresenceio/telepresence/issues/1037))
+
+Bug fixes:
+
+* The unprivileged proxy image switches to the intended UID when unexpectedly running as root.
+  This remedies the "unprotected key file" warning from `sshd` and the subsequent proxy pod crash seen by some users.
+  ([#1013](https://github.com/telepresenceio/telepresence/issues/1013))
+* Attaching a debugger to the process running under Telepresence no longer causes the session to end.
+  Thanks to Gigi Sayfan for the patch.
+  ([#1003](https://github.com/telepresenceio/telepresence/issues/1003))
+
+Misc:
+
+* If you make a [pull request](https://github.com/telepresenceio/telepresence/pulls) on GitHub, unit tests and linters will run against your PR automatically.
+  We hope the quick automated feedback will be helpful.
+  Thank you for your contributions!
 
 #### 0.99 (April 17, 2019)
 
