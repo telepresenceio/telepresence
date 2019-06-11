@@ -34,10 +34,11 @@ esac
 echo "Download commands"
 curl -sLO "https://storage.googleapis.com/kubernetes-release/release/v1.12.2/bin/${OS}/amd64/kubectl"
 curl -sLO "http://releases.datawire.io/kubernaut/$(curl -s http://releases.datawire.io/kubernaut/latest.txt)/${OS}/amd64/kubernaut"
+curl -sLO "https://github.com/rancher/k3s/releases/download/v0.5.0/k3s"
 
 echo "Install commands"
-chmod a+x kubectl kubernaut
-sudo mv kubectl kubernaut /usr/local/bin
+chmod a+x kubectl kubernaut k3s
+sudo mv kubectl kubernaut k3s /usr/local/bin
 
 echo "Install torsocks"
 ./ci/build-torsocks.sh "$OS"
@@ -45,7 +46,3 @@ echo "Install torsocks"
 echo "Set up kubernaut's backend"
 mkdir -p ~/.config/kubernaut
 kubernaut config backend create --url="https://next.kubernaut.io" --name="v2" --activate "$KUBERNAUT_TOKEN"
-
-echo "Claim a cluster"
-echo "tel-$(uuidgen)" > /tmp/kubernaut-claim-name.txt
-kubernaut claims create --name "$(cat /tmp/kubernaut-claim-name.txt)" --cluster-group main
