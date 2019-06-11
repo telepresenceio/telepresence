@@ -29,7 +29,7 @@ commands:
   decrypt-gcloud-keys:
     steps:
       - run:
-          name: "decrypt gcloud keys"
+          name: "Decrypt gcloud keys (to use a GKE cluster, etc.)"
           command: |
             # To update:
             #   1) Generate a new key and IV:
@@ -48,12 +48,6 @@ commands:
               echo "Running for a forked PRs with no credentials, so marking this step successful"
               circleci step halt
             fi
-  setup-for-ci:
-    steps:
-      - run:
-          name: Setup the CI environment
-          command: |
-            ci/setup-for-ci.sh
   kubernaut-claim:
     steps:
       - run:
@@ -68,6 +62,13 @@ commands:
           name: Discard the kubernaut cluster
           command: |
             kubernaut claims delete $(cat /tmp/kubernaut-claim-name.txt)
+  launch-k3s-cluster:
+    steps:
+      - run:
+          name: k3s in the background
+          command: sudo /usr/local/bin/k3s server --log /dev/null
+          background: true
+      - run: echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> ${BASH_ENV}
 
 jobs:
   linux-kubernaut:
@@ -80,7 +81,7 @@ jobs:
       - run: sudo apt-get --quiet update
       - run: pyenv global 2.7.12 3.5.2
       - checkout
-      - setup-for-ci
+      - run: ci/setup-for-ci.sh
       - kubernaut-claim
       - run: kubectl cluster-info
       - run: make virtualenv
@@ -100,12 +101,8 @@ jobs:
       - run: sudo apt-get --quiet update
       - run: pyenv global 2.7.12 3.5.2
       - checkout
-      - setup-for-ci
-      - run:
-          name: k3s in the background
-          command: sudo /usr/local/bin/k3s server --log /dev/null
-          background: true
-      - run: echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> ${BASH_ENV}
+      - run: ci/setup-for-ci.sh
+      - launch-k3s-cluster
       - run: make virtualenv
       - run: kubectl cluster-info
       - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
