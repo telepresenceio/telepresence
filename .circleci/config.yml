@@ -101,10 +101,13 @@ jobs:
       - run: pyenv global 2.7.12 3.5.2
       - checkout
       - setup-for-ci
-      - run: sudo k3s server &
+      - run:
+          name: k3s in the background
+          command: sudo /usr/local/bin/k3s server --log /dev/null
+          background: true
       - run: echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> ${BASH_ENV}
-      - run: kubectl cluster-info
       - run: make virtualenv
+      - run: kubectl cluster-info
       - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
