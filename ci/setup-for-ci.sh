@@ -5,6 +5,10 @@ set -o pipefail
 set -o nounset
 # set -o xtrace
 
+## This is a work in progress. It is intended to replace the current setup file
+## environment-setup.sh but only for use in CI. At the moment there is a lot of
+## duplication. FIXME.
+
 OS=$(python3 -c "import sys; print(sys.platform)")
 
 echo "Check for requirements"

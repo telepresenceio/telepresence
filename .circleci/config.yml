@@ -18,12 +18,12 @@ workflows:
       #- build-testbench:
       #    requires:
       #      - build-image
-      - linux-kubernaut:
-          requires:
-            - build-image
-      - linux-k3s:
-          requires:
-            - build-image
+      #- linux-kubernaut:
+      #    requires:
+      #      - build-image
+      #- linux-k3s:
+      #    requires:
+      #      - build-image
 
 commands:
   decrypt-gcloud-keys:
@@ -71,46 +71,6 @@ commands:
       - run: echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> ${BASH_ENV}
 
 jobs:
-  linux-kubernaut:
-    machine:
-      enabled: true
-      # https://circleci.com/docs/2.0/configuration-reference/#machine
-      # Ubuntu 14.04 + docker 17.11.0-ce + docker-compose 1.17.1
-      image: "circleci/classic:201711-01"
-    steps:
-      - run: sudo apt-get --quiet update
-      - run: pyenv global 2.7.12 3.5.2
-      - checkout
-      - run: ci/setup-for-ci.sh
-      - kubernaut-claim
-      - run: kubectl cluster-info
-      - run: make virtualenv
-      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
-      - store_test_results:
-          # https://circleci.com/docs/2.0/collect-test-data/#pytest
-          path: test-reports
-      - kubernaut-discard
-
-  linux-k3s:
-    machine:
-      enabled: true
-      # https://circleci.com/docs/2.0/configuration-reference/#machine
-      # Ubuntu 14.04 + docker 17.11.0-ce + docker-compose 1.17.1
-      image: "circleci/classic:201711-01"
-    steps:
-      - run: sudo apt-get --quiet update
-      - run: pyenv global 2.7.12 3.5.2
-      - checkout
-      - run: ci/setup-for-ci.sh
-      - launch-k3s-cluster
-      - run: make virtualenv
-      - run: kubectl cluster-info
-      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
-      - store_test_results:
-          # https://circleci.com/docs/2.0/collect-test-data/#pytest
-          path: test-reports
-      - kubernaut-discard
-
   check-local:
     docker:
       # https://circleci.com/docs/2.0/circleci-images/
@@ -232,6 +192,45 @@ jobs:
             - "~/google-cloud-sdk/"
 
       - run: make virtualenv
+      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
+      - store_test_results:
+          # https://circleci.com/docs/2.0/collect-test-data/#pytest
+          path: test-reports
+
+  linux-kubernaut:
+    machine:
+      enabled: true
+      # https://circleci.com/docs/2.0/configuration-reference/#machine
+      # Ubuntu 14.04 + docker 17.11.0-ce + docker-compose 1.17.1
+      image: "circleci/classic:201711-01"
+    steps:
+      - run: sudo apt-get --quiet update
+      - run: pyenv global 2.7.12 3.5.2
+      - checkout
+      - run: ci/setup-for-ci.sh
+      - kubernaut-claim
+      - run: kubectl cluster-info
+      - run: make virtualenv
+      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
+      - store_test_results:
+          # https://circleci.com/docs/2.0/collect-test-data/#pytest
+          path: test-reports
+      - kubernaut-discard
+
+  linux-k3s:
+    machine:
+      enabled: true
+      # https://circleci.com/docs/2.0/configuration-reference/#machine
+      # Ubuntu 14.04 + docker 17.11.0-ce + docker-compose 1.17.1
+      image: "circleci/classic:201711-01"
+    steps:
+      - run: sudo apt-get --quiet update
+      - run: pyenv global 2.7.12 3.5.2
+      - checkout
+      - run: ci/setup-for-ci.sh
+      - launch-k3s-cluster
+      - run: make virtualenv
+      - run: kubectl cluster-info
       - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
