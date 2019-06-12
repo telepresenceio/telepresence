@@ -108,11 +108,13 @@ func doDisconnect() error {
 	return nil
 }
 
-func fetchResponse(path string) (string, error) {
+func fetchResponse(path string, verbose bool) (string, error) {
 	client := GetClient()
 	res, err := client.Get(fmt.Sprintf("http://unix/%s", path))
 	if err != nil {
-		fmt.Println(WordWrapString(failedToConnect))
+		if verbose {
+			fmt.Println(WordWrapString(failedToConnect))
+		}
 		return "", err
 	}
 	body, err := ioutil.ReadAll(res.Body)
@@ -121,19 +123,13 @@ func fetchResponse(path string) (string, error) {
 }
 
 func isServerRunning() bool {
-	client := GetClient()
-	res, err := client.Get("http://unix/version")
-	if err != nil {
-		return false
-	}
-	_, err = ioutil.ReadAll(res.Body)
-	res.Body.Close()
+	_, err := fetchResponse("version", false)
 	return err == nil
 }
 
 func doVersion() error {
 	fmt.Printf("playpen client %s\n", displayVersion)
-	body, err := fetchResponse("version")
+	body, err := fetchResponse("version", true)
 	if err != nil {
 		return err
 	}
@@ -142,7 +138,7 @@ func doVersion() error {
 }
 
 func doQuit() error {
-	body, err := fetchResponse("quit")
+	body, err := fetchResponse("quit", true)
 	if err != nil {
 		return err
 	}
