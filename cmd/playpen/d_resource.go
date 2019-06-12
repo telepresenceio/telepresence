@@ -76,45 +76,61 @@ func (cr *CommandResource) Enable(p *supervisor.Process) error {
 // very badly, it will return an error, in which case it probably makes sense to
 // quit.
 func (cr *CommandResource) Monitor(p *supervisor.Process) error {
-	oldOkay := cr.ok
-	defer func() {
+	// Notify if the resource enabled and the state just changed
+	defer func(oldOkay bool) {
 		if cr.enabled && (cr.ok != oldOkay) {
 			Notify(p, fmt.Sprintf("%s: %t -> %t", cr.Name(), oldOkay, cr.ok))
 		}
-	}()
+	}(cr.ok)
 
-	cr.ok = true
+	// There is nothing to do if this resource is not enabled
 	if !cr.enabled {
+		cr.ok = true
 		return nil
 	}
 
+	// Resource is enabled, so check it
 	cr.lastCheckedAt = time.Now()
+
+	// If it's not running, launch it
 	if !cr.sub.Running() {
-		cr.ok = false
 		p.Logf("Resource %s is not running. Launching...", cr.Name())
 		err := cr.sub.Start(p)
 		if err != nil {
 			p.Logf("Failed to launch %s. Giving up.", cr.Name())
 			return err
 		}
-		// Launched. Try user checks next time around.
+		// Launched; try user checks next time around
+		cr.ok = false
 		return nil
 	}
 
+	// It's running; are there any user checks?
 	if cr.check == nil {
+		// No user checks, so running is good enough
+		cr.ok = true
 		return nil
 	}
+
+	// Run the user check
 	err := cr.check(p)
 	if err == nil {
+		cr.ok = true
 		return nil
 	}
 
-	cr.ok = false
 	p.Logf("Resource %s failed user check: %v", cr.Name(), err)
+	cr.ok = false
+
+	// Kill the process. We'll start it again the next time around.
 	err = cr.sub.Kill(p)
 	if err == nil {
 		return nil
 	}
+
+	// Failure to kill is a fatal error
+	// FIXME: This will be a problem if the resource is in the process of dying
+	// when we user-check it, but is dead when we get around to killing it.
 	p.Logf("Failed to kill %s on user check fail: %v", cr.Name(), err)
 	p.Log("Giving up.")
 	return err
