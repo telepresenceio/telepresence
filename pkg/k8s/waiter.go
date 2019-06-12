@@ -14,14 +14,18 @@ type Waiter struct {
 	kinds   map[string]map[string]bool
 }
 
-func NewWaiter(watcher *Watcher) (w *Waiter) {
+func NewWaiter(watcher *Watcher) (w *Waiter, err error) {
 	if watcher == nil {
-		watcher = NewClient(nil).Watcher()
+		cli, err := NewClient(nil)
+		if err != nil {
+			return nil, err
+		}
+		watcher = cli.Watcher()
 	}
 	return &Waiter{
 		watcher: watcher,
 		kinds:   make(map[string]map[string]bool),
-	}
+	}, nil
 }
 
 func (w *Waiter) Add(resource string) error {

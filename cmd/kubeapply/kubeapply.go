@@ -156,7 +156,11 @@ func phase(names []string, data interface{}) int {
 		return 1
 	}
 
-	waiter := k8s.NewWaiter(nil)
+	waiter, err := k8s.NewWaiter(nil)
+	if err != nil {
+		fmt.Println(err)
+		return 1
+	}
 
 	valid := make(map[string]bool)
 	abort := false

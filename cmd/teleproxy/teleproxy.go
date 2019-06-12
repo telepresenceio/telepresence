@@ -294,10 +294,7 @@ func teleproxy(p *supervisor.Process, args Args) error {
 					return err
 				}
 
-				kubeinfo, err := k8s.NewKubeInfo(args.kubeconfig, args.context, args.namespace)
-				if err != nil {
-					return errors.Wrap(err, "k8s.NewKubeInfo")
-				}
+				kubeinfo := k8s.NewKubeInfo(args.kubeconfig, args.context, args.namespace)
 				bridges(p, kubeinfo)
 				return nil
 			},
@@ -509,11 +506,23 @@ func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
 		Name: K8S_BRIDGE,
 		Work: func(p *supervisor.Process) error {
 			// setup kubernetes bridge
-			p.Logf("kubernetes ctx=%s ns=%s", kubeinfo.Context, kubeinfo.Namespace)
+			ctx, err := kubeinfo.Context()
+			if err != nil {
+				return err
+			}
+			ns, err := kubeinfo.Namespace()
+			if err != nil {
+				return err
+			}
+			p.Logf("kubernetes ctx=%s ns=%s", ctx, ns)
 			var w *k8s.Watcher
 
-			err := p.DoClean(func() error {
-				w = k8s.NewClient(kubeinfo).Watcher()
+			err = p.DoClean(func() error {
+				var err error
+				w, err = k8s.NewWatcher(kubeinfo)
+				if err != nil {
+					return err
+				}
 
 				updateTable := func(w *k8s.Watcher) {
 					table := route.Table{Name: "kubernetes"}
@@ -600,8 +609,12 @@ func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
 	})
 
 	// Set up DNS search path based on current Kubernetes namespace
+	namespace, err := kubeinfo.Namespace()
+	if err != nil {
+		return err
+	}
 	paths := []string{
-		kubeinfo.Namespace + ".svc.cluster.local.",
+		namespace + ".svc.cluster.local.",
 		"svc.cluster.local.",
 		"cluster.local.",
 		"",
@@ -682,7 +695,11 @@ func connect(p *supervisor.Process, kubeinfo *k8s.KubeInfo) {
 		Name: K8S_APPLY,
 		Work: func(p *supervisor.Process) (err error) {
 			// setup remote teleproxy pod
-			apply := p.Command("kubectl", kubeinfo.GetKubectlArray("apply", "-f", "-")...)
+			args, err := kubeinfo.GetKubectlArray("apply", "-f", "-")
+			if err != nil {
+				return err
+			}
+			apply := p.Command("kubectl", args...)
 			apply.Stdin = strings.NewReader(TELEPROXY_POD)
 			err = apply.Start()
 			if err != nil {
@@ -704,7 +721,11 @@ func connect(p *supervisor.Process, kubeinfo *k8s.KubeInfo) {
 		Requires: []string{K8S_APPLY},
 		Retry:    true,
 		Work: func(p *supervisor.Process) (err error) {
-			pf := p.Command("kubectl", kubeinfo.GetKubectlArray("port-forward", "pod/teleproxy", "8022")...)
+			args, err := kubeinfo.GetKubectlArray("port-forward", "pod/teleproxy", "8022")
+			if err != nil {
+				return err
+			}
+			pf := p.Command("kubectl", args...)
 			err = pf.Start()
 			if err != nil {
 				return
@@ -713,8 +734,11 @@ func connect(p *supervisor.Process, kubeinfo *k8s.KubeInfo) {
 			err = p.DoClean(func() error {
 				err := pf.Wait()
 				if err != nil {
-					inspect := p.Command("kubectl",
-						kubeinfo.GetKubectlArray("get", "pod/teleproxy")...)
+					args, err := kubeinfo.GetKubectlArray("get", "pod/teleproxy")
+					if err != nil {
+						return err
+					}
+					inspect := p.Command("kubectl", args...)
 					inspect.Run()
 				}
 				return err
