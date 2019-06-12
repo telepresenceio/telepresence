@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -14,31 +13,13 @@ import (
 
 	"github.com/datawire/apro/lib/logging"
 	"github.com/datawire/teleproxy/pkg/supervisor"
+	rpc "github.com/gorilla/rpc/v2"
+	"github.com/gorilla/rpc/v2/json2"
 	"github.com/pkg/errors"
 )
 
-func retrieveRequest(w http.ResponseWriter, r *http.Request) *PPRequest {
-	if r.Method == http.MethodPost {
-		d := json.NewDecoder(r.Body)
-		req := PPRequest{}
-		err := d.Decode(&req)
-		if err != nil {
-			http.Error(w, err.Error(), 400)
-		}
-		return &req
-	}
-	http.Error(w, "Bad request", 400)
-	return nil
-}
-
-func makeRequestHandler(p *supervisor.Process, handle func(*supervisor.Process, *PPRequest) string) func(http.ResponseWriter, *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		req := retrieveRequest(w, r)
-		w.Write([]byte(handle(p, req)))
-	}
-}
-
 func daemon(p *supervisor.Process) error {
+	svc := new(DaemonService)
 	mux := http.NewServeMux()
 
 	// Operations that are valid irrespective of API version (curl is okay)
@@ -57,11 +38,17 @@ func daemon(p *supervisor.Process) error {
 		fmt.Fprintln(w, "Playpen Daemon quitting...")
 	})
 
-	// API-specific operations
-	apiPath := fmt.Sprintf("/api/v%d", apiVersion)
-	mux.HandleFunc(apiPath+"/status", makeRequestHandler(p, daemonStatus))
-	mux.HandleFunc(apiPath+"/connect", makeRequestHandler(p, daemonConnect))
-	mux.HandleFunc(apiPath+"/disconnect", makeRequestHandler(p, daemonDisconnect))
+	// API-specific operations, via JSON-RPC
+	rpcServer := rpc.NewServer()
+	rpcServer.RegisterCodec(json2.NewCodec(), "application/json")
+	err := rpcServer.RegisterService(svc, "daemon")
+	if err != nil {
+		return errors.Wrap(err, "register")
+	}
+	rpcServer.RegisterAfterFunc(func(i *rpc.RequestInfo) {
+		p.Logf("RPC call method=%s err=%v", i.Method, i.Error)
+	})
+	mux.Handle(fmt.Sprintf("/api/v%d", apiVersion), rpcServer)
 
 	unixListener, err := net.Listen("unix", socketName)
 	if err != nil {
@@ -189,16 +176,4 @@ func runAsDaemon() error {
 	}
 	sup.Logger.Printf("Playpen daemon %s is done.", displayVersion)
 	return errors.New("playpen daemon has exited")
-}
-
-func daemonStatus(p *supervisor.Process, req *PPRequest) string {
-	return "Not connected"
-}
-
-func daemonConnect(p *supervisor.Process, req *PPRequest) string {
-	return "Not implemented..."
-}
-
-func daemonDisconnect(p *supervisor.Process, req *PPRequest) string {
-	return "Not connected"
 }

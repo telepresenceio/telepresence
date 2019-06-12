@@ -1,17 +1,15 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/pkg/errors"
-	"k8s.io/apimachinery/pkg/util/json"
+	"github.com/ybbus/jsonrpc"
 )
 
 // GetClient returns an http.Client that can (only) connect to unix sockets
@@ -26,38 +24,6 @@ func GetClient() *http.Client {
 	}
 }
 
-// PPRequest represents a request from the client to the server.
-type PPRequest struct {
-	Command string
-	Args    []string
-	Env     []string
-	UID     int
-}
-
-func newRequest(command string, args ...string) *PPRequest {
-	return &PPRequest{command, args, os.Environ(), os.Getuid()}
-}
-
-func sendRequest(command string) (int, string, error) {
-	client := GetClient()
-	req := newRequest(command)
-	reqBody, err := json.Marshal(req)
-	if err != nil {
-		return 0, "", errors.Wrap(err, "JSON of request")
-	}
-	url := fmt.Sprintf("http://unix/api/v%d/%s", apiVersion, command)
-	res, err := client.Post(url, "application/json", bytes.NewReader(reqBody))
-	if err != nil {
-		return 0, "", err
-	}
-	body, err := ioutil.ReadAll(res.Body)
-	res.Body.Close()
-	if err != nil {
-		return res.StatusCode, "", errors.Wrap(err, "request read body")
-	}
-	return res.StatusCode, string(body), nil
-}
-
 var failedToConnect = fmt.Sprintf(`
 Failed to connect to the server. Is it still running? Take a look in %s for more information. You can start the server using "sudo playpen start-server" if it is not running.
 `, logfile)
@@ -66,43 +32,79 @@ var apiMismatch = fmt.Sprintf(`
 Failed to communicate with the server. This is usually due to an API version mismatch. Try "playpen version" to see the client and server versions. If that's not the problem, take a look in %s for more information.
 `, logfile)
 
-func doClientRequest(command string) (string, error) {
-	statusCode, body, err := sendRequest(command)
+func doClientRequest(command string, params interface{}) (*jsonrpc.RPCResponse, error) {
+	url := fmt.Sprintf("http://unix/api/v%d", apiVersion)
+	clientOpts := &jsonrpc.RPCClientOpts{HTTPClient: GetClient()}
+	rpcClient := jsonrpc.NewClientWithOpts(url, clientOpts)
+	method := fmt.Sprintf("daemon.%s", command)
+	response, err := rpcClient.Call(method, params)
 	if err != nil {
-		fmt.Println(WordWrapString(failedToConnect))
-		return "", err
-	}
-	if statusCode == 404 {
+		httpErr, ok := err.(*jsonrpc.HTTPError)
+		if !ok {
+			fmt.Println(err)
+			fmt.Println("")
+			fmt.Println(WordWrapString(failedToConnect))
+			return nil, errors.New("unable to connect to server")
+		}
+		fmt.Println(httpErr)
+		fmt.Println("")
 		fmt.Println(WordWrapString(apiMismatch))
-		return "", errors.New("could not communicate with server")
+		return nil, errors.New("could not communicate with server")
 	}
-	return body, nil
+	return response, nil
+}
+
+func decodeAsStringReply(response *jsonrpc.RPCResponse) (string, error) {
+	res := &StringReply{}
+	err := response.GetObject(res)
+	if err != nil {
+		return "", errors.Wrap(err, "bad response from server")
+	}
+	if len(res.Message) == 0 {
+		return "", errors.New("empty message from server")
+	}
+	return res.Message, nil
 }
 
 func doStatus() error {
-	body, err := doClientRequest("status")
+	response, err := doClientRequest("Status", EmptyArgs{})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Status call")
 	}
-	println(body)
+	message, err := decodeAsStringReply(response)
+	if err != nil {
+		return errors.Wrap(err, "Status result")
+	}
+
+	fmt.Println(message)
 	return nil
 }
 
 func doConnect() error {
-	body, err := doClientRequest("connect")
+	response, err := doClientRequest("Connect", EmptyArgs{})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Connect call")
 	}
-	println(body)
+	message, err := decodeAsStringReply(response)
+	if err != nil {
+		return errors.Wrap(err, "Connect result")
+	}
+
+	fmt.Println(message)
 	return nil
 }
 
 func doDisconnect() error {
-	body, err := doClientRequest("disconnect")
+	response, err := doClientRequest("Disconnect", EmptyArgs{})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "Disconnect call")
 	}
-	println(body)
+	message, err := decodeAsStringReply(response)
+	if err != nil {
+		return errors.Wrap(err, "Disconnect result")
+	}
+
+	fmt.Println(message)
 	return nil
 }
 
