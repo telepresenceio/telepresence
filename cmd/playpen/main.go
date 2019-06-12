@@ -20,6 +20,8 @@ const apiVersion = 1
 
 var displayVersion = fmt.Sprintf("v%s (api v%d)", Version, apiVersion)
 
+// adaptNoArgs adapts a no-argument function to fit Cobra's required signature
+// by discarding the unnecessary arguments
 func adaptNoArgs(fn func() error) func(*cobra.Command, []string) error {
 	return func(_ *cobra.Command, _ []string) error {
 		return fn()
@@ -30,7 +32,10 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:          "playpen [command]",
 		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
-		RunE:         adaptNoArgs(doStatus),
+		RunE: func(_ *cobra.Command, _ []string) error {
+			fmt.Println("Running \"playpen status\". Use \"playpen help\" to get help.")
+			return doStatus()
+		},
 	}
 
 	rootCmd.AddCommand(&cobra.Command{
