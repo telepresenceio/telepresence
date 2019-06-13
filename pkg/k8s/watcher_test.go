@@ -34,8 +34,14 @@ func (w *Watcher) fetch(resource, qname string) (result Resource) {
 	return result
 }
 
+const CLUSTER_FILE = "../../build-aux/cluster.knaut"
+
+func info() *KubeInfo {
+	return NewKubeInfo(CLUSTER_FILE, "", "")
+}
+
 func TestUpdateStatus(t *testing.T) {
-	w := MustNewWatcher(nil)
+	w := MustNewWatcher(info())
 
 	svc := w.fetch("services", "kubernetes.default")
 	svc.Status()["loadBalancer"].(map[string]interface{})["ingress"] = []map[string]interface{}{{"hostname": "foo", "ip": "1.2.3.4"}}
@@ -47,7 +53,7 @@ func TestUpdateStatus(t *testing.T) {
 		t.Logf("updated %s status, result: %v\n", svc.QName(), result.ResourceVersion())
 	}
 
-	svc = MustNewWatcher(nil).fetch("services", "kubernetes.default")
+	svc = MustNewWatcher(info()).fetch("services", "kubernetes.default")
 	ingresses := svc.Status()["loadBalancer"].(map[string]interface{})["ingress"].([]interface{})
 	ingress := ingresses[0].(map[string]interface{})
 	if ingress["hostname"] != "foo" {
@@ -60,7 +66,7 @@ func TestUpdateStatus(t *testing.T) {
 }
 
 func TestWatchCustom(t *testing.T) {
-	w := MustNewWatcher(nil)
+	w := MustNewWatcher(info())
 
 	// XXX: we can only watch custom resources... k8s doesn't
 	// support status for CRDs until 1.12
@@ -76,7 +82,7 @@ func TestWatchCustom(t *testing.T) {
 }
 
 func TestSelectiveWatch(t *testing.T) {
-	w := MustNewWatcher(nil)
+	w := MustNewWatcher(info())
 
 	services := []string{}
 	err := w.SelectiveWatch("", "services", "metadata.name=kubernetes", "", func(w *Watcher) {

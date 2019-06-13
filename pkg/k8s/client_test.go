@@ -5,7 +5,7 @@ import (
 )
 
 func TestList(t *testing.T) {
-	c, err := NewClient(nil)
+	c, err := NewClient(info())
 	if err != nil {
 		t.Error(err)
 		return
