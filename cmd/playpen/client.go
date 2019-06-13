@@ -110,7 +110,7 @@ func doDisconnect() error {
 
 func fetchResponse(path string, verbose bool) (string, error) {
 	client := GetClient()
-	res, err := client.Get(fmt.Sprintf("http://unix/%s", path))
+	res, err := client.Post(fmt.Sprintf("http://unix/%s", path), "application/json", nil)
 	if err != nil {
 		if verbose {
 			fmt.Println(WordWrapString(failedToConnect))

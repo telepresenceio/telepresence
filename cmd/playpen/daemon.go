@@ -27,6 +27,12 @@ func daemon(p *supervisor.Process) error {
 		fmt.Fprintf(w, "playpen daemon %s\n", displayVersion)
 	})
 	mux.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			// Specifically looking to disallow GET/HEAD; requiring POST is
+			// perhaps too specific, but whatever, it gets the job done.
+			http.Error(w, "Bad request (use -XPOST)", 400)
+			return
+		}
 		me, err := os.FindProcess(os.Getpid())
 		if err != nil {
 			message := fmt.Sprintf("Error trying to quit: %v", err)
