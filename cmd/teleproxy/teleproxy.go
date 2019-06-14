@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"git.lukeshu.com/go/libsystemd/sd_daemon"
 	"github.com/pkg/errors"
@@ -242,7 +243,8 @@ func _main() int {
 
 func selfcheck(p *supervisor.Process) error {
 	// XXX: these checks might not make sense if -dns is specified
-	for _, name := range []string{"teleproxy.", "teleproxy"} {
+	lookupName := fmt.Sprintf("teleproxy%d.cachebust.telepresence.io", time.Now().Unix())
+	for _, name := range []string{fmt.Sprintf("%s.", lookupName), lookupName} {
 		ips, err := net.LookupIP(name)
 		if err != nil {
 			return err
@@ -259,7 +261,7 @@ func selfcheck(p *supervisor.Process) error {
 		p.Logf("%s resolves to %v", name, ips)
 	}
 
-	curl := p.Command("curl", "-sqI", "teleproxy/api/tables/")
+	curl := p.Command("curl", "-sqI", fmt.Sprintf("%s/api/tables/", lookupName))
 	err := curl.Start()
 	if err != nil {
 		return err
