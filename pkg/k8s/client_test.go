@@ -1,11 +1,22 @@
-package k8s
+package k8s_test
 
 import (
+	"os"
 	"testing"
+
+	"github.com/datawire/teleproxy/pkg/dtest"
+	"github.com/datawire/teleproxy/pkg/k8s"
 )
 
+const CLUSTER_FILE = "../../build-aux/cluster.knaut"
+
+func TestMain(m *testing.M) {
+	dtest.Manifests(CLUSTER_FILE, "00-custom-crd.yaml", "custom.yaml")
+	os.Exit(m.Run())
+}
+
 func TestList(t *testing.T) {
-	c, err := NewClient(info())
+	c, err := k8s.NewClient(info())
 	if err != nil {
 		t.Error(err)
 		return
