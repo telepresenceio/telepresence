@@ -81,7 +81,15 @@ func doStatus() error {
 }
 
 func doConnect() error {
-	response, err := doClientRequest("Connect", EmptyArgs{})
+	// Collect information
+	rai, err := GetRunAsInfo()
+	if err != nil {
+		return err
+	}
+	callArgs := ConnectArgs{RAI: rai}
+
+	// Perform RPC
+	response, err := doClientRequest("Connect", callArgs)
 	if err != nil {
 		return errors.Wrap(err, "Connect call")
 	}

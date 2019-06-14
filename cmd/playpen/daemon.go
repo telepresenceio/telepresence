@@ -19,7 +19,7 @@ import (
 )
 
 func daemon(p *supervisor.Process) error {
-	svc := new(DaemonService)
+	svc := &DaemonService{p}
 	mux := http.NewServeMux()
 
 	// Operations that are valid irrespective of API version (curl is okay)
