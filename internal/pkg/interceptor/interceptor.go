@@ -70,6 +70,13 @@ func (i *Interceptor) Resolve(query string) *rt.Route {
 		query += "."
 	}
 
+	const prefix = "teleproxy"
+	const suffix = ".cachebust.telepresence.io." // must end with .
+	const replacement = "teleproxy."             // must end with .
+	if strings.HasPrefix(query, prefix) && strings.HasSuffix(query, suffix) {
+		query = replacement
+	}
+
 	i.searchLock.RLock()
 	defer i.searchLock.RUnlock()
 	i.domainsLock.RLock()
