@@ -138,11 +138,19 @@ func runAsDaemon() error {
 	})
 
 	teleproxy := "/Users/ark3/datawire/bin/pp-teleproxy-darwin-amd64"
-	netOverride := NewCommandResource("netOverride",
-		[]string{teleproxy, "-mode", "intercept"})
+	netOverride := NewCommandResource(
+		"netOverride",
+		[]string{teleproxy, "-mode", "intercept"},
+	)
 	netOverride.SetCheckFunction(func(p *supervisor.Process) error {
 		// Check by doing the equivalent of curl http://teleproxy/api/tables/
-		res, err := http.Get("http://teleproxy/api/tables")
+		// It's okay to create a new client each time because we don't want to
+		// reuse connections.
+		client := http.Client{Timeout: 3 * time.Second}
+		res, err := client.Get(fmt.Sprintf(
+			"http://teleproxy%d.cachebust.telepresence.io/api/tables",
+			time.Now().Unix(),
+		))
 		if err != nil {
 			return err
 		}
