@@ -56,13 +56,13 @@ func Flush() {
 		return cmpVersion(ver, minVer) >= 0
 	}
 
-	// As of macOS 10.13 (High Sierra), how to flush the DNS cache
+	// As of macOS 10.14 (Mojave), how to flush the DNS cache
 	// hasn't changed since 10.10.4.
 	//
-	// FIXME: Verify that it hasn't changed in 10.14 (Mojave).
+	// FIXME: Verify that it hasn't changed in 10.15 (Catalina).
 	//
 	// References:
-	//  - https://support.apple.com/en-us/HT202516
+	//  - https://support.apple.com/en-us/HT202516 (no longer updated?)
 	//  - https://github.com/nbcarey/flush-dns-osx
 	//  - https://github.com/eventi/noreallyjustfuckingstopalready
 	switch {
@@ -70,8 +70,8 @@ func Flush() {
 		_ = exec.Command("dscacheutil", "-flushcache").Run()
 		_ = exec.Command("killall", "-HUP", "mDNSResponder").Run()
 	case haveVer(10, 10):
-		_ = exec.Command("discoveryutil", "mndsflushcache").Run()
-		_ = exec.Command("discoveryutil", "undsflushcache").Run()
+		_ = exec.Command("discoveryutil", "mdnsflushcache").Run()
+		_ = exec.Command("discoveryutil", "udnsflushcache").Run()
 	default:
 		log("How are we even running?  Go 1.11 requires at least macOS 10.10, but we're on %q", verStr)
 	}
