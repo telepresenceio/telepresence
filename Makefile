@@ -7,7 +7,7 @@ include build-aux/help.mk
 include build-aux/k8s.mk
 include build-aux/teleproxy.mk
 
-check: claim
+check: $(_kubernaut-ui.KUBECONFIG)
 
 # Utility targets
 
