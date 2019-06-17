@@ -21,6 +21,7 @@ func WithMachineLock(body func()) {
 	func() {
 		old := syscall.Umask(0)
 		defer syscall.Umask(old)
+		/* #nosec */
 		file, err = os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0666)
 	}()
 
