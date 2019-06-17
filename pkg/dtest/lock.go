@@ -13,9 +13,9 @@ func exit(err error) {
 	os.Exit(1)
 }
 
-// WithGlobalLock executes the supplied body with a guarantee that it
-// is the only code running (via WithGlobalLock) on the machine.
-func WithGlobalLock(body func()) {
+// WithMachineLock executes the supplied body with a guarantee that it
+// is the only code running (via WithMachineLock) on the machine.
+func WithMachineLock(body func()) {
 	var file *os.File
 	var err error
 	func() {

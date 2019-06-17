@@ -15,7 +15,7 @@ import (
 
 func TestMain(m *testing.M) {
 	dtest.Sudo()
-	dtest.WithGlobalLock(func() {
+	dtest.WithMachineLock(func() {
 		os.Exit(m.Run())
 	})
 }
