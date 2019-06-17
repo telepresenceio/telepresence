@@ -45,7 +45,7 @@ func main() {
 		RunE:  adaptNoArgs(doVersion),
 	})
 	rootCmd.AddCommand(&cobra.Command{
-		Use:    "server",
+		Use:    "server-debug",
 		Short:  "launch Playpen Daemon in the foreground (debug)",
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
@@ -101,7 +101,7 @@ func launchDaemon() error {
 	}
 	fmt.Printf("Launching Playpen Daemon %s...\n", displayVersion)
 
-	cmd := exec.Command(os.Args[0], "server")
+	cmd := exec.Command(os.Args[0], "server-debug")
 	cmd.Env = os.Environ()
 	cmd.Stdin = nil
 	cmd.Stdout = nil
