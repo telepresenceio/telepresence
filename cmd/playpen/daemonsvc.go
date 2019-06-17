@@ -16,13 +16,13 @@ type DaemonService struct {
 }
 
 // Status reports the current status of the daemon
-func (d *DaemonService) Status(r *http.Request, args *EmptyArgs, reply *StringReply) error {
+func (d *DaemonService) Status(_ *http.Request, _ *EmptyArgs, reply *StringReply) error {
 	reply.Message = "Not connected"
 	return nil
 }
 
 // Connect the daemon to a cluster
-func (d *DaemonService) Connect(r *http.Request, args *ConnectArgs, reply *StringReply) error {
+func (d *DaemonService) Connect(_ *http.Request, args *ConnectArgs, reply *StringReply) error {
 	cmdArgs := make([]string, 0, 3+len(args.KArgs))
 	cmdArgs = append(cmdArgs, "kubectl", "get", "po")
 	cmdArgs = append(cmdArgs, args.KArgs...)
@@ -39,7 +39,7 @@ func (d *DaemonService) Connect(r *http.Request, args *ConnectArgs, reply *Strin
 }
 
 // Disconnect from the connected cluster
-func (d *DaemonService) Disconnect(r *http.Request, args *EmptyArgs, reply *StringReply) error {
+func (d *DaemonService) Disconnect(_ *http.Request, _ *EmptyArgs, reply *StringReply) error {
 	reply.Message = "Not connected"
 	return nil
 }

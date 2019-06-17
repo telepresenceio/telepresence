@@ -33,14 +33,19 @@ func daemon(p *supervisor.Process) error {
 			http.Error(w, "Bad request (use -XPOST)", 400)
 			return
 		}
-		me, err := os.FindProcess(os.Getpid())
+		err := func() error {
+			me, err := os.FindProcess(os.Getpid())
+			if err != nil {
+				return err
+			}
+			return me.Signal(syscall.SIGTERM)
+		}()
 		if err != nil {
 			message := fmt.Sprintf("Error trying to quit: %v", err)
 			p.Log(message)
 			http.Error(w, message, http.StatusInternalServerError)
 			return
 		}
-		me.Signal(syscall.SIGTERM)
 		fmt.Fprintln(w, "Playpen Daemon quitting...")
 	})
 
@@ -67,7 +72,7 @@ func daemon(p *supervisor.Process) error {
 	server := &http.Server{
 		Handler: logging.LoggingMiddleware(mux),
 	}
-	p.Go(func(p *supervisor.Process) error {
+	_ = p.Go(func(p *supervisor.Process) error {
 		err := server.Serve(unixListener)
 		if err != http.ErrServerClosed {
 			return err
@@ -89,7 +94,10 @@ func monitorResources(p *supervisor.Process, resources []Resource) error {
 	defer ticker.Stop()
 	for {
 		for _, resource := range resources {
-			resource.Monitor(p)
+			err := resource.Monitor(p)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Wait a few seconds between loops

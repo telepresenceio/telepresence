@@ -17,14 +17,18 @@ func Notify(p *supervisor.Process, title string, message ...string) {
 			AppName:     "Playpen Daemon",
 		})
 	}
+	var err error
 	switch {
 	case len(message) == 0:
 		p.Logf("NOTIFY: %s", title)
-		notifyConfig.Push(title, "", "", notificator.UR_NORMAL)
+		err = notifyConfig.Push(title, "", "", notificator.UR_NORMAL)
 	case len(message) == 1:
 		p.Logf("NOTIFY: %s: %s", title, message)
-		notifyConfig.Push(title, message[0], "", notificator.UR_NORMAL)
+		err = notifyConfig.Push(title, message[0], "", notificator.UR_NORMAL)
 	default:
 		panic(fmt.Sprintf("NOTIFY message too long: %d", len(message)))
+	}
+	if err != nil {
+		p.Logf("ERROR while notifying: %v", err)
 	}
 }

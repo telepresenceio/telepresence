@@ -25,13 +25,12 @@ func GetClient() *http.Client {
 	}
 }
 
-var failedToConnect = fmt.Sprintf(`
-Failed to connect to the server. Is it still running? Take a look in %s for more information. You can start the server using "sudo playpen start-server" if it is not running.
-`, logfile)
+var failedToConnect = "Failed to connect to the server. Is it still running? Take a look in " + logfile +
+	" for more information. You can start the server using \"sudo playpen start-server\" if it is not running."
 
-var apiMismatch = fmt.Sprintf(`
-Failed to communicate with the server. This is usually due to an API version mismatch. Try "playpen version" to see the client and server versions. If that's not the problem, take a look in %s for more information.
-`, logfile)
+var apiMismatch = "Failed to communicate with the server. This is usually due to an API version mismatch. " +
+	"Try \"playpen version\" to see the client and server versions. If that's not the problem, take a look in " +
+	logfile + " for more information."
 
 func doClientRequest(command string, params interface{}) (*jsonrpc.RPCResponse, error) {
 	url := fmt.Sprintf("http://unix/api/v%d", apiVersion)
