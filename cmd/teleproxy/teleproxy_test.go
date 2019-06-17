@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/datawire/teleproxy/pkg/dtest"
+	"github.com/datawire/teleproxy/pkg/dtest/testprocess"
 )
 
 const ClusterFile = "../../build-aux/cluster.knaut"
 
 func TestMain(m *testing.M) {
-	dtest.Subprocess.Enable()
+	testprocess.Dispatch()
 	dtest.WithMachineLock(func() {
 		dtest.Manifests(ClusterFile, "../../k8s")
 		os.Exit(m.Run())
@@ -85,7 +86,7 @@ func teleproxyCluster() {
 	main()
 }
 
-var smoke = dtest.Subprocess.MakeSudo(teleproxyCluster)
+var smoke = testprocess.MakeSudo(teleproxyCluster)
 
 func TestSmoke(t *testing.T) {
 	withInterrupt(t, smoke, func() {
