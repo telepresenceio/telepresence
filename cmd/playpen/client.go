@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 	"github.com/ybbus/jsonrpc"
 )
 
@@ -80,13 +81,13 @@ func doStatus() error {
 	return nil
 }
 
-func doConnect() error {
+func doConnect(_ *cobra.Command, args []string) error {
 	// Collect information
 	rai, err := GetRunAsInfo()
 	if err != nil {
 		return err
 	}
-	callArgs := ConnectArgs{RAI: rai}
+	callArgs := ConnectArgs{RAI: rai, KArgs: args}
 
 	// Perform RPC
 	response, err := doClientRequest("Connect", callArgs)

@@ -23,7 +23,10 @@ func (d *DaemonService) Status(r *http.Request, args *EmptyArgs, reply *StringRe
 
 // Connect the daemon to a cluster
 func (d *DaemonService) Connect(r *http.Request, args *ConnectArgs, reply *StringReply) error {
-	cmd := args.RAI.Command(d.p, "kubectl", "get", "po")
+	cmdArgs := make([]string, 0, 3+len(args.KArgs))
+	cmdArgs = append(cmdArgs, "kubectl", "get", "po")
+	cmdArgs = append(cmdArgs, args.KArgs...)
+	cmd := args.RAI.Command(d.p, cmdArgs...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		_, ok := err.(*exec.ExitError)

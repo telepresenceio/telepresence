@@ -64,10 +64,9 @@ func main() {
 		RunE:  adaptNoArgs(doStatus),
 	})
 	rootCmd.AddCommand(&cobra.Command{
-		Use:   "connect",
+		Use:   "connect [-- additional kubectl arguments...]",
 		Short: "connect to a cluster",
-		Args:  cobra.ExactArgs(0),
-		RunE:  adaptNoArgs(doConnect),
+		RunE:  doConnect,
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "disconnect",
