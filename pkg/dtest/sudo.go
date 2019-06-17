@@ -6,7 +6,11 @@ import (
 	"os/exec"
 )
 
+// Sudo is intended for use in a TestMain. It will relaunch the test
+// executable via sudo if it isn't already running with an effective
+// userid of root.
 func Sudo() {
+	/* #nosec */
 	if os.Geteuid() != 0 {
 		cmd := exec.Command("sudo", append([]string{"-E"}, os.Args...)...)
 		cmd.Stdout = os.Stdout

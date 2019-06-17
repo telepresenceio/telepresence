@@ -12,12 +12,12 @@ import (
 	"github.com/datawire/teleproxy/pkg/dtest"
 )
 
-const CLUSTER_FILE = "../../build-aux/cluster.knaut"
+const ClusterFile = "../../build-aux/cluster.knaut"
 
 func TestMain(m *testing.M) {
 	dtest.Subprocess.Enable()
 	dtest.WithGlobalLock(func() {
-		dtest.Manifests(CLUSTER_FILE, "../../k8s")
+		dtest.Manifests(ClusterFile, "../../k8s")
 		os.Exit(m.Run())
 	})
 }
@@ -39,7 +39,10 @@ func withInterrupt(t *testing.T, cmd *exec.Cmd, body func()) {
 	}()
 
 	defer func() {
-		cmd.Process.Signal(os.Interrupt)
+		err := cmd.Process.Signal(os.Interrupt)
+		if err != nil {
+			t.Error(err)
+		}
 		<-exited
 	}()
 
@@ -49,6 +52,7 @@ func withInterrupt(t *testing.T, cmd *exec.Cmd, body func()) {
 // use this get to avoid artifacts from idle connections
 func get(url string) (*http.Response, error) {
 	http.DefaultClient.CloseIdleConnections()
+	/* #nosec */
 	return http.Get(url)
 }
 
@@ -76,12 +80,12 @@ func poll(t *testing.T, url string) bool {
 	}
 }
 
-func teleproxy_cluster() {
-	os.Args = []string{"teleproxy", fmt.Sprintf("-kubeconfig=%s", CLUSTER_FILE)}
+func teleproxyCluster() {
+	os.Args = []string{"teleproxy", fmt.Sprintf("-kubeconfig=%s", ClusterFile)}
 	main()
 }
 
-var smoke = dtest.Subprocess.MakeSudo(teleproxy_cluster)
+var smoke = dtest.Subprocess.MakeSudo(teleproxyCluster)
 
 func TestSmoke(t *testing.T) {
 	withInterrupt(t, smoke, func() {

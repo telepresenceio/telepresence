@@ -19,6 +19,7 @@ type sub struct {
 	functions map[string]func()
 }
 
+/* #nosec */
 func (s *sub) _make(sudo bool, f func()) *exec.Cmd {
 	name := getFunctionName(f)
 	s.functions[name] = f
@@ -67,10 +68,10 @@ func (s *sub) Enable() {
 	}
 }
 
-// The Subprocess struct can be used to launch multiple subprocesses
-// as part of a go test. If you want to throw up in your mouth a
-// little, then read the implementation. Don't worry, this is
-// apparently a "blessed" hack for doing this sort of thing.
+// Subprocess can be used to launch multiple subprocesses as part of a
+// go test. If you want to throw up in your mouth a little, then read
+// the implementation. Don't worry, this is apparently a "blessed"
+// hack for doing this sort of thing.
 //
 // You always want to call Subprocess.Enable() at the beginning of
 // your TestMain function since confusing things will happen if you

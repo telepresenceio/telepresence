@@ -12,4 +12,5 @@ linters-settings:
   maligned:
     suggest-new: true
 issues:
+  exclude-use-default: false
   new-from-rev: 61cc8815bf172110171836581439d1822c161b42

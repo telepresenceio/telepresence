@@ -62,6 +62,7 @@ func NewKubeInfo(configfile, context, namespace string) *KubeInfo {
 	return &res
 }
 
+// Context returns the context name of the KubeInfo.
 func (info *KubeInfo) Context() (string, error) {
 	// Extract context
 	resultContext := info.context
@@ -75,6 +76,7 @@ func (info *KubeInfo) Context() (string, error) {
 	return resultContext, nil
 }
 
+// Namespace returns the namespace for a KubeInfo.
 func (info *KubeInfo) Namespace() (string, error) {
 	// Extract namespace
 	resultNamespace, _, err := info.clientConfig.Namespace()
@@ -115,6 +117,7 @@ func (info *KubeInfo) GetKubectl(args string) (string, error) {
 	return strings.Join(kargs, " "), nil
 }
 
+// GetKubectlArray does what GetKubectl does but returns the result as a []string.
 func (info *KubeInfo) GetKubectlArray(args ...string) ([]string, error) {
 	res := []string{"kubectl"}
 	if len(info.Kubeconfig) != 0 {

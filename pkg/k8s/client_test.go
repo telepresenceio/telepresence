@@ -8,10 +8,10 @@ import (
 	"github.com/datawire/teleproxy/pkg/k8s"
 )
 
-const CLUSTER_FILE = "../../build-aux/cluster.knaut"
+const ClusterFile = "../../build-aux/cluster.knaut"
 
 func TestMain(m *testing.M) {
-	dtest.Manifests(CLUSTER_FILE, "00-custom-crd.yaml", "custom.yaml")
+	dtest.Manifests(ClusterFile, "00-custom-crd.yaml", "custom.yaml")
 	os.Exit(m.Run())
 }
 

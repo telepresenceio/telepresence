@@ -14,6 +14,7 @@ type Waiter struct {
 	kinds   map[string]map[string]bool
 }
 
+// NewWaiter constructs a Waiter object based on the suppliec Watcher.
 func NewWaiter(watcher *Watcher) (w *Waiter, err error) {
 	if watcher == nil {
 		cli, err := NewClient(nil)

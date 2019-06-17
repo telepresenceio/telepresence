@@ -15,11 +15,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Kubeapply applies the supplied manifests to the kubernetes cluster
+// indicated via the kubeinfo argument. If kubeinfo is nil, it will
+// look in the standard default places for cluster configuration.
 func Kubeapply(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug bool, files ...string) error {
 	if kubeinfo == nil {
 		kubeinfo = k8s.NewKubeInfo("", "", "")
 	}
-	p := NewPhaser()
+	p := newPhaser()
 
 	for _, file := range files {
 		err := p.Add(file)
@@ -38,13 +41,13 @@ func Kubeapply(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug bool, files 
 	return nil
 }
 
-type Phaser struct {
+type phaser struct {
 	prefixes map[string][]string
 	last     []string
 }
 
-func NewPhaser() *Phaser {
-	return &Phaser{
+func newPhaser() *phaser {
+	return &phaser{
 		prefixes: make(map[string][]string),
 	}
 }
@@ -60,7 +63,7 @@ func isYaml(name string) bool {
 	return false
 }
 
-func (p *Phaser) Add(root string) error {
+func (p *phaser) Add(root string) error {
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -75,7 +78,7 @@ func (p *Phaser) Add(root string) error {
 	return err
 }
 
-func (p *Phaser) AddFile(path string) {
+func (p *phaser) AddFile(path string) {
 	base := filepath.Base(path)
 	var pfx string
 	if len(base) >= 3 {
@@ -88,7 +91,7 @@ func (p *Phaser) AddFile(path string) {
 	}
 }
 
-func (p *Phaser) phases() (result [][]string) {
+func (p *phaser) phases() (result [][]string) {
 	var keys []string
 	for k := range p.prefixes {
 		keys = append(keys, k)
@@ -163,6 +166,7 @@ func phase(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug bool, names []st
 }
 
 func expand(names []string, data interface{}) ([]string, error) {
+	_ = data
 	fmt.Printf("expanding %s\n", strings.Join(names, " "))
 	var result []string
 	for _, n := range names {
@@ -190,6 +194,7 @@ func apply(info *k8s.KubeInfo, names []string) error {
 		return err
 	}
 	fmt.Printf("kubectl %s\n", strings.Join(kargs, " "))
+	/* #nosec */
 	cmd := exec.Command("kubectl", kargs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

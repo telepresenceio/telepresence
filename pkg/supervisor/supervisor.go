@@ -108,6 +108,15 @@ func (w *Worker) reset() {
 	w.lastBlockedWarning = time.Time{}
 }
 
+// Restart is used to cause a finished Worker to restart. It can only
+// be called on Workers that are done. The only way to be sure a
+// worker is done is to call Wait() on it, e.g.:
+//
+//     ...
+//     worker.Shutdown()
+//     worker.Wait()
+//     worker.Restart()
+//     ...
 func (w *Worker) Restart() {
 	s := w.supervisor
 	s.change(func() {

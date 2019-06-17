@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+// WithGlobalLock executes the supplied body with a guarantee that it
+// is the only code running (via WithGlobalLock) on the machine.
 func WithGlobalLock(body func()) {
 	// any fixed free port will work
 	port := 1025
@@ -18,7 +20,10 @@ func WithGlobalLock(body func()) {
 		}
 
 		defer func() {
-			ln.Close()
+			err := ln.Close()
+			if err != nil {
+				fmt.Println(err)
+			}
 		}()
 
 		body()

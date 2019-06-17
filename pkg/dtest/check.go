@@ -5,9 +5,9 @@ import (
 	"os"
 )
 
-// The check function logs any non-nil error arguments and exits with
-// error code 1 unless all arguments are nil. If all arguments are
-// nil, then it is a noop.
+// Check will log any non-nil error arguments and exit with error code
+// 1 unless all arguments are nil. If all arguments are nil, then it
+// is a noop.
 func Check(errors ...error) {
 	exit := false
 	for _, err := range errors {
