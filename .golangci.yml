@@ -2,18 +2,14 @@ linters:
   enable-all: true
   disable:
     - dupl # phil: raises false positives for non-duplicate code
-    - errcheck
     - gochecknoglobals
     - gochecknoinits
-    - golint
-    - gosec
     - interfacer # author says it's deprecated, gives very subjective advice
-    - lll
     - prealloc
-    - scopelint
-    - unparam
 linters-settings:
   goconst:
     min-len: 5
   maligned:
     suggest-new: true
+issues:
+  new-from-rev: 61cc8815bf172110171836581439d1822c161b42
