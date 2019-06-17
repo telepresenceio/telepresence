@@ -94,9 +94,15 @@ func monitorResources(p *supervisor.Process, resources []Resource) error {
 	defer ticker.Stop()
 	for {
 		for _, resource := range resources {
+			name := resource.Name()
+			oldStatus := resource.IsOkay()
 			err := resource.Monitor(p)
 			if err != nil {
 				return err
+			}
+			newStatus := resource.IsOkay()
+			if oldStatus != newStatus {
+				Notify(p, fmt.Sprintf("%s: %t -> %t", name, oldStatus, newStatus))
 			}
 		}
 
@@ -150,7 +156,7 @@ func runAsDaemon() error {
 		"netOverride",
 		[]string{teleproxy, "-mode", "intercept"},
 	)
-	netOverride.SetCheckFunction(func(p *supervisor.Process) error {
+	netOverride.SetCheck(func(p *supervisor.Process) error {
 		// Check by doing the equivalent of curl http://teleproxy/api/tables/
 		// It's okay to create a new client each time because we don't want to
 		// reuse connections.
