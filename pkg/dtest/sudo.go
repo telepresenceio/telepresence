@@ -17,7 +17,7 @@ func Sudo() {
 		cmd.Stderr = os.Stderr
 		err := cmd.Run()
 		if err != nil {
-			fmt.Print(err)
+			fmt.Printf("error re-invoking tests with sudo: %v\n", err)
 		}
 		os.Exit(cmd.ProcessState.ExitCode())
 	}

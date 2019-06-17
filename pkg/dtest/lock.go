@@ -2,32 +2,40 @@ package dtest
 
 import (
 	"fmt"
-	"net"
-	"time"
+	"os"
+	"syscall"
 )
+
+const filename = "/tmp/datawire-machine-scoped.lock"
+
+func exit(err error) {
+	fmt.Fprintf(os.Stderr, "error trying to acquire lock on %s: %v\n", filename, err)
+	os.Exit(1)
+}
 
 // WithGlobalLock executes the supplied body with a guarantee that it
 // is the only code running (via WithGlobalLock) on the machine.
 func WithGlobalLock(body func()) {
-	// any fixed free port will work
-	port := 1025
-	for {
-		ln, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
-		if err != nil {
-			fmt.Println(err)
-			time.Sleep(1 * time.Second)
-			continue
-		}
+	var file *os.File
+	var err error
+	func() {
+		old := syscall.Umask(0)
+		defer syscall.Umask(old)
+		file, err = os.OpenFile(filename, os.O_RDONLY|os.O_CREATE, 0666)
+	}()
 
-		defer func() {
-			err := ln.Close()
-			if err != nil {
-				fmt.Println(err)
-			}
-		}()
-
-		body()
-
-		return
+	if err != nil {
+		exit(err)
 	}
+
+	err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX)
+	if err != nil {
+		err = &os.PathError{Op: "flock", Path: file.Name(), Err: err}
+		exit(err)
+	}
+	defer func() {
+		file.Close()
+	}()
+
+	body()
 }
