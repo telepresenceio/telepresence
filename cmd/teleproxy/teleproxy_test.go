@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
@@ -40,24 +39,7 @@ func withInterrupt(t *testing.T, cmd *exec.Cmd, body func()) {
 	}()
 
 	defer func() {
-		if strings.HasSuffix(cmd.Path, "/sudo") {
-			// not totally sure why the -b is necessary
-			// but I think it might be because sudo tries
-			// to be smart about only relaying signals
-			// some of the time
-			args := []string{"-b", "kill", "-INT", fmt.Sprintf("%d", cmd.Process.Pid)}
-			log.Printf("sudo %s", strings.Join(args, " "))
-			kill := exec.Command("sudo", args...)
-			kill.Stdout = os.Stdout
-			kill.Stderr = os.Stderr
-			err := kill.Run()
-			if err != nil {
-				log.Print(err)
-				t.Error(err)
-			}
-		} else {
-			cmd.Process.Signal(os.Interrupt)
-		}
+		cmd.Process.Signal(os.Interrupt)
 		<-exited
 	}()
 

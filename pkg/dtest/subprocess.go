@@ -24,10 +24,10 @@ func (s *sub) _make(sudo bool, f func()) *exec.Cmd {
 	s.functions[name] = f
 	var cmd *exec.Cmd
 	if sudo {
-		cmd = exec.Command("sudo", "-E", os.Args[0])
+		cmd = exec.Command(os.Args[0])
 		s.sudo = true
 	} else {
-		cmd = exec.Command(os.Args[0])
+		cmd = exec.Command("sudo", "-u", os.Getenv("SUDO_USER"), "-E", os.Args[0])
 	}
 	cmd.Env = append(os.Environ(), fmt.Sprintf("BE_SUBPROCESS=%s", name))
 	cmd.Stdout = os.Stdout
@@ -46,17 +46,9 @@ func (s *sub) MakeSudo(f func()) *exec.Cmd {
 func (s *sub) Enable() {
 	name := os.Getenv("BE_SUBPROCESS")
 	if name == "" {
-		if s.sudo {
-			sudo := exec.Command("sudo", "true")
-			sudo.Stdout = os.Stdout
-			sudo.Stderr = os.Stderr
-			err := sudo.Run()
-			if err != nil {
-				log.Print(err)
-				os.Exit(1)
-			}
+		if s.sudo && os.Geteuid() != 0 {
+			Sudo()
 		}
-		return
 	} else {
 		log.Printf("SUBPROCESS %s PID: %d", name, os.Getpid())
 
