@@ -93,3 +93,21 @@ func TestSmoke(t *testing.T) {
 		poll(t, "http://teleproxied-httpbin/status/200")
 	})
 }
+
+var orig = testprocess.MakeSudo(teleproxyCluster)
+var dup = testprocess.MakeSudo(teleproxyCluster)
+
+func TestAlreadyRunning(t *testing.T) {
+	withInterrupt(t, orig, func() {
+		if poll(t, "http://teleproxied-httpbin/status/200") {
+			err := dup.Run()
+			t.Logf("ERROR: %v", err)
+			resp, err := get("http://teleproxied-httpbin/status/200")
+			if err != nil {
+				t.Errorf("duplicate teleproxy killed the first one: %v", err)
+			} else if resp.StatusCode != 200 {
+				t.Errorf("duplicate teleproxy killed the first one: %v", resp.StatusCode)
+			}
+		}
+	})
+}
