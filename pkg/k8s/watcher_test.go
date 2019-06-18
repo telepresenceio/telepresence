@@ -1,9 +1,10 @@
-package k8s
+package k8s_test
 
 import (
 	"testing"
 	"time"
 
+	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/stretchr/testify/require"
 )
 
@@ -11,13 +12,13 @@ const (
 	delay = 10 * time.Second
 )
 
-func (w *Watcher) fetch(resource, qname string) (result Resource) {
+func fetch(w *k8s.Watcher, resource, qname string) (result k8s.Resource) {
 	go func() {
 		time.Sleep(delay)
 		w.Stop()
 	}()
 
-	err := w.Watch(resource, func(w *Watcher) {
+	err := w.Watch(resource, func(w *k8s.Watcher) {
 		for _, r := range w.List(resource) {
 			if r.QName() == qname {
 				result = r
@@ -34,10 +35,14 @@ func (w *Watcher) fetch(resource, qname string) (result Resource) {
 	return result
 }
 
-func TestUpdateStatus(t *testing.T) {
-	w := NewClient(nil).Watcher()
+func info() *k8s.KubeInfo {
+	return k8s.NewKubeInfo(ClusterFile, "", "")
+}
 
-	svc := w.fetch("services", "kubernetes.default")
+func TestUpdateStatus(t *testing.T) {
+	w := k8s.MustNewWatcher(info())
+
+	svc := fetch(w, "services", "kubernetes.default")
 	svc.Status()["loadBalancer"].(map[string]interface{})["ingress"] = []map[string]interface{}{{"hostname": "foo", "ip": "1.2.3.4"}}
 	result, err := w.UpdateStatus(svc)
 	if err != nil {
@@ -47,7 +52,7 @@ func TestUpdateStatus(t *testing.T) {
 		t.Logf("updated %s status, result: %v\n", svc.QName(), result.ResourceVersion())
 	}
 
-	svc = NewClient(nil).Watcher().fetch("services", "kubernetes.default")
+	svc = fetch(k8s.MustNewWatcher(info()), "services", "kubernetes.default")
 	ingresses := svc.Status()["loadBalancer"].(map[string]interface{})["ingress"].([]interface{})
 	ingress := ingresses[0].(map[string]interface{})
 	if ingress["hostname"] != "foo" {
@@ -60,11 +65,11 @@ func TestUpdateStatus(t *testing.T) {
 }
 
 func TestWatchCustom(t *testing.T) {
-	w := NewClient(nil).Watcher()
+	w := k8s.MustNewWatcher(info())
 
 	// XXX: we can only watch custom resources... k8s doesn't
 	// support status for CRDs until 1.12
-	xmas := w.fetch("customs", "xmas.default")
+	xmas := fetch(w, "customs", "xmas.default")
 	if xmas == nil {
 		t.Error("couldn't find xmas")
 	} else {
@@ -76,9 +81,10 @@ func TestWatchCustom(t *testing.T) {
 }
 
 func TestSelectiveWatch(t *testing.T) {
-	w := NewClient(nil).Watcher()
+	w := k8s.MustNewWatcher(info())
+
 	services := []string{}
-	err := w.SelectiveWatch("", "services", "metadata.name=kubernetes", "", func(w *Watcher) {
+	err := w.SelectiveWatch("", "services", "metadata.name=kubernetes", "", func(w *k8s.Watcher) {
 		for _, r := range w.List("services") {
 			services = append(services, r.QName())
 		}

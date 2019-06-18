@@ -658,3 +658,31 @@ func TestDoPanic(t *testing.T) {
 		t.Errorf("did not recover from panic")
 	}
 }
+
+func TestRestart(t *testing.T) {
+	MustRun("sysiphus", func(p *Process) error {
+		pipe := make(chan bool)
+		w := &Worker{
+			Name: "bob",
+			Work: func(p *Process) error {
+				p.Ready()
+				pipe <- true
+				<-p.Shutdown()
+				return nil
+			},
+		}
+
+		p.Supervisor().Supervise(w)
+
+		<-pipe
+		w.Shutdown()
+		w.Wait()
+
+		w.Restart()
+		<-pipe
+		w.Shutdown()
+		w.Wait()
+
+		return nil
+	})
+}

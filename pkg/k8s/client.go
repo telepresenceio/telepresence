@@ -26,14 +26,14 @@ import (
 // KubeInfo holds the data required to talk to a cluster
 type KubeInfo struct {
 	Kubeconfig   string
-	Context      string
-	Namespace    string
+	context      string
+	namespace    string
 	clientConfig clientcmd.ClientConfig
 }
 
 // NewKubeInfo returns a useable KubeInfo, handling optional
 // kubeconfig, context, and namespace.
-func NewKubeInfo(configfile, context, namespace string) (*KubeInfo, error) {
+func NewKubeInfo(configfile, context, namespace string) *KubeInfo {
 	// Find the correct kube config file
 	configfilesearch := clientcmd.NewDefaultClientConfigLoadingRules()
 	if len(configfile) != 0 {
@@ -52,29 +52,35 @@ func NewKubeInfo(configfile, context, namespace string) (*KubeInfo, error) {
 	// Construct the config
 	kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(configfilesearch, overrides)
 
-	// Extract resulting context and namespace
-	resultContext := context
-	if len(context) == 0 {
-		apiconfig, err := kubeconfig.RawConfig()
-		if err != nil {
-			return nil, err
-		}
-		resultContext = apiconfig.CurrentContext
-	}
-
-	resultNamespace, _, err := kubeconfig.Namespace()
-	if err != nil {
-		return nil, err
-	}
-
 	res := KubeInfo{
 		configfile,
-		resultContext,
-		resultNamespace,
+		context,
+		namespace,
 		kubeconfig,
 	}
 
-	return &res, nil
+	return &res
+}
+
+// Context returns the context name of the KubeInfo.
+func (info *KubeInfo) Context() (string, error) {
+	// Extract context
+	resultContext := info.context
+	if len(info.context) == 0 {
+		apiconfig, err := info.clientConfig.RawConfig()
+		if err != nil {
+			return "", err
+		}
+		resultContext = apiconfig.CurrentContext
+	}
+	return resultContext, nil
+}
+
+// Namespace returns the namespace for a KubeInfo.
+func (info *KubeInfo) Namespace() (string, error) {
+	// Extract namespace
+	resultNamespace, _, err := info.clientConfig.Namespace()
+	return resultNamespace, err
 }
 
 // GetRestConfig returns a REST config
@@ -99,22 +105,35 @@ func (info *KubeInfo) GetRestConfig() (*rest.Config, error) {
 
 // GetKubectl returns the arguments for a runnable kubectl command that talks to
 // the same cluster as the associated ClientConfig.
-func (info *KubeInfo) GetKubectl(args string) string {
+func (info *KubeInfo) GetKubectl(args string) (string, error) {
 	parts, err := shlex.Split(args)
 	if err != nil {
 		panic(err)
 	}
-	return strings.Join(info.GetKubectlArray(parts...), " ")
+	kargs, err := info.GetKubectlArray(parts...)
+	if err != nil {
+		return "", err
+	}
+	return strings.Join(kargs, " "), nil
 }
 
-func (info *KubeInfo) GetKubectlArray(args ...string) []string {
+// GetKubectlArray does what GetKubectl does but returns the result as a []string.
+func (info *KubeInfo) GetKubectlArray(args ...string) ([]string, error) {
 	res := []string{"kubectl"}
 	if len(info.Kubeconfig) != 0 {
 		res = append(res, "--kubeconfig", info.Kubeconfig)
 	}
-	res = append(res, "--context", info.Context, "--namespace", info.Namespace)
+	context, err := info.Context()
+	if err != nil {
+		return nil, err
+	}
+	namespace, err := info.Namespace()
+	if err != nil {
+		return nil, err
+	}
+	res = append(res, "--context", context, "--namespace", namespace)
 	res = append(res, args...)
-	return res[1:] // Drop leading "kubectl" because reasons...
+	return res[1:], nil // Drop leading "kubectl" because reasons...
 }
 
 // Client is the top-level handle to the Kubernetes cluster.
@@ -125,33 +144,29 @@ type Client struct {
 
 // NewClient constructs a k8s.Client, optionally using a previously-constructed
 // KubeInfo.
-func NewClient(info *KubeInfo) *Client {
+func NewClient(info *KubeInfo) (*Client, error) {
 	if info == nil {
-		var err error
-		info, err = NewKubeInfo("", "", "") // Empty file/ctx/ns for defaults
-		if err != nil {
-			panic(err)
-		}
+		info = NewKubeInfo("", "", "") // Empty file/ctx/ns for defaults
 	}
 	config, err := info.GetRestConfig()
 	if err != nil {
-		panic(fmt.Sprintf("Failed to get REST config: %v", err))
+		return nil, errors.Errorf("Failed to get REST config: %v", err)
 	}
 
 	disco, err := discovery.NewDiscoveryClientForConfig(config)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	resources, err := disco.ServerResources()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	return &Client{
 		config:    config,
 		resources: resources,
-	}
+	}, nil
 }
 
 // ResourceType describes a Kubernetes resource type in a particular cluster.

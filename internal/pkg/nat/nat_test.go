@@ -4,12 +4,21 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/datawire/teleproxy/pkg/dtest"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 )
+
+func TestMain(m *testing.M) {
+	dtest.Sudo()
+	dtest.WithMachineLock(func() {
+		os.Exit(m.Run())
+	})
+}
 
 func udp_listener(p *supervisor.Process, port int) error {
 	bindaddr := fmt.Sprintf(":%d", port)

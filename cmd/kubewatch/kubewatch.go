@@ -251,7 +251,7 @@ func kubewatch(cmd *cobra.Command, args []string) {
 	s := Syncer{
 		Mux:         mux,
 		Changed:     cond,
-		Watcher:     k8s.NewClient(nil).Watcher(),
+		Watcher:     k8s.MustNewWatcher(nil),
 		SyncCommand: SYNC_COMMAND,
 		Kinds:       args,
 		Limiter:     limiter.NewInterval(MIN_INTERVAL),
