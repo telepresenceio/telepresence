@@ -38,7 +38,15 @@ func GetRunAsInfo() (*RunAsInfo, error) {
 // Command returns a supervisor.Cmd that is configured to run a subprocess as
 // the user in this context.
 func (rai *RunAsInfo) Command(p *supervisor.Process, args ...string) *supervisor.Cmd {
-	cmd := p.Command("su", "-m", rai.Name, "-c", shellquote.Join(args...))
+	if rai == nil {
+		rai = &RunAsInfo{}
+	}
+	var cmd *supervisor.Cmd
+	if rai.Name == "root" || len(rai.Name) == 0 {
+		cmd = p.Command(args[0], args[1:]...)
+	} else {
+		cmd = p.Command("su", "-m", rai.Name, "-c", shellquote.Join(args...))
+	}
 	cmd.Env = rai.Env
 	cmd.Dir = rai.Cwd
 	return cmd
