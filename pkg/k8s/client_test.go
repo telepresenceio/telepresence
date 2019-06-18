@@ -11,7 +11,7 @@ import (
 const ClusterFile = "../../build-aux/cluster.knaut"
 
 func TestMain(m *testing.M) {
-	dtest.Manifests(ClusterFile, "00-custom-crd.yaml", "custom.yaml")
+	dtest.K8sApply(ClusterFile, "00-custom-crd.yaml", "custom.yaml")
 	os.Exit(m.Run())
 }
 

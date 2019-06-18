@@ -18,7 +18,7 @@ const ClusterFile = "../../build-aux/cluster.knaut"
 func TestMain(m *testing.M) {
 	testprocess.Dispatch()
 	dtest.WithMachineLock(func() {
-		dtest.Manifests(ClusterFile, "../../k8s")
+		dtest.K8sApply(ClusterFile, "../../k8s")
 		os.Exit(m.Run())
 	})
 }

@@ -17,9 +17,9 @@ kubeconfig does not exist: %s
 
 `
 
-// Manifests applies the supplied manifests to the cluster indicated
-// by the supplied kubeconfig.
-func Manifests(kubeconfig string, files ...string) {
+// K8sApply applies the supplied manifests to the cluster indicated by
+// the supplied kubeconfig.
+func K8sApply(kubeconfig string, files ...string) {
 	override := os.Getenv("TELEPROXY_DEV_KUBECONFIG")
 	if override != "" {
 		kubeconfig = override
