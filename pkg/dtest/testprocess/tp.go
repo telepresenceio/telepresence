@@ -1,6 +1,7 @@
 package testprocess
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -27,12 +28,12 @@ func (s *sub) _make(sudo bool, f func()) *exec.Cmd {
 	s.functions[name] = f
 	var cmd *exec.Cmd
 	if sudo {
-		cmd = exec.Command(os.Args[0])
+		cmd = exec.Command(os.Args[0], "-testprocess.name", name)
 		s.sudo = true
 	} else {
-		cmd = exec.Command("sudo", "-u", os.Getenv("SUDO_USER"), "-E", os.Args[0])
+		cmd = exec.Command("sudo", "-u", os.Getenv("SUDO_USER"), "-E", os.Args[0], "-testprocess.name", name)
 	}
-	cmd.Env = append(os.Environ(), fmt.Sprintf("BE_TESTPROCESS=%s", name))
+	cmd.Env = append(os.Environ(), fmt.Sprintf("TESTPROCESS_NAME=%s", name))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd
@@ -68,25 +69,29 @@ var singleton = &sub{false, make(map[string]func())}
 //         ...
 //     }
 func Dispatch() {
-	name := os.Getenv("BE_TESTPROCESS")
-	if name == "" {
+	// if this ever causes problems, we can switch back to getting
+	// the name from the TESTPROCESS_NAME environment variable
+	name := flag.String("testprocess.name", "", "")
+	flag.Parse()
+
+	if *name == "" {
 		if singleton.sudo && os.Geteuid() != 0 {
 			dtest.Sudo()
 		}
 	} else {
-		log.Printf("TESTPROCESS %s PID: %d", name, os.Getpid())
+		log.Printf("TESTPROCESS %s PID: %d", *name, os.Getpid())
 
 		defer func() {
 			if r := recover(); r != nil {
 				stack := string(debug.Stack())
-				log.Printf("TESTPROCESS %s PANICKED: %v\n%s", name, r, stack)
+				log.Printf("TESTPROCESS %s PANICKED: %v\n%s", *name, r, stack)
 				os.Exit(1)
 			}
 		}()
 
-		singleton.functions[name]()
+		singleton.functions[*name]()
 
-		log.Printf("TESTPROCESS %s NORMAL EXIT", name)
+		log.Printf("TESTPROCESS %s NORMAL EXIT", *name)
 		os.Exit(0)
 	}
 }
