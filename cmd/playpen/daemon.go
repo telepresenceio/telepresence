@@ -155,6 +155,7 @@ func runAsDaemon() error {
 	netOverride := NewCommandResource(
 		"netOverride",
 		[]string{teleproxy, "-mode", "intercept"},
+		&RunAsInfo{},
 	)
 	netOverride.SetCheck(func(p *supervisor.Process) error {
 		// Check by doing the equivalent of curl http://teleproxy/api/tables/

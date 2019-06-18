@@ -24,6 +24,7 @@ type Resource interface {
 type CommandResource struct {
 	name    string
 	args    []string
+	rai     *RunAsInfo
 	check   func(*supervisor.Process) error
 	lock    sync.Mutex
 	enabled bool            // (Enable/Disable) disabled by default
@@ -34,10 +35,11 @@ type CommandResource struct {
 
 // NewCommandResource returns a new Command Resource with the specified name and
 // command arguments
-func NewCommandResource(name string, args []string) *CommandResource {
+func NewCommandResource(name string, args []string, rai *RunAsInfo) *CommandResource {
 	return &CommandResource{
 		name: name,
 		args: args,
+		rai:  rai,
 	}
 }
 
@@ -156,7 +158,7 @@ func (cr *CommandResource) runLoop(p *supervisor.Process) error {
 		return nil // Indicate success so Supervisor does not retry
 	}
 
-	cr.cmd = p.Command(cr.args[0], cr.args[1:]...)
+	cr.cmd = cr.rai.Command(p, cr.args...)
 	err := cr.cmd.Start()
 	if err != nil {
 		return err
