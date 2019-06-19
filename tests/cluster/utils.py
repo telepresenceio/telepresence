@@ -246,7 +246,7 @@ def run_webserver(namespace=None):
     def cleanup():
         check_call(
             kubectl + [
-                "delete", "--ignore-not-found", "all",
+                "delete", "--ignore-not-found", "all", "--wait=false",
                 "--selector=telepresence=" + webserver_name
             ]
         )
@@ -316,4 +316,6 @@ def create_namespace(namespace_name, name):
 
 
 def cleanup_namespace(namespace_name):
-    check_call([KUBECTL, "delete", "namespace", namespace_name])
+    check_call([
+        KUBECTL, "delete", "namespace", namespace_name, "--wait=false"
+    ])

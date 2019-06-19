@@ -425,7 +425,7 @@ def create_service(deployment_ident, ports):
 def cleanup_service(deployment_ident):
     check_call([
         KUBECTL, "delete", "--namespace", deployment_ident.namespace,
-        "--ignore-not-found", "service", deployment_ident.name
+        "--ignore-not-found", "service", deployment_ident.name, "--wait=false"
     ])
 
 
@@ -463,6 +463,7 @@ def _cleanup_deployment(ident):
         "--ignore-not-found",
         "deployment",
         ident.name,
+        "--wait=false",
     ])
 
 
