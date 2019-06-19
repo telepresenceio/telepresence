@@ -62,6 +62,7 @@ def main():
 
     read_and_respond(stdin.buffer, output)
     print("Goodbye.")
+    exit(args.exit_code)
 
 
 class TaggedOutput(object):
@@ -88,6 +89,8 @@ def read_and_respond(commands, output):
         response = COMMANDS[command](*argv)
         output.write(dumps(response))
         print("Dumped response.", flush=True)
+        if command == "done":
+            break
 
 
 def probe_also_proxy(hostname):
@@ -170,6 +173,7 @@ COMMANDS = {
     "disconnect-telepresence": disconnect_telepresence,
     "gethostbyname": probe_gethostbyname,
     "gethostbyaddr": probe_gethostbyaddr,
+    "done": str,  # identity function
 }
 
 
@@ -242,6 +246,12 @@ def argument_parser():
         action="append",
         default=[],
         help="A value to return from the most recent HTTP server.",
+    )
+    parser.add_argument(
+        "--exit-code",
+        type=int,
+        default=94,
+        help="The desired exit code for this process.",
     )
     return parser
 
