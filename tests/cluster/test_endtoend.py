@@ -3,36 +3,17 @@ End-to-end tests which launch Telepresence and verify user-facing
 behaviors.
 """
 
-from pprint import (
-    pformat,
-)
-from time import (
-    time,
-)
-from json import (
-    loads,
-)
-from urllib.request import (
-    urlopen,
-)
-from ipaddress import (
-    IPv4Address,
-)
-from subprocess import (
-    check_output,
-)
+from ipaddress import IPv4Address
+from json import loads
+from pprint import pformat
+from subprocess import check_output
+from time import time
+from urllib.request import urlopen
 
 import pytest
 
-from .conftest import (
-    with_probe,
-    after_probe,
-)
-from .utils import (
-    KUBECTL,
-    DEPLOYMENT_TYPE,
-    query_from_cluster,
-)
+from .conftest import after_probe, with_probe
+from .utils import DEPLOYMENT_TYPE, KUBECTL, query_from_cluster
 
 
 @pytest.fixture(scope="session")
@@ -407,10 +388,7 @@ def probe_also_proxy(probe_result, hostname):
     return success, address
 
 
-def _get_swap_result(probe):
-    if probe.operation.name != "swap":
-        pytest.skip("Test only applies to --swap-deployment usage.")
-
+def _get_post_exit_result(probe):
     # Telepresence won't try to swap anything back until it believes its job
     # is done.  So make sure its job is done before we make any assertions
     # about whether things were swapped back.
@@ -483,13 +461,24 @@ def test_resolve_addresses_failure(probe):
 
 
 @after_probe
+def test_exit_code(probe):
+    """
+    The Telepresence session exited with the expected return code.
+    """
+    result = _get_post_exit_result(probe)
+    assert result.returncode == probe.desired_exit_code, result.returncode
+
+
+@after_probe
 def test_swapdeployment_restores_container_image(probe):
     """
     After a Telepresence session with ``--swap-deployment`` exits, the image
     specified by the original deployment has been restored to the Kubernetes
     Deployment resource.
     """
-    result = _get_swap_result(probe)
+    if probe.operation.name != "swap":
+        pytest.skip("Test only applies to --swap-deployment usage.")
+    result = _get_post_exit_result(probe)
     deployment = get_deployment(result.deployment_ident)
     images = {
         container["image"]
@@ -505,7 +494,9 @@ def test_swapdeployment_restores_container_command(probe):
     specified by the original deployment has been restored to the Kubernetes
     Deployment resource.
     """
-    result = _get_swap_result(probe)
+    if probe.operation.name != "swap":
+        pytest.skip("Test only applies to --swap-deployment usage.")
+    result = _get_post_exit_result(probe)
     deployment = get_deployment(result.deployment_ident)
     args = [
         container["args"]
@@ -520,7 +511,9 @@ def test_swapdeployment_restores_deployment_pods(probe):
     After a Telepresence session with ``--swap-deployment`` exits, pods with
     the image specified by the original have been restored.
     """
-    result = _get_swap_result(probe)
+    if probe.operation.name != "swap":
+        pytest.skip("Test only applies to --swap-deployment usage.")
+    result = _get_post_exit_result(probe)
     start = time()
     while time() < start + 60:
         pods = get_pods(result.deployment_ident)["items"]
@@ -553,7 +546,9 @@ def test_swapdeployment_restores_deployment_replicas(probe):
     configuration specified by the original deployment has been restored to
     the Kubernetes Deployment resource.
     """
-    result = _get_swap_result(probe)
+    if probe.operation.name != "swap":
+        pytest.skip("Test only applies to --swap-deployment usage.")
+    result = _get_post_exit_result(probe)
     deployment = get_deployment(result.deployment_ident)
     assert probe.operation.replicas == deployment["spec"]["replicas"]
 
@@ -571,7 +566,6 @@ def get_deployment(ident):
         ident.name,
         "-o",
         "json",
-        "--export",
     )
 
 
@@ -585,5 +579,4 @@ def get_pods(ident):
         "telepresence-test={}".format(ident.name),
         "-o",
         "json",
-        "--export",
     )

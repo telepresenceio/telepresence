@@ -7,7 +7,8 @@ from shutil import which
 from socket import AF_INET, SOCK_STREAM, getaddrinfo, gethostbyaddr
 from struct import unpack
 from subprocess import (
-    PIPE, STDOUT, CalledProcessError, Popen, check_call, check_output
+    PIPE, STDOUT, CalledProcessError, Popen, TimeoutExpired, check_call,
+    check_output
 )
 from sys import executable, stdout
 from time import sleep
@@ -425,7 +426,7 @@ def create_service(deployment_ident, ports):
 def cleanup_service(deployment_ident):
     check_call([
         KUBECTL, "delete", "--namespace", deployment_ident.namespace,
-        "--ignore-not-found", "service", deployment_ident.name
+        "--ignore-not-found", "service", deployment_ident.name, "--wait=false"
     ])
 
 
@@ -463,6 +464,7 @@ def _cleanup_deployment(ident):
         "--ignore-not-found",
         "deployment",
         ident.name,
+        "--wait=false",
     ])
 
 
@@ -511,6 +513,7 @@ def run_telepresence_probe(
     probe_paths,
     also_proxy,
     http_servers,
+    desired_exit_code,
 ):
     """
     :param request: The pytest mumble mumble whatever.
@@ -541,6 +544,8 @@ def run_telepresence_probe(
 
     :param list[HTTPServer] http_servers: Configuration for HTTP servers to
         pass to the Telepresence probe with `--http-...``.
+
+    :param int desired_exit_code: The probe's exit status.
     """
     probe_endtoend = (Path(__file__).parent / "probe_endtoend.py").as_posix()
 
@@ -607,6 +612,7 @@ def run_telepresence_probe(
             "--http-value",
             http.value,
         ])
+    probe_args.extend(["--exit-code", str(desired_exit_code)])
 
     telepresence_args = []
     for addr in also_proxy:
@@ -740,6 +746,7 @@ class ProbeResult(object):
         self.deployment_ident = deployment_ident
         self.webserver_name = webserver_name
         self.result = result
+        self.returncode = None
 
     def write(self, command):
         if "\n" in command:
@@ -927,12 +934,20 @@ class Probe(object):
                 self.HTTP_SERVER_DIFFERENT_PORT,
                 self.HTTP_SERVER_LOW_PORT,
             ]
+            self.desired_exit_code = len(str(self))
             self._result = "FAILED"
             self._result = run_telepresence_probe(
-                self._request, self.method, self.operation,
-                self.DESIRED_ENVIRONMENT, {self.CLIENT_ENV_VAR: "FOO"},
-                [self.loopback_url], self.QUESTIONABLE_COMMANDS,
-                self.INTERESTING_PATHS, also_proxy, http_servers
+                self._request,
+                self.method,
+                self.operation,
+                self.DESIRED_ENVIRONMENT,
+                {self.CLIENT_ENV_VAR: "FOO"},
+                [self.loopback_url],
+                self.QUESTIONABLE_COMMANDS,
+                self.INTERESTING_PATHS,
+                also_proxy,
+                http_servers,
+                self.desired_exit_code,
             )
             self._cleanup.append(self.ensure_dead)
             self._cleanup.append(self.cleanup_resources)
@@ -956,8 +971,15 @@ class Probe(object):
             raise Exception("Probe never launched")
         if self._result == "FAILED":
             raise Exception("Probe has failed")
-
-        _cleanup_process(self._result.telepresence)
+        if self._result.telepresence.returncode is None:
+            print("Telling probe {} to quit".format(self))
+            self._result.write("done")
+            self._result.read()  # Last output should be well-formed
+            try:
+                self._result.telepresence.wait(timeout=15)
+            except TimeoutExpired:
+                _cleanup_process(self._result.telepresence)
+        self._result.returncode = self._result.telepresence.returncode
 
     def cleanup_resources(self):
         """

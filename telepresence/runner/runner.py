@@ -25,7 +25,7 @@ from functools import partial
 from inspect import currentframe, getframeinfo
 from pathlib import Path
 from shutil import rmtree, which
-from subprocess import STDOUT, CalledProcessError, TimeoutExpired, Popen
+from subprocess import STDOUT, CalledProcessError, Popen, TimeoutExpired
 from tempfile import mkdtemp
 from threading import Thread
 from time import sleep, time
@@ -680,7 +680,7 @@ class Runner(object):
         self.write("Everything launched. Waiting to exit...")
         main_code = None
         span = self.span()
-        Thread(target=wait_for_process, args=(main_process, ))
+        Thread(target=wait_for_process, args=(main_process, )).start()
         while not self.quitting:
             sleep(0.1)
         span.end()

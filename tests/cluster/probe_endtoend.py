@@ -5,49 +5,19 @@ The report can be inspected by the test suite to verify Telepresence has
 created the execution context correctly.
 """
 
-from time import (
-    sleep,
-)
-from os import (
-    environ,
-)
-from sys import (
-    stdin,
-    stdout,
-)
-from struct import (
-    pack,
-)
-from os.path import (
-    join,
-)
-from json import (
-    dumps,
-    loads,
-)
-from argparse import (
-    ArgumentParser,
-)
-from urllib.request import (
-    Request,
-    urlopen,
-)
-from subprocess import (
-    CalledProcessError,
-    check_output,
-    run,
-)
-from http.server import (
-    HTTPServer,
-    BaseHTTPRequestHandler,
-)
-from threading import (
-    Thread,
-)
-from socket import (
-    gethostbyname,
-    gethostbyaddr,
-)
+from argparse import ArgumentParser
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from json import dumps, loads
+from os import environ
+from os.path import join
+from socket import gethostbyaddr, gethostbyname
+from struct import pack
+from subprocess import CalledProcessError, check_output, run
+from sys import stdin, stdout
+from threading import Thread
+from time import sleep
+from urllib.request import Request, urlopen
+
 # The probe's output is mixed together with Telepresence output and maybe more
 # output from things like socat or torsocks.  This makes it difficult to
 # extract information from the probe via stdout.  Unfortunately, options apart
@@ -92,6 +62,7 @@ def main():
 
     read_and_respond(stdin.buffer, output)
     print("Goodbye.")
+    exit(args.exit_code)
 
 
 class TaggedOutput(object):
@@ -118,6 +89,8 @@ def read_and_respond(commands, output):
         response = COMMANDS[command](*argv)
         output.write(dumps(response))
         print("Dumped response.", flush=True)
+        if command == "done":
+            break
 
 
 def probe_also_proxy(hostname):
@@ -200,6 +173,7 @@ COMMANDS = {
     "disconnect-telepresence": disconnect_telepresence,
     "gethostbyname": probe_gethostbyname,
     "gethostbyaddr": probe_gethostbyaddr,
+    "done": str,  # identity function
 }
 
 
@@ -245,28 +219,39 @@ def argument_parser():
     parser.add_argument(
         "--probe-url",
         action="append",
+        default=[],
         help="A URL to retrieve.",
     )
     parser.add_argument(
         "--probe-command",
         action="append",
+        default=[],
         help="A command to run.",
     )
     parser.add_argument(
         "--probe-path",
         action="append",
+        default=[],
         help="A path to read.",
     )
     parser.add_argument(
         "--http-port",
         type=int,
         action="append",
+        default=[],
         help="A port number on which to serve HTTP.",
     )
     parser.add_argument(
         "--http-value",
         action="append",
+        default=[],
         help="A value to return from the most recent HTTP server.",
+    )
+    parser.add_argument(
+        "--exit-code",
+        type=int,
+        default=94,
+        help="The desired exit code for this process.",
     )
     return parser
 
