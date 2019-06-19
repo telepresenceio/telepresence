@@ -286,7 +286,7 @@ def connect_sshuttle(
     # less robust alternative, is to `killall -HUP mDNSResponder`.
     subspan = runner.span("sshuttle-wait")
     countdown = 3
-    for idx in runner.loop_until(25, 0.1):
+    for idx in runner.loop_until(35, 0.1):
         # Construct a different name each time to avoid NXDOMAIN caching.
         name = "hellotelepresence-{}".format(idx)
         runner.write("Wait for vpn-tcp connection: {}".format(name))
