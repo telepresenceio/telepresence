@@ -77,7 +77,7 @@ class SSH(object):
         """Return whether SSH server can be reached within 30 seconds."""
         for _ in self.runner.loop_until(30, 0.25):
             try:
-                self.runner.check_call(self.command(["/bin/true"]))
+                self.runner.check_call(self.command(["/bin/true"]), timeout=5)
                 return True
             except CalledProcessError:
                 pass
