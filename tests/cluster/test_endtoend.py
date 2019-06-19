@@ -223,6 +223,9 @@ def test_network_routing_also_proxy_hostname(probe, origin_ip):
     traffic for that host proxied via via the cluster.  The hostname must
     be resolveable on the cluster and the address reached from it.
     """
+    if probe.method.name != "vpn-tcp":
+        pytest.skip("Test only applies to --method vpn-tcp usage.")
+
     probe_result = probe.result()
 
     (success, request_ip) = probe_also_proxy(
@@ -239,6 +242,9 @@ def test_network_routing_also_proxy_ip_literal(probe, origin_ip):
     and arranges to have traffic for addresses in that range proxied via the
     cluster.
     """
+    if probe.method.name != "vpn-tcp":
+        pytest.skip("Test only applies to --method vpn-tcp usage.")
+
     probe_result = probe.result()
 
     (success, request_ip) = probe_also_proxy(
@@ -255,6 +261,9 @@ def test_network_routing_also_proxy_ip_cidr(probe, origin_ip):
     string and arranges to have traffic for addresses in that range
     proxied via the cluster.
     """
+    if probe.method.name != "vpn-tcp":
+        pytest.skip("Test only applies to --method vpn-tcp usage.")
+
     probe_result = probe.result()
 
     (success, request_ip) = probe_also_proxy(
