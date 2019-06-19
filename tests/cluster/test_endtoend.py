@@ -461,6 +461,15 @@ def test_resolve_addresses_failure(probe):
 
 
 @after_probe
+def test_exit_code(probe):
+    """
+    The Telepresence session exited with the expected return code.
+    """
+    result = _get_post_exit_result(probe)
+    assert result.returncode == probe.desired_exit_code, result.returncode
+
+
+@after_probe
 def test_swapdeployment_restores_container_image(probe):
     """
     After a Telepresence session with ``--swap-deployment`` exits, the image
