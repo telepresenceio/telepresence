@@ -971,7 +971,7 @@ class Probe(object):
             raise Exception("Probe never launched")
         if self._result == "FAILED":
             raise Exception("Probe has failed")
-        if self._result.returncode is None:
+        if self._result.telepresence.returncode is None:
             print("Telling probe {} to quit".format(self))
             self._result.write("done")
             self._result.read()  # Last output should be well-formed
@@ -979,7 +979,7 @@ class Probe(object):
                 self._result.telepresence.wait(timeout=15)
             except TimeoutExpired:
                 _cleanup_process(self._result.telepresence)
-            self._result.returncode = self._result.telepresence.returncode
+        self._result.returncode = self._result.telepresence.returncode
 
     def cleanup_resources(self):
         """
