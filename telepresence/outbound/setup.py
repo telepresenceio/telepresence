@@ -38,6 +38,12 @@ def setup_inject(runner: Runner, args):
             "https://telepresence.io/reference/methods.html"
         )
 
+    if args.also_proxy:
+        runner.show(
+            "Note: --also-proxy is not meaningful with -m inject-tcp. "
+            "The inject-tcp method sends all network traffic to the cluster."
+        )
+
     def launch(
         runner_, _remote_info, env, socks_port, _ssh, _mount_dir, _pod_info
     ):
