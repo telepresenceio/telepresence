@@ -1,0 +1,1 @@
+When using the vpn-tcp method in a container, Telepresence warns you if it is unable to use iptables due to missing capabilities, instead of crashing mysteriously much later.

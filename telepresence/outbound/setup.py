@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from subprocess import CalledProcessError
+
 from telepresence.runner import Runner
 
 from .container import SUDO_FOR_DOCKER, run_docker_command
@@ -56,6 +58,23 @@ def setup_vpn(runner: Runner, args):
     if runner.platform == "darwin":
         runner.require(["pfctl"], "Required for the vpn-tcp method")
     runner.require_sudo()
+    if runner.platform == "linux":
+        # Do a quick iptables sanity check, post sudo
+        try:
+            ipt_command = ["sudo", "iptables", "--list"]
+            runner.get_output(ipt_command, stderr_to_stdout=True)
+        except CalledProcessError as exc:
+            runner.show("Quick test of iptables failed:")
+            print("\n> {}".format(" ".join(ipt_command)))
+            print("{}\n".format(exc.output))
+            runner.show(
+                "The vpn-tcp method requires the use of iptables. "
+                "If you're running Telepresence in a container, add network "
+                "capabilities (docker run ... --cap-add=NET_ADMIN "
+                "--cap-add=NET_BIND_SERVICE ...) or use a privileged "
+                "container (docker run ... --privileged ...)."
+            )
+            runner.fail("Unable to use iptables")
     if runner.chatty:
         runner.show(
             "Starting proxy with method 'vpn-tcp', which has the following "
