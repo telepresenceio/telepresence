@@ -308,7 +308,26 @@ def connect_sshuttle(
         dns_lookup(runner, many_dotted_name, 1)
 
     if countdown != 0:
+        runner.add_cleanup("Diagnose vpn-tcp", log_info_vpn_crash, runner)
         raise RuntimeError("vpn-tcp tunnel did not connect")
 
     subspan.end()
     span.end()
+
+
+def log_info_vpn_crash(runner: Runner) -> None:
+    """
+    Log some stuff that may help diagnose vpn-tcp method failures.
+    """
+    commands = [
+        "ls -l /etc/resolv.conf",
+        "grep -v ^# /etc/resolv.conf",
+        "ls -l /etc/resolvconf",
+        "cat /etc/nsswitch.conf",
+        "ls -l /etc/resolver",
+    ]
+    for command in commands:
+        try:
+            runner.check_call(command.split(), timeout=1)
+        except (CalledProcessError, TimeoutExpired):
+            pass
