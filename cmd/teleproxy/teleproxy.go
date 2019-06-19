@@ -391,8 +391,9 @@ func intercept(p *supervisor.Process, args Args) error {
 	}
 
 	sup.Supervise(&supervisor.Worker{
-		Name:     TRANSLATOR,
-		Requires: []string{}, // XXX: this will need to include the api server once it is changed to not bind early
+		Name: TRANSLATOR,
+		// XXX: Requires will need to include the api server once it is changed to not bind early
+		Requires: []string{PROXY, DNS_SERVER},
 		Work:     iceptor.Work,
 	})
 
