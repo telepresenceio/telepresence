@@ -1,6 +1,15 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.101 (June 19, 2019)
+
+Bug fixes:
+
+* Telepresence once again exits when your process finishes.
+  ([#1052](https://github.com/telepresenceio/telepresence/issues/1052))
+* When using the vpn-tcp method in a container, Telepresence warns you if it is unable to use `iptables` due to missing capabilities, instead of crashing mysteriously much later.
+  ([#1054](https://github.com/telepresenceio/telepresence/issues/1054))
+
 #### 0.100 (June 10, 2019)
 
 Features:
