@@ -13,8 +13,6 @@ import (
 
 	"github.com/datawire/apro/lib/logging"
 	"github.com/datawire/teleproxy/pkg/supervisor"
-	rpc "github.com/gorilla/rpc/v2"
-	"github.com/gorilla/rpc/v2/json2"
 	"github.com/pkg/errors"
 )
 
@@ -50,15 +48,11 @@ func daemon(p *supervisor.Process) error {
 	})
 
 	// API-specific operations, via JSON-RPC
-	rpcServer := rpc.NewServer()
-	rpcServer.RegisterCodec(json2.NewCodec(), "application/json")
+	rpcServer := getRPCServer(p)
 	err := rpcServer.RegisterService(svc, "daemon")
 	if err != nil {
 		return errors.Wrap(err, "register")
 	}
-	rpcServer.RegisterAfterFunc(func(i *rpc.RequestInfo) {
-		p.Logf("RPC call method=%s err=%v", i.Method, i.Error)
-	})
 	mux.Handle(fmt.Sprintf("/api/v%d", apiVersion), rpcServer)
 
 	unixListener, err := net.Listen("unix", socketName)

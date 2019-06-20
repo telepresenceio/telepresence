@@ -4,10 +4,29 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/datawire/teleproxy/pkg/supervisor"
+	rpc "github.com/gorilla/rpc/v2"
+	"github.com/gorilla/rpc/v2/json2"
 )
+
+// getRPCServer returns an RPC server that locks around every call
+func getRPCServer(p *supervisor.Process) *rpc.Server {
+	serverLock := new(sync.Mutex)
+
+	rpcServer := rpc.NewServer()
+	rpcServer.RegisterCodec(json2.NewCodec(), "application/json")
+	rpcServer.RegisterBeforeFunc(func(_ *rpc.RequestInfo) {
+		serverLock.Lock()
+	})
+	rpcServer.RegisterAfterFunc(func(i *rpc.RequestInfo) {
+		p.Logf("RPC call method=%s err=%v", i.Method, i.Error)
+		serverLock.Unlock()
+	})
+	return rpcServer
+}
 
 // DaemonService is the RPC Service used to export Playpen Daemon functionality
 // to the client
