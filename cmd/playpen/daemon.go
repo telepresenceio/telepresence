@@ -3,13 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/datawire/apro/lib/logging"
 	"github.com/datawire/teleproxy/pkg/supervisor"
@@ -17,7 +15,6 @@ import (
 )
 
 func daemon(p *supervisor.Process) error {
-	svc := &DaemonService{p}
 	mux := http.NewServeMux()
 
 	// Operations that are valid irrespective of API version (curl is okay)
@@ -48,13 +45,17 @@ func daemon(p *supervisor.Process) error {
 	})
 
 	// API-specific operations, via JSON-RPC
-	rpcServer := getRPCServer(p)
-	err := rpcServer.RegisterService(svc, "daemon")
+	svc, err := MakeDaemonService(p)
 	if err != nil {
-		return errors.Wrap(err, "register")
+		return err
+	}
+	rpcServer := getRPCServer(p)
+	if err := rpcServer.RegisterService(svc, "daemon"); err != nil {
+		return err
 	}
 	mux.Handle(fmt.Sprintf("/api/v%d", apiVersion), rpcServer)
 
+	// Listen on unix domain socket
 	unixListener, err := net.Listen("unix", socketName)
 	if err != nil {
 		return errors.Wrap(err, "listen")
@@ -66,47 +67,17 @@ func daemon(p *supervisor.Process) error {
 	server := &http.Server{
 		Handler: logging.LoggingMiddleware(mux),
 	}
-	_ = p.Go(func(p *supervisor.Process) error {
-		err := server.Serve(unixListener)
-		if err != http.ErrServerClosed {
+
+	p.Ready()
+	Notify(p, "Running")
+	err = p.DoClean(func() error {
+		if err := server.Serve(unixListener); err != http.ErrServerClosed {
 			return err
 		}
 		return nil
-	})
-	Notify(p, "Running")
-	p.Ready()
-
-	// Wait for Supervisor to tell us to quit
-	<-p.Shutdown()
-
+	}, func() error { return server.Shutdown(p.Context()) })
 	Notify(p, "Terminated")
-	return server.Shutdown(p.Context())
-}
-
-func monitorResources(p *supervisor.Process, resources []Resource) error {
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
-	for {
-		for _, resource := range resources {
-			name := resource.Name()
-			oldStatus := resource.IsOkay()
-			err := resource.Monitor(p)
-			if err != nil {
-				return err
-			}
-			newStatus := resource.IsOkay()
-			if oldStatus != newStatus {
-				Notify(p, fmt.Sprintf("%s: %t -> %t", name, oldStatus, newStatus))
-			}
-		}
-
-		// Wait a few seconds between loops
-		select {
-		case <-ticker.C:
-		case <-p.Shutdown():
-			return nil
-		}
-	}
+	return err
 }
 
 func waitForSignal(p *supervisor.Process) error {
@@ -143,47 +114,6 @@ func runAsDaemon() error {
 		Name:     "signal",
 		Requires: []string{"daemon"},
 		Work:     waitForSignal,
-	})
-
-	teleproxy := "/Users/ark3/datawire/bin/pp-teleproxy-darwin-amd64"
-	netOverride := NewCommandResource(
-		"netOverride",
-		[]string{teleproxy, "-mode", "intercept"},
-		&RunAsInfo{},
-	)
-	netOverride.SetCheck(func(p *supervisor.Process) error {
-		// Check by doing the equivalent of curl http://teleproxy/api/tables/
-		// It's okay to create a new client each time because we don't want to
-		// reuse connections.
-		client := http.Client{Timeout: 3 * time.Second}
-		res, err := client.Get(fmt.Sprintf(
-			"http://teleproxy%d.cachebust.telepresence.io/api/tables",
-			time.Now().Unix(),
-		))
-		if err != nil {
-			return err
-		}
-		_, err = ioutil.ReadAll(res.Body)
-		res.Body.Close()
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-
-	resources := []Resource{netOverride}
-	sup.Supervise(&supervisor.Worker{
-		Name:     "monitor",
-		Requires: []string{"daemon"},
-		Work: func(p *supervisor.Process) error {
-			return monitorResources(p, resources)
-		},
-	})
-
-	sup.Supervise(&supervisor.Worker{
-		Name:     "enable",
-		Requires: []string{"daemon"},
-		Work:     netOverride.Enable,
 	})
 
 	sup.Logger.Printf("---")

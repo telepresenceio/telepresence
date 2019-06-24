@@ -1,11 +1,15 @@
 package main
 
 import (
+	"io/ioutil"
 	"net/http"
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
+
+	"fmt"
 
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	rpc "github.com/gorilla/rpc/v2"
@@ -28,15 +32,81 @@ func getRPCServer(p *supervisor.Process) *rpc.Server {
 	return rpcServer
 }
 
+func checkNetOverride() error {
+	// Check by doing the equivalent of curl http://teleproxy/api/tables/
+	// It's okay to create a new client each time because we don't want to
+	// reuse connections.
+	client := http.Client{Timeout: 3 * time.Second}
+	res, err := client.Get(fmt.Sprintf(
+		"http://teleproxy%d.cachebust.telepresence.io/api/tables",
+		time.Now().Unix(),
+	))
+	if err != nil {
+		return err
+	}
+	_, err = ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // DaemonService is the RPC Service used to export Playpen Daemon functionality
 // to the client
 type DaemonService struct {
-	p *supervisor.Process
+	p              *supervisor.Process
+	network        Resource
+	cluster        Resource
+	bridge         Resource
+	intercepts     []Resource
+	interceptables []string
+}
+
+// MakeDaemonService creates a DaemonService object
+func MakeDaemonService(p *supervisor.Process) (*DaemonService, error) {
+	teleproxy := "/Users/ark3/datawire/bin/pp-teleproxy-darwin-amd64"
+	netOverride, err := CheckedRetryingCommand(
+		p,
+		"netOverride",
+		[]string{teleproxy, "-mode", "intercept"},
+		&RunAsInfo{},
+		checkNetOverride,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &DaemonService{
+		p:       p,
+		network: netOverride,
+	}, nil
 }
 
 // Status reports the current status of the daemon
 func (d *DaemonService) Status(_ *http.Request, _ *EmptyArgs, reply *StringReply) error {
-	reply.Message = "Not connected"
+	res := new(strings.Builder)
+	defer func() { reply.Message = res.String() }()
+
+	if !d.network.IsOkay() {
+		fmt.Fprintln(res, "Network overrides NOT established")
+	}
+	if d.cluster == nil {
+		fmt.Fprintln(res, "Not connected")
+		return nil
+	}
+	if d.cluster.IsOkay() {
+		fmt.Fprintln(res, "Connected")
+	} else {
+		fmt.Fprintln(res, "Attempting to reconnect...")
+	}
+	fmt.Fprintf(res, "  Context:       %s (%s)\n", "{context}", "{server}")
+	if d.bridge != nil && d.bridge.IsOkay() {
+		fmt.Fprintln(res, "  Proxy:         ON (networking to the cluster is enabled)")
+	} else {
+		fmt.Fprintln(res, "  Proxy:         OFF (attempting to connect...)")
+	}
+	fmt.Fprintf(res, "  Interceptable: %d deployments\n", len(d.interceptables))
+	fmt.Fprintf(res, "  Intercepts:    ? total, %d local\n", len(d.intercepts))
 	return nil
 }
 
