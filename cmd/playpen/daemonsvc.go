@@ -3,7 +3,6 @@ package main
 import (
 	"io/ioutil"
 	"net/http"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -28,11 +27,12 @@ func getRPCServer(p *supervisor.Process) *rpc.Server {
 
 	rpcServer := rpc.NewServer()
 	rpcServer.RegisterCodec(json2.NewCodec(), "application/json")
-	rpcServer.RegisterBeforeFunc(func(_ *rpc.RequestInfo) {
+	rpcServer.RegisterBeforeFunc(func(i *rpc.RequestInfo) {
+		p.Logf("RPC call START method=%s", i.Method)
 		serverLock.Lock()
 	})
 	rpcServer.RegisterAfterFunc(func(i *rpc.RequestInfo) {
-		p.Logf("RPC call method=%s err=%v", i.Method, i.Error)
+		p.Logf("RPC call END method=%s err=%v", i.Method, i.Error)
 		serverLock.Unlock()
 	})
 	return rpcServer
@@ -118,18 +118,28 @@ func (d *DaemonService) Status(_ *http.Request, _ *EmptyArgs, reply *StringReply
 
 // Connect the daemon to a cluster
 func (d *DaemonService) Connect(_ *http.Request, args *ConnectArgs, reply *StringReply) error {
-	cmdArgs := make([]string, 0, 3+len(args.KArgs))
-	cmdArgs = append(cmdArgs, "kubectl", "get", "po")
-	cmdArgs = append(cmdArgs, args.KArgs...)
-	cmd := args.RAI.Command(d.p, cmdArgs...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		_, ok := err.(*exec.ExitError)
-		if !ok {
-			return err
-		}
+	// Sanity checks
+	if d.cluster != nil {
+		reply.Message = "Already connected"
+		return nil
 	}
-	reply.Message = TrimRightSpace(string(output))
+	if d.bridge != nil {
+		reply.Message = "Not ready: Trying to disconnect"
+		return nil
+	}
+	if !d.network.IsOkay() {
+		reply.Message = "Not ready: Establishing network overrides"
+		return nil
+	}
+
+	cluster, err := KCluster(d.p, args)
+	if err != nil {
+		reply.Message = err.Error()
+		return nil
+	}
+
+	d.cluster = cluster
+	reply.Message = "Connected to context {ctx} ({srv})"
 	return nil
 }
 
