@@ -145,6 +145,19 @@ func (d *DaemonService) Connect(_ *http.Request, args *ConnectArgs, reply *Strin
 
 // Disconnect from the connected cluster
 func (d *DaemonService) Disconnect(_ *http.Request, _ *EmptyArgs, reply *StringReply) error {
-	reply.Message = "Not connected"
-	return nil
+	// Sanity checks
+	if d.cluster == nil {
+		reply.Message = "Not connected"
+		return nil
+	}
+
+	if d.bridge != nil {
+		_ = d.bridge.Close()
+		d.bridge = nil
+	}
+	err := d.cluster.Close()
+	d.cluster = nil
+
+	reply.Message = "Disconnected"
+	return err
 }
