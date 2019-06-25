@@ -16,6 +16,12 @@ import (
 	"github.com/gorilla/rpc/v2/json2"
 )
 
+// TrimRightSpace returns a slice of the string s, with all trailing white space
+// removed, as defined by Unicode.
+func TrimRightSpace(s string) string {
+	return strings.TrimRightFunc(s, unicode.IsSpace)
+}
+
 // getRPCServer returns an RPC server that locks around every call
 func getRPCServer(p *supervisor.Process) *rpc.Server {
 	serverLock := new(sync.Mutex)
@@ -85,7 +91,7 @@ func MakeDaemonService(p *supervisor.Process) (*DaemonService, error) {
 // Status reports the current status of the daemon
 func (d *DaemonService) Status(_ *http.Request, _ *EmptyArgs, reply *StringReply) error {
 	res := new(strings.Builder)
-	defer func() { reply.Message = res.String() }()
+	defer func() { reply.Message = TrimRightSpace(res.String()) }()
 
 	if !d.network.IsOkay() {
 		fmt.Fprintln(res, "Network overrides NOT established")
@@ -123,7 +129,7 @@ func (d *DaemonService) Connect(_ *http.Request, args *ConnectArgs, reply *Strin
 			return err
 		}
 	}
-	reply.Message = strings.TrimRightFunc(string(output), unicode.IsSpace)
+	reply.Message = TrimRightSpace(string(output))
 	return nil
 }
 
