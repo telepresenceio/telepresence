@@ -63,7 +63,7 @@ func checkNetOverride() error {
 type DaemonService struct {
 	p              *supervisor.Process
 	network        Resource
-	cluster        Resource
+	cluster        *KCluster
 	bridge         Resource
 	intercepts     []Resource
 	interceptables []string
@@ -105,7 +105,7 @@ func (d *DaemonService) Status(_ *http.Request, _ *EmptyArgs, reply *StringReply
 	} else {
 		fmt.Fprintln(res, "Attempting to reconnect...")
 	}
-	fmt.Fprintf(res, "  Context:       %s (%s)\n", "{context}", "{server}")
+	fmt.Fprintf(res, "  Context:       %s (%s)\n", d.cluster.Context(), d.cluster.Server())
 	if d.bridge != nil && d.bridge.IsOkay() {
 		fmt.Fprintln(res, "  Proxy:         ON (networking to the cluster is enabled)")
 	} else {
@@ -132,14 +132,16 @@ func (d *DaemonService) Connect(_ *http.Request, args *ConnectArgs, reply *Strin
 		return nil
 	}
 
-	cluster, err := KCluster(d.p, args)
+	cluster, err := TrackKCluster(d.p, args)
 	if err != nil {
 		reply.Message = err.Error()
 		return nil
 	}
-
 	d.cluster = cluster
-	reply.Message = "Connected to context {ctx} ({srv})"
+
+	reply.Message = fmt.Sprintf(
+		"Connected to context %s (%s)", d.cluster.Context(), d.cluster.Server(),
+	)
 	return nil
 }
 

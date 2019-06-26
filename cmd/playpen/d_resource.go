@@ -101,16 +101,18 @@ func (rb *ResourceBase) processor(p *supervisor.Process) error {
 	}
 }
 
-// cluster is a Kubernetes cluster reference
-type cluster struct {
-	context string
-	server  string
-	rai     *RunAsInfo
-	kargs   []string
+// KCluster is a Kubernetes cluster reference
+type KCluster struct {
+	context      string
+	server       string
+	rai          *RunAsInfo
+	kargs        []string
 	ResourceBase
 }
 
-func (c *cluster) getKubectlCmd(p *supervisor.Process, args ...string) *supervisor.Cmd {
+// GetKubectlCmd returns a Cmd that runs kubectl with the given arguments and
+// the appropriate environment to talk to the cluster
+func (c *KCluster) GetKubectlCmd(p *supervisor.Process, args ...string) *supervisor.Cmd {
 	cmdArgs := make([]string, 0, 1+len(c.kargs)+len(args))
 	cmdArgs = append(cmdArgs, "kubectl")
 	cmdArgs = append(cmdArgs, c.kargs...)
@@ -118,15 +120,25 @@ func (c *cluster) getKubectlCmd(p *supervisor.Process, args ...string) *supervis
 	return c.rai.Command(p, cmdArgs...)
 }
 
+// Context returns the cluster's context name
+func (c *KCluster) Context() string {
+	return c.context
+}
+
+// Server returns the cluster's server configuration
+func (c *KCluster) Server() string {
+	return c.server
+}
+
 // check for cluster connectivity
-func (c *cluster) check(p *supervisor.Process) error {
-	cmd := c.getKubectlCmd(p, "get", "po", "ohai", "--ignore-not-found")
+func (c *KCluster) check(p *supervisor.Process) error {
+	cmd := c.GetKubectlCmd(p, "get", "po", "ohai", "--ignore-not-found")
 	return cmd.Run()
 }
 
-// KCluster tracks connectivity to a cluster
-func KCluster(p *supervisor.Process, args *ConnectArgs) (Resource, error) {
-	c := &cluster{
+// TrackKCluster tracks connectivity to a cluster
+func TrackKCluster(p *supervisor.Process, args *ConnectArgs) (*KCluster, error) {
+	c := &KCluster{
 		rai:   args.RAI,
 		kargs: args.KArgs,
 		ResourceBase: ResourceBase{
@@ -141,14 +153,14 @@ func KCluster(p *supervisor.Process, args *ConnectArgs) (Resource, error) {
 		return nil, err
 	}
 
-	cmd := c.getKubectlCmd(p, "config", "current-context")
+	cmd := c.GetKubectlCmd(p, "config", "current-context")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, err
 	}
 	c.context = strings.TrimSpace(string(output))
 
-	cmd = c.getKubectlCmd(p, "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
+	cmd = c.GetKubectlCmd(p, "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
 	output, err = cmd.CombinedOutput()
 	if err != nil {
 		return nil, err
