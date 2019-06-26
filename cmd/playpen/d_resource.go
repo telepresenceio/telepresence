@@ -107,6 +107,7 @@ type KCluster struct {
 	server       string
 	rai          *RunAsInfo
 	kargs        []string
+	isBridgeOkay func() bool
 	ResourceBase
 }
 
@@ -130,8 +131,19 @@ func (c *KCluster) Server() string {
 	return c.server
 }
 
+// SetBridgeCheck sets the callable used to check whether the Teleproxy bridge
+// is functioning. If this is nil/unset, cluster monitoring checks the cluster
+// directly (via kubectl)
+func (c *KCluster) SetBridgeCheck(isBridgeOkay func() bool) {
+	c.isBridgeOkay = isBridgeOkay
+}
+
 // check for cluster connectivity
 func (c *KCluster) check(p *supervisor.Process) error {
+	// If the bridge is okay then the cluster is okay
+	if c.isBridgeOkay != nil && c.isBridgeOkay() {
+		return nil
+	}
 	cmd := c.GetKubectlCmd(p, "get", "po", "ohai", "--ignore-not-found")
 	return cmd.Run()
 }
