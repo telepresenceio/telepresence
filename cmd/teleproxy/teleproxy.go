@@ -176,35 +176,6 @@ func _main() int {
 	})
 
 	sup.Supervise(&supervisor.Worker{
-		Name:     CHECK_READY,
-		Requires: []string{TRANSLATOR, API, DNS_SERVER, PROXY, DNS_CONFIG},
-		Work: func(p *supervisor.Process) error {
-			err := selfcheck(p)
-			if err != nil {
-				if args.nocheck {
-					p.Logf("WARNING, SELF CHECK FAILED: %v", err)
-				} else {
-					return errors.Wrap(err, "SELF CHECK FAILED")
-				}
-			} else {
-				p.Logf("SELF CHECK PASSED, SIGNALING READY")
-			}
-
-			err = p.Do(func() error {
-				sd_daemon.Notification{State: "READY=1"}.Send(false)
-				p.Ready()
-				return nil
-			})
-			if err != nil {
-				return err
-			}
-
-			<-p.Shutdown()
-			return nil
-		},
-	})
-
-	sup.Supervise(&supervisor.Worker{
 		Name: SIGNAL,
 		Work: func(p *supervisor.Process) error {
 			select {
@@ -271,14 +242,42 @@ func selfcheck(p *supervisor.Process) error {
 }
 
 func teleproxy(p *supervisor.Process, args Args) error {
+	sup := p.Supervisor()
+
 	if args.mode == DEFAULT || args.mode == INTERCEPT {
 		err := intercept(p, args)
 		if err != nil {
 			return err
 		}
-	}
+		sup.Supervise(&supervisor.Worker{
+			Name:     CHECK_READY,
+			Requires: []string{TRANSLATOR, API, DNS_SERVER, PROXY, DNS_CONFIG},
+			Work: func(p *supervisor.Process) error {
+				err := selfcheck(p)
+				if err != nil {
+					if args.nocheck {
+						p.Logf("WARNING, SELF CHECK FAILED: %v", err)
+					} else {
+						return errors.Wrap(err, "SELF CHECK FAILED")
+					}
+				} else {
+					p.Logf("SELF CHECK PASSED, SIGNALING READY")
+				}
 
-	sup := p.Supervisor()
+				err = p.Do(func() error {
+					sd_daemon.Notification{State: "READY=1"}.Send(false)
+					p.Ready()
+					return nil
+				})
+				if err != nil {
+					return err
+				}
+
+				<-p.Shutdown()
+				return nil
+			},
+		})
+	}
 
 	if args.mode == DEFAULT || args.mode == BRIDGE {
 		requires := []string{}
