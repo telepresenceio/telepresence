@@ -265,7 +265,9 @@ func teleproxy(p *supervisor.Process, args Args) error {
 				}
 
 				err = p.Do(func() error {
-					sd_daemon.Notification{State: "READY=1"}.Send(false)
+					if err := (sd_daemon.Notification{State: "READY=1"}).Send(false); err != nil {
+						p.Logf("Ignoring daemon notification failure: %v", err)
+					}
 					p.Ready()
 					return nil
 				})
