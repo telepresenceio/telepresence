@@ -126,7 +126,7 @@ func (b *kubebootstrap) Work(p *supervisor.Process) error {
 
 		watcherFunc := func(ns, kind string) func(watcher *k8s.Watcher) {
 			return func(watcher *k8s.Watcher) {
-				resources := watcher.List(watcher.Canonical(kind))
+				resources := watcher.List(kind)
 				p.Logf("found %d %q in namespace %q", len(resources), kind, fmtNamespace(ns))
 				for _, n := range b.notify {
 					n <- k8sEvent{kind: kind, resources: resources}

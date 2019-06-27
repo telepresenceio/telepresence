@@ -137,6 +137,27 @@ func (r Resource) Kind() string {
 	}
 }
 
+// QKind returns a fully qualified resource kind with the following
+// format: <kind>.<version>.<group>
+func (r Resource) QKind() string {
+	gv, ok := r["apiVersion"]
+	if ok {
+		if strings.ToLower(gv.(string)) == "v1" {
+			return r.Kind()
+		}
+
+		parts := strings.Split(gv.(string), "/")
+		// this is just reversing the list
+		for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
+			parts[i], parts[j] = parts[j], parts[i]
+		}
+		gvs := strings.Join(parts, ".")
+		return fmt.Sprintf("%s.%s", r.Kind(), gvs)
+	}
+
+	return r.Kind()
+}
+
 func (r Resource) Empty() bool {
 	_, ok := r["kind"]
 	return !ok

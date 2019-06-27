@@ -80,11 +80,29 @@ func TestWatchCustom(t *testing.T) {
 	}
 }
 
-func TestSelectiveWatch(t *testing.T) {
+func TestWatchCustomCollision(t *testing.T) {
+	w := k8s.MustNewWatcher(info())
+
+	easter := fetch(w, "csrv", "easter.default")
+	if easter == nil {
+		t.Error("couln't find easter")
+	} else {
+		spec := easter.Spec()
+		deck := spec["deck"]
+		if deck != "the lawn" {
+			t.Errorf("expected the lawn, got %v", deck)
+		}
+	}
+}
+
+func TestWatchQuery(t *testing.T) {
 	w := k8s.MustNewWatcher(info())
 
 	services := []string{}
-	err := w.SelectiveWatch("", "services", "metadata.name=kubernetes", "", func(w *k8s.Watcher) {
+	err := w.WatchQuery(k8s.Query{
+		Kind:          "services",
+		FieldSelector: "metadata.name=kubernetes",
+	}, func(w *k8s.Watcher) {
 		for _, r := range w.List("services") {
 			services = append(services, r.QName())
 		}

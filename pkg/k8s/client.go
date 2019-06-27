@@ -11,12 +11,14 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/google/shlex"
@@ -138,8 +140,8 @@ func (info *KubeInfo) GetKubectlArray(args ...string) ([]string, error) {
 
 // Client is the top-level handle to the Kubernetes cluster.
 type Client struct {
-	config    *rest.Config
-	resources []*v1.APIResourceList
+	config *rest.Config
+	mapper meta.RESTMapper
 }
 
 // NewClient constructs a k8s.Client, optionally using a previously-constructed
@@ -158,14 +160,14 @@ func NewClient(info *KubeInfo) (*Client, error) {
 		return nil, err
 	}
 
-	resources, err := disco.ServerResources()
+	resources, err := restmapper.GetAPIGroupResources(disco)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Client{
-		config:    config,
-		resources: resources,
+		config: config,
+		mapper: restmapper.NewShortcutExpander(restmapper.NewDiscoveryRESTMapper(resources), disco),
 	}, nil
 }
 
@@ -176,9 +178,13 @@ func NewClient(info *KubeInfo) (*Client, error) {
 type ResourceType struct {
 	Group      string
 	Version    string
-	Name       string // lowercase plural
+	Name       string // lowercase plural, called Resource in kubernetes code
 	Kind       string // uppercase singular
 	Namespaced bool
+}
+
+func (r ResourceType) String() string {
+	return r.Name + "." + r.Version + "." + r.Group
 }
 
 // ResolveResourceType takes the name of a resource type (singular,
@@ -196,55 +202,64 @@ type ResourceType struct {
 // clusters, it may be a good idea to use this even for internal
 // callers, rather than treating it purely as a UI concern.
 //
-// BUG(lukeshu): ResolveResourceType currently only takes the type name, it should
-// accept TYPE[[.VERSION].GROUP], like `kubectl`.
-//
-// BUG(lukeshu): ResolveResourceType currently returns the first
-// match.  In the event of multiple resource types with the same name
-// (multiple API groups, multiple versions), it should do something
-// more intelligent than that; it should at least pay attention to the
-// API group's PreferredVersion.
-//
-// Should be equivalent to
+// This implementation is supposed to be equivalent to
 // k8s.io/cli-runtime/pkg/genericclioptions/resource.Builder.mappingFor(),
 // which calls
 // k8s.io/apimachinery/pkg/runtime/schema.ParseResourceArg() and
 // k8s.io/client-go/restmapper.shortcutExpander.expandResourceShortcut()
 func (c *Client) ResolveResourceType(resource string) (ResourceType, error) {
-	if resource == "" {
-		return ResourceType{}, errors.New("empty resource string")
-	}
-	lresource := strings.ToLower(resource)
-	for _, rl := range c.resources {
-		for _, r := range rl.APIResources {
-			candidates := []string{
-				r.Name,         // lowercase plural
-				r.Kind,         // uppercase singular
-				r.SingularName, // lowercase singular
-			}
-			candidates = append(candidates, r.ShortNames...)
+	fullySpecifiedGVR, groupResource := schema.ParseResourceArg(resource)
+	gvk := schema.GroupVersionKind{}
 
-			for _, c := range candidates {
-				if lresource == strings.ToLower(c) {
-					var group string
-					var version string
-					parts := strings.Split(rl.GroupVersion, "/")
-					switch len(parts) {
-					case 1:
-						group = ""
-						version = parts[0]
-					case 2:
-						group = parts[0]
-						version = parts[1]
-					default:
-						return ResourceType{}, errors.New("unrecognized GroupVersion")
-					}
-					return ResourceType{group, version, r.Name, r.Kind, r.Namespaced}, nil
-				}
-			}
+	if fullySpecifiedGVR != nil {
+		gvk, _ = c.mapper.KindFor(*fullySpecifiedGVR)
+	}
+	if gvk.Empty() {
+		gvk, _ = c.mapper.KindFor(groupResource.WithVersion(""))
+	}
+	if !gvk.Empty() {
+		return wrapRESTMapping(c.mapper.RESTMapping(gvk.GroupKind(), gvk.Version))
+	}
+
+	fullySpecifiedGVK, groupKind := schema.ParseKindArg(resource)
+	if fullySpecifiedGVK == nil {
+		gvk := groupKind.WithVersion("")
+		fullySpecifiedGVK = &gvk
+	}
+
+	if !fullySpecifiedGVK.Empty() {
+		if mapping, err := c.mapper.RESTMapping(fullySpecifiedGVK.GroupKind(), fullySpecifiedGVK.Version); err == nil {
+			return wrapRESTMapping(mapping, nil)
 		}
 	}
-	return ResourceType{}, errors.New(fmt.Sprintf("unrecognized resource: %s", resource))
+
+	mapping, err := c.mapper.RESTMapping(groupKind, gvk.Version)
+	if err != nil {
+		// if we error out here, it is because we could not match a resource or a kind
+		// for the given argument. To maintain consistency with previous behavior,
+		// announce that a resource type could not be found.
+		// if the error is _not_ a *meta.NoKindMatchError, then we had trouble doing discovery,
+		// so we should return the original error since it may help a user diagnose what is actually wrong
+		if meta.IsNoMatchError(err) {
+			return ResourceType{}, fmt.Errorf("the server doesn't have a resource type %q", groupResource.Resource)
+		}
+		return ResourceType{}, err
+	}
+	return wrapRESTMapping(mapping, err)
+}
+
+func wrapRESTMapping(m *meta.RESTMapping, err error) (ResourceType, error) {
+	if err != nil || m == nil {
+		return ResourceType{}, err
+	}
+
+	return ResourceType{
+		Group:      m.GroupVersionKind.Group,
+		Version:    m.GroupVersionKind.Version,
+		Name:       m.Resource.Resource,
+		Kind:       m.GroupVersionKind.Kind,
+		Namespaced: m.Scope.Name() == meta.RESTScopeNameNamespace,
+	}, nil
 }
 
 // List calls ListNamespace(...) with the empty string as the namespace, which
@@ -261,10 +276,54 @@ func (c *Client) ListNamespace(namespace, resource string) ([]Resource, error) {
 }
 
 func (c *Client) SelectiveList(namespace, resource, fieldSelector, labelSelector string) ([]Resource, error) {
-	ri, err := c.ResolveResourceType(resource)
+	return c.ListQuery(Query{
+		Kind:          resource,
+		Namespace:     namespace,
+		FieldSelector: fieldSelector,
+		LabelSelector: labelSelector,
+	})
+}
+
+// Query describes a query for a set of kubernetes resources.
+//
+// The Kind of a query may use any of the short names or abbreviations
+// permitted by kubectl.
+//
+// If the Namespace field is the empty string, then all namespaces
+// will be queried.
+//
+// The FieldSelector and LabelSelector fields contain field and label
+// selectors as documented by kubectl.
+type Query struct {
+	Kind          string
+	Namespace     string
+	FieldSelector string
+	LabelSelector string
+	resourceType  ResourceType
+}
+
+func (q *Query) resolve(c *Client) error {
+	if q.resourceType != (ResourceType{}) {
+		return nil
+	}
+
+	rt, err := c.ResolveResourceType(q.Kind)
+	if err != nil {
+		return err
+	}
+	q.resourceType = rt
+	return nil
+}
+
+// ListQuery returns all the kubernetes resources that satisfy the
+// supplied query.
+func (c *Client) ListQuery(query Query) ([]Resource, error) {
+	err := query.resolve(c)
 	if err != nil {
 		return nil, err
 	}
+
+	ri := query.resourceType
 
 	dyn, err := dynamic.NewForConfig(c.config)
 	if err != nil {
@@ -278,15 +337,15 @@ func (c *Client) SelectiveList(namespace, resource, fieldSelector, labelSelector
 	})
 
 	var filtered dynamic.ResourceInterface
-	if namespace != "" {
-		filtered = cli.Namespace(namespace)
+	if query.Namespace != "" {
+		filtered = cli.Namespace(query.Namespace)
 	} else {
 		filtered = cli
 	}
 
 	uns, err := filtered.List(v1.ListOptions{
-		FieldSelector: fieldSelector,
-		LabelSelector: labelSelector,
+		FieldSelector: query.FieldSelector,
+		LabelSelector: query.LabelSelector,
 	})
 	if err != nil {
 		return nil, err
