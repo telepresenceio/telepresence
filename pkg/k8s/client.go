@@ -141,7 +141,9 @@ func (info *KubeInfo) GetKubectlArray(args ...string) ([]string, error) {
 // Client is the top-level handle to the Kubernetes cluster.
 type Client struct {
 	config *rest.Config
-	mapper meta.RESTMapper
+
+	restMapper      meta.RESTMapper
+	discoveryClient discovery.DiscoveryInterface
 }
 
 // NewClient constructs a k8s.Client, optionally using a previously-constructed
@@ -155,19 +157,27 @@ func NewClient(info *KubeInfo) (*Client, error) {
 		return nil, errors.Errorf("Failed to get REST config: %v", err)
 	}
 
-	disco, err := discovery.NewDiscoveryClientForConfig(config)
+	// TODO(lukeshu): Optionally use a DiscoveryClient that does kubectl-like filesystem
+	// caching; see k8s.io/cli-runtime/pkg/genericclioptions.ConfigFlags.ToDiscoveryClient().
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(config)
 	if err != nil {
 		return nil, err
 	}
 
-	resources, err := restmapper.GetAPIGroupResources(disco)
+	// TODO(lukeshu): Use a *restmapper.DeferredDiscoveryRESTMapper to lazily call
+	// restmapper.GetAPIGroupResources().  This is blocked by discoveryClient implementing
+	// discovery.DiscoveryInterface but not discovery.CachedDiscoveryInterface (probably
+	// resolved with the above TODO).
+	resources, err := restmapper.GetAPIGroupResources(discoveryClient)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Client{
 		config: config,
-		mapper: restmapper.NewShortcutExpander(restmapper.NewDiscoveryRESTMapper(resources), disco),
+
+		restMapper:      restmapper.NewDiscoveryRESTMapper(resources),
+		discoveryClient: discoveryClient,
 	}, nil
 }
 
@@ -201,39 +211,55 @@ func (r ResourceType) String() string {
 // extensions/v1beta1.  Because of discrepancies between different
 // clusters, it may be a good idea to use this even for internal
 // callers, rather than treating it purely as a UI concern.
-//
-// This implementation is supposed to be equivalent to
-// k8s.io/cli-runtime/pkg/genericclioptions/resource.Builder.mappingFor(),
-// which calls
-// k8s.io/apimachinery/pkg/runtime/schema.ParseResourceArg() and
-// k8s.io/client-go/restmapper.shortcutExpander.expandResourceShortcut()
 func (c *Client) ResolveResourceType(resource string) (ResourceType, error) {
-	fullySpecifiedGVR, groupResource := schema.ParseResourceArg(resource)
+	shortcutExpander := restmapper.NewShortcutExpander(c.restMapper, c.discoveryClient)
+	restmapping, err := mappingFor(resource, shortcutExpander)
+	if err != nil {
+		return ResourceType{}, err
+	}
+	return ResourceType{
+		Group:      restmapping.GroupVersionKind.Group,
+		Version:    restmapping.GroupVersionKind.Version,
+		Name:       restmapping.Resource.Resource,
+		Kind:       restmapping.GroupVersionKind.Kind,
+		Namespaced: restmapping.Scope.Name() == meta.RESTScopeNameNamespace,
+	}, nil
+}
+
+// mappingFor returns the RESTMapping for the Kind given, or the Kind referenced by the resource.
+// Prefers a fully specified GroupVersionResource match. If one is not found, we match on a fully
+// specified GroupVersionKind, or fallback to a match on GroupKind.
+//
+// This is copy/pasted from k8s.io/cli-runtime/pkg/resource.Builder.mappingFor() (which is
+// unfortunately private), with modified lines marked with "// MODIFIED".
+func mappingFor(resourceOrKindArg string, restMapper meta.RESTMapper) (*meta.RESTMapping, error) { // MODIFIED: args
+	fullySpecifiedGVR, groupResource := schema.ParseResourceArg(resourceOrKindArg)
 	gvk := schema.GroupVersionKind{}
+	// MODIFIED: Don't call b.restMapperFn(), use the mapper given as an argument.
 
 	if fullySpecifiedGVR != nil {
-		gvk, _ = c.mapper.KindFor(*fullySpecifiedGVR)
+		gvk, _ = restMapper.KindFor(*fullySpecifiedGVR)
 	}
 	if gvk.Empty() {
-		gvk, _ = c.mapper.KindFor(groupResource.WithVersion(""))
+		gvk, _ = restMapper.KindFor(groupResource.WithVersion(""))
 	}
 	if !gvk.Empty() {
-		return wrapRESTMapping(c.mapper.RESTMapping(gvk.GroupKind(), gvk.Version))
+		return restMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	}
 
-	fullySpecifiedGVK, groupKind := schema.ParseKindArg(resource)
+	fullySpecifiedGVK, groupKind := schema.ParseKindArg(resourceOrKindArg)
 	if fullySpecifiedGVK == nil {
 		gvk := groupKind.WithVersion("")
 		fullySpecifiedGVK = &gvk
 	}
 
 	if !fullySpecifiedGVK.Empty() {
-		if mapping, err := c.mapper.RESTMapping(fullySpecifiedGVK.GroupKind(), fullySpecifiedGVK.Version); err == nil {
-			return wrapRESTMapping(mapping, nil)
+		if mapping, err := restMapper.RESTMapping(fullySpecifiedGVK.GroupKind(), fullySpecifiedGVK.Version); err == nil {
+			return mapping, nil
 		}
 	}
 
-	mapping, err := c.mapper.RESTMapping(groupKind, gvk.Version)
+	mapping, err := restMapper.RESTMapping(groupKind, gvk.Version)
 	if err != nil {
 		// if we error out here, it is because we could not match a resource or a kind
 		// for the given argument. To maintain consistency with previous behavior,
@@ -241,25 +267,12 @@ func (c *Client) ResolveResourceType(resource string) (ResourceType, error) {
 		// if the error is _not_ a *meta.NoKindMatchError, then we had trouble doing discovery,
 		// so we should return the original error since it may help a user diagnose what is actually wrong
 		if meta.IsNoMatchError(err) {
-			return ResourceType{}, fmt.Errorf("the server doesn't have a resource type %q", groupResource.Resource)
+			return nil, fmt.Errorf("the server doesn't have a resource type %q", groupResource.Resource)
 		}
-		return ResourceType{}, err
-	}
-	return wrapRESTMapping(mapping, err)
-}
-
-func wrapRESTMapping(m *meta.RESTMapping, err error) (ResourceType, error) {
-	if err != nil || m == nil {
-		return ResourceType{}, err
+		return nil, err
 	}
 
-	return ResourceType{
-		Group:      m.GroupVersionKind.Group,
-		Version:    m.GroupVersionKind.Version,
-		Name:       m.Resource.Resource,
-		Kind:       m.GroupVersionKind.Kind,
-		Namespaced: m.Scope.Name() == meta.RESTScopeNameNamespace,
-	}, nil
+	return mapping, nil
 }
 
 // List calls ListNamespace(...) with the empty string as the namespace, which
