@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net"
 	"net/http"
 	"os/signal"
+	"sort"
 	"syscall"
 
 	"fmt"
@@ -13,6 +15,9 @@ import (
 
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/ssh/terminal"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func retrieveRequest(w http.ResponseWriter, r *http.Request) *PPRequest {
@@ -86,14 +91,53 @@ func waitForSignal(p *supervisor.Process) error {
 	return nil
 }
 
+type myFormatter struct{}
+
+func (f *myFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+	var b *bytes.Buffer
+	if entry.Buffer != nil {
+		b = entry.Buffer
+	} else {
+		b = &bytes.Buffer{}
+	}
+
+	fmt.Fprintf(b, "%s %s", entry.Time.Format("2006/01/02 15:04:05"), entry.Message)
+
+	if len(entry.Data) > 0 {
+		keys := make([]string, 0, len(entry.Data))
+		for k := range entry.Data {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			v := entry.Data[k]
+			fmt.Fprintf(b, " %s=%+v", k, v)
+		}
+	}
+	b.WriteByte('\n')
+	return b.Bytes(), nil
+}
+
 func runAsDaemon() {
 	if os.Geteuid() != 0 {
 		fmt.Println("Playpen Daemon must run as root.")
 		//os.Exit(1)
 	}
 
+	logger := logrus.New()
+	logger.Formatter = new(myFormatter)
+	if !terminal.IsTerminal(int(os.Stdout.Fd())) {
+		logger.SetOutput(&lumberjack.Logger{
+			Filename:   logfile,
+			MaxSize:    10,   // megabytes
+			MaxBackups: 3,    // in the same directory
+			MaxAge:     60,   // days
+			LocalTime:  true, // rotated logfiles use local time names
+		})
+	}
+
 	sup := supervisor.WithContext(context.Background())
-	//sup.Logger = ...
+	sup.Logger = logger
 	sup.Supervise(&supervisor.Worker{
 		Name: "daemon",
 		Work: daemon,
