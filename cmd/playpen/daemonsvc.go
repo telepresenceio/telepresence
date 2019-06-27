@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -15,7 +16,32 @@ import (
 	"github.com/gorilla/rpc/v2/json2"
 )
 
-const teleproxy = "/Users/ark3/datawire/bin/pp-teleproxy-darwin-amd64"
+var teleproxy = ""
+
+// FindTeleproxy finds a compatible version of Teleproxy in your PATH and saves
+// it in a global
+func FindTeleproxy() error {
+	if len(teleproxy) == 0 {
+		path, err := exec.LookPath("teleproxy")
+		if err != nil {
+			return err
+		}
+		cmd := exec.Command(path, "-version")
+		outputBytes, err := cmd.CombinedOutput()
+		if err != nil {
+			return err
+		}
+		output := string(outputBytes)
+		if !strings.Contains(output, "version 0.6") && !strings.Contains(output, "version 0.5.1-42-g4b3d893") {
+			return fmt.Errorf(
+				"required teleproxy 0.6.x not found; found %s in your PATH",
+				output,
+			)
+		}
+		teleproxy = path
+	}
+	return nil
+}
 
 // TrimRightSpace returns a slice of the string s, with all trailing white space
 // removed, as defined by Unicode.
@@ -96,6 +122,9 @@ type DaemonService struct {
 
 // MakeDaemonService creates a DaemonService object
 func MakeDaemonService(p *supervisor.Process) (*DaemonService, error) {
+	if err := FindTeleproxy(); err != nil {
+		return nil, err
+	}
 	netOverride, err := CheckedRetryingCommand(
 		p,
 		"netOverride",
