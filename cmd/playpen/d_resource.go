@@ -1,13 +1,13 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/datawire/teleproxy/pkg/supervisor"
+	"github.com/pkg/errors"
 )
 
 // Resource represents one thing managed by playpen daemon. Examples include

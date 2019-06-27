@@ -9,9 +9,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/datawire/apro/lib/logging"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/pkg/errors"
+
+	"github.com/datawire/apro/lib/logging"
 )
 
 func daemon(p *supervisor.Process) error {
