@@ -6,3 +6,11 @@ metadata:
 spec:
   deck: the halls
   value: {{env "USER"}}
+---
+apiVersion: example.org/v1beta1
+kind: Service
+metadata:
+  name: easter
+spec:
+  deck: the lawn
+  value: with eggs

@@ -29,8 +29,59 @@ func NewWaiter(watcher *Watcher) (w *Waiter, err error) {
 	}, nil
 }
 
+// canonical returns the canonical form of either a resource name or a
+// resource type name:
+//
+//   ResourceName: TYPE/NAME[.NAMESPACE]
+//   ResourceType: TYPE
+//
+func (w *Waiter) canonical(name string) string {
+	parts := strings.Split(name, "/")
+
+	var kind string
+	switch len(parts) {
+	case 1:
+		kind = parts[0]
+		name = ""
+	case 2:
+		kind = parts[0]
+		name = parts[1]
+	default:
+		return ""
+	}
+
+	ri, err := w.watcher.client.ResolveResourceType(kind)
+	if err != nil {
+		panic(fmt.Sprintf("%s: %v", kind, err))
+	}
+	kind = strings.ToLower(ri.String())
+
+	if name == "" {
+		return kind
+	}
+
+	if ri.Namespaced {
+		var namespace string
+
+		parts = strings.Split(name, ".")
+		switch len(parts) {
+		case 1:
+			namespace = "default"
+		case 2:
+			name = parts[0]
+			namespace = parts[1]
+		default:
+			return ""
+		}
+
+		return fmt.Sprintf("%s/%s.%s", kind, name, namespace)
+	}
+
+	return fmt.Sprintf("%s/%s", kind, name)
+}
+
 func (w *Waiter) Add(resource string) error {
-	cresource := w.watcher.Canonical(resource)
+	cresource := w.canonical(resource)
 
 	parts := strings.Split(cresource, "/")
 	if len(parts) != 2 {
@@ -52,7 +103,7 @@ func (w *Waiter) Add(resource string) error {
 func (w *Waiter) Scan(path string) (err error) {
 	resources, err := LoadResources(path)
 	for _, res := range resources {
-		err = w.Add(fmt.Sprintf("%s/%s", res.Kind(), res.QName()))
+		err = w.Add(fmt.Sprintf("%s/%s", res.QKind(), res.QName()))
 		if err != nil {
 			return
 		}
@@ -63,7 +114,7 @@ func (w *Waiter) Scan(path string) (err error) {
 func (w *Waiter) ScanPaths(files []string) (err error) {
 	resources, err := WalkResources(tpu.IsYaml, files...)
 	for _, res := range resources {
-		err = w.Add(fmt.Sprintf("%s/%s", res.Kind(), res.QName()))
+		err = w.Add(fmt.Sprintf("%s/%s", res.QKind(), res.QName()))
 		if err != nil {
 			return
 		}
@@ -90,9 +141,8 @@ func (w *Waiter) Wait(timeout time.Duration) bool {
 	printed := make(map[string]bool)
 	w.watcher.Watch("events", func(watcher *Watcher) {
 		for _, r := range watcher.List("events") {
-			lastIf, ok := r["lastTimestamp"]
-			if ok {
-				last, err := time.Parse("2006-01-02T15:04:05Z", lastIf.(string))
+			if lastStr, ok := r["lastTimestamp"].(string); ok {
+				last, err := time.Parse("2006-01-02T15:04:05Z", lastStr)
 				if err != nil {
 					log.Println(err)
 					continue
@@ -103,16 +153,8 @@ func (w *Waiter) Wait(timeout time.Duration) bool {
 			}
 			if !printed[r.QName()] {
 				var name string
-				objIf, ok := r["involvedObject"]
-				if ok {
-					obj, ok := objIf.(map[string]interface{})
-					if ok {
-						name = fmt.Sprintf("%s/%v.%v", obj["kind"], obj["name"],
-							obj["namespace"])
-						name = watcher.Canonical(name)
-					} else {
-						name = r.QName()
-					}
+				if obj, ok := r["involvedObject"].(map[string]interface{}); ok {
+					name = w.canonical(fmt.Sprintf("%s/%v.%v", Resource(obj).QKind(), obj["name"], obj["namespace"]))
 				} else {
 					name = r.QName()
 				}
@@ -128,10 +170,10 @@ func (w *Waiter) Wait(timeout time.Duration) bool {
 				r := watcher.Get(kind, name)
 				if r.Ready() {
 					if r.ReadyImplemented() {
-						fmt.Printf("ready: %s/%s\n", watcher.Canonical(r.Kind()), r.QName())
+						fmt.Printf("ready: %s/%s\n", w.canonical(r.QKind()), r.QName())
 					} else {
 						fmt.Printf("ready: %s/%s (UNIMPLEMENTED)\n",
-							watcher.Canonical(r.Kind()), r.QName())
+							w.canonical(r.QKind()), r.QName())
 					}
 					w.remove(kind, name)
 				}

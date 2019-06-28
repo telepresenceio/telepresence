@@ -39,7 +39,7 @@ func (lw listWatchAdapter) Watch(options v1.ListOptions) (pwatch.Interface, erro
 
 type Watcher struct {
 	client  *Client
-	watches map[string]watch
+	watches map[ResourceType]watch
 	stop    chan struct{}
 	wg      sync.WaitGroup
 	mutex   sync.Mutex
@@ -49,16 +49,14 @@ type Watcher struct {
 }
 
 type watch struct {
-	namespace     string
-	resource      dynamic.NamespaceableResourceInterface
-	fieldSelector string
-	labelSelector string
-	store         cache.Store
-	invoke        func()
-	runner        func()
+	query    Query
+	resource dynamic.NamespaceableResourceInterface
+	store    cache.Store
+	invoke   func()
+	runner   func()
 }
 
-// MustNewWatcher returns a kubernetes watcher for the specified
+// MustNewWatcher returns a Kubernetes watcher for the specified
 // cluster or panics.
 func MustNewWatcher(info *KubeInfo) *Watcher {
 	w, err := NewWatcher(info)
@@ -68,7 +66,7 @@ func MustNewWatcher(info *KubeInfo) *Watcher {
 	return w
 }
 
-// NewWatcher returns a kubernetes watcher for the specified cluster.
+// NewWatcher returns a Kubernetes watcher for the specified cluster.
 func NewWatcher(info *KubeInfo) (*Watcher, error) {
 	cli, err := NewClient(info)
 	if err != nil {
@@ -81,66 +79,11 @@ func NewWatcher(info *KubeInfo) (*Watcher, error) {
 func (c *Client) Watcher() *Watcher {
 	w := &Watcher{
 		client:  c,
-		watches: make(map[string]watch),
+		watches: make(map[ResourceType]watch),
 		stop:    make(chan struct{}),
 	}
 
 	return w
-}
-
-// Canonical returns the canonical form of either a resource name or a
-// resource type name:
-//
-//   ResourceName: TYPE/NAME[.NAMESPACE]
-//   ResourceType: TYPE
-//
-// BUG(lukeshu): Canonical's TYPE is just the resource type
-// name/kind/shortname; it does NOT include the version or API group.
-// This is because of limitations in Client.ResolveResourceType.
-func (w *Watcher) Canonical(name string) string {
-	parts := strings.Split(name, "/")
-
-	var kind string
-	switch len(parts) {
-	case 1:
-		kind = parts[0]
-		name = ""
-	case 2:
-		kind = parts[0]
-		name = parts[1]
-	default:
-		return ""
-	}
-
-	ri, err := w.client.ResolveResourceType(kind)
-	if err != nil {
-		panic(err)
-	}
-	//kind = ri.Name + "." + ri.Version + "." + ri.Group
-	kind = ri.Name
-
-	if name == "" {
-		return kind
-	}
-
-	if ri.Namespaced {
-		var namespace string
-
-		parts = strings.Split(name, ".")
-		switch len(parts) {
-		case 1:
-			namespace = "default"
-		case 2:
-			name = parts[0]
-			namespace = parts[1]
-		default:
-			return ""
-		}
-
-		return fmt.Sprintf("%s/%s.%s", kind, name, namespace)
-	} else {
-		return fmt.Sprintf("%s/%s", kind, name)
-	}
 }
 
 func (w *Watcher) Watch(resources string, listener func(*Watcher)) error {
@@ -153,10 +96,23 @@ func (w *Watcher) WatchNamespace(namespace, resources string, listener func(*Wat
 
 func (w *Watcher) SelectiveWatch(namespace, resources, fieldSelector, labelSelector string,
 	listener func(*Watcher)) error {
-	ri, err := w.client.ResolveResourceType(resources)
+	return w.WatchQuery(Query{
+		Kind:          resources,
+		Namespace:     namespace,
+		FieldSelector: fieldSelector,
+		LabelSelector: labelSelector,
+	}, listener)
+}
+
+// WatchQuery watches the set of resources identified by the supplied
+// query and invokes the supplied listener whenever they change.
+func (w *Watcher) WatchQuery(query Query, listener func(*Watcher)) error {
+	err := query.resolve(w.client)
 	if err != nil {
 		return err
 	}
+	ri := query.resourceType
+
 	dyn, err := dynamic.NewForConfig(w.client.config)
 	if err != nil {
 		return err
@@ -169,8 +125,8 @@ func (w *Watcher) SelectiveWatch(namespace, resources, fieldSelector, labelSelec
 	})
 
 	var watched dynamic.ResourceInterface
-	if namespace != "" {
-		watched = resource.Namespace(namespace)
+	if query.Namespace != "" {
+		watched = resource.Namespace(query.Namespace)
 	} else {
 		watched = resource
 	}
@@ -182,7 +138,7 @@ func (w *Watcher) SelectiveWatch(namespace, resources, fieldSelector, labelSelec
 	}
 
 	store, controller := cache.NewInformer(
-		listWatchAdapter{watched, fieldSelector, labelSelector},
+		listWatchAdapter{watched, query.FieldSelector, query.LabelSelector},
 		nil,
 		5*time.Minute,
 		cache.ResourceEventHandlerFuncs{
@@ -223,15 +179,12 @@ func (w *Watcher) SelectiveWatch(namespace, resources, fieldSelector, labelSelec
 		w.wg.Done()
 	}
 
-	kind := w.Canonical(ri.Kind)
-	w.watches[kind] = watch{
-		namespace:     namespace,
-		resource:      resource,
-		fieldSelector: fieldSelector,
-		labelSelector: labelSelector,
-		store:         store,
-		invoke:        invoke,
-		runner:        runner,
+	w.watches[ri] = watch{
+		query:    query,
+		resource: resource,
+		store:    store,
+		invoke:   invoke,
+		runner:   runner,
 	}
 
 	return nil
@@ -260,9 +213,9 @@ func (w *Watcher) Start() {
 	}
 }
 
-func (w *Watcher) sync(kind string) {
+func (w *Watcher) sync(kind ResourceType) {
 	watch := w.watches[kind]
-	resources, err := w.client.SelectiveList(watch.namespace, kind, watch.fieldSelector, watch.labelSelector)
+	resources, err := w.client.ListQuery(watch.query)
 	if err != nil {
 		panic(err)
 	}
@@ -277,8 +230,11 @@ func (w *Watcher) sync(kind string) {
 }
 
 func (w *Watcher) List(kind string) []Resource {
-	kind = w.Canonical(kind)
-	watch, ok := w.watches[kind]
+	ri, err := w.client.ResolveResourceType(kind)
+	if err != nil {
+		panic(err)
+	}
+	watch, ok := w.watches[ri]
 	if ok {
 		objs := watch.store.List()
 		result := make([]Resource, len(objs))
@@ -292,13 +248,13 @@ func (w *Watcher) List(kind string) []Resource {
 }
 
 func (w *Watcher) UpdateStatus(resource Resource) (Resource, error) {
-	kind := w.Canonical(resource.Kind())
-	if kind == "" {
-		return nil, fmt.Errorf("unknown resource: %v", resource.Kind())
+	ri, err := w.client.ResolveResourceType(resource.Kind())
+	if err != nil {
+		return nil, err
 	}
-	watch, ok := w.watches[kind]
+	watch, ok := w.watches[ri]
 	if !ok {
-		return nil, fmt.Errorf("no watch: %s", kind)
+		return nil, fmt.Errorf("no watch: %v", ri)
 	}
 
 	var uns unstructured.Unstructured
