@@ -29,7 +29,7 @@ func NewWaiter(watcher *Watcher) (w *Waiter, err error) {
 	}, nil
 }
 
-// Canonical returns the canonical form of either a resource name or a
+// canonical returns the canonical form of either a resource name or a
 // resource type name:
 //
 //   ResourceName: TYPE/NAME[.NAMESPACE]
@@ -141,9 +141,8 @@ func (w *Waiter) Wait(timeout time.Duration) bool {
 	printed := make(map[string]bool)
 	w.watcher.Watch("events", func(watcher *Watcher) {
 		for _, r := range watcher.List("events") {
-			lastIf, ok := r["lastTimestamp"]
-			if ok {
-				last, err := time.Parse("2006-01-02T15:04:05Z", lastIf.(string))
+			if lastStr, ok := r["lastTimestamp"].(string); ok {
+				last, err := time.Parse("2006-01-02T15:04:05Z", lastStr)
 				if err != nil {
 					log.Println(err)
 					continue
@@ -154,16 +153,8 @@ func (w *Waiter) Wait(timeout time.Duration) bool {
 			}
 			if !printed[r.QName()] {
 				var name string
-				objIf, ok := r["involvedObject"]
-				if ok {
-					obj, ok := objIf.(map[string]interface{})
-					if ok {
-						name = fmt.Sprintf("%s/%v.%v", obj["kind"], obj["name"],
-							obj["namespace"])
-						name = w.canonical(name)
-					} else {
-						name = r.QName()
-					}
+				if obj, ok := r["involvedObject"].(map[string]interface{}); ok {
+					name = w.canonical(fmt.Sprintf("%s/%v.%v", obj["kind"], obj["name"], obj["namespace"]))
 				} else {
 					name = r.QName()
 				}
