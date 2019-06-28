@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"k8s.io/apimachinery/pkg/api/meta"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"k8s.io/client-go/discovery"
@@ -23,6 +23,14 @@ import (
 
 	"github.com/google/shlex"
 	"github.com/pkg/errors"
+)
+
+const (
+	// NamespaceAll is the argument to specify on a context when you want to list or filter
+	// resources across all namespaces.
+	NamespaceAll = metav1.NamespaceAll
+	// NamespaceNone is the argument for a context when there is no namespace.
+	NamespaceNone = metav1.NamespaceNone
 )
 
 // KubeInfo holds the data required to talk to a cluster
@@ -274,15 +282,14 @@ func mappingFor(resourceOrKindArg string, restMapper meta.RESTMapper) (*meta.RES
 	return mapping, nil
 }
 
-// List calls ListNamespace(...) with the empty string as the namespace, which
-// means all namespaces if the resource is namespaced.
+// List calls ListNamespace(...) with NamespaceAll.
 func (c *Client) List(resource string) ([]Resource, error) {
-	return c.ListNamespace("", resource)
+	return c.ListNamespace(NamespaceAll, resource)
 }
 
 // ListNamespace returns a slice of Resources.
-// If the resource is not namespaced, the namespace must be the empty string.
-// If the resource is namespaced, the empty string lists across all namespaces.
+// If the resource is not namespaced, the namespace must be NamespaceNone.
+// If the resource is namespaced, NamespaceAll lists across all namespaces.
 func (c *Client) ListNamespace(namespace, resource string) ([]Resource, error) {
 	return c.SelectiveList(namespace, resource, "", "")
 }
@@ -301,8 +308,8 @@ type Query struct {
 	// The Kind of a query may use any of the short names or abbreviations permitted by kubectl.
 	Kind string
 
-	// The Namespace field specifies the namespace to query.  If this field is the empty string,
-	// then all namespaces will be queried.
+	// The Namespace field specifies the namespace to query.  Use NamespaceAll to query all
+	// namespaces.  If the resource type is not namespaced, this field must be NamespaceNone.
 	Namespace string
 
 	// The FieldSelector and LabelSelector fields contain field and label selectors as
@@ -354,7 +361,7 @@ func (c *Client) ListQuery(query Query) ([]Resource, error) {
 		filtered = cli
 	}
 
-	uns, err := filtered.List(v1.ListOptions{
+	uns, err := filtered.List(metav1.ListOptions{
 		FieldSelector: query.FieldSelector,
 		LabelSelector: query.LabelSelector,
 	})
