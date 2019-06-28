@@ -154,7 +154,7 @@ func (w *Waiter) Wait(timeout time.Duration) bool {
 			if !printed[r.QName()] {
 				var name string
 				if obj, ok := r["involvedObject"].(map[string]interface{}); ok {
-					name = w.canonical(fmt.Sprintf("%s/%v.%v", obj["kind"], obj["name"], obj["namespace"]))
+					name = w.canonical(fmt.Sprintf("%s/%v.%v", Resource(obj).QKind(), obj["name"], obj["namespace"]))
 				} else {
 					name = r.QName()
 				}
