@@ -188,7 +188,7 @@ func NewClient(info *KubeInfo) (*Client, error) {
 type ResourceType struct {
 	Group      string
 	Version    string
-	Name       string // lowercase plural, called Resource in kubernetes code
+	Name       string // lowercase plural, called Resource in Kubernetes code
 	Kind       string // uppercase singular
 	Namespaced bool
 }
@@ -197,20 +197,19 @@ func (r ResourceType) String() string {
 	return r.Name + "." + r.Version + "." + r.Group
 }
 
-// ResolveResourceType takes the name of a resource type (singular,
-// plural, or an abbreviation; like you might pass to `kubectl get`)
-// and returns cluster-specific canonical information about that
-// resource type.
+// ResolveResourceType takes the name of a resource type
+// (TYPE[[.VERSION].GROUP], where TYPE may be singular, plural, or an
+// abbreviation; like you might pass to `kubectl get`) and returns
+// cluster-specific canonical information about that resource type.
 //
 // For example, with Kubernetes v1.10.5:
-//   "pod"        --> {Group: "",           Version: "v1",      Name: "pods",        Kind: "Pod",        Namespaced: true}
-//   "deployment" --> {Group: "extensions", Version: "v1beta1", Name: "deployments", Kind: "Deployment", Namespaced: true}
+//  "pod"        -> {Group: "",           Version: "v1",      Name: "pods",        Kind: "Pod",        Namespaced: true}
+//  "deployment" -> {Group: "extensions", Version: "v1beta1", Name: "deployments", Kind: "Deployment", Namespaced: true}
+//  "svc.v1."    -> {Group: "",           Version: "v1",      Name: "services",    Kind: "Service",    Namespaced: true}
 //
 // Newer versions of Kubernetes might instead put "pod" in the "core"
 // group, or put "deployment" in apps/v1 instead of
-// extensions/v1beta1.  Because of discrepancies between different
-// clusters, it may be a good idea to use this even for internal
-// callers, rather than treating it purely as a UI concern.
+// extensions/v1beta1.
 func (c *Client) ResolveResourceType(resource string) (ResourceType, error) {
 	shortcutExpander := restmapper.NewShortcutExpander(c.restMapper, c.discoveryClient)
 	restmapping, err := mappingFor(resource, shortcutExpander)
@@ -297,22 +296,21 @@ func (c *Client) SelectiveList(namespace, resource, fieldSelector, labelSelector
 	})
 }
 
-// Query describes a query for a set of kubernetes resources.
-//
-// The Kind of a query may use any of the short names or abbreviations
-// permitted by kubectl.
-//
-// If the Namespace field is the empty string, then all namespaces
-// will be queried.
-//
-// The FieldSelector and LabelSelector fields contain field and label
-// selectors as documented by kubectl.
+// Query describes a query for a set of Kubernetes resources.
 type Query struct {
-	Kind          string
-	Namespace     string
+	// The Kind of a query may use any of the short names or abbreviations permitted by kubectl.
+	Kind string
+
+	// The Namespace field specifies the namespace to query.  If this field is the empty string,
+	// then all namespaces will be queried.
+	Namespace string
+
+	// The FieldSelector and LabelSelector fields contain field and label selectors as
+	// documented by kubectl.
 	FieldSelector string
 	LabelSelector string
-	resourceType  ResourceType
+
+	resourceType ResourceType
 }
 
 func (q *Query) resolve(c *Client) error {
@@ -328,7 +326,7 @@ func (q *Query) resolve(c *Client) error {
 	return nil
 }
 
-// ListQuery returns all the kubernetes resources that satisfy the
+// ListQuery returns all the Kubernetes resources that satisfy the
 // supplied query.
 func (c *Client) ListQuery(query Query) ([]Resource, error) {
 	err := query.resolve(c)

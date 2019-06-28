@@ -29,7 +29,7 @@ func NewWaiter(watcher *Watcher) (w *Waiter, err error) {
 	}, nil
 }
 
-// Canonical returns the canonical form of either a resource name or a
+// canonical returns the canonical form of either a resource name or a
 // resource type name:
 //
 //   ResourceName: TYPE/NAME[.NAMESPACE]

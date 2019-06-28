@@ -56,7 +56,7 @@ type watch struct {
 	runner   func()
 }
 
-// MustNewWatcher returns a kubernetes watcher for the specified
+// MustNewWatcher returns a Kubernetes watcher for the specified
 // cluster or panics.
 func MustNewWatcher(info *KubeInfo) *Watcher {
 	w, err := NewWatcher(info)
@@ -66,7 +66,7 @@ func MustNewWatcher(info *KubeInfo) *Watcher {
 	return w
 }
 
-// NewWatcher returns a kubernetes watcher for the specified cluster.
+// NewWatcher returns a Kubernetes watcher for the specified cluster.
 func NewWatcher(info *KubeInfo) (*Watcher, error) {
 	cli, err := NewClient(info)
 	if err != nil {
