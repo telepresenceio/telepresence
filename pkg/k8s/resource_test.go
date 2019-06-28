@@ -19,6 +19,8 @@ func TestQKind(t *testing.T) {
 		{k8s.Resource{"kind": "KindOnly"}, "KindOnly.."},
 		{k8s.Resource{"apiVersion": "group/version"}, ".version.group"},
 		{k8s.Resource{}, ".."},
+		{k8s.Resource{"kind": 7, "apiVersion": "v1"}, ".v1."},
+		{k8s.Resource{"kind": "Pod", "apiVersion": 1}, "Pod.."},
 	}
 	for i, testcase := range testcases {
 		t.Run(strconv.Itoa(i), func(testcase struct {
@@ -26,6 +28,11 @@ func TestQKind(t *testing.T) {
 			QKind    string
 		}) func(t *testing.T) {
 			return func(t *testing.T) {
+				defer func() {
+					if r := recover(); r != nil {
+						t.Errorf("fail: %#v.QKind() paniced: %v", testcase.Resource, r)
+					}
+				}()
 				qkind := testcase.Resource.QKind()
 				if qkind != testcase.QKind {
 					t.Errorf("fail: %#v.QKind()=%#v, expected %#v", testcase.Resource, qkind, testcase.QKind)

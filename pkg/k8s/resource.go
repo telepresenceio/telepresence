@@ -74,54 +74,50 @@ var READY = map[string]func(Resource) bool{
 type Map map[string]interface{}
 
 func (m Map) getMap(name string) map[string]interface{} {
-	v, ok := m[name]
-	if ok {
-		return v.(map[string]interface{})
-	} else {
-		return Map{}
+	v, ok := m[name].(map[string]interface{})
+	if !ok {
+		return map[string]interface{}{}
 	}
+	return v
 }
 
 func (m Map) getMaps(name string) []map[string]interface{} {
-	var result []map[string]interface{}
-	v, ok := m[name]
-	if ok {
-		lst, ok := v.([]interface{})
-		if ok {
-			result = make([]map[string]interface{}, len(lst))
-			for idx, obj := range lst {
-				result[idx] = obj.(map[string]interface{})
-			}
+	v, ok := m[name].([]interface{})
+	if !ok {
+		return nil
+	}
+	result := make([]map[string]interface{}, len(v))
+	for idx, obj := range v {
+		result[idx], ok = obj.(map[string]interface{})
+		if !ok {
+			result[idx] = map[string]interface{}{}
 		}
 	}
 	return result
 }
 
 func (m Map) getString(key string) string {
-	v, ok := m[key]
-	if ok {
-		return v.(string)
-	} else {
+	v, ok := m[key].(string)
+	if !ok {
 		return ""
 	}
+	return v
 }
 
 func (m Map) getInt64(key string) int64 {
-	v, ok := m[key]
-	if ok {
-		return v.(int64)
-	} else {
+	v, ok := m[key].(int64)
+	if !ok {
 		return 0
 	}
+	return v
 }
 
 func (m Map) getBool(key string) bool {
-	v, ok := m[key]
-	if ok {
-		return v.(bool)
-	} else {
+	v, ok := m[key].(bool)
+	if !ok {
 		return false
 	}
+	return v
 }
 
 // Resource is map from strings to any with some convenience methods for
@@ -129,12 +125,7 @@ func (m Map) getBool(key string) bool {
 type Resource map[string]interface{}
 
 func (r Resource) Kind() string {
-	k, ok := r["kind"]
-	if ok {
-		return k.(string)
-	} else {
-		return ""
-	}
+	return Map(r).getString("kind")
 }
 
 // QKind returns a fully qualified resource kind with the following
@@ -234,26 +225,34 @@ func (r Resource) Decode(output interface{}) error {
 func fixup(obj interface{}) interface{} {
 	switch obj := obj.(type) {
 	case []interface{}:
-		result := make([]interface{}, len(obj))
-		for i, v := range obj {
-			result[i] = fixup(v)
-		}
-		return result
+		return fixupList(obj)
 	case map[interface{}]interface{}:
-		result := make(map[string]interface{})
-		for k, v := range obj {
-			if kStr, kIsStr := k.(string); kIsStr {
-				result[kStr] = fixup(v)
-			}
-		}
-		return result
+		return fixupMap(obj)
 	default:
 		return obj
 	}
 }
 
+func fixupList(obj []interface{}) []interface{} {
+	result := make([]interface{}, len(obj))
+	for i, v := range obj {
+		result[i] = fixup(v)
+	}
+	return result
+}
+
+func fixupMap(obj map[interface{}]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	for key, val := range obj {
+		if key, ok := key.(string); ok {
+			result[key] = fixup(val)
+		}
+	}
+	return result
+}
+
 func NewResourceFromYaml(yaml map[interface{}]interface{}) Resource {
-	return Resource(fixup(yaml).(map[string]interface{}))
+	return Resource(fixupMap(yaml))
 }
 
 func isTemplate(input []byte) bool {
