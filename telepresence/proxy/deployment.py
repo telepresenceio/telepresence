@@ -38,8 +38,11 @@ def get_image_name(expose: PortMapping) -> str:
 
 
 def existing_deployment(
-    runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool
+    runner: Runner,
+    deployment_arg: str,
+    expose: PortMapping,
+    add_custom_nameserver: bool,
+    custom_serviceaccount: Optional[str] = None
 ) -> Tuple[str, Optional[str]]:
     """
     Handle an existing deployment by doing nothing
@@ -61,8 +64,11 @@ def existing_deployment(
 
 
 def existing_deployment_openshift(
-    runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool
+    runner: Runner,
+    deployment_arg: str,
+    expose: PortMapping,
+    add_custom_nameserver: bool,
+    custom_serviceaccount: Optional[str] = None
 ) -> Tuple[str, Optional[str]]:
     """
     Handle an existing deploymentconfig by doing nothing

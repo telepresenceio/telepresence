@@ -94,7 +94,8 @@ def setup(runner: Runner, args):
     custom_serviceaccount = args.custom_serviceaccount
 
     def start_proxy(runner_: Runner) -> RemoteInfo:
-        tel_deployment, run_id = operation( #pylint: disable-msg=too-many-arguments
+
+        tel_deployment, run_id = operation(
             runner_, deployment_arg, args.expose, add_custom_ns,
             custom_serviceaccount
         )
