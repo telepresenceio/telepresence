@@ -21,7 +21,7 @@
 
 ## 0.4.10 (2019-05-08)
 
- * [watt] Bug fix: interpolated addresses cause watt to never reach bootstrapped stage [teleproxy#110](datawire/teleproxy#110)
+ * [watt] Bug fix: interpolated addresses cause watt to never reach bootstrapped stage ([teleproxy#110](https://github.com/datawire/teleproxy/issues/110))
 
 ## 0.4.9 (2019-05-06)
 
