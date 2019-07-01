@@ -131,6 +131,7 @@ func MakeDaemonService(p *supervisor.Process) (*DaemonService, error) {
 		[]string{teleproxy, "-mode", "intercept"},
 		&RunAsInfo{},
 		checkNetOverride,
+		10*time.Second,
 	)
 	if err != nil {
 		return nil, err
@@ -198,6 +199,7 @@ func (d *DaemonService) Connect(_ *http.Request, args *ConnectArgs, reply *Strin
 		[]string{teleproxy, "-mode", "bridge"},
 		args.RAI,
 		checkBridge,
+		10*time.Second,
 	)
 	if err != nil {
 		reply.Message = err.Error()

@@ -189,27 +189,31 @@ func TrackKCluster(p *supervisor.Process, args *ConnectArgs) (*KCluster, error) 
 
 // crCmd is a handle to a checked retrying command
 type crCmd struct {
-	args    []string
-	rai     *RunAsInfo
-	check   func() error
-	callerP *supervisor.Process // processor's Process
-	cmd     *supervisor.Cmd     // (run loop) tracks the cmd for killing it
+	args       []string
+	rai        *RunAsInfo
+	check      func() error
+	startGrace time.Duration
+	callerP    *supervisor.Process // processor's Process
+	cmd        *supervisor.Cmd     // (run loop) tracks the cmd for killing it
+	startedAt  time.Time
 	ResourceBase
 }
 
 // CheckedRetryingCommand launches a command, restarting it repeatedly if it
 // quits, and killing and restarting it if it fails the given check.
 func CheckedRetryingCommand(
-	p *supervisor.Process, name string, args []string, rai *RunAsInfo, check func() error,
+	p *supervisor.Process, name string, args []string, rai *RunAsInfo,
+	check func() error, startGrace time.Duration,
 ) (Resource, error) {
 	if check == nil {
 		check = func() error { return nil }
 	}
 	crc := &crCmd{
-		args:    args,
-		rai:     rai,
-		check:   check,
-		callerP: p,
+		args:       args,
+		rai:        rai,
+		check:      check,
+		startGrace: startGrace,
+		callerP:    p,
 		ResourceBase: ResourceBase{
 			name:  name,
 			tasks: make(chan func() error, 1),
@@ -243,6 +247,7 @@ func (crc *crCmd) launch() error {
 				return nil
 			}
 			launchErr <- nil
+			crc.startedAt = time.Now()
 			p.Ready()
 
 			// Wait for the subprocess to end, log
@@ -280,9 +285,15 @@ func (crc *crCmd) doCheck(p *supervisor.Process) error {
 	}
 	if err := crc.check(); err != nil {
 		p.Logf("check failed: %v", err)
-		// Kill the process because it's in a bad state
-		if err := crc.kill(); err != nil {
-			p.Logf("failed to kill: %v", err)
+		runTime := time.Since(crc.startedAt)
+		if runTime > crc.startGrace {
+			p.Log("Killing...")
+			// Kill the process because it's in a bad state
+			if err := crc.kill(); err != nil {
+				p.Logf("failed to kill: %v", err)
+			}
+		} else {
+			p.Logf("Not killing yet (%v < %v)", runTime, crc.startGrace)
 		}
 		return err // from crc.check() above
 	}
