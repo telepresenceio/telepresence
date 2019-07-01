@@ -32,7 +32,7 @@ func FindTeleproxy() error {
 			return err
 		}
 		output := string(outputBytes)
-		if !strings.Contains(output, "version 0.6") && !strings.Contains(output, "version 0.5.1-42-g4b3d893") {
+		if !strings.Contains(output, "version 0.6") {
 			return fmt.Errorf(
 				"required teleproxy 0.6.x not found; found %s in your PATH",
 				output,
