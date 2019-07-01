@@ -273,7 +273,6 @@ func (crc *crCmd) kill() error {
 }
 
 func (crc *crCmd) doQuit() error {
-	crc.quitting = true
 	return crc.kill()
 }
 
