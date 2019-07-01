@@ -6,7 +6,7 @@ libraries that they use. Lines within each entry are prefixed with
 
 ## 0.6.0 (2019-06-01)
 
- * <b>[lib/k8s] [watt] [teleproxy] [kubeapply]</b> Bug fix: lookup of kubernetes resources should now behave just like kubectl, e.g. allowing for `<name>.<version>.<group>` syntax in order to disambiguate resources with the same short names. ([teleproxy#127](https://github.com/datawire/teleproxy/issues/127))
+ * <b>[lib/k8s] [watt] [teleproxy] [kubeapply]</b> Bug fix: lookup of kubernetes resources should now behave just like kubectl, e.g. allowing for `<name>.<version>.<group>` syntax in order to disambiguate resources with the same short names. ([teleproxy#127](https://github.com/datawire/teleproxy/issues/127)) This change is not intended to break compatibility, however it is a fairly extensive change to a pretty fundamental piece of code and so we are bumping the version number to 0.6.0 because of this. Any software that uses any of these components should perform additional testing around how they pass in kubernetes names. It would also be advisable to update kubernetes names to make them fully qualified.
  * <b>[teleproxy]</b> Bug fix: the self check should only be run when the process is doing intercept.
  * <b>[lib/dtest]</b> Added utility code for testing subprocesses and applying manifests from inside go test code.
 
