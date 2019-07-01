@@ -232,37 +232,51 @@ func CheckedRetryingCommand(
 	return crc, nil
 }
 
+func (crc *crCmd) nilCmd() error {
+	crc.cmd = nil
+	return nil
+}
+
 func (crc *crCmd) launch() error {
 	if crc.cmd != nil {
 		panic(fmt.Errorf("launching %s: already launched", crc.name))
 	}
+	sup := crc.callerP.Supervisor()
+
+	// Launch the subprocess (set up logging using a worker)
 	launchErr := make(chan error)
-	crc.callerP.Supervisor().Supervise(&supervisor.Worker{
-		Name: crc.name + "/proc",
+	sup.Supervise(&supervisor.Worker{
+		Name: crc.name + "/out",
 		Work: func(p *supervisor.Process) error {
-			// Launch the subprocess
 			crc.cmd = crc.rai.Command(p, crc.args...)
-			if err := crc.cmd.Start(); err != nil {
-				launchErr <- err
-				return nil
-			}
-			launchErr <- nil
-			crc.startedAt = time.Now()
-			p.Ready()
-
-			// Wait for the subprocess to end, log
-			p.Logf("subprocess ended: %v", p.DoClean(crc.cmd.Wait, crc.kill))
-			crc.cmd = nil
-
+			launchErr <- crc.cmd.Start()
 			return nil
 		},
 	})
+
+	// Wait for it to start
 	select {
 	case err := <-launchErr:
-		return err
+		if err != nil {
+			return err
+		}
 	case <-crc.callerP.Shutdown():
 		return nil
 	}
+	crc.startedAt = time.Now()
+
+	// Launch a worker to Wait() for it to finish
+	sup.Supervise(&supervisor.Worker{
+		Name: crc.name + "/end",
+		Work: func(p *supervisor.Process) error {
+			// Wait for the subprocess to end, log
+			p.Log(p.DoClean(crc.cmd.Wait, crc.kill))
+			crc.tasks <- crc.nilCmd
+			return nil
+		},
+	})
+
+	return nil
 }
 
 func (crc *crCmd) kill() error {
