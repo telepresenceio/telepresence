@@ -88,8 +88,11 @@ def existing_deployment_openshift(
 
 
 def create_new_deployment(
-    runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool
+    runner: Runner,
+    deployment_arg: str,
+    expose: PortMapping,
+    add_custom_nameserver: bool,
+    custom_serviceaccount: Optional[str] = None
 ) -> Tuple[str, str]:
     """
     Create a new Deployment, return its name and Kubernetes label.
@@ -137,6 +140,8 @@ def create_new_deployment(
         command.append(
             "--env=TELEPRESENCE_NAMESERVER=" + get_alternate_nameserver()
         )
+    if custom_serviceaccount:
+        command.append("--serviceaccount=" + custom_serviceaccount)
     try:
         runner.check_call(runner.kubectl(command))
     except CalledProcessError as exc:
@@ -165,8 +170,11 @@ def _get_container_name(container, deployment_json):
 
 
 def supplant_deployment(
-    runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool
+    runner: Runner,
+    deployment_arg: str,
+    expose: PortMapping,
+    add_custom_nameserver: bool,
+    custom_serviceaccount: Optional[str] = None
 ) -> Tuple[str, str]:
     """
     Swap out an existing Deployment, supplant method.
@@ -193,11 +201,8 @@ def supplant_deployment(
     container = _get_container_name(container, deployment_json)
 
     new_deployment_json = new_swapped_deployment(
-        deployment_json,
-        container,
-        run_id,
-        expose,
-        add_custom_nameserver,
+        deployment_json, container, run_id, expose, add_custom_nameserver,
+        custom_serviceaccount
     )
 
     # Compute a new name that isn't too long, i.e. up to 63 characters.
@@ -260,6 +265,7 @@ def new_swapped_deployment(
     run_id: str,
     expose: PortMapping,
     add_custom_nameserver: bool,
+    custom_serviceaccount: Optional[str] = None
 ) -> Dict:
     """
     Create a new Deployment that uses telepresence-k8s image.
@@ -285,6 +291,9 @@ def new_swapped_deployment(
     new_deployment_json["spec"]["template"]["metadata"].setdefault(
         "labels", {}
     )["telepresence"] = run_id
+    if custom_serviceaccount:
+        new_deployment_json["spec"]["template"]["spec"][
+            "serviceAccountName"] = custom_serviceaccount
     for container, old_container in zip(
         new_deployment_json["spec"]["template"]["spec"]["containers"],
         old_deployment["spec"]["template"]["spec"]["containers"],
@@ -336,8 +345,11 @@ def new_swapped_deployment(
 
 
 def swap_deployment_openshift(
-    runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool
+    runner: Runner,
+    deployment_arg: str,
+    expose: PortMapping,
+    add_custom_nameserver: bool,
+    custom_serviceaccount: Optional[str] = None
 ) -> Tuple[str, str]:
     """
     Swap out an existing DeploymentConfig and also clears any triggers
@@ -399,11 +411,8 @@ def swap_deployment_openshift(
     container = _get_container_name(container, dc_json)
 
     new_dc_json = new_swapped_deployment(
-        dc_json,
-        container,
-        run_id,
-        expose,
-        add_custom_nameserver,
+        dc_json, container, run_id, expose, add_custom_nameserver,
+        custom_serviceaccount
     )
 
     apply_json(new_dc_json)

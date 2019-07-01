@@ -91,9 +91,12 @@ def setup(runner: Runner, args):
             " --new-deployment instead."
         )
 
+    custom_serviceaccount = args.custom_serviceaccount
+
     def start_proxy(runner_: Runner) -> RemoteInfo:
         tel_deployment, run_id = operation(
-            runner_, deployment_arg, args.expose, add_custom_ns
+            runner_, deployment_arg, args.expose, add_custom_ns,
+            custom_serviceaccount
         )
         remote_info = get_remote_info(
             runner,

@@ -270,6 +270,12 @@ def parse_args(args=None) -> argparse.Namespace:
         )
     )
     parser.add_argument(
+        "--serviceaccount",
+        dest="custom_serviceaccount",
+        default=None,
+        help="Service account to set in the proxy pod spec."
+    )
+    parser.add_argument(
         "--expose",
         action='append',
         metavar="PORT[:REMOTE_PORT]",
