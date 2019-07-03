@@ -30,7 +30,7 @@ func K8sApply(kubeconfig string, files ...string) {
 		os.Exit(1)
 	}
 
-	err := kubeapply.Kubeapply(k8s.NewKubeInfo(kubeconfig, "", ""), 30*time.Second, false, files...)
+	err := kubeapply.Kubeapply(k8s.NewKubeInfo(kubeconfig, "", ""), 30*time.Second, false, false, files...)
 	if err != nil {
 		fmt.Println()
 		fmt.Println(err)
