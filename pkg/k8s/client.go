@@ -148,8 +148,8 @@ func (info *KubeInfo) GetKubectlArray(args ...string) ([]string, error) {
 
 // Client is the top-level handle to the Kubernetes cluster.
 type Client struct {
-	config *rest.Config
-
+	config          *rest.Config
+	namespace       string
 	restMapper      meta.RESTMapper
 	discoveryClient discovery.DiscoveryInterface
 }
@@ -163,6 +163,11 @@ func NewClient(info *KubeInfo) (*Client, error) {
 	config, err := info.GetRestConfig()
 	if err != nil {
 		return nil, errors.Errorf("Failed to get REST config: %v", err)
+	}
+
+	namespace, err := info.Namespace()
+	if err != nil {
+		return nil, errors.Errorf("Failed to get namespace: %v", err)
 	}
 
 	// TODO(lukeshu): Optionally use a DiscoveryClient that does kubectl-like filesystem
@@ -182,8 +187,8 @@ func NewClient(info *KubeInfo) (*Client, error) {
 	}
 
 	return &Client{
-		config: config,
-
+		config:          config,
+		namespace:       namespace,
 		restMapper:      restmapper.NewDiscoveryRESTMapper(resources),
 		discoveryClient: discoveryClient,
 	}, nil
