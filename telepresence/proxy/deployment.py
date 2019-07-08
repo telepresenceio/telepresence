@@ -308,6 +308,11 @@ def new_swapped_deployment(
                     container.pop(unneeded)
                 except KeyError:
                     pass
+
+            # add running command explicitly
+            docker_cmd = "/usr/src/app/run.sh" if expose.has_privileged_ports() else "/usr/src/app/pre-run.sh"
+            container["command"] = [docker_cmd]
+
             # We don't write out termination file:
             container["terminationMessagePolicy"] = "FallbackToLogsOnError"
             # Use custom name server if necessary:

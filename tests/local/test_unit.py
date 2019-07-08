@@ -168,6 +168,8 @@ spec:
           name: configmap-volume
       - name: nginxhttps
         image: ___replace___me___
+        command:
+        - __run_me__ 
         terminationMessagePolicy: "FallbackToLogsOnError"
         imagePullPolicy: "IfNotPresent"
         ports:
@@ -199,12 +201,22 @@ def test_swap_deployment_changes():
     actual = telepresence.proxy.deployment.new_swapped_deployment(
         original, "nginxhttps", "random_id_123", ports, False
     )
+
+    # image test and replace
     image = actual["spec"]["template"]["spec"]["containers"][1]["image"]
     assert "/telepresence-k8s-priv:" in image
     expected["spec"]["template"]["spec"]["containers"][1]["image"] = image
+
+    # cmd test and replace
+    actual_command = actual["spec"]["template"]["spec"]["containers"][1]["command"][0]
+    assert actual_command == "/usr/src/app/run.sh"
+    expected["spec"]["template"]["spec"]["containers"][1]["command"][0] = actual_command
+
     assert actual == expected
     assert (9999, 9999) in ports.local_to_remote()
     assert (80, 80) in ports.local_to_remote()
+
+
 
     # Test w/o privileged port.
     original = yaml.safe_load(COMPLEX_DEPLOYMENT)
@@ -220,6 +232,11 @@ def test_swap_deployment_changes():
     image = actual["spec"]["template"]["spec"]["containers"][1]["image"]
     assert "/telepresence-k8s:" in image
     expected["spec"]["template"]["spec"]["containers"][1]["image"] = image
+
+    actual_command = actual["spec"]["template"]["spec"]["containers"][1]["command"][0]
+    assert actual_command == "/usr/src/app/pre-run.sh"
+    expected["spec"]["template"]["spec"]["containers"][1]["command"][0] = actual_command
+
     assert actual == expected
     assert (9999, 9999) in ports.local_to_remote()
     assert (8080, 8080) in ports.local_to_remote()
