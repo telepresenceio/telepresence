@@ -20,7 +20,7 @@ COPY requirements.txt /usr/src/app
 
 # For some reason pip doesn't install incremental (a Twisted dependency) so do
 # so manually. When done, remove unneeded packages for a smaller image.
-RUN apk add --no-cache python3 python3-dev openssh gcc libc-dev && \
+RUN apk add --no-cache python3 python3-dev openssh gcc libc-dev ca-certificates && \
     ssh-keygen -A && \
     echo -e "ClientAliveInterval 1\nGatewayPorts yes\nPermitEmptyPasswords yes\nPort 8022\nClientAliveCountMax 10\nPermitRootLogin yes\n" >> /etc/ssh/sshd_config && \
     pip3 install --no-cache-dir --upgrade pip && \
