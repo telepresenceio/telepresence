@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -20,6 +19,7 @@ import (
 
 	"git.lukeshu.com/go/libsystemd/sd_daemon"
 	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
@@ -79,10 +79,6 @@ const (
 	MAGIC_IP = "127.254.254.254"
 )
 
-func main() {
-	os.Exit(_main())
-}
-
 // worker names
 const (
 	TELEPROXY       = "TPY"
@@ -131,21 +127,38 @@ type Args struct {
 	version    bool
 }
 
-func _main() int {
+func main() {
 	args := Args{}
 
-	flag.BoolVar(&args.version, "version", false, "alias for '-mode=version'")
-	flag.StringVar(&args.mode, "mode", "", "mode of operation ('intercept', 'bridge', or 'version')")
-	flag.StringVar(&args.kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
-	flag.StringVar(&args.context, "context", "", "context to use (default: the current context)")
-	flag.StringVar(&args.namespace, "namespace", "", "namespace to use (default: the current namespace for the context")
-	flag.StringVar(&args.dnsIP, "dns", "", "dns ip address")
-	flag.StringVar(&args.fallbackIP, "fallback", "", "dns fallback")
-	flag.BoolVar(&args.nosearch, "noSearchOverride", false, "disable dns search override")
-	flag.BoolVar(&args.nocheck, "noCheck", false, "disable self check")
+	var tp = &cobra.Command{
+		Use:   "teleproxy",
+		Short: "teleproxy",
+		Long:  "teleproxy - connect locally running code to a remote kubernetes cluster",
+	}
 
-	flag.Parse()
+	tp.Flags().BoolVar(&args.version, "version", false, "alias for '-mode=version'")
+	tp.Flags().StringVar(&args.mode, "mode", "", "mode of operation ('intercept', 'bridge', or 'version')")
+	tp.Flags().StringVar(&args.kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
+	tp.Flags().StringVar(&args.context, "context", "", "context to use (default: the current context)")
+	tp.Flags().StringVar(&args.namespace, "namespace", "",
+		"namespace to use (default: the current namespace for the context")
+	tp.Flags().StringVar(&args.dnsIP, "dns", "", "dns ip address")
+	tp.Flags().StringVar(&args.fallbackIP, "fallback", "", "dns fallback")
+	tp.Flags().BoolVar(&args.nosearch, "no-search-override", false, "disable dns search override")
+	tp.Flags().BoolVar(&args.nocheck, "no-check", false, "disable self check")
 
+	tp.Run = adapt(func(cmd *cobra.Command, _ []string) error {
+		return runTeleproxy(args)
+	})
+
+	err := tp.Execute()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func runTeleproxy(args Args) error {
 	if args.version {
 		args.mode = VERSION
 	}
@@ -155,9 +168,9 @@ func _main() int {
 		// do nothing
 	case VERSION:
 		fmt.Println("teleproxy", "version", Version)
-		return 0
+		return nil
 	default:
-		panic(fmt.Sprintf("TPY: unrecognized mode: %v", args.mode))
+		return errors.Errorf("TPY: unrecognized mode: %v", args.mode)
 	}
 
 	// do this up front so we don't miss out on cleanup if someone
@@ -196,19 +209,27 @@ func _main() int {
 	log.Println("")
 
 	errs := sup.Run()
-	if len(errs) > 0 {
-		fmt.Printf("Teleproxy exited with %d error(s):\n", len(errs))
-	} else {
+	if len(errs) == 0 {
 		fmt.Println("Teleproxy exited successfully")
+		return nil
 	}
 
+	msg := fmt.Sprintf("Teleproxy exited with %d error(s):\n", len(errs))
+
 	for _, err := range errs {
-		fmt.Printf("  %v\n", err)
+		msg += fmt.Sprintf("  %v\n", err)
 	}
-	if len(errs) > 0 {
-		return 1
-	} else {
-		return 0
+
+	return errors.New(strings.TrimSpace(msg))
+}
+
+func adapt(f func(*cobra.Command, []string) error) func(*cobra.Command, []string) {
+	return func(cmd *cobra.Command, args []string) {
+		err := f(cmd, args)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
 }
 
