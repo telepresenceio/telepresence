@@ -639,28 +639,27 @@ func TestCommandRun(t *testing.T) {
 	})
 }
 
-type LogToBuffer struct {
+type LogToSlice struct {
 	Lines []string
 }
 
-func (lb *LogToBuffer) Printf(format string, v ...interface{}) {
+func (lb *LogToSlice) Printf(format string, v ...interface{}) {
 	lb.Lines = append(lb.Lines, fmt.Sprintf(format, v...))
 }
 
 func TestCommandRunLogging(t *testing.T) {
 	sup := WithContext(context.Background())
-	theLogger := &LogToBuffer{}
+	theLogger := &LogToSlice{}
 	sup.Logger = theLogger
 	sup.Supervise(&Worker{
 		Name: "charles",
 		Work: func(p *Process) error {
 			cmd := p.Command("bash", "-c", "for i in $(seq 1 3); do echo $i; sleep 0.2; done")
-			if err := cmd.Start(); err != nil {
+			if err := cmd.Run(); err != nil {
 				t.Errorf("unexpted error: %v", err)
 			}
-			cmd.Wait()
 			if len(theLogger.Lines) != 6 {
-				t.Log("Expected lines: process start, cmd start, 1, 2, 3, cmd end")
+				t.Log("Expected 6 lines: process start, cmd start, 1, 2, 3, cmd end")
 				t.Logf("Got (%d lines): %q", len(theLogger.Lines), theLogger.Lines)
 				t.Fail()
 			}
