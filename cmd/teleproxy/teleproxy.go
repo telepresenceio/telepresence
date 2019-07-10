@@ -131,9 +131,11 @@ func main() {
 	args := Args{}
 
 	var tp = &cobra.Command{
-		Use:   "teleproxy",
-		Short: "teleproxy",
-		Long:  "teleproxy - connect locally running code to a remote kubernetes cluster",
+		Use:           "teleproxy",
+		Short:         "teleproxy",
+		Long:          "teleproxy - connect locally running code to a remote kubernetes cluster",
+		SilenceErrors: true,
+		SilenceUsage:  true,
 	}
 
 	tp.Flags().BoolVar(&args.version, "version", false, "alias for '-mode=version'")
@@ -147,9 +149,9 @@ func main() {
 	tp.Flags().BoolVar(&args.nosearch, "no-search-override", false, "disable dns search override")
 	tp.Flags().BoolVar(&args.nocheck, "no-check", false, "disable self check")
 
-	tp.Run = adapt(func(cmd *cobra.Command, _ []string) error {
+	tp.RunE = func(cmd *cobra.Command, _ []string) error {
 		return runTeleproxy(args)
-	})
+	}
 
 	err := tp.Execute()
 	if err != nil {
@@ -221,16 +223,6 @@ func runTeleproxy(args Args) error {
 	}
 
 	return errors.New(strings.TrimSpace(msg))
-}
-
-func adapt(f func(*cobra.Command, []string) error) func(*cobra.Command, []string) {
-	return func(cmd *cobra.Command, args []string) {
-		err := f(cmd, args)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-	}
 }
 
 func selfcheck(p *supervisor.Process) error {
