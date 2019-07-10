@@ -51,9 +51,34 @@ func (rb *ResourceBase) IsOkay() bool {
 
 // Close shuts down this resource
 func (rb *ResourceBase) Close() error {
-	rb.tasks <- rb.quit
-	<-rb.end // Wait until things have closed
+	if rb.tasks != nil {
+		rb.tasks <- rb.quit
+		<-rb.end // Wait until things have closed
+		rb.tasks = nil
+	}
 	return nil
+}
+
+func (rb *ResourceBase) setup(sup *supervisor.Supervisor, name string) {
+	rb.name = name
+	rb.tasks = make(chan func() error, 1)
+	sup.Supervise(&supervisor.Worker{
+		Name: name,
+		Work: rb.processor,
+	})
+	sup.Supervise(&supervisor.Worker{
+		Name: name + "/shutdown",
+		Work: func(p *supervisor.Process) error {
+			select {
+			case <-p.Shutdown():
+				p.Log("daemon is shutting down")
+				return rb.Close()
+			case <-rb.end:
+				p.Log("Close() complete")
+				return nil
+			}
+		},
+	})
 }
 
 func (rb *ResourceBase) quit() error {
@@ -85,10 +110,9 @@ func (rb *ResourceBase) processor(p *supervisor.Process) error {
 			task = fn
 		case <-ticker.C: // Ticker says it's time to monitor
 			task = func() error { return rb.monitor(p) }
-		case <-p.Shutdown(): // Supervisor told us to quit
-			task = rb.quit
 		}
 		if err := task(); err != nil {
+			p.Logf("task failed: %v", err)
 			return err
 		}
 		if rb.done {
@@ -150,10 +174,6 @@ func TrackKCluster(p *supervisor.Process, args *ConnectArgs) (*KCluster, error) 
 	c := &KCluster{
 		rai:   args.RAI,
 		kargs: args.KArgs,
-		ResourceBase: ResourceBase{
-			name:  "cluster",
-			tasks: make(chan func() error, 1),
-		},
 	}
 	c.doCheck = c.check
 	c.doQuit = func() error { c.done = true; return nil }
@@ -176,11 +196,7 @@ func TrackKCluster(p *supervisor.Process, args *ConnectArgs) (*KCluster, error) 
 	}
 	c.server = strings.TrimSpace(string(output))
 
-	p.Supervisor().Supervise(&supervisor.Worker{
-		Name: "cluster",
-		Work: c.processor,
-	})
-
+	c.setup(p.Supervisor(), "cluster")
 	return c, nil
 }
 
@@ -212,18 +228,11 @@ func CheckedRetryingCommand(
 		check:      check,
 		startGrace: startGrace,
 		callerP:    p,
-		ResourceBase: ResourceBase{
-			name:  name,
-			tasks: make(chan func() error, 1),
-		},
 	}
 	crc.ResourceBase.doCheck = crc.doCheck
 	crc.ResourceBase.doQuit = crc.doQuit
+	crc.setup(p.Supervisor(), name)
 
-	p.Supervisor().Supervise(&supervisor.Worker{
-		Name: crc.name + "/crc",
-		Work: crc.processor,
-	})
 	if err := crc.launch(); err != nil {
 		return nil, err
 	}
@@ -284,7 +293,6 @@ func (crc *crCmd) launch() error {
 
 func (crc *crCmd) kill() error {
 	if crc.cmd != nil {
-		crc.callerP.Log("killing...")
 		if err := crc.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 			crc.callerP.Logf("kill failed (ignoring): %v", err)
 		}
@@ -311,11 +319,9 @@ func (crc *crCmd) doCheck(p *supervisor.Process) error {
 		p.Logf("check failed: %v", err)
 		runTime := time.Since(crc.startedAt)
 		if runTime > crc.startGrace {
-			p.Log("Killing...")
 			// Kill the process because it's in a bad state
-			if err := crc.kill(); err != nil {
-				p.Logf("failed to kill: %v", err)
-			}
+			p.Log("Killing...")
+			_ = crc.kill()
 		} else {
 			p.Logf("Not killing yet (%v < %v)", runTime, crc.startGrace)
 		}
