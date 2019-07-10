@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
+	"strconv"
 	"time"
 
 	"github.com/datawire/teleproxy/pkg/kubeapply"
@@ -12,25 +12,8 @@ import (
 )
 
 func envBool(name string) bool {
-	val := os.Getenv(name)
-	switch strings.TrimSpace(strings.ToLower(val)) {
-	case "true":
-		return true
-	case "yes":
-		return true
-	case "1":
-		return true
-	case "false":
-		return false
-	case "no":
-		return false
-	case "0":
-		return false
-	case "":
-		return false
-	}
-
-	return true
+	val, _ := strconv.ParseBool(name)
+	return val
 }
 
 // Version holds the version of the code. This is intended to be overridden at build time.
