@@ -82,7 +82,7 @@ func poll(t *testing.T, url string) bool {
 }
 
 func teleproxyCluster() {
-	os.Args = []string{"teleproxy", fmt.Sprintf("-kubeconfig=%s", ClusterFile)}
+	os.Args = []string{"teleproxy", fmt.Sprintf("--kubeconfig=%s", ClusterFile)}
 	main()
 }
 

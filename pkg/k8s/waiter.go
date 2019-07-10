@@ -66,7 +66,7 @@ func (w *Waiter) canonical(name string) string {
 		parts = strings.Split(name, ".")
 		switch len(parts) {
 		case 1:
-			namespace = "default"
+			namespace = w.watcher.client.namespace
 		case 2:
 			name = parts[0]
 			namespace = parts[1]

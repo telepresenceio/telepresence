@@ -18,7 +18,7 @@ import (
 // Kubeapply applies the supplied manifests to the kubernetes cluster
 // indicated via the kubeinfo argument. If kubeinfo is nil, it will
 // look in the standard default places for cluster configuration.
-func Kubeapply(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug bool, files ...string) error {
+func Kubeapply(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool, files ...string) error {
 	if kubeinfo == nil {
 		kubeinfo = k8s.NewKubeInfo("", "", "")
 	}
@@ -32,7 +32,7 @@ func Kubeapply(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug bool, files 
 	}
 
 	for _, names := range p.phases() {
-		err := phase(kubeinfo, timeout, debug, names, nil)
+		err := phase(kubeinfo, timeout, debug, dryRun, names, nil)
 		if err != nil {
 			return err
 		}
@@ -108,7 +108,7 @@ func (p *phaser) phases() (result [][]string) {
 	return
 }
 
-func phase(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug bool, names []string, data interface{}) error {
+func phase(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool, names []string, data interface{}) error {
 	expanded, err := expand(names, data)
 	if err != nil {
 		return err
@@ -136,7 +136,7 @@ func phase(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug bool, names []st
 	}
 
 	if len(msgs) == 0 {
-		err = apply(kubeinfo, expanded)
+		err = apply(kubeinfo, dryRun, expanded)
 	}
 
 	if !debug {
@@ -184,8 +184,11 @@ func expand(names []string, data interface{}) ([]string, error) {
 	return result, nil
 }
 
-func apply(info *k8s.KubeInfo, names []string) error {
+func apply(info *k8s.KubeInfo, dryRun bool, names []string) error {
 	args := []string{"apply"}
+	if dryRun {
+		args = append(args, "--dry-run")
+	}
 	for _, n := range names {
 		args = append(args, "-f", n)
 	}
