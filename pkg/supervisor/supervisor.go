@@ -532,6 +532,11 @@ func (l *logger) Log(prefix, line string) {
 }
 
 func (l *logger) LogLines(prefix, str string, err error) {
+	if strings.HasSuffix(str, "\n") {
+		str = str[:len(str)-1]
+	} else {
+		str += "\\no newline"
+	}
 	lines := strings.Split(str, "\n")
 	for _, line := range lines {
 		l.Log(prefix, line)
