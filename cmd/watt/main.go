@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -13,6 +14,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Version holds the version of the code. This is intended to be overridden at build time.
+var Version = "(unknown version)"
+
 var kubernetesNamespace string
 var initialSources = make([]string, 0)
 var initialFieldSelector string
@@ -21,6 +25,7 @@ var watchHooks = make([]string, 0)
 var notifyReceivers = make([]string, 0)
 var port int
 var interval time.Duration
+var showVersion bool
 
 var rootCmd = &cobra.Command{
 	Use:              "watt",
@@ -41,6 +46,7 @@ func init() {
 	rootCmd.Flags().IntVarP(&port, "port", "p", 7000, "configure the snapshot server port")
 	rootCmd.Flags().DurationVarP(&interval, "interval", "i", 250*time.Millisecond,
 		"configure the rate limit interval")
+	rootCmd.Flags().BoolVarP(&showVersion, "version", "", false, "display version information")
 }
 
 func runWatt(cmd *cobra.Command, args []string) {
@@ -48,6 +54,11 @@ func runWatt(cmd *cobra.Command, args []string) {
 }
 
 func _runWatt(cmd *cobra.Command, args []string) int {
+	if showVersion {
+		fmt.Println("watt", Version)
+		return 0
+	}
+
 	if len(initialSources) == 0 {
 		log.Println("no initial sources configured")
 		return 1
