@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/kubeapply"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -28,6 +29,9 @@ func main() {
 		SilenceUsage:  true,
 	}
 
+	kubeconfig := ka.Flags().String("kubeconfig", "", "kubernetes config file")
+	context := ka.Flags().String("context", "", "kubernetes context")
+	namespace := ka.Flags().StringP("namespace", "n", "", "kubernetes namespace")
 	debug := ka.Flags().Bool("debug", envBool("KUBEAPPLY_DEBUG"), "enable debug mode")
 	dryRun := ka.Flags().Bool("dry-run", envBool("KUBEAPPLY_DRYRUN"), "enable dry-run mode")
 	timeout := ka.Flags().DurationP("timeout", "t", 60*time.Second, "timeout to wait for applied yaml to be ready")
@@ -45,7 +49,8 @@ func main() {
 		if len(*files) == 0 {
 			return errors.Errorf("at least one file argument is required")
 		}
-		return kubeapply.Kubeapply(nil, *timeout, *debug, *dryRun, *files...)
+		return kubeapply.Kubeapply(k8s.NewKubeInfo(*kubeconfig, *context, *namespace), *timeout,
+			*debug, *dryRun, *files...)
 	}
 
 	err := ka.Execute()
