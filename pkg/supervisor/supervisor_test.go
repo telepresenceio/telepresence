@@ -639,6 +639,36 @@ func TestCommandRun(t *testing.T) {
 	})
 }
 
+type LogToSlice struct {
+	Lines []string
+}
+
+func (lb *LogToSlice) Printf(format string, v ...interface{}) {
+	lb.Lines = append(lb.Lines, fmt.Sprintf(format, v...))
+}
+
+func TestCommandRunLogging(t *testing.T) {
+	sup := WithContext(context.Background())
+	theLogger := &LogToSlice{}
+	sup.Logger = theLogger
+	sup.Supervise(&Worker{
+		Name: "charles",
+		Work: func(p *Process) error {
+			cmd := p.Command("bash", "-c", "for i in $(seq 1 3); do echo $i; sleep 0.2; done")
+			if err := cmd.Run(); err != nil {
+				t.Errorf("unexpted error: %v", err)
+			}
+			if len(theLogger.Lines) != 6 {
+				t.Log("Expected 6 lines: process start, cmd start, 1, 2, 3, cmd end")
+				t.Logf("Got (%d lines): %q", len(theLogger.Lines), theLogger.Lines)
+				t.Fail()
+			}
+			return nil
+		},
+	})
+	sup.Run()
+}
+
 func TestDoPanic(t *testing.T) {
 	gotHere := false
 	errs := Run("bob", func(p *Process) error {
