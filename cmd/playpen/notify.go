@@ -2,33 +2,38 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 
-	"github.com/0xAX/notificator"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
-var notifyConfig *notificator.Notificator
+var notifyRAI *RunAsInfo
 
 // Notify displays a desktop banner notification to the user
-func Notify(p *supervisor.Process, title string, message ...string) {
-	if notifyConfig == nil {
-		notifyConfig = notificator.New(notificator.Options{
-			DefaultIcon: "",
-			AppName:     "Playpen Daemon",
-		})
+func Notify(p *supervisor.Process, message string) {
+	if notifyRAI == nil {
+		var err error
+		notifyRAI, err = GuessRunAsInfo(p)
+		if err != nil {
+			p.Log(err)
+			notifyRAI = &RunAsInfo{}
+		}
 	}
-	var err error
-	switch {
-	case len(message) == 0:
-		p.Logf("NOTIFY: %s", title)
-		err = notifyConfig.Push(title, "", "", notificator.UR_NORMAL)
-	case len(message) == 1:
-		p.Logf("NOTIFY: %s: %s", title, message)
-		err = notifyConfig.Push(title, message[0], "", notificator.UR_NORMAL)
+
+	var args []string
+	switch runtime.GOOS {
+	case "darwin":
+		script := fmt.Sprintf("display notification \"Playpen Daemon\" with title \"%s\"", message)
+		args = []string{"osascript", "-e", script}
+	case "linux":
+		args = []string{"notify-send", "Playpen Daemon", message}
 	default:
-		panic(fmt.Sprintf("NOTIFY message too long: %d", len(message)))
+		return
 	}
-	if err != nil {
+
+	p.Logf("NOTIFY: %s", message)
+	cmd := notifyRAI.Command(p, args...)
+	if err := cmd.Run(); err != nil {
 		p.Logf("ERROR while notifying: %v", err)
 	}
 }
