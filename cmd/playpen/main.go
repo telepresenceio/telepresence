@@ -28,9 +28,15 @@ func adaptNoArgs(fn func() error) func(*cobra.Command, []string) error {
 	}
 }
 
+// unimplemented displays a message and returns
+func unimplemented(cmd *cobra.Command, _ []string) error {
+	fmt.Printf("%s is unimplimented...\n", cmd.Name())
+	return nil
+}
+
 func main() {
 	rootCmd := &cobra.Command{
-		Use:          "playpen [command]",
+		Use:          "playpen",
 		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
 		RunE: func(_ *cobra.Command, _ []string) error {
 			fmt.Println("Running \"playpen status\". Use \"playpen help\" to get help.")
@@ -80,6 +86,30 @@ func main() {
 		Args:  cobra.ExactArgs(0),
 		RunE:  adaptNoArgs(doQuit),
 	})
+
+	interceptCmd := &cobra.Command{
+		Use:   "intercept",
+		Long:  "Manage deployment intercepts. An intercept arranges for a subset of requests to be diverted to the local machine.",
+		Short: "manage deployment intercepts",
+		RunE:  unimplemented,
+	}
+	interceptCmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "list current intercepts",
+		RunE:  unimplemented,
+	})
+	interceptCmd.AddCommand(&cobra.Command{
+		Use:   "add",
+		Short: "add a deployment intercept",
+		RunE:  unimplemented,
+	})
+	interceptCmd.AddCommand(&cobra.Command{
+		Use:   "remove",
+		Short: "deactivate and remove an existent intercept",
+		RunE:  unimplemented,
+	})
+
+	rootCmd.AddCommand(interceptCmd)
 
 	err := rootCmd.Execute()
 	if err != nil {
