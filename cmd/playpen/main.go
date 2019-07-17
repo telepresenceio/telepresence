@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -30,7 +32,7 @@ func adaptNoArgs(fn func() error) func(*cobra.Command, []string) error {
 
 // unimplemented displays a message and returns
 func unimplemented(cmd *cobra.Command, _ []string) error {
-	fmt.Printf("%s is unimplimented...\n", cmd.Name())
+	fmt.Printf("%s is unimplemented...\n", cmd.CommandPath())
 	return nil
 }
 
@@ -96,19 +98,80 @@ func main() {
 	interceptCmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "list current intercepts",
-		RunE:  unimplemented,
-	})
-	interceptCmd.AddCommand(&cobra.Command{
-		Use:   "add",
-		Short: "add a deployment intercept",
-		RunE:  unimplemented,
+		Args:  cobra.ExactArgs(0),
+		RunE: func(_ *cobra.Command, _ []string) error {
+			out, err := listIntercepts()
+			if err != nil {
+				return err
+			}
+			fmt.Print(out)
+			return nil
+		},
 	})
 	interceptCmd.AddCommand(&cobra.Command{
 		Use:   "remove",
 		Short: "deactivate and remove an existent intercept",
-		RunE:  unimplemented,
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := strings.TrimSpace(args[0])
+			err := removeIntercept(name)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Removed intercept named %q", name)
+			return nil
+		},
 	})
+	intercept := InterceptInfo{}
+	interceptAddCmd := &cobra.Command{
+		Use:   "add DEPLOYMENT -t [HOST:]PORT -m HEADER=REGEX ...",
+		Short: "add a deployment intercept",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			intercept.Deployment = args[0]
+			if intercept.Name == "" {
+				intercept.Name = fmt.Sprintf("cept-%d", time.Now().Unix())
+			}
 
+			var host, portStr string
+			hp := strings.SplitN(intercept.TargetHost, ":", 2)
+			if len(hp) < 2 {
+				portStr = hp[0]
+			} else {
+				host = strings.TrimSpace(hp[0])
+				portStr = hp[1]
+			}
+			if len(host) == 0 {
+				host = "127.0.0.1"
+			}
+			port, err := strconv.Atoi(portStr)
+			if err != nil {
+				return errors.Wrapf(
+					err,
+					"Failed to parse %q as HOST:PORT",
+					intercept.TargetHost,
+				)
+			}
+			intercept.TargetHost = host
+			intercept.TargetPort = port
+			addIntercept(&intercept)
+
+			out, err := listIntercepts()
+			if err != nil {
+				return err
+			}
+			fmt.Print(out)
+
+			return nil
+		},
+	}
+	interceptAddCmd.Flags().StringVarP(&intercept.Name, "name", "n", "", "a name for this intercept")
+	interceptAddCmd.Flags().StringVarP(&intercept.TargetHost, "target", "t", "", "the [HOST:]PORT to forward to")
+	interceptAddCmd.MarkFlagRequired("target")
+	interceptAddCmd.Flags().StringToStringVarP(&intercept.Patterns, "match", "m", nil, "match expression (HEADER=REGEX)")
+	interceptAddCmd.MarkFlagRequired("match")
+
+	interceptCmd.AddCommand(interceptAddCmd)
 	rootCmd.AddCommand(interceptCmd)
 
 	err := rootCmd.Execute()
