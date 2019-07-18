@@ -163,12 +163,11 @@ def path_or_bool(value: str) -> Union[Path, bool]:
     path = Path(value)
     if path.is_absolute():
         return path
-    value_lower = value.lower()
-    if value_lower in ("true", "on", "yes", "1"):
+    value = value.lower()
+    if value in ("true", "on", "yes", "1"):
         return True
-    if value_lower in ("false", "off", "no", "0"):
+    if value in ("false", "off", "no", "0"):
         return False
-
     raise argparse.ArgumentTypeError(
         "Value must be true, false, or an absolute filesystem path"
     )

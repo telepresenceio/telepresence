@@ -14,7 +14,8 @@
 
 from subprocess import CalledProcessError
 from typing import Callable, Tuple
-import random, string
+import random
+import string
 
 from telepresence.connect import SSH
 from telepresence.runner import Runner
@@ -31,35 +32,32 @@ def mount_remote_volumes(
     Returns (path to mounted directory, callable that will unmount it).
     """
     span = runner.span()
-    ssh_args = ssh.required_args.copy()
-
-    if use_docker_volume:
-        sudo_prefix = []
-        middle = ["-o", "allow_other"]
-        sshfs = ["docker", "volume", "create", "-d", "vieux/sshfs"]
-        port_option = ["-o", "port="+str(ssh.port)]
-        sshcmd = ["-o", "sshcmd="+"{}:/".format(ssh.user_at_host)]
-
-        f_index = ssh_args.index("-F") if "-F" in ssh_args else None
-        if f_index != None:
-            del ssh_args[f_index + 1]
-            del ssh_args[f_index]
-    else:
-        sshfs= ["sshfs", "{}:/".format(ssh.user_at_host)]
-        port_option = ["-p", str(ssh.port)]
-        sshcmd = ["{}:/".format(ssh.user_at_host)]
-        if  allow_all_users:
-            sudo_prefix = ["sudo"]
-            middle = ["-o", "allow_other"]
-        else:
-            sudo_prefix = []
-            middle = []
-
     try:
-        runner.check_call(
-            sudo_prefix + sshfs + port_option + ssh_args +
-            middle + sshcmd + [mount_dir],
-        )
+        if use_docker_volume:
+            ssh_args = ssh.required_args.copy()
+            f_index = ssh_args.index("-F") if "-F" in ssh_args else None
+            if f_index is not None:
+                del ssh_args[f_index + 1]
+                del ssh_args[f_index]
+
+            runner.check_call(
+                ["docker", "volume", "create", "-d", "vieux/sshfs", "-o", "port="+str(ssh.port)] +
+                ssh_args +
+                ["-o", "allow_other", "-o", "sshcmd="+"{}:/".format(ssh.user_at_host), mount_dir]
+            )
+        else:
+            if allow_all_users:
+                sudo_prefix = ["sudo"]
+                middle = ["-o", "allow_other"]
+            else:
+                sudo_prefix = []
+                middle = []
+
+            runner.check_call(
+                sudo_prefix + ["sshfs", "-p", str(ssh.port)] + ssh.required_args +
+                middle + ["{}:/".format(ssh.user_at_host), mount_dir],
+            )
+        
         mounted = True
     except CalledProcessError as exc:
         runner.show(
