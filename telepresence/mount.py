@@ -20,7 +20,7 @@ from telepresence.runner import Runner
 
 
 def mount_remote_volumes(
-    runner: Runner, ssh: SSH, allow_all_users: bool, mount_dir: str
+    runner: Runner, ssh: SSH, allow_all_users: bool, use_docker_volume: bool, mount_dir: str
 ) -> Tuple[str, Callable]:
     """
     sshfs is used to mount the remote system locally.
@@ -30,16 +30,32 @@ def mount_remote_volumes(
     Returns (path to mounted directory, callable that will unmount it).
     """
     span = runner.span()
-    if allow_all_users:
-        sudo_prefix = ["sudo"]
-        middle = ["-o", "allow_other"]
-    else:
+    if use_docker_volume:
         sudo_prefix = []
-        middle = []
+        middle = ["-o", "allow_other"]
+        sshfs = ["docker", "volume", "create", "-d", "vieux/sshfs"]
+        port_option = ["-o", "port="+str(ssh.port)]
+        sshcmd = ["-o", "sshcmd="+"{}:/".format(ssh.user_at_host)]
+    else:
+        sshfs= ["sshfs", "{}:/".format(ssh.user_at_host)]
+        port_option = ["-p", str(ssh.port)]
+        sshcmd = ["{}:/".format(ssh.user_at_host)]
+        if  allow_all_users:
+            sudo_prefix = ["sudo"]
+            middle = ["-o", "allow_other"]
+        else:
+            sudo_prefix = []
+            middle = []
+
+    ssh_args = ssh.required_args.copy()
+
+    ssh_args.pop(0)
+    ssh_args.pop(0)
+
     try:
         runner.check_call(
-            sudo_prefix + ["sshfs", "-p", str(ssh.port)] + ssh.required_args +
-            middle + ["{}:/".format(ssh.user_at_host), mount_dir],
+            sudo_prefix + sshfs + port_option + ssh_args +
+            middle + sshcmd + [mount_dir],
         )
         mounted = True
     except CalledProcessError as exc:
@@ -60,7 +76,9 @@ def mount_remote_volumes(
         pass
 
     def cleanup():
-        if runner.platform == "linux":
+        if use_docker_volume:
+            runner.check_call(["docker", "volume", "rm", "-f", mount_dir])
+        elif runner.platform == "linux":
             runner.check_call(
                 sudo_prefix + ["fusermount", "-z", "-u", mount_dir]
             )
@@ -71,13 +89,15 @@ def mount_remote_volumes(
     return mount_dir, cleanup if mounted else no_cleanup
 
 
-def mount_remote(runner, mount, ssh, allow_all_users, env):
+def mount_remote(runner, mount, ssh, allow_all_users, use_docker_volume, env):
     """Handle filesystem stuff (pod name, ssh object)"""
     if mount:
         # The mount directory is made here, removed by mount_cleanup if
         # mount succeeds, leaked if mount fails.
         if mount is True:
             mount_dir = str(runner.make_temp("fs"))
+        elif use_docker_volume:
+            mount_dir = str(mount)
         else:
             # Try to create the mount point as a sanity check. If we do create
             # it, we leave it behind. This is sort of a leak. Kind of.
@@ -87,13 +107,21 @@ def mount_remote(runner, mount, ssh, allow_all_users, env):
             except OSError as exc:
                 raise runner.fail("Unable to use mount path: {}".format(exc))
             mount_dir = str(mount)
+            
+
         mount_dir, mount_cleanup = mount_remote_volumes(
             runner,
             ssh,
             allow_all_users,
+            use_docker_volume,
             mount_dir,
         )
-        env["TELEPRESENCE_ROOT"] = mount_dir
+
+        telepresence_root = mount_dir
+        if telepresence_root[0] != "/":
+            telepresence_root = "/" + telepresence_root
+
+        env["TELEPRESENCE_ROOT"] = telepresence_root
         runner.add_cleanup("Unmount remote filesystem", mount_cleanup)
     else:
         mount_dir = None
@@ -115,6 +143,7 @@ def setup(runner, args):
             needed.append("umount")
         runner.require(needed, "Required for volume mounts")
 
+    use_docker_volume = args.mount is str and args.method == "container"
     # We allow all users if we're using Docker because we don't know
     # what uid the Docker container will use.
     allow_all_users = args.mount and args.method == "container"
@@ -127,5 +156,5 @@ def setup(runner, args):
             "https://telepresence.io/howto/volumes.html for details."
         )
     return lambda runner_, env, ssh: mount_remote(
-        runner_, args.mount, ssh, allow_all_users, env
+        runner_, args.mount, ssh, allow_all_users, use_docker_volume, env
     )

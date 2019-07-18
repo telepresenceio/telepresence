@@ -207,7 +207,10 @@ def run_docker_command(
     docker_env.update(remote_env)
 
     if mount_dir:
-        docker_command.append("--volume={}:{}".format(mount_dir, mount_dir))
+        mount_dir_target = mount_dir
+        if mount_dir_target[0] != "/":
+            mount_dir_target = "/" + mount_dir_target
+        docker_command.append("--volume={}:{}".format(mount_dir, mount_dir_target))
 
     # Don't add --init if the user is doing something with it
     init_args = [

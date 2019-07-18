@@ -158,16 +158,19 @@ def crash_reporting(runner=None):
         raise SystemExit(1)
 
 
-def path_or_bool(value: str) -> Union[Path, bool]:
+def path_or_bool(value: str) -> Union[Path, bool, str]:
     """Parse value as a Path or a boolean"""
     path = Path(value)
     if path.is_absolute():
         return path
-    value = value.lower()
-    if value in ("true", "on", "yes", "1"):
+    value_lower = value.lower()
+    if value_lower in ("true", "on", "yes", "1"):
         return True
-    if value in ("false", "off", "no", "0"):
+    if value_lower in ("false", "off", "no", "0"):
         return False
+    if not "/" in value:
+        return value
+
     raise argparse.ArgumentTypeError(
         "Value must be true, false, or an absolute filesystem path"
     )
