@@ -97,6 +97,7 @@ def run_docker_command(
     remote_env: Dict[str, str],
     ssh: SSH,
     mount_dir: Optional[str],
+    mount_target: Optional[str],
     pod_info: Dict[str, str],
 ) -> Popen:
     """
@@ -207,10 +208,7 @@ def run_docker_command(
     docker_env.update(remote_env)
 
     if mount_dir:
-        mount_dir_target = mount_dir
-        if mount_dir_target[0] != "/":
-            mount_dir_target = "/" + mount_dir_target
-        docker_command.append("--volume={}:{}".format(mount_dir, mount_dir_target))
+        docker_command.append("--volume={}:{}".format(mount_dir, mount_target))
 
     # Don't add --init if the user is doing something with it
     init_args = [
