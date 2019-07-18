@@ -22,7 +22,8 @@ from telepresence.runner import Runner
 
 
 def mount_remote_volumes(
-    runner: Runner, ssh: SSH, allow_all_users: bool, use_docker_volume: bool, mount_dir: str
+    runner: Runner, ssh: SSH, allow_all_users: bool, use_docker_volume: bool,
+    mount_dir: str
 ) -> Tuple[str, Callable]:
     """
     sshfs is used to mount the remote system locally.
@@ -40,11 +41,13 @@ def mount_remote_volumes(
                 del ssh_args[f_index + 1]
                 del ssh_args[f_index]
 
-            runner.check_call(
-                ["docker", "volume", "create", "-d", "vieux/sshfs", "-o", "port="+str(ssh.port)] +
-                ssh_args +
-                ["-o", "allow_other", "-o", "sshcmd="+"{}:/".format(ssh.user_at_host), mount_dir]
-            )
+            runner.check_call([
+                "docker", "volume", "create", "-d", "vieux/sshfs", "-o",
+                "port=" + str(ssh.port)
+            ] + ssh_args + [
+                "-o", "allow_other", "-o", "sshcmd=" +
+                "{}:/".format(ssh.user_at_host), mount_dir
+            ])
         else:
             if allow_all_users:
                 sudo_prefix = ["sudo"]
@@ -54,10 +57,11 @@ def mount_remote_volumes(
                 middle = []
 
             runner.check_call(
-                sudo_prefix + ["sshfs", "-p", str(ssh.port)] + ssh.required_args +
-                middle + ["{}:/".format(ssh.user_at_host), mount_dir],
+                sudo_prefix + ["sshfs", "-p", str(ssh.port)] +
+                ssh.required_args + middle +
+                ["{}:/".format(ssh.user_at_host), mount_dir],
             )
-        
+
         mounted = True
     except CalledProcessError as exc:
         runner.show(
@@ -89,13 +93,16 @@ def mount_remote_volumes(
     span.end()
     return mount_dir, cleanup if mounted else no_cleanup
 
+
 def mount_remote(runner, mount, ssh, allow_all_users, docker_mount, env):
     """Handle filesystem stuff (pod name, ssh object)"""
     if mount or docker_mount:
         # The mount directory is made here, removed by mount_cleanup if
         # mount succeeds, leaked if mount fails.
         if docker_mount:
-            mount_dir = "telepresence-" + ''.join(random.choice(string.ascii_lowercase) for i in range(9))
+            mount_dir = "telepresence-" + ''.join(
+                random.choice(string.ascii_lowercase) for i in range(9)
+            )
             mount_target = str(docker_mount)
         elif mount is True:
             mount_dir = str(runner.make_temp("fs"))
@@ -112,11 +119,7 @@ def mount_remote(runner, mount, ssh, allow_all_users, docker_mount, env):
             mount_target = mount_dir
 
         mount_dir, mount_cleanup = mount_remote_volumes(
-            runner,
-            ssh,
-            allow_all_users,
-            docker_mount != None,
-            mount_dir
+            runner, ssh, allow_all_users, docker_mount != None, mount_dir
         )
 
         env["TELEPRESENCE_ROOT"] = mount_dir

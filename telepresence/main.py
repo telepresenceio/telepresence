@@ -74,7 +74,8 @@ def main():
         # Set up outbound networking (pod name, ssh object)
         # Launch user command with the correct environment (...)
         user_process = launch(
-            runner, remote_info, env, socks_port, ssh, mount_dir, mount_target, pod_info
+            runner, remote_info, env, socks_port, ssh, mount_dir, mount_target,
+            pod_info
         )
 
         runner.wait_for_exit(user_process)

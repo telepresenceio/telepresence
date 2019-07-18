@@ -45,7 +45,8 @@ def setup_inject(runner: Runner, args):
         )
 
     def launch(
-        runner_, _remote_info, env, socks_port, _ssh, _mount_dir, _mount_target, _pod_info
+        runner_, _remote_info, env, socks_port, _ssh, _mount_dir,
+        _mount_target, _pod_info
     ):
         return launch_inject(runner_, command, socks_port, env)
 
@@ -92,7 +93,8 @@ def setup_vpn(runner: Runner, args):
         )
 
     def launch(
-        runner_, remote_info, env, _socks_port, ssh, _mount_dir, _mount_target, _pod_info
+        runner_, remote_info, env, _socks_port, ssh, _mount_dir, _mount_target,
+        _pod_info
     ):
         return launch_vpn(
             runner_, remote_info, command, args.also_proxy, env, ssh
@@ -113,7 +115,8 @@ def setup_container(runner: Runner, args):
         )
 
     def launch(
-        runner_, remote_info, env, _socks_port, ssh, mount_dir, mount_target, pod_info
+        runner_, remote_info, env, _socks_port, ssh, mount_dir, mount_target,
+        pod_info
     ):
         return run_docker_command(
             runner_, remote_info, args.docker_run, args.expose, env, ssh,

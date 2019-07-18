@@ -29,7 +29,6 @@ from telepresence.utilities import random_name
 
 class PortMapping(object):
     """Maps local ports to listen to remote exposed ports."""
-
     def __init__(self):
         self._mapping = {}  # type: Dict[int,int]
 
@@ -171,6 +170,7 @@ def path_or_bool(value: str) -> Union[Path, bool]:
     raise argparse.ArgumentTypeError(
         "Value must be true, false, or an absolute filesystem path"
     )
+
 
 def absolute_path(value: str) -> Path:
     """Parse value as a Path or a boolean"""
