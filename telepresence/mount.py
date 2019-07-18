@@ -143,7 +143,7 @@ def setup(runner, args):
             needed.append("umount")
         runner.require(needed, "Required for volume mounts")
 
-    use_docker_volume = args.mount is str and args.method == "container"
+    use_docker_volume = args.mount and args.mount[0] != "/" and args.method == "container"
     # We allow all users if we're using Docker because we don't know
     # what uid the Docker container will use.
     allow_all_users = args.mount and args.method == "container"
