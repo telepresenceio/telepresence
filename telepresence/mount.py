@@ -122,7 +122,7 @@ def mount_remote(runner, mount, ssh, allow_all_users, docker_mount, env):
             runner, ssh, allow_all_users, docker_mount != None, mount_dir
         )
 
-        env["TELEPRESENCE_ROOT"] = mount_dir
+        env["TELEPRESENCE_ROOT"] = mount_target
         runner.add_cleanup("Unmount remote filesystem", mount_cleanup)
     else:
         mount_dir = None
