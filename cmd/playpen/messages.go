@@ -3,6 +3,11 @@ package main
 // EmptyArgs supports RPCs that take no arguments
 type EmptyArgs struct{}
 
+// StringArgs supports RPCs that take a single string as an argument
+type StringArgs struct {
+	Value string
+}
+
 // StringReply supports RPCs that return a single string
 type StringReply struct {
 	Message string

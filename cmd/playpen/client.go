@@ -116,6 +116,48 @@ func doDisconnect() error {
 	return nil
 }
 
+func doListIntercepts() error {
+	response, err := doClientRequest("ListIntercepts", EmptyArgs{})
+	if err != nil {
+		return errors.Wrap(err, "ListIntercepts call")
+	}
+	message, err := decodeAsStringReply(response)
+	if err != nil {
+		return errors.Wrap(err, "ListIntercepts result")
+	}
+
+	fmt.Println(message)
+	return nil
+}
+
+func doAddIntercept(intercept *InterceptInfo) error {
+	response, err := doClientRequest("AddIntercept", intercept)
+	if err != nil {
+		return errors.Wrap(err, "AddIntercept call")
+	}
+	message, err := decodeAsStringReply(response)
+	if err != nil {
+		return errors.Wrap(err, "AddIntercept result")
+	}
+
+	fmt.Println(message)
+	return nil
+}
+
+func doRemoveIntercept(name string) error {
+	response, err := doClientRequest("RemoveIntercept", StringArgs{Value: name})
+	if err != nil {
+		return errors.Wrap(err, "RemoveIntercept call")
+	}
+	message, err := decodeAsStringReply(response)
+	if err != nil {
+		return errors.Wrap(err, "RemoveIntercept result")
+	}
+
+	fmt.Println(message)
+	return nil
+}
+
 func fetchResponse(path string, verbose bool) (string, error) {
 	client := GetClient()
 	res, err := client.Post(fmt.Sprintf("http://unix/%s", path), "application/json", nil)

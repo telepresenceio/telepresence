@@ -99,14 +99,7 @@ func main() {
 		Use:   "list",
 		Short: "list current intercepts",
 		Args:  cobra.ExactArgs(0),
-		RunE: func(_ *cobra.Command, _ []string) error {
-			out, err := listIntercepts()
-			if err != nil {
-				return err
-			}
-			fmt.Print(out)
-			return nil
-		},
+		RunE:  adaptNoArgs(doListIntercepts),
 	})
 	interceptCmd.AddCommand(&cobra.Command{
 		Use:   "remove",
@@ -114,12 +107,7 @@ func main() {
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := strings.TrimSpace(args[0])
-			err := removeIntercept(name)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("Removed intercept named %q", name)
-			return nil
+			return doRemoveIntercept(name)
 		},
 	})
 	intercept := InterceptInfo{}
@@ -154,15 +142,7 @@ func main() {
 			}
 			intercept.TargetHost = host
 			intercept.TargetPort = port
-			addIntercept(&intercept)
-
-			out, err := listIntercepts()
-			if err != nil {
-				return err
-			}
-			fmt.Print(out)
-
-			return nil
+			return doAddIntercept(&intercept)
 		},
 	}
 	interceptAddCmd.Flags().StringVarP(&intercept.Name, "name", "n", "", "a name for this intercept")
