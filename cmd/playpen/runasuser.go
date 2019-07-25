@@ -28,11 +28,11 @@ type RunAsInfo struct {
 func GetRunAsInfo() (*RunAsInfo, error) {
 	user, err := user.Current()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "user.Current()")
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "os.Getwd()")
 	}
 	rai := &RunAsInfo{
 		Name: user.Username,
@@ -51,7 +51,7 @@ func GuessRunAsInfo(p *supervisor.Process) (*RunAsInfo, error) {
 	}
 	pidDirs, err := ioutil.ReadDir("/proc")
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "read /proc")
 	}
 	for _, fi := range pidDirs {
 		if !fi.IsDir() { // Skip /proc files

@@ -14,6 +14,7 @@ import (
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	rpc "github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
+	"github.com/pkg/errors"
 )
 
 var teleproxy = ""
@@ -26,10 +27,10 @@ func FindTeleproxy() error {
 		if err != nil {
 			return err
 		}
-		cmd := exec.Command(path, "-version")
+		cmd := exec.Command(path, "--version")
 		outputBytes, err := cmd.CombinedOutput()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "teleproxy --version")
 		}
 		output := string(outputBytes)
 		if !strings.Contains(output, "version 0.6") {
@@ -128,13 +129,13 @@ func MakeDaemonService(p *supervisor.Process) (*DaemonService, error) {
 	netOverride, err := CheckedRetryingCommand(
 		p,
 		"netOverride",
-		[]string{teleproxy, "-mode", "intercept"},
+		[]string{teleproxy, "--mode", "intercept"},
 		&RunAsInfo{},
 		checkNetOverride,
 		10*time.Second,
 	)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "teleproxy initial launch")
 	}
 	return &DaemonService{
 		p:       p,
@@ -196,7 +197,7 @@ func (d *DaemonService) Connect(_ *http.Request, args *ConnectArgs, reply *Strin
 	bridge, err := CheckedRetryingCommand(
 		d.p,
 		"bridge",
-		[]string{teleproxy, "-mode", "bridge"},
+		[]string{teleproxy, "--mode", "bridge"},
 		args.RAI,
 		checkBridge,
 		10*time.Second,

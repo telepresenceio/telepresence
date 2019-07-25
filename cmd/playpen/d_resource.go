@@ -179,20 +179,20 @@ func TrackKCluster(p *supervisor.Process, args *ConnectArgs) (*KCluster, error) 
 	c.doQuit = func() error { c.done = true; return nil }
 
 	if err := c.check(p); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "initial cluster check")
 	}
 
 	cmd := c.GetKubectlCmd(p, "config", "current-context")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "kubectl config current-context")
 	}
 	c.context = strings.TrimSpace(string(output))
 
 	cmd = c.GetKubectlCmd(p, "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
 	output, err = cmd.CombinedOutput()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "kubectl config view")
 	}
 	c.server = strings.TrimSpace(string(output))
 
@@ -234,7 +234,7 @@ func CheckedRetryingCommand(
 	crc.setup(p.Supervisor(), name)
 
 	if err := crc.launch(); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "initial launch of %s", name)
 	}
 	return crc, nil
 }
