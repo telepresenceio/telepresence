@@ -6,16 +6,15 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/pkg/errors"
 
+	"github.com/datawire/apro/cmd/playpen/daemon"
 	"github.com/datawire/apro/lib/logging"
 )
 
-func daemon(p *supervisor.Process) error {
+func daemonWorker(p *supervisor.Process) error {
 	mux := http.NewServeMux()
 
 	// Operations that are valid irrespective of API version (curl is okay)
@@ -29,19 +28,7 @@ func daemon(p *supervisor.Process) error {
 			http.Error(w, "Bad request (use -XPOST)", 400)
 			return
 		}
-		err := func() error {
-			me, err := os.FindProcess(os.Getpid())
-			if err != nil {
-				return err
-			}
-			return me.Signal(syscall.SIGTERM)
-		}()
-		if err != nil {
-			message := fmt.Sprintf("Error trying to quit: %v", err)
-			p.Log(message)
-			http.Error(w, message, http.StatusInternalServerError)
-			return
-		}
+		p.Supervisor().Shutdown()
 		fmt.Fprintln(w, "Playpen Daemon quitting...")
 	})
 
@@ -81,25 +68,6 @@ func daemon(p *supervisor.Process) error {
 	return err
 }
 
-func waitForSignal(p *supervisor.Process) error {
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
-	p.Ready()
-
-	select {
-	case killSignal := <-interrupt:
-		switch killSignal {
-		case os.Interrupt:
-			p.Log("Got SIGINT...")
-		case syscall.SIGTERM:
-			p.Log("Got SIGTERM...")
-		}
-		p.Supervisor().Shutdown()
-	case <-p.Shutdown():
-	}
-	return nil
-}
-
 func runAsDaemon() error {
 	if os.Geteuid() != 0 {
 		return errors.New("playpen daemon must run as root")
@@ -109,12 +77,12 @@ func runAsDaemon() error {
 	sup.Logger = SetUpLogging()
 	sup.Supervise(&supervisor.Worker{
 		Name: "daemon",
-		Work: daemon,
+		Work: daemonWorker,
 	})
 	sup.Supervise(&supervisor.Worker{
 		Name:     "signal",
 		Requires: []string{"daemon"},
-		Work:     waitForSignal,
+		Work:     daemon.WaitForSignal,
 	})
 
 	sup.Logger.Printf("---")
