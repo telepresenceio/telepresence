@@ -2,73 +2,26 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/pkg/errors"
-
-	"github.com/datawire/apro/cmd/playpen/daemon"
-	"github.com/datawire/apro/lib/logging"
 )
 
-func daemonWorker(p *supervisor.Process) error {
-	mux := http.NewServeMux()
-
-	// Operations that are valid irrespective of API version (curl is okay)
-	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "playpen daemon %s\n", displayVersion)
-	})
-	mux.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			// Specifically looking to disallow GET/HEAD; requiring POST is
-			// perhaps too specific, but whatever, it gets the job done.
-			http.Error(w, "Bad request (use -XPOST)", 400)
-			return
-		}
-		p.Supervisor().Shutdown()
-		fmt.Fprintln(w, "Playpen Daemon quitting...")
-	})
-
-	// API-specific operations, via JSON-RPC
-	svc, err := MakeDaemonService(p)
-	if err != nil {
-		return err
-	}
-	rpcServer := getRPCServer(p)
-	if err := rpcServer.RegisterService(svc, "daemon"); err != nil {
-		return err
-	}
-	mux.Handle(fmt.Sprintf("/api/v%d", apiVersion), rpcServer)
-
-	// Listen on unix domain socket
-	unixListener, err := net.Listen("unix", socketName)
-	if err != nil {
-		return errors.Wrap(err, "listen")
-	}
-	err = os.Chmod(socketName, 0777)
-	if err != nil {
-		return errors.Wrap(err, "chmod")
-	}
-	server := &http.Server{
-		Handler: logging.LoggingMiddleware(mux),
-	}
-
-	p.Ready()
-	Notify(p, "Running")
-	err = p.DoClean(func() error {
-		if err := server.Serve(unixListener); err != http.ErrServerClosed {
-			return err
-		}
-		return nil
-	}, func() error { return server.Shutdown(p.Context()) })
-	Notify(p, "Terminated")
-	return err
+// Daemon represents the state of the Playpen Daemon
+type Daemon struct {
+	network        Resource
+	cluster        *KCluster
+	bridge         Resource
+	intercepts     []*InterceptInfo
+	interceptables []string
 }
 
-func runAsDaemon() error {
+// RunAsDaemon is the main function when executing as the daemon
+func RunAsDaemon() error {
 	if os.Geteuid() != 0 {
 		return errors.New("playpen daemon must run as root")
 	}
@@ -77,16 +30,17 @@ func runAsDaemon() error {
 	sup.Logger = SetUpLogging()
 	sup.Supervise(&supervisor.Worker{
 		Name: "daemon",
-		Work: daemonWorker,
+		Work: acceptLoop,
 	})
 	sup.Supervise(&supervisor.Worker{
 		Name:     "signal",
 		Requires: []string{"daemon"},
-		Work:     daemon.WaitForSignal,
+		Work:     WaitForSignal,
 	})
 
 	sup.Logger.Printf("---")
 	sup.Logger.Printf("Playpen daemon %s starting...", displayVersion)
+	sup.Logger.Printf("PID is %d", os.Getpid())
 	runErrors := sup.Run()
 
 	sup.Logger.Printf("")
@@ -98,4 +52,61 @@ func runAsDaemon() error {
 	}
 	sup.Logger.Printf("Playpen daemon %s is done.", displayVersion)
 	return errors.New("playpen daemon has exited")
+}
+
+func acceptLoop(p *supervisor.Process) error {
+	// Listen on unix domain socket
+	unixListener, err := net.Listen("unix", socketName)
+	if err != nil {
+		return errors.Wrap(err, "chmod")
+	}
+	err = os.Chmod(socketName, 0777)
+	if err != nil {
+		return errors.Wrap(err, "chmod")
+	}
+
+	p.Ready()
+	Notify(p, "Running")
+	defer Notify(p, "Terminated")
+
+	return p.DoClean(
+		func() error {
+			for {
+				conn, err := unixListener.Accept()
+				if err != nil {
+					return errors.Wrap(err, "accept")
+				}
+				_ = p.Go(func(p *supervisor.Process) error {
+					return handle(p, conn)
+				})
+			}
+		},
+		unixListener.Close,
+	)
+}
+
+func handle(p *supervisor.Process, conn net.Conn) error {
+	defer conn.Close()
+
+	decoder := json.NewDecoder(conn)
+	data := &ClientMessage{}
+	if err := decoder.Decode(data); err != nil {
+		p.Logf("Failed to read message: %v", err)
+		fmt.Fprintln(conn, "API mismatch. Server", displayVersion)
+		return nil
+	}
+	if data.APIVersion != apiVersion {
+		p.Logf("API version mismatch (got %d, need %d)", data.APIVersion, apiVersion)
+		fmt.Fprintf(conn, "API version mismatch (got %d, server %s)", data.APIVersion, displayVersion)
+		return nil
+	}
+	p.Logf("Received command: %q", data.Args)
+
+	err := handleCommand(p, conn, data)
+	if err != nil {
+		p.Logf("Command processing failed: %v", err)
+	}
+
+	p.Log("Done")
+	return nil
 }

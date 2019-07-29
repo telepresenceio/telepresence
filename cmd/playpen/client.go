@@ -1,17 +1,106 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/ybbus/jsonrpc"
 )
+
+// ClientMessage contains everything the daemon needs to process a
+// user's command
+type ClientMessage struct {
+	Args          []string
+	RAI           *RunAsInfo
+	APIVersion    int
+	ClientVersion string
+}
+
+// ExitPrefix is the token used by the daemon ot tell the client to
+// exit with the specified status
+const ExitPrefix = "-- exit "
+
+func isServerRunning() bool {
+	conn, err := net.Dial("unix", socketName)
+	if err != nil {
+		return false
+	}
+	defer conn.Close()
+
+	data := ClientMessage{
+		Args:          []string{"playpen", "version"},
+		APIVersion:    apiVersion,
+		ClientVersion: displayVersion,
+	}
+	encoder := json.NewEncoder(conn)
+	if err := encoder.Encode(&data); err != nil {
+		return false
+	}
+
+	if _, err := ioutil.ReadAll(conn); err != nil {
+		return false
+	}
+
+	return true
+}
+
+func mainViaDaemon() error {
+	conn, err := net.Dial("unix", socketName)
+	if err != nil {
+		fmt.Println(WordWrapString(failedToConnect))
+		fmt.Println()
+		return err
+	}
+	defer conn.Close()
+
+	rai, err := GetRunAsInfo()
+	if err != nil {
+		return errors.Wrap(err, "failed to get local info")
+	}
+
+	data := ClientMessage{
+		Args:          os.Args,
+		RAI:           rai,
+		APIVersion:    apiVersion,
+		ClientVersion: displayVersion,
+	}
+	encoder := json.NewEncoder(conn)
+	if err := encoder.Encode(&data); err != nil {
+		return errors.Wrap(err, "encode/send")
+	}
+
+	scanner := bufio.NewScanner(conn)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, ExitPrefix) {
+			codeStr := line[len(ExitPrefix):]
+			code, err := strconv.Atoi(codeStr)
+			if err != nil {
+				fmt.Println()
+				fmt.Printf("Bad exit code from daemon: %q", codeStr)
+				code = 1
+			}
+			os.Exit(code)
+		}
+		fmt.Println(scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	os.Exit(0)
+	return nil // not reached
+}
 
 // GetClient returns an http.Client that can (only) connect to unix sockets
 func GetClient() *http.Client {
@@ -25,8 +114,8 @@ func GetClient() *http.Client {
 	}
 }
 
-var failedToConnect = "Failed to connect to the server. Is it still running? Take a look in " + logfile +
-	" for more information. You can start the server using \"sudo playpen start-server\" if it is not running."
+var failedToConnect = "Failed to connect to the daemon. Is it still running? Take a look in " + logfile +
+	" for more information. You can start the daemon using \"sudo playpen daemon\" if it is not running."
 
 var apiMismatch = "Failed to communicate with the server. This is usually due to an API version mismatch. " +
 	"Try \"playpen version\" to see the client and server versions. If that's not the problem, take a look in " +
@@ -170,11 +259,6 @@ func fetchResponse(path string, verbose bool) (string, error) {
 	body, err := ioutil.ReadAll(res.Body)
 	res.Body.Close()
 	return string(body), err
-}
-
-func isServerRunning() bool {
-	_, err := fetchResponse("version", false)
-	return err == nil
 }
 
 func doVersion() error {

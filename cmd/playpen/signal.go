@@ -1,4 +1,4 @@
-package daemon
+package main
 
 import (
 	"os"
@@ -8,6 +8,8 @@ import (
 	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
+// WaitForSignal is a Worker that calls Shutdown if SIGINT or SIGTERM
+// is received.
 func WaitForSignal(p *supervisor.Process) error {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
