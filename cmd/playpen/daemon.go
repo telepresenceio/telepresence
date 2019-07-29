@@ -13,6 +13,8 @@ import (
 
 // Daemon represents the state of the Playpen Daemon
 type Daemon struct {
+	teleproxy string
+
 	network        Resource
 	cluster        *KCluster
 	bridge         Resource
