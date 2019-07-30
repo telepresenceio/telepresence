@@ -13,13 +13,13 @@ type Emitter struct {
 }
 
 // NewEmitter returns a new Emitter to write to conn
-func NewEmitter(w io.Writer) Emitter {
-	return Emitter{w: w}
+func NewEmitter(w io.Writer) *Emitter {
+	return &Emitter{w: w}
 }
 
 // Printf formats according to a format specifier and writes to the
 // client. Errors are collected and returned by Err().
-func (out Emitter) Printf(format string, a ...interface{}) {
+func (out *Emitter) Printf(format string, a ...interface{}) {
 	if out.err == nil {
 		_, out.err = fmt.Fprintf(out.w, format, a...)
 	}
@@ -27,7 +27,7 @@ func (out Emitter) Printf(format string, a ...interface{}) {
 
 // Print formats using the default formats for its operands and writes
 // to the client. Errors are collected and returned by Err().
-func (out Emitter) Print(a ...interface{}) {
+func (out *Emitter) Print(a ...interface{}) {
 	if out.err == nil {
 		_, out.err = fmt.Fprint(out.w, a...)
 	}
@@ -36,7 +36,7 @@ func (out Emitter) Print(a ...interface{}) {
 // Println formats using the default formats for its operands and
 // writes to the client, ending output with a newline. Errors are
 // collected and returned by Err().
-func (out Emitter) Println(a ...interface{}) {
+func (out *Emitter) Println(a ...interface{}) {
 	if out.err == nil {
 		_, out.err = fmt.Fprintln(out.w, a...)
 	}
@@ -44,7 +44,7 @@ func (out Emitter) Println(a ...interface{}) {
 
 // SendExit tells the client to exit with the specified return code.
 // Errors are collected and returned by Err().
-func (out Emitter) SendExit(code int) {
+func (out *Emitter) SendExit(code int) {
 	if out.err == nil {
 		_, out.err = fmt.Fprintf(out.w, "%s%d", ExitPrefix, code)
 	}
@@ -52,6 +52,6 @@ func (out Emitter) SendExit(code int) {
 
 // Err returns the first non-EOF error that was encountered by the
 // Emitter.
-func (out Emitter) Err() error {
+func (out *Emitter) Err() error {
 	return out.err
 }
