@@ -494,15 +494,11 @@ func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
 		Name: K8sBridgeWorker,
 		Work: func(p *supervisor.Process) error {
 			// setup kubernetes bridge
-			ctx, err := kubeinfo.Context()
-			if err != nil {
-				return err
-			}
 			ns, err := kubeinfo.Namespace()
 			if err != nil {
 				return err
 			}
-			p.Logf("kubernetes ctx=%s ns=%s", ctx, ns)
+			p.Logf("kubernetes ns=%s", ns)
 			var w *k8s.Watcher
 
 			err = p.DoClean(func() error {

@@ -15,14 +15,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"k8s.io/cli-runtime/pkg/genericclioptions"
+
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
-	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/google/shlex"
 	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
 )
 
 const (
@@ -35,82 +37,94 @@ const (
 
 // KubeInfo holds the data required to talk to a cluster
 type KubeInfo struct {
-	Kubeconfig   string
-	context      string
-	namespace    string
-	clientConfig clientcmd.ClientConfig
+	flags       *pflag.FlagSet
+	configFlags *genericclioptions.ConfigFlags
+	config      *rest.Config
+	namespace   string
 }
 
 // NewKubeInfo returns a useable KubeInfo, handling optional
 // kubeconfig, context, and namespace.
 func NewKubeInfo(configfile, context, namespace string) *KubeInfo {
-	// Find the correct kube config file
-	configfilesearch := clientcmd.NewDefaultClientConfigLoadingRules()
-	if len(configfile) != 0 {
-		configfilesearch.ExplicitPath = configfile
+	flags := pflag.NewFlagSet("KubeInfo", pflag.PanicOnError)
+	result := NewKubeInfoFromFlags(flags)
+
+	var args []string
+	if configfile != "" {
+		args = append(args, "--kubeconfig", configfile)
+	}
+	if context != "" {
+		args = append(args, "--context", context)
+	}
+	if namespace != "" {
+		args = append(args, "--namespace", namespace)
 	}
 
-	// Possibly override context and namespace
-	overrides := &clientcmd.ConfigOverrides{}
-	if len(context) != 0 {
-		overrides.CurrentContext = context
+	err := flags.Parse(args)
+	if err != nil {
+		panic(err)
 	}
-	if len(namespace) != 0 {
-		overrides.Context.Namespace = namespace
-	}
-
-	// Construct the config
-	kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(configfilesearch, overrides)
-
-	res := KubeInfo{
-		configfile,
-		context,
-		namespace,
-		kubeconfig,
-	}
-
-	return &res
+	return result
 }
 
-// Context returns the context name of the KubeInfo.
-func (info *KubeInfo) Context() (string, error) {
-	// Extract context
-	resultContext := info.context
-	if len(info.context) == 0 {
-		apiconfig, err := info.clientConfig.RawConfig()
+// NewKubeInfoFromFlags adds the generic kubeconfig flags to the
+// provided FlagSet, and returns a *KubeInfo that configures itself
+// based on those flags.
+func NewKubeInfoFromFlags(flags *pflag.FlagSet) *KubeInfo {
+	configFlags := genericclioptions.NewConfigFlags(false)
+
+	// We can disable or enable flags by setting them to
+	// nil/non-nil prior to calling .AddFlags().
+	//
+	// .Username and .Password are already disabled by default in
+	// genericclioptions.NewConfigFlags().
+	//
+	// Unlike client-go/discovery.CachedDiscoveryClient,
+	// ericchiang/k8s doesn't support caching to the filesystem,
+	// so disable the '--cache-dir' flag.
+	configFlags.CacheDir = nil
+
+	configFlags.AddFlags(flags)
+	return &KubeInfo{flags, configFlags, nil, ""}
+}
+
+func (info *KubeInfo) load() error {
+	if info.config == nil {
+		configLoader := info.configFlags.ToRawKubeConfigLoader()
+
+		config, err := configLoader.ClientConfig()
 		if err != nil {
-			return "", err
+			return errors.Errorf("Failed to get REST config: %v", err)
 		}
-		resultContext = apiconfig.CurrentContext
+
+		namespace, _, err := configLoader.Namespace()
+		if err != nil {
+			return errors.Errorf("Failed to get namespace: %v", err)
+		}
+
+		info.config = config
+		info.namespace = namespace
 	}
-	return resultContext, nil
+
+	return nil
 }
 
 // Namespace returns the namespace for a KubeInfo.
 func (info *KubeInfo) Namespace() (string, error) {
-	// Extract namespace
-	resultNamespace, _, err := info.clientConfig.Namespace()
-	return resultNamespace, err
+	err := info.load()
+	if err != nil {
+		return "", err
+	}
+	return info.namespace, nil
 }
 
 // GetRestConfig returns a REST config
 func (info *KubeInfo) GetRestConfig() (*rest.Config, error) {
-	/*
-		// Do the right thing if you're running in a cluster
-		if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
-			inClusterConfig, err := rest.InClusterConfig()
-			if err != nil {
-				return nil, err
-			}
-			return inClusterConfig, nil
-		}
-	*/
-
-	config, err := info.clientConfig.ClientConfig()
+	err := info.load()
 	if err != nil {
 		return nil, err
 	}
-	return config, nil
+	return info.config, nil
 }
 
 // GetKubectl returns the arguments for a runnable kubectl command that talks to
@@ -129,21 +143,15 @@ func (info *KubeInfo) GetKubectl(args string) (string, error) {
 
 // GetKubectlArray does what GetKubectl does but returns the result as a []string.
 func (info *KubeInfo) GetKubectlArray(args ...string) ([]string, error) {
-	res := []string{"kubectl"}
-	if len(info.Kubeconfig) != 0 {
-		res = append(res, "--kubeconfig", info.Kubeconfig)
-	}
-	context, err := info.Context()
-	if err != nil {
-		return nil, err
-	}
-	namespace, err := info.Namespace()
-	if err != nil {
-		return nil, err
-	}
-	res = append(res, "--context", context, "--namespace", namespace)
+	res := []string{} // No leading "kubectl" because reasons...
+
+	info.flags.Visit(func(f *pflag.Flag) {
+		res = append(res, fmt.Sprintf("--%s", f.Name), f.Value.String())
+	})
+
 	res = append(res, args...)
-	return res[1:], nil // Drop leading "kubectl" because reasons...
+
+	return res, nil
 }
 
 // Client is the top-level handle to the Kubernetes cluster.
@@ -160,14 +168,14 @@ func NewClient(info *KubeInfo) (*Client, error) {
 	if info == nil {
 		info = NewKubeInfo("", "", "") // Empty file/ctx/ns for defaults
 	}
+
 	config, err := info.GetRestConfig()
 	if err != nil {
-		return nil, errors.Errorf("Failed to get REST config: %v", err)
+		return nil, err
 	}
-
 	namespace, err := info.Namespace()
 	if err != nil {
-		return nil, errors.Errorf("Failed to get namespace: %v", err)
+		return nil, err
 	}
 
 	// TODO(lukeshu): Optionally use a DiscoveryClient that does kubectl-like filesystem
