@@ -33,13 +33,13 @@ func (d *Daemon) ListIntercepts(p *supervisor.Process, out *Emitter) error {
 func (d *Daemon) AddIntercept(p *supervisor.Process, out *Emitter, intercept *InterceptInfo) error {
 	for _, cept := range d.intercepts {
 		if cept.Name == intercept.Name {
-			out.Printf("Intercept with name %q already exists", intercept.Name)
+			out.Printf("Intercept with name %q already exists\n", intercept.Name)
 			out.SendExit(1)
 			return nil
 		}
 	}
 	d.intercepts = append(d.intercepts, intercept)
-	out.Printf("Added intercept %q", intercept.Name)
+	out.Printf("Added intercept %q\n", intercept.Name)
 	return nil
 }
 
@@ -52,7 +52,7 @@ func (d *Daemon) RemoveIntercept(p *supervisor.Process, out *Emitter, name strin
 			return nil
 		}
 	}
-	out.Printf("Intercept named %q not found", name)
+	out.Printf("Intercept named %q not found\n", name)
 	out.SendExit(1)
 	return nil
 }
