@@ -1,11 +1,7 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
-	"strings"
-
-	"github.com/pkg/errors"
+	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 // InterceptInfo tracks one intercept operation
@@ -18,44 +14,45 @@ type InterceptInfo struct {
 }
 
 // ListIntercepts lists active intercepts
-func (d *Daemon) ListIntercepts(_ *http.Request, _ *EmptyArgs, reply *StringReply) error {
-	res := &strings.Builder{}
+func (d *Daemon) ListIntercepts(p *supervisor.Process, out *Emitter) error {
 	for idx, intercept := range d.intercepts {
-		fmt.Fprintf(res, "%4d. %s\n", idx, intercept.Name)
-		fmt.Fprintf(res, "      Intercepting requests to %s when\n", intercept.Deployment)
+		out.Printf("%4d. %s\n", idx, intercept.Name)
+		out.Printf("      Intercepting requests to %s when\n", intercept.Deployment)
 		for k, v := range intercept.Patterns {
-			fmt.Fprintf(res, "      - %s: %s\n", k, v)
+			out.Printf("      - %s: %s\n", k, v)
 		}
-		fmt.Fprintf(res, "      and redirecting them to %s:%d\n", intercept.TargetHost, intercept.TargetPort)
+		out.Printf("      and redirecting them to %s:%d\n", intercept.TargetHost, intercept.TargetPort)
 	}
 	if len(d.intercepts) == 0 {
-		fmt.Fprintln(res, "No intercepts")
+		out.Println("No intercepts")
 	}
-	reply.Message = res.String()
 	return nil
 }
 
 // AddIntercept adds one intercept
-func (d *Daemon) AddIntercept(_ *http.Request, intercept *InterceptInfo, reply *StringReply) error {
+func (d *Daemon) AddIntercept(p *supervisor.Process, out *Emitter, intercept *InterceptInfo) error {
 	for _, cept := range d.intercepts {
 		if cept.Name == intercept.Name {
-			return errors.Errorf("Intercept with name %q already exists", intercept.Name)
+			out.Printf("Intercept with name %q already exists", intercept.Name)
+			out.SendExit(1)
+			return nil
 		}
 	}
 	d.intercepts = append(d.intercepts, intercept)
-	reply.Message = fmt.Sprintf("Added intercept %q", intercept.Name)
+	out.Printf("Added intercept %q", intercept.Name)
 	return nil
 }
 
 // RemoveIntercept removes one intercept by name
-func (d *Daemon) RemoveIntercept(_ *http.Request, request *StringArgs, reply *StringReply) error {
-	name := request.Value
+func (d *Daemon) RemoveIntercept(p *supervisor.Process, out *Emitter, name string) error {
 	for idx, intercept := range d.intercepts {
 		if intercept.Name == name {
 			d.intercepts = append(d.intercepts[:idx], d.intercepts[idx+1:]...)
-			reply.Message = fmt.Sprintf("Removed intercept %q", name)
+			out.Printf("Removed intercept %q", name)
 			return nil
 		}
 	}
-	return errors.Errorf("Intercept named %q not found", name)
+	out.Printf("Intercept named %q not found", name)
+	out.SendExit(1)
+	return nil
 }

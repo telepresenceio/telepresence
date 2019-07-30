@@ -2,31 +2,34 @@ package main
 
 import (
 	"crypto/tls"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"time"
+
+	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 // Connect the daemon to a cluster
-func (d *Daemon) Connect(_ *http.Request, args *ConnectArgs, reply *StringReply) error {
+func (d *Daemon) Connect(p *supervisor.Process, out *Emitter, rai *RunAsInfo, kargs []string) error {
 	// Sanity checks
 	if d.cluster != nil {
-		reply.Message = "Already connected"
+		out.Println("Already connected")
 		return nil
 	}
 	if d.bridge != nil {
-		reply.Message = "Not ready: Trying to disconnect"
+		out.Println("Not ready: Trying to disconnect")
 		return nil
 	}
 	if !d.network.IsOkay() {
-		reply.Message = "Not ready: Establishing network overrides"
+		out.Println("Not ready: Establishing network overrides")
 		return nil
 	}
 
-	cluster, err := TrackKCluster(d.p, args)
+	out.Println("Connecting...")
+	cluster, err := TrackKCluster(p, rai, kargs)
 	if err != nil {
-		reply.Message = err.Error()
+		out.Println(err.Error())
+		out.SendExit(1)
 		return nil
 	}
 	d.cluster = cluster
@@ -35,15 +38,16 @@ func (d *Daemon) Connect(_ *http.Request, args *ConnectArgs, reply *StringReply)
 		return err
 	}
 	bridge, err := CheckedRetryingCommand(
-		d.p,
+		p,
 		"bridge",
 		[]string{d.teleproxy, "--mode", "bridge"},
-		args.RAI,
+		rai,
 		checkBridge,
 		10*time.Second,
 	)
 	if err != nil {
-		reply.Message = err.Error()
+		out.Println(err.Error())
+		out.SendExit(1)
 		d.cluster.Close()
 		d.cluster = nil
 		return nil
@@ -51,17 +55,17 @@ func (d *Daemon) Connect(_ *http.Request, args *ConnectArgs, reply *StringReply)
 	d.bridge = bridge
 	d.cluster.SetBridgeCheck(d.bridge.IsOkay)
 
-	reply.Message = fmt.Sprintf(
+	out.Printf(
 		"Connected to context %s (%s)", d.cluster.Context(), d.cluster.Server(),
 	)
 	return nil
 }
 
 // Disconnect from the connected cluster
-func (d *Daemon) Disconnect(_ *http.Request, _ *EmptyArgs, reply *StringReply) error {
+func (d *Daemon) Disconnect(p *supervisor.Process, out *Emitter) error {
 	// Sanity checks
 	if d.cluster == nil {
-		reply.Message = "Not connected"
+		out.Println("Not connected")
 		return nil
 	}
 
@@ -72,7 +76,7 @@ func (d *Daemon) Disconnect(_ *http.Request, _ *EmptyArgs, reply *StringReply) e
 	err := d.cluster.Close()
 	d.cluster = nil
 
-	reply.Message = "Disconnected"
+	out.Println("Disconnected")
 	return err
 }
 

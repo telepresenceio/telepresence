@@ -8,24 +8,20 @@ import (
 	"time"
 
 	"github.com/datawire/teleproxy/pkg/supervisor"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
-// unimplemented displays a message and returns
-func unimplemented(cmd *cobra.Command, _ []string) error {
-	fmt.Printf("%s is unimplemented...\n", cmd.CommandPath())
-	return nil
-}
-
-func handleCommand(p *supervisor.Process, conn net.Conn, data *ClientMessage) error {
+func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *ClientMessage) error {
 	out := NewEmitter(conn)
 	rootCmd := &cobra.Command{
 		Use:          "playpen",
 		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
 		RunE: func(_ *cobra.Command, _ []string) error {
 			out.Println("Running \"playpen status\". Use \"playpen help\" to get help.")
-			return doStatus()
+			if err := d.Status(p, out); err != nil {
+				return err
+			}
+			return out.Err()
 		},
 	}
 	rootCmd.SetOutput(conn) // FIXME replace with SetOut and SetErr
@@ -47,7 +43,8 @@ func handleCommand(p *supervisor.Process, conn net.Conn, data *ClientMessage) er
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			out.Println("Server", displayVersion, "is already running.")
+			out.Println("Daemon", displayVersion, "is already running.")
+			out.Println("Use \"playpen quit\" to terminate the daemon.")
 			out.SendExit(1)
 			return out.Err()
 		},
@@ -57,7 +54,8 @@ func handleCommand(p *supervisor.Process, conn net.Conn, data *ClientMessage) er
 		Short: "launch Playpen Daemon in the background (sudo)",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(_ *cobra.Command, _ []string) error {
-			out.Println("Server", displayVersion, "is already running.")
+			out.Println("Daemon", displayVersion, "is already running.")
+			out.Println("Use \"playpen quit\" to terminate the daemon.")
 			out.SendExit(1)
 			return out.Err()
 		},
@@ -67,15 +65,17 @@ func handleCommand(p *supervisor.Process, conn net.Conn, data *ClientMessage) er
 		Short: "show connectivity status",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(_ *cobra.Command, _ []string) error {
-			out.Println("FIXME: Not connected.")
+			if err := d.Status(p, out); err != nil {
+				return err
+			}
 			return out.Err()
 		},
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "connect [-- additional kubectl arguments...]",
 		Short: "connect to a cluster",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			out.Println("FIXME: Not implemented.")
+		RunE: func(_ *cobra.Command, args []string) error {
+			d.Connect(p, out, data.RAI, args)
 			return out.Err()
 		},
 	})
@@ -84,7 +84,9 @@ func handleCommand(p *supervisor.Process, conn net.Conn, data *ClientMessage) er
 		Short: "disconnect from the connected cluster",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(_ *cobra.Command, _ []string) error {
-			out.Println("FIXME: Not implemented.")
+			if err := d.Disconnect(p, out); err != nil {
+				return err
+			}
 			return out.Err()
 		},
 	})
@@ -103,13 +105,23 @@ func handleCommand(p *supervisor.Process, conn net.Conn, data *ClientMessage) er
 		Use:   "intercept",
 		Long:  "Manage deployment intercepts. An intercept arranges for a subset of requests to be diverted to the local machine.",
 		Short: "manage deployment intercepts",
-		RunE:  unimplemented,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			if err := d.ListIntercepts(p, out); err != nil {
+				return err
+			}
+			return out.Err()
+		},
 	}
 	interceptCmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "list current intercepts",
 		Args:  cobra.ExactArgs(0),
-		RunE:  adaptNoArgs(doListIntercepts),
+		RunE: func(_ *cobra.Command, _ []string) error {
+			if err := d.ListIntercepts(p, out); err != nil {
+				return err
+			}
+			return out.Err()
+		},
 	})
 	interceptCmd.AddCommand(&cobra.Command{
 		Use:   "remove",
@@ -117,7 +129,10 @@ func handleCommand(p *supervisor.Process, conn net.Conn, data *ClientMessage) er
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := strings.TrimSpace(args[0])
-			return doRemoveIntercept(name)
+			if err := d.RemoveIntercept(p, out, name); err != nil {
+				return err
+			}
+			return out.Err()
 		},
 	})
 	intercept := InterceptInfo{}
@@ -144,15 +159,16 @@ func handleCommand(p *supervisor.Process, conn net.Conn, data *ClientMessage) er
 			}
 			port, err := strconv.Atoi(portStr)
 			if err != nil {
-				return errors.Wrapf(
-					err,
-					"Failed to parse %q as HOST:PORT",
-					intercept.TargetHost,
-				)
+				out.Printf("Failed to parse %q as HOST:PORT: %v", intercept.TargetHost, err)
+				out.SendExit(1)
+				return nil
 			}
 			intercept.TargetHost = host
 			intercept.TargetPort = port
-			return doAddIntercept(&intercept)
+			if err := d.AddIntercept(p, out, &intercept); err != nil {
+				return err
+			}
+			return out.Err()
 		},
 	}
 	interceptAddCmd.Flags().StringVarP(&intercept.Name, "name", "n", "", "a name for this intercept")
