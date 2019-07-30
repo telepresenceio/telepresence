@@ -36,6 +36,7 @@ func (d *Daemon) FindTeleproxy() error {
 	return nil
 }
 
+// MakeNetOverride sets up the network override resource for the daemon
 func (d *Daemon) MakeNetOverride(p *supervisor.Process) error {
 	if err := d.FindTeleproxy(); err != nil {
 		return err
