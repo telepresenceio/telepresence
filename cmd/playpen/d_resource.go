@@ -170,10 +170,10 @@ func (c *KCluster) check(p *supervisor.Process) error {
 }
 
 // TrackKCluster tracks connectivity to a cluster
-func TrackKCluster(p *supervisor.Process, args *ConnectArgs) (*KCluster, error) {
+func TrackKCluster(p *supervisor.Process, rai *RunAsInfo, kargs []string) (*KCluster, error) {
 	c := &KCluster{
-		rai:   args.RAI,
-		kargs: args.KArgs,
+		rai:   rai,
+		kargs: kargs,
 	}
 	c.doCheck = c.check
 	c.doQuit = func() error { c.done = true; return nil }
