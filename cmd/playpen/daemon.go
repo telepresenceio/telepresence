@@ -28,16 +28,29 @@ func RunAsDaemon() error {
 		return errors.New("playpen daemon must run as root")
 	}
 
+	d := &Daemon{}
+
 	sup := supervisor.WithContext(context.Background())
 	sup.Logger = SetUpLogging()
 	sup.Supervise(&supervisor.Worker{
 		Name: "daemon",
-		Work: acceptLoop,
+		Work: d.acceptLoop,
 	})
 	sup.Supervise(&supervisor.Worker{
 		Name:     "signal",
 		Requires: []string{"daemon"},
 		Work:     WaitForSignal,
+	})
+	sup.Supervise(&supervisor.Worker{
+		Name:     "setup",
+		Requires: []string{"daemon"},
+		Work: func(p *supervisor.Process) error {
+			if err := d.MakeNetOverride(p); err != nil {
+				return err
+			}
+			p.Ready()
+			return nil
+		},
 	})
 
 	sup.Logger.Printf("---")
@@ -56,7 +69,7 @@ func RunAsDaemon() error {
 	return errors.New("playpen daemon has exited")
 }
 
-func acceptLoop(p *supervisor.Process) error {
+func (d *Daemon) acceptLoop(p *supervisor.Process) error {
 	// Listen on unix domain socket
 	unixListener, err := net.Listen("unix", socketName)
 	if err != nil {
@@ -79,7 +92,7 @@ func acceptLoop(p *supervisor.Process) error {
 					return errors.Wrap(err, "accept")
 				}
 				_ = p.Go(func(p *supervisor.Process) error {
-					return handle(p, conn)
+					return d.handle(p, conn)
 				})
 			}
 		},
@@ -87,7 +100,7 @@ func acceptLoop(p *supervisor.Process) error {
 	)
 }
 
-func handle(p *supervisor.Process, conn net.Conn) error {
+func (d *Daemon) handle(p *supervisor.Process, conn net.Conn) error {
 	defer conn.Close()
 
 	decoder := json.NewDecoder(conn)
@@ -104,7 +117,7 @@ func handle(p *supervisor.Process, conn net.Conn) error {
 	}
 	p.Logf("Received command: %q", data.Args)
 
-	err := handleCommand(p, conn, data)
+	err := d.handleCommand(p, conn, data)
 	if err != nil {
 		p.Logf("Command processing failed: %v", err)
 	}
