@@ -106,6 +106,7 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 		Long:  "Manage deployment intercepts. An intercept arranges for a subset of requests to be diverted to the local machine.",
 		Short: "manage deployment intercepts",
 		RunE: func(_ *cobra.Command, _ []string) error {
+			out.Println("Running \"playpen intercept list\". Use \"playpen intercept help\" to get help.")
 			if err := d.ListIntercepts(p, out); err != nil {
 				return err
 			}
@@ -180,5 +181,9 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	interceptCmd.AddCommand(interceptAddCmd)
 	rootCmd.AddCommand(interceptCmd)
 
-	return rootCmd.Execute()
+	err := rootCmd.Execute()
+	if err != nil {
+		out.SendExit(1)
+	}
+	return out.Err()
 }
