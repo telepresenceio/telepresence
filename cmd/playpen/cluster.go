@@ -43,7 +43,7 @@ func (d *Daemon) Connect(p *supervisor.Process, out *Emitter, rai *RunAsInfo, ka
 		[]string{d.teleproxy, "--mode", "bridge"},
 		rai,
 		checkBridge,
-		10*time.Second,
+		15*time.Second,
 	)
 	if err != nil {
 		out.Println(err.Error())
@@ -83,7 +83,7 @@ func (d *Daemon) Disconnect(p *supervisor.Process, out *Emitter) error {
 // checkBridge checks the status of teleproxy bridge by doing the equivalent of
 // curl -k https://kubernetes/api/. It's okay to create a new client each time
 // because we don't want to reuse connections.
-func checkBridge() error {
+func checkBridge(p *supervisor.Process) error {
 	// A zero-value transport is (probably) okay because we set a tight overall
 	// timeout on the client
 	tr := &http.Transport{

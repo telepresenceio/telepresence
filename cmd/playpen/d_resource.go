@@ -207,7 +207,7 @@ func TrackKCluster(p *supervisor.Process, rai *RunAsInfo, kargs []string) (*KClu
 type crCmd struct {
 	args       []string
 	rai        *RunAsInfo
-	check      func() error
+	check      func(p *supervisor.Process) error
 	startGrace time.Duration
 	cmd        *supervisor.Cmd // (run loop) tracks the cmd for killing it
 	quitting   bool            // (run loop) enables Close()
@@ -219,10 +219,10 @@ type crCmd struct {
 // quits, and killing and restarting it if it fails the given check.
 func CheckedRetryingCommand(
 	p *supervisor.Process, name string, args []string, rai *RunAsInfo,
-	check func() error, startGrace time.Duration,
+	check func(*supervisor.Process) error, startGrace time.Duration,
 ) (Resource, error) {
 	if check == nil {
-		check = func() error { return nil }
+		check = func(*supervisor.Process) error { return nil }
 	}
 	crc := &crCmd{
 		args:       args,
@@ -256,6 +256,7 @@ func (crc *crCmd) launch(p *supervisor.Process) error {
 	}
 
 	// Launch the subprocess (set up logging using a worker)
+	p.Logf("Launching %s...", crc.name)
 	launchErr := make(chan error)
 	p.Supervisor().Supervise(&supervisor.Worker{
 		Name: crc.name + "/out",
@@ -283,6 +284,7 @@ func (crc *crCmd) launch(p *supervisor.Process) error {
 		return nil
 	}
 	crc.startedAt = time.Now()
+	p.Logf("Launched %s", crc.name)
 
 	return nil
 }
@@ -316,7 +318,7 @@ func (crc *crCmd) doCheck(p *supervisor.Process) error {
 		crc.tasks <- crc.launch
 		return errors.New("not running")
 	}
-	if err := crc.check(); err != nil {
+	if err := crc.check(p); err != nil {
 		p.Logf("check: failed: %v", err)
 		runTime := time.Since(crc.startedAt)
 		if runTime > crc.startGrace {
