@@ -62,6 +62,7 @@ func (rb *ResourceBase) Close() error {
 func (rb *ResourceBase) setup(sup *supervisor.Supervisor, name string) {
 	rb.name = name
 	rb.tasks = make(chan func(*supervisor.Process) error, 1)
+	rb.end = make(chan struct{})
 	sup.Supervise(&supervisor.Worker{
 		Name: name,
 		Work: rb.processor,
@@ -100,7 +101,6 @@ func (rb *ResourceBase) monitor(p *supervisor.Process) error {
 func (rb *ResourceBase) processor(p *supervisor.Process) error {
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
-	rb.end = make(chan struct{})
 	defer close(rb.end)
 	p.Ready()
 	for {
