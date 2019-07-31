@@ -260,6 +260,13 @@ func (crc *crCmd) launch(p *supervisor.Process) error {
 		Work: func(p *supervisor.Process) error {
 			crc.cmd = crc.rai.Command(p, crc.args...)
 			launchErr <- crc.cmd.Start()
+			// Wait for the subprocess to end. Another worker will
+			// call kill() on shutdown (via quit()) so we don't need
+			// to worry about supervisor shutdown ourselves.
+			if err := crc.cmd.Wait(); err != nil {
+				p.Log(err)
+			}
+			crc.tasks <- crc.subprocessEnded
 			return nil
 		},
 	})
@@ -274,19 +281,6 @@ func (crc *crCmd) launch(p *supervisor.Process) error {
 		return nil
 	}
 	crc.startedAt = time.Now()
-
-	// Launch a worker to Wait() for it to finish
-	sup.Supervise(&supervisor.Worker{
-		Name: crc.name + "/end",
-		Work: func(p *supervisor.Process) error {
-			// Wait for the subprocess to end. The processor worker will call
-			// kill() on shutdown (via quit()) so we don't need to worry about
-			// supervisor shutdown ourselves.
-			p.Log(crc.cmd.Wait())
-			crc.tasks <- crc.subprocessEnded
-			return nil
-		},
-	})
 
 	return nil
 }
