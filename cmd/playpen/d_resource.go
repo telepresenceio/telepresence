@@ -22,8 +22,8 @@ type Resource interface {
 type ResourceBase struct {
 	name    string
 	doCheck func(*supervisor.Process) error
-	doQuit  func() error
-	tasks   chan func() error
+	doQuit  func(*supervisor.Process) error
+	tasks   chan func(*supervisor.Process) error
 	okay    bool          // (monitor) cmd is running and check passes
 	done    bool          // (Close) to get everything to quit
 	end     chan struct{} // (Close) closed when the processor finishes
@@ -32,7 +32,7 @@ type ResourceBase struct {
 // Name implements Resource
 func (rb *ResourceBase) Name() string {
 	res := make(chan string)
-	rb.tasks <- func() error {
+	rb.tasks <- func(p *supervisor.Process) error {
 		res <- rb.name
 		return nil
 	}
@@ -42,7 +42,7 @@ func (rb *ResourceBase) Name() string {
 // IsOkay returns whether the resource is okay as far as monitoring is aware
 func (rb *ResourceBase) IsOkay() bool {
 	res := make(chan bool)
-	rb.tasks <- func() error {
+	rb.tasks <- func(p *supervisor.Process) error {
 		res <- rb.okay
 		return nil
 	}
@@ -61,7 +61,7 @@ func (rb *ResourceBase) Close() error {
 
 func (rb *ResourceBase) setup(sup *supervisor.Supervisor, name string) {
 	rb.name = name
-	rb.tasks = make(chan func() error, 1)
+	rb.tasks = make(chan func(*supervisor.Process) error, 1)
 	sup.Supervise(&supervisor.Worker{
 		Name: name,
 		Work: rb.processor,
@@ -81,8 +81,8 @@ func (rb *ResourceBase) setup(sup *supervisor.Supervisor, name string) {
 	})
 }
 
-func (rb *ResourceBase) quit() error {
-	return rb.doQuit()
+func (rb *ResourceBase) quit(p *supervisor.Process) error {
+	return rb.doQuit(p)
 }
 
 func (rb *ResourceBase) monitor(p *supervisor.Process) error {
@@ -104,14 +104,14 @@ func (rb *ResourceBase) processor(p *supervisor.Process) error {
 	defer close(rb.end)
 	p.Ready()
 	for {
-		var task func() error
+		var task func(*supervisor.Process) error
 		select {
 		case fn := <-rb.tasks: // There is work to do
 			task = fn
 		case <-ticker.C: // Ticker says it's time to monitor
-			task = func() error { return rb.monitor(p) }
+			task = rb.monitor
 		}
-		if err := task(); err != nil {
+		if err := task(p); err != nil {
 			p.Logf("task failed: %v", err)
 			return err
 		}
@@ -176,7 +176,7 @@ func TrackKCluster(p *supervisor.Process, rai *RunAsInfo, kargs []string) (*KClu
 		kargs: kargs,
 	}
 	c.doCheck = c.check
-	c.doQuit = func() error { c.done = true; return nil }
+	c.doQuit = func(p *supervisor.Process) error { c.done = true; return nil }
 
 	if err := c.check(p); err != nil {
 		return nil, errors.Wrap(err, "initial cluster check")
@@ -233,13 +233,13 @@ func CheckedRetryingCommand(
 	crc.ResourceBase.doQuit = crc.doQuit
 	crc.setup(p.Supervisor(), name)
 
-	if err := crc.launch(); err != nil {
+	if err := crc.launch(p); err != nil {
 		return nil, errors.Wrapf(err, "initial launch of %s", name)
 	}
 	return crc, nil
 }
 
-func (crc *crCmd) subprocessEnded() error {
+func (crc *crCmd) subprocessEnded(p *supervisor.Process) error {
 	crc.cmd = nil
 	if crc.quitting {
 		crc.done = true
@@ -247,7 +247,7 @@ func (crc *crCmd) subprocessEnded() error {
 	return nil
 }
 
-func (crc *crCmd) launch() error {
+func (crc *crCmd) launch(p *supervisor.Process) error {
 	if crc.cmd != nil {
 		panic(fmt.Errorf("launching %s: already launched", crc.name))
 	}
@@ -291,7 +291,7 @@ func (crc *crCmd) launch() error {
 	return nil
 }
 
-func (crc *crCmd) kill() error {
+func (crc *crCmd) kill(p *supervisor.Process) error {
 	if crc.cmd != nil {
 		if err := crc.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 			crc.callerP.Logf("kill failed (ignoring): %v", err)
@@ -300,9 +300,9 @@ func (crc *crCmd) kill() error {
 	return nil
 }
 
-func (crc *crCmd) doQuit() error {
+func (crc *crCmd) doQuit(p *supervisor.Process) error {
 	crc.quitting = true
-	return crc.kill()
+	return crc.kill(p)
 }
 
 // doCheck determines whether the subprocess is running and healthy
@@ -321,7 +321,7 @@ func (crc *crCmd) doCheck(p *supervisor.Process) error {
 		if runTime > crc.startGrace {
 			// Kill the process because it's in a bad state
 			p.Log("Killing...")
-			_ = crc.kill()
+			_ = crc.kill(p)
 		} else {
 			p.Logf("Not killing yet (%v < %v)", runTime, crc.startGrace)
 		}
