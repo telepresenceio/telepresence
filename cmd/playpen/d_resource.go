@@ -293,11 +293,12 @@ func (crc *crCmd) launch(p *supervisor.Process) error {
 
 func (crc *crCmd) kill(p *supervisor.Process) error {
 	if crc.cmd != nil {
+		p.Log("kill: sending signal")
 		if err := crc.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 			p.Logf("kill: failed (ignoring): %v", err)
 		}
 	} else {
-		p.Log("kill: signal sent")
+		p.Log("kill: no subprocess to kill")
 	}
 	return nil
 }
