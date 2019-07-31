@@ -18,6 +18,7 @@ type Daemon struct {
 	network        Resource
 	cluster        *KCluster
 	bridge         Resource
+	trafficMgr     Resource
 	intercepts     []*InterceptInfo
 	interceptables []string
 }

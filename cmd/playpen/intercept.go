@@ -1,7 +1,13 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+
 	"github.com/datawire/teleproxy/pkg/supervisor"
+	"github.com/pkg/errors"
 )
 
 // InterceptInfo tracks one intercept operation
@@ -11,6 +17,72 @@ type InterceptInfo struct {
 	Patterns   map[string]string
 	TargetHost string
 	TargetPort int
+	remotePort int
+}
+
+// Acquire an intercept from the traffic manager
+func (cept *InterceptInfo) Acquire(p *supervisor.Process, tm *TrafficManager) error {
+	reqPatterns := make([]map[string]string, len(cept.Patterns))
+	for header, regex := range cept.Patterns {
+		pattern := map[string]string{"name": header, "regex_match": regex}
+		reqPatterns = append(reqPatterns, pattern)
+	}
+	request := map[string]interface{}{
+		"name":     cept.Name,
+		"patterns": reqPatterns,
+	}
+	reqData, err := json.Marshal(request)
+	if err != nil {
+		return err
+	}
+	result, code, err := tm.request("POST", "intercept/"+cept.Name, reqData)
+	if err != nil {
+		return errors.Wrap(err, "acquire intercept")
+	}
+	if code == 404 {
+		return fmt.Errorf("Deployment %q is not known to the traffic manager", cept.Name)
+	}
+	if !(200 <= code && code <= 299) {
+		return fmt.Errorf("acquire intercept: %s: %s", http.StatusText(code), result)
+	}
+	cept.remotePort, err = strconv.Atoi(result)
+	if err != nil {
+		return errors.Wrapf(err, "bad port number from traffic manager: %q", result)
+	}
+	return nil
+}
+
+// Retain the given intercept. This likely needs to be called every
+// five seconds or so.
+func (cept *InterceptInfo) Retain(p *supervisor.Process, tm *TrafficManager) error {
+	if cept.remotePort == 0 {
+		return fmt.Errorf("retain intercept: %q is not yet acquired", cept.Name)
+	}
+	data := []byte(fmt.Sprintf("{\"port\": %d}", cept.remotePort))
+	result, code, err := tm.request("POST", "intercept/"+cept.Name, data)
+	if err != nil {
+		return errors.Wrap(err, "retain intercept")
+	}
+	if !(200 <= code && code <= 299) {
+		return fmt.Errorf("retain intercept: %s: %s", http.StatusText(code), result)
+	}
+	return nil
+}
+
+// Release the given intercept.
+func (cept *InterceptInfo) Release(p *supervisor.Process, tm *TrafficManager) error {
+	if cept.remotePort == 0 {
+		return fmt.Errorf("release intercept: %q is not yet acquired", cept.Name)
+	}
+	data := []byte(fmt.Sprintf("%d", cept.remotePort))
+	result, code, err := tm.request("DELETE", "intercept/"+cept.Name, data)
+	if err != nil {
+		return errors.Wrap(err, "release intercept")
+	}
+	if !(200 <= code && code <= 299) {
+		return fmt.Errorf("release intercept: %s: %s", http.StatusText(code), result)
+	}
+	return nil
 }
 
 // ListIntercepts lists active intercepts
