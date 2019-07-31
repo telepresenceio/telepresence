@@ -135,14 +135,25 @@ type KCluster struct {
 	ResourceBase
 }
 
-// GetKubectlCmd returns a Cmd that runs kubectl with the given arguments and
-// the appropriate environment to talk to the cluster
-func (c *KCluster) GetKubectlCmd(p *supervisor.Process, args ...string) *supervisor.Cmd {
+// RAI returns the RunAsInfo for this cluster
+func (c *KCluster) RAI() *RunAsInfo {
+	return c.rai
+}
+
+// GetKubectlArgs returns the kubectl command arguments to run a
+// kubectl command with this cluster
+func (c *KCluster) GetKubectlArgs(args ...string) []string {
 	cmdArgs := make([]string, 0, 1+len(c.kargs)+len(args))
 	cmdArgs = append(cmdArgs, "kubectl")
 	cmdArgs = append(cmdArgs, c.kargs...)
 	cmdArgs = append(cmdArgs, args...)
-	return c.rai.Command(p, cmdArgs...)
+	return cmdArgs
+}
+
+// GetKubectlCmd returns a Cmd that runs kubectl with the given arguments and
+// the appropriate environment to talk to the cluster
+func (c *KCluster) GetKubectlCmd(p *supervisor.Process, args ...string) *supervisor.Cmd {
+	return c.rai.Command(p, c.GetKubectlArgs(args...)...)
 }
 
 // Context returns the cluster's context name
