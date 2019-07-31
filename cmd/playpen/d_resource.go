@@ -83,15 +83,18 @@ func (rb *ResourceBase) setup(sup *supervisor.Supervisor, name string) {
 }
 
 func (rb *ResourceBase) quit(p *supervisor.Process) error {
+	p.Log("Close() / resource quit() called")
 	return rb.doQuit(p)
 }
 
 func (rb *ResourceBase) monitor(p *supervisor.Process) error {
 	old := rb.okay
+	p.Log("monitor: checking...")
 	if err := rb.doCheck(p); err != nil {
 		rb.okay = false // Check failed is not okay
-		p.Logf("check failed: %v", err)
+		p.Logf("monitor: check failed: %v", err)
 	} else {
+		p.Log("monitor: check passed")
 		rb.okay = true
 	}
 	MaybeNotify(p, rb.name, old, rb.okay)
@@ -251,11 +254,10 @@ func (crc *crCmd) launch(p *supervisor.Process) error {
 	if crc.cmd != nil {
 		panic(fmt.Errorf("launching %s: already launched", crc.name))
 	}
-	sup := p.Supervisor()
 
 	// Launch the subprocess (set up logging using a worker)
 	launchErr := make(chan error)
-	sup.Supervise(&supervisor.Worker{
+	p.Supervisor().Supervise(&supervisor.Worker{
 		Name: crc.name + "/out",
 		Work: func(p *supervisor.Process) error {
 			crc.cmd = crc.rai.Command(p, crc.args...)
@@ -298,7 +300,6 @@ func (crc *crCmd) kill(p *supervisor.Process) error {
 }
 
 func (crc *crCmd) doQuit(p *supervisor.Process) error {
-	p.Log("quit")
 	crc.quitting = true
 	return crc.kill(p)
 }
@@ -315,7 +316,6 @@ func (crc *crCmd) doCheck(p *supervisor.Process) error {
 		crc.tasks <- crc.launch
 		return errors.New("not running")
 	}
-	p.Log("check: checking...")
 	if err := crc.check(); err != nil {
 		p.Logf("check: failed: %v", err)
 		runTime := time.Since(crc.startedAt)
