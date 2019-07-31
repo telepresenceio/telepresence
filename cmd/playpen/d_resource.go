@@ -206,9 +206,8 @@ type crCmd struct {
 	rai        *RunAsInfo
 	check      func() error
 	startGrace time.Duration
-	callerP    *supervisor.Process // processor's Process
-	cmd        *supervisor.Cmd     // (run loop) tracks the cmd for killing it
-	quitting   bool                // (run loop) enables Close()
+	cmd        *supervisor.Cmd // (run loop) tracks the cmd for killing it
+	quitting   bool            // (run loop) enables Close()
 	startedAt  time.Time
 	ResourceBase
 }
@@ -227,7 +226,6 @@ func CheckedRetryingCommand(
 		rai:        rai,
 		check:      check,
 		startGrace: startGrace,
-		callerP:    p,
 	}
 	crc.ResourceBase.doCheck = crc.doCheck
 	crc.ResourceBase.doQuit = crc.doQuit
@@ -240,8 +238,10 @@ func CheckedRetryingCommand(
 }
 
 func (crc *crCmd) subprocessEnded(p *supervisor.Process) error {
+	p.Log("end: subprocess ended")
 	crc.cmd = nil
 	if crc.quitting {
+		p.Log("end: marking as done")
 		crc.done = true
 	}
 	return nil
@@ -251,7 +251,7 @@ func (crc *crCmd) launch(p *supervisor.Process) error {
 	if crc.cmd != nil {
 		panic(fmt.Errorf("launching %s: already launched", crc.name))
 	}
-	sup := crc.callerP.Supervisor()
+	sup := p.Supervisor()
 
 	// Launch the subprocess (set up logging using a worker)
 	launchErr := make(chan error)
@@ -270,7 +270,7 @@ func (crc *crCmd) launch(p *supervisor.Process) error {
 		if err != nil {
 			return err
 		}
-	case <-crc.callerP.Shutdown():
+	case <-p.Shutdown():
 		return nil
 	}
 	crc.startedAt = time.Now()
@@ -294,13 +294,16 @@ func (crc *crCmd) launch(p *supervisor.Process) error {
 func (crc *crCmd) kill(p *supervisor.Process) error {
 	if crc.cmd != nil {
 		if err := crc.cmd.Process.Signal(syscall.SIGTERM); err != nil {
-			crc.callerP.Logf("kill failed (ignoring): %v", err)
+			p.Logf("kill: failed (ignoring): %v", err)
 		}
+	} else {
+		p.Log("kill: signal sent")
 	}
 	return nil
 }
 
 func (crc *crCmd) doQuit(p *supervisor.Process) error {
+	p.Log("quit")
 	crc.quitting = true
 	return crc.kill(p)
 }
@@ -309,23 +312,27 @@ func (crc *crCmd) doQuit(p *supervisor.Process) error {
 func (crc *crCmd) doCheck(p *supervisor.Process) error {
 	if crc.cmd == nil {
 		if crc.quitting {
+			p.Log("check: no subprocess + quitting -> done")
 			crc.done = true
 			return nil
 		}
+		p.Log("check: no subprocess -> launch")
 		crc.tasks <- crc.launch
 		return errors.New("not running")
 	}
+	p.Log("check: checking...")
 	if err := crc.check(); err != nil {
-		p.Logf("check failed: %v", err)
+		p.Logf("check: failed: %v", err)
 		runTime := time.Since(crc.startedAt)
 		if runTime > crc.startGrace {
 			// Kill the process because it's in a bad state
-			p.Log("Killing...")
+			p.Log("check: killing...")
 			_ = crc.kill(p)
 		} else {
-			p.Logf("Not killing yet (%v < %v)", runTime, crc.startGrace)
+			p.Logf("check: not killing yet (%v < %v)", runTime, crc.startGrace)
 		}
 		return err // from crc.check() above
 	}
+	p.Log("check: passed")
 	return nil
 }
