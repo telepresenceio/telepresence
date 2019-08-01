@@ -13,7 +13,10 @@ import (
 
 	"github.com/Masterminds/sprig"
 	ms "github.com/mitchellh/mapstructure"
+	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
+
+	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 var READY = map[string]func(Resource) bool{
@@ -259,13 +262,71 @@ func isTemplate(input []byte) bool {
 	return strings.Contains(string(input), "@TEMPLATE@")
 }
 
+func builder(dir string) func(string) (string, error) {
+	return func(dockerfile string) (string, error) {
+		return image(dir, dockerfile)
+	}
+}
+
+func image(dir, dockerfile string) (string, error) {
+	var result string
+	errs := supervisor.Run("BLD", func(p *supervisor.Process) error {
+		iidfile, err := ioutil.TempFile("", "iid")
+		if err != nil {
+			return err
+		}
+		defer os.Remove(iidfile.Name())
+		err = iidfile.Close()
+		if err != nil {
+			return err
+		}
+
+		ctx := filepath.Dir(filepath.Join(dir, dockerfile))
+		cmd := p.Command("docker", "build", "-f", filepath.Base(dockerfile), ".", "--iidfile", iidfile.Name())
+		cmd.Dir = ctx
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
+		content, err := ioutil.ReadFile(iidfile.Name())
+		if err != nil {
+			return err
+		}
+		iid := strings.Split(strings.TrimSpace(string(content)), ":")[1]
+		short := iid[:12]
+
+		registry := strings.TrimSpace(os.Getenv("DOCKER_REGISTRY"))
+		if registry == "" {
+			return errors.Errorf("please set the DOCKER_REGISTRY environment variable")
+		}
+		tag := fmt.Sprintf("%s/%s", registry, short)
+
+		cmd = p.Command("docker", "tag", iid, tag)
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
+
+		result = tag
+
+		cmd = p.Command("docker", "push", tag)
+		return cmd.Run()
+	})
+	if len(errs) > 0 {
+		return "", errors.Errorf("errors building %s: %v", dockerfile, errs)
+	}
+	return result, nil
+}
+
 func ExpandResource(path string) (result []byte, err error) {
 	input, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %v", path, err)
 	}
 	if isTemplate(input) {
-		tmpl := template.New(filepath.Base(path)).Funcs(sprig.TxtFuncMap())
+		funcs := sprig.TxtFuncMap()
+		funcs["image"] = builder(filepath.Dir(path))
+		tmpl := template.New(filepath.Base(path)).Funcs(funcs)
 		_, err := tmpl.Parse(string(input))
 		if err != nil {
 			return nil, fmt.Errorf("%s: %v", path, err)

@@ -1,6 +1,7 @@
 package k8s_test
 
 import (
+	"os/exec"
 	"strconv"
 	"testing"
 
@@ -39,5 +40,16 @@ func TestQKind(t *testing.T) {
 				}
 			}
 		}(testcase))
+	}
+}
+
+func TestDocker(t *testing.T) {
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Skip(err)
+	}
+
+	_, err := k8s.ExpandResource("docker.yaml")
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
