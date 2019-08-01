@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/pkg/errors"
@@ -139,21 +140,38 @@ type Intercept struct {
 	ii   *InterceptInfo
 	tm   *TrafficManager
 	port int
+	crc  Resource
 	ResourceBase
 }
 
 // MakeIntercept acquires an intercept and returns a Resource handle
 // for it
-func MakeIntercept(p *supervisor.Process, tm *TrafficManager, ii *InterceptInfo) (cept *Intercept, err error) {
+func MakeIntercept(p *supervisor.Process, tm *TrafficManager, ii *InterceptInfo) (*Intercept, error) {
 	port, err := ii.Acquire(p, tm)
 	if err != nil {
-		return
+		return nil, err
 	}
-	cept = &Intercept{ii: ii, tm: tm, port: port}
+
+	cept := &Intercept{ii: ii, tm: tm, port: port}
 	cept.doCheck = cept.check
 	cept.doQuit = cept.quit
 	cept.setup(p.Supervisor(), ii.Name)
-	return
+
+	sshCmd := []string{
+		"ssh", "-C", "-N", "telepresence@localhost",
+		"-oConnectTimeout=5", "-oExitOnForwardFailure=yes",
+		"-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null",
+		"-p", strconv.Itoa(tm.sshPort),
+		"-R", fmt.Sprintf("%d:%s:%d", cept.port, ii.TargetHost, ii.TargetPort),
+	}
+	ssh, err := CheckedRetryingCommand(p, ii.Name+"-ssh", sshCmd, nil, nil, 5*time.Second)
+	if err != nil {
+		_ = cept.Close()
+		return nil, err
+	}
+	cept.crc = ssh
+
+	return cept, nil
 }
 
 func (cept *Intercept) check(p *supervisor.Process) error {
@@ -162,5 +180,6 @@ func (cept *Intercept) check(p *supervisor.Process) error {
 
 func (cept *Intercept) quit(p *supervisor.Process) error {
 	cept.done = true
+	_ = cept.crc.Close()
 	return cept.ii.Release(p, cept.tm, cept.port)
 }
