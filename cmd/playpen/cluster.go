@@ -63,12 +63,12 @@ func (d *Daemon) Connect(p *supervisor.Process, out *Emitter, rai *RunAsInfo, ka
 	d.cluster.SetBridgeCheck(d.bridge.IsOkay)
 
 	out.Printf(
-		"Connected to context %s (%s)", d.cluster.Context(), d.cluster.Server(),
+		"Connected to context %s (%s)\n", d.cluster.Context(), d.cluster.Server(),
 	)
 
 	tmgr, err := NewTrafficManager(p, d.cluster)
 	if err != nil {
-		out.Printf("Failed to connect to traffic manager: %v", err)
+		out.Printf("Failed to connect to traffic manager: %v\n", err)
 	} else {
 		d.trafficMgr = tmgr
 	}
