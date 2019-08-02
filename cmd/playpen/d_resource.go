@@ -61,7 +61,7 @@ func (rb *ResourceBase) Close() error {
 
 func (rb *ResourceBase) setup(sup *supervisor.Supervisor, name string) {
 	rb.name = name
-	rb.tasks = make(chan func(*supervisor.Process) error, 1)
+	rb.tasks = make(chan func(*supervisor.Process) error, 10)
 	rb.end = make(chan struct{})
 	sup.Supervise(&supervisor.Worker{
 		Name: name,
