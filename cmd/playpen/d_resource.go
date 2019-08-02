@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Resource represents one thing managed by playpen daemon. Examples include
+// Resource represents one thing managed by edgectl daemon. Examples include
 // network intercepts (via teleproxy intercept) and cluster connectivity.
 type Resource interface {
 	Name() string

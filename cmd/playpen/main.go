@@ -14,8 +14,8 @@ import (
 // Version is inserted at build using --ldflags -X
 var Version = "(unknown version)"
 
-const socketName = "/var/run/playpen.socket"
-const logfile = "/tmp/playpen.log"
+const socketName = "/var/run/edgectl.socket"
+const logfile = "/tmp/edgectl.log"
 const apiVersion = 1
 
 var displayVersion = fmt.Sprintf("v%s (api v%d)", Version, apiVersion)
@@ -28,7 +28,7 @@ func main() {
 	// ...
 
 	rootCmd := &cobra.Command{
-		Use:          "playpen",
+		Use:          "edgectl",
 		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
 		Args:         cobra.ArbitraryArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
@@ -48,7 +48,7 @@ func main() {
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:    "daemon-foreground",
-		Short:  "launch Playpen Daemon in the foreground (debug)",
+		Short:  "launch Edge Control Daemon in the foreground (debug)",
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
@@ -57,7 +57,7 @@ func main() {
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "daemon",
-		Short: "launch Playpen Daemon in the background (sudo)",
+		Short: "launch Edge Control Daemon in the background (sudo)",
 		Args:  cobra.ExactArgs(0),
 		RunE:  launchDaemon,
 	})
@@ -70,11 +70,11 @@ func main() {
 
 func launchDaemon(ccmd *cobra.Command, _ []string) error {
 	if os.Geteuid() != 0 {
-		fmt.Println("Playpen Daemon must be launched as root.")
+		fmt.Println("Edge Control Daemon must be launched as root.")
 		fmt.Printf("  sudo %s\n", ccmd.CommandPath())
 		return errors.New("root privileges required")
 	}
-	fmt.Println("Launching Playpen Daemon", displayVersion)
+	fmt.Println("Launching Edge Control Daemon", displayVersion)
 
 	cmd := exec.Command(os.Args[0], "daemon-foreground")
 	cmd.Env = os.Environ()

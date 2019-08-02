@@ -13,7 +13,7 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// DaemonFormatter formats log messages for the Playpen Daemon
+// DaemonFormatter formats log messages for the Edge Control Daemon
 type DaemonFormatter struct {
 	TimestampFormat string
 }
@@ -44,7 +44,7 @@ func (f *DaemonFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// SetUpLogging sets up standard Playpen Daemon logging
+// SetUpLogging sets up standard Edge Control Daemon logging
 func SetUpLogging() supervisor.Logger {
 	loggingToTerminal := terminal.IsTerminal(int(os.Stdout.Fd()))
 	logger := logrus.StandardLogger()

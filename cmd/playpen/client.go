@@ -34,7 +34,7 @@ func isServerRunning() bool {
 	defer conn.Close()
 
 	data := ClientMessage{
-		Args:          []string{"playpen", "version"},
+		Args:          []string{"edgectl", "version"},
 		APIVersion:    apiVersion,
 		ClientVersion: displayVersion,
 	}
@@ -99,4 +99,4 @@ func mainViaDaemon() error {
 }
 
 var failedToConnect = "Failed to connect to the daemon. Is it still running? Take a look in " + logfile +
-	" for more information. You can start the daemon using \"sudo playpen daemon\" if it is not running."
+	" for more information. You can start the daemon using \"sudo edgectl daemon\" if it is not running."

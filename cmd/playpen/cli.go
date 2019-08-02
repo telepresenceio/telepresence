@@ -14,10 +14,10 @@ import (
 func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *ClientMessage) error {
 	out := NewEmitter(conn)
 	rootCmd := &cobra.Command{
-		Use:          "playpen",
+		Use:          "edgectl",
 		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
 		RunE: func(_ *cobra.Command, _ []string) error {
-			out.Println("Running \"playpen status\". Use \"playpen help\" to get help.")
+			out.Println("Running \"edgectl status\". Use \"edgectl help\" to get help.")
 			if err := d.Status(p, out); err != nil {
 				return err
 			}
@@ -39,23 +39,23 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:    "daemon-foreground",
-		Short:  "launch Playpen Daemon in the foreground (debug)",
+		Short:  "launch Edge Control Daemon in the foreground (debug)",
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			out.Println("Daemon", displayVersion, "is already running.")
-			out.Println("Use \"playpen quit\" to terminate the daemon.")
+			out.Println("Use \"edgectl quit\" to terminate the daemon.")
 			out.SendExit(1)
 			return out.Err()
 		},
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "daemon",
-		Short: "launch Playpen Daemon in the background (sudo)",
+		Short: "launch Edge Control Daemon in the background (sudo)",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(_ *cobra.Command, _ []string) error {
 			out.Println("Daemon", displayVersion, "is already running.")
-			out.Println("Use \"playpen quit\" to terminate the daemon.")
+			out.Println("Use \"edgectl quit\" to terminate the daemon.")
 			out.SendExit(1)
 			return out.Err()
 		},
@@ -94,10 +94,10 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "quit",
-		Short: "tell Playpen Daemon to quit (for upgrades)",
+		Short: "tell Edge Control Daemon to quit (for upgrades)",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(_ *cobra.Command, _ []string) error {
-			out.Println("Playpen Daemon quitting...")
+			out.Println("Edge Control Daemon quitting...")
 			p.Supervisor().Shutdown()
 			return out.Err()
 		},
@@ -109,7 +109,7 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 			"diverted to the local machine.",
 		Short: "manage deployment intercepts",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			out.Println("Running \"playpen intercept list\". Use \"playpen intercept help\" to get help.")
+			out.Println("Running \"edgectl intercept list\". Use \"edgectl intercept help\" to get help.")
 			if err := d.ListIntercepts(p, out); err != nil {
 				return err
 			}

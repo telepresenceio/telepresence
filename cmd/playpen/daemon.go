@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Daemon represents the state of the Playpen Daemon
+// Daemon represents the state of the Edge Control Daemon
 type Daemon struct {
 	teleproxy string
 
@@ -26,7 +26,7 @@ type Daemon struct {
 // RunAsDaemon is the main function when executing as the daemon
 func RunAsDaemon() error {
 	if os.Geteuid() != 0 {
-		return errors.New("playpen daemon must run as root")
+		return errors.New("edgectl daemon must run as root")
 	}
 
 	d := &Daemon{}
@@ -55,7 +55,7 @@ func RunAsDaemon() error {
 	})
 
 	sup.Logger.Printf("---")
-	sup.Logger.Printf("Playpen daemon %s starting...", displayVersion)
+	sup.Logger.Printf("Edge Control daemon %s starting...", displayVersion)
 	sup.Logger.Printf("PID is %d", os.Getpid())
 	runErrors := sup.Run()
 
@@ -66,8 +66,8 @@ func RunAsDaemon() error {
 			sup.Logger.Printf("- %v", err)
 		}
 	}
-	sup.Logger.Printf("Playpen daemon %s is done.", displayVersion)
-	return errors.New("playpen daemon has exited")
+	sup.Logger.Printf("Edge Control daemon %s is done.", displayVersion)
+	return errors.New("edgectl daemon has exited")
 }
 
 func (d *Daemon) acceptLoop(p *supervisor.Process) error {
