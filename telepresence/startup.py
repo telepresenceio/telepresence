@@ -194,7 +194,8 @@ class KubeInfo(object):
 
     def _check_if_in_local_vm(self, runner: Runner) -> bool:
         # Running Docker Desktop on macOS (or maybe Windows?)
-        if (self.context == "docker-for-desktop") or (self.context == "docker-desktop"):
+        if (self.context == "docker-for-desktop"
+            ) or (self.context == "docker-desktop"):
             return True
         # kind (kube-in-docker) has complex context name, so check by cluster
         if self.cluster == "kind":
