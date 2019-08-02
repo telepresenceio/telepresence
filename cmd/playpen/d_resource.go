@@ -32,7 +32,7 @@ type ResourceBase struct {
 // Name implements Resource
 func (rb *ResourceBase) Name() string {
 	res := make(chan string)
-	rb.tasks <- func(p *supervisor.Process) error {
+	rb.tasks <- func(_ *supervisor.Process) error {
 		res <- rb.name
 		return nil
 	}
@@ -42,7 +42,7 @@ func (rb *ResourceBase) Name() string {
 // IsOkay returns whether the resource is okay as far as monitoring is aware
 func (rb *ResourceBase) IsOkay() bool {
 	res := make(chan bool)
-	rb.tasks <- func(p *supervisor.Process) error {
+	rb.tasks <- func(_ *supervisor.Process) error {
 		res <- rb.okay
 		return nil
 	}

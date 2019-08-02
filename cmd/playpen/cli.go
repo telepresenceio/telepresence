@@ -75,7 +75,9 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 		Use:   "connect [-- additional kubectl arguments...]",
 		Short: "connect to a cluster",
 		RunE: func(_ *cobra.Command, args []string) error {
-			d.Connect(p, out, data.RAI, args)
+			if err := d.Connect(p, out, data.RAI, args); err != nil {
+				return err
+			}
 			return out.Err()
 		},
 	})
@@ -102,8 +104,9 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	})
 
 	interceptCmd := &cobra.Command{
-		Use:   "intercept",
-		Long:  "Manage deployment intercepts. An intercept arranges for a subset of requests to be diverted to the local machine.",
+		Use: "intercept",
+		Long: "Manage deployment intercepts. An intercept arranges for a subset of requests to be " +
+			"diverted to the local machine.",
 		Short: "manage deployment intercepts",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			out.Println("Running \"playpen intercept list\". Use \"playpen intercept help\" to get help.")
@@ -174,9 +177,9 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	}
 	interceptAddCmd.Flags().StringVarP(&intercept.Name, "name", "n", "", "a name for this intercept")
 	interceptAddCmd.Flags().StringVarP(&intercept.TargetHost, "target", "t", "", "the [HOST:]PORT to forward to")
-	interceptAddCmd.MarkFlagRequired("target")
+	_ = interceptAddCmd.MarkFlagRequired("target")
 	interceptAddCmd.Flags().StringToStringVarP(&intercept.Patterns, "match", "m", nil, "match expression (HEADER=REGEX)")
-	interceptAddCmd.MarkFlagRequired("match")
+	_ = interceptAddCmd.MarkFlagRequired("match")
 
 	interceptCmd.AddCommand(interceptAddCmd)
 	rootCmd.AddCommand(interceptCmd)

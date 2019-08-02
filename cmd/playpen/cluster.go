@@ -76,7 +76,7 @@ func (d *Daemon) Connect(p *supervisor.Process, out *Emitter, rai *RunAsInfo, ka
 }
 
 // Disconnect from the connected cluster
-func (d *Daemon) Disconnect(p *supervisor.Process, out *Emitter) error {
+func (d *Daemon) Disconnect(_ *supervisor.Process, out *Emitter) error {
 	// Sanity checks
 	if d.cluster == nil {
 		out.Println("Not connected")
@@ -170,10 +170,11 @@ func NewTrafficManager(p *supervisor.Process, cluster *KCluster) (*TrafficManage
 	if err != nil {
 		return nil, errors.Wrap(err, "get free port for ssh")
 	}
-	kpfArgs := fmt.Sprintf("port-forward svc/telepresence-proxy %d:8022 %d:8081", sshPort, apiPort)
+	kpfArgStr := fmt.Sprintf("port-forward svc/telepresence-proxy %d:8022 %d:8081", sshPort, apiPort)
+	kpfArgs := cluster.GetKubectlArgs(strings.Fields(kpfArgStr)...)
 	tm := &TrafficManager{apiPort: apiPort, sshPort: sshPort}
 
-	pf, err := CheckedRetryingCommand(p, "traffic-kpf", cluster.GetKubectlArgs(strings.Fields(kpfArgs)...), cluster.RAI(), tm.check, 15*time.Second)
+	pf, err := CheckedRetryingCommand(p, "traffic-kpf", kpfArgs, cluster.RAI(), tm.check, 15*time.Second)
 	if err != nil {
 		return nil, err
 	}

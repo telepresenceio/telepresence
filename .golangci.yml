@@ -33,3 +33,5 @@ issues:
     - (Expect directory permissions to be 0750 or less|Expect file permissions to be 0600 or less)
     # gosec: False positive is triggered by 'src, err := ioutil.ReadFile(filename)'
     - Potential file inclusion via variable
+    # unparam: Some things need to return error even when that's always nil
+    - result 0 [(]error[)] is always nil

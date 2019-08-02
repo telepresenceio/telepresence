@@ -5,7 +5,7 @@ import (
 )
 
 // Status reports the current status of the daemon
-func (d *Daemon) Status(p *supervisor.Process, out *Emitter) error {
+func (d *Daemon) Status(_ *supervisor.Process, out *Emitter) error {
 	if !d.network.IsOkay() {
 		out.Println("Network overrides NOT established")
 	}

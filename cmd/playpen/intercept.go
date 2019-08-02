@@ -21,7 +21,7 @@ type InterceptInfo struct {
 }
 
 // Acquire an intercept from the traffic manager
-func (ii *InterceptInfo) Acquire(p *supervisor.Process, tm *TrafficManager) (int, error) {
+func (ii *InterceptInfo) Acquire(_ *supervisor.Process, tm *TrafficManager) (int, error) {
 	reqPatterns := make([]map[string]string, 0, len(ii.Patterns))
 	for header, regex := range ii.Patterns {
 		pattern := map[string]string{"name": header, "regex_match": regex}
@@ -40,7 +40,7 @@ func (ii *InterceptInfo) Acquire(p *supervisor.Process, tm *TrafficManager) (int
 		return 0, errors.Wrap(err, "acquire intercept")
 	}
 	if code == 404 {
-		return 0, fmt.Errorf("Deployment %q is not known to the traffic manager", ii.Deployment)
+		return 0, fmt.Errorf("deployment %q is not known to the traffic manager", ii.Deployment)
 	}
 	if !(200 <= code && code <= 299) {
 		return 0, fmt.Errorf("acquire intercept: %s: %s", http.StatusText(code), result)
@@ -54,7 +54,7 @@ func (ii *InterceptInfo) Acquire(p *supervisor.Process, tm *TrafficManager) (int
 
 // Retain the given intercept. This likely needs to be called every
 // five seconds or so.
-func (ii *InterceptInfo) Retain(p *supervisor.Process, tm *TrafficManager, port int) error {
+func (ii *InterceptInfo) Retain(_ *supervisor.Process, tm *TrafficManager, port int) error {
 	data := []byte(fmt.Sprintf("{\"port\": %d}", port))
 	result, code, err := tm.request("POST", "intercept/"+ii.Deployment, data)
 	if err != nil {
@@ -67,7 +67,7 @@ func (ii *InterceptInfo) Retain(p *supervisor.Process, tm *TrafficManager, port 
 }
 
 // Release the given intercept.
-func (ii *InterceptInfo) Release(p *supervisor.Process, tm *TrafficManager, port int) error {
+func (ii *InterceptInfo) Release(_ *supervisor.Process, tm *TrafficManager, port int) error {
 	data := []byte(fmt.Sprintf("%d", port))
 	result, code, err := tm.request("DELETE", "intercept/"+ii.Deployment, data)
 	if err != nil {
@@ -80,7 +80,7 @@ func (ii *InterceptInfo) Release(p *supervisor.Process, tm *TrafficManager, port
 }
 
 // ListIntercepts lists active intercepts
-func (d *Daemon) ListIntercepts(p *supervisor.Process, out *Emitter) error {
+func (d *Daemon) ListIntercepts(_ *supervisor.Process, out *Emitter) error {
 	for idx, cept := range d.intercepts {
 		ii := cept.ii
 		out.Printf("%4d. %s\n", idx, ii.Name)
@@ -117,7 +117,7 @@ func (d *Daemon) AddIntercept(p *supervisor.Process, out *Emitter, ii *Intercept
 }
 
 // RemoveIntercept removes one intercept by name
-func (d *Daemon) RemoveIntercept(p *supervisor.Process, out *Emitter, name string) error {
+func (d *Daemon) RemoveIntercept(_ *supervisor.Process, out *Emitter, name string) error {
 	for idx, cept := range d.intercepts {
 		if cept.ii.Name == name {
 			d.intercepts = append(d.intercepts[:idx], d.intercepts[idx+1:]...)
