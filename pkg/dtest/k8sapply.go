@@ -9,7 +9,7 @@ import (
 	"github.com/datawire/teleproxy/pkg/kubeapply"
 )
 
-const msg = `
+const k8sapplyMsg = `
 kubeconfig does not exist: %s
 
   Run "make claim" to acquire a kubernaut cluster, or use
@@ -26,7 +26,7 @@ func K8sApply(kubeconfig string, files ...string) {
 	}
 
 	if _, err := os.Stat(kubeconfig); os.IsNotExist(err) {
-		fmt.Printf(msg, kubeconfig)
+		fmt.Printf(k8sapplyMsg, kubeconfig)
 		os.Exit(1)
 	}
 
