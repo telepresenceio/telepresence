@@ -67,6 +67,7 @@ commands:
     steps:
       - checkout
       - restore-go-mod-cache
+      - run: go mod vendor
       - run: make check
       - save-go-mod-cache
       - run: make build
@@ -92,6 +93,40 @@ jobs:
       xcode: "9.0"
     working_directory: ~/repo
     steps:
+      - restore_cache:
+          keys:
+            - brew-cache-2
+      - run: brew install socat docker-machine-driver-xhyve docker &&
+             sudo chown root:wheel /usr/local/opt/docker-machine-driver-xhyve/bin/docker-machine-driver-xhyve &&
+             sudo chmod u+s /usr/local/opt/docker-machine-driver-xhyve/bin/docker-machine-driver-xhyve
+      - run:
+          name: Docker Virtual Machine
+          command: docker-machine create default --driver xhyve && sleep 7200
+          background: true
+      - run: until docker-machine env; do sleep 3; done && docker-machine env >> ${BASH_ENV}
+      - run: docker system info
+      - save_cache:
+          key: brew-cache-2
+          paths:
+            - /usr/local/Homebrew
+            - ".docker"
+          when: always
+      - run:
+          name: Registry Port Forward (IPv4)
+          command: socat tcp4-listen:5000,reuseaddr,fork tcp:$(docker-machine ip):5000
+          background: true
+      - run:
+          name: K3s Port Forward (IPv4)
+          command: socat tcp4-listen:6443,reuseaddr,fork tcp:$(docker-machine ip):6443
+          background: true
+      - run:
+          name: Registry Port Forward (IPv6)
+          command: socat tcp6-listen:5000,reuseaddr,fork tcp:$(docker-machine ip):5000
+          background: true
+      - run:
+          name: K3s Port Forward (IPv6)
+          command: socat tcp6-listen:6443,reuseaddr,fork tcp:$(docker-machine ip):6443
+          background: true
       - aws-install
       - golang-install:
           os: darwin
