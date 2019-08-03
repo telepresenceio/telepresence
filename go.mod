@@ -149,7 +149,7 @@ require (
 	k8s.io/utils v0.0.0-20190712204705-3dccf664f023 // indirect
 	layeh.com/radius v0.0.0-20190118135028-0f678f039617 // indirect
 	sigs.k8s.io/kustomize v2.0.3+incompatible // indirect
-	sigs.k8s.io/yaml v1.1.0 // indirect
+	sigs.k8s.io/yaml v1.1.0
 )
 
 replace (

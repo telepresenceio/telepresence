@@ -7,7 +7,6 @@ linters:
     - interfacer # author says it's deprecated, gives very subjective advice
     - prealloc
     - scopelint # rhs: this is either incomprehensible or buggy
-    - unparam # rhs: this considers it an error to have a function that always receives the same parameter
 linters-settings:
   goconst:
     min-len: 5
