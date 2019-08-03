@@ -69,9 +69,6 @@ commands:
       - restore-go-mod-cache
       - run: make check
       - save-go-mod-cache
-      - run:
-          command: make unclaim
-          when: always
       - run: make build
       - run:
           name: "gather logs"
