@@ -19,8 +19,39 @@ const logfile = "/tmp/edgectl.log"
 const apiVersion = 1
 
 var displayVersion = fmt.Sprintf("v%s (api v%d)", Version, apiVersion)
+var edgectl string
 
 func main() {
+	// Figure out our executable and save it
+	func() {
+		var err error
+		edgectl, err = os.Executable()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Internal error: %v", err)
+			os.Exit(1)
+		}
+	}()
+
+	// Notice early if we're impersonating Teleproxy
+	if len(os.Args) == 3 && os.Args[1] == "teleproxy" {
+		func() {
+			var err error
+			switch os.Args[2] {
+			case "intercept":
+				err = RunAsTeleproxyIntercept()
+			case "bridge":
+				err = RunAsTeleproxyBridge()
+			default:
+				return // Allow normal CLI error handling to proceed
+			}
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: %v", err)
+				os.Exit(1)
+			}
+			os.Exit(0)
+		}()
+	}
+
 	// Let the daemon take care of everything if possible
 	failedToConnectErr := mainViaDaemon()
 
@@ -76,7 +107,7 @@ func launchDaemon(ccmd *cobra.Command, _ []string) error {
 	}
 	fmt.Println("Launching Edge Control Daemon", displayVersion)
 
-	cmd := exec.Command(os.Args[0], "daemon-foreground")
+	cmd := exec.Command(edgectl, "daemon-foreground")
 	cmd.Env = os.Environ()
 	cmd.Stdin = nil
 	cmd.Stdout = nil

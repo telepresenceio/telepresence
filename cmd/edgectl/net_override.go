@@ -4,47 +4,18 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/pkg/errors"
 )
 
-// FindTeleproxy finds a compatible version of Teleproxy in your PATH
-func (d *Daemon) FindTeleproxy() error {
-	if len(d.teleproxy) == 0 {
-		path, err := exec.LookPath("teleproxy")
-		if err != nil {
-			return err
-		}
-		cmd := exec.Command(path, "--version")
-		outputBytes, err := cmd.CombinedOutput()
-		if err != nil {
-			return errors.Wrap(err, "teleproxy --version")
-		}
-		output := string(outputBytes)
-		if !strings.Contains(output, "version 0.6") {
-			return fmt.Errorf(
-				"required teleproxy 0.6.x not found; found %s in your PATH",
-				output,
-			)
-		}
-		d.teleproxy = path
-	}
-	return nil
-}
-
 // MakeNetOverride sets up the network override resource for the daemon
 func (d *Daemon) MakeNetOverride(p *supervisor.Process) error {
-	if err := d.FindTeleproxy(); err != nil {
-		return err
-	}
 	netOverride, err := CheckedRetryingCommand(
 		p,
 		"netOverride",
-		[]string{d.teleproxy, "--mode", "intercept"},
+		[]string{edgectl, "teleproxy", "intercept"},
 		&RunAsInfo{},
 		checkNetOverride,
 		10*time.Second,
