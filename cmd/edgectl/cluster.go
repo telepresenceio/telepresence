@@ -41,13 +41,10 @@ func (d *Daemon) Connect(p *supervisor.Process, out *Emitter, rai *RunAsInfo, ka
 	}
 	d.cluster = cluster
 
-	if err := d.FindTeleproxy(); err != nil {
-		return err
-	}
 	bridge, err := CheckedRetryingCommand(
 		p,
 		"bridge",
-		[]string{d.teleproxy, "--mode", "bridge"},
+		[]string{edgectl, "teleproxy", "bridge"},
 		rai,
 		checkBridge,
 		15*time.Second,

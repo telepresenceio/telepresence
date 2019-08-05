@@ -13,8 +13,6 @@ import (
 
 // Daemon represents the state of the Edge Control Daemon
 type Daemon struct {
-	teleproxy string
-
 	network        Resource
 	cluster        *KCluster
 	bridge         Resource
