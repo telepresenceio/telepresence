@@ -12,7 +12,7 @@ import (
 var Version = "(unknown version)"
 
 func main() {
-	args := teleproxy.Args{}
+	args := teleproxy.Teleproxy{}
 
 	var tp = &cobra.Command{
 		Use:           "teleproxy",

@@ -120,8 +120,8 @@ var logLegend = []struct {
 	{CheckReadyWorker, "The worker teleproxy uses to do a self check and signal the system it is ready."},
 }
 
-// Args holds the configuration for this Teleproxy invocation
-type Args struct {
+// Teleproxy holds the configuration for this Teleproxy invocation
+type Teleproxy struct {
 	Mode       string
 	Kubeconfig string
 	Context    string
@@ -134,7 +134,7 @@ type Args struct {
 }
 
 // RunTeleproxy is the main entry point for Teleproxy
-func RunTeleproxy(args Args, version string) error {
+func RunTeleproxy(args Teleproxy, version string) error {
 	if args.Version {
 		args.Mode = versionMode
 	}
@@ -228,7 +228,7 @@ func selfcheck(p *supervisor.Process) error {
 	return p.DoClean(curl.Wait, curl.Process.Kill)
 }
 
-func teleproxy(p *supervisor.Process, args Args) error {
+func teleproxy(p *supervisor.Process, args Teleproxy) error {
 	sup := p.Supervisor()
 
 	if args.Mode == defaultMode || args.Mode == interceptMode {
@@ -335,7 +335,7 @@ func checkKubectl(p *supervisor.Process) error {
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
 //
 // If fallbackIP is empty, it will default to Google DNS.
-func intercept(p *supervisor.Process, args Args) error {
+func intercept(p *supervisor.Process, args Teleproxy) error {
 	if os.Geteuid() != 0 {
 		return errors.New("ERROR: teleproxy must be run as root or suid root")
 	}
