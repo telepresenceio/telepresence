@@ -12,7 +12,7 @@ import (
 var Version = "(unknown version)"
 
 func main() {
-	args := teleproxy.Teleproxy{}
+	tele := teleproxy.Teleproxy{}
 
 	var tp = &cobra.Command{
 		Use:           "teleproxy",
@@ -22,19 +22,19 @@ func main() {
 		SilenceUsage:  true,
 	}
 
-	tp.Flags().BoolVar(&args.Version, "version", false, "alias for '-mode=version'")
-	tp.Flags().StringVar(&args.Mode, "mode", "", "mode of operation ('intercept', 'bridge', or 'version')")
-	tp.Flags().StringVar(&args.Kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
-	tp.Flags().StringVar(&args.Context, "context", "", "context to use (default: the current context)")
-	tp.Flags().StringVar(&args.Namespace, "namespace", "",
+	tp.Flags().BoolVar(&tele.Version, "version", false, "alias for '-mode=version'")
+	tp.Flags().StringVar(&tele.Mode, "mode", "", "mode of operation ('intercept', 'bridge', or 'version')")
+	tp.Flags().StringVar(&tele.Kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
+	tp.Flags().StringVar(&tele.Context, "context", "", "context to use (default: the current context)")
+	tp.Flags().StringVar(&tele.Namespace, "namespace", "",
 		"namespace to use (default: the current namespace for the context")
-	tp.Flags().StringVar(&args.DNSIP, "dns", "", "dns ip address")
-	tp.Flags().StringVar(&args.FallbackIP, "fallback", "", "dns fallback")
-	tp.Flags().BoolVar(&args.NoSearch, "no-search-override", false, "disable dns search override")
-	tp.Flags().BoolVar(&args.NoCheck, "no-check", false, "disable self check")
+	tp.Flags().StringVar(&tele.DNSIP, "dns", "", "dns ip address")
+	tp.Flags().StringVar(&tele.FallbackIP, "fallback", "", "dns fallback")
+	tp.Flags().BoolVar(&tele.NoSearch, "no-search-override", false, "disable dns search override")
+	tp.Flags().BoolVar(&tele.NoCheck, "no-check", false, "disable self check")
 
 	tp.RunE = func(cmd *cobra.Command, _ []string) error {
-		return teleproxy.RunTeleproxy(args, Version)
+		return teleproxy.RunTeleproxy(tele, Version)
 	}
 
 	err := tp.Execute()

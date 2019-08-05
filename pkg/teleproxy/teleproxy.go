@@ -134,19 +134,19 @@ type Teleproxy struct {
 }
 
 // RunTeleproxy is the main entry point for Teleproxy
-func RunTeleproxy(args Teleproxy, version string) error {
-	if args.Version {
-		args.Mode = versionMode
+func RunTeleproxy(tele Teleproxy, version string) error {
+	if tele.Version {
+		tele.Mode = versionMode
 	}
 
-	switch args.Mode {
+	switch tele.Mode {
 	case defaultMode, interceptMode, bridgeMode:
 		// do nothing
 	case versionMode:
 		fmt.Println("teleproxy", "version", version)
 		return nil
 	default:
-		return errors.Errorf("TPY: unrecognized mode: %v", args.Mode)
+		return errors.Errorf("TPY: unrecognized mode: %v", tele.Mode)
 	}
 
 	// do this up front so we don't miss out on cleanup if someone
@@ -160,7 +160,7 @@ func RunTeleproxy(args Teleproxy, version string) error {
 	sup.Supervise(&supervisor.Worker{
 		Name: TeleproxyWorker,
 		Work: func(p *supervisor.Process) error {
-			return teleproxy(p, args)
+			return teleproxy(p, tele)
 		},
 	})
 
@@ -228,11 +228,11 @@ func selfcheck(p *supervisor.Process) error {
 	return p.DoClean(curl.Wait, curl.Process.Kill)
 }
 
-func teleproxy(p *supervisor.Process, args Teleproxy) error {
+func teleproxy(p *supervisor.Process, tele Teleproxy) error {
 	sup := p.Supervisor()
 
-	if args.Mode == defaultMode || args.Mode == interceptMode {
-		err := intercept(p, args)
+	if tele.Mode == defaultMode || tele.Mode == interceptMode {
+		err := intercept(p, tele)
 		if err != nil {
 			return err
 		}
@@ -242,7 +242,7 @@ func teleproxy(p *supervisor.Process, args Teleproxy) error {
 			Work: func(p *supervisor.Process) error {
 				err := selfcheck(p)
 				if err != nil {
-					if args.NoCheck {
+					if tele.NoCheck {
 						p.Logf("WARNING, SELF CHECK FAILED: %v", err)
 					} else {
 						return errors.Wrap(err, "SELF CHECK FAILED")
@@ -268,9 +268,9 @@ func teleproxy(p *supervisor.Process, args Teleproxy) error {
 		})
 	}
 
-	if args.Mode == defaultMode || args.Mode == bridgeMode {
+	if tele.Mode == defaultMode || tele.Mode == bridgeMode {
 		requires := []string{}
-		if args.Mode != bridgeMode {
+		if tele.Mode != bridgeMode {
 			requires = append(requires, CheckReadyWorker)
 		}
 		sup.Supervise(&supervisor.Worker{
@@ -282,7 +282,7 @@ func teleproxy(p *supervisor.Process, args Teleproxy) error {
 					return err
 				}
 
-				kubeinfo := k8s.NewKubeInfo(args.Kubeconfig, args.Context, args.Namespace)
+				kubeinfo := k8s.NewKubeInfo(tele.Kubeconfig, tele.Context, tele.Namespace)
 				_ = bridges(p, kubeinfo) // FIXME why don't we return this error?
 				return nil
 			},
@@ -335,14 +335,14 @@ func checkKubectl(p *supervisor.Process) error {
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
 //
 // If fallbackIP is empty, it will default to Google DNS.
-func intercept(p *supervisor.Process, args Teleproxy) error {
+func intercept(p *supervisor.Process, tele Teleproxy) error {
 	if os.Geteuid() != 0 {
 		return errors.New("ERROR: teleproxy must be run as root or suid root")
 	}
 
 	sup := p.Supervisor()
 
-	if args.DNSIP == "" {
+	if tele.DNSIP == "" {
 		dat, err := ioutil.ReadFile("/etc/resolv.conf")
 		if err != nil {
 			return err
@@ -350,25 +350,25 @@ func intercept(p *supervisor.Process, args Teleproxy) error {
 		for _, line := range strings.Split(string(dat), "\n") {
 			if strings.Contains(line, "nameserver") {
 				fields := strings.Fields(line)
-				args.DNSIP = fields[1]
-				log.Printf("TPY: Automatically set -dns=%v", args.DNSIP)
+				tele.DNSIP = fields[1]
+				log.Printf("TPY: Automatically set -dns=%v", tele.DNSIP)
 				break
 			}
 		}
 	}
-	if args.DNSIP == "" {
+	if tele.DNSIP == "" {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
 	}
 
-	if args.FallbackIP == "" {
-		if args.DNSIP == "8.8.8.8" {
-			args.FallbackIP = "8.8.4.4"
+	if tele.FallbackIP == "" {
+		if tele.DNSIP == "8.8.8.8" {
+			tele.FallbackIP = "8.8.4.4"
 		} else {
-			args.FallbackIP = "8.8.8.8"
+			tele.FallbackIP = "8.8.8.8"
 		}
-		log.Printf("TPY: Automatically set -fallback=%v", args.FallbackIP)
+		log.Printf("TPY: Automatically set -fallback=%v", tele.FallbackIP)
 	}
-	if args.FallbackIP == args.DNSIP {
+	if tele.FallbackIP == tele.DNSIP {
 		return errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
 	}
 
@@ -403,7 +403,7 @@ func intercept(p *supervisor.Process, args Teleproxy) error {
 		Work: func(p *supervisor.Process) error {
 			srv := dns.Server{
 				Listeners: dnsListeners(p, DNSRedirPort),
-				Fallback:  args.FallbackIP + ":53",
+				Fallback:  tele.FallbackIP + ":53",
 				Resolve: func(domain string) string {
 					route := iceptor.Resolve(domain)
 					if route != nil {
@@ -449,7 +449,7 @@ func intercept(p *supervisor.Process, args Teleproxy) error {
 		Work: func(p *supervisor.Process) error {
 			bootstrap := route.Table{Name: "bootstrap"}
 			bootstrap.Add(route.Route{
-				Ip:     args.DNSIP,
+				Ip:     tele.DNSIP,
 				Target: DNSRedirPort,
 				Proto:  "udp",
 			})
@@ -462,14 +462,14 @@ func intercept(p *supervisor.Process, args Teleproxy) error {
 			iceptor.Update(bootstrap)
 
 			var restore func()
-			if !args.NoSearch {
+			if !tele.NoSearch {
 				restore = dns.OverrideSearchDomains(p, ".")
 			}
 
 			p.Ready()
 			<-p.Shutdown()
 
-			if !args.NoSearch {
+			if !tele.NoSearch {
 				restore()
 			}
 
