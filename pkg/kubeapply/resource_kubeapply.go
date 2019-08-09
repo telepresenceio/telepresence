@@ -1,4 +1,4 @@
-package k8s
+package kubeapply
 
 import (
 	"bytes"
@@ -14,12 +14,13 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 
+	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
-var readyChecks = map[string]func(Resource) bool{
-	"": func(Resource) bool { return false },
-	"Deployment": func(r Resource) bool {
+var readyChecks = map[string]func(k8s.Resource) bool{
+	"": func(k8s.Resource) bool { return false },
+	"Deployment": func(r k8s.Resource) bool {
 		// NOTE - plombardi - (2019-05-20)
 		// a zero-sized deployment never gets status.readyReplicas and friends set by kubernetes deployment controller.
 		// this effectively short-circuits the wait.
@@ -31,12 +32,12 @@ var readyChecks = map[string]func(Resource) bool{
 
 		return r.Status().GetInt64("readyReplicas") > 0
 	},
-	"Service": func(r Resource) bool {
+	"Service": func(r k8s.Resource) bool {
 		return true
 	},
-	"Pod": func(r Resource) bool {
+	"Pod": func(r k8s.Resource) bool {
 		css := r.Status().GetMaps("containerStatuses")
-		var cs Map
+		var cs k8s.Map
 		for _, cs = range css {
 			if !cs.GetBool("ready") {
 				return false
@@ -44,20 +45,20 @@ var readyChecks = map[string]func(Resource) bool{
 		}
 		return true
 	},
-	"Namespace": func(r Resource) bool {
+	"Namespace": func(r k8s.Resource) bool {
 		return r.Status().GetString("phase") == "Active"
 	},
-	"ServiceAccount": func(r Resource) bool {
+	"ServiceAccount": func(r k8s.Resource) bool {
 		_, ok := r["secrets"]
 		return ok
 	},
-	"ClusterRole": func(r Resource) bool {
+	"ClusterRole": func(r k8s.Resource) bool {
 		return true
 	},
-	"ClusterRoleBinding": func(r Resource) bool {
+	"ClusterRoleBinding": func(r k8s.Resource) bool {
 		return true
 	},
-	"CustomResourceDefinition": func(r Resource) bool {
+	"CustomResourceDefinition": func(r k8s.Resource) bool {
 		conditions := r.Status().GetMaps("conditions")
 		if len(conditions) == 0 {
 			return false
@@ -69,7 +70,7 @@ var readyChecks = map[string]func(Resource) bool{
 
 // ReadyImplemented returns whether or not this package knows how to
 // wait for this resource to be ready.
-func (r Resource) ReadyImplemented() bool {
+func ReadyImplemented(r k8s.Resource) bool {
 	if r.Empty() {
 		return false
 	}
@@ -81,7 +82,7 @@ func (r Resource) ReadyImplemented() bool {
 // Ready returns whether or not this resource is ready; if this
 // package does not know how to check whether the resource is ready,
 // then it returns true.
-func (r Resource) Ready() bool {
+func Ready(r k8s.Resource) bool {
 	if r.Empty() {
 		return false
 	}
@@ -185,18 +186,18 @@ func ExpandResource(path string) (result []byte, err error) {
 
 // LoadResources is like ExpandResource, but follows it up by actually
 // parsing the YAML.
-func LoadResources(path string) (result []Resource, err error) {
+func LoadResources(path string) (result []k8s.Resource, err error) {
 	var input []byte
 	input, err = ExpandResource(path)
 	if err != nil {
 		return
 	}
-	result, err = ParseResources(path, string(input))
+	result, err = k8s.ParseResources(path, string(input))
 	return
 }
 
-// SaveResources serializes a list of Resources to a YAML file.
-func SaveResources(path string, resources []Resource) error {
+// SaveResources serializes a list of k8s.Resources to a YAML file.
+func SaveResources(path string, resources []k8s.Resource) error {
 	output, err := MarshalResources(resources)
 	if err != nil {
 		return fmt.Errorf("%s: %v", path, err)
@@ -208,8 +209,8 @@ func SaveResources(path string, resources []Resource) error {
 	return nil
 }
 
-// WalkResources loads all YAML Resources from a list of directories.
-func WalkResources(filter func(name string) bool, roots ...string) (result []Resource, err error) {
+// WalkResources loads all YAML k8s.Resources from a list of directories.
+func WalkResources(filter func(name string) bool, roots ...string) (result []k8s.Resource, err error) {
 	for _, root := range roots {
 		err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -234,8 +235,8 @@ func WalkResources(filter func(name string) bool, roots ...string) (result []Res
 	return
 }
 
-// MarshalResources serializes a list of Resources in to YAML.
-func MarshalResources(resources []Resource) ([]byte, error) {
+// MarshalResources serializes a list of k8s.Resources in to YAML.
+func MarshalResources(resources []k8s.Resource) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 	e := yaml.NewEncoder(buf)
 	for _, r := range resources {
@@ -248,14 +249,14 @@ func MarshalResources(resources []Resource) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// MarshalResource serializes a Resource in to YAML.
-func MarshalResource(resource Resource) ([]byte, error) {
-	return MarshalResources([]Resource{resource})
+// MarshalResource serializes a k8s.Resource in to YAML.
+func MarshalResource(resource k8s.Resource) ([]byte, error) {
+	return MarshalResources([]k8s.Resource{resource})
 }
 
 // MarshalResourcesJSON is like MarshalResources, but JSON instead of
 // YAML.
-func MarshalResourcesJSON(resources []Resource) ([]byte, error) {
+func MarshalResourcesJSON(resources []k8s.Resource) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 	e := json.NewEncoder(buf)
 	for _, r := range resources {
@@ -270,6 +271,6 @@ func MarshalResourcesJSON(resources []Resource) ([]byte, error) {
 
 // MarshalResourceJSON is like MarshalResource, but JSON instead of
 // YAML.
-func MarshalResourceJSON(resource Resource) ([]byte, error) {
-	return MarshalResourcesJSON([]Resource{resource})
+func MarshalResourceJSON(resource k8s.Resource) ([]byte, error) {
+	return MarshalResourcesJSON([]k8s.Resource{resource})
 }

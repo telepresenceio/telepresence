@@ -1,4 +1,4 @@
-package k8s
+package kubeapply
 
 import (
 	"fmt"
@@ -6,18 +6,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/datawire/teleproxy/pkg/tpu"
+	"github.com/datawire/teleproxy/pkg/k8s"
 )
 
 type Waiter struct {
-	watcher *Watcher
+	watcher *k8s.Watcher
 	kinds   map[string]map[string]bool
 }
 
 // NewWaiter constructs a Waiter object based on the suppliec Watcher.
-func NewWaiter(watcher *Watcher) (w *Waiter, err error) {
+func NewWaiter(watcher *k8s.Watcher) (w *Waiter, err error) {
 	if watcher == nil {
-		cli, err := NewClient(nil)
+		cli, err := k8s.NewClient(nil)
 		if err != nil {
 			return nil, err
 		}
@@ -112,7 +112,7 @@ func (w *Waiter) Scan(path string) (err error) {
 }
 
 func (w *Waiter) ScanPaths(files []string) (err error) {
-	resources, err := WalkResources(tpu.IsYaml, files...)
+	resources, err := WalkResources(isYaml, files...)
 	for _, res := range resources {
 		err = w.Add(fmt.Sprintf("%s/%s", res.QKind(), res.QName()))
 		if err != nil {
@@ -139,7 +139,7 @@ func (w *Waiter) isEmpty() bool {
 func (w *Waiter) Wait(timeout time.Duration) bool {
 	start := time.Now()
 	printed := make(map[string]bool)
-	w.watcher.Watch("events", func(watcher *Watcher) {
+	err := w.watcher.Watch("events", func(watcher *k8s.Watcher) {
 		for _, r := range watcher.List("events") {
 			if lastStr, ok := r["lastTimestamp"].(string); ok {
 				last, err := time.Parse("2006-01-02T15:04:05Z", lastStr)
@@ -154,7 +154,7 @@ func (w *Waiter) Wait(timeout time.Duration) bool {
 			if !printed[r.QName()] {
 				var name string
 				if obj, ok := r["involvedObject"].(map[string]interface{}); ok {
-					name = w.canonical(fmt.Sprintf("%s/%v.%v", Resource(obj).QKind(), obj["name"], obj["namespace"]))
+					name = w.canonical(fmt.Sprintf("%s/%v.%v", k8s.Resource(obj).QKind(), obj["name"], obj["namespace"]))
 				} else {
 					name = r.QName()
 				}
@@ -163,13 +163,16 @@ func (w *Waiter) Wait(timeout time.Duration) bool {
 			}
 		}
 	})
+	if err != nil {
+		panic(err)
+	}
 
-	listener := func(watcher *Watcher) {
+	listener := func(watcher *k8s.Watcher) {
 		for kind, names := range w.kinds {
 			for name := range names {
 				r := watcher.Get(kind, name)
-				if r.Ready() {
-					if r.ReadyImplemented() {
+				if Ready(r) {
+					if ReadyImplemented(r) {
 						fmt.Printf("ready: %s/%s\n", w.canonical(r.QKind()), r.QName())
 					} else {
 						fmt.Printf("ready: %s/%s (UNIMPLEMENTED)\n",

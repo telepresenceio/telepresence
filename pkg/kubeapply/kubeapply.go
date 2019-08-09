@@ -108,7 +108,7 @@ func phase(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool, na
 	if err != nil {
 		return errors.Wrapf(err, "kubeapply: error connecting to cluster %v", kubeinfo)
 	}
-	waiter, err := k8s.NewWaiter(cli.Watcher())
+	waiter, err := NewWaiter(cli.Watcher())
 	if err != nil {
 		return err
 	}
@@ -159,12 +159,12 @@ func expand(names []string) ([]string, error) {
 	fmt.Printf("expanding %s\n", strings.Join(names, " "))
 	var result []string
 	for _, n := range names {
-		resources, err := k8s.LoadResources(n)
+		resources, err := LoadResources(n)
 		if err != nil {
 			return nil, err
 		}
 		out := n + ".o"
-		err = k8s.SaveResources(out, resources)
+		err = SaveResources(out, resources)
 		if err != nil {
 			return nil, err
 		}

@@ -1,4 +1,4 @@
-package k8s_test
+package kubeapply_test
 
 import (
 	"os"
@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/datawire/teleproxy/pkg/dtest"
-	"github.com/datawire/teleproxy/pkg/k8s"
+	"github.com/datawire/teleproxy/pkg/kubeapply"
 )
 
 func TestDocker(t *testing.T) {
@@ -18,7 +18,7 @@ func TestDocker(t *testing.T) {
 		os.Setenv("DOCKER_REGISTRY", dtest.DockerRegistry())
 	}
 
-	_, err := k8s.ExpandResource("docker.yaml")
+	_, err := kubeapply.ExpandResource("docker.yaml")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
