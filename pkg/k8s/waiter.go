@@ -50,7 +50,7 @@ func (w *Waiter) canonical(name string) string {
 		return ""
 	}
 
-	ri, err := w.watcher.client.ResolveResourceType(kind)
+	ri, err := w.watcher.Client.ResolveResourceType(kind)
 	if err != nil {
 		panic(fmt.Sprintf("%s: %v", kind, err))
 	}
@@ -66,7 +66,7 @@ func (w *Waiter) canonical(name string) string {
 		parts = strings.Split(name, ".")
 		switch len(parts) {
 		case 1:
-			namespace = w.watcher.client.namespace
+			namespace = w.watcher.Client.Namespace
 		case 2:
 			name = parts[0]
 			namespace = parts[1]

@@ -27,27 +27,27 @@ var READY = map[string]func(Resource) bool{
 		// this effectively short-circuits the wait.
 		//
 		// in the future it might be worth porting this change to StatefulSets, ReplicaSets and ReplicationControllers
-		if r.Spec().getInt64("replicas") == 0 {
+		if r.Spec().GetInt64("replicas") == 0 {
 			return true
 		}
 
-		return r.Status().getInt64("readyReplicas") > 0
+		return r.Status().GetInt64("readyReplicas") > 0
 	},
 	"Service": func(r Resource) bool {
 		return true
 	},
 	"Pod": func(r Resource) bool {
-		css := r.Status().getMaps("containerStatuses")
+		css := r.Status().GetMaps("containerStatuses")
 		var cs Map
 		for _, cs = range css {
-			if !cs.getBool("ready") {
+			if !cs.GetBool("ready") {
 				return false
 			}
 		}
 		return true
 	},
 	"Namespace": func(r Resource) bool {
-		return r.Status().getString("phase") == "Active"
+		return r.Status().GetString("phase") == "Active"
 	},
 	"ServiceAccount": func(r Resource) bool {
 		_, ok := r["secrets"]
@@ -60,7 +60,7 @@ var READY = map[string]func(Resource) bool{
 		return true
 	},
 	"CustomResourceDefinition": func(r Resource) bool {
-		conditions := r.Status().getMaps("conditions")
+		conditions := r.Status().GetMaps("conditions")
 		if len(conditions) > 0 {
 			last := conditions[len(conditions)-1]
 			if last["status"] == "True" {
@@ -74,9 +74,14 @@ var READY = map[string]func(Resource) bool{
 	},
 }
 
+// Map is a YAML/JSON-ish map with some convenience methods on it.
 type Map map[string]interface{}
 
-func (m Map) getMap(name string) map[string]interface{} {
+// GetMap returns m[name], type-asserted to be a map.  If m[name] is
+// not set, or is not a map, then an non-nil empty map is returned.
+//
+// That is: it always safely returns a usable map.
+func (m Map) GetMap(name string) map[string]interface{} {
 	v, ok := m[name].(map[string]interface{})
 	if !ok {
 		return map[string]interface{}{}
@@ -84,7 +89,12 @@ func (m Map) getMap(name string) map[string]interface{} {
 	return v
 }
 
-func (m Map) getMaps(name string) []map[string]interface{} {
+// GetMaps returns m[name], type-asserted to be a list of maps.  If
+// m[name] is not set, or is not a list of maps, then a nil array is
+// returned.
+//
+// That is: it always safely returns a usable slice of maps.
+func (m Map) GetMaps(name string) []map[string]interface{} {
 	v, ok := m[name].([]interface{})
 	if !ok {
 		return nil
@@ -99,7 +109,12 @@ func (m Map) getMaps(name string) []map[string]interface{} {
 	return result
 }
 
-func (m Map) getString(key string) string {
+// GetString returns m[key], type-asserted to be a string.  If m[key]
+// is not set, or it is not a string, then an empty string is
+// returned.
+//
+// That is: it always safely returns a usable string.
+func (m Map) GetString(key string) string {
 	v, ok := m[key].(string)
 	if !ok {
 		return ""
@@ -107,7 +122,11 @@ func (m Map) getString(key string) string {
 	return v
 }
 
-func (m Map) getInt64(key string) int64 {
+// GetInt64 returns m[key], type-asserted to be an int64.  If m[key]
+// is not set, or it is not an int64, then 0 is returned.
+//
+// That is: it always safely returns a usable int64.
+func (m Map) GetInt64(key string) int64 {
 	v, ok := m[key].(int64)
 	if !ok {
 		return 0
@@ -115,7 +134,11 @@ func (m Map) getInt64(key string) int64 {
 	return v
 }
 
-func (m Map) getBool(key string) bool {
+// GetBool returns m[key], type-asserted to be a bool.  If m[key] is
+// not set, or it is not a bool, then false is returned.
+//
+// That is: it always safely returns a usable bool.
+func (m Map) GetBool(key string) bool {
 	v, ok := m[key].(bool)
 	if !ok {
 		return false
@@ -128,14 +151,14 @@ func (m Map) getBool(key string) bool {
 type Resource map[string]interface{}
 
 func (r Resource) Kind() string {
-	return Map(r).getString("kind")
+	return Map(r).GetString("kind")
 }
 
 // QKind returns a fully qualified resource kind with the following
 // format: <kind>.<version>.<group>
 func (r Resource) QKind() string {
-	gv := Map(r).getString("apiVersion")
-	k := Map(r).getString("kind")
+	gv := Map(r).GetString("apiVersion")
+	k := Map(r).GetString("kind")
 
 	var g, v string
 	if slash := strings.IndexByte(gv, '/'); slash < 0 {
@@ -155,15 +178,15 @@ func (r Resource) Empty() bool {
 }
 
 func (r Resource) Status() Map {
-	return Map(r).getMap("status")
+	return Map(r).GetMap("status")
 }
 
 func (r Resource) Data() Map {
-	return Map(r).getMap("data")
+	return Map(r).GetMap("data")
 }
 
 func (r Resource) Spec() Map {
-	return Map(r).getMap("spec")
+	return Map(r).GetMap("spec")
 }
 
 func (r Resource) ReadyImplemented() bool {
@@ -191,20 +214,23 @@ func (r Resource) Ready() bool {
 type Metadata map[string]interface{}
 
 func (r Resource) Metadata() Metadata {
-	return Metadata(Map(r).getMap("metadata"))
+	return Metadata(Map(r).GetMap("metadata"))
 }
 
-func (m Metadata) Name() string { return Map(m).getString("name") }
+// Name returns the metadata "name".
+func (m Metadata) Name() string { return Map(m).GetString("name") }
 func (r Resource) Name() string { return r.Metadata().Name() }
 
-func (m Metadata) Namespace() string { return Map(m).getString("namespace") }
+// Namespace returns the metadata "namespace".
+func (m Metadata) Namespace() string { return Map(m).GetString("namespace") }
 func (r Resource) Namespace() string { return r.Metadata().Namespace() }
 
-func (m Metadata) ResourceVersion() string { return Map(m).getString("resourceVersion") }
+// ResourceVersion returns the metadata "resourceVersion".
+func (m Metadata) ResourceVersion() string { return Map(m).GetString("resourceVersion") }
 func (r Resource) ResourceVersion() string { return r.Metadata().ResourceVersion() }
 
 func (m Metadata) Annotations() map[string]interface{} {
-	return Map(m).getMap("annotations")
+	return Map(m).GetMap("annotations")
 }
 
 func (m Metadata) QName() string {

@@ -38,7 +38,7 @@ func (lw listWatchAdapter) Watch(options v1.ListOptions) (pwatch.Interface, erro
 }
 
 type Watcher struct {
-	client  *Client
+	Client  *Client
 	watches map[ResourceType]watch
 	stop    chan struct{}
 	wg      sync.WaitGroup
@@ -78,7 +78,7 @@ func NewWatcher(info *KubeInfo) (*Watcher, error) {
 // Watcher returns a Kubernetes Watcher for the specified client.
 func (c *Client) Watcher() *Watcher {
 	w := &Watcher{
-		client:  c,
+		Client:  c,
 		watches: make(map[ResourceType]watch),
 		stop:    make(chan struct{}),
 	}
@@ -107,13 +107,13 @@ func (w *Watcher) SelectiveWatch(namespace, resources, fieldSelector, labelSelec
 // WatchQuery watches the set of resources identified by the supplied
 // query and invokes the supplied listener whenever they change.
 func (w *Watcher) WatchQuery(query Query, listener func(*Watcher)) error {
-	err := query.resolve(w.client)
+	err := query.resolve(w.Client)
 	if err != nil {
 		return err
 	}
 	ri := query.resourceType
 
-	dyn, err := dynamic.NewForConfig(w.client.config)
+	dyn, err := dynamic.NewForConfig(w.Client.config)
 	if err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func (w *Watcher) Start() {
 
 func (w *Watcher) sync(kind ResourceType) {
 	watch := w.watches[kind]
-	resources, err := w.client.ListQuery(watch.query)
+	resources, err := w.Client.ListQuery(watch.query)
 	if err != nil {
 		panic(err)
 	}
@@ -230,7 +230,7 @@ func (w *Watcher) sync(kind ResourceType) {
 }
 
 func (w *Watcher) List(kind string) []Resource {
-	ri, err := w.client.ResolveResourceType(kind)
+	ri, err := w.Client.ResolveResourceType(kind)
 	if err != nil {
 		panic(err)
 	}
@@ -248,7 +248,7 @@ func (w *Watcher) List(kind string) []Resource {
 }
 
 func (w *Watcher) UpdateStatus(resource Resource) (Resource, error) {
-	ri, err := w.client.ResolveResourceType(resource.QKind())
+	ri, err := w.Client.ResolveResourceType(resource.QKind())
 	if err != nil {
 		return nil, err
 	}
