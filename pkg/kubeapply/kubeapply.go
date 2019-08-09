@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/pkg/errors"
@@ -143,7 +144,7 @@ func applyAndWait(kubeinfo *k8s.KubeInfo, deadline time.Time, debug, dryRun bool
 	}
 
 	if len(msgs) == 0 {
-		err = apply(kubeinfo, dryRun, expanded)
+		err = kubectlApply(kubeinfo, dryRun, expanded)
 	}
 
 	if !debug {
@@ -190,13 +191,22 @@ func expand(names []string) ([]string, error) {
 	return result, nil
 }
 
-func apply(info *k8s.KubeInfo, dryRun bool, names []string) error {
+func kubectlApply(info *k8s.KubeInfo, dryRun bool, filenames []string) error {
 	args := []string{"apply"}
 	if dryRun {
 		args = append(args, "--dry-run")
 	}
-	for _, n := range names {
-		args = append(args, "-f", n)
+	for _, filename := range filenames {
+		// https://github.com/datawire/teleproxy/issues/77
+		filehandle, err := os.Open(filename)
+		if err != nil {
+			return err
+		}
+		defer filehandle.Close()
+		if err := syscall.Flock(int(filehandle.Fd()), syscall.LOCK_EX); err != nil {
+			return err
+		}
+		args = append(args, "-f", filename)
 	}
 	kargs, err := info.GetKubectlArray(args...)
 	if err != nil {
