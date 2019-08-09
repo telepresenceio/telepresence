@@ -2,7 +2,6 @@ package kubeapply
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -208,32 +207,6 @@ func SaveResources(path string, resources []k8s.Resource) error {
 	return nil
 }
 
-// WalkResources loads all YAML k8s.Resources from a list of directories.
-func WalkResources(filter func(name string) bool, roots ...string) (result []k8s.Resource, err error) {
-	for _, root := range roots {
-		err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-
-			if !info.IsDir() && filter(path) {
-				rsrcs, err := LoadResources(path)
-				if err != nil {
-					return err
-				}
-				result = append(result, rsrcs...)
-			}
-
-			return nil
-		})
-		if err != nil {
-			return
-		}
-	}
-
-	return
-}
-
 // MarshalResources serializes a list of k8s.Resources in to YAML.
 func MarshalResources(resources []k8s.Resource) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
@@ -246,30 +219,4 @@ func MarshalResources(resources []k8s.Resource) ([]byte, error) {
 	}
 	e.Close()
 	return buf.Bytes(), nil
-}
-
-// MarshalResource serializes a k8s.Resource in to YAML.
-func MarshalResource(resource k8s.Resource) ([]byte, error) {
-	return MarshalResources([]k8s.Resource{resource})
-}
-
-// MarshalResourcesJSON is like MarshalResources, but JSON instead of
-// YAML.
-func MarshalResourcesJSON(resources []k8s.Resource) ([]byte, error) {
-	buf := bytes.NewBuffer(nil)
-	e := json.NewEncoder(buf)
-	for _, r := range resources {
-		err := e.Encode(r)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return buf.Bytes(), nil
-}
-
-// MarshalResourceJSON is like MarshalResource, but JSON instead of
-// YAML.
-func MarshalResourceJSON(resource k8s.Resource) ([]byte, error) {
-	return MarshalResourcesJSON([]k8s.Resource{resource})
 }
