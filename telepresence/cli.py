@@ -339,7 +339,8 @@ def parse_args(args=None) -> argparse.Namespace:
         dest="service_account",
         type=str,
         help=(
-            "The Kubernetes serviceAccountName. Defaults to kubectl's default"
+            "The Kubernetes serviceAccount. Defaults to kubectl's default"
+            "This is only applicable when new-deployment is used."
         )
     )
 
