@@ -1,7 +1,5 @@
 // Copyright 2018 Datawire. All rights reserved.
 
-// +build ignore
-
 // gotest2tap.go translates `go test -json` on stdin to TAP v13 on
 // stdout.
 package main

@@ -86,13 +86,13 @@ directory, you could write:
 ## Adding your own test runners
 
 To add a new test runner, you just need a command that emits TAP:
-`tee` it to a `.tap` file, and pipe that to `build-aux/tap-driver
-stream -n TEST_GROUP_NAME` to pretty-print the results as they happen:
+`tee` it to a `.tap` file, and pipe that to `$(TAP_DRIVER) stream -n
+TEST_GROUP_NAME` to pretty-print the results as they happen:
 
 	# Tell Make how to run the test command, and stream the results to
-	# `tap-driver stream` to pretty-print the results as they happen.
-	my-test.tap: my-test.input FORCE
-		@SOME_COMMAND_THAT_EMITS_TAP 2>&1 | tee $@ | build-aux/tap-driver stream -n my-test
+	# `$(TAP_DRIVER) stream` to pretty-print the results as they happen.
+	my-test.tap: my-test.input $(TAP_DRIVER) FORCE
+		@SOME_COMMAND_THAT_EMITS_TAP 2>&1 | tee $@ | $(TAP_DRIVER) stream -n my-test
 
 	# Tell Make to include 'my-test' in `make check`
 	test-suite.tap: my-test.tap
@@ -100,8 +100,8 @@ stream -n TEST_GROUP_NAME` to pretty-print the results as they happen:
 For example, to use [BATS (Bash Automated Testing System)][BATS], you
 would write:
 
-	%.tap: %.bats FORCE
-		@bats --tap $< | tee $@ | build-aux/tap-driver stream -n $<
+	%.tap: %.bats $(TAP_DRIVER) FORCE
+		@bats --tap $< | tee $@ | $(TAP_DRIVER) stream -n $<
 
 	# Automatically include `./tests/*.bats`
 	test-suite.tap: $(patsubst %.bats,%.tap,$(wildcard tests/*.bats))

@@ -3,35 +3,30 @@
 # Makefile snippet for calling `teleproxy`
 #
 ## Eager inputs ##
-#  - Variable: TELEPROXY     ?= ./build-aux/teleproxy
 #  - Variable: KUBECONFIG
 #  - Variable: TELEPROXY_LOG ?= ./build-aux/teleproxy.log
 ## Lazy inputs ##
 #  - Variable: KUBE_URL
 ## Outputs ##
-#  - Variable: TELEPROXY     ?= ./build-aux/teleproxy
+#  - Executable: TELEPROXY ?= $(CURDIR)/build-aux/bin/teleproxy
 #  - Variable: TELEPROXY_LOG ?= ./build-aux/teleproxy.log
-#  - Target       : $(TELEPROXY)
 #  - .PHONY Target: proxy
 #  - .PHONY Target: unproxy
 #  - .PHONY Target: status-proxy
 ## common.mk targets ##
 #  - clean
-#  - clobber
 ## kubernaut-ui.mk targets ##
 #  - $(KUBECONFIG).clean
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
 _teleproxy.mk := $(lastword $(MAKEFILE_LIST))
 include $(dir $(_teleproxy.mk))prelude.mk
 
-TELEPROXY ?= $(dir $(_teleproxy.mk))teleproxy
 TELEPROXY_LOG ?= $(dir $(_teleproxy.mk))teleproxy.log
-TELEPROXY_VERSION = 0.3.16
 KUBE_URL = https://kubernetes/api/
 
-$(TELEPROXY): $(_teleproxy.mk)
-	sudo rm -f $@
-	curl -o $@ --fail https://s3.amazonaws.com/datawire-static-files/teleproxy/$(TELEPROXY_VERSION)/$(GOHOSTOS)/$(GOHOSTARCH)/teleproxy
+TELEPROXY ?= $(build-aux.bindir)/teleproxy
+$(build-aux.bindir)/teleproxy: $(build-aux.dir)/go.mod $(_prelude.go.lock) | $(build-aux.bindir)
+	$(build-aux.go-build) -o $@ github.com/datawire/teleproxy/cmd/teleproxy
 	sudo chown root $@
 	sudo chmod go-w,a+sx $@
 
@@ -75,11 +70,11 @@ $(KUBECONFIG).clean: unproxy
 clean: _clean-teleproxy
 _clean-teleproxy: $(if $(wildcard $(TELEPROXY_LOG)),unproxy)
 	rm -f $(TELEPROXY_LOG)
+# Files made by older versions.  Remove the tail of this list when the
+# commit making the change gets far enough in to the past.
+#
+# 2018-07-01
+	rm -f $(dir $(_teleproxy.mk))teleproxy
 .PHONY: _clean-teleproxy
-
-clobber: _clobber-teleproxy
-_clobber-teleproxy:
-	rm -f $(TELEPROXY)
-.PHONY: _clobber-teleproxy
 
 endif

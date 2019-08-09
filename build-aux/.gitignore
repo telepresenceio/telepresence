@@ -1,9 +1,11 @@
-# teleproxy.mk
-/teleproxy
-/teleproxy.log
+.tmp.*
+*.tmp
 
-# kubeapply.mk
-/kubeapply
+# prelude.mk
+/bin/
+
+# teleproxy.mk
+/teleproxy.log
 
 # kubernaut.mk
 *.knaut
@@ -14,16 +16,24 @@
 /docker-port-forward.log
 /docker-registry.yaml.o
 
-# _go-common.mk
-/golangci-lint
+# go-mod.mk
 /go-test.tap
+/go1*.src.tar.gz
 
 # go-mod.mk
 /gopath/
 
+# var.mk
+/.var.*
+
 # --- Files ignored by older versions ---
 # Remove the tail of this list when the commit making the change gets
 # far enough in to the past.
+
+# 2019-07-01
+/teleproxy
+/kubeapply
+/golangci-lint
 
 # 2019-02-06
 /patter.go

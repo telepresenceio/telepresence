@@ -10,15 +10,25 @@ include simply by writing `include build-aux/NAME.mk` in your
 Each `.mk` snippet starts with a reference header-comment
 identifying:
 
- - any inputs (mostly variables)
+ - any eager-evaluated inputs (mostly variables)
+ - any lazy-evaluated inputs (mostly variables)
  - any outputs (targets, variables)
  - which targets from other snippets it hooks in to (mostly hooking
    in to `common.mk` targets)
 
-You don't need to worry about dependencies between `.mk` files; each
-file will automatically `include` the others it depends on.  You don't
-need to worry about including a file twice; this is safe, as they all
-have C-header-style include guards.
+Eager inputs need to be defined *before* loading the snippet; lazy
+inputs can be defined later.  See [`conventions.mk`][./conventions.md]
+for more information on the reference header-comment.
+
+For the most part, you don't need to worry about dependencies between
+`.mk` files; each file will automatically `include` the others it
+depends on.  However, if you would like to use an output from one
+snippet as an eager input to another, then you do need to worry about
+include order; if you would like to use `kubernaut-ui.mk` to set
+`KUBECONFIG` for `teleproxy.mk`, then you will need to make sure you
+include `kubernaut-ui.mk` *before* you include `teleproxy.mk`.  You
+don't need to worry about including a file twice; this is safe, as
+they all have C-header-style include guards.
 
 ## `common.mk`
 
