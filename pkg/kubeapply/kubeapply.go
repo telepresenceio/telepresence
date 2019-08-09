@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/pkg/errors"
@@ -23,7 +22,7 @@ func Kubeapply(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool
 		kubeinfo = k8s.NewKubeInfo("", "", "")
 	}
 	p := &phaser{
-		prefixes: make(map[string][]string),
+		phasesByName: make(map[string][]string),
 	}
 
 	for _, file := range files {
@@ -33,7 +32,7 @@ func Kubeapply(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool
 		}
 	}
 
-	for _, names := range p.phases() {
+	for _, names := range p.orderedPhases() {
 		err := phase(kubeinfo, timeout, debug, dryRun, names)
 		if err != nil {
 			return err
@@ -44,8 +43,7 @@ func Kubeapply(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool
 }
 
 type phaser struct {
-	prefixes map[string][]string
-	last     []string
+	phasesByName map[string][]string
 }
 
 func isYaml(name string) bool {
@@ -67,34 +65,37 @@ func (p *phaser) Add(root string) error {
 	return err
 }
 
-func (p *phaser) AddFile(path string) {
-	base := filepath.Base(path)
-	var pfx string
-	if len(base) >= 3 {
-		pfx = base[:3]
+func hasNumberPrefix(filepart string) bool {
+	if len(filepart) < 3 {
+		return false
 	}
-	if len(pfx) == 3 && pfx[2] == '-' && unicode.IsDigit(rune(pfx[0])) && unicode.IsDigit(rune(pfx[1])) {
-		p.prefixes[pfx] = append(p.prefixes[pfx], path)
-	} else {
-		p.last = append(p.last, path)
-	}
+	return '0' <= filepart[0] && filepart[0] <= '9' &&
+		'0' <= filepart[1] && filepart[1] <= '9' &&
+		filepart[2] == '-'
 }
 
-func (p *phaser) phases() (result [][]string) {
-	var keys []string
-	for k := range p.prefixes {
-		keys = append(keys, k)
+func (p *phaser) AddFile(path string) {
+	_, notdir := filepath.Split(path)
+	phaseName := "last" // all letters sort after all numbers; "last" is after all numbered phases
+	if hasNumberPrefix(notdir) {
+		phaseName = notdir[:2]
 	}
-	sort.Strings(keys)
+	p.phasesByName[phaseName] = append(p.phasesByName[phaseName], path)
+}
 
-	for _, k := range keys {
-		result = append(result, p.prefixes[k])
+func (p *phaser) orderedPhases() [][]string {
+	phaseNames := make([]string, 0, len(p.phasesByName))
+	for phaseName := range p.phasesByName {
+		phaseNames = append(phaseNames, phaseName)
+	}
+	sort.Strings(phaseNames)
+
+	orderedPhases := make([][]string, 0, len(phaseNames))
+	for _, phaseName := range phaseNames {
+		orderedPhases = append(orderedPhases, p.phasesByName[phaseName])
 	}
 
-	if len(p.last) > 0 {
-		result = append(result, p.last)
-	}
-	return
+	return orderedPhases
 }
 
 func phase(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool, names []string) error {
