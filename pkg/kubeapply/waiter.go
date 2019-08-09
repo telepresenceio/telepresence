@@ -3,18 +3,19 @@ package kubeapply
 import (
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
 )
 
+// Waiter takes some YAML and waits for all of the resources described
+// in it to be ready.
 type Waiter struct {
 	watcher *k8s.Watcher
-	kinds   map[string]map[string]bool
+	kinds   map[k8s.ResourceType]map[string]struct{}
 }
 
-// NewWaiter constructs a Waiter object based on the suppliec Watcher.
+// NewWaiter constructs a Waiter object based on the supplied Watcher.
 func NewWaiter(watcher *k8s.Watcher) (w *Waiter, err error) {
 	if watcher == nil {
 		cli, err := k8s.NewClient(nil)
@@ -25,85 +26,38 @@ func NewWaiter(watcher *k8s.Watcher) (w *Waiter, err error) {
 	}
 	return &Waiter{
 		watcher: watcher,
-		kinds:   make(map[string]map[string]bool),
+		kinds:   make(map[k8s.ResourceType]map[string]struct{}),
 	}, nil
 }
 
-// canonical returns the canonical form of either a resource name or a
-// resource type name:
-//
-//   ResourceName: TYPE/NAME[.NAMESPACE]
-//   ResourceType: TYPE
-//
-func (w *Waiter) canonical(name string) string {
-	parts := strings.Split(name, "/")
-
-	var kind string
-	switch len(parts) {
-	case 1:
-		kind = parts[0]
-		name = ""
-	case 2:
-		kind = parts[0]
-		name = parts[1]
-	default:
-		return ""
-	}
-
-	ri, err := w.watcher.Client.ResolveResourceType(kind)
+func (w *Waiter) add(resource k8s.Resource) error {
+	resourceType, err := w.watcher.Client.ResolveResourceType(resource.QKind())
 	if err != nil {
-		panic(fmt.Sprintf("%s: %v", kind, err))
-	}
-	kind = strings.ToLower(ri.String())
-
-	if name == "" {
-		return kind
+		return err
 	}
 
-	if ri.Namespaced {
-		var namespace string
-
-		parts = strings.Split(name, ".")
-		switch len(parts) {
-		case 1:
+	resourceName := resource.Name()
+	if resourceType.Namespaced {
+		namespace := resource.Namespace()
+		if namespace == "" {
 			namespace = w.watcher.Client.Namespace
-		case 2:
-			name = parts[0]
-			namespace = parts[1]
-		default:
-			return ""
 		}
-
-		return fmt.Sprintf("%s/%s.%s", kind, name, namespace)
+		resourceName += "." + namespace
 	}
 
-	return fmt.Sprintf("%s/%s", kind, name)
-}
-
-func (w *Waiter) Add(resource string) error {
-	cresource := w.canonical(resource)
-
-	parts := strings.Split(cresource, "/")
-	if len(parts) != 2 {
-		return fmt.Errorf("expecting <kind>/<name>[.<namespace>], got %s", resource)
+	if _, ok := w.kinds[resourceType]; !ok {
+		w.kinds[resourceType] = make(map[string]struct{})
 	}
-
-	kind := parts[0]
-	name := parts[1]
-
-	resources, ok := w.kinds[kind]
-	if !ok {
-		resources = make(map[string]bool)
-		w.kinds[kind] = resources
-	}
-	resources[name] = false
+	w.kinds[resourceType][resourceName] = struct{}{}
 	return nil
 }
 
+// Scan calls LoadResources(path), and add all resources loaded to the
+// Waiter.
 func (w *Waiter) Scan(path string) (err error) {
 	resources, err := LoadResources(path)
 	for _, res := range resources {
-		err = w.Add(fmt.Sprintf("%s/%s", res.QKind(), res.QName()))
+		err = w.add(res)
 		if err != nil {
 			return
 		}
@@ -111,18 +65,7 @@ func (w *Waiter) Scan(path string) (err error) {
 	return
 }
 
-func (w *Waiter) ScanPaths(files []string) (err error) {
-	resources, err := WalkResources(isYaml, files...)
-	for _, res := range resources {
-		err = w.Add(fmt.Sprintf("%s/%s", res.QKind(), res.QName()))
-		if err != nil {
-			return
-		}
-	}
-	return
-}
-
-func (w *Waiter) remove(kind, name string) {
+func (w *Waiter) remove(kind k8s.ResourceType, name string) {
 	delete(w.kinds[kind], name)
 }
 
@@ -136,6 +79,10 @@ func (w *Waiter) isEmpty() bool {
 	return true
 }
 
+// Wait spews a bunch of crap on stdout, and waits for all of the
+// Scan()ed resources to be ready.  If they all become ready before
+// timeout, then it returns true.  If they don't become ready in that
+// amount of time, then it bails early and returns false.
 func (w *Waiter) Wait(timeout time.Duration) bool {
 	start := time.Now()
 	printed := make(map[string]bool)
@@ -154,7 +101,8 @@ func (w *Waiter) Wait(timeout time.Duration) bool {
 			if !printed[r.QName()] {
 				var name string
 				if obj, ok := r["involvedObject"].(map[string]interface{}); ok {
-					name = w.canonical(fmt.Sprintf("%s/%v.%v", k8s.Resource(obj).QKind(), obj["name"], obj["namespace"]))
+					res := k8s.Resource(obj)
+					name = fmt.Sprintf("%s/%s", res.QKind(), res.QName())
 				} else {
 					name = r.QName()
 				}
@@ -170,13 +118,13 @@ func (w *Waiter) Wait(timeout time.Duration) bool {
 	listener := func(watcher *k8s.Watcher) {
 		for kind, names := range w.kinds {
 			for name := range names {
-				r := watcher.Get(kind, name)
+				r := watcher.Get(kind.String(), name)
 				if Ready(r) {
 					if ReadyImplemented(r) {
-						fmt.Printf("ready: %s/%s\n", w.canonical(r.QKind()), r.QName())
+						fmt.Printf("ready: %s/%s\n", r.QKind(), r.QName())
 					} else {
 						fmt.Printf("ready: %s/%s (UNIMPLEMENTED)\n",
-							w.canonical(r.QKind()), r.QName())
+							r.QKind(), r.QName())
 					}
 					w.remove(kind, name)
 				}
@@ -189,7 +137,7 @@ func (w *Waiter) Wait(timeout time.Duration) bool {
 	}
 
 	for k := range w.kinds {
-		err := w.watcher.Watch(k, listener)
+		err := w.watcher.Watch(k.String(), listener)
 		if err != nil {
 			panic(err)
 		}
