@@ -1,0 +1,275 @@
+package k8s
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"strings"
+	"text/template"
+
+	"github.com/Masterminds/sprig"
+	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
+
+	"github.com/datawire/teleproxy/pkg/supervisor"
+)
+
+var readyChecks = map[string]func(Resource) bool{
+	"": func(Resource) bool { return false },
+	"Deployment": func(r Resource) bool {
+		// NOTE - plombardi - (2019-05-20)
+		// a zero-sized deployment never gets status.readyReplicas and friends set by kubernetes deployment controller.
+		// this effectively short-circuits the wait.
+		//
+		// in the future it might be worth porting this change to StatefulSets, ReplicaSets and ReplicationControllers
+		if r.Spec().GetInt64("replicas") == 0 {
+			return true
+		}
+
+		return r.Status().GetInt64("readyReplicas") > 0
+	},
+	"Service": func(r Resource) bool {
+		return true
+	},
+	"Pod": func(r Resource) bool {
+		css := r.Status().GetMaps("containerStatuses")
+		var cs Map
+		for _, cs = range css {
+			if !cs.GetBool("ready") {
+				return false
+			}
+		}
+		return true
+	},
+	"Namespace": func(r Resource) bool {
+		return r.Status().GetString("phase") == "Active"
+	},
+	"ServiceAccount": func(r Resource) bool {
+		_, ok := r["secrets"]
+		return ok
+	},
+	"ClusterRole": func(r Resource) bool {
+		return true
+	},
+	"ClusterRoleBinding": func(r Resource) bool {
+		return true
+	},
+	"CustomResourceDefinition": func(r Resource) bool {
+		conditions := r.Status().GetMaps("conditions")
+		if len(conditions) == 0 {
+			return false
+		}
+		last := conditions[len(conditions)-1]
+		return last["status"] == "True"
+	},
+}
+
+// ReadyImplemented returns whether or not this package knows how to
+// wait for this resource to be ready.
+func (r Resource) ReadyImplemented() bool {
+	if r.Empty() {
+		return false
+	}
+	kind := r.Kind()
+	_, ok := readyChecks[kind]
+	return ok
+}
+
+// Ready returns whether or not this resource is ready; if this
+// package does not know how to check whether the resource is ready,
+// then it returns true.
+func (r Resource) Ready() bool {
+	if r.Empty() {
+		return false
+	}
+	kind := r.Kind()
+	fn, fnOK := readyChecks[kind]
+	if !fnOK {
+		return true
+	}
+	return fn(r)
+}
+
+func isTemplate(input []byte) bool {
+	return strings.Contains(string(input), "@TEMPLATE@")
+}
+
+func builder(dir string) func(string) (string, error) {
+	return func(dockerfile string) (string, error) {
+		return image(dir, dockerfile)
+	}
+}
+
+func image(dir, dockerfile string) (string, error) {
+	var result string
+	errs := supervisor.Run("BLD", func(p *supervisor.Process) error {
+		iidfile, err := ioutil.TempFile("", "iid")
+		if err != nil {
+			return err
+		}
+		defer os.Remove(iidfile.Name())
+		err = iidfile.Close()
+		if err != nil {
+			return err
+		}
+
+		ctx := filepath.Dir(filepath.Join(dir, dockerfile))
+		cmd := p.Command("docker", "build", "-f", filepath.Base(dockerfile), ".", "--iidfile", iidfile.Name())
+		cmd.Dir = ctx
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
+		content, err := ioutil.ReadFile(iidfile.Name())
+		if err != nil {
+			return err
+		}
+		iid := strings.Split(strings.TrimSpace(string(content)), ":")[1]
+		short := iid[:12]
+
+		registry := strings.TrimSpace(os.Getenv("DOCKER_REGISTRY"))
+		if registry == "" {
+			return errors.Errorf("please set the DOCKER_REGISTRY environment variable")
+		}
+		tag := fmt.Sprintf("%s/%s", registry, short)
+
+		cmd = p.Command("docker", "tag", iid, tag)
+		err = cmd.Run()
+		if err != nil {
+			return err
+		}
+
+		result = tag
+
+		cmd = p.Command("docker", "push", tag)
+		return cmd.Run()
+	})
+	if len(errs) > 0 {
+		return "", errors.Errorf("errors building %s: %v", dockerfile, errs)
+	}
+	return result, nil
+}
+
+// ExpandResource takes a path to a YAML file, and returns its
+// contents, with any kubeapply templating expanded.
+func ExpandResource(path string) (result []byte, err error) {
+	input, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %v", path, err)
+	}
+	if isTemplate(input) {
+		funcs := sprig.TxtFuncMap()
+		funcs["image"] = builder(filepath.Dir(path))
+		tmpl := template.New(filepath.Base(path)).Funcs(funcs)
+		_, err := tmpl.Parse(string(input))
+		if err != nil {
+			return nil, fmt.Errorf("%s: %v", path, err)
+		}
+
+		buf := bytes.NewBuffer(nil)
+		err = tmpl.ExecuteTemplate(buf, filepath.Base(path), nil)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %v", path, err)
+		}
+
+		result = buf.Bytes()
+	} else {
+		result = input
+	}
+
+	return
+}
+
+// LoadResources is like ExpandResource, but follows it up by actually
+// parsing the YAML.
+func LoadResources(path string) (result []Resource, err error) {
+	var input []byte
+	input, err = ExpandResource(path)
+	if err != nil {
+		return
+	}
+	result, err = ParseResources(path, string(input))
+	return
+}
+
+// SaveResources serializes a list of Resources to a YAML file.
+func SaveResources(path string, resources []Resource) error {
+	output, err := MarshalResources(resources)
+	if err != nil {
+		return fmt.Errorf("%s: %v", path, err)
+	}
+	err = ioutil.WriteFile(path, output, 0644)
+	if err != nil {
+		return fmt.Errorf("%s: %v", path, err)
+	}
+	return nil
+}
+
+// WalkResources loads all YAML Resources from a list of directories.
+func WalkResources(filter func(name string) bool, roots ...string) (result []Resource, err error) {
+	for _, root := range roots {
+		err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if !info.IsDir() && filter(path) {
+				rsrcs, err := LoadResources(path)
+				if err != nil {
+					return err
+				}
+				result = append(result, rsrcs...)
+			}
+
+			return nil
+		})
+		if err != nil {
+			return
+		}
+	}
+
+	return
+}
+
+// MarshalResources serializes a list of Resources in to YAML.
+func MarshalResources(resources []Resource) ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	e := yaml.NewEncoder(buf)
+	for _, r := range resources {
+		err := e.Encode(r)
+		if err != nil {
+			return nil, err
+		}
+	}
+	e.Close()
+	return buf.Bytes(), nil
+}
+
+// MarshalResource serializes a Resource in to YAML.
+func MarshalResource(resource Resource) ([]byte, error) {
+	return MarshalResources([]Resource{resource})
+}
+
+// MarshalResourcesJSON is like MarshalResources, but JSON instead of
+// YAML.
+func MarshalResourcesJSON(resources []Resource) ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	e := json.NewEncoder(buf)
+	for _, r := range resources {
+		err := e.Encode(r)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return buf.Bytes(), nil
+}
+
+// MarshalResourceJSON is like MarshalResource, but JSON instead of
+// YAML.
+func MarshalResourceJSON(resource Resource) ([]byte, error) {
+	return MarshalResourcesJSON([]Resource{resource})
+}
