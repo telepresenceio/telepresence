@@ -81,9 +81,9 @@ func (w *Waiter) isEmpty() bool {
 
 // Wait spews a bunch of crap on stdout, and waits for all of the
 // Scan()ed resources to be ready.  If they all become ready before
-// timeout, then it returns true.  If they don't become ready in that
-// amount of time, then it bails early and returns false.
-func (w *Waiter) Wait(timeout time.Duration) bool {
+// deadline, then it returns true.  If they don't become ready by
+// then, then it bails early and returns false.
+func (w *Waiter) Wait(deadline time.Time) bool {
 	start := time.Now()
 	printed := make(map[string]bool)
 	err := w.watcher.Watch("events", func(watcher *k8s.Watcher) {
@@ -146,7 +146,7 @@ func (w *Waiter) Wait(timeout time.Duration) bool {
 	w.watcher.Start()
 
 	go func() {
-		time.Sleep(timeout)
+		time.Sleep(time.Until(deadline))
 		w.watcher.Stop()
 	}()
 

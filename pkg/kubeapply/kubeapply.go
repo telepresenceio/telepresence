@@ -10,14 +10,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/pkg/errors"
+
+	"github.com/datawire/teleproxy/pkg/k8s"
 )
+
+var errorTimeoutExceeded = errors.New("timeout exceeded")
 
 // Kubeapply applies the supplied manifests to the kubernetes cluster
 // indicated via the kubeinfo argument. If kubeinfo is nil, it will
 // look in the standard default places for cluster configuration.
 func Kubeapply(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool, files ...string) error {
+	deadline := time.Now().Add(timeout)
+
 	if kubeinfo == nil {
 		kubeinfo = k8s.NewKubeInfo("", "", "")
 	}
@@ -33,8 +38,11 @@ func Kubeapply(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool
 	}
 
 	for _, names := range p.orderedPhases() {
-		err := phase(kubeinfo, timeout, debug, dryRun, names)
+		err := phase(kubeinfo, deadline, debug, dryRun, names)
 		if err != nil {
+			if err == errorTimeoutExceeded {
+				err = errors.Errorf("not ready after %v", timeout)
+			}
 			return err
 		}
 	}
@@ -98,7 +106,7 @@ func (p *phaser) orderedPhases() [][]string {
 	return orderedPhases
 }
 
-func phase(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool, names []string) error {
+func phase(kubeinfo *k8s.KubeInfo, deadline time.Time, debug, dryRun bool, names []string) error {
 	expanded, err := expand(names)
 	if err != nil {
 		return err
@@ -148,8 +156,8 @@ func phase(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool, na
 		return errors.Errorf("errors expanding templates:\n  %s", strings.Join(msgs, "\n  "))
 	}
 
-	if !waiter.Wait(timeout) {
-		return errors.Errorf("not ready after %s seconds\n", timeout.String())
+	if !waiter.Wait(deadline) {
+		return errorTimeoutExceeded
 	}
 
 	return nil
