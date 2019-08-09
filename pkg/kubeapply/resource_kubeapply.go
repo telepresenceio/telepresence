@@ -19,7 +19,7 @@ import (
 )
 
 var readyChecks = map[string]func(k8s.Resource) bool{
-	"": func(k8s.Resource) bool { return false },
+	"": func(_ k8s.Resource) bool { return false },
 	"Deployment": func(r k8s.Resource) bool {
 		// NOTE - plombardi - (2019-05-20)
 		// a zero-sized deployment never gets status.readyReplicas and friends set by kubernetes deployment controller.
@@ -37,9 +37,8 @@ var readyChecks = map[string]func(k8s.Resource) bool{
 	},
 	"Pod": func(r k8s.Resource) bool {
 		css := r.Status().GetMaps("containerStatuses")
-		var cs k8s.Map
-		for _, cs = range css {
-			if !cs.GetBool("ready") {
+		for _, cs := range css {
+			if !k8s.Map(cs).GetBool("ready") {
 				return false
 			}
 		}

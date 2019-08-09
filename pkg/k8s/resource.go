@@ -218,19 +218,3 @@ func ParseResources(name, input string) (result []Resource, err error) {
 		result = append(result, res)
 	}
 }
-
-//func (r *Resource) MarshalJSON() ([]byte, error) {
-//	return json.Marshal(r)
-//}
-//
-//func (r *Resource) UnmarshalJSON(data []byte) error {
-//	return json.Unmarshal(data, r)
-//}
-
-//func (r Resource) MarshalJSON() ([]byte, error) {
-//	return json.Marshal(r)
-//}
-//
-//func (r Resource) UnmarshalJSON(data []byte) error {
-//	return json.Unmarshal(data, &Resource{})
-//}
