@@ -101,7 +101,7 @@ func poll(t *testing.T, url string, expected string) bool {
 			return false
 		}
 		time.Sleep(time.Second)
-		if time.Since(start) > 30*time.Second {
+		if time.Since(start) > 120*time.Second {
 			t.Errorf("time has expired")
 			return false
 		}
