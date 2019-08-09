@@ -115,7 +115,7 @@ func (t *Translator) Enable(p *supervisor.Process) {
 	pf(p, []string{"-f", "/dev/stdin"}, "pass on lo0")
 	pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 
-	output := string(p.Command("pfctl", "-E").MustCaptureErr(nil))
+	output := p.Command("pfctl", "-E").MustCaptureErr(nil)
 	for _, line := range strings.Split(output, "\n") {
 		parts := strings.Split(line, ":")
 		if len(parts) == 2 && strings.TrimSpace(parts[0]) == "Token" {
@@ -130,7 +130,7 @@ func (t *Translator) Enable(p *supervisor.Process) {
 }
 
 func (t *Translator) Disable(p *supervisor.Process) {
-	p.Command("pfctl", "-X", t.token).Run()
+	_ = p.Command("pfctl", "-X", t.token).Run()
 
 	if t.dev != nil {
 		for _, action := range actions {
