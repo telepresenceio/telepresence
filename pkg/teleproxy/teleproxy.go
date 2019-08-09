@@ -508,6 +508,21 @@ var (
 	errAborted = errors.New("aborted")
 )
 
+type svcResource struct {
+	Spec svcSpec
+}
+
+type svcSpec struct {
+	ClusterIP string
+	Ports     []svcPort
+}
+
+type svcPort struct {
+	Name     string
+	Port     int
+	Protocol string
+}
+
 func bridges(p *supervisor.Process, tele *Teleproxy) {
 	sup := p.Supervisor()
 
@@ -557,16 +572,35 @@ func bridges(p *supervisor.Process, tele *Teleproxy) {
 					table := route.Table{Name: "kubernetes"}
 
 					for _, svc := range w.List("services") {
-						ip, ok := svc.Spec()["clusterIP"]
+						decoded := svcResource{}
+						err := svc.Decode(&decoded)
+						if err != nil {
+							p.Logf("error decoding service: %v", err)
+							continue
+						}
+
+						spec := decoded.Spec
+
+						ports := ""
+						for _, port := range spec.Ports {
+							if ports == "" {
+								ports = fmt.Sprintf("%d", port.Port)
+							} else {
+								ports = fmt.Sprintf("%s,%d", ports, port.Port)
+							}
+						}
+
+						ip := spec.ClusterIP
 						// for headless services the IP is None, we
 						// should properly handle these by listening
 						// for endpoints and returning multiple A
 						// records at some point
-						if ok && ip != "None" {
+						if ip != "" && ip != "None" {
 							qualName := svc.Name() + "." + svc.Namespace() + ".svc.cluster.local"
 							table.Add(route.Route{
 								Name:   qualName,
-								Ip:     ip.(string),
+								Ip:     ip,
+								Port:   ports,
 								Proto:  "tcp",
 								Target: ProxyRedirPort,
 							})

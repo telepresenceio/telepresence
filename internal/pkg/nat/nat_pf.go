@@ -27,12 +27,30 @@ func pf(p *supervisor.Process, args []string, stdin string) error {
 	return cmd.Wait()
 }
 
-func fmtDest(a Address) string {
-	result := fmt.Sprintf("proto %s to %s", a.Proto, a.Ip)
-	if a.Port != "" {
-		result += fmt.Sprintf(" port %s", a.Port)
+func splitPorts(portspec string) (result []string) {
+	for _, part := range strings.Split(portspec, ",") {
+		result = append(result, strings.TrimSpace(part))
 	}
-	return result
+	return
+}
+
+func fmtDest(a Address) (result []string) {
+	ports := splitPorts(a.Port)
+
+	if len(ports) == 0 {
+		result = append(result, fmt.Sprintf("proto %s to %s", a.Proto, a.Ip))
+	} else {
+		for _, port := range ports {
+			addr := fmt.Sprintf("proto %s to %s", a.Proto, a.Ip)
+			if port != "" {
+				addr += fmt.Sprintf(" port %s", port)
+			}
+
+			result = append(result, addr)
+		}
+	}
+
+	return
 }
 
 func (t *Translator) rules() string {
@@ -45,14 +63,18 @@ func (t *Translator) rules() string {
 	result := ""
 	for _, entry := range entries {
 		dst := entry.Destination
-		result += ("rdr pass on lo0 inet " + fmtDest(dst) + " -> 127.0.0.1 port " + entry.Port + "\n")
+		for _, addr := range fmtDest(dst) {
+			result += ("rdr pass on lo0 inet " + addr + " -> 127.0.0.1 port " + entry.Port + "\n")
+		}
 	}
 
 	result += "pass out quick inet proto tcp to 127.0.0.1/32\n"
 
 	for _, entry := range entries {
 		dst := entry.Destination
-		result += "pass out route-to lo0 inet " + fmtDest(dst) + " keep state\n"
+		for _, addr := range fmtDest(dst) {
+			result += "pass out route-to lo0 inet " + addr + " keep state\n"
+		}
 	}
 
 	return result
