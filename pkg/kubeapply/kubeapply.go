@@ -22,7 +22,9 @@ func Kubeapply(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool
 	if kubeinfo == nil {
 		kubeinfo = k8s.NewKubeInfo("", "", "")
 	}
-	p := newPhaser()
+	p := &phaser{
+		prefixes: make(map[string][]string),
+	}
 
 	for _, file := range files {
 		err := p.Add(file)
@@ -32,7 +34,7 @@ func Kubeapply(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool
 	}
 
 	for _, names := range p.phases() {
-		err := phase(kubeinfo, timeout, debug, dryRun, names, nil)
+		err := phase(kubeinfo, timeout, debug, dryRun, names)
 		if err != nil {
 			return err
 		}
@@ -46,21 +48,8 @@ type phaser struct {
 	last     []string
 }
 
-func newPhaser() *phaser {
-	return &phaser{
-		prefixes: make(map[string][]string),
-	}
-}
-
 func isYaml(name string) bool {
-	for _, ext := range []string{
-		".yaml",
-	} {
-		if strings.HasSuffix(name, ext) {
-			return true
-		}
-	}
-	return false
+	return strings.HasSuffix(name, ".yaml")
 }
 
 func (p *phaser) Add(root string) error {
@@ -108,8 +97,8 @@ func (p *phaser) phases() (result [][]string) {
 	return
 }
 
-func phase(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool, names []string, data interface{}) error {
-	expanded, err := expand(names, data)
+func phase(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool, names []string) error {
+	expanded, err := expand(names)
 	if err != nil {
 		return err
 	}
@@ -165,8 +154,7 @@ func phase(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool, na
 	return nil
 }
 
-func expand(names []string, data interface{}) ([]string, error) {
-	_ = data
+func expand(names []string) ([]string, error) {
 	fmt.Printf("expanding %s\n", strings.Join(names, " "))
 	var result []string
 	for _, n := range names {
