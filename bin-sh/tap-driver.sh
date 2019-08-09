@@ -11,10 +11,25 @@
 # portability.
 #
 # Notes:
-#  - The TAP parser here is heavily based on the one I (LukeShu) wrote
-#    in Python for testbench-matrix.
-#  - This is only slightly shorter than Automake's tap-driver.sh, but
-#    I think it's a lot more understandable.
+#    This is 500 lines of pure Bash.  I (LukeShu) think it's clean and
+#    editable, but I'm more comfortable with Bash than most.  It's
+#    conceptually very similar to Automake's `tap-driver.sh`, which is
+#    about the same length, but a little bit of POSIX shell, and a
+#    whole lot of AWK (and I think isn't very understandable).  The
+#    bulk of mine is a TAP parser, strongly based on the one I wrote
+#    in Python for [testbench-matrix][].
+#     - I considered writing it in Python, but decided against it
+#       because I didn't want to expand the build-footprint of
+#       build-aux, which currently does not depend on Python.
+#     - I considered writing it in Perl, because it's part of the base
+#       install just about everywhere, but decided against it because
+#       I figured everyone else at Datawire would hate that even more
+#       than Bash.
+#     - I don't know why I didn't write it in Go.  Writing it in Go
+#       would have made a lot of sense.  Rewriting it in Go is an
+#       option on the table that I don't oppose.
+#
+# [testbench-matrix]: https://github.com/datawire/testbench/tree/master/testbench/tap/matrix
 set -euE -o pipefail
 
 arg0=${0##*/}
@@ -502,6 +517,9 @@ cmd_summarize() {
 	colored_cnt "$PURPLE" ERROR $cnt_error
 	colored "$color" '============================================================================'
 	if ! $pass; then
+		if [[ "$arg_file" != /* ]]; then
+			arg_file="./${arg_file}"
+		fi
 		colored "$color" 'See %s' "$arg_file"
 		colored "$color" '============================================================================'
 	fi

@@ -143,22 +143,22 @@ _docker.port-forward = $(dir $(_docker.mk))docker-port-forward
 # %.docker.knaut-push file contents:
 #
 #  line 1: in-cluster tag name (hash-based)
-%.docker.knaut-push: %.docker $(KUBEAPPLY) $(KUBECONFIG)
-	DOCKER_K8S_ENABLE_PVC=$(DOCKER_K8S_ENABLE_PVC) $(KUBEAPPLY) -f $(dir $(_docker.mk))docker-registry.yaml
+%.docker.knaut-push: %.docker $(KUBEAPPLY) $(FLOCK) $(KUBECONFIG)
+# the FLOCK for KUBEAPPLY is to work around https://github.com/datawire/teleproxy/issues/77
+	DOCKER_K8S_ENABLE_PVC=$(DOCKER_K8S_ENABLE_PVC) $(FLOCK) $(_docker.port-forward).lock $(KUBEAPPLY) -f $(dir $(_docker.mk))docker-registry.yaml
 	{ \
 	    trap "kill $$($(FLOCK) $(_docker.port-forward).lock sh -c 'kubectl port-forward --namespace=docker-registry $(if $(filter true,$(DOCKER_K8S_ENALBE_PVC)),statefulset,deployment)/registry 31000:5000 >$(_docker.port-forward).log 2>&1 & echo $$!')" EXIT; \
 	    while ! curl -i http://localhost:31000/ 2>/dev/null; do sleep 1; done; \
 	    docker push "$$(sed -n 3p $<)"; \
 	}
 	sed -n '3{ s/^[^:]*:/127.0.0.1:/; p; }' $< > $@
-.NOTPARALLEL: # work around https://github.com/datawire/teleproxy/issues/77
 
 %.docker.push: %.docker
 	docker tag "$$(sed -n 2p $<)" '$(DOCKER_IMAGE)'
 	docker push '$(DOCKER_IMAGE)'
 .PHONY: %.docker.push
 
-_clean-docker:
+_clean-docker: $(FLOCK)
 	$(FLOCK) $(_docker.port-forward).lock rm $(_docker.port-forward).lock
 	rm -f $(_docker.port-forward).log
 	rm -f $(dir $(_docker.mk))docker-registry.yaml.o

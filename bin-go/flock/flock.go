@@ -1,7 +1,5 @@
 // Copyright 2018 Datawire. All rights reserved.
 
-// +build ignore
-
 // flock.go is a minimal implementation of flock(1) (from util-linux)
 // for systems that don't have flock(1) but do have flock(2).
 //
