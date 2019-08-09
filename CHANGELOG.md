@@ -6,6 +6,7 @@ libraries that they use. Lines within each entry are prefixed with
 
 ## 0.7.0 (TBD)
 
+ * <b>[kubestatus]</b> Added this CLI utility for updating Kubernetes object status.
  * <b>[lib/k8s]</b> BREAKING CHANGE: KubeInfo has changed to use `k8s.io/cli-runtime/pkg/genericclioptions`.
 
 ## 0.6.0 (2019-06-01)

@@ -18,7 +18,7 @@ check: $(_kubernaut-ui.KUBECONFIG)
 # Utility targets
 
 release: ## Upload binaries to S3
-release: release-teleproxy release-kubeapply release-kubewatch release-watt
+release: release-teleproxy release-kubeapply release-kubewatch release-watt release-kubestatus
 release-%: bin_$(GOOS)_$(GOARCH)/%
 	aws s3 cp --acl public-read $< 's3://datawire-static-files/$*/$(VERSION)/$(GOOS)/$(GOARCH)/$*'
 .PHONY: release release-%
