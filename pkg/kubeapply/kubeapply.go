@@ -15,62 +15,61 @@ import (
 	"github.com/datawire/teleproxy/pkg/k8s"
 )
 
-var errorTimeoutExceeded = errors.New("timeout exceeded")
+// ErrorDeadlineExceeded is returned from YAMLCollection.ApplyAndWait
+// if the deadline is exceeded.
+var ErrorDeadlineExceeded = errors.New("timeout exceeded")
 
 // Kubeapply applies the supplied manifests to the kubernetes cluster
 // indicated via the kubeinfo argument. If kubeinfo is nil, it will
 // look in the standard default places for cluster configuration.
+//
+// Unlike YAMLCollection.ApplyAndWait, this does not return
+// ErrorDeadlineExceeded if the timeout is exceeded; it returns a
+// different error, with a more end-user-friendly message.
 func Kubeapply(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool, files ...string) error {
 	deadline := time.Now().Add(timeout)
 
-	if kubeinfo == nil {
-		kubeinfo = k8s.NewKubeInfo("", "", "")
-	}
-	p := &phaser{
-		phasesByName: make(map[string][]string),
+	collection, err := CollectYAML(files...)
+	if err != nil {
+		return err
 	}
 
-	for _, file := range files {
-		err := p.Add(file)
-		if err != nil {
-			return err
+	if err = collection.ApplyAndWait(kubeinfo, deadline, debug, dryRun); err != nil {
+		if err == ErrorDeadlineExceeded {
+			err = errors.Errorf("not ready after %v", timeout)
 		}
-	}
-
-	for _, names := range p.orderedPhases() {
-		err := phase(kubeinfo, deadline, debug, dryRun, names)
-		if err != nil {
-			if err == errorTimeoutExceeded {
-				err = errors.Errorf("not ready after %v", timeout)
-			}
-			return err
-		}
+		return err
 	}
 
 	return nil
 }
 
-type phaser struct {
-	phasesByName map[string][]string
-}
+// A YAMLCollection is a collection of YAML files to later be applied.
+type YAMLCollection map[string][]string
 
-func isYaml(name string) bool {
-	return strings.HasSuffix(name, ".yaml")
-}
+// CollectYAML takes several file or directory paths, and returns a
+// collection of the YAML files in them.
+func CollectYAML(paths ...string) (YAMLCollection, error) {
+	ret := make(YAMLCollection)
+	for _, path := range paths {
+		err := filepath.Walk(path, func(filename string, fileinfo os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if fileinfo.IsDir() {
+				return nil
+			}
 
-func (p *phaser) Add(root string) error {
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if strings.HasSuffix(filename, ".yaml") {
+				ret.addFile(filename)
+			}
+			return nil
+		})
 		if err != nil {
-			return err
+			return nil, err
 		}
-
-		if !info.IsDir() && isYaml(path) {
-			p.AddFile(path)
-		}
-
-		return nil
-	})
-	return err
+	}
+	return ret, nil
 }
 
 func hasNumberPrefix(filepart string) bool {
@@ -82,32 +81,42 @@ func hasNumberPrefix(filepart string) bool {
 		filepart[2] == '-'
 }
 
-func (p *phaser) AddFile(path string) {
+func (collection YAMLCollection) addFile(path string) {
 	_, notdir := filepath.Split(path)
 	phaseName := "last" // all letters sort after all numbers; "last" is after all numbered phases
 	if hasNumberPrefix(notdir) {
 		phaseName = notdir[:2]
 	}
-	p.phasesByName[phaseName] = append(p.phasesByName[phaseName], path)
+
+	collection[phaseName] = append(collection[phaseName], path)
 }
 
-func (p *phaser) orderedPhases() [][]string {
-	phaseNames := make([]string, 0, len(p.phasesByName))
-	for phaseName := range p.phasesByName {
+// ApplyAndWait applies the collection of YAML, and waits for all
+// Resources described in it to be ready.  If they do not all become
+// ready before deadline, then it returns early with
+// ErrorDeadlineExceeded.
+func (collection YAMLCollection) ApplyAndWait(kubeinfo *k8s.KubeInfo, deadline time.Time, debug, dryRun bool) error {
+	if kubeinfo == nil {
+		kubeinfo = k8s.NewKubeInfo("", "", "")
+	}
+
+	phaseNames := make([]string, 0, len(collection))
+	for phaseName := range collection {
 		phaseNames = append(phaseNames, phaseName)
 	}
 	sort.Strings(phaseNames)
 
-	orderedPhases := make([][]string, 0, len(phaseNames))
 	for _, phaseName := range phaseNames {
-		orderedPhases = append(orderedPhases, p.phasesByName[phaseName])
+		err := applyAndWait(kubeinfo, deadline, debug, dryRun, collection[phaseName])
+		if err != nil {
+			return err
+		}
 	}
-
-	return orderedPhases
+	return nil
 }
 
-func phase(kubeinfo *k8s.KubeInfo, deadline time.Time, debug, dryRun bool, names []string) error {
-	expanded, err := expand(names)
+func applyAndWait(kubeinfo *k8s.KubeInfo, deadline time.Time, debug, dryRun bool, filenames []string) error {
+	expanded, err := expand(filenames)
 	if err != nil {
 		return err
 	}
@@ -157,7 +166,7 @@ func phase(kubeinfo *k8s.KubeInfo, deadline time.Time, debug, dryRun bool, names
 	}
 
 	if !waiter.Wait(deadline) {
-		return errorTimeoutExceeded
+		return ErrorDeadlineExceeded
 	}
 
 	return nil
