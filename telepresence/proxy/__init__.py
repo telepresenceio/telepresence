@@ -93,7 +93,7 @@ def setup(runner: Runner, args):
 
     def start_proxy(runner_: Runner) -> RemoteInfo:
         tel_deployment, run_id = operation(
-            runner_, deployment_arg, args.expose, add_custom_ns
+            runner_, deployment_arg, args.expose, add_custom_ns, args.service_account
         )
         remote_info = get_remote_info(
             runner,

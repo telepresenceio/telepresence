@@ -89,7 +89,7 @@ def existing_deployment_openshift(
 
 def create_new_deployment(
     runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool
+    add_custom_nameserver: bool, service_account: str
 ) -> Tuple[str, str]:
     """
     Create a new Deployment, return its name and Kubernetes label.
@@ -129,6 +129,8 @@ def create_new_deployment(
     # arbitrary and doesn't need to be maintained.  See issue 494.
     for port in sorted(expose.remote(), reverse=True):
         command.append("--port={}".format(port))
+    if service_account is not None:
+        command.append("--serviceaccount={}".format(service_account))
     if expose.remote():
         command.append("--expose")
     # If we're on local VM we need to use different nameserver to prevent

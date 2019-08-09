@@ -333,6 +333,16 @@ def parse_args(args=None) -> argparse.Namespace:
         )
     )
 
+    parser.add_argument(
+        "--service-account",
+        default=None,
+        dest="service_account",
+        type=str,
+        help=(
+            "The Kubernetes serviceAccountName. Defaults to kubectl's default"
+        )
+    )
+
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--run-shell",
