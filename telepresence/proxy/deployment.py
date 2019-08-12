@@ -38,8 +38,11 @@ def get_image_name(expose: PortMapping) -> str:
 
 
 def existing_deployment(
-    runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool
+    runner: Runner,
+    deployment_arg: str,
+    expose: PortMapping,
+    add_custom_nameserver: bool,
+    service_account: str = None
 ) -> Tuple[str, Optional[str]]:
     """
     Handle an existing deployment by doing nothing
@@ -61,8 +64,11 @@ def existing_deployment(
 
 
 def existing_deployment_openshift(
-    runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool
+    runner: Runner,
+    deployment_arg: str,
+    expose: PortMapping,
+    add_custom_nameserver: bool,
+    service_account: str = None
 ) -> Tuple[str, Optional[str]]:
     """
     Handle an existing deploymentconfig by doing nothing
@@ -88,8 +94,11 @@ def existing_deployment_openshift(
 
 
 def create_new_deployment(
-    runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool, service_account: str
+    runner: Runner,
+    deployment_arg: str,
+    expose: PortMapping,
+    add_custom_nameserver: bool,
+    service_account: str = None
 ) -> Tuple[str, str]:
     """
     Create a new Deployment, return its name and Kubernetes label.
@@ -167,8 +176,11 @@ def _get_container_name(container, deployment_json):
 
 
 def supplant_deployment(
-    runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool
+    runner: Runner,
+    deployment_arg: str,
+    expose: PortMapping,
+    add_custom_nameserver: bool,
+    service_account: str = None
 ) -> Tuple[str, str]:
     """
     Swap out an existing Deployment, supplant method.
@@ -338,8 +350,11 @@ def new_swapped_deployment(
 
 
 def swap_deployment_openshift(
-    runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool
+    runner: Runner,
+    deployment_arg: str,
+    expose: PortMapping,
+    add_custom_nameserver: bool,
+    service_account: str = None
 ) -> Tuple[str, str]:
     """
     Swap out an existing DeploymentConfig and also clears any triggers
