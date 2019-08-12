@@ -1,29 +1,43 @@
 # Copyright 2018 Datawire. All rights reserved.
 #
-# Makefile snippet to build Go programs using Go 1.11 modules
+# Makefile snippet to build Go programs using Go 1.11 modules.
 #
 ## Eager inputs ##
 #  - File: ./go.mod
 #  - Variable: go.DISABLE_GO_TEST ?=
 #  - Variable: go.PLATFORMS ?= $(GOOS)_$(GOARCH)
+#
 ## Lazy inputs ##
 #  - Variable: go.GOBUILD ?= go build
 #  - Variable: go.LDFLAGS ?=
-#  - Variable: go.GOLANG_LINT_VERSION ?= …
 #  - Variable: go.GOLANG_LINT_FLAGS ?= …$(wildcard .golangci.yml .golangci.toml .golangci.json)…
-#  - Variable: CI
+#  - Variable: CI ?=
+#
 ## Outputs ##
+#  - Executable: GOTEST2TAP    ?= $(CURDIR)/build-aux/bin/gotest2tap
+#  - Executable: GOLANGCI_LINT ?= $(CURDIR)/build-aux/bin/golangci-lint
+#
+#  - Variable: export GO111MODULE = on
 #  - Variable: NAME ?= $(notdir $(go.module))
+#
+#  - Variable: go.goversion = $(patsubst go%,%,$(filter go1%,$(shell go version)))
+#  - Variable: go.lock = $(FLOCK)                   # if nescessary, in dependencies
+#  -                or = $(FLOCK) $(GOPATH)/pkg/mod # if nescessary, in recipes
 #  - Variable: go.module = EXAMPLE.COM/YOU/YOURREPO
 #  - Variable: go.bins = List of "main" Go packages
-#  - Variable: go.pkgs = ./...
-#  - Function: go.list = $(shell go list $1), but ignores submodules and doesn't download things
+#  - Variable: go.pkgs ?= ./...
+#
+#  - Function: go.list = like $(shell go list $1), but ignores nested Go modules and doesn't download things
+#  - Function: go.bin.rule = Only use this if you know what you are doing
+#
 #  - Targets: bin_$(OS)_$(ARCH)/$(CMD)
+#  - Targets: bin_$(OS)_$(ARCH)/$(CMD).opensource.tar.gz
 #  - .PHONY Target: go-get
 #  - .PHONY Target: go-build
 #  - .PHONY Target: go-lint
 #  - .PHONY Target: go-fmt
 #  - .PHONY Target: go-test
+#
 ## common.mk targets ##
 #  - build
 #  - lint
@@ -36,95 +50,168 @@
 # platforms `make build` should compile for.  Unlike most variables,
 # it must be specified *before* including go-workspace.mk.
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
-ifneq ($(go.module),)
-$(error Only include one of go-mod.mk or go-workspace.mk)
-endif
+_go-mod.mk := $(lastword $(MAKEFILE_LIST))
+include $(dir $(_go-mod.mk))common.mk
 
 #
-# 0. configure the `go` command
+# Configure the `go` command
+
+go.goversion = $(_prelude.go.goversion)
+go.lock = $(_prelude.go.lock)
 
 export GO111MODULE = on
 
-# Disable parallel builds on Go 1.11; the module cache is not
-# concurrency-safe.  This is fixed in 1.12.
-ifneq ($(filter go1.11.%,$(shell go version)),)
-.NOTPARALLEL:
-endif
+#
+# Set default values for input variables
+
+go.GOBUILD ?= go build
+go.DISABLE_GO_TEST ?=
+go.LDFLAGS ?=
+go.PLATFORMS ?= $(GOOS)_$(GOARCH)
+go.GOLANG_LINT_FLAGS ?= $(if $(wildcard .golangci.yml .golangci.toml .golangci.json),,--disable-all --enable=gofmt --enable=govet)
+CI ?=
 
 #
-# 1. Set go.module
+# Set output variables and functions
 
-# Why use this complex `sed` expression to parse go.mod, instead of
-# just having `go list -m` do it?  Because `go list -m` will go ahead
-# and download dependencies.  We don't want Go to do that at
-# Makefile-parse-time; what if we're running `make clean`?
-#
-# See: cmd/go/internal/modfile/read.go:ModulePath()
-go.module := $(strip $(shell sed -n -e 's,//.*,,' -e '/^\s*module/{s/^\s*module//;p;q;}' go.mod))
-#go.module := $(shell $(GO) list -m)
+GOTEST2TAP    ?= $(build-aux.bindir)/gotest2tap
+GOLANGCI_LINT ?= $(build-aux.bindir)/golangci-lint
+
+NAME ?= $(notdir $(go.module))
+
+go.module := $(shell GO111MODULE=on go mod edit -json | jq -r .Module.Path)
 ifneq ($(words $(go.module)),1)
-  # Print a helpful message
-  ifeq ($(wildcard go.mod),)
-    $(info go-mod.mk: File `./go.mod` does not exist.)
-    ifeq ($(wildcard .go-workspace/),)
-      $(info go-mod.mk: Initalize it with `go mod init github.com/YOU/REPONAME`)
-    else
-      $(info go-mod.mk: But `./go-workspace/` does.  Did you mean to use go-workspace.mk?)
-    endif
-  else
-    $(info go-mod.mk: File `./go.mod` seems to be malformed; could not parse.)
-  endif
-  # And then error out
   $(error Could not extract $$(go.module) from ./go.mod)
 endif
 
-ifneq ($(shell git ls-tree -rl HEAD | grep '^120000 ' | tee /dev/stderr),)
-$(error You may not use symlinks with Go modules)
+# It would be simpler to create this list if we could use module-aware
+# `go list`:
+#
+#     go.bins := $(shell GO111MODULE=on go list -f='{{if eq .Name "main"}}{{.ImportPath}}{{end}}' ./...)
+#
+# But alas, we can't do that, as that would cause the module system go
+# ahead and download dependencies.  We don't want Go to do that at
+# Makefile-parse-time; what if we're running `make clean`?
+#
+# So instead, we must deal with this abomination.
+_go.submods := $(patsubst %/go.mod,%,$(shell git ls-files '*/go.mod'))
+go.list = $(call path.addprefix,$(go.module),\
+                                $(filter-out $(foreach d,$(_go.submods),$d $d/%),\
+                                             $(call path.trimprefix,_$(CURDIR),\
+                                                                    $(shell GOPATH=/bogus GO111MODULE=off go list $1))))
+go.bins := $(call go.list,-f='{{if eq .Name "main"}}{{.ImportPath}}{{end}}' ./...)
+
+go.pkgs ?= ./...
+
+#
+# Rules
+
+go-get: ## (Go) Download Go dependencies
+go-get: $(go.lock)
+	$(go.lock)go mod download
+.PHONY: go-get
+
+vendor: go-get FORCE
+vendor: $(go.lock)
+	$(go.lock)go mod vendor
+	@test -d $@
+
+$(dir $(_go-mod.mk))go1%.src.tar.gz:
+	curl -o $@ --fail https://dl.google.com/go/$(@F)
+
+_go.mkopensource = $(build-aux.bindir)/go-mkopensource
+
+# Usage: $(eval $(call go.bin.rule,BINNAME,GOPACKAGE))
+define go.bin.rule
+bin_%/.$1.stamp: go-get $$(go.lock) FORCE
+	$$(go.lock)$$(go.GOBUILD) $$(if $$(go.LDFLAGS),--ldflags $$(call quote.shell,$$(go.LDFLAGS))) -o $$@ $2
+bin_%/$1: bin_%/.$1.stamp $$(COPY_IFCHANGED)
+	$$(COPY_IFCHANGED) $$< $$@
+
+bin_%/$1.opensource.tar.gz: vendor $$(_go.mkopensource) $$(dir $$(_go-mod.mk))go$$(go.goversion).src.tar.gz $$(WRITE_IFCHANGED) $$(go.lock)
+	$$(go.lock)$$(_go.mkopensource) --output-name=$1.opensource --package=$2 --gotar=$$(dir $$(_go-mod.mk))go$$(go.goversion).src.tar.gz | $$(WRITE_IFCHANGED) $$@
+endef
+
+_go.bin.name = $(notdir $(_go.bin))
+_go.bin.pkg = $(_go.bin)
+$(foreach _go.bin,$(go.bins),$(eval $(call go.bin.rule,$(_go.bin.name),$(_go.bin.pkg))))
+go-build: $(foreach _go.PLATFORM,$(go.PLATFORMS),$(foreach _go.bin,$(go.bins), bin_$(_go.PLATFORM)/$(_go.bin.name)                   ))
+build:    $(foreach _go.PLATFORM,$(go.PLATFORMS),$(foreach _go.bin,$(go.bins), bin_$(_go.PLATFORM)/$(_go.bin.name).opensource.tar.gz ))
+
+go-build: ## (Go) Build the code with `go build`
+.PHONY: go-build
+
+$(build-aux.bindir)/golangci-lint: $(build-aux.dir)/go.mod $(_prelude.go.lock) | $(build-aux.bindir)
+	$(build-aux.go-build) -o $@ github.com/golangci/golangci-lint/cmd/golangci-lint
+
+go-lint: ## (Go) Check the code with `golangci-lint`
+go-lint: $(GOLANGCI_LINT) go-get $(go.lock)
+	$(go.lock)$(GOLANGCI_LINT) run $(go.GOLANG_LINT_FLAGS) $(go.pkgs)
+.PHONY: go-lint
+
+go-fmt: ## (Go) Fixup the code with `go fmt`
+go-fmt: go-get $(go.lock)
+	$(go.lock)go fmt $(go.pkgs)
+.PHONY: go-fmt
+
+go-test: ## (Go) Check the code with `go test`
+go-test: go-build
+ifeq ($(go.DISABLE_GO_TEST),)
+	$(MAKE) $(dir $(_go-mod.mk))go-test.tap.summary
 endif
 
-#
-# 2. Set go.pkgs
-
-go.pkgs := ./...
+$(dir $(_go-mod.mk))go-test.tap: $(GOTEST2TAP) $(TAP_DRIVER) $(go.lock) FORCE
+	@$(go.lock)go test -json $(go.pkgs) 2>&1 | $(GOTEST2TAP) | tee $@ | $(TAP_DRIVER) stream -n go-test
 
 #
-# 3. Recipe for go-get
-
-go-get:
-	go mod download
-
-#
-# Include _go-common.mk
-
-include $(dir $(lastword $(MAKEFILE_LIST)))_go-common.mk
-
-#
+# go-doc
 
 go-doc: ## (Go) Run a `godoc -http` server
-go-doc: $(dir $(_go-common.mk))gopath
+go-doc: $(dir $(_go-mod.mk))gopath
 	{ \
 		while sleep 1; do \
-			$(MAKE) --quiet $(dir $(_go-common.mk))gopath/src/$(go.module); \
+			$(MAKE) --quiet $(dir $(_go-mod.mk))gopath/src/$(go.module); \
 		done & \
 		trap "kill $$!" EXIT; \
-		GOPATH=$(dir $(_go-common.mk))gopath godoc -http :8080; \
+		GOPATH=$(dir $(_go-mod.mk))gopath godoc -http :8080; \
 	}
 .PHONY: go-doc
 
-vendor: FORCE
-	go mod vendor
-
-$(dir $(_go-common.mk))gopath: FORCE vendor
-	mkdir -p $(dir $(_go-common.mk))gopath/src
-	rsync --archive --delete vendor/ $(dir $(_go-common.mk))gopath/src/
-	$(MAKE) $(dir $(_go-common.mk))gopath/src/$(go.module)
-$(dir $(_go-common.mk))gopath/src/$(go.module): FORCE
+$(dir $(_go-mod.mk))gopath: FORCE vendor
+	mkdir -p $(dir $(_go-mod.mk))gopath/src
+	echo 'module bogus' > $(dir $(_go-mod.mk))gopath/go.mod
+	rsync --archive --delete vendor/ $(dir $(_go-mod.mk))gopath/src/
+	$(MAKE) $(dir $(_go-mod.mk))gopath/src/$(go.module)
+$(dir $(_go-mod.mk))gopath/src/$(go.module): $(go.lock) FORCE
 	mkdir -p $@
-	go list ./... | sed -e 's,^$(go.module),,' -e 's,$$,/*.go,' | rsync --archive --prune-empty-dirs --delete-excluded --include='*/' --include-from=/dev/stdin --exclude='*' ./ $@/
+	$(go.lock)go list ./... | sed -e 's,^$(go.module),,' -e 's,$$,/*.go,' | rsync --archive --prune-empty-dirs --delete-excluded --include='*/' --include-from=/dev/stdin --exclude='*' ./ $@/
 
-clean: _clean-gopath
-_clean-gopath:
-	rm -rf $(dir $(_go-common.mk))gopath vendor
-.PHONY: _clean-gopath
+#
+# Hook in to common.mk
+
+build: go-build
+lint: go-lint
+format: go-fmt
+test-suite.tap: $(if $(go.DISABLE_GO_TEST),,$(dir $(_go-mod.mk))go-test.tap)
+
+clean: _go-clean
+_go-clean:
+	rm -f $(dir $(_go-mod.mk))go-test.tap
+	rm -rf $(dir $(_go-mod.mk))gopath/ vendor/
+# Files made by older versions.  Remove the tail of this list when the
+# commit making the change gets far enough in to the past.
+#
+# 2018-07-03
+	rm -f vendor.hash
+# 2018-07-01
+	rm -f $(dir $(_go-mod.mk))golangci-lint
+# 2019-02-06
+	rm -f $(dir $(_go-mod.mk))patter.go $(dir $(_go-mod.mk))patter.go.tmp
+.PHONY: _go-clean
+
+clobber: _go-clobber
+_go-clobber:
+	rm -f $(dir $(_go-mod.mk))go1*.src.tar.gz
+.PHONY: _go-clobber
 
 endif

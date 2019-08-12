@@ -18,6 +18,9 @@
 #  - .PHONY Target: clobber
 ## common.mk targets ##
 #  (N/A)
+#
+# Dependencies of `clobber` MUST NOT depend on programs in
+# `$(build-aux.bindir)/`.
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
 _common.mk := $(lastword $(MAKEFILE_LIST))
 include $(dir $(_common.mk))prelude.mk
@@ -76,22 +79,22 @@ _common_clean:
 
 check: lint build
 	$(MAKE) test-suite.tap.summary
-test-suite.tap:
-	@$(dir $(_common.mk))tap-driver cat $(sort $(filter %.tap,$^)) > $@
+test-suite.tap: $(TAP_DRIVER)
+	@$(TAP_DRIVER) cat $(sort $(filter %.tap,$^)) > $@
 
-%.tap.summary: %.tap
-	@$(dir $(_common.mk))tap-driver summarize $<
+%.tap.summary: %.tap $(TAP_DRIVER)
+	@$(TAP_DRIVER) summarize $<
 
-%.tap: %.tap.gen FORCE
-	@$(abspath $<) 2>&1 | tee $@ | $(dir $(_common.mk))tap-driver stream -n $<
+%.tap: %.tap.gen $(TAP_DRIVER) FORCE
+	@$(abspath $<) 2>&1 | tee $@ | $(TAP_DRIVER) stream -n $<
 %.log: %.test FORCE
 	@$(abspath $<) >$@ 2>&1; echo :exit-status: $$? >>$@
-%.tap: %.log %.test
+%.tap: %.log %.test $(TAP_DRIVER)
 	@{ \
 		printf '%s\n' 'TAP version 13' '1..1' && \
 		sed 's/^/#/' < $< && \
 		sed -n '$${ s/^:exit-status: 0$$/ok 1/; s/^:exit-status: 77$$/ok 1 # SKIP/; s/^:exit-status: .*/not ok 1/; p; }' < $<; \
-	} | tee $@ | $(dir $(_common.mk))tap-driver stream -n $*.test
+	} | tee $@ | $(TAP_DRIVER) stream -n $*.test
 
 #
 # Configure how Make works

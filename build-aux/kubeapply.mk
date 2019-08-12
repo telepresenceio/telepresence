@@ -3,28 +3,26 @@
 # Makefile snippet for installing `kubeapply`
 #
 ## Eager inputs ##
-#  - Variable: KUBEAPPLY ?= ./build-aux/kubeapply
+#  (none)
 ## Lazy inputs ##
 #  (none)
 ## Outputs ##
-#  - Variable: KUBEAPPLY ?= ./build-aux/kubeapply
-#  - Target: $(KUBEAPPLY)
-## common.mk targets ##
-#  - clobber
+#  - Executable: KUBEAPPLY ?= $(CURDIR)/build-aux/bin/kubeapply
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
 _kubeapply.mk := $(lastword $(MAKEFILE_LIST))
-include $(dir $(lastword $(MAKEFILE_LIST)))prelude.mk
+include $(dir $(_kubeapply.mk))prelude.mk
 
-KUBEAPPLY ?= $(dir $(_kubeapply.mk))kubeapply
-KUBEAPPLY_VERSION = 0.3.11
+KUBEAPPLY ?= $(build-aux.bindir)/kubeapply
+$(build-aux.bindir)/kubeapply: $(build-aux.dir)/go.mod $(_prelude.go.lock) | $(build-aux.bindir)
+	$(build-aux.go-build) -o $@ github.com/datawire/teleproxy/cmd/kubeapply
 
-$(KUBEAPPLY): $(_kubeapply.mk)
-	curl -o $@ --fail https://s3.amazonaws.com/datawire-static-files/kubeapply/$(KUBEAPPLY_VERSION)/$(GOHOSTOS)/$(GOHOSTARCH)/kubeapply
-	chmod go-w,a+x $@
-
-clobber: _clobber-kubeapply
-_clobber-kubeapply:
-	rm -f $(KUBEAPPLY)
-.PHONY: _clobber-kubeapply
+clean: _clean-kubeapply
+_clean-kubeapply:
+# Files made by older versions.  Remove the tail of this list when the
+# commit making the change gets far enough in to the past.
+#
+# 2018-07-01
+	rm -f $(dir $(_kubeapply.mk))kubeapply
+.PHONY: _clean-kubeapply
 
 endif

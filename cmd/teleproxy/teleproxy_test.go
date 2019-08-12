@@ -62,11 +62,20 @@ func get(url string) (*http.Response, error) {
 func poll(t *testing.T, url string) bool {
 	start := time.Now()
 	for {
-		resp, err := get(url)
-		if err != nil {
-			log.Print(err)
-		} else if resp.StatusCode == 200 {
-			log.Printf("%s: SUCCESS", url)
+		b := func() bool {
+			resp, err := get(url)
+			if err != nil {
+				log.Print(err)
+				return false
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode == 200 {
+				log.Printf("%s: SUCCESS", url)
+				return true
+			}
+			return false
+		}()
+		if b {
 			return true
 		}
 		if t.Failed() {
@@ -105,7 +114,10 @@ func TestAlreadyRunning(t *testing.T) {
 			resp, err := get("http://teleproxied-httpbin/status/200")
 			if err != nil {
 				t.Errorf("duplicate teleproxy killed the first one: %v", err)
-			} else if resp.StatusCode != 200 {
+				return
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != 200 {
 				t.Errorf("duplicate teleproxy killed the first one: %v", resp.StatusCode)
 			}
 		}

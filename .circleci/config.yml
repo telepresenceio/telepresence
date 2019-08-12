@@ -99,6 +99,7 @@ jobs:
       - golang-install:
           os: darwin
       - kubectl-install
+      - run: brew install jq
       - main
 
   machine-build:

@@ -66,6 +66,44 @@ _help.genbody = $(if $2,$(call _help.genbody,$1$(if $(and $1,$(call _help.genbod
 help.body.vars = NAME VERSION KUBECONFIG
 help.body ?= $(call _help.genbody,,$(help.body.vars))
 
+# If a target doesn't specify a category name, then we use $(NAME) as
+# the category name.  We used to use "-", but the en_US.UTF-8 locale
+# ignores non-letter characters.  So showing "-" in the category
+# column for non-categorized targets meant that `sort` would be
+# looking at the second column for those rows, which would,
+# potentially split the non-categorized targets:
+#
+#    TARGETS:
+#      -            check-e2e        Check: oauth e2e tests
+#      -            check-intercept  Check: apictl traffic intercept
+#      (Common)     build            Build the software
+#      (Common)     check            Check whether the software works; run the tests
+#      (Common)     clean            Delete all files that are normally created by building the software
+#      (Common)     clobber          Delete all files that this Makefile can re-generate
+#      (Common)     format           Apply automatic formatting+cleanup to source code
+#      (Common)     help             Show this message
+#      (Common)     lint             Perform static analysis of the software
+#      (Go)         go-fmt           Fixup the code with `go fmt`
+#      (Go)         go-get           Download Go dependencies
+#      (Go)         go-lint          Check the code with `golangci-lint`
+#      (Go)         go-test          Check the code with `go test`
+#      (Kubernaut)  apply            Apply YAML to the cluster, WITHOUT pushing newer Docker images
+#      (Kubernaut)  claim            Obtain an ephemeral cluster from kubernaut.io
+#      (Kubernaut)  deploy           Apply YAML to the cluster, pushing newer Docker images
+#      (Kubernaut)  proxy            Launch teleproxy in the background
+#      (Kubernaut)  push             Push Docker images to the cluster
+#      (Kubernaut)  shell            Run an interactive Bash shell with KUBECONFIG= set to the Kubernaut claim
+#      (Kubernaut)  unclaim          Destroy the cluster
+#      (Kubernaut)  unproxy          Shut down 'proxy'
+#      -            release-bin      Upload binaries to S3
+#      -            release          Cut a release; upload binaries to S3 and Docker images to Quay
+#      -            release-docker   Upload Docker images to Quay
+#
+# Using $(NAME) (falling back to "this project", since `help.mk`
+# doesn't assume you set NAME) as the default category name solves
+# this, and makes it clear what no-category means (since all
+# build-aux.git targets now declare a category).
+
 help:  ## (Common) Show this message
 	@echo 'Usage: make [TARGETS...]'
 	@echo
