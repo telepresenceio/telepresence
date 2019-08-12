@@ -20,6 +20,14 @@
    value.
  - Make sure to pass `--fail` to `curl` when downloading things;
    otherwise it will silently save 404 HTML/XML pages.
+ - Don't depend on anything in ./build-aux/bin/ during clean and
+   clobber rules.  The `prelude.mk` cleanup might remove it before
+   your cleanup bit runs.  For Go programs, `cd` to the program's
+   sourcedirectory, and use `go run .` to run it:
+
+		cd $(dir $(_myfile.mk))bin-go/PROGRAM && GO111MODULE=on go run . ARGS...
+
+   Only tolerate that grossness in your cleanup rules.
 
 ## Naming conventions
 

@@ -158,8 +158,11 @@ _docker.port-forward = $(dir $(_docker.mk))docker-port-forward
 	docker push '$(DOCKER_IMAGE)'
 .PHONY: %.docker.push
 
-_clean-docker: $(FLOCK)
-	$(FLOCK) $(_docker.port-forward).lock rm $(_docker.port-forward).lock
+# This `go run` bit is gross, compared to just depending on and using
+# $(FLOCK).  But if the user runs `make clobber`, the prelude.mk
+# cleanup might delete $(FLOCK) before we get to run it.
+_clean-docker:
+	cd $(dir $(_docker.mk))bin-go/flock && GO111MODULE=on go run . $(abspath $(_docker.port-forward).lock) rm $(abspath $(_docker.port-forward).lock)
 	rm -f $(_docker.port-forward).log
 	rm -f $(dir $(_docker.mk))docker-registry.yaml.o
 clean: _clean-docker

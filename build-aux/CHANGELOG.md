@@ -1,6 +1,9 @@
 <!-- -*- fill-column: 100 -*- -->
 # Datawire build-aux CHANGELOG
 
+ - 2019-08-13: Fix race condition in `make clobber` where it attempted to use compiled programs used
+               for cleanup, after the programs themselves had already been deleted.
+
  - 2019-07-10: `var.mk`: Introduce
 
  - 2019-07-05: `build-aux-push`: Work around problem with `git subtree`; avoid accidentally pushing
