@@ -42,7 +42,6 @@ def _open_logfile(logfile_path: str) -> TextIO:
 
 class Output(object):
     """Logging and display"""
-
     def __init__(self, logfile_path: str) -> None:
         """
         Create output handle

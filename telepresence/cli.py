@@ -29,7 +29,6 @@ from telepresence.utilities import random_name
 
 class PortMapping(object):
     """Maps local ports to listen to remote exposed ports."""
-
     def __init__(self):
         self._mapping = {}  # type: Dict[int,int]
 

@@ -37,7 +37,6 @@ class _RandomPortAssigner(object):
     without replacement.  This reduces the chances that concurrent runs
     of the test suite will try to use the same port number.
     """
-
     def __init__(self, low, high):
         self.low = low
         self.high = high
@@ -449,7 +448,6 @@ class ResourceIdent(object):
     """
     Identify a Kubernetes resource.
     """
-
     def __init__(self, namespace, name):
         self.namespace = namespace
         self.name = name
@@ -765,7 +763,6 @@ class AlsoProxy(object):
     """
     Represent parameters of a particular case to test of ``--also-proxy``.
     """
-
     def __init__(self, argument, host):
         """
         :param str argument: The value to supply to ``--also-proxy``.

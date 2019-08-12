@@ -39,7 +39,6 @@ class Container(object):
     Run commands in a container
     FIXME: This should be a context manager
     """
-
     def __init__(self, image: str, verbose=True) -> None:
         self.image = image
         self.verbose = verbose
