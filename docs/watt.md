@@ -1,20 +1,9 @@
 # Watt - Watch All The Things
 
-# Build Watt
+TODO: add more stuff here... I pruned this of stuff that was obviously stale, but now it is kinda sparse...
 
-Compiles binaries into `bin_$GOOS_$GOARCH`
-
-```bash
-make build
-bin_linux_amd64/watt --help
-```
-
-# Deploy Cluster and Setup Teleproxy
-
-```bash
-make deploy
-export KUBECONFIG=build-aux/teleproxy.knaut
-```
+Watt watches resources in kubernetes and/or consul and invokes hooks
+when these resources change.
 
 # Run Watt
 
