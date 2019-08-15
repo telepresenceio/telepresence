@@ -1,0 +1,26 @@
+# @TEMPLATE@
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: httptarget
+spec:
+  selector:
+    pod: httptarget
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: httptarget
+  labels:
+    pod: httptarget
+spec:
+  containers:
+  - name: backend
+    image: {{image "../Dockerfile"}}
+    ports:
+    - containerPort: 80

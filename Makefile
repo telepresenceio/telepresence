@@ -1,8 +1,8 @@
 # Use the versions of teleproxy and kubeapply built here, instead of
 # versions pinned by build-aux.
 include build-aux/prelude.mk
-TELEPROXY = bin_$(GOHOSTHOS)_$(GOHOSTARCH)/teleproxy
-KUBEAPPLY = bin_$(GOHOSTHOS)_$(GOHOSTARCH)/kubeapply
+TELEPROXY = bin_$(GOHOSTOS)_$(GOHOSTARCH)/teleproxy
+KUBEAPPLY = bin_$(GOHOSTOS)_$(GOHOSTARCH)/kubeapply
 
 include build-aux/kubernaut-ui.mk
 include build-aux/common.mk
@@ -12,8 +12,19 @@ include build-aux/docker.mk
 include build-aux/help.mk
 include build-aux/k8s.mk
 include build-aux/teleproxy.mk
+include build-aux/pidfile.mk
 
-check: $(_kubernaut-ui.KUBECONFIG)
+export DOCKER_REGISTRY = $(docker.LOCALHOST):31000
+
+build-aux/test-registry.pid: $(_kubernaut-ui.KUBECONFIG) $(KUBEAPPLY)
+	$(KUBEAPPLY) -f build-aux/docker-registry.yaml
+	kubectl port-forward --namespace=docker-registry deployment/registry 31000:5000 >build-aux/test-registry.log 2>&1 & echo $$! > $@
+	while ! curl -i http://localhost:31000/ 2>/dev/null; do sleep 1; done
+$(_kubernaut-ui.KUBECONFIG).clean: build-aux/test-registry.pid.clean
+clean: build-aux/test-registry.pid.clean
+	rm -f build-aux/test-registry.log
+
+build-aux/go-test.tap: vendor build-aux/test-registry.pid
 
 # Utility targets
 

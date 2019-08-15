@@ -1,0 +1,36 @@
+# @TEMPLATE@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: alt
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: httptarget
+  namespace: alt
+spec:
+  selector:
+    pod: httptarget
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: httptarget
+  namespace: alt
+  labels:
+    pod: httptarget
+spec:
+  containers:
+  - name: backend
+    image: {{image "../Dockerfile"}}
+    ports:
+    - containerPort: 80
+    env:
+    - name: HTTPTEST_BODY
+      value: "ALT"

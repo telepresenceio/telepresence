@@ -6,6 +6,8 @@
 /.firewall.lock
 /.cluster.lock
 /vendor/
+/build-aux/test-registry.pid
+/build-aux/test-registry.log
 
 # --- IntelliJ IDEA ---
 .idea

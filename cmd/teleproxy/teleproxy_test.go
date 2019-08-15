@@ -15,10 +15,15 @@ import (
 
 const ClusterFile = "../../build-aux/cluster.knaut"
 
+var noDocker error
+
 func TestMain(m *testing.M) {
 	testprocess.Dispatch()
 	dtest.WithMachineLock(func() {
-		dtest.K8sApply(ClusterFile, "../../k8s")
+		_, noDocker = exec.LookPath("docker")
+		if noDocker == nil {
+			dtest.K8sApply(ClusterFile, "../../k8s")
+		}
 		os.Exit(m.Run())
 	})
 }
@@ -98,8 +103,11 @@ func teleproxyCluster() {
 var smoke = testprocess.MakeSudo(teleproxyCluster)
 
 func TestSmoke(t *testing.T) {
+	if noDocker != nil {
+		t.Skip(noDocker)
+	}
 	withInterrupt(t, smoke, func() {
-		poll(t, "http://teleproxied-httpbin/status/200")
+		poll(t, "http://httptarget")
 	})
 }
 
@@ -107,11 +115,14 @@ var orig = testprocess.MakeSudo(teleproxyCluster)
 var dup = testprocess.MakeSudo(teleproxyCluster)
 
 func TestAlreadyRunning(t *testing.T) {
+	if noDocker != nil {
+		t.Skip(noDocker)
+	}
 	withInterrupt(t, orig, func() {
-		if poll(t, "http://teleproxied-httpbin/status/200") {
+		if poll(t, "http://httptarget") {
 			err := dup.Run()
 			t.Logf("ERROR: %v", err)
-			resp, err := get("http://teleproxied-httpbin/status/200")
+			resp, err := get("http://httptarget")
 			if err != nil {
 				t.Errorf("duplicate teleproxy killed the first one: %v", err)
 				return
