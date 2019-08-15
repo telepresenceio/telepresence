@@ -46,6 +46,9 @@ type KubeInfo struct {
 // NewKubeInfo returns a useable KubeInfo, handling optional
 // kubeconfig, context, and namespace.
 func NewKubeInfo(configfile, context, namespace string) *KubeInfo {
+	// Because we are constructing the args for this flagset
+	// below, it's ok to use pflag.PanicOnError. We should never
+	// supply it with erroneous arguments.
 	flags := pflag.NewFlagSet("KubeInfo", pflag.PanicOnError)
 	result := NewKubeInfoFromFlags(flags)
 
@@ -62,6 +65,8 @@ func NewKubeInfo(configfile, context, namespace string) *KubeInfo {
 
 	err := flags.Parse(args)
 	if err != nil {
+		// Args is constructed by us, we should never get an
+		// error, so it's ok to panic.
 		panic(err)
 	}
 	return result
@@ -78,11 +83,6 @@ func NewKubeInfoFromFlags(flags *pflag.FlagSet) *KubeInfo {
 	//
 	// .Username and .Password are already disabled by default in
 	// genericclioptions.NewConfigFlags().
-	//
-	// Unlike client-go/discovery.CachedDiscoveryClient,
-	// ericchiang/k8s doesn't support caching to the filesystem,
-	// so disable the '--cache-dir' flag.
-	configFlags.CacheDir = nil
 
 	configFlags.AddFlags(flags)
 	return &KubeInfo{flags, configFlags, nil, ""}
