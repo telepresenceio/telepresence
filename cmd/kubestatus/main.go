@@ -13,8 +13,7 @@ import (
 func main() {
 	var st = &cobra.Command{
 		Use:           "kubestatus <kind>",
-		Short:         "kubestatus",
-		Long:          "kubestatus - get and set status of kubernetes resources",
+		Short:         "get and set status of kubernetes resources",
 		Args:          cobra.ExactArgs(1),
 		SilenceErrors: true,
 		SilenceUsage:  true,
