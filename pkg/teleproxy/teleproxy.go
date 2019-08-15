@@ -131,10 +131,12 @@ type Teleproxy struct {
 	NoSearch   bool
 	NoCheck    bool
 	Version    bool
+	supervisor *supervisor.Supervisor
+	workers    []*supervisor.Worker
 }
 
 // RunTeleproxy is the main entry point for Teleproxy
-func RunTeleproxy(tele Teleproxy, version string) error {
+func RunTeleproxy(tele *Teleproxy, version string) error {
 	if tele.Version {
 		tele.Mode = versionMode
 	}
@@ -152,10 +154,11 @@ func RunTeleproxy(tele Teleproxy, version string) error {
 	// do this up front so we don't miss out on cleanup if someone
 	// Control-C's just after starting us
 	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	sup := supervisor.WithContext(ctx)
+	tele.supervisor = sup
 
 	sup.Supervise(&supervisor.Worker{
 		Name: TeleproxyWorker,
@@ -167,11 +170,27 @@ func RunTeleproxy(tele Teleproxy, version string) error {
 	sup.Supervise(&supervisor.Worker{
 		Name: SignalWorker,
 		Work: func(p *supervisor.Process) error {
-			select {
-			case <-p.Shutdown():
-			case s := <-signalChan:
-				p.Logf("TPY: %v", s)
-				cancel()
+			for {
+				select {
+				case <-p.Shutdown():
+					return nil
+				case s := <-signalChan:
+					p.Logf("TPY: %v", s)
+					if s == syscall.SIGHUP {
+						for _, w := range tele.workers {
+							w.Shutdown()
+						}
+						for _, w := range tele.workers {
+							w.Wait()
+						}
+						for _, w := range tele.workers {
+							w.Restart()
+						}
+					} else {
+						cancel()
+						return nil
+					}
+				}
 			}
 			return nil
 		},
@@ -228,7 +247,7 @@ func selfcheck(p *supervisor.Process) error {
 	return p.DoClean(curl.Wait, curl.Process.Kill)
 }
 
-func teleproxy(p *supervisor.Process, tele Teleproxy) error {
+func teleproxy(p *supervisor.Process, tele *Teleproxy) error {
 	sup := p.Supervisor()
 
 	if tele.Mode == defaultMode || tele.Mode == interceptMode {
@@ -282,14 +301,18 @@ func teleproxy(p *supervisor.Process, tele Teleproxy) error {
 					return err
 				}
 
-				kubeinfo := k8s.NewKubeInfo(tele.Kubeconfig, tele.Context, tele.Namespace)
-				_ = bridges(p, kubeinfo) // FIXME why don't we return this error?
+				bridges(p, tele)
 				return nil
 			},
 		})
 	}
 
 	return nil
+}
+
+func (t *Teleproxy) addWorker(worker *supervisor.Worker) {
+	t.supervisor.Supervise(worker)
+	t.workers = append(t.workers, worker)
 }
 
 const kubectlErr = "kubectl version 1.10 or greater is required"
@@ -335,7 +358,7 @@ func checkKubectl(p *supervisor.Process) error {
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
 //
 // If fallbackIP is empty, it will default to Google DNS.
-func intercept(p *supervisor.Process, tele Teleproxy) error {
+func intercept(p *supervisor.Process, tele *Teleproxy) error {
 	if os.Geteuid() != 0 {
 		return errors.New("ERROR: teleproxy must be run as root or suid root")
 	}
@@ -485,20 +508,57 @@ var (
 	errAborted = errors.New("aborted")
 )
 
-func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
+type svcResource struct {
+	Spec svcSpec
+}
+
+type svcSpec struct {
+	ClusterIP string
+	Ports     []svcPort
+}
+
+type svcPort struct {
+	Name     string
+	Port     int
+	Protocol string
+}
+
+func bridges(p *supervisor.Process, tele *Teleproxy) {
 	sup := p.Supervisor()
 
-	connect(p, kubeinfo)
+	connect(tele)
 
-	sup.Supervise(&supervisor.Worker{
+	tele.addWorker(&supervisor.Worker{
 		Name: K8sBridgeWorker,
 		Work: func(p *supervisor.Process) error {
 			// setup kubernetes bridge
-			ns, err := kubeinfo.Namespace()
+
+			kubeinfo := k8s.NewKubeInfo(tele.Kubeconfig, tele.Context, tele.Namespace)
+
+			// Set up DNS search path based on current Kubernetes namespace
+			namespace, err := kubeinfo.Namespace()
 			if err != nil {
 				return err
 			}
-			p.Logf("kubernetes ns=%s", ns)
+			p.Logf("kubernetes namespace=%s", namespace)
+			paths := []string{
+				namespace + ".svc.cluster.local.",
+				"svc.cluster.local.",
+				"cluster.local.",
+				"",
+			}
+			log.Println("BRG: Setting DNS search path:", paths[0])
+			body, err := json.Marshal(paths)
+			if err != nil {
+				panic(err)
+			}
+			ign, err := http.Post("http://teleproxy/api/search", "application/json", bytes.NewReader(body))
+			if err != nil {
+				log.Printf("BRG: error setting up search path: %v", err)
+				panic(err) // Because this will fail if we win the startup race
+			}
+			defer ign.Body.Close()
+
 			var w *k8s.Watcher
 
 			err = p.DoClean(func() error {
@@ -512,16 +572,35 @@ func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
 					table := route.Table{Name: "kubernetes"}
 
 					for _, svc := range w.List("services") {
-						ip, ok := svc.Spec()["clusterIP"]
+						decoded := svcResource{}
+						err := svc.Decode(&decoded)
+						if err != nil {
+							p.Logf("error decoding service: %v", err)
+							continue
+						}
+
+						spec := decoded.Spec
+
+						ports := ""
+						for _, port := range spec.Ports {
+							if ports == "" {
+								ports = fmt.Sprintf("%d", port.Port)
+							} else {
+								ports = fmt.Sprintf("%s,%d", ports, port.Port)
+							}
+						}
+
+						ip := spec.ClusterIP
 						// for headless services the IP is None, we
 						// should properly handle these by listening
 						// for endpoints and returning multiple A
 						// records at some point
-						if ok && ip != "None" {
+						if ip != "" && ip != "None" {
 							qualName := svc.Name() + "." + svc.Namespace() + ".svc.cluster.local"
 							table.Add(route.Route{
 								Name:   qualName,
-								Ip:     ip.(string),
+								Ip:     ip,
+								Port:   ports,
 								Proto:  "tcp",
 								Target: ProxyRedirPort,
 							})
@@ -594,28 +673,6 @@ func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
 		},
 	})
 
-	// Set up DNS search path based on current Kubernetes namespace
-	namespace, err := kubeinfo.Namespace()
-	if err != nil {
-		return err
-	}
-	paths := []string{
-		namespace + ".svc.cluster.local.",
-		"svc.cluster.local.",
-		"cluster.local.",
-		"",
-	}
-	log.Println("BRG: Setting DNS search path:", paths[0])
-	body, err := json.Marshal(paths)
-	if err != nil {
-		panic(err)
-	}
-	_, err = http.Post("http://teleproxy/api/search", "application/json", bytes.NewReader(body))
-	if err != nil {
-		log.Printf("BRG: error setting up search path: %v", err)
-		panic(err) // Because this will fail if we win the startup race
-	}
-
 	sup.Supervise(&supervisor.Worker{
 		Name: DkrBridgeWorker,
 		Work: func(p *supervisor.Process) error {
@@ -634,8 +691,6 @@ func bridges(p *supervisor.Process, kubeinfo *k8s.KubeInfo) error {
 			return nil
 		},
 	})
-
-	return nil
 }
 
 func post(tables ...route.Table) {
@@ -674,12 +729,11 @@ spec:
       containerPort: 8022
 `
 
-func connect(p *supervisor.Process, kubeinfo *k8s.KubeInfo) {
-	sup := p.Supervisor()
-
-	sup.Supervise(&supervisor.Worker{
+func connect(tele *Teleproxy) {
+	tele.addWorker(&supervisor.Worker{
 		Name: K8sApplyWorker,
 		Work: func(p *supervisor.Process) (err error) {
+			kubeinfo := k8s.NewKubeInfo(tele.Kubeconfig, tele.Context, tele.Namespace)
 			// setup remote teleproxy pod
 			args, err := kubeinfo.GetKubectlArray("apply", "-f", "-")
 			if err != nil {
@@ -702,11 +756,13 @@ func connect(p *supervisor.Process, kubeinfo *k8s.KubeInfo) {
 		},
 	})
 
-	sup.Supervise(&supervisor.Worker{
+	tele.addWorker(&supervisor.Worker{
 		Name:     K8sPortForwardWorker,
 		Requires: []string{K8sApplyWorker},
 		Retry:    true,
 		Work: func(p *supervisor.Process) (err error) {
+
+			kubeinfo := k8s.NewKubeInfo(tele.Kubeconfig, tele.Context, tele.Namespace)
 			args, err := kubeinfo.GetKubectlArray("port-forward", "pod/teleproxy", "8022")
 			if err != nil {
 				return err
@@ -735,7 +791,7 @@ func connect(p *supervisor.Process, kubeinfo *k8s.KubeInfo) {
 		},
 	})
 
-	sup.Supervise(&supervisor.Worker{
+	tele.addWorker(&supervisor.Worker{
 		Name:     K8sSSHWorker,
 		Requires: []string{K8sPortForwardWorker},
 		Retry:    true,

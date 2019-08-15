@@ -619,6 +619,16 @@ func (c *Cmd) Run() error {
 	return err
 }
 
+// Command creates a single purpose supervisor and uses it to produce
+// and return a *supervisor.Cmd.
+func Command(prefix, name string, args ...string) (result *Cmd) {
+	MustRun(prefix, func(p *Process) error {
+		result = p.Command(name, args...)
+		return nil
+	})
+	return
+}
+
 // Creates a command that automatically logs inputs, outputs, and exit
 // codes to the process logger.
 func (p *Process) Command(name string, args ...string) *Cmd {
@@ -638,6 +648,28 @@ func (c *Cmd) Capture(stdin io.Reader) (output string, err error) {
 
 func (c *Cmd) MustCapture(stdin io.Reader) (output string) {
 	output, err := c.Capture(stdin)
+	if err != nil {
+		panic(err)
+	}
+	return output
+}
+
+// CaptureErr runs a command with the supplied input and captures
+// stdout and stderr as a string.
+func (c *Cmd) CaptureErr(stdin io.Reader) (output string, err error) {
+	c.Stdin = stdin
+	out := strings.Builder{}
+	c.Stdout = &out
+	c.Stderr = &out
+	err = c.Run()
+	output = out.String()
+	return
+}
+
+// MustCaptureErr runs a command with the supplied input and captures
+// stdout and stderr as a string.
+func (c *Cmd) MustCaptureErr(stdin io.Reader) (output string) {
+	output, err := c.CaptureErr(stdin)
 	if err != nil {
 		panic(err)
 	}

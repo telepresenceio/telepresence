@@ -2,10 +2,15 @@
 
 package nat
 
-import "github.com/datawire/teleproxy/pkg/supervisor"
+import (
+	"strings"
+
+	"github.com/datawire/teleproxy/pkg/supervisor"
+)
 
 type env struct {
 	pfconf string
+	before string
 }
 
 /*
@@ -23,6 +28,19 @@ var environments = []env{
 
 func (e *env) setup() {
 	supervisor.MustRun("setup", func(p *supervisor.Process) error {
+		output := p.Command("pfctl", "-sr").MustCapture(nil)
+		output += p.Command("pfctl", "-sn").MustCapture(nil)
+		lines := strings.Split(output, "\n")
+
+		for _, kw := range []string{"scrub-anchor", "nat-anchor", "rdr-anchor", "anchor"} {
+			for _, line := range lines {
+				fields := strings.Fields(line)
+				if len(fields) > 0 && fields[0] == kw {
+					e.before += line + "\n"
+				}
+			}
+		}
+
 		err := pf(p, []string{"-F", "all"}, "")
 		if err != nil {
 			return err
@@ -37,7 +55,7 @@ func (e *env) setup() {
 
 func (e *env) teardown() {
 	supervisor.MustRun("teardown", func(p *supervisor.Process) error {
-		pf(p, []string{"-F", "all"}, "")
-		return nil
+		_ = pf(p, []string{"-F", "all"}, "")
+		return pf(p, []string{"-f", "/dev/stdin"}, e.before)
 	})
 }
