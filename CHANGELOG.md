@@ -4,6 +4,10 @@ This changelog covers teleproxy, watt, kubeapply, and the various
 libraries that they use. Lines within each entry are prefixed with
 <b>[`<name>`]</b> to indicate what they refer to.
 
+## 0.7.0 (TBD)
+
+ * <b>[lib/k8s]</b> BREAKING CHANGE: KubeInfo has changed to use `k8s.io/cli-runtime/pkg/genericclioptions`.
+
 ## 0.6.0 (2019-06-01)
 
  * <b>[lib/k8s] [watt] [teleproxy] [kubeapply]</b> Bug fix: lookup of kubernetes resources should now behave just like kubectl, e.g. allowing for `<name>.<version>.<group>` syntax in order to disambiguate resources with the same short names. ([teleproxy#127](https://github.com/datawire/teleproxy/issues/127)) This change is not intended to break compatibility, however it is a fairly extensive change to a pretty fundamental piece of code and so we are bumping the version number to 0.6.0 because of this. Any software that uses any of these components should perform additional testing around how they pass in kubernetes names. It would also be advisable to update kubernetes names to make them fully qualified.

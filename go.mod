@@ -27,7 +27,6 @@ require (
 	github.com/coredns/coredns v1.4.0 // indirect
 	github.com/coreos/etcd v3.3.12+incompatible // indirect
 	github.com/coreos/go-oidc v2.0.0+incompatible // indirect
-	github.com/coreos/go-semver v0.2.0 // indirect
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/dancannon/gorethink v4.0.0+incompatible // indirect
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
@@ -36,6 +35,7 @@ require (
 	github.com/duosecurity/duo_api_golang v0.0.0-20190308151101-6c680f768e74 // indirect
 	github.com/ecodia/golang-awaitility v0.0.0-20180710094957-fb55e59708c7
 	github.com/envoyproxy/go-control-plane v0.6.9 // indirect
+	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
 	github.com/fullsailor/pkcs7 v0.0.0-20180613152042-8306686428a5 // indirect
 	github.com/gammazero/deque v0.0.0-20190130191400-2afb3858e9c7 // indirect
 	github.com/gammazero/workerpool v0.0.0-20181230203049-86a96b5d5d92 // indirect
@@ -52,8 +52,6 @@ require (
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/google/btree v1.0.0 // indirect
 	github.com/google/shlex v0.0.0-20181106134648-c34317bd91bf
-	github.com/google/uuid v1.1.0 // indirect
-	github.com/gophercloud/gophercloud v0.0.0-20190125124242-bb1ef8ce758c // indirect
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75 // indirect
 	github.com/gorilla/websocket v1.4.0 // indirect
 	github.com/gregjones/httpcache v0.0.0-20181110185634-c63ab54fda8f // indirect
@@ -104,7 +102,6 @@ require (
 	github.com/mattn/go-isatty v0.0.7 // indirect
 	github.com/michaelklishin/rabbit-hole v1.5.0 // indirect
 	github.com/miekg/dns v1.1.6
-	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/hashstructure v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/mitchellh/pointerstructure v0.0.0-20170205204203-f2329fcfa9e2 // indirect
@@ -122,7 +119,8 @@ require (
 	github.com/shirou/w32 v0.0.0-20160930032740-bb4de0191aa4 // indirect
 	github.com/sirupsen/logrus v1.4.0
 	github.com/soheilhy/cmux v0.1.4 // indirect
-	github.com/spf13/cobra v0.0.3
+	github.com/spf13/cobra v0.0.4
+	github.com/spf13/pflag v1.0.3
 	github.com/streadway/amqp v0.0.0-20190312223743-14f78b41ce6d // indirect
 	github.com/stretchr/testify v1.3.0
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
@@ -143,12 +141,20 @@ require (
 	gopkg.in/ory-am/dockertest.v2 v2.2.3 // indirect
 	gopkg.in/square/go-jose.v2 v2.3.0 // indirect
 	gopkg.in/yaml.v2 v2.2.2
-	// We need to pin k8s.io/api and k8s.io/client-go to their respective releases
-	// because api has been removed from master
-	k8s.io/api v0.0.0-20190111032252-67edc246be36 // indirect
-	k8s.io/apimachinery v0.0.0-20190119020841-d41becfba9ee
-	k8s.io/client-go v10.0.0+incompatible
-	k8s.io/klog v0.1.0 // indirect
+	k8s.io/apimachinery v0.0.0-20190629125103-05b5762916b3
+	k8s.io/cli-runtime v0.0.0-20190703050941-cd24d85f6ca9
+	k8s.io/client-go v11.0.0+incompatible
+	k8s.io/klog v0.3.3 // indirect
+	k8s.io/kube-openapi v0.0.0-20190722073852-5e22f3d471e6 // indirect
+	k8s.io/utils v0.0.0-20190712204705-3dccf664f023 // indirect
 	layeh.com/radius v0.0.0-20190118135028-0f678f039617 // indirect
+	sigs.k8s.io/kustomize v2.0.3+incompatible // indirect
 	sigs.k8s.io/yaml v1.1.0 // indirect
+)
+
+replace (
+	k8s.io/api => k8s.io/api v0.0.0-20190313235455-40a48860b5ab
+	k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20190313205120-d7deff9243b1
+	k8s.io/cli-runtime => k8s.io/cli-runtime v0.0.0-20190314001948-2899ed30580f
+	k8s.io/client-go => k8s.io/client-go v11.0.0+incompatible
 )

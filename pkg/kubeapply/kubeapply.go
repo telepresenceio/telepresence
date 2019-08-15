@@ -116,7 +116,7 @@ func phase(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool, na
 
 	cli, err := k8s.NewClient(kubeinfo)
 	if err != nil {
-		return errors.Wrapf(err, "kubeapply: error connecting to cluster %s", kubeinfo.Kubeconfig)
+		return errors.Wrapf(err, "kubeapply: error connecting to cluster %v", kubeinfo)
 	}
 	waiter, err := k8s.NewWaiter(cli.Watcher())
 	if err != nil {

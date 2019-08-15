@@ -6,6 +6,7 @@ linters:
     - gochecknoinits
     - interfacer # author says it's deprecated, gives very subjective advice
     - prealloc
+    - scopelint # rhs: this is either incomprehensible or buggy
 linters-settings:
   goconst:
     min-len: 5
