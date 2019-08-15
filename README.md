@@ -1,17 +1,17 @@
 This repository contains the <b>Edge ToolKit</b>, or <b>ETK</b> for
 short. The <b>ETK</b> is a collection of binaries and golang libraries
 for managing requests that that flow into, out of, or within
-kubernetes-based cloud native applications.
+Kubernetes-based cloud native applications.
 
 ## Components of the ETK
 
 Commands:
 
-- [teleproxy](docs/teleproxy.md) - connect locally running code to a remote kubernetes cluster
-- [watt](docs/watt.md) - trigger actions when kubernetes and/or consul resources are updated
-- [kubeapply](docs/kubeapply.md) - apply kubernetes manifests with templating, docker builds, and feedback
-- [k3sctl](docs/k3sctl.md) - run/manage a lightweight local kubernetes cluster and docker registry for testing
-- [kubestatus](docs/kubestatus.md) - display and update the status of arbitrary kubernetes resources
+- [teleproxy](docs/teleproxy.md) - connect locally running code to a remote Kubernetes cluster
+- [watt](docs/watt.md) - trigger actions when Kubernetes and/or consul resources are updated
+- [kubeapply](docs/kubeapply.md) - apply Kubernetes manifests with templating, docker builds, and feedback
+- [k3sctl](docs/k3sctl.md) - run/manage a lightweight local Kubernetes cluster and docker registry for testing
+- [kubestatus](docs/kubestatus.md) - display and update the status of arbitrary Kubernetes resources
 
 Libraries:
 
@@ -51,7 +51,7 @@ The fastest way to run tests is to run `go test ./<path>/...`
 
 ### Testing dependencies
 
-The tests require a kubernetes cluster and a docker registry to
+The tests require a Kubernetes cluster and a docker registry to
 run. By default these are spun up locally on demand. You can also
 supply your own cluster and/or registry.
 
@@ -72,6 +72,6 @@ given docker registry for testing. You will need to be authenticated
 and have permission to push to whatever registry you supply.
 
 Use the `DTEST_KUBECONFIG` environment variable to make the tests use
-a particular kubernetes cluster for testing. Note that the tests may
+a particular Kubernetes cluster for testing. Note that the tests may
 be destructive, so make sure you use a suitable cluster. This cluster
 will need to be able to pull from whatever registry you supply.

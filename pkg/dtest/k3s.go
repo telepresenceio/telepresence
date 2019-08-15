@@ -3,6 +3,7 @@ package dtest
 import (
 	"fmt"
 	"io/ioutil"
+	"net"
 	"os"
 	"os/user"
 	"strings"
@@ -190,9 +191,9 @@ func GetKubeconfig() string {
 		return ""
 	}
 
-	cmd := supervisor.Command(prefix, "sh", "-c", fmt.Sprintf("docker cp \"%s:%s\" - | tar -xO", id, k3sConfigPath))
+	cmd := supervisor.Command(prefix, "docker", "exec", "-i", id, "cat", k3sConfigPath)
 	kubeconfig := cmd.MustCapture(nil)
-	kubeconfig = strings.ReplaceAll(kubeconfig, "localhost:6443", fmt.Sprintf("%s:%s", dockerIP(), k3sPort))
+	kubeconfig = strings.ReplaceAll(kubeconfig, "localhost:6443", net.JoinHostPort(dockerIP(), k3sPort))
 	return kubeconfig
 }
 
