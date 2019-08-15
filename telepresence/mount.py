@@ -119,7 +119,7 @@ def mount_remote(runner, mount, ssh, allow_all_users, docker_mount, env):
             mount_target = mount_dir
 
         mount_dir, mount_cleanup = mount_remote_volumes(
-            runner, ssh, allow_all_users, docker_mount != None, mount_dir
+            runner, ssh, allow_all_users, docker_mount is not None, mount_dir
         )
 
         env["TELEPRESENCE_ROOT"] = mount_target
@@ -137,8 +137,8 @@ def setup(runner, args):
     - Mount onto a temporary directory
     - Mount onto a specified mount point
     """
-
-    # We allow all users if we're using Docker and not using docker volume because we don't know
+    # We allow all users if we're using Docker
+    # and not using docker volume because we don't know
     # what uid the Docker container will use.
     allow_all_users = args.mount and args.method == "container"
     if not args.docker_mount and allow_all_users:
