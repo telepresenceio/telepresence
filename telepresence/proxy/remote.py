@@ -32,7 +32,6 @@ class RemoteInfo(object):
     :ivar container_config dict: The container within the Deployment JSON.
     :ivar container_name str: The name of the container.
     """
-
     def __init__(
         self,
         runner: Runner,

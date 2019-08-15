@@ -29,7 +29,6 @@ def covering_cidr(ips: List[str]) -> str:
 
     Presumes it's at least a /24.
     """
-
     def collapse(ns):
         return list(ipaddress.collapse_addresses(ns))
 
@@ -183,7 +182,6 @@ def serviceCIDR(runner: Runner):
     existing Service IPs. We create more services if there are less
     than 8, to ensure some coverage of the IP range.
     """
-
     def get_service_ips():
         services = json.loads(
             runner.get_output(runner.kubectl("get", "services", "-o", "json"))

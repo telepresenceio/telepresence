@@ -20,7 +20,6 @@ from telepresence.runner import Runner
 
 class SSH(object):
     """Run ssh to k8s-proxy with appropriate arguments."""
-
     def __init__(
         self,
         runner: Runner,
