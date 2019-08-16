@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/datawire/teleproxy/pkg/dtest"
 	"github.com/datawire/teleproxy/pkg/k8s"
-	"github.com/stretchr/testify/require"
 )
 
 const (

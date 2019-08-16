@@ -6,8 +6,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/pkg/errors"
+
+	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 // Resource represents one thing managed by edgectl daemon. Examples include

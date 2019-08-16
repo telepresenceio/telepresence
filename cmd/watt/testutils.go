@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/datawire/teleproxy/pkg/supervisor"
+	"github.com/stretchr/testify/require"
 
 	"github.com/datawire/teleproxy/pkg/k8s"
-	"github.com/stretchr/testify/require"
+	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 var (

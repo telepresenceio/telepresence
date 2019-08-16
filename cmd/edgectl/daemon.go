@@ -7,8 +7,9 @@ import (
 	"net"
 	"os"
 
-	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/pkg/errors"
+
+	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 // Daemon represents the state of the Edge Control Daemon

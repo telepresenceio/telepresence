@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"sigs.k8s.io/yaml"
+
 	"github.com/datawire/teleproxy/pkg/dtest"
 	"github.com/datawire/teleproxy/pkg/dtest/testprocess"
-	"sigs.k8s.io/yaml"
 )
 
 var noDocker error

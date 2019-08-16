@@ -7,8 +7,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/datawire/teleproxy/pkg/supervisor"
 	"github.com/pkg/errors"
+
+	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 // InterceptInfo tracks one intercept operation

@@ -11,6 +11,18 @@ linters-settings:
     min-len: 5
   maligned:
     suggest-new: true
+  goimports:
+    # put imports beginning with prefix after 3rd-party packages;
+    # it's a comma-separated list of prefixes
+    local-prefixes: github.com/datawire/teleproxy
+  depguard:
+    list-type: blacklist
+    include-go-root: true
+    packages:
+      - errors # use "github.com/pkg/errors"
+      - golang.org/x/net/context # use "context"
+      - github.com/datawire/kat-backend/xds/ # use "github.com/datawire/ambassador/go/"
+      - github.com/lyft/ratelimit/proto/ # use "github.com/datawire/ambassador/go/"
 issues:
   exclude-use-default: false
   new-from-rev: 61cc8815bf172110171836581439d1822c161b42

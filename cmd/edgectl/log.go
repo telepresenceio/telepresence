@@ -6,11 +6,11 @@ import (
 	"os"
 	"sort"
 
-	"github.com/datawire/teleproxy/pkg/supervisor"
-
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
 	"gopkg.in/natefinch/lumberjack.v2"
+
+	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 // DaemonFormatter formats log messages for the Edge Control Daemon

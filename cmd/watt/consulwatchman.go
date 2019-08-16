@@ -5,10 +5,10 @@ import (
 	"log"
 	"os"
 
-	"github.com/datawire/teleproxy/pkg/consulwatch"
-
-	"github.com/datawire/teleproxy/pkg/supervisor"
 	consulapi "github.com/hashicorp/consul/api"
+
+	"github.com/datawire/teleproxy/pkg/consulwatch"
+	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 type consulEvent struct {
