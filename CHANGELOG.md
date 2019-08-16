@@ -1,8 +1,9 @@
 ## CHANGELOG
 
-This changelog covers teleproxy, watt, kubeapply, and the various
-libraries that they use. Lines within each entry are prefixed with
-<b>[`<name>`]</b> to indicate what they refer to.
+This changelog covers edgectl, teleproxy, watt, kubeapply, k3sctl,
+kubestatus, and the various libraries that they use.  Lines within
+each entry are prefixed with <b>[`<name>`]</b> to indicate what they
+refer to.
 
 ## 0.7.0 (2019-08-16)
 
