@@ -20,16 +20,31 @@ Libraries:
 - [k8s](https://godoc.org/github.com/datawire/teleproxy/pkg/k8s) - an easy-to-use facade around the client-go library
 - [dtest](https://godoc.org/github.com/datawire/teleproxy/pkg/dtest) - testing related utilities
 
-## Releases
+## Changelog
 
-You can get precompiled binaries for `linux` or `darwin` here:
+See [CHANGELOG](./CHANGELOG.md) for notes on the current release.
+
+## Linux downloads
 
 ```bash
-curl https://datawire-static-files.s3.amazonaws.com/<name>/<version>/<os>/amd64/<name> -o <name>
+curl https://datawire-static-files.s3.amazonaws.com/edgectl/0.7.0/linux/amd64/edgectl -o edgectl && chmod a+x edgectl
+curl https://datawire-static-files.s3.amazonaws.com/teleproxy/0.7.0/linux/amd64/teleproxy -o teleproxy && chmod a+x teleproxy
+curl https://datawire-static-files.s3.amazonaws.com/watt/0.7.0/linux/amd64/watt -o watt && chmod a+x watt
+curl https://datawire-static-files.s3.amazonaws.com/kubeapply/0.7.0/linux/amd64/kubeapply -o kubeapply && chmod a+x kubeapply
+curl https://datawire-static-files.s3.amazonaws.com/k3sctl/0.7.0/linux/amd64/k3sctl -o k3sctl && chmod a+x k3sctl
+curl https://datawire-static-files.s3.amazonaws.com/kubestatus/0.7.0/linux/amd64/kubestatus -o kubestatus && chmod a+x kubestatus
 ```
 
-See the [CHANGELOG](./CHANGELOG.md) for the latest version and notes
-on the current release.
+## Darwin downloads
+
+```bash
+curl https://datawire-static-files.s3.amazonaws.com/edgectl/0.7.0/darwin/amd64/edgectl -o edgectl && chmod a+x edgectl
+curl https://datawire-static-files.s3.amazonaws.com/teleproxy/0.7.0/darwin/amd64/teleproxy -o teleproxy && chmod a+x teleproxy
+curl https://datawire-static-files.s3.amazonaws.com/watt/0.7.0/darwin/amd64/watt -o watt && chmod a+x watt
+curl https://datawire-static-files.s3.amazonaws.com/kubeapply/0.7.0/darwin/amd64/kubeapply -o kubeapply && chmod a+x kubeapply
+curl https://datawire-static-files.s3.amazonaws.com/k3sctl/0.7.0/darwin/amd64/k3sctl -o k3sctl && chmod a+x k3sctl
+curl https://datawire-static-files.s3.amazonaws.com/kubestatus/0.7.0/darwin/amd64/kubestatus -o kubestatus && chmod a+x kubestatus
+```
 
 ## Repository Organization
 

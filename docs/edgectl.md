@@ -22,7 +22,7 @@ Jane needs to test a bug fix for an existing service running in the cluster. Usi
 Grab the binary from S3 and install it somewhere in your shell's `PATH`.
 
 ```console
-curl -O https://s3.amazonaws.com/datawire-static-files/edgectl/v0.7.0-pre/linux/amd64/edgectl
+curl -O https://s3.amazonaws.com/datawire-static-files/edgectl/0.7.0/linux/amd64/edgectl
 chmod a+x edgectl
 mv edgectl ~/bin  # Somewhere in your PATH
 ```
