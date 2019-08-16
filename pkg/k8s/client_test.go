@@ -8,11 +8,14 @@ import (
 	"github.com/datawire/teleproxy/pkg/k8s"
 )
 
-const ClusterFile = "../../build-aux/cluster.knaut"
-
 func TestMain(m *testing.M) {
-	dtest.K8sApply(ClusterFile, "00-custom-crd.yaml", "custom.yaml")
-	os.Exit(m.Run())
+	// we get the lock to make sure we are the only thing running
+	// because the nat tests interfere with docker functionality
+	dtest.WithMachineLock(func() {
+		dtest.K8sApply("00-custom-crd.yaml", "custom.yaml")
+
+		os.Exit(m.Run())
+	})
 }
 
 func TestList(t *testing.T) {

@@ -9,37 +9,22 @@ import (
 	"github.com/datawire/teleproxy/pkg/kubeapply"
 )
 
-const msg = `
-kubeconfig does not exist: %s
-
-  Run "make claim" to acquire a kubernaut cluster, or use
-  TELEPROXY_DEV_KUBECONFIG to point elsewhere
-
-`
-
 // K8sApply applies the supplied manifests to the cluster indicated by
 // the supplied kubeconfig.
-func K8sApply(kubeconfig string, files ...string) {
-	override := os.Getenv("TELEPROXY_DEV_KUBECONFIG")
-	if override != "" {
-		kubeconfig = override
+func K8sApply(files ...string) {
+	if os.Getenv("DOCKER_REGISTRY") == "" {
+		os.Setenv("DOCKER_REGISTRY", DockerRegistry())
 	}
-
-	if _, err := os.Stat(kubeconfig); os.IsNotExist(err) {
-		fmt.Printf(msg, kubeconfig)
-		os.Exit(1)
-	}
-
-	err := kubeapply.Kubeapply(k8s.NewKubeInfo(kubeconfig, "", ""), 30*time.Second, false, false, files...)
+	kubeconfig := Kubeconfig()
+	err := kubeapply.Kubeapply(k8s.NewKubeInfo(kubeconfig, "", ""), 120*time.Second, false, false, files...)
 	if err != nil {
 		fmt.Println()
 		fmt.Println(err)
-		fmt.Print(`
-  Please note, if this is a timeout, your kubernaut cluster may have
-  been preempted or expired. Use "make unclaim && make claim" to get a
-  fresh cluster.
+		fmt.Printf(`
+  Please note, if this is a timeout, then your kubernetes cluster may not
+  exist or may be unreachable. Check access to your cluster with "kubectl --kubeconfig %s".
 
-`)
+`, kubeconfig)
 		os.Exit(1)
 	}
 }
