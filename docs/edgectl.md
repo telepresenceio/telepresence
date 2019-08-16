@@ -2,7 +2,16 @@
 
 ## What is it?
 
-Edge Control will perform numerous function related to Ambassador, APro, and ACode. Right now it supports setting up connectivity to and from a Kubernetes cluster.
+Edge Control is the CLI for a new architecture for Telepresence that is designed to deliver several key things that have been difficult within its current architecture.
+
+We have chosen to introduce a new CLI since the new architecture exposes capabilities that are not easy to fit into the old interface, and we also do not want to destabilize users of the existing Telepresence CLI.
+
+The goals of the new architecture are:
+
+ - Enable a good UX for the "always-on" experience that many Telepresence users have created through custom workarounds.
+ - Provide basic functionality to the user with no or minimal cluster-side installation required.
+ - Provide advanced functionality without requiring ongoing modification of cluster resources after initial cluster-side installation.
+ - Enable a single dev cluster to be safely shared amongst multiple developers.
 
 ### Use cases
 
@@ -20,6 +29,16 @@ Jane needs to test a bug fix for an existing service running in the cluster. Usi
 ### Laptop
 
 Grab the binary from S3 and install it somewhere in your shell's `PATH`.
+
+For MacOS:
+
+```console
+curl -O https://s3.amazonaws.com/datawire-static-files/edgectl/0.7.0/darwin/amd64/edgectl
+chmod a+x edgectl
+mv edgectl ~/bin  # Somewhere in your PATH
+```
+
+For Linux:
 
 ```console
 curl -O https://s3.amazonaws.com/datawire-static-files/edgectl/0.7.0/linux/amd64/edgectl
@@ -45,8 +64,8 @@ Make sure everything is okay:
 
 ```console
 $ edgectl version
-Client v0.7.0-pre (api v1)
-Daemon v0.7.0-pre (api v1)
+Client v0.7.0 (api v1)
+Daemon v0.7.0 (api v1)
 
 $ edgectl status
 Not connected
