@@ -4,9 +4,19 @@ This changelog covers teleproxy, watt, kubeapply, and the various
 libraries that they use. Lines within each entry are prefixed with
 <b>[`<name>`]</b> to indicate what they refer to.
 
-## 0.7.0 (TBD)
+## 0.7.0 (2019-08-16)
 
+ * <b>[edgectl]</b> Initial release of edgectl.
+ * <b>[teleproxy]</b> Switched to GNU-style long arguments.
+ * <b>[teleproxy]</b> Bug fix: teleproxy now handles SIGHUP more gracefully by reloading kubernetes config info instead of dying and leaving the network messed up
+ * <b>[k3sctl]</b> Initial release of the k3sctl -- a utility for managing a local test cluster and registry.
  * <b>[kubestatus]</b> Added this CLI utility for updating Kubernetes object status.
+ * <b>[kubeapply]</b> Switched to GNU-style long arguments.
+ * <b>[kubeapply]</b> Changed the timeout argument to allow any duration unit rather than just seconds.
+ * <b>[kubeapply]</b> Added a --dry-run flag.
+ * <b>[kubeapply]</b> Added command-line arguments for --kubeconfig, --context, and --namespace
+ * <b>[kubeapply]</b> Added an image template function that provides simple docker build functionality
+ * <b>[kubeapply]</b> Bug fix: wait for resources in the correct namespace
  * <b>[lib/k8s]</b> BREAKING CHANGE: KubeInfo has changed to use `k8s.io/cli-runtime/pkg/genericclioptions`.
 
 ## 0.6.0 (2019-06-01)

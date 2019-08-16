@@ -20,6 +20,17 @@ Libraries:
 - [k8s](https://godoc.org/github.com/datawire/teleproxy/pkg/k8s) - an easy-to-use facade around the client-go library
 - [dtest](https://godoc.org/github.com/datawire/teleproxy/pkg/dtest) - testing related utilities
 
+## Releases
+
+You can get precompiled binaries for `linux` or `darwin` here:
+
+```bash
+curl https://datawire-static-files.s3.amazonaws.com/<name>/<version>/<os>/amd64/<name> -o <name>
+```
+
+See the [CHANGELOG](./CHANGELOG.md) for the latest version and notes
+on the current release.
+
 ## Repository Organization
 
 This repository follows the standard golang package layout.
