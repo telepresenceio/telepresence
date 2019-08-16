@@ -1,8 +1,13 @@
+// This file is verbatim copied from Go 1.12.7
+// os/exec/example_test.go, except that the imports list has been
+// changed.
+//
 // Copyright 2012 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package exec_test
+//nolint
+package logexec_test
 
 import (
 	"bytes"
@@ -13,9 +18,10 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
+
+	exec "github.com/datawire/teleproxy/pkg/logexec"
 )
 
 func ExampleLookPath() {
@@ -26,8 +32,8 @@ func ExampleLookPath() {
 	fmt.Printf("fortune is available at %s\n", path)
 }
 
-func ExampleCommand() {
-	cmd := exec.Command("tr", "a-z", "A-Z")
+func ExampleCommandContext() {
+	cmd := exec.CommandContext(context.Background(), "tr", "a-z", "A-Z")
 	cmd.Stdin = strings.NewReader("some input")
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -38,8 +44,8 @@ func ExampleCommand() {
 	fmt.Printf("in all caps: %q\n", out.String())
 }
 
-func ExampleCommand_environment() {
-	cmd := exec.Command("prog")
+func ExampleCommandContext_environment() {
+	cmd := exec.CommandContext(context.Background(), "prog")
 	cmd.Env = append(os.Environ(),
 		"FOO=duplicate_value", // ignored
 		"FOO=actual_value",    // this value is used
@@ -50,7 +56,7 @@ func ExampleCommand_environment() {
 }
 
 func ExampleCmd_Output() {
-	out, err := exec.Command("date").Output()
+	out, err := exec.CommandContext(context.Background(), "date").Output()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -58,14 +64,14 @@ func ExampleCmd_Output() {
 }
 
 func ExampleCmd_Run() {
-	cmd := exec.Command("sleep", "1")
+	cmd := exec.CommandContext(context.Background(), "sleep", "1")
 	log.Printf("Running command and waiting for it to finish...")
 	err := cmd.Run()
 	log.Printf("Command finished with error: %v", err)
 }
 
 func ExampleCmd_Start() {
-	cmd := exec.Command("sleep", "5")
+	cmd := exec.CommandContext(context.Background(), "sleep", "5")
 	err := cmd.Start()
 	if err != nil {
 		log.Fatal(err)
@@ -76,7 +82,7 @@ func ExampleCmd_Start() {
 }
 
 func ExampleCmd_StdoutPipe() {
-	cmd := exec.Command("echo", "-n", `{"Name": "Bob", "Age": 32}`)
+	cmd := exec.CommandContext(context.Background(), "echo", "-n", `{"Name": "Bob", "Age": 32}`)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Fatal(err)
@@ -98,7 +104,7 @@ func ExampleCmd_StdoutPipe() {
 }
 
 func ExampleCmd_StdinPipe() {
-	cmd := exec.Command("cat")
+	cmd := exec.CommandContext(context.Background(), "cat")
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		log.Fatal(err)
@@ -118,7 +124,7 @@ func ExampleCmd_StdinPipe() {
 }
 
 func ExampleCmd_StderrPipe() {
-	cmd := exec.Command("sh", "-c", "echo stdout; echo 1>&2 stderr")
+	cmd := exec.CommandContext(context.Background(), "sh", "-c", "echo stdout; echo 1>&2 stderr")
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		log.Fatal(err)
@@ -137,7 +143,7 @@ func ExampleCmd_StderrPipe() {
 }
 
 func ExampleCmd_CombinedOutput() {
-	cmd := exec.Command("sh", "-c", "echo stdout; echo 1>&2 stderr")
+	cmd := exec.CommandContext(context.Background(), "sh", "-c", "echo stdout; echo 1>&2 stderr")
 	stdoutStderr, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Fatal(err)
@@ -145,7 +151,7 @@ func ExampleCmd_CombinedOutput() {
 	fmt.Printf("%s\n", stdoutStderr)
 }
 
-func ExampleCommandContext() {
+func ExampleCommandContext_timeout() {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
