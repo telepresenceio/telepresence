@@ -7,7 +7,7 @@ refer to.
 
 ## 0.7.0 (2019-08-16)
 
- * <b>[edgectl]</b> Initial release of edgectl.
+ * <b>[edgectl]</b> Initial release of [edgectl](docs/edgectl.md).
  * <b>[teleproxy]</b> Switched to GNU-style long arguments.
  * <b>[teleproxy]</b> Bug fix: teleproxy now handles SIGHUP more gracefully by reloading kubernetes config info instead of dying and leaving the network messed up
  * <b>[k3sctl]</b> Initial release of the k3sctl -- a utility for managing a local test cluster and registry.
