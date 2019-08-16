@@ -7,6 +7,7 @@ Kubernetes-based cloud native applications.
 
 Commands:
 
+- [edgectl](docs/edgectl.md) - CLI for controlling the traffic into, out of, or within a Kubernetes cluster
 - [teleproxy](docs/teleproxy.md) - connect locally running code to a remote Kubernetes cluster
 - [watt](docs/watt.md) - trigger actions when Kubernetes and/or consul resources are updated
 - [kubeapply](docs/kubeapply.md) - apply Kubernetes manifests with templating, docker builds, and feedback
