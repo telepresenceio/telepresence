@@ -16,8 +16,6 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-const ClusterFile = "../../build-aux/cluster.knaut"
-
 var noDocker error
 
 func TestMain(m *testing.M) {
@@ -25,7 +23,7 @@ func TestMain(m *testing.M) {
 	dtest.WithMachineLock(func() {
 		_, noDocker = exec.LookPath("docker")
 		if noDocker == nil {
-			dtest.K8sApply(ClusterFile, "../../k8s")
+			dtest.K8sApply("../../k8s")
 		}
 		os.Exit(m.Run())
 	})
@@ -103,7 +101,7 @@ func poll(t *testing.T, url string, expected string) bool {
 			return false
 		}
 		time.Sleep(time.Second)
-		if time.Since(start) > 30*time.Second {
+		if time.Since(start) > 120*time.Second {
 			t.Errorf("time has expired")
 			return false
 		}
@@ -111,7 +109,7 @@ func poll(t *testing.T, url string, expected string) bool {
 }
 
 func teleproxyCluster() {
-	os.Args = []string{"teleproxy", fmt.Sprintf("--kubeconfig=%s", ClusterFile)}
+	os.Args = []string{"teleproxy", fmt.Sprintf("--kubeconfig=%s", dtest.Kubeconfig())}
 	main()
 }
 
@@ -158,7 +156,7 @@ var hup = testprocess.MakeSudo(func() {
 })
 
 func writeGoodFile(dest string) {
-	good, err := ioutil.ReadFile(ClusterFile)
+	good, err := ioutil.ReadFile(dtest.Kubeconfig())
 	if err != nil {
 		panic(err)
 	}
@@ -178,7 +176,7 @@ func writeBadFile(dest string) {
 }
 
 func writeAltFile(dest string) {
-	good, err := ioutil.ReadFile(ClusterFile)
+	good, err := ioutil.ReadFile(dtest.Kubeconfig())
 	if err != nil {
 		panic(err)
 	}

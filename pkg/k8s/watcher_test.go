@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/datawire/teleproxy/pkg/dtest"
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/stretchr/testify/require"
 )
@@ -36,7 +37,7 @@ func fetch(w *k8s.Watcher, resource, qname string) (result k8s.Resource) {
 }
 
 func info() *k8s.KubeInfo {
-	return k8s.NewKubeInfo(ClusterFile, "", "")
+	return k8s.NewKubeInfo(dtest.Kubeconfig(), "", "")
 }
 
 func TestUpdateStatus(t *testing.T) {
