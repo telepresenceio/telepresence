@@ -103,6 +103,11 @@ func (w tbWrapper) Warnln(a ...interface{})    { w.tb.Helper(); w.Logln(LogLevel
 func (w tbWrapper) Warningln(a ...interface{}) { w.tb.Helper(); w.Logln(LogLevelWarn, a...) }
 func (w tbWrapper) Errorln(a ...interface{})   { w.tb.Helper(); w.Logln(LogLevelError, a...) }
 
+// WrapTB converts a testing.TB (that is: either a *testing.T or a
+// *testing.B) into a generic Logger.
+//
+// Naturally, you should only use this from inside of your *_test.go
+// files.
 func WrapTB(in testing.TB) Logger {
 	return tbWrapper{in, map[string]interface{}{}}
 }

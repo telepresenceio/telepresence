@@ -61,6 +61,10 @@ func (l logrusWrapper) StdLogger(level LogLevel) *log.Logger {
 
 // WrapLogrus converts a logrus *Logger (or *Entry) into a generic
 // Logger.
+//
+// You should only really ever call WrapLogrus from the initial
+// process set up (i.e. directly inside your 'main()' function), and
+// you should pass the result directly to WithLogger.
 func WrapLogrus(in logrusLogger) Logger {
 	return logrusWrapper{in}
 }

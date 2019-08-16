@@ -1,6 +1,23 @@
+// Package dlog implements a generic logger facade.
+//
+// There are two first-class things of value in this package:
+//
+// First: The Logger interface.  This is a simple structured logging
+// interface that is mostly trivial to implement on top of most
+// logging backends, and allows library code to not need to care about
+// what specific logging system the calling program uses.
+//
+// Second: The WithLogger, GetLogger, and WithLoggerField functions
+// for tracking logger context.  These allow you to painlessly
+// associate a logger with a context.
+//
+// If you are writing library code and want a logger, then you should
+// take a context.Context as an argument, and then call GetLogger on
+// that Context argument.
 package dlog
 
 import (
+	"context"
 	"log"
 )
 
@@ -58,3 +75,32 @@ const (
 	// informational events than the Debug.
 	LogLevelTrace
 )
+
+// WithLogger returns a copy of ctx with logger associated with it,
+// for future calls to GetLogger.
+//
+// You should only really ever call WithLogger from the initial
+// process set up (i.e. directly inside your 'main()' function).
+func WithLogger(ctx context.Context, logger Logger) context.Context {
+	return context.WithValue(ctx, loggerContextKey{}, logger)
+}
+
+// WithLoggerField is a convenience wrapper for
+//
+//     WithLogger(ctx, GetLogger(ctx).WithField(key, value))
+func WithLoggerField(ctx context.Context, key string, value interface{}) context.Context {
+	return WithLogger(ctx, GetLogger(ctx).WithField(key, value))
+}
+
+// GetLogger returns the Logger associated with ctx.  If ctx has no
+// Logger associated with it, a "default" logger is returned.  This
+// function always returns a usable logger.
+func GetLogger(ctx context.Context) Logger {
+	logger := ctx.Value(loggerContextKey{})
+	if logger == nil {
+		return getDefaultLogger()
+	}
+	return logger.(Logger)
+}
+
+type loggerContextKey struct{}
