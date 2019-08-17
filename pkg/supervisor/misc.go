@@ -8,22 +8,29 @@ import (
 	"time"
 )
 
+// Logger is what Supervisor may use as a logging backend.
 type Logger interface {
 	Printf(format string, v ...interface{})
 }
 
+// DefaultLogger is a logger that uses the stdlib "log" package
+// default logger.
 type DefaultLogger struct{}
 
+// Printf implements the Logger interface.
 func (d *DefaultLogger) Printf(format string, v ...interface{}) {
 	log.Printf(format, v...)
 }
 
+// Run creates a single-purpose Supervisor and runs a worker function
+// with it.
 func Run(name string, f func(*Process) error) []error {
 	sup := WithContext(context.Background())
 	sup.Supervise(&Worker{Name: name, Work: f})
 	return sup.Run()
 }
 
+// MustRun is like Run, but panics if there are errors.
 func MustRun(name string, f func(*Process) error) {
 	errs := Run(name, f)
 	if len(errs) > 0 {
@@ -42,9 +49,8 @@ func nextDelay(delay time.Duration) time.Duration {
 	}
 }
 
-// Creates a work function from a function whose signature includes a
-// process plus additional arguments.
-
+// WorkFunc creates a work function from a function whose signature
+// includes a process plus additional arguments.
 func WorkFunc(fn interface{}, args ...interface{}) func(*Process) error {
 	fnv := reflect.ValueOf(fn)
 	return func(p *Process) error {
@@ -57,14 +63,13 @@ func WorkFunc(fn interface{}, args ...interface{}) func(*Process) error {
 			panic(fmt.Sprintf("unexpected result: %v", result))
 		}
 		v := result[0].Interface()
-		if v == nil {
-			return nil
-		} else {
+		if v != nil {
 			err, ok := v.(error)
 			if !ok {
 				panic(fmt.Sprintf("unrecognized result type: %v", v))
 			}
 			return err
 		}
+		return nil
 	}
 }

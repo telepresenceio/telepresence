@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// A Process represents a goroutine being run from a Worker.
 type Process struct {
 	supervisor *Supervisor
 	worker     *Worker
@@ -18,54 +19,61 @@ type Process struct {
 	shutdownClosed bool
 }
 
+// Supervisor returns the Supervisor that is managing this Process.
 func (p *Process) Supervisor() *Supervisor {
 	return p.supervisor
 }
 
+// Worker returns the Worker that this Process is running.
 func (p *Process) Worker() *Worker {
 	return p.worker
 }
 
+// Context returns the Process' context.
 func (p *Process) Context() context.Context {
 	return p.supervisor.context
 }
 
-// Invoked by a worker to signal it is ready.
+// Ready is called by the Process' Worker to notify the supervisor
+// that it is now ready.
 func (p *Process) Ready() {
 	p.Supervisor().change(func() {
 		p.ready = true
 	})
 }
 
-// Used for graceful shutdown...
+// Shutdown is used for graceful shutdown...
 func (p *Process) Shutdown() <-chan struct{} {
 	return p.shutdown
 }
 
-// Used for logging...
+// Log is used for logging...
 func (p *Process) Log(obj interface{}) {
 	p.supervisor.Logger.Printf("%s: %v", p.Worker().Name, obj)
 }
 
+// Logf is used for logging...
 func (p *Process) Logf(format string, args ...interface{}) {
 	p.supervisor.Logger.Printf("%s: %v", p.Worker().Name, fmt.Sprintf(format, args...))
 }
 
-func (p *Process) allocateId() int64 {
+func (p *Process) allocateID() int64 {
 	return atomic.AddInt64(&p.Worker().children, 1)
 }
 
-// Shorthand for launching a child worker... it is named "<parent>[<child-count>]"
+// Go is shorthand for launching a child worker... it is named
+// "<parent>[<child-count>]".
 func (p *Process) Go(fn func(*Process) error) *Worker {
 	w := &Worker{
-		Name: fmt.Sprintf("%s[%d]", p.Worker().Name, p.allocateId()),
+		Name: fmt.Sprintf("%s[%d]", p.Worker().Name, p.allocateID()),
 		Work: fn,
 	}
 	p.Supervisor().Supervise(w)
 	return w
 }
 
-// Shorthand for launching a named worker... it is named "<parent>.<name>"
+// GoName is shorthand for launching a named worker... it is named
+// "<parent>.<name>".
 func (p *Process) GoName(name string, fn func(*Process) error) *Worker {
 	w := &Worker{
 		Name: fmt.Sprintf("%s.%s", p.Worker().Name, name),
@@ -75,10 +83,10 @@ func (p *Process) GoName(name string, fn func(*Process) error) *Worker {
 	return w
 }
 
-// Shorthand for proper shutdown handling while doing a potentially
-// blocking activity. This method will return nil if the activity
-// completes normally and an error if the activity panics or returns
-// an error.
+// Do is shorthand for proper shutdown handling while doing a
+// potentially blocking activity. This method will return nil if the
+// activity completes normally and an error if the activity panics or
+// returns an error.
 //
 // If you want to know whether the work was aborted or might still be
 // running when Do returns, then use DoClean like so:
@@ -90,14 +98,12 @@ func (p *Process) GoName(name string, fn func(*Process) error) *Worker {
 //   if err == aborted {
 //     ...
 //   }
-
 func (p *Process) Do(fn func() error) (err error) {
 	return p.DoClean(fn, func() error { return nil })
 }
 
-// Same as Process.Do() but executes the supplied clean function on
-// abort.
-
+// DoClean is the same as Process.Do() but executes the supplied clean
+// function on abort.
 func (p *Process) DoClean(fn, clean func() error) (err error) {
 	sup := p.Supervisor()
 	done := make(chan struct{})

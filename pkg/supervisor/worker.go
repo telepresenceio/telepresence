@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+// A Worker represents a managed goroutine being prepared or run.
+//
+// I (LukeShu) don't think a Worker can be reused after being run by a
+// Supervisor.
 type Worker struct {
 	Name               string               // the name of the worker
 	Work               func(*Process) error // the function to perform the work
@@ -23,9 +27,8 @@ type Worker struct {
 func (w *Worker) Error() string {
 	if w.error == nil {
 		return "worker without an error"
-	} else {
-		return fmt.Sprintf("%s: %s", w.Name, w.error.Error())
 	}
+	return fmt.Sprintf("%s: %s", w.Name, w.error.Error())
 }
 
 func (w *Worker) reset() {
@@ -52,6 +55,7 @@ func (w *Worker) Restart() {
 	})
 }
 
+// Wait blocks until the worker is done.
 func (w *Worker) Wait() {
 	s := w.supervisor
 	s.mutex.Lock()
@@ -126,9 +130,9 @@ func (w *Worker) maybeWarnBlocked(name, cond string) {
 	}
 }
 
-// Shuts down the worker. Note that if the worker has other workers
-// that depend on it, the shutdown won't actually be initiated until
-// those dependent workers exit.
+// Shutdown shuts down the worker. Note that if the worker has other
+// workers that depend on it, the shutdown won't actually be initiated
+// until those dependent workers exit.
 func (w *Worker) Shutdown() {
 	s := w.supervisor
 	s.change(func() {

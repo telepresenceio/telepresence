@@ -49,6 +49,8 @@ func WithContext(ctx context.Context) *Supervisor {
 	}
 }
 
+// Supervise adds a Worker to be run as a Process when s.Run() is
+// called.
 func (s *Supervisor) Supervise(worker *Worker) {
 	s.change(func() {
 		_, exists := s.workers[worker.Name]

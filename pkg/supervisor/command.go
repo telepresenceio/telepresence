@@ -51,11 +51,10 @@ func (l *loggingWriter) Write(bytes []byte) (int, error) {
 	if l.writer == nil {
 		l.LogLines(" <- ", string(bytes), nil)
 		return len(bytes), nil
-	} else {
-		n, err := l.writer.Write(bytes)
-		l.LogLines(" <- ", string(bytes[:n]), err)
-		return n, err
 	}
+	n, err := l.writer.Write(bytes)
+	l.LogLines(" <- ", string(bytes[:n]), err)
+	return n, err
 }
 
 type loggingReader struct {
@@ -69,6 +68,8 @@ func (l *loggingReader) Read(p []byte) (n int, err error) {
 	return n, err
 }
 
+// A Cmd is like an os/exec.Cmd, but logs what happens on
+// stdin/stdout/stderr, and has a slightly different API.
 type Cmd struct {
 	*exec.Cmd
 	supervisorProcess *Process
@@ -96,17 +97,20 @@ func (c *Cmd) post(err error) {
 	}
 }
 
+// Start is like os/exec.Cmd.Start.
 func (c *Cmd) Start() error {
 	c.pre()
 	return c.Cmd.Start()
 }
 
+// Wait is like os/exec.Cmd.Wait.
 func (c *Cmd) Wait() error {
 	err := c.Cmd.Wait()
 	c.post(err)
 	return err
 }
 
+// Run is like os/exec.Cmd.Run.
 func (c *Cmd) Run() error {
 	c.pre()
 	err := c.Cmd.Run()
@@ -124,14 +128,14 @@ func Command(prefix, name string, args ...string) (result *Cmd) {
 	return
 }
 
-// Creates a command that automatically logs inputs, outputs, and exit
-// codes to the process logger.
+// Command creates a command that automatically logs inputs, outputs,
+// and exit codes to the process logger.
 func (p *Process) Command(name string, args ...string) *Cmd {
 	return &Cmd{exec.Command(name, args...), p}
 }
 
-// Runs a command with the supplied input and captures the output as a
-// string.
+// Capture runs a command with the supplied input and captures the
+// output as a string.
 func (c *Cmd) Capture(stdin io.Reader) (output string, err error) {
 	c.Stdin = stdin
 	out := strings.Builder{}
@@ -141,6 +145,7 @@ func (c *Cmd) Capture(stdin io.Reader) (output string, err error) {
 	return
 }
 
+// MustCapture is like Capture, but panics if there is an error.
 func (c *Cmd) MustCapture(stdin io.Reader) (output string) {
 	output, err := c.Capture(stdin)
 	if err != nil {
@@ -161,8 +166,7 @@ func (c *Cmd) CaptureErr(stdin io.Reader) (output string, err error) {
 	return
 }
 
-// MustCaptureErr runs a command with the supplied input and captures
-// stdout and stderr as a string.
+// MustCaptureErr is like CaptureErr, but panics if there is an error.
 func (c *Cmd) MustCaptureErr(stdin io.Reader) (output string) {
 	output, err := c.CaptureErr(stdin)
 	if err != nil {
