@@ -33,7 +33,7 @@ import (
 )
 
 func testContext(t *testing.T) context.Context {
-	return dlog.WithLogger(context.Background(), dlog.WrapTB(t))
+	return dlog.WithLogger(context.Background(), dlog.WrapTB(t, true))
 }
 
 func helperCommandContext(t *testing.T, ctx context.Context, s ...string) (cmd *exec.Cmd) {

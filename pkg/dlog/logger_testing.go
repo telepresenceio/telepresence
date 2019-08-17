@@ -11,8 +11,9 @@ import (
 )
 
 type tbWrapper struct {
-	tb     testing.TB
-	fields map[string]interface{}
+	tb          testing.TB
+	failOnError bool
+	fields      map[string]interface{}
 }
 
 func (w tbWrapper) WithField(key string, value interface{}) Logger {
@@ -58,7 +59,11 @@ func (w tbWrapper) log(level LogLevel, msg string) {
 
 	switch level {
 	case LogLevelError:
-		w.tb.Error(str)
+		if w.failOnError {
+			w.tb.Error(str)
+		} else {
+			w.tb.Log(str)
+		}
 	case LogLevelWarn, LogLevelInfo, LogLevelDebug, LogLevelTrace:
 		w.tb.Log(str)
 	}
@@ -108,8 +113,12 @@ func (w tbWrapper) Errorln(a ...interface{})   { w.tb.Helper(); w.Logln(LogLevel
 //
 // Naturally, you should only use this from inside of your *_test.go
 // files.
-func WrapTB(in testing.TB) Logger {
-	return tbWrapper{in, map[string]interface{}{}}
+func WrapTB(in testing.TB, failOnError bool) Logger {
+	return tbWrapper{
+		tb:          in,
+		failOnError: failOnError,
+		fields:      map[string]interface{}{},
+	}
 }
 
 type tbWriter struct {
