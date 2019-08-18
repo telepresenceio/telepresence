@@ -1,5 +1,4 @@
 package dns
-
 import (
 	_log "log"
 	"net"
@@ -25,7 +24,19 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	domain := strings.ToLower(r.Question[0].Name)
 	switch r.Question[0].Qtype {
 	case dns.TypeA:
-		ip := s.Resolve(domain)
+		var ip string
+		if domain == "localhost." {
+			// BUG(lukeshu): I have no idea why a lookup
+			// for localhost even makes it to here on my
+			// home WiFi when connecting to a k3sctl
+			// cluster (but not a kubernaut.io cluster).
+			// But it does, so I need this in order to be
+			// productive at home.  We should really
+			// root-cause this, because it's weird.
+			ip = "127.0.0.1"
+		} else {
+			ip = s.Resolve(domain)
+		}
 		if ip != "" {
 			log("QUERY %s -> %s", domain, ip)
 			msg := dns.Msg{}
