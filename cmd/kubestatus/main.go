@@ -57,13 +57,13 @@ func main() {
 			for _, rsrc := range w.List(kind) {
 				if *statusFile == "" {
 					fmt.Println("Status of", rsrc.QName())
-					fmt.Printf("  %q\n", rsrc["status"])
+					fmt.Printf("  %v\n", rsrc["status"])
 				} else {
 					fmt.Println("Updating", rsrc.QName())
 					rsrc["status"] = status
 					_, err := w.UpdateStatus(rsrc)
 					if err != nil {
-						log.Println(err)
+						log.Printf("error updating resource: %v", err)
 					}
 				}
 			}

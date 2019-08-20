@@ -248,13 +248,13 @@ func (w *Watcher) List(kind string) []Resource {
 }
 
 func (w *Watcher) UpdateStatus(resource Resource) (Resource, error) {
-	ri, err := w.client.ResolveResourceType(resource.Kind())
+	ri, err := w.client.ResolveResourceType(resource.QKind())
 	if err != nil {
 		return nil, err
 	}
 	watch, ok := w.watches[ri]
 	if !ok {
-		return nil, fmt.Errorf("no watch: %v", ri)
+		return nil, fmt.Errorf("no watch: %v, %v", ri, w.watches)
 	}
 
 	var uns unstructured.Unstructured
