@@ -9,6 +9,8 @@ include build-aux/go-mod.mk
 include build-aux/go-version.mk
 include build-aux/help.mk
 
+build-aux/go-test.tap: vendor
+
 # Utility targets
 
 release: ## Upload binaries to S3
