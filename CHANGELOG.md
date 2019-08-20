@@ -5,6 +5,10 @@ kubestatus, and the various libraries that they use.  Lines within
 each entry are prefixed with <b>[`<name>`]</b> to indicate what they
 refer to.
 
+## 0.7.1 (2019-08-20)
+
+ * <b>[kubestatus]</b> Bug fix: update would error out when resource short names are ambiguous.
+
 ## 0.7.0 (2019-08-16)
 
  * <b>[edgectl]</b> Initial release of [edgectl](docs/edgectl.md).
