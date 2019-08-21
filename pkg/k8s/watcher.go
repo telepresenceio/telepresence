@@ -125,7 +125,7 @@ func (w *Watcher) WatchQuery(query Query, listener func(*Watcher)) error {
 	})
 
 	var watched dynamic.ResourceInterface
-	if query.Namespace != "" {
+	if ri.Namespaced && query.Namespace != "" {
 		watched = resource.Namespace(query.Namespace)
 	} else {
 		watched = resource
@@ -260,8 +260,14 @@ func (w *Watcher) UpdateStatus(resource Resource) (Resource, error) {
 	var uns unstructured.Unstructured
 	uns.SetUnstructuredContent(resource)
 
-	// XXX: should we have an if Namespaced here?
-	result, err := watch.resource.Namespace(uns.GetNamespace()).UpdateStatus(&uns, v1.UpdateOptions{})
+	var cli dynamic.ResourceInterface
+	if ri.Namespaced {
+		cli = watch.resource.Namespace(uns.GetNamespace())
+	} else {
+		cli = watch.resource
+	}
+
+	result, err := cli.UpdateStatus(&uns, v1.UpdateOptions{})
 	if err != nil {
 		return nil, err
 	} else {
