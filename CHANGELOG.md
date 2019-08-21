@@ -1,6 +1,11 @@
 <!-- -*- fill-column: 100 -*- -->
 # Datawire build-aux CHANGELOG
 
+ - 2019-08-13: Fix race condition in `make clobber` where it attempted to use compiled programs used
+               for cleanup, after the programs themselves had already been deleted.
+
+ - 2019-07-10: `var.mk`: Introduce
+
  - 2019-07-05: `build-aux-push`: Work around problem with `git subtree`; avoid accidentally pushing
                proprietary code to build-aux.git.
 
@@ -19,7 +24,7 @@
  - 2019-06-20: `go-mod.mk`: For each binary, generate a `BIN.opensource.tar.gz` file.
  - 2019-06-20: `go-workspace.mk`: Remove.
 
- - 2019-05-31: `go-modmk`: Add `go doc` target to run `godoc -http`.
+ - 2019-05-31: `go-mod.mk`: Add `go doc` target to run `godoc -http`.
 
  - 2019-05-01: BREAKING CHANGE: `docker.mk`: Don't include `kuberanut-ui.mk`.
  - 2019-05-01: BREAKING CHANGE: `teleproxy.mk`: Don't include `kuberanut-ui.mk`.
