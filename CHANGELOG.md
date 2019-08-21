@@ -5,6 +5,11 @@ kubestatus, and the various libraries that they use.  Lines within
 each entry are prefixed with <b>[`<name>`]</b> to indicate what they
 refer to.
 
+## 0.7.2 (2019-08-21)
+
+ * <b>[kubestatus]</b> Bug fix: kubestatus will work properly on non namespaced resources.
+ * <b>[lib/k8s]</b> Bug fix: WatchQuery and ListQuery will now ignore namespace for non namespaced resources.
+
 ## 0.7.1 (2019-08-20)
 
  * <b>[kubestatus]</b> Bug fix: update would error out when resource short names are ambiguous.
