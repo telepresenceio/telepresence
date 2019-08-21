@@ -368,7 +368,7 @@ func (c *Client) ListQuery(query Query) ([]Resource, error) {
 	})
 
 	var filtered dynamic.ResourceInterface
-	if query.Namespace != "" {
+	if ri.Namespaced && query.Namespace != "" {
 		filtered = cli.Namespace(query.Namespace)
 	} else {
 		filtered = cli
