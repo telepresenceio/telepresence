@@ -10,6 +10,18 @@ import (
 	"runtime/debug"
 )
 
+// flags.  Initialize these in the init() step, in case anything else
+// wants to call flag.Parse() from TestMain.
+var (
+	name = flag.String("testprocess.name", "", "internal use")
+)
+
+// package-scoped global variables, that we use as regular variables
+var (
+	functions  = map[string]func(){}
+	dispatched = false
+)
+
 func getFunctionName(i interface{}) string {
 	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 }
@@ -17,8 +29,6 @@ func getFunctionName(i interface{}) string {
 func alreadySudoed() bool {
 	return os.Getuid() == 0 && os.Getenv("SUDO_USER") != ""
 }
-
-var functions = map[string]func(){}
 
 /* #nosec */
 func _make(sudo bool, f func()) *exec.Cmd {
@@ -68,10 +78,16 @@ func _make(sudo bool, f func()) *exec.Cmd {
 //         err := fooCmd.Run()
 //         ...
 //     }
+//
+// It is permissible, but not required, to call flag.Parse before
+// calling testprocess.Dispatch.  If flag.Parse has not been called,
+// then testprocess.Dispatch will call it.
 func Dispatch() {
-	name := flag.String("testprocess.name", "", "internal use")
-	flag.Parse()
+	dispatched = true
 
+	if !flag.Parsed() {
+		flag.Parse()
+	}
 	if *name == "" {
 		return
 	}
@@ -94,17 +110,28 @@ func Dispatch() {
 
 // Make returns an *exec.Cmd that will execute the supplied function
 // in a subprocess. For this to work, testprocess.Dispatch must be
-// invoked by the TestMain of any test suite using this, and the
-// call to Make must be from a global variable initializer, e.g.:
+// invoked by the TestMain of any test suite using this, and the call
+// to Make must be *before* the call to testprocess.Dispatch; possibly
+// from a global variable initializer, e.g.:
 //
 //     var myCmd = testprocess.Make(func() { doSomething(); })
 //
 func Make(f func()) *exec.Cmd {
+	if dispatched {
+		// panic because it's a bug in the code, and a stack
+		// trace is useful.
+		panic("testprocess: testprocess.Make called after testprocess.Dispatch")
+	}
 	return _make(false, f)
 }
 
 // MakeSudo does the same thing as testprocess.Make with exactly the
 // same limitations, except the subprocess will run as root.
 func MakeSudo(f func()) *exec.Cmd {
+	if dispatched {
+		// panic because it's a bug in the code, and a stack
+		// trace is useful.
+		panic("testprocess: testprocess.MakeSudo called after testprocess.Dispatch")
+	}
 	return _make(true, f)
 }
