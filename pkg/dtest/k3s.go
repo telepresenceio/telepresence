@@ -172,7 +172,13 @@ func isK3sReady() bool {
 		}
 	}
 
-	return true
+	get := supervisor.Command(prefix, "kubectl", "--kubeconfig", kubeconfig, "get", "namespace", "default")
+	err = get.Start()
+	if err != nil {
+		panic(err)
+	}
+	_ = get.Wait()
+	return get.ProcessState.ExitCode() == 0
 }
 
 const k3sConfigPath = "/etc/rancher/k3s/k3s.yaml"
