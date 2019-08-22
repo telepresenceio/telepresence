@@ -31,7 +31,11 @@ func (s *sub) _make(sudo bool, f func()) *exec.Cmd {
 		cmd = exec.Command(os.Args[0], "-testprocess.name", name)
 		s.sudo = true
 	} else {
-		cmd = exec.Command("sudo", "-u", os.Getenv("SUDO_USER"), "-E", os.Args[0], "-testprocess.name", name)
+		user := os.Getenv("SUDO_USER")
+		if len(user) == 0 { // Not running under sudo, i.e. MakeSudo(...) was not called
+			user = os.Getenv("USER")
+		}
+		cmd = exec.Command("sudo", "-u", user, "-E", os.Args[0], "-testprocess.name", name)
 	}
 	cmd.Env = append(os.Environ(), fmt.Sprintf("TESTPROCESS_NAME=%s", name))
 	cmd.Stdout = os.Stdout
