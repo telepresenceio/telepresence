@@ -2,48 +2,44 @@ package testprocess
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"reflect"
 	"runtime"
 	"runtime/debug"
-
-	"github.com/datawire/teleproxy/pkg/dtest"
 )
 
 func getFunctionName(i interface{}) string {
 	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 }
 
-type sub struct {
-	sudo      bool
-	functions map[string]func()
+func alreadySudoed() bool {
+	return os.Getuid() == 0 && os.Getenv("SUDO_USER") != ""
 }
+
+var functions = map[string]func(){}
 
 /* #nosec */
-func (s *sub) _make(sudo bool, f func()) *exec.Cmd {
+func _make(sudo bool, f func()) *exec.Cmd {
 	name := getFunctionName(f)
-	s.functions[name] = f
-	var cmd *exec.Cmd
-	if sudo {
-		cmd = exec.Command(os.Args[0], "-testprocess.name", name)
-		s.sudo = true
-	} else {
-		user := os.Getenv("SUDO_USER")
-		if len(user) == 0 { // Not running under sudo, i.e. MakeSudo(...) was not called
-			user = os.Getenv("USER")
-		}
-		cmd = exec.Command("sudo", "-u", user, "-E", os.Args[0], "-testprocess.name", name)
+	functions[name] = f
+
+	args := []string{os.Args[0], "-testprocess.name=" + name}
+	switch {
+	case sudo && !alreadySudoed():
+		args = append([]string{"sudo", "-E", "--"}, args...)
+	case !sudo && alreadySudoed():
+		// In case they called dtest.Sudo() to run "everything" as root.
+		args = append([]string{"sudo", "-E", "-u", os.Getenv("SUDO_USER"), "--"}, args...)
 	}
-	cmd.Env = append(os.Environ(), fmt.Sprintf("TESTPROCESS_NAME=%s", name))
+
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
 	return cmd
 }
-
-var singleton = &sub{false, make(map[string]func())}
 
 // Dispatch can be used to launch multiple subprocesses as part of a
 // go test. If you want to throw up in your mouth a little, then read
@@ -73,31 +69,27 @@ var singleton = &sub{false, make(map[string]func())}
 //         ...
 //     }
 func Dispatch() {
-	// if this ever causes problems, we can switch back to getting
-	// the name from the TESTPROCESS_NAME environment variable
-	name := flag.String("testprocess.name", "", "")
+	name := flag.String("testprocess.name", "", "internal use")
 	flag.Parse()
 
 	if *name == "" {
-		if singleton.sudo && os.Geteuid() != 0 {
-			dtest.Sudo()
-		}
-	} else {
-		log.Printf("TESTPROCESS %s PID: %d", *name, os.Getpid())
-
-		defer func() {
-			if r := recover(); r != nil {
-				stack := string(debug.Stack())
-				log.Printf("TESTPROCESS %s PANICKED: %v\n%s", *name, r, stack)
-				os.Exit(1)
-			}
-		}()
-
-		singleton.functions[*name]()
-
-		log.Printf("TESTPROCESS %s NORMAL EXIT", *name)
-		os.Exit(0)
+		return
 	}
+
+	log.Printf("TESTPROCESS %s PID: %d", *name, os.Getpid())
+
+	defer func() {
+		if r := recover(); r != nil {
+			stack := string(debug.Stack())
+			log.Printf("TESTPROCESS %s PANICKED: %v\n%s", *name, r, stack)
+			os.Exit(1)
+		}
+	}()
+
+	functions[*name]()
+
+	log.Printf("TESTPROCESS %s NORMAL EXIT", *name)
+	os.Exit(0)
 }
 
 // Make returns an *exec.Cmd that will execute the supplied function
@@ -108,14 +100,11 @@ func Dispatch() {
 //     var myCmd = testprocess.Make(func() { doSomething(); })
 //
 func Make(f func()) *exec.Cmd {
-	return singleton._make(false, f)
+	return _make(false, f)
 }
 
 // MakeSudo does the same thing as testprocess.Make with exactly the
-// same limitations, except the subprocess will run as root. Note that
-// if testprocess.MakeSudo is used in any part of the test suite, then
-// all the normal test code will also run as root, however any
-// subprocess created via testprocess.Make will run as the user.
+// same limitations, except the subprocess will run as root.
 func MakeSudo(f func()) *exec.Cmd {
-	return singleton._make(true, f)
+	return _make(true, f)
 }

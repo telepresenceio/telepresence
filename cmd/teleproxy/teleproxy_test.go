@@ -19,6 +19,7 @@ import (
 var noDocker error
 
 func TestMain(m *testing.M) {
+	dtest.Sudo()
 	testprocess.Dispatch()
 	dtest.WithMachineLock(func() {
 		_, noDocker = exec.LookPath("docker")
