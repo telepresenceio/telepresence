@@ -456,7 +456,7 @@ class Runner(object):
         bufsize: int = -1,
         is_critical: bool = True,
     ) -> None:
-        """Asyncrounously run a process.
+        """Asynchronously run a process.
 
         :param name: A human-friendly name to describe the process.
 
@@ -477,7 +477,7 @@ class Runner(object):
         a new session breaks sudo if it is configured to ask for a
         password.
 
-        :parmam bufsize: See ``subprocess.Popen()`.
+        :param bufsize: See ``subprocess.Popen()`.
 
         :param is_critical: Whether this process quitting should end this
         Telepresence session. Default is True because that used to be the
