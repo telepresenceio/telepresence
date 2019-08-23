@@ -16,29 +16,22 @@ import (
 	"github.com/datawire/teleproxy/pkg/k8s"
 )
 
-// ErrorDeadlineExceeded is returned from YAMLCollection.ApplyAndWait
+// errorDeadlineExceeded is returned from YAMLCollection.applyAndWait
 // if the deadline is exceeded.
-var ErrorDeadlineExceeded = errors.New("timeout exceeded")
+var errorDeadlineExceeded = errors.New("timeout exceeded")
 
 // Kubeapply applies the supplied manifests to the kubernetes cluster
-// indicated via the kubeinfo argument. If kubeinfo is nil, it will
-// look in the standard default places for cluster configuration.
-//
-// Unlike YAMLCollection.ApplyAndWait, this does not return
-// ErrorDeadlineExceeded if the timeout is exceeded; it returns a
-// different error, with a more end-user-friendly message.
-func Kubeapply(kubeinfo *k8s.KubeInfo, timeout time.Duration, debug, dryRun bool, files ...string) error {
-	deadline := time.Now().Add(timeout)
-
+// indicated via the kubeinfo argument.  If kubeinfo is nil, it will
+// look in the standard default places for cluster configuration.  If
+// any phase takes longer than perPhaseTimeout to become ready, then
+// it returns early with an error.
+func Kubeapply(kubeinfo *k8s.KubeInfo, perPhaseTimeout time.Duration, debug, dryRun bool, files ...string) error {
 	collection, err := CollectYAML(files...)
 	if err != nil {
 		return err
 	}
 
-	if err = collection.ApplyAndWait(kubeinfo, deadline, debug, dryRun); err != nil {
-		if err == ErrorDeadlineExceeded {
-			err = errors.Errorf("not ready after %v", timeout)
-		}
+	if err = collection.ApplyAndWait(kubeinfo, perPhaseTimeout, debug, dryRun); err != nil {
 		return err
 	}
 
@@ -93,10 +86,14 @@ func (collection YAMLCollection) addFile(path string) {
 }
 
 // ApplyAndWait applies the collection of YAML, and waits for all
-// Resources described in it to be ready.  If they do not all become
-// ready before deadline, then it returns early with
-// ErrorDeadlineExceeded.
-func (collection YAMLCollection) ApplyAndWait(kubeinfo *k8s.KubeInfo, deadline time.Time, debug, dryRun bool) error {
+// Resources described in it to be ready.  If any phase takes longer
+// than perPhaseTimeout to become ready, then it returns early with an
+// error.
+func (collection YAMLCollection) ApplyAndWait(
+	kubeinfo *k8s.KubeInfo,
+	perPhaseTimeout time.Duration,
+	debug, dryRun bool,
+) error {
 	if kubeinfo == nil {
 		kubeinfo = k8s.NewKubeInfo("", "", "")
 	}
@@ -108,8 +105,12 @@ func (collection YAMLCollection) ApplyAndWait(kubeinfo *k8s.KubeInfo, deadline t
 	sort.Strings(phaseNames)
 
 	for _, phaseName := range phaseNames {
+		deadline := time.Now().Add(perPhaseTimeout)
 		err := applyAndWait(kubeinfo, deadline, debug, dryRun, collection[phaseName])
 		if err != nil {
+			if err == errorDeadlineExceeded {
+				err = errors.Errorf("phase %q not ready after %v", phaseName, perPhaseTimeout)
+			}
 			return err
 		}
 	}
@@ -167,7 +168,7 @@ func applyAndWait(kubeinfo *k8s.KubeInfo, deadline time.Time, debug, dryRun bool
 	}
 
 	if !waiter.Wait(deadline) {
-		return ErrorDeadlineExceeded
+		return errorDeadlineExceeded
 	}
 
 	return nil
