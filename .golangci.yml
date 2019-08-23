@@ -6,7 +6,6 @@ linters:
     - gochecknoinits
     - interfacer # author says it's deprecated, gives very subjective advice
     - prealloc
-    - scopelint # rhs: this is either incomprehensible or buggy
 linters-settings:
   goconst:
     min-len: 5
@@ -36,3 +35,7 @@ issues:
     - Potential file inclusion via variable
     # unparam: Some things need to return error even when that's always nil
     - result 0 [(]error[)] is always nil
+  exclude-rules:
+    # scopelint seems to be buggy and says things that don't syntactically make sense.
+    - linters: [scopelint]
+      text: "^Using the variable on range scope `.*` in function literal$"

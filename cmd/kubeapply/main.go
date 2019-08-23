@@ -6,10 +6,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/datawire/teleproxy/pkg/k8s"
-	"github.com/datawire/teleproxy/pkg/kubeapply"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+
+	"github.com/datawire/teleproxy/pkg/k8s"
+	"github.com/datawire/teleproxy/pkg/kubeapply"
 )
 
 func envBool(name string) bool {
@@ -34,7 +35,8 @@ func main() {
 	namespace := ka.Flags().StringP("namespace", "n", "", "kubernetes namespace")
 	debug := ka.Flags().Bool("debug", envBool("KUBEAPPLY_DEBUG"), "enable debug mode")
 	dryRun := ka.Flags().Bool("dry-run", envBool("KUBEAPPLY_DRYRUN"), "enable dry-run mode")
-	timeout := ka.Flags().DurationP("timeout", "t", 60*time.Second, "timeout to wait for applied yaml to be ready")
+	timeout := ka.Flags().DurationP("timeout", "t", time.Minute,
+		"timeout to wait for each applied YAML phase to become ready")
 	showVersion := ka.Flags().Bool("version", false, "output version information and exit")
 	files := ka.Flags().StringArrayP("", "f", nil, "files to apply")
 

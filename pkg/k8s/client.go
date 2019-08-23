@@ -157,7 +157,7 @@ func (info *KubeInfo) GetKubectlArray(args ...string) ([]string, error) {
 // Client is the top-level handle to the Kubernetes cluster.
 type Client struct {
 	config          *rest.Config
-	namespace       string
+	Namespace       string
 	restMapper      meta.RESTMapper
 	discoveryClient discovery.DiscoveryInterface
 }
@@ -196,7 +196,7 @@ func NewClient(info *KubeInfo) (*Client, error) {
 
 	return &Client{
 		config:          config,
-		namespace:       namespace,
+		Namespace:       namespace,
 		restMapper:      restmapper.NewDiscoveryRESTMapper(resources),
 		discoveryClient: discoveryClient,
 	}, nil
