@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/hashicorp/consul/api"
-	"github.com/hashicorp/consul/watch"
+	"github.com/hashicorp/consul/api/watch"
 )
 
 type ConnectLeafWatcher struct {

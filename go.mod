@@ -59,7 +59,9 @@ require (
 	github.com/gregjones/httpcache v0.0.0-20181110185634-c63ab54fda8f // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
-	github.com/hashicorp/consul v1.4.4
+	github.com/hashicorp/consul v1.5.0
+	github.com/hashicorp/consul/api v1.1.0
+	github.com/hashicorp/consul/sdk v0.1.1
 	github.com/hashicorp/go-cleanhttp v0.5.1 // indirect
 	github.com/hashicorp/go-discover v0.0.0-20190319153616-61771d82ff54 // indirect
 	github.com/hashicorp/go-gcp-common v0.0.0-20180425173946-763e39302965 // indirect
@@ -152,13 +154,6 @@ require (
 	layeh.com/radius v0.0.0-20190118135028-0f678f039617 // indirect
 	sigs.k8s.io/kustomize v2.0.3+incompatible // indirect
 	sigs.k8s.io/yaml v1.1.0
-)
-
-replace (
-	k8s.io/api => k8s.io/api v0.0.0-20190313235455-40a48860b5ab
-	k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20190313205120-d7deff9243b1
-	k8s.io/cli-runtime => k8s.io/cli-runtime v0.0.0-20190314001948-2899ed30580f
-	k8s.io/client-go => k8s.io/client-go v11.0.0+incompatible
 )
 
 // Fix invalid pseudo-version that Go 1.13 complains about.
