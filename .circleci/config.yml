@@ -81,6 +81,7 @@ commands:
           command: |
             cp /tmp/edgectl.log . || true
             rsync -ma --include='*/' --include='*.tap' --include='*.log' --exclude='*' . /tmp/test-logs
+            grep "Acquiring machine lock" build-aux/go-test.tap | sed 'sX.*teleproxy/XX' | uniq || true
       - store_artifacts:
           path: /tmp/test-logs
           destination: test-logs
