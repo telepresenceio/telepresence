@@ -68,13 +68,18 @@ commands:
       - checkout
       - restore-go-mod-cache
       - run: go mod vendor
-      - run: make check
+      - run:
+          # Use a ridiculously-long timeout because MacOS CI is slow and
+          # teleproxy/edgectl tests serialize on the machine lock.
+          command: GOFLAGS=-timeout=30m make check
+          no_output_timeout: 30m
       - save-go-mod-cache
       - run: make build
       - run:
           name: "gather logs"
           when: always
           command: |
+            cp /tmp/edgectl.log . || true
             rsync -ma --include='*/' --include='*.tap' --include='*.log' --exclude='*' . /tmp/test-logs
       - store_artifacts:
           path: /tmp/test-logs
@@ -135,7 +140,8 @@ jobs:
       - main
 
   machine-build:
-    machine: true
+    machine:
+      image: "ubuntu-1604:201903-01"
     working_directory: ~/repo
     steps:
       - aws-install
