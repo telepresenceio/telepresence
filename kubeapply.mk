@@ -13,8 +13,7 @@ _kubeapply.mk := $(lastword $(MAKEFILE_LIST))
 include $(dir $(_kubeapply.mk))prelude.mk
 
 KUBEAPPLY ?= $(build-aux.bindir)/kubeapply
-$(build-aux.bindir)/kubeapply: $(build-aux.dir)/go.mod $(_prelude.go.lock) | $(build-aux.bindir)
-	$(build-aux.go-build) -o $@ github.com/datawire/teleproxy/cmd/kubeapply
+$(eval $(call build-aux.bin-go.rule, kubeapply, github.com/datawire/teleproxy/cmd/kubeapply))
 
 clean: _clean-kubeapply
 _clean-kubeapply:

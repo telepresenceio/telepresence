@@ -1,0 +1,158 @@
+version: 2.1
+
+executors:
+
+  "vm-ubuntu-16-04":
+    machine:
+      image: "ubuntu-1604:201903-01"
+    environment:
+      build_aux_expected_GOHOSTOS: "linux"
+      build_aux_expected_GOHOSTARCH: "amd64"
+      build_aux_expected_FLOCK: "/usr/bin/flock"
+
+  "vm-macos-10-13":
+    macos:
+      xcode: "10.1.0"
+    environment:
+      build_aux_expected_GOHOSTOS: "darwin"
+      build_aux_expected_GOHOSTARCH: "amd64"
+      build_aux_expected_FLOCK: ""
+
+commands:
+
+  "apt-install":
+    parameters:
+      "packages":
+        type: string
+    steps:
+      - run:
+          # CircleCI seems to be in EC2 us-east-1, so use an archive.ubuntu.com mirror there, so that "apt
+          # update" is consistently fast.
+          command: |
+            sudo sed -i 's,//archive\.ubuntu\.com,//us-east-1.ec2.archive.ubuntu.com,g' /etc/apt/sources.list &&
+            sudo apt update &&
+            sudo apt install << parameters.packages >>
+
+  "brew-install":
+    parameters:
+      "packages":
+        type: string
+    steps:
+      - restore_cache:
+          name: "Restore brew cache"
+          keys:
+            - brew-{{ arch }}
+      - run: brew install << parameters.packages >>
+      - save_cache:
+          name: "Save brew cache"
+          key: brew-{{ arch }}
+          paths:
+            - "/usr/local/Homebrew"
+
+  "install-go":
+    parameters:
+      "version":
+        type: string
+        default: "1.13"
+    steps:
+      - run:
+          name: "Install Go"
+          command: |
+            curl https://dl.google.com/go/go<< parameters.version >>.$(uname -s | tr A-Z a-z)-amd64.tar.gz -o /tmp/go.tar.gz
+            tar -C /tmp -xzf /tmp/go.tar.gz
+            echo 'export PATH=/tmp/go/bin:$PATH' >> "$BASH_ENV"
+            if [ -z "$(/tmp/go/bin/go env GOPROXY)" ]; then
+              echo 'export GOPROXY=https://proxy.golang.org' >> "$BASH_ENV"
+            fi
+
+jobs:
+
+  "VM Ubuntu 16-04":
+    executor: vm-ubuntu-16-04
+    environment:
+      build_aux_unsupported_go: true
+    steps:
+      - apt-install:
+          packages: bats
+      - checkout
+      - run: bats tests/
+
+  "VM Ubuntu 16-04 Go 1-11":
+    executor: vm-ubuntu-16-04
+    steps:
+      - apt-install:
+          packages: bats
+      - install-go:
+          version: "1.11.4"
+      - checkout
+      - run: bats tests/
+
+  "VM Ubuntu 16-04 Go 1-12":
+    executor: vm-ubuntu-16-04
+    steps:
+      - apt-install:
+          packages: bats
+      - install-go:
+          version: "1.12"
+      - checkout
+      - run: bats tests/
+
+  "VM Ubuntu 16-04 Go 1-13":
+    executor: vm-ubuntu-16-04
+    steps:
+      - apt-install:
+          packages: bats
+      - install-go:
+          version: "1.13"
+      - checkout
+      - run: bats tests/
+
+  "VM macOS 10-13":
+    executor: vm-macos-10-13
+    steps:
+      - brew-install:
+          packages: bats
+      - checkout
+      - run: bats tests/
+
+  "VM macOS 10-13 Go 1-11":
+    executor: vm-macos-10-13
+    steps:
+      - brew-install:
+          packages: bats
+      - install-go:
+          version: "1.11.4"
+      - checkout
+      - run: bats tests/
+
+  "VM macOS 10-13 Go 1-12":
+    executor: vm-macos-10-13
+    steps:
+      - brew-install:
+          packages: bats
+      - install-go:
+          version: "1.12"
+      - checkout
+      - run: bats tests/
+
+  "VM macOS 10-13 Go 1-13":
+    executor: vm-macos-10-13
+    steps:
+      - brew-install:
+          packages: bats
+      - install-go:
+          version: "1.13"
+      - checkout
+      - run: bats tests/
+
+workflows:
+  "build-aux Test Suite":
+    jobs:
+      - "VM Ubuntu 16-04"
+      - "VM Ubuntu 16-04 Go 1-11"
+      - "VM Ubuntu 16-04 Go 1-12"
+      - "VM Ubuntu 16-04 Go 1-13"
+      - "VM macOS 10-13"
+      - "VM macOS 10-13 Go 1-11"
+      - "VM macOS 10-13 Go 1-12"
+      - "VM macOS 10-13 Go 1-13"
