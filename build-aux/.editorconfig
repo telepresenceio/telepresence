@@ -9,3 +9,7 @@ indent_style = space
 [*.yaml]
 indent_style = space
 indent_size = 2
+
+[*.yml]
+indent_style = space
+indent_size = 2

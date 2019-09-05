@@ -20,14 +20,14 @@
 # Dockerfile; each of $(addsuffix /Dockerfile,$(K8S_IMAGES)) should
 # exist.
 ifeq ($(words $(filter $(abspath $(lastword $(MAKEFILE_LIST))),$(abspath $(MAKEFILE_LIST)))),1)
-include $(dir $(lastword $(MAKEFILE_LIST)))docker.mk
+include $(dir $(lastword $(MAKEFILE_LIST)))docker-cluster.mk
 
 K8S_IMAGES ?=
 K8S_ENVS ?=
 K8S_DIRS ?= k8s
 
 ifneq ($(HAVE_DOCKER),)
-build: $(addsuffix .docker,$(K8S_IMAGES))
+build: $(addsuffix .docker.tag.cluster,$(K8S_IMAGES))
 else
 build: _build-k8s
 _build-k8s:
@@ -37,12 +37,12 @@ endif
 clean: $(addsuffix .docker.clean,$(K8S_IMAGES))
 
 push: ## (Kubernaut) Push Docker images to the cluster
-push: $(addsuffix .docker.knaut-push,$(K8S_IMAGES))
+push: $(addsuffix .docker.push.cluster,$(K8S_IMAGES))
 .PHONY: push
 
 apply:  ## (Kubernaut) Apply YAML to the cluster, WITHOUT pushing newer Docker images
 deploy: ## (Kubernaut) Apply YAML to the cluster, pushing newer Docker images
-_k8s.push = $(addsuffix .docker.knaut-push,$(K8S_IMAGES))
+_k8s.push = $(addsuffix .docker.push.cluster,$(K8S_IMAGES))
 apply: $(filter-out $(wildcard $(_k8s.push)),$(_k8s.push))
 deploy: $(_k8s.push)
 apply deploy: $(KUBECONFIG) $(KUBEAPPLY) $(K8S_ENVS)
@@ -51,7 +51,7 @@ apply deploy: $(KUBECONFIG) $(KUBEAPPLY) $(K8S_ENVS)
 
 $(KUBECONFIG).clean: _clean-k8s
 _clean-k8s:
-	rm -f $(addsuffix .docker.knaut-push,$(K8S_IMAGES))
+	rm -f -- $(addsuffix .docker.push.cluster,$(K8S_IMAGES))
 	rm -f -- $(addsuffix /*.yaml.o,$(K8S_DIRS))
 .PHONY: _clean-k8s
 

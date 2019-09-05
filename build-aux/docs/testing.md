@@ -108,8 +108,17 @@ would write:
 
 If your test framework of choice doesn't support TAP output, you can
 pipe it to a helper program that can translate it.  For example, `go
-test` doesn't support TAP output, but `go test -v` output is parsable,
-so we pipe that to [patter][patter], which translates it to TAP.
+test` doesn't support TAP output, but `go test -json` output is
+parsable, so we pipe that to [gotest2tap][gotest2tap], which
+translates it to TAP.
+
+If you set `SHELL = sh -o pipefail` in your `Makefile` (the pros and
+cons of which I won't comment on here), you should be sure that if
+your test-runner indicates success or failure with an exit code, that
+you ignore that exit code:
+
+	%.tap: %.bats $(TAP_DRIVER) FORCE
+		@{ bats --tap $< || true; } | tee $@ | $(TAP_DRIVER) stream -n $<
 
 ## Adding dependencies of tests
 
@@ -148,4 +157,4 @@ through `test-suite.tap`:
 
 [TAP]: https://testanything.org
 [BATS]: https://github.com/sstephenson/bats
-[patter]: https://github.com/apg/patter
+[gotest2tap]: ../bin-go/gotest2tap/
