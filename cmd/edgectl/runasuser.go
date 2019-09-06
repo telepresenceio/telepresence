@@ -121,7 +121,16 @@ func (rai *RunAsInfo) Command(p *supervisor.Process, args ...string) *supervisor
 	if rai.Name == "root" || len(rai.Name) == 0 {
 		cmd = p.Command(args[0], args[1:]...)
 	} else {
-		cmd = p.Command("su", "-m", rai.Name, "-c", shellquote.Join(args...))
+		if runtime.GOOS == "darwin" {
+			// MacOS `su` doesn't appear to propagate signals and
+			// `sudo` is always (?) available.
+			sudoOpts := []string{"--user", rai.Name, "--set-home", "--preserve-env", "--"}
+			cmd = p.Command("sudo", append(sudoOpts, args...)...)
+		} else {
+			// FIXME(ark3): The above _should_ work on Linux, but
+			// doesn't work on my machine. I don't know why (yet).
+			cmd = p.Command("su", "-m", rai.Name, "-c", shellquote.Join(args...))
+		}
 	}
 	cmd.Env = rai.Env
 	cmd.Dir = rai.Cwd

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+	"time"
 )
 
 const pattern = "/tmp/datawire-machine-scoped-%s.lock"
@@ -24,6 +25,7 @@ func WithMachineLock(body func()) {
 // machine. The name provides scope so this can be used in multiple
 // independent ways without conflicts.
 func WithNamedMachineLock(name string, body func()) {
+	lockAcquireStart := time.Now()
 	filename := fmt.Sprintf(pattern, name)
 	var file *os.File
 	var err error
@@ -62,5 +64,6 @@ func WithNamedMachineLock(name string, body func()) {
 		file.Close()
 	}()
 
+	fmt.Printf("Acquiring machine lock %q took %.2f seconds\n", name, time.Since(lockAcquireStart).Seconds())
 	body()
 }
