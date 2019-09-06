@@ -11,6 +11,9 @@ include build-aux/help.mk
 
 build-aux/go-test.tap: vendor
 
+# Edge Control tests require calling out to the edgectl binary
+build-aux/go-test.tap: bin_$(GOHOSTOS)_$(GOHOSTARCH)/edgectl
+
 # Utility targets
 
 release: ## Upload binaries to S3
