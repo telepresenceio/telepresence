@@ -15,6 +15,7 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	out := NewEmitter(conn)
 	rootCmd := &cobra.Command{
 		Use:          "edgectl",
+		Short:        "Edge Control",
 		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
 		RunE: func(_ *cobra.Command, _ []string) error {
 			out.Println("Running \"edgectl status\". Use \"edgectl help\" to get help.")
@@ -29,7 +30,7 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "version",
-		Short: "show program's version number and exit",
+		Short: "Show program's version number and exit",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(_ *cobra.Command, _ []string) error {
 			out.Println("Client", data.ClientVersion)
@@ -39,7 +40,7 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:    "daemon-foreground",
-		Short:  "launch Edge Control Daemon in the foreground (debug)",
+		Short:  "Launch Edge Control Daemon in the foreground (debug)",
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
@@ -51,7 +52,7 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "daemon",
-		Short: "launch Edge Control Daemon in the background (sudo)",
+		Short: "Launch Edge Control Daemon in the background (sudo)",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(_ *cobra.Command, _ []string) error {
 			out.Println("Daemon", displayVersion, "is already running.")
@@ -62,7 +63,7 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "status",
-		Short: "show connectivity status",
+		Short: "Show connectivity status",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if err := d.Status(p, out); err != nil {
@@ -73,7 +74,7 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "connect [-- additional kubectl arguments...]",
-		Short: "connect to a cluster",
+		Short: "Connect to a cluster",
 		RunE: func(_ *cobra.Command, args []string) error {
 			if err := d.Connect(p, out, data.RAI, args); err != nil {
 				return err
@@ -83,7 +84,7 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "disconnect",
-		Short: "disconnect from the connected cluster",
+		Short: "Disconnect from the connected cluster",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if err := d.Disconnect(p, out); err != nil {
@@ -94,7 +95,7 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "quit",
-		Short: "tell Edge Control Daemon to quit (for upgrades)",
+		Short: "Tell Edge Control Daemon to quit (for upgrades)",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(_ *cobra.Command, _ []string) error {
 			out.Println("Edge Control Daemon quitting...")
@@ -107,7 +108,7 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 		Use: "intercept",
 		Long: "Manage deployment intercepts. An intercept arranges for a subset of requests to be " +
 			"diverted to the local machine.",
-		Short: "manage deployment intercepts",
+		Short: "Manage deployment intercepts",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			out.Println("Running \"edgectl intercept list\". Use \"edgectl intercept help\" to get help.")
 			if err := d.ListIntercepts(p, out); err != nil {
@@ -118,7 +119,7 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	}
 	interceptCmd.AddCommand(&cobra.Command{
 		Use:   "list",
-		Short: "list current intercepts",
+		Short: "List current intercepts",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if err := d.ListIntercepts(p, out); err != nil {
@@ -129,7 +130,7 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	})
 	interceptCmd.AddCommand(&cobra.Command{
 		Use:   "remove",
-		Short: "deactivate and remove an existent intercept",
+		Short: "Deactivate and remove an existent intercept",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := strings.TrimSpace(args[0])
@@ -142,7 +143,7 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	intercept := InterceptInfo{}
 	interceptAddCmd := &cobra.Command{
 		Use:   "add DEPLOYMENT -t [HOST:]PORT -m HEADER=REGEX ...",
-		Short: "add a deployment intercept",
+		Short: "Add a deployment intercept",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			intercept.Deployment = args[0]

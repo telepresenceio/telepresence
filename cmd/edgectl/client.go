@@ -53,8 +53,6 @@ func isServerRunning() bool {
 func mainViaDaemon() error {
 	conn, err := net.Dial("unix", socketName)
 	if err != nil {
-		fmt.Println(WordWrapString(failedToConnect))
-		fmt.Println()
 		return err
 	}
 	defer conn.Close()
@@ -97,6 +95,3 @@ func mainViaDaemon() error {
 	os.Exit(0)
 	return nil // not reached
 }
-
-var failedToConnect = "Failed to connect to the daemon. Is it still running? Take a look in " + logfile +
-	" for more information. You can start the daemon using \"sudo edgectl daemon\" if it is not running."
