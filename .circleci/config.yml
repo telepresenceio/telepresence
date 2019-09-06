@@ -17,7 +17,7 @@ commands:
       # pipe the curl straight to tar.
       - run: |
           sudo rm -rf /usr/local/go &&
-          curl https://dl.google.com/go/go1.12.5.<<parameters.os>>-amd64.tar.gz -o /tmp/go.tgz &&
+          curl https://dl.google.com/go/go1.13.<<parameters.os>>-amd64.tar.gz -o /tmp/go.tgz &&
           sudo tar -C /usr/local -xzf /tmp/go.tgz
 
       # Golang paths
@@ -61,7 +61,7 @@ commands:
             - go-mod-cache-{{ arch }}-{{ checksum "go.mod" }}-
             - go-mod-cache-{{ arch }}-
       - run: |
-          GOPROXY=file://$HOME/goproxy make go-get || true
+          echo 'export GOPROXY=file://$HOME/goproxy,$(go env GOPROXY)' >> "${BASH_ENV}"
 
   main:
     steps:

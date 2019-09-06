@@ -25,9 +25,11 @@ TELEPROXY_LOG ?= $(dir $(_teleproxy.mk))teleproxy.log
 KUBE_URL = https://kubernetes/api/
 
 TELEPROXY ?= $(build-aux.bindir)/teleproxy
-$(build-aux.bindir)/teleproxy: $(build-aux.dir)/go.mod $(_prelude.go.lock) | $(build-aux.bindir)
-	$(build-aux.go-build) -o $@ github.com/datawire/teleproxy/cmd/teleproxy
-	sudo chown root $@
+$(eval $(call build-aux.bin-go.rule,teleproxy,github.com/datawire/teleproxy/cmd/teleproxy))
+# override the rule for .teleproxy.stamp -> teleproxy
+$(build-aux.bindir)/teleproxy: $(build-aux.bindir)/%: $(build-aux.bindir)/.%.stamp $(COPY_IFCHANGED)
+	sudo $(COPY_IFCHANGED) $< $@
+	sudo chown 0:0 $@
 	sudo chmod go-w,a+sx $@
 
 proxy: ## (Kubernaut) Launch teleproxy in the background

@@ -1,5 +1,7 @@
 module github.com/datawire/teleproxy
 
+go 1.13
+
 require (
 	cloud.google.com/go v0.35.1 // indirect
 	contrib.go.opencensus.io/exporter/ocagent v0.4.3 // indirect
@@ -158,3 +160,6 @@ replace (
 	k8s.io/cli-runtime => k8s.io/cli-runtime v0.0.0-20190314001948-2899ed30580f
 	k8s.io/client-go => k8s.io/client-go v11.0.0+incompatible
 )
+
+// Fix invalid pseudo-version that Go 1.13 complains about.
+replace github.com/census-instrumentation/opencensus-proto v0.1.0-0.20181214143942-ba49f56771b8 => github.com/census-instrumentation/opencensus-proto v0.0.3-0.20181214143942-ba49f56771b8

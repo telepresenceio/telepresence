@@ -1,4 +1,5 @@
 package dns
+
 import (
 	_log "log"
 	"net"

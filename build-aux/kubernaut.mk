@@ -49,6 +49,7 @@ _kubernaut.mk := $(lastword $(MAKEFILE_LIST))
 include $(dir $(_kubernaut.mk))prelude.mk
 
 GUBERNAUT ?= $(build-aux.bindir)/gubernaut
+$(eval $(call build-aux.bin-go.rule, gubernaut, github.com/datawire/build-aux/bin-go/gubernaut))
 
 %.knaut.claim:
 	echo $(*F)-$${USER}-$$(uuidgen) > $@
