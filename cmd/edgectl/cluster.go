@@ -65,7 +65,11 @@ func (d *Daemon) Connect(p *supervisor.Process, out *Emitter, rai *RunAsInfo, ka
 
 	tmgr, err := NewTrafficManager(p, d.cluster)
 	if err != nil {
-		out.Printf("Failed to connect to traffic manager: %v\n", err)
+		out.Println()
+		out.Println("Unable to connect to the traffic manager in your cluster.")
+		out.Println("The intercept feature will not be available.")
+		out.Println("Error was:", err)
+		// out.Println("Use <some command> to set up the traffic manager.") // FIXME
 	} else {
 		d.trafficMgr = tmgr
 	}
