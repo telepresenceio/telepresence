@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -148,10 +149,11 @@ func GetFreePort() (int, error) {
 // TrafficManager is a handle to access the Traffic Manager in a
 // cluster.
 type TrafficManager struct {
-	crc     Resource
-	apiPort int
-	sshPort int
-	client  *http.Client
+	crc            Resource
+	apiPort        int
+	sshPort        int
+	client         *http.Client
+	interceptables []string
 }
 
 // NewTrafficManager returns a TrafficManager resource for the given
@@ -185,11 +187,28 @@ func NewTrafficManager(p *supervisor.Process, cluster *KCluster) (*TrafficManage
 }
 
 func (tm *TrafficManager) check(p *supervisor.Process) error {
-	_, _, err := tm.request("GET", "state", []byte{})
-	// FIXME: Instead of throwing away the body, use it to track
-	// information about available interceptables and intercepts
-	// currently in play.
-	return err
+	body, _, err := tm.request("GET", "state", []byte{})
+	if err != nil {
+		return err
+	}
+	var state map[string]interface{}
+	if err := json.Unmarshal([]byte(body), &state); err != nil {
+		p.Logf("check: bad JSON from tm: %v", err)
+		p.Logf("check: JSON data is: %q", body)
+		return err
+	}
+	deployments, ok := state["Deployments"].(map[string]interface{})
+	if !ok {
+		p.Log("check: failed to get deployment info")
+		p.Logf("check: JSON data is: %q", body)
+	}
+	tm.interceptables = make([]string, len(deployments))
+	idx := 0
+	for deployment := range deployments {
+		tm.interceptables[idx] = deployment
+		idx++
+	}
+	return nil
 }
 
 func (tm *TrafficManager) request(method, path string, data []byte) (result string, code int, err error) {

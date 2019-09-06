@@ -30,7 +30,7 @@ func (d *Daemon) Status(_ *supervisor.Process, out *Emitter) error {
 	case !d.trafficMgr.IsOkay():
 		out.Println("  Intercepts:    (connecting to traffic manager...)")
 	default:
-		out.Printf("  Interceptable: %d deployments\n", len(d.interceptables))
+		out.Printf("  Interceptable: %d deployments\n", len(d.trafficMgr.interceptables))
 		out.Printf("  Intercepts:    ? total, %d local\n", len(d.intercepts))
 	}
 	return nil
