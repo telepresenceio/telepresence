@@ -78,13 +78,14 @@ func (d *Daemon) Connect(p *supervisor.Process, out *Emitter, rai *RunAsInfo, ka
 }
 
 // Disconnect from the connected cluster
-func (d *Daemon) Disconnect(_ *supervisor.Process, out *Emitter) error {
+func (d *Daemon) Disconnect(p *supervisor.Process, out *Emitter) error {
 	// Sanity checks
 	if d.cluster == nil {
 		out.Println("Not connected")
 		return nil
 	}
 
+	_ = d.ClearIntercepts(p)
 	if d.bridge != nil {
 		_ = d.bridge.Close()
 		d.bridge = nil

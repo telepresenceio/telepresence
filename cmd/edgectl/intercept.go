@@ -135,6 +135,17 @@ func (d *Daemon) RemoveIntercept(_ *supervisor.Process, out *Emitter, name strin
 	return nil
 }
 
+// ClearIntercepts removes all intercepts
+func (d *Daemon) ClearIntercepts(p *supervisor.Process) error {
+	for _, cept := range d.intercepts {
+		if err := cept.Close(); err != nil {
+			p.Logf("Closing intercept %q: %v", cept.ii.Name, err)
+		}
+	}
+	d.intercepts = d.intercepts[:0]
+	return nil
+}
+
 // Intercept is a Resource handle that represents a live intercept
 type Intercept struct {
 	ii   *InterceptInfo
