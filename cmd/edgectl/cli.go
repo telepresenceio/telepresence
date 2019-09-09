@@ -110,13 +110,38 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 			"diverted to the local machine.",
 		Short: "Manage deployment intercepts",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			out.Println("Running \"edgectl intercept list\". Use \"edgectl intercept help\" to get help.")
+			out.Println("Running \"edgectl intercept list\". Use \"edgectl intercept --help\" to get help.")
 			if err := d.ListIntercepts(p, out); err != nil {
 				return err
 			}
 			return out.Err()
 		},
 	}
+	interceptCmd.AddCommand(&cobra.Command{
+		Use:     "available",
+		Aliases: []string{"avail"},
+		Short:   "List deployments available for intercept",
+		Args:    cobra.ExactArgs(0),
+		RunE: func(_ *cobra.Command, _ []string) error {
+			switch {
+			case d.cluster == nil:
+				out.Println("Not connected")
+			case d.trafficMgr == nil:
+				out.Println("Intercept unavailable: no traffic manager")
+			case !d.trafficMgr.IsOkay():
+				out.Println("Connecting to traffic manager...")
+			case len(d.trafficMgr.interceptables) == 0:
+				out.Println("No interceptable deployments")
+			default:
+				out.Printf("Found %d interceptable deployment(s):\n", len(d.trafficMgr.interceptables))
+				for idx, deployment := range d.trafficMgr.interceptables {
+					out.Printf("%4d. %s\n", idx+1, deployment)
+				}
+			}
+			return out.Err()
+		},
+	})
+
 	interceptCmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List current intercepts",
