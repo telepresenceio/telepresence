@@ -156,6 +156,7 @@ type TrafficManager struct {
 	sshPort        int
 	client         *http.Client
 	interceptables []string
+	totalClusCepts int
 }
 
 // NewTrafficManager returns a TrafficManager resource for the given
@@ -205,10 +206,19 @@ func (tm *TrafficManager) check(p *supervisor.Process) error {
 		p.Logf("check: JSON data is: %q", body)
 	}
 	tm.interceptables = make([]string, len(deployments))
+	tm.totalClusCepts = 0
 	idx := 0
 	for deployment := range deployments {
 		tm.interceptables[idx] = deployment
 		idx++
+		info, ok := deployments[deployment].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		cepts, ok := info["Intercepts"].([]interface{})
+		if ok {
+			tm.totalClusCepts += len(cepts)
+		}
 	}
 	return nil
 }
