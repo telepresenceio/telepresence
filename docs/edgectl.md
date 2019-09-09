@@ -128,14 +128,16 @@ Not connected
 $ edgectl connect
 Connecting...
 Connected to context default (https://localhost:6443)
-Failed to connect to traffic manager: kubectl get svc/deploy telepresency-proxy: exit status 1
+
+Unable to connect to the traffic manager in your cluster.
+The intercept feature will not be available.
+Error was: kubectl get svc/deploy telepresency-proxy: exit status 1
 
 $ edgectl status
 Connected
   Context:       default (https://localhost:6443)
   Proxy:         ON (networking to the cluster is enabled)
-  Interceptable: 0 deployments
-  Intercepts:    ? total, 0 local
+  Intercepts:    Unavailable: no traffic manager
 
 $ curl hello-world
 Hello, world!
@@ -183,6 +185,12 @@ Connected
   Interceptable: 0 deployments
   Intercepts:    ? total, 0 local
 
+$ edgectl intercept avail
+Found 3 interceptable deployment(s):
+   1. intercepted
+   2. model-cluster-app
+   3. echo
+
 $ curl echo/foo/bar
 Request served by echo-97f77648d-jnn2x
 
@@ -221,7 +229,7 @@ $ edgectl intercept add echo -m :path=.*ark3.* -t localhost:8080 -n test1
 Added intercept "test1"
 
 $ edgectl intercept list
-   0. test1
+   1. test1
       Intercepting requests to echo when
       - :path: .*ark3.*
       and redirecting them to localhost:8080
@@ -349,11 +357,11 @@ Content-Length: 0
 X-Request-Id: cbaa6aa4-a623-4636-bf9b-d5a48e94d6fd
 
 $ edgectl intercept list
-   0. test2
+   1. test2
       Intercepting requests to echo when
       - x-service-preview: dev
       and redirecting them to localhost:8080
-   1. test3
+   2. test3
       Intercepting requests to echo when
       - x-allow-intercept: .*
       - x-user: ark3
