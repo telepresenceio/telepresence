@@ -83,7 +83,7 @@ func (ii *InterceptInfo) Release(_ *supervisor.Process, tm *TrafficManager, port
 func (d *Daemon) ListIntercepts(_ *supervisor.Process, out *Emitter) error {
 	for idx, cept := range d.intercepts {
 		ii := cept.ii
-		out.Printf("%4d. %s\n", idx, ii.Name)
+		out.Printf("%4d. %s\n", idx+1, ii.Name)
 		out.Printf("      Intercepting requests to %s when\n", ii.Deployment)
 		for k, v := range ii.Patterns {
 			out.Printf("      - %s: %s\n", k, v)
