@@ -87,6 +87,7 @@ func (d *Daemon) Disconnect(p *supervisor.Process, out *Emitter) error {
 
 	_ = d.ClearIntercepts(p)
 	if d.bridge != nil {
+		d.cluster.SetBridgeCheck(nil) // Stop depending on this bridge
 		_ = d.bridge.Close()
 		d.bridge = nil
 	}
