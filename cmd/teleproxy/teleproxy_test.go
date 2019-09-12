@@ -57,11 +57,15 @@ func withInterrupt(t *testing.T, cmd *exec.Cmd, body func()) {
 	body()
 }
 
+var netClient = &http.Client{
+	Timeout: time.Second * 10,
+}
+
 // use this get to avoid artifacts from idle connections
 func get(url string) (*http.Response, error) {
-	http.DefaultClient.CloseIdleConnections()
+	netClient.CloseIdleConnections()
 	/* #nosec */
-	return http.Get(url)
+	return netClient.Get(url)
 }
 
 // The poll function polls the supplied url until we get back a 200 or
@@ -73,14 +77,15 @@ func poll(t *testing.T, url string, expected string) bool {
 		b := func() bool {
 			resp, err := get(url)
 			if err != nil {
-				log.Print(err)
+				log.Printf("poll get: %v", err)
 				return false
 			}
 			defer resp.Body.Close()
 
 			bytes, err := ioutil.ReadAll(resp.Body)
 			if err != nil {
-				log.Print(err)
+				log.Printf("poll read body: %v", err)
+				return false
 			}
 
 			body := string(bytes)
