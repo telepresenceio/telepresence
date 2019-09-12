@@ -18,6 +18,10 @@ const socketName = "/var/run/edgectl.socket"
 const logfile = "/tmp/edgectl.log"
 const apiVersion = 1
 
+var failedToConnect = `Failed to connect to the daemon. Is it still running?
+The daemon's log output in ` + logfile + ` may have more information.
+Start the daemon using "sudo edgectl daemon" if it is not running.
+`
 var displayVersion = fmt.Sprintf("v%s (api v%d)", Version, apiVersion)
 var edgectl string
 
@@ -60,18 +64,21 @@ func main() {
 
 	rootCmd := &cobra.Command{
 		Use:          "edgectl",
+		Short:        "Edge Control (daemon unavailable)",
 		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
 		Args:         cobra.ArbitraryArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			fmt.Println(failedToConnect)
 			return failedToConnectErr
 		},
 	}
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "version",
-		Short: "show program's version number and exit",
+		Short: "Show program's version number and exit",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(_ *cobra.Command, _ []string) error {
+			fmt.Println(failedToConnect)
 			fmt.Println("Client", displayVersion)
 			fmt.Println()
 			return failedToConnectErr
@@ -79,7 +86,7 @@ func main() {
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:    "daemon-foreground",
-		Short:  "launch Edge Control Daemon in the foreground (debug)",
+		Short:  "Launch Edge Control Daemon in the foreground (debug)",
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
@@ -88,10 +95,11 @@ func main() {
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "daemon",
-		Short: "launch Edge Control Daemon in the background (sudo)",
+		Short: "Launch Edge Control Daemon in the background (sudo)",
 		Args:  cobra.ExactArgs(0),
 		RunE:  launchDaemon,
 	})
+	rootCmd.SetHelpTemplate(rootCmd.HelpTemplate() + "\n" + failedToConnect)
 
 	err := rootCmd.Execute()
 	if err != nil {
@@ -102,7 +110,7 @@ func main() {
 func launchDaemon(ccmd *cobra.Command, _ []string) error {
 	if os.Geteuid() != 0 {
 		fmt.Println("Edge Control Daemon must be launched as root.")
-		fmt.Printf("  sudo %s\n", ccmd.CommandPath())
+		fmt.Printf("\n  sudo %s\n\n", ccmd.CommandPath())
 		return errors.New("root privileges required")
 	}
 	fmt.Println("Launching Edge Control Daemon", displayVersion)

@@ -83,7 +83,7 @@ func (ii *InterceptInfo) Release(_ *supervisor.Process, tm *TrafficManager, port
 func (d *Daemon) ListIntercepts(_ *supervisor.Process, out *Emitter) error {
 	for idx, cept := range d.intercepts {
 		ii := cept.ii
-		out.Printf("%4d. %s\n", idx, ii.Name)
+		out.Printf("%4d. %s\n", idx+1, ii.Name)
 		out.Printf("      Intercepting requests to %s when\n", ii.Deployment)
 		for k, v := range ii.Patterns {
 			out.Printf("      - %s: %s\n", k, v)
@@ -132,6 +132,17 @@ func (d *Daemon) RemoveIntercept(_ *supervisor.Process, out *Emitter, name strin
 	}
 	out.Printf("Intercept named %q not found\n", name)
 	out.SendExit(1)
+	return nil
+}
+
+// ClearIntercepts removes all intercepts
+func (d *Daemon) ClearIntercepts(p *supervisor.Process) error {
+	for _, cept := range d.intercepts {
+		if err := cept.Close(); err != nil {
+			p.Logf("Closing intercept %q: %v", cept.ii.Name, err)
+		}
+	}
+	d.intercepts = d.intercepts[:0]
 	return nil
 }
 

@@ -13,12 +13,11 @@ import (
 
 // Daemon represents the state of the Edge Control Daemon
 type Daemon struct {
-	network        Resource
-	cluster        *KCluster
-	bridge         Resource
-	trafficMgr     *TrafficManager
-	intercepts     []*Intercept
-	interceptables []string
+	network    Resource
+	cluster    *KCluster
+	bridge     Resource
+	trafficMgr *TrafficManager
+	intercepts []*Intercept
 }
 
 // RunAsDaemon is the main function when executing as the daemon

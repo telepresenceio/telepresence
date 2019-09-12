@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 
 	"github.com/datawire/teleproxy/pkg/supervisor"
+
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -63,49 +63,4 @@ func SetUpLogging() supervisor.Logger {
 		})
 	}
 	return logger
-}
-
-func doWordWrap(text string, prefix string, lineWidth int) []string {
-	words := strings.Fields(strings.TrimSpace(text))
-	if len(words) == 0 {
-		return []string{""}
-	}
-	lines := make([]string, 0)
-	wrapped := prefix + words[0]
-	for _, word := range words[1:] {
-		if len(word)+1 > lineWidth-len(wrapped) {
-			lines = append(lines, wrapped)
-			wrapped = prefix + word
-		} else {
-			wrapped += " " + word
-		}
-	}
-	if len(wrapped) > 0 {
-		lines = append(lines, wrapped)
-	}
-	return lines
-}
-
-var terminalWidth = 0 // Set on first use
-
-// WordWrap returns a slice of strings with the original content wrapped at the
-// terminal width or at 80 characters if no terminal is present.
-func WordWrap(text string) []string {
-	if terminalWidth <= 0 {
-		terminalWidth = 80
-		fd := int(os.Stdout.Fd())
-		if terminal.IsTerminal(fd) {
-			w, _, err := terminal.GetSize(fd)
-			if err == nil {
-				terminalWidth = w
-			}
-		}
-	}
-	return doWordWrap(text, "", terminalWidth)
-}
-
-// WordWrapString returns a string with the original content wrapped at the
-// terminal width or at 80 characters if no terminal is present.
-func WordWrapString(text string) string {
-	return strings.Join(WordWrap(text), "\n")
 }

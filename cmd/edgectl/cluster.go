@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -65,7 +66,11 @@ func (d *Daemon) Connect(p *supervisor.Process, out *Emitter, rai *RunAsInfo, ka
 
 	tmgr, err := NewTrafficManager(p, d.cluster)
 	if err != nil {
-		out.Printf("Failed to connect to traffic manager: %v\n", err)
+		out.Println()
+		out.Println("Unable to connect to the traffic manager in your cluster.")
+		out.Println("The intercept feature will not be available.")
+		out.Println("Error was:", err)
+		// out.Println("Use <some command> to set up the traffic manager.") // FIXME
 	} else {
 		d.trafficMgr = tmgr
 	}
@@ -73,14 +78,16 @@ func (d *Daemon) Connect(p *supervisor.Process, out *Emitter, rai *RunAsInfo, ka
 }
 
 // Disconnect from the connected cluster
-func (d *Daemon) Disconnect(_ *supervisor.Process, out *Emitter) error {
+func (d *Daemon) Disconnect(p *supervisor.Process, out *Emitter) error {
 	// Sanity checks
 	if d.cluster == nil {
 		out.Println("Not connected")
 		return nil
 	}
 
+	_ = d.ClearIntercepts(p)
 	if d.bridge != nil {
+		d.cluster.SetBridgeCheck(nil) // Stop depending on this bridge
 		_ = d.bridge.Close()
 		d.bridge = nil
 	}
@@ -144,10 +151,12 @@ func GetFreePort() (int, error) {
 // TrafficManager is a handle to access the Traffic Manager in a
 // cluster.
 type TrafficManager struct {
-	crc     Resource
-	apiPort int
-	sshPort int
-	client  *http.Client
+	crc            Resource
+	apiPort        int
+	sshPort        int
+	client         *http.Client
+	interceptables []string
+	totalClusCepts int
 }
 
 // NewTrafficManager returns a TrafficManager resource for the given
@@ -181,11 +190,37 @@ func NewTrafficManager(p *supervisor.Process, cluster *KCluster) (*TrafficManage
 }
 
 func (tm *TrafficManager) check(p *supervisor.Process) error {
-	_, _, err := tm.request("GET", "state", []byte{})
-	// FIXME: Instead of throwing away the body, use it to track
-	// information about available interceptables and intercepts
-	// currently in play.
-	return err
+	body, _, err := tm.request("GET", "state", []byte{})
+	if err != nil {
+		return err
+	}
+	var state map[string]interface{}
+	if err := json.Unmarshal([]byte(body), &state); err != nil {
+		p.Logf("check: bad JSON from tm: %v", err)
+		p.Logf("check: JSON data is: %q", body)
+		return err
+	}
+	deployments, ok := state["Deployments"].(map[string]interface{})
+	if !ok {
+		p.Log("check: failed to get deployment info")
+		p.Logf("check: JSON data is: %q", body)
+	}
+	tm.interceptables = make([]string, len(deployments))
+	tm.totalClusCepts = 0
+	idx := 0
+	for deployment := range deployments {
+		tm.interceptables[idx] = deployment
+		idx++
+		info, ok := deployments[deployment].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		cepts, ok := info["Intercepts"].([]interface{})
+		if ok {
+			tm.totalClusCepts += len(cepts)
+		}
+	}
+	return nil
 }
 
 func (tm *TrafficManager) request(method, path string, data []byte) (result string, code int, err error) {
