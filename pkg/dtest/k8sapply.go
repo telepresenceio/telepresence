@@ -7,6 +7,7 @@ import (
 
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/kubeapply"
+	"github.com/datawire/teleproxy/pkg/supervisor"
 )
 
 // K8sApply applies the supplied manifests to the cluster indicated by
@@ -25,6 +26,13 @@ func K8sApply(files ...string) {
   exist or may be unreachable. Check access to your cluster with "kubectl --kubeconfig %s".
 
 `, kubeconfig)
+		fmt.Println()
+		cmd := supervisor.Command(
+			prefix, "kubectl", "--kubeconfig", kubeconfig,
+			"get", "--all-namespaces", "ns,svc,deploy,po",
+		)
+		_ = cmd.Run() // Command output and any error will be logged
+
 		os.Exit(1)
 	}
 }
