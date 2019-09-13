@@ -107,7 +107,7 @@ jobs:
              sudo chmod u+s /usr/local/opt/docker-machine-driver-xhyve/bin/docker-machine-driver-xhyve
       - run:
           name: Docker Virtual Machine
-          command: docker-machine create default --driver xhyve && sleep 7200
+          command: docker-machine create default --xhyve-boot2docker-url https://github.com/boot2docker/boot2docker/releases/download/v19.03.2/boot2docker.iso --driver xhyve && sleep 7200
           background: true
       - run: until docker-machine env; do sleep 3; done && docker-machine env >> ${BASH_ENV}
       - run: docker system info
