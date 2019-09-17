@@ -1,6 +1,6 @@
-// Package logexec is a logging variant of os/exec.
+// Package dexec is a logging variant of os/exec.
 //
-// logexec is *almost* a drop-in replacement for os/exec.  Differences
+// dexec is *almost* a drop-in replacement for os/exec.  Differences
 // are:
 //
 // - The "Command" function is missing, because a context is always
@@ -24,7 +24,7 @@
 // For example:
 //
 //     ctx := dlog.WithLogger(context.Background(), myLogger)
-//     cmd := logexec.CommandContext(ctx, "printf", "%s\n", "foo bar", "baz")
+//     cmd := dexec.CommandContext(ctx, "printf", "%s\n", "foo bar", "baz")
 //     cmd.Stdin = os.Stdin
 //     err := cmd.Run()
 //
@@ -40,7 +40,7 @@
 // calling .StdinPipe, .StdoutPipe, or .StderrPipe.
 //
 // See the os/exec documentation for more information.
-package logexec
+package dexec
 
 import (
 	"context"

@@ -1,4 +1,4 @@
-package logexec_test
+package dexec_test
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	exec "github.com/datawire/teleproxy/pkg/dexec"
 	"github.com/datawire/teleproxy/pkg/dlog"
-	exec "github.com/datawire/teleproxy/pkg/logexec"
 )
 
 func TestMustCapture(t *testing.T) {

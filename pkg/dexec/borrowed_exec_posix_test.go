@@ -8,7 +8,7 @@
 // +build aix darwin dragonfly freebsd linux netbsd openbsd solaris
 
 //nolint
-package logexec_test
+package dexec_test
 
 import (
 	"os/user"

@@ -1,4 +1,4 @@
-package logexec
+package dexec
 
 import (
 	"bytes"
