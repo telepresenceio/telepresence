@@ -9,7 +9,7 @@
 // circular dependency on non-cgo darwin.
 
 //nolint
-package logexec_test
+package dexec_test
 
 import (
 	"bufio"
@@ -28,12 +28,12 @@ import (
 	"testing"
 	"time"
 
+	exec "github.com/datawire/teleproxy/pkg/dexec"
 	"github.com/datawire/teleproxy/pkg/dlog"
-	exec "github.com/datawire/teleproxy/pkg/logexec"
 )
 
 func testContext(t *testing.T) context.Context {
-	return dlog.WithLogger(context.Background(), dlog.WrapTB(t))
+	return dlog.WithLogger(context.Background(), dlog.WrapTB(t, true))
 }
 
 func helperCommandContext(t *testing.T, ctx context.Context, s ...string) (cmd *exec.Cmd) {

@@ -6,7 +6,7 @@
 // license that can be found in the LICENSE file.
 
 //nolint
-package logexec
+package dexec
 
 import (
 	"bytes"

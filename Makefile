@@ -9,6 +9,8 @@ include build-aux/go-mod.mk
 include build-aux/go-version.mk
 include build-aux/help.mk
 
+.DEFAULT_GOAL = help
+
 build-aux/go-test.tap: vendor
 
 # Edge Control tests require calling out to the edgectl binary

@@ -6,8 +6,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/spf13/cobra"
+
+	"github.com/datawire/teleproxy/pkg/k8s"
 )
 
 func main() {

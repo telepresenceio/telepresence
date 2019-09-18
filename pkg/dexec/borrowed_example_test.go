@@ -7,7 +7,7 @@
 // license that can be found in the LICENSE file.
 
 //nolint
-package logexec_test
+package dexec_test
 
 import (
 	"bytes"
@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	exec "github.com/datawire/teleproxy/pkg/logexec"
+	exec "github.com/datawire/teleproxy/pkg/dexec"
 )
 
 func ExampleLookPath() {

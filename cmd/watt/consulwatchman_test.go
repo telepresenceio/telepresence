@@ -6,11 +6,10 @@ import (
 	"time"
 
 	"github.com/ecodia/golang-awaitility/awaitility"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/datawire/teleproxy/pkg/consulwatch"
-
 	"github.com/datawire/teleproxy/pkg/supervisor"
-	"github.com/stretchr/testify/assert"
 )
 
 type consulwatchmanIsolator struct {

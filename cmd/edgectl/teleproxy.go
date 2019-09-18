@@ -3,8 +3,9 @@ package main
 import (
 	"os"
 
-	"github.com/datawire/teleproxy/pkg/teleproxy"
 	"github.com/pkg/errors"
+
+	"github.com/datawire/teleproxy/pkg/teleproxy"
 )
 
 // RunAsTeleproxyIntercept is the main function when executing as

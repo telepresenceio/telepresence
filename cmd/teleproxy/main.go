@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/datawire/teleproxy/pkg/teleproxy"
 	"github.com/spf13/cobra"
+
+	"github.com/datawire/teleproxy/pkg/teleproxy"
 )
 
 // Version is inserted at build using --ldflags -X

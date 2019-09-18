@@ -8,10 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/datawire/teleproxy/pkg/k8s"
 	"github.com/datawire/teleproxy/pkg/limiter"
 	"github.com/datawire/teleproxy/pkg/supervisor"
-	"github.com/spf13/cobra"
 )
 
 // Version holds the version of the code. This is intended to be overridden at build time.

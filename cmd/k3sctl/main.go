@@ -1,16 +1,16 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
 
-	"github.com/datawire/teleproxy/pkg/dtest"
-
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+
+	"github.com/datawire/teleproxy/pkg/dtest"
 )
 
 // Version holds the version of the code. This is intended to be overridden at build time.
