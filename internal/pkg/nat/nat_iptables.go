@@ -5,6 +5,7 @@ package nat
 import (
 	"fmt"
 	"net"
+	"strings"
 	"syscall"
 
 	"github.com/datawire/teleproxy/pkg/supervisor"
@@ -57,7 +58,11 @@ func (t *Translator) forward(p *supervisor.Process, protocol, ip, port, toPort s
 	t.clear(p, protocol, ip, port)
 	args := []string{"-A", t.Name, "-j", "REDIRECT", "-p", protocol, "--dest", ip + "/32"}
 	if port != "" {
-		args = append(args, "--dport", port)
+		if strings.Contains(port, ",") {
+			args = append(args, "-m", "multiport", "--dports", port)
+		} else {
+			args = append(args, "--dport", port)
+		}
 	}
 	args = append(args, "--to-ports", toPort)
 	t.ipt(p, args...)
@@ -76,7 +81,11 @@ func (t *Translator) clear(p *supervisor.Process, protocol, ip, port string) {
 	if previous, exists := t.Mappings[Address{protocol, ip, port}]; exists {
 		args := []string{"-D", t.Name, "-j", "REDIRECT", "-p", protocol, "--dest", ip + "/32"}
 		if port != "" {
-			args = append(args, "--dport", port)
+			if strings.Contains(port, ",") {
+				args = append(args, "-m", "multiport", "--dports", port)
+			} else {
+				args = append(args, "--dport", port)
+			}
 		}
 		args = append(args, "--to-ports", previous)
 		t.ipt(p, args...)
