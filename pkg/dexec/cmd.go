@@ -129,7 +129,6 @@ func (c *Cmd) Start() error {
 	}
 
 	err := c.Cmd.Start()
-	c.pidlock.Unlock()
 	if err == nil {
 		c.logger.Printf("[pid:%v] started command %#v", c.Process.Pid, c.Args)
 		if stdin, isFile := c.Stdin.(*os.File); isFile {
@@ -142,6 +141,7 @@ func (c *Cmd) Start() error {
 			c.logger.Printf("[pid:%v] stderr > not logging output written to file %s", c.Process.Pid, stderr.Name())
 		}
 	}
+	c.pidlock.Unlock()
 	return err
 }
 

@@ -5,6 +5,19 @@ kubestatus, and the various libraries that they use.  Lines within
 each entry are prefixed with <b>[`<name>`]</b> to indicate what they
 refer to.
 
+## 0.7.3 (TBD)
+
+ * The `go.mod` dependency list should now be less problematic; upgrade consul 1.4.4→1.5.0.
+ * <b>[edgectl]</b> Better output.
+ * <b>[edgectl]</b> `su`/`sudo` bug fixed.
+ * <b>[k3sctl]</b> Bug fix: More robust readiness check.
+ * <b>[teleproxy]</b> Once again works properly for services with multiple ports.
+ * <b>[lib/dlog]</b> Added.
+ * <b>[lib/dtest/testprocess]</b> Enhancement: Don't require the use of `sudo`.
+ * <b>[lib/exec]</b> Added.
+ * <b>[lib/k8s]</b> BREAKING CHANGE: Many things moved to <b>[lib/kubeapply]</b>.
+ * <b>[lib/kubeapply]</b> Added.
+
 ## 0.7.2 (2019-08-21)
 
  * <b>[kubestatus]</b> Bug fix: kubestatus will work properly on non namespaced resources.
