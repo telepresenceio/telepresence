@@ -3,13 +3,13 @@ module github.com/datawire/teleproxy
 go 1.13
 
 require (
-	git.lukeshu.com/go/libsystemd v0.0.0-20181219160046-e05011ef37a6
+	git.lukeshu.com/go/libsystemd v0.5.3
 	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/Masterminds/semver v1.4.2 // indirect
 	github.com/Masterminds/sprig v2.17.1+incompatible
 	github.com/aokoli/goutils v1.1.0 // indirect
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869
-	github.com/datawire/libk8s v0.0.0-20190907232252-778ff575ee65
+	github.com/datawire/libk8s v0.0.0-20190923150809-3b461b0ee981
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
 	github.com/ecodia/golang-awaitility v0.0.0-20180710094957-fb55e59708c7
 	github.com/google/shlex v0.0.0-20181106134648-c34317bd91bf

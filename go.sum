@@ -1,7 +1,7 @@
 cloud.google.com/go v0.1.1-0.20160913182117-3b1ae45394a2 h1:8Pau1HNsqG3bybGrTxn2oaH64hozvPKX+V5WySSKK8c=
 cloud.google.com/go v0.1.1-0.20160913182117-3b1ae45394a2/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
-git.lukeshu.com/go/libsystemd v0.0.0-20181219160046-e05011ef37a6 h1:RIKACBk97cDZjLb9ye3DUhB0qXi/PlZeeARNvt+dutw=
-git.lukeshu.com/go/libsystemd v0.0.0-20181219160046-e05011ef37a6/go.mod h1:ClDr3zlU9uyEWaIRc/L5ybH6W2YHUy9LtiU7+FEOTis=
+git.lukeshu.com/go/libsystemd v0.5.3 h1:491FbFw6FUXF449cVOYtrv7p7sJRSKNldLbOU7Ajvgc=
+git.lukeshu.com/go/libsystemd v0.5.3/go.mod h1:FfDoP0i92r4p5Vn4NCLxvjkd7rCOe6otPa4L6hZg9WM=
 github.com/Azure/go-autorest v11.1.0+incompatible h1:9DfMsQdUMEtg1jKRTjtkNZsvOuZXJOMl4dN1kiQwAc8=
 github.com/Azure/go-autorest v11.1.0+incompatible/go.mod h1:r+4oMnoxhatjLLJ6zxSWATqVooLgysK6ZNox3g/xq24=
 github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ=
@@ -24,8 +24,8 @@ github.com/bgentry/speakeasy v0.1.0 h1:ByYyxL9InA1OWqxJqqp2A5pYHUrCiAL6K3J+LKSsQ
 github.com/bgentry/speakeasy v0.1.0/go.mod h1:+zsyZBPWlz7T6j88CTgSN5bM796AkVf0kBD4zp0CCIs=
 github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 h1:DDGfHa7BWjL4YnC6+E63dPcxHo2sUxDIu8g3QgEJdRY=
 github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869/go.mod h1:Ekp36dRnpXw/yCqJaO+ZrUyxD+3VXMFFr56k5XYrpB4=
-github.com/datawire/libk8s v0.0.0-20190907232252-778ff575ee65 h1:scgvOGH2cm9cAB8wjiw/Y+yRuxqhOK87eAWf+PBtz20=
-github.com/datawire/libk8s v0.0.0-20190907232252-778ff575ee65/go.mod h1:GBLaVOglMDiCZZaxcsMaYJvcZuxtAVsUkmtn+zxTSUA=
+github.com/datawire/libk8s v0.0.0-20190923150809-3b461b0ee981 h1:2NKTcGOUo1OMwHrEMcehGmlLlUUxalfsCCkMnpGIvp0=
+github.com/datawire/libk8s v0.0.0-20190923150809-3b461b0ee981/go.mod h1:GBLaVOglMDiCZZaxcsMaYJvcZuxtAVsUkmtn+zxTSUA=
 github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a h1:VHPuM0sSTEHfjtSX86XQqZKJNUWTWVu2BuV6X8SdGUk=
 github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a/go.mod h1:H8uUmE8qqo7z9u30MYB9riLyRckPHOPBk9ZdCuH+dQQ=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -222,6 +222,7 @@ golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4 h1:YUO/7uOKsKeq9UokNS62b8FY
 golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sync v0.0.0-20190423024810-112230192c58 h1:8gQV6CLnAEikrhgkHFbMAEhagSSnXWGV915qUMm9mrU=
 golang.org/x/sync v0.0.0-20190423024810-112230192c58/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+golang.org/x/sys v0.0.0-20180425194835-bb9c189858d9/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20180823144017-11551d06cbcc/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20180905080454-ebe1bf3edb33/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e h1:o3PsSEY8E4eXWkXrIP9YJALUkVZqzHJT5DOasTyn8Vs=
