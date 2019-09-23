@@ -113,15 +113,15 @@ func checkBridge(p *supervisor.Process) error {
 		// #nosec G402
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
-	client := http.Client{Timeout: 3 * time.Second, Transport: tr}
+	client := http.Client{Timeout: 5 * time.Second, Transport: tr}
 	res, err := client.Get("https://kubernetes.default/api/")
 	if err != nil {
-		return err
+		return errors.Wrap(err, "get")
 	}
 	_, err = ioutil.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "read body")
 	}
 	return nil
 }
@@ -230,15 +230,16 @@ func (tm *TrafficManager) request(method, path string, data []byte) (result stri
 	if err != nil {
 		return
 	}
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := tm.client.Do(req)
 	if err != nil {
+		err = errors.Wrap(err, "get")
 		return
 	}
 	defer resp.Body.Close()
 	code = resp.StatusCode
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+		err = errors.Wrap(err, "read body")
 		return
 	}
 	result = string(body)
