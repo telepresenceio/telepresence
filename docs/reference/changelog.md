@@ -1,6 +1,13 @@
 # Changelog
 
 <!--- towncrier start line -->
+
+Misc:
+
+* When using the `inject-tcp` method, Telepresence no longer tries to connect to google.com to check for connectivity.
+  Now it tries to connect to kubernetes.default.svc.cluster.local, which should be accessible in common cluster configurations.
+  Thanks to GitHub user ReSearchITEng for the patch.
+
 #### 0.101 (June 19, 2019)
 
 Bug fixes:
