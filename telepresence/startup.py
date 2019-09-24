@@ -69,7 +69,6 @@ def _parse_version(version: str) -> Tuple[int, int, int]:
 
 class KubeInfo(object):
     """Record the local machine Kubernetes configuration"""
-
     def __init__(self, runner: Runner, args) -> None:
         span = runner.span()
         # We don't quite know yet if we want kubectl or oc (if someone has both

@@ -26,7 +26,6 @@ class BackgroundProcessCrash(Exception):
 
 class _Logger:
     """Logger that optionally captures what is logged"""
-
     def __init__(
         self,
         write: typing.Callable[[str], None],
@@ -70,7 +69,6 @@ def _launch_command(
     Launch subprocess with args, kwargs.
     Log stdout and stderr by calling respective callbacks.
     """
-
     def pump_stream(logger: _Logger, stream: typing.Iterable[str]) -> None:
         """Pump the stream"""
         for line in stream:

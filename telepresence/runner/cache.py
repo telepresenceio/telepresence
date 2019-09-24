@@ -33,7 +33,6 @@ class Cache(object):
     >>> number_cache["one"] = 1
     >>> number_cache["pi"] = 22.0/7.0
     """
-
     @classmethod
     def load(cls, filename):
         """Return a cache loaded from a file"""
