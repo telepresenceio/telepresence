@@ -69,7 +69,6 @@ def _parse_version(version: str) -> Tuple[int, int, int]:
 
 class KubeInfo(object):
     """Record the local machine Kubernetes configuration"""
-
     def __init__(self, runner: Runner, args) -> None:
         span = runner.span()
         # We don't quite know yet if we want kubectl or oc (if someone has both
@@ -193,14 +192,16 @@ class KubeInfo(object):
         return result
 
     def _check_if_in_local_vm(self, runner: Runner) -> bool:
-        # Running Docker Desktop on macOS (or maybe Windows?)
-        if self.context == "docker-for-desktop":
+        local_context_names = {
+            "docker-for-desktop",
+            "docker-desktop",
+            "minikube",
+        }
+        # Check by context name
+        if self.context in local_context_names:
             return True
         # kind (kube-in-docker) has complex context name, so check by cluster
         if self.cluster == "kind":
-            return True
-        # Minikube just has 'minikube' as context'
-        if self.context == "minikube":
             return True
         # Minishift has complex context name, so check by server:
         if self.command == "oc":

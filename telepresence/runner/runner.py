@@ -51,7 +51,6 @@ _CleanupItem = typing.NamedTuple(
 
 class Runner(object):
     """Context for running subprocesses."""
-
     def __init__(self, logfile_path: str, kubeinfo, verbose: bool) -> None:
         """
         :param logfile_path: Path or string file path or "-" for stdout
@@ -664,7 +663,6 @@ class Runner(object):
         """
         Monitor main process and background items until done
         """
-
         def wait_for_process(p):
             """Wait for process and set main_code and self.quitting flag
 

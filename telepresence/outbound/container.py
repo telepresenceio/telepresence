@@ -45,7 +45,6 @@ def docker_runify(args: List[str], env=False) -> List[str]:
 
 def make_docker_kill(runner: Runner, name: str) -> Callable:
     """Return a function that will kill a named docker container."""
-
     def kill():
         sudo = ["sudo"] if SUDO_FOR_DOCKER else []
         runner.check_call(sudo + ["docker", "stop", "--time=1", name])
