@@ -198,7 +198,7 @@ def test_swap_deployment_changes():
     expected = yaml.safe_load(SWAPPED_DEPLOYMENT)
     ports = telepresence.cli.PortMapping.parse(["9999"])
     actual = telepresence.proxy.deployment.new_swapped_deployment(
-        original, "nginxhttps", "random_id_123", ports, False
+        original, "nginxhttps", "random_id_123", ports, "", False
     )
     image = actual["spec"]["template"]["spec"]["containers"][1]["image"]
     assert "/telepresence-k8s-priv:" in image
@@ -216,7 +216,7 @@ def test_swap_deployment_changes():
         "containerPort"] = 8080
     ports = telepresence.cli.PortMapping.parse(["9999"])
     actual = telepresence.proxy.deployment.new_swapped_deployment(
-        original, "nginxhttps", "random_id_123", ports, False
+        original, "nginxhttps", "random_id_123", ports, "", False
     )
     image = actual["spec"]["template"]["spec"]["containers"][1]["image"]
     assert "/telepresence-k8s:" in image

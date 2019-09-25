@@ -269,6 +269,15 @@ def parse_args(args=None) -> argparse.Namespace:
         )
     )
     parser.add_argument(
+        "--serviceaccount",
+        dest="service_account",
+        default=None,
+        help=(
+            "The Kubernetes service account to use. Sets the value for a new"
+            " deployment or overrides the value for a swapped deployment."
+        )
+    )
+    parser.add_argument(
         "--expose",
         action='append',
         metavar="PORT[:REMOTE_PORT]",

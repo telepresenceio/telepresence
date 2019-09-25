@@ -13,12 +13,13 @@
 # limitations under the License.
 from subprocess import CalledProcessError
 
+from telepresence.runner import Runner
+
 from .deployment import (
-    existing_deployment, existing_deployment_openshift, create_new_deployment,
-    swap_deployment_openshift, supplant_deployment
+    create_new_deployment, existing_deployment, existing_deployment_openshift,
+    supplant_deployment, swap_deployment_openshift
 )
 from .remote import RemoteInfo, get_remote_info
-from telepresence.runner import Runner
 
 
 def _dc_exists(runner: Runner, name: str) -> bool:
@@ -92,8 +93,22 @@ def setup(runner: Runner, args):
         )
 
     def start_proxy(runner_: Runner) -> RemoteInfo:
+        if args.service_account:
+            try:
+                runner_.check_call(
+                    runner_.kubectl(
+                        "get", "serviceaccount", args.service_account
+                    )
+                )
+            except CalledProcessError as exc:
+                raise runner.fail(
+                    "Check service account {} failed:\n{}".format(
+                        args.service_account, exc.stderr
+                    )
+                )
         tel_deployment, run_id = operation(
-            runner_, deployment_arg, args.expose, add_custom_ns
+            runner_, deployment_arg, args.expose, add_custom_ns,
+            args.service_account
         )
         remote_info = get_remote_info(
             runner,
