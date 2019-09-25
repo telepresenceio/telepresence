@@ -301,13 +301,15 @@ def new_swapped_deployment(
             container["imagePullPolicy"] = "IfNotPresent"
             # Drop unneeded fields:
             for unneeded in [
-                "command", "args", "livenessProbe", "readinessProbe",
-                "workingDir", "lifecycle"
+                "args", "livenessProbe", "readinessProbe", "workingDir",
+                "lifecycle"
             ]:
                 try:
                     container.pop(unneeded)
                 except KeyError:
                     pass
+            # Set running command explicitly
+            container["command"] = ["/usr/src/app/run.sh"]
             # We don't write out termination file:
             container["terminationMessagePolicy"] = "FallbackToLogsOnError"
             # Use custom name server if necessary:

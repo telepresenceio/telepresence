@@ -15,24 +15,24 @@
 Unit tests (in-memory, small units of code).
 """
 
-import sys
-import tempfile
 import ipaddress
 import subprocess
+import sys
+import tempfile
 
-from hypothesis import strategies as st, given, example
 import pytest
 import yaml
+from hypothesis import example, given
+from hypothesis import strategies as st
 
 import telepresence.cli
+import telepresence.main
 import telepresence.outbound.container
+import telepresence.outbound.vpn
 import telepresence.proxy.deployment
 import telepresence.runner.output
-import telepresence.outbound.vpn
-import telepresence.main
-
-from telepresence.runner.runner import Runner
 from telepresence.runner.cache import Cache
+from telepresence.runner.runner import Runner
 
 COMPLEX_DEPLOYMENT = """\
 apiVersion: extensions/v1beta1
@@ -168,6 +168,7 @@ spec:
           name: configmap-volume
       - name: nginxhttps
         image: ___replace___me___
+        command: ["/usr/src/app/run.sh"]
         terminationMessagePolicy: "FallbackToLogsOnError"
         imagePullPolicy: "IfNotPresent"
         ports:

@@ -9,6 +9,8 @@ Misc:
   Thanks to GitHub user ReSearchITEng for the patch.
 * Telepresence detects another name for Docker for Desktop.
   Thanks to William Austin for the patch.
+* Telepresence sets the `command` field when swapping a deployment.
+  Thanks to GitHub user netag for the patch.
 
 #### 0.101 (June 19, 2019)
 
