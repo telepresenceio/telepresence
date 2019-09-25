@@ -35,26 +35,25 @@ COPY forwarder.py /usr/src/app
 COPY socks.py /usr/src/app
 COPY . /usr/src/app
 
+CMD /usr/src/app/run.sh
+
 #
 # The normal (non-root) image
 #
 FROM common as telepresence-k8s
 
 # Set up to run as the telepresence user (1000:0)
-RUN chmod -R g+r /etc/ssh && \
+RUN cp /usr/src/app/run-unpriv.sh /usr/src/app/run.sh && \
+    chmod -R g+r /etc/ssh && \
     chmod -R g+w /usr/src/app && \
     echo "telepresence::1000:0:Telepresence User:/usr/src/app:/bin/ash" >> /etc/passwd
 USER 1000:0
-
-CMD /usr/src/app/pre-run.sh
 
 #
 # The privileged (running-as-root) image
 #
 FROM common as telepresence-k8s-priv
 
-# Set up to run as the telepresence user (1000:0)
-RUN echo "telepresence::0:0:Telepresence User:/usr/src/app:/bin/ash" >> /etc/passwd
-#RUN chmod -R 0600 /etc/ssh/*
-
-CMD /usr/src/app/run.sh
+# Set up to run as root
+RUN cp /usr/src/app/run-priv.sh /usr/src/app/run.sh && \
+    echo "telepresence::0:0:Telepresence User:/usr/src/app:/bin/ash" >> /etc/passwd
