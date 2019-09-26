@@ -128,7 +128,6 @@ def setup_container(runner: Runner, args):
             ]),
             timeout=30,
             reveal=True,
-            stderr_to_stdout=True,
         ).strip()
         if id_in_container != runner.session_id:
             runner.write("Expected: [{}]".format(runner.session_id))
