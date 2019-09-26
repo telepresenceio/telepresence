@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from subprocess import CalledProcessError
+from subprocess import CalledProcessError, TimeoutExpired
 from typing import List
 
 from telepresence.runner import Runner
@@ -78,6 +78,6 @@ class SSH(object):
             try:
                 self.runner.check_call(self.command(["/bin/true"]), timeout=5)
                 return True
-            except CalledProcessError:
+            except (CalledProcessError, TimeoutExpired):
                 pass
         return False

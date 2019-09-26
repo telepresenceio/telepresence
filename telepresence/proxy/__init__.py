@@ -14,6 +14,7 @@
 from subprocess import CalledProcessError
 
 from telepresence.runner import Runner
+from telepresence.utilities import get_alternate_nameserver
 
 from .deployment import (
     create_new_deployment, existing_deployment, existing_deployment_openshift,
@@ -84,13 +85,20 @@ def setup(runner: Runner, args):
     # loop... We've fixed that for most cases by setting a distinct name server
     # for the proxy to use when making a new proxy pod, but that does not work
     # for --deployment.
-    add_custom_ns = args.method == "vpn-tcp" and runner.kubectl.in_local_vm
-    if add_custom_ns and args.operation == "deployment":
-        raise runner.fail(
-            "vpn-tcp method doesn't work with minikube/minishift when"
-            " using --deployment. Use --swap-deployment or"
-            " --new-deployment instead."
-        )
+    custom_nameserver = None
+    if args.method == "vpn-tcp" and runner.kubectl.in_local_vm:
+        if args.operation == "deployment":
+            raise runner.fail(
+                "vpn-tcp method doesn't work with minikube/minishift when"
+                " using --deployment. Use --swap-deployment or"
+                " --new-deployment instead."
+            )
+        try:
+            custom_nameserver = get_alternate_nameserver()
+        except Exception as exc:
+            raise runner.fail(
+                "Failed to find a fallback nameserver: {}".format(exc)
+            )
 
     def start_proxy(runner_: Runner) -> RemoteInfo:
         if args.service_account:
@@ -107,7 +115,7 @@ def setup(runner: Runner, args):
                     )
                 )
         tel_deployment, run_id = operation(
-            runner_, deployment_arg, args.expose, add_custom_ns,
+            runner_, deployment_arg, args.expose, custom_nameserver,
             args.service_account
         )
         remote_info = get_remote_info(

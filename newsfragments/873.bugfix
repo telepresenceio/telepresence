@@ -1,0 +1,1 @@
+When using the container method, Telepresence notices if the Docker daemon is not local and reports an error.
