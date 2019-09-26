@@ -211,6 +211,9 @@ class KubeInfo(object):
                 return False
             if ip and ip in self.server:
                 return True
+        # Check by server address (e.g., https://localhost:6443)
+        if "/localhost:" in self.server:
+            return True
         return False
 
     def _check_versions(self, runner: Runner) -> None:
