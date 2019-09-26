@@ -86,7 +86,6 @@ def setup(runner: Runner, args):
     # for the proxy to use when making a new proxy pod, but that does not work
     # for --deployment.
     custom_nameserver = None
-    runner.kubectl.in_local_vm = True
     if args.method == "vpn-tcp" and runner.kubectl.in_local_vm:
         if args.operation == "deployment":
             raise runner.fail(
