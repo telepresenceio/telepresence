@@ -38,8 +38,11 @@ def get_image_name(expose: PortMapping) -> str:
 
 
 def existing_deployment(
-    runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool
+    runner: Runner,
+    deployment_arg: str,
+    expose: PortMapping,
+    add_custom_nameserver: bool,
+    service_account: str,
 ) -> Tuple[str, Optional[str]]:
     """
     Handle an existing deployment by doing nothing
@@ -61,8 +64,11 @@ def existing_deployment(
 
 
 def existing_deployment_openshift(
-    runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool
+    runner: Runner,
+    deployment_arg: str,
+    expose: PortMapping,
+    add_custom_nameserver: bool,
+    service_account: str,
 ) -> Tuple[str, Optional[str]]:
     """
     Handle an existing deploymentconfig by doing nothing
@@ -88,8 +94,11 @@ def existing_deployment_openshift(
 
 
 def create_new_deployment(
-    runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool
+    runner: Runner,
+    deployment_arg: str,
+    expose: PortMapping,
+    add_custom_nameserver: bool,
+    service_account: str,
 ) -> Tuple[str, str]:
     """
     Create a new Deployment, return its name and Kubernetes label.
@@ -129,6 +138,8 @@ def create_new_deployment(
     # arbitrary and doesn't need to be maintained.  See issue 494.
     for port in sorted(expose.remote(), reverse=True):
         command.append("--port={}".format(port))
+    if service_account:
+        command.append("--serviceaccount={}".format(service_account))
     if expose.remote():
         command.append("--expose")
     # If we're on local VM we need to use different nameserver to prevent
@@ -165,8 +176,11 @@ def _get_container_name(container, deployment_json):
 
 
 def supplant_deployment(
-    runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool
+    runner: Runner,
+    deployment_arg: str,
+    expose: PortMapping,
+    add_custom_nameserver: bool,
+    service_account: str,
 ) -> Tuple[str, str]:
     """
     Swap out an existing Deployment, supplant method.
@@ -197,6 +211,7 @@ def supplant_deployment(
         container,
         run_id,
         expose,
+        service_account,
         add_custom_nameserver,
     )
 
@@ -259,6 +274,7 @@ def new_swapped_deployment(
     container_to_update: str,
     run_id: str,
     expose: PortMapping,
+    service_account: str,
     add_custom_nameserver: bool,
 ) -> Dict:
     """
@@ -282,11 +298,12 @@ def new_swapped_deployment(
     new_deployment_json["spec"]["replicas"] = 1
     new_deployment_json["metadata"].setdefault("labels",
                                                {})["telepresence"] = run_id
-    new_deployment_json["spec"]["template"]["metadata"].setdefault(
-        "labels", {}
-    )["telepresence"] = run_id
+    ndj_template = new_deployment_json["spec"]["template"]
+    ndj_template["metadata"].setdefault("labels", {})["telepresence"] = run_id
+    if service_account:
+        ndj_template["spec"]["serviceAccountName"] = service_account
     for container, old_container in zip(
-        new_deployment_json["spec"]["template"]["spec"]["containers"],
+        ndj_template["spec"]["containers"],
         old_deployment["spec"]["template"]["spec"]["containers"],
     ):
         if container["name"] == container_to_update:
@@ -301,13 +318,15 @@ def new_swapped_deployment(
             container["imagePullPolicy"] = "IfNotPresent"
             # Drop unneeded fields:
             for unneeded in [
-                "command", "args", "livenessProbe", "readinessProbe",
-                "workingDir", "lifecycle"
+                "args", "livenessProbe", "readinessProbe", "workingDir",
+                "lifecycle"
             ]:
                 try:
                     container.pop(unneeded)
                 except KeyError:
                     pass
+            # Set running command explicitly
+            container["command"] = ["/usr/src/app/run.sh"]
             # We don't write out termination file:
             container["terminationMessagePolicy"] = "FallbackToLogsOnError"
             # Use custom name server if necessary:
@@ -336,8 +355,11 @@ def new_swapped_deployment(
 
 
 def swap_deployment_openshift(
-    runner: Runner, deployment_arg: str, expose: PortMapping,
-    add_custom_nameserver: bool
+    runner: Runner,
+    deployment_arg: str,
+    expose: PortMapping,
+    add_custom_nameserver: bool,
+    service_account: str,
 ) -> Tuple[str, str]:
     """
     Swap out an existing DeploymentConfig and also clears any triggers
@@ -403,6 +425,7 @@ def swap_deployment_openshift(
         container,
         run_id,
         expose,
+        service_account,
         add_custom_nameserver,
     )
 

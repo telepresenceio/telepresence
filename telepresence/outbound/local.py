@@ -51,11 +51,13 @@ def set_up_torsocks(runner: Runner, socks_port: int) -> Dict[str, str]:
         torsocks_env["TORSOCKS_LOG_FILE_PATH"] = runner.logfile_path
 
     # Wait until DNS resolution via torsocks succeeds
-    # FIXME: Make this lookup for google.com configurable
+    # FIXME: Make this lookup externally configurable
     # https://github.com/telepresenceio/telepresence/issues/389
+    # https://github.com/telepresenceio/telepresence/issues/985
+    test_hostname = "kubernetes.default.svc.cluster.local"
     test_proxying_cmd = [
         "torsocks", "python3", "-c",
-        "import socket; socket.socket().connect(('google.com', 80))"
+        "import socket; socket.socket().connect(('%s', 443))" % test_hostname
     ]
     launch_env = os.environ.copy()
     launch_env.update(torsocks_env)
