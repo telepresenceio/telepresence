@@ -96,7 +96,7 @@ def run_docker_command(
     remote_env: Dict[str, str],
     ssh: SSH,
     mount_dir: Optional[str],
-    mount_target: Optional[str],
+    use_docker_mount: Optional[bool],
     pod_info: Dict[str, str],
 ) -> Popen:
     """
@@ -207,7 +207,12 @@ def run_docker_command(
     docker_env.update(remote_env)
 
     if mount_dir:
-        docker_command.append("--volume={}:{}".format(mount_dir, mount_target))
+        if use_docker_mount:
+            mount_volume = "telepresence-" + runner.session_id
+        else:
+            mount_volume = mount_dir
+
+        docker_command.append("--volume={}:{}".format(mount_volume, mount_dir))
 
     # Don't add --init if the user is doing something with it
     init_args = [

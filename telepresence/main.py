@@ -66,7 +66,7 @@ def main():
         env, pod_info = get_remote_env(runner, ssh, remote_info)
 
         # Handle filesystem stuff
-        mount_dir, mount_target = mount_remote(runner, env, ssh)
+        mount_dir = mount_remote(runner, env, ssh)
 
         # Maybe write environment files
         write_env_files(runner, env)
@@ -74,8 +74,7 @@ def main():
         # Set up outbound networking (pod name, ssh object)
         # Launch user command with the correct environment (...)
         user_process = launch(
-            runner, remote_info, env, socks_port, ssh, mount_dir, mount_target,
-            pod_info
+            runner, remote_info, env, socks_port, ssh, mount_dir, pod_info
         )
 
         runner.wait_for_exit(user_process)

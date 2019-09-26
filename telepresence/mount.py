@@ -14,8 +14,6 @@
 
 from subprocess import CalledProcessError
 from typing import Callable, Tuple
-import random
-import string
 
 from telepresence.connect import SSH
 from telepresence.runner import Runner
@@ -46,7 +44,8 @@ def mount_remote_volumes(
                 "port=" + str(ssh.port)
             ] + ssh_args + [
                 "-o", "allow_other", "-o", "sshcmd=" +
-                "{}:/".format(ssh.user_at_host), mount_dir
+                "{}:/".format(ssh.user_at_host), "telepresence-" +
+                runner.session_id
             ])
         else:
             if allow_all_users:
@@ -100,13 +99,9 @@ def mount_remote(runner, mount, ssh, allow_all_users, docker_mount, env):
         # The mount directory is made here, removed by mount_cleanup if
         # mount succeeds, leaked if mount fails.
         if docker_mount:
-            mount_dir = "telepresence-" + ''.join(
-                random.choice(string.ascii_lowercase) for i in range(9)
-            )
-            mount_target = str(docker_mount)
+            mount_dir = str(docker_mount)
         elif mount is True:
             mount_dir = str(runner.make_temp("fs"))
-            mount_target = mount_dir
         else:
             # Try to create the mount point as a sanity check. If we do create
             # it, we leave it behind. This is sort of a leak. Kind of.
@@ -116,18 +111,16 @@ def mount_remote(runner, mount, ssh, allow_all_users, docker_mount, env):
             except OSError as exc:
                 raise runner.fail("Unable to use mount path: {}".format(exc))
             mount_dir = str(mount)
-            mount_target = mount_dir
 
         mount_dir, mount_cleanup = mount_remote_volumes(
             runner, ssh, allow_all_users, docker_mount is not None, mount_dir
         )
 
-        env["TELEPRESENCE_ROOT"] = mount_target
+        env["TELEPRESENCE_ROOT"] = mount_dir
         runner.add_cleanup("Unmount remote filesystem", mount_cleanup)
     else:
         mount_dir = None
-        mount_target = None
-    return mount_dir, mount_target
+    return mount_dir
 
 
 def setup(runner, args):
