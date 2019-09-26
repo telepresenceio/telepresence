@@ -22,7 +22,6 @@ from telepresence import (
 )
 from telepresence.cli import PortMapping
 from telepresence.runner import Runner
-from telepresence.utilities import get_alternate_nameserver
 
 from .remote import get_deployment_json
 
@@ -41,7 +40,7 @@ def existing_deployment(
     runner: Runner,
     deployment_arg: str,
     expose: PortMapping,
-    add_custom_nameserver: bool,
+    custom_nameserver: Optional[str],
     service_account: str,
 ) -> Tuple[str, Optional[str]]:
     """
@@ -67,7 +66,7 @@ def existing_deployment_openshift(
     runner: Runner,
     deployment_arg: str,
     expose: PortMapping,
-    add_custom_nameserver: bool,
+    custom_nameserver: Optional[str],
     service_account: str,
 ) -> Tuple[str, Optional[str]]:
     """
@@ -97,7 +96,7 @@ def create_new_deployment(
     runner: Runner,
     deployment_arg: str,
     expose: PortMapping,
-    add_custom_nameserver: bool,
+    custom_nameserver: Optional[str],
     service_account: str,
 ) -> Tuple[str, str]:
     """
@@ -144,10 +143,8 @@ def create_new_deployment(
         command.append("--expose")
     # If we're on local VM we need to use different nameserver to prevent
     # infinite loops caused by sshuttle:
-    if add_custom_nameserver:
-        command.append(
-            "--env=TELEPRESENCE_NAMESERVER=" + get_alternate_nameserver()
-        )
+    if custom_nameserver:
+        command.append("--env=TELEPRESENCE_NAMESERVER=" + custom_nameserver)
     try:
         runner.check_call(runner.kubectl(command))
     except CalledProcessError as exc:
@@ -179,7 +176,7 @@ def supplant_deployment(
     runner: Runner,
     deployment_arg: str,
     expose: PortMapping,
-    add_custom_nameserver: bool,
+    custom_nameserver: Optional[str],
     service_account: str,
 ) -> Tuple[str, str]:
     """
@@ -212,7 +209,7 @@ def supplant_deployment(
         run_id,
         expose,
         service_account,
-        add_custom_nameserver,
+        custom_nameserver,
     )
 
     # Compute a new name that isn't too long, i.e. up to 63 characters.
@@ -275,7 +272,7 @@ def new_swapped_deployment(
     run_id: str,
     expose: PortMapping,
     service_account: str,
-    add_custom_nameserver: bool,
+    custom_nameserver: Optional[str],
 ) -> Dict:
     """
     Create a new Deployment that uses telepresence-k8s image.
@@ -330,10 +327,10 @@ def new_swapped_deployment(
             # We don't write out termination file:
             container["terminationMessagePolicy"] = "FallbackToLogsOnError"
             # Use custom name server if necessary:
-            if add_custom_nameserver:
+            if custom_nameserver:
                 container.setdefault("env", []).append({
                     "name": "TELEPRESENCE_NAMESERVER",
-                    "value": get_alternate_nameserver()
+                    "value": custom_nameserver,
                 })
             # Add namespace environment variable to support deployments using
             # automountServiceAccountToken: false. To be used by forwarder.py
@@ -358,7 +355,7 @@ def swap_deployment_openshift(
     runner: Runner,
     deployment_arg: str,
     expose: PortMapping,
-    add_custom_nameserver: bool,
+    custom_nameserver: Optional[str],
     service_account: str,
 ) -> Tuple[str, str]:
     """
@@ -426,7 +423,7 @@ def swap_deployment_openshift(
         run_id,
         expose,
         service_account,
-        add_custom_nameserver,
+        custom_nameserver,
     )
 
     apply_json(new_dc_json)
