@@ -91,3 +91,10 @@ def telepresence_remote_mounts():
         link_src = os.path.join(tel_root, mount[1:])
         os.symlink(link_src, mount)
 ```
+
+### Docker volumes via [vieux/sshfs](https://github.com/vieux/docker-volume-sshfs)
+It is possible to use [vieux/sshfs](https://github.com/vieux/docker-volume-sshfs) volume driver instead of using sshfs directly. This is needed to run telepresence cli inside a container (for instance to use it on windows). To utilize 'vieux/sshfs' use --docker-mount cli option. It is mutually exclusive with --mount. It needs to be set to absolute path and can be used only in conjunction with --method container.
+
+When --docker-mount is specified instead of using sshfs a randomly named docker volume will be created using vieux/sshfs volume driver. The volume will be mounted in the user container at the mount point specified by --docker-mount. As a side benefit sudo is no longer required for container method.
+
+One downside is that it is not possible to mount volume sub-directory to a container. This means that using TELEPRESENCE_ROOT is obligatory.
