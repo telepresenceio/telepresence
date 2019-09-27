@@ -168,7 +168,9 @@ class KubeInfo(object):
         )
         self._check_versions(runner)
 
-        self.in_local_vm = self._check_if_in_local_vm(runner)
+        self.in_local_vm = (
+            args.local_cluster or self._check_if_in_local_vm(runner)
+        )
         if self.in_local_vm:
             runner.write("Looks like we're in a local VM, e.g. minikube.\n")
 
@@ -211,9 +213,14 @@ class KubeInfo(object):
                 return False
             if ip and ip in self.server:
                 return True
+        local_server_patterns = (
+            "/localhost:",
+            "/127.0.0.1:",
+        )
         # Check by server address (e.g., https://localhost:6443)
-        if "/localhost:" in self.server:
-            return True
+        for pattern in local_server_patterns:
+            if pattern in self.server:
+                return True
         return False
 
     def _check_versions(self, runner: Runner) -> None:
