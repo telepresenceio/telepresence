@@ -92,9 +92,17 @@ def telepresence_remote_mounts():
         os.symlink(link_src, mount)
 ```
 
-### Docker volumes via [vieux/sshfs](https://github.com/vieux/docker-volume-sshfs)
-It is possible to use [vieux/sshfs](https://github.com/vieux/docker-volume-sshfs) volume driver instead of using sshfs directly. This is needed to run telepresence cli inside a container (for instance to use it on windows). To utilize 'vieux/sshfs' use --docker-mount cli option. It is mutually exclusive with --mount. It needs to be set to absolute path and can be used only in conjunction with --method container.
+## Volume access via Docker volume for the container method
 
-When --docker-mount is specified instead of using sshfs a randomly named docker volume will be created using vieux/sshfs volume driver. The volume will be mounted in the user container at the mount point specified by --docker-mount. As a side benefit sudo is no longer required for container method.
+It is possible to use the [vieux/sshfs](https://github.com/vieux/docker-volume-sshfs) volume driver to access remote volumes if you are using the container method.
+This makes it possible to use volumes even if you don't have mount privileges or capabilities on your main system, e.g. on Windows.
+Use the `--docker-mount` option to specify an absolute path for volume mounts inside your container.
+Note that `--docker-mount` is mutually exclusive with `--mount` and is available only with the container method.
 
-One downside is that it is not possible to mount volume sub-directory to a container. This means that using TELEPRESENCE_ROOT is obligatory.
+When `--docker-mount` is specified, instead of using `sshfs` to mount the remote filesystem on your host, a randomly named docker volume is created using the vieux/sshfs volume driver.
+The volume is mounted in the user container at the mount point specified by `--docker-mount`.
+As a side benefit, `sudo` is no longer required for the container method (unless you need `sudo` to run Docker).
+
+One downside is that it is not possible to mount a subdirectory of the remote volumes at another location in your container.
+This means that the `/var/run/secrets` workaround described above cannot be done with `--docker-mount`.
+Using `$TELEPRESENCE_ROOT` is required.
