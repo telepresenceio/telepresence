@@ -132,12 +132,16 @@ def test_loopback_network_access(probe):
     The Telepresence execution environment allows network access to the host
     at the loopback address.
     """
-    if probe.method.loopback_is_host():
-        probe_result = probe.result()
-        (success, response) = next(
-            result for url, result in probe_result.result["probe-urls"]
-            if url == probe.loopback_url
-        )
+    probe_result = probe.result()
+    for url, (success, response) in probe_result.result["probe-urls"]:
+        assert url in (probe.loopback_url, probe.fwd_url)
+        if url == probe.loopback_url and not probe.method.loopback_is_host():
+            # This won't work with the container method (not loopback is host).
+            continue
+        if url == probe.fwd_url and probe.method.loopback_is_host():
+            # This will only work with the container method, where we set up
+            # and explicity port forward to allow it to work.
+            continue
 
         # We're loading _this_ file via curl, so it should have the string
         # "cuttlefish" which is in this comment and unlikely to appear by

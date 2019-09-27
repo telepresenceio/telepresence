@@ -303,6 +303,19 @@ def parse_args(args=None) -> argparse.Namespace:
         )
     )
     parser.add_argument(
+        "--container-to-host",
+        action="append",
+        metavar="CONTAINER_PORT[:HOST_PORT]",
+        default=[],
+        help=(
+            "For the container method, listen on localhost:CONTAINER_PORT in"
+            " the container and forward connections to localhost:HOST_PORT on"
+            " the host running Telepresence. Useful for allowing code running"
+            " in the container to connect to an IDE or debugger running on the"
+            " host."
+        )
+    )
+    parser.add_argument(
         "--also-proxy",
         metavar="CLOUD_HOSTNAME",
         dest="also_proxy",
@@ -437,6 +450,7 @@ def parse_args(args=None) -> argparse.Namespace:
         )
 
     args.expose = PortMapping.parse(args.expose)
+    args.container_to_host = PortMapping.parse(args.container_to_host)
     return args
 
 
