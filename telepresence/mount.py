@@ -112,14 +112,14 @@ def mount_remote_volumes_docker(runner: Runner, ssh: SSH) -> Callable:
             del ssh_args[f_index + 1]
             del ssh_args[f_index]
 
-        runner.check_call([
-            "docker", "volume", "create", "-d", "vieux/sshfs", "-o", "port=" +
-            str(ssh.port)
-        ] + ssh_args + [
-            "-o", "allow_other", "-o", "sshcmd=" +
-            "{}:/".format(ssh.user_at_host), "telepresence-" +
-            runner.session_id
-        ])
+        runner.check_call(
+            runner.docker(
+                "volume", "create", "-d", "vieux/sshfs", "-o",
+                "port={}".format(ssh.port), *ssh_args, "-o", "allow_other",
+                "-o", "sshcmd={}:/".format(ssh.user_at_host),
+                "telepresence-{}".format(runner.session_id)
+            )
+        )
 
         mounted = True
     except CalledProcessError as exc:
@@ -138,9 +138,11 @@ def mount_remote_volumes_docker(runner: Runner, ssh: SSH) -> Callable:
         pass
 
     def cleanup():
-        runner.check_call([
-            "docker", "volume", "rm", "-f", "telepresence-" + runner.session_id
-        ])
+        runner.check_call(
+            runner.docker(
+                "volume", "rm", "-f", "telepresence-" + runner.session_id
+            )
+        )
 
     span.end()
     return cleanup if mounted else no_cleanup
