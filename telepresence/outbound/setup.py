@@ -16,7 +16,7 @@ from subprocess import CalledProcessError
 
 from telepresence.runner import Runner
 
-from .container import SUDO_FOR_DOCKER, run_docker_command
+from .container import SUDO_FOR_DOCKER, docker_runify, run_docker_command
 from .local import launch_inject, launch_vpn
 
 
@@ -111,6 +111,34 @@ def setup_container(runner: Runner, args):
             "Note: --also-proxy is no longer required with --docker-run. "
             "The container method sends all network traffic to the cluster."
         )
+
+    # Check for non-local docker
+    local_docker_message = (
+        "Telepresence's container method requires using a local Docker daemon."
+        " Connecting to a remote daemon or a daemon running in a VM does not"
+        " work at this time. If you are using Minikube's Docker daemon, launch"
+        " Telepresence in a separate shell that does not have the Minikube"
+        " Docker environment variables set."
+    )
+    try:
+        id_in_container = runner.get_output(
+            docker_runify([
+                "--rm", "-v", "{}:/tel".format(runner.temp), "alpine:3.6",
+                "cat", "/tel/session_id.txt"
+            ]),
+            timeout=30,
+            reveal=True,
+        ).strip()
+        if id_in_container != runner.session_id:
+            runner.write("Expected: [{}]".format(runner.session_id))
+            runner.write("Got:      [{}]".format(id_in_container))
+            runner.show("ID mismatch on local Docker check.")
+            runner.show("\n" + local_docker_message)
+            raise runner.fail("Error: Local Docker daemon required")
+    except CalledProcessError as exc:
+        runner.show("Local Docker check failed: {}".format(exc.output))
+        runner.show("\n" + local_docker_message)
+        raise runner.fail("Error: Local Docker daemon required")
 
     def launch(
         runner_, remote_info, env, _socks_port, ssh, mount_dir, pod_info

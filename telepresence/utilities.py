@@ -40,7 +40,7 @@ def find_free_port() -> int:
         s.close()
 
 
-def get_resolv_conf_namservers() -> List[str]:
+def get_resolv_conf_nameservers() -> List[str]:
     """Return list of nameserver IPs in /etc/resolv.conf."""
     result = []
     with open("/etc/resolv.conf") as f:
@@ -53,7 +53,7 @@ def get_resolv_conf_namservers() -> List[str]:
 
 def get_alternate_nameserver() -> str:
     """Get a public nameserver that isn't in /etc/resolv.conf."""
-    banned = get_resolv_conf_namservers()
+    banned = get_resolv_conf_nameservers()
     # From https://www.lifewire.com/free-and-public-dns-servers-2626062 -
     public = [
         "8.8.8.8", "8.8.4.4", "216.146.35.35", "216.146.36.36", "209.244.0.3",

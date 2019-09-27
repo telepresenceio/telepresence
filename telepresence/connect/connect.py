@@ -57,7 +57,16 @@ def connect(
     )
 
     if not ssh.wait():
-        raise RuntimeError("SSH to the cluster failed to start.")
+        # Describe the pod; output goes to the logfile
+        runner.write("SSH timed out. Pod info follows.")
+        try:
+            runner.check_call(
+                runner.kubectl("describe", "pod", remote_info.pod_name),
+                timeout=10
+            )
+        except Exception:
+            pass
+        raise RuntimeError("SSH to the cluster failed to start. See logfile.")
 
     # Create ssh tunnels. In the case of the container method, just show the
     # associated messages; the tunnels will be created in the network
