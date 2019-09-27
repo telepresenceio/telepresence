@@ -165,7 +165,7 @@ def mount_remote_docker(runner, ssh, docker_mount, env):
 
 def setup(runner, args):
     """
-    Set up one of three mount_remote implementations:
+    Set up one of four mount_remote implementations:
     - Do nothing
     - Mount onto a temporary directory
     - Mount onto a specified mount point
@@ -185,6 +185,21 @@ def setup(runner, args):
         else:
             needed.append("umount")
         runner.require(needed, "Required for volume mounts")
+
+    if args.docker_mount:
+        try:
+            runner.check_call(
+                runner.docker("plugin", "inspect", "vieux/sshfs"),
+                timeout=30,
+            )
+        except CalledProcessError as exc:
+            runner.show("Docker plugin check failed: {}".format(exc.stderr))
+            runner.show(
+                "\nThe --docker-mount option requires the vieux/sshfs Docker"
+                " plugin. Use `docker plugin install vieux/sshfs` to install"
+                " it. Use `docker plugin list` to check installed plugins."
+            )
+            raise runner.fail("Error: Docker plugin required")
 
     if (args.mount or args.docker_mount) and runner.chatty:
         runner.show(
