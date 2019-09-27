@@ -126,7 +126,7 @@ def create_new_deployment(
     command = [
         "run",  # This will result in using Deployment:
         "--restart=Always",
-        "--limits=cpu=100m,memory=256Mi",
+        "--limits=cpu=1000m,memory=256Mi",
         "--requests=cpu=25m,memory=64Mi",
         deployment_arg,
         "--image=" + get_image_name(expose),
