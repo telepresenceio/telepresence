@@ -141,8 +141,9 @@ def setup_container(runner: Runner, args):
         runner_, remote_info, env, _socks_port, ssh, mount_dir, pod_info
     ):
         return run_docker_command(
-            runner_, remote_info, args.docker_run, args.expose, env, ssh,
-            mount_dir, args.docker_mount is not None, pod_info
+            runner_, remote_info, args.docker_run, args.expose,
+            args.container_to_host, env, ssh, mount_dir,
+            args.docker_mount is not None, pod_info
         )
 
     return launch

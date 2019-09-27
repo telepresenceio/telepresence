@@ -76,6 +76,7 @@ def run_docker_command(
     remote_info: RemoteInfo,
     docker_run: List[str],
     expose: PortMapping,
+    container_to_host: PortMapping,
     remote_env: Dict[str, str],
     ssh: SSH,
     mount_dir: Optional[str],
@@ -106,7 +107,7 @@ def run_docker_command(
     )
     local_ssh = SSH(runner, container_sshd_port, "root@127.0.0.1")
 
-    # Start the sshuttle container:
+    # Start the network (sshuttle) container:
     name = random_name()
     config = {
         "cidrs": ["0/0"],
@@ -135,9 +136,19 @@ def run_docker_command(
     if not local_ssh.wait():
         raise RuntimeError("SSH to the network container failed to start.")
 
+    container_forward_args = ["-R", "38023:127.0.0.1:{}".format(ssh.port)]
+    for container_port, host_port in container_to_host.local_to_remote():
+        if runner.chatty:
+            runner.show(
+                "Forwarding container port {} to host port {}.".format(
+                    container_port, host_port
+                )
+            )
+        container_forward_args.extend([
+            "-R", "{}:127.0.0.1:{}".format(container_port, host_port)
+        ])
     runner.launch(
-        "Local SSH port forward",
-        local_ssh.bg_command(["-R", "38023:127.0.0.1:{}".format(ssh.port)])
+        "Local SSH port forward", local_ssh.bg_command(container_forward_args)
     )
 
     # Wait for sshuttle to be running:
