@@ -11,6 +11,9 @@ Put tests in this module if they don't use ``with_probe`` but do use
 """
 
 import subprocess
+from shutil import (
+    which,
+)
 from time import (
     sleep,
     time,
@@ -72,6 +75,9 @@ def disconnect_telepresence(probe_result, namespace):
 
 
 def test_docker_mount(request):
+    if which("docker") is None:
+        pytest.skip("Docker unavailable")
+        # not reached
     mount_dir = "/test{}".format(int(time()))
     filename = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
     script = "[ $TELEPRESENCE_ROOT == {} ]".format(mount_dir)
