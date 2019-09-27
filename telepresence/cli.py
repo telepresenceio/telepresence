@@ -318,6 +318,17 @@ def parse_args(args=None) -> argparse.Namespace:
             "the run subprocess will be proxied."
         )
     )
+    parser.add_argument(
+        "--local-cluster",
+        action='store_true',
+        help=(
+            "If you are using --method=vpn-tcp with a local cluster (one that"
+            " is running on the same computer as Telepresence) and you"
+            " experience DNS loops or loss of Internet connectivity while"
+            " Telepresence is running, use this flag to enable an internal"
+            " workaround that may help."
+        )
+    )
 
     mount_group = parser.add_mutually_exclusive_group()
     mount_group.add_argument(

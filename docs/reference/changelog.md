@@ -8,6 +8,7 @@ Features:
   This makes it possible to use volumes even if you don't have mount privileges or capabilities on your main system, e.g. on Windows.
   See [the documentation](https://www.telepresence.io/howto/volumes#volume-access-via-docker-volume-for-the-container-method) for more about the new `--docker-mount` feature.
   Thanks to Sławomir Kwasiborski for the patch.
+* When using the default `vpn-tcp` method, you can use the `--local-cluster` flag to bypass local cluster heuristics and force Telepresence to use its DNS loop avoidance workaround.
 
 Misc:
 
