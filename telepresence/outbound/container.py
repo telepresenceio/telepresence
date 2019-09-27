@@ -26,28 +26,11 @@ from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.utilities import find_free_port, random_name
 
-# Whether Docker requires sudo
-SUDO_FOR_DOCKER = os.path.exists("/var/run/docker.sock") and not os.access(
-    "/var/run/docker.sock", os.W_OK
-)
-
-
-def docker_runify(args: List[str], env=False) -> List[str]:
-    """Prepend 'docker run' to a list of arguments."""
-    args = ['docker', 'run'] + args
-    if SUDO_FOR_DOCKER:
-        if env:
-            return ["sudo", "-E"] + args
-        return ["sudo"] + args
-    else:
-        return args
-
 
 def make_docker_kill(runner: Runner, name: str) -> Callable:
     """Return a function that will kill a named docker container."""
     def kill():
-        sudo = ["sudo"] if SUDO_FOR_DOCKER else []
-        runner.check_call(sudo + ["docker", "stop", "--time=1", name])
+        runner.check_call(runner.docker("stop", "--time=1", name))
 
     return kill
 
@@ -139,15 +122,13 @@ def run_docker_command(
     span = runner.span()
     runner.launch(
         "Network container",
-        docker_runify(
-            publish_args + dns_args + [
-                "--rm", "--privileged", "--name=" +
-                name, TELEPRESENCE_LOCAL_IMAGE, "proxy",
-                json.dumps(config)
-            ]
+        runner.docker(
+            "run", *publish_args, *dns_args, "--rm", "--privileged",
+            "--name=" + name, TELEPRESENCE_LOCAL_IMAGE, "proxy",
+            json.dumps(config)
         ),
         killer=make_docker_kill(runner, name),
-        keep_session=SUDO_FOR_DOCKER,
+        keep_session=runner.sudo_for_docker,
     )
 
     # Set up ssh tunnel to allow the container to reach the cluster
@@ -164,10 +145,10 @@ def run_docker_command(
     for _ in runner.loop_until(120, 1):
         try:
             runner.check_call(
-                docker_runify([
-                    "--network=container:" + name, "--rm",
+                runner.docker(
+                    "run", "--network=container:" + name, "--rm",
                     TELEPRESENCE_LOCAL_IMAGE, "wait"
-                ])
+                )
             )
         except CalledProcessError as e:
             if e.returncode == 100:
@@ -192,11 +173,10 @@ def run_docker_command(
 
     # Start the container specified by the user:
     container_name = random_name()
-    docker_command = docker_runify(
-        [
-            "--name=" + container_name,
-            "--network=container:" + name,
-        ],
+    docker_command = runner.docker(
+        "run",
+        "--name=" + container_name,
+        "--network=container:" + name,
         env=True,
     )
 

@@ -16,7 +16,7 @@ from subprocess import CalledProcessError
 
 from telepresence.runner import Runner
 
-from .container import SUDO_FOR_DOCKER, docker_runify, run_docker_command
+from .container import run_docker_command
 from .local import launch_inject, launch_vpn
 
 
@@ -102,10 +102,7 @@ def setup_vpn(runner: Runner, args):
 
 
 def setup_container(runner: Runner, args):
-    runner.require(["docker"], "Needed for the container method.")
-    if SUDO_FOR_DOCKER:
-        runner.require_sudo()
-
+    runner.require_docker()
     if args.also_proxy:
         runner.show(
             "Note: --also-proxy is no longer required with --docker-run. "
@@ -122,10 +119,10 @@ def setup_container(runner: Runner, args):
     )
     try:
         id_in_container = runner.get_output(
-            docker_runify([
-                "--rm", "-v", "{}:/tel".format(runner.temp), "alpine:3.6",
-                "cat", "/tel/session_id.txt"
-            ]),
+            runner.docker(
+                "run", "--rm", "-v", "{}:/tel".format(runner.temp),
+                "alpine:3.6", "cat", "/tel/session_id.txt"
+            ),
             timeout=30,
             reveal=True,
         ).strip()
