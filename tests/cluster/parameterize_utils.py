@@ -23,6 +23,9 @@ from .utils import (
 REGISTRY = os.environ.get("TELEPRESENCE_REGISTRY", "datawire")
 ENVFILE_PATH = Path("/tmp")
 
+LOCAL_WEB_PORT = 12399
+LOCAL_WEB_CONTAINER_PORT = 8000
+
 
 def retry(condition, function):
     while True:
@@ -99,6 +102,8 @@ class _ContainerMethod(object):
         return [
             "--method",
             "container",
+            "--container-to-host",
+            "{}:{}".format(LOCAL_WEB_CONTAINER_PORT, LOCAL_WEB_PORT),
             "--docker-run",
             # The probe wants to use stdio to communicate with the test process
             "--interactive",
@@ -913,13 +918,22 @@ class Probe(object):
             print("Launching {}".format(self))
 
             local_port = find_free_port()
-            self.loopback_url = self.LOOPBACK_URL_TEMPLATE.format(local_port, )
+            self.loopback_url = self.LOOPBACK_URL_TEMPLATE.format(local_port)
             # This is a local web server that the Telepresence probe can try to
             # interact with to verify network routing to the host.
             # TODO Just cross our fingers and hope this port is available...
             server_cmd = [executable, "-m", "http.server", str(local_port)]
             p = Popen(server_cmd, cwd=str(DIRECTORY))
             self._cleanup.append(lambda: _cleanup_process(p))
+
+            # This is for testing the container method's connectivity to the
+            # host using port forwarding.
+            self.fwd_url = self.LOOPBACK_URL_TEMPLATE.format(
+                LOCAL_WEB_CONTAINER_PORT
+            )
+            server_cmd = [executable, "-m", "http.server", str(LOCAL_WEB_PORT)]
+            p2 = Popen(server_cmd, cwd=str(DIRECTORY))
+            self._cleanup.append(lambda: _cleanup_process(p2))
 
             also_proxy = [
                 self.ALSO_PROXY_HOSTNAME.argument,
@@ -939,7 +953,7 @@ class Probe(object):
                 self.operation,
                 self.DESIRED_ENVIRONMENT,
                 {self.CLIENT_ENV_VAR: "FOO"},
-                [self.loopback_url],
+                [self.loopback_url, self.fwd_url],
                 self.QUESTIONABLE_COMMANDS,
                 self.INTERESTING_PATHS,
                 also_proxy,
