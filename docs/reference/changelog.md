@@ -2,6 +2,13 @@
 
 <!--- towncrier start line -->
 
+Features:
+
+* When using the container method, Telepresence can use a Docker volume to mount remote volumes.
+  This makes it possible to use volumes even if you don't have mount privileges or capabilities on your main system, e.g. on Windows.
+  See [the documentation](https://www.telepresence.io/howto/volumes#volume-access-via-docker-volume-for-the-container-method) for more about the new `--docker-mount` feature.
+  Thanks to Sławomir Kwasiborski for the patch.
+
 Misc:
 
 * When using the `inject-tcp` method, Telepresence no longer tries to connect to google.com to check for connectivity.
