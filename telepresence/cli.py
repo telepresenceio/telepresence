@@ -172,6 +172,17 @@ def path_or_bool(value: str) -> Union[Path, bool]:
     )
 
 
+def absolute_path(value: str) -> Path:
+    """Parse value as a Path or a boolean"""
+    path = Path(value)
+    if path.is_absolute():
+        return path
+
+    raise argparse.ArgumentTypeError(
+        "Value must be an absolute filesystem path"
+    )
+
+
 def parse_args(args=None) -> argparse.Namespace:
     """Create a new ArgumentParser and parse sys.argv."""
     parser = argparse.ArgumentParser(
@@ -307,7 +318,22 @@ def parse_args(args=None) -> argparse.Namespace:
             "the run subprocess will be proxied."
         )
     )
-    parser.add_argument(
+
+    mount_group = parser.add_mutually_exclusive_group()
+    mount_group.add_argument(
+        "--docker-mount",
+        type=absolute_path,
+        metavar="PATH",
+        dest="docker_mount",
+        default=None,
+        help=(
+            "The absolute path for the root directory where volumes will be "
+            "mounted, $TELEPRESENCE_ROOT. "
+            "Requires --method container."
+        )
+    )
+
+    mount_group.add_argument(
         "--mount",
         type=path_or_bool,
         metavar="PATH_OR_BOOLEAN",
@@ -382,6 +408,9 @@ def parse_args(args=None) -> argparse.Namespace:
     ):
         args.new_deployment = random_name()
 
+    if args.docker_mount:
+        args.mount = False
+
     if args.method == "container" and args.docker_run is None:
         raise SystemExit(
             "'--docker-run' is required when using '--method container'."
@@ -389,6 +418,11 @@ def parse_args(args=None) -> argparse.Namespace:
     if args.docker_run is not None and args.method != "container":
         raise SystemExit(
             "'--method container' is required when using '--docker-run'."
+        )
+
+    if args.docker_mount is not None and args.method != "container":
+        raise SystemExit(
+            "'--method container' is required when using '--docker-mount'."
         )
 
     args.expose = PortMapping.parse(args.expose)

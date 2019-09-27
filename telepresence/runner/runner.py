@@ -66,6 +66,7 @@ class Runner(object):
         self.counter = 0
         self.cleanup_stack = []  # type: typing.List[_CleanupItem]
         self.sudo_held = False
+        self.sudo_for_docker = False
         self.quitting = False
         self.ended = []  # type: typing.List[str]
 
@@ -258,6 +259,25 @@ class Runner(object):
                 "https://www.telepresence.io/reference/install#dependencies " +
                 "for more information."
             )
+
+    def require_docker(self):
+        self.require(["docker"], "Needed for the container method.")
+
+        # Check whether `sudo docker` is required.
+        # FIXME(ark3): This assumes a local docker. We check for that in a
+        # roundabout way elsewhere. Consider using `docker context inspect` to
+        # do all of this stuff in a way that may be supported.
+        dsock = "/var/run/docker.sock"
+        if os.path.exists(dsock) and not os.access(dsock, os.W_OK):
+            self.require_sudo()
+            self.sudo_for_docker = True
+
+    def docker(self, *args: str, env=False) -> typing.List[str]:
+        if not self.sudo_for_docker:
+            return ["docker"] + list(args)
+        if env:
+            return ["sudo", "-E", "docker"] + list(args)
+        return ["sudo", "docker"] + list(args)
 
     # Time
 

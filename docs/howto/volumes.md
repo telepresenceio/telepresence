@@ -91,3 +91,18 @@ def telepresence_remote_mounts():
         link_src = os.path.join(tel_root, mount[1:])
         os.symlink(link_src, mount)
 ```
+
+## Volume access via Docker volume for the container method
+
+It is possible to use the [vieux/sshfs](https://github.com/vieux/docker-volume-sshfs) volume driver to access remote volumes if you are using the container method.
+This makes it possible to use volumes even if you don't have mount privileges or capabilities on your main system, e.g. on Windows.
+Use the `--docker-mount` option to specify an absolute path for volume mounts inside your container.
+Note that `--docker-mount` is mutually exclusive with `--mount` and is available only with the container method.
+
+When `--docker-mount` is specified, instead of using `sshfs` to mount the remote filesystem on your host, a randomly named docker volume is created using the vieux/sshfs volume driver.
+The volume is mounted in the user container at the mount point specified by `--docker-mount`.
+As a side benefit, `sudo` is no longer required for the container method (unless you need `sudo` to run Docker).
+
+One downside is that it is not possible to mount a subdirectory of the remote volumes at another location in your container.
+This means that the `/var/run/secrets` workaround described above cannot be done with `--docker-mount`.
+Using `$TELEPRESENCE_ROOT` is required.
