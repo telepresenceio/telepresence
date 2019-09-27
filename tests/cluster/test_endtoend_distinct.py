@@ -10,8 +10,10 @@ Put tests in this module if they don't use ``with_probe`` but do use
 ``Probe``.
 """
 
+import subprocess
 from time import (
     sleep,
+    time,
 )
 
 import pytest
@@ -67,3 +69,15 @@ def test_disconnect(request):
 
 def disconnect_telepresence(probe_result, namespace):
     probe_result.write("disconnect-telepresence " + namespace)
+
+
+def test_docker_mount(request):
+    mount_dir = "/test{}".format(int(time()))
+    filename = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+    script = "[ $TELEPRESENCE_ROOT == {} ]".format(mount_dir)
+    script += " && cat {}{}".format(mount_dir, filename)
+    args = [
+        "telepresence", "--logfile=-", "--docker-mount", mount_dir,
+        "--docker-run", "--rm", "alpine:3.10", "sh", "-x", "-c", script
+    ]
+    subprocess.check_call(args)
