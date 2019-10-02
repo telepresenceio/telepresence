@@ -38,7 +38,7 @@ func main() {
 	timeout := ka.Flags().DurationP("timeout", "t", time.Minute,
 		"timeout to wait for each applied YAML phase to become ready")
 	showVersion := ka.Flags().Bool("version", false, "output version information and exit")
-	files := ka.Flags().StringArrayP("", "f", nil, "files to apply")
+	files := ka.Flags().StringSliceP("filename", "f", nil, "files to apply")
 
 	ka.RunE = func(cmd *cobra.Command, args []string) error {
 		if *showVersion {
