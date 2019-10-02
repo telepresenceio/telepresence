@@ -1,1 +1,0 @@
-increase telepresence pod CPU limit to 1, fixing performance degrading caused by CPU time throttling, more information can be found here https://github.com/kubernetes/kubernetes/issues/67577 and https://github.com/kubernetes/kubernetes/issues/51135

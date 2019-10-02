@@ -2,23 +2,46 @@
 
 <!--- towncrier start line -->
 
+#### 0.102 (October 2, 2019)
+
 Features:
 
+* You can set the Kubernetes service account for new and swapped deployments using the `--serviceaccount` option.
+  Thanks to Bill McMath and Dmitry Bazhal for the patches.
+  ([#1093](https://github.com/telepresenceio/telepresence/issues/1093))
+* When using the container method, you can forward container ports to the host machine.
+  This can be useful to allow code running in your container to connect to an IDE or debugger running on the host.
+  ([#1022](https://github.com/telepresenceio/telepresence/issues/1022))
 * When using the container method, Telepresence can use a Docker volume to mount remote volumes.
-  This makes it possible to use volumes even if you don't have mount privileges or capabilities on your main system, e.g. on Windows.
+  This makes it possible to use volumes even if you don't have mount privileges or capabilities on your main system, e.g. in a container.
   See [the documentation](https://www.telepresence.io/howto/volumes#volume-access-via-docker-volume-for-the-container-method) for more about the new `--docker-mount` feature.
+  This is Linux-only for the moment: [#1135](https://github.com/telepresenceio/telepresence/issues/1135).
   Thanks to Sławomir Kwasiborski for the patch.
 * When using the default `vpn-tcp` method, you can use the `--local-cluster` flag to bypass local cluster heuristics and force Telepresence to use its DNS loop avoidance workaround.
+* Telepresence sets the `command` field when swapping a deployment.
+  Thanks to GitHub user netag for the patch.
+
+
+Bug fixes:
+
+* When using the container method, Telepresence notices if the Docker daemon is not local and reports an error.
+  ([#873](https://github.com/telepresenceio/telepresence/issues/873))
+* Telepresence is somewhat more robust when working with a local cluster.
+  ([#1000](https://github.com/telepresenceio/telepresence/issues/1000))
+* Telepresence no longer crashes on `ssh` timeouts.
+  ([#1075](https://github.com/telepresenceio/telepresence/issues/1075))
+* The CPU limit for the Telepresence pod for new deployments is now 1, fixing performance degradation caused by CPU time throttling.
+  See https://github.com/kubernetes/kubernetes/issues/67577 and https://github.com/kubernetes/kubernetes/issues/51135 for more information.
+  Thanks to Zhuo Peng for the patch.
+  ([#1120](https://github.com/telepresenceio/telepresence/issues/1120))
 
 Misc:
 
 * When using the `inject-tcp` method, Telepresence no longer tries to connect to google.com to check for connectivity.
   Now it tries to connect to kubernetes.default.svc.cluster.local, which should be accessible in common cluster configurations.
   Thanks to GitHub user ReSearchITEng for the patch.
-* Telepresence detects another name for Docker for Desktop.
+* Telepresence detects an additional name for Docker for Desktop.
   Thanks to William Austin for the patch.
-* Telepresence sets the `command` field when swapping a deployment.
-  Thanks to GitHub user netag for the patch.
 
 #### 0.101 (June 19, 2019)
 
