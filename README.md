@@ -68,7 +68,7 @@ packages can be found at `<repo>/internal/pkg/<name>/...`.
 
 The build process uses `jq` to perform some operations. Make sure it is installed:
 
-```
+```console
 # On MacOS
 $ brew install jq
 $ jq --version
