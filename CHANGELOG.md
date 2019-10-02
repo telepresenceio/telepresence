@@ -11,6 +11,7 @@ refer to.
  * <b>[edgectl]</b> Better output.
  * <b>[edgectl]</b> `su`/`sudo` bug fixed.
  * <b>[k3sctl]</b> Bug fix: More robust readiness check.
+ * <b>[kubeapply]</b> Accept `--filename` in addition to `-f`, just like `kubectl apply`.
  * <b>[teleproxy]</b> Once again works properly for services with multiple ports.
  * <b>[lib/dlog]</b> Added.
  * <b>[lib/dtest/testprocess]</b> Enhancement: Don't require the use of `sudo`.
