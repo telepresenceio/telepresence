@@ -69,6 +69,13 @@ In the above output the address is `http://example.openshiftsapps.com`, but you 
 It may take a few minutes before this route will be live; in the interim you will get an error page.
 If you do wait a minute and try again.
 
+**Important:** When running Telepresence with `vpn-tcp` proxying, all DNS queries for the host will be routed to
+cluster DNS. This can break `oc` if the cluster is running in AWS and a request to resolve the name of a cluster's API
+endpoint returns an address internal to AWS. Manually updating `KUBECONFIG` with the resolved address may work around
+this issue, but if the API endpoint is behind a virtualhost proxy (e.g. if the cluster was deployed with
+`try.openshift.com`) it may be necessary to leave the host name in `KUBECONFIG` and add an entry to `/etc/hosts`
+instead.
+
 {{ macros.gettingStartedPart2("oc", "OpenShift") }}
 
 ```console
