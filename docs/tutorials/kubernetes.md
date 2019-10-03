@@ -30,7 +30,7 @@ $ kubectl expose deployment hello-world --type=LoadBalancer --name=hello-world
 > http://192.168.99.100:12345/
 > ```
 
-{{ macros.gettingStartedPart2("Deployment", "kubectl", "Kubernetes") }}
+{{ macros.gettingStartedPart2("kubectl", "Kubernetes") }}
 
 ```console
 $ kubectl delete deployment,service hello-world

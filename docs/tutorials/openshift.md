@@ -6,7 +6,8 @@
 2. Run a service in the cluster:
 
    ```console
-   $ oc run myservice --image=datawire/hello-world --port=8000 --expose
+   $ oc create deployment myservice --image=datawire/hello-world
+   $ oc expose deployment/myservice --type="ClusterIP" --port 8000
    $ oc get service myservice
    NAME        CLUSTER-IP   EXTERNAL-IP   PORT(S)    AGE
    myservice   10.0.0.12    <none>        8000/TCP   1m
@@ -36,7 +37,8 @@ In the more extended tutorial that follows you'll see how you can also route tra
 You should start a new application and publicly expose it:
 
 ```console
-$ oc new-app --docker-image=datawire/hello-world --name=hello-world
+$ oc create deployment hello-world --image=datawire/hello-world
+$ oc expose deployment/hello-world --type="ClusterIP" --port 8000
 $ oc expose service hello-world
 ```
 
@@ -67,10 +69,10 @@ In the above output the address is `http://example.openshiftsapps.com`, but you 
 It may take a few minutes before this route will be live; in the interim you will get an error page.
 If you do wait a minute and try again.
 
-{{ macros.gettingStartedPart2("DeploymentConfig", "oc", "OpenShift") }}
+{{ macros.gettingStartedPart2("oc", "OpenShift") }}
 
 ```console
-$ oc delete dc,service,route,imagestream hello-world
+$ oc delete deploy,service,route hello-world
 ```
 
 Telepresence can do much more than this: see the reference section of the documentation, on the top-left, for details.
