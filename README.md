@@ -66,6 +66,15 @@ packages can be found at `<repo>/internal/pkg/<name>/...`.
 
 ## Building
 
+The build process uses `jq` to perform some operations. Make sure it is installed:
+
+```console
+# On MacOS
+$ brew install jq
+$ jq --version
+jq-1.6
+```
+
 Use `make check` and `make build` for running formal test and
 builds. You can use `make help` to find other useful targets.
 
