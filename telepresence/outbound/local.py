@@ -121,6 +121,7 @@ def launch_vpn(
     Launch sshuttle and the user's command
     """
     connect_sshuttle(runner, remote_info, also_proxy, ssh)
+    _flush_dns_cache(runner)
     env = get_local_env(runner, env_overrides, False)
     runner.show("Setup complete. Launching your command.")
     try:
@@ -131,3 +132,10 @@ def launch_vpn(
         "Terminate local process", terminate_local_process, runner, process
     )
     return process
+
+
+def _flush_dns_cache(runner: Runner):
+    if runner.platform == "darwin":
+        runner.show("Connected. Flushing DNS cache.")
+        pkill_cmd = ["sudo", "-n", "/usr/bin/pkill", "-HUP", "mDNSResponder"]
+        runner.check_call(pkill_cmd)
