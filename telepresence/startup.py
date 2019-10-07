@@ -24,6 +24,10 @@ from urllib.request import urlopen
 
 from telepresence.runner import Runner
 
+KUBECTL = "kubectl"
+
+OC = "oc"
+
 
 def kubectl_or_oc(server: str) -> str:
     """
@@ -31,23 +35,31 @@ def kubectl_or_oc(server: str) -> str:
 
     :param server: The URL of the cluster API server.
     """
-    if which("oc") is None:
-        return "kubectl"
+    if which(OC) is None:
+        return KUBECTL
     # We've got oc, and possibly kubectl as well. We only want oc for OpenShift
-    # servers, so check for an OpenShift API endpoint:
+    # servers, so check for an OpenShift API endpoint exposing users
+    # (it's also used by oc whoami command):
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     try:
-        with urlopen(server + "/apis", context=ctx) as response:
+        with urlopen(
+            server + "/apis/user.openshift.io/v1/users/", context=ctx
+        ) as response:
             api_group_list = str(response.read())
-    except (URLError, HTTPError):
-        return "kubectl"
+    except HTTPError as err:
+        if err.code == 403:
+            return OC
+        else:
+            return KUBECTL
+    except URLError:
+        return KUBECTL
 
     if "openshift" in api_group_list:
-        return "oc"
+        return OC
     else:
-        return "kubectl"
+        return KUBECTL
 
 
 def _parse_version_component(comp: str) -> int:
