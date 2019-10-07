@@ -138,4 +138,7 @@ def _flush_dns_cache(runner: Runner):
     if runner.platform == "darwin":
         runner.show("Connected. Flushing DNS cache.")
         pkill_cmd = ["sudo", "-n", "/usr/bin/pkill", "-HUP", "mDNSResponder"]
-        runner.check_call(pkill_cmd)
+        try:
+            runner.check_call(pkill_cmd)
+        except (OSError, CalledProcessError):
+            pass
