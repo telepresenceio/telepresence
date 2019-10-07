@@ -54,7 +54,7 @@ On startup:
 1. `telepresence` does a lookup of `hellotelepresence`.
 2. Your DNS client library turns this into a lookup of `hellotelepresence.example.com`.
 3. `sshuttle` forwards this to the custom Telepresence DNS server.
-4. The Telepresence DNS server recognizes the `hellotelepresence` marker, and so now it knows suffix it needs to filter is `example.com`.
+4. The Telepresence DNS server recognizes the `hellotelepresence` marker, and so now it knows the suffix it needs to filter is `example.com`.
 
 Next let's say you do:
 
