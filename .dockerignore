@@ -1,7 +1,0 @@
-*
-!go.mod
-!go.sum
-!internal/
-!pkg/
-!cmd/
-!vendor/
