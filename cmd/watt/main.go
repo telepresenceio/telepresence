@@ -80,11 +80,11 @@ func _runWatt(cmd *cobra.Command, args []string) int {
 
 	// The aggregator sends the current consul resolver set to the
 	// consul watch manager.
-	aggregatorToConsulwatchmanCh := make(chan []ConsulWatchSpec)
+	aggregatorToConsulwatchmanCh := make(chan []ConsulWatchSpec, 100)
 
 	// The aggregator sends the current k8s watch set to the
 	// kubernetes watch manager.
-	aggregatorToKubewatchmanCh := make(chan []KubernetesWatchSpec)
+	aggregatorToKubewatchmanCh := make(chan []KubernetesWatchSpec, 100)
 
 	invoker := NewInvoker(port, notifyReceivers)
 	limiter := limiter.NewComposite(limiter.NewUnlimited(), limiter.NewInterval(interval), interval)
