@@ -8,7 +8,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/pkg/errors"
 
-	"github.com/datawire/teleproxy/pkg/supervisor"
+	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
 type Server struct {

@@ -9,7 +9,7 @@ import (
 
 	ppf "github.com/datawire/pf"
 
-	"github.com/datawire/teleproxy/pkg/supervisor"
+	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
 type Translator struct {

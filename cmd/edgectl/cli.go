@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/datawire/teleproxy/pkg/supervisor"
+	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
 func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *ClientMessage) error {

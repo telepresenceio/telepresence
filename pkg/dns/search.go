@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/datawire/teleproxy/pkg/supervisor"
+	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
 type searchDomains struct {

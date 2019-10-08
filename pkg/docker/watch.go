@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/datawire/teleproxy/pkg/tpu"
+	"github.com/datawire/ambassador/pkg/tpu"
 )
 
 type empty struct{}

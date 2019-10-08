@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/datawire/teleproxy/pkg/supervisor"
+	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
 // Status reports the current status of the daemon

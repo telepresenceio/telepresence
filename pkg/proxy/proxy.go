@@ -5,7 +5,7 @@ import (
 	"log"
 	"net"
 
-	"github.com/datawire/teleproxy/pkg/tpu"
+	"github.com/datawire/ambassador/pkg/tpu"
 	"golang.org/x/net/proxy"
 )
 

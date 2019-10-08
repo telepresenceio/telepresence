@@ -9,7 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/datawire/teleproxy/pkg/supervisor"
+	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
 // Daemon represents the state of the Edge Control Daemon
