@@ -371,7 +371,7 @@ func intercept(p *supervisor.Process, tele *Teleproxy) error {
 			return err
 		}
 		for _, line := range strings.Split(string(dat), "\n") {
-			if strings.Contains(line, "nameserver") {
+			if strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
 				fields := strings.Fields(line)
 				tele.DNSIP = fields[1]
 				log.Printf("TPY: Automatically set -dns=%v", tele.DNSIP)
