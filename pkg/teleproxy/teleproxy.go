@@ -48,7 +48,10 @@ func dnsListeners(p *supervisor.Process, port string) (listeners []string) {
 			p.Log("not listening on docker bridge")
 			return
 		}
-		listeners = append(listeners, fmt.Sprintf("%s:%s", strings.TrimSpace(output), port))
+		extraIP := strings.TrimSpace(output)
+		if extraIP != "127.0.0.1" {
+			listeners = append(listeners, fmt.Sprintf("%s:%s", extraIP, port))
+		}
 	}
 
 	return
