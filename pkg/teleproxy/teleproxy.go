@@ -49,7 +49,7 @@ func dnsListeners(p *supervisor.Process, port string) (listeners []string) {
 			return
 		}
 		extraIP := strings.TrimSpace(output)
-		if extraIP != "127.0.0.1" {
+		if extraIP != "127.0.0.1" && extraIP != "0.0.0.0" && extraIP != "" {
 			listeners = append(listeners, fmt.Sprintf("%s:%s", extraIP, port))
 		}
 	}
