@@ -5,7 +5,7 @@ package nat
 import (
 	"strings"
 
-	"github.com/datawire/teleproxy/pkg/supervisor"
+	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
 type env struct {

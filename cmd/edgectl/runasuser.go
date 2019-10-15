@@ -13,7 +13,7 @@ import (
 	"github.com/kballard/go-shellquote"
 	"github.com/pkg/errors"
 
-	"github.com/datawire/teleproxy/pkg/supervisor"
+	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
 // RunAsInfo contains the information required to launch a subprocess as the

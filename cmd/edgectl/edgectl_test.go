@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/datawire/teleproxy/pkg/dtest"
-	"github.com/datawire/teleproxy/pkg/dtest/testprocess"
+	"github.com/datawire/ambassador/pkg/dtest"
+	"github.com/datawire/ambassador/pkg/dtest/testprocess"
 
 	"github.com/stretchr/testify/require"
 )
