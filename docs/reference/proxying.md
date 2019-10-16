@@ -62,6 +62,18 @@ $ telepresence --run curl http://helloworld.default
 ...
 ```
 
+Note that access to a headless service requires the full domain in `--method=vpn-tcp` to properly keep the correct host names of its underlying pods.
+For example, after deploying a Kafka cluster via Helm with a headless service named `confluent-cp-kafka-headless`:
+
+```bash
+# This will resolve correctly
+nslookup confluent-cp-kafka-headless.default.svc.cluster.local
+
+# This will initially find the service, but also will quietly append your local machine's DNS
+# information which will fail future requests for the underlying pods!
+nslookup confluent-cp-kafka-headless
+```
+
 > **Having trouble?** Ask us a question in our [Slack chatroom](https://d6e.co/slack).
 
 ### Networking access to cloud resources
