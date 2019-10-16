@@ -233,7 +233,11 @@ def run_helper(namespace):
 
 def run_webserver(namespace):
     """Run webserver in Kubernetes; return Service name."""
-    run_helper(namespace)
+    query_from_cluster(
+        "http://{}:8000/".format(HELPER_NAME),
+        namespace,
+        retries_on_empty=5,
+    )
     return HELPER_NAME
 
 
