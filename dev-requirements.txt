@@ -4,7 +4,7 @@ mypy
 pytest
 pytest-xdist
 pytest-timeout
-pytest-tap
+pytest-profiling
 pyyaml
 yapf
 towncrier
