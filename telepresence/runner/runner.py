@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import platform
 import select
 import signal
 import socket
@@ -70,14 +71,21 @@ class Runner(object):
         self.quitting = False
         self.ended = []  # type: typing.List[str]
 
+        self.is_wsl = False
         if sys.platform.startswith("linux"):
             self.platform = "linux"
+
+            # Detect if this platform is really linux-on-windows
+            if platform.uname().release.endswith("-Microsoft"):
+                self.is_wsl = True
         elif sys.platform.startswith("darwin"):
             self.platform = "darwin"
         else:
             # For untested platforms...
             self.platform = sys.platform
+        self.output.write("uname: {}".format(platform.uname()))
         self.output.write("Platform: {}".format(self.platform))
+        self.output.write("WSL: {}".format(self.is_wsl))
 
         term_width = 99999
         self.chatty = False
@@ -108,7 +116,6 @@ class Runner(object):
 
         # Log some version info
         self.output.write("Python {}".format(sys.version))
-        self.check_call(["uname", "-a"])
 
         cache_dir = os.path.expanduser("~/.cache/telepresence")
         os.makedirs(cache_dir, exist_ok=True)
@@ -116,9 +123,14 @@ class Runner(object):
         self.cache.invalidate(12 * 60 * 60)
         self.add_cleanup("Save caches", self.cache.save)
 
-        # Docker for Mac only shares some folders; the default TMPDIR
-        # on OS X is not one of them, so make sure we use /tmp:
-        self.temp = Path(mkdtemp(prefix="tel-", dir="/tmp"))
+        # Docker for Mac doesn't share TMPDIR, so make sure we use /tmp
+        # Docker for Windows can't access /tmp, so use a directory it can
+        tmp_dir = "/tmp"
+        if self.is_wsl:
+            tmp_dir = "/c/temp"
+        if not os.path.exists(tmp_dir):
+            os.makedirs(tmp_dir)
+        self.temp = Path(mkdtemp(prefix="tel-", dir=tmp_dir))
         (self.temp / "session_id.txt").write_text(self.session_id)
         self.add_cleanup("Remove temporary directory", rmtree, str(self.temp))
 
