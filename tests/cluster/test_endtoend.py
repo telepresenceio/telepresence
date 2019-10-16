@@ -195,7 +195,7 @@ def test_network_routing_to_cluster(probe):
     port = probe_environ[service_env + "_SERVICE_PORT"]
 
     # Check the partial service domain name with hard-coded port.
-    svc_url = "http://{}:8080/".format(probe_result.webserver_name)
+    svc_url = "http://{}:8000/".format(probe_result.webserver_name)
     (success, response) = probe_url(probe_result, svc_url)
     assert success and "Hello" in response
 

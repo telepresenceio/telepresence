@@ -190,45 +190,54 @@ def _indent(text):
     return ">\t" + text.replace("\n", "\n>\t")
 
 
+HELPER_NAME = "helper"
+
+
+def is_helper_running(namespace):
+    cmd = [
+        KUBECTL,
+        "--namespace={}".format(namespace),
+        "get",
+        "pods",
+        HELPER_NAME,
+        "--ignore-not-found",
+        "-o",
+        "jsonpath={.status.phase}",
+    ]
+    phase = check_output(cmd, universal_newlines=True)
+    if phase != "Running":
+        print("Helper phase:", phase)
+    return phase == "Running"
+
+
+def run_helper(namespace):
+    cmd = [
+        KUBECTL,
+        "--namespace={}".format(namespace),
+        "run",
+        "--restart=Never",
+        HELPER_NAME,
+        "--labels=telepresence=" + HELPER_NAME,
+        "--image=datawire/hello-world",
+        "--limits=cpu=100m,memory=256Mi",
+        "--requests=cpu=25m,memory=150Mi",
+        "--port=8000",
+        "--expose",
+    ]
+    if is_helper_running(namespace):
+        return
+    check_call(cmd)
+    for i in range(240):
+        if is_helper_running(namespace):
+            return
+        time.sleep(0.5)
+    raise RuntimeError("Helper never started!")
+
+
 def run_webserver(namespace):
     """Run webserver in Kubernetes; return Service name."""
-    webserver_name = "helper"
-    kubectl = [KUBECTL, "--namespace", namespace]
-
-    print("Creating webserver {}/{}".format(namespace, webserver_name))
-    check_output(
-        kubectl + [
-            "run",
-            "--restart=Never",
-            webserver_name,
-            "--labels=telepresence=" + webserver_name,
-            "--image=openshift/hello-openshift",
-            "--limits=cpu=100m,memory=256Mi",
-            "--requests=cpu=25m,memory=150Mi",
-            "--port=8080",
-            "--expose",
-        ]
-    )
-    for i in range(120):
-        try:
-            available = check_output(
-                kubectl + [
-                    "get", "pods", webserver_name, "-o",
-                    'jsonpath={.status.phase}'
-                ]
-            )
-        except CalledProcessError:
-            available = None
-        print("webserver phase: {}".format(available))
-        if available == b"Running":
-            # Wait for it to be running
-            query_from_cluster(
-                "http://{}:8080/".format(webserver_name), namespace
-            )
-            return webserver_name
-        else:
-            time.sleep(1)
-    raise RuntimeError("webserver never started")
+    run_helper(namespace)
+    return HELPER_NAME
 
 
 def current_namespace():
