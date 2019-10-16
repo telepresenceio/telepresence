@@ -1,6 +1,5 @@
 """Utilities."""
 
-import atexit
 import os
 import socket
 import time
@@ -110,52 +109,6 @@ def telepresence_image_version():
     return os.environ["TELEPRESENCE_VERSION"]
 
 
-def query_in_k8s(namespace, url, process_to_poll):
-    """Try sending HTTP requests to URL in Kubernetes, returning result.
-
-    On failure, retry. Will eventually timeout and raise exception.
-    """
-    for i in range(120):
-        try:
-            return check_output([
-                'kubectl',
-                'run',
-                '--attach',
-                random_name("q"),
-                "--quiet",
-                '--rm',
-                '--image=alpine',
-                '--restart',
-                'Never',
-                "--namespace",
-                namespace,
-                '--command',
-                '--',
-                'wget',
-                "-q",
-                "-O-",
-                "-T",
-                "3",
-                url,
-            ])
-        except CalledProcessError as e:
-            if process_to_poll is not None and process_to_poll.poll(
-            ) is not None:
-                raise RuntimeError(
-                    "Process exited prematurely: {}".format(
-                        process_to_poll.returncode
-                    )
-                )
-            print(
-                "http request failed, sleeping before retry ({}; {})".format(
-                    e, e.output
-                )
-            )
-            time.sleep(1)
-            continue
-    raise RuntimeError("failed to connect to HTTP server " + url)
-
-
 def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
     """
     Run an HTTP request from the cluster with timeout and retries
@@ -243,17 +196,6 @@ def run_webserver(namespace=None):
         namespace = current_namespace()
     kubectl = [KUBECTL, "--namespace", namespace]
 
-    def cleanup():
-        check_call(
-            kubectl + [
-                "delete", "--ignore-not-found", "all", "--wait=false",
-                "--selector=telepresence=" + webserver_name
-            ]
-        )
-
-    cleanup()
-    atexit.register(cleanup)
-
     print("Creating webserver {}/{}".format(namespace, webserver_name))
     check_output(
         kubectl + [
@@ -281,8 +223,8 @@ def run_webserver(namespace=None):
         print("webserver phase: {}".format(available))
         if available == b"Running":
             # Wait for it to be running
-            query_in_k8s(
-                namespace, "http://{}:8080/".format(webserver_name), None
+            query_from_cluster(
+                "http://{}:8080/".format(webserver_name), namespace
             )
             return webserver_name
         else:
