@@ -126,7 +126,7 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
         # Try wget the number of times we were asked.
         for value in $(seq {tries}); do
             # Don't try too fast.
-            sleep 1
+            sleep 0.1
 
             # server-response gets us the response headers which we'll dump
             # later to help debug any unexpected failures.
@@ -143,6 +143,7 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
             # the loop.
             wget --server-response --output-document=output -T3 \
                 {url} 2>&1 && break
+            sleep 0.9
         done
 
         # wget output is over.  Put this known string into the output here to
@@ -189,11 +190,9 @@ def _indent(text):
     return ">\t" + text.replace("\n", "\n>\t")
 
 
-def run_webserver(namespace=None):
+def run_webserver(namespace):
     """Run webserver in Kubernetes; return Service name."""
-    webserver_name = random_name("web")
-    if namespace is None:
-        namespace = current_namespace()
+    webserver_name = "helper"
     kubectl = [KUBECTL, "--namespace", namespace]
 
     print("Creating webserver {}/{}".format(namespace, webserver_name))
