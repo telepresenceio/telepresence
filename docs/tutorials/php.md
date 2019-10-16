@@ -12,7 +12,7 @@
 
 In this tutorial we will focus on how to setup a local development environment for a (micro)-service `Bar` written in PHP.
 
-This is is very useful if your application is formed of many such services which cannot run on a single development machine. In which case it's easy to setup a separate Kubernetes cluster dedicated for development.
+This is very useful if your application is formed of many such services which cannot run on a single development machine. In which case it's easy to setup a separate Kubernetes cluster dedicated for development.
 
 `Telepresence` will help us locally develop our service `Bar` as if it was still inside the Kubernetes cluster. It's a win-win!!
 
@@ -25,7 +25,10 @@ It will also maintain all the environment variables defined in your deployment. 
 
 In order to run our PHP application in a local Docker container, we can simply start a container which has PHP and Apache installed, mount the source directory to our code, and start coding!
 
-In this tutorial we will be using PHP 7.2 and an Apache based container, this could also work with PHP-FPM + Nginx, you'd just need to adjust the default xdebug port of 9000 because that will conflict with PHP-FPM.
+In this tutorial we will be using PHP 7.2 and an Apache based container.
+
+#### PHP-FPM NOTE:
+> this could also work with PHP-FPM + Nginx, you'd just need to adjust the default xdebug port of 9000 because that will conflict with the PHP-FPM listener port. I haven't had time to test PHP-FPM + Nginx, and will update this tutorial when I'm able to.
 
 ## Building inside a docker container
 
@@ -86,8 +89,9 @@ RUN echo "xdebug.remote_enable=1" >> /usr/local/etc/php/php.ini && \
 COPY ./index.php /var/www/html  
 WORKDIR /var/www/html
 ```
+This is taking the base PHP:7.2-apache docker container and inserting our xdebug configuration so xdebug will run when we execute our `myapp` container.
 
-Next, you'll build this container:
+Next, you'll build the `myapp` container:
 
 ```bash
 docker build -t myapp:01 .
