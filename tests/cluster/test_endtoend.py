@@ -22,6 +22,17 @@ def origin_ip():
 
 
 @with_probe
+def test_nothing(probe):
+    """
+    This test will probably run first for this set of probe arguments. Cause
+    the probe to run and then test nothing. This exists to keep probe launch
+    time from counting against other tests during profiling.
+    """
+    _ = probe.result()
+    return
+
+
+@with_probe
 def test_environment_from_deployment(probe):
     """
     The Telepresence execution context supplies environment variables with
@@ -195,7 +206,7 @@ def test_network_routing_to_cluster(probe):
     port = probe_environ[service_env + "_SERVICE_PORT"]
 
     # Check the partial service domain name with hard-coded port.
-    svc_url = "http://{}:8080/".format(probe_result.webserver_name)
+    svc_url = "http://{}:8000/".format(probe_result.webserver_name)
     (success, response) = probe_url(probe_result, svc_url)
     assert success and "Hello" in response
 

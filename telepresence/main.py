@@ -29,17 +29,22 @@ def main():
     Top-level function for Telepresence
     """
 
-    ########################################
-    # Preliminaries: No changes to the machine or the cluster, no cleanup
-    # Capture environment info and the user's intent
-
     with crash_reporting():
+        ########################################
+        # Preliminaries: No changes to the machine or the cluster, no cleanup
+        # Capture environment info
+
         args = parse_args()  # tab-completion stuff goes here
 
         runner = Runner(args.logfile, None, args.verbose)
         span = runner.span()
         runner.add_cleanup("Stop time tracking", span.end)
         runner.kubectl = KubeInfo(runner, args)
+
+    with runner.cleanup_handling(), crash_reporting(runner):
+        ########################################
+        # Intent: Fast, user prompts here, cleanup available
+        # Capture the user's intent
 
         start_proxy = proxy.setup(runner, args)
         do_connect = connect.setup(runner, args)
@@ -52,10 +57,10 @@ def main():
         # Usage tracking
         call_scout(runner, args)
 
-    ########################################
-    # Now it's okay to change things
+        ########################################
+        # Action: Perform the user's intended operation(s)
+        # Now it's okay to change things
 
-    with runner.cleanup_handling(), crash_reporting(runner):
         # Set up the proxy pod (operation -> pod name)
         remote_info = start_proxy(runner)
 

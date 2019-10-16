@@ -9,6 +9,7 @@ telepresence.log
 .hypothesis
 *.egg-info
 dist
+prof
 
 # Secrets -- don't commit these!
 gcloud-service-key.json

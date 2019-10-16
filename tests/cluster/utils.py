@@ -1,13 +1,12 @@
 """Utilities."""
 
-import atexit
 import os
 import socket
 import time
 from base64 import b64encode
 from json import dumps
 from pathlib import Path
-from subprocess import CalledProcessError, check_call, check_output
+from subprocess import check_call, check_output
 
 DIRECTORY = Path(__file__).absolute().parent
 REVISION = str(check_output(["git", "rev-parse", "--short", "HEAD"]),
@@ -110,56 +109,11 @@ def telepresence_image_version():
     return os.environ["TELEPRESENCE_VERSION"]
 
 
-def query_in_k8s(namespace, url, process_to_poll):
-    """Try sending HTTP requests to URL in Kubernetes, returning result.
-
-    On failure, retry. Will eventually timeout and raise exception.
-    """
-    for i in range(120):
-        try:
-            return check_output([
-                'kubectl',
-                'run',
-                '--attach',
-                random_name("q"),
-                "--quiet",
-                '--rm',
-                '--image=alpine',
-                '--restart',
-                'Never',
-                "--namespace",
-                namespace,
-                '--command',
-                '--',
-                'wget',
-                "-q",
-                "-O-",
-                "-T",
-                "3",
-                url,
-            ])
-        except CalledProcessError as e:
-            if process_to_poll is not None and process_to_poll.poll(
-            ) is not None:
-                raise RuntimeError(
-                    "Process exited prematurely: {}".format(
-                        process_to_poll.returncode
-                    )
-                )
-            print(
-                "http request failed, sleeping before retry ({}; {})".format(
-                    e, e.output
-                )
-            )
-            time.sleep(1)
-            continue
-    raise RuntimeError("failed to connect to HTTP server " + url)
-
-
 def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
     """
     Run an HTTP request from the cluster with timeout and retries
     """
+    run_helper(namespace)
     # Separate debug output from the HTTP server response.
     delimiter = b64encode(
         b"totally random stuff that won't appear anywhere else"
@@ -173,7 +127,7 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
         # Try wget the number of times we were asked.
         for value in $(seq {tries}); do
             # Don't try too fast.
-            sleep 1
+            sleep 0.1
 
             # server-response gets us the response headers which we'll dump
             # later to help debug any unexpected failures.
@@ -190,6 +144,7 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
             # the loop.
             wget --server-response --output-document=output -T3 \
                 {url} 2>&1 && break
+            sleep 0.9
         done
 
         # wget output is over.  Put this known string into the output here to
@@ -210,14 +165,10 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
         res = check_output([
             "kubectl",
             "--namespace={}".format(namespace),
-            "run",
-            random_name("query"),
-            "--attach",
-            "--quiet",
-            "--rm",
-            "--image=alpine",
-            "--restart=Never",
-            "--command",
+            "exec",
+            "-i",
+            "-t",
+            HELPER_NAME,
             "--",
             "sh",
             "-c",
@@ -236,58 +187,58 @@ def _indent(text):
     return ">\t" + text.replace("\n", "\n>\t")
 
 
-def run_webserver(namespace=None):
+HELPER_NAME = "helper"
+
+
+def is_helper_running(namespace):
+    cmd = [
+        KUBECTL,
+        "--namespace={}".format(namespace),
+        "get",
+        "pods",
+        HELPER_NAME,
+        "--ignore-not-found",
+        "-o",
+        "jsonpath={.status.phase}",
+    ]
+    phase = check_output(cmd, universal_newlines=True)
+    if phase != "Running":
+        print("Helper phase:", phase)
+    return phase == "Running"
+
+
+def run_helper(namespace):
+    cmd = [
+        KUBECTL,
+        "--namespace={}".format(namespace),
+        "run",
+        "--restart=Never",
+        HELPER_NAME,
+        "--labels=telepresence=" + HELPER_NAME,
+        "--image=datawire/hello-world",
+        "--limits=cpu=100m,memory=256Mi",
+        "--requests=cpu=25m,memory=150Mi",
+        "--port=8000",
+        "--expose",
+    ]
+    if is_helper_running(namespace):
+        return
+    check_call(cmd)
+    for i in range(240):
+        if is_helper_running(namespace):
+            return
+        time.sleep(0.5)
+    raise RuntimeError("Helper never started!")
+
+
+def run_webserver(namespace):
     """Run webserver in Kubernetes; return Service name."""
-    webserver_name = random_name("web")
-    if namespace is None:
-        namespace = current_namespace()
-    kubectl = [KUBECTL, "--namespace", namespace]
-
-    def cleanup():
-        check_call(
-            kubectl + [
-                "delete", "--ignore-not-found", "all", "--wait=false",
-                "--selector=telepresence=" + webserver_name
-            ]
-        )
-
-    cleanup()
-    atexit.register(cleanup)
-
-    print("Creating webserver {}/{}".format(namespace, webserver_name))
-    check_output(
-        kubectl + [
-            "run",
-            "--restart=Never",
-            webserver_name,
-            "--labels=telepresence=" + webserver_name,
-            "--image=openshift/hello-openshift",
-            "--limits=cpu=100m,memory=256Mi",
-            "--requests=cpu=25m,memory=150Mi",
-            "--port=8080",
-            "--expose",
-        ]
+    query_from_cluster(
+        "http://{}:8000/".format(HELPER_NAME),
+        namespace,
+        retries_on_empty=5,
     )
-    for i in range(120):
-        try:
-            available = check_output(
-                kubectl + [
-                    "get", "pods", webserver_name, "-o",
-                    'jsonpath={.status.phase}'
-                ]
-            )
-        except CalledProcessError:
-            available = None
-        print("webserver phase: {}".format(available))
-        if available == b"Running":
-            # Wait for it to be running
-            query_in_k8s(
-                namespace, "http://{}:8080/".format(webserver_name), None
-            )
-            return webserver_name
-        else:
-            time.sleep(1)
-    raise RuntimeError("webserver never started")
+    return HELPER_NAME
 
 
 def current_namespace():
