@@ -22,6 +22,17 @@ def origin_ip():
 
 
 @with_probe
+def test_nothing(probe):
+    """
+    This test will probably run first for this set of probe arguments. Cause
+    the probe to run and then test nothing. This exists to keep probe launch
+    time from counting against other tests during profiling.
+    """
+    _ = probe.result()
+    return
+
+
+@with_probe
 def test_environment_from_deployment(probe):
     """
     The Telepresence execution context supplies environment variables with
