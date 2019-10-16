@@ -6,7 +6,7 @@ import time
 from base64 import b64encode
 from json import dumps
 from pathlib import Path
-from subprocess import CalledProcessError, check_call, check_output
+from subprocess import check_call, check_output
 
 DIRECTORY = Path(__file__).absolute().parent
 REVISION = str(check_output(["git", "rev-parse", "--short", "HEAD"]),
@@ -113,6 +113,7 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
     """
     Run an HTTP request from the cluster with timeout and retries
     """
+    run_helper(namespace)
     # Separate debug output from the HTTP server response.
     delimiter = b64encode(
         b"totally random stuff that won't appear anywhere else"
@@ -164,14 +165,10 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
         res = check_output([
             "kubectl",
             "--namespace={}".format(namespace),
-            "run",
-            random_name("query"),
-            "--attach",
-            "--quiet",
-            "--rm",
-            "--image=alpine",
-            "--restart=Never",
-            "--command",
+            "exec",
+            "-i",
+            "-t",
+            HELPER_NAME,
             "--",
             "sh",
             "-c",
