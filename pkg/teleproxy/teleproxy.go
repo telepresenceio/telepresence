@@ -48,7 +48,10 @@ func dnsListeners(p *supervisor.Process, port string) (listeners []string) {
 			p.Log("not listening on docker bridge")
 			return
 		}
-		listeners = append(listeners, fmt.Sprintf("%s:%s", strings.TrimSpace(output), port))
+		extraIP := strings.TrimSpace(output)
+		if extraIP != "127.0.0.1" && extraIP != "0.0.0.0" && extraIP != "" {
+			listeners = append(listeners, fmt.Sprintf("%s:%s", extraIP, port))
+		}
 	}
 
 	return
@@ -371,7 +374,7 @@ func intercept(p *supervisor.Process, tele *Teleproxy) error {
 			return err
 		}
 		for _, line := range strings.Split(string(dat), "\n") {
-			if strings.Contains(line, "nameserver") {
+			if strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
 				fields := strings.Fields(line)
 				tele.DNSIP = fields[1]
 				log.Printf("TPY: Automatically set -dns=%v", tele.DNSIP)
