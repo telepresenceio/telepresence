@@ -12,8 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import typing
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
+
+from .runner import Runner
+
+
+def dumb_print(message: str) -> None:
+    print(message)
 
 
 class DumbHandler(BaseHTTPRequestHandler):
@@ -21,24 +28,24 @@ class DumbHandler(BaseHTTPRequestHandler):
     HTTP handler that returns success for any HEAD request
     """
 
-    tel_output = print
+    tel_output = dumb_print
 
     def do_HEAD(self) -> None:
         "Handle head"
         self.send_response(200)
         self.end_headers()
 
-    def log_message(self, format: str, *args) -> None:
+    def log_message(self, format: str, *args: typing.Any) -> None:
         """
         Make sure log messages go to the right place
         """
         message = format % args
         if message == '"HEAD / HTTP/1.1" 200 -':
             message = "(proxy checking local liveness)"
-        self.tel_output(message)
+        DumbHandler.tel_output(message)
 
 
-def launch_local_server(runner, port: int) -> None:
+def launch_local_server(runner: Runner, port: int) -> None:
     """
     Make a dumb web server for the proxy pod to poll.
     """

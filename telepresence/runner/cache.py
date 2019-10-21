@@ -14,6 +14,7 @@
 
 import json
 from time import time
+from typing import Any, Callable
 
 
 class Cache(object):
@@ -34,37 +35,34 @@ class Cache(object):
     >>> number_cache["pi"] = 22.0/7.0
     """
     @classmethod
-    def load(cls, filename):
+    def load(cls, filename: str) -> "Cache":
         """Return a cache loaded from a file"""
         try:
             with open(filename, "r") as f:
                 cache = json.load(f)
         except (FileNotFoundError, ValueError):
             cache = {}
-
         result = Cache(cache)
-
-        def save():
-            """Overwrite the original file with current cache contents"""
-            with open(filename, "w") as f:
-                json.dump(result.values, f)
-
-        result.save = save
         return result
 
-    def __init__(self, values):
+    def __init__(self, values: Any) -> None:
         self.values = values
 
-    def __contains__(self, key):
+    def save(self, filename: str) -> None:
+        """Overwrite the original file with current cache contents"""
+        with open(filename, "w") as f:
+            json.dump(self.values, f)
+
+    def __contains__(self, key: str) -> bool:
         return key in self.values
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Any:
         return self.values[key]
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: str, value: Any) -> None:
         self.values[key] = value
 
-    def child(self, key):
+    def child(self, key: str) -> "Cache":
         """
         Retrieve a child cache that operates over a separate keyspace but is
         loaded and saved with the parent cache.
@@ -76,7 +74,7 @@ class Cache(object):
             self.values[key] = child
         return Cache(child)
 
-    def invalidate(self, ttl):
+    def invalidate(self, ttl: float) -> None:
         """
         Clear the cache if it is too old.
 
@@ -88,7 +86,7 @@ class Cache(object):
             self.clear()
             self["created"] = now
 
-    def lookup(self, key, function):
+    def lookup(self, key: str, function: Callable[[], Any]) -> Any:
         """
         Retrieve the value for the associated key. If the value is not already
         cached, call function with no arguments to compute the value and cache
@@ -105,6 +103,6 @@ class Cache(object):
             self.values[key] = value
             return value
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear the cache"""
         self.values.clear()

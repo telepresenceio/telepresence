@@ -17,7 +17,7 @@ import sys
 from collections import deque
 from time import ctime
 from time import time as curtime
-from typing import TextIO
+from typing import Deque, TextIO
 
 from telepresence import __version__, image_version, version_override
 from telepresence.utilities import str_command
@@ -40,7 +40,7 @@ def _open_logfile(logfile_path: str) -> TextIO:
     return open(logfile_path, "a", buffering=1)
 
 
-class Output(object):
+class Output:
     """Logging and display"""
     def __init__(self, logfile_path: str) -> None:
         """
@@ -66,7 +66,7 @@ class Output(object):
         self.logfile_path = logfile_path
 
         self.start_time = curtime()
-        self.logtail = deque(maxlen=25)  # type: deque  # keep last 25 lines
+        self.logtail = deque(maxlen=25)  # type: Deque[str]  # keep last 25 lns
 
         self.write(
             "Telepresence {} launched at {}".format(__version__, ctime())
@@ -77,7 +77,7 @@ class Output(object):
         elif image_version != __version__:
             self.write("  Using images version {} (dev)".format(image_version))
 
-    def write(self, message: str, prefix="TEL") -> None:
+    def write(self, message: str, prefix: str = "TEL") -> None:
         """Write a message to the log."""
         if self.logfile.closed:
             return

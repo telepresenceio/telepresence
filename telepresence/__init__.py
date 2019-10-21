@@ -15,12 +15,13 @@
 Telepresence: local development environment for a remote Kubernetes cluster.
 """
 
-from pathlib import Path
 import os
+from pathlib import Path
 
 # Version number computed by Versioneer. See _version.py for info.
-from ._version import get_versions
-__version__ = get_versions()['version']
+from ._version import get_versions  # type: ignore
+
+__version__ = get_versions()['version']  # type: str
 del get_versions
 
 # Use the most recent released image version. Override below:

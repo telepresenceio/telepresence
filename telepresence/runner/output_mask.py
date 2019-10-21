@@ -14,22 +14,25 @@
 
 import re
 from functools import partial
-from typing import Iterable
+from typing import Iterable, Match
 
 # See https://regex101.com/r/pHbVhO/2 for usage with "token" keys
-KEY_VALUE_REGEX = r'(?:[\"\']*)(?P<key>%s)(?:[\"\']*)(?:\s*)(?=:)(?:\:\s*)' \
-                  r'(?:(?:"(?P<in_double_quotes>' \
-                  r'[^"\\]*(?:\\.[^"\\]*)*' \
-                  r'.*?)")|' \
-                  r'(?:\'(?P<in_single_quotes>.*?)\')|' \
-                  r'(?P<plain_value>(?:[^\n ]*).*?),?)'
+KEY_VALUE_REGEX = (
+    r'(?:[\"\']*)(?P<key>%s)(?:[\"\']*)(?:\s*)(?=:)(?:\:\s*)'
+    r'(?:(?:"(?P<in_double_quotes>'
+    r'[^"\\]*(?:\\.[^"\\]*)*'
+    r'.*?)")|'
+    r'(?:\'(?P<in_single_quotes>.*?)\')|'
+    r'(?P<plain_value>(?:[^\n ]*).*?),?)'
+)
 
 
-def _replace_closure(replacement, m):
-    def _replace_group(index):
-        return m.group()[:(m.span(index)[0] -
-                           m.span()[0])] + replacement + m.group()[
-                               (m.span(index)[1] - m.span()[0]):]
+def _replace_closure(replacement: str, m: Match[str]) -> str:
+    def _replace_group(index: int) -> str:
+        before = m.span(index)[0] - m.span()[0]
+        after = m.span(index)[1] - m.span()[0]
+        group = m.group()
+        return group[:before] + replacement + group[after:]
 
     if m.group('in_double_quotes') is not None:
         return _replace_group(2)
@@ -40,8 +43,10 @@ def _replace_closure(replacement, m):
     if m.group('plain_value') is not None:
         return _replace_group(4)
 
+    assert False, m
 
-def mask_values(source: str, keys: Iterable[str], mask: str):
+
+def mask_values(source: str, keys: Iterable[str], mask: str) -> str:
     """
     :param source: string to perform replacement on
     :param keys: list of keys to be matched
@@ -52,7 +57,7 @@ def mask_values(source: str, keys: Iterable[str], mask: str):
     return re.sub(regex, partial(_replace_closure, mask), source)
 
 
-def mask_sensitive_data(source) -> str:
+def mask_sensitive_data(source: str) -> str:
     return mask_values(
         source, ['token', 'access-token'], 'Masked-by-Telepresence'
     )
