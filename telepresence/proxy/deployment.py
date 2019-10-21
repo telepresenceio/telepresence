@@ -146,7 +146,7 @@ def create_new_deployment(
     if custom_nameserver:
         command.append("--env=TELEPRESENCE_NAMESERVER=" + custom_nameserver)
     try:
-        runner.check_call(runner.kubectl(command))
+        runner.check_call(runner.kubectl(*command))
     except CalledProcessError as exc:
         raise runner.fail(
             "Failed to create deployment {}:\n{}".format(

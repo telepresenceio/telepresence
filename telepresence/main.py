@@ -20,7 +20,7 @@ import sys
 from telepresence import connect, mount, outbound, proxy, remote_env
 from telepresence.cli import crash_reporting, parse_args
 from telepresence.runner import Runner
-from telepresence.startup import KubeInfo, final_checks
+from telepresence.startup import final_checks, set_kube_command
 from telepresence.usage_tracking import call_scout
 
 
@@ -36,10 +36,10 @@ def main():
 
         args = parse_args()  # tab-completion stuff goes here
 
-        runner = Runner(args.logfile, None, args.verbose)
+        runner = Runner(args.logfile, args.verbose)
         span = runner.span()
         runner.add_cleanup("Stop time tracking", span.end)
-        runner.kubectl = KubeInfo(runner, args)
+        set_kube_command(runner, args)
 
     with runner.cleanup_handling(), crash_reporting(runner):
         ########################################

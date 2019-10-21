@@ -35,6 +35,7 @@ from telepresence import TELEPRESENCE_BINARY
 from telepresence.utilities import kill_process, str_command
 
 from .cache import Cache
+from .kube import KUBE_UNSET
 from .launch import BackgroundProcessCrash, _launch_command, _Logger
 from .output import Output
 from .output_mask import mask_sensitive_data
@@ -50,9 +51,9 @@ _CleanupItem = typing.NamedTuple(
 )
 
 
-class Runner(object):
+class Runner:
     """Context for running subprocesses."""
-    def __init__(self, logfile_path: str, kubeinfo, verbose: bool) -> None:
+    def __init__(self, logfile_path: str, verbose: bool) -> None:
         """
         :param logfile_path: Path or string file path or "-" for stdout
         :param kubeinfo: How to run kubectl or equivalent
@@ -60,7 +61,7 @@ class Runner(object):
         """
         self.output = Output(logfile_path)
         self.logfile_path = self.output.logfile_path
-        self.kubectl = kubeinfo
+        self.kubectl = KUBE_UNSET
         self.verbose = verbose
         self.start_time = time()
         self.current_span = None  # type: typing.Optional[Span]

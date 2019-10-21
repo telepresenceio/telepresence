@@ -13,7 +13,8 @@
 # limitations under the License.
 
 from .background import launch_local_server
+from .kube import KubeInfo
 from .launch import BackgroundProcessCrash
 from .runner import Runner
 
-__all__ = "BackgroundProcessCrash", "Runner", "launch_local_server"
+__all__ = "BackgroundProcessCrash", "KubeInfo", "Runner", "launch_local_server"

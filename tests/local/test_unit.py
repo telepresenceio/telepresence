@@ -358,13 +358,13 @@ def test_get_output():
     cmd = ["python3", "-c", "for idx in range({}): print(idx)".format(count)]
 
     # Test verbose == False
-    runner = Runner("/dev/null", None, False)
+    runner = Runner("/dev/null", False)
     data = runner.get_output(cmd)
     lines = data.splitlines()
     assert len(lines) == count
 
     # Test verbose == True
-    runner = Runner("/dev/null", None, True)
+    runner = Runner("/dev/null", True)
     data = runner.get_output(cmd)
     lines = data.splitlines()
     assert len(lines) == count
@@ -375,7 +375,7 @@ def test_check_call_timeout():
     cmd = ["python3", "-c", code]
 
     # Test verbose == False
-    runner = Runner("-", None, False)
+    runner = Runner("-", False)
     with pytest.raises(subprocess.TimeoutExpired):  # as exc_info
         runner.check_call(cmd, timeout=0.5)
     # FIXME output capture is broken. Everything appears at the end, which
@@ -387,7 +387,7 @@ def test_check_call_timeout():
     '''
 
     # Test verbose == True
-    runner = Runner("-", None, True)
+    runner = Runner("-", True)
     with pytest.raises(subprocess.TimeoutExpired):  # as exc_info
         runner.check_call(cmd, timeout=0.5)
     # FIXME output capture is broken. Everything appears at the end, which

@@ -73,7 +73,7 @@ def proxy(config: dict):
     expose_ports = config["expose_ports"]
 
     # Launch local sshd so Tel outside can forward 38023 to the cluster
-    runner = Runner("-", "-", False)
+    runner = Runner("-", False)
     runner.check_call(["/usr/sbin/sshd", "-e"])
 
     # Wait for the cluster to be available
