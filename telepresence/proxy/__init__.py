@@ -31,7 +31,7 @@ def _dc_exists(runner: Runner, name: str) -> bool:
     if runner.kubectl.command != "oc":
         return False
     if ":" in name:
-        name, container = name.split(":",1)
+        name, container = name.split(":", 1)
     try:
         runner.check_call(runner.kubectl("get", "dc/{}".format(name)))
         return True
