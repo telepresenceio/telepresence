@@ -18,7 +18,7 @@ from .utils import DEPLOYMENT_TYPE, KUBECTL, query_from_cluster
 
 @pytest.fixture(scope="session")
 def origin_ip():
-    return IPv4Address(httpbin_ip())
+    return the_origin_ip
 
 
 @with_probe
@@ -397,6 +397,9 @@ def httpbin_ip():
     result = str(urlopen("http://httpbin.org/ip", timeout=30).read(), "utf-8")
     origin = fix_httpbin_ip(loads(result)["origin"])
     return origin
+
+
+the_origin_ip = IPv4Address(httpbin_ip())
 
 
 def probe_also_proxy(probe_result, hostname):
