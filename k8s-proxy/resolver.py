@@ -107,7 +107,7 @@ class LocalResolver(object):
         """
         Generate the response to a query, given an IP.
         """
-        print("Result for {} is {}".format(name, ips))
+        print("Result for {!r} is {}".format(name, ips))
         answers = [
             dns.RRHeader(name=name, payload=record_type(address=ip))
             for ip in ips
