@@ -30,6 +30,8 @@ def _dc_exists(runner: Runner, name: str) -> bool:
     """
     if runner.kubectl.command != "oc":
         return False
+    if ":" in name:
+        name, container = name.split(":", 1)
     try:
         runner.check_call(runner.kubectl("get", "dc/{}".format(name)))
         return True
@@ -53,14 +55,15 @@ def setup(runner: Runner, args):
 
     # Figure out which operation the user wants
     # Handle --deployment case
-    deployment_arg = args.deployment
-    if _dc_exists(runner, deployment_arg):
-        operation = existing_deployment_openshift
-        deployment_type = "deploymentconfig"
-    else:
-        operation = existing_deployment
-        deployment_type = "deployment"
-    args.operation = "deployment"
+    if args.deployment is not None:
+        deployment_arg = args.deployment
+        if _dc_exists(runner, deployment_arg):
+            operation = existing_deployment_openshift
+            deployment_type = "deploymentconfig"
+        else:
+            operation = existing_deployment
+            deployment_type = "deployment"
+        args.operation = "deployment"
 
     if args.new_deployment is not None:
         # This implies --new-deployment
