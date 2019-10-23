@@ -30,9 +30,9 @@ from twisted.application.service import Application
 from twisted.internet import reactor
 from twisted.names import dns, server
 
-import socks
-import resolver
 import periodic
+import resolver
+import socks
 
 NAMESPACE_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 
@@ -50,8 +50,18 @@ def main():
     if predefined_namespace:
         NAMESPACE = predefined_namespace
     else:
-        with open(NAMESPACE_PATH) as f:
-            NAMESPACE = f.read()
+        try:
+            with open(NAMESPACE_PATH) as f:
+                NAMESPACE = f.read()
+        except IOError as exc:
+            print("ERROR: Failed to determine namespace:")
+            print("  {}".format(exc))
+            print("Make sure serviceaccount is available via")
+            print("  automountServiceAccountToken: true")
+            print("in your Deployment")
+            print("or set the TELEPRESENCE_CONTAINER_NAMESPACE env var")
+            print("directly or using the Downward API.")
+            exit("Failed to determine namespace")
     telepresence_nameserver = os.environ.get("TELEPRESENCE_NAMESERVER")
     reactor.suggestThreadPoolSize(50)
     periodic.setup(reactor)
