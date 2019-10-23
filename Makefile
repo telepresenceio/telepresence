@@ -69,11 +69,13 @@ docker-build:  ## Build Docker images
 	docker build --file local-docker/Dockerfile . -t $(TELEPRESENCE_REGISTRY)/telepresence-local:$(TELEPRESENCE_VERSION)
 	docker build k8s-proxy -t $(TELEPRESENCE_REGISTRY)/telepresence-k8s:$(TELEPRESENCE_VERSION) --target telepresence-k8s
 	docker build k8s-proxy -t $(TELEPRESENCE_REGISTRY)/telepresence-k8s-priv:$(TELEPRESENCE_VERSION) --target telepresence-k8s-priv
+	docker build --file k8s-proxy/Dockerfile.ocp k8s-proxy -t $(TELEPRESENCE_REGISTRY)/telepresence-ocp:$(TELEPRESENCE_VERSION)
 .PHONY: docker-build
 
 docker-push: docker-build  ## Push Docker images to TELEPRESENCE_REGISTRY (implies 'docker-build')
 	docker push $(TELEPRESENCE_REGISTRY)/telepresence-k8s:$(TELEPRESENCE_VERSION)
 	docker push $(TELEPRESENCE_REGISTRY)/telepresence-k8s-priv:$(TELEPRESENCE_VERSION)
+	docker push $(TELEPRESENCE_REGISTRY)/telepresence-ocp:$(TELEPRESENCE_VERSION)
 	docker push $(TELEPRESENCE_REGISTRY)/telepresence-local:$(TELEPRESENCE_VERSION)
 .PHONY: docker-push
 
