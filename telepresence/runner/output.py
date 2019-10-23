@@ -14,16 +14,16 @@
 
 import os
 import sys
+import typing
 from collections import deque
 from time import ctime
 from time import time as curtime
-from typing import Deque, TextIO
 
 from telepresence import __version__, image_version, version_override
 from telepresence.utilities import str_command
 
 
-def _open_logfile(logfile_path: str) -> TextIO:
+def _open_logfile(logfile_path: str) -> typing.TextIO:
     """
     Try to open the specified path for the logfile.
     :param logfile_path: as it says
@@ -66,7 +66,9 @@ class Output:
         self.logfile_path = logfile_path
 
         self.start_time = curtime()
-        self.logtail = deque(maxlen=25)  # type: Deque[str]  # keep last 25 lns
+
+        # keep last 25 lines
+        self.logtail = deque(maxlen=25)  # type: typing.Deque[str]
 
         self.write(
             "Telepresence {} launched at {}".format(__version__, ctime())
