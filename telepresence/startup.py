@@ -163,7 +163,19 @@ def set_kube_command(runner: Runner, args) -> None:
     else:
         raise runner.fail("Error: Unable to find server information")
 
-    command = kubectl_or_oc(server)
+    # Try to determine whether cluster is OpenShift
+    try:
+        kubectl_apis_output = runner.get_output([
+            prelim_command, "api-versions"
+        ])
+    except CalledProcessError:
+        raise runner.fail("Error: Unable to get cluster API info")
+    cluster_is_openshift = "openshift.io" in kubectl_apis_output.lower()
+
+    # Choose command (kubectl or oc)
+    command = prelim_command
+    if cluster_is_openshift and "oc" not in missing:
+        command = "oc"
 
     runner.write("Command: {} {}".format(command, command_version))
     runner.write(
@@ -181,6 +193,7 @@ def set_kube_command(runner: Runner, args) -> None:
     kubeinfo = KubeInfo(
         cluster,
         cluster_version,
+        cluster_is_openshift,
         command,
         command_version,
         server,

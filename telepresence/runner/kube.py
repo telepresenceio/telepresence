@@ -18,6 +18,7 @@ _KubeInfo = typing.NamedTuple(
     "_KubeInfo", [
         ("cluster", str),
         ("cluster_version", str),
+        ("cluster_is_openshift", bool),
         ("command", str),
         ("command_version", str),
         ("server", str),
@@ -42,4 +43,4 @@ class KubeInfo(_KubeInfo):
         return result
 
 
-KUBE_UNSET = KubeInfo("", "", "", "", "", "", "", False, False)
+KUBE_UNSET = KubeInfo("", "", False, "", "", "", "", "", False, False)
