@@ -28,7 +28,10 @@ def _dc_exists(runner: Runner, name: str) -> bool:
     If we're using OpenShift Origin, we may be using a DeploymentConfig instead
     of a Deployment. Return True if a dc exists with the given name.
     """
-    if runner.kubectl.command != "oc":
+    # Need to use oc to manage DeploymentConfigs. The cluster needs to be
+    # running OpenShift as well. Check for both.
+    kube = runner.kubectl
+    if kube.command != "oc" or not kube.cluster_is_openshift:
         return False
     if ":" in name:
         name, container = name.split(":", 1)
@@ -50,12 +53,15 @@ def setup(runner: Runner, args):
     """
 
     # OpenShift doesn't support running as root:
-    if args.expose.has_privileged_ports() and runner.kubectl.command == "oc":
+    if (
+        args.expose.has_privileged_ports()
+        and runner.kubectl.cluster_is_openshift
+    ):
         raise runner.fail("OpenShift does not support ports <1024.")
 
     # Figure out which operation the user wants
-    # Handle --deployment case
     if args.deployment is not None:
+        # This implies --deployment
         deployment_arg = args.deployment
         if _dc_exists(runner, deployment_arg):
             operation = existing_deployment_openshift
@@ -68,8 +74,12 @@ def setup(runner: Runner, args):
     if args.new_deployment is not None:
         # This implies --new-deployment
         deployment_arg = args.new_deployment
+        if runner.kubectl.cluster_is_openshift:
+            # FIXME: This will not clean up the new dc
+            deployment_type = "deploymentconfig"
+        else:
+            deployment_type = "deployment"
         operation = create_new_deployment
-        deployment_type = "deployment"
         args.operation = "new_deployment"
 
     if args.swap_deployment is not None:

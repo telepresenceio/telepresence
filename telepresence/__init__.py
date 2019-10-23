@@ -46,6 +46,9 @@ TELEPRESENCE_REMOTE_IMAGE = "{}/telepresence-k8s:{}".format(
 TELEPRESENCE_REMOTE_IMAGE_PRIV = "{}/telepresence-k8s-priv:{}".format(
     REGISTRY, image_version
 )
+TELEPRESENCE_REMOTE_IMAGE_OCP = "{}/telepresence-ocp:{}".format(
+    REGISTRY, image_version
+)
 
 # This path points to one of
 # - the telepresence executable zip file, for an installed telepresence
