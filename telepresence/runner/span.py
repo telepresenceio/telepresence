@@ -12,32 +12,43 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import typing
 from time import time
+
+if typing.TYPE_CHECKING:
+    from .runner import Runner
 
 
 class Span(object):
     emit_summary = False
 
-    def __init__(self, runner, tag, parent, verbose=True):
+    def __init__(
+        self,
+        runner: "Runner",
+        tag: str,
+        parent: typing.Optional["Span"],
+        verbose: bool = True,
+    ) -> None:
         self.runner = runner
         self.tag = tag
         self.parent = parent
-        self.children = []
+        self.children = []  # type: typing.List[Span]
         if self.parent:
             self.parent.children.append(self)
-            self.depth = self.parent.depth + 1
+            self.depth = self.parent.depth + 1  # type: int
         else:
             self.depth = 0
-        self.start_time = None
-        self.end_time = None
+        self.start_time = None  # type: typing.Optional[float]
+        self.end_time = None  # type: typing.Optional[float]
         self.verbose = verbose
 
-    def begin(self):
+    def begin(self) -> None:
         self.start_time = time()
         if self.verbose:
             self.runner.write("BEGIN SPAN {}".format(self.tag))
 
-    def end(self):
+    def end(self) -> float:
+        assert self.start_time is not None
         self.end_time = time()
         spent = self.end_time - self.start_time
         if self.runner.current_span == self:
@@ -49,9 +60,10 @@ class Span(object):
             self.summarize()
         return spent
 
-    def summarize(self):
+    def summarize(self) -> None:
         indent = self.depth * "  "
         if self.end_time:
+            assert self.start_time is not None
             spent = "{:6.1f}s".format(self.end_time - self.start_time)
         else:
             spent = "   ???"

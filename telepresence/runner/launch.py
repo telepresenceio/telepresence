@@ -62,9 +62,9 @@ def _launch_command(
     args: typing.List[str],
     out_logger: _Logger,
     err_logger: _Logger,
-    done: typing.Optional[typing.Callable[[Popen], None]] = None,
+    done: typing.Optional[typing.Callable[["Popen[str]"], None]] = None,
     **kwargs: typing.Any
-) -> Popen:
+) -> "Popen[str]":
     """
     Launch subprocess with args, kwargs.
     Log stdout and stderr by calling respective callbacks.
@@ -93,7 +93,7 @@ def _launch_command(
     kwargs.setdefault("stdout", PIPE)
     kwargs.setdefault("stderr", PIPE)
     kwargs["universal_newlines"] = True  # Text streams, not byte streams
-    process = Popen(args, **kwargs)
+    process = Popen(args, **kwargs)  # type: Popen[str]
     threads = []
     if process.stdout:
         thread = Thread(

@@ -42,13 +42,13 @@ acquire-sudo:
 #
 
 check-local: virtualenv  ## Run the local tests (fast, doesn't require a Kubernetes cluster)
-	$(VIRTUALENV) py.test -v --timeout=360 --timeout-method=thread tests/local $(PYTEST_ARGS)
+	$(VIRTUALENV) py.test -v --timeout=360 --timeout-method=thread -rfE tests/local $(PYTEST_ARGS)
 .PHONY: check-local
 
 check-cluster: acquire-sudo virtualenv $(DOCKER_PUSH)  ## Run the end-to-end tests (requires a cluster, implies '$(DOCKER_PUSH)')
 	$(if $(shell which kubectl 2>/dev/null),,$(error Required executable 'kubectl' not found on $$PATH))
 	sudo echo -n
-	$(VIRTUALENV) $(_pytest_env) py.test -v --timeout=360 --timeout-method=thread tests/cluster $(PYTEST_ARGS)
+	$(VIRTUALENV) $(_pytest_env) py.test -v --timeout=360 --timeout-method=thread -rfE tests/cluster $(PYTEST_ARGS)
 .PHONY: check-cluster
 
 _pytest_env  = TELEPRESENCE_REGISTRY=$(TELEPRESENCE_REGISTRY)
@@ -69,11 +69,13 @@ docker-build:  ## Build Docker images
 	docker build --file local-docker/Dockerfile . -t $(TELEPRESENCE_REGISTRY)/telepresence-local:$(TELEPRESENCE_VERSION)
 	docker build k8s-proxy -t $(TELEPRESENCE_REGISTRY)/telepresence-k8s:$(TELEPRESENCE_VERSION) --target telepresence-k8s
 	docker build k8s-proxy -t $(TELEPRESENCE_REGISTRY)/telepresence-k8s-priv:$(TELEPRESENCE_VERSION) --target telepresence-k8s-priv
+	docker build --file k8s-proxy/Dockerfile.ocp k8s-proxy -t $(TELEPRESENCE_REGISTRY)/telepresence-ocp:$(TELEPRESENCE_VERSION)
 .PHONY: docker-build
 
 docker-push: docker-build  ## Push Docker images to TELEPRESENCE_REGISTRY (implies 'docker-build')
 	docker push $(TELEPRESENCE_REGISTRY)/telepresence-k8s:$(TELEPRESENCE_VERSION)
 	docker push $(TELEPRESENCE_REGISTRY)/telepresence-k8s-priv:$(TELEPRESENCE_VERSION)
+	docker push $(TELEPRESENCE_REGISTRY)/telepresence-ocp:$(TELEPRESENCE_VERSION)
 	docker push $(TELEPRESENCE_REGISTRY)/telepresence-local:$(TELEPRESENCE_VERSION)
 .PHONY: docker-push
 

@@ -1,12 +1,13 @@
 import json
-from string import printable, ascii_letters
+from string import ascii_letters, printable
 
 import pytest
 import yaml
 from hamcrest import assert_that, equal_to
-from hypothesis import given, strategies as st, settings
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
-from telepresence.runner.output_mask import mask_values, mask_sensitive_data
+from telepresence.runner.output_mask import mask_sensitive_data, mask_values
 
 TEST_JSON = (
     "  {\n"
@@ -43,22 +44,27 @@ simple_test_data = [
         lambda source: yaml.safe_load(source)
     ),
 ]
+simple_ids = ["simple-JSON", "simple-YAML"]
 
 complex_test_data = [
     (TEST_JSON, lambda source: json.loads(source)),
     (TEST_YAML, lambda source: yaml.safe_load(source)),
 ]
+complex_ids = ["complex-JSON", "complex-YAML"]
 
 # Simple parametrized test cases handling both JSON and YAML masking
 
 
-@pytest.mark.parametrize('source', [TEST_JSON, TEST_YAML])
-def test_should_leave_source_unchanged_when_masking_non_existing_key(source):
+@pytest.mark.parametrize('source', [TEST_JSON, TEST_YAML], ids=complex_ids)
+def test_non_existing_key(source):
+    """Should leave source unchanged when masking a non-existing key"""
     masked = mask_values(source, ['_not_existing'], 'telepresence')
     assert_that(masked, equal_to(source))
 
 
-@pytest.mark.parametrize('source,unmarshal', complex_test_data)
+@pytest.mark.parametrize(
+    'source,unmarshal', complex_test_data, ids=complex_ids
+)
 def test_should_mask_multiple_keys(source, unmarshal):
     masked_key = mask_values(source, ['_id', 'token'], 'telepresence')
     as_json = unmarshal(masked_key)
@@ -68,7 +74,9 @@ def test_should_mask_multiple_keys(source, unmarshal):
 
 
 @pytest.mark.parametrize(
-    'source,unmarshal', simple_test_data + complex_test_data
+    'source,unmarshal',
+    simple_test_data + complex_test_data,
+    ids=simple_ids + complex_ids,
 )
 def test_should_mask_token(source, unmarshal):
     masked_key = mask_sensitive_data(source)

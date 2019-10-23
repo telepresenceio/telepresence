@@ -24,6 +24,8 @@
 # modifications include adding the Apache License Header and performing some
 # reformatting so our CI lint tests pass. See the commit history on GitHub for
 # more information.
+
+# type: ignore
 """Git implementation of _version.py."""
 
 import errno

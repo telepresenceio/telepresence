@@ -20,6 +20,7 @@ from urllib import request
 from uuid import uuid4
 
 from telepresence import __version__
+from telepresence.runner import Runner
 
 
 class Scout:
@@ -123,13 +124,13 @@ def get_numeric_version(version_str):
     return tuple(res)
 
 
-def call_scout(runner, args):
+def call_scout(runner: Runner, args):
     config_root = Path(Path.home() / ".config" / "telepresence")
     config_root.mkdir(parents=True, exist_ok=True)
     id_file = Path(config_root / "id")
 
     scout_kwargs = dict(
-        kubectl_version=runner.kubectl.kubectl_version,
+        kubectl_version=runner.kubectl.command_version,
         kubernetes_version=runner.kubectl.cluster_version,
         operation=args.operation,
         method=args.method

@@ -2,6 +2,16 @@
 
 <!--- towncrier start line -->
 
+Stuff:
+
+* Telepresence uses a new OpenShift-specific proxy image when it detects an OpenShift cluster.
+  It should no longer be necessary to modify OpenShift cluster policies to allow Telepresence to run.
+  The OpenShift proxy image is based on CentOS Linux (instead of Alpine), which means it is significantly larger than the Kubernetes proxy image, so you may notice additional startup latency.
+  Use of a CentOS base image should allow for easier approval or certification in some enterprise environments.
+  Thanks to GitHub user ReSearchITEng for the patch.
+  ([#1114](https://github.com/telepresenceio/telepresence/pull/1114))
+
+
 #### 0.102 (October 2, 2019)
 
 Features:

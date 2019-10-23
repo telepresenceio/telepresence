@@ -18,7 +18,8 @@ from subprocess import CalledProcessError
 from typing import Dict, Optional, Tuple
 
 from telepresence import (
-    TELEPRESENCE_REMOTE_IMAGE, TELEPRESENCE_REMOTE_IMAGE_PRIV
+    TELEPRESENCE_REMOTE_IMAGE, TELEPRESENCE_REMOTE_IMAGE_OCP,
+    TELEPRESENCE_REMOTE_IMAGE_PRIV
 )
 from telepresence.cli import PortMapping
 from telepresence.runner import Runner
@@ -26,11 +27,13 @@ from telepresence.runner import Runner
 from .remote import get_deployment_json
 
 
-def get_image_name(expose: PortMapping) -> str:
+def get_image_name(runner: Runner, expose: PortMapping) -> str:
     """
     Return the correct Telepresence image name (privileged or not) depending on
     whether any privileged ports (< 1024) are used.
     """
+    if runner.kubectl.cluster_is_openshift:
+        return TELEPRESENCE_REMOTE_IMAGE_OCP
     if expose.has_privileged_ports():
         return TELEPRESENCE_REMOTE_IMAGE_PRIV
     return TELEPRESENCE_REMOTE_IMAGE
@@ -129,7 +132,7 @@ def create_new_deployment(
         "--limits=cpu=1000m,memory=256Mi",
         "--requests=cpu=25m,memory=64Mi",
         deployment_arg,
-        "--image=" + get_image_name(expose),
+        "--image=" + get_image_name(runner, expose),
         "--labels=telepresence=" + run_id,
     ]
     # Provide a stable argument ordering.  Reverse it because that happens to
@@ -146,7 +149,7 @@ def create_new_deployment(
     if custom_nameserver:
         command.append("--env=TELEPRESENCE_NAMESERVER=" + custom_nameserver)
     try:
-        runner.check_call(runner.kubectl(command))
+        runner.check_call(runner.kubectl(*command))
     except CalledProcessError as exc:
         raise runner.fail(
             "Failed to create deployment {}:\n{}".format(
@@ -204,6 +207,7 @@ def supplant_deployment(
     container = _get_container_name(container, deployment_json)
 
     new_deployment_json = new_swapped_deployment(
+        runner,
         deployment_json,
         container,
         run_id,
@@ -267,6 +271,7 @@ def supplant_deployment(
 
 
 def new_swapped_deployment(
+    runner: Runner,
     old_deployment: Dict,
     container_to_update: str,
     run_id: str,
@@ -309,7 +314,7 @@ def new_swapped_deployment(
                 port["containerPort"] for port in container.get("ports", [])
                 if port["protocol"] == "TCP"
             ])
-            container["image"] = get_image_name(expose)
+            container["image"] = get_image_name(runner, expose)
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
             container["imagePullPolicy"] = "IfNotPresent"
@@ -418,6 +423,7 @@ def swap_deployment_openshift(
     container = _get_container_name(container, dc_json)
 
     new_dc_json = new_swapped_deployment(
+        runner,
         dc_json,
         container,
         run_id,

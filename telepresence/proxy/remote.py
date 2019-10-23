@@ -43,9 +43,7 @@ class RemoteInfo(object):
         self.pod_name = pod_name
         self.deployment_config = deployment_config
         cs = deployment_config["spec"]["template"]["spec"]["containers"]
-        containers = [c for c in cs if "telepresence-k8s" in c["image"]]
-        if not containers:
-            containers = [c for c in cs if "telepresence-proxy" in c["image"]]
+        containers = [c for c in cs if "/telepresence-" in c["image"]]
         if not containers:
             raise RuntimeError(
                 "Could not find container with image "
@@ -83,20 +81,14 @@ def get_deployment_json(
             "json",
         ]
         if run_id is None:
-            return json.loads(
-                runner.get_output(
-                    runner.kubectl(get_deployment + [deployment_name])
-                )
-            )
+            kcmd = get_deployment + [deployment_name]
+            output = runner.get_output(runner.kubectl(*kcmd))
+            return json.loads(output)
         else:
             # When using a selector we get a list of objects, not just one:
-            return json.loads(
-                runner.get_output(
-                    runner.kubectl(
-                        get_deployment + ["--selector=telepresence=" + run_id]
-                    )
-                )
-            )["items"][0]
+            kcmd = get_deployment + ["--selector=telepresence=" + run_id]
+            output = runner.get_output(runner.kubectl(*kcmd))
+            return json.loads(output)["items"][0]
     except CalledProcessError as e:
         raise runner.fail(
             "Failed to find deployment {}:\n{}".format(
@@ -163,7 +155,7 @@ def get_remote_info(
         cmd.append("--selector=telepresence={}".format(run_id))
 
     for _ in runner.loop_until(120, 1):
-        pods = json.loads(runner.get_output(runner.kubectl(cmd)))["items"]
+        pods = json.loads(runner.get_output(runner.kubectl(*cmd)))["items"]
         for pod in pods:
             name = pod["metadata"]["name"]
             phase = pod["status"]["phase"]

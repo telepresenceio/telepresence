@@ -42,6 +42,9 @@ RUN yum -y install gcc && \
 # Not a must; sets python3 when running exec inside container using bash shell
 RUN echo -e '#!/bin/bash\nsource scl_source enable rh-python36' >/etc/profile.d/scl_enable.sh
 
+# Set PATH so python3 is available for oc exec
+ENV PATH="/opt/rh/rh-python36/root/usr/bin:${PATH}"
+
 # setup telepresence user
 RUN adduser --system -s /bin/bash -u 1000 -g 0 --home-dir /usr/src/app/ telepresence
 # in ocp, uid 1000 might get replaced by a different value at runtime -> see CMD below
@@ -57,11 +60,8 @@ RUN chgrp -R 0 /usr/src/app /etc/ssh /etc/passwd /etc/group && \
 COPY forwarder.py /usr/src/app
 COPY socks.py /usr/src/app
 COPY . /usr/src/app
+RUN cp /usr/src/app/run-ocp.sh /usr/src/app/run.sh
 
 EXPOSE 8022
 USER 1000:0
-CMD echo -e ",s/1000/`id -u`/g\\012 w" | ed -s /etc/passwd && \
-    ssh-keygen -A && \
-    source scl_source enable rh-python36 && \
-    /usr/src/app/pre-run.sh
-
+CMD /usr/src/app/run.sh

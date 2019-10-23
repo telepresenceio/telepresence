@@ -35,6 +35,7 @@ from telepresence import TELEPRESENCE_BINARY
 from telepresence.utilities import kill_process, str_command
 
 from .cache import Cache
+from .kube import KUBE_UNSET
 from .launch import BackgroundProcessCrash, _launch_command, _Logger
 from .output import Output
 from .output_mask import mask_sensitive_data
@@ -43,16 +44,16 @@ from .span import Span
 _CleanupItem = typing.NamedTuple(
     "_CleanupItem", [
         ("name", str),
-        ("callable", typing.Callable),
-        ("args", typing.Tuple),
+        ("callable", typing.Callable[..., None]),
+        ("args", typing.Tuple[typing.Any, ...]),
         ("kwargs", typing.Dict[str, typing.Any]),
     ]
 )
 
 
-class Runner(object):
+class Runner:
     """Context for running subprocesses."""
-    def __init__(self, logfile_path: str, kubeinfo, verbose: bool) -> None:
+    def __init__(self, logfile_path: str, verbose: bool) -> None:
         """
         :param logfile_path: Path or string file path or "-" for stdout
         :param kubeinfo: How to run kubectl or equivalent
@@ -60,7 +61,7 @@ class Runner(object):
         """
         self.output = Output(logfile_path)
         self.logfile_path = self.output.logfile_path
-        self.kubectl = kubeinfo
+        self.kubectl = KUBE_UNSET
         self.verbose = verbose
         self.start_time = time()
         self.current_span = None  # type: typing.Optional[Span]
@@ -119,9 +120,10 @@ class Runner(object):
 
         cache_dir = os.path.expanduser("~/.cache/telepresence")
         os.makedirs(cache_dir, exist_ok=True)
-        self.cache = Cache.load(os.path.join(cache_dir, "cache.json"))
+        cache_filename = os.path.join(cache_dir, "cache.json")
+        self.cache = Cache.load(cache_filename)
         self.cache.invalidate(12 * 60 * 60)
-        self.add_cleanup("Save caches", self.cache.save)
+        self.add_cleanup("Save caches", self.cache.save, cache_filename)
 
         # Docker for Mac doesn't share TMPDIR, so make sure we use /tmp
         # Docker for Windows can't access /tmp, so use a directory it can
@@ -149,7 +151,9 @@ class Runner(object):
             path = "{}:{}".format(libexec, path)
         os.environ["PATH"] = path
 
-    def span(self, name: str = "", context=True, verbose=True) -> Span:
+    def span(
+        self, name: str = "", context: bool = True, verbose: bool = True
+    ) -> Span:
         """Write caller's frame info to the log."""
 
         if context:
@@ -167,7 +171,7 @@ class Runner(object):
         s.begin()
         return s
 
-    def write(self, message: str, prefix="TEL") -> None:
+    def write(self, message: str, prefix: str = "TEL") -> None:
         """Don't use this..."""
         return self.output.write(message, prefix)
 
@@ -272,7 +276,7 @@ class Runner(object):
                 "for more information."
             )
 
-    def require_docker(self):
+    def require_docker(self) -> None:
         self.require(["docker"], "Needed for the container method.")
 
         # Check whether `sudo docker` is required.
@@ -284,7 +288,7 @@ class Runner(object):
             self.require_sudo()
             self.sudo_for_docker = True
 
-    def docker(self, *args: str, env=False) -> typing.List[str]:
+    def docker(self, *args: str, env: bool = False) -> typing.List[str]:
         if not self.sudo_for_docker:
             return ["docker"] + list(args)
         if env:
@@ -331,12 +335,12 @@ class Runner(object):
     # Subprocesses
 
     def _make_logger(
-        self, track: int, do_log: bool, do_capture: bool, capture_limit
+        self, track: int, do_log: bool, do_capture: bool, capture_limit: int
     ) -> _Logger:
         """Create a logger that optionally captures what is logged"""
         prefix = "{:>3d}".format(track)
 
-        def write(line: str):
+        def write(line: str) -> None:
             self.output.write(mask_sensitive_data(line), prefix=prefix)
 
         return _Logger(write, do_log, do_capture, capture_limit)
@@ -442,7 +446,7 @@ class Runner(object):
         timeout: typing.Optional[float] = None,
         input: typing.Optional[bytes] = None,
         env: typing.Optional[typing.Dict[str, str]] = None,
-    ):
+    ) -> None:
         """Run a subprocess, make sure it exited with 0."""
         self._run_command_sync(
             ("Running", "ran"),
@@ -459,8 +463,8 @@ class Runner(object):
         self,
         args: typing.List[str],
         timeout: typing.Optional[float] = None,
-        stderr_to_stdout=False,
-        reveal=False,
+        stderr_to_stdout: bool = False,
+        reveal: bool = False,
         input: typing.Optional[bytes] = None,
         env: typing.Optional[typing.Dict[str, str]] = None,
     ) -> str:
@@ -481,7 +485,7 @@ class Runner(object):
         self,
         name: str,
         args: typing.List[str],
-        killer: typing.Callable[[], None] = None,
+        killer: typing.Optional[typing.Callable[[], None]] = None,
         notify: bool = False,
         keep_session: bool = False,
         bufsize: int = -1,
@@ -520,7 +524,7 @@ class Runner(object):
         self.counter = track = self.counter + 1
         out_logger = self._make_logger(track, True, True, 10)
 
-        def done(proc: Popen) -> None:
+        def done(proc: "Popen[str]") -> None:
             retcode = proc.wait()
             self.output.write("[{}] {}: exit {}".format(track, name, retcode))
             recent = "\n  ".join(out_logger.get_captured().split("\n"))
@@ -562,10 +566,9 @@ class Runner(object):
         except OSError as exc:
             self.output.write("[{}] {}".format(track, exc))
             raise
-        self.add_cleanup(
-            "Kill BG process [{}] {}".format(track, name),
-            killer if killer else partial(kill_process, process),
-        )
+        if killer is None:
+            killer = partial(kill_process, process)
+        self.add_cleanup("Kill BG process [{}] {}".format(track, name), killer)
         if notify:
             # We need a select()able notification of death in case the
             # process dies before sending READY=1.  In C, I'd do this
@@ -576,7 +579,7 @@ class Runner(object):
             # launched process, so what's the harm in one more?
             pr, pw = os.pipe()
 
-            def pipewait():
+            def pipewait() -> None:
                 process.wait()
                 os.close(pw)
 
@@ -596,7 +599,10 @@ class Runner(object):
 
     # Cleanup
 
-    def add_cleanup(self, name: str, callback, *args, **kwargs) -> None:
+    def add_cleanup(
+        self, name: str, callback: typing.Callable[..., None],
+        *args: typing.Any, **kwargs: typing.Any
+    ) -> None:
         """
         Set up callback to be called during cleanup processing on exit.
 
@@ -606,7 +612,7 @@ class Runner(object):
         cleanup_item = _CleanupItem(name, callback, args, kwargs)
         self.cleanup_stack.append(cleanup_item)
 
-    def _signal_received(self, sig_num, frame):
+    def _signal_received(self, sig_num: int, frame: typing.Any) -> None:
         try:
             sig_name = signal.Signals(sig_num).name
         except (ValueError, AttributeError):
@@ -622,7 +628,7 @@ class Runner(object):
         )
         self.exit(0)
 
-    def _do_cleanup(self):
+    def _do_cleanup(self) -> typing.List[typing.Tuple[str, BaseException]]:
         failures = []
         self.show("Exit cleanup in progress")
         for name, callback, args, kwargs in reversed(self.cleanup_stack):
@@ -636,7 +642,7 @@ class Runner(object):
         return failures
 
     @contextmanager
-    def cleanup_handling(self):
+    def cleanup_handling(self) -> typing.Iterator[None]:
         signal.signal(signal.SIGTERM, self._signal_received)
         signal.signal(signal.SIGHUP, self._signal_received)
         try:
@@ -678,7 +684,7 @@ class Runner(object):
         exit(code)
         return SystemExit(code)  # Not reached; just here for the linters
 
-    def exit(self, code) -> SystemExit:
+    def exit(self, code: int) -> SystemExit:
         """
         Exit after a successful session. Does not return. Cleanup will run
         before the process ends.
@@ -691,11 +697,13 @@ class Runner(object):
         exit(code)
         return SystemExit(code)  # Not reached; just here for the linters
 
-    def wait_for_exit(self, main_process: Popen) -> None:
+    def wait_for_exit(self, main_process: "Popen[str]") -> None:
         """
         Monitor main process and background items until done
         """
-        def wait_for_process(p):
+        main_code = None
+
+        def wait_for_process(p: "Popen[str]") -> None:
             """Wait for process and set main_code and self.quitting flag
 
             Note that main_code is defined in the parent function,
@@ -708,7 +716,6 @@ class Runner(object):
             self.quitting = True
 
         self.write("Everything launched. Waiting to exit...")
-        main_code = None
         span = self.span()
         Thread(target=wait_for_process, args=(main_process, )).start()
         while not self.quitting:
