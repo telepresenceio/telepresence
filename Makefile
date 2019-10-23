@@ -42,7 +42,7 @@ acquire-sudo:
 #
 
 check-local: virtualenv  ## Run the local tests (fast, doesn't require a Kubernetes cluster)
-	$(VIRTUALENV) py.test -v --timeout=360 --timeout-method=thread -rfE tests/local $(PYTEST_ARGS)
+	$(VIRTUALENV) py.test -v --timeout=360 --timeout-method=thread -rfE tests/local k8s-proxy $(PYTEST_ARGS)
 .PHONY: check-local
 
 check-cluster: acquire-sudo virtualenv $(DOCKER_PUSH)  ## Run the end-to-end tests (requires a cluster, implies '$(DOCKER_PUSH)')

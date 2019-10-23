@@ -123,6 +123,11 @@ class ReverseResolveTestsMixin(object):
 class ThreadedReverseResolverTest(ReverseResolveTestsMixin, unittest.TestCase):
     reverse_resolve = staticmethod(socks.reverse_resolve)
 
+    def test_fail(self):
+        return super().test_fail()
+
+    test_fail.skip = "Fails in CI: resolves to ip-127-..."  # type: ignore
+
 
 class FakeReverseResolverTest(ReverseResolveTestsMixin, unittest.TestCase):
     reverse_resolve = ReverseResolver({
