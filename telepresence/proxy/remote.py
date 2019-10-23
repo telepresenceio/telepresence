@@ -43,9 +43,7 @@ class RemoteInfo(object):
         self.pod_name = pod_name
         self.deployment_config = deployment_config
         cs = deployment_config["spec"]["template"]["spec"]["containers"]
-        containers = [c for c in cs if "telepresence-k8s" in c["image"]]
-        if not containers:
-            containers = [c for c in cs if "telepresence-proxy" in c["image"]]
+        containers = [c for c in cs if "/telepresence-" in c["image"]]
         if not containers:
             raise RuntimeError(
                 "Could not find container with image "
