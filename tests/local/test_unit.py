@@ -32,6 +32,7 @@ import telepresence.outbound.vpn
 import telepresence.proxy.deployment
 import telepresence.runner.output
 from telepresence.runner.cache import Cache
+from telepresence.runner.kube import KubeInfo
 from telepresence.runner.runner import Runner
 
 COMPLEX_DEPLOYMENT = """\
@@ -193,12 +194,26 @@ def test_swap_deployment_changes():
     The modified Deployment used to swap out an existing Deployment replaces
     all values that might break our own image.
     """
+    runner = Runner("-", False)
+    runner.kubectl = KubeInfo(
+        "cluster",
+        "cluster_version",
+        False,  # cluster_is_openshift
+        "kubectl",
+        "command_version",
+        "server",
+        "context",
+        "namespace",
+        False,  # in_local_vm
+        False,  # verbose
+    )
+
     # Original has a privileged port
     original = yaml.safe_load(COMPLEX_DEPLOYMENT)
     expected = yaml.safe_load(SWAPPED_DEPLOYMENT)
     ports = telepresence.cli.PortMapping.parse(["9999"])
     actual = telepresence.proxy.deployment.new_swapped_deployment(
-        original, "nginxhttps", "random_id_123", ports, "", False
+        runner, original, "nginxhttps", "random_id_123", ports, "", False
     )
     image = actual["spec"]["template"]["spec"]["containers"][1]["image"]
     assert "/telepresence-k8s-priv:" in image
@@ -216,10 +231,32 @@ def test_swap_deployment_changes():
         "containerPort"] = 8080
     ports = telepresence.cli.PortMapping.parse(["9999"])
     actual = telepresence.proxy.deployment.new_swapped_deployment(
-        original, "nginxhttps", "random_id_123", ports, "", False
+        runner, original, "nginxhttps", "random_id_123", ports, "", False
     )
     image = actual["spec"]["template"]["spec"]["containers"][1]["image"]
     assert "/telepresence-k8s:" in image
+    expected["spec"]["template"]["spec"]["containers"][1]["image"] = image
+    assert actual == expected
+    assert (9999, 9999) in ports.local_to_remote()
+    assert (8080, 8080) in ports.local_to_remote()
+
+    # Test with OpenShift.
+    runner.kubectl = runner.kubectl._replace(
+        command="oc",
+        cluster_is_openshift=True,
+    )
+    original = yaml.safe_load(COMPLEX_DEPLOYMENT)
+    original["spec"]["template"]["spec"]["containers"][1]["ports"][0][
+        "containerPort"] = 8080
+    expected = yaml.safe_load(SWAPPED_DEPLOYMENT)
+    expected["spec"]["template"]["spec"]["containers"][1]["ports"][0][
+        "containerPort"] = 8080
+    ports = telepresence.cli.PortMapping.parse(["9999"])
+    actual = telepresence.proxy.deployment.new_swapped_deployment(
+        runner, original, "nginxhttps", "random_id_123", ports, "", False
+    )
+    image = actual["spec"]["template"]["spec"]["containers"][1]["image"]
+    assert "/telepresence-ocp:" in image
     expected["spec"]["template"]["spec"]["containers"][1]["image"] = image
     assert actual == expected
     assert (9999, 9999) in ports.local_to_remote()
