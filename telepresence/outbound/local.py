@@ -74,9 +74,12 @@ def set_up_torsocks(runner: Runner, socks_port: int) -> Dict[str, str]:
 
 
 def terminate_local_process(runner, process):
-    if process.poll() is None:
+    ret = process.poll()
+    if ret is None:
         runner.write("Killing local process...")
         kill_process(process)
+    else:
+        runner.write("Local process is already dead (ret={})".format(ret))
 
 
 def get_local_env(runner, env_overrides, replace_dns_tools):
