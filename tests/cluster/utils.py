@@ -101,7 +101,7 @@ def random_name(suffix=""):
     return "testing-{}-{}-{}-{}{}".format(
         REVISION, hostname[:16], os.getpid(), int(time.time() - START_TIME),
         suffix
-    ).replace(".", "-")
+    ).replace(".", "-").lower()
 
 
 def telepresence_image_version():
