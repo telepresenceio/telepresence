@@ -87,7 +87,7 @@ else:
     KUBECTL = "kubectl"
     EXISTING_DEPLOYMENT = EXISTING_DEPLOYMENT % (
         """\
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment""",
     )
     DEPLOYMENT_TYPE = "deployment"
