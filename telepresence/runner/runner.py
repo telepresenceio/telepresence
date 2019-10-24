@@ -713,6 +713,9 @@ class Runner:
             """
             nonlocal main_code
             main_code = p.wait()
+            main_command = str_command(str(arg) for arg in main_process.args)
+            self.write("Main process ({})".format(main_command))
+            self.write(" exited with code {}.".format(main_code))
             self.quitting = True
 
         self.write("Everything launched. Waiting to exit...")
@@ -725,9 +728,6 @@ class Runner:
         if main_code is not None:
             # User process exited, we're done. Automatic shutdown cleanup
             # will kill subprocesses.
-            main_command = str_command(str(arg) for arg in main_process.args)
-            self.write("Main process ({})".format(main_command))
-            self.write(" exited with code {}.".format(main_code))
             message = "Your process "
             if main_code:
                 message += "exited with return code {}.".format(main_code)
