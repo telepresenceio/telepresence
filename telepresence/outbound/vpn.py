@@ -142,7 +142,7 @@ def k8s_resolve(
     else:
         hostname_ips = []
 
-    resolved_ips: List[str] = []
+    resolved_ips = []  # type: List[str]
     for host, ips in zip(hostnames, hostname_ips):
         ipcache[host] = ips
         resolved_ips += ips
