@@ -102,7 +102,7 @@ def k8s_resolve(
     hostnames = []
     ip_ranges = []
 
-    ipcache = runner.cache.child(runner.kubectl.context).child("ips")
+    ipcache = runner.cache.child(runner.kubectl.context).child("ip-list")
 
     for proxy_target in hosts_or_ips:
         try:
@@ -114,10 +114,7 @@ def k8s_resolve(
             continue
 
         if proxy_target in ipcache:
-            if isinstance(ipcache[proxy_target], list):
-                ip_ranges += ipcache[proxy_target]
-            else:
-                ip_ranges.append(ipcache[proxy_target])
+            ip_ranges += ipcache[proxy_target]
             continue
 
         hostnames.append(proxy_target)
