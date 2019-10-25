@@ -25,6 +25,8 @@ clients within a k8s pod.
 """
 
 import os
+import re
+import typing
 
 from twisted.application.service import Application
 from twisted.internet import reactor
@@ -37,6 +39,45 @@ import socks
 NAMESPACE_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 
 
+def _get_env_namespace() -> typing.Optional[str]:
+    print("Retrieving this pod's namespace from the process environment")
+    try:
+        return os.environ["TELEPRESENCE_CONTAINER_NAMESPACE"]
+    except KeyError:
+        print("Failed: TELEPRESENCE_CONTAINER_NAMESPACE not set")
+    return None
+
+
+def _get_sa_namespace() -> typing.Optional[str]:
+    print("Reading this pod's namespace from the k8s service account")
+    try:
+        return open(NAMESPACE_PATH).read()
+    except IOError as exc:
+        print("Failed to determine namespace from service account:")
+        print("  {}".format(exc))
+    return None
+
+
+def _guess_namespace() -> typing.Optional[str]:
+    print("Guessing this pod's namespace via /etc/resolv.conf")
+    try:
+        contents = open("/etc/resolv.conf").read()
+    except IOError as exc:
+        print("Guess attempt failed:")
+        print("  {}".format(exc))
+        return None
+    for line in contents.splitlines():
+        line = line.strip()
+        if not line.startswith("search"):
+            continue
+        match = re.search(r"\s([a-z0-9]+)[.]svc([.]|\s|$)", line)
+        if not match:
+            continue
+        return match.group(1)
+    print("Guess attempt failed: No matching search line found.")
+    return None
+
+
 def listen(client):
     reactor.listenTCP(9050, socks.SOCKSv5Factory())
     factory = server.DNSServerFactory(clients=[client])
@@ -46,27 +87,25 @@ def listen(client):
 
 
 def main():
-    predefined_namespace = os.getenv('TELEPRESENCE_CONTAINER_NAMESPACE', None)
-    if predefined_namespace:
-        NAMESPACE = predefined_namespace
-    else:
-        try:
-            with open(NAMESPACE_PATH) as f:
-                NAMESPACE = f.read()
-        except IOError as exc:
-            print("ERROR: Failed to determine namespace:")
-            print("  {}".format(exc))
-            print("Make sure serviceaccount is available via")
-            print("  automountServiceAccountToken: true")
-            print("in your Deployment")
-            print("or set the TELEPRESENCE_CONTAINER_NAMESPACE env var")
-            print("directly or using the Downward API.")
-            exit("Failed to determine namespace")
+    namespace = _get_env_namespace()
+    if namespace is None:
+        namespace = _get_sa_namespace()
+    if namespace is None:
+        namespace = _guess_namespace()
+    if namespace is None:
+        print("\nERROR: Failed to determine namespace")
+        print("Enable serviceaccount access via")
+        print("  automountServiceAccountToken: true")
+        print("in your Deployment")
+        print("or set the TELEPRESENCE_CONTAINER_NAMESPACE env var")
+        print("directly or using the Downward API.\n")
+        exit("ERROR: Failed to determine namespace")
+    print("Pod's namespace is {!r}".format(namespace))
     telepresence_nameserver = os.environ.get("TELEPRESENCE_NAMESERVER")
     reactor.suggestThreadPoolSize(50)
     periodic.setup(reactor)
     print("Listening...")
-    listen(resolver.LocalResolver(telepresence_nameserver, NAMESPACE))
+    listen(resolver.LocalResolver(telepresence_nameserver, namespace))
 
 
 main()
