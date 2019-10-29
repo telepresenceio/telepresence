@@ -13,10 +13,16 @@ If you want to use Telepresence to proxy a containerized application you should 
 
 #### `localhost` and the pod
 
-`localhost` and `127.0.0.1` will end up accessing the host machine—the machine where you run `telepresence`—*not* the pod.
+`localhost` and `127.0.0.1` will access the host machine, i.e. the machine where you ran `telepresence`.
+If you're using the container method, `localhost` will refer to your local container.
+In either case, `localhost` will not connect you to other containers in the pod.
 This can be a problem in cases where you are running multiple containers in a pod and you need your process to access a different container in the same pod.
 
-The solution is to access the pod via its IP, rather than at `127.0.0.1`.
+The solution is to use `--to-pod PORT` and/or `--from-pod PORT` to tell Telepresence to set up additional forwarding.
+If you want to make connections from your local session to the pod, e.g., to access a proxy/helper sidecar, use `--to-pod PORT`.
+On the other hand, if you want connections from other containers in the pod to reach your local session, use `--from-pod PORT`.
+
+An alternate solution to connect to the pod is to access the pod via its IP, rather than at `127.0.0.1`.
 You can have the pod IP configured as an environment variable `$MY_POD_IP` in the Deployment using the Kubernetes [Downward API](https://kubernetes.io/docs/tasks/configure-pod-container/environment-variable-expose-pod-information/):
 
 <pre><code class="lang-yaml">apiVersion: extensions/v1beta1

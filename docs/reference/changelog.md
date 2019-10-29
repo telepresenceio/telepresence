@@ -2,7 +2,7 @@
 
 <!--- towncrier start line -->
 
-Stuff:
+#### Upcoming
 
 * Telepresence uses a new OpenShift-specific proxy image when it detects an OpenShift cluster.
   It should no longer be necessary to modify OpenShift cluster policies to allow Telepresence to run.

@@ -1,0 +1,1 @@
+Telepresence supports forwarding traffic to and from other containers in the pod. This is useful to connect to proxy/helper containers (`--to-pod`) and to use adapters/agents sending traffic to your app (`--from-pod`).
