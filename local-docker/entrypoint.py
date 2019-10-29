@@ -72,6 +72,8 @@ def proxy(config: typing.Dict[str, typing.Any]) -> None:
     """Start sshuttle proxy to Kubernetes."""
     cidrs = config["cidrs"]
     expose_ports = config["expose_ports"]
+    to_pod = config["to_pod"]
+    from_pod = config["from_pod"]
 
     # Launch local sshd so Tel outside can forward 38023 to the cluster
     runner = Runner("-", False)
@@ -105,7 +107,7 @@ def proxy(config: typing.Dict[str, typing.Any]) -> None:
     main_process = Popen(sshuttle_cmd, universal_newlines=True)
 
     # Start the SSH tunnels to expose local services:
-    expose_local_services(runner, ssh, expose_ports)
+    expose_local_services(runner, ssh, expose_ports, to_pod, from_pod)
 
     # Wait for everything to exit:
     runner.wait_for_exit(main_process)

@@ -22,28 +22,25 @@ from .ssh import SSH
 def expose_local_services(
     runner: Runner,
     ssh: SSH,
-    port_numbers: List[Tuple[int, int]],
+    exp_port_numbers: List[Tuple[int, int]],
+    to_pod: List[int],
+    from_pod: List[int],
     show_only: bool = False,
 ) -> None:
     """Create SSH tunnels from remote proxy pod to local host.
-
-    :param runner: The runner
-    :param ssh: A 'SSH` instance.
-    :param port_numbers: List of pairs of (local port, remote port).
-    :param show_only: Don't create the tunnels, just output info for the user
 
     The show_only param is used to show messages for the container method; the
     tunnels are created in the network container, where those messages are not
     visible to the user.
     """
-    if not port_numbers and runner.chatty:
+    if not exp_port_numbers and runner.chatty:
         runner.show(
             "\nNo traffic is being forwarded from the remote Deployment to "
             "your local machine. You can use the --expose option to specify "
             "which ports you want to forward."
         )
-    remote_forward_arguments = []
-    for local_port, remote_port in port_numbers:
+    forward_arguments = []  # type: List[str]
+    for local_port, remote_port in exp_port_numbers:
         if runner.chatty:
             runner.show(
                 "Forwarding remote port {} to local port {}.".format(
@@ -51,14 +48,28 @@ def expose_local_services(
                     local_port,
                 )
             )
-        remote_forward_arguments.extend([
+        forward_arguments.extend([
             "-R",
             "*:{}:127.0.0.1:{}".format(remote_port, local_port),
         ])
-    if remote_forward_arguments and not show_only:
+    for port in to_pod:
+        if runner.chatty:
+            runner.show("Forwarding localhost:{} to the pod".format(port))
+        forward_arguments.extend([
+            "-L",
+            "127.0.0.1:{}:127.0.0.1:{}".format(port, port),
+        ])
+    for port in from_pod:
+        if runner.chatty:
+            runner.show("Forwarding localhost:{} from the pod".format(port))
+        forward_arguments.extend([
+            "-R",
+            "127.0.0.1:{}:127.0.0.1:{}".format(port, port),
+        ])
+    if forward_arguments and not show_only:
         runner.launch(
             "SSH port forward (exposed ports)",
-            ssh.bg_command(remote_forward_arguments)
+            ssh.bg_command(forward_arguments)
         )
     if runner.chatty:
         runner.show("\n")

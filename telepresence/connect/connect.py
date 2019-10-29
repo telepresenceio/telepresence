@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from argparse import Namespace
 from subprocess import CalledProcessError
-from typing import Tuple
+from typing import Callable, List, Tuple
 
 from telepresence.cli import PortMapping
 from telepresence.proxy import RemoteInfo
@@ -26,7 +27,7 @@ from .ssh import SSH
 
 def connect(
     runner: Runner, remote_info: RemoteInfo, is_container_mode: bool,
-    expose: PortMapping
+    expose: PortMapping, to_pod: List[int], from_pod: List[int]
 ) -> Tuple[int, SSH]:
     """
     Start all the processes that handle remote proxying.
@@ -75,6 +76,8 @@ def connect(
         runner,
         ssh,
         list(expose.local_to_remote()),
+        to_pod,
+        from_pod,
         show_only=is_container_mode
     )
 
@@ -97,7 +100,7 @@ def connect(
     return socks_port, ssh
 
 
-def setup(runner: Runner, args):
+def setup(runner: Runner, args: Namespace) -> Callable:
     # Make sure we can run openssh:
     runner.require(["ssh"], "Please install the OpenSSH client")
     try:
@@ -109,7 +112,11 @@ def setup(runner: Runner, args):
 
     is_container_mode = args.method == "container"
 
-    def do_connect(runner_: Runner, remote_info: RemoteInfo):
-        return connect(runner_, remote_info, is_container_mode, args.expose)
+    def do_connect(runner_: Runner,
+                   remote_info: RemoteInfo) -> Tuple[int, SSH]:
+        return connect(
+            runner_, remote_info, is_container_mode, args.expose, args.to_pod,
+            args.from_pod
+        )
 
     return do_connect
