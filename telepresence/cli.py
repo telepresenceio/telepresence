@@ -303,6 +303,32 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
         )
     )
     parser.add_argument(
+        "--to-pod",
+        action="append",
+        metavar="PORT",
+        type=int,
+        default=[],
+        help=(
+            "Access localhost:PORT on other containers in the swapped "
+            "deployment's pod from your host or local container. For example, "
+            "use this to reach proxy/helper containers in the pod with "
+            "--swap-deployment."
+        )
+    )
+    parser.add_argument(
+        "--from-pod",
+        action="append",
+        metavar="PORT",
+        type=int,
+        default=[],
+        help=(
+            "Allow access to localhost:PORT on your host or local container "
+            "from other containers in the swapped deployment's pod. For "
+            "example, use this to let an adapter container forward requests "
+            "to your swapped deployment."
+        )
+    )
+    parser.add_argument(
         "--container-to-host",
         action="append",
         metavar="CONTAINER_PORT[:HOST_PORT]",
