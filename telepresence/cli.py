@@ -19,21 +19,21 @@ from contextlib import contextmanager
 from pathlib import Path
 from subprocess import check_output
 from traceback import format_exc
-from typing import Dict, List, Set, Tuple, Union
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple, Union
 from urllib.parse import quote_plus
 
 import telepresence
-from telepresence.runner import BackgroundProcessCrash
-from telepresence.utilities import random_name
+from telepresence.runner import BackgroundProcessCrash, Runner
+from telepresence.utilities import dumb_print, random_name
 
 
 class PortMapping(object):
     """Maps local ports to listen to remote exposed ports."""
-    def __init__(self):
+    def __init__(self) -> None:
         self._mapping = {}  # type: Dict[int,int]
 
     @classmethod
-    def parse(cls, port_strings: List[str]):
+    def parse(cls, port_strings: List[str]) -> "PortMapping":
         """Parse list of 'port' or 'local_port:remote_port' to PortMapping."""
         result = PortMapping()
         for port_string in port_strings:
@@ -44,7 +44,7 @@ class PortMapping(object):
             result._mapping[local_port] = remote_port
         return result
 
-    def merge_automatic_ports(self, ports: List[int]):
+    def merge_automatic_ports(self, ports: List[int]) -> None:
         """
         Merge a list of ports to the existing ones.
 
@@ -83,7 +83,7 @@ def safe_output(args: List[str]) -> str:
         return "(error: {})".format(e)
 
 
-def report_crash(error, log_path, logs):
+def report_crash(error: Any, log_path: str, logs: str) -> None:
     print(
         "\nLooks like there's a bug in our code. Sorry about that!\n\n" +
         error + "\n"
@@ -127,7 +127,7 @@ def report_crash(error, log_path, logs):
 
 
 @contextmanager
-def crash_reporting(runner=None):
+def crash_reporting(runner: Optional[Runner] = None) -> Iterator[None]:
     """
     Decorator that catches unexpected errors
     """
@@ -137,7 +137,7 @@ def crash_reporting(runner=None):
         if runner is not None:
             show = runner.show
         else:
-            show = print
+            show = dumb_print
         show("Keyboard interrupt (Ctrl-C/Ctrl-Break) pressed")
         raise SystemExit(0)
     except Exception as exc:
@@ -183,7 +183,7 @@ def absolute_path(value: str) -> Path:
     )
 
 
-def parse_args(args=None) -> argparse.Namespace:
+def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
     """Create a new ArgumentParser and parse sys.argv."""
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -303,6 +303,32 @@ def parse_args(args=None) -> argparse.Namespace:
         )
     )
     parser.add_argument(
+        "--to-pod",
+        action="append",
+        metavar="PORT",
+        type=int,
+        default=[],
+        help=(
+            "Access localhost:PORT on other containers in the swapped "
+            "deployment's pod from your host or local container. For example, "
+            "use this to reach proxy/helper containers in the pod with "
+            "--swap-deployment."
+        )
+    )
+    parser.add_argument(
+        "--from-pod",
+        action="append",
+        metavar="PORT",
+        type=int,
+        default=[],
+        help=(
+            "Allow access to localhost:PORT on your host or local container "
+            "from other containers in the swapped deployment's pod. For "
+            "example, use this to let an adapter container forward requests "
+            "to your swapped deployment."
+        )
+    )
+    parser.add_argument(
         "--container-to-host",
         action="append",
         metavar="CONTAINER_PORT[:HOST_PORT]",
@@ -419,7 +445,7 @@ def parse_args(args=None) -> argparse.Namespace:
             "Requires --method container."
         )
     )
-    args = parser.parse_args(args)
+    args = parser.parse_args(in_args)
 
     # Fill in defaults:
     if args.method is None:

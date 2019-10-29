@@ -16,7 +16,7 @@ import argparse
 import json
 import os
 import os.path
-from subprocess import CalledProcessError, Popen
+import subprocess
 from typing import Callable, Dict, List, Optional, Tuple
 
 from telepresence import TELEPRESENCE_LOCAL_IMAGE
@@ -27,9 +27,9 @@ from telepresence.runner import Runner
 from telepresence.utilities import find_free_port, random_name
 
 
-def make_docker_kill(runner: Runner, name: str) -> Callable:
+def make_docker_kill(runner: Runner, name: str) -> Callable[[], None]:
     """Return a function that will kill a named docker container."""
-    def kill():
+    def kill() -> None:
         runner.check_call(runner.docker("stop", "--time=1", name))
 
     return kill
@@ -76,13 +76,15 @@ def run_docker_command(
     remote_info: RemoteInfo,
     docker_run: List[str],
     expose: PortMapping,
+    to_pod: List[int],
+    from_pod: List[int],
     container_to_host: PortMapping,
     remote_env: Dict[str, str],
     ssh: SSH,
     mount_dir: Optional[str],
     use_docker_mount: Optional[bool],
     pod_info: Dict[str, str],
-) -> Popen:
+) -> "subprocess.Popen[bytes]":
     """
     --docker-run support.
 
@@ -112,6 +114,8 @@ def run_docker_command(
     config = {
         "cidrs": ["0/0"],
         "expose_ports": list(expose.local_to_remote()),
+        "to_pod": to_pod,
+        "from_pod": from_pod,
     }
     dns_args = []
     if "hostname" in pod_info:
@@ -161,7 +165,7 @@ def run_docker_command(
                     TELEPRESENCE_LOCAL_IMAGE, "wait"
                 )
             )
-        except CalledProcessError as e:
+        except subprocess.CalledProcessError as e:
             if e.returncode == 100:
                 # We're good!
                 sshuttle_ok = True
@@ -218,9 +222,9 @@ def run_docker_command(
     span.end()
 
     runner.show("Setup complete. Launching your container.")
-    process = Popen(docker_command, env=docker_env)
+    process = subprocess.Popen(docker_command, env=docker_env)
 
-    def terminate_if_alive():
+    def terminate_if_alive() -> None:
         runner.write("Shutting down containers...\n")
         if process.poll() is None:
             runner.write("Killing local container...\n")

@@ -12,12 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from subprocess import CalledProcessError
+import subprocess
+import typing
+from argparse import Namespace
 
+from telepresence.connect import SSH
+from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
 
 from .container import run_docker_command
 from .local import launch_inject, launch_vpn
+
+LaunchType = typing.Callable[[
+    Runner,
+    RemoteInfo,
+    typing.Dict[str, str],  # env
+    int,
+    SSH,
+    str,
+    typing.Dict[str, str],  # pod info
+], "subprocess.Popen[bytes]"]
 
 
 def check_local_command(runner: Runner, command: str) -> None:
@@ -25,7 +39,7 @@ def check_local_command(runner: Runner, command: str) -> None:
         raise runner.fail("{}: command not found".format(command))
 
 
-def setup_inject(runner: Runner, args):
+def setup_inject(runner: Runner, args: Namespace) -> LaunchType:
     command = ["torsocks"] + (args.run or ["bash", "--norc"])
     check_local_command(runner, command[1])
     runner.require(["torsocks"], "Please install torsocks (v2.1 or later)")
@@ -52,7 +66,7 @@ def setup_inject(runner: Runner, args):
     return launch
 
 
-def setup_vpn(runner: Runner, args):
+def setup_vpn(runner: Runner, args: Namespace) -> LaunchType:
     command = args.run or ["bash", "--norc"]
     check_local_command(runner, command[0])
     runner.require(["sshuttle-telepresence"],
@@ -69,7 +83,7 @@ def setup_vpn(runner: Runner, args):
         try:
             ipt_command = ["sudo", "iptables", "--list"]
             runner.get_output(ipt_command, stderr_to_stdout=True)
-        except CalledProcessError as exc:
+        except subprocess.CalledProcessError as exc:
             runner.show("Quick test of iptables failed:")
             print("\n> {}".format(" ".join(ipt_command)))
             print("{}\n".format(exc.output))
@@ -101,7 +115,7 @@ def setup_vpn(runner: Runner, args):
     return launch
 
 
-def setup_container(runner: Runner, args):
+def setup_container(runner: Runner, args: Namespace) -> LaunchType:
     runner.require_docker()
     if args.also_proxy:
         runner.show(
@@ -132,7 +146,7 @@ def setup_container(runner: Runner, args):
             runner.show("ID mismatch on local Docker check.")
             runner.show("\n" + local_docker_message)
             raise runner.fail("Error: Local Docker daemon required")
-    except CalledProcessError as exc:
+    except subprocess.CalledProcessError as exc:
         runner.show("Local Docker check failed: {}".format(exc.output))
         runner.show("\n" + local_docker_message)
         raise runner.fail("Error: Local Docker daemon required")
@@ -141,15 +155,24 @@ def setup_container(runner: Runner, args):
         runner_, remote_info, env, _socks_port, ssh, mount_dir, pod_info
     ):
         return run_docker_command(
-            runner_, remote_info, args.docker_run, args.expose,
-            args.container_to_host, env, ssh, mount_dir,
-            args.docker_mount is not None, pod_info
+            runner_,
+            remote_info,
+            args.docker_run,
+            args.expose,
+            args.to_pod,
+            args.from_pod,
+            args.container_to_host,
+            env,
+            ssh,
+            mount_dir,
+            args.docker_mount is not None,
+            pod_info,
         )
 
     return launch
 
 
-def setup(runner: Runner, args):
+def setup(runner: Runner, args: Namespace) -> LaunchType:
     if args.method == "inject-tcp":
         return setup_inject(runner, args)
 

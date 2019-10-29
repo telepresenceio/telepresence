@@ -282,6 +282,10 @@ class _ExistingDeploymentOperation(object):
             deployment_ident.namespace,
             option,
             deployment_ident.name,
+            "--to-pod",
+            "8910",
+            "--from-pod",
+            "9876",
             "--env-json",
             str(self.json_env),
             "--env-file",
@@ -360,6 +364,11 @@ def create_deployment(deployment_ident, image, args, environ, ports, replicas):
     if ports is not None:
         container["ports"] = ports
 
+    sidecar_container = {
+        "name": "sidecar",
+        "image": "datawire/tel-sidecar-test-helper:1",
+    }
+
     deployment = dumps({
         "kind": "Deployment",
         "apiVersion": "extensions/v1beta1",
@@ -389,7 +398,7 @@ def create_deployment(deployment_ident, image, args, environ, ports, replicas):
                             }],
                         },
                     }],
-                    "containers": [container],
+                    "containers": [container, sidecar_container],
                 },
             },
         },

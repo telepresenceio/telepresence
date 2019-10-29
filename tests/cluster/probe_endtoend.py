@@ -60,6 +60,8 @@ def main():
     for (port, value) in zip(args.http_port, args.http_value):
         run_http_server(port, value)
 
+    run_http_server(9876, "sidecar")
+
     read_and_respond(stdin.buffer, output)
     print("Goodbye.")
     exit(args.exit_code)
