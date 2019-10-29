@@ -424,6 +424,27 @@ def _get_post_exit_result(probe):
 
 
 @with_probe
+def test_network_routing_to_from_pod(probe):
+    """
+    Test port forwarding to/from another container in the pod.
+
+    Accesses localhost:8910 from the probe, which hits a server running on
+    another container in the pod (tests --to-pod). That server returns success
+    only if it can access localhost:9876, which is running in the probe (tests
+    --from-pod).
+    """
+    if probe.operation.name not in ("swap", "existing"):
+        pytest.skip(
+            "Test only applies to --swap-deployment and --deployment usage."
+        )
+
+    probe_result = probe.result()
+
+    success, response = probe_url(probe_result, "http://localhost:8910/")
+    assert success and "sidecar" in response
+
+
+@with_probe
 def test_resolve_names(probe):
     """
     Name resolution is performed in the context of the Kubernetes cluster.
