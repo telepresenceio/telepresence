@@ -360,6 +360,11 @@ def create_deployment(deployment_ident, image, args, environ, ports, replicas):
     if ports is not None:
         container["ports"] = ports
 
+    sidecar_container = {
+        "name": "sidecar",
+        "image": "datawire/tel-sidecar-test-helper:1",
+    }
+
     deployment = dumps({
         "kind": "Deployment",
         "apiVersion": "extensions/v1beta1",
@@ -389,7 +394,7 @@ def create_deployment(deployment_ident, image, args, environ, ports, replicas):
                             }],
                         },
                     }],
-                    "containers": [container],
+                    "containers": [container, sidecar_container],
                 },
             },
         },

@@ -510,6 +510,7 @@ def test_swapdeployment_restores_container_image(probe):
     images = {
         container["image"]
         for container in deployment["spec"]["template"]["spec"]["containers"]
+        if container["name"] == "hello"
     }
     assert {probe.operation.image} == images
 
@@ -528,6 +529,7 @@ def test_swapdeployment_restores_container_command(probe):
     args = [
         container["args"]
         for container in deployment["spec"]["template"]["spec"]["containers"]
+        if container["name"] == "hello"
     ]
     assert [probe.operation.container_args] == args
 
