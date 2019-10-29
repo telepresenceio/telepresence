@@ -20,6 +20,11 @@ from time import time
 from typing import Iterable, List
 
 
+def dumb_print(message: str) -> None:
+    """A simplified print that is type-compatible with runner.show"""
+    print(message)
+
+
 def random_name() -> str:
     """Return a random name for a container."""
     return "telepresence-{}-{}".format(time(), os.getpid()).replace(".", "-")

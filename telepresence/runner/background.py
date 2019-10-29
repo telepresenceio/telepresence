@@ -16,11 +16,9 @@ import typing
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
 
+from telepresence.utilities import dumb_print
+
 from .runner import Runner
-
-
-def dumb_print(message: str) -> None:
-    print(message)
 
 
 class DumbHandler(BaseHTTPRequestHandler):
