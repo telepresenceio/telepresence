@@ -1,1 +1,0 @@
-Changing strategy to determine if `oc` (Openshift) cli tool should be used for a given telepresence session. Previously called `/apis` endpoint can be secured making `telepresence` defaulting to `kubectl` where the actual cluster is Openshift and uses `DeploymentConfig`s.

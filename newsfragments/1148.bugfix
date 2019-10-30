@@ -1,1 +1,0 @@
-When runnning telepresence inside WSL, use a Docker-accessible directory as the TMP dir.

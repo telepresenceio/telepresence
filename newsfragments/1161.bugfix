@@ -1,1 +1,0 @@
-Change the test hostname from `kubernetes.default.svc.cluster.local` to `kubernetes.default`.

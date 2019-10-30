@@ -2,7 +2,9 @@
 
 <!--- towncrier start line -->
 
-#### Upcoming
+#### 0.103 (October 30, 2019)
+
+Backwards incompatible changes:
 
 * Telepresence uses a new OpenShift-specific proxy image when it detects an OpenShift cluster.
   It should no longer be necessary to modify OpenShift cluster policies to allow Telepresence to run.
@@ -10,7 +12,32 @@
   Use of a CentOS base image should allow for easier approval or certification in some enterprise environments.
   Thanks to GitHub user ReSearchITEng for the patch.
   ([#1114](https://github.com/telepresenceio/telepresence/pull/1114))
+* Telepresence uses a new strategy to detect an OpenShift cluster.
+  If `openshift.io` is present in the output of `kubectl api-versions`, Telepresence treats the cluster as OpenShift.
+  It prefers `oc` over `kubectl` and uses the OpenShift-specific image as above.
+  Thanks to Bartosz Majsak for the original patch; blame to the Datawire team for errors in the ultimate implementation.
+  ([#1139](https://github.com/telepresenceio/telepresence/issues/1139))
 
+
+Features:
+
+* Telepresence supports forwarding traffic to and from other containers in the pod. This is useful to connect to proxy/helper containers (`--to-pod`) and to use adapters/agents sending traffic to your app (`--from-pod`).
+  ([#728](https://github.com/telepresenceio/telepresence/issues/728))
+* When using the `vpn-tcp` method on MacOS, Telepresence will flush the DNS cache once connected.
+  This can be useful to clear cached NXDOMAIN responses that were populated when Telepresence was not yet connected.
+  Thanks to Karolis Labrencis for the patch.
+  ([#1118](https://github.com/telepresenceio/telepresence/issues/1118))
+
+Bug fixes:
+
+* On WSL (Windows 10), Telepresence uses a Docker-accessible directory as the temporary dir.
+  Thanks to Shawn Dellysse for the patch.
+  ([#1148](https://github.com/telepresenceio/telepresence/issues/1148))
+* The connectivity test for the inject-tcp method is able to succeed in more cluster configurations.
+  The test hostname is now `kubernetes.default` instead of `kubernetes.default.svc.cluster.local`.
+  Thanks to Mohammad Teimori Pabandi for the patch.
+  ([#1141](https://github.com/telepresenceio/telepresence/issues/1141))
+  ([#1161](https://github.com/telepresenceio/telepresence/issues/1161))
 
 #### 0.102 (October 2, 2019)
 
