@@ -12,7 +12,9 @@ import (
 )
 
 // Version is inserted at build using --ldflags -X
-var Version = "(unknown version)"
+// But we don't really build that way any longer.
+// So include a fallback version number that's not useless.
+var Version = "0.8.0"
 
 const socketName = "/var/run/edgectl.socket"
 const logfile = "/tmp/edgectl.log"
@@ -23,6 +25,8 @@ The daemon's log output in ` + logfile + ` may have more information.
 Start the daemon using "sudo edgectl daemon" if it is not running.
 `
 var displayVersion = fmt.Sprintf("v%s (api v%d)", Version, apiVersion)
+
+// edgectl is the full path to the Edge Control binary
 var edgectl string
 
 func main() {
