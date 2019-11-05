@@ -103,6 +103,12 @@ func main() {
 		Args:  cobra.ExactArgs(0),
 		RunE:  launchDaemon,
 	})
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "login",
+		Short: "Access the Ambassador Edge Stack admin UI",
+		Args:  cobra.NoArgs,
+		RunE:  aesLogin,
+	})
 	rootCmd.SetHelpTemplate(rootCmd.HelpTemplate() + "\n" + failedToConnect)
 
 	err := rootCmd.Execute()
