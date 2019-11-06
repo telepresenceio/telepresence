@@ -4,24 +4,69 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/pkg/browser"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 )
+
+const SecretName = "ambassador-internal"
+const AmbassadorNamespace = "ambassador"
 
 type LoginClaimsV1 struct {
 	LoginTokenVersion  string `json:"login_token_version"`
 	jwt.StandardClaims `json:",inline"`
 }
 
+func maybeWrongCluster() {
+	fmt.Println()
+	fmt.Println("Failed to obtain expected information from the cluster.")
+	fmt.Println("Is kubectl configured to connect to the correct cluster?")
+	fmt.Println()
+	fmt.Println("    kubectl -n ambassador get svc,deploy")
+	fmt.Println()
+}
+
 func aesLogin(_ *cobra.Command, _ []string) error {
+	fmt.Println("Connecting to the Ambassador Edge Stack admin UI in this cluster...")
+
+	// Prepare to talk to the cluster
+	kubeinfo := k8s.NewKubeInfo("", "", "") // Empty file/ctx/ns for defaults
+	restconfig, err := kubeinfo.GetRestConfig()
+	if err != nil {
+		return errors.Wrap(err, "Failed to connect to cluster")
+	}
+	coreClient, err := k8sClientCoreV1.NewForConfig(restconfig)
+	if err != nil {
+		return errors.Wrap(err, "Failed to connect to cluster")
+	}
+
 	// Obtain signing key
-	// -> kubectl -n ambassador get secret ambassador-internal -o json
-	signingKey := []byte("1234")
+	// -> kubectl -n $AmbassadorNamespace get secret $SecretName -o json
+	secretInterface := coreClient.Secrets(AmbassadorNamespace)
+	secret, err := secretInterface.Get(SecretName, k8sTypesMetaV1.GetOptions{})
+	if err != nil {
+		maybeWrongCluster()
+		return err
+	}
+	// Parse out the private key from the secret
+	privatePEM, ok := secret.Data["rsa.key"]
+	if !ok {
+		maybeWrongCluster()
+		return errors.Errorf("secret name=%q namespace=%q exists but does not contain an %q %s field",
+			SecretName, AmbassadorNamespace, "rsa.key", "private-key")
+	}
+	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(privatePEM)
+	if err != nil {
+		maybeWrongCluster()
+		return errors.Wrap(err, "parse private-key")
+	}
 
 	// Figure out the correct hostname
-	// -> kubectl -n ambassador get host -o json
+	// -> kubectl -n $AmbassadorNamespace get host -o json
 	// and use the oldest host (for now)
 	hostname := "FIXME"
 
@@ -38,8 +83,8 @@ func aesLogin(_ *cobra.Command, _ []string) error {
 	}
 
 	// Generate JWT
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(signingKey)
+	token := jwt.NewWithClaims(jwt.GetSigningMethod("PS512"), claims)
+	tokenString, err := token.SignedString(privateKey)
 	if err != nil {
 		return errors.Wrap(err, "Unexpected error generating JWT")
 	}
