@@ -10,6 +10,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sSchema "k8s.io/apimachinery/pkg/runtime/schema"
+	k8sClientDynamic "k8s.io/client-go/dynamic"
 	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
@@ -43,6 +45,10 @@ func aesLogin(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return errors.Wrap(err, "Failed to connect to cluster")
 	}
+	dynamicClient, err := k8sClientDynamic.NewForConfig(restconfig)
+	if err != nil {
+		return err
+	}
 
 	// Obtain signing key
 	// -> kubectl -n $AmbassadorNamespace get secret $SecretName -o json
@@ -67,8 +73,36 @@ func aesLogin(_ *cobra.Command, _ []string) error {
 
 	// Figure out the correct hostname
 	// -> kubectl -n $AmbassadorNamespace get host -o json
-	// and use the oldest host (for now)
-	hostname := "FIXME"
+	// and the first host we find for now...
+	hostsGetter := dynamicClient.Resource(k8sSchema.GroupVersionResource{
+		Group:    "getambassador.io",
+		Version:  "v2",
+		Resource: "hosts",
+	})
+	hosts, err := hostsGetter.List(k8sTypesMetaV1.ListOptions{})
+	if err != nil {
+		maybeWrongCluster()
+		return err
+	}
+	var hostname string
+	for _, host := range hosts.Items {
+		// FIXME: We should pay attention to the Namespace, maybe some sort of
+		// Ambassador ID thing, etc., so we don't pick up the wrong hostname.
+		spec, ok := host.Object["spec"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		maybeHostname, ok := spec["hostname"].(string)
+		if !ok {
+			continue
+		}
+		hostname = maybeHostname
+		break
+	}
+	if hostname == "" {
+		maybeWrongCluster()
+		return fmt.Errorf("Did not find a valid Host in your cluster")
+	}
 
 	// Construct claims
 	now := time.Now()
