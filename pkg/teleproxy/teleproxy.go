@@ -38,7 +38,10 @@ func dnsListeners(p *supervisor.Process, port string) (listeners []string) {
 	// are coming from the wrong place
 	listeners = append(listeners, "127.0.0.1:"+port)
 
-	if runtime.GOOS == "linux" {
+	_, err := os.Stat("/.dockerenv")
+	insideDocker := err == nil
+
+	if runtime.GOOS == "linux" && !insideDocker {
 		// This is the default docker bridge. We need to listen here because the nat logic we use to intercept
 		// dns packets will divert the packet to the interface it originates from, which in the case of
 		// containers is the docker bridge. Without this dns won't work from inside containers.
