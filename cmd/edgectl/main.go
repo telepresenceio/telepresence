@@ -106,7 +106,7 @@ func main() {
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "login",
 		Short: "Access the Ambassador Edge Stack admin UI",
-		Args:  cobra.NoArgs,
+		Args:  cobra.MaximumNArgs(1),
 		RunE:  aesLogin,
 	})
 	rootCmd.SetHelpTemplate(rootCmd.HelpTemplate() + "\n" + failedToConnect)
