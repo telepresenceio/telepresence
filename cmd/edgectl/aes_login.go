@@ -58,6 +58,11 @@ func aesLogin(_ *cobra.Command, args []string) error {
 	var hostname string
 	if len(args) == 1 {
 		hostname = args[0]
+		// FIXME: validate that hostname by querying
+		// https://{{hostname}}/edge_stack/admin/api/ambassador_cluster_id and
+		// verifying that it returns the same UUID via direct access and via
+		// port-forward/teleproxy. This avoids leaking login credentials to the
+		// operator of a different website.
 	} else {
 		hostname, err = getHostname(restconfig)
 		if err != nil {
@@ -145,8 +150,6 @@ func getHostname(restconfig *rest.Config) (hostname string, err error) {
 			return
 		}
 	}
-	if hostname == "" {
-		err = fmt.Errorf("Did not find a valid Host in your cluster")
-	}
+	err = fmt.Errorf("Did not find a valid Host in your cluster. Use \"edgectl login HOSTNAME\"")
 	return
 }
