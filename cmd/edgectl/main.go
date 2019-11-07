@@ -20,74 +20,55 @@ const socketName = "/var/run/edgectl.socket"
 const logfile = "/tmp/edgectl.log"
 const apiVersion = 1
 
-var failedToConnect = `Failed to connect to the daemon. Is it still running?
-The daemon's log output in ` + logfile + ` may have more information.
-Start the daemon using "sudo edgectl daemon" if it is not running.
-`
 var displayVersion = fmt.Sprintf("v%s (api v%d)", Version, apiVersion)
+
+const failedToConnect = "Unable to connect to the daemon (See \"edgectl help daemon\")"
+
+var daemonHelp = `The Edge Control Daemon is a long-lived background component that manages
+connections and network state.
+
+Launch the Edge Control Daemon:
+    sudo edgectl daemon
+
+Examine the Daemon's log output in
+    ` + logfile + `
+to troubleshoot problems.
+`
 
 // edgectl is the full path to the Edge Control binary
 var edgectl string
 
 func main() {
 	// Figure out our executable and save it
-	func() {
-		var err error
-		edgectl, err = os.Executable()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Internal error: %v", err)
-			os.Exit(1)
-		}
-	}()
-
-	// Notice early if we're impersonating Teleproxy
-	if len(os.Args) == 3 && os.Args[1] == "teleproxy" {
-		func() {
-			var err error
-			switch os.Args[2] {
-			case "intercept":
-				err = RunAsTeleproxyIntercept()
-			case "bridge":
-				err = RunAsTeleproxyBridge()
-			default:
-				return // Allow normal CLI error handling to proceed
-			}
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "error: %v", err)
-				os.Exit(1)
-			}
-			os.Exit(0)
-		}()
+	if executable, err := os.Executable(); err != nil {
+		fmt.Fprintf(os.Stderr, "Internal error: %v", err)
+		os.Exit(1)
+	} else {
+		edgectl = executable
 	}
 
-	// Let the daemon take care of everything if possible
-	failedToConnectErr := mainViaDaemon()
+	rootCmd := getRootCommand(false, false)
+	err := rootCmd.Execute()
+	if err != nil {
+		os.Exit(1)
+	}
+}
 
-	// Couldn't reach the daemon. Try to handle things locally.
-	// ...
+func getRootCommand(daemonIsRunning, runningAsDaemon bool) *cobra.Command {
+	myName := "Edge Control"
+	if !(daemonIsRunning || runningAsDaemon) {
+		myName = "Edge Control (daemon unavailable)"
+	}
 
 	rootCmd := &cobra.Command{
 		Use:          "edgectl",
-		Short:        "Edge Control (daemon unavailable)",
+		Short:        myName,
 		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
-		Args:         cobra.ArbitraryArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			fmt.Println(failedToConnect)
-			return failedToConnectErr
-		},
 	}
 
-	rootCmd.AddCommand(&cobra.Command{
-		Use:   "version",
-		Short: "Show program's version number and exit",
-		Args:  cobra.ExactArgs(0),
-		RunE: func(_ *cobra.Command, _ []string) error {
-			fmt.Println(failedToConnect)
-			fmt.Println("Client", displayVersion)
-			fmt.Println()
-			return failedToConnectErr
-		},
-	})
+	// Hidden/internal commands. These are called by Edge Control itself from
+	// the correct context and execute in-place immediately.
+
 	rootCmd.AddCommand(&cobra.Command{
 		Use:    "daemon-foreground",
 		Short:  "Launch Edge Control Daemon in the foreground (debug)",
@@ -98,8 +79,26 @@ func main() {
 		},
 	})
 	rootCmd.AddCommand(&cobra.Command{
+		Use:       "teleproxy",
+		Short:     "Impersonate Teleproxy (for internal use)",
+		Args:      cobra.ExactValidArgs(1),
+		ValidArgs: []string{"intercept", "bridge"},
+		Hidden:    true,
+		RunE: func(_ *cobra.Command, args []string) error {
+			if args[0] == "intercept" {
+				return RunAsTeleproxyIntercept()
+			} else {
+				return RunAsTeleproxyBridge()
+			}
+		},
+	})
+
+	// Client commands. These are never sent to the daemon.
+
+	rootCmd.AddCommand(&cobra.Command{
 		Use:   "daemon",
 		Short: "Launch Edge Control Daemon in the background (sudo)",
+		Long:  daemonHelp,
 		Args:  cobra.ExactArgs(0),
 		RunE:  launchDaemon,
 	})
@@ -109,12 +108,37 @@ func main() {
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  aesLogin,
 	})
-	rootCmd.SetHelpTemplate(rootCmd.HelpTemplate() + "\n" + failedToConnect)
 
-	err := rootCmd.Execute()
-	if err != nil {
-		os.Exit(1)
+	// Daemon commands. These should be forwarded to the daemon.
+
+	nilDaemon := &Daemon{}
+	daemonCmd := nilDaemon.getRootCommand(nil, nil, nil)
+	walkSubcommands(daemonCmd)
+	rootCmd.AddCommand(daemonCmd.Commands()...)
+
+	return rootCmd
+}
+
+func walkSubcommands(cmd *cobra.Command) {
+	for _, subCmd := range cmd.Commands() {
+		walkSubcommands(subCmd)
 	}
+	if cmd.RunE != nil {
+		cmd.RunE = forwardToDaemon
+	}
+}
+
+func forwardToDaemon(cmd *cobra.Command, _ []string) error {
+	err := mainViaDaemon()
+	if err != nil {
+		// The version command is special because it must emit the client
+		// version if the daemon is unavailable.
+		if cmd.Use == "version" {
+			fmt.Println("Client", displayVersion)
+		}
+		fmt.Println(failedToConnect)
+	}
+	return err
 }
 
 func launchDaemon(ccmd *cobra.Command, _ []string) error {
