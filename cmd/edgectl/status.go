@@ -9,29 +9,43 @@ func (d *Daemon) Status(_ *supervisor.Process, out *Emitter) error {
 	if !d.network.IsOkay() {
 		out.Println("Network overrides NOT established")
 	}
+	out.Send("net_overrides", d.network.IsOkay())
 	if d.cluster == nil {
 		out.Println("Not connected")
+		out.Send("cluster", nil)
 		return nil
 	}
 	if d.cluster.IsOkay() {
 		out.Println("Connected")
+		out.Send("cluster.connected", true)
 	} else {
 		out.Println("Attempting to reconnect...")
+		out.Send("cluster.connected", false)
 	}
 	out.Printf("  Context:       %s (%s)\n", d.cluster.Context(), d.cluster.Server())
+	out.Send("cluster.context", d.cluster.Context())
+	out.Send("cluster.server", d.cluster.Server())
 	if d.bridge != nil && d.bridge.IsOkay() {
 		out.Println("  Proxy:         ON (networking to the cluster is enabled)")
+		out.Send("bridge", true)
 	} else {
 		out.Println("  Proxy:         OFF (attempting to connect...)")
+		out.Send("bridge", false)
 	}
 	switch {
 	case d.trafficMgr == nil:
 		out.Println("  Intercepts:    Unavailable: no traffic manager")
+		out.Send("intercept", nil)
 	case !d.trafficMgr.IsOkay():
 		out.Println("  Intercepts:    (connecting to traffic manager...)")
+		out.Send("intercept.connected", false)
 	default:
+		out.Send("intercept.connected", true)
 		out.Printf("  Interceptable: %d deployments\n", len(d.trafficMgr.interceptables))
 		out.Printf("  Intercepts:    %d total, %d local\n", d.trafficMgr.totalClusCepts, len(d.intercepts))
+		out.Send("interceptable", len(d.trafficMgr.interceptables))
+		out.Send("cluster_intercepts", d.trafficMgr.totalClusCepts)
+		out.Send("local_intercepts", len(d.intercepts))
 	}
 	return nil
 }

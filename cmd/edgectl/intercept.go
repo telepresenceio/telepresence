@@ -12,6 +12,19 @@ import (
 	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
+func (d *Daemon) interceptMessage() string {
+	switch {
+	case d.cluster == nil:
+		return "Not connected"
+	case d.trafficMgr == nil:
+		return "Intercept unavailable: no traffic manager"
+	case !d.trafficMgr.IsOkay():
+		return "Connecting to traffic manager..."
+	default:
+		return ""
+	}
+}
+
 // InterceptInfo tracks one intercept operation
 type InterceptInfo struct {
 	Name       string // Name of the intercept (user/logging)
@@ -82,14 +95,26 @@ func (ii *InterceptInfo) Release(_ *supervisor.Process, tm *TrafficManager, port
 
 // ListIntercepts lists active intercepts
 func (d *Daemon) ListIntercepts(_ *supervisor.Process, out *Emitter) error {
+	msg := d.interceptMessage()
+	if msg != "" {
+		out.Println(msg)
+		out.Send("intercept", msg)
+		return nil
+	}
 	for idx, cept := range d.intercepts {
 		ii := cept.ii
 		out.Printf("%4d. %s\n", idx+1, ii.Name)
+		out.Send("local_intercept", ii.Name)
+		key := "local_intercept." + ii.Name
 		out.Printf("      Intercepting requests to %s when\n", ii.Deployment)
+		out.Send(key, ii.Deployment)
 		for k, v := range ii.Patterns {
 			out.Printf("      - %s: %s\n", k, v)
+			out.Send(key+".pattern", []string{k, v})
 		}
 		out.Printf("      and redirecting them to %s:%d\n", ii.TargetHost, ii.TargetPort)
+		out.Send(key+".host", ii.TargetHost)
+		out.Send(key+".port", ii.TargetPort)
 	}
 	if len(d.intercepts) == 0 {
 		out.Println("No intercepts")
@@ -99,9 +124,16 @@ func (d *Daemon) ListIntercepts(_ *supervisor.Process, out *Emitter) error {
 
 // AddIntercept adds one intercept
 func (d *Daemon) AddIntercept(p *supervisor.Process, out *Emitter, ii *InterceptInfo) error {
+	msg := d.interceptMessage()
+	if msg != "" {
+		out.Println(msg)
+		out.Send("intercept", msg)
+		return nil
+	}
 	for _, cept := range d.intercepts {
 		if cept.ii.Name == ii.Name {
 			out.Printf("Intercept with name %q already exists\n", ii.Name)
+			out.Send("failed", "intercept name exists")
 			out.SendExit(1)
 			return nil
 		}
@@ -109,6 +141,7 @@ func (d *Daemon) AddIntercept(p *supervisor.Process, out *Emitter, ii *Intercept
 	cept, err := MakeIntercept(p, d.trafficMgr, ii)
 	if err != nil {
 		out.Printf("Failed to establish intercept: %s\n", err)
+		out.Send("failed", err.Error())
 		out.SendExit(1)
 		return nil
 	}
@@ -119,19 +152,26 @@ func (d *Daemon) AddIntercept(p *supervisor.Process, out *Emitter, ii *Intercept
 
 // RemoveIntercept removes one intercept by name
 func (d *Daemon) RemoveIntercept(_ *supervisor.Process, out *Emitter, name string) error {
+	msg := d.interceptMessage()
 	for idx, cept := range d.intercepts {
 		if cept.ii.Name == name {
 			d.intercepts = append(d.intercepts[:idx], d.intercepts[idx+1:]...)
 			out.Printf("Removed intercept %q\n", name)
 			if err := cept.Close(); err != nil {
 				out.Printf("Error while removing intercept: %v\n", err)
+				out.Send("failed", err.Error())
 				out.SendExit(1)
 			}
-
 			return nil
 		}
 	}
+	if msg != "" {
+		out.Println(msg)
+		out.Send("intercept", msg)
+		return nil
+	}
 	out.Printf("Intercept named %q not found\n", name)
+	out.Send("failed", "not found")
 	out.SendExit(1)
 	return nil
 }

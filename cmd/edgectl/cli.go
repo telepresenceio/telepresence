@@ -38,6 +38,8 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 		RunE: func(_ *cobra.Command, _ []string) error {
 			out.Println("Client", data.ClientVersion)
 			out.Println("Daemon", displayVersion)
+			out.Send("daemon.version", Version)
+			out.Send("daemon.apiVersion", apiVersion)
 			return out.Err()
 		},
 	})
@@ -79,6 +81,7 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 		Args:  cobra.ExactArgs(0),
 		RunE: func(_ *cobra.Command, _ []string) error {
 			out.Println("Edge Control Daemon quitting...")
+			out.Send("quit", true)
 			p.Supervisor().Shutdown()
 			return out.Err()
 		},
@@ -96,19 +99,21 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 		Short:   "List deployments available for intercept",
 		Args:    cobra.ExactArgs(0),
 		RunE: func(_ *cobra.Command, _ []string) error {
+			msg := d.interceptMessage()
+			if msg != "" {
+				out.Println(msg)
+				out.Send("intercept", msg)
+				return out.Err()
+			}
+			out.Send("interceptable", len(d.trafficMgr.interceptables))
 			switch {
-			case d.cluster == nil:
-				out.Println("Not connected")
-			case d.trafficMgr == nil:
-				out.Println("Intercept unavailable: no traffic manager")
-			case !d.trafficMgr.IsOkay():
-				out.Println("Connecting to traffic manager...")
 			case len(d.trafficMgr.interceptables) == 0:
 				out.Println("No interceptable deployments")
 			default:
 				out.Printf("Found %d interceptable deployment(s):\n", len(d.trafficMgr.interceptables))
 				for idx, deployment := range d.trafficMgr.interceptables {
 					out.Printf("%4d. %s\n", idx+1, deployment)
+					out.Send("interceptable.deployment", deployment)
 				}
 			}
 			return out.Err()
@@ -163,6 +168,7 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 			port, err := strconv.Atoi(portStr)
 			if err != nil {
 				out.Printf("Failed to parse %q as HOST:PORT: %v", intercept.TargetHost, err)
+				out.Send("failed", "parse target")
 				out.SendExit(1)
 				return nil
 			}
