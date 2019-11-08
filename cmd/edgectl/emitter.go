@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 )
@@ -10,6 +11,8 @@ import (
 type Emitter struct {
 	w   io.Writer
 	err error
+	kv  bool
+	enc *json.Encoder
 }
 
 // NewEmitter returns a new Emitter to write to conn
@@ -17,10 +20,15 @@ func NewEmitter(w io.Writer) *Emitter {
 	return &Emitter{w: w}
 }
 
+func (out *Emitter) SetKV() {
+	out.kv = true
+	out.enc = json.NewEncoder(out.w)
+}
+
 // Printf formats according to a format specifier and writes to the
 // client. Errors are collected and returned by Err().
 func (out *Emitter) Printf(format string, a ...interface{}) {
-	if out.err == nil {
+	if out.err == nil && !out.kv {
 		_, out.err = fmt.Fprintf(out.w, format, a...)
 	}
 }
@@ -28,7 +36,7 @@ func (out *Emitter) Printf(format string, a ...interface{}) {
 // Print formats using the default formats for its operands and writes
 // to the client. Errors are collected and returned by Err().
 func (out *Emitter) Print(a ...interface{}) {
-	if out.err == nil {
+	if out.err == nil && !out.kv {
 		_, out.err = fmt.Fprint(out.w, a...)
 	}
 }
@@ -37,7 +45,7 @@ func (out *Emitter) Print(a ...interface{}) {
 // writes to the client, ending output with a newline. Errors are
 // collected and returned by Err().
 func (out *Emitter) Println(a ...interface{}) {
-	if out.err == nil {
+	if out.err == nil && !out.kv {
 		_, out.err = fmt.Fprintln(out.w, a...)
 	}
 }
@@ -47,6 +55,14 @@ func (out *Emitter) Println(a ...interface{}) {
 func (out *Emitter) SendExit(code int) {
 	if out.err == nil {
 		_, out.err = fmt.Fprintf(out.w, "%s%d", ExitPrefix, code)
+	}
+}
+
+// Send a key/value pair to the client if the Emitter is in key/value mode.
+// Errors are collected and returned by Err().
+func (out *Emitter) Send(key string, value interface{}) {
+	if out.err == nil && out.kv {
+		out.err = out.enc.Encode(map[string]interface{}{key: value})
 	}
 }
 
