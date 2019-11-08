@@ -16,6 +16,11 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	out := NewEmitter(conn)
 	rootCmd := d.getRootCommand(p, out, data)
 	rootCmd.SetOutput(conn) // FIXME replace with SetOut and SetErr
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
+		if batch, _ := cmd.Flags().GetBool("batch"); batch {
+			out.SetKV()
+		}
+	}
 	rootCmd.SetArgs(data.Args[1:])
 	err := rootCmd.Execute()
 	if err != nil {
@@ -30,6 +35,8 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 		Short:        "Edge Control",
 		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
 	}
+	_ = rootCmd.PersistentFlags().Bool("batch", false, "Emit machine-readable output")
+	_ = rootCmd.PersistentFlags().MarkHidden("batch")
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "version",

@@ -115,6 +115,7 @@ func getRootCommand(daemonIsRunning, runningAsDaemon bool) *cobra.Command {
 	daemonCmd := nilDaemon.getRootCommand(nil, nil, nil)
 	walkSubcommands(daemonCmd)
 	rootCmd.AddCommand(daemonCmd.Commands()...)
+	rootCmd.PersistentFlags().AddFlagSet(daemonCmd.PersistentFlags())
 
 	return rootCmd
 }
