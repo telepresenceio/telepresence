@@ -47,16 +47,16 @@ func main() {
 		edgectl = executable
 	}
 
-	rootCmd := getRootCommand(false, false)
+	rootCmd := getRootCommand()
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1)
 	}
 }
 
-func getRootCommand(daemonIsRunning, runningAsDaemon bool) *cobra.Command {
+func getRootCommand() *cobra.Command {
 	myName := "Edge Control"
-	if !(daemonIsRunning || runningAsDaemon) {
+	if !isServerRunning() {
 		myName = "Edge Control (daemon unavailable)"
 	}
 
