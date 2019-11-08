@@ -454,7 +454,7 @@ class Runner:
         self._run_command_sync(
             ("Running", "ran"),
             True,
-            False,
+            True,
             args,
             10,  # limited capture, only used for error reporting
             timeout,
@@ -483,6 +483,31 @@ class Runner:
             env,
         )
         return output
+
+    def report_subprocess_failure(
+        self, exc: typing.Union[CalledProcessError, TimeoutExpired]
+    ) -> None:
+        if isinstance(exc, TimeoutExpired):
+            command = exc.cmd
+            message = "Timed out after {:.2f} seconds)".format(exc.timeout)
+            if exc.output:
+                output = exc.output
+            else:
+                output = "[no output]"
+        elif isinstance(exc, CalledProcessError):
+            command = exc.cmd
+            message = "Exited with return code {}".format(exc.returncode)
+            if exc.output:
+                output = exc.output
+            else:
+                output = "[no output]"
+        else:
+            raise exc  # i.e. crash
+        indent = "  "
+        output = indent + ("\n" + indent).join(output.splitlines())
+        self.show("{}$ {}".format(indent, str_command(command)))
+        self.show_raw(output)
+        self.show(indent + "--> " + message)
 
     def launch(
         self,
