@@ -110,7 +110,7 @@ func (d *Daemon) ListIntercepts(_ *supervisor.Process, out *Emitter) error {
 		out.Send(key, ii.Deployment)
 		for k, v := range ii.Patterns {
 			out.Printf("      - %s: %s\n", k, v)
-			out.Send(key+".pattern", []string{k, v})
+			out.Send(key+"."+k, v)
 		}
 		out.Printf("      and redirecting them to %s:%d\n", ii.TargetHost, ii.TargetPort)
 		out.Send(key+".host", ii.TargetHost)
