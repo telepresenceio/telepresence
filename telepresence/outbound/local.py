@@ -21,6 +21,7 @@ from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.utilities import kill_process
 
+from .edgectl import connect_teleproxy
 from .vpn import connect_sshuttle
 from .workarounds import apply_workarounds
 
@@ -135,11 +136,10 @@ def launch_vpn(
     """
     connect_sshuttle(runner, remote_info, also_proxy, ssh)
     _flush_dns_cache(runner)
-
     return launch_local(runner, command, env_overrides, False)
 
 
-def _flush_dns_cache(runner: Runner):
+def _flush_dns_cache(runner: Runner) -> None:
     if runner.platform == "darwin":
         runner.show("Connected. Flushing DNS cache.")
         pkill_cmd = ["sudo", "-n", "/usr/bin/pkill", "-HUP", "mDNSResponder"]
@@ -147,3 +147,15 @@ def _flush_dns_cache(runner: Runner):
             runner.check_call(pkill_cmd)
         except (OSError, CalledProcessError):
             pass
+
+
+def launch_teleproxy(
+    runner: Runner,
+    remote_info: RemoteInfo,
+    command: List[str],
+    also_proxy: List[str],
+    env_overrides: Dict[str, str],
+    ssh: SSH,
+) -> Popen:
+    connect_teleproxy(runner)
+    return launch_local(runner, command, env_overrides, False)

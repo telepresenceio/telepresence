@@ -20,8 +20,9 @@ from telepresence.connect import SSH
 from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
 
+from . import edgectl
 from .container import run_docker_command
-from .local import launch_inject, launch_vpn
+from .local import launch_inject, launch_teleproxy, launch_vpn
 
 LaunchType = typing.Callable[[
     Runner,
@@ -115,6 +116,51 @@ def setup_vpn(runner: Runner, args: Namespace) -> LaunchType:
     return launch
 
 
+def setup_teleproxy(runner: Runner, args: Namespace) -> LaunchType:
+    command = args.run or ["bash", "--norc"]
+    check_local_command(runner, command[0])
+
+    if args.also_proxy:
+        raise runner.fail(
+            "The teleproxy method does not (yet) support --also-proxy"
+        )
+
+    # Verify that the daemon is running and ready
+    runner.require(["edgectl"], "See URL FIXME")
+    status = edgectl.run(runner, "status")
+    if not status:
+        raise runner.fail("Error: Edge Control daemon not running.")
+    if not edgectl.net_overrides_ok(status):
+        runner.show(edgectl.NET_OVERRIDES_MESSAGE)
+        raise runner.fail("Error: Network overrides not ready")
+
+    # Make sure we're not connected to a different cluster
+    if edgectl.is_connected(status):
+        connected_to = edgectl.what_cluster(status)
+        if connected_to != (runner.kubectl.context, runner.kubectl.server):
+            runner.show(edgectl.WRONG_CLUSTER_MESSAGE)
+            raise runner.fail("Error: Connected to another cluster")
+
+    if runner.chatty:
+        runner.show(
+            "Starting proxy with the EXPERIMENTAL method 'teleproxy', which "
+            "has the following limitations: All processes are affected and "
+            "you can't use other VPNs. Adding cloud hosts and headless "
+            "services with --also-proxy is NOT supported (yet). For a full "
+            "list of method limitations see "
+            "https://telepresence.io/reference/methods.html"
+        )
+
+    def launch(
+        runner_, remote_info, env, _socks_port, ssh, _mount_dir, _pod_info
+    ):
+        return launch_teleproxy(
+            runner_, remote_info, command, args.also_proxy, env, ssh
+        )
+
+    return launch
+
+
 def setup_container(runner: Runner, args: Namespace) -> LaunchType:
     runner.require_docker()
     if args.also_proxy:
@@ -181,5 +227,8 @@ def setup(runner: Runner, args: Namespace) -> LaunchType:
 
     if args.method == "container":
         return setup_container(runner, args)
+
+    if args.method == "teleproxy":
+        return setup_teleproxy(runner, args)
 
     assert False, args.method

@@ -216,12 +216,13 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--method",
         "-m",
-        choices=["inject-tcp", "vpn-tcp", "container"],
+        choices=["inject-tcp", "vpn-tcp", "container", "teleproxy"],
         help=(
             "'inject-tcp': inject process-specific shared "
             "library that proxies TCP to the remote cluster.\n"
             "'vpn-tcp': all local processes can route TCP "
             "traffic to the remote cluster. Requires root.\n"
+            "'teleproxy': experimental, like `vpn-tcp`.\n"
             "'container': used with --docker-run.\n"
             "\n"
             "Default is 'vpn-tcp', or 'container' when --docker-run is used.\n"
