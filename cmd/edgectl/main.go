@@ -78,20 +78,30 @@ func getRootCommand() *cobra.Command {
 			return RunAsDaemon()
 		},
 	})
-	rootCmd.AddCommand(&cobra.Command{
-		Use:       "teleproxy",
-		Short:     "Impersonate Teleproxy (for internal use)",
-		Args:      cobra.ExactValidArgs(1),
-		ValidArgs: []string{"intercept", "bridge"},
-		Hidden:    true,
-		RunE: func(_ *cobra.Command, args []string) error {
-			if args[0] == "intercept" {
-				return RunAsTeleproxyIntercept()
-			} else {
-				return RunAsTeleproxyBridge()
-			}
+	teleproxyCmd := &cobra.Command{
+		Use:    "teleproxy",
+		Short:  "Impersonate Teleproxy (for internal use)",
+		Hidden: true,
+	}
+	teleproxyCmd.AddCommand(&cobra.Command{
+		Use:    "intercept",
+		Short:  "Impersonate Teleproxy Intercept (for internal use)",
+		Args:   cobra.NoArgs,
+		Hidden: true,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return RunAsTeleproxyIntercept()
 		},
 	})
+	teleproxyCmd.AddCommand(&cobra.Command{
+		Use:    "bridge",
+		Short:  "Impersonate Teleproxy Bridge (for internal use)",
+		Args:   cobra.ExactArgs(2),
+		Hidden: true,
+		RunE: func(_ *cobra.Command, args []string) error {
+			return RunAsTeleproxyBridge(args[0], args[1])
+		},
+	})
+	rootCmd.AddCommand(teleproxyCmd)
 
 	// Client commands. These are never sent to the daemon.
 

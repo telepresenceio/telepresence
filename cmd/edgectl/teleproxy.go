@@ -20,7 +20,11 @@ func RunAsTeleproxyIntercept() error {
 
 // RunAsTeleproxyBridge is the main function when executing as
 // teleproxy bridge
-func RunAsTeleproxyBridge() error {
-	tele := &teleproxy.Teleproxy{Mode: "bridge"}
+func RunAsTeleproxyBridge(context, namespace string) error {
+	tele := &teleproxy.Teleproxy{
+		Mode:      "bridge",
+		Context:   context,
+		Namespace: namespace,
+	}
 	return teleproxy.RunTeleproxy(tele, displayVersion)
 }

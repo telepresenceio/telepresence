@@ -51,7 +51,7 @@ func (d *Daemon) Connect(p *supervisor.Process, out *Emitter, rai *RunAsInfo, ka
 	bridge, err := CheckedRetryingCommand(
 		p,
 		"bridge",
-		[]string{edgectl, "teleproxy", "bridge"},
+		[]string{edgectl, "teleproxy", "bridge", "", "default"},
 		rai,
 		checkBridge,
 		15*time.Second,
