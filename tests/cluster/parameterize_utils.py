@@ -176,6 +176,42 @@ class _VPNTCPMethod(object):
         ]
 
 
+class _TeleproxyMethod(object):
+    name = "teleproxy"
+
+    def unsupported(self):
+        missing = set()
+        for exe in {"edgectl"}:
+            if which(exe) is None:
+                missing.add(exe)
+        if missing:
+            return "Required executables {} not found on $PATH".format(
+                missing,
+            )
+        return None
+
+    def command_has_graceful_failure(self, command):
+        return command in {
+            "ping",
+            "traceroute",
+        }
+
+    def loopback_is_host(self):
+        return True
+
+    def inherits_client_environment(self):
+        return True
+
+    def telepresence_args(self, probe):
+        return [
+            "--method",
+            "teleproxy",
+            "--run",
+            executable,
+            probe,
+        ]
+
+
 class _ExistingDeploymentOperation(object):
     def __init__(self, swap):
         self.swap = swap
@@ -455,6 +491,7 @@ METHODS = [
     _ContainerMethod(),
     _VPNTCPMethod(),
     INJECT_TCP_METHOD,
+    _TeleproxyMethod(),
 ]
 OPERATIONS = [
     _ExistingDeploymentOperation(False),
@@ -632,6 +669,9 @@ def run_telepresence_probe(
     probe_args.extend(["--exit-code", str(desired_exit_code)])
 
     telepresence_args = []
+    # FIXME: Teleproxy method rejects --also-proxy
+    if method.name == "teleproxy":
+        also_proxy = []
     for addr in also_proxy:
         telepresence_args.extend(["--also-proxy", addr])
     for http in http_servers:
