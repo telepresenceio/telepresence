@@ -17,7 +17,7 @@ Telepresence deploys a two-way network proxy in a pod running in your Kubernetes
 This approach gives:
 
 * your local service full access to other services in the remote cluster
-* your local service full access to Kubernetes environment variables, secrets, and ConfigMap
+* your local service full access to Kubernetes environment variables, secrets, and ConfigMaps
 * your remote services full access to your local service
 
 How Telepresence works is discussed in more detail [here](/discussion/how-it-works.html).
@@ -35,4 +35,4 @@ Typical alternatives to Telepresence include:
 Telepresence offers a broad set of [proxying options](/reference/methods.html) which have different strengths and weaknesses. Generally speaking, we recommend you:
 
 * Start with the container method, which provides the most consistent environment for your code. Here is a [container quick start](/tutorials/docker.html).
-* Use the VPN method, which lets you use an IDE or debugger with your code. Here is a [quick start that uses the VPN method](/tutorials/kubernetes-rapid.html)
+* Use the vpn-tcp method, which lets you use an IDE or debugger with your code. Here is a [quick start that uses the vpn-tcp method](/tutorials/kubernetes-rapid.html)

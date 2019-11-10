@@ -1,19 +1,27 @@
 # Proxying methods
 
-### Choosing a proxying method
+## Choosing a proxying method
 
-Telepresence has three different proxying methods; you will need to choose one of them.
+Telepresence has four different proxying methods; you will need to choose one of them.
 
 1. `--method inject-tcp` works by injecting a shared library into the subprocess run by Telepresence using `--run` and `--run-shell`.
 2. `--method vpn-tcp` works by using a program called [sshuttle](https://sshuttle.readthedocs.io) to open a VPN-like connection to the Kubernetes cluster.
-3. `--method container` is documented in the [Docker tutorial](/tutorials/docker.html).
+3. `--method teleproxy` is an experimental approach that uses Teleproxy (FIXME: link) in place of sshuttle and has a different set of tradeoffs, but essentially behaves similarly to `vpn-tcp`.
+3. `--method container` (documented in the [Docker tutorial](/tutorials/docker.html)) launches a Docker container with its network proxied to the cluster.
 
-In general `vpn-tcp` should work in more cases, and it is chosen by default (unless `--docker-run` is used, in which case the `container` method is the default.)
-If you want to run more than one telepresence connection per machine, or if you don't want proxying to affect all processes, use `inject-tcp`.
+If you are comfortable developing in Docker, the container method offers a reliable way to get an environment very similar to running in Kubernetes directly.
+Multiple simultaneous sessions work robustly without interfering with one another.
+We recommend using the container method whenever it is applicable.
+
+For local processes instead of containers, `vpn-tcp` should work in more cases than `inject-tcp`, and it is chosen by default (unless `--docker-run` is used, in which case the `container` method is the default.)
+
+If you want to run more than one Telepresence connection per machine, use `inject-tcp` or try the experimental `teleproxy` method (or use the container method).
+
+If you don't want proxying to affect all processes, use `inject-tcp` (or use the container method).
 
 You can read about the specific limitations of each method below, and read about the differences in what they proxy in the documentation of [what gets proxied](/reference/proxying.html).
 
-### Limitations: `--method vpn-tcp`
+## Limitations: `--method vpn-tcp`
 
 `--method vpn-tcp` should work with more programs (and programming languages) than `--method inject-tcp`.
 For example, if you're developing in Go you'll want to stick to this method.
@@ -27,13 +35,27 @@ This method does have some limitations of its own, however:
   instances with other proxying methods concurrently is possible.
 * VPNs may interfere with `telepresence`, and vice-versa: don't use both at once.
 * Cloud resources like AWS RDS will not be routed automatically via cluster.
-  You'll need to specify the hosts manually using `--also-proxy`, e.g. `--also-proxy mydatabase.somewhere.vpc.aws.amazon.com` to route traffic to that host via the Kubernetes cluster..
+  You'll need to specify the hosts manually using `--also-proxy`, e.g. `--also-proxy mydatabase.somewhere.vpc.aws.amazon.com` to route traffic to that host via the Kubernetes cluster.
 
-### Limitations: `--method inject-tcp`
+## Limitations: `--method teleproxy`
+
+`--method teleproxy` works much like  `--method vpn-tcp`, but is still experimental.
+
+This method's limitations are a little different:
+
+* Fully qualified Kubernetes domains like `yourservice.default.svc.cluster.local` won't resolve correctly on Linux.
+  `yourservice` and `yourservice.default` will resolve correctly, however.
+  See [the relevant ticket](https://github.com/datawire/telepresence/issues/161) for details.
+* Multiple instances of `telepresence` using `teleproxy` connecting to the same cluster and namespace works fine as long as you run `edgectl connect` manually before starting your `telepresence` sessions.
+* VPNs may interfere with `telepresence`, and vice-versa: don't use both at once.
+* Cloud resources like AWS RDS will not be routed automatically via cluster.
+  Support for adding them manually using `--also-proxy` is coming soon.
+
+## Limitations: `--method inject-tcp`
 
 If you're using `--method inject-tcp` you will have certain limitations.
 
-#### Incompatible programs
+### Incompatible programs
 
 Because of the mechanism Telepresence uses to intercept networking calls when using `inject-tcp`:
 
@@ -46,7 +68,7 @@ Thus command line tools like `ping`, `nslookup`, `dig`, `host` and `traceroute` 
 However, this only impacts outgoing connections.
 Incoming proxying (from Kubernetes) will still work with these binaries.
 
-#### Golang
+### Golang
 
 Programs written with the Go programming language will not work by default with this method.
 We recommend using `--method vpn-tcp` instead if you're writing Go, since that method will work with Go.
@@ -62,7 +84,7 @@ If you don't want to use `--method vpn-tcp` for some reason you can also work ar
 
 But the easiest thing to do, again, is to use `--method vpn-tcp`, which *does* work with Go.
 
-#### MacOS System Integrity Protection
+### MacOS System Integrity Protection
 
 In OS X El Capitan (10.11), Apple introduced a security feature called System Integrity Protection (SIP).
 

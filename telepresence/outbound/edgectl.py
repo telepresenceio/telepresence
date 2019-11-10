@@ -121,8 +121,8 @@ def connect_teleproxy(runner: Runner) -> None:
 def is_running_quiet(runner: Runner) -> bool:
     """
     Determines whether the Edge Control Daemon is running without notifying the
-    user that an edgectl command has failed. This is useful for vpn-tcp to check
-    for a conflict between sshuttle and a running Edge Control Daemon.
+    user that an edgectl command has failed. This is useful for vpn-tcp to
+    check for a conflict between sshuttle and a running Edge Control Daemon.
     """
     # Check whether "edgectl status" succeeds
     try:

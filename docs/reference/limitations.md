@@ -1,17 +1,17 @@
 # Troubleshooting & Workarounds
 
-### Method-specific limitations
+## Method-specific limitations
 
 For method-specific limitations see the documentation on the [available proxying methods](/reference/methods.html).
 
-### General limitations & workarounds
+## General limitations & workarounds
 
-#### Docker containers
+### Docker containers
 
 When using `--method vpn-tcp` or `--method inject-tcp` a container run via `docker run` will not inherit the outgoing functionality of the Telepresence shell.
 If you want to use Telepresence to proxy a containerized application you should use [`--method container`](/tutorials/docker.html).
 
-#### `localhost` and the pod
+### `localhost` and the pod
 
 `localhost` and `127.0.0.1` will access the host machine, i.e. the machine where you ran `telepresence`.
 If you're using the container method, `localhost` will refer to your local container.
@@ -40,24 +40,25 @@ spec:
               fieldPath: status.podIP
 </code></pre>
 
-#### EC2
+### EC2
 
 Amazon EC2 instances inside a VPC use a custom DNS setup that resolves internal names. This will prevent Telepresence from working properly. To resolve this issue, override the default name servers, e.g.,
 
-```
+```shell
 sudo echo 'supersede domain-name-servers 8.8.8.8, 8.8.4.4;' >> /etc/dhcp/dhclient.conf
 sudo dhclient
+
 ```
 
 For more details see [issue # 462](https://github.com/datawire/telepresence/issues/462).
 
-#### Fedora 18+/CentOS 7+/RHEL 7+ and `--docker-run`
+### Fedora 18+/CentOS 7+/RHEL 7+ and `--docker-run`
 
 Fedora 18+/CentOS 7+/RHEL 7+ ship with firewalld enabled and running by default. In its default configuration this will drop traffic on unknown ports originating from Docker's default bridge network - usually `172.17.0.0/16`. 
 
 To resolve this issue, instruct firewalld to trust traffic from `172.17.0.0/16`:
 
-```
+```shell
 sudo firewall-cmd --permanent --zone=trusted --add-source=172.17.0.0/16
 sudo firewall-cmd --reload
 ```

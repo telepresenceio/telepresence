@@ -1,6 +1,6 @@
-# How it works
+# How Telepresence works
 
-### Goals
+## Goals
 
 Our goals for Telepresence are:
 
@@ -14,7 +14,7 @@ Our goals for Telepresence are:
 Achieving all these goals at the same time is not always possible.
 We've therefore chosen to support more than one method of proxying, with the different methods each having its own [benefits and limitations](/reference/methods.html).
 
-### How it works
+## How it works
 
 Telepresence works by building a two-way network proxy (bootstrapped using `kubectl port-forward` or `oc port-forward`) between a custom pod running inside a remote (or local) Kubernetes cluster and a process running on your development machine.
 The custom pod is substituted for your normal pod that would run in production.
@@ -28,8 +28,9 @@ This happens one of two ways:
 * When using `--method inject-tcp` this is implemented using `LD_PRELOAD`/`DYLD_INSERT_LIBRARIES` mechanism on Linux/OSX, where a shared library can be injected into a process and override library calls.
   In particular, it overrides DNS resolution and TCP connection and routes them via a SOCKS proxy to the cluster.
   We wrote [a blog post](https://www.datawire.io/code-injection-on-linux-and-macos/) explaining LD_PRELOAD in more detail.
-
-(Technically there is a third method, for proxying containers, that is based on the `vpn-tcp` method.)
+* When using `--method container` (which is implied by `--docker-run`) all network traffic from your container is forwarded to the cluster by running sshuttle in the same network namespace as your container.
+* The experimental `--method teleproxy` works much like `--method vpn-tcp` but uses Teleproxy (FIXME: link) instead of sshuttle.
+  One key difference is that DNS resolution is done locally rather than in the cluster.
 
 Volumes are proxied using [sshfs](https://github.com/libfuse/sshfs), with their location available to the container as an environment variable.
 
@@ -71,7 +72,7 @@ inside a Telepresence-proxied shell.
 5. The custom Telepresence DNS server hands this back, `sshuttle` forwards it back, and eventually `curl` gets the Service IP.
 6. `curl` opens connection to that IP, `sshuttle` forwards it to the Kubernetes cluster.
 
-#### minikube/minishift and Docker Desktop
+#### Local clusters: minikube/minishift, Docker Desktop, etc.
 
 There is an additional complication when running a cluster locally in a VM, using something like minikube, minishift, or Docker Desktop.
 Let's say you lookup `google.com`.
@@ -87,16 +88,24 @@ When it does, the Telepresence DNS server will forward DNS requests that aren't 
 E.g. it might use Google's public DNS if your host isn't.
 As a result these DNS lookups aren't captured by `sshuttle` and the infinite loop is prevented.
 
+### teleproxy method in detail
+
+Teleproxy talks to the cluster and figures out the CIDR for Kubernetes Pods and Services and forwards traffic to those IPs via the proxy Pod running in the cluster.
+It works in a manner similar to sshuttle. Because Teleproxy is aware of the Services in the cluster, it can perform DNS resolution locally.
+Support for `--also-proxy` will be added in the future.
+
 ### inject-tcp method in detail
 
 A custom SOCKS proxy is run on the Kubernetes pod, which uses [Tor's extended SOCKSv5 protocol](https://gitweb.torproject.org/torsocks.git/tree/doc/socks/socks-extensions.txt) which adds support for DNS lookups.
 `kubectl port-forward` creates a tunnel to this SOCKS proxy.
 
 A subprocess is then run using `torsocks`, a library that uses `LD_PRELOAD` to override TCP and (most) DNS lookups so that they get routed via the SOCKSv5 proxy.
+All network traffic from the subprocess goes to the cluster, so `--also-proxy` is not required.
 
-### Docker method in detail
+### container method in detail
 
 Telepresence can also proxy a Docker container, using a variant on the `vpn-tcp` method: `sshuttle` is run inside a Docker container.
 
 The user's specified Docker container is then run using the same network namespace as the proxy container with `sshuttle`.
 (In typical Docker usage, in contrast, each container gets its own separate network namespace by default.)
+All network traffic from the container goes to the cluster, so `--also-proxy` is not required.
