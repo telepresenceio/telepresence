@@ -87,7 +87,11 @@ def connect_teleproxy(runner: Runner) -> None:
         if is_disconnected(status):
             # Try to connect
             connect_args = [
-                "connect", "--", "--context", runner.kubectl.context
+                "connect",
+                "--context",
+                runner.kubectl.context,
+                "--namespace",
+                runner.kubectl.namespace,
             ]
             connect = run(runner, *connect_args)
             if not connect:
