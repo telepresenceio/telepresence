@@ -116,3 +116,17 @@ def connect_teleproxy(runner: Runner) -> None:
         # runner.add_cleanup("Diagnose vpn-tcp", log_info_vpn_crash, runner)
         raise RuntimeError("Edge Control did not connect")
     span.end()
+
+
+def is_running_quiet(runner: Runner) -> bool:
+    """
+    Determines whether the Edge Control Daemon is running without notifying the
+    user that an edgectl command has failed. This is useful for vpn-tcp to check
+    for a conflict between sshuttle and a running Edge Control Daemon.
+    """
+    # Check whether "edgectl status" succeeds
+    try:
+        runner.check_call(["edgectl", "status"], )
+        return True
+    except (OSError, subprocess.CalledProcessError):
+        return False

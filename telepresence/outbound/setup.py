@@ -78,6 +78,13 @@ def setup_vpn(runner: Runner, args: Namespace) -> LaunchType:
                        "Required for the vpn-tcp method")
     if runner.platform == "darwin":
         runner.require(["pfctl"], "Required for the vpn-tcp method")
+    if edgectl.is_running_quiet(runner):
+        runner.show(
+            "Edge Control Daemon is running. At present, the vpn-tcp method "
+            "conflicts with Edge Control Daemon. Please quit the daemon using "
+            "'edgectl quit' to use the vpn-tcp method. We will fix this soon!"
+        )
+        raise runner.fail("Error: Edge Control Daemon is running")
     runner.require_sudo()
     if runner.platform == "linux":
         # Do a quick iptables sanity check, post sudo
