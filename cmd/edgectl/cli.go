@@ -61,16 +61,27 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 			return out.Err()
 		},
 	})
-	rootCmd.AddCommand(&cobra.Command{
-		Use:   "connect [-- additional kubectl arguments...]",
+	connectCmd := &cobra.Command{
+		Use:   "connect [flags] [-- additional kubectl arguments...]",
 		Short: "Connect to a cluster",
-		RunE: func(_ *cobra.Command, args []string) error {
-			if err := d.Connect(p, out, data.RAI, args); err != nil {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			context, _ := cmd.Flags().GetString("context")
+			namespace, _ := cmd.Flags().GetString("namespace")
+			if err := d.Connect(p, out, data.RAI, context, namespace, args); err != nil {
 				return err
 			}
 			return out.Err()
 		},
-	})
+	}
+	_ = connectCmd.Flags().StringP(
+		"context", "c", "",
+		"The Kubernetes context to use. Defaults to the current kubectl context.",
+	)
+	_ = connectCmd.Flags().StringP(
+		"namespace", "n", "",
+		"The Kubernetes namespace to use. Defaults to kubectl's default for the context.",
+	)
+	rootCmd.AddCommand(connectCmd)
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "disconnect",
 		Short: "Disconnect from the connected cluster",

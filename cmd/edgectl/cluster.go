@@ -19,7 +19,10 @@ import (
 )
 
 // Connect the daemon to a cluster
-func (d *Daemon) Connect(p *supervisor.Process, out *Emitter, rai *RunAsInfo, kargs []string) error {
+func (d *Daemon) Connect(
+	p *supervisor.Process, out *Emitter, rai *RunAsInfo,
+	context, namespace string, kargs []string,
+) error {
 	// Sanity checks
 	if d.cluster != nil {
 		out.Println("Already connected")
@@ -39,7 +42,7 @@ func (d *Daemon) Connect(p *supervisor.Process, out *Emitter, rai *RunAsInfo, ka
 
 	out.Println("Connecting...")
 	out.Send("connect", "Connecting...")
-	cluster, err := TrackKCluster(p, rai, kargs)
+	cluster, err := TrackKCluster(p, rai, context, namespace, kargs)
 	if err != nil {
 		out.Println(err.Error())
 		out.Send("failed", err.Error())
@@ -51,7 +54,7 @@ func (d *Daemon) Connect(p *supervisor.Process, out *Emitter, rai *RunAsInfo, ka
 	bridge, err := CheckedRetryingCommand(
 		p,
 		"bridge",
-		[]string{edgectl, "teleproxy", "bridge", "", "default"},
+		[]string{edgectl, "teleproxy", "bridge", cluster.context, cluster.namespace},
 		rai,
 		checkBridge,
 		15*time.Second,

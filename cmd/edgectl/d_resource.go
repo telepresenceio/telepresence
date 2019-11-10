@@ -129,6 +129,7 @@ func (rb *ResourceBase) processor(p *supervisor.Process) error {
 // KCluster is a Kubernetes cluster reference
 type KCluster struct {
 	context      string
+	namespace    string
 	server       string
 	rai          *RunAsInfo
 	kargs        []string
@@ -146,6 +147,12 @@ func (c *KCluster) RAI() *RunAsInfo {
 func (c *KCluster) GetKubectlArgs(args ...string) []string {
 	cmdArgs := make([]string, 0, 1+len(c.kargs)+len(args))
 	cmdArgs = append(cmdArgs, "kubectl")
+	if c.context != "" {
+		cmdArgs = append(cmdArgs, "--context", c.context)
+	}
+	if c.namespace != "" {
+		cmdArgs = append(cmdArgs, "--namespace", c.namespace)
+	}
 	cmdArgs = append(cmdArgs, c.kargs...)
 	cmdArgs = append(cmdArgs, args...)
 	return cmdArgs
@@ -185,10 +192,14 @@ func (c *KCluster) check(p *supervisor.Process) error {
 }
 
 // TrackKCluster tracks connectivity to a cluster
-func TrackKCluster(p *supervisor.Process, rai *RunAsInfo, kargs []string) (*KCluster, error) {
+func TrackKCluster(
+	p *supervisor.Process, rai *RunAsInfo, context, namespace string, kargs []string,
+) (*KCluster, error) {
 	c := &KCluster{
-		rai:   rai,
-		kargs: kargs,
+		rai:       rai,
+		kargs:     kargs,
+		context:   context,
+		namespace: namespace,
 	}
 	c.doCheck = c.check
 	c.doQuit = func(p *supervisor.Process) error { c.done = true; return nil }
@@ -197,19 +208,40 @@ func TrackKCluster(p *supervisor.Process, rai *RunAsInfo, kargs []string) (*KClu
 		return nil, errors.Wrap(err, "initial cluster check")
 	}
 
-	cmd := c.GetKubectlCmd(p, "config", "current-context")
+	if c.context == "" {
+		cmd := c.GetKubectlCmd(p, "config", "current-context")
+		p.Logf("%s %v", cmd.Path, cmd.Args[1:])
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return nil, errors.Wrap(err, "kubectl config current-context")
+		}
+		c.context = strings.TrimSpace(string(output))
+	}
+	p.Logf("Context: %s", c.context)
+
+	if c.namespace == "" {
+		nsQuery := fmt.Sprintf("jsonpath={.contexts[?(@.name==\"%s\")].context.namespace}", c.context)
+		cmd := c.GetKubectlCmd(p, "config", "view", "-o", nsQuery)
+		p.Logf("%s %v", cmd.Path, cmd.Args[1:])
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return nil, errors.Wrap(err, "kubectl config view ns")
+		}
+		c.namespace = strings.TrimSpace(string(output))
+		if c.namespace == "" { // This is what kubens does
+			c.namespace = "default"
+		}
+	}
+	p.Logf("Namespace: %s", c.namespace)
+
+	cmd := c.GetKubectlCmd(p, "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
+	p.Logf("%s %v", cmd.Path, cmd.Args[1:])
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, errors.Wrap(err, "kubectl config current-context")
-	}
-	c.context = strings.TrimSpace(string(output))
-
-	cmd = c.GetKubectlCmd(p, "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
-	output, err = cmd.CombinedOutput()
-	if err != nil {
-		return nil, errors.Wrap(err, "kubectl config view")
+		return nil, errors.Wrap(err, "kubectl config view server")
 	}
 	c.server = strings.TrimSpace(string(output))
+	p.Logf("Server: %s", c.server)
 
 	c.setup(p.Supervisor(), "cluster")
 	return c, nil
