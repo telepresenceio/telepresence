@@ -95,16 +95,6 @@ def set_kube_command(runner: Runner, args) -> None:
     else:
         raise runner.fail("Found neither 'kubectl' nor 'oc' in your $PATH.")
 
-    try:
-        kubectl_version_output = runner.get_output([
-            prelim_command, "version", "--short"
-        ]).split("\n")
-        command_version = kubectl_version_output[0].split(": v")[1]
-        cluster_version = kubectl_version_output[1].split(": v")[1]
-    except CalledProcessError as exc:
-        ver = "(error: {})".format(exc)
-        command_version = cluster_version = ver
-
     # Make sure we have a Kubernetes context set either on command line or
     # in kubeconfig:
     if args.context is None:
@@ -128,11 +118,29 @@ def set_kube_command(runner: Runner, args) -> None:
             )
     context = args.context
 
+    # Add context to prelim_command as it should always be used from now on.
+    # If the user has selected a different context, all version checks need
+    # to use the context the user has selected.
+
+    prelim_command_with_context = [prelim_command, "--context", context]
+
+    try:
+        kubectl_version_output = runner.get_output([
+            *prelim_command_with_context, "version", "--short"
+        ]).split("\n")
+        command_version = kubectl_version_output[0].split(": v")[1]
+        cluster_version = kubectl_version_output[1].split(": v")[1]
+    except CalledProcessError as exc:
+        ver = "(error: {})".format(exc)
+        command_version = cluster_version = ver
+
     # Figure out explicit namespace if its not specified, and the server
     # address (we use the server address to determine for good whether we
     # want oc or kubectl):
     kubectl_config = json.loads(
-        runner.get_output([prelim_command, "config", "view", "-o", "json"])
+        runner.get_output([
+            *prelim_command_with_context, "config", "view", "-o", "json"
+        ])
     )
     for context_setting in kubectl_config["contexts"]:
         if context_setting["name"] == args.context:
@@ -148,7 +156,7 @@ def set_kube_command(runner: Runner, args) -> None:
     # Check if the requested namespace exists
     try:
         runner.get_output([
-            prelim_command, "--context", context, "get", "ns", args.namespace
+            *prelim_command_with_context, "get", "ns", args.namespace
         ]).split("\n")
         namespace = args.namespace
     except CalledProcessError:
@@ -166,7 +174,7 @@ def set_kube_command(runner: Runner, args) -> None:
     # Try to determine whether cluster is OpenShift
     try:
         kubectl_apis_output = runner.get_output([
-            prelim_command, "api-versions"
+            *prelim_command_with_context, "api-versions"
         ])
     except CalledProcessError:
         raise runner.fail("Error: Unable to get cluster API info")
