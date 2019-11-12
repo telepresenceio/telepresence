@@ -17,7 +17,7 @@ func aesLicense(cmd *cobra.Command, args []string) error {
 	namespace, _ := cmd.Flags().GetString("namespace")
 	licenseKey := args[0]
 	data := base64.StdEncoding.EncodeToString([]byte(licenseKey))
-	manifest := fmt.Sprintf(secretManifest, data)
+	manifest := fmt.Sprintf(secretManifest, namespace, data)
 
 	kubeinfo := k8s.NewKubeInfo("", context, namespace)
 	kargs, err := kubeinfo.GetKubectlArray("apply", "-f", "-")
@@ -40,7 +40,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: ambassador-edge-stack
-  namespace: ambassador
+  namespace: %s
 data:
   license-key: "%s"
 `
