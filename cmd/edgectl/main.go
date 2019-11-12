@@ -118,6 +118,21 @@ func getRootCommand() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  aesLogin,
 	})
+	licenseCmd := &cobra.Command{
+		Use:   "license [flags] LICENSE_KEY",
+		Short: "Set or update the Ambassador Edge Stack license key",
+		Args:  cobra.ExactArgs(1),
+		RunE:  aesLicense,
+	}
+	_ = licenseCmd.Flags().StringP(
+		"context", "c", "",
+		"The Kubernetes context to use. Defaults to the current kubectl context.",
+	)
+	_ = licenseCmd.Flags().StringP(
+		"namespace", "n", "ambassador",
+		"The Kubernetes namespace to use. Defaults to ambassador.",
+	)
+	rootCmd.AddCommand(licenseCmd)
 
 	// Daemon commands. These should be forwarded to the daemon.
 
