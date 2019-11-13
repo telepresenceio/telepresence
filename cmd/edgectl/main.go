@@ -12,9 +12,7 @@ import (
 )
 
 // Version is inserted at build using --ldflags -X
-// But we don't really build that way any longer.
-// So include a fallback version number that's not useless.
-var Version = "0.8.1"
+var Version = "(unknown version)"
 
 const socketName = "/var/run/edgectl.socket"
 const logfile = "/tmp/edgectl.log"
