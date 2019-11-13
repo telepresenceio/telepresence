@@ -91,7 +91,7 @@ func aesLogin(_ *cobra.Command, args []string) error {
 	}
 
 	// Output
-	url := fmt.Sprintf("https://%s/edge_stack/admin#%s\n", hostname, tokenString)
+	url := fmt.Sprintf("https://%s/edge_stack/admin/#%s", hostname, tokenString)
 
 	if err := browser.OpenURL(url); err != nil {
 		fmt.Println("Unexpected error while trying to open your browser.")
