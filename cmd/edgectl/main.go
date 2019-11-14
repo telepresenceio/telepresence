@@ -110,12 +110,21 @@ func getRootCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(0),
 		RunE:  launchDaemon,
 	})
-	rootCmd.AddCommand(&cobra.Command{
-		Use:   "login",
+	loginCmd := &cobra.Command{
+		Use:   "login [flags] HOSTNAME",
 		Short: "Access the Ambassador Edge Stack admin UI",
-		Args:  cobra.MaximumNArgs(1),
+		Args:  cobra.ExactArgs(1),
 		RunE:  aesLogin,
-	})
+	}
+	_ = loginCmd.Flags().StringP(
+		"context", "c", "",
+		"The Kubernetes context to use. Defaults to the current kubectl context.",
+	)
+	_ = loginCmd.Flags().StringP(
+		"namespace", "n", "ambassador",
+		"The Kubernetes namespace to use. Defaults to ambassador.",
+	)
+	rootCmd.AddCommand(loginCmd)
 	licenseCmd := &cobra.Command{
 		Use:   "license [flags] LICENSE_KEY",
 		Short: "Set or update the Ambassador Edge Stack license key",

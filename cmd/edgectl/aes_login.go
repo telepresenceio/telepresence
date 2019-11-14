@@ -11,65 +11,48 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	k8sSchema "k8s.io/apimachinery/pkg/runtime/schema"
-	k8sClientDynamic "k8s.io/client-go/dynamic"
 	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 )
 
 const SecretName = "ambassador-internal"
-const AmbassadorNamespace = "ambassador"
 
 type LoginClaimsV1 struct {
 	LoginTokenVersion  string `json:"login_token_version"`
 	jwt.StandardClaims `json:",inline"`
 }
 
-func maybeWrongCluster() {
-	fmt.Println()
-	fmt.Println("Failed to obtain expected information from the cluster.")
-	fmt.Println("Is kubectl configured to connect to the correct cluster?")
-	fmt.Println()
-	fmt.Println("    kubectl -n ambassador get svc,deploy")
-	fmt.Println()
-}
-
-func aesLogin(_ *cobra.Command, args []string) error {
+func aesLogin(cmd *cobra.Command, args []string) error {
 	fmt.Println("Connecting to the Ambassador Edge Stack admin UI in this cluster...")
 
 	// Prepare to talk to the cluster
-	kubeinfo := k8s.NewKubeInfo("", "", "") // Empty file/ctx/ns for defaults
+	context, _ := cmd.Flags().GetString("context")
+	namespace, _ := cmd.Flags().GetString("namespace")
+	kubeinfo := k8s.NewKubeInfo("", context, namespace) // Default namespace here
 	restconfig, err := kubeinfo.GetRestConfig()
 	if err != nil {
-		return errors.Wrap(err, "Failed to connect to cluster")
+		return errors.Wrap(err, "Failed to connect to cluster (rest)")
 	}
 
 	// Obtain signing key
-	// -> kubectl -n $AmbassadorNamespace get secret $SecretName -o json
-	privateKey, err := getSigningKey(restconfig)
+	// -> kubectl -n $namespace get secret $SecretName -o json
+	privateKey, err := getSigningKey(restconfig, namespace)
 	if err != nil {
-		maybeWrongCluster()
+		fmt.Println()
+		fmt.Println("Failed to obtain expected information from the cluster.")
+		fmt.Println("Is kubectl configured to connect to the correct cluster?")
+		fmt.Printf("Is %s the namespace where Ambassador is installed?\n\n", namespace)
+		fmt.Printf("    kubectl -n %s get svc,deploy\n\n", namespace)
 		return err
 	}
 
 	// Figure out the correct hostname
-	// -> kubectl get host
-	// and use the first host we find
-	var hostname string
-	if len(args) == 1 {
-		hostname = args[0]
-		// FIXME: validate that hostname by querying
-		// https://{{hostname}}/edge_stack/admin/api/ambassador_cluster_id and
-		// verifying that it returns the same UUID via direct access and via
-		// port-forward/teleproxy. This avoids leaking login credentials to the
-		// operator of a different website.
-	} else {
-		hostname, err = getHostname(restconfig)
-		if err != nil {
-			maybeWrongCluster()
-			return err
-		}
-	}
+	hostname := args[0]
+	// FIXME: validate that hostname by querying
+	// https://{{hostname}}/edge_stack/admin/api/ambassador_cluster_id and
+	// verifying that it returns the same UUID via direct access and via
+	// port-forward/teleproxy. This avoids leaking login credentials to the
+	// operator of a different website.
 
 	// Construct claims
 	now := time.Now()
@@ -103,12 +86,12 @@ func aesLogin(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func getSigningKey(restconfig *rest.Config) (*rsa.PrivateKey, error) {
+func getSigningKey(restconfig *rest.Config, namespace string) (*rsa.PrivateKey, error) {
 	coreClient, err := k8sClientCoreV1.NewForConfig(restconfig)
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to connect to cluster")
+		return nil, errors.Wrap(err, "Failed to connect to cluster (core)")
 	}
-	secretInterface := coreClient.Secrets(AmbassadorNamespace)
+	secretInterface := coreClient.Secrets(namespace)
 	secret, err := secretInterface.Get(SecretName, k8sTypesMetaV1.GetOptions{})
 	if err != nil {
 		return nil, err
@@ -117,39 +100,7 @@ func getSigningKey(restconfig *rest.Config) (*rsa.PrivateKey, error) {
 	privatePEM, ok := secret.Data["rsa.key"]
 	if !ok {
 		return nil, errors.Errorf("secret name=%q namespace=%q exists but does not contain an %q %s field",
-			SecretName, AmbassadorNamespace, "rsa.key", "private-key")
+			SecretName, namespace, "rsa.key", "private-key")
 	}
 	return jwt.ParseRSAPrivateKeyFromPEM(privatePEM)
-}
-
-func getHostname(restconfig *rest.Config) (hostname string, err error) {
-	dynamicClient, err := k8sClientDynamic.NewForConfig(restconfig)
-	if err != nil {
-		err = errors.Wrap(err, "Failed to connect to cluster")
-		return
-	}
-	hostsGetter := dynamicClient.Resource(k8sSchema.GroupVersionResource{
-		Group:    "getambassador.io",
-		Version:  "v2",
-		Resource: "hosts",
-	})
-	hosts, err := hostsGetter.List(k8sTypesMetaV1.ListOptions{})
-	if err != nil {
-		return
-	}
-	for _, host := range hosts.Items {
-		// FIXME: We should pay attention to the Namespace, maybe some sort of
-		// Ambassador ID thing, etc., so we don't pick up the wrong hostname.
-		spec, ok := host.Object["spec"].(map[string]interface{})
-		if !ok {
-			continue
-		}
-		maybeHostname, ok := spec["hostname"].(string)
-		if ok {
-			hostname = maybeHostname
-			return
-		}
-	}
-	err = fmt.Errorf("Did not find a valid Host in your cluster. Use \"edgectl login HOSTNAME\"")
-	return
 }
