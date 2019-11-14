@@ -24,12 +24,17 @@ case "${OS}" in
         brew cask install osxfuse
         brew install sshfs
         pip3 install virtualenv
+        curl -Ls -o /usr/local/bin/edgectl https://metriton.datawire.io/downloads/darwin/edgectl
+        chmod a+x /usr/local/bin/edgectl
         ;;
 
     linux)
         sudo apt-get install \
              sshfs conntrack \
              lsb-release
+        curl -Ls -o /tmp/edgectl https://metriton.datawire.io/downloads/linux/edgectl
+        sudo mv /tmp/edgectl /usr/bin/edgectl
+        sudo chmod a+x /usr/bin/edgectl
         ;;
 
     *)
@@ -43,6 +48,9 @@ python2 --version || true
 python3 --version
 ruby --version || true
 docker version || true
+
+sudo edgectl daemon
+edgectl version || true
 
 # Make sure gcloud is installed.  This includes kubectl.
 ./ci/setup-gcloud.sh "${PROJECT_NAME}" "${CLUSTER_NAME}" "${CLOUDSDK_COMPUTE_ZONE}" "${OS}"
