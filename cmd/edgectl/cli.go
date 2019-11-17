@@ -131,7 +131,7 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 				out.Printf("Found %d interceptable deployment(s):\n", len(d.trafficMgr.interceptables))
 				for idx, deployment := range d.trafficMgr.interceptables {
 					out.Printf("%4d. %s\n", idx+1, deployment)
-					out.Send("interceptable.deployment", deployment)
+					out.Send(fmt.Sprintf("interceptable.deployment.%d", idx+1), deployment)
 				}
 			}
 			return out.Err()
