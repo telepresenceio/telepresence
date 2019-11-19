@@ -211,7 +211,7 @@ func MakeIntercept(p *supervisor.Process, tm *TrafficManager, ii *InterceptInfo)
 
 	sshCmd := []string{
 		"ssh", "-C", "-N", "telepresence@localhost",
-		"-oConnectTimeout=5", "-oExitOnForwardFailure=yes",
+		"-oConnectTimeout=10", "-oExitOnForwardFailure=yes",
 		"-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null",
 		"-p", strconv.Itoa(tm.sshPort),
 		"-R", fmt.Sprintf("%d:%s:%d", cept.port, ii.TargetHost, ii.TargetPort),

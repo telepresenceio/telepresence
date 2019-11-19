@@ -128,7 +128,7 @@ func checkBridge(p *supervisor.Process) error {
 		// #nosec G402
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
-	client := http.Client{Timeout: 5 * time.Second, Transport: tr}
+	client := http.Client{Timeout: 10 * time.Second, Transport: tr}
 	res, err := client.Get("https://kubernetes.default/api/")
 	if err != nil {
 		return errors.Wrap(err, "get")
@@ -201,7 +201,7 @@ func NewTrafficManager(p *supervisor.Process, cluster *KCluster) (*TrafficManage
 		return nil, err
 	}
 	tm.crc = pf
-	tm.client = &http.Client{Timeout: 3 * time.Second}
+	tm.client = &http.Client{Timeout: 10 * time.Second}
 	return tm, nil
 }
 

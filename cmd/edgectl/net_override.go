@@ -32,7 +32,7 @@ func (d *Daemon) MakeNetOverride(p *supervisor.Process) error {
 // equivalent of curl http://teleproxy/api/tables/. It's okay to create a new
 // client each time because we don't want to reuse connections.
 func checkNetOverride(p *supervisor.Process) error {
-	client := http.Client{Timeout: 3 * time.Second}
+	client := http.Client{Timeout: 10 * time.Second}
 	res, err := client.Get(fmt.Sprintf(
 		"http://teleproxy%d.cachebust.telepresence.io/api/tables",
 		time.Now().Unix(),
