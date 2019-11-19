@@ -233,5 +233,8 @@ func (cept *Intercept) check(p *supervisor.Process) error {
 func (cept *Intercept) quit(p *supervisor.Process) error {
 	cept.done = true
 	_ = cept.crc.Close()
-	return cept.ii.Release(p, cept.tm, cept.port)
+	if err := cept.ii.Release(p, cept.tm, cept.port); err != nil {
+		p.Log(err)
+	}
+	return nil
 }
