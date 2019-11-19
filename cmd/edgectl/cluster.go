@@ -114,7 +114,7 @@ func (d *Daemon) Disconnect(p *supervisor.Process, out *Emitter) error {
 	d.cluster = nil
 
 	out.Println("Disconnected")
-	out.Send("disconnect", "Diconnected")
+	out.Send("disconnect", "Disconnected")
 	return err
 }
 
