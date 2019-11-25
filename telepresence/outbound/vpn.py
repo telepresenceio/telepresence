@@ -160,7 +160,7 @@ def podCIDRs(runner: Runner):
             pod_cidr = node["spec"].get("podCIDR")
             if pod_cidr is not None:
                 cidrs.add(pod_cidr)
-    
+
     if len(cidrs) == 0:
         # Fallback to using pod IPs:
         pods = json.loads(
@@ -175,7 +175,7 @@ def podCIDRs(runner: Runner):
                 pass
         if pod_ips:
             cidrs.add(covering_cidr(pod_ips))
-    
+
     return list(cidrs)
 
 
