@@ -124,6 +124,8 @@ func getRootCommand() *cobra.Command {
 		"namespace", "n", "ambassador",
 		"The Kubernetes namespace to use. Defaults to ambassador.",
 	)
+	_ = loginCmd.Flags().Bool("url", false, "Just show the URL (don't launch a browser)")
+	_ = loginCmd.Flags().Bool("token", false, "Also display the login token")
 	rootCmd.AddCommand(loginCmd)
 	licenseCmd := &cobra.Command{
 		Use:   "license [flags] LICENSE_KEY",

@@ -25,9 +25,13 @@ type LoginClaimsV1 struct {
 func aesLogin(cmd *cobra.Command, args []string) error {
 	fmt.Println("Connecting to the Ambassador Edge Stack admin UI in this cluster...")
 
-	// Prepare to talk to the cluster
+	// Grab options
 	context, _ := cmd.Flags().GetString("context")
 	namespace, _ := cmd.Flags().GetString("namespace")
+	justShowURL, _ := cmd.Flags().GetBool("url")
+	showToken, _ := cmd.Flags().GetBool("token")
+
+	// Prepare to talk to the cluster
 	kubeinfo := k8s.NewKubeInfo("", context, namespace) // Default namespace here
 	restconfig, err := kubeinfo.GetRestConfig()
 	if err != nil {
@@ -76,14 +80,28 @@ func aesLogin(cmd *cobra.Command, args []string) error {
 	// Output
 	url := fmt.Sprintf("https://%s/edge_stack/admin/#%s", hostname, tokenString)
 
-	if err := browser.OpenURL(url); err != nil {
-		fmt.Println("Unexpected error while trying to open your browser.")
-		fmt.Println("Visit the following URL to access the Ambassador Edge Stack admin UI:")
-		fmt.Println("    ", url)
-		return errors.Wrap(err, "browse")
+	if !justShowURL {
+		err = browser.OpenURL(url)
+		if err != nil {
+			fmt.Println("Unexpected error while trying to open your browser.")
+			err = errors.Wrap(err, "browse")
+		}
 	}
-	fmt.Println("Ambassador Edge Stack admin UI has been opened in your browser.")
-	return nil
+
+	if justShowURL || err != nil {
+		fmt.Println("Visit the following URL to access the Ambassador Edge Stack admin UI:")
+	} else {
+		fmt.Println("Ambassador Edge Stack admin UI has been opened in your browser.")
+	}
+	fmt.Println("    ", url)
+
+	if showToken {
+		fmt.Println()
+		fmt.Println("The login token is")
+		fmt.Println("    ", tokenString)
+	}
+
+	return err
 }
 
 func getSigningKey(restconfig *rest.Config, namespace string) (*rsa.PrivateKey, error) {
