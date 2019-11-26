@@ -120,6 +120,7 @@ func (rb *ResourceBase) processor(p *supervisor.Process) error {
 			return err
 		}
 		if rb.done {
+			MaybeNotify(p, rb.name, rb.okay, false)
 			p.Log("done")
 			return nil
 		}
