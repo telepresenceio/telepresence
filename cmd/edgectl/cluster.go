@@ -34,6 +34,11 @@ func (d *Daemon) Connect(
 		out.Send("connect", "Not ready: Trying to disconnect")
 		return nil
 	}
+	if d.network == nil {
+		out.Println("Not ready: Network overrides are paused (use \"edgectl resume\")")
+		out.Send("connect", "Not ready: Paused")
+		return nil
+	}
 	if !d.network.IsOkay() {
 		out.Println("Not ready: Establishing network overrides")
 		out.Send("connect", "Not ready: Establishing network overrides")

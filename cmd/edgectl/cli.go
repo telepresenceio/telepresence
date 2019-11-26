@@ -61,6 +61,63 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 			return out.Err()
 		},
 	})
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "pause",
+		Short: "Turn off network overrides (to use a VPN)",
+		Args:  cobra.ExactArgs(0),
+		RunE: func(_ *cobra.Command, _ []string) error {
+			if d.network == nil {
+				out.Println("Network overrides are already paused")
+				out.Send("paused", true)
+				return out.Err()
+			}
+			if d.cluster != nil {
+				out.Println("Edge Control is connected to a cluster.")
+				out.Println("See \"edgectl status\" for details.")
+				out.Println("Please disconnect before pausing.")
+				out.Send("paused", false)
+				out.SendExit(1)
+				return out.Err()
+			}
+
+			if err := d.network.Close(); err != nil {
+				p.Logf("pause: %v", err)
+				out.Printf("Unexpected error while pausing: %v\n", err)
+			}
+			d.network = nil
+
+			out.Println("Network overrides paused.")
+			out.Println("Used \"edgectl resume\" to reestablish network overrides.")
+			out.Send("paused", true)
+
+			return out.Err()
+		},
+	})
+	rootCmd.AddCommand(&cobra.Command{
+		Use:     "resume",
+		Short:   "Turn network overrides on (after using edgectl pause)",
+		Aliases: []string{"unpause"},
+		Args:    cobra.ExactArgs(0),
+		RunE: func(_ *cobra.Command, _ []string) error {
+			if d.network != nil {
+				if d.network.IsOkay() {
+					out.Println("Network overrides are established (not paused)")
+				} else {
+					out.Println("Network overrides are being reestablished...")
+				}
+				out.Send("paused", false)
+				return out.Err()
+			}
+
+			if err := d.MakeNetOverride(p); err != nil {
+				p.Logf("resume: %v", err)
+				out.Printf("Unexpected error establishing network overrides: %v", err)
+			}
+			out.Send("paused", d.network == nil)
+
+			return out.Err()
+		},
+	})
 	connectCmd := &cobra.Command{
 		Use:   "connect [flags] [-- additional kubectl arguments...]",
 		Short: "Connect to a cluster",
