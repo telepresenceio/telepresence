@@ -81,7 +81,7 @@ func (d *Daemon) acceptLoop(p *supervisor.Process) error {
 
 	p.Ready()
 	Notify(p, "Running")
-	defer Notify(p, "Terminated")
+	defer Notify(p, "Shutting down...")
 
 	return p.DoClean(
 		func() error {
