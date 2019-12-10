@@ -32,6 +32,7 @@ func aesLicense(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return errors.Wrap(err, "kubectl apply")
 	}
+	fmt.Println("Please wait a minute or two for your license to be refreshed in your running Ambassador Edge Stack.")
 	return nil
 }
 
