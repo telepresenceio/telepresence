@@ -2,15 +2,12 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/pkg/errors"
@@ -144,29 +141,6 @@ func checkBridge(p *supervisor.Process) error {
 		return errors.Wrap(err, "read body")
 	}
 	return nil
-}
-
-// GetFreePort asks the kernel for a free open port that is ready to use.
-// Similar to telepresence.utilities.find_free_port()
-func GetFreePort() (int, error) {
-	lc := net.ListenConfig{
-		Control: func(network, address string, c syscall.RawConn) error {
-			var operr error
-			fn := func(fd uintptr) {
-				operr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
-			}
-			if err := c.Control(fn); err != nil {
-				return err
-			}
-			return operr
-		},
-	}
-	l, err := lc.Listen(context.Background(), "tcp", ":0")
-	if err != nil {
-		return 0, err
-	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
 // TrafficManager is a handle to access the Traffic Manager in a
