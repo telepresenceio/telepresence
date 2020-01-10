@@ -49,15 +49,15 @@ func main() {
 	if DaemonWorks() {
 		cg = []CmdGroup{
 			CmdGroup{
-				GroupName: "Edge Stack Commands",
+				GroupName: "Management Commands",
 				CmdNames:  []string{"login", "license"},
 			},
 			CmdGroup{
-				GroupName: "Cluster Commands",
+				GroupName: "Development Commands",
 				CmdNames:  []string{"status", "connect", "disconnect", "intercept"},
 			},
 			CmdGroup{
-				GroupName: "Daemon Commands",
+				GroupName: "Advanced Commands",
 				CmdNames:  []string{"daemon", "pause", "resume", "quit"},
 			},
 			CmdGroup{
@@ -68,7 +68,7 @@ func main() {
 	} else {
 		cg = []CmdGroup{
 			CmdGroup{
-				GroupName: "Edge Stack Commands",
+				GroupName: "Management Commands",
 				CmdNames:  []string{"login", "license"},
 			},
 			CmdGroup{
@@ -93,8 +93,7 @@ func getRootCommand() *cobra.Command {
 	}
 
 	myHelp := myName + `
-  Edge Stack: https://www.getambassador.io/user-guide/install/
-  Intercept:  https://www.getambassador.io/reference/edge-control/
+  https://www.getambassador.io/user-guide/install/
 `
 
 	rootCmd := &cobra.Command{
