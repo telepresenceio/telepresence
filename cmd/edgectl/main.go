@@ -10,9 +10,11 @@ import (
 // Version is inserted at build using --ldflags -X
 var Version = "(unknown version)"
 
-const socketName = "/var/run/edgectl.socket"
-const logfile = "/tmp/edgectl.log"
-const apiVersion = 1
+const (
+	socketName = "/var/run/edgectl.socket"
+	logfile    = "/tmp/edgectl.log"
+	apiVersion = 1
+)
 
 var displayVersion = fmt.Sprintf("v%s (api v%d)", Version, apiVersion)
 
@@ -43,23 +45,37 @@ func main() {
 
 	rootCmd := getRootCommand()
 
-	cg := []CmdGroup{
-		CmdGroup{
-			GroupName: "Edge Stack Commands",
-			CmdNames:  []string{"login", "license"},
-		},
-		CmdGroup{
-			GroupName: "Cluster Commands",
-			CmdNames:  []string{"status", "connect", "disconnect", "intercept"},
-		},
-		CmdGroup{
-			GroupName: "Daemon Commands",
-			CmdNames:  []string{"daemon", "pause", "resume", "quit"},
-		},
-		CmdGroup{
-			GroupName: "Other Commands",
-			CmdNames:  []string{"version", "help"},
-		},
+	var cg []CmdGroup
+	if DaemonWorks() {
+		cg = []CmdGroup{
+			CmdGroup{
+				GroupName: "Edge Stack Commands",
+				CmdNames:  []string{"login", "license"},
+			},
+			CmdGroup{
+				GroupName: "Cluster Commands",
+				CmdNames:  []string{"status", "connect", "disconnect", "intercept"},
+			},
+			CmdGroup{
+				GroupName: "Daemon Commands",
+				CmdNames:  []string{"daemon", "pause", "resume", "quit"},
+			},
+			CmdGroup{
+				GroupName: "Other Commands",
+				CmdNames:  []string{"version", "help"},
+			},
+		}
+	} else {
+		cg = []CmdGroup{
+			CmdGroup{
+				GroupName: "Edge Stack Commands",
+				CmdNames:  []string{"login", "license"},
+			},
+			CmdGroup{
+				GroupName: "Other Commands",
+				CmdNames:  []string{"version", "help"},
+			},
+		}
 	}
 
 	usageFunc := NewCmdUsage(rootCmd, cg)
@@ -121,13 +137,15 @@ func getRootCommand() *cobra.Command {
 
 	// Client commands. These are never sent to the daemon.
 
-	rootCmd.AddCommand(&cobra.Command{
-		Use:   "daemon",
-		Short: "Launch Edge Control Daemon in the background (sudo)",
-		Long:  daemonHelp,
-		Args:  cobra.ExactArgs(0),
-		RunE:  launchDaemon,
-	})
+	if DaemonWorks() {
+		rootCmd.AddCommand(&cobra.Command{
+			Use:   "daemon",
+			Short: "Launch Edge Control Daemon in the background (sudo)",
+			Long:  daemonHelp,
+			Args:  cobra.ExactArgs(0),
+			RunE:  launchDaemon,
+		})
+	}
 	loginCmd := &cobra.Command{
 		Use:   "login [flags] HOSTNAME",
 		Short: "Access the Ambassador Edge Stack admin UI",
@@ -163,11 +181,24 @@ func getRootCommand() *cobra.Command {
 
 	// Daemon commands. These should be forwarded to the daemon.
 
-	nilDaemon := &Daemon{}
-	daemonCmd := nilDaemon.getRootCommand(nil, nil, nil)
-	walkSubcommands(daemonCmd)
-	rootCmd.AddCommand(daemonCmd.Commands()...)
-	rootCmd.PersistentFlags().AddFlagSet(daemonCmd.PersistentFlags())
+	if DaemonWorks() {
+		nilDaemon := &Daemon{}
+		daemonCmd := nilDaemon.getRootCommand(nil, nil, nil)
+		walkSubcommands(daemonCmd)
+		rootCmd.AddCommand(daemonCmd.Commands()...)
+		rootCmd.PersistentFlags().AddFlagSet(daemonCmd.PersistentFlags())
+	} else {
+		rootCmd.AddCommand(&cobra.Command{
+			Use:   "version",
+			Short: "Show program's version number and exit",
+			Args:  cobra.ExactArgs(0),
+			RunE: func(_ *cobra.Command, _ []string) error {
+				fmt.Println("Client", displayVersion)
+				fmt.Println("Daemon unavailable on this platform")
+				return nil
+			},
+		})
+	}
 
 	rootCmd.InitDefaultHelpCmd()
 

@@ -24,3 +24,8 @@ func launchDaemon(_ *cobra.Command, _ []string) error {
 func GetFreePort() (int, error) {
 	return 0, errors.New("Not implemented on this platform")
 }
+
+// DaemonWorks returns whether the daemon can function on this platform
+func DaemonWorks() bool {
+	return false
+}

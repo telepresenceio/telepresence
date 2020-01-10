@@ -152,3 +152,7 @@ func GetFreePort() (int, error) {
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
+// DaemonWorks returns whether the daemon can function on this platform
+func DaemonWorks() bool {
+	return true
+}
