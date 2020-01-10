@@ -92,9 +92,15 @@ func getRootCommand() *cobra.Command {
 		myName = "Edge Control (daemon unavailable)"
 	}
 
+	myHelp := myName + `
+  Edge Stack: https://www.getambassador.io/user-guide/install/
+  Intercept:  https://www.getambassador.io/reference/edge-control/
+`
+
 	rootCmd := &cobra.Command{
 		Use:          "edgectl",
 		Short:        myName,
+		Long:         myHelp,
 		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
 	}
 
@@ -148,7 +154,7 @@ func getRootCommand() *cobra.Command {
 	}
 	loginCmd := &cobra.Command{
 		Use:   "login [flags] HOSTNAME",
-		Short: "Access the Ambassador Edge Stack admin UI",
+		Short: "Access the Ambassador Edge Policy Console",
 		Args:  cobra.ExactArgs(1),
 		RunE:  aesLogin,
 	}
