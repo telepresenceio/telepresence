@@ -262,6 +262,13 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 	_ = interceptAddCmd.MarkFlagRequired("match")
 
 	interceptCmd.AddCommand(interceptAddCmd)
+	interceptCG := []CmdGroup{
+		CmdGroup{
+			GroupName: "Available Commands",
+			CmdNames:  []string{"available", "list", "add", "remove"},
+		},
+	}
+	interceptCmd.SetUsageFunc(NewCmdUsage(interceptCmd, interceptCG))
 	rootCmd.AddCommand(interceptCmd)
 
 	return rootCmd
