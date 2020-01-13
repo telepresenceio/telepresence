@@ -129,7 +129,7 @@ def setup(runner: Runner, args):
                 )
         tel_deployment, run_id = operation(
             runner_, deployment_arg, args.expose, custom_nameserver,
-            args.service_account
+            args.service_account, args.node_selectors
         )
         remote_info = get_remote_info(
             runner,

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+import json
 import sys
 import webbrowser
 from contextlib import contextmanager
@@ -366,6 +367,19 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
             " experience DNS loops or loss of Internet connectivity while"
             " Telepresence is running, use this flag to enable an internal"
             " workaround that may help."
+        )
+    )
+    parser.add_argument(
+        "--node-selectors",
+        default=None,
+        dest="node_selectors",
+        metavar='{"key1": "value1", "key2": "value2"}',
+        type=json.loads,
+        help=(
+            "The Kubernetes nodeSelector. Defaults to kubectl's default"
+            "This is only applicable when new-deployment is used. E.g. "
+            "--node-selectors '{\"key1\": \"value1\", \"key2\": \"value2\"}'"
+            "This is only applicable when new-deployment is used."
         )
     )
 

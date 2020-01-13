@@ -1,0 +1,1 @@
+Telepresence can now set the node selector that is used in new deployments.  This is done using the `--node-selectors '{"key1": "value1", "key2": "value2"}'` flag.

@@ -45,6 +45,7 @@ def existing_deployment(
     expose: PortMapping,
     custom_nameserver: Optional[str],
     service_account: str,
+    node_selectors: dict = None,
 ) -> Tuple[str, Optional[str]]:
     """
     Handle an existing deployment by doing nothing
@@ -71,6 +72,7 @@ def existing_deployment_openshift(
     expose: PortMapping,
     custom_nameserver: Optional[str],
     service_account: str,
+    node_selectors: dict = None,
 ) -> Tuple[str, Optional[str]]:
     """
     Handle an existing deploymentconfig by doing nothing
@@ -101,6 +103,7 @@ def create_new_deployment(
     expose: PortMapping,
     custom_nameserver: Optional[str],
     service_account: str,
+    node_selectors: dict = None,
 ) -> Tuple[str, str]:
     """
     Create a new Deployment, return its name and Kubernetes label.
@@ -148,6 +151,18 @@ def create_new_deployment(
     # infinite loops caused by sshuttle:
     if custom_nameserver:
         command.append("--env=TELEPRESENCE_NAMESERVER=" + custom_nameserver)
+
+    if node_selectors != None:
+        nodeSelectors = ""
+        start='--overrides={ "spec": { "template": { "spec": { "nodeSelector": {'
+        end=' } } } } }'
+
+        for nsKey in node_selectors.keys():
+            nodeSelectors += '"' + nsKey + '": "' + node_selectors[nsKey] + '", '
+        nodeSelectors = nodeSelectors[:-2]
+
+        command.append('{} {} {}'.format(start, nodeSelectors, end) )
+
     try:
         runner.check_call(runner.kubectl(*command))
     except CalledProcessError as exc:
@@ -181,6 +196,7 @@ def supplant_deployment(
     expose: PortMapping,
     custom_nameserver: Optional[str],
     service_account: str,
+    node_selectors: dict = None,
 ) -> Tuple[str, str]:
     """
     Swap out an existing Deployment, supplant method.
@@ -362,6 +378,7 @@ def swap_deployment_openshift(
     expose: PortMapping,
     custom_nameserver: Optional[str],
     service_account: str,
+    node_selectors: dict = None,
 ) -> Tuple[str, str]:
     """
     Swap out an existing DeploymentConfig and also clears any triggers
