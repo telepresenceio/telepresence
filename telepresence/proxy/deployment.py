@@ -152,16 +152,19 @@ def create_new_deployment(
     if custom_nameserver:
         command.append("--env=TELEPRESENCE_NAMESERVER=" + custom_nameserver)
 
-    if node_selectors != None:
+    if node_selectors is not None:
         nodeSelectors = ""
-        start='--overrides={ "spec": { "template": { "spec": { "nodeSelector": {'
-        end=' } } } } }'
+        start = '--overrides={ "spec": { "template": '
+        start += '{ "spec": { "nodeSelector": {'
+        end = ' } } } } }'
 
         for nsKey in node_selectors.keys():
-            nodeSelectors += '"' + nsKey + '": "' + node_selectors[nsKey] + '", '
+            nodeSelectors += '"' + nsKey + '": "' + node_selectors[nsKey
+                                                                   ] + '", '
+
         nodeSelectors = nodeSelectors[:-2]
 
-        command.append('{} {} {}'.format(start, nodeSelectors, end) )
+        command.append('{} {} {}'.format(start, nodeSelectors, end))
 
     try:
         runner.check_call(runner.kubectl(*command))

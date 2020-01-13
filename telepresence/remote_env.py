@@ -20,8 +20,9 @@ from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
 
 
-def get_remote_env(runner: Runner, ssh: SSH, remote_info: RemoteInfo
-                   ) -> Tuple[Dict[str, str], Dict[str, Dict[str, str]]]:
+def get_remote_env(
+    runner: Runner, ssh: SSH, remote_info: RemoteInfo
+) -> Tuple[Dict[str, str], Dict[str, Dict[str, str]]]:
     """
     Get the environment variables we want to copy from the remote pod
     """
