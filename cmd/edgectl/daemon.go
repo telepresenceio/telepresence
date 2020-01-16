@@ -19,15 +19,17 @@ type Daemon struct {
 	bridge     Resource
 	trafficMgr *TrafficManager
 	intercepts []*Intercept
+	dns        string
+	fallback   string
 }
 
 // RunAsDaemon is the main function when executing as the daemon
-func RunAsDaemon() error {
+func RunAsDaemon(dns, fallback string) error {
 	if os.Geteuid() != 0 {
 		return errors.New("edgectl daemon must run as root")
 	}
 
-	d := &Daemon{}
+	d := &Daemon{dns: dns, fallback: fallback}
 
 	sup := supervisor.WithContext(context.Background())
 	sup.Logger = SetUpLogging()

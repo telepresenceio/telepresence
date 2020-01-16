@@ -16,7 +16,7 @@ func (d *Daemon) MakeNetOverride(p *supervisor.Process) error {
 	netOverride, err := CheckedRetryingCommand(
 		p,
 		"netOverride",
-		[]string{edgectl, "teleproxy", "intercept", "", ""},
+		[]string{edgectl, "teleproxy", "intercept", d.dns, d.fallback},
 		&RunAsInfo{},
 		checkNetOverride,
 		10*time.Second,

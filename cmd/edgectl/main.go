@@ -109,10 +109,10 @@ func getRootCommand() *cobra.Command {
 	rootCmd.AddCommand(&cobra.Command{
 		Use:    "daemon-foreground",
 		Short:  "Launch Edge Control Daemon in the foreground (debug)",
-		Args:   cobra.ExactArgs(0),
+		Args:   cobra.ExactArgs(2),
 		Hidden: true,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return RunAsDaemon()
+		RunE: func(_ *cobra.Command, args []string) error {
+			return RunAsDaemon(args[0], args[1])
 		},
 	})
 	teleproxyCmd := &cobra.Command{
@@ -143,13 +143,22 @@ func getRootCommand() *cobra.Command {
 	// Client commands. These are never sent to the daemon.
 
 	if DaemonWorks() {
-		rootCmd.AddCommand(&cobra.Command{
+		daemonCmd := &cobra.Command{
 			Use:   "daemon",
 			Short: "Launch Edge Control Daemon in the background (sudo)",
 			Long:  daemonHelp,
 			Args:  cobra.ExactArgs(0),
 			RunE:  launchDaemon,
-		})
+		}
+		_ = daemonCmd.Flags().String(
+			"dns", "",
+			"DNS IP address to intercept. Defaults to the first nameserver listed in /etc/resolv.conf.",
+		)
+		_ = daemonCmd.Flags().String(
+			"fallback", "",
+			"DNS fallback, how non-cluster DNS queries are resolved. Defaults to Google DNS (8.8.8.8).",
+		)
+		rootCmd.AddCommand(daemonCmd)
 	}
 	loginCmd := &cobra.Command{
 		Use:   "login [flags] HOSTNAME",

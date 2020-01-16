@@ -98,7 +98,10 @@ func launchDaemon(ccmd *cobra.Command, _ []string) error {
 	}
 	fmt.Println("Launching Edge Control Daemon", displayVersion)
 
-	cmd := exec.Command(edgectl, "daemon-foreground")
+	dns, _ := ccmd.Flags().GetString("dns")
+	fallback, _ := ccmd.Flags().GetString("fallback")
+
+	cmd := exec.Command(edgectl, "daemon-foreground", dns, fallback)
 	cmd.Env = os.Environ()
 	cmd.Stdin = nil
 	cmd.Stdout = nil
