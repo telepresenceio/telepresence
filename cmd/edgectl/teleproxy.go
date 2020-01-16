@@ -12,11 +12,15 @@ import (
 
 // RunAsTeleproxyIntercept is the main function when executing as
 // teleproxy intercept
-func RunAsTeleproxyIntercept() error {
+func RunAsTeleproxyIntercept(dns, fallback string) error {
 	if os.Geteuid() != 0 {
 		return errors.New("edgectl daemon as teleproxy intercept must run as root")
 	}
-	tele := &teleproxy.Teleproxy{Mode: "intercept"}
+	tele := &teleproxy.Teleproxy{
+		Mode:       "intercept",
+		DNSIP:      dns,
+		FallbackIP: fallback,
+	}
 	return teleproxy.RunTeleproxy(tele, displayVersion)
 }
 

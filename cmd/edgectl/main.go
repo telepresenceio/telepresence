@@ -123,10 +123,10 @@ func getRootCommand() *cobra.Command {
 	teleproxyCmd.AddCommand(&cobra.Command{
 		Use:    "intercept",
 		Short:  "Impersonate Teleproxy Intercept (for internal use)",
-		Args:   cobra.NoArgs,
+		Args:   cobra.ExactArgs(2),
 		Hidden: true,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return RunAsTeleproxyIntercept()
+		RunE: func(_ *cobra.Command, args []string) error {
+			return RunAsTeleproxyIntercept(args[0], args[1])
 		},
 	})
 	teleproxyCmd.AddCommand(&cobra.Command{
