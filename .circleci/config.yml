@@ -129,7 +129,9 @@ jobs:
     steps:
       - forked-pr-return
       - run: sudo apt-get --quiet update
-      - run: pyenv global 2.7.12 3.5.2
+      - run: pyenv versions
+      - run: pyenv install 3.5.3
+      - run: pyenv global 2.7.12 3.5.3
       - checkout
       - decrypt-gcloud-keys
 
