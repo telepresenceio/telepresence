@@ -144,7 +144,6 @@ jobs:
             # gcloud can't do that correctly (see
             # https://github.com/kubernetes/kubernetes/issues/30617)
             echo 'export GOOGLE_APPLICATION_CREDENTIALS=${PWD}/gcloud-service-key.json' >> ${BASH_ENV}
-            docker plugin install --grant-all-permissions vieux/sshfs
 
       - run: make virtualenv
       - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
