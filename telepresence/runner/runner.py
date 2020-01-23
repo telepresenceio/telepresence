@@ -152,7 +152,10 @@ class Runner:
         os.environ["PATH"] = path
 
     def span(
-        self, name: str = "", context: bool = True, verbose: bool = True
+        self,
+        name: str = "",
+        context: bool = True,
+        verbose: bool = True
     ) -> Span:
         """Write caller's frame info to the log."""
 

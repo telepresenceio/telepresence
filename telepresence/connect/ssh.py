@@ -40,7 +40,9 @@ class SSH(object):
         ]
 
     def command(
-        self, additional_args: List[str], prepend_arguments: List[str] = []
+        self,
+        additional_args: List[str],
+        prepend_arguments: List[str] = []
     ) -> List[str]:
         """
         Return command line argument list for running ssh.
