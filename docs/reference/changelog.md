@@ -1,6 +1,19 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.104 (January 23, 2020)
+
+Bug fixes:
+
+* Using --also-proxy proxies all resolved IPs for a hostname.
+  Thanks to Markus Maga for the patch.
+  ([#379](https://github.com/telepresenceio/telepresence/issues/379))
+* The context specified at the command line is used with all startup operations.
+  Thanks to Bret Palsson for the patch.
+  ([#1190](https://github.com/telepresenceio/telepresence/issues/1190))
+* The vpn-tcp method uses a more robust heuristic to determine the Pod IP space.
+  Thanks to Simon Trigona for the patch.
+  ([#1201](https://github.com/telepresenceio/telepresence/issues/1201))
 
 #### 0.103 (October 30, 2019)
 
@@ -17,7 +30,6 @@ Backwards incompatible changes:
   It prefers `oc` over `kubectl` and uses the OpenShift-specific image as above.
   Thanks to Bartosz Majsak for the original patch; blame to the Datawire team for errors in the ultimate implementation.
   ([#1139](https://github.com/telepresenceio/telepresence/issues/1139))
-
 
 Features:
 
