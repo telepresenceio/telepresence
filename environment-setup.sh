@@ -49,3 +49,6 @@ docker version || true
 
 # Make sure torsocks is installed:
 ./ci/build-torsocks.sh "${OS}"
+
+# Make sure Docker sshfs plugin is installed.
+docker plugin install --grant-all-permissions vieux/sshfs || true

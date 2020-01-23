@@ -108,7 +108,7 @@ def main():
     for name in names:
         print(" {}".format(name))
     if not args.dry_run:
-        run(["kubectl", "delete"] + names)
+        run(["kubectl", "delete", "--wait=false"] + names)
 
 
 if __name__ == "__main__":
