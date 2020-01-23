@@ -371,12 +371,17 @@ def create_deployment(deployment_ident, image, args, environ, ports, replicas):
 
     deployment = dumps({
         "kind": "Deployment",
-        "apiVersion": "extensions/v1beta1",
+        "apiVersion": "apps/v1",
         "metadata": {
             "name": deployment_ident.name,
             "namespace": deployment_ident.namespace,
         },
         "spec": {
+            "selector": {
+                "matchLabels": {
+                    "name": deployment_ident.name
+                }
+            },
             "replicas": replicas,
             "template": {
                 "metadata": {

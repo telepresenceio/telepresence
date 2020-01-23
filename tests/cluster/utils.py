@@ -87,7 +87,7 @@ else:
     KUBECTL = "kubectl"
     EXISTING_DEPLOYMENT = EXISTING_DEPLOYMENT % (
         """\
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment""",
     )
     DEPLOYMENT_TYPE = "deployment"
@@ -101,7 +101,7 @@ def random_name(suffix=""):
     return "testing-{}-{}-{}-{}{}".format(
         REVISION, hostname[:16], os.getpid(), int(time.time() - START_TIME),
         suffix
-    ).replace(".", "-")
+    ).replace(".", "-").lower()
 
 
 def telepresence_image_version():

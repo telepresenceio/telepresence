@@ -36,11 +36,14 @@ from telepresence.runner.kube import KubeInfo
 from telepresence.runner.runner import Runner
 
 COMPLEX_DEPLOYMENT = """\
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: my-nginx
 spec:
+  selector:
+    matchLabels:
+      name: my-nginx
   replicas: 3
   template:
     metadata:
@@ -119,13 +122,16 @@ spec:
 """
 
 SWAPPED_DEPLOYMENT = """\
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: my-nginx
   labels:
     telepresence: random_id_123
 spec:
+  selector:
+    matchLabels:
+      name: my-nginx
   replicas: 1
   template:
     metadata:

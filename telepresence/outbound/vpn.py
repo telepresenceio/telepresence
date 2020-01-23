@@ -49,7 +49,11 @@ import socket, sys, json
 
 result = []
 for host in sys.argv[1:]:
-    result.append(socket.gethostbyname(host))
+    host_ips = []
+    for x in socket.getaddrinfo(host, None):
+         if x[:2] == (socket.AF_INET, socket.SOCK_STREAM):
+            host_ips.append(x[4][0])
+    result.append(host_ips)
 sys.stdout.write(json.dumps(result))
 sys.stdout.flush()
 """
@@ -98,7 +102,7 @@ def k8s_resolve(
     hostnames = []
     ip_ranges = []
 
-    ipcache = runner.cache.child(runner.kubectl.context).child("ips")
+    ipcache = runner.cache.child(runner.kubectl.context).child("ip-list")
 
     for proxy_target in hosts_or_ips:
         try:
@@ -110,14 +114,14 @@ def k8s_resolve(
             continue
 
         if proxy_target in ipcache:
-            ip_ranges.append(ipcache[proxy_target])
+            ip_ranges += ipcache[proxy_target]
             continue
 
         hostnames.append(proxy_target)
 
     if hostnames:
         try:
-            resolved_ips = json.loads(
+            hostname_ips = json.loads(
                 runner.get_output(
                     runner.kubectl(
                         "exec", "--container=" + remote_info.container_name,
@@ -136,10 +140,12 @@ def k8s_resolve(
                 )
             )
     else:
-        resolved_ips = []
+        hostname_ips = []
 
-    for host, ip in zip(hostnames, resolved_ips):
-        ipcache[host] = ip
+    resolved_ips = []  # type: List[str]
+    for host, ips in zip(hostnames, hostname_ips):
+        ipcache[host] = ips
+        resolved_ips += ips
 
     return resolved_ips + ip_ranges
 
