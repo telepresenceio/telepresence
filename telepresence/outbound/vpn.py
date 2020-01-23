@@ -161,6 +161,13 @@ def podCIDRs(runner: Runner):
         )["items"]
     except CalledProcessError as e:
         runner.write("Failed to get nodes: {}".format(e))
+    else:
+        for node in nodes:
+            pod_cidr = node["spec"].get("podCIDR")
+            if pod_cidr is not None:
+                cidrs.add(pod_cidr)
+
+    if len(cidrs) == 0:
         # Fallback to using pod IPs:
         pods = json.loads(
             runner.get_output(runner.kubectl("get", "pods", "-o", "json"))
@@ -174,11 +181,7 @@ def podCIDRs(runner: Runner):
                 pass
         if pod_ips:
             cidrs.add(covering_cidr(pod_ips))
-    else:
-        for node in nodes:
-            pod_cidr = node["spec"].get("podCIDR")
-            if pod_cidr is not None:
-                cidrs.add(pod_cidr)
+
     return list(cidrs)
 
 
