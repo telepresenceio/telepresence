@@ -8,7 +8,7 @@ import (
 
 // RunAsTeleproxyIntercept is the main function when executing as
 // teleproxy intercept
-func RunAsTeleproxyIntercept() error {
+func RunAsTeleproxyIntercept(_, _ string) error {
 	return errors.New("Not implemented on this platform")
 }
 
