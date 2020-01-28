@@ -50,7 +50,7 @@ func main() {
 		cg = []CmdGroup{
 			CmdGroup{
 				GroupName: "Management Commands",
-				CmdNames:  []string{"login", "license"},
+				CmdNames:  []string{"install", "login", "license"},
 			},
 			CmdGroup{
 				GroupName: "Development Commands",
@@ -69,7 +69,7 @@ func main() {
 		cg = []CmdGroup{
 			CmdGroup{
 				GroupName: "Management Commands",
-				CmdNames:  []string{"login", "license"},
+				CmdNames:  []string{"install", "login", "license"},
 			},
 			CmdGroup{
 				GroupName: "Other Commands",
@@ -192,6 +192,7 @@ func getRootCommand() *cobra.Command {
 		"The Kubernetes namespace to use. Defaults to ambassador.",
 	)
 	rootCmd.AddCommand(licenseCmd)
+	rootCmd.AddCommand(aesInstallCmd())
 
 	// Daemon commands. These should be forwarded to the daemon.
 
