@@ -1,7 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -83,18 +88,84 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("Your IP address is", ipAddress)
 
-	// Send a request to register this endpoint
-	// if successful
-	//   _ = metrics.Report("cert_provisioned")
-	//   create a Host object with the info received
-	//   report to the user
-	//   open a browser window to https...
-	// else
-	//   report to the user
-	//   if reachable from host (e.g., k3s, special case for Minikube?)
-	//     open a browser window to http...
-	//   else
-	//     suggest port-forward to reach policy console?
+	// Send a request to acquire a DNS name for this cluster's IP address
+	regURL := "https://metriton.datawire.io/beta/register-domain"
+	emailAddress := "ark3+eci@datawire.io"
+	buf := new(bytes.Buffer)
+	_ = json.NewEncoder(buf).Encode(registration{emailAddress, ipAddress})
+	resp, err := http.Post(regURL, "application/json", buf)
+	if err != nil {
+		return errors.Wrap(err, "acquire DNS name (post)")
+	}
+	content, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return errors.Wrap(err, "acquire DNS name (read body)")
+	}
+
+	if resp.StatusCode == 200 {
+		hostname := string(content)
+		fmt.Println("-> Acquiring DNS name", hostname)
+
+		// Wait for DNS to propagate. This tries to avoid waiting for a ten
+		// minute error backoff if the ACME registration races ahead of the DNS
+		// name appearing for LetsEncrypt.
+		for {
+			conn, err := net.Dial("tcp", hostname+":443")
+			if err == nil {
+				conn.Close()
+				break
+			}
+			// fmt.Printf("Waiting for DNS: %#v\n", err)
+			time.Sleep(500 * time.Millisecond)
+		}
+		fmt.Println("-> Automatically configuring TLS")
+		fmt.Println("Please enter an email address. We'll use this email address to notify you prior to domain and certification expiration [None]:", emailAddress)
+		fmt.Println("FIXME: let the user enter an address")
+		// Create a Host resource
+		hostResource := fmt.Sprintf(hostManifest, hostname, namespace, hostname, emailAddress)
+		kargs, err := i.kubeinfo.GetKubectlArray("apply", "-f", "-")
+		if err != nil {
+			return errors.Wrapf(err, "cluster access for install AES")
+		}
+		fmt.Println("\n$ kubectl apply -f - < [Host Resource]")
+		cmd := exec.Command("kubectl", kargs...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = strings.NewReader(hostResource)
+		if err := cmd.Run(); err != nil {
+			return errors.Wrap(err, "install AES")
+		}
+
+		fmt.Println("\n-> Obtaining a TLS certificate from Let's Encrypt")
+
+		for {
+			state, err := i.CaptureKubectl("get Host state", "get", "host", hostname, "-o", "go-template={{.status.state}}")
+			if err != nil {
+				return err
+			}
+			if state == "Ready" {
+				break
+			}
+			time.Sleep(500 * time.Millisecond) // FIXME: Time out at some point...
+			// FIXME: Do something smart for state == "Error"
+		}
+
+		_ = metrics.Report("cert_provisioned")
+		fmt.Println("-> TLS configured successfully")
+		if err := i.ShowKubectl("show Host", "get", "host", hostname); err != nil {
+			return err
+		}
+
+		// TODO: Open browser (do edgectl login)
+
+	} else {
+		fmt.Println("-> Failed to create a DNS name", content)
+		//   if reachable from host (e.g., k3s, special case for Minikube?)
+		//     open a browser window to http...
+		//   else
+		//     suggest port-forward to reach policy console?
+	}
 
 	_ = metrics.Report("aes_health_good") // or aes_health_bad TODO: Send cluster's install_id and AES version
 
@@ -143,6 +214,13 @@ func (i *Installer) CaptureKubectl(name string, args ...string) (res string, err
 	return
 }
 
+// DNS Registration
+
+type registration struct {
+	Email string
+	Ip    string
+}
+
 // Metrics
 
 type Metrics struct {
@@ -158,3 +236,15 @@ func (m *Metrics) Report(eventName string) error {
 	fmt.Println("-> [Metrics]", eventName)
 	return nil
 }
+
+const hostManifest = `
+apiVersion: getambassador.io/v2
+kind: Host
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  hostname: %s
+  acmeProvider:
+    email: %s
+`
