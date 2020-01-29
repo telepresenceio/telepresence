@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/pkg/errors"
@@ -66,12 +67,21 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 
 	_ = metrics.Report("deploy") // TODO: Send cluster type and Helm version
 
-	ipAddress, err := i.CaptureKubectl("get IP address", "get", "-n", "ambassador", "service", "ambassador", "-o", `go-template={{range .status.loadBalancer.ingress}}{{print .ip "\n"}}{{end}}`)
-	if err != nil {
-		return err
+	ipAddress := ""
+	for {
+		var err error
+		ipAddress, err = i.CaptureKubectl("get IP address", "get", "-n", "ambassador", "service", "ambassador", "-o", `go-template={{range .status.loadBalancer.ingress}}{{print .ip "\n"}}{{end}}`)
+		if err != nil {
+			return err
+		}
+		ipAddress = strings.TrimSpace(ipAddress)
+		if ipAddress != "" {
+			break
+		}
+		time.Sleep(250 * time.Millisecond) // FIXME: Time out at some point...
 	}
-	ipAddress = strings.TrimSpace(ipAddress)
-	fmt.Println("Your IP address is", ipAddress) // FIXME: This doesn't wait for an IP address, happily reporting empty string if no address is available yet.
+
+	fmt.Println("Your IP address is", ipAddress)
 
 	// Send a request to register this endpoint
 	// if successful
