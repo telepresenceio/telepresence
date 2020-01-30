@@ -86,7 +86,28 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		time.Sleep(250 * time.Millisecond) // FIXME: Time out at some point...
 	}
 
-	fmt.Println("Your IP address is", ipAddress)
+	fmt.Println("\nYour IP address is", ipAddress)
+
+	// Wait for Ambassador to be ready to serve ACME requests.
+	for {
+		// FIXME: Time out at some point...
+		time.Sleep(500 * time.Millisecond)
+		resp, err := http.Get("http://" + ipAddress + "/.well-known/acme-challenge/")
+		if err != nil {
+			fmt.Printf("Waiting for Ambassador (get): %#v\n", err)
+			continue
+		}
+		resp.Body.Close()
+		if resp.StatusCode != 404 {
+			fmt.Printf("Waiting for Ambassador: wrong status code: %d\n", resp.StatusCode)
+			continue
+		}
+		if resp.Header.Get("server") != "envoy" {
+			fmt.Printf("Waiting for Ambassador: wrong server header: %s\n", resp.Header.Get("server"))
+			continue
+		}
+		break
+	}
 
 	// Send a request to acquire a DNS name for this cluster's IP address
 	regURL := "https://metriton.datawire.io/beta/register-domain"
