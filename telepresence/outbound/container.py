@@ -71,6 +71,45 @@ def parse_resolv_conf(contents: str) -> List[str]:
     return res
 
 
+def parse_hosts(contents: str) -> List[str]:
+    """
+    Try to extract IP, and corresponding host names from hosts file.
+    """
+    res = []
+    for line in contents.splitlines():
+        line = line.strip()
+
+        if not line or line.startswith("#"):
+            continue
+
+        tokens = line.split()
+        ip = tokens[0]
+        hosts = tokens[1:]
+
+        if ip == "127.0.0.1" or not validate_ip(ip):
+            continue
+
+        for host in hosts:
+            if host.startswith("#") or host == "localhost" or host == "broadcasthost":
+                break
+            res.append("--add-host={}:{}".format(host, ip))
+
+    return res
+
+
+def validate_ip(s):
+    a = s.split('.')
+    if len(a) != 4:
+        return False
+    for x in a:
+        if not x.isdigit():
+            return False
+        i = int(x)
+        if i < 0 or i > 255:
+            return False
+    return True
+
+
 def run_docker_command(
     runner: Runner,
     remote_info: RemoteInfo,
@@ -120,6 +159,8 @@ def run_docker_command(
     dns_args = []
     if "hostname" in pod_info:
         dns_args.append("--hostname={}".format(pod_info["hostname"].strip()))
+    if "hosts" in pod_info:
+        dns_args.extend(parse_hosts(pod_info["hosts"]))
     if "resolv" in pod_info:
         dns_args.extend(parse_resolv_conf(pod_info["resolv"]))
 
