@@ -163,11 +163,24 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		}
 
 	} else {
-		fmt.Println("-> Failed to create a DNS name", content)
-		//   if reachable from host (e.g., k3s, special case for Minikube?)
-		//     open a browser window to http...
-		//   else
-		//     suggest port-forward to reach policy console?
+		message := strings.TrimSpace(string(content))
+		fmt.Println("\n-> Failed to create a DNS name:", message)
+		fmt.Println()
+		fmt.Println("If this IP address is reachable from here, then the following command")
+		fmt.Println("will open the Edge Policy Console once you accept a self-signed")
+		fmt.Println("certificate in your browser.")
+		fmt.Println()
+		fmt.Println("    edgectl login -n ambassador", ipAddress)
+		fmt.Println()
+		fmt.Println("If the IP is not reachable from here, you can use port forwarding to")
+		fmt.Println("access the Edge Policy Console.")
+		fmt.Println()
+		fmt.Println("    kubectl -n ambassador port-forward deploy/ambassador 8443 &")
+		fmt.Println("    edgectl login -n ambassador 127.0.0.1:8443")
+		fmt.Println()
+		fmt.Println("You will need to accept a self-signed certificate in your browser.")
+		fmt.Println()
+		fmt.Println("See https://www.getambassador.io/user-guide/getting-started/")
 	}
 
 	_ = metrics.Report("aes_health_good") // or aes_health_bad TODO: Send cluster's install_id and AES version
@@ -236,7 +249,7 @@ func NewMetrics() *Metrics {
 }
 
 func (m *Metrics) Report(eventName string) error {
-	fmt.Println("-> [Metrics]", eventName)
+	fmt.Println("\n-> [Metrics]", eventName)
 	return nil
 }
 
