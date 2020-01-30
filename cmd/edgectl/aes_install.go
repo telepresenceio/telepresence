@@ -157,7 +157,10 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		// TODO: Open browser (do edgectl login)
+		// Open a browser window to the Edge Policy Console
+		if err := do_login(kubeinfo, context, "ambassador", hostname, false, false); err != nil {
+			return err
+		}
 
 	} else {
 		fmt.Println("-> Failed to create a DNS name", content)
