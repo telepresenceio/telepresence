@@ -89,6 +89,8 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	fmt.Println("\nYour IP address is", ipAddress)
 
 	// Wait for Ambassador to be ready to serve ACME requests.
+	// FIXME: This assumes we can connect to the load balancer. If this
+	// assumption is incorrect, this code will loop forever.
 	for {
 		// FIXME: Time out at some point...
 		time.Sleep(500 * time.Millisecond)
@@ -97,6 +99,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 			fmt.Printf("Waiting for Ambassador (get): %#v\n", err)
 			continue
 		}
+		_, _ = ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
 		if resp.StatusCode != 404 {
 			fmt.Printf("Waiting for Ambassador: wrong status code: %d\n", resp.StatusCode)
