@@ -31,8 +31,16 @@ func aesLogin(cmd *cobra.Command, args []string) error {
 	justShowURL, _ := cmd.Flags().GetBool("url")
 	showToken, _ := cmd.Flags().GetBool("token")
 
+	// Figure out the correct hostname
+	hostname := args[0]
+
 	// Prepare to talk to the cluster
-	kubeinfo := k8s.NewKubeInfo("", context, namespace) // Default namespace here
+	kubeinfo := k8s.NewKubeInfo("", context, namespace) // Default namespace is "ambassador"
+
+	return do_login(kubeinfo, context, namespace, hostname, justShowURL, showToken)
+}
+
+func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, justShowURL, showToken bool) error {
 	restconfig, err := kubeinfo.GetRestConfig()
 	if err != nil {
 		return errors.Wrap(err, "Failed to connect to cluster (rest)")
@@ -50,8 +58,6 @@ func aesLogin(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Figure out the correct hostname
-	hostname := args[0]
 	// FIXME: validate that hostname by querying
 	// https://{{hostname}}/edge_stack/admin/api/ambassador_cluster_id and
 	// verifying that it returns the same UUID via direct access and via
@@ -104,6 +110,8 @@ func aesLogin(cmd *cobra.Command, args []string) error {
 	return err
 }
 
+// getSigningKey retrieves the designated secret from the cluster and returns
+// the private key extracted from the secret data
 func getSigningKey(restconfig *rest.Config, namespace string) (*rsa.PrivateKey, error) {
 	coreClient, err := k8sClientCoreV1.NewForConfig(restconfig)
 	if err != nil {
