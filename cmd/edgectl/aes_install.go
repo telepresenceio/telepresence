@@ -41,6 +41,16 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	_ = metrics.Report("install")
 
 	// Display version information
+	// TODO: This displays the version of Edge Control, not the image version in
+	// the manifests being downloaded. We should figure out what to do if those
+	// don't match up.
+	// 1. Allow an old Edge Control to install a newer AES
+	// 2. Insist that Edge Control be the same version as the AES it's installing
+	// 3. Something else?
+	// Note that the second option will allow us to make the install process
+	// more complicated in the future without having to subject our users to
+	// increasing complexity, assuming this approach to installation gains
+	// traction.
 	fmt.Printf("-> Installing the Ambassador Edge Stack %s\n", Version)
 
 	// Attempt to talk to the specified cluster
@@ -94,6 +104,8 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	for {
 		// FIXME: Time out at some point...
 		time.Sleep(500 * time.Millisecond)
+
+		// Verify that we can connect to something
 		resp, err := http.Get("http://" + ipAddress + "/.well-known/acme-challenge/")
 		if err != nil {
 			fmt.Printf("Waiting for Ambassador (get): %#v\n", err)
@@ -101,10 +113,16 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		}
 		_, _ = ioutil.ReadAll(resp.Body)
 		resp.Body.Close()
+
+		// Verify that we get the expected status code. If Ambassador is still
+		// starting up, then Envoy may return "upstream request timeout" (503),
+		// in which case we should keep looping.
 		if resp.StatusCode != 404 {
 			fmt.Printf("Waiting for Ambassador: wrong status code: %d\n", resp.StatusCode)
 			continue
 		}
+
+		// Sanity check that we're talking to Envoy. This is probably unnecessary.
 		if resp.Header.Get("server") != "envoy" {
 			fmt.Printf("Waiting for Ambassador: wrong server header: %s\n", resp.Header.Get("server"))
 			continue
