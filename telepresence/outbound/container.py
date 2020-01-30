@@ -90,7 +90,9 @@ def parse_hosts(contents: str) -> List[str]:
             continue
 
         for host in hosts:
-            if host.startswith("#") or host == "localhost" or host == "broadcasthost":
+            if host.startswith(
+                "#"
+            ) or host == "localhost" or host == "broadcasthost":
                 break
             res.append("--add-host={}:{}".format(host, ip))
 
