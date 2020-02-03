@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+import ipaddress
 import json
 import os
 import os.path
@@ -100,16 +101,12 @@ def parse_hosts(contents: str) -> List[str]:
 
 
 def validate_ip(s):
-    a = s.split('.')
-    if len(a) != 4:
+
+    try:
+        ipaddress.ip_address(s)
+        return True
+    except ValueError:
         return False
-    for x in a:
-        if not x.isdigit():
-            return False
-        i = int(x)
-        if i < 0 or i > 255:
-            return False
-    return True
 
 
 def run_docker_command(
@@ -275,3 +272,7 @@ def run_docker_command(
 
     runner.add_cleanup("Terminate local container", terminate_if_alive)
     return process
+
+
+print(validate_ip("Fred"))
+print(validate_ip("192.168.0.1"))
