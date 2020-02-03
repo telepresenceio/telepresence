@@ -282,16 +282,23 @@ type registration struct {
 // Metrics
 
 type Metrics struct {
-	InstallID string
+	scout *Scout
 }
 
 func NewMetrics() *Metrics {
-	// TODO: Read or create an installation ID
-	return nil
+	scout, err := NewScout("install")
+	if err != nil {
+		// Don't crash if Scout stuff doesn't work
+		scout = nil
+	}
+	return &Metrics{scout}
 }
 
-func (m *Metrics) Report(eventName string) error {
+func (m *Metrics) Report(eventName string, meta ...ScoutMeta) error {
 	fmt.Println("\n-> [Metrics]", eventName)
+	if m.scout != nil {
+		_ = m.scout.Report(eventName, meta...)
+	}
 	return nil
 }
 
