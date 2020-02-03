@@ -272,7 +272,3 @@ def run_docker_command(
 
     runner.add_cleanup("Terminate local container", terminate_if_alive)
     return process
-
-
-print(validate_ip("Fred"))
-print(validate_ip("192.168.0.1"))
