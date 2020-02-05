@@ -297,7 +297,9 @@ func NewMetrics() *Metrics {
 func (m *Metrics) Report(eventName string, meta ...ScoutMeta) error {
 	fmt.Println("\n-> [Metrics]", eventName)
 	if m.scout != nil {
-		_ = m.scout.Report(eventName, meta...)
+		if err := m.scout.Report(eventName, meta...); err != nil {
+			fmt.Println("            ", err)
+		}
 	}
 	return nil
 }
