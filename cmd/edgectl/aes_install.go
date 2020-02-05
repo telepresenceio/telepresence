@@ -269,6 +269,7 @@ func (i *Installer) CaptureKubectl(name string, args ...string) (res string, err
 		err = errors.Wrap(err, name)
 	}
 	res = string(resAsBytes)
+	fmt.Println(res)
 	return
 }
 
