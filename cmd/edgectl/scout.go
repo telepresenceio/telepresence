@@ -71,7 +71,7 @@ func NewScout(mode string) (*Scout, error) {
 
 func (s *Scout) SetClusterID(clusterID string) {
 	if s.clusterID != "" {
-		panic(fmt.Sprintf("Trying to replace cluster ID %q with %q", s.clusterID, clusterID))
+		panic(fmt.Sprintf("trying to replace cluster ID %q with %q", s.clusterID, clusterID))
 	}
 	s.clusterID = clusterID
 }

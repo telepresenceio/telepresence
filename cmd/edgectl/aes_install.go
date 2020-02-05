@@ -80,7 +80,10 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Grab Ambassador's install ID as the cluster ID we'll send going forward
+	// Grab Ambassador's install ID as the cluster ID we'll send going forward.
+	// Note: Using "kubectl exec" has the side effect of making sure the Pod is
+	// Running (though not necessarily Ready). This should be good enough to
+	// report the "deploy" status to metrics.
 	for {
 		if clusterID, err := i.CaptureKubectl("get cluster ID", "-n", "ambassador", "exec", "deploy/ambassador", "python3", "kubewatch.py"); err == nil {
 			metrics.SetClusterID(strings.TrimSpace(clusterID))
