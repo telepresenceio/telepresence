@@ -80,6 +80,15 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Grab Ambassador's install ID as the cluster ID we'll send going forward
+	for {
+		if clusterID, err := i.CaptureKubectl("get cluster ID", "-n", "ambassador", "exec", "deploy/ambassador", "python3", "kubewatch.py"); err == nil {
+			metrics.SetClusterID(strings.TrimSpace(clusterID))
+			break
+		}
+		time.Sleep(500 * time.Millisecond) // FIXME: Time out at some point...
+	}
+
 	_ = metrics.Report("deploy") // TODO: Send cluster type and Helm version
 
 	ipAddress := ""
@@ -293,6 +302,13 @@ func NewMetrics() *Metrics {
 		scout = nil
 	}
 	return &Metrics{scout}
+}
+
+func (m *Metrics) SetClusterID(clusterID string) {
+	fmt.Println("\n-> [Metrics] Cluster ID (AES install ID) is", clusterID)
+	if m.scout != nil {
+		m.scout.SetClusterID(clusterID)
+	}
 }
 
 func (m *Metrics) Report(eventName string, meta ...ScoutMeta) error {
