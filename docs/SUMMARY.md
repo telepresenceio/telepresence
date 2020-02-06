@@ -18,6 +18,7 @@
 * [Rapid development with Kubernetes](tutorials/kubernetes-rapid.md)
 * [Get started with OpenShift](tutorials/openshift.md)
 * [Minikube VPN access](tutorials/minikube-vpn.md)
+* [Using Telepresence with Golang](tutorials/kubernetes-client-libs.md)
 * [Using Telepresence with Golang](howto/golang.md)
 * [Local Java development](tutorials/java.md)
 * [Using Telepresence with IntelliJ](tutorials/intellij.md)
