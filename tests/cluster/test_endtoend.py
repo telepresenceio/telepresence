@@ -459,6 +459,7 @@ def test_resolve_names(probe):
     success, reply = loads(result.read())
     assert success and IPv4Address(reply), reply
 
+
 @with_probe
 def test_resolve_host_alias(probe):
     """
