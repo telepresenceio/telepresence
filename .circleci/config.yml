@@ -148,10 +148,10 @@ jobs:
             echo 'export GOOGLE_APPLICATION_CREDENTIALS=${PWD}/gcloud-service-key.json' >> ${BASH_ENV}
 
       - run: make virtualenv
-      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=/tmp/test-reports/junit.xml'
+      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
-          path: /tmp/test-reports
+          path: test-reports
 
       - run: ./ci/clean-cluster.py
           # We can do this at the end of the Linux build because it has a
@@ -194,10 +194,10 @@ jobs:
             - "~/google-cloud-sdk/"
 
       - run: make virtualenv
-      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=/tmp/test-reports/junit.xml'
+      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
-          path: /tmp/test-reports
+          path: test-reports
 
   linux-kubernaut:
     machine:
@@ -213,10 +213,10 @@ jobs:
       - kubernaut-claim
       - run: kubectl cluster-info
       - run: make virtualenv
-      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=/tmp/test-reports/junit.xml'
+      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
-          path: /tmp/test-reports
+          path: test-reports
       - kubernaut-discard
 
   linux-k3s:
@@ -233,10 +233,10 @@ jobs:
       - launch-k3s-cluster
       - run: make virtualenv
       - run: kubectl cluster-info
-      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=/tmp/test-reports/junit.xml'
+      - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest
-          path: /tmp/test-reports
+          path: test-reports
 
   build-testbench:
     # Use the Machine executor for now.
