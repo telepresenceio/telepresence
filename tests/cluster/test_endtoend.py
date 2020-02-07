@@ -459,6 +459,16 @@ def test_resolve_names(probe):
     success, reply = loads(result.read())
     assert success and IPv4Address(reply), reply
 
+@with_probe
+def test_resolve_host_alias(probe):
+    """
+    Name resolution is performed in the context of the Kubernetes cluster.
+    """
+    result = probe.result()
+    result.write("gethostbyname foo.local")
+    success, reply = loads(result.read())
+    assert success and IPv4Address(reply) and "127.0.0.1" in reply[0], reply
+
 
 @with_probe
 def test_resolve_names_failure(probe):
