@@ -85,6 +85,8 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	// Running (though not necessarily Ready). This should be good enough to
 	// report the "deploy" status to metrics.
 	for {
+		// FIXME This doesn't work with `kubectl` 1.13 (and possibly 1.14). We
+		// FIXME need to discover and use the pod name with `kubectl exec`.
 		if clusterID, err := i.CaptureKubectl("get cluster ID", "-n", "ambassador", "exec", "deploy/ambassador", "python3", "kubewatch.py"); err == nil {
 			metrics.SetClusterID(strings.TrimSpace(clusterID))
 			break
@@ -276,7 +278,7 @@ func (i *Installer) CaptureKubectl(name string, args ...string) (res string, err
 	resAsBytes, err := cmd.Output()
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
-			fmt.Println(ee.Stderr)
+			fmt.Println(string(ee.Stderr))
 		}
 		err = errors.Wrap(err, name)
 	}
