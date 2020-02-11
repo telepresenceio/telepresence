@@ -15,6 +15,7 @@ import (
 
 type Scout struct {
 	installID string
+	index     int
 	metadata  map[string]interface{}
 }
 
@@ -67,6 +68,7 @@ func NewScout(mode string) (*Scout, error) {
 	metadata := make(map[string]interface{})
 	metadata["mode"] = mode
 	metadata["new_install"] = newInstall
+	metadata["trace_id"] = uuid.New().String()
 	res := &Scout{installID: installID, metadata: metadata}
 	return res, nil
 }
@@ -84,8 +86,15 @@ func (s *Scout) Report(action string, meta ...ScoutMeta) error {
 		return nil
 	}
 
+	// Construct the report's metadata. Include the fixed (growing) set of
+	// metadata in the Scout structure and the pairs passed as arguments to this
+	// call. Also include and increment the index, which can be used to
+	// determine the correct order of reported events for this installation
+	// attempt (correlated by the trace_id set at the start).
+	s.index++
 	metadata := map[string]interface{}{
 		"action": action,
+		"index":  s.index,
 	}
 	for metaKey, metaValue := range s.metadata {
 		metadata[metaKey] = metaValue
