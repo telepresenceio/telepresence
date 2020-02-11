@@ -312,7 +312,7 @@ func NewMetrics() *Metrics {
 func (m *Metrics) SetClusterID(clusterID string) {
 	fmt.Println("\n-> [Metrics] Cluster ID (AES install ID) is", clusterID)
 	if m.scout != nil {
-		m.scout.SetClusterID(clusterID)
+		m.scout.SetMetadatum("aes_install_id", clusterID)
 	}
 }
 

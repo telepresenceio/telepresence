@@ -14,10 +14,8 @@ import (
 )
 
 type Scout struct {
-	mode       string
-	installID  string
-	newInstall bool
-	clusterID  string
+	installID string
+	metadata  map[string]interface{}
 }
 
 type ScoutMeta struct {
@@ -66,14 +64,19 @@ func NewScout(mode string) (*Scout, error) {
 		return nil, err
 	}
 
-	return &Scout{mode, installID, newInstall, ""}, nil
+	metadata := make(map[string]interface{})
+	metadata["mode"] = mode
+	metadata["new_install"] = newInstall
+	res := &Scout{installID: installID, metadata: metadata}
+	return res, nil
 }
 
-func (s *Scout) SetClusterID(clusterID string) {
-	if s.clusterID != "" {
-		panic(fmt.Sprintf("trying to replace cluster ID %q with %q", s.clusterID, clusterID))
+func (s *Scout) SetMetadatum(key string, value interface{}) {
+	oldValue, ok := s.metadata[key]
+	if ok {
+		panic(fmt.Sprintf("trying to replace metadata[%q] = %q with %q", key, oldValue, value))
 	}
-	s.clusterID = clusterID
+	s.metadata[key] = value
 }
 
 func (s *Scout) Report(action string, meta ...ScoutMeta) error {
@@ -82,12 +85,10 @@ func (s *Scout) Report(action string, meta ...ScoutMeta) error {
 	}
 
 	metadata := map[string]interface{}{
-		"mode":        s.mode,
-		"new_install": s.newInstall,
-		"action":      action,
+		"action": action,
 	}
-	if s.clusterID != "" {
-		metadata["aes_install_id"] = s.clusterID
+	for metaKey, metaValue := range s.metadata {
+		metadata[metaKey] = metaValue
 	}
 	for _, metaItem := range meta {
 		metadata[metaItem.Key] = metaItem.Value
