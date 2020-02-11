@@ -37,8 +37,8 @@ func aesInstallCmd() *cobra.Command {
 }
 
 func aesInstall(cmd *cobra.Command, args []string) error {
-	metrics := NewMetrics()
-	_ = metrics.Report("install")
+	installer := NewInstaller()
+	installer.Report("install")
 
 	// Display version information
 	// TODO: This displays the version of Edge Control, not the image version in
@@ -56,27 +56,25 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	// Attempt to talk to the specified cluster
 	context, _ := cmd.Flags().GetString("context")
 	namespace, _ := cmd.Flags().GetString("namespace")
-	kubeinfo := k8s.NewKubeInfo("", context, namespace)
-	i := &Installer{
-		kubeinfo,
-	}
-	if err := i.ShowKubectl("cluster-info", "cluster-info"); err != nil {
+	installer.kubeinfo = k8s.NewKubeInfo("", context, namespace)
+
+	if err := installer.ShowKubectl("cluster-info", "cluster-info"); err != nil {
 		return err
 	}
 
-	if err := i.ShowKubectl("install CRDs", "apply", "-f", "https://www.getambassador.io/yaml/aes-crds.yaml"); err != nil {
+	if err := installer.ShowKubectl("install CRDs", "apply", "-f", "https://www.getambassador.io/yaml/aes-crds.yaml"); err != nil {
 		return err
 	}
 
-	if err := i.ShowKubectl("wait for CRDs", "wait", "--for", "condition=established", "--timeout=90s", "crd", "-lproduct=aes"); err != nil {
+	if err := installer.ShowKubectl("wait for CRDs", "wait", "--for", "condition=established", "--timeout=90s", "crd", "-lproduct=aes"); err != nil {
 		return err
 	}
 
-	if err := i.ShowKubectl("install AES", "apply", "-f", "https://www.getambassador.io/yaml/aes.yaml"); err != nil {
+	if err := installer.ShowKubectl("install AES", "apply", "-f", "https://www.getambassador.io/yaml/aes.yaml"); err != nil {
 		return err
 	}
 
-	if err := i.ShowKubectl("wait for AES", "-n", "ambassador", "wait", "--for", "condition=available", "--timeout=90s", "deploy", "-lproduct=aes"); err != nil {
+	if err := installer.ShowKubectl("wait for AES", "-n", "ambassador", "wait", "--for", "condition=available", "--timeout=90s", "deploy", "-lproduct=aes"); err != nil {
 		return err
 	}
 
@@ -87,19 +85,19 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	for {
 		// FIXME This doesn't work with `kubectl` 1.13 (and possibly 1.14). We
 		// FIXME need to discover and use the pod name with `kubectl exec`.
-		if clusterID, err := i.CaptureKubectl("get cluster ID", "-n", "ambassador", "exec", "deploy/ambassador", "python3", "kubewatch.py"); err == nil {
-			metrics.SetClusterID(strings.TrimSpace(clusterID))
+		if clusterID, err := installer.CaptureKubectl("get cluster ID", "-n", "ambassador", "exec", "deploy/ambassador", "python3", "kubewatch.py"); err == nil {
+			installer.SetMetadatum("Cluster ID", "aes_install_id", clusterID)
 			break
 		}
 		time.Sleep(500 * time.Millisecond) // FIXME: Time out at some point...
 	}
 
-	_ = metrics.Report("deploy") // TODO: Send cluster type and Helm version
+	installer.Report("deploy") // TODO: Send cluster type and Helm version
 
 	ipAddress := ""
 	for {
 		var err error
-		ipAddress, err = i.CaptureKubectl("get IP address", "get", "-n", "ambassador", "service", "ambassador", "-o", `go-template={{range .status.loadBalancer.ingress}}{{print .ip "\n"}}{{end}}`)
+		ipAddress, err = installer.CaptureKubectl("get IP address", "get", "-n", "ambassador", "service", "ambassador", "-o", `go-template={{range .status.loadBalancer.ingress}}{{print .ip "\n"}}{{end}}`)
 		if err != nil {
 			return err
 		}
@@ -180,7 +178,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		fmt.Println("FIXME: let the user enter an address")
 		// Create a Host resource
 		hostResource := fmt.Sprintf(hostManifest, hostname, namespace, hostname, emailAddress)
-		kargs, err := i.kubeinfo.GetKubectlArray("apply", "-f", "-")
+		kargs, err := installer.kubeinfo.GetKubectlArray("apply", "-f", "-")
 		if err != nil {
 			return errors.Wrapf(err, "cluster access for install AES")
 		}
@@ -196,7 +194,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		fmt.Println("\n-> Obtaining a TLS certificate from Let's Encrypt")
 
 		for {
-			state, err := i.CaptureKubectl("get Host state", "get", "host", hostname, "-o", "go-template={{.status.state}}")
+			state, err := installer.CaptureKubectl("get Host state", "get", "host", hostname, "-o", "go-template={{.status.state}}")
 			if err != nil {
 				return err
 			}
@@ -207,14 +205,14 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 			// FIXME: Do something smart for state == "Error"
 		}
 
-		_ = metrics.Report("cert_provisioned")
+		installer.Report("cert_provisioned")
 		fmt.Println("-> TLS configured successfully")
-		if err := i.ShowKubectl("show Host", "get", "host", hostname); err != nil {
+		if err := installer.ShowKubectl("show Host", "get", "host", hostname); err != nil {
 			return err
 		}
 
 		// Open a browser window to the Edge Policy Console
-		if err := do_login(kubeinfo, context, "ambassador", hostname, false, false); err != nil {
+		if err := do_login(installer.kubeinfo, context, "ambassador", hostname, false, false); err != nil {
 			return err
 		}
 
@@ -239,13 +237,20 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		fmt.Println("See https://www.getambassador.io/user-guide/getting-started/")
 	}
 
-	_ = metrics.Report("aes_health_good") // or aes_health_bad TODO: Send cluster's install_id and AES version
+	installer.Report("aes_health_good") // or aes_health_bad TODO: Send cluster's install_id and AES version
 
 	return nil
 }
 
 type Installer struct {
 	kubeinfo *k8s.KubeInfo
+	scout    *Scout
+}
+
+func NewInstaller() *Installer {
+	return &Installer{
+		scout: NewScout("install"),
+	}
 }
 
 // Kubernetes Cluster
@@ -287,43 +292,25 @@ func (i *Installer) CaptureKubectl(name string, args ...string) (res string, err
 	return
 }
 
+// Metrics
+
+func (i *Installer) SetMetadatum(name, key string, value interface{}) {
+	fmt.Printf("\n-> [Metrics] %s (%q) is %q", name, key, value)
+	i.scout.SetMetadatum(key, value)
+}
+
+func (i *Installer) Report(eventName string, meta ...ScoutMeta) {
+	fmt.Println("\n-> [Metrics]", eventName)
+	if err := i.scout.Report(eventName, meta...); err != nil {
+		fmt.Println("            ", err)
+	}
+}
+
 // DNS Registration
 
 type registration struct {
 	Email string
 	Ip    string
-}
-
-// Metrics
-
-type Metrics struct {
-	scout *Scout
-}
-
-func NewMetrics() *Metrics {
-	scout, err := NewScout("install")
-	if err != nil {
-		// Don't crash if Scout stuff doesn't work
-		scout = nil
-	}
-	return &Metrics{scout}
-}
-
-func (m *Metrics) SetClusterID(clusterID string) {
-	fmt.Println("\n-> [Metrics] Cluster ID (AES install ID) is", clusterID)
-	if m.scout != nil {
-		m.scout.SetMetadatum("aes_install_id", clusterID)
-	}
-}
-
-func (m *Metrics) Report(eventName string, meta ...ScoutMeta) error {
-	fmt.Println("\n-> [Metrics]", eventName)
-	if m.scout != nil {
-		if err := m.scout.Report(eventName, meta...); err != nil {
-			fmt.Println("            ", err)
-		}
-	}
-	return nil
 }
 
 const hostManifest = `

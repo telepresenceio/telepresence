@@ -24,9 +24,14 @@ type ScoutMeta struct {
 	Value interface{}
 }
 
-func NewScout(mode string) (*Scout, error) {
-	var installID string
-	var newInstall bool
+func NewScout(mode string) (s *Scout) {
+	// Fixed (growing) metadata passed with every report
+	metadata := make(map[string]interface{})
+	metadata["mode"] = mode
+	metadata["trace_id"] = uuid.New().String()
+
+	// The result
+	s = &Scout{metadata: metadata}
 
 	// Get or create the persistent install ID for Edge Control
 	err := func() error {
@@ -36,41 +41,39 @@ func NewScout(mode string) (*Scout, error) {
 		// definitely different on MacOS.
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return errors.Wrap(err, "install ID")
+			return err
 		}
 		configDir := filepath.Join(home, ".config", "edgectl")
 		if err := os.MkdirAll(configDir, 0755); err != nil {
-			return errors.Wrap(err, "install ID")
+			return err
 		}
 		idFilename := filepath.Join(configDir, "id")
 
 		// Try to read an existing install ID
 		if installIDBytes, err := ioutil.ReadFile(idFilename); err == nil {
-			installID = string(installIDBytes)
+			s.installID = string(installIDBytes)
 			// Validate UUID format
-			if _, err := uuid.Parse(installID); err == nil {
-				newInstall = false
+			if _, err := uuid.Parse(s.installID); err == nil {
+				metadata["new_install"] = false
 				return nil
 			} // else the value is not a UUID
 		} // else file doesn't exist, etc.
 
 		// Try to create a new install ID
-		installID = uuid.New().String()
-		if err := ioutil.WriteFile(idFilename, []byte(installID), 0755); err != nil {
-			return errors.Wrap(err, "install ID")
+		s.installID = uuid.New().String()
+		metadata["new_install"] = true
+		if err := ioutil.WriteFile(idFilename, []byte(s.installID), 0755); err != nil {
+			return err
 		}
 		return nil
 	}()
 	if err != nil {
-		return nil, err
+		s.installID = "00000000-0000-0000-0000-000000000000"
+		metadata["new_install"] = true
+		metadata["install_id_error"] = err.Error()
 	}
 
-	metadata := make(map[string]interface{})
-	metadata["mode"] = mode
-	metadata["new_install"] = newInstall
-	metadata["trace_id"] = uuid.New().String()
-	res := &Scout{installID: installID, metadata: metadata}
-	return res, nil
+	return
 }
 
 func (s *Scout) SetMetadatum(key string, value interface{}) {
