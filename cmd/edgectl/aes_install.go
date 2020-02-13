@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -30,16 +31,16 @@ func aesInstallCmd() *cobra.Command {
 		"context", "c", "",
 		"The Kubernetes context to use. Defaults to the current kubectl context.",
 	)
-	_ = res.Flags().StringP(
-		"namespace", "n", "",
-		"The Kubernetes namespace to use. Defaults to kubectl's default for the context.",
+	_ = res.Flags().BoolP(
+		"verbose", "v", false,
+		"Show all output. Defaults to sending most output to the logfile.",
 	)
-
 	return res
 }
 
 func aesInstall(cmd *cobra.Command, args []string) error {
-	i := NewInstaller()
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	i := NewInstaller(verbose)
 	i.Report("install")
 
 	// Display version information
@@ -57,8 +58,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 
 	// Attempt to talk to the specified cluster
 	context, _ := cmd.Flags().GetString("context")
-	namespace, _ := cmd.Flags().GetString("namespace")
-	i.kubeinfo = k8s.NewKubeInfo("", context, namespace)
+	i.kubeinfo = k8s.NewKubeInfo("", context, "")
 
 	if err := i.ShowKubectl("cluster-info", "cluster-info"); err != nil {
 		return err
@@ -179,7 +179,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		i.show.Println("Please enter an email address. We'll use this email address to notify you prior to domain and certification expiration [None]:", emailAddress)
 		i.show.Println("FIXME: let the user enter an address")
 		// Create a Host resource
-		hostResource := fmt.Sprintf(hostManifest, hostname, namespace, hostname, emailAddress)
+		hostResource := fmt.Sprintf(hostManifest, hostname, hostname, emailAddress)
 		kargs, err := i.kubeinfo.GetKubectlArray("apply", "-f", "-")
 		if err != nil {
 			return errors.Wrapf(err, "cluster access for install AES")
@@ -251,19 +251,35 @@ type Installer struct {
 	log      *log.Logger
 	cmdOut   *log.Logger
 	cmdErr   *log.Logger
+	logName  string
 }
 
-func NewInstaller() *Installer {
+func NewInstaller(verbose bool) *Installer {
 	// Although log, cmdOut, and cmdErr *can* go to different files and/or have
 	// different prefixes, they'll probably all go to the same file, possibly
 	// with different prefixes, for most cases.
-	return &Installer{
-		scout:  NewScout("install"),
-		show:   log.New(os.Stderr, "", 0),
-		log:    log.New(os.Stderr, "* ", log.Ltime),
-		cmdOut: log.New(os.Stderr, "  ", log.Ltime),
-		cmdErr: log.New(os.Stderr, "x ", log.Ltime),
+	logfileName := filepath.Join(os.TempDir(), time.Now().Format("edgectl-install-20060102-150405.log"))
+	logfile, err := os.Create(logfileName)
+	if err != nil {
+		logfile = os.Stderr
+		fmt.Fprintf(logfile, "WARNING: Failed to open logfile %q: %+v\n", logfileName, err)
 	}
+	i := &Installer{
+		scout:   NewScout("install"),
+		show:    log.New(io.MultiWriter(os.Stdout, logfile), "", 0),
+		logName: logfileName,
+	}
+	if verbose {
+		i.log = log.New(io.MultiWriter(logfile, NewLoggingWriter(log.New(os.Stderr, "== ", 0))), "", log.Ltime)
+		i.cmdOut = log.New(io.MultiWriter(logfile, NewLoggingWriter(log.New(os.Stderr, "=- ", 0))), "", 0)
+		i.cmdErr = log.New(io.MultiWriter(logfile, NewLoggingWriter(log.New(os.Stderr, "=x ", 0))), "", 0)
+	} else {
+		i.log = log.New(logfile, "", log.Ltime)
+		i.cmdOut = log.New(logfile, "", 0)
+		i.cmdErr = log.New(logfile, "", 0)
+	}
+
+	return i
 }
 
 // Kubernetes Cluster
@@ -329,7 +345,6 @@ apiVersion: getambassador.io/v2
 kind: Host
 metadata:
   name: %s
-  namespace: %s
 spec:
   hostname: %s
   acmeProvider:
