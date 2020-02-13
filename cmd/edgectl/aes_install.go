@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -36,6 +38,37 @@ func aesInstallCmd() *cobra.Command {
 		"Show all output. Defaults to sending most output to the logfile.",
 	)
 	return res
+}
+
+func getEmailAddress(defaultEmail string, log *log.Logger) string {
+	prompt := fmt.Sprintf("Email address [%s]: ", defaultEmail)
+	errorFallback := defaultEmail
+	if defaultEmail == "" {
+		prompt = "Email address: "
+		errorFallback = "email_query_failure@datawire.io"
+	}
+
+	for {
+		fmt.Print(prompt)
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
+		text := scanner.Text()
+		if err := scanner.Err(); err != nil {
+			log.Printf("Email query failed: %+v", err)
+			return errorFallback
+		}
+
+		text = strings.TrimSpace(text)
+		if defaultEmail != "" && text == "" {
+			return defaultEmail
+		}
+
+		if validEmailAddress.MatchString(text) {
+			return text
+		}
+
+		fmt.Printf("Sorry, %q does not match our email address filter.\n", text)
+	}
 }
 
 func aesInstall(cmd *cobra.Command, args []string) error {
@@ -110,7 +143,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		time.Sleep(250 * time.Millisecond) // FIXME: Time out at some point...
 	}
 
-	i.show.Println("\nYour IP address is", ipAddress)
+	i.show.Println("Your IP address is", ipAddress)
 
 	// Wait for Ambassador to be ready to serve ACME requests.
 	// FIXME: This assumes we can connect to the load balancer. If this
@@ -144,9 +177,27 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		break
 	}
 
+	i.show.Println("-> Automatically configuring TLS")
+
+	// Attempt to grab a reasonable default for the user's email address
+	defaultEmail, err := i.Capture("get email", "git", "config", "--global", "user.email")
+	if err != nil {
+		i.log.Print(err)
+		defaultEmail = ""
+	} else {
+		defaultEmail = strings.TrimSpace(defaultEmail)
+		if !validEmailAddress.MatchString(defaultEmail) {
+			defaultEmail = ""
+		}
+	}
+
+	// Ask for the user's email address
+	i.show.Println(emailAsk)
+	emailAddress := getEmailAddress(defaultEmail, i.log)
+	i.log.Printf("Using email address %q", emailAddress)
+
 	// Send a request to acquire a DNS name for this cluster's IP address
 	regURL := "https://metriton.datawire.io/beta/register-domain"
-	emailAddress := "ark3+eci@datawire.io"
 	buf := new(bytes.Buffer)
 	_ = json.NewEncoder(buf).Encode(registration{emailAddress, ipAddress})
 	resp, err := http.Post(regURL, "application/json", buf)
@@ -175,9 +226,6 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 			// i.show.Printf("Waiting for DNS: %#v\n", err)
 			time.Sleep(500 * time.Millisecond)
 		}
-		i.show.Println("-> Automatically configuring TLS")
-		i.show.Println("Please enter an email address. We'll use this email address to notify you prior to domain and certification expiration [None]:", emailAddress)
-		i.show.Println("FIXME: let the user enter an address")
 		// Create a Host resource
 		hostResource := fmt.Sprintf(hostManifest, hostname, hostname, emailAddress)
 		kargs, err := i.kubeinfo.GetKubectlArray("apply", "-f", "-")
@@ -193,7 +241,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 			return errors.Wrap(err, "install AES")
 		}
 
-		i.show.Println("\n-> Obtaining a TLS certificate from Let's Encrypt")
+		i.show.Println("-> Obtaining a TLS certificate from Let's Encrypt")
 
 		for {
 			state, err := i.CaptureKubectl("get Host state", "get", "host", hostname, "-o", "go-template={{.status.state}}")
@@ -220,7 +268,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 
 	} else {
 		message := strings.TrimSpace(string(content))
-		i.show.Println("\n-> Failed to create a DNS name:", message)
+		i.show.Println("-> Failed to create a DNS name:", message)
 		i.show.Println()
 		i.show.Println("If this IP address is reachable from here, then the following command")
 		i.show.Println("will open the Edge Policy Console once you accept a self-signed")
@@ -306,9 +354,15 @@ func (i *Installer) CaptureKubectl(name string, args ...string) (res string, err
 		err = errors.Wrapf(err, "cluster access for %s", name)
 		return
 	}
+	kargs = append([]string{"kubectl"}, kargs...)
+	return i.Capture(name, kargs...)
+}
+
+func (i *Installer) Capture(name string, args ...string) (res string, err error) {
+	res = ""
 	resAsBytes := &bytes.Buffer{}
-	i.log.Printf("$ kubectl %s", strings.Join(kargs, " "))
-	cmd := exec.Command("kubectl", kargs...)
+	i.log.Printf("$ %s", strings.Join(args, " "))
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdout = io.MultiWriter(NewLoggingWriter(i.cmdOut), resAsBytes)
 	cmd.Stderr = NewLoggingWriter(i.cmdErr)
 	err = cmd.Run()
@@ -350,3 +404,9 @@ spec:
   acmeProvider:
     email: %s
 `
+
+// FIXME: Mention that this will be shared with Let's Encrypt?
+const emailAsk = `Please enter an email address. We'll use this email address to notify you
+prior to domain and certificate expiration.`
+
+var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
