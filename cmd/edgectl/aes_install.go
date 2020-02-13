@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"time"
 
@@ -275,8 +275,8 @@ func (i *Installer) ShowKubectl(name string, args ...string) error {
 	}
 	i.log.Printf("$ kubectl %s", strings.Join(kargs, " "))
 	cmd := exec.Command("kubectl", kargs...)
-	cmd.Stdout = NewLoggingWriter(i.cmdOut, ioutil.Discard)
-	cmd.Stderr = NewLoggingWriter(i.cmdOut, ioutil.Discard)
+	cmd.Stdout = NewLoggingWriter(i.cmdOut)
+	cmd.Stderr = NewLoggingWriter(i.cmdErr)
 	if err := cmd.Run(); err != nil {
 		return errors.Wrap(err, name)
 	}
@@ -293,8 +293,8 @@ func (i *Installer) CaptureKubectl(name string, args ...string) (res string, err
 	resAsBytes := &bytes.Buffer{}
 	i.log.Printf("$ kubectl %s", strings.Join(kargs, " "))
 	cmd := exec.Command("kubectl", kargs...)
-	cmd.Stdout = NewLoggingWriter(i.cmdOut, resAsBytes)
-	cmd.Stderr = NewLoggingWriter(i.cmdOut, ioutil.Discard)
+	cmd.Stdout = io.MultiWriter(NewLoggingWriter(i.cmdOut), resAsBytes)
+	cmd.Stderr = NewLoggingWriter(i.cmdErr)
 	err = cmd.Run()
 	if err != nil {
 		err = errors.Wrap(err, name)
