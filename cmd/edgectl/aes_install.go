@@ -217,8 +217,8 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		// Wait for DNS to propagate. This tries to avoid waiting for a ten
 		// minute error backoff if the ACME registration races ahead of the DNS
 		// name appearing for LetsEncrypt.
-		for {
-			conn, err := net.Dial("tcp", hostname+":443")
+		for n := 0; n < 1200; n++ {
+			conn, err := net.Dial("tcp", fmt.Sprintf("check-%d.%s:443", n, hostname))
 			if err == nil {
 				conn.Close()
 				break
