@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,12 +13,15 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/datawire/ambassador/pkg/k8s"
+	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -73,7 +77,49 @@ func getEmailAddress(defaultEmail string, log *log.Logger) string {
 
 func aesInstall(cmd *cobra.Command, args []string) error {
 	verbose, _ := cmd.Flags().GetBool("verbose")
+	kcontext, _ := cmd.Flags().GetString("context")
 	i := NewInstaller(verbose)
+
+	sup := supervisor.WithContext(context.Background())
+	sup.Logger = i.log
+
+	sup.Supervise(&supervisor.Worker{
+		Name: "signal",
+		Work: func(p *supervisor.Process) error {
+			sigs := make(chan os.Signal, 1)
+			signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+			p.Ready()
+			select {
+			case sig := <-sigs:
+				i.Report("user_interrupted", ScoutMeta{"signal", fmt.Sprintf("%+v", sig)})
+				p.Supervisor().Shutdown()
+			case <-p.Shutdown():
+			}
+			return nil
+		},
+	})
+	sup.Supervise(&supervisor.Worker{
+		Name:     "install",
+		Requires: []string{"signal"},
+		Work: func(p *supervisor.Process) error {
+			defer p.Supervisor().Shutdown()
+			return i.Perform(kcontext)
+		},
+	})
+
+	runErrors := sup.Run()
+	if len(runErrors) > 1 { // This shouldn't happen...
+		for _, err := range runErrors {
+			i.show.Printf(err.Error())
+		}
+	}
+	if len(runErrors) > 0 {
+		return runErrors[0]
+	}
+	return nil
+}
+
+func (i *Installer) Perform(kcontext string) error {
 	i.Report("install")
 
 	// Display version information
@@ -90,8 +136,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	i.show.Printf("-> Installing the Ambassador Edge Stack %s\n", Version)
 
 	// Attempt to talk to the specified cluster
-	context, _ := cmd.Flags().GetString("context")
-	i.kubeinfo = k8s.NewKubeInfo("", context, "")
+	i.kubeinfo = k8s.NewKubeInfo("", kcontext, "")
 
 	if err := i.ShowKubectl("cluster-info", "cluster-info"); err != nil {
 		return err
@@ -262,7 +307,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		}
 
 		// Open a browser window to the Edge Policy Console
-		if err := do_login(i.kubeinfo, context, "ambassador", hostname, false, false); err != nil {
+		if err := do_login(i.kubeinfo, kcontext, "ambassador", hostname, false, false); err != nil {
 			return err
 		}
 
@@ -387,8 +432,8 @@ func (i *Installer) Report(eventName string, meta ...ScoutMeta) {
 	}
 }
 
-// DNS Registration
 
+// registration is used to register edgestack.me domains
 type registration struct {
 	Email string
 	Ip    string
