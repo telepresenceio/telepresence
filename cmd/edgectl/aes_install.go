@@ -119,57 +119,99 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func getManifest(url string) (string, error) {
+	res, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	bodyBytes, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return "", err
+	}
+	if res.StatusCode != 200 {
+		return "", errors.Errorf("Bad status: %d", res.StatusCode)
+	}
+	return string(bodyBytes), nil
+}
+
 func (i *Installer) Perform(kcontext string) error {
+	// Start
 	i.Report("install")
 
+	// Download AES manifests
+	crdManifests, err := getManifest("https://www.getambassador.io/yaml/aes-crds.yaml")
+	if err != nil {
+		i.Report("fail_no_internet", ScoutMeta{"err", err.Error()})
+		return errors.Wrap(err, "download AES CRD manifests")
+	}
+	aesManifests, err := getManifest("https://www.getambassador.io/yaml/aes.yaml")
+	if err != nil {
+		i.Report("fail_no_internet", ScoutMeta{"err", err.Error()})
+		return errors.Wrap(err, "download AES manifests")
+	}
+
+	// Figure out what version of AES is being installed
+	// TODO: Parse the manifests and build objects
+	// TODO: Extract version info from the Deployment object
+	// TODO? Set label(s) on the to indicate this installation was performed by the installer
+	aesVersionRE := regexp.MustCompile("image: quay[.]io/datawire/aes:([[:^space:]]+)[[:space:]]")
+	matches := aesVersionRE.FindStringSubmatch(aesManifests)
+	if len(matches) != 2 {
+		i.log.Printf("matches is %+v", matches)
+		return errors.Errorf("Failed to parse downloaded manifests. Is there a proxy server interfering with HTTP downloads?")
+	}
+	aesVersion := matches[1]
+	i.SetMetadatum("AES version being installed", "aes_version", aesVersion)
+
 	// Display version information
-	// TODO: This displays the version of Edge Control, not the image version in
-	// the manifests being downloaded. We should figure out what to do if those
-	// don't match up.
-	// 1. Allow an old Edge Control to install a newer AES
-	// 2. Insist that Edge Control be the same version as the AES it's installing
-	// 3. Something else?
-	// Note that the second option will allow us to make the install process
-	// more complicated in the future without having to subject our users to
-	// increasing complexity, assuming this approach to installation gains
-	// traction.
-	i.show.Printf("-> Installing the Ambassador Edge Stack %s\n", Version)
+	i.show.Printf("-> Installing the Ambassador Edge Stack %s\n", aesVersion)
 
 	// Attempt to talk to the specified cluster
+	// TODO: Figure out cluster info to be passed along
 	i.kubeinfo = k8s.NewKubeInfo("", kcontext, "")
+	if err := i.ShowKubectl("cluster-info", "", "cluster-info"); err != nil {
+		i.Report("fail_no_cluster")
+		return err
+	}
+	i.SetMetadatum("Cluster info", "cluster_info", "FIXME")
 
-	if err := i.ShowKubectl("cluster-info", "cluster-info"); err != nil {
+	// Install the AES manifests
+
+	if err := i.ShowKubectl("install CRDs", crdManifests, "apply", "-f", "-"); err != nil {
+		i.Report("fail_install_crds")
 		return err
 	}
 
-	if err := i.ShowKubectl("install CRDs", "apply", "-f", "https://www.getambassador.io/yaml/aes-crds.yaml"); err != nil {
+	if err := i.ShowKubectl("wait for CRDs", "", "wait", "--for", "condition=established", "--timeout=90s", "crd", "-lproduct=aes"); err != nil {
+		i.Report("fail_wait_crds")
 		return err
 	}
 
-	if err := i.ShowKubectl("wait for CRDs", "wait", "--for", "condition=established", "--timeout=90s", "crd", "-lproduct=aes"); err != nil {
+	if err := i.ShowKubectl("install AES", aesManifests, "apply", "-f", "-"); err != nil {
+		i.Report("fail_install_aes")
 		return err
 	}
 
-	if err := i.ShowKubectl("install AES", "apply", "-f", "https://www.getambassador.io/yaml/aes.yaml"); err != nil {
+	if err := i.ShowKubectl("wait for AES", "", "-n", "ambassador", "wait", "--for", "condition=available", "--timeout=90s", "deploy", "-lproduct=aes"); err != nil {
+		i.Report("fail_wait_aes")
 		return err
 	}
 
-	if err := i.ShowKubectl("wait for AES", "-n", "ambassador", "wait", "--for", "condition=available", "--timeout=90s", "deploy", "-lproduct=aes"); err != nil {
-		return err
-	}
-
-	// Grab Ambassador's install ID as the cluster ID we'll send going forward.
+	// Wait for Ambassador Pod; grab AES install ID
 	// Note: Using "kubectl exec" has the side effect of making sure the Pod is
 	// Running (though not necessarily Ready). This should be good enough to
 	// report the "deploy" status to metrics.
 	for {
 		// FIXME This doesn't work with `kubectl` 1.13 (and possibly 1.14). We
 		// FIXME need to discover and use the pod name with `kubectl exec`.
-		if clusterID, err := i.CaptureKubectl("get cluster ID", "-n", "ambassador", "exec", "deploy/ambassador", "python3", "kubewatch.py"); err == nil {
+		if clusterID, err := i.CaptureKubectl("get cluster ID", "", "-n", "ambassador", "exec", "deploy/ambassador", "python3", "kubewatch.py"); err == nil {
 			i.SetMetadatum("Cluster ID", "aes_install_id", clusterID)
 			break
 		}
 		time.Sleep(500 * time.Millisecond) // FIXME: Time out at some point...
+		// TODO On pod timeout "fail_pod_timeout"
+		// TODO On other error "fail_install_id", pass along the error
 	}
 
 	i.Report("deploy") // TODO: Send cluster type and Helm version
@@ -177,7 +219,7 @@ func (i *Installer) Perform(kcontext string) error {
 	ipAddress := ""
 	for {
 		var err error
-		ipAddress, err = i.CaptureKubectl("get IP address", "get", "-n", "ambassador", "service", "ambassador", "-o", `go-template={{range .status.loadBalancer.ingress}}{{print .ip "\n"}}{{end}}`)
+		ipAddress, err = i.CaptureKubectl("get IP address", "", "get", "-n", "ambassador", "service", "ambassador", "-o", `go-template={{range .status.loadBalancer.ingress}}{{print .ip "\n"}}{{end}}`)
 		if err != nil {
 			return err
 		}
@@ -225,7 +267,7 @@ func (i *Installer) Perform(kcontext string) error {
 	i.show.Println("-> Automatically configuring TLS")
 
 	// Attempt to grab a reasonable default for the user's email address
-	defaultEmail, err := i.Capture("get email", "git", "config", "--global", "user.email")
+	defaultEmail, err := i.Capture("get email", "", "git", "config", "--global", "user.email")
 	if err != nil {
 		i.log.Print(err)
 		defaultEmail = ""
@@ -273,23 +315,14 @@ func (i *Installer) Perform(kcontext string) error {
 		}
 		// Create a Host resource
 		hostResource := fmt.Sprintf(hostManifest, hostname, hostname, emailAddress)
-		kargs, err := i.kubeinfo.GetKubectlArray("apply", "-f", "-")
-		if err != nil {
-			return errors.Wrapf(err, "cluster access for install AES")
-		}
-		i.log.Println("$ kubectl apply -f - < [Host Resource]")
-		cmd := exec.Command("kubectl", kargs...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Stdin = strings.NewReader(hostResource)
-		if err := cmd.Run(); err != nil {
-			return errors.Wrap(err, "install AES")
+		if err := i.ShowKubectl("install Host resource", hostResource, "apply", "-f", "-"); err != nil {
+			return err
 		}
 
 		i.show.Println("-> Obtaining a TLS certificate from Let's Encrypt")
 
 		for {
-			state, err := i.CaptureKubectl("get Host state", "get", "host", hostname, "-o", "go-template={{.status.state}}")
+			state, err := i.CaptureKubectl("get Host state", "", "get", "host", hostname, "-o", "go-template={{.status.state}}")
 			if err != nil {
 				return err
 			}
@@ -302,7 +335,7 @@ func (i *Installer) Perform(kcontext string) error {
 
 		i.Report("cert_provisioned")
 		i.show.Println("-> TLS configured successfully")
-		if err := i.ShowKubectl("show Host", "get", "host", hostname); err != nil {
+		if err := i.ShowKubectl("show Host", "", "get", "host", hostname); err != nil {
 			return err
 		}
 
@@ -332,7 +365,10 @@ func (i *Installer) Perform(kcontext string) error {
 		i.show.Println("See https://www.getambassador.io/user-guide/getting-started/")
 	}
 
-	i.Report("aes_health_good") // or aes_health_bad TODO: Send cluster's install_id and AES version
+	// TODO: Report metric "aes_health_good" when AES is reachable and healthy:
+	// hit /ambassador/v0/check_ready and see if you get a 200. Otherwise report
+	// metric "aes_health_bad"
+	i.Report("aes_health_good")
 
 	return nil
 }
@@ -377,13 +413,14 @@ func NewInstaller(verbose bool) *Installer {
 
 // Kubernetes Cluster
 
-func (i *Installer) ShowKubectl(name string, args ...string) error {
+func (i *Installer) ShowKubectl(name string, input string, args ...string) error {
 	kargs, err := i.kubeinfo.GetKubectlArray(args...)
 	if err != nil {
 		return errors.Wrapf(err, "cluster access for %s", name)
 	}
 	i.log.Printf("$ kubectl %s", strings.Join(kargs, " "))
 	cmd := exec.Command("kubectl", kargs...)
+	cmd.Stdin = strings.NewReader(input)
 	cmd.Stdout = NewLoggingWriter(i.cmdOut)
 	cmd.Stderr = NewLoggingWriter(i.cmdErr)
 	if err := cmd.Run(); err != nil {
@@ -392,7 +429,7 @@ func (i *Installer) ShowKubectl(name string, args ...string) error {
 	return nil
 }
 
-func (i *Installer) CaptureKubectl(name string, args ...string) (res string, err error) {
+func (i *Installer) CaptureKubectl(name, input string, args ...string) (res string, err error) {
 	res = ""
 	kargs, err := i.kubeinfo.GetKubectlArray(args...)
 	if err != nil {
@@ -400,14 +437,15 @@ func (i *Installer) CaptureKubectl(name string, args ...string) (res string, err
 		return
 	}
 	kargs = append([]string{"kubectl"}, kargs...)
-	return i.Capture(name, kargs...)
+	return i.Capture(name, input, kargs...)
 }
 
-func (i *Installer) Capture(name string, args ...string) (res string, err error) {
+func (i *Installer) Capture(name, input string, args ...string) (res string, err error) {
 	res = ""
 	resAsBytes := &bytes.Buffer{}
 	i.log.Printf("$ %s", strings.Join(args, " "))
 	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Stdin = strings.NewReader(input)
 	cmd.Stdout = io.MultiWriter(NewLoggingWriter(i.cmdOut), resAsBytes)
 	cmd.Stderr = NewLoggingWriter(i.cmdErr)
 	err = cmd.Run()
@@ -431,7 +469,6 @@ func (i *Installer) Report(eventName string, meta ...ScoutMeta) {
 		i.log.Println("[Metrics]", eventName, err)
 	}
 }
-
 
 // registration is used to register edgestack.me domains
 type registration struct {
