@@ -97,7 +97,7 @@ func (d *Daemon) Connect(
 func (d *Daemon) Disconnect(p *supervisor.Process, out *Emitter) error {
 	// Sanity checks
 	if d.cluster == nil {
-		out.Println("Not connected")
+		out.Println("Not connected (use 'edgectl connect' to connect to your cluster)")
 		out.Send("disconnect", "Not connected")
 		return nil
 	}

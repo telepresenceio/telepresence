@@ -17,7 +17,7 @@ import (
 func (d *Daemon) interceptMessage() string {
 	switch {
 	case d.cluster == nil:
-		return "Not connected"
+		return "Not connected (use 'edgectl connect' to connect to your cluster)"
 	case d.trafficMgr == nil:
 		return "Intercept unavailable: no traffic manager"
 	case !d.trafficMgr.IsOkay():
