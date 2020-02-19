@@ -135,6 +135,127 @@ func getManifest(url string) (string, error) {
 	return string(bodyBytes), nil
 }
 
+type LoopFailedError string
+
+func (s LoopFailedError) Error() string {
+	return string(s)
+}
+
+func (i *Installer) loopUntil(what string, how func() error) error {
+	// Maybe these should be arguments?
+	sleepTime := 500 * time.Millisecond // How long to sleep between calls
+	progressTime := 15 * time.Second    // How long until we explain why we're waiting
+	timeout := 120 * time.Second        // How long until we give up
+
+	ctx, cancel := context.WithTimeout(i.ctx, timeout)
+	defer cancel()
+	start := time.Now()
+	i.log.Printf("Waiting for %s", what)
+	defer func() { i.log.Printf("Wait for %s took %.1f seconds", what, time.Since(start).Seconds()) }()
+	progTimer := time.NewTimer(progressTime)
+	defer progTimer.Stop()
+	for {
+		err := how()
+		if err == nil {
+			return nil // Success
+		} else if _, ok := err.(LoopFailedError); ok {
+			return err // Immediate failure
+		}
+		// Wait and try again
+		select {
+		case <-progTimer.C:
+			i.show.Printf("(waiting for %s)", what)
+		case <-time.After(sleepTime):
+			// Try again
+			// TODO: Fancy animated progress indicator?
+		case <-ctx.Done():
+			return errors.Errorf("timed out waiting for %s (or interrupted)", what)
+		}
+	}
+}
+
+// GrabAESInstallID uses "kubectl exec" to ask the AES pod for the cluster's ID,
+// which we uses as the AES install ID. This has the side effect of making sure
+// the Pod is Running (though not necessarily Ready). This should be good enough
+// to report the "deploy" status to metrics.
+func (i *Installer) GrabAESInstallID() error {
+	// FIXME This doesn't work with `kubectl` 1.13 (and possibly 1.14). We
+	// FIXME need to discover and use the pod name with `kubectl exec`.
+	clusterID, err := i.CaptureKubectl("get cluster ID", "", "-n", "ambassador", "exec", "deploy/ambassador", "python3", "kubewatch.py")
+	if err != nil {
+		return err
+	}
+	i.SetMetadatum("Cluster ID", "aes_install_id", clusterID)
+	return nil
+}
+
+func (i *Installer) GrabLoadBalancerIP() (string, error) {
+	ipAddress, err := i.CaptureKubectl("get IP address", "", "get", "-n", "ambassador", "service", "ambassador", "-o", `go-template={{range .status.loadBalancer.ingress}}{{print .ip "\n"}}{{end}}`)
+	if err != nil {
+		return "", err
+	}
+	ipAddress = strings.TrimSpace(ipAddress)
+	if ipAddress == "" {
+		return "", errors.New("empty IP address")
+	}
+	return ipAddress, nil
+}
+
+func (i *Installer) CheckAESServesACME(ipAddress string) (err error) {
+	defer func() {
+		if err != nil {
+			i.log.Print(err.Error())
+		}
+	}()
+
+	// Verify that we can connect to something
+	resp, err := http.Get("http://" + ipAddress + "/.well-known/acme-challenge/")
+	if err != nil {
+		err = errors.Wrap(err, "check for AES")
+		return
+	}
+	_, _ = ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	// Verify that we get the expected status code. If Ambassador is still
+	// starting up, then Envoy may return "upstream request timeout" (503),
+	// in which case we should keep looping.
+	if resp.StatusCode != 404 {
+		err = errors.Errorf("check for AES: wrong status code: %d instead of 404", resp.StatusCode)
+		return
+	}
+
+	// Sanity check that we're talking to Envoy. This is probably unnecessary.
+	if resp.Header.Get("server") != "envoy" {
+		err = errors.Errorf("check for AES: wrong server header: %s instead of envoy", resp.Header.Get("server"))
+		return
+	}
+
+	return nil
+}
+
+func (i *Installer) CheckHostnameFound(hostname string) error {
+	conn, err := net.Dial("tcp", fmt.Sprintf("check-%d.%s:443", time.Now().Unix(), hostname))
+	if err == nil {
+		conn.Close()
+	}
+	return err
+}
+
+func (i *Installer) CheckACMEIsDone(hostname string) error {
+	state, err := i.CaptureKubectl("get Host state", "", "get", "host", hostname, "-o", "go-template={{.status.state}}")
+	if err != nil {
+		return LoopFailedError(err.Error())
+	}
+	if state == "Error" {
+		return LoopFailedError(fmt.Sprintf("ACME failed. More information: kubectl get host %s -o yaml", hostname))
+	}
+	if state != "Ready" {
+		return errors.Errorf("Host state is %s, not Ready", state)
+	}
+	return nil
+}
+
 func (i *Installer) Perform(kcontext string) error {
 	// Start
 	i.Report("install")
@@ -168,7 +289,15 @@ func (i *Installer) Perform(kcontext string) error {
 	i.show.Printf("-> Installing the Ambassador Edge Stack %s\n", aesVersion)
 
 	// Attempt to talk to the specified cluster
-	// TODO: Figure out cluster info to be passed along
+	// TODO: Figure out cluster info to be passed along.
+	// TODO: Cluster type (minikube or GKE or whatever): Look at node labels for
+	//       the kubernetes.io/hostname label if possible; we can construct
+	//       regular expressions to identify common cluster types.
+	// TODO: Figure out if a previous installation exists
+	// TODO: Grab Helm information if relevant. Look at the ambassador
+	//       deployment's annotations for app.kubernetes.io/managed-by=Helm or
+	//       similar. Figure out Helm version?
+
 	i.kubeinfo = k8s.NewKubeInfo("", kcontext, "")
 	if err := i.ShowKubectl("cluster-info", "", "cluster-info"); err != nil {
 		i.Report("fail_no_cluster")
@@ -199,69 +328,32 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	// Wait for Ambassador Pod; grab AES install ID
-	// Note: Using "kubectl exec" has the side effect of making sure the Pod is
-	// Running (though not necessarily Ready). This should be good enough to
-	// report the "deploy" status to metrics.
-	for {
-		// FIXME This doesn't work with `kubectl` 1.13 (and possibly 1.14). We
-		// FIXME need to discover and use the pod name with `kubectl exec`.
-		if clusterID, err := i.CaptureKubectl("get cluster ID", "", "-n", "ambassador", "exec", "deploy/ambassador", "python3", "kubewatch.py"); err == nil {
-			i.SetMetadatum("Cluster ID", "aes_install_id", clusterID)
-			break
-		}
-		time.Sleep(500 * time.Millisecond) // FIXME: Time out at some point...
-		// TODO On pod timeout "fail_pod_timeout"
-		// TODO On other error "fail_install_id", pass along the error
+	if err := i.loopUntil("AES pod startup", i.GrabAESInstallID); err != nil {
+		i.Report("fail_pod_timeout")
+		// TODO Is it possible to detect other errors? If so, report "fail_install_id", pass along the error
+		return err
 	}
 
-	i.Report("deploy") // TODO: Send cluster type and Helm version
+	i.Report("deploy")
 
+	// Grab load balancer IP address
 	ipAddress := ""
-	for {
+	grabIP := func() error {
 		var err error
-		ipAddress, err = i.CaptureKubectl("get IP address", "", "get", "-n", "ambassador", "service", "ambassador", "-o", `go-template={{range .status.loadBalancer.ingress}}{{print .ip "\n"}}{{end}}`)
-		if err != nil {
-			return err
-		}
-		ipAddress = strings.TrimSpace(ipAddress)
-		if ipAddress != "" {
-			break
-		}
-		time.Sleep(250 * time.Millisecond) // FIXME: Time out at some point...
+		ipAddress, err = i.GrabLoadBalancerIP()
+		return err
 	}
-
+	if err := i.loopUntil("Load Balancer", grabIP); err != nil {
+		// FIXME this can fail in reasonable cases (Minikube, Kubernaut) and we don't handle that.
+		return err
+	}
 	i.show.Println("Your IP address is", ipAddress)
 
 	// Wait for Ambassador to be ready to serve ACME requests.
 	// FIXME: This assumes we can connect to the load balancer. If this
 	// assumption is incorrect, this code will loop forever.
-	for {
-		// FIXME: Time out at some point...
-		time.Sleep(500 * time.Millisecond)
-
-		// Verify that we can connect to something
-		resp, err := http.Get("http://" + ipAddress + "/.well-known/acme-challenge/")
-		if err != nil {
-			i.show.Printf("Waiting for Ambassador (get): %#v\n", err)
-			continue
-		}
-		_, _ = ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		// Verify that we get the expected status code. If Ambassador is still
-		// starting up, then Envoy may return "upstream request timeout" (503),
-		// in which case we should keep looping.
-		if resp.StatusCode != 404 {
-			i.show.Printf("Waiting for Ambassador: wrong status code: %d\n", resp.StatusCode)
-			continue
-		}
-
-		// Sanity check that we're talking to Envoy. This is probably unnecessary.
-		if resp.Header.Get("server") != "envoy" {
-			i.show.Printf("Waiting for Ambassador: wrong server header: %s\n", resp.Header.Get("server"))
-			continue
-		}
-		break
+	if err := i.loopUntil("AES to serve ACME", func() error { return i.CheckAESServesACME(ipAddress) }); err != nil {
+		return err
 	}
 
 	i.show.Println("-> Automatically configuring TLS")
@@ -280,8 +372,24 @@ func (i *Installer) Perform(kcontext string) error {
 
 	// Ask for the user's email address
 	i.show.Println(emailAsk)
-	emailAddress := getEmailAddress(defaultEmail, i.log)
+	// Do the goroutine dance to let the user hit Ctrl-C at the email prompt
+	gotEmail := make(chan (string))
+	var emailAddress string
+	go func() {
+		gotEmail <- getEmailAddress(defaultEmail, i.log)
+		close(gotEmail)
+	}()
+	select {
+	case emailAddress = <-gotEmail:
+		// Continue
+	case <-i.ctx.Done():
+		fmt.Println()
+		return errors.New("Interrupted")
+	}
+
 	i.log.Printf("Using email address %q", emailAddress)
+
+	// Did the user hit Ctrl-C at the email prompt?
 
 	// Send a request to acquire a DNS name for this cluster's IP address
 	regURL := "https://metriton.datawire.io/beta/register-domain"
@@ -304,15 +412,10 @@ func (i *Installer) Perform(kcontext string) error {
 		// Wait for DNS to propagate. This tries to avoid waiting for a ten
 		// minute error backoff if the ACME registration races ahead of the DNS
 		// name appearing for LetsEncrypt.
-		for n := 0; n < 1200; n++ {
-			conn, err := net.Dial("tcp", fmt.Sprintf("check-%d.%s:443", n, hostname))
-			if err == nil {
-				conn.Close()
-				break
-			}
-			// i.show.Printf("Waiting for DNS: %#v\n", err)
-			time.Sleep(500 * time.Millisecond)
+		if err := i.loopUntil("DNS propagation to this host", func() error { return i.CheckHostnameFound(hostname) }); err != nil {
+			return err
 		}
+
 		// Create a Host resource
 		hostResource := fmt.Sprintf(hostManifest, hostname, hostname, emailAddress)
 		if err := i.ShowKubectl("install Host resource", hostResource, "apply", "-f", "-"); err != nil {
@@ -320,17 +423,8 @@ func (i *Installer) Perform(kcontext string) error {
 		}
 
 		i.show.Println("-> Obtaining a TLS certificate from Let's Encrypt")
-
-		for {
-			state, err := i.CaptureKubectl("get Host state", "", "get", "host", hostname, "-o", "go-template={{.status.state}}")
-			if err != nil {
-				return err
-			}
-			if state == "Ready" {
-				break
-			}
-			time.Sleep(500 * time.Millisecond) // FIXME: Time out at some point...
-			// FIXME: Do something smart for state == "Error"
+		if err := i.loopUntil("TLS certificate acquisition", func() error { return i.CheckACMEIsDone(hostname) }); err != nil {
+			return err
 		}
 
 		i.Report("cert_provisioned")
