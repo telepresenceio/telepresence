@@ -319,23 +319,33 @@ func (i *Installer) Perform(kcontext string) error {
 	i.show.Printf("-> Installing the Ambassador Edge Stack %s\n", aesVersion)
 
 	// Attempt to talk to the specified cluster
-	// TODO: Figure out cluster info to be passed along.
-	// TODO: Cluster type (minikube or GKE or whatever): Look at node labels for
-	//       the kubernetes.io/hostname label if possible; we can construct
-	//       regular expressions to identify common cluster types.
-	// TODO: Figure out if a previous installation exists
-	// TODO: Grab Helm information if relevant. Look at the ambassador
-	//       deployment's annotations for app.kubernetes.io/managed-by=Helm or
-	//       similar. Figure out Helm version?
-
 	i.kubeinfo = k8s.NewKubeInfo("", kcontext, "")
 	if err := i.ShowKubectl("cluster-info", "", "cluster-info"); err != nil {
 		i.Report("fail_no_cluster")
 		return err
 	}
-	i.SetMetadatum("Cluster info", "cluster_info", "FIXME")
+
+	// Try to determine cluster type from node labels
+	if clusterNodeLabels, err := i.CaptureKubectl("get node labels", "", "get", "no", "-Lkubernetes.io/hostname"); err == nil {
+		clusterInfo := "unknown"
+		if strings.Contains(clusterNodeLabels, "docker-desktop") {
+			clusterInfo = "docker-desktop"
+		} else if strings.Contains(clusterNodeLabels, "minikube") {
+			clusterInfo = "minikube"
+		} else if strings.Contains(clusterNodeLabels, "gke") {
+			clusterInfo = "gke"
+		} else if strings.Contains(clusterNodeLabels, "aks") {
+			clusterInfo = "aks"
+		} else if strings.Contains(clusterNodeLabels, "compute") {
+			clusterInfo = "eks"
+		} else if strings.Contains(clusterNodeLabels, "ec2") {
+			clusterInfo = "ec2"
+		}
+		i.SetMetadatum("Cluster Info", "cluster_info", clusterInfo)
+	}
 
 	// Install the AES manifests
+	// TODO: Figure out if a previous installation exists
 
 	if err := i.ShowKubectl("install CRDs", crdManifests, "apply", "-f", "-"); err != nil {
 		i.Report("fail_install_crds")
@@ -362,6 +372,14 @@ func (i *Installer) Perform(kcontext string) error {
 		i.Report("fail_pod_timeout")
 		// TODO Is it possible to detect other errors? If so, report "fail_install_id", pass along the error
 		return err
+	}
+
+	// Grab Helm information if present
+	// TODO: Figure out Helm version?
+	if managedDeployment, err := i.CaptureKubectl("get deployment labels", "", "get", "-n", "ambassador", "deployments", "ambassador", "-Lapp.kubernetes.io/managed-by"); err == nil {
+		if strings.Contains(managedDeployment, "Helm") {
+			i.SetMetadatum("Cluster Info", "managed", "helm")
+		}
 	}
 
 	i.Report("deploy")
