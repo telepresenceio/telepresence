@@ -326,12 +326,15 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	// Try to determine cluster type from node labels
+	isKnownLocalCluster := false
 	if clusterNodeLabels, err := i.CaptureKubectl("get node labels", "", "get", "no", "-Lkubernetes.io/hostname"); err == nil {
 		clusterInfo := "unknown"
 		if strings.Contains(clusterNodeLabels, "docker-desktop") {
 			clusterInfo = "docker-desktop"
+			isKnownLocalCluster = true
 		} else if strings.Contains(clusterNodeLabels, "minikube") {
 			clusterInfo = "minikube"
+			isKnownLocalCluster = true
 		} else if strings.Contains(clusterNodeLabels, "gke") {
 			clusterInfo = "gke"
 		} else if strings.Contains(clusterNodeLabels, "aks") {
@@ -384,7 +387,17 @@ func (i *Installer) Perform(kcontext string) error {
 
 	i.Report("deploy")
 
+	// Don't proceed any further if we know we are using a local (not publicly
+	// accessible) cluster. There's no point wasting the user's time on
+	// timeouts.
+	if isKnownLocalCluster {
+		i.Report("cluster_not_accessible")
+		// TODO: Show local cluster message
+		return nil
+	}
+
 	// Grab load balancer IP address
+	i.show.Println("-> Provisioning a cloud load balancer. (This may take a minute, depending on your cloud provider.)")
 	ipAddress := ""
 	grabIP := func() error {
 		var err error
@@ -392,18 +405,21 @@ func (i *Installer) Perform(kcontext string) error {
 		return err
 	}
 	if err := i.loopUntil("Load Balancer", grabIP); err != nil {
-		// FIXME this can fail in reasonable cases (Minikube, Kubernaut) and we don't handle that.
-		// FIXME also i.Report("cluster_not_accessible")
+		i.Report("fail_loadbalancer_timeout")
+		i.show.Println("Timed out waiting for the load balancer's IP address for the AES Service.")
+		i.show.Println("- If a load balancer IP address shows up, simply run the installer again.")
+		i.show.Println("- If your cluster doesn't support load balancers, you'll need to expose")
+		i.show.Println("  AES some other way.")
+		i.show.Println("See https://www.getambassador.io/user-guide/getting-started/")
 		return err
 	}
 	i.Report("cluster_accessible")
 	i.show.Println("Your IP address is", ipAddress)
 
 	// Wait for Ambassador to be ready to serve ACME requests.
-	// FIXME: This assumes we can connect to the load balancer. If this
-	// assumption is incorrect, this code will loop forever.
 	if err := i.loopUntil("AES to serve ACME", func() error { return i.CheckAESServesACME(ipAddress) }); err != nil {
 		i.Report("aes_listening_timeout")
+		// TODO: Show an informative message here
 		return err
 	}
 	i.Report("aes_listening")
@@ -457,50 +473,10 @@ func (i *Installer) Perform(kcontext string) error {
 		return errors.Wrap(err, "acquire DNS name (read body)")
 	}
 
-	if resp.StatusCode == 200 {
-		hostname := string(content)
-		i.show.Println("-> Acquiring DNS name", hostname)
-
-		// Wait for DNS to propagate. This tries to avoid waiting for a ten
-		// minute error backoff if the ACME registration races ahead of the DNS
-		// name appearing for LetsEncrypt.
-		if err := i.loopUntil("DNS propagation to this host", func() error { return i.CheckHostnameFound(hostname) }); err != nil {
-			i.Report("dns_name_propagation_timeout")
-			return err
-		}
-		i.Report("dns_name_propagated")
-
-		// Create a Host resource
-		hostResource := fmt.Sprintf(hostManifest, hostname, hostname, emailAddress)
-		if err := i.ShowKubectl("install Host resource", hostResource, "apply", "-f", "-"); err != nil {
-			i.Report("fail_host_resource", ScoutMeta{"err", err.Error()})
-			return err
-		}
-
-		i.show.Println("-> Obtaining a TLS certificate from Let's Encrypt")
-		if err := i.loopUntil("TLS certificate acquisition", func() error { return i.CheckACMEIsDone(hostname) }); err != nil {
-			i.Report("cert_provision_failed") // TODO add error info here
-			return err
-		}
-		i.Report("cert_provisioned")
-		i.show.Println("-> TLS configured successfully")
-		if err := i.ShowKubectl("show Host", "", "get", "host", hostname); err != nil {
-			return err
-		}
-
-		// Open a browser window to the Edge Policy Console
-		if err := do_login(i.kubeinfo, kcontext, "ambassador", hostname, false, false); err != nil {
-			return err
-		}
-
-		if err := i.CheckAESHealth(hostname); err != nil {
-			i.Report("aes_health_bad", ScoutMeta{"err", err.Error()})
-		} else {
-			i.Report("aes_health_good")
-		}
-
-	} else {
+	if resp.StatusCode != 200 {
 		message := strings.TrimSpace(string(content))
+		// TODO: consider how this message should look relative to the other
+		// not-accessible cases
 		i.Report("dns_name_failure", ScoutMeta{"code", resp.StatusCode}, ScoutMeta{"err", message})
 		i.show.Println("-> Failed to create a DNS name:", message)
 		i.show.Println()
@@ -519,6 +495,54 @@ func (i *Installer) Perform(kcontext string) error {
 		i.show.Println("You will need to accept a self-signed certificate in your browser.")
 		i.show.Println()
 		i.show.Println("See https://www.getambassador.io/user-guide/getting-started/")
+		return nil
+	}
+
+	hostname := string(content)
+	i.show.Println("-> Acquiring DNS name", hostname)
+
+	// Wait for DNS to propagate. This tries to avoid waiting for a ten
+	// minute error backoff if the ACME registration races ahead of the DNS
+	// name appearing for LetsEncrypt.
+	if err := i.loopUntil("DNS propagation to this host", func() error { return i.CheckHostnameFound(hostname) }); err != nil {
+		i.Report("dns_name_propagation_timeout")
+		// TODO: Show an informative message here
+		return err
+	}
+	i.Report("dns_name_propagated")
+
+	// Create a Host resource
+	hostResource := fmt.Sprintf(hostManifest, hostname, hostname, emailAddress)
+	if err := i.ShowKubectl("install Host resource", hostResource, "apply", "-f", "-"); err != nil {
+		i.Report("fail_host_resource", ScoutMeta{"err", err.Error()})
+		// TODO: Show an informative message here
+		return err
+	}
+
+	i.show.Println("-> Obtaining a TLS certificate from Let's Encrypt")
+	if err := i.loopUntil("TLS certificate acquisition", func() error { return i.CheckACMEIsDone(hostname) }); err != nil {
+		i.Report("cert_provision_failed") // TODO add error info here
+		// TODO: Show an informative message here
+		return err
+	}
+	i.Report("cert_provisioned")
+	i.show.Println("-> TLS configured successfully")
+	if err := i.ShowKubectl("show Host", "", "get", "host", hostname); err != nil {
+		// TODO: Show an informative message here
+		return err
+	}
+
+	// Open a browser window to the Edge Policy Console
+	// TODO Make this really noisy and gross
+	if err := do_login(i.kubeinfo, kcontext, "ambassador", hostname, false, false); err != nil {
+		// TODO: Show an informative message here
+		return err
+	}
+
+	if err := i.CheckAESHealth(hostname); err != nil {
+		i.Report("aes_health_bad", ScoutMeta{"err", err.Error()})
+	} else {
+		i.Report("aes_health_good")
 	}
 
 	return nil
