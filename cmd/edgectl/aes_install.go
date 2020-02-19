@@ -80,7 +80,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	kcontext, _ := cmd.Flags().GetString("context")
 	i := NewInstaller(verbose)
 
-	sup := supervisor.WithContext(context.Background())
+	sup := supervisor.WithContext(i.ctx)
 	sup.Logger = i.log
 
 	sup.Supervise(&supervisor.Worker{
@@ -92,7 +92,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 			select {
 			case sig := <-sigs:
 				i.Report("user_interrupted", ScoutMeta{"signal", fmt.Sprintf("%+v", sig)})
-				p.Supervisor().Shutdown()
+				i.Quit()
 			case <-p.Shutdown():
 			}
 			return nil
@@ -102,7 +102,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		Name:     "install",
 		Requires: []string{"signal"},
 		Work: func(p *supervisor.Process) error {
-			defer p.Supervisor().Shutdown()
+			defer i.Quit()
 			return i.Perform(kcontext)
 		},
 	})
@@ -376,6 +376,8 @@ func (i *Installer) Perform(kcontext string) error {
 type Installer struct {
 	kubeinfo *k8s.KubeInfo
 	scout    *Scout
+	ctx      context.Context
+	cancel   context.CancelFunc
 	show     *log.Logger
 	log      *log.Logger
 	cmdOut   *log.Logger
@@ -393,8 +395,11 @@ func NewInstaller(verbose bool) *Installer {
 		logfile = os.Stderr
 		fmt.Fprintf(logfile, "WARNING: Failed to open logfile %q: %+v\n", logfileName, err)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	i := &Installer{
 		scout:   NewScout("install"),
+		ctx:     ctx,
+		cancel:  cancel,
 		show:    log.New(io.MultiWriter(os.Stdout, logfile), "", 0),
 		logName: logfileName,
 	}
@@ -409,6 +414,10 @@ func NewInstaller(verbose bool) *Installer {
 	}
 
 	return i
+}
+
+func (i *Installer) Quit() {
+	i.cancel()
 }
 
 // Kubernetes Cluster
