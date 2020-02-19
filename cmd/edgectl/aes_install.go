@@ -275,6 +275,8 @@ func (i *Installer) CheckACMEIsDone(hostname string) error {
 		return LoopFailedError(err.Error())
 	}
 	if state == "Error" {
+		// TODO: Print the error message rather than telling the user to use kubectl.
+		// TODO: Wait longer if it's an NXDOMAIN. AES ACME should retry in one minute.
 		return LoopFailedError(fmt.Sprintf("ACME failed. More information: kubectl get host %s -o yaml", hostname))
 	}
 	if state != "Ready" {
@@ -373,16 +375,20 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 	if err := i.loopUntil("Load Balancer", grabIP); err != nil {
 		// FIXME this can fail in reasonable cases (Minikube, Kubernaut) and we don't handle that.
+		// FIXME also i.Report("cluster_not_accessible")
 		return err
 	}
+	i.Report("cluster_accessible")
 	i.show.Println("Your IP address is", ipAddress)
 
 	// Wait for Ambassador to be ready to serve ACME requests.
 	// FIXME: This assumes we can connect to the load balancer. If this
 	// assumption is incorrect, this code will loop forever.
 	if err := i.loopUntil("AES to serve ACME", func() error { return i.CheckAESServesACME(ipAddress) }); err != nil {
+		i.Report("aes_listening_timeout")
 		return err
 	}
+	i.Report("aes_listening")
 
 	i.show.Println("-> Automatically configuring TLS")
 
@@ -417,19 +423,19 @@ func (i *Installer) Perform(kcontext string) error {
 
 	i.log.Printf("Using email address %q", emailAddress)
 
-	// Did the user hit Ctrl-C at the email prompt?
-
 	// Send a request to acquire a DNS name for this cluster's IP address
 	regURL := "https://metriton.datawire.io/beta/register-domain"
 	buf := new(bytes.Buffer)
 	_ = json.NewEncoder(buf).Encode(registration{emailAddress, ipAddress})
 	resp, err := http.Post(regURL, "application/json", buf)
 	if err != nil {
+		i.Report("dns_name_failure", ScoutMeta{"err", err.Error()})
 		return errors.Wrap(err, "acquire DNS name (post)")
 	}
 	content, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
+		i.Report("dns_name_failure", ScoutMeta{"err", err.Error()})
 		return errors.Wrap(err, "acquire DNS name (read body)")
 	}
 
@@ -441,20 +447,23 @@ func (i *Installer) Perform(kcontext string) error {
 		// minute error backoff if the ACME registration races ahead of the DNS
 		// name appearing for LetsEncrypt.
 		if err := i.loopUntil("DNS propagation to this host", func() error { return i.CheckHostnameFound(hostname) }); err != nil {
+			i.Report("dns_name_propagation_timeout")
 			return err
 		}
+		i.Report("dns_name_propagated")
 
 		// Create a Host resource
 		hostResource := fmt.Sprintf(hostManifest, hostname, hostname, emailAddress)
 		if err := i.ShowKubectl("install Host resource", hostResource, "apply", "-f", "-"); err != nil {
+			i.Report("fail_host_resource", ScoutMeta{"err", err.Error()})
 			return err
 		}
 
 		i.show.Println("-> Obtaining a TLS certificate from Let's Encrypt")
 		if err := i.loopUntil("TLS certificate acquisition", func() error { return i.CheckACMEIsDone(hostname) }); err != nil {
+			i.Report("cert_provision_failed") // TODO add error info here
 			return err
 		}
-
 		i.Report("cert_provisioned")
 		i.show.Println("-> TLS configured successfully")
 		if err := i.ShowKubectl("show Host", "", "get", "host", hostname); err != nil {
@@ -474,6 +483,7 @@ func (i *Installer) Perform(kcontext string) error {
 
 	} else {
 		message := strings.TrimSpace(string(content))
+		i.Report("dns_name_failure", ScoutMeta{"code", resp.StatusCode}, ScoutMeta{"err", message})
 		i.show.Println("-> Failed to create a DNS name:", message)
 		i.show.Println()
 		i.show.Println("If this IP address is reachable from here, then the following command")
