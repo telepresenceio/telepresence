@@ -241,6 +241,22 @@ func (i *Installer) CheckAESServesACME(ipAddress string) (err error) {
 	return nil
 }
 
+// CheckAESHealth retrieves AES's idea of whether it is healthy, i.e. ready.
+func (i *Installer) CheckAESHealth(hostname string) error {
+	resp, err := http.Get("https://" + hostname + "/ambassador/v0/check_ready")
+	if err != nil {
+		return err
+	}
+	_, _ = ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return errors.Errorf("check for AES health: wrong status code: %d instead of 200", resp.StatusCode)
+	}
+
+	return nil
+}
+
 // CheckHostnameFound tries to connect to check-blah.hostname to see whether DNS
 // has propagated. Each connect talks to a different hostname to try to avoid
 // NXDOMAIN caching.
@@ -450,6 +466,12 @@ func (i *Installer) Perform(kcontext string) error {
 			return err
 		}
 
+		if err := i.CheckAESHealth(hostname); err != nil {
+			i.Report("aes_health_bad", ScoutMeta{"err", err.Error()})
+		} else {
+			i.Report("aes_health_good")
+		}
+
 	} else {
 		message := strings.TrimSpace(string(content))
 		i.show.Println("-> Failed to create a DNS name:", message)
@@ -470,11 +492,6 @@ func (i *Installer) Perform(kcontext string) error {
 		i.show.Println()
 		i.show.Println("See https://www.getambassador.io/user-guide/getting-started/")
 	}
-
-	// TODO: Report metric "aes_health_good" when AES is reachable and healthy:
-	// hit /ambassador/v0/check_ready and see if you get a 200. Otherwise report
-	// metric "aes_health_bad"
-	i.Report("aes_health_good")
 
 	return nil
 }
