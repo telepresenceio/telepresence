@@ -135,12 +135,16 @@ func getManifest(url string) (string, error) {
 	return string(bodyBytes), nil
 }
 
+// LoopFailedError is a fatal error for loopUntil(...)
 type LoopFailedError string
 
+// Error implements error
 func (s LoopFailedError) Error() string {
 	return string(s)
 }
 
+// loopUntil repeatedly calls a function until it succeeds, using a
+// (presently-fixed) loop period and timeout.
 func (i *Installer) loopUntil(what string, how func() error) error {
 	// Maybe these should be arguments?
 	sleepTime := 500 * time.Millisecond // How long to sleep between calls
@@ -189,6 +193,7 @@ func (i *Installer) GrabAESInstallID() error {
 	return nil
 }
 
+// GrabLoadBalancerIP return's the AES service load balancer's IP address
 func (i *Installer) GrabLoadBalancerIP() (string, error) {
 	ipAddress, err := i.CaptureKubectl("get IP address", "", "get", "-n", "ambassador", "service", "ambassador", "-o", `go-template={{range .status.loadBalancer.ingress}}{{print .ip "\n"}}{{end}}`)
 	if err != nil {
@@ -201,6 +206,8 @@ func (i *Installer) GrabLoadBalancerIP() (string, error) {
 	return ipAddress, nil
 }
 
+// CheckAESServesACME performs the same checks that the edgestack.me name
+// service performs against the AES load balancer IP
 func (i *Installer) CheckAESServesACME(ipAddress string) (err error) {
 	defer func() {
 		if err != nil {
@@ -234,6 +241,9 @@ func (i *Installer) CheckAESServesACME(ipAddress string) (err error) {
 	return nil
 }
 
+// CheckHostnameFound tries to connect to check-blah.hostname to see whether DNS
+// has propagated. Each connect talks to a different hostname to try to avoid
+// NXDOMAIN caching.
 func (i *Installer) CheckHostnameFound(hostname string) error {
 	conn, err := net.Dial("tcp", fmt.Sprintf("check-%d.%s:443", time.Now().Unix(), hostname))
 	if err == nil {
@@ -242,6 +252,7 @@ func (i *Installer) CheckHostnameFound(hostname string) error {
 	return err
 }
 
+// CheckACMEIsDone queries the Host object and succeeds if its state is Ready.
 func (i *Installer) CheckACMEIsDone(hostname string) error {
 	state, err := i.CaptureKubectl("get Host state", "", "get", "host", hostname, "-o", "go-template={{.status.state}}")
 	if err != nil {
@@ -256,6 +267,7 @@ func (i *Installer) CheckACMEIsDone(hostname string) error {
 	return nil
 }
 
+// Perform is the main function for the installer
 func (i *Installer) Perform(kcontext string) error {
 	// Start
 	i.Report("install")
@@ -467,6 +479,7 @@ func (i *Installer) Perform(kcontext string) error {
 	return nil
 }
 
+// Installer represents the state of the installation process
 type Installer struct {
 	kubeinfo *k8s.KubeInfo
 	scout    *Scout
@@ -479,6 +492,7 @@ type Installer struct {
 	logName  string
 }
 
+// NewInstaller returns an Installer object after setting up logging.
 func NewInstaller(verbose bool) *Installer {
 	// Although log, cmdOut, and cmdErr *can* go to different files and/or have
 	// different prefixes, they'll probably all go to the same file, possibly
@@ -516,6 +530,8 @@ func (i *Installer) Quit() {
 
 // Kubernetes Cluster
 
+// ShowKubectl calls kubectl and dumps the output to the logger. Use this for
+// side effects.
 func (i *Installer) ShowKubectl(name string, input string, args ...string) error {
 	kargs, err := i.kubeinfo.GetKubectlArray(args...)
 	if err != nil {
@@ -532,6 +548,8 @@ func (i *Installer) ShowKubectl(name string, input string, args ...string) error
 	return nil
 }
 
+// CaptureKubectl calls kubectl and returns its stdout, dumping all the output
+// to the logger.
 func (i *Installer) CaptureKubectl(name, input string, args ...string) (res string, err error) {
 	res = ""
 	kargs, err := i.kubeinfo.GetKubectlArray(args...)
@@ -543,6 +561,8 @@ func (i *Installer) CaptureKubectl(name, input string, args ...string) (res stri
 	return i.Capture(name, input, kargs...)
 }
 
+// Capture calls a command and returns its stdout, dumping all output to the
+// logger.
 func (i *Installer) Capture(name, input string, args ...string) (res string, err error) {
 	res = ""
 	resAsBytes := &bytes.Buffer{}
@@ -561,11 +581,14 @@ func (i *Installer) Capture(name, input string, args ...string) (res string, err
 
 // Metrics
 
+// SetMetadatum adds a key-value pair to the metrics extra traits field. All
+// collected metadata is passed with every subsequent report to Metriton.
 func (i *Installer) SetMetadatum(name, key string, value interface{}) {
 	i.log.Printf("[Metrics] %s (%q) is %q", name, key, value)
 	i.scout.SetMetadatum(key, value)
 }
 
+// Report sends an event to Metriton
 func (i *Installer) Report(eventName string, meta ...ScoutMeta) {
 	i.log.Println("[Metrics]", eventName)
 	if err := i.scout.Report(eventName, meta...); err != nil {
