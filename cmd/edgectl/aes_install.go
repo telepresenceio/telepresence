@@ -99,17 +99,17 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 
 	if clusterNodeLabels, err := i.CaptureKubectl("get node labels", "get", "no", "-Lkubernetes.io/hostname"); err == nil {
 		clusterInfo := "unknown"
-		if clusterNodeLabels.Contains("docker-desktop") {
+		if strings.Contains(clusterNodeLabels, "docker-desktop") {
 			clusterInfo = "docker-desktop"
-		} else if clusterNodeLabels.Contains("minikube") {
+		} else if strings.Contains(clusterNodeLabels, "minikube") {
 			clusterInfo = "minikube"
-		} else if clusterNodeLabels.Contains("gke") {
+		} else if strings.Contains(clusterNodeLabels, "gke") {
 			clusterInfo = "gke"
-		} else if clusterNodeLabels.Contains("aks") {
+		} else if strings.Contains(clusterNodeLabels, "aks") {
 			clusterInfo = "aks"
-		} else if clusterNodeLabels.Contains("compute") {
+		} else if strings.Contains(clusterNodeLabels, "compute") {
 			clusterInfo = "eks"
-		} else if clusterNodeLabels.Contains("ec2") {
+		} else if strings.Contains(clusterNodeLabels, "ec2") {
 			clusterInfo = "ec2"
 		}
 		i.SetMetadatum("Cluster Info", "cluster_info", clusterInfo)
@@ -146,7 +146,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	if managedDeployment, err := i.CaptureKubectl("get deployment labels", "get", "-n", "ambassador", "deployments", "ambassador", "-Lapp.kubernetes.io/managed-by"); err == nil {
-		if managedDeployment.Contains("Helm") {
+		if strings.Contains(managedDeployment, "Helm") {
 			i.SetMetadatum("Cluster Info", "managed", "helm")
 		}
 	}
