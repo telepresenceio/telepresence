@@ -196,9 +196,14 @@ func (i *Installer) loopUntil(what string, how func() error, lc *loopConfig) err
 // the Pod is Running (though not necessarily Ready). This should be good enough
 // to report the "deploy" status to metrics.
 func (i *Installer) GrabAESInstallID() error {
-	// FIXME This doesn't work with `kubectl` 1.13 (and possibly 1.14). We
-	// FIXME need to discover and use the pod name with `kubectl exec`.
-	clusterID, err := i.CaptureKubectl("get cluster ID", "", "-n", "ambassador", "exec", "deploy/ambassador", "python3", "kubewatch.py")
+	// Note: This is brittle. If there is more than one pod, this returns all
+	// the pod names squashed together. This should not occur in normal usage,
+	// i.e. when installing a single version of AES, maybe repeatedly.
+	pod, err := i.CaptureKubectl("get AES pod", "", "-n", "ambassador", "get", "pods", "-l", "service=ambassador", "-o", "go-template={{range .items}}{{.metadata.name}}{{end}}")
+	if err != nil {
+		return err
+	}
+	clusterID, err := i.CaptureKubectl("get cluster ID", "", "-n", "ambassador", "exec", pod, "python3", "kubewatch.py")
 	if err != nil {
 		return err
 	}
