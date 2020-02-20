@@ -290,13 +290,22 @@ func (i *Installer) Perform(kcontext string) error {
 	// Start
 	i.Report("install")
 
+	// Allow overriding the source domain (e.g., for smoke tests before release)
+	manifestsDomain := "www.getambassador.io"
+	domainOverrideVar := "AES_MANIFESTS_DOMAIN"
+	if amd := os.Getenv(domainOverrideVar); amd != "" {
+		i.show.Printf("Downloading manifests from override domain %q instead of default %q", amd, manifestsDomain)
+		i.show.Printf("because the environment variable %s is set.", domainOverrideVar)
+		manifestsDomain = amd
+	}
+
 	// Download AES manifests
-	crdManifests, err := getManifest("https://www.getambassador.io/yaml/aes-crds.yaml")
+	crdManifests, err := getManifest(fmt.Sprintf("https://%s/yaml/aes-crds.yaml", manifestsDomain))
 	if err != nil {
 		i.Report("fail_no_internet", ScoutMeta{"err", err.Error()})
 		return errors.Wrap(err, "download AES CRD manifests")
 	}
-	aesManifests, err := getManifest("https://www.getambassador.io/yaml/aes.yaml")
+	aesManifests, err := getManifest(fmt.Sprintf("https://%s/yaml/aes.yaml", manifestsDomain))
 	if err != nil {
 		i.Report("fail_no_internet", ScoutMeta{"err", err.Error()})
 		return errors.Wrap(err, "download AES manifests")
