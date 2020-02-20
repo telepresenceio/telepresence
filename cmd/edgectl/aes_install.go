@@ -275,8 +275,23 @@ func (i *Installer) CheckACMEIsDone(hostname string) error {
 		return LoopFailedError(err.Error())
 	}
 	if state == "Error" {
-		// TODO: Print the error message rather than telling the user to use kubectl.
-		// TODO: Wait longer if it's an NXDOMAIN. AES ACME should retry in one minute.
+		reason, err := i.CaptureKubectl("get Host error", "", "get", "host", hostname, "-o", "go-template={{.status.errorReason}}")
+		if err != nil {
+			return LoopFailedError(err.Error())
+		}
+		// This heuristic tries to detect whether the error is that the ACME
+		// provider got NXDOMAIN for the provided hostname. It specifically
+		// handles the error message returned by Let's Encrypt in Feb 2020, but
+		// it may cover others as well. The AES ACME controller retries much
+		// sooner if this heuristic is tripped, so we should continue to wait
+		// rather than giving up.
+		isAcmeNxDomain := strings.Contains(reason, "NXDOMAIN") || strings.Contains(reason, "urn:ietf:params:acme:error:dns")
+		if isAcmeNxDomain {
+			return errors.New("Waiting for NXDOMAIN retry")
+		}
+
+		i.show.Println("Acquiring TLS certificate via ACME has failed:")
+		i.show.Println(reason)
 		return LoopFailedError(fmt.Sprintf("ACME failed. More information: kubectl get host %s -o yaml", hostname))
 	}
 	if state != "Ready" {
