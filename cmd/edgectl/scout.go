@@ -117,8 +117,7 @@ func (s *Scout) Report(action string, meta ...ScoutMeta) error {
 	if err != nil {
 		panic(err)
 	}
-	// metritonEndpoint := "https://metriton.datawire.io/scout"   // Prod URL
-	metritonEndpoint := "https://metriton.datawire.io/beta/scout" // Beta URL
+	metritonEndpoint := "https://metriton.datawire.io/scout"
 	resp, err := http.Post(metritonEndpoint, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		return errors.Wrap(err, "scout report")

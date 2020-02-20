@@ -467,7 +467,7 @@ func (i *Installer) Perform(kcontext string) error {
 	i.log.Printf("Using email address %q", emailAddress)
 
 	// Send a request to acquire a DNS name for this cluster's IP address
-	regURL := "https://metriton.datawire.io/beta/register-domain"
+	regURL := "https://metriton.datawire.io/register-domain"
 	buf := new(bytes.Buffer)
 	_ = json.NewEncoder(buf).Encode(registration{emailAddress, ipAddress})
 	resp, err := http.Post(regURL, "application/json", buf)
