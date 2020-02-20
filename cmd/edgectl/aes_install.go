@@ -143,20 +143,33 @@ func (s LoopFailedError) Error() string {
 	return string(s)
 }
 
+type loopConfig struct {
+	sleepTime    time.Duration // How long to sleep between calls
+	progressTime time.Duration // How long until we explain why we're waiting
+	timeout      time.Duration // How long until we give up
+}
+
+var lc2 = &loopConfig{
+	sleepTime:    500 * time.Millisecond,
+	progressTime: 15 * time.Second,
+	timeout:      120 * time.Second,
+}
+
+var lc5 = &loopConfig{
+	sleepTime:    3 * time.Second,
+	progressTime: 30 * time.Second,
+	timeout:      5 * time.Minute,
+}
+
 // loopUntil repeatedly calls a function until it succeeds, using a
 // (presently-fixed) loop period and timeout.
-func (i *Installer) loopUntil(what string, how func() error) error {
-	// Maybe these should be arguments?
-	sleepTime := 500 * time.Millisecond // How long to sleep between calls
-	progressTime := 15 * time.Second    // How long until we explain why we're waiting
-	timeout := 120 * time.Second        // How long until we give up
-
-	ctx, cancel := context.WithTimeout(i.ctx, timeout)
+func (i *Installer) loopUntil(what string, how func() error, lc *loopConfig) error {
+	ctx, cancel := context.WithTimeout(i.ctx, lc.timeout)
 	defer cancel()
 	start := time.Now()
 	i.log.Printf("Waiting for %s", what)
 	defer func() { i.log.Printf("Wait for %s took %.1f seconds", what, time.Since(start).Seconds()) }()
-	progTimer := time.NewTimer(progressTime)
+	progTimer := time.NewTimer(lc.progressTime)
 	defer progTimer.Stop()
 	for {
 		err := how()
@@ -169,7 +182,7 @@ func (i *Installer) loopUntil(what string, how func() error) error {
 		select {
 		case <-progTimer.C:
 			i.show.Printf("(waiting for %s)", what)
-		case <-time.After(sleepTime):
+		case <-time.After(lc.sleepTime):
 			// Try again
 			// TODO: Fancy animated progress indicator?
 		case <-ctx.Done():
@@ -395,7 +408,7 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	// Wait for Ambassador Pod; grab AES install ID
-	if err := i.loopUntil("AES pod startup", i.GrabAESInstallID); err != nil {
+	if err := i.loopUntil("AES pod startup", i.GrabAESInstallID, lc2); err != nil {
 		i.Report("fail_pod_timeout")
 		// TODO Is it possible to detect other errors? If so, report "fail_install_id", pass along the error
 		return err
@@ -428,7 +441,7 @@ func (i *Installer) Perform(kcontext string) error {
 		ipAddress, err = i.GrabLoadBalancerIP()
 		return err
 	}
-	if err := i.loopUntil("Load Balancer", grabIP); err != nil {
+	if err := i.loopUntil("Load Balancer", grabIP, lc5); err != nil {
 		i.Report("fail_loadbalancer_timeout")
 		i.show.Println("Timed out waiting for the load balancer's IP address for the AES Service.")
 		i.show.Println("- If a load balancer IP address shows up, simply run the installer again.")
@@ -441,7 +454,7 @@ func (i *Installer) Perform(kcontext string) error {
 	i.show.Println("Your IP address is", ipAddress)
 
 	// Wait for Ambassador to be ready to serve ACME requests.
-	if err := i.loopUntil("AES to serve ACME", func() error { return i.CheckAESServesACME(ipAddress) }); err != nil {
+	if err := i.loopUntil("AES to serve ACME", func() error { return i.CheckAESServesACME(ipAddress) }, lc2); err != nil {
 		i.Report("aes_listening_timeout")
 		// TODO: Show an informative message here
 		return err
@@ -528,7 +541,7 @@ func (i *Installer) Perform(kcontext string) error {
 	// Wait for DNS to propagate. This tries to avoid waiting for a ten
 	// minute error backoff if the ACME registration races ahead of the DNS
 	// name appearing for LetsEncrypt.
-	if err := i.loopUntil("DNS propagation to this host", func() error { return i.CheckHostnameFound(hostname) }); err != nil {
+	if err := i.loopUntil("DNS propagation to this host", func() error { return i.CheckHostnameFound(hostname) }, lc2); err != nil {
 		i.Report("dns_name_propagation_timeout")
 		// TODO: Show an informative message here
 		return err
@@ -544,7 +557,7 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	i.show.Println("-> Obtaining a TLS certificate from Let's Encrypt")
-	if err := i.loopUntil("TLS certificate acquisition", func() error { return i.CheckACMEIsDone(hostname) }); err != nil {
+	if err := i.loopUntil("TLS certificate acquisition", func() error { return i.CheckACMEIsDone(hostname) }, lc5); err != nil {
 		i.Report("cert_provision_failed") // TODO add error info here
 		// TODO: Show an informative message here
 		return err
