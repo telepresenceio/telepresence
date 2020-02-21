@@ -302,6 +302,7 @@ def new_swapped_deployment(
                                                {})["telepresence"] = run_id
     ndj_template = new_deployment_json["spec"]["template"]
     ndj_template["metadata"].setdefault("labels", {})["telepresence"] = run_id
+    ndj_template["spec"]["securityContext"]["runAsUser"] = 0
     if service_account:
         ndj_template["spec"]["serviceAccountName"] = service_account
     for container, old_container in zip(
