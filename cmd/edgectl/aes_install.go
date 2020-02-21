@@ -184,7 +184,6 @@ func (i *Installer) loopUntil(what string, how func() error, lc *loopConfig) err
 			i.show.Printf("(waiting for %s)", what)
 		case <-time.After(lc.sleepTime):
 			// Try again
-			// TODO: Fancy animated progress indicator?
 		case <-ctx.Done():
 			return errors.Errorf("timed out waiting for %s (or interrupted)", what)
 		}
@@ -345,9 +344,6 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	// Figure out what version of AES is being installed
-	// TODO: Parse the manifests and build objects
-	// TODO: Extract version info from the Deployment object
-	// TODO? Set label(s) on the to indicate this installation was performed by the installer
 	aesVersionRE := regexp.MustCompile("image: quay[.]io/datawire/aes:([[:^space:]]+)[[:space:]]")
 	matches := aesVersionRE.FindStringSubmatch(aesManifests)
 	if len(matches) != 2 {
@@ -390,7 +386,6 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	// Install the AES manifests
-	// TODO: Figure out if a previous installation exists
 
 	if err := i.ShowKubectl("install CRDs", crdManifests, "apply", "-f", "-"); err != nil {
 		i.Report("fail_install_crds")
@@ -415,12 +410,10 @@ func (i *Installer) Perform(kcontext string) error {
 	// Wait for Ambassador Pod; grab AES install ID
 	if err := i.loopUntil("AES pod startup", i.GrabAESInstallID, lc2); err != nil {
 		i.Report("fail_pod_timeout")
-		// TODO Is it possible to detect other errors? If so, report "fail_install_id", pass along the error
 		return err
 	}
 
 	// Grab Helm information if present
-	// TODO: Figure out Helm version?
 	if managedDeployment, err := i.CaptureKubectl("get deployment labels", "", "get", "-n", "ambassador", "deployments", "ambassador", "-Lapp.kubernetes.io/managed-by"); err == nil {
 		if strings.Contains(managedDeployment, "Helm") {
 			i.SetMetadatum("Cluster Info", "managed", "helm")
@@ -558,7 +551,7 @@ func (i *Installer) Perform(kcontext string) error {
 
 	i.show.Println("-> Obtaining a TLS certificate from Let's Encrypt")
 	if err := i.loopUntil("TLS certificate acquisition", func() error { return i.CheckACMEIsDone(hostname) }, lc5); err != nil {
-		i.Report("cert_provision_failed") // TODO add error info here
+		i.Report("cert_provision_failed")
 		// Some info is reported by the check function.
 		i.ShowWrapped(seeDocs)
 		i.ShowWrapped(tryAgain)
@@ -573,9 +566,7 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	// Open a browser window to the Edge Policy Console
-	// TODO Make this really noisy and gross
 	if err := do_login(i.kubeinfo, kcontext, "ambassador", hostname, false, false); err != nil {
-		// TODO: Show an informative message here
 		return err
 	}
 
