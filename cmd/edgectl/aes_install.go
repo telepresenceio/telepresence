@@ -434,7 +434,11 @@ func (i *Installer) Perform(kcontext string) error {
 	// timeouts.
 	if isKnownLocalCluster {
 		i.Report("cluster_not_accessible")
-		// TODO: Show local cluster message
+		i.show.Println("-> Local cluster detected. Not configuring automatic TLS.")
+		loginMsg := "Determine the IP address and port number of your Ambassador service. "
+		loginMsg += fmt.Sprintf(loginViaIP, "IP_ADDRESS:PORT")
+		i.ShowWrapped(loginMsg)
+		i.ShowWrapped(seeDocs)
 		return nil
 	}
 
@@ -517,26 +521,13 @@ func (i *Installer) Perform(kcontext string) error {
 
 	if resp.StatusCode != 200 {
 		message := strings.TrimSpace(string(content))
-		// TODO: consider how this message should look relative to the other
-		// not-accessible cases
 		i.Report("dns_name_failure", ScoutMeta{"code", resp.StatusCode}, ScoutMeta{"err", message})
 		i.show.Println("-> Failed to create a DNS name:", message)
 		i.show.Println()
-		i.show.Println("If this IP address is reachable from here, then the following command")
-		i.show.Println("will open the Edge Policy Console once you accept a self-signed")
-		i.show.Println("certificate in your browser.")
-		i.show.Println()
-		i.show.Println("    edgectl login -n ambassador", ipAddress)
-		i.show.Println()
-		i.show.Println("If the IP is not reachable from here, you can use port forwarding to")
-		i.show.Println("access the Edge Policy Console.")
-		i.show.Println()
-		i.show.Println("    kubectl -n ambassador port-forward deploy/ambassador 8443 &")
-		i.show.Println("    edgectl login -n ambassador 127.0.0.1:8443")
-		i.show.Println()
-		i.show.Println("You will need to accept a self-signed certificate in your browser.")
-		i.show.Println()
-		i.show.Println("See https://www.getambassador.io/user-guide/getting-started/")
+		i.ShowWrapped("If this IP address is reachable from here, you can access your installation without a DNS name.")
+		i.ShowWrapped(fmt.Sprintf(loginViaIP, ipAddress))
+		i.ShowWrapped(loginViaPortForward)
+		i.ShowWrapped(seeDocs)
 		return nil
 	}
 
@@ -755,5 +746,22 @@ spec:
 `
 
 const emailAsk = `Please enter an email address. We'll use this email address to notify you prior to domain and certificate expiration. We also share this email address with Let's Encrypt to acquire your certificate for TLS.`
+
+const loginViaIP = `
+The following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.
+
+$ edgectl login -n ambassador %s
+` // ipAddress
+
+const loginViaPortForward = `
+You can use port forwarding to access the Edge Policy Console.
+
+$ kubectl -n ambassador port-forward deploy/ambassador 8443 &
+$ edgectl login -n ambassador 127.0.0.1:8443
+
+You will need to accept a self-signed certificate in your browser.
+`
+
+const seeDocs = "See https://www.getambassador.io/user-guide/getting-started/"
 
 var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
