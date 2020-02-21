@@ -326,9 +326,9 @@ func (i *Installer) Perform(kcontext string) error {
 	// Allow overriding the source domain (e.g., for smoke tests before release)
 	manifestsDomain := "www.getambassador.io"
 	domainOverrideVar := "AES_MANIFESTS_DOMAIN"
+	overrideMessage := "Downloading manifests from override domain %q instead of default %q because the environment variable %s is set."
 	if amd := os.Getenv(domainOverrideVar); amd != "" {
-		i.show.Printf("Downloading manifests from override domain %q instead of default %q", amd, manifestsDomain)
-		i.show.Printf("because the environment variable %s is set.", domainOverrideVar)
+		i.ShowWrapped(fmt.Sprintf(overrideMessage, amd, manifestsDomain, domainOverrideVar))
 		manifestsDomain = amd
 	}
 
