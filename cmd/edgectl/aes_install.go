@@ -481,7 +481,7 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	// Ask for the user's email address
-	i.show.Println(emailAsk)
+	i.ShowWrapped(emailAsk)
 	// Do the goroutine dance to let the user hit Ctrl-C at the email prompt
 	gotEmail := make(chan (string))
 	var emailAddress string
@@ -639,6 +639,15 @@ func (i *Installer) Quit() {
 	i.cancel()
 }
 
+func (i *Installer) ShowWrapped(text string) {
+	text = strings.Trim(text, "\n")                  // Drop leading and trailing newlines
+	for _, para := range strings.Split(text, "\n") { // Preserve newlines in the text
+		for _, line := range doWordWrap(para, "", 79) { // But wrap text too
+			i.show.Println(line)
+		}
+	}
+}
+
 // Kubernetes Cluster
 
 // ShowKubectl calls kubectl and dumps the output to the logger. Use this for
@@ -707,6 +716,27 @@ func (i *Installer) Report(eventName string, meta ...ScoutMeta) {
 	}
 }
 
+func doWordWrap(text string, prefix string, lineWidth int) []string {
+	words := strings.Fields(strings.TrimSpace(text))
+	if len(words) == 0 {
+		return []string{""}
+	}
+	lines := make([]string, 0)
+	wrapped := prefix + words[0]
+	for _, word := range words[1:] {
+		if len(word)+1 > lineWidth-len(wrapped) {
+			lines = append(lines, wrapped)
+			wrapped = prefix + word
+		} else {
+			wrapped += " " + word
+		}
+	}
+	if len(wrapped) > 0 {
+		lines = append(lines, wrapped)
+	}
+	return lines
+}
+
 // registration is used to register edgestack.me domains
 type registration struct {
 	Email string
@@ -724,8 +754,6 @@ spec:
     email: %s
 `
 
-// FIXME: Mention that this will be shared with Let's Encrypt?
-const emailAsk = `Please enter an email address. We'll use this email address to notify you
-prior to domain and certificate expiration.`
+const emailAsk = `Please enter an email address. We'll use this email address to notify you prior to domain and certificate expiration. We also share this email address with Let's Encrypt to acquire your certificate for TLS.`
 
 var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
