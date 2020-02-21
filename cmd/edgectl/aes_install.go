@@ -465,7 +465,8 @@ func (i *Installer) Perform(kcontext string) error {
 	// Wait for Ambassador to be ready to serve ACME requests.
 	if err := i.loopUntil("AES to serve ACME", func() error { return i.CheckAESServesACME(ipAddress) }, lc2); err != nil {
 		i.Report("aes_listening_timeout")
-		// TODO: Show an informative message here
+		i.ShowWrapped("It seems AES did not start in the expected time.")
+		i.ShowWrapped(tryAgain)
 		return err
 	}
 	i.Report("aes_listening")
@@ -539,7 +540,9 @@ func (i *Installer) Perform(kcontext string) error {
 	// name appearing for LetsEncrypt.
 	if err := i.loopUntil("DNS propagation to this host", func() error { return i.CheckHostnameFound(hostname) }, lc2); err != nil {
 		i.Report("dns_name_propagation_timeout")
-		// TODO: Show an informative message here
+		i.ShowWrapped("We are unable to resolve your new DNS name on this machine.")
+		i.ShowWrapped(seeDocs)
+		i.ShowWrapped(tryAgain)
 		return err
 	}
 	i.Report("dns_name_propagated")
@@ -548,20 +551,24 @@ func (i *Installer) Perform(kcontext string) error {
 	hostResource := fmt.Sprintf(hostManifest, hostname, hostname, emailAddress)
 	if err := i.ShowKubectl("install Host resource", hostResource, "apply", "-f", "-"); err != nil {
 		i.Report("fail_host_resource", ScoutMeta{"err", err.Error()})
-		// TODO: Show an informative message here
+		i.ShowWrapped("We failed to create a Host resource in your cluster. This is unexpected.")
+		i.ShowWrapped(seeDocs)
 		return err
 	}
 
 	i.show.Println("-> Obtaining a TLS certificate from Let's Encrypt")
 	if err := i.loopUntil("TLS certificate acquisition", func() error { return i.CheckACMEIsDone(hostname) }, lc5); err != nil {
 		i.Report("cert_provision_failed") // TODO add error info here
-		// TODO: Show an informative message here
+		// Some info is reported by the check function.
+		i.ShowWrapped(seeDocs)
+		i.ShowWrapped(tryAgain)
 		return err
 	}
 	i.Report("cert_provisioned")
 	i.show.Println("-> TLS configured successfully")
 	if err := i.ShowKubectl("show Host", "", "get", "host", hostname); err != nil {
-		// TODO: Show an informative message here
+		i.ShowWrapped("We failed to retrieve the Host resource from your cluster that we just created. This is unexpected.")
+		i.ShowWrapped(tryAgain)
 		return err
 	}
 
@@ -761,6 +768,8 @@ $ edgectl login -n ambassador 127.0.0.1:8443
 
 You will need to accept a self-signed certificate in your browser.
 `
+
+const tryAgain = "If this appears to be a transient failure, please try running the installer again. It is safe to run the installer repeatedly on a cluster."
 
 const seeDocs = "See https://www.getambassador.io/user-guide/getting-started/"
 
