@@ -178,6 +178,8 @@ spec:
         command: ["/usr/src/app/run.sh"]
         terminationMessagePolicy: "FallbackToLogsOnError"
         imagePullPolicy: "IfNotPresent"
+        securityContext:
+          runAsUser: 0
         ports:
         - containerPort: 80
           name: http-api
