@@ -1,2 +1,1 @@
-For the telepresence deployment, the runAsUser will now be set to 0. This is a usefull setting when you
-have a different runAsUser for your deployment or if you have Pod Security Policies defined.
+For the telepresence deployment, the runAsUser will now be set to 0. This is a usefull setting when you have a different runAsUser for your deployment or if you have Pod Security Policies defined.
