@@ -318,13 +318,9 @@ def new_swapped_deployment(
             # Not strictly necessary for real use, but tests break without this
             # since we don't upload test images to Docker Hub:
             container["imagePullPolicy"] = "IfNotPresent"
-            # Set runAsUser to 0 because telepresence image requires this. This 
+            # Set runAsUser to 0 because telepresence image requires this. This
             # is usefull when PodSecurityPolicy is enabled.
-            container.update({
-                "securityContext": {
-                    "runAsUser": 0
-                }
-            })
+            container.update({"securityContext": {"runAsUser": 0}})
             # Drop unneeded fields:
             for unneeded in [
                 "args", "livenessProbe", "readinessProbe", "workingDir",
