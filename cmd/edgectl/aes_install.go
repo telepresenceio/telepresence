@@ -354,7 +354,7 @@ func (i *Installer) Perform(kcontext string) error {
 	i.SetMetadatum("AES version being installed", "aes_version", aesVersion)
 
 	// Display version information
-	i.show.Printf("-> Installing the Ambassador Edge Stack %s\n", aesVersion)
+	i.ShowWrapped(fmt.Sprintf("-> Installing the Ambassador Edge Stack %s. (This may take a minute to download images.)", aesVersion))
 
 	// Attempt to talk to the specified cluster
 	i.kubeinfo = k8s.NewKubeInfo("", kcontext, "")
