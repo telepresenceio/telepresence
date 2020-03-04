@@ -47,10 +47,3 @@ func Notify(p *supervisor.Process, message string) {
 		p.Logf("ERROR while notifying: %v", err)
 	}
 }
-
-// MaybeNotify displays a notification only if a value changes
-func MaybeNotify(p *supervisor.Process, name string, old, new bool) {
-	if old != new {
-		Notify(p, fmt.Sprintf("%s: %t -> %t", name, old, new))
-	}
-}

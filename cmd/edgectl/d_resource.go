@@ -26,6 +26,7 @@ type ResourceBase struct {
 	doQuit  func(*supervisor.Process) error
 	tasks   chan func(*supervisor.Process) error
 	okay    bool          // (monitor) cmd is running and check passes
+	transAt time.Time     // (monitor) time of transition (okay value changed)
 	done    bool          // (Close) to get everything to quit
 	end     chan struct{} // (Close) closed when the processor finishes
 }
@@ -64,6 +65,7 @@ func (rb *ResourceBase) setup(sup *supervisor.Supervisor, name string) {
 	rb.name = name
 	rb.tasks = make(chan func(*supervisor.Process) error, 10)
 	rb.end = make(chan struct{})
+	rb.transAt = time.Now()
 	sup.Supervise(&supervisor.Worker{
 		Name: name,
 		Work: rb.processor,
@@ -98,7 +100,10 @@ func (rb *ResourceBase) monitor(p *supervisor.Process) error {
 		p.Log("monitor: check passed")
 		rb.okay = true
 	}
-	MaybeNotify(p, rb.name, old, rb.okay)
+	if old != rb.okay {
+		Notify(p, fmt.Sprintf("%s: %t -> %t after %s", rb.name, old, rb.okay, time.Since(rb.transAt)))
+		rb.transAt = time.Now()
+	}
 	return nil
 }
 
@@ -120,7 +125,7 @@ func (rb *ResourceBase) processor(p *supervisor.Process) error {
 			return err
 		}
 		if rb.done {
-			MaybeNotify(p, rb.name, rb.okay, false)
+			Notify(p, fmt.Sprintf("%s: %t -> Closed after %s", rb.name, rb.okay, time.Since(rb.transAt)))
 			p.Log("done")
 			return nil
 		}
