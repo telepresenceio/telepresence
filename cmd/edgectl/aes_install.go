@@ -373,6 +373,9 @@ func (i *Installer) Perform(kcontext string) error {
 		} else if strings.Contains(clusterNodeLabels, "minikube") {
 			clusterInfo = "minikube"
 			isKnownLocalCluster = true
+		} else if strings.Contains(clusterNodeLabels, "kind") {
+			clusterInfo = "kind"
+			isKnownLocalCluster = true
 		} else if strings.Contains(clusterNodeLabels, "gke") {
 			clusterInfo = "gke"
 		} else if strings.Contains(clusterNodeLabels, "aks") {
