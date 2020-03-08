@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import argparse
-import ipaddress
 import json
 import os
 import os.path
@@ -74,8 +73,8 @@ def parse_resolv_conf(contents: str) -> List[str]:
 
 def parse_hosts_aliases(contents: str) -> List[str]:
     """
-    Try to extract IP, and corresponding host names from hosts file for each hostAlias,
-    and create the corresponding --add-host docker run argument.
+    Try to extract IP, and corresponding host names from hosts file for each
+    hostAlias, and create the corresponding --add-host docker run argument.
     """
     res = []
 
