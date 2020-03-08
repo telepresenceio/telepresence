@@ -403,13 +403,13 @@ def create_deployment(deployment_ident, image, args, environ, ports, replicas):
                             }],
                         },
                     }],
+                    "hostAliases": [{
+                        "ip": "127.0.0.1",
+                        "hostnames": ["foo.local", "bar.local"],
+                    }],
                     "containers": [container, sidecar_container],
                 },
             },
-            "hostAliases": [{
-                "ip": "127.0.0.1",
-                "hostnames": ["foo.local"]
-            }]
         },
     })
     check_output([KUBECTL, "create", "-f", "-"],

@@ -465,10 +465,15 @@ def test_resolve_host_alias(probe):
     """
     Name resolution is performed in the context of the Kubernetes cluster.
     """
+    if probe.method.name != "container" or probe.operation.name != "swap":
+        pytest.skip(
+            "Test only applies to --method container with --swap-deployment usage."
+        )
+
     result = probe.result()
     result.write("gethostbyname foo.local")
     success, reply = loads(result.read())
-    assert success and IPv4Address(reply) and "127.0.0.1" in reply[0], reply
+    assert success and IPv4Address(reply), reply
 
 
 @with_probe

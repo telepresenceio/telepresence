@@ -72,41 +72,35 @@ def parse_resolv_conf(contents: str) -> List[str]:
     return res
 
 
-def parse_hosts(contents: str) -> List[str]:
+def parse_hosts_aliases(contents: str) -> List[str]:
     """
-    Try to extract IP, and corresponding host names from hosts file.
+    Try to extract IP, and corresponding host names from hosts file for each hostAlias,
+    and create the corresponding --add-host docker run argument.
     """
     res = []
+
+    host_alias = False
+
     for line in contents.splitlines():
+
         line = line.strip()
 
-        if not line or line.startswith("#"):
+        if not line:
             continue
 
-        tokens = line.split()
-        ip = tokens[0]
-        hosts = tokens[1:]
-
-        if ip == "127.0.0.1" or not validate_ip(ip):
+        if line.startswith("#"):
+            host_alias = line.__contains__("HostAliases")
             continue
 
-        for host in hosts:
-            if host.startswith(
-                "#"
-            ) or host == "localhost" or host == "broadcasthost":
-                break
-            res.append("--add-host={}:{}".format(host, ip))
+        if host_alias:
+            tokens = line.split()
+            ip = tokens[0]
+            hosts = tokens[1:]
+
+            for host in hosts:
+                res.append("--add-host={}:{}".format(host, ip))
 
     return res
-
-
-def validate_ip(s):
-
-    try:
-        ipaddress.ip_address(s)
-        return True
-    except ValueError:
-        return False
 
 
 def run_docker_command(
@@ -159,7 +153,7 @@ def run_docker_command(
     if "hostname" in pod_info:
         dns_args.append("--hostname={}".format(pod_info["hostname"].strip()))
     if "hosts" in pod_info:
-        dns_args.extend(parse_hosts(pod_info["hosts"]))
+        dns_args.extend(parse_hosts_aliases(pod_info["hosts"]))
     if "resolv" in pod_info:
         dns_args.extend(parse_resolv_conf(pod_info["resolv"]))
 
