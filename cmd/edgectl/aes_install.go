@@ -356,7 +356,8 @@ func (i *Installer) Perform(kcontext string) error {
 	i.SetMetadatum("AES version being installed", "aes_version", aesVersion)
 
 	// Display version information
-	i.ShowWrapped(fmt.Sprintf("-> Installing the Ambassador Edge Stack %s. (This may take a minute to download images.)", aesVersion))
+	i.ShowWrapped(fmt.Sprintf("-> Installing the Ambassador Edge Stack %s.", aesVersion))
+	i.ShowWrapped("Downloading images. (This may take a minute.)")
 
 	// Attempt to talk to the specified cluster
 	i.kubeinfo = k8s.NewKubeInfo("", kcontext, "")
@@ -433,15 +434,20 @@ func (i *Installer) Perform(kcontext string) error {
 	if isKnownLocalCluster {
 		i.Report("cluster_not_accessible")
 		i.show.Println("-> Local cluster detected. Not configuring automatic TLS.")
-		loginMsg := "Determine the IP address and port number of your Ambassador service. "
+		i.show.Println()
+		i.ShowWrapped(noTlsSuccess)
+		i.show.Println()
+		loginMsg := "Determine the IP address and port number of your Ambassador service.\n"
+		loginMsg += "(e.g., minikube service -n ambassador ambassador)\n"
 		loginMsg += fmt.Sprintf(loginViaIP, "IP_ADDRESS:PORT")
 		i.ShowWrapped(loginMsg)
+		i.show.Println()
 		i.ShowWrapped(seeDocs)
 		return nil
 	}
 
 	// Grab load balancer IP address
-	i.show.Println("-> Provisioning a cloud load balancer. (This may take a minute, depending on your cloud provider.)")
+	i.ShowWrapped("-> Provisioning a cloud load balancer. (This may take a minute, depending on your cloud provider.)")
 	ipAddress := ""
 	grabIP := func() error {
 		var err error
@@ -450,21 +456,23 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 	if err := i.loopUntil("Load Balancer", grabIP, lc5); err != nil {
 		i.Report("fail_loadbalancer_timeout")
-		i.show.Println("Timed out waiting for the load balancer's IP address for the AES Service.")
-		i.show.Println("- If a load balancer IP address shows up, simply run the installer again.")
-		i.show.Println("- If your cluster doesn't support load balancers, you'll need to expose")
-		i.show.Println("  AES some other way.")
-		i.show.Println("See https://www.getambassador.io/user-guide/getting-started/")
+		i.show.Println()
+		i.ShowWrapped(failLoadBalancer)
+		i.show.Println()
+		i.ShowWrapped(noTlsSuccess)
+		i.ShowWrapped(seeDocs)
 		return err
 	}
 	i.Report("cluster_accessible")
-	i.show.Println("Your IP address is", ipAddress)
+	i.show.Println("Your AES installation's IP address is", ipAddress)
 
 	// Wait for Ambassador to be ready to serve ACME requests.
 	if err := i.loopUntil("AES to serve ACME", func() error { return i.CheckAESServesACME(ipAddress) }, lc2); err != nil {
 		i.Report("aes_listening_timeout")
-		i.ShowWrapped("It seems AES did not start in the expected time.")
+		i.ShowWrapped("It seems AES did not start in the expected time, or your IP address is not reachable from here.")
 		i.ShowWrapped(tryAgain)
+		i.ShowWrapped(noTlsSuccess)
+		i.ShowWrapped(seeDocs)
 		return err
 	}
 	i.Report("aes_listening")
@@ -484,6 +492,7 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	// Ask for the user's email address
+	i.show.Println()
 	i.ShowWrapped(emailAsk)
 	// Do the goroutine dance to let the user hit Ctrl-C at the email prompt
 	gotEmail := make(chan (string))
@@ -499,6 +508,7 @@ func (i *Installer) Perform(kcontext string) error {
 		fmt.Println()
 		return errors.New("Interrupted")
 	}
+	i.show.Println()
 
 	i.log.Printf("Using email address %q", emailAddress)
 
@@ -523,6 +533,7 @@ func (i *Installer) Perform(kcontext string) error {
 		i.Report("dns_name_failure", ScoutMeta{"code", resp.StatusCode}, ScoutMeta{"err", message})
 		i.show.Println("-> Failed to create a DNS name:", message)
 		i.show.Println()
+		i.ShowWrapped(noTlsSuccess)
 		i.ShowWrapped("If this IP address is reachable from here, you can access your installation without a DNS name.")
 		i.ShowWrapped(fmt.Sprintf(loginViaIP, ipAddress))
 		i.ShowWrapped(loginViaPortForward)
@@ -569,6 +580,10 @@ func (i *Installer) Perform(kcontext string) error {
 		i.ShowWrapped(tryAgain)
 		return err
 	}
+
+	i.show.Println()
+	i.ShowWrapped(fmt.Sprintf(fullSuccess, hostname))
+	i.show.Println()
 
 	// Open a browser window to the Edge Policy Console
 	if err := do_login(i.kubeinfo, kcontext, "ambassador", hostname, false, false); err != nil {
@@ -757,7 +772,7 @@ $ edgectl login -n ambassador %s
 ` // ipAddress
 
 const loginViaPortForward = `
-You can use port forwarding to access the Edge Policy Console.
+You can use port forwarding to access your Edge Stack installation and the Edge Policy Console.
 
 $ kubectl -n ambassador port-forward deploy/ambassador 8443 &
 $ edgectl login -n ambassador 127.0.0.1:8443
@@ -765,8 +780,18 @@ $ edgectl login -n ambassador 127.0.0.1:8443
 You will need to accept a self-signed certificate in your browser.
 `
 
+const failLoadBalancer = `
+Timed out waiting for the load balancer's IP address for the AES Service.
+- If a load balancer IP address shows up, simply run the installer again.
+- If your cluster doesn't support load balancers, you'll need to expose AES some other way.
+`
+
 const tryAgain = "If this appears to be a transient failure, please try running the installer again. It is safe to run the installer repeatedly on a cluster."
 
 const seeDocs = "See https://www.getambassador.io/user-guide/getting-started/"
 
 var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+
+const fullSuccess = "Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit %s to access your Edge Stack installation and for additional configuration." // hostname
+
+const noTlsSuccess = "Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically."
