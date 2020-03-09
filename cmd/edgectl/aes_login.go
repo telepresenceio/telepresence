@@ -23,7 +23,7 @@ type LoginClaimsV1 struct {
 }
 
 func aesLogin(cmd *cobra.Command, args []string) error {
-	fmt.Println("Connecting to the Ambassador Edge Stack admin UI in this cluster...")
+	fmt.Println("Connecting to the Ambassador Edge Policy Console in this cluster...")
 
 	// Grab options
 	context, _ := cmd.Flags().GetString("context")
@@ -95,11 +95,11 @@ func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, justS
 	}
 
 	if justShowURL || err != nil {
-		fmt.Println("Visit the following URL to access the Ambassador Edge Stack admin UI:")
+		fmt.Println("Visit the following URL to access the Ambassador Edge Policy Console:")
+		fmt.Println("    ", url)
 	} else {
-		fmt.Println("Ambassador Edge Stack admin UI has been opened in your browser.")
+		fmt.Println("The Ambassador Edge Policy Console has been opened in your browser.")
 	}
-	fmt.Println("    ", url)
 
 	if showToken {
 		fmt.Println()
