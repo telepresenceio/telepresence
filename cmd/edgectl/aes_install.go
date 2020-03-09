@@ -114,6 +114,8 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if len(runErrors) > 0 {
+		i.show.Println()
+		i.show.Printf("Full logs at %s\n\n", i.logName)
 		return runErrors[0]
 	}
 	return nil
