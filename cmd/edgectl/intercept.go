@@ -309,7 +309,6 @@ func MakeIntercept(p *supervisor.Process, out *Emitter, tm *TrafficManager, clus
 	cept.setup(p.Supervisor(), ii.Name)
 
 	p.Logf("%s: Intercepting via port %v, using namespace %v", ii.Name, port, ii.Namespace)
-	out.Printf("%v: Intercepting\n", ii.Name)
 
 	mapping := interceptMapping{
 		APIVersion: "getambassador.io/v2",
@@ -334,7 +333,7 @@ func MakeIntercept(p *supervisor.Process, out *Emitter, tm *TrafficManager, clus
 	}
 
 	p.Logf("%s: Intercept using mapping %v", ii.Name, string(manifest))
-	out.Printf("Applying intercept mapping:\n%v\n", string(manifest))
+	out.Printf("%s: applying intercept mapping in namespace %s\n", ii.Name, ii.Namespace)
 
 	apply := cluster.GetKubectlCmdNoNamespace(p, "apply", "-f", "-")
 	apply.Stdin = strings.NewReader(string(manifest))
@@ -359,7 +358,7 @@ func MakeIntercept(p *supervisor.Process, out *Emitter, tm *TrafficManager, clus
 	}
 
 	p.Logf("%s: starting SSH tunnel", ii.Name)
-	out.Printf("%s: starting SSH tunnel", ii.Name)
+	out.Printf("%s: starting SSH tunnel\n", ii.Name)
 
 	ssh, err := CheckedRetryingCommand(p, ii.Name+"-ssh", sshCmd, nil, nil, 5*time.Second)
 
