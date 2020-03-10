@@ -157,7 +157,7 @@ type TrafficManager struct {
 // NewTrafficManager returns a TrafficManager resource for the given
 // cluster if it has a Traffic Manager service.
 func NewTrafficManager(p *supervisor.Process, cluster *KCluster) (*TrafficManager, error) {
-	cmd := cluster.GetKubectlCmd(p, "get", "svc/telepresence-proxy", "deploy/telepresence-proxy")
+	cmd := cluster.GetKubectlCmd(p, "get", "-n", cluster.namespace, "svc/telepresence-proxy", "deploy/telepresence-proxy")
 	err := cmd.Run()
 	if err != nil {
 		return nil, errors.Wrap(err, "kubectl get svc/deploy telepresency-proxy")
@@ -171,7 +171,7 @@ func NewTrafficManager(p *supervisor.Process, cluster *KCluster) (*TrafficManage
 	if err != nil {
 		return nil, errors.Wrap(err, "get free port for ssh")
 	}
-	kpfArgStr := fmt.Sprintf("port-forward svc/telepresence-proxy %d:8022 %d:8081", sshPort, apiPort)
+	kpfArgStr := fmt.Sprintf("port-forward -n %s svc/telepresence-proxy %d:8022 %d:8081", cluster.namespace, sshPort, apiPort)
 	kpfArgs := cluster.GetKubectlArgs(strings.Fields(kpfArgStr)...)
 	tm := &TrafficManager{apiPort: apiPort, sshPort: sshPort}
 

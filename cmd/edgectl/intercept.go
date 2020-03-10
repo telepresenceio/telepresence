@@ -53,7 +53,9 @@ func (ii *InterceptInfo) Acquire(_ *supervisor.Process, tm *TrafficManager) (int
 	if err != nil {
 		return 0, err
 	}
-	result, code, err := tm.request("POST", "intercept/"+ii.Deployment, reqData)
+
+	requestUrl := fmt.Sprintf("intercept/%s/%s", ii.Namespace, ii.Deployment)
+	result, code, err := tm.request("POST", requestUrl, reqData)
 	if err != nil {
 		return 0, errors.Wrap(err, "acquire intercept")
 	}
@@ -134,6 +136,7 @@ func (d *Daemon) AddIntercept(p *supervisor.Process, out *Emitter, ii *Intercept
 		out.Send("intercept", msg)
 		return nil
 	}
+
 	for _, cept := range d.intercepts {
 		if cept.ii.Name == ii.Name {
 			out.Printf("Intercept with name %q already exists\n", ii.Name)
@@ -142,6 +145,53 @@ func (d *Daemon) AddIntercept(p *supervisor.Process, out *Emitter, ii *Intercept
 			return nil
 		}
 	}
+
+	// Do we already have a namespace?
+	if ii.Namespace == "" {
+		// Nope. See if we have an interceptable that matches the name.
+
+		matches := make([]InterceptInfo, 0)
+		for _, deployment := range d.trafficMgr.interceptables {
+			fields := strings.SplitN(deployment, "/", 2)
+
+			appName := fields[0]
+			appNamespace := d.cluster.namespace
+
+			if len(fields) > 1 {
+				appNamespace = fields[0]
+				appName = fields[1]
+			}
+
+			if ii.Deployment == appName {
+				// Abuse InterceptInfo rather than defining a new tuple type.
+				matches = append(matches, InterceptInfo{"", appNamespace, appName, "", nil, "", 0})
+			}
+		}
+
+		switch len(matches) {
+		case 0:
+			out.Printf("No interceptable deployment matching %s found", ii.Name)
+			out.Send("failed", "no interceptable deployment matches")
+			out.SendExit(1)
+			return nil
+
+		case 1:
+			// Good to go.
+			ii.Namespace = matches[0].Namespace
+			out.Printf("Using deployment %s in namespace %s\n", ii.Name, ii.Namespace)
+
+		default:
+			out.Printf("Found more than one possible match:\n")
+
+			for idx, match := range matches {
+				out.Printf("%4d: %s in namespace %s\n", idx+1, match.Deployment, match.Namespace)
+			}
+			out.Send("failed", "multiple interceptable deployment matched")
+			out.SendExit(1)
+			return nil
+		}
+	}
+
 	cept, err := MakeIntercept(p, out, d.trafficMgr, d.cluster, ii)
 	if err != nil {
 		out.Printf("Failed to establish intercept: %s\n", err)
@@ -210,12 +260,12 @@ func (cept *Intercept) removeMapping(p *supervisor.Process) error {
 	err = nil
 
 	if cept.mappingExists {
-		p.Logf("%v: Deleting mapping", cept.ii.Name)
-		delete := cept.cluster.GetKubectlCmd(p, "delete", "mapping", fmt.Sprintf("%s-mapping", cept.ii.Name))
+		p.Logf("%v: Deleting mapping in namespace %v", cept.ii.Name, cept.ii.Namespace)
+		delete := cept.cluster.GetKubectlCmd(p, "delete", "-n", cept.ii.Namespace, "mapping", fmt.Sprintf("%s-mapping", cept.ii.Name))
 		delete.Stdout = os.Stdout
 		delete.Stderr = os.Stderr
 		err = delete.Run()
-		p.Logf("%v: Deleted mapping", cept.ii.Name)
+		p.Logf("%v: Deleted mapping in namespace %v", cept.ii.Name, cept.ii.Namespace)
 	}
 
 	if err != nil {
@@ -271,7 +321,7 @@ func MakeIntercept(p *supervisor.Process, out *Emitter, tm *TrafficManager, clus
 		Spec: mappingSpec{
 			AmbassadorID: []string{fmt.Sprintf("intercept-%s", ii.Deployment)},
 			Prefix:       ii.Prefix,
-			Service:      fmt.Sprintf("telepresence-proxy:%d", port),
+			Service:      fmt.Sprintf("telepresence-proxy.%s:%d", cluster.namespace, port),
 			Headers:      ii.Patterns,
 		},
 	}
@@ -284,9 +334,9 @@ func MakeIntercept(p *supervisor.Process, out *Emitter, tm *TrafficManager, clus
 	}
 
 	p.Logf("%s: Intercept using mapping %v", ii.Name, string(manifest))
-	// out.Printf("Applying intercept mapping in namespace %v:\n%v\n", ii.Namespace, string(manifest))
+	out.Printf("Applying intercept mapping:\n%v\n", string(manifest))
 
-	apply := cluster.GetKubectlCmd(p, "apply", "-f", "-")
+	apply := cluster.GetKubectlCmdNoNamespace(p, "apply", "-f", "-")
 	apply.Stdin = strings.NewReader(string(manifest))
 	apply.Stdout = os.Stdout
 	apply.Stderr = os.Stderr

@@ -187,7 +187,17 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 			default:
 				out.Printf("Found %d interceptable deployment(s):\n", len(d.trafficMgr.interceptables))
 				for idx, deployment := range d.trafficMgr.interceptables {
-					out.Printf("%4d. %s\n", idx+1, deployment)
+					fields := strings.SplitN(deployment, "/", 2)
+
+					appName := fields[0]
+					appNamespace := d.cluster.namespace
+
+					if len(fields) > 1 {
+						appNamespace = fields[0]
+						appName = fields[1]
+					}
+
+					out.Printf("%4d. %s in namespace %s\n", idx+1, appName, appNamespace)
 					out.Send(fmt.Sprintf("interceptable.deployment.%d", idx+1), deployment)
 				}
 			}
@@ -229,9 +239,9 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 				intercept.Name = fmt.Sprintf("cept-%d", time.Now().Unix())
 			}
 
-			if intercept.Namespace == "" {
-				intercept.Namespace = "default"
-			}
+			// if intercept.Namespace == "" {
+			// 	intercept.Namespace = "default"
+			// }
 
 			if intercept.Prefix == "" {
 				intercept.Prefix = "/"
