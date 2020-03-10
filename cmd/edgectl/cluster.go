@@ -42,7 +42,11 @@ func (d *Daemon) Connect(
 		return nil
 	}
 
-	out.Println("Connecting...")
+	if namespace == "" {
+		namespace = "ambassador"
+	}
+
+	out.Printf("Connecting to traffic manager in namespace %s...\n", namespace)
 	out.Send("connect", "Connecting...")
 	cluster, err := TrackKCluster(p, rai, context, namespace, kargs)
 	if err != nil {
