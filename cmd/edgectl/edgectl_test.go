@@ -150,7 +150,7 @@ func TestSmokeOutbound(t *testing.T) {
 	}()
 
 	fmt.Println("connect")
-	require.NoError(t, run(executable, "connect"), "connect")
+	require.NoError(t, run(executable, "connect", "-n", namespace), "connect")
 	out, err = capture(executable, "status")
 	require.NoError(t, err, "status connected")
 	if !strings.Contains(out, "Context") {
