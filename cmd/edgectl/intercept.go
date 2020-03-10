@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -15,7 +17,7 @@ import (
 func (d *Daemon) interceptMessage() string {
 	switch {
 	case d.cluster == nil:
-		return "Not connected"
+		return "Not connected (use 'edgectl connect' to connect to your cluster)"
 	case d.trafficMgr == nil:
 		return "Intercept unavailable: no traffic manager"
 	case !d.trafficMgr.IsOkay():
@@ -28,7 +30,9 @@ func (d *Daemon) interceptMessage() string {
 // InterceptInfo tracks one intercept operation
 type InterceptInfo struct {
 	Name       string // Name of the intercept (user/logging)
+	Namespace  string // Name in which to create the Intercept mapping
 	Deployment string // Name of the deployment being intercepted
+	Prefix     string // Prefix to intercept (default /)
 	Patterns   map[string]string
 	TargetHost string
 	TargetPort int
@@ -49,7 +53,9 @@ func (ii *InterceptInfo) Acquire(_ *supervisor.Process, tm *TrafficManager) (int
 	if err != nil {
 		return 0, err
 	}
-	result, code, err := tm.request("POST", "intercept/"+ii.Deployment, reqData)
+
+	requestUrl := fmt.Sprintf("intercept/%s/%s", ii.Namespace, ii.Deployment)
+	result, code, err := tm.request("POST", requestUrl, reqData)
 	if err != nil {
 		return 0, errors.Wrap(err, "acquire intercept")
 	}
@@ -130,6 +136,7 @@ func (d *Daemon) AddIntercept(p *supervisor.Process, out *Emitter, ii *Intercept
 		out.Send("intercept", msg)
 		return nil
 	}
+
 	for _, cept := range d.intercepts {
 		if cept.ii.Name == ii.Name {
 			out.Printf("Intercept with name %q already exists\n", ii.Name)
@@ -138,7 +145,54 @@ func (d *Daemon) AddIntercept(p *supervisor.Process, out *Emitter, ii *Intercept
 			return nil
 		}
 	}
-	cept, err := MakeIntercept(p, d.trafficMgr, ii)
+
+	// Do we already have a namespace?
+	if ii.Namespace == "" {
+		// Nope. See if we have an interceptable that matches the name.
+
+		matches := make([]InterceptInfo, 0)
+		for _, deployment := range d.trafficMgr.interceptables {
+			fields := strings.SplitN(deployment, "/", 2)
+
+			appName := fields[0]
+			appNamespace := d.cluster.namespace
+
+			if len(fields) > 1 {
+				appNamespace = fields[0]
+				appName = fields[1]
+			}
+
+			if ii.Deployment == appName {
+				// Abuse InterceptInfo rather than defining a new tuple type.
+				matches = append(matches, InterceptInfo{"", appNamespace, appName, "", nil, "", 0})
+			}
+		}
+
+		switch len(matches) {
+		case 0:
+			out.Printf("No interceptable deployment matching %s found", ii.Name)
+			out.Send("failed", "no interceptable deployment matches")
+			out.SendExit(1)
+			return nil
+
+		case 1:
+			// Good to go.
+			ii.Namespace = matches[0].Namespace
+			out.Printf("Using deployment %s in namespace %s\n", ii.Name, ii.Namespace)
+
+		default:
+			out.Printf("Found more than one possible match:\n")
+
+			for idx, match := range matches {
+				out.Printf("%4d: %s in namespace %s\n", idx+1, match.Deployment, match.Namespace)
+			}
+			out.Send("failed", "multiple interceptable deployment matched")
+			out.SendExit(1)
+			return nil
+		}
+	}
+
+	cept, err := MakeIntercept(p, out, d.trafficMgr, d.cluster, ii)
 	if err != nil {
 		out.Printf("Failed to establish intercept: %s\n", err)
 		out.Send("failed", err.Error())
@@ -151,12 +205,14 @@ func (d *Daemon) AddIntercept(p *supervisor.Process, out *Emitter, ii *Intercept
 }
 
 // RemoveIntercept removes one intercept by name
-func (d *Daemon) RemoveIntercept(_ *supervisor.Process, out *Emitter, name string) error {
+func (d *Daemon) RemoveIntercept(p *supervisor.Process, out *Emitter, name string) error {
 	msg := d.interceptMessage()
 	for idx, cept := range d.intercepts {
 		if cept.ii.Name == name {
 			d.intercepts = append(d.intercepts[:idx], d.intercepts[idx+1:]...)
+
 			out.Printf("Removed intercept %q\n", name)
+
 			if err := cept.Close(); err != nil {
 				out.Printf("Error while removing intercept: %v\n", err)
 				out.Send("failed", err.Error())
@@ -189,25 +245,109 @@ func (d *Daemon) ClearIntercepts(p *supervisor.Process) error {
 
 // Intercept is a Resource handle that represents a live intercept
 type Intercept struct {
-	ii   *InterceptInfo
-	tm   *TrafficManager
-	port int
-	crc  Resource
+	ii            *InterceptInfo
+	tm            *TrafficManager
+	cluster       *KCluster
+	port          int
+	crc           Resource
+	mappingExists bool
 	ResourceBase
+}
+
+// removeMapping drops an Intercept's mapping if needed (and possible).
+func (cept *Intercept) removeMapping(p *supervisor.Process) error {
+	var err error
+	err = nil
+
+	if cept.mappingExists {
+		p.Logf("%v: Deleting mapping in namespace %v", cept.ii.Name, cept.ii.Namespace)
+		delete := cept.cluster.GetKubectlCmd(p, "delete", "-n", cept.ii.Namespace, "mapping", fmt.Sprintf("%s-mapping", cept.ii.Name))
+		delete.Stdout = os.Stdout
+		delete.Stderr = os.Stderr
+		err = delete.Run()
+		p.Logf("%v: Deleted mapping in namespace %v", cept.ii.Name, cept.ii.Namespace)
+	}
+
+	if err != nil {
+		return errors.Wrap(err, "Intercept: mapping could not be deleted")
+	}
+
+	return nil
+}
+
+type mappingMetadata struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+}
+
+type mappingSpec struct {
+	AmbassadorID []string          `json:"ambassador_id"`
+	Prefix       string            `json:"prefix"`
+	Service      string            `json:"service"`
+	Headers      map[string]string `json:"headers"`
+}
+
+type interceptMapping struct {
+	APIVersion string          `json:"apiVersion"`
+	Kind       string          `json:"kind"`
+	Metadata   mappingMetadata `json:"metadata"`
+	Spec       mappingSpec     `json:"spec"`
 }
 
 // MakeIntercept acquires an intercept and returns a Resource handle
 // for it
-func MakeIntercept(p *supervisor.Process, tm *TrafficManager, ii *InterceptInfo) (*Intercept, error) {
+func MakeIntercept(p *supervisor.Process, out *Emitter, tm *TrafficManager, cluster *KCluster, ii *InterceptInfo) (*Intercept, error) {
 	port, err := ii.Acquire(p, tm)
 	if err != nil {
 		return nil, err
 	}
 
-	cept := &Intercept{ii: ii, tm: tm, port: port}
+	cept := &Intercept{ii: ii, tm: tm, cluster: cluster, port: port}
+	cept.mappingExists = false
 	cept.doCheck = cept.check
 	cept.doQuit = cept.quit
 	cept.setup(p.Supervisor(), ii.Name)
+
+	p.Logf("%s: Intercepting via port %v, using namespace %v", ii.Name, port, ii.Namespace)
+
+	mapping := interceptMapping{
+		APIVersion: "getambassador.io/v2",
+		Kind:       "Mapping",
+		Metadata: mappingMetadata{
+			Name:      fmt.Sprintf("%s-mapping", ii.Name),
+			Namespace: ii.Namespace,
+		},
+		Spec: mappingSpec{
+			AmbassadorID: []string{fmt.Sprintf("intercept-%s", ii.Deployment)},
+			Prefix:       ii.Prefix,
+			Service:      fmt.Sprintf("telepresence-proxy.%s:%d", cluster.namespace, port),
+			Headers:      ii.Patterns,
+		},
+	}
+
+	manifest, err := json.MarshalIndent(&mapping, "", "  ")
+
+	if err != nil {
+		_ = cept.Close()
+		return nil, errors.Wrap(err, "Intercept: mapping could not be constructed")
+	}
+
+	p.Logf("%s: Intercept using mapping %v", ii.Name, string(manifest))
+	out.Printf("%s: applying intercept mapping in namespace %s\n", ii.Name, ii.Namespace)
+
+	apply := cluster.GetKubectlCmdNoNamespace(p, "apply", "-f", "-")
+	apply.Stdin = strings.NewReader(string(manifest))
+	apply.Stdout = os.Stdout
+	apply.Stderr = os.Stderr
+	err = apply.Run()
+
+	if err != nil {
+		p.Logf("%v: Intercept could not apply mapping: %v", ii.Name, err)
+		_ = cept.Close()
+		return nil, errors.Wrap(err, "Intercept: kubectl apply")
+	}
+
+	cept.mappingExists = true
 
 	sshCmd := []string{
 		"ssh", "-C", "-N", "telepresence@localhost",
@@ -216,11 +356,17 @@ func MakeIntercept(p *supervisor.Process, tm *TrafficManager, ii *InterceptInfo)
 		"-p", strconv.Itoa(tm.sshPort),
 		"-R", fmt.Sprintf("%d:%s:%d", cept.port, ii.TargetHost, ii.TargetPort),
 	}
+
+	p.Logf("%s: starting SSH tunnel", ii.Name)
+	out.Printf("%s: starting SSH tunnel\n", ii.Name)
+
 	ssh, err := CheckedRetryingCommand(p, ii.Name+"-ssh", sshCmd, nil, nil, 5*time.Second)
+
 	if err != nil {
 		_ = cept.Close()
 		return nil, err
 	}
+
 	cept.crc = ssh
 
 	return cept, nil
@@ -232,9 +378,24 @@ func (cept *Intercept) check(p *supervisor.Process) error {
 
 func (cept *Intercept) quit(p *supervisor.Process) error {
 	cept.done = true
-	_ = cept.crc.Close()
+
+	p.Logf("cept.Quit removing %v", cept.ii.Name)
+
+	cept.removeMapping(p)
+
+	p.Logf("cept.Quit removed %v", cept.ii.Name)
+
+	if cept.crc != nil {
+		_ = cept.crc.Close()
+	}
+
+	p.Logf("cept.Quit releasing %v", cept.ii.Name)
+
 	if err := cept.ii.Release(p, cept.tm, cept.port); err != nil {
 		p.Log(err)
 	}
+
+	p.Logf("cept.Quit released %v", cept.ii.Name)
+
 	return nil
 }

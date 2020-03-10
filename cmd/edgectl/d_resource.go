@@ -144,16 +144,30 @@ func (c *KCluster) RAI() *RunAsInfo {
 }
 
 // GetKubectlArgs returns the kubectl command arguments to run a
-// kubectl command with this cluster
+// kubectl command with this cluster, including the namespace argument.
 func (c *KCluster) GetKubectlArgs(args ...string) []string {
+	return c.getKubectlArgs(true, args...)
+}
+
+// GetKubectlArgsNoNamespace returns the kubectl command arguments to run a
+// kubectl command with this cluster, but without the namespace argument.
+func (c *KCluster) GetKubectlArgsNoNamespace(args ...string) []string {
+	return c.getKubectlArgs(false, args...)
+}
+
+func (c *KCluster) getKubectlArgs(includeNamespace bool, args ...string) []string {
 	cmdArgs := make([]string, 0, 1+len(c.kargs)+len(args))
 	cmdArgs = append(cmdArgs, "kubectl")
 	if c.context != "" {
 		cmdArgs = append(cmdArgs, "--context", c.context)
 	}
-	if c.namespace != "" {
-		cmdArgs = append(cmdArgs, "--namespace", c.namespace)
+
+	if includeNamespace {
+		if c.namespace != "" {
+			cmdArgs = append(cmdArgs, "--namespace", c.namespace)
+		}
 	}
+
 	cmdArgs = append(cmdArgs, c.kargs...)
 	cmdArgs = append(cmdArgs, args...)
 	return cmdArgs
@@ -163,6 +177,13 @@ func (c *KCluster) GetKubectlArgs(args ...string) []string {
 // the appropriate environment to talk to the cluster
 func (c *KCluster) GetKubectlCmd(p *supervisor.Process, args ...string) *supervisor.Cmd {
 	return c.rai.Command(p, c.GetKubectlArgs(args...)...)
+}
+
+// GetKubectlCmdNoNamespace returns a Cmd that runs kubectl with the given arguments and
+// the appropriate environment to talk to the cluster, but it doesn't supply a namespace
+// arg.
+func (c *KCluster) GetKubectlCmdNoNamespace(p *supervisor.Process, args ...string) *supervisor.Cmd {
+	return c.rai.Command(p, c.GetKubectlArgsNoNamespace(args...)...)
 }
 
 // Context returns the cluster's context name

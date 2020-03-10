@@ -16,7 +16,7 @@ func (d *Daemon) Status(_ *supervisor.Process, out *Emitter) error {
 	}
 	out.Send("net_overrides", d.network.IsOkay())
 	if d.cluster == nil {
-		out.Println("Not connected")
+		out.Println("Not connected (use 'edgectl connect' to connect to your cluster)")
 		out.Send("cluster", nil)
 		return nil
 	}
