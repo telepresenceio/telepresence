@@ -110,7 +110,7 @@ func (d *Daemon) ListIntercepts(_ *supervisor.Process, out *Emitter) error {
 	for idx, cept := range d.intercepts {
 		ii := cept.ii
 		out.Printf("%4d. %s\n", idx+1, ii.Name)
-		out.Send("local_intercept", ii.Name)
+		out.Send(fmt.Sprintf("local_intercept.%d", idx+1), ii.Name)
 		key := "local_intercept." + ii.Name
 		out.Printf("      Intercepting requests to %s when\n", ii.Deployment)
 		out.Send(key, ii.Deployment)
@@ -262,8 +262,6 @@ func (cept *Intercept) removeMapping(p *supervisor.Process) error {
 	if cept.mappingExists {
 		p.Logf("%v: Deleting mapping in namespace %v", cept.ii.Name, cept.ii.Namespace)
 		delete := cept.cluster.GetKubectlCmd(p, "delete", "-n", cept.ii.Namespace, "mapping", fmt.Sprintf("%s-mapping", cept.ii.Name))
-		delete.Stdout = os.Stdout
-		delete.Stderr = os.Stderr
 		err = delete.Run()
 		p.Logf("%v: Deleted mapping in namespace %v", cept.ii.Name, cept.ii.Namespace)
 	}
@@ -326,7 +324,6 @@ func MakeIntercept(p *supervisor.Process, out *Emitter, tm *TrafficManager, clus
 	}
 
 	manifest, err := json.MarshalIndent(&mapping, "", "  ")
-
 	if err != nil {
 		_ = cept.Close()
 		return nil, errors.Wrap(err, "Intercept: mapping could not be constructed")
@@ -361,7 +358,6 @@ func MakeIntercept(p *supervisor.Process, out *Emitter, tm *TrafficManager, clus
 	out.Printf("%s: starting SSH tunnel\n", ii.Name)
 
 	ssh, err := CheckedRetryingCommand(p, ii.Name+"-ssh", sshCmd, nil, nil, 5*time.Second)
-
 	if err != nil {
 		_ = cept.Close()
 		return nil, err
