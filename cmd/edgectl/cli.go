@@ -124,7 +124,8 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 		RunE: func(cmd *cobra.Command, args []string) error {
 			context, _ := cmd.Flags().GetString("context")
 			namespace, _ := cmd.Flags().GetString("namespace")
-			if err := d.Connect(p, out, data.RAI, context, namespace, args); err != nil {
+			managerNs, _ := cmd.Flags().GetString("manager-namespace")
+			if err := d.Connect(p, out, data.RAI, context, namespace, managerNs, args); err != nil {
 				return err
 			}
 			return out.Err()
@@ -137,6 +138,10 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 	_ = connectCmd.Flags().StringP(
 		"namespace", "n", "",
 		"The Kubernetes namespace to use. Defaults to kubectl's default for the context.",
+	)
+	_ = connectCmd.Flags().StringP(
+		"manager-namespace", "m", "ambassador",
+		"The Kubernetes namespace in which the Traffic Manager is running.",
 	)
 	rootCmd.AddCommand(connectCmd)
 	rootCmd.AddCommand(&cobra.Command{
