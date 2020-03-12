@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -322,7 +321,7 @@ func MakeIntercept(p *supervisor.Process, out *Emitter, tm *TrafficManager, clus
 		Spec: mappingSpec{
 			AmbassadorID: []string{fmt.Sprintf("intercept-%s", ii.Deployment)},
 			Prefix:       ii.Prefix,
-			Service:      fmt.Sprintf("telepresence-proxy.%s:%d", cluster.namespace, port),
+			Service:      fmt.Sprintf("telepresence-proxy.%s:%d", tm.namespace, port),
 			Headers:      ii.Patterns,
 		},
 	}
@@ -333,13 +332,10 @@ func MakeIntercept(p *supervisor.Process, out *Emitter, tm *TrafficManager, clus
 		return nil, errors.Wrap(err, "Intercept: mapping could not be constructed")
 	}
 
-	p.Logf("%s: Intercept using mapping %v", ii.Name, string(manifest))
 	out.Printf("%s: applying intercept mapping in namespace %s\n", ii.Name, ii.Namespace)
 
 	apply := cluster.GetKubectlCmdNoNamespace(p, "apply", "-f", "-")
 	apply.Stdin = strings.NewReader(string(manifest))
-	apply.Stdout = os.Stdout
-	apply.Stderr = os.Stderr
 	err = apply.Run()
 
 	if err != nil {

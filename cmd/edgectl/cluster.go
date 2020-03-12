@@ -150,6 +150,7 @@ type TrafficManager struct {
 	apiPort        int
 	sshPort        int
 	client         *http.Client
+	namespace      string
 	interceptables []string
 	totalClusCepts int
 	snapshotSent   bool
@@ -174,7 +175,12 @@ func NewTrafficManager(p *supervisor.Process, cluster *KCluster, managerNs strin
 	}
 	kpfArgStr := fmt.Sprintf("port-forward -n %s svc/telepresence-proxy %d:8022 %d:8081", managerNs, sshPort, apiPort)
 	kpfArgs := cluster.GetKubectlArgs(strings.Fields(kpfArgStr)...)
-	tm := &TrafficManager{apiPort: apiPort, sshPort: sshPort, client: &http.Client{Timeout: 10 * time.Second}}
+	tm := &TrafficManager{
+		apiPort:   apiPort,
+		sshPort:   sshPort,
+		namespace: managerNs,
+		client:    &http.Client{Timeout: 10 * time.Second},
+	}
 
 	pf, err := CheckedRetryingCommand(p, "traffic-kpf", kpfArgs, cluster.RAI(), tm.check, 15*time.Second)
 	if err != nil {
