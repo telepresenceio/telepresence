@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"time"
 
 	"github.com/pkg/errors"
@@ -29,11 +28,9 @@ func (d *Daemon) MakeNetOverride(p *supervisor.Process) error {
 }
 
 // checkNetOverride checks the status of teleproxy intercept by doing the
-// equivalent of curl http://teleproxy/api/tables/. It's okay to create a new
-// client each time because we don't want to reuse connections.
+// equivalent of curl http://teleproxy/api/tables/.
 func checkNetOverride(p *supervisor.Process) error {
-	client := http.Client{Timeout: 10 * time.Second}
-	res, err := client.Get(fmt.Sprintf(
+	res, err := hClient.Get(fmt.Sprintf(
 		"http://teleproxy%d.cachebust.telepresence.io/api/tables",
 		time.Now().Unix(),
 	))

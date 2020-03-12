@@ -1,8 +1,12 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -33,6 +37,23 @@ to troubleshoot problems.
 
 // edgectl is the full path to the Edge Control binary
 var edgectl string
+
+var simpleTransport = &http.Transport{
+	// #nosec G402
+	TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	Proxy:           nil,
+	DialContext: (&net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 1 * time.Second,
+		DualStack: true,
+	}).DialContext,
+	DisableKeepAlives: true,
+}
+
+var hClient = &http.Client{
+	Transport: simpleTransport,
+	Timeout:   15 * time.Second,
+}
 
 func main() {
 	// Figure out our executable and save it
