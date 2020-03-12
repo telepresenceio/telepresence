@@ -152,6 +152,7 @@ type TrafficManager struct {
 	client         *http.Client
 	interceptables []string
 	totalClusCepts int
+	snapshotSent   bool
 }
 
 // NewTrafficManager returns a TrafficManager resource for the given
@@ -173,14 +174,13 @@ func NewTrafficManager(p *supervisor.Process, cluster *KCluster, managerNs strin
 	}
 	kpfArgStr := fmt.Sprintf("port-forward -n %s svc/telepresence-proxy %d:8022 %d:8081", managerNs, sshPort, apiPort)
 	kpfArgs := cluster.GetKubectlArgs(strings.Fields(kpfArgStr)...)
-	tm := &TrafficManager{apiPort: apiPort, sshPort: sshPort}
+	tm := &TrafficManager{apiPort: apiPort, sshPort: sshPort, client: &http.Client{Timeout: 10 * time.Second}}
 
 	pf, err := CheckedRetryingCommand(p, "traffic-kpf", kpfArgs, cluster.RAI(), tm.check, 15*time.Second)
 	if err != nil {
 		return nil, err
 	}
 	tm.crc = pf
-	tm.client = &http.Client{Timeout: 10 * time.Second}
 	return tm, nil
 }
 
@@ -215,6 +215,25 @@ func (tm *TrafficManager) check(p *supervisor.Process) error {
 			tm.totalClusCepts += len(cepts)
 		}
 	}
+
+	if !tm.snapshotSent {
+		p.Log("trying to send snapshot")
+		tm.snapshotSent = true // don't try again, even if this fails
+		body, code, err := tm.request("GET", "snapshot", []byte{})
+		if err != nil || code != 200 {
+			p.Logf("snapshot request failed: %v", err)
+			return nil
+		}
+		resp, err := tm.client.Post("http://teleproxy/api/tables/", "application/json", strings.NewReader(body))
+		if err != nil {
+			p.Logf("snapshot post failed: %v", err)
+			return nil
+		}
+		_, _ = ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
+		p.Log("snapshot sent!")
+	}
+
 	return nil
 }
 
