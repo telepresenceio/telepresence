@@ -166,33 +166,33 @@ func (i *Interceptor) Update(table rt.Table) {
 	result := make(chan struct{})
 	i.work <- func(p *supervisor.Process) error {
 		defer close(result)
-		i.tablesLock.Lock()
-		defer i.tablesLock.Unlock()
-		i.domainsLock.Lock()
-		defer i.domainsLock.Unlock()
 		return i.update(p, table)
 	}
 	<-result
 }
 
-// .update() assumes that both .tablesLock and .domainsLock are held
-// for writing.  Ensuring that is the case is the caller's
-// responsibility.
 func (i *Interceptor) update(p *supervisor.Process, table rt.Table) error {
+	// Make a copy of the current table
+	i.tablesLock.Lock()
 	oldTable, ok := i.tables[table.Name]
-
 	oldRoutes := make(map[string]rt.Route)
 	if ok {
 		for _, route := range oldTable.Routes {
 			oldRoutes[route.Name] = route
 		}
 	}
+	i.tablesLock.Unlock()
 
+	// Operate on the copy of the current table and the new table
 	for _, newRoute := range table.Routes {
 		oldRoute, oldRouteOk := oldRoutes[newRoute.Name]
 		// A nil Route (when oldRouteOk != true) will compare
 		// inequal to any valid new Route.
 		if newRoute != oldRoute {
+			// We're updating a route. Make sure DNS waits until the new answer
+			// is ready, i.e. don't serve the old answer.
+			i.domainsLock.Lock()
+
 			// delete the old version
 			if oldRouteOk {
 				switch newRoute.Proto {
@@ -220,6 +220,8 @@ func (i *Interceptor) update(p *supervisor.Process, table rt.Table) error {
 				log.Printf("INT: STORE %v->%v", newRoute.Domain(), newRoute)
 				i.domains[newRoute.Domain()] = newRoute
 			}
+
+			i.domainsLock.Unlock()
 		}
 
 		// remove the route from our map of old routes so we
@@ -227,6 +229,8 @@ func (i *Interceptor) update(p *supervisor.Process, table rt.Table) error {
 		delete(oldRoutes, newRoute.Name)
 	}
 
+	// Clear out stale routes and DNS names
+	i.domainsLock.Lock()
 	for _, route := range oldRoutes {
 		log.Printf("INT: CLEAR %v->%v", route.Domain(), route)
 		delete(i.domains, route.Domain())
@@ -239,14 +243,17 @@ func (i *Interceptor) update(p *supervisor.Process, table rt.Table) error {
 		default:
 			log.Printf("INT: unrecognized protocol: %v", route)
 		}
-
 	}
+	i.domainsLock.Unlock()
 
+	// Update the externally-visible table
+	i.tablesLock.Lock()
 	if table.Routes == nil || len(table.Routes) == 0 {
 		delete(i.tables, table.Name)
 	} else {
 		i.tables[table.Name] = table
 	}
+	i.tablesLock.Unlock()
 
 	return nil
 }
