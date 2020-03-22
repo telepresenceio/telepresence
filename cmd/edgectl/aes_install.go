@@ -319,6 +319,50 @@ func (i *Installer) CheckACMEIsDone(hostname string) error {
 	return nil
 }
 
+// GetAESCRDs returns the names of the AES CRDs available in the cluster (and
+// logs them as a side effect)
+func (i *Installer) GetAESCRDs() ([]string, error) {
+	crds, err := i.CaptureKubectl("get AES crds", "", "get", "crds", "-lproduct=aes", "-o", "name")
+	if err != nil {
+		return nil, err
+	}
+	res := make([]string, 0, 15)
+	scanner := bufio.NewScanner(strings.NewReader(crds))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			res = append(res, line)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// GetInstalledImageVersion returns the image of the installed AES deployment or the
+// empty string if none is found.
+// TODO: Try to search all namespaces (which may fail due to RBAC) and capture a
+// correct namespace for an Ambassador installation (what if there is more than
+// one?), then proceed operating on that Ambassador in that namespace. Right now
+// we hard-code the "ambassador" namespace in a number of spots.
+// TODO: Also look for Ambassador OSS and do something intelligent.
+func (i *Installer) GetInstalledImageVersion() (string, error) {
+	aesVersionRE := regexp.MustCompile("quay[.]io/datawire/aes:([[:^space:]]+)")
+	deploys, err := i.CaptureKubectl("get AES deployment", "", "-nambassador", "get", "deploy", "-lproduct=aes", "-o", "go-template={{range .items}}{{range .spec.template.spec.containers}}{{.image}}\n{{end}}{{end}}")
+	if err != nil {
+		return "", err
+	}
+	scanner := bufio.NewScanner(strings.NewReader(deploys))
+	for scanner.Scan() {
+		image := strings.TrimSpace(scanner.Text())
+		if matches := aesVersionRE.FindStringSubmatch(image); len(matches) == 2 {
+			return matches[1], nil
+		}
+	}
+	return "", scanner.Err()
+}
+
 // Perform is the main function for the installer
 func (i *Installer) Perform(kcontext string) error {
 	// Start
@@ -364,6 +408,7 @@ func (i *Installer) Perform(kcontext string) error {
 	matches := aesVersionRE.FindStringSubmatch(aesManifests)
 	if len(matches) != 2 {
 		i.log.Printf("matches is %+v", matches)
+		// FIXME i.Report("something")
 		return errors.Errorf("Failed to parse downloaded manifests. Is there a proxy server interfering with HTTP downloads?")
 	}
 	aesVersion := matches[1]
@@ -371,7 +416,6 @@ func (i *Installer) Perform(kcontext string) error {
 
 	// Display version information
 	i.ShowWrapped(fmt.Sprintf("-> Installing the Ambassador Edge Stack %s.", aesVersion))
-	i.ShowWrapped("Downloading images. (This may take a minute.)")
 
 	// Try to determine cluster type from node labels
 	isKnownLocalCluster := false
@@ -398,26 +442,75 @@ func (i *Installer) Perform(kcontext string) error {
 		i.SetMetadatum("Cluster Info", "cluster_info", clusterInfo)
 	}
 
-	// Install the AES manifests
-
-	if err := i.ShowKubectl("install CRDs", crdManifests, "apply", "-f", "-"); err != nil {
-		i.Report("fail_install_crds")
-		return err
+	// Find existing AES CRDs
+	aesCrds, err := i.GetAESCRDs()
+	if err != nil {
+		i.show.Println("Failed to get existing CRDs:", err)
+		aesCrds = []string{}
+		// Things will likely fail when we try to apply CRDs
 	}
 
-	if err := i.ShowKubectl("wait for CRDs", "", "wait", "--for", "condition=established", "--timeout=90s", "crd", "-lproduct=aes"); err != nil {
-		i.Report("fail_wait_crds")
-		return err
+	// Figure out whether we need to apply the manifests
+	// TODO: Parse the downloaded manifests and look for specific CRDs.
+	// Installed CRDs may be out of date or incomplete (e.g., if there's an
+	// OSS installation present).
+	alreadyApplied := false
+	if len(aesCrds) > 0 {
+		// AES CRDs exist so there is likely an existing installation. Try to
+		// verify the existence of an Ambassador deployment in the Ambassador
+		// namespace.
+		installedVersion, err := i.GetInstalledImageVersion()
+		if err != nil {
+			i.show.Println("Failed to look for an existing installation:", err)
+			installedVersion = ""
+			// Things will likely fail when we try to apply manifests
+		}
+		switch {
+		case aesVersion == installedVersion:
+			alreadyApplied = true
+			i.ShowWrapped(fmt.Sprintf("-> Found an existing installation of Ambassador Edge Stack %s.", aesVersion))
+		case installedVersion != "":
+			i.ShowWrapped(fmt.Sprintf("-> Found an existing installation of Ambassador Edge Stack %s.", installedVersion))
+			i.show.Println()
+			i.ShowWrapped(abortExisting)
+			i.show.Println()
+			i.ShowWrapped(seeDocs)
+			// FIXME i.Report("Something")
+			return errors.Errorf("existing AES %s found when installing AES %s", installedVersion, aesVersion)
+		default:
+			i.ShowWrapped(abortCRDs)
+			i.show.Println()
+			i.ShowWrapped(seeDocs)
+			// FIXME: Explain how to remove existing CRDs? Or do something smarter?
+			// FIXME i.Report("Something")
+			return errors.New("CRDs found")
+		}
 	}
 
-	if err := i.ShowKubectl("install AES", aesManifests, "apply", "-f", "-"); err != nil {
-		i.Report("fail_install_aes")
-		return err
-	}
+	if !alreadyApplied {
+		// Install the AES manifests
 
-	if err := i.ShowKubectl("wait for AES", "", "-n", "ambassador", "wait", "--for", "condition=available", "--timeout=90s", "deploy", "-lproduct=aes"); err != nil {
-		i.Report("fail_wait_aes")
-		return err
+		i.ShowWrapped("Downloading images. (This may take a minute.)")
+
+		if err := i.ShowKubectl("install CRDs", crdManifests, "apply", "-f", "-"); err != nil {
+			i.Report("fail_install_crds")
+			return err
+		}
+
+		if err := i.ShowKubectl("wait for CRDs", "", "wait", "--for", "condition=established", "--timeout=90s", "crd", "-lproduct=aes"); err != nil {
+			i.Report("fail_wait_crds")
+			return err
+		}
+
+		if err := i.ShowKubectl("install AES", aesManifests, "apply", "-f", "-"); err != nil {
+			i.Report("fail_install_aes")
+			return err
+		}
+
+		if err := i.ShowKubectl("wait for AES", "", "-n", "ambassador", "wait", "--for", "condition=available", "--timeout=90s", "deploy", "-lproduct=aes"); err != nil {
+			i.Report("fail_wait_aes")
+			return err
+		}
 	}
 
 	// Wait for Ambassador Pod; grab AES install ID
@@ -808,6 +901,18 @@ Timed out waiting for the load balancer's IP address for the AES Service.
 `
 
 const tryAgain = "If this appears to be a transient failure, please try running the installer again. It is safe to run the installer repeatedly on a cluster."
+
+const abortExisting = `
+This tool does not support upgrades/downgrades at this time.
+
+Aborting the installer to avoid corrupting an existing installation of AES.
+`
+
+const abortCRDs = `
+-> Found Ambassador CRDs in your cluster, but no AES installation.
+
+Aborting the installer to avoid corrupting an existing (but undetected) installation.
+`
 
 const seeDocs = "See https://www.getambassador.io/user-guide/getting-started/"
 
