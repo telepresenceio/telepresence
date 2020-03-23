@@ -408,7 +408,7 @@ func (i *Installer) Perform(kcontext string) error {
 	matches := aesVersionRE.FindStringSubmatch(aesManifests)
 	if len(matches) != 2 {
 		i.log.Printf("matches is %+v", matches)
-		// FIXME i.Report("something")
+		i.Report("fail_bad_manifests")
 		return errors.Errorf("Failed to parse downloaded manifests. Is there a proxy server interfering with HTTP downloads?")
 	}
 	aesVersion := matches[1]
@@ -475,14 +475,13 @@ func (i *Installer) Perform(kcontext string) error {
 			i.ShowWrapped(abortExisting)
 			i.show.Println()
 			i.ShowWrapped(seeDocs)
-			// FIXME i.Report("Something")
+			i.Report("fail_existing_aes", ScoutMeta{"installing", aesVersion}, ScoutMeta{"found", installedVersion})
 			return errors.Errorf("existing AES %s found when installing AES %s", installedVersion, aesVersion)
 		default:
 			i.ShowWrapped(abortCRDs)
 			i.show.Println()
 			i.ShowWrapped(seeDocs)
-			// FIXME: Explain how to remove existing CRDs? Or do something smarter?
-			// FIXME i.Report("Something")
+			i.Report("fail_existing_crds")
 			return errors.New("CRDs found")
 		}
 	}
@@ -908,6 +907,7 @@ This tool does not support upgrades/downgrades at this time.
 Aborting the installer to avoid corrupting an existing installation of AES.
 `
 
+// TODO: Explain how to remove existing CRDs? Or do something smarter?
 const abortCRDs = `
 -> Found Ambassador CRDs in your cluster, but no AES installation.
 
