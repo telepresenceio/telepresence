@@ -907,9 +907,13 @@ This tool does not support upgrades/downgrades at this time.
 Aborting the installer to avoid corrupting an existing installation of AES.
 `
 
-// TODO: Explain how to remove existing CRDs? Or do something smarter?
 const abortCRDs = `
 -> Found Ambassador CRDs in your cluster, but no AES installation.
+
+You can manually remove installed CRDs if you are confident they are not in use by any installation.
+Removing the CRDs will cause your existing Ambassador Mappings and other resources to be deleted as well.
+
+$ kubectl delete crd -l product=aes
 
 Aborting the installer to avoid corrupting an existing (but undetected) installation.
 `
