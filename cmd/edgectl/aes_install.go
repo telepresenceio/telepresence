@@ -324,6 +324,20 @@ func (i *Installer) Perform(kcontext string) error {
 	// Start
 	i.Report("install")
 
+	// Attempt to use kubectl
+	_, err := i.GetKubectlPath()
+	if err != nil {
+		i.Report("fail_no_kubectl")
+		return fmt.Errorf(noKubectl)
+	}
+
+	// Attempt to talk to the specified cluster
+	i.kubeinfo = k8s.NewKubeInfo("", kcontext, "")
+	if err := i.ShowKubectl("cluster-info", "", "cluster-info"); err != nil {
+		i.Report("fail_no_cluster")
+		return fmt.Errorf(noCluster)
+	}
+
 	// Allow overriding the source domain (e.g., for smoke tests before release)
 	manifestsDomain := "www.getambassador.io"
 	domainOverrideVar := "AES_MANIFESTS_DOMAIN"
@@ -358,13 +372,6 @@ func (i *Installer) Perform(kcontext string) error {
 	// Display version information
 	i.ShowWrapped(fmt.Sprintf("-> Installing the Ambassador Edge Stack %s.", aesVersion))
 	i.ShowWrapped("Downloading images. (This may take a minute.)")
-
-	// Attempt to talk to the specified cluster
-	i.kubeinfo = k8s.NewKubeInfo("", kcontext, "")
-	if err := i.ShowKubectl("cluster-info", "", "cluster-info"); err != nil {
-		i.Report("fail_no_cluster")
-		return err
-	}
 
 	// Try to determine cluster type from node labels
 	isKnownLocalCluster := false
@@ -666,8 +673,12 @@ func (i *Installer) ShowKubectl(name string, input string, args ...string) error
 	if err != nil {
 		return errors.Wrapf(err, "cluster access for %s", name)
 	}
-	i.log.Printf("$ kubectl %s", strings.Join(kargs, " "))
-	cmd := exec.Command("kubectl", kargs...)
+	kubectl, err := i.GetKubectlPath()
+	if err != nil {
+		return errors.Wrapf(err, "kubectl not found %s", name)
+	}
+	i.log.Printf("$ %v %s", kubectl, strings.Join(kargs, " "))
+	cmd := exec.Command(kubectl, kargs...)
 	cmd.Stdin = strings.NewReader(input)
 	cmd.Stdout = NewLoggingWriter(i.cmdOut)
 	cmd.Stderr = NewLoggingWriter(i.cmdErr)
@@ -686,8 +697,18 @@ func (i *Installer) CaptureKubectl(name, input string, args ...string) (res stri
 		err = errors.Wrapf(err, "cluster access for %s", name)
 		return
 	}
-	kargs = append([]string{"kubectl"}, kargs...)
+	kubectl, err := i.GetKubectlPath()
+	if err != nil {
+		err = errors.Wrapf(err, "kubectl not found %s", name)
+		return
+	}
+	kargs = append([]string{kubectl}, kargs...)
 	return i.Capture(name, input, kargs...)
+}
+
+// GetKubectlPath returns the full path to the kubectl executable, or an error if not found
+func (i *Installer) GetKubectlPath() (string, error) {
+	return exec.LookPath("kubectl")
 }
 
 // Capture calls a command and returns its stdout, dumping all output to the
@@ -795,3 +816,7 @@ var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a
 const fullSuccess = "Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit %s to access your Edge Stack installation and for additional configuration." // hostname
 
 const noTlsSuccess = "Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically."
+
+const noKubectl = "The installer depends on the 'kubectl' executable. Make sure you have the latest release downloaded in your PATH, and that you have executable permissions.\nVisit https://kubernetes.io/docs/tasks/tools/install-kubectl/ for more information and instructions.\n"
+
+const noCluster = "Unable to communicate with the remote Kubernetes cluster using your kubectl context.\nTo further debug and diagnose cluster problems, use 'kubectl cluster-info dump' or get started and run Kubernetes https://kubernetes.io/docs/setup/\n"
