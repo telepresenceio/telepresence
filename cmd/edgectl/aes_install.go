@@ -926,6 +926,13 @@ const fullSuccess = "Congratulations! You've successfully installed the Ambassad
 
 const noTlsSuccess = "Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically."
 
-const noKubectl = "The installer depends on the 'kubectl' executable. Make sure you have the latest release downloaded in your PATH, and that you have executable permissions.\nVisit https://kubernetes.io/docs/tasks/tools/install-kubectl/ for more information and instructions.\n"
+const noKubectl = `
+The installer depends on the 'kubectl' executable. Make sure you have the latest release downloaded in your PATH, and that you have executable permissions.
 
-const noCluster = "Unable to communicate with the remote Kubernetes cluster using your kubectl context.\nTo further debug and diagnose cluster problems, use 'kubectl cluster-info dump' or get started and run Kubernetes https://kubernetes.io/docs/setup/\n"
+Visit https://kubernetes.io/docs/tasks/tools/install-kubectl/ for more information and instructions.`
+
+const noCluster = `
+Unable to communicate with the remote Kubernetes cluster using your kubectl context.
+
+To further debug and diagnose cluster problems, use 'kubectl cluster-info dump' 
+or get started and run Kubernetes https://kubernetes.io/docs/setup/`
