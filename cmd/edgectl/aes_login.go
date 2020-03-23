@@ -18,8 +18,8 @@ import (
 const SecretName = "ambassador-internal"
 
 type LoginClaimsV1 struct {
-	LoginTokenVersion  string `json:"login_token_version"`
-	jwt.StandardClaims `json:",inline"`
+	LoginTokenVersion string `json:"login_token_version"`
+	jwt.StandardClaims
 }
 
 func aesLogin(cmd *cobra.Command, args []string) error {
