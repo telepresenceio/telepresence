@@ -918,7 +918,7 @@ $ kubectl delete crd -l product=aes
 Aborting the installer to avoid corrupting an existing (but undetected) installation.
 `
 
-const seeDocs = "See https://www.getambassador.io/user-guide/getting-started/"
+const seeDocs = "See https://www.getambassador.io/docs/latest/tutorials/getting-started/"
 
 var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 
