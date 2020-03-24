@@ -200,14 +200,48 @@ func (i *Installer) loopUntil(what string, how func() error, lc *loopConfig) err
 // the Pod is Running (though not necessarily Ready). This should be good enough
 // to report the "deploy" status to metrics.
 func (i *Installer) GrabAESInstallID() error {
-	// Note: This is brittle. If there is more than one pod, this returns all
-	// the pod names squashed together. This should not occur in normal usage,
-	// i.e. when installing a single version of AES, maybe repeatedly.
-	pod, err := i.CaptureKubectl("get AES pod", "", "-n", "ambassador", "get", "pods", "-l", "service=ambassador", "-o", "go-template={{range .items}}{{.metadata.name}}{{end}}")
+	aesImage := "quay.io/datawire/aes:1.3.1" // FIXME
+	podName := ""
+	containerName := ""
+	podInterface := i.coreClient.Pods("ambassador") // namespace
+	i.log.Print("> k -n ambassador get po")
+	pods, err := podInterface.List(k8sTypesMetaV1.ListOptions{})
 	if err != nil {
 		return err
 	}
-	clusterID, err := i.CaptureKubectl("get cluster ID", "", "-n", "ambassador", "exec", pod, "python3", "kubewatch.py")
+
+	// Find an AES Pod
+PodsLoop:
+	for _, pod := range pods.Items {
+		i.log.Print("  Pod: ", pod.Name)
+	ContainersLoop:
+		for _, container := range pod.Spec.Containers {
+			// Avoid matching the Traffic Manager (container.Command == ["traffic-proxy"])
+			i.log.Printf("       Container: %s (image: %q; command: %q)", container.Name, container.Image, container.Command)
+			if container.Image != aesImage || container.Command != nil {
+				continue
+			}
+			// Avoid matching the Traffic Agent by checking for
+			// AGENT_SERVICE in the environment. This is how Ambassador's
+			// Python code decides it is running as an Agent.
+			for _, envVar := range container.Env {
+				if envVar.Name == "AGENT_SERVICE" && envVar.Value != "" {
+					i.log.Printf("                  AGENT_SERVICE: %q", envVar.Value)
+					continue ContainersLoop
+				}
+			}
+			i.log.Print("       Success")
+			podName = pod.Name
+			containerName = container.Name
+			break PodsLoop
+		}
+	}
+	if podName == "" {
+		return errors.New("no AES pods found")
+	}
+
+	// Retrieve the cluster ID
+	clusterID, err := i.CaptureKubectl("get cluster ID", "", "-n", "ambassador", "exec", podName, "-c", containerName, "python3", "kubewatch.py")
 	if err != nil {
 		return err
 	}
