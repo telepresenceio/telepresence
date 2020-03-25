@@ -215,22 +215,28 @@ func (i *Installer) GrabAESInstallID() error {
 	return nil
 }
 
-// GrabLoadBalancerIP return's the AES service load balancer's IP address
-func (i *Installer) GrabLoadBalancerIP() (string, error) {
-	ipAddress, err := i.CaptureKubectl("get IP address", "", "get", "-n", "ambassador", "service", "ambassador", "-o", `go-template={{range .status.loadBalancer.ingress}}{{print .ip "\n"}}{{end}}`)
+// GrabLoadBalancerAddress return's the AES service load balancer's address (IP
+// address or hostname)
+func (i *Installer) GrabLoadBalancerAddress() (string, error) {
+	serviceInterface := i.coreClient.Services("ambassador") // namespace
+	service, err := serviceInterface.Get("ambassador", k8sTypesMetaV1.GetOptions{})
 	if err != nil {
 		return "", err
 	}
-	ipAddress = strings.TrimSpace(ipAddress)
-	if ipAddress == "" {
-		return "", errors.New("empty IP address")
+	for _, ingress := range service.Status.LoadBalancer.Ingress {
+		if net.ParseIP(ingress.IP) != nil {
+			return ingress.IP, nil
+		}
+		if ingress.Hostname != "" {
+			return ingress.Hostname, nil
+		}
 	}
-	return ipAddress, nil
+	return "", errors.New("no address found")
 }
 
 // CheckAESServesACME performs the same checks that the edgestack.me name
-// service performs against the AES load balancer IP
-func (i *Installer) CheckAESServesACME(ipAddress string) (err error) {
+// service performs against the AES load balancer host
+func (i *Installer) CheckAESServesACME(host string) (err error) {
 	defer func() {
 		if err != nil {
 			i.log.Print(err.Error())
@@ -238,7 +244,7 @@ func (i *Installer) CheckAESServesACME(ipAddress string) (err error) {
 	}()
 
 	// Verify that we can connect to something
-	resp, err := http.Get("http://" + ipAddress + "/.well-known/acme-challenge/")
+	resp, err := http.Get("http://" + host + "/.well-known/acme-challenge/")
 	if err != nil {
 		err = errors.Wrap(err, "check for AES")
 		return
@@ -558,15 +564,15 @@ func (i *Installer) Perform(kcontext string) error {
 		return nil
 	}
 
-	// Grab load balancer IP address
+	// Grab load balancer address
 	i.ShowWrapped("-> Provisioning a cloud load balancer. (This may take a minute, depending on your cloud provider.)")
-	ipAddress := ""
-	grabIP := func() error {
+	lbAddress := ""
+	grabAddress := func() error {
 		var err error
-		ipAddress, err = i.GrabLoadBalancerIP()
+		lbAddress, err = i.GrabLoadBalancerAddress()
 		return err
 	}
-	if err := i.loopUntil("Load Balancer", grabIP, lc5); err != nil {
+	if err := i.loopUntil("Load Balancer", grabAddress, lc5); err != nil {
 		i.Report("fail_loadbalancer_timeout")
 		i.show.Println()
 		i.ShowWrapped(failLoadBalancer)
@@ -576,12 +582,12 @@ func (i *Installer) Perform(kcontext string) error {
 		return err
 	}
 	i.Report("cluster_accessible")
-	i.show.Println("Your AES installation's IP address is", ipAddress)
+	i.show.Println("Your AES installation's address is", lbAddress)
 
 	// Wait for Ambassador to be ready to serve ACME requests.
-	if err := i.loopUntil("AES to serve ACME", func() error { return i.CheckAESServesACME(ipAddress) }, lc2); err != nil {
+	if err := i.loopUntil("AES to serve ACME", func() error { return i.CheckAESServesACME(lbAddress) }, lc2); err != nil {
 		i.Report("aes_listening_timeout")
-		i.ShowWrapped("It seems AES did not start in the expected time, or your IP address is not reachable from here.")
+		i.ShowWrapped("It seems AES did not start in the expected time, or the AES load balancer is not reachable from here.")
 		i.ShowWrapped(tryAgain)
 		i.ShowWrapped(noTlsSuccess)
 		i.ShowWrapped(seeDocs)
@@ -624,10 +630,16 @@ func (i *Installer) Perform(kcontext string) error {
 
 	i.log.Printf("Using email address %q", emailAddress)
 
-	// Send a request to acquire a DNS name for this cluster's IP address
+	// Send a request to acquire a DNS name for this cluster's load balancer
 	regURL := "https://metriton.datawire.io/register-domain"
+	regData := &registration{Email: emailAddress}
+	if net.ParseIP(lbAddress) != nil {
+		regData.Ip = lbAddress
+	} else {
+		regData.Hostname = lbAddress
+	}
 	buf := new(bytes.Buffer)
-	_ = json.NewEncoder(buf).Encode(registration{emailAddress, ipAddress})
+	_ = json.NewEncoder(buf).Encode(regData)
 	resp, err := http.Post(regURL, "application/json", buf)
 	if err != nil {
 		i.Report("dns_name_failure", ScoutMeta{"err", err.Error()})
@@ -647,7 +659,7 @@ func (i *Installer) Perform(kcontext string) error {
 		i.show.Println()
 		i.ShowWrapped(noTlsSuccess)
 		i.ShowWrapped("If this IP address is reachable from here, you can access your installation without a DNS name.")
-		i.ShowWrapped(fmt.Sprintf(loginViaIP, ipAddress))
+		i.ShowWrapped(fmt.Sprintf(loginViaIP, lbAddress))
 		i.ShowWrapped(loginViaPortForward)
 		i.ShowWrapped(seeDocs)
 		return nil
@@ -876,8 +888,9 @@ func doWordWrap(text string, prefix string, lineWidth int) []string {
 
 // registration is used to register edgestack.me domains
 type registration struct {
-	Email string
-	Ip    string
+	Email    string
+	Ip       string
+	Hostname string
 }
 
 const hostManifest = `
