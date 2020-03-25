@@ -319,10 +319,68 @@ func (i *Installer) CheckACMEIsDone(hostname string) error {
 	return nil
 }
 
+// GetAESCRDs returns the names of the AES CRDs available in the cluster (and
+// logs them as a side effect)
+func (i *Installer) GetAESCRDs() ([]string, error) {
+	crds, err := i.CaptureKubectl("get AES crds", "", "get", "crds", "-lproduct=aes", "-o", "name")
+	if err != nil {
+		return nil, err
+	}
+	res := make([]string, 0, 15)
+	scanner := bufio.NewScanner(strings.NewReader(crds))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			res = append(res, line)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// GetInstalledImageVersion returns the image of the installed AES deployment or the
+// empty string if none is found.
+// TODO: Try to search all namespaces (which may fail due to RBAC) and capture a
+// correct namespace for an Ambassador installation (what if there is more than
+// one?), then proceed operating on that Ambassador in that namespace. Right now
+// we hard-code the "ambassador" namespace in a number of spots.
+// TODO: Also look for Ambassador OSS and do something intelligent.
+func (i *Installer) GetInstalledImageVersion() (string, error) {
+	aesVersionRE := regexp.MustCompile("quay[.]io/datawire/aes:([[:^space:]]+)")
+	deploys, err := i.CaptureKubectl("get AES deployment", "", "-nambassador", "get", "deploy", "-lproduct=aes", "-o", "go-template={{range .items}}{{range .spec.template.spec.containers}}{{.image}}\n{{end}}{{end}}")
+	if err != nil {
+		return "", err
+	}
+	scanner := bufio.NewScanner(strings.NewReader(deploys))
+	for scanner.Scan() {
+		image := strings.TrimSpace(scanner.Text())
+		if matches := aesVersionRE.FindStringSubmatch(image); len(matches) == 2 {
+			return matches[1], nil
+		}
+	}
+	return "", scanner.Err()
+}
+
 // Perform is the main function for the installer
 func (i *Installer) Perform(kcontext string) error {
 	// Start
 	i.Report("install")
+
+	// Attempt to use kubectl
+	_, err := i.GetKubectlPath()
+	if err != nil {
+		i.Report("fail_no_kubectl")
+		return fmt.Errorf(noKubectl)
+	}
+
+	// Attempt to talk to the specified cluster
+	i.kubeinfo = k8s.NewKubeInfo("", kcontext, "")
+	if err := i.ShowKubectl("cluster-info", "", "cluster-info"); err != nil {
+		i.Report("fail_no_cluster")
+		return fmt.Errorf(noCluster)
+	}
 
 	// Allow overriding the source domain (e.g., for smoke tests before release)
 	manifestsDomain := "www.getambassador.io"
@@ -350,6 +408,7 @@ func (i *Installer) Perform(kcontext string) error {
 	matches := aesVersionRE.FindStringSubmatch(aesManifests)
 	if len(matches) != 2 {
 		i.log.Printf("matches is %+v", matches)
+		i.Report("fail_bad_manifests")
 		return errors.Errorf("Failed to parse downloaded manifests. Is there a proxy server interfering with HTTP downloads?")
 	}
 	aesVersion := matches[1]
@@ -357,14 +416,6 @@ func (i *Installer) Perform(kcontext string) error {
 
 	// Display version information
 	i.ShowWrapped(fmt.Sprintf("-> Installing the Ambassador Edge Stack %s.", aesVersion))
-	i.ShowWrapped("Downloading images. (This may take a minute.)")
-
-	// Attempt to talk to the specified cluster
-	i.kubeinfo = k8s.NewKubeInfo("", kcontext, "")
-	if err := i.ShowKubectl("cluster-info", "", "cluster-info"); err != nil {
-		i.Report("fail_no_cluster")
-		return err
-	}
 
 	// Try to determine cluster type from node labels
 	isKnownLocalCluster := false
@@ -391,26 +442,74 @@ func (i *Installer) Perform(kcontext string) error {
 		i.SetMetadatum("Cluster Info", "cluster_info", clusterInfo)
 	}
 
-	// Install the AES manifests
-
-	if err := i.ShowKubectl("install CRDs", crdManifests, "apply", "-f", "-"); err != nil {
-		i.Report("fail_install_crds")
-		return err
+	// Find existing AES CRDs
+	aesCrds, err := i.GetAESCRDs()
+	if err != nil {
+		i.show.Println("Failed to get existing CRDs:", err)
+		aesCrds = []string{}
+		// Things will likely fail when we try to apply CRDs
 	}
 
-	if err := i.ShowKubectl("wait for CRDs", "", "wait", "--for", "condition=established", "--timeout=90s", "crd", "-lproduct=aes"); err != nil {
-		i.Report("fail_wait_crds")
-		return err
+	// Figure out whether we need to apply the manifests
+	// TODO: Parse the downloaded manifests and look for specific CRDs.
+	// Installed CRDs may be out of date or incomplete (e.g., if there's an
+	// OSS installation present).
+	alreadyApplied := false
+	if len(aesCrds) > 0 {
+		// AES CRDs exist so there is likely an existing installation. Try to
+		// verify the existence of an Ambassador deployment in the Ambassador
+		// namespace.
+		installedVersion, err := i.GetInstalledImageVersion()
+		if err != nil {
+			i.show.Println("Failed to look for an existing installation:", err)
+			installedVersion = ""
+			// Things will likely fail when we try to apply manifests
+		}
+		switch {
+		case aesVersion == installedVersion:
+			alreadyApplied = true
+			i.ShowWrapped(fmt.Sprintf("-> Found an existing installation of Ambassador Edge Stack %s.", aesVersion))
+		case installedVersion != "":
+			i.ShowWrapped(fmt.Sprintf("-> Found an existing installation of Ambassador Edge Stack %s.", installedVersion))
+			i.show.Println()
+			i.ShowWrapped(abortExisting)
+			i.show.Println()
+			i.ShowWrapped(seeDocs)
+			i.Report("fail_existing_aes", ScoutMeta{"installing", aesVersion}, ScoutMeta{"found", installedVersion})
+			return errors.Errorf("existing AES %s found when installing AES %s", installedVersion, aesVersion)
+		default:
+			i.ShowWrapped(abortCRDs)
+			i.show.Println()
+			i.ShowWrapped(seeDocs)
+			i.Report("fail_existing_crds")
+			return errors.New("CRDs found")
+		}
 	}
 
-	if err := i.ShowKubectl("install AES", aesManifests, "apply", "-f", "-"); err != nil {
-		i.Report("fail_install_aes")
-		return err
-	}
+	if !alreadyApplied {
+		// Install the AES manifests
 
-	if err := i.ShowKubectl("wait for AES", "", "-n", "ambassador", "wait", "--for", "condition=available", "--timeout=90s", "deploy", "-lproduct=aes"); err != nil {
-		i.Report("fail_wait_aes")
-		return err
+		i.ShowWrapped("Downloading images. (This may take a minute.)")
+
+		if err := i.ShowKubectl("install CRDs", crdManifests, "apply", "-f", "-"); err != nil {
+			i.Report("fail_install_crds")
+			return err
+		}
+
+		if err := i.ShowKubectl("wait for CRDs", "", "wait", "--for", "condition=established", "--timeout=90s", "crd", "-lproduct=aes"); err != nil {
+			i.Report("fail_wait_crds")
+			return err
+		}
+
+		if err := i.ShowKubectl("install AES", aesManifests, "apply", "-f", "-"); err != nil {
+			i.Report("fail_install_aes")
+			return err
+		}
+
+		if err := i.ShowKubectl("wait for AES", "", "-n", "ambassador", "wait", "--for", "condition=available", "--timeout=90s", "deploy", "-lproduct=aes"); err != nil {
+			i.Report("fail_wait_aes")
+			return err
+		}
 	}
 
 	// Wait for Ambassador Pod; grab AES install ID
@@ -666,8 +765,12 @@ func (i *Installer) ShowKubectl(name string, input string, args ...string) error
 	if err != nil {
 		return errors.Wrapf(err, "cluster access for %s", name)
 	}
-	i.log.Printf("$ kubectl %s", strings.Join(kargs, " "))
-	cmd := exec.Command("kubectl", kargs...)
+	kubectl, err := i.GetKubectlPath()
+	if err != nil {
+		return errors.Wrapf(err, "kubectl not found %s", name)
+	}
+	i.log.Printf("$ %v %s", kubectl, strings.Join(kargs, " "))
+	cmd := exec.Command(kubectl, kargs...)
 	cmd.Stdin = strings.NewReader(input)
 	cmd.Stdout = NewLoggingWriter(i.cmdOut)
 	cmd.Stderr = NewLoggingWriter(i.cmdErr)
@@ -686,8 +789,18 @@ func (i *Installer) CaptureKubectl(name, input string, args ...string) (res stri
 		err = errors.Wrapf(err, "cluster access for %s", name)
 		return
 	}
-	kargs = append([]string{"kubectl"}, kargs...)
+	kubectl, err := i.GetKubectlPath()
+	if err != nil {
+		err = errors.Wrapf(err, "kubectl not found %s", name)
+		return
+	}
+	kargs = append([]string{kubectl}, kargs...)
 	return i.Capture(name, input, kargs...)
+}
+
+// GetKubectlPath returns the full path to the kubectl executable, or an error if not found
+func (i *Installer) GetKubectlPath() (string, error) {
+	return exec.LookPath("kubectl")
 }
 
 // Capture calls a command and returns its stdout, dumping all output to the
@@ -788,10 +901,38 @@ Timed out waiting for the load balancer's IP address for the AES Service.
 
 const tryAgain = "If this appears to be a transient failure, please try running the installer again. It is safe to run the installer repeatedly on a cluster."
 
-const seeDocs = "See https://www.getambassador.io/user-guide/getting-started/"
+const abortExisting = `
+This tool does not support upgrades/downgrades at this time.
+
+Aborting the installer to avoid corrupting an existing installation of AES.
+`
+
+const abortCRDs = `
+-> Found Ambassador CRDs in your cluster, but no AES installation.
+
+You can manually remove installed CRDs if you are confident they are not in use by any installation.
+Removing the CRDs will cause your existing Ambassador Mappings and other resources to be deleted as well.
+
+$ kubectl delete crd -l product=aes
+
+Aborting the installer to avoid corrupting an existing (but undetected) installation.
+`
+
+const seeDocs = "See https://www.getambassador.io/docs/latest/tutorials/getting-started/"
 
 var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 
 const fullSuccess = "Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit %s to access your Edge Stack installation and for additional configuration." // hostname
 
 const noTlsSuccess = "Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically."
+
+const noKubectl = `
+The installer depends on the 'kubectl' executable. Make sure you have the latest release downloaded in your PATH, and that you have executable permissions.
+
+Visit https://kubernetes.io/docs/tasks/tools/install-kubectl/ for more information and instructions.`
+
+const noCluster = `
+Unable to communicate with the remote Kubernetes cluster using your kubectl context.
+
+To further debug and diagnose cluster problems, use 'kubectl cluster-info dump' 
+or get started and run Kubernetes https://kubernetes.io/docs/setup/`
