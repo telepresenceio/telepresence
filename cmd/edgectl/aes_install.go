@@ -24,6 +24,9 @@ import (
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/rest"
 )
 
 func aesInstallCmd() *cobra.Command {
@@ -381,6 +384,16 @@ func (i *Installer) Perform(kcontext string) error {
 		i.Report("fail_no_cluster")
 		return fmt.Errorf(noCluster)
 	}
+	i.restConfig, err = i.kubeinfo.GetRestConfig()
+	if err != nil {
+		i.Report("fail_no_cluster")
+		return err
+	}
+	i.coreClient, err = k8sClientCoreV1.NewForConfig(i.restConfig)
+	if err != nil {
+		i.Report("fail_no_cluster")
+		return err
+	}
 
 	// Allow overriding the source domain (e.g., for smoke tests before release)
 	manifestsDomain := "www.getambassador.io"
@@ -700,15 +713,17 @@ func (i *Installer) Perform(kcontext string) error {
 
 // Installer represents the state of the installation process
 type Installer struct {
-	kubeinfo *k8s.KubeInfo
-	scout    *Scout
-	ctx      context.Context
-	cancel   context.CancelFunc
-	show     *log.Logger
-	log      *log.Logger
-	cmdOut   *log.Logger
-	cmdErr   *log.Logger
-	logName  string
+	kubeinfo   *k8s.KubeInfo
+	restConfig *rest.Config
+	coreClient *k8sClientCoreV1.CoreV1Client
+	scout      *Scout
+	ctx        context.Context
+	cancel     context.CancelFunc
+	show       *log.Logger
+	log        *log.Logger
+	cmdOut     *log.Logger
+	cmdErr     *log.Logger
+	logName    string
 }
 
 // NewInstaller returns an Installer object after setting up logging.
