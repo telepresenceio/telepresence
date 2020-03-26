@@ -200,7 +200,7 @@ func (i *Installer) loopUntil(what string, how func() error, lc *loopConfig) err
 // the Pod is Running (though not necessarily Ready). This should be good enough
 // to report the "deploy" status to metrics.
 func (i *Installer) GrabAESInstallID() error {
-	aesImage := "quay.io/datawire/aes:1.3.1" // FIXME
+	aesImage := "quay.io/datawire/aes:" + i.version
 	podName := ""
 	containerName := ""
 	podInterface := i.coreClient.Pods("ambassador") // namespace
@@ -249,28 +249,30 @@ PodsLoop:
 	return nil
 }
 
-// GrabLoadBalancerAddress return's the AES service load balancer's address (IP
+// GrabLoadBalancerAddress retrieves the AES service load balancer's address (IP
 // address or hostname)
-func (i *Installer) GrabLoadBalancerAddress() (string, error) {
+func (i *Installer) GrabLoadBalancerAddress() error {
 	serviceInterface := i.coreClient.Services("ambassador") // namespace
 	service, err := serviceInterface.Get("ambassador", k8sTypesMetaV1.GetOptions{})
 	if err != nil {
-		return "", err
+		return err
 	}
 	for _, ingress := range service.Status.LoadBalancer.Ingress {
 		if net.ParseIP(ingress.IP) != nil {
-			return ingress.IP, nil
+			i.address = ingress.IP
+			return nil
 		}
 		if ingress.Hostname != "" {
-			return ingress.Hostname, nil
+			i.address = ingress.Hostname
+			return nil
 		}
 	}
-	return "", errors.New("no address found")
+	return errors.New("no address found")
 }
 
 // CheckAESServesACME performs the same checks that the edgestack.me name
 // service performs against the AES load balancer host
-func (i *Installer) CheckAESServesACME(host string) (err error) {
+func (i *Installer) CheckAESServesACME() (err error) {
 	defer func() {
 		if err != nil {
 			i.log.Print(err.Error())
@@ -278,7 +280,7 @@ func (i *Installer) CheckAESServesACME(host string) (err error) {
 	}()
 
 	// Verify that we can connect to something
-	resp, err := http.Get("http://" + host + "/.well-known/acme-challenge/")
+	resp, err := http.Get("http://" + i.address + "/.well-known/acme-challenge/")
 	if err != nil {
 		err = errors.Wrap(err, "check for AES")
 		return
@@ -304,8 +306,8 @@ func (i *Installer) CheckAESServesACME(host string) (err error) {
 }
 
 // CheckAESHealth retrieves AES's idea of whether it is healthy, i.e. ready.
-func (i *Installer) CheckAESHealth(hostname string) error {
-	resp, err := http.Get("https://" + hostname + "/ambassador/v0/check_ready")
+func (i *Installer) CheckAESHealth() error {
+	resp, err := http.Get("https://" + i.hostname + "/ambassador/v0/check_ready")
 	if err != nil {
 		return err
 	}
@@ -322,8 +324,8 @@ func (i *Installer) CheckAESHealth(hostname string) error {
 // CheckHostnameFound tries to connect to check-blah.hostname to see whether DNS
 // has propagated. Each connect talks to a different hostname to try to avoid
 // NXDOMAIN caching.
-func (i *Installer) CheckHostnameFound(hostname string) error {
-	conn, err := net.Dial("tcp", fmt.Sprintf("check-%d.%s:443", time.Now().Unix(), hostname))
+func (i *Installer) CheckHostnameFound() error {
+	conn, err := net.Dial("tcp", fmt.Sprintf("check-%d.%s:443", time.Now().Unix(), i.hostname))
 	if err == nil {
 		conn.Close()
 	}
@@ -331,13 +333,13 @@ func (i *Installer) CheckHostnameFound(hostname string) error {
 }
 
 // CheckACMEIsDone queries the Host object and succeeds if its state is Ready.
-func (i *Installer) CheckACMEIsDone(hostname string) error {
-	state, err := i.CaptureKubectl("get Host state", "", "get", "host", hostname, "-o", "go-template={{.status.state}}")
+func (i *Installer) CheckACMEIsDone() error {
+	state, err := i.CaptureKubectl("get Host state", "", "get", "host", i.hostname, "-o", "go-template={{.status.state}}")
 	if err != nil {
 		return LoopFailedError(err.Error())
 	}
 	if state == "Error" {
-		reason, err := i.CaptureKubectl("get Host error", "", "get", "host", hostname, "-o", "go-template={{.status.errorReason}}")
+		reason, err := i.CaptureKubectl("get Host error", "", "get", "host", i.hostname, "-o", "go-template={{.status.errorReason}}")
 		if err != nil {
 			return LoopFailedError(err.Error())
 		}
@@ -354,7 +356,7 @@ func (i *Installer) CheckACMEIsDone(hostname string) error {
 
 		i.show.Println("Acquiring TLS certificate via ACME has failed:")
 		i.show.Println(reason)
-		return LoopFailedError(fmt.Sprintf("ACME failed. More information: kubectl get host %s -o yaml", hostname))
+		return LoopFailedError(fmt.Sprintf("ACME failed. More information: kubectl get host %s -o yaml", i.hostname))
 	}
 	if state != "Ready" {
 		return errors.Errorf("Host state is %s, not Ready", state)
@@ -464,11 +466,11 @@ func (i *Installer) Perform(kcontext string) error {
 		i.Report("fail_bad_manifests")
 		return errors.Errorf("Failed to parse downloaded manifests. Is there a proxy server interfering with HTTP downloads?")
 	}
-	aesVersion := matches[1]
-	i.SetMetadatum("AES version being installed", "aes_version", aesVersion)
+	i.version = matches[1]
+	i.SetMetadatum("AES version being installed", "aes_version", i.version)
 
 	// Display version information
-	i.ShowWrapped(fmt.Sprintf("-> Installing the Ambassador Edge Stack %s.", aesVersion))
+	i.ShowWrapped(fmt.Sprintf("-> Installing the Ambassador Edge Stack %s.", i.version))
 
 	// Try to determine cluster type from node labels
 	isKnownLocalCluster := false
@@ -519,17 +521,17 @@ func (i *Installer) Perform(kcontext string) error {
 			// Things will likely fail when we try to apply manifests
 		}
 		switch {
-		case aesVersion == installedVersion:
+		case i.version == installedVersion:
 			alreadyApplied = true
-			i.ShowWrapped(fmt.Sprintf("-> Found an existing installation of Ambassador Edge Stack %s.", aesVersion))
+			i.ShowWrapped(fmt.Sprintf("-> Found an existing installation of Ambassador Edge Stack %s.", i.version))
 		case installedVersion != "":
 			i.ShowWrapped(fmt.Sprintf("-> Found an existing installation of Ambassador Edge Stack %s.", installedVersion))
 			i.show.Println()
 			i.ShowWrapped(abortExisting)
 			i.show.Println()
 			i.ShowWrapped(seeDocs)
-			i.Report("fail_existing_aes", ScoutMeta{"installing", aesVersion}, ScoutMeta{"found", installedVersion})
-			return errors.Errorf("existing AES %s found when installing AES %s", installedVersion, aesVersion)
+			i.Report("fail_existing_aes", ScoutMeta{"installing", i.version}, ScoutMeta{"found", installedVersion})
+			return errors.Errorf("existing AES %s found when installing AES %s", installedVersion, i.version)
 		default:
 			i.ShowWrapped(abortCRDs)
 			i.show.Println()
@@ -600,13 +602,7 @@ func (i *Installer) Perform(kcontext string) error {
 
 	// Grab load balancer address
 	i.ShowWrapped("-> Provisioning a cloud load balancer. (This may take a minute, depending on your cloud provider.)")
-	lbAddress := ""
-	grabAddress := func() error {
-		var err error
-		lbAddress, err = i.GrabLoadBalancerAddress()
-		return err
-	}
-	if err := i.loopUntil("Load Balancer", grabAddress, lc5); err != nil {
+	if err := i.loopUntil("Load Balancer", i.GrabLoadBalancerAddress, lc5); err != nil {
 		i.Report("fail_loadbalancer_timeout")
 		i.show.Println()
 		i.ShowWrapped(failLoadBalancer)
@@ -616,10 +612,10 @@ func (i *Installer) Perform(kcontext string) error {
 		return err
 	}
 	i.Report("cluster_accessible")
-	i.show.Println("Your AES installation's address is", lbAddress)
+	i.show.Println("Your AES installation's address is", i.address)
 
 	// Wait for Ambassador to be ready to serve ACME requests.
-	if err := i.loopUntil("AES to serve ACME", func() error { return i.CheckAESServesACME(lbAddress) }, lc2); err != nil {
+	if err := i.loopUntil("AES to serve ACME", i.CheckAESServesACME, lc2); err != nil {
 		i.Report("aes_listening_timeout")
 		i.ShowWrapped("It seems AES did not start in the expected time, or the AES load balancer is not reachable from here.")
 		i.ShowWrapped(tryAgain)
@@ -667,10 +663,10 @@ func (i *Installer) Perform(kcontext string) error {
 	// Send a request to acquire a DNS name for this cluster's load balancer
 	regURL := "https://metriton.datawire.io/register-domain"
 	regData := &registration{Email: emailAddress}
-	if net.ParseIP(lbAddress) != nil {
-		regData.Ip = lbAddress
+	if net.ParseIP(i.address) != nil {
+		regData.Ip = i.address
 	} else {
-		regData.Hostname = lbAddress
+		regData.Hostname = i.address
 	}
 	buf := new(bytes.Buffer)
 	_ = json.NewEncoder(buf).Encode(regData)
@@ -693,19 +689,19 @@ func (i *Installer) Perform(kcontext string) error {
 		i.show.Println()
 		i.ShowWrapped(noTlsSuccess)
 		i.ShowWrapped("If this IP address is reachable from here, you can access your installation without a DNS name.")
-		i.ShowWrapped(fmt.Sprintf(loginViaIP, lbAddress))
+		i.ShowWrapped(fmt.Sprintf(loginViaIP, i.address))
 		i.ShowWrapped(loginViaPortForward)
 		i.ShowWrapped(seeDocs)
 		return nil
 	}
 
-	hostname := string(content)
-	i.show.Println("-> Acquiring DNS name", hostname)
+	i.hostname = string(content)
+	i.show.Println("-> Acquiring DNS name", i.hostname)
 
 	// Wait for DNS to propagate. This tries to avoid waiting for a ten
 	// minute error backoff if the ACME registration races ahead of the DNS
 	// name appearing for LetsEncrypt.
-	if err := i.loopUntil("DNS propagation to this host", func() error { return i.CheckHostnameFound(hostname) }, lc2); err != nil {
+	if err := i.loopUntil("DNS propagation to this host", i.CheckHostnameFound, lc2); err != nil {
 		i.Report("dns_name_propagation_timeout")
 		i.ShowWrapped("We are unable to resolve your new DNS name on this machine.")
 		i.ShowWrapped(seeDocs)
@@ -715,7 +711,7 @@ func (i *Installer) Perform(kcontext string) error {
 	i.Report("dns_name_propagated")
 
 	// Create a Host resource
-	hostResource := fmt.Sprintf(hostManifest, hostname, hostname, emailAddress)
+	hostResource := fmt.Sprintf(hostManifest, i.hostname, i.hostname, emailAddress)
 	if err := i.ShowKubectl("install Host resource", hostResource, "apply", "-f", "-"); err != nil {
 		i.Report("fail_host_resource", ScoutMeta{"err", err.Error()})
 		i.ShowWrapped("We failed to create a Host resource in your cluster. This is unexpected.")
@@ -724,7 +720,7 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	i.show.Println("-> Obtaining a TLS certificate from Let's Encrypt")
-	if err := i.loopUntil("TLS certificate acquisition", func() error { return i.CheckACMEIsDone(hostname) }, lc5); err != nil {
+	if err := i.loopUntil("TLS certificate acquisition", i.CheckACMEIsDone, lc5); err != nil {
 		i.Report("cert_provision_failed")
 		// Some info is reported by the check function.
 		i.ShowWrapped(seeDocs)
@@ -733,22 +729,22 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 	i.Report("cert_provisioned")
 	i.show.Println("-> TLS configured successfully")
-	if err := i.ShowKubectl("show Host", "", "get", "host", hostname); err != nil {
+	if err := i.ShowKubectl("show Host", "", "get", "host", i.hostname); err != nil {
 		i.ShowWrapped("We failed to retrieve the Host resource from your cluster that we just created. This is unexpected.")
 		i.ShowWrapped(tryAgain)
 		return err
 	}
 
 	i.show.Println()
-	i.ShowWrapped(fmt.Sprintf(fullSuccess, hostname))
+	i.ShowWrapped(fmt.Sprintf(fullSuccess, i.hostname))
 	i.show.Println()
 
 	// Open a browser window to the Edge Policy Console
-	if err := do_login(i.kubeinfo, kcontext, "ambassador", hostname, false, false); err != nil {
+	if err := do_login(i.kubeinfo, kcontext, "ambassador", i.hostname, false, false); err != nil {
 		return err
 	}
 
-	if err := i.CheckAESHealth(hostname); err != nil {
+	if err := i.CheckAESHealth(); err != nil {
 		i.Report("aes_health_bad", ScoutMeta{"err", err.Error()})
 	} else {
 		i.Report("aes_health_good")
@@ -759,17 +755,31 @@ func (i *Installer) Perform(kcontext string) error {
 
 // Installer represents the state of the installation process
 type Installer struct {
+	// Cluster
+
 	kubeinfo   *k8s.KubeInfo
 	restConfig *rest.Config
 	coreClient *k8sClientCoreV1.CoreV1Client
-	scout      *Scout
-	ctx        context.Context
-	cancel     context.CancelFunc
-	show       *log.Logger
-	log        *log.Logger
-	cmdOut     *log.Logger
-	cmdErr     *log.Logger
-	logName    string
+
+	// Reporting
+
+	scout *Scout
+
+	// Logging and management
+
+	ctx     context.Context
+	cancel  context.CancelFunc
+	show    *log.Logger
+	log     *log.Logger
+	cmdOut  *log.Logger
+	cmdErr  *log.Logger
+	logName string
+
+	// Install results
+
+	version  string // which AES is being installed
+	address  string // load balancer address
+	hostname string // of the Host resource
 }
 
 // NewInstaller returns an Installer object after setting up logging.
