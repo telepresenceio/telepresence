@@ -245,6 +245,7 @@ PodsLoop:
 	if err != nil {
 		return err
 	}
+	i.clusterID = clusterID
 	i.SetMetadatum("Cluster ID", "aes_install_id", clusterID)
 	return nil
 }
@@ -663,6 +664,10 @@ func (i *Installer) Perform(kcontext string) error {
 	// Send a request to acquire a DNS name for this cluster's load balancer
 	regURL := "https://metriton.datawire.io/register-domain"
 	regData := &registration{Email: emailAddress}
+	if !i.scout.Disabled() {
+		regData.AESInstallId = i.clusterID
+		regData.EdgectlInstallId = i.scout.installID
+	}
 	if net.ParseIP(i.address) != nil {
 		regData.Ip = i.address
 	} else {
@@ -777,9 +782,10 @@ type Installer struct {
 
 	// Install results
 
-	version  string // which AES is being installed
-	address  string // load balancer address
-	hostname string // of the Host resource
+	version   string // which AES is being installed
+	address   string // load balancer address
+	hostname  string // of the Host resource
+	clusterID string // the Ambassador unique clusterID
 }
 
 // NewInstaller returns an Installer object after setting up logging.
@@ -932,9 +938,11 @@ func doWordWrap(text string, prefix string, lineWidth int) []string {
 
 // registration is used to register edgestack.me domains
 type registration struct {
-	Email    string
-	Ip       string
-	Hostname string
+	Email            string
+	Ip               string
+	Hostname         string
+	EdgectlInstallId string
+	AESInstallId     string
 }
 
 const hostManifest = `
