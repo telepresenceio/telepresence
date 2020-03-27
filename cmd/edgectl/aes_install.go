@@ -83,6 +83,16 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	kcontext, _ := cmd.Flags().GetString("context")
 	i := NewInstaller(verbose)
 
+	// If Scout is disabled (environment variable set to non-null), inform the user.
+	// TODO: should be i.scout.Disabled() when Alex's PR #2496 is merged.
+	if os.Getenv("SCOUT_DISABLE") != "" {
+		i.show.Printf("[aesInstall] Scout is disabled; metrics will not be written to Metriton.")
+	}
+
+	// Both printed and logged when verbose.
+	i.log.Printf("[aesInstall] the install_id is: %s", i.scout.installID)
+	i.log.Printf("[aesInstall] the trace_id is:   %s", i.scout.metadata["trace_id"])
+
 	sup := supervisor.WithContext(i.ctx)
 	sup.Logger = i.log
 
@@ -415,6 +425,7 @@ func (i *Installer) Perform(kcontext string) error {
 
 	// Attempt to use kubectl
 	_, err := i.GetKubectlPath()
+	//err = errors.New("early error for testing")  // TODO: remove for production
 	if err != nil {
 		i.Report("fail_no_kubectl")
 		return fmt.Errorf(noKubectl)
@@ -1000,7 +1011,6 @@ const noTlsSuccess = "Congratulations! You've successfully installed the Ambassa
 
 const noKubectl = `
 The installer depends on the 'kubectl' executable. Make sure you have the latest release downloaded in your PATH, and that you have executable permissions.
-
 Visit https://kubernetes.io/docs/tasks/tools/install-kubectl/ for more information and instructions.`
 
 const noCluster = `
