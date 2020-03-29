@@ -753,7 +753,9 @@ func (i *Installer) Perform(kcontext string) error {
 	// Add a little color
 
 	i.show.Println()
-	i.ShowWrapped(color.Info.Sprintf(fullSuccess, chalk.Bold.TextStyle(i.hostname), chalk.Bold.TextStyle("edgectl install")))
+	i.ShowWrapped(color.Info.Sprintf(fullSuccess,
+		chalk.Bold.TextStyle(i.hostname),
+		chalk.Bold.TextStyle("edgectl install namespace=ambassador \\\n"+i.hostname)))
 
 	i.show.Println()
 
@@ -1017,7 +1019,7 @@ const fullSuccess = `Congratulations! You've successfully installed the Ambassad
 
 To access your Edge Stack installation and for additional configuration.  In the future, to log back in to the Ambassador Edge Stack, run
 %s
-from the command line.` // hostname, "edgectl login"
+from the command line.` // hostname, "edgectl login --namespace=ambassador <hostname>"
 
 const noTlsSuccess = "Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically."
 
