@@ -7,6 +7,7 @@ import (
 
 	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/dgrijalva/jwt-go"
+	"github.com/gookit/color"
 	"github.com/pkg/browser"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -23,7 +24,7 @@ type LoginClaimsV1 struct {
 }
 
 func aesLogin(cmd *cobra.Command, args []string) error {
-	fmt.Println("Connecting to the Ambassador Edge Policy Console in this cluster...")
+	fmt.Println(color.Info.Sprintf("Connecting to the Ambassador Edge Policy Console in this cluster..."))
 
 	// Grab options
 	context, _ := cmd.Flags().GetString("context")
@@ -98,7 +99,7 @@ func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, justS
 		fmt.Println("Visit the following URL to access the Ambassador Edge Policy Console:")
 		fmt.Println("    ", url)
 	} else {
-		fmt.Println("The Ambassador Edge Policy Console has been opened in your browser.")
+		fmt.Println(color.Info.Sprintf("The Ambassador Edge Policy Console has been opened in your browser."))
 	}
 
 	if showToken {

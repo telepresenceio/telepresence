@@ -22,8 +22,10 @@ import (
 
 	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/gookit/color"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"github.com/ttacon/chalk"
 	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
@@ -86,7 +88,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	// If Scout is disabled (environment variable set to non-null), inform the user.
 	// TODO: should be i.scout.Disabled() when Alex's PR #2496 is merged.
 	if os.Getenv("SCOUT_DISABLE") != "" {
-		i.show.Printf("[aesInstall] Scout is disabled; metrics will not be written to Metriton.")
+		i.show.Printf(color.Notice.Sprintf("[aesInstall] Scout is disabled; metrics will not be written to Metriton."))
 	}
 
 	// Both printed and logged when verbose.
@@ -423,6 +425,8 @@ func (i *Installer) Perform(kcontext string) error {
 	// Start
 	i.Report("install")
 
+	i.ShowWrapped(color.Info.Sprintf("Beginning AES Installation\n"))
+
 	// Attempt to use kubectl
 	_, err := i.GetKubectlPath()
 	//err = errors.New("early error for testing")  // TODO: remove for production
@@ -623,7 +627,7 @@ func (i *Installer) Perform(kcontext string) error {
 		return err
 	}
 	i.Report("cluster_accessible")
-	i.show.Println("Your AES installation's address is", i.address)
+	i.show.Println("Your AES installation's address is", chalk.Bold.TextStyle(i.address))
 
 	// Wait for Ambassador to be ready to serve ACME requests.
 	if err := i.loopUntil("AES to serve ACME", i.CheckAESServesACME, lc2); err != nil {
@@ -707,7 +711,7 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	i.hostname = string(content)
-	i.show.Println("-> Acquiring DNS name", i.hostname)
+	i.show.Println("-> Acquiring DNS name", chalk.Bold.TextStyle(i.hostname))
 
 	// Wait for DNS to propagate. This tries to avoid waiting for a ten
 	// minute error backoff if the ACME registration races ahead of the DNS
@@ -746,8 +750,11 @@ func (i *Installer) Perform(kcontext string) error {
 		return err
 	}
 
+	// Add a little color
+
 	i.show.Println()
-	i.ShowWrapped(fmt.Sprintf(fullSuccess, i.hostname))
+	i.ShowWrapped(color.Info.Sprintf(fullSuccess, chalk.Bold.TextStyle(i.hostname), chalk.Bold.TextStyle("edgectl install")))
+
 	i.show.Println()
 
 	// Open a browser window to the Edge Policy Console
@@ -1005,7 +1012,12 @@ const seeDocs = "See https://www.getambassador.io/docs/latest/tutorials/getting-
 
 var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 
-const fullSuccess = "Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit %s to access your Edge Stack installation and for additional configuration." // hostname
+const fullSuccess = `Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit
+%s
+
+To access your Edge Stack installation and for additional configuration.  In the future, to log back in to the Ambassador Edge Stack, run
+%s
+from the command line.` // hostname, "edgectl login"
 
 const noTlsSuccess = "Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically."
 
