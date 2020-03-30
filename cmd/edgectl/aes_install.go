@@ -26,7 +26,6 @@ import (
 	"github.com/gookit/color"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/ttacon/chalk"
 	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
@@ -88,11 +87,11 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 
 	// If Scout is disabled (environment variable set to non-null), inform the user.
 	if i.scout.Disabled() {
-		i.show.Printf(color.Info.Sprintf(phoneHomeDisabled))
+		i.show.Printf(phoneHomeDisabled)
 	}
 
 	// Both printed and logged when verbose (Installer.log is responsible for --verbose)
-	i.log.Printf(color.Info.Sprintf(installAndTraceIDs, i.scout.installID, i.scout.metadata["trace_id"]))
+	i.log.Printf(fmt.Sprintf(installAndTraceIDs, i.scout.installID, i.scout.metadata["trace_id"]))
 
 	sup := supervisor.WithContext(i.ctx)
 	sup.Logger = i.log
@@ -425,7 +424,8 @@ func (i *Installer) Perform(kcontext string) error {
 	// Start
 	i.Report("install")
 
-	i.ShowWrapped(color.Info.Sprintf("Beginning AES Installation\n"))
+	i.show.Println("================================")
+	i.show.Println(beginningAESInstallation)
 
 	// Attempt to use kubectl
 	_, err := i.GetKubectlPath()
@@ -629,7 +629,7 @@ func (i *Installer) Perform(kcontext string) error {
 		return err
 	}
 	i.Report("cluster_accessible")
-	i.show.Println("Your AES installation's address is", chalk.Bold.TextStyle(i.address))
+	i.show.Println("Your AES installation's address is", color.Bold.Sprintf(i.address))
 
 	// Wait for Ambassador to be ready to serve ACME requests.
 	if err := i.loopUntil("AES to serve ACME", i.CheckAESServesACME, lc2); err != nil {
@@ -717,7 +717,7 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	i.hostname = string(content)
-	i.show.Println("-> Acquiring DNS name", chalk.Bold.TextStyle(i.hostname))
+	i.show.Println("-> Acquiring DNS name", color.Bold.Sprintf(i.hostname))
 
 	// Wait for DNS to propagate. This tries to avoid waiting for a ten
 	// minute error backoff if the ACME registration races ahead of the DNS
@@ -756,12 +756,12 @@ func (i *Installer) Perform(kcontext string) error {
 		return err
 	}
 
-	// Add a little color
+	i.show.Println("AES Installation Complete!")
+	i.show.Println("================================\n")
 
-	i.show.Println()
-	i.ShowWrapped(color.Info.Sprintf(fullSuccess,
-		chalk.Bold.TextStyle(i.hostname),
-		chalk.Bold.TextStyle("edgectl login "+i.hostname)))
+	i.ShowWrapped(fmt.Sprintf(fullSuccess,
+		color.Bold.Sprintf(i.hostname),
+		color.Bold.Sprintf("edgectl login "+i.hostname)))
 
 	i.show.Println()
 
@@ -977,6 +977,8 @@ spec:
     email: %s
 `
 
+const beginningAESInstallation = "Beginning Ambassador Edge Stack Installation"
+
 const emailAsk = `Please enter an email address. We'll use this email address to notify you prior to domain and certificate expiration. We also share this email address with Let's Encrypt to acquire your certificate for TLS.`
 
 const loginViaIP = `
@@ -1021,8 +1023,8 @@ The installer will now quit to avoid corrupting an existing (but undetected) ins
 const seeDocsURL = "https://www.getambassador.io/docs/latest/tutorials/getting-started/"
 const seeDocs    = "See " + seeDocsURL
 
-const phoneHomeDisabled  = "Info: phone-home is disabled by environment variable"
-const installAndTraceIDs = "Info: install_id = %s; trace_id = %s"
+const phoneHomeDisabled  = "INFO: phone-home is disabled by environment variable"
+const installAndTraceIDs = "INFO: install_id = %s; trace_id = %s"
 
 var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 

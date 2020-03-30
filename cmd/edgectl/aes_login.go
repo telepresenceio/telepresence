@@ -99,7 +99,7 @@ func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, justS
 		fmt.Println("Visit the following URL to access the Ambassador Edge Policy Console:")
 		fmt.Println("    ", url)
 	} else {
-		fmt.Println(color.Info.Sprintf("The Ambassador Edge Policy Console has been opened in your browser."))
+		fmt.Println("The Ambassador Edge Policy Console has been opened in your browser.")
 	}
 
 	if showToken {
