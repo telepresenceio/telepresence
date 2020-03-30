@@ -131,8 +131,5 @@ func (s *Scout) Report(action string, meta ...ScoutMeta) error {
 }
 
 func (s *Scout) Disabled() bool {
-	if os.Getenv("SCOUT_DISABLE") != "" {
-		return true
-	}
-	return false
+	return os.Getenv("SCOUT_DISABLE") != ""
 }
