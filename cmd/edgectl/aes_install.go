@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pkg/browser"
 	"io"
 	"io/ioutil"
 	"log"
@@ -76,7 +77,7 @@ func getEmailAddress(defaultEmail string, log *log.Logger) string {
 			return text
 		}
 
-		fmt.Printf("Sorry, %q does not match our email address filter.\n", text)
+		fmt.Printf("Sorry, %q does not appear to be a valid email address.  Please check it and try again.\n", text)
 	}
 }
 
@@ -88,12 +89,11 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	// If Scout is disabled (environment variable set to non-null), inform the user.
 	// TODO: should be i.scout.Disabled() when Alex's PR #2496 is merged.
 	if os.Getenv("SCOUT_DISABLE") != "" {
-		i.show.Printf(color.Notice.Sprintf("[aesInstall] Scout is disabled; metrics will not be written to Metriton."))
+		i.show.Printf(color.Info.Sprintf(phoneHomeDisabled))
 	}
 
-	// Both printed and logged when verbose.
-	i.log.Printf("[aesInstall] the install_id is: %s", i.scout.installID)
-	i.log.Printf("[aesInstall] the trace_id is:   %s", i.scout.metadata["trace_id"])
+	// Both printed and logged when verbose (Installer.log is responsible for --verbose)
+	i.log.Printf(color.Info.Sprintf(installAndTraceIDs, i.scout.installID, i.scout.metadata["trace_id"]))
 
 	sup := supervisor.WithContext(i.ctx)
 	sup.Logger = i.log
@@ -432,6 +432,7 @@ func (i *Installer) Perform(kcontext string) error {
 	//err = errors.New("early error for testing")  // TODO: remove for production
 	if err != nil {
 		i.Report("fail_no_kubectl")
+		err = browser.OpenURL(noKubectlURL)
 		return fmt.Errorf(noKubectl)
 	}
 
@@ -439,6 +440,7 @@ func (i *Installer) Perform(kcontext string) error {
 	i.kubeinfo = k8s.NewKubeInfo("", kcontext, "")
 	if err := i.ShowKubectl("cluster-info", "", "cluster-info"); err != nil {
 		i.Report("fail_no_cluster")
+		err = browser.OpenURL(noClusterURL)
 		return fmt.Errorf(noCluster)
 	}
 	i.restConfig, err = i.kubeinfo.GetRestConfig()
@@ -996,7 +998,7 @@ const tryAgain = "If this appears to be a transient failure, please try running 
 const abortExisting = `
 This tool does not support upgrades/downgrades at this time.
 
-Aborting the installer to avoid corrupting an existing installation of AES.
+The installer will now quit to avoid corrupting an existing installation of AES.
 `
 
 const abortCRDs = `
@@ -1007,17 +1009,20 @@ Removing the CRDs will cause your existing Ambassador Mappings and other resourc
 
 $ kubectl delete crd -l product=aes
 
-Aborting the installer to avoid corrupting an existing (but undetected) installation.
+The installer will now quit to avoid corrupting an existing (but undetected) installation.
 `
 
-const seeDocs = "See https://www.getambassador.io/docs/latest/tutorials/getting-started/"
+const seeDocs    = "See https://www.getambassador.io/docs/latest/tutorials/getting-started/"
+const seeDocsURL = "https://www.getambassador.io/docs/latest/tutorials/getting-started/"
+
+const phoneHomeDisabled  = "[aesInstall] Info: phone-home is disabled by environment variable"
+const installAndTraceIDs = "[aesInstall] Info: install_id = %s; trace_id = %s"
 
 var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 
-const fullSuccess = `Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit
-%s
+const fullSuccess = `Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit https://%s to access your Edge Stack installation and for additional configuration.
 
-To access your Edge Stack installation and for additional configuration.  In the future, to log back in to the Ambassador Edge Stack, run
+In the future, to log back in to the Ambassador Edge Policy Console, run
 $ %s
 from the command line.` // hostname, "edgectl login --namespace=ambassador <hostname>"
 
@@ -1027,8 +1032,12 @@ const noKubectl = `
 The installer depends on the 'kubectl' executable. Make sure you have the latest release downloaded in your PATH, and that you have executable permissions.
 Visit https://kubernetes.io/docs/tasks/tools/install-kubectl/ for more information and instructions.`
 
+const noKubectlURL = "https://kubernetes.io/docs/tasks/tools/install-kubectl/"
+
 const noCluster = `
 Unable to communicate with the remote Kubernetes cluster using your kubectl context.
 
 To further debug and diagnose cluster problems, use 'kubectl cluster-info dump' 
 or get started and run Kubernetes https://kubernetes.io/docs/setup/`
+
+const noClusterURL = "https://kubernetes.io/docs/setup/"

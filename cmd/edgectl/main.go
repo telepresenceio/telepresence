@@ -183,7 +183,7 @@ func getRootCommand() *cobra.Command {
 	}
 	loginCmd := &cobra.Command{
 		Use:   "login [flags] HOSTNAME",
-		Short: "Log in to the Ambassador Edge Policy Console web application",
+		Short: "Log in and open the Ambassador Edge Policy Console web application",
 		Args:  cobra.ExactArgs(1),
 		RunE:  aesLogin,
 	}
