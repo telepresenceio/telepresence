@@ -87,8 +87,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	i := NewInstaller(verbose)
 
 	// If Scout is disabled (environment variable set to non-null), inform the user.
-	// TODO: should be i.scout.Disabled() when Alex's PR #2496 is merged.
-	if os.Getenv("SCOUT_DISABLE") != "" {
+	if i.scout.Disabled() != "" {
 		i.show.Printf(color.Info.Sprintf(phoneHomeDisabled))
 	}
 
@@ -757,7 +756,7 @@ func (i *Installer) Perform(kcontext string) error {
 	i.show.Println()
 	i.ShowWrapped(color.Info.Sprintf(fullSuccess,
 		chalk.Bold.TextStyle(i.hostname),
-		chalk.Bold.TextStyle("edgectl install "+i.hostname)))
+		chalk.Bold.TextStyle("edgectl login --namespace=ambassador "+i.hostname)))
 
 	i.show.Println()
 
@@ -1011,12 +1010,11 @@ $ kubectl delete crd -l product=aes
 
 The installer will now quit to avoid corrupting an existing (but undetected) installation.
 `
-
-const seeDocs    = "See https://www.getambassador.io/docs/latest/tutorials/getting-started/"
 const seeDocsURL = "https://www.getambassador.io/docs/latest/tutorials/getting-started/"
+const seeDocs    = "See " + seeDocsURL
 
-const phoneHomeDisabled  = "[aesInstall] Info: phone-home is disabled by environment variable"
-const installAndTraceIDs = "[aesInstall] Info: install_id = %s; trace_id = %s"
+const phoneHomeDisabled  = "Info: phone-home is disabled by environment variable"
+const installAndTraceIDs = "Info: install_id = %s; trace_id = %s"
 
 var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 
@@ -1028,16 +1026,15 @@ from the command line.` // hostname, "edgectl login --namespace=ambassador <host
 
 const noTlsSuccess = "Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically."
 
+const noKubectlURL = "https://kubernetes.io/docs/tasks/tools/install-kubectl/"
 const noKubectl = `
 The installer depends on the 'kubectl' executable. Make sure you have the latest release downloaded in your PATH, and that you have executable permissions.
-Visit https://kubernetes.io/docs/tasks/tools/install-kubectl/ for more information and instructions.`
+Visit ` + noKubectlURL + `  for more information and instructions.`
 
-const noKubectlURL = "https://kubernetes.io/docs/tasks/tools/install-kubectl/"
-
+const noClusterURL = "https://kubernetes.io/docs/setup/"
 const noCluster = `
 Unable to communicate with the remote Kubernetes cluster using your kubectl context.
 
 To further debug and diagnose cluster problems, use 'kubectl cluster-info dump' 
-or get started and run Kubernetes https://kubernetes.io/docs/setup/`
+or get started and run Kubernetes` + noClusterURL
 
-const noClusterURL = "https://kubernetes.io/docs/setup/"
