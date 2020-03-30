@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -65,7 +66,7 @@ func (s *Scout) Report(action string, meta ...ScoutMeta) error {
 		metadata[metaItem.Key] = metaItem.Value
 	}
 
-	_, err := s.reporter.Report(metadata)
+	_, err := s.reporter.Report(context.TODO(), metadata)
 	if err != nil {
 		return errors.Wrap(err, "scout report")
 	}
