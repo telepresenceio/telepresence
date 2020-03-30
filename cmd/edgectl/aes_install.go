@@ -87,7 +87,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	i := NewInstaller(verbose)
 
 	// If Scout is disabled (environment variable set to non-null), inform the user.
-	if i.scout.Disabled() != "" {
+	if i.scout.Disabled() {
 		i.show.Printf(color.Info.Sprintf(phoneHomeDisabled))
 	}
 
@@ -1037,12 +1037,12 @@ const noTlsSuccess = "Congratulations! You've successfully installed the Ambassa
 const noKubectlURL = "https://kubernetes.io/docs/tasks/tools/install-kubectl/"
 const noKubectl = `
 The installer depends on the 'kubectl' executable. Make sure you have the latest release downloaded in your PATH, and that you have executable permissions.
-Visit ` + noKubectlURL + `  for more information and instructions.`
+Visit ` + noKubectlURL + ` for more information and instructions.`
 
 const noClusterURL = "https://kubernetes.io/docs/setup/"
 const noCluster = `
 Unable to communicate with the remote Kubernetes cluster using your kubectl context.
 
 To further debug and diagnose cluster problems, use 'kubectl cluster-info dump' 
-or get started and run Kubernetes` + noClusterURL
+or get started and run Kubernetes: ` + noClusterURL
 
