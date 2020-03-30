@@ -757,7 +757,8 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	i.show.Println("AES Installation Complete!")
-	i.show.Println("================================\n")
+	i.show.Println("================================")
+	i.show.Println()
 
 	i.ShowWrapped(fmt.Sprintf(fullSuccess,
 		color.Bold.Sprintf(i.hostname),
