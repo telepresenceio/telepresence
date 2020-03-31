@@ -424,6 +424,30 @@ func (i *Installer) Perform(kcontext string) error {
 	// Start
 	i.Report("install")
 
+	i.show.Println(color.Bold.Sprintf(welcomeInstall))
+
+	// Ask for the user's email address
+	i.show.Println()
+	i.ShowWrapped(emailAsk)
+	// Do the goroutine dance to let the user hit Ctrl-C at the email prompt
+	gotEmail := make(chan (string))
+	var emailAddress string
+	go func() {
+		gotEmail <- getEmailAddress(defaultEmail, i.log)
+		close(gotEmail)
+	}()
+	select {
+	case emailAddress = <-gotEmail:
+		// Continue
+	case <-i.ctx.Done():
+		fmt.Println()
+		return errors.New("Interrupted")
+	}
+	i.show.Println()
+
+	i.log.Printf("Using email address %q", emailAddress)
+
+	i.show.Println("================================")
 	i.show.Println(beginningAESInstallation)
 
 	// Attempt to use kubectl
@@ -656,27 +680,6 @@ func (i *Installer) Perform(kcontext string) error {
 			defaultEmail = ""
 		}
 	}
-
-	// Ask for the user's email address
-	i.show.Println()
-	i.ShowWrapped(emailAsk)
-	// Do the goroutine dance to let the user hit Ctrl-C at the email prompt
-	gotEmail := make(chan (string))
-	var emailAddress string
-	go func() {
-		gotEmail <- getEmailAddress(defaultEmail, i.log)
-		close(gotEmail)
-	}()
-	select {
-	case emailAddress = <-gotEmail:
-		// Continue
-	case <-i.ctx.Done():
-		fmt.Println()
-		return errors.New("Interrupted")
-	}
-	i.show.Println()
-
-	i.log.Printf("Using email address %q", emailAddress)
 
 	// Send a request to acquire a DNS name for this cluster's load balancer
 	regURL := "https://metriton.datawire.io/register-domain"
@@ -981,9 +984,11 @@ spec:
     email: %s
 `
 
-const beginningAESInstallation = "Beginning Ambassador Edge Stack Installation"
+const welcomeInstall = "Installing the Ambassador Edge Stack"
 
 const emailAsk = `Please enter an email address. We'll use this email address to notify you prior to domain and certificate expiration. We also share this email address with Let's Encrypt to acquire your certificate for TLS.`
+
+const beginningAESInstallation = "Beginning Ambassador Edge Stack Installation"
 
 const loginViaIP = `
 The following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.
