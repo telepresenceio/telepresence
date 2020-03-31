@@ -81,6 +81,7 @@ func getEmailAddress(defaultEmail string, log *log.Logger) string {
 }
 
 func aesInstall(cmd *cobra.Command, args []string) error {
+	skipReport, _ := cmd.Flags().GetBool("no-report")
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	kcontext, _ := cmd.Flags().GetString("context")
 	i := NewInstaller(verbose)
@@ -129,6 +130,9 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	if len(runErrors) > 0 {
 		i.show.Println()
 		i.show.Printf("Full logs at %s\n\n", i.logName)
+		if !skipReport {
+			i.generateCrashReport(runErrors[0])
+		}
 		return runErrors[0]
 	}
 	return nil
@@ -421,6 +425,8 @@ func (i *Installer) GetInstalledImageVersion() (string, error) {
 
 // Perform is the main function for the installer
 func (i *Installer) Perform(kcontext string) error {
+	return fmt.Errorf("Short circuit")
+
 	// Start
 	i.Report("install")
 
@@ -940,6 +946,69 @@ func (i *Installer) Report(eventName string, meta ...ScoutMeta) {
 	}
 }
 
+func (i *Installer) generateCrashReport(sourceError error) {
+	// TODO: Use the live endpoint
+	//reportURL := "https://metriton.datawire.io/crash-report"
+	reportURL := "https://metriton.datawire.io/beta/crash-report"
+
+	report := &crashReportCreationRequest{
+		Product:        "edgectl",
+		Command:        "install", // TODO, include cmd flags?
+		ProductVersion: "",        // TODO
+		Error:          sourceError,
+		AESVersion:     i.version,
+		Address:        i.address,
+		Hostname:       i.hostname,
+		ClusterID:      i.clusterID,
+		// TODO, many other fields should be included (kubectl version, k8s version, cluster type, etc.)
+	}
+	buf := new(bytes.Buffer)
+	_ = json.NewEncoder(buf).Encode(report)
+	resp, err := http.Post(reportURL, "application/json", buf)
+	if err != nil {
+		i.log.Printf("failed to initiate anonymous crash report due to error: %v", err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	content, err := ioutil.ReadAll(resp.Body)
+	if resp.StatusCode != 200 {
+		i.log.Print("skipping anonymous crash report and log submission for this failure")
+		return
+	}
+	crashReport := crashReportCreationResponse{}
+	err = json.Unmarshal(content, &crashReport)
+	if err != nil {
+		i.log.Printf("failed to generate anonymous crash report due to error: %v", err.Error())
+		return
+	}
+	i.log.Printf("uploading anonymous crash report and logs under report ID: %v", crashReport.ReportId)
+	i.uploadCrashReportData(crashReport)
+}
+
+func (i *Installer) uploadCrashReportData(crashReport crashReportCreationResponse) {
+	// TODO: collect the data
+	uploadContent := "Hello world! from edgectl"
+
+	client := &http.Client{}
+	req, err := http.NewRequest(crashReport.Method, crashReport.UploadURL, strings.NewReader(uploadContent))
+	if err != nil {
+		i.log.Print(err.Error())
+		return
+	}
+
+	res, err := client.Do(req)
+	if err != nil {
+		i.log.Print(err.Error())
+		return
+	}
+	defer res.Body.Close()
+	_, err = ioutil.ReadAll(res.Body)
+	if err != nil {
+		i.log.Print(err.Error())
+		return
+	}
+}
+
 func doWordWrap(text string, prefix string, lineWidth int) []string {
 	words := strings.Fields(strings.TrimSpace(text))
 	if len(words) == 0 {
@@ -968,6 +1037,25 @@ type registration struct {
 	Hostname         string
 	EdgectlInstallId string
 	AESInstallId     string
+}
+
+// crashReportCreationRequest is used to initiate a crash report request
+type crashReportCreationRequest struct {
+	Product        string
+	ProductVersion string
+	Command        string
+	Error          error
+	AESVersion     string
+	Address        string
+	Hostname       string
+	ClusterID      string
+}
+
+// crashReportCreationResponse is used to receive a crash report creation response
+type crashReportCreationResponse struct {
+	ReportId  string
+	Method    string
+	UploadURL string
 }
 
 const hostManifest = `
@@ -1025,9 +1113,9 @@ $ kubectl delete crd -l product=aes
 The installer will now quit to avoid corrupting an existing (but undetected) installation.
 `
 const seeDocsURL = "https://www.getambassador.io/docs/latest/tutorials/getting-started/"
-const seeDocs    = "See " + seeDocsURL
+const seeDocs = "See " + seeDocsURL
 
-const phoneHomeDisabled  = "INFO: phone-home is disabled by environment variable"
+const phoneHomeDisabled = "INFO: phone-home is disabled by environment variable"
 const installAndTraceIDs = "INFO: install_id = %s; trace_id = %s"
 
 var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
@@ -1050,4 +1138,3 @@ Unable to communicate with the remote Kubernetes cluster using your kubectl cont
 
 To further debug and diagnose cluster problems, use 'kubectl cluster-info dump' 
 or get started and run Kubernetes: ` + noClusterURL
-
