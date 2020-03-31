@@ -424,7 +424,20 @@ func (i *Installer) Perform(kcontext string) error {
 	// Start
 	i.Report("install")
 
+	i.show.Println()
 	i.show.Println(color.Bold.Sprintf(welcomeInstall))
+
+	// Attempt to grab a reasonable default for the user's email address
+	defaultEmail, err := i.Capture("get email", "", "git", "config", "--global", "user.email")
+	if err != nil {
+		i.log.Print(err)
+		defaultEmail = ""
+	} else {
+		defaultEmail = strings.TrimSpace(defaultEmail)
+		if !validEmailAddress.MatchString(defaultEmail) {
+			defaultEmail = ""
+		}
+	}
 
 	// Ask for the user's email address
 	i.show.Println()
@@ -447,11 +460,12 @@ func (i *Installer) Perform(kcontext string) error {
 
 	i.log.Printf("Using email address %q", emailAddress)
 
-	i.show.Println("================================")
+	i.show.Println("========================================================================")
 	i.show.Println(beginningAESInstallation)
+	i.show.Println()
 
 	// Attempt to use kubectl
-	_, err := i.GetKubectlPath()
+	_, err = i.GetKubectlPath()
 	//err = errors.New("early error for testing")  // TODO: remove for production
 	if err != nil {
 		i.Report("fail_no_kubectl")
@@ -652,9 +666,7 @@ func (i *Installer) Perform(kcontext string) error {
 		return err
 	}
 	i.Report("cluster_accessible")
-	i.show.Println()
-	i.show.Println("Your AES installation's address is", color.Bold.Sprintf(i.address))
-	i.show.Println()
+	i.show.Println("-> Your AES installation's address is", color.Bold.Sprintf(i.address))
 
 	// Wait for Ambassador to be ready to serve ACME requests.
 	if err := i.loopUntil("AES to serve ACME", i.CheckAESServesACME, lc2); err != nil {
@@ -668,18 +680,6 @@ func (i *Installer) Perform(kcontext string) error {
 	i.Report("aes_listening")
 
 	i.show.Println("-> Automatically configuring TLS")
-
-	// Attempt to grab a reasonable default for the user's email address
-	defaultEmail, err := i.Capture("get email", "", "git", "config", "--global", "user.email")
-	if err != nil {
-		i.log.Print(err)
-		defaultEmail = ""
-	} else {
-		defaultEmail = strings.TrimSpace(defaultEmail)
-		if !validEmailAddress.MatchString(defaultEmail) {
-			defaultEmail = ""
-		}
-	}
 
 	// Send a request to acquire a DNS name for this cluster's load balancer
 	regURL := "https://metriton.datawire.io/register-domain"
@@ -760,16 +760,17 @@ func (i *Installer) Perform(kcontext string) error {
 		return err
 	}
 
+	i.show.Println()
 	i.show.Println("AES Installation Complete!")
-	i.show.Println("================================")
+	i.show.Println("========================================================================")
 	i.show.Println()
 
 	// Show congratulations message
-	i.ShowWrapped(fmt.Sprintf(fullSuccess, color.Bold.Sprintf(i.hostname)))
+	i.ShowWrapped(color.Bold.Sprintf(fullSuccess, i.hostname))
 	i.show.Println()
 
 	// Open a browser window to the Edge Policy Console
-	if err := do_login(i.kubeinfo, kcontext, "ambassador", i.hostname, false, false); err != nil {
+	if err := do_login(i.kubeinfo, kcontext, "ambassador", i.hostname, true, true, false); err != nil {
 		return err
 	}
 
