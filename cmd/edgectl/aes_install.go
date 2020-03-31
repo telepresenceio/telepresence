@@ -425,6 +425,7 @@ func (i *Installer) GetInstalledImageVersion() (string, error) {
 
 // Perform is the main function for the installer
 func (i *Installer) Perform(kcontext string) error {
+	// TODO: REMOVE!
 	return fmt.Errorf("Short circuit")
 
 	// Start
