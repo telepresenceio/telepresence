@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sVersion "k8s.io/apimachinery/pkg/version"
 	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 )
@@ -425,9 +426,6 @@ func (i *Installer) GetInstalledImageVersion() (string, error) {
 
 // Perform is the main function for the installer
 func (i *Installer) Perform(kcontext string) error {
-	// TODO: REMOVE!
-	return fmt.Errorf("Short circuit")
-
 	// Start
 	i.Report("install")
 
@@ -459,6 +457,21 @@ func (i *Installer) Perform(kcontext string) error {
 		i.Report("fail_no_cluster")
 		return err
 	}
+
+	versions, err := i.CaptureKubectl("get versions", "", "version", "-o", "json")
+	if err != nil {
+		i.Report("fail_no_cluster")
+		return err
+	}
+	k8sVersion := &kubernetesVersion{}
+	err = json.Unmarshal([]byte(versions), k8sVersion)
+	if err != nil {
+		i.log.Printf("failed to read Kubernetes client and server versions", err.Error())
+	}
+	i.k8sVersion = k8sVersion
+
+	// TODO: REMOVE!
+	return fmt.Errorf("Short circuit")
 
 	// Allow overriding the source domain (e.g., for smoke tests before release)
 	manifestsDomain := "www.getambassador.io"
@@ -797,6 +810,7 @@ type Installer struct {
 	kubeinfo   *k8s.KubeInfo
 	restConfig *rest.Config
 	coreClient *k8sClientCoreV1.CoreV1Client
+	k8sVersion *kubernetesVersion
 
 	// Reporting
 
@@ -953,15 +967,22 @@ func (i *Installer) generateCrashReport(sourceError error) {
 	reportURL := "https://metriton.datawire.io/beta/crash-report"
 
 	report := &crashReportCreationRequest{
-		Product:        "edgectl",
-		Command:        "install", // TODO, include cmd flags?
-		ProductVersion: "",        // TODO
-		Error:          sourceError,
-		AESVersion:     i.version,
-		Address:        i.address,
-		Hostname:       i.hostname,
-		ClusterID:      i.clusterID,
-		// TODO, many other fields should be included (kubectl version, k8s version, cluster type, etc.)
+		Product:         "edgectl",
+		Command:         "install",
+		ProductVersion:  displayVersion,
+		Error:           sourceError.Error(),
+		AESVersion:      i.version,
+		Address:         i.address,
+		Hostname:        i.hostname,
+		ClusterID:       i.clusterID,
+		InstallID:       i.scout.installID,
+		TraceID:         fmt.Sprintf("%v", i.scout.metadata["trace_id"]),
+		ClusterInfo:     fmt.Sprintf("%v", i.scout.metadata["cluster_info"]),
+		Managed:         fmt.Sprintf("%v", i.scout.metadata["managed"]),
+		KubectlVersion:  i.k8sVersion.Client.GitVersion,
+		KubectlPlatform: i.k8sVersion.Client.Platform,
+		K8sVersion:      i.k8sVersion.Server.GitVersion,
+		K8sPlatform:     i.k8sVersion.Server.Platform,
 	}
 	buf := new(bytes.Buffer)
 	_ = json.NewEncoder(buf).Encode(report)
@@ -972,8 +993,9 @@ func (i *Installer) generateCrashReport(sourceError error) {
 	}
 	defer resp.Body.Close()
 	content, err := ioutil.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != 201 {
 		i.log.Print("skipping anonymous crash report and log submission for this failure")
+		i.log.Printf("%v: %q", resp.StatusCode, string(content))
 		return
 	}
 	crashReport := crashReportCreationResponse{}
@@ -1042,14 +1064,22 @@ type registration struct {
 
 // crashReportCreationRequest is used to initiate a crash report request
 type crashReportCreationRequest struct {
-	Product        string
-	ProductVersion string
-	Command        string
-	Error          error
-	AESVersion     string
-	Address        string
-	Hostname       string
-	ClusterID      string
+	Product         string
+	ProductVersion  string
+	Command         string
+	Error           string
+	AESVersion      string
+	Address         string
+	Hostname        string
+	ClusterID       string
+	InstallID       string
+	TraceID         string
+	ClusterInfo     string
+	Managed         string
+	KubectlVersion  string
+	KubectlPlatform string
+	K8sVersion      string
+	K8sPlatform     string
 }
 
 // crashReportCreationResponse is used to receive a crash report creation response
@@ -1057,6 +1087,11 @@ type crashReportCreationResponse struct {
 	ReportId  string
 	Method    string
 	UploadURL string
+}
+
+type kubernetesVersion struct {
+	Client k8sVersion.Info `json:"clientVersion"`
+	Server k8sVersion.Info `json:"serverVersion"`
 }
 
 const hostManifest = `
