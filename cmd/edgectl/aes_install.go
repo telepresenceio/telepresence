@@ -196,7 +196,7 @@ func (i *Installer) loopUntil(what string, how func() error, lc *loopConfig) err
 		// Wait and try again
 		select {
 		case <-progTimer.C:
-			i.show.Printf("-> Waiting for %s. (This may take a minute.)", what)
+			i.show.Printf("  -> Still waiting for %s. (This may take a minute.)", what)
 		case <-time.After(lc.sleepTime):
 			// Try again
 		case <-ctx.Done():
@@ -365,8 +365,8 @@ func (i *Installer) CheckACMEIsDone() error {
 			return errors.New("Waiting for NXDOMAIN retry")
 		}
 
-		i.show.Println("Acquiring TLS certificate via ACME has failed:")
-		i.show.Println(reason)
+		i.show.Println()
+		i.show.Println(color.Bold.Sprintf("Acquiring TLS certificate via ACME has failed: %s", reason))
 		return LoopFailedError(fmt.Sprintf("ACME failed. More information: kubectl get host %s -o yaml", i.hostname))
 	}
 	if state != "Ready" {
@@ -622,6 +622,7 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	// Wait for Ambassador Pod; grab AES install ID
+	i.show.Println("-> Checking the AES pod deployment")
 	if err := i.loopUntil("AES pod startup", i.GrabAESInstallID, lc2); err != nil {
 		i.Report("fail_pod_timeout")
 		return err
@@ -643,11 +644,12 @@ func (i *Installer) Perform(kcontext string) error {
 		i.Report("cluster_not_accessible")
 		i.show.Println("-> Local cluster detected. Not configuring automatic TLS.")
 		i.show.Println()
-		i.ShowWrapped(noTlsSuccess)
+		i.ShowWrapped(color.Bold.Sprintf(noTlsSuccess))
 		i.show.Println()
-		loginMsg := "Determine the IP address and port number of your Ambassador service.\n"
-		loginMsg += "(e.g., minikube service -n ambassador ambassador)\n"
-		loginMsg += fmt.Sprintf(loginViaIP, "IP_ADDRESS:PORT")
+		loginMsg := "Determine the IP address and port number of your Ambassador service, e.g.\n"
+		loginMsg += color.Bold.Sprintf("$ minikube service -n ambassador ambassador)\n\n")
+		loginMsg += fmt.Sprintf(loginViaIP)
+		loginMsg += color.Bold.Sprintf("$ edgectl login -n ambassador IP_ADDRESS:PORT")
 		i.ShowWrapped(loginMsg)
 		i.show.Println()
 		i.ShowWrapped(seeDocs)
@@ -655,13 +657,13 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	// Grab load balancer address
-	i.ShowWrapped("-> Provisioning a cloud load balancer. (This may take a minute.)")
+	i.show.Println("-> Provisioning a cloud load balancer")
 	if err := i.loopUntil("Load Balancer", i.GrabLoadBalancerAddress, lc5); err != nil {
 		i.Report("fail_loadbalancer_timeout")
 		i.show.Println()
 		i.ShowWrapped(failLoadBalancer)
 		i.show.Println()
-		i.ShowWrapped(noTlsSuccess)
+		i.ShowWrapped(color.Bold.Sprintf(noTlsSuccess))
 		i.ShowWrapped(seeDocs)
 		return err
 	}
@@ -669,11 +671,12 @@ func (i *Installer) Perform(kcontext string) error {
 	i.show.Println("-> Your AES installation's address is", color.Bold.Sprintf(i.address))
 
 	// Wait for Ambassador to be ready to serve ACME requests.
+	i.show.Println("-> Checking that AES is responding to ACME challenge")
 	if err := i.loopUntil("AES to serve ACME", i.CheckAESServesACME, lc2); err != nil {
 		i.Report("aes_listening_timeout")
 		i.ShowWrapped("It seems AES did not start in the expected time, or the AES load balancer is not reachable from here.")
 		i.ShowWrapped(tryAgain)
-		i.ShowWrapped(noTlsSuccess)
+		i.ShowWrapped(color.Bold.Sprintf(noTlsSuccess))
 		i.ShowWrapped(seeDocs)
 		return err
 	}
@@ -712,20 +715,29 @@ func (i *Installer) Perform(kcontext string) error {
 		i.Report("dns_name_failure", ScoutMeta{"code", resp.StatusCode}, ScoutMeta{"err", message})
 		i.show.Println("-> Failed to create a DNS name:", message)
 		i.show.Println()
-		i.ShowWrapped(noTlsSuccess)
+		i.ShowWrapped(color.Bold.Sprintf(noTlsSuccess))
+		i.show.Println()
+		
 		i.ShowWrapped("If this IP address is reachable from here, you can access your installation without a DNS name.")
-		i.ShowWrapped(fmt.Sprintf(loginViaIP, i.address))
+		i.ShowWrapped(loginViaIP)
+		i.show.Println(color.Bold.Sprintf("$ edgectl login -n ambassador %s", i.address))
+
+		i.show.Println()
 		i.ShowWrapped(loginViaPortForward)
+		i.show.Println(color.Bold.Sprintf("$ kubectl -n ambassador port-forward deploy/ambassador 8443 &"))
+		i.show.Println(color.Bold.Sprintf("$ edgectl login -n ambassador 127.0.0.1:8443"))
+		i.show.Println()
+
 		i.ShowWrapped(seeDocs)
 		return nil
 	}
 
-	i.hostname = string(content)
-	i.show.Println("-> Acquiring DNS name", color.Bold.Sprintf(i.hostname))
-
 	// Wait for DNS to propagate. This tries to avoid waiting for a ten
 	// minute error backoff if the ACME registration races ahead of the DNS
 	// name appearing for LetsEncrypt.
+	i.hostname = string(content)
+	i.show.Println("-> Acquiring DNS name", color.Bold.Sprintf(i.hostname))
+
 	if err := i.loopUntil("DNS propagation to this host", i.CheckHostnameFound, lc2); err != nil {
 		i.Report("dns_name_propagation_timeout")
 		i.ShowWrapped("We are unable to resolve your new DNS name on this machine.")
@@ -987,24 +999,13 @@ spec:
 
 const welcomeInstall = "Installing the Ambassador Edge Stack"
 
-const emailAsk = `Please enter an email address. We'll use this email address to notify you prior to domain and certificate expiration. We also share this email address with Let's Encrypt to acquire your certificate for TLS.`
+const emailAsk = `Please enter an email address. We'll use this contact information to notify you prior to domain and certificate expiration. We also share this with Let's Encrypt to acquire your certificate for TLS.`
 
 const beginningAESInstallation = "Beginning Ambassador Edge Stack Installation"
 
-const loginViaIP = `
-The following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.
+const loginViaIP = "The following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.\n"
 
-$ edgectl login -n ambassador %s
-` // ipAddress
-
-const loginViaPortForward = `
-You can use port forwarding to access your Edge Stack installation and the Edge Policy Console.
-
-$ kubectl -n ambassador port-forward deploy/ambassador 8443 &
-$ edgectl login -n ambassador 127.0.0.1:8443
-
-You will need to accept a self-signed certificate in your browser.
-`
+const loginViaPortForward = "You can use port forwarding to access your Edge Stack installation and the Edge Policy Console.  You will need to accept a self-signed certificate in your browser.\n"
 
 const failLoadBalancer = `
 Timed out waiting for the load balancer's IP address for the AES Service.
