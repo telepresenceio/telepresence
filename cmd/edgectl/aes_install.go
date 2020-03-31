@@ -196,7 +196,7 @@ func (i *Installer) loopUntil(what string, how func() error, lc *loopConfig) err
 		// Wait and try again
 		select {
 		case <-progTimer.C:
-			i.show.Printf("(waiting for %s)", what)
+			i.show.Printf("-> Waiting for %s. (This may take a minute.)", what)
 		case <-time.After(lc.sleepTime):
 			// Try again
 		case <-ctx.Done():
@@ -424,7 +424,6 @@ func (i *Installer) Perform(kcontext string) error {
 	// Start
 	i.Report("install")
 
-	i.show.Println("================================")
 	i.show.Println(beginningAESInstallation)
 
 	// Attempt to use kubectl
@@ -561,7 +560,7 @@ func (i *Installer) Perform(kcontext string) error {
 	if !alreadyApplied {
 		// Install the AES manifests
 
-		i.ShowWrapped("Downloading images. (This may take a minute.)")
+		i.ShowWrapped("-> Downloading images. (This may take a minute.)")
 
 		if err := i.ShowKubectl("install CRDs", crdManifests, "apply", "-f", "-"); err != nil {
 			i.Report("fail_install_crds")
@@ -618,7 +617,7 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	// Grab load balancer address
-	i.ShowWrapped("-> Provisioning a cloud load balancer. (This may take a minute, depending on your cloud provider.)")
+	i.ShowWrapped("-> Provisioning a cloud load balancer. (This may take a minute.)")
 	if err := i.loopUntil("Load Balancer", i.GrabLoadBalancerAddress, lc5); err != nil {
 		i.Report("fail_loadbalancer_timeout")
 		i.show.Println()
@@ -629,7 +628,9 @@ func (i *Installer) Perform(kcontext string) error {
 		return err
 	}
 	i.Report("cluster_accessible")
+	i.show.Println()
 	i.show.Println("Your AES installation's address is", color.Bold.Sprintf(i.address))
+	i.show.Println()
 
 	// Wait for Ambassador to be ready to serve ACME requests.
 	if err := i.loopUntil("AES to serve ACME", i.CheckAESServesACME, lc2); err != nil {
@@ -760,16 +761,18 @@ func (i *Installer) Perform(kcontext string) error {
 	i.show.Println("================================")
 	i.show.Println()
 
-	i.ShowWrapped(fmt.Sprintf(fullSuccess,
-		color.Bold.Sprintf(i.hostname),
-		color.Bold.Sprintf("edgectl login "+i.hostname)))
-
+	// Show congratulations message
+	i.ShowWrapped(fmt.Sprintf(fullSuccess, color.Bold.Sprintf(i.hostname)))
 	i.show.Println()
 
 	// Open a browser window to the Edge Policy Console
 	if err := do_login(i.kubeinfo, kcontext, "ambassador", i.hostname, false, false); err != nil {
 		return err
 	}
+
+	// Show how to use edgectl login in the future
+	i.show.Println()
+	i.ShowWrapped(fmt.Sprintf(futureLogin, color.Bold.Sprintf("edgectl login "+i.hostname)))
 
 	if err := i.CheckAESHealth(); err != nil {
 		i.Report("aes_health_bad", ScoutMeta{"err", err.Error()})
@@ -1029,11 +1032,10 @@ const installAndTraceIDs = "INFO: install_id = %s; trace_id = %s"
 
 var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 
-const fullSuccess = `Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit https://%s to access your Edge Stack installation and for additional configuration.
+const fullSuccess = `Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit https://%s` // hostname
 
-In the future, to log back in to the Ambassador Edge Policy Console, run
-$ %s
-from the command line.` // hostname, "edgectl login <hostname>"
+const futureLogin = `In the future, to log in to the Ambassador Edge Policy Console, run
+$ %s` // "edgectl login <hostname>"
 
 const noTlsSuccess = "Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically."
 
