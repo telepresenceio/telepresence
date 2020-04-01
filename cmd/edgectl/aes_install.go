@@ -999,7 +999,7 @@ spec:
 
 const welcomeInstall = "Installing the Ambassador Edge Stack"
 
-const emailAsk = `Please enter an email address. We'll use this contact information to notify you prior to domain and certificate expiration. We also share this with Let's Encrypt to acquire your certificate for TLS.`
+const emailAsk = `Please enter an email address for us to notify you before your TLS certificate and domain name expire. In order to acquire the TLS certificate, we share this email with Let’s Encrypt.`
 
 const beginningAESInstallation = "Beginning Ambassador Edge Stack Installation"
 
