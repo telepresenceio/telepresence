@@ -85,7 +85,7 @@ func (s *Scout) SetMetadatum(key string, value interface{}) {
 }
 
 func (s *Scout) Report(action string, meta ...ScoutMeta) error {
-	if os.Getenv("SCOUT_DISABLE") != "" {
+	if s.Disabled() {
 		return nil
 	}
 
@@ -128,4 +128,8 @@ func (s *Scout) Report(action string, meta ...ScoutMeta) error {
 	_ = resp.Body.Close()
 
 	return nil
+}
+
+func (s *Scout) Disabled() bool {
+	return os.Getenv("SCOUT_DISABLE") != ""
 }
