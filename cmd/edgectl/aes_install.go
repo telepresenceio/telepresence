@@ -129,11 +129,11 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if len(runErrors) > 0 {
-		i.show.Println()
-		i.show.Printf("Full logs at %s\n\n", i.logName)
 		if !skipReport {
 			i.generateCrashReport(runErrors[0])
 		}
+		i.show.Println()
+		i.show.Printf("Full logs at %s\n\n", i.logName)
 		return runErrors[0]
 	}
 	return nil
@@ -458,7 +458,7 @@ func (i *Installer) Perform(kcontext string) error {
 		return err
 	}
 
-	versions, err := i.SilentCaptureKubectl("get versions", "", "version", "-o", "json")
+	versions, err := i.CaptureKubectl("get versions", "", "version", "-o", "json")
 	if err != nil {
 		i.Report("fail_no_cluster")
 		return err
@@ -466,6 +466,9 @@ func (i *Installer) Perform(kcontext string) error {
 	k8sVersion := &kubernetesVersion{}
 	err = json.Unmarshal([]byte(versions), k8sVersion)
 	if err != nil {
+		// We tried to extract Kubernetes client and server versions but failed.
+		// This should not happen since we already validated the cluster-info, but still...
+		// It's not critical if this information is missing, other than for debugging purposes.
 		i.log.Printf("failed to read Kubernetes client and server versions: %v", err.Error())
 	}
 	i.k8sVersion = k8sVersion
@@ -902,7 +905,7 @@ func (i *Installer) ShowKubectl(name string, input string, args ...string) error
 
 // CaptureKubectl calls kubectl and returns its stdout, dumping all the output
 // to the logger.
-func (i *Installer) CaptureKubectl(name string, input string, args ...string) (res string, err error) {
+func (i *Installer) CaptureKubectl(name, input string, args ...string) (res string, err error) {
 	res = ""
 	kargs, err := i.kubeinfo.GetKubectlArray(args...)
 	if err != nil {
@@ -920,7 +923,7 @@ func (i *Installer) CaptureKubectl(name string, input string, args ...string) (r
 
 // SilentCaptureKubectl calls kubectl and returns its stdout
 // without dumping all the output to the logger.
-func (i *Installer) SilentCaptureKubectl(name string, input string, args ...string) (res string, err error) {
+func (i *Installer) SilentCaptureKubectl(name, input string, args ...string) (res string, err error) {
 	res = ""
 	kargs, err := i.kubeinfo.GetKubectlArray(args...)
 	if err != nil {
@@ -950,10 +953,10 @@ func (i *Installer) Capture(name string, logToStdout bool, input string, args ..
 	cmd.Stdin = strings.NewReader(input)
 	if logToStdout {
 		cmd.Stdout = io.MultiWriter(NewLoggingWriter(i.cmdOut), resAsBytes)
-		cmd.Stderr = NewLoggingWriter(i.cmdErr)
 	} else {
-		cmd.Stdout = io.MultiWriter(resAsBytes)
+		cmd.Stdout = resAsBytes
 	}
+	cmd.Stderr = NewLoggingWriter(i.cmdErr)
 	err = cmd.Run()
 	if err != nil {
 		err = errors.Wrap(err, name)
@@ -979,102 +982,6 @@ func (i *Installer) Report(eventName string, meta ...ScoutMeta) {
 	}
 }
 
-func (i *Installer) generateCrashReport(sourceError error) {
-	// TODO: Use the live endpoint
-	//reportURL := "https://metriton.datawire.io/crash-report"
-	reportURL := "https://metriton.datawire.io/beta/crash-report"
-
-	report := &crashReportCreationRequest{
-		Product:         "edgectl",
-		Command:         "install",
-		ProductVersion:  displayVersion,
-		Error:           sourceError.Error(),
-		AESVersion:      i.version,
-		Address:         i.address,
-		Hostname:        i.hostname,
-		ClusterID:       i.clusterID,
-		InstallID:       i.scout.installID,
-		TraceID:         fmt.Sprintf("%v", i.scout.metadata["trace_id"]),
-		ClusterInfo:     fmt.Sprintf("%v", i.scout.metadata["cluster_info"]),
-		Managed:         fmt.Sprintf("%v", i.scout.metadata["managed"]),
-		KubectlVersion:  i.k8sVersion.Client.GitVersion,
-		KubectlPlatform: i.k8sVersion.Client.Platform,
-		K8sVersion:      i.k8sVersion.Server.GitVersion,
-		K8sPlatform:     i.k8sVersion.Server.Platform,
-	}
-	buf := new(bytes.Buffer)
-	_ = json.NewEncoder(buf).Encode(report)
-	resp, err := http.Post(reportURL, "application/json", buf)
-	if err != nil {
-		i.log.Printf("failed to initiate anonymous crash report due to error: %v", err.Error())
-		return
-	}
-	defer resp.Body.Close()
-	content, err := ioutil.ReadAll(resp.Body)
-	if resp.StatusCode != 201 {
-		i.log.Print("skipping anonymous crash report and log submission for this failure")
-		i.log.Printf("%v: %q", resp.StatusCode, string(content))
-		return
-	}
-	crashReport := crashReportCreationResponse{}
-	err = json.Unmarshal(content, &crashReport)
-	if err != nil {
-		i.log.Printf("failed to generate anonymous crash report due to error: %v", err.Error())
-		return
-	}
-	i.log.Printf("uploading anonymous crash report and logs under report ID: %v", crashReport.ReportId)
-	i.Report("crash_report", ScoutMeta{"crash_report_id", crashReport.ReportId})
-	i.uploadCrashReportData(crashReport, i.gatherCrashReportData())
-}
-
-func (i *Installer) gatherCrashReportData() []byte {
-	buffer := bytes.NewBuffer([]byte{})
-
-	buffer.WriteString("========== edgectl logs ==========\n")
-	fileContent, err := ioutil.ReadFile(i.logName)
-	if err != nil {
-		i.log.Printf("failed to read log file %v: %v", i.logName, err.Error())
-	}
-	buffer.Write(fileContent)
-
-	buffer.WriteString("\n========== kubectl describe ==========\n")
-	describe, err := i.SilentCaptureKubectl("describe ambassador namespace", "", "-n", "ambassador", "describe", "all")
-	if err != nil {
-		i.log.Printf("failed to describe ambassador resources: %v", err.Error())
-	}
-	buffer.WriteString(describe)
-
-	buffer.WriteString("\n========== kubectl logs ==========\n")
-	ambassadorLogs, err := i.SilentCaptureKubectl("read ambassador logs", "", "-n", "ambassador", "logs", "deployments/ambassador", "--tail=1000")
-	if err != nil {
-		i.log.Printf("failed to read ambassador logs: %v", err.Error())
-	}
-	buffer.WriteString(ambassadorLogs)
-
-	return buffer.Bytes()
-}
-
-func (i *Installer) uploadCrashReportData(crashReport crashReportCreationResponse, uploadContent []byte) {
-	client := &http.Client{}
-	req, err := http.NewRequest(crashReport.Method, crashReport.UploadURL, bytes.NewReader(uploadContent))
-	if err != nil {
-		i.log.Print(err.Error())
-		return
-	}
-
-	res, err := client.Do(req)
-	if err != nil {
-		i.log.Print(err.Error())
-		return
-	}
-	defer res.Body.Close()
-	_, err = ioutil.ReadAll(res.Body)
-	if err != nil {
-		i.log.Print(err.Error())
-		return
-	}
-}
-
 func doWordWrap(text string, prefix string, lineWidth int) []string {
 	words := strings.Fields(strings.TrimSpace(text))
 	if len(words) == 0 {
@@ -1094,42 +1001,6 @@ func doWordWrap(text string, prefix string, lineWidth int) []string {
 		lines = append(lines, wrapped)
 	}
 	return lines
-}
-
-// registration is used to register edgestack.me domains
-type registration struct {
-	Email            string
-	Ip               string
-	Hostname         string
-	EdgectlInstallId string
-	AESInstallId     string
-}
-
-// crashReportCreationRequest is used to initiate a crash report request
-type crashReportCreationRequest struct {
-	Product         string
-	ProductVersion  string
-	Command         string
-	Error           string
-	AESVersion      string
-	Address         string
-	Hostname        string
-	ClusterID       string
-	InstallID       string
-	TraceID         string
-	ClusterInfo     string
-	Managed         string
-	KubectlVersion  string
-	KubectlPlatform string
-	K8sVersion      string
-	K8sPlatform     string
-}
-
-// crashReportCreationResponse is used to receive a crash report creation response
-type crashReportCreationResponse struct {
-	ReportId  string
-	Method    string
-	UploadURL string
 }
 
 type kubernetesVersion struct {
