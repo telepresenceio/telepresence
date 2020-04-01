@@ -256,7 +256,7 @@ PodsLoop:
 	}
 
 	// Retrieve the cluster ID
-	clusterID, err := i.CaptureKubectl("get cluster ID", true, "", "-n", "ambassador", "exec", podName, "-c", containerName, "python3", "kubewatch.py")
+	clusterID, err := i.CaptureKubectl("get cluster ID", "", "-n", "ambassador", "exec", podName, "-c", containerName, "python3", "kubewatch.py")
 	if err != nil {
 		return err
 	}
@@ -350,12 +350,12 @@ func (i *Installer) CheckHostnameFound() error {
 
 // CheckACMEIsDone queries the Host object and succeeds if its state is Ready.
 func (i *Installer) CheckACMEIsDone() error {
-	state, err := i.CaptureKubectl("get Host state", true, "", "get", "host", i.hostname, "-o", "go-template={{.status.state}}")
+	state, err := i.CaptureKubectl("get Host state", "", "get", "host", i.hostname, "-o", "go-template={{.status.state}}")
 	if err != nil {
 		return LoopFailedError(err.Error())
 	}
 	if state == "Error" {
-		reason, err := i.CaptureKubectl("get Host error", true, "", "get", "host", i.hostname, "-o", "go-template={{.status.errorReason}}")
+		reason, err := i.CaptureKubectl("get Host error", "", "get", "host", i.hostname, "-o", "go-template={{.status.errorReason}}")
 		if err != nil {
 			return LoopFailedError(err.Error())
 		}
@@ -383,7 +383,7 @@ func (i *Installer) CheckACMEIsDone() error {
 // GetAESCRDs returns the names of the AES CRDs available in the cluster (and
 // logs them as a side effect)
 func (i *Installer) GetAESCRDs() ([]string, error) {
-	crds, err := i.CaptureKubectl("get AES crds", true, "", "get", "crds", "-lproduct=aes", "-o", "name")
+	crds, err := i.CaptureKubectl("get AES crds", "", "get", "crds", "-lproduct=aes", "-o", "name")
 	if err != nil {
 		return nil, err
 	}
@@ -410,7 +410,7 @@ func (i *Installer) GetAESCRDs() ([]string, error) {
 // TODO: Also look for Ambassador OSS and do something intelligent.
 func (i *Installer) GetInstalledImageVersion() (string, error) {
 	aesVersionRE := regexp.MustCompile("quay[.]io/datawire/aes:([[:^space:]]+)")
-	deploys, err := i.CaptureKubectl("get AES deployment", true, "", "-nambassador", "get", "deploy", "-lproduct=aes", "-o", "go-template={{range .items}}{{range .spec.template.spec.containers}}{{.image}}\n{{end}}{{end}}")
+	deploys, err := i.CaptureKubectl("get AES deployment", "", "-nambassador", "get", "deploy", "-lproduct=aes", "-o", "go-template={{range .items}}{{range .spec.template.spec.containers}}{{.image}}\n{{end}}{{end}}")
 	if err != nil {
 		return "", err
 	}
@@ -458,7 +458,7 @@ func (i *Installer) Perform(kcontext string) error {
 		return err
 	}
 
-	versions, err := i.CaptureKubectl("get versions", false, "", "version", "-o", "json")
+	versions, err := i.SilentCaptureKubectl("get versions", "", "version", "-o", "json")
 	if err != nil {
 		i.Report("fail_no_cluster")
 		return err
@@ -507,7 +507,7 @@ func (i *Installer) Perform(kcontext string) error {
 
 	// Try to determine cluster type from node labels
 	isKnownLocalCluster := false
-	if clusterNodeLabels, err := i.CaptureKubectl("get node labels", true, "", "get", "no", "-Lkubernetes.io/hostname"); err == nil {
+	if clusterNodeLabels, err := i.CaptureKubectl("get node labels", "", "get", "no", "-Lkubernetes.io/hostname"); err == nil {
 		clusterInfo := "unknown"
 		if strings.Contains(clusterNodeLabels, "docker-desktop") {
 			clusterInfo = "docker-desktop"
@@ -607,7 +607,7 @@ func (i *Installer) Perform(kcontext string) error {
 	}
 
 	// Grab Helm information if present
-	if managedDeployment, err := i.CaptureKubectl("get deployment labels", true, "", "get", "-n", "ambassador", "deployments", "ambassador", "-Lapp.kubernetes.io/managed-by"); err == nil {
+	if managedDeployment, err := i.CaptureKubectl("get deployment labels", "", "get", "-n", "ambassador", "deployments", "ambassador", "-Lapp.kubernetes.io/managed-by"); err == nil {
 		if strings.Contains(managedDeployment, "Helm") {
 			i.SetMetadatum("Cluster Info", "managed", "helm")
 		}
@@ -902,7 +902,7 @@ func (i *Installer) ShowKubectl(name string, input string, args ...string) error
 
 // CaptureKubectl calls kubectl and returns its stdout, dumping all the output
 // to the logger.
-func (i *Installer) CaptureKubectl(name string, logToStdout bool, input string, args ...string) (res string, err error) {
+func (i *Installer) CaptureKubectl(name string, input string, args ...string) (res string, err error) {
 	res = ""
 	kargs, err := i.kubeinfo.GetKubectlArray(args...)
 	if err != nil {
@@ -915,7 +915,25 @@ func (i *Installer) CaptureKubectl(name string, logToStdout bool, input string, 
 		return
 	}
 	kargs = append([]string{kubectl}, kargs...)
-	return i.Capture(name, logToStdout, input, kargs...)
+	return i.Capture(name, true, input, kargs...)
+}
+
+// SilentCaptureKubectl calls kubectl and returns its stdout
+// without dumping all the output to the logger.
+func (i *Installer) SilentCaptureKubectl(name string, input string, args ...string) (res string, err error) {
+	res = ""
+	kargs, err := i.kubeinfo.GetKubectlArray(args...)
+	if err != nil {
+		err = errors.Wrapf(err, "cluster access for %s", name)
+		return
+	}
+	kubectl, err := i.GetKubectlPath()
+	if err != nil {
+		err = errors.Wrapf(err, "kubectl not found %s", name)
+		return
+	}
+	kargs = append([]string{kubectl}, kargs...)
+	return i.Capture(name, false, input, kargs...)
 }
 
 // GetKubectlPath returns the full path to the kubectl executable, or an error if not found
@@ -923,8 +941,7 @@ func (i *Installer) GetKubectlPath() (string, error) {
 	return exec.LookPath("kubectl")
 }
 
-// Capture calls a command and returns its stdout, dumping all output to the
-// logger.
+// Capture calls a command and returns its stdout
 func (i *Installer) Capture(name string, logToStdout bool, input string, args ...string) (res string, err error) {
 	res = ""
 	resAsBytes := &bytes.Buffer{}
@@ -1020,14 +1037,14 @@ func (i *Installer) gatherCrashReportData() []byte {
 	buffer.Write(fileContent)
 
 	buffer.WriteString("\n========== kubectl describe ==========\n")
-	describe, err := i.CaptureKubectl("describe ambassador namespace", false, "", "-n", "ambassador", "describe", "all")
+	describe, err := i.SilentCaptureKubectl("describe ambassador namespace", "", "-n", "ambassador", "describe", "all")
 	if err != nil {
 		i.log.Printf("failed to describe ambassador resources: %v", err.Error())
 	}
 	buffer.WriteString(describe)
 
 	buffer.WriteString("\n========== kubectl logs ==========\n")
-	ambassadorLogs, err := i.CaptureKubectl("read ambassador logs", false, "", "-n", "ambassador", "logs", "deployments/ambassador", "--tail=1000")
+	ambassadorLogs, err := i.SilentCaptureKubectl("read ambassador logs", "", "-n", "ambassador", "logs", "deployments/ambassador", "--tail=1000")
 	if err != nil {
 		i.log.Printf("failed to read ambassador logs: %v", err.Error())
 	}
