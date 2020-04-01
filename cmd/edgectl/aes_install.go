@@ -196,7 +196,7 @@ func (i *Installer) loopUntil(what string, how func() error, lc *loopConfig) err
 		// Wait and try again
 		select {
 		case <-progTimer.C:
-			i.show.Printf("  -> Still waiting for %s. (This may take a minute.)", what)
+			i.show.Printf("   Still waiting for %s. (This may take a minute.)", what)
 		case <-time.After(lc.sleepTime):
 			// Try again
 		case <-ctx.Done():
