@@ -1008,6 +1008,15 @@ type kubernetesVersion struct {
 	Server k8sVersion.Info `json:"serverVersion"`
 }
 
+// registration is used to register edgestack.me domains
+type registration struct {
+	Email            string
+	Ip               string
+	Hostname         string
+	EdgectlInstallId string
+	AESInstallId     string
+}
+
 const hostManifest = `
 apiVersion: getambassador.io/v2
 kind: Host

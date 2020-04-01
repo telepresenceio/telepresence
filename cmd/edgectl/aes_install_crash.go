@@ -104,15 +104,6 @@ func (i *Installer) uploadCrashReportData(crashReport crashReportCreationRespons
 	}
 }
 
-// registration is used to register edgestack.me domains
-type registration struct {
-	Email            string
-	Ip               string
-	Hostname         string
-	EdgectlInstallId string
-	AESInstallId     string
-}
-
 // crashReportCreationRequest is used to initiate a crash report request
 type crashReportCreationRequest struct {
 	Product         string
