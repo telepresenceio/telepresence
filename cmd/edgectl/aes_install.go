@@ -1023,6 +1023,7 @@ func (i *Installer) generateCrashReport(sourceError error) {
 		return
 	}
 	i.log.Printf("uploading anonymous crash report and logs under report ID: %v", crashReport.ReportId)
+	i.Report("crash_report", ScoutMeta{"crash_report_id", crashReport.ReportId})
 	i.uploadCrashReportData(crashReport, i.gatherCrashReportData())
 }
 
