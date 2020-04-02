@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sVersion "k8s.io/apimachinery/pkg/version"
 	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 )
@@ -81,6 +82,7 @@ func getEmailAddress(defaultEmail string, log *log.Logger) string {
 }
 
 func aesInstall(cmd *cobra.Command, args []string) error {
+	skipReport, _ := cmd.Flags().GetBool("no-report")
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	kcontext, _ := cmd.Flags().GetString("context")
 	i := NewInstaller(verbose)
@@ -127,6 +129,9 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if len(runErrors) > 0 {
+		if !skipReport {
+			i.generateCrashReport(runErrors[0])
+		}
 		i.show.Println()
 		i.show.Printf("Full logs at %s\n\n", i.logName)
 		return runErrors[0]
@@ -495,6 +500,21 @@ func (i *Installer) Perform(kcontext string) error {
 		return err
 	}
 
+	versions, err := i.CaptureKubectl("get versions", "", "version", "-o", "json")
+	if err != nil {
+		i.Report("fail_no_cluster")
+		return err
+	}
+	k8sVersion := &kubernetesVersion{}
+	err = json.Unmarshal([]byte(versions), k8sVersion)
+	if err != nil {
+		// We tried to extract Kubernetes client and server versions but failed.
+		// This should not happen since we already validated the cluster-info, but still...
+		// It's not critical if this information is missing, other than for debugging purposes.
+		i.log.Printf("failed to read Kubernetes client and server versions: %v", err.Error())
+	}
+	i.k8sVersion = k8sVersion
+
 	// Allow overriding the source domain (e.g., for smoke tests before release)
 	manifestsDomain := "www.getambassador.io"
 	domainOverrideVar := "AES_MANIFESTS_DOMAIN"
@@ -811,6 +831,7 @@ type Installer struct {
 	kubeinfo   *k8s.KubeInfo
 	restConfig *rest.Config
 	coreClient *k8sClientCoreV1.CoreV1Client
+	k8sVersion *kubernetesVersion
 
 	// Reporting
 
@@ -918,7 +939,25 @@ func (i *Installer) CaptureKubectl(name, input string, args ...string) (res stri
 		return
 	}
 	kargs = append([]string{kubectl}, kargs...)
-	return i.Capture(name, input, kargs...)
+	return i.Capture(name, true, input, kargs...)
+}
+
+// SilentCaptureKubectl calls kubectl and returns its stdout
+// without dumping all the output to the logger.
+func (i *Installer) SilentCaptureKubectl(name, input string, args ...string) (res string, err error) {
+	res = ""
+	kargs, err := i.kubeinfo.GetKubectlArray(args...)
+	if err != nil {
+		err = errors.Wrapf(err, "cluster access for %s", name)
+		return
+	}
+	kubectl, err := i.GetKubectlPath()
+	if err != nil {
+		err = errors.Wrapf(err, "kubectl not found %s", name)
+		return
+	}
+	kargs = append([]string{kubectl}, kargs...)
+	return i.Capture(name, false, input, kargs...)
 }
 
 // GetKubectlPath returns the full path to the kubectl executable, or an error if not found
@@ -926,15 +965,18 @@ func (i *Installer) GetKubectlPath() (string, error) {
 	return exec.LookPath("kubectl")
 }
 
-// Capture calls a command and returns its stdout, dumping all output to the
-// logger.
-func (i *Installer) Capture(name, input string, args ...string) (res string, err error) {
+// Capture calls a command and returns its stdout
+func (i *Installer) Capture(name string, logToStdout bool, input string, args ...string) (res string, err error) {
 	res = ""
 	resAsBytes := &bytes.Buffer{}
 	i.log.Printf("$ %s", strings.Join(args, " "))
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = strings.NewReader(input)
-	cmd.Stdout = io.MultiWriter(NewLoggingWriter(i.cmdOut), resAsBytes)
+	if logToStdout {
+		cmd.Stdout = io.MultiWriter(NewLoggingWriter(i.cmdOut), resAsBytes)
+	} else {
+		cmd.Stdout = resAsBytes
+	}
 	cmd.Stderr = NewLoggingWriter(i.cmdErr)
 	err = cmd.Run()
 	if err != nil {
@@ -980,6 +1022,11 @@ func doWordWrap(text string, prefix string, lineWidth int) []string {
 		lines = append(lines, wrapped)
 	}
 	return lines
+}
+
+type kubernetesVersion struct {
+	Client k8sVersion.Info `json:"clientVersion"`
+	Server k8sVersion.Info `json:"serverVersion"`
 }
 
 // registration is used to register edgestack.me domains
@@ -1037,9 +1084,9 @@ $ kubectl delete crd -l product=aes
 The installer will now quit to avoid corrupting an existing (but undetected) installation.
 `
 const seeDocsURL = "https://www.getambassador.io/docs/latest/tutorials/getting-started/"
-const seeDocs    = "See " + seeDocsURL
+const seeDocs = "See " + seeDocsURL
 
-const phoneHomeDisabled  = "INFO: phone-home is disabled by environment variable"
+const phoneHomeDisabled = "INFO: phone-home is disabled by environment variable"
 const installAndTraceIDs = "INFO: install_id = %s; trace_id = %s"
 
 var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
@@ -1062,4 +1109,3 @@ Unable to communicate with the remote Kubernetes cluster using your kubectl cont
 
 To further debug and diagnose cluster problems, use 'kubectl cluster-info dump' 
 or get started and run Kubernetes: ` + noClusterURL
-
