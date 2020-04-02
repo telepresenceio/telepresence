@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/browser"
 	"io"
 	"io/ioutil"
 	"log"
@@ -20,6 +19,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/pkg/browser"
 
 	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/datawire/ambassador/pkg/supervisor"
@@ -437,7 +438,7 @@ func (i *Installer) Perform(kcontext string) error {
 	i.show.Println(color.Bold.Sprintf(welcomeInstall))
 
 	// Attempt to grab a reasonable default for the user's email address
-	defaultEmail, err := i.Capture("get email", true,"", "git", "config", "--global", "user.email")
+	defaultEmail, err := i.Capture("get email", true, "", "git", "config", "--global", "user.email")
 	if err != nil {
 		i.log.Print(err)
 		defaultEmail = ""
@@ -475,7 +476,7 @@ func (i *Installer) Perform(kcontext string) error {
 
 	// Attempt to use kubectl
 	_, err = i.GetKubectlPath()
-	//err = errors.New("early error for testing")  // TODO: remove for production
+	// err = errors.New("early error for testing")  // TODO: remove for production
 	if err != nil {
 		i.Report("fail_no_kubectl")
 		err = browser.OpenURL(noKubectlURL)
@@ -746,7 +747,7 @@ func (i *Installer) Perform(kcontext string) error {
 		i.show.Println()
 		i.ShowWrapped(color.Bold.Sprintf(noTlsSuccess))
 		i.show.Println()
-		
+
 		i.ShowWrapped("If this IP address is reachable from here, you can access your installation without a DNS name.")
 		i.ShowWrapped(loginViaIP)
 		i.show.Println(color.Bold.Sprintf("$ edgectl login -n ambassador %s", i.address))
