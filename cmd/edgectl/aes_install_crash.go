@@ -9,9 +9,7 @@ import (
 )
 
 func (i *Installer) generateCrashReport(sourceError error) {
-	// TODO: Use the live endpoint
-	//reportURL := "https://metriton.datawire.io/crash-report"
-	reportURL := "https://metriton.datawire.io/beta/crash-report"
+	reportURL := "https://metriton.datawire.io/crash-report"
 
 	report := &crashReportCreationRequest{
 		Product:         "edgectl",
