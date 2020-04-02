@@ -652,7 +652,7 @@ func (i *Installer) Perform(kcontext string) error {
 		i.ShowWrapped(color.Bold.Sprintf(noTlsSuccess))
 		i.show.Println()
 		loginMsg := "Determine the IP address and port number of your Ambassador service, e.g.\n"
-		loginMsg += color.Bold.Sprintf("$ minikube service -n ambassador ambassador)\n\n")
+		loginMsg += color.Bold.Sprintf("$ minikube service -n ambassador ambassador\n\n")
 		loginMsg += fmt.Sprintf(loginViaIP)
 		loginMsg += color.Bold.Sprintf("$ edgectl login -n ambassador IP_ADDRESS:PORT")
 		i.ShowWrapped(loginMsg)
