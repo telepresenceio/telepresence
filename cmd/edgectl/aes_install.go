@@ -437,7 +437,7 @@ func (i *Installer) Perform(kcontext string) error {
 	i.show.Println(color.Bold.Sprintf(welcomeInstall))
 
 	// Attempt to grab a reasonable default for the user's email address
-	defaultEmail, err := i.Capture("get email", "", "git", "config", "--global", "user.email")
+	defaultEmail, err := i.Capture("get email", true,"", "git", "config", "--global", "user.email")
 	if err != nil {
 		i.log.Print(err)
 		defaultEmail = ""
