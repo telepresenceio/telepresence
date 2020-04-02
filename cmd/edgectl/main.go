@@ -123,6 +123,9 @@ func getRootCommand() *cobra.Command {
 		Long:         myHelp,
 		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
 	}
+	_ = rootCmd.PersistentFlags().Bool(
+		"no-report", false, "turn off anonymous crash reports and log submission on failure",
+	)
 
 	// Hidden/internal commands. These are called by Edge Control itself from
 	// the correct context and execute in-place immediately.
