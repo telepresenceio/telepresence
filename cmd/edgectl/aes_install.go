@@ -505,15 +505,19 @@ func (i *Installer) Perform(kcontext string) error {
 		i.Report("fail_no_cluster")
 		return err
 	}
-	k8sVersion := &kubernetesVersion{}
-	err = json.Unmarshal([]byte(versions), k8sVersion)
+	kubernetesVersion := &kubernetesVersion{}
+	err = json.Unmarshal([]byte(versions), kubernetesVersion)
 	if err != nil {
 		// We tried to extract Kubernetes client and server versions but failed.
 		// This should not happen since we already validated the cluster-info, but still...
 		// It's not critical if this information is missing, other than for debugging purposes.
 		i.log.Printf("failed to read Kubernetes client and server versions: %v", err.Error())
 	}
-	i.k8sVersion = k8sVersion
+	i.k8sVersion = kubernetesVersion
+	// Metriton tries to parse fields with `version` in their keys and discards them if it can't.
+	// Using _v to keep the version value as string since Kubernetes versions vary in formats.
+	i.SetMetadatum("kubectl Version", "kubectl_v", i.k8sVersion.Client.GitVersion)
+	i.SetMetadatum("K8s Version", "k8s_v", i.k8sVersion.Server.GitVersion)
 
 	// Allow overriding the source domain (e.g., for smoke tests before release)
 	manifestsDomain := "www.getambassador.io"
