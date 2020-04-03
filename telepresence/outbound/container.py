@@ -80,6 +80,7 @@ def run_docker_command(
     from_pod: List[int],
     container_to_host: PortMapping,
     remote_env: Dict[str, str],
+    docker_host: Optional[str],
     ssh: SSH,
     mount_dir: Optional[str],
     use_docker_mount: Optional[bool],
@@ -107,7 +108,10 @@ def run_docker_command(
     publish_args.append(
         "--publish=127.0.0.1:{}:38022/tcp".format(container_sshd_port)
     )
-    local_ssh = SSH(runner, container_sshd_port, "root@127.0.0.1")
+
+    if not docker_host:
+        docker_host = "127.0.0.1"
+    local_ssh = SSH(runner, container_sshd_port, "root@{}".format(docker_host))
 
     # Start the network (sshuttle) container:
     name = random_name()

@@ -229,6 +229,17 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
             "https://telepresence.io/reference/methods.html"
         )
     )
+    parser.add_argument(
+        "--docker-host",
+        dest="docker_host",
+        metavar="HOSTNAME",
+        help=(
+            "If you are using --method=container within a docker container "
+            "with a remote docker daemon, you can set a host name or ip "
+            "address to the host machine's localhost. \n"
+            "Example '--docker-host docker.for.mac.localhost'"
+        )
+    )
     group_deployment = parser.add_mutually_exclusive_group()
     group_deployment.add_argument(
         '--new-deployment',

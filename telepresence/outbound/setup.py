@@ -163,6 +163,7 @@ def setup_container(runner: Runner, args: Namespace) -> LaunchType:
             args.from_pod,
             args.container_to_host,
             env,
+            args.docker_host,
             ssh,
             mount_dir,
             args.docker_mount is not None,
