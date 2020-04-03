@@ -28,6 +28,14 @@ func UnhandledErrResult(err error) Result {
 }
 
 func (i *Installer) ShowResult(r Result) {
+	templateData := []AdditionalDatum{
+		AdditionalDatum{key: "Report", value: r.Report},
+		AdditionalDatum{key: "Message", value: r.Message},
+		AdditionalDatum{key: "TryAgain", value: r.TryAgain},
+		AdditionalDatum{key: "URL", value: r.URL},
+		AdditionalDatum{key: "Err", value: r.Err},
+	}
+
 	if r.Err != nil {
 		// Failure
 
@@ -43,7 +51,7 @@ func (i *Installer) ShowResult(r Result) {
 			i.show.Println("AES Installation Unsuccessful")
 			i.show.Println("========================================================================")
 			i.show.Println()
-			i.ShowWrapped(r.Message)
+			i.ShowTemplated(r.Message, templateData...)
 
 			if r.URL != "" {
 				i.show.Println()
@@ -72,10 +80,19 @@ func (i *Installer) ShowResult(r Result) {
 			i.show.Println("AES Installation Complete!")
 			i.show.Println("========================================================================")
 			i.show.Println()
-			i.ShowTemplated(r.Message)
+			i.ShowTemplated(r.Message, templateData...)
 
-			// Assume there is no URL to open automatically. The login code may
-			// be invoked; it opens the browser itself.
+			if r.URL != "" {
+				// TODO: Consider leaving out this fixed "visit" message.
+				// Instead, it may be better to let Result.Message offer useful
+				// context for visiting a URL.
+				i.show.Println()
+				i.ShowWrapped(fmt.Sprintf("Visit %s for more information and instructions.", r.URL))
+
+				if err := browser.OpenURL(r.URL); err != nil {
+					i.log.Printf("Failed to open browser: %+v", err)
+				}
+			}
 
 			// Assume there's no need to show the "try again" message.
 		}

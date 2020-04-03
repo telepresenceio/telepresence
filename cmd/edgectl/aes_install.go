@@ -760,8 +760,8 @@ You can use port forwarding to access your Edge Stack installation and the Edge 
 `
 		return Result{
 			Message: userMessage,
-			Report:  "",         // FIXME: reported above due to additional metadata required
-			URL:     seeDocsURL, // FIXME: this will be ignored
+			URL:     seeDocsURL,
+			Report:  "", // FIXME: reported above due to additional metadata required
 		}
 	}
 
