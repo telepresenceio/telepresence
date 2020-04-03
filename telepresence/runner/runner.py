@@ -53,7 +53,7 @@ _CleanupItem = typing.NamedTuple(
 
 class Runner:
     """Context for running subprocesses."""
-    def __init__(self, logfile_path: str, verbose: bool) -> None:
+    def __init__(self, logfile_path: str, verbose: bool, tmp_path: str) -> None:
         """
         :param logfile_path: Path or string file path or "-" for stdout
         :param kubeinfo: How to run kubectl or equivalent
@@ -132,7 +132,10 @@ class Runner:
             tmp_dir = "/c/temp"
         if not os.path.exists(tmp_dir):
             os.makedirs(tmp_dir)
-        self.temp = Path(mkdtemp(prefix="tel-", dir=tmp_dir))
+        if tmp_path:
+            self.temp = Path(tmp_path)
+        else:
+            self.temp = Path(mkdtemp(prefix="tel-", dir=tmp_dir))
         (self.temp / "session_id.txt").write_text(self.session_id)
         self.add_cleanup("Remove temporary directory", rmtree, str(self.temp))
 

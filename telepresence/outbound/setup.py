@@ -137,25 +137,26 @@ def setup_container(runner: Runner, args: Namespace) -> LaunchType:
         " Telepresence in a separate shell that does not have the Minikube"
         " Docker environment variables set."
     )
-    try:
-        id_in_container = runner.get_output(
-            runner.docker(
-                "run", "--rm", "-v", "{}:/tel".format(runner.temp),
-                "alpine:3.6", "cat", "/tel/session_id.txt"
-            ),
-            timeout=30,
-            reveal=True,
-        ).strip()
-        if id_in_container != runner.session_id:
-            runner.write("Expected: [{}]".format(runner.session_id))
-            runner.write("Got:      [{}]".format(id_in_container))
-            runner.show("ID mismatch on local Docker check.")
+    if not args.docker_host:
+        try:
+            id_in_container = runner.get_output(
+                runner.docker(
+                    "run", "--rm", "-v", "{}:/tel".format(runner.temp),
+                    "alpine:3.6", "cat", "/tel/session_id.txt"
+                ),
+                timeout=30,
+                reveal=True,
+            ).strip()
+            if id_in_container != runner.session_id:
+                runner.write("Expected: [{}]".format(runner.session_id))
+                runner.write("Got:      [{}]".format(id_in_container))
+                runner.show("ID mismatch on local Docker check.")
+                runner.show("\n" + local_docker_message)
+                raise runner.fail("Error: Local Docker daemon required")
+        except subprocess.CalledProcessError as exc:
+            runner.show("Local Docker check failed: {}".format(exc.output))
             runner.show("\n" + local_docker_message)
             raise runner.fail("Error: Local Docker daemon required")
-    except subprocess.CalledProcessError as exc:
-        runner.show("Local Docker check failed: {}".format(exc.output))
-        runner.show("\n" + local_docker_message)
-        raise runner.fail("Error: Local Docker daemon required")
 
     def launch(
         runner_, remote_info, env, _socks_port, ssh, mount_dir, pod_info

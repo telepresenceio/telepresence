@@ -36,7 +36,7 @@ def main():
 
         args = parse_args()  # tab-completion stuff goes here
 
-        runner = Runner(args.logfile, args.verbose)
+        runner = Runner(args.logfile, args.verbose, args.tmp_path)
         span = runner.span()
         runner.add_cleanup("Stop time tracking", span.end)
         set_kube_command(runner, args)

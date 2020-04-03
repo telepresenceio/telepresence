@@ -240,6 +240,16 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
             "Example '--docker-host docker.for.mac.localhost'"
         )
     )
+    parser.add_argument(
+        "--tmp-path",
+        dest="tmp_path",
+        metavar="DIRECTORY",
+        help=(
+            "If you are using --method=container within a docker container "
+            "with a remote docker daemon, you can set a distinct shared "
+            "folder path."
+        )
+    )
     group_deployment = parser.add_mutually_exclusive_group()
     group_deployment.add_argument(
         '--new-deployment',
