@@ -50,13 +50,14 @@ def connect(
 
     ssh = SSH(runner, find_free_port())
 
-    bind_all = "--address 0.0.0.0" if is_remote_docker else ""
+    bind_all = ["--address", "0.0.0.0"] if is_remote_docker else []
 
     # forward remote port to here, by tunneling via remote SSH server:
     runner.launch(
         "kubectl port-forward",
         runner.kubectl(
-            "port-forward", bind_all, remote_info.pod_name, "{}:8022".format(ssh.port)
+            "port-forward", *bind_all, remote_info.pod_name,
+            "{}:8022".format(ssh.port)
         )
     )
 
