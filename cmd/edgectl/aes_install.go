@@ -125,6 +125,11 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		},
 	})
 
+	// Don't allow messages emitted while opening the browser to mess up our
+	// carefully-crafted terminal output
+	browser.Stdout = ioutil.Discard
+	browser.Stderr = ioutil.Discard
+
 	runErrors := sup.Run()
 	if len(runErrors) > 1 { // This shouldn't happen...
 		for _, err := range runErrors {
