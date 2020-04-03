@@ -747,22 +747,22 @@ func (i *Installer) Perform(kcontext string) Result {
 		message := strings.TrimSpace(string(content))
 		i.Report("dns_name_failure", ScoutMeta{"code", resp.StatusCode}, ScoutMeta{"err", message})
 		i.show.Println("-> Failed to create a DNS name:", message)
-		i.show.Println()
-		i.ShowWrapped(color.Bold.Sprintf(noTlsSuccess))
-		i.show.Println()
 
-		i.ShowWrapped("If this IP address is reachable from here, you can access your installation without a DNS name.")
-		i.ShowWrapped(loginViaIP)
-		i.show.Println(color.Bold.Sprintf("$ edgectl login -n ambassador %s", i.address))
+		userMessage := `
+<bold>Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically.</>
 
-		i.show.Println()
-		i.ShowWrapped(loginViaPortForward)
-		i.show.Println(color.Bold.Sprintf("$ kubectl -n ambassador port-forward deploy/ambassador 8443 &"))
-		i.show.Println(color.Bold.Sprintf("$ edgectl login -n ambassador 127.0.0.1:8443"))
-		i.show.Println()
+If this IP address is reachable from here, you can access your installation without a DNS name. The following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.
+<bold>$ edgectl login -n ambassador {{ .address }}</>
 
-		i.ShowWrapped(seeDocs)
-		return UnhandledErrResult(nil)
+You can use port forwarding to access your Edge Stack installation and the Edge Policy Console.  You will need to accept a self-signed certificate in your browser.
+<bold>$ kubectl -n ambassador port-forward deploy/ambassador 8443 &</>
+<bold>$ edgectl login -n ambassador 127.0.0.1:8443</>
+`
+		return Result{
+			Message: userMessage,
+			Report:  "",         // FIXME: reported above due to additional metadata required
+			URL:     seeDocsURL, // FIXME: this will be ignored
+		}
 	}
 
 	i.hostname = string(content)
