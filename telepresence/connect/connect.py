@@ -27,7 +27,8 @@ from .ssh import SSH
 
 def connect(
     runner: Runner, remote_info: RemoteInfo, is_container_mode: bool,
-    expose: PortMapping, to_pod: List[int], from_pod: List[int]
+    expose: PortMapping, to_pod: List[int], from_pod: List[int],
+    is_remote_docker: bool
 ) -> Tuple[int, SSH]:
     """
     Start all the processes that handle remote proxying.
@@ -49,11 +50,13 @@ def connect(
 
     ssh = SSH(runner, find_free_port())
 
+    bind_all = "--address 0.0.0.0" if is_remote_docker else ""
+
     # forward remote port to here, by tunneling via remote SSH server:
     runner.launch(
         "kubectl port-forward",
         runner.kubectl(
-            "port-forward", remote_info.pod_name, "{}:8022".format(ssh.port)
+            "port-forward", bind_all, remote_info.pod_name, "{}:8022".format(ssh.port)
         )
     )
 
@@ -111,12 +114,13 @@ def setup(runner: Runner, args: Namespace) -> Callable:
         raise runner.fail("Error running ssh: {}\n".format(e))
 
     is_container_mode = args.method == "container"
+    is_remote_docker = True if args.docker_host else False
 
     def do_connect(runner_: Runner,
                    remote_info: RemoteInfo) -> Tuple[int, SSH]:
         return connect(
             runner_, remote_info, is_container_mode, args.expose, args.to_pod,
-            args.from_pod
+            args.from_pod, is_remote_docker
         )
 
     return do_connect
