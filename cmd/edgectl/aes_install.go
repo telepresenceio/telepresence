@@ -120,6 +120,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		Work: func(p *supervisor.Process) error {
 			defer i.Quit()
 			result := i.Perform(kcontext)
+			i.ShowResult(result)
 			return result.Err
 		},
 	})
@@ -617,11 +618,12 @@ func (i *Installer) Perform(kcontext string) Result {
 			i.Report("fail_existing_aes", ScoutMeta{"installing", i.version}, ScoutMeta{"found", installedVersion})
 			return UnhandledErrResult(errors.Errorf("existing AES %s found when installing AES %s", installedVersion, i.version))
 		default:
-			i.ShowWrapped(abortCRDs)
-			i.show.Println()
-			i.ShowWrapped(seeDocs)
-			i.Report("fail_existing_crds")
-			return UnhandledErrResult(errors.New("CRDs found"))
+			return Result{
+				Report:  "fail_existing_crds",
+				Message: abortCRDs,
+				URL:     seeDocsURL,
+				Err:     errors.New("CRDs found"),
+			}
 		}
 	}
 
