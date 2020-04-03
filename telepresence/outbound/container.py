@@ -126,6 +126,7 @@ def run_docker_command(
         "to_pod": to_pod,
         "from_pod": from_pod,
         "exclude_proxy": exclude_proxy,
+        "host_ip": host_ip,
     }
     dns_args = []
     if "hostname" in pod_info:
