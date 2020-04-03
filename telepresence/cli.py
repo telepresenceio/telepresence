@@ -369,6 +369,22 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
         )
     )
     parser.add_argument(
+        "--exclude-proxy",
+        metavar="CIDR",
+        dest="exclude_proxy",
+        action='append',
+        default=[],
+        help=(
+            "If you are using --method=vpn-tcp, use this to exclude additional "
+            "remote IPs, and IP ranges to proxy. Kubernetes service "
+            "and pods are proxied automatically, so you only need to list "
+            "cloud resources, e.g. the hostname of a AWS RDS. "
+            "When using --method=inject-tcp "
+            "this option is unnecessary as all outgoing communication in "
+            "the run subprocess will be proxied."
+        )
+    )
+    parser.add_argument(
         "--local-cluster",
         action='store_true',
         help=(

@@ -265,7 +265,11 @@ def dns_lookup(runner: Runner, name: str, timeout: int) -> bool:
 
 
 def connect_sshuttle(
-    runner: Runner, remote_info: RemoteInfo, hosts_or_ips: List[str], ssh: SSH
+    runner: Runner,
+    remote_info: RemoteInfo,
+    hosts_or_ips: List[str],
+    exclude_cidrs: List[str],
+    ssh: SSH
 ) -> None:
     """Connect to Kubernetes using sshuttle."""
     span = runner.span()
@@ -273,13 +277,19 @@ def connect_sshuttle(
     if runner.platform == "linux":
         # sshuttle tproxy mode seems to have issues:
         sshuttle_method = "nat"
+
+    exclusions = []
+    if exclude_cidrs:
+        for cidr in exclude_cidrs:
+            exclusions.extend(["-x", cidr])
+
     runner.launch(
         "sshuttle",
         get_sshuttle_command(ssh, sshuttle_method) + [
             # DNS proxy running on remote pod:
             "--to-ns",
             "127.0.0.1:9053",
-        ] + get_proxy_cidrs(runner, remote_info, hosts_or_ips),
+        ] + exclusions + get_proxy_cidrs(runner, remote_info, hosts_or_ips),
         keep_session=True,  # Avoid trouble with interactive sudo
     )
 

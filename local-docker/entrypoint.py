@@ -74,6 +74,7 @@ def proxy(config: typing.Dict[str, typing.Any]) -> None:
     expose_ports = config["expose_ports"]
     to_pod = config["to_pod"]
     from_pod = config["from_pod"]
+    exclude_proxy = config["exclude_proxy"]
 
     # Launch local sshd so Tel outside can forward 38023 to the cluster
     runner = Runner("-", False)
@@ -101,6 +102,10 @@ def proxy(config: typing.Dict[str, typing.Any]) -> None:
             runner.write("Failed on line: " + line)
             raise
     assert exclusions, netstat_output
+
+    if exclude_proxy:
+        for cidr in exclude_proxy:
+            exclusions.extend(["-x", cidr])
 
     # Start the sshuttle VPN-like thing:
     sshuttle_cmd = get_sshuttle_command(ssh, "nat") + exclusions + cidrs

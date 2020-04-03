@@ -85,6 +85,7 @@ def run_docker_command(
     mount_dir: Optional[str],
     use_docker_mount: Optional[bool],
     pod_info: Dict[str, str],
+    exclude_proxy: List[str],
 ) -> "subprocess.Popen[bytes]":
     """
     --docker-run support.
@@ -120,6 +121,7 @@ def run_docker_command(
         "expose_ports": list(expose.local_to_remote()),
         "to_pod": to_pod,
         "from_pod": from_pod,
+        "exclude_proxy": exclude_proxy,
     }
     dns_args = []
     if "hostname" in pod_info:
