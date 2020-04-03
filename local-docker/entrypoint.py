@@ -75,13 +75,17 @@ def proxy(config: typing.Dict[str, typing.Any]) -> None:
     to_pod = config["to_pod"]
     from_pod = config["from_pod"]
     exclude_proxy = config["exclude_proxy"]
+    host_ip = config["host_ip"]
 
     # Launch local sshd so Tel outside can forward 38023 to the cluster
     runner = Runner("-", False)
     runner.check_call(["/usr/sbin/sshd", "-e"])
 
+    if not host_ip:
+        host_ip = "127.0.0.1"
+
     # Wait for the cluster to be available
-    ssh = SSH(runner, 38023, "telepresence@127.0.0.1")
+    ssh = SSH(runner, 38023, "telepresence@{}".format(host_ip))
     if not ssh.wait():
         raise RuntimeError(
             "SSH from local container to the cluster failed to start."

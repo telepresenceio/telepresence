@@ -375,13 +375,22 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
         action='append',
         default=[],
         help=(
-            "If you are using --method=vpn-tcp, use this to exclude additional "
-            "remote IPs, and IP ranges to proxy. Kubernetes service "
-            "and pods are proxied automatically, so you only need to list "
-            "cloud resources, e.g. the hostname of a AWS RDS. "
-            "When using --method=inject-tcp "
+            "If you are using --method=vpn-tcp or --method=container, use "
+            "this to exclude additional remote IPs, and IP ranges to proxy. "
+            "Kubernetes service and pods are proxied automatically, so you "
+            "only need to list cloud resources, e.g. the hostname of a AWS "
+            "RDS. When using --method=inject-tcp "
             "this option is unnecessary as all outgoing communication in "
             "the run subprocess will be proxied."
+        )
+    )
+    parser.add_argument(
+        "--host-ip",
+        metavar="IPADDRESS",
+        dest="host_ip",
+        help=(
+            "If you are using --method=container, with a remote docker daemon "
+            "(one that is running on the host machine)."
         )
     )
     parser.add_argument(

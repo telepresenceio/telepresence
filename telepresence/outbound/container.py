@@ -86,6 +86,7 @@ def run_docker_command(
     use_docker_mount: Optional[bool],
     pod_info: Dict[str, str],
     exclude_proxy: List[str],
+    host_ip: str,
 ) -> "subprocess.Popen[bytes]":
     """
     --docker-run support.
@@ -113,6 +114,9 @@ def run_docker_command(
     if not docker_host:
         docker_host = "127.0.0.1"
     local_ssh = SSH(runner, container_sshd_port, "root@{}".format(docker_host))
+
+    if host_ip:
+        exclude_proxy.append(host_ip)
 
     # Start the network (sshuttle) container:
     name = random_name()

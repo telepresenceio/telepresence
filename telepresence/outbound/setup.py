@@ -175,7 +175,8 @@ def setup_container(runner: Runner, args: Namespace) -> LaunchType:
             mount_dir,
             args.docker_mount is not None,
             pod_info,
-            args.exclude_proxy
+            args.exclude_proxy,
+            args.host_ip
         )
 
     return launch
