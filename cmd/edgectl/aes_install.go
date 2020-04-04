@@ -33,6 +33,8 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+
 func aesInstallCmd() *cobra.Command {
 	res := &cobra.Command{
 		Use:   "install",
@@ -90,11 +92,11 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 
 	// If Scout is disabled (environment variable set to non-null), inform the user.
 	if i.scout.Disabled() {
-		i.show.Printf(phoneHomeDisabled)
+		i.show.Printf("INFO: phone-home is disabled by environment variable")
 	}
 
 	// Both printed and logged when verbose (Installer.log is responsible for --verbose)
-	i.log.Printf(fmt.Sprintf(installAndTraceIDs, i.scout.installID, i.scout.metadata["trace_id"]))
+	i.log.Printf(fmt.Sprintf("INFO: install_id = #{i.scout.installID}; trace_id = #{i.scout.metadata['trace_id']}"))
 
 	sup := supervisor.WithContext(i.ctx)
 	sup.Logger = i.log
@@ -442,7 +444,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	i.Report("install")
 
 	i.show.Println()
-	i.show.Println(color.Bold.Sprintf(welcomeInstall))
+	i.show.Println(color.Bold.Sprintf("Installing the Ambassador Edge Stack"))
 
 	// Attempt to grab a reasonable default for the user's email address
 	defaultEmail, err := i.Capture("get email", true, "", "git", "config", "--global", "user.email")
@@ -458,9 +460,10 @@ func (i *Installer) Perform(kcontext string) Result {
 
 	// Ask for the user's email address
 	i.show.Println()
-	i.ShowWrapped(emailAsk)
+	i.ShowWrapped("Please enter an email address for us to notify you before your TLS certificate and domain name expire. In order to acquire the TLS certificate, we share this email with Let’s Encrypt.")
+
 	// Do the goroutine dance to let the user hit Ctrl-C at the email prompt
-	gotEmail := make(chan (string))
+	gotEmail := make(chan string)
 	var emailAddress string
 	go func() {
 		gotEmail <- getEmailAddress(defaultEmail, i.log)
@@ -470,59 +473,41 @@ func (i *Installer) Perform(kcontext string) Result {
 	case emailAddress = <-gotEmail:
 		// Continue
 	case <-i.ctx.Done():
-		fmt.Println()
-		return UnhandledErrResult(errors.New("Interrupted"))
+		return i.EmailRequestError(errors.New("Interrupted"))
 	}
 	i.show.Println()
-
 	i.log.Printf("Using email address %q", emailAddress)
 
-	i.show.Println("========================================================================")
-	i.show.Println(beginningAESInstallation)
-	i.show.Println()
+	// Beginning the AES Installation
+	i.BeginAESInstallMessage()
 
 	// Attempt to use kubectl
 	_, err = i.GetKubectlPath()
 	// err = errors.New("early error for testing")  // TODO: remove for production
 	if err != nil {
-		return NoKubectlError(err)
-
-		i.Report("fail_no_kubectl")
-		err = browser.OpenURL(noKubectlURL)
-		return UnhandledErrResult(fmt.Errorf(noKubectl))
+		return i.NoKubectlError(err)
 	}
 
 	// Attempt to talk to the specified cluster
 	i.kubeinfo = k8s.NewKubeInfo("", kcontext, "")
 	if err := i.ShowKubectl("cluster-info", "", "cluster-info"); err != nil {
-		return NoClusterError(err)
-
-		i.Report("fail_no_cluster")
-		err = browser.OpenURL(noClusterURL)
-		return UnhandledErrResult(fmt.Errorf(noCluster))
+		return i.NoClusterError(err)
 	}
 	i.restConfig, err = i.kubeinfo.GetRestConfig()
 	if err != nil {
-		return GetRestConfigError(err)
-
-		i.Report("fail_no_cluster")
-		return UnhandledErrResult(err)
+		return i.GetRestConfigError(err)
 	}
+
 	i.coreClient, err = k8sClientCoreV1.NewForConfig(i.restConfig)
 	if err != nil {
-		return NewForConfigError(err)
-
-		i.Report("fail_no_cluster")
-		return UnhandledErrResult(err)
+		return i.NewForConfigError(err)
 	}
 
 	versions, err := i.CaptureKubectl("get versions", "", "version", "-o", "json")
 	if err != nil {
-		return CaptureKubectlError(err)
-
-		i.Report("fail_no_cluster")
-		return UnhandledErrResult(err)
+		return i.CaptureKubectlError(err)
 	}
+
 	kubernetesVersion := &kubernetesVersion{}
 	err = json.Unmarshal([]byte(versions), kubernetesVersion)
 	if err != nil {
@@ -550,31 +535,21 @@ func (i *Installer) Perform(kcontext string) Result {
 	// Download AES manifests
 	crdManifests, err := getManifest(fmt.Sprintf("https://%s/yaml/aes-crds.yaml", manifestsDomain))
 	if err != nil {
-		return AESCRDManifestsError(err)
-
-		i.Report("fail_no_internet", ScoutMeta{"err", err.Error()})
-		return UnhandledErrResult(errors.Wrap(err, "download AES CRD manifests"))
+		return i.AESCRDManifestsError(err)
 	}
 
 	aesManifests, err := getManifest(fmt.Sprintf("https://%s/yaml/aes.yaml", manifestsDomain))
 	if err != nil {
-		return AESManifestsError(err)
-
-		i.Report("fail_no_internet", ScoutMeta{"err", err.Error()})
-		return UnhandledErrResult(errors.Wrap(err, "download AES manifests"))
+		return i.AESManifestsError(err)
 	}
 
 	// Figure out what version of AES is being installed
 	aesVersionRE := regexp.MustCompile("image: quay[.]io/datawire/aes:([[:^space:]]+)[[:space:]]")
 	matches := aesVersionRE.FindStringSubmatch(aesManifests)
 	if len(matches) != 2 {
-		i.log.Printf("matches is %+v", matches)
-		i.Report("fail_bad_manifests")
-
-		return ManifestParsingError(err)
-
-		return UnhandledErrResult(errors.Errorf("Failed to parse downloaded manifests. Is there a proxy server interfering with HTTP downloads?"))
+		return i.ManifestParsingError(err, matches)
 	}
+
 	i.version = matches[1]
 	i.SetMetadatum("AES version being installed", "aes_version", i.version)
 
@@ -636,23 +611,11 @@ func (i *Installer) Perform(kcontext string) Result {
 		case installedVersion != "":
 			i.ShowWrapped(fmt.Sprintf("-> Found an existing installation of Ambassador Edge Stack %s.", installedVersion))
 			i.show.Println()
-			i.ShowWrapped(abortExisting)
-			i.show.Println()
-			i.ShowWrapped(seeDocs)
-			i.Report("fail_existing_aes", ScoutMeta{"installing", i.version}, ScoutMeta{"found", installedVersion})
-
-			return IncompatibleCRDVersionsError(err)
-
-			return UnhandledErrResult(errors.Errorf("existing AES %s found when installing AES %s", installedVersion, i.version))
+			return i.IncompatibleCRDVersionsError(err, installedVersion)
 		default:
-			return ExistingCRDsError(err)
-
-			return Result{
-				Report:  "fail_existing_crds",
-				Message: abortCRDs,
-				URL:     seeDocsURL,
-				Err:     errors.New("CRDs found"),
-			}
+			i.show.Println("-> Found Ambassador CRDs in your cluster, but no AES installation.")
+			i.show.Println()
+			return i.ExistingCRDsError(err)
 		}
 	}
 
@@ -662,41 +625,26 @@ func (i *Installer) Perform(kcontext string) Result {
 		i.ShowWrapped("-> Downloading images. (This may take a minute.)")
 
 		if err := i.ShowKubectl("install CRDs", crdManifests, "apply", "-f", "-"); err != nil {
-			i.Report("fail_install_crds")
-			return InstallCRDsError(err)
-
-			return UnhandledErrResult(err)
+			return i.InstallCRDsError(err)
 		}
 
 		if err := i.ShowKubectl("wait for CRDs", "", "wait", "--for", "condition=established", "--timeout=90s", "crd", "-lproduct=aes"); err != nil {
-			return WaitCRDsError(err)
-
-			i.Report("fail_wait_crds")
-			return UnhandledErrResult(err)
+			return i.WaitCRDsError(err)
 		}
 
 		if err := i.ShowKubectl("install AES", aesManifests, "apply", "-f", "-"); err != nil {
-			return InstallAESError(err)
-
-			i.Report("fail_install_aes")
-			return UnhandledErrResult(err)
+			return i.InstallAESError(err)
 		}
 
 		if err := i.ShowKubectl("wait for AES", "", "-n", "ambassador", "wait", "--for", "condition=available", "--timeout=90s", "deploy", "-lproduct=aes"); err != nil {
-			return WaitForAESError(err)
-
-			i.Report("fail_wait_aes")
-			return UnhandledErrResult(err)
+			return i.WaitForAESError(err)
 		}
 	}
 
 	// Wait for Ambassador Pod; grab AES install ID
 	i.show.Println("-> Checking the AES pod deployment")
 	if err := i.loopUntil("AES pod startup", i.GrabAESInstallID, lc2); err != nil {
-		i.Report("fail_pod_timeout")
-		return AESPodStartupError(err)
-
-		return UnhandledErrResult(err)
+		return i.AESPodStartupError(err)
 	}
 
 	// Grab Helm information if present
@@ -713,37 +661,16 @@ func (i *Installer) Perform(kcontext string) Result {
 	// timeouts.
 
 	if isKnownLocalCluster {
-		i.Report("cluster_not_accessible")
 		i.show.Println("-> Local cluster detected. Not configuring automatic TLS.")
 		i.show.Println()
-		i.ShowWrapped(color.Bold.Sprintf(noTlsSuccess))
-		i.show.Println()
-		loginMsg := "Determine the IP address and port number of your Ambassador service, e.g.\n"
-		loginMsg += color.Bold.Sprintf("$ minikube service -n ambassador ambassador\n\n")
-		loginMsg += fmt.Sprintf(loginViaIP)
-		loginMsg += color.Bold.Sprintf("$ edgectl login -n ambassador IP_ADDRESS:PORT")
-		i.ShowWrapped(loginMsg)
-		i.show.Println()
-		i.ShowWrapped(seeDocs)
 
-		return KnownLocalClusterResult()
-
-		return UnhandledErrResult(nil)
+		return i.KnownLocalClusterResult()
 	}
 
 	// Grab load balancer address
 	i.show.Println("-> Provisioning a cloud load balancer")
 	if err := i.loopUntil("Load Balancer", i.GrabLoadBalancerAddress, lc5); err != nil {
-		i.Report("fail_loadbalancer_timeout")
-		i.show.Println()
-		i.ShowWrapped(failLoadBalancer)
-		i.show.Println()
-		i.ShowWrapped(color.Bold.Sprintf(noTlsSuccess))
-		i.ShowWrapped(seeDocs)
-
-		return LoadBalancerError(err)
-
-		return UnhandledErrResult(err)
+		return i.LoadBalancerError(err)
 	}
 	i.Report("cluster_accessible")
 	i.show.Println("-> Your AES installation's address is", color.Bold.Sprintf(i.address))
@@ -751,18 +678,9 @@ func (i *Installer) Perform(kcontext string) Result {
 	// Wait for Ambassador to be ready to serve ACME requests.
 	i.show.Println("-> Checking that AES is responding to ACME challenge")
 	if err := i.loopUntil("AES to serve ACME", i.CheckAESServesACME, lc2); err != nil {
-		i.Report("aes_listening_timeout")
-		i.ShowWrapped("It seems AES did not start in the expected time, or the AES load balancer is not reachable from here.")
-		i.ShowWrapped(tryAgain)
-		i.ShowWrapped(color.Bold.Sprintf(noTlsSuccess))
-		i.ShowWrapped(seeDocs)
-
-		return AESACMEChallengeError(err)
-
-		return UnhandledErrResult(err)
+		return i.AESACMEChallengeError(err)
 	}
 	i.Report("aes_listening")
-
 	i.show.Println("-> Automatically configuring TLS")
 
 	// Send a request to acquire a DNS name for this cluster's load balancer
@@ -781,45 +699,21 @@ func (i *Installer) Perform(kcontext string) Result {
 	_ = json.NewEncoder(buf).Encode(regData)
 	resp, err := http.Post(regURL, "application/json", buf)
 	if err != nil {
-		i.Report("dns_name_failure", ScoutMeta{"err", err.Error()})
-
-		return DNSNamePostFailure(err)
-
-		return UnhandledErrResult(errors.Wrap(err, "acquire DNS name (post)"))
+		return i.DNSNamePostError(err)
 	}
+
 	content, err := ioutil.ReadAll(resp.Body)
-
 	resp.Body.Close()
+
 	if err != nil {
-		i.Report("dns_name_failure", ScoutMeta{"err", err.Error()})
-
-		return DNSNameBodyFailure(err)
-
-		return UnhandledErrResult(errors.Wrap(err, "acquire DNS name (read body)"))
+		return i.DNSNameBodyError(err)
 	}
 
 	if resp.StatusCode != 200 {
 		message := strings.TrimSpace(string(content))
-		i.Report("dns_name_failure", ScoutMeta{"code", resp.StatusCode}, ScoutMeta{"err", message})
 		i.show.Println("-> Failed to create a DNS name:", message)
 
-		userMessage := `
-<bold>Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically.</>
-
-If this IP address is reachable from here, you can access your installation without a DNS name. The following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.
-<bold>$ edgectl login -n ambassador {{ .address }}</>
-
-You can use port forwarding to access your Edge Stack installation and the Edge Policy Console.  You will need to accept a self-signed certificate in your browser.
-<bold>$ kubectl -n ambassador port-forward deploy/ambassador 8443 &</>
-<bold>$ edgectl login -n ambassador 127.0.0.1:8443</>
-`
-		return AESInstalledNoDNSResult()
-
-		return Result{
-			Message: userMessage,
-			URL:     seeDocsURL,
-			Report:  "", // FIXME: reported above due to additional metadata required
-		}
+		return i.AESInstalledNoDNSResult(resp.StatusCode, message)
 	}
 
 	i.hostname = string(content)
@@ -829,49 +723,25 @@ You can use port forwarding to access your Edge Stack installation and the Edge 
 	// minute error backoff if the ACME registration races ahead of the DNS
 	// name appearing for LetsEncrypt.
 	if err := i.loopUntil("DNS propagation to this host", i.CheckHostnameFound, lc2); err != nil {
-		i.Report("dns_name_propagation_timeout")
-		i.ShowWrapped("We are unable to resolve your new DNS name on this machine.")
-		i.ShowWrapped(seeDocs)
-		i.ShowWrapped(tryAgain)
-
-		return DNSPropagationError(err)
-
-		return UnhandledErrResult(err)
+		return i.DNSPropagationError(err)
 	}
+
 	i.Report("dns_name_propagated")
 
 	// Create a Host resource
 	hostResource := fmt.Sprintf(hostManifest, i.hostname, i.hostname, emailAddress)
 	if err := i.ShowKubectl("install Host resource", hostResource, "apply", "-f", "-"); err != nil {
-		i.Report("fail_host_resource", ScoutMeta{"err", err.Error()})
-		i.ShowWrapped("We failed to create a Host resource in your cluster. This is unexpected.")
-		i.ShowWrapped(seeDocs)
-
-		return HostResourceCreationError(err)
-
-		return UnhandledErrResult(err)
+		return i.HostResourceCreationError(err)
 	}
 
 	i.show.Println("-> Obtaining a TLS certificate from Let's Encrypt")
 	if err := i.loopUntil("TLS certificate acquisition", i.CheckACMEIsDone, lc5); err != nil {
-		i.Report("cert_provision_failed")
-		// Some info is reported by the check function.
-		i.ShowWrapped(seeDocs)
-		i.ShowWrapped(tryAgain)
-
-		return CertificateProvisionError(err)
-
-		return UnhandledErrResult(err)
+		return i.CertificateProvisionError(err)
 	}
 	i.Report("cert_provisioned")
 	i.show.Println("-> TLS configured successfully")
 	if err := i.ShowKubectl("show Host", "", "get", "host", i.hostname); err != nil {
-		i.ShowWrapped("We failed to retrieve the Host resource from your cluster that we just created. This is unexpected.")
-		i.ShowWrapped(tryAgain)
-
-		return HostRetrievalError(err)
-
-		return UnhandledErrResult(err)
+		return i.HostRetrievalError(err)
 	}
 
 	i.show.Println()
@@ -880,18 +750,18 @@ You can use port forwarding to access your Edge Stack installation and the Edge 
 	i.show.Println()
 
 	// Show congratulations message
-	i.ShowWrapped(color.Bold.Sprintf(fullSuccess, i.hostname))
+	i.ShowWrapped(color.Bold.Sprintf("Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit https://#{i.hostname}"))
 	i.show.Println()
 
 	// Open a browser window to the Edge Policy Console
 	if err := do_login(i.kubeinfo, kcontext, "ambassador", i.hostname, true, true, false); err != nil {
-		return AESLoginError(err)
-
-		return UnhandledErrResult(err)
+		return i.AESLoginError(err)
 	}
 
 	// Show how to use edgectl login in the future
 	i.show.Println()
+
+	futureLogin := `In the future, to log in to the Ambassador Edge Policy Console, run\n$ %s`
 	i.ShowWrapped(fmt.Sprintf(futureLogin, color.Bold.Sprintf("edgectl login "+i.hostname)))
 
 	if err := i.CheckAESHealth(); err != nil {
@@ -900,9 +770,7 @@ You can use port forwarding to access your Edge Stack installation and the Edge 
 		i.Report("aes_health_good")
 	}
 
-	return AESLoginSuccessResult()
-
-	return UnhandledErrResult(nil)
+	return i.AESLoginSuccessResult()
 }
 
 // Installer represents the state of the installation process
@@ -1129,64 +997,3 @@ spec:
   acmeProvider:
     email: %s
 `
-
-const welcomeInstall = "Installing the Ambassador Edge Stack"
-
-const emailAsk = `Please enter an email address for us to notify you before your TLS certificate and domain name expire. In order to acquire the TLS certificate, we share this email with Let’s Encrypt.`
-
-const beginningAESInstallation = "Beginning Ambassador Edge Stack Installation"
-
-const loginViaIP = "The following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.\n"
-
-const loginViaPortForward = "You can use port forwarding to access your Edge Stack installation and the Edge Policy Console.  You will need to accept a self-signed certificate in your browser.\n"
-
-const failLoadBalancer = `
-Timed out waiting for the load balancer's IP address for the AES Service.
-- If a load balancer IP address shows up, simply run the installer again.
-- If your cluster doesn't support load balancers, you'll need to expose AES some other way.
-`
-
-const tryAgain = "If this appears to be a transient failure, please try running the installer again. It is safe to run the installer repeatedly on a cluster."
-
-const abortExisting = `
-This tool does not support upgrades/downgrades at this time.
-
-The installer will now quit to avoid corrupting an existing installation of AES.
-`
-
-const abortCRDs = `
--> Found Ambassador CRDs in your cluster, but no AES installation.
-
-You can manually remove installed CRDs if you are confident they are not in use by any installation.
-Removing the CRDs will cause your existing Ambassador Mappings and other resources to be deleted as well.
-
-$ kubectl delete crd -l product=aes
-
-The installer will now quit to avoid corrupting an existing (but undetected) installation.
-`
-const seeDocsURL = "https://www.getambassador.io/docs/latest/tutorials/getting-started/"
-const seeDocs = "See " + seeDocsURL
-
-const phoneHomeDisabled = "INFO: phone-home is disabled by environment variable"
-const installAndTraceIDs = "INFO: install_id = %s; trace_id = %s"
-
-var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
-
-const fullSuccess = `Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit https://%s` // hostname
-
-const futureLogin = `In the future, to log in to the Ambassador Edge Policy Console, run
-$ %s` // "edgectl login <hostname>"
-
-const noTlsSuccess = "Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically."
-
-const noKubectlURL = "https://kubernetes.io/docs/tasks/tools/install-kubectl/"
-const noKubectl = `
-The installer depends on the 'kubectl' executable. Make sure you have the latest release downloaded in your PATH, and that you have executable permissions.
-Visit ` + noKubectlURL + ` for more information and instructions.`
-
-const noClusterURL = "https://kubernetes.io/docs/setup/"
-const noCluster = `
-Unable to communicate with the remote Kubernetes cluster using your kubectl context.
-
-To further debug and diagnose cluster problems, use 'kubectl cluster-info dump' 
-or get started and run Kubernetes: ` + noClusterURL
