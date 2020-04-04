@@ -285,7 +285,7 @@ type mappingSpec struct {
 	AmbassadorID []string          `json:"ambassador_id"`
 	Prefix       string            `json:"prefix"`
 	Service      string            `json:"service"`
-	Headers      map[string]string `json:"headers"`
+	RegexHeaders map[string]string `json:"regex_headers"`
 }
 
 type interceptMapping struct {
@@ -322,7 +322,7 @@ func MakeIntercept(p *supervisor.Process, out *Emitter, tm *TrafficManager, clus
 			AmbassadorID: []string{fmt.Sprintf("intercept-%s", ii.Deployment)},
 			Prefix:       ii.Prefix,
 			Service:      fmt.Sprintf("telepresence-proxy.%s:%d", tm.namespace, port),
-			Headers:      ii.Patterns,
+			RegexHeaders: ii.Patterns,
 		},
 	}
 
