@@ -235,7 +235,7 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 	})
 	intercept := InterceptInfo{}
 	interceptAddCmd := &cobra.Command{
-		Use:   "add DEPLOYMENT [--namespace NAMESPACE] [-p PREFIX] -t [HOST:]PORT -m HEADER=REGEX ...",
+		Use:   "add DEPLOYMENT -t [HOST:]PORT -m HEADER=REGEX ...",
 		Short: "Add a deployment intercept",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
