@@ -299,12 +299,12 @@ You can use port forwarding to access your Edge Stack installation and the Edge 
 
 // The DNS name propagation timed out, so unable to resolve the name.
 func (i *Installer) DNSPropagationError(err error) Result {
-	i.Report("dns_name_propagation_timeout")
 	i.ShowWrapped("We are unable to resolve your new DNS name on this machine.")
 	i.ShowWrapped(seeDocs)
 	i.ShowWrapped(tryAgain)
 
 	return Result{
+		Report: "dns_name_propagation_timeout",
 		TryAgain: true,
 		URL: seeDocsURL,
 		Err: err,
@@ -325,12 +325,12 @@ func (i *Installer) HostResourceCreationError(err error) Result {
 
 // Unable to acquire a TLS certificate from Let's Encrypt
 func (i *Installer) CertificateProvisionError(err error) Result {
-	i.Report("cert_provision_failed")
 	// Some info is reported by the check function.
 	i.ShowWrapped(seeDocs)
 	i.ShowWrapped(tryAgain)
 
 	return Result{
+		Report: "cert_provision_failed",
 		TryAgain: true,
 		URL: seeDocsURL,
 		Err: err,
