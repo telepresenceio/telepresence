@@ -377,9 +377,11 @@ func (cept *Intercept) quit(p *supervisor.Process) error {
 
 	p.Logf("cept.Quit removing %v", cept.ii.Name)
 
-	cept.removeMapping(p)
-
-	p.Logf("cept.Quit removed %v", cept.ii.Name)
+	if err := cept.removeMapping(p); err != nil {
+		p.Logf("cept.Quit failed to remove %v: %+v", cept.ii.Name, err)
+	} else {
+		p.Logf("cept.Quit removed %v", cept.ii.Name)
+	}
 
 	if cept.crc != nil {
 		_ = cept.crc.Close()
