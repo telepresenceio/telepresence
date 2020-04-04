@@ -11,8 +11,7 @@ import (
 // - Have a reasonable user message;
 // - Have a page in our documentation that explains the error and what can be done to resolve it.
 
-
-// Useful strings
+// Useful strings, used more than once...
 const seeDocsURL = "https://www.getambassador.io/docs/latest/tutorials/getting-started/"
 const seeDocs = "See " + seeDocsURL
 const tryAgain = "If this appears to be a transient failure, please try running the installer again. It is safe to run the installer repeatedly on a cluster."
@@ -32,10 +31,10 @@ func (i *Installer) EmailRequestError(err error) Result {
 // Unable to get a kubectl path.
 func (i *Installer) NoKubectlError(err error) Result {
 	return Result{
-		Report: "fail_no_kubectl",
+		Report:  "fail_no_kubectl",
 		Message: "The installer depends on the 'kubectl' executable. Make sure you have the latest release downloaded in your PATH, and that you have executable permissions.",
-		URL: "https://kubernetes.io/docs/tasks/tools/install-kubectl/",
-		Err: err,
+		URL:     "https://kubernetes.io/docs/tasks/tools/install-kubectl/",
+		Err:     err,
 	}
 }
 
@@ -48,10 +47,10 @@ To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'
 or get started and run Kubernetes.`
 
 	return Result{
-		Report: "fail_no_cluster",
-		URL: "https://kubernetes.io/docs/setup/",
+		Report:  "fail_no_cluster",
+		URL:     "https://kubernetes.io/docs/setup/",
 		Message: noCluster,
-		Err: err,
+		Err:     err,
 	}
 }
 
@@ -59,28 +58,25 @@ or get started and run Kubernetes.`
 func (i *Installer) GetRestConfigError(err error) Result {
 	return Result{
 		Report: "fail_no_cluster",
-		Err: err,
+		Err:    err,
 	}
 }
-
 
 // Unable to create a new CoreV1Client for the given configuration.
 func (i *Installer) NewForConfigError(err error) Result {
 	return Result{
 		Report: "fail_no_cluster",
-		Err: err,
+		Err:    err,
 	}
 }
-
 
 // Unable to get versions via kubectl
 func (i *Installer) CaptureKubectlError(err error) Result {
 	return Result{
 		Report: "fail_no_cluster",
-		Err: err,
+		Err:    err,
 	}
 }
-
 
 // Unable to fetch the AES CRD manifests (aes-crds.yaml)
 func (i *Installer) AESCRDManifestsError(err error) Result {
@@ -88,30 +84,28 @@ func (i *Installer) AESCRDManifestsError(err error) Result {
 
 	return Result{
 		Message: "download AES CRD manifests",
-		Err: errors.Wrap(err, "download AES CRD manifests"),
+		Err:     errors.Wrap(err, "download AES CRD manifests"),
 	}
 }
-
 
 // Unable to fetch the AES manifests (aes.yaml)
 func (i *Installer) AESManifestsError(err error) Result {
 	i.Report("fail_no_internet", ScoutMeta{"err", err.Error()})
 
 	return Result{
-		Message:  "download AES manifests",
-		Err: errors.Wrap(err, "download AES manifests"),
+		Message: "download AES manifests",
+		Err:     errors.Wrap(err, "download AES manifests"),
 	}
 }
-
 
 // Unable to parse the downloaded AES manifests
 func (i *Installer) ManifestParsingError(err error, matches []string) Result {
 	i.log.Printf("matches is %+v", matches)
 
 	return Result{
-		Report: "fail_bad_manifests",
+		Report:  "fail_bad_manifests",
 		Message: "Failed to parse downloaded manifests. Is there a proxy server interfering with HTTP downloads?",
-		Err: err,
+		Err:     err,
 	}
 }
 
@@ -128,12 +122,11 @@ The installer will now quit to avoid corrupting an existing installation of AES.
 	i.Report("fail_existing_aes", ScoutMeta{"installing", i.version}, ScoutMeta{"found", installedVersion})
 
 	return Result{
-		URL: seeDocsURL,
+		URL:     seeDocsURL,
 		Message: fmt.Sprintf("existing AES %s found when installing AES %s", installedVersion, i.version),
-		Err: err,
+		Err:     err,
 	}
 }
-
 
 // Existing AES CRD's, unable to upgrade.
 func (i *Installer) ExistingCRDsError(err error) Result {
@@ -152,51 +145,45 @@ The installer will now quit to avoid corrupting an existing (but undetected) ins
 	}
 }
 
-
 // Unable to kubectl apply the aes-crd.yaml manifests
 func (i *Installer) InstallCRDsError(err error) Result {
 	return Result{
 		Report: "fail_install_crds",
-		Err: err,
+		Err:    err,
 	}
 }
-
 
 // 90-second timeout on waiting for aes-crd.yaml manifests to be established
 func (i *Installer) WaitCRDsError(err error) Result {
 	return Result{
 		Report: "fail_wait_crds",
-		Err: err,
+		Err:    err,
 	}
 }
-
 
 // Unable to kubectl apply the aes.yaml manifests
 func (i *Installer) InstallAESError(err error) Result {
 	return Result{
 		Report: "fail_install_aes",
-		Err: err,
+		Err:    err,
 	}
 }
-
 
 //90-second timeout on waiting for aes.yaml manifests to be deployed and available
 func (i *Installer) WaitForAESError(err error) Result {
 	return Result{
 		Report: "fail_wait_aes",
-		Err: err,
+		Err:    err,
 	}
 }
-
 
 // Unable to get the AES Install ID via kubectl exec to ask for the pod ID
 func (i *Installer) AESPodStartupError(err error) Result {
 	return Result{
 		Report: "fail_pod_timeout",
-		Err: err,
+		Err:    err,
 	}
 }
-
 
 // docker-desktop, minikube, or kind: local cluster so no automatic TLS.
 func (i *Installer) KnownLocalClusterResult() Result {
@@ -212,11 +199,10 @@ func (i *Installer) KnownLocalClusterResult() Result {
 
 	return Result{
 		Report: "cluster_not_accessible",
-		URL: seeDocsURL,
-		Err: nil,
+		URL:    seeDocsURL,
+		Err:    nil,
 	}
 }
-
 
 // Unable to provision a load balancer (failed to retrieve the IP address)
 func (i *Installer) LoadBalancerError(err error) Result {
@@ -234,11 +220,10 @@ Timed out waiting for the load balancer's IP address for the AES Service.
 
 	return Result{
 		Report: "fail_loadbalancer_timeout",
-		URL: seeDocsURL,
-		Err: err,
+		URL:    seeDocsURL,
+		Err:    err,
 	}
 }
-
 
 // AES failed to respond to the ACME challenge.  This may be because AES did not start quickly enough or
 // if the AES load balancer is not reachable.
@@ -249,10 +234,10 @@ func (i *Installer) AESACMEChallengeError(err error) Result {
 	i.ShowWrapped(seeDocs)
 
 	return Result{
-		Report: "aes_listening_timeout",
+		Report:   "aes_listening_timeout",
 		TryAgain: true,
-		URL: seeDocsURL,
-		Err: err,
+		URL:      seeDocsURL,
+		Err:      err,
 	}
 }
 
@@ -272,7 +257,7 @@ func (i *Installer) DNSNameBodyError(err error) Result {
 
 	return Result{
 		Message: "acquire DNS name (read body)",
-		Err: errors.Wrap(err, "acquire DNS name (read body)"),
+		Err:     errors.Wrap(err, "acquire DNS name (read body)"),
 	}
 }
 
@@ -304,10 +289,10 @@ func (i *Installer) DNSPropagationError(err error) Result {
 	i.ShowWrapped(tryAgain)
 
 	return Result{
-		Report: "dns_name_propagation_timeout",
+		Report:   "dns_name_propagation_timeout",
 		TryAgain: true,
-		URL: seeDocsURL,
-		Err: err,
+		URL:      seeDocsURL,
+		Err:      err,
 	}
 }
 
@@ -330,10 +315,10 @@ func (i *Installer) CertificateProvisionError(err error) Result {
 	i.ShowWrapped(tryAgain)
 
 	return Result{
-		Report: "cert_provision_failed",
+		Report:   "cert_provision_failed",
 		TryAgain: true,
-		URL: seeDocsURL,
-		Err: err,
+		URL:      seeDocsURL,
+		Err:      err,
 	}
 }
 
@@ -344,7 +329,7 @@ func (i *Installer) HostRetrievalError(err error) Result {
 
 	return Result{
 		TryAgain: true,
-		Err: err,
+		Err:      err,
 	}
 }
 
@@ -358,7 +343,7 @@ func (i *Installer) AESLoginError(err error) Result {
 }
 
 // AES login successful!
-func (i *Installer) AESLoginSuccessResult()  Result {
+func (i *Installer) AESLoginSuccessResult() Result {
 	return Result{
 		Err: nil,
 	}

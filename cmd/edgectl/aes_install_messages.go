@@ -6,7 +6,7 @@ import (
 )
 
 // First message when beginning the AES Installation process
-func (i *Installer) BeginAESInstallMessage()  {
+func (i *Installer) BeginAESInstallMessage() {
 	i.show.Println("========================================================================")
 	i.show.Println("Beginning Ambassador Edge Stack Installation")
 	i.show.Println()
@@ -76,9 +76,8 @@ func (i *Installer) ShowTLSConfiguredSuccessfully() {
 	i.show.Println("-> TLS configured successfully")
 }
 
-
 // AES installation complete!
-func (i *Installer) ShowAESInstallationComplete()  {
+func (i *Installer) ShowAESInstallationComplete() {
 	i.show.Println()
 	i.show.Println("AES Installation Complete!")
 	i.show.Println("========================================================================")
@@ -89,5 +88,3 @@ func (i *Installer) ShowAESInstallationComplete()  {
 	i.show.Println()
 
 }
-
-
