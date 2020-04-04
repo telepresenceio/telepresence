@@ -211,10 +211,11 @@ func (i *Installer) loopUntil(what string, how func() error, lc *loopConfig) err
 		// Wait and try again
 		select {
 		case <-progTimer.C:
-			i.show.Printf("   Still waiting for %s. (This may take a minute.)", what)
+			i.ShowWaiting(what)
 		case <-time.After(lc.sleepTime):
 			// Try again
 		case <-ctx.Done():
+			i.ShowTimedOut(what)
 			return errors.Errorf("timed out waiting for %s (or interrupted)", what)
 		}
 	}
@@ -554,7 +555,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	i.SetMetadatum("AES version being installed", "aes_version", i.version)
 
 	// Display version information
-	i.ShowWrapped(fmt.Sprintf("-> Installing the Ambassador Edge Stack %s.", i.version))
+	i.ShowAESVersionBeingInstalled()
 
 	// Try to determine cluster type from node labels
 	isKnownLocalCluster := false
@@ -607,14 +608,12 @@ func (i *Installer) Perform(kcontext string) Result {
 		switch {
 		case i.version == installedVersion:
 			alreadyApplied = true
-			i.ShowWrapped(fmt.Sprintf("-> Found an existing installation of Ambassador Edge Stack %s.", i.version))
+			i.ShowAESExistingVersion(i.version)
 		case installedVersion != "":
-			i.ShowWrapped(fmt.Sprintf("-> Found an existing installation of Ambassador Edge Stack %s.", installedVersion))
-			i.show.Println()
+			i.ShowAESExistingVersion(installedVersion)
 			return i.IncompatibleCRDVersionsError(err, installedVersion)
 		default:
-			i.show.Println("-> Found Ambassador CRDs in your cluster, but no AES installation.")
-			i.show.Println()
+			i.ShowAESCRDsButNoAESInstallation()
 			return i.ExistingCRDsError(err)
 		}
 	}
@@ -622,7 +621,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	if !alreadyApplied {
 		// Install the AES manifests
 
-		i.ShowWrapped("-> Downloading images. (This may take a minute.)")
+		i.ShowDownloadingImages()
 
 		if err := i.ShowKubectl("install CRDs", crdManifests, "apply", "-f", "-"); err != nil {
 			return i.InstallCRDsError(err)
@@ -642,7 +641,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	}
 
 	// Wait for Ambassador Pod; grab AES install ID
-	i.show.Println("-> Checking the AES pod deployment")
+	i.ShowCheckingAESPodDeployment()
 	if err := i.loopUntil("AES pod startup", i.GrabAESInstallID, lc2); err != nil {
 		return i.AESPodStartupError(err)
 	}
@@ -661,27 +660,26 @@ func (i *Installer) Perform(kcontext string) Result {
 	// timeouts.
 
 	if isKnownLocalCluster {
-		i.show.Println("-> Local cluster detected. Not configuring automatic TLS.")
-		i.show.Println()
-
+		i.ShowLocalClusterDetected()
 		return i.KnownLocalClusterResult()
 	}
 
 	// Grab load balancer address
-	i.show.Println("-> Provisioning a cloud load balancer")
+	i.ShowProvisioningLoadBalancer()
+
 	if err := i.loopUntil("Load Balancer", i.GrabLoadBalancerAddress, lc5); err != nil {
 		return i.LoadBalancerError(err)
 	}
 	i.Report("cluster_accessible")
-	i.show.Println("-> Your AES installation's address is", color.Bold.Sprintf(i.address))
+	i.ShowAESInstallAddress(i.address)
 
 	// Wait for Ambassador to be ready to serve ACME requests.
-	i.show.Println("-> Checking that AES is responding to ACME challenge")
+	i.ShowAESRespondingToACME()
 	if err := i.loopUntil("AES to serve ACME", i.CheckAESServesACME, lc2); err != nil {
 		return i.AESACMEChallengeError(err)
 	}
 	i.Report("aes_listening")
-	i.show.Println("-> Automatically configuring TLS")
+	i.ShowAESConfiguringTLS()
 
 	// Send a request to acquire a DNS name for this cluster's load balancer
 	regURL := "https://metriton.datawire.io/register-domain"
@@ -711,13 +709,12 @@ func (i *Installer) Perform(kcontext string) Result {
 
 	if resp.StatusCode != 200 {
 		message := strings.TrimSpace(string(content))
-		i.show.Println("-> Failed to create a DNS name:", message)
-
+		i.ShowFailedToCreateDNSName(message)
 		return i.AESInstalledNoDNSResult(resp.StatusCode, message)
 	}
 
 	i.hostname = string(content)
-	i.show.Println("-> Acquiring DNS name", color.Bold.Sprintf(i.hostname))
+	i.ShowAcquiringDNSName(i.hostname)
 
 	// Wait for DNS to propagate. This tries to avoid waiting for a ten
 	// minute error backoff if the ACME registration races ahead of the DNS
@@ -734,24 +731,19 @@ func (i *Installer) Perform(kcontext string) Result {
 		return i.HostResourceCreationError(err)
 	}
 
-	i.show.Println("-> Obtaining a TLS certificate from Let's Encrypt")
+	i.ShowObtainingTLSCertificate()
+
 	if err := i.loopUntil("TLS certificate acquisition", i.CheckACMEIsDone, lc5); err != nil {
 		return i.CertificateProvisionError(err)
 	}
 	i.Report("cert_provisioned")
-	i.show.Println("-> TLS configured successfully")
+	i.ShowTLSConfiguredSuccessfully()
 	if err := i.ShowKubectl("show Host", "", "get", "host", i.hostname); err != nil {
 		return i.HostRetrievalError(err)
 	}
 
-	i.show.Println()
-	i.show.Println("AES Installation Complete!")
-	i.show.Println("========================================================================")
-	i.show.Println()
-
-	// Show congratulations message
-	i.ShowWrapped(color.Bold.Sprintf("Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit https://#{i.hostname}"))
-	i.show.Println()
+	// All done!
+	i.ShowAESInstallationComplete()
 
 	// Open a browser window to the Edge Policy Console
 	if err := do_login(i.kubeinfo, kcontext, "ambassador", i.hostname, true, true, false); err != nil {

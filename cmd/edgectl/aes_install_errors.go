@@ -31,20 +31,16 @@ func (i *Installer) EmailRequestError(err error) Result {
 
 // Unable to get a kubectl path.
 func (i *Installer) NoKubectlError(err error) Result {
-	noKubectlURL := "https://kubernetes.io/docs/tasks/tools/install-kubectl/"
-	noKubectlMsg := fmt.Sprintf("The installer depends on the 'kubectl' executable. Make sure you have the latest release downloaded in your PATH, and that you have executable permissions.")
-
 	return Result{
 		Report: "fail_no_kubectl",
-		Message: noKubectlMsg,
-		URL: noKubectlURL,
+		Message: "The installer depends on the 'kubectl' executable. Make sure you have the latest release downloaded in your PATH, and that you have executable permissions.",
+		URL: "https://kubernetes.io/docs/tasks/tools/install-kubectl/",
 		Err: err,
 	}
 }
 
 // Unable to get cluster information
 func (i *Installer) NoClusterError(err error) Result {
-	noClusterURL := "https://kubernetes.io/docs/setup/"
 	noCluster := `
 Unable to communicate with the remote Kubernetes cluster using your kubectl context.
 
@@ -53,7 +49,7 @@ or get started and run Kubernetes.`
 
 	return Result{
 		Report: "fail_no_cluster",
-		URL: noClusterURL,
+		URL: "https://kubernetes.io/docs/setup/",
 		Message: noCluster,
 		Err: err,
 	}
@@ -92,7 +88,7 @@ func (i *Installer) AESCRDManifestsError(err error) Result {
 
 	return Result{
 		Message: "download AES CRD manifests",
-		Err: err,
+		Err: errors.Wrap(err, "download AES CRD manifests"),
 	}
 }
 
@@ -103,7 +99,7 @@ func (i *Installer) AESManifestsError(err error) Result {
 
 	return Result{
 		Message:  "download AES manifests",
-		Err: err,
+		Err: errors.Wrap(err, "download AES manifests"),
 	}
 }
 
