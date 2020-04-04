@@ -87,7 +87,7 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 			d.network = nil
 
 			out.Println("Network overrides paused.")
-			out.Println("Used \"edgectl resume\" to reestablish network overrides.")
+			out.Println("Use \"edgectl resume\" to reestablish network overrides.")
 			out.Send("paused", true)
 
 			return out.Err()
