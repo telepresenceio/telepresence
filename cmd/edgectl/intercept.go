@@ -285,7 +285,7 @@ type mappingSpec struct {
 	AmbassadorID []string          `json:"ambassador_id"`
 	Prefix       string            `json:"prefix"`
 	Service      string            `json:"service"`
-	Headers      map[string]string `json:"headers"`
+	RegexHeaders map[string]string `json:"regex_headers"`
 }
 
 type interceptMapping struct {
@@ -322,7 +322,7 @@ func MakeIntercept(p *supervisor.Process, out *Emitter, tm *TrafficManager, clus
 			AmbassadorID: []string{fmt.Sprintf("intercept-%s", ii.Deployment)},
 			Prefix:       ii.Prefix,
 			Service:      fmt.Sprintf("telepresence-proxy.%s:%d", tm.namespace, port),
-			Headers:      ii.Patterns,
+			RegexHeaders: ii.Patterns,
 		},
 	}
 
@@ -377,9 +377,11 @@ func (cept *Intercept) quit(p *supervisor.Process) error {
 
 	p.Logf("cept.Quit removing %v", cept.ii.Name)
 
-	cept.removeMapping(p)
-
-	p.Logf("cept.Quit removed %v", cept.ii.Name)
+	if err := cept.removeMapping(p); err != nil {
+		p.Logf("cept.Quit failed to remove %v: %+v", cept.ii.Name, err)
+	} else {
+		p.Logf("cept.Quit removed %v", cept.ii.Name)
+	}
 
 	if cept.crc != nil {
 		_ = cept.crc.Close()
