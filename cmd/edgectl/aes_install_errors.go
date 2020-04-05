@@ -32,7 +32,6 @@ func (i *Installer) NoKubectlError(err error) Result {
 	return Result{
 		Report:  "fail_no_kubectl",
 		Message: "The installer depends on the 'kubectl' executable. Make sure you have the latest release downloaded in your PATH, and that you have executable permissions.",
-		// URL:     "https://kubernetes.io/docs/tasks/tools/install-kubectl/",
 		URL: "https://www.getambassador.io/docs/latest/topics/install/help/no-kubectl",
 		Err: err,
 	}
@@ -128,7 +127,6 @@ The installer will now quit to avoid corrupting an existing installation of AES.
 	i.Report("fail_existing_aes", ScoutMeta{"installing", i.version}, ScoutMeta{"found", installedVersion})
 
 	return Result{
-		//URL:     seeDocsURL,
 		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/incompatible-crd-versions",
 		Message: fmt.Sprintf("existing AES %s found when installing AES %s", installedVersion, i.version),
 		Err:     err,
@@ -147,7 +145,6 @@ The installer will now quit to avoid corrupting an existing (but undetected) ins
 	return Result{
 		Report:  "fail_existing_crds",
 		Message: abortCRDs,
-		//URL:     seeDocsURL,
 		URL: "https://www.getambassador.io/docs/latest/topics/install/help/existing-crds",
 		Err: err,
 	}
@@ -233,7 +230,6 @@ Timed out waiting for the load balancer's IP address for the AES Service.
 
 	return Result{
 		Report: "fail_loadbalancer_timeout",
-		//URL:    seeDocsURL,
 		URL: "https://www.getambassador.io/docs/latest/topics/install/help/load-balancer",
 		Err: err,
 	}
@@ -308,7 +304,6 @@ func (i *Installer) DNSPropagationError(err error) Result {
 	return Result{
 		Report:   "dns_name_propagation_timeout",
 		TryAgain: true,
-		//URL:      seeDocsURL,
 		URL: "https://www.getambassador.io/docs/latest/topics/install/help/dns-propagation",
 		Err: err,
 	}
@@ -321,7 +316,6 @@ func (i *Installer) HostResourceCreationError(err error) Result {
 	i.ShowWrapped(seeDocs)
 
 	return Result{
-		// URL: seeDocsURL,
 		URL: "https://www.getambassador.io/docs/latest/topics/install/help/host-resource-creation",
 		Err: err,
 	}
@@ -336,7 +330,6 @@ func (i *Installer) CertificateProvisionError(err error) Result {
 	return Result{
 		Report:   "cert_provision_failed",
 		TryAgain: true,
-		// URL:      seeDocsURL,
 		URL: "https://www.getambassador.io/docs/latest/topics/install/help/certificate-provision",
 		Err: err,
 	}
