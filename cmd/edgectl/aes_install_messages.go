@@ -6,7 +6,7 @@ import (
 )
 
 // First message when beginning the AES Installation process
-func (i *Installer) BeginAESInstallMessage() {
+func (i *Installer) ShowBeginAESInstallation() {
 	i.show.Println("========================================================================")
 	i.show.Println("Beginning Ambassador Edge Stack Installation")
 	i.show.Println()

@@ -480,7 +480,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	i.log.Printf("Using email address %q", emailAddress)
 
 	// Beginning the AES Installation
-	i.BeginAESInstallMessage()
+	i.ShowBeginAESInstallation()
 
 	// Attempt to use kubectl
 	_, err = i.GetKubectlPath()
