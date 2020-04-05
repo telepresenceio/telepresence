@@ -19,9 +19,8 @@ const noTlsSuccess = "Congratulations! You've successfully installed the Ambassa
 
 // User interrupted the email request.
 func (i *Installer) EmailRequestError(err error) Result {
-	fmt.Println()
-
 	return Result{
+		URL: "https://www.getambassador.io/docs/latest/topics/install/help/email-request",
 		Err: err,
 	}
 }
@@ -34,8 +33,8 @@ func (i *Installer) NoKubectlError(err error) Result {
 		Report:  "fail_no_kubectl",
 		Message: "The installer depends on the 'kubectl' executable. Make sure you have the latest release downloaded in your PATH, and that you have executable permissions.",
 		// URL:     "https://kubernetes.io/docs/tasks/tools/install-kubectl/",
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/no-kubectl",
-		Err:     err,
+		URL: "https://www.getambassador.io/docs/latest/topics/install/help/no-kubectl",
+		Err: err,
 	}
 }
 
@@ -53,13 +52,13 @@ or get started and run Kubernetes.`
 		Message: noCluster,
 		Err:     err,
 	}
-}
+}.
 
 // Unable to get client configuration or namespace
 func (i *Installer) GetRestConfigError(err error) Result {
 	return Result{
 		Report: "fail_no_cluster",
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/get-rest-config",
+		URL:    "https://www.getambassador.io/docs/latest/topics/install/help/get-rest-config",
 		Err:    err,
 	}
 }
@@ -68,16 +67,16 @@ func (i *Installer) GetRestConfigError(err error) Result {
 func (i *Installer) NewForConfigError(err error) Result {
 	return Result{
 		Report: "fail_no_cluster",
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/new-for-config",
+		URL:    "https://www.getambassador.io/docs/latest/topics/install/help/new-for-config",
 		Err:    err,
 	}
 }
 
 // Unable to get versions via kubectl
-func (i *Installer) CaptureKubectlError(err error) Result {
+func (i *Installer) GetVersionsError(err error) Result {
 	return Result{
 		Report: "fail_no_cluster",
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/capture-kubectl",
+		URL:    "https://www.getambassador.io/docs/latest/topics/install/help/get-versions",
 		Err:    err,
 	}
 }
@@ -149,8 +148,8 @@ The installer will now quit to avoid corrupting an existing (but undetected) ins
 		Report:  "fail_existing_crds",
 		Message: abortCRDs,
 		//URL:     seeDocsURL,
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/existing-crds",
-		Err:     err,
+		URL: "https://www.getambassador.io/docs/latest/topics/install/help/existing-crds",
+		Err: err,
 	}
 }
 
@@ -158,7 +157,7 @@ The installer will now quit to avoid corrupting an existing (but undetected) ins
 func (i *Installer) InstallCRDsError(err error) Result {
 	return Result{
 		Report: "fail_install_crds",
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/install-crds",
+		URL:    "https://www.getambassador.io/docs/latest/topics/install/help/install-crds",
 		Err:    err,
 	}
 }
@@ -167,7 +166,7 @@ func (i *Installer) InstallCRDsError(err error) Result {
 func (i *Installer) WaitCRDsError(err error) Result {
 	return Result{
 		Report: "fail_wait_crds",
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/wait-crds",
+		URL:    "https://www.getambassador.io/docs/latest/topics/install/help/wait-crds",
 		Err:    err,
 	}
 }
@@ -176,7 +175,7 @@ func (i *Installer) WaitCRDsError(err error) Result {
 func (i *Installer) InstallAESError(err error) Result {
 	return Result{
 		Report: "fail_install_aes",
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/install-aes",
+		URL:    "https://www.getambassador.io/docs/latest/topics/install/help/install-aes",
 		Err:    err,
 	}
 }
@@ -185,7 +184,7 @@ func (i *Installer) InstallAESError(err error) Result {
 func (i *Installer) WaitForAESError(err error) Result {
 	return Result{
 		Report: "fail_wait_aes",
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/wait-for-aes",
+		URL:    "https://www.getambassador.io/docs/latest/topics/install/help/wait-for-aes",
 		Err:    err,
 	}
 }
@@ -194,7 +193,7 @@ func (i *Installer) WaitForAESError(err error) Result {
 func (i *Installer) AESPodStartupError(err error) Result {
 	return Result{
 		Report: "fail_pod_timeout",
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/aes-pod-startup",
+		URL:    "https://www.getambassador.io/docs/latest/topics/install/help/aes-pod-startup",
 		Err:    err,
 	}
 }
@@ -235,8 +234,8 @@ Timed out waiting for the load balancer's IP address for the AES Service.
 	return Result{
 		Report: "fail_loadbalancer_timeout",
 		//URL:    seeDocsURL,
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/load-balancer",
-		Err:    err,
+		URL: "https://www.getambassador.io/docs/latest/topics/install/help/load-balancer",
+		Err: err,
 	}
 }
 
@@ -252,8 +251,8 @@ func (i *Installer) AESACMEChallengeError(err error) Result {
 		Report:   "aes_listening_timeout",
 		TryAgain: true,
 		// URL:      seeDocsURL,
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/aes-acme-challenge",
-		Err:      err,
+		URL: "https://www.getambassador.io/docs/latest/topics/install/help/aes-acme-challenge",
+		Err: err,
 	}
 }
 
@@ -263,7 +262,7 @@ func (i *Installer) DNSNamePostError(err error) Result {
 	i.Report("dns_name_failure", ScoutMeta{"err", err.Error()})
 
 	return Result{
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/dns-name-post",
+		URL: "https://www.getambassador.io/docs/latest/topics/install/help/dns-name-post",
 		Err: errors.Wrap(err, "acquire DNS name (post)"),
 	}
 }
@@ -310,8 +309,8 @@ func (i *Installer) DNSPropagationError(err error) Result {
 		Report:   "dns_name_propagation_timeout",
 		TryAgain: true,
 		//URL:      seeDocsURL,
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/dns-propagation",
-		Err:      err,
+		URL: "https://www.getambassador.io/docs/latest/topics/install/help/dns-propagation",
+		Err: err,
 	}
 }
 
@@ -323,7 +322,7 @@ func (i *Installer) HostResourceCreationError(err error) Result {
 
 	return Result{
 		// URL: seeDocsURL,
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/host-resource-creation",
+		URL: "https://www.getambassador.io/docs/latest/topics/install/help/host-resource-creation",
 		Err: err,
 	}
 }
@@ -338,8 +337,8 @@ func (i *Installer) CertificateProvisionError(err error) Result {
 		Report:   "cert_provision_failed",
 		TryAgain: true,
 		// URL:      seeDocsURL,
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/certificate-provision",
-		Err:      err,
+		URL: "https://www.getambassador.io/docs/latest/topics/install/help/certificate-provision",
+		Err: err,
 	}
 }
 
@@ -350,7 +349,7 @@ func (i *Installer) HostRetrievalError(err error) Result {
 
 	return Result{
 		TryAgain: true,
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/host-retrieval",
+		URL:      "https://www.getambassador.io/docs/latest/topics/install/help/host-retrieval",
 		Err:      err,
 	}
 }
@@ -360,7 +359,7 @@ func (i *Installer) HostRetrievalError(err error) Result {
 // Attempted to log in to the cluster but failed.
 func (i *Installer) AESLoginError(err error) Result {
 	return Result{
-		URL:     "https://www.getambassador.io/docs/latest/topics/install/help/aes-login",
+		URL: "https://www.getambassador.io/docs/latest/topics/install/help/aes-login",
 		Err: err,
 	}
 }

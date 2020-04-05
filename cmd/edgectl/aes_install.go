@@ -506,7 +506,7 @@ func (i *Installer) Perform(kcontext string) Result {
 
 	versions, err := i.CaptureKubectl("get versions", "", "version", "-o", "json")
 	if err != nil {
-		return i.CaptureKubectlError(err)
+		return i.GetVersionsError(err)
 	}
 
 	kubernetesVersion := &kubernetesVersion{}
