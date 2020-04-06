@@ -32,8 +32,8 @@ func (i *Installer) NoKubectlError(err error) Result {
 	return Result{
 		Report:  "fail_no_kubectl",
 		Message: "The installer depends on the 'kubectl' executable. Make sure you have the latest release downloaded in your PATH, and that you have executable permissions.",
-		URL: "https://www.getambassador.io/docs/topics/install/help/no-kubectl",
-		Err: err,
+		URL:     "https://www.getambassador.io/docs/topics/install/help/no-kubectl",
+		Err:     err,
 	}
 }
 
@@ -145,8 +145,8 @@ The installer will now quit to avoid corrupting an existing (but undetected) ins
 	return Result{
 		Report:  "fail_existing_crds",
 		Message: abortCRDs,
-		URL: "https://www.getambassador.io/docs/topics/install/help/existing-crds",
-		Err: err,
+		URL:     "https://www.getambassador.io/docs/topics/install/help/existing-crds",
+		Err:     err,
 	}
 }
 
@@ -230,8 +230,8 @@ Timed out waiting for the load balancer's IP address for the AES Service.
 
 	return Result{
 		Report: "fail_loadbalancer_timeout",
-		URL: "https://www.getambassador.io/docs/topics/install/help/load-balancer",
-		Err: err,
+		URL:    "https://www.getambassador.io/docs/topics/install/help/load-balancer",
+		Err:    err,
 	}
 }
 
@@ -304,8 +304,8 @@ func (i *Installer) DNSPropagationError(err error) Result {
 	return Result{
 		Report:   "dns_name_propagation_timeout",
 		TryAgain: true,
-		URL: "https://www.getambassador.io/docs/topics/install/help/dns-propagation",
-		Err: err,
+		URL:      "https://www.getambassador.io/docs/topics/install/help/dns-propagation",
+		Err:      err,
 	}
 }
 
@@ -330,8 +330,8 @@ func (i *Installer) CertificateProvisionError(err error) Result {
 	return Result{
 		Report:   "cert_provision_failed",
 		TryAgain: true,
-		URL: "https://www.getambassador.io/docs/topics/install/help/certificate-provision",
-		Err: err,
+		URL:      "https://www.getambassador.io/docs/topics/install/help/certificate-provision",
+		Err:      err,
 	}
 }
 
