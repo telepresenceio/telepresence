@@ -42,14 +42,25 @@ func (i *Installer) ShowTemplated(text string, more ...AdditionalDatum) {
 	t := template.New("installer")
 	template.Must(t.Parse(text))
 
+	// Note: May fail before we have k8sVersion, so handle this special case.
+	var k8sClientVersion = "unknown"
+	var k8sServerVersion = "unknown"
+
+	// Assign if we have k8sVersion available.
+	if i.k8sVersion != nil {
+		k8sClientVersion = i.k8sVersion.Client.GitVersion
+		k8sServerVersion = i.k8sVersion.Server.GitVersion
+	}
+
 	data := map[string]interface{}{
 		"version":   i.version,
 		"address":   i.address,
 		"hostname":  i.hostname,
 		"clusterID": i.clusterID,
-		"kubectl":   i.k8sVersion.Client.GitVersion,
-		"k8s":       i.k8sVersion.Server.GitVersion,
+		"kubectl":   k8sClientVersion,
+		"k8s":       k8sServerVersion,
 	}
+
 	for _, ad := range more {
 		data[ad.key] = ad.value
 	}

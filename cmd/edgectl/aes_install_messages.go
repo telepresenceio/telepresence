@@ -17,7 +17,7 @@ func (i *Installer) ShowAESVersionBeingInstalled() {
 }
 
 func (i *Installer) ShowAESExistingVersion(versionName string) {
-	i.show.Println(fmt.Sprintf("-> Installing the Ambassador Edge Stack %s.", versionName))
+	i.show.Println(fmt.Sprintf("   Ambassador Edge Stack %s already installed", versionName))
 }
 
 func (i *Installer) ShowAESCRDsButNoAESInstallation() {

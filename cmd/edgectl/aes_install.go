@@ -484,7 +484,6 @@ func (i *Installer) Perform(kcontext string) Result {
 
 	// Attempt to use kubectl
 	_, err = i.GetKubectlPath()
-	// err = errors.New("early error for testing")  // TODO: remove for production
 	if err != nil {
 		return i.NoKubectlError(err)
 	}
@@ -595,6 +594,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	// Installed CRDs may be out of date or incomplete (e.g., if there's an
 	// OSS installation present).
 	alreadyApplied := false
+
 	if len(aesCrds) > 0 {
 		// AES CRDs exist so there is likely an existing installation. Try to
 		// verify the existence of an Ambassador deployment in the Ambassador
@@ -605,6 +605,7 @@ func (i *Installer) Perform(kcontext string) Result {
 			installedVersion = ""
 			// Things will likely fail when we try to apply manifests
 		}
+
 		switch {
 		case i.version == installedVersion:
 			alreadyApplied = true

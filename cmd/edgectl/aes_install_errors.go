@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/gookit/color"
 	"github.com/pkg/errors"
 )
 
@@ -15,7 +14,7 @@ import (
 const seeDocsURL = "https://www.getambassador.io/docs/latest/tutorials/getting-started/"
 const seeDocs = "See " + seeDocsURL
 const tryAgain = "If this appears to be a transient failure, please try running the installer again. It is safe to run the installer repeatedly on a cluster."
-const noTlsSuccess = "Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically."
+const noTlsSuccess = "<bold>You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically.</>"
 
 // User interrupted the email request.
 func (i *Installer) EmailRequestError(err error) Result {
@@ -118,27 +117,25 @@ func (i *Installer) ManifestParsingError(err error, matches []string) Result {
 func (i *Installer) IncompatibleCRDVersionsError(err error, installedVersion string) Result {
 	abortExisting := `
 This tool does not support upgrades/downgrades at this time.
-
 The installer will now quit to avoid corrupting an existing installation of AES.
 `
-	i.ShowWrapped(abortExisting)
-	i.show.Println()
-	i.ShowWrapped(seeDocs)
+	message := fmt.Sprintf("existing AES %s found when installing AES %s\n%s",
+		installedVersion, i.version, abortExisting)
+
 	i.Report("fail_existing_aes", ScoutMeta{"installing", i.version}, ScoutMeta{"found", installedVersion})
 
 	return Result{
 		URL:     "https://www.getambassador.io/docs/topics/install/help/incompatible-crd-versions",
-		Message: fmt.Sprintf("existing AES %s found when installing AES %s", installedVersion, i.version),
+		Message: message,
 		Err:     err,
 	}
 }
 
 // Existing AES CRD's, unable to upgrade.
 func (i *Installer) ExistingCRDsError(err error) Result {
-	abortCRDs := `You can manually remove installed CRDs if you are confident they are not in use by any installation.
-Removing the CRDs will cause your existing Ambassador Mappings and other resources to be deleted as well.
+	abortCRDs := `You can manually remove installed CRDs if you are confident they are not in use by any installation. Removing the CRDs will cause your existing Ambassador Mappings and other resources to be deleted as well.
 
-$ kubectl delete crd -l product=aes
+<bold>$ kubectl delete crd -l product=aes</>
 
 The installer will now quit to avoid corrupting an existing (but undetected) installation.
 `
@@ -197,18 +194,17 @@ func (i *Installer) AESPodStartupError(err error) Result {
 
 // docker-desktop, minikube, or kind: local cluster so no automatic TLS.
 func (i *Installer) KnownLocalClusterResult() Result {
-	i.ShowWrapped(color.Bold.Sprintf(noTlsSuccess))
-	i.show.Println()
-	loginMsg := "Determine the IP address and port number of your Ambassador service, e.g.\n"
-	loginMsg += color.Bold.Sprintf("$ minikube service -n ambassador ambassador\n\n")
-	loginMsg += fmt.Sprintf("The following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.\n")
-	loginMsg += color.Bold.Sprintf("$ edgectl login -n ambassador IP_ADDRESS:PORT")
-	i.ShowWrapped(loginMsg)
-	i.show.Println()
-	i.ShowWrapped(seeDocs)
+	message := noTlsSuccess
+	message += "\n\n"
+	message += "Determine the IP address and port number of your Ambassador service, e.g.\n"
+	message += "<bold>$ minikube service -n ambassador ambassador</>\n\n"
+	message += "The following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.\n"
+	message += "<bold>$ edgectl login -n ambassador IP_ADDRESS:PORT</>"
+	message += "\n\n"
 
 	return Result{
 		Report: "cluster_not_accessible",
+		Message: message,
 		URL:    seeDocsURL,
 		Err:    nil,
 	}
@@ -216,20 +212,17 @@ func (i *Installer) KnownLocalClusterResult() Result {
 
 // Unable to provision a load balancer (failed to retrieve the IP address)
 func (i *Installer) LoadBalancerError(err error) Result {
-	i.show.Println()
-
-	failLoadBalancer := `
-Timed out waiting for the load balancer's IP address for the AES Service.
+	message := noTlsSuccess
+	message += "\n\n"
+	message += `We timed out waiting for the load balancer's IP address for the AES Service.
 - If a load balancer IP address shows up, simply run the installer again.
-- If your cluster doesn't support load balancers, you'll need to expose AES some other way.
-`
-	i.ShowWrapped(failLoadBalancer)
-	i.show.Println()
-	i.ShowWrapped(color.Bold.Sprintf(noTlsSuccess))
-	i.ShowWrapped(seeDocs)
+- If your cluster doesn't support load balancers, you'll need to expose AES some other way.`
+	message += "\n\n"
 
 	return Result{
+
 		Report: "fail_loadbalancer_timeout",
+		Message: message,
 		URL:    "https://www.getambassador.io/docs/topics/install/help/load-balancer",
 		Err:    err,
 	}
@@ -238,15 +231,15 @@ Timed out waiting for the load balancer's IP address for the AES Service.
 // AES failed to respond to the ACME challenge.  This may be because AES did not start quickly enough or
 // if the AES load balancer is not reachable.
 func (i *Installer) AESACMEChallengeError(err error) Result {
-	i.ShowWrapped("It seems AES did not start in the expected time, or the AES load balancer is not reachable from here.")
-	i.ShowWrapped(tryAgain)
-	i.ShowWrapped(color.Bold.Sprintf(noTlsSuccess))
-	i.ShowWrapped(seeDocs)
+	message := "<bold>It seems AES did not start in the expected time, or the AES load balancer is not reachable from here.</>"
+	message += "\n\n"
+	message += tryAgain
+	message += "\n\n"
 
 	return Result{
 		Report:   "aes_listening_timeout",
+		Message: message,
 		TryAgain: true,
-		// URL:      seeDocsURL,
 		URL: "https://www.getambassador.io/docs/topics/install/help/aes-acme-challenge",
 		Err: err,
 	}
@@ -278,7 +271,7 @@ func (i *Installer) DNSNameBodyError(err error) Result {
 func (i *Installer) AESInstalledNoDNSResult(statusCode int, message string) Result {
 	i.Report("dns_name_failure", ScoutMeta{"code", statusCode}, ScoutMeta{"err", message})
 
-	userMessage := `
+	success := `
 <bold>Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically.</>
 
 If this IP address is reachable from here, you can access your installation without a DNS name. The following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.
@@ -289,7 +282,7 @@ You can use port forwarding to access your Edge Stack installation and the Edge 
 <bold>$ edgectl login -n ambassador 127.0.0.1:8443</>
 `
 	return Result{
-		Message: userMessage,
+		Message: success,
 		URL:     seeDocsURL,
 		Report:  "", // FIXME: reported above due to additional metadata required
 	}
@@ -297,12 +290,9 @@ You can use port forwarding to access your Edge Stack installation and the Edge 
 
 // The DNS name propagation timed out, so unable to resolve the name.
 func (i *Installer) DNSPropagationError(err error) Result {
-	i.ShowWrapped("We are unable to resolve your new DNS name on this machine.")
-	i.ShowWrapped(seeDocs)
-	i.ShowWrapped(tryAgain)
-
 	return Result{
 		Report:   "dns_name_propagation_timeout",
+		Message:  "We are unable to resolve your new DNS name on this machine." + seeDocs + tryAgain,
 		TryAgain: true,
 		URL:      "https://www.getambassador.io/docs/topics/install/help/dns-propagation",
 		Err:      err,
@@ -312,23 +302,20 @@ func (i *Installer) DNSPropagationError(err error) Result {
 // In attempting to kubectl apply the hostResource yaml, kubectl failed.
 func (i *Installer) HostResourceCreationError(err error) Result {
 	i.Report("fail_host_resource", ScoutMeta{"err", err.Error()})
-	i.ShowWrapped("We failed to create a Host resource in your cluster. This is unexpected.")
-	i.ShowWrapped(seeDocs)
 
 	return Result{
-		URL: "https://www.getambassador.io/docs/topics/install/help/host-resource-creation",
-		Err: err,
+		Message: "We failed to create a Host resource in your cluster. This is unexpected." + seeDocs,
+		URL:     "https://www.getambassador.io/docs/topics/install/help/host-resource-creation",
+		Err:     err,
 	}
 }
 
 // Unable to acquire a TLS certificate from Let's Encrypt
 func (i *Installer) CertificateProvisionError(err error) Result {
-	// Some info is reported by the check function.
-	i.ShowWrapped(seeDocs)
-	i.ShowWrapped(tryAgain)
 
 	return Result{
 		Report:   "cert_provision_failed",
+		Message:  seeDocs + tryAgain,
 		TryAgain: true,
 		URL:      "https://www.getambassador.io/docs/topics/install/help/certificate-provision",
 		Err:      err,
@@ -337,10 +324,8 @@ func (i *Installer) CertificateProvisionError(err error) Result {
 
 // Unable to acquire a TLS certificate from Let's Encrypt
 func (i *Installer) HostRetrievalError(err error) Result {
-	i.ShowWrapped("We failed to retrieve the Host resource from your cluster that we just created. This is unexpected.")
-	i.ShowWrapped(tryAgain)
-
 	return Result{
+		Message:  "We failed to retrieve the Host resource from your cluster that we just created. This is unexpected." + tryAgain,
 		TryAgain: true,
 		URL:      "https://www.getambassador.io/docs/topics/install/help/host-retrieval",
 		Err:      err,
