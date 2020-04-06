@@ -87,15 +87,18 @@ def get_deployment_json(
                 )
             )
         else:
-            # When using a selector we get a list of objects, not just one:
-            return json.loads(
-                runner.get_output(
-                    runner.kubectl(
-                        get_deployment + ["--selector=telepresence=" + run_id]
-                    ),
-                    stderr=STDOUT
-                )
-            )["items"][0]
+            try:
+                # When using a selector we get a list of objects, not just one:
+                return json.loads(
+                    runner.get_output(
+                        runner.kubectl(
+                            get_deployment + ["--selector=telepresence=" + run_id]
+                        ),
+                        stderr=STDOUT
+                    )
+                )["items"][0]
+            except IndexError:
+                raise SystemExit('No deployements found!')
     except CalledProcessError as e:
         raise runner.fail(
             "Failed to find Deployment '{}':\n{}".format(
