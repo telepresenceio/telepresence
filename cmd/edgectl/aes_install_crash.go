@@ -64,6 +64,11 @@ func (i *Installer) gatherCrashReportData() []byte {
 	}
 	buffer.Write(fileContent)
 
+	if i.k8sVersion.Server.GitVersion == "" {
+		buffer.WriteString("\n\nNo kubectl or no cluster (see report)\n")
+		return buffer.Bytes()
+	}
+
 	buffer.WriteString("\n========== kubectl describe ==========\n")
 	describe, err := i.SilentCaptureKubectl("describe ambassador namespace", "", "-n", "ambassador", "describe", "all")
 	if err != nil {

@@ -47,7 +47,7 @@ func (i *Installer) ShowTemplated(text string, more ...AdditionalDatum) {
 	var k8sServerVersion = "unknown"
 
 	// Assign if we have k8sVersion available.
-	if i.k8sVersion != nil {
+	if i.k8sVersion.Server.GitVersion != "" {
 		k8sClientVersion = i.k8sVersion.Client.GitVersion
 		k8sServerVersion = i.k8sVersion.Server.GitVersion
 	}
@@ -145,4 +145,3 @@ func (i *Installer) ShowResult(r Result) {
 		}
 	}
 }
-

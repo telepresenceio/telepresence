@@ -517,7 +517,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		i.log.Printf("failed to read Kubernetes client and server versions: %v", err.Error())
 	}
 
-	i.k8sVersion = kubernetesVersion
+	i.k8sVersion = *kubernetesVersion
 	// Metriton tries to parse fields with `version` in their keys and discards them if it can't.
 	// Using _v to keep the version value as string since Kubernetes versions vary in formats.
 	i.SetMetadatum("kubectl Version", "kubectl_v", i.k8sVersion.Client.GitVersion)
@@ -773,7 +773,6 @@ type Installer struct {
 	kubeinfo   *k8s.KubeInfo
 	restConfig *rest.Config
 	coreClient *k8sClientCoreV1.CoreV1Client
-	k8sVersion *kubernetesVersion
 
 	// Reporting
 
@@ -791,10 +790,11 @@ type Installer struct {
 
 	// Install results
 
-	version   string // which AES is being installed
-	address   string // load balancer address
-	hostname  string // of the Host resource
-	clusterID string // the Ambassador unique clusterID
+	k8sVersion kubernetesVersion // cluster version information
+	version    string            // which AES is being installed
+	address    string            // load balancer address
+	hostname   string            // of the Host resource
+	clusterID  string            // the Ambassador unique clusterID
 }
 
 // NewInstaller returns an Installer object after setting up logging.
