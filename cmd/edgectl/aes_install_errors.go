@@ -132,7 +132,7 @@ The installer will now quit to avoid corrupting an existing installation of AES.
 
 	return Result{
 		URL:          url,
-		ShortMessage: fmt.Sprintf("Found incompatible AES CRD versions: Existing AES %s found when installing AES %s\n", installedVersion, i.version),
+		ShortMessage: fmt.Sprintf("Found incompatible AES CRD versions: Existing AES %s found when installing AES %s", installedVersion, i.version),
 		Message:      message,
 		Err:          errors.Errorf("Ambassador Edge Stack %s already installed", installedVersion),
 	}
