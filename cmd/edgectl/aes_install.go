@@ -754,7 +754,8 @@ func (i *Installer) Perform(kcontext string) Result {
 	// Show how to use edgectl login in the future
 	i.show.Println()
 
-	futureLogin := `In the future, to log in to the Ambassador Edge Policy Console, run %s`
+	futureLogin := `In the future, to log in to the Ambassador Edge Policy Console, run 
+%s`
 	i.ShowWrapped(fmt.Sprintf(futureLogin, color.Bold.Sprintf("edgectl login "+i.hostname)))
 
 	if err := i.CheckAESHealth(); err != nil {
