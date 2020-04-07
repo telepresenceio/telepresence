@@ -96,7 +96,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	// Both printed and logged when verbose (Installer.log is responsible for --verbose)
-	i.log.Printf(fmt.Sprintf("INFO: install_id = #{i.scout.installID}; trace_id = #{i.scout.metadata['trace_id']}"))
+	i.log.Printf(fmt.Sprintf("INFO: install_id = %v; trace_id = %v", i.scout.installID, i.scout.metadata["trace_id"]))
 
 	sup := supervisor.WithContext(i.ctx)
 	sup.Logger = i.log
