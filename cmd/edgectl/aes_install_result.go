@@ -94,7 +94,7 @@ func (i *Installer) ShowResult(r Result) {
 
 		if r.Message != "" {
 			i.show.Println()
-			i.show.Println("AES Installation Unsuccessful")
+			i.show.Println("AES Installation UNSUCCESSFUL")
 			i.show.Println("========================================================================")
 			i.show.Println()
 			i.ShowTemplated(r.Message, templateData...)
