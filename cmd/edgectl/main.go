@@ -114,7 +114,7 @@ func getRootCommand() *cobra.Command {
 	}
 
 	myHelp := myName + `
-  https://www.getambassador.io/user-guide/install/
+  https://www.getambassador.io/docs/latest/topics/install/
 `
 
 	rootCmd := &cobra.Command{
