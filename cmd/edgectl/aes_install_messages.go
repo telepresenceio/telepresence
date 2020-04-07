@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/gookit/color"
 )
 
@@ -84,7 +85,7 @@ func (i *Installer) ShowAESInstallationComplete() {
 	i.show.Println()
 
 	// Show congratulations message
-	i.ShowWrapped(color.Bold.Sprintf("Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit https://#{i.hostname}"))
+	i.ShowTemplated(color.Bold.Sprintf("Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit https://{{.hostname}}/"))
 	i.show.Println()
 
 }
