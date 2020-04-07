@@ -10,11 +10,12 @@ import (
 
 // Result represents the result of an installation attempt
 type Result struct {
-	Report   string // Action to report to Metriton
-	Message  string // Message to show to the user
-	TryAgain bool   // Whether to show the "try again" message (TODO: Is this necessary?)
-	URL      string // Docs URL to show and open
-	Err      error  // Error condition (nil -> successful installation)
+	Report       string // Action to report to Metriton
+	ShortMessage string // Short human-readable error message
+	Message      string // Message to show to the user
+	TryAgain     bool   // Whether to show the "try again" message (TODO: Is this necessary?)
+	URL          string // Docs URL to show and open
+	Err          error  // Error condition (nil -> successful installation)
 }
 
 // UnhandledErrResult returns a minimal Result that passes along an error but
@@ -90,6 +91,10 @@ func (i *Installer) ShowResult(r Result) {
 
 		if r.Report != "" {
 			i.Report(r.Report, ScoutMeta{"err", r.Err.Error()})
+		}
+
+		if r.ShortMessage != "" {
+			i.show.Println(r.ShortMessage)
 		}
 
 		if r.Message != "" {

@@ -31,10 +31,11 @@ func (i *Installer) EmailRequestError(err error) Result {
 func (i *Installer) NoKubectlError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/no-kubectl"
 	return Result{
-		Report:  "fail_no_kubectl",
-		Message: fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about how to install and configure kubectl to continue installing Ambassador Edge Stack.", url),
-		URL:     url,
-		Err:     err,
+		Report:       "fail_no_kubectl",
+		ShortMessage: "kubectl not found in $PATH",
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about how to install and configure kubectl to continue installing Ambassador Edge Stack.", url),
+		URL:          url,
+		Err:          err,
 	}
 }
 
@@ -42,10 +43,11 @@ func (i *Installer) NoKubectlError(err error) Result {
 func (i *Installer) NoClusterError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/no-cluster"
 	return Result{
-		Report:  "fail_no_cluster",
-		URL:     url,
-		Message: fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about how to setup up your Kubernetes environment to continue installing Ambassador Edge Stack.", url),
-		Err:     err,
+		Report:       "fail_no_cluster",
+		URL:          url,
+		ShortMessage: "Could not find a Kubernetes cluster",
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about how to setup up your Kubernetes environment to continue installing Ambassador Edge Stack.", url),
+		Err:          err,
 	}
 }
 
@@ -82,9 +84,10 @@ func (i *Installer) AESCRDManifestsError(err error) Result {
 
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/aes-crd-manifests"
 	return Result{
-		Message: fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about downloading AES CRD manifests to continue installing Ambassador Edge Stack.", url),
-		URL:     url,
-		Err:     errors.Wrap(err, "download AES CRD manifests"),
+		ShortMessage: "Failed to download AES CRD manifests",
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about downloading AES CRD manifests to continue installing Ambassador Edge Stack.", url),
+		URL:          url,
+		Err:          errors.Wrap(err, "download AES CRD manifests"),
 	}
 }
 
@@ -94,9 +97,10 @@ func (i *Installer) AESManifestsError(err error) Result {
 
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/aes-manifests"
 	return Result{
-		Message: fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about downloading AES manifests to continue installing Ambassador Edge Stack.", url),
-		URL:     url,
-		Err:     errors.Wrap(err, "download AES manifests"),
+		ShortMessage: "Failed to download AES manifests",
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about downloading AES manifests to continue installing Ambassador Edge Stack.", url),
+		URL:          url,
+		Err:          errors.Wrap(err, "download AES manifests"),
 	}
 }
 
@@ -106,10 +110,11 @@ func (i *Installer) ManifestParsingError(err error, matches []string) Result {
 
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/manifest-parsing"
 	return Result{
-		Report:  "fail_bad_manifests",
-		Message: fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about downloading AES manifests to continue installing Ambassador Edge Stack.", url),
-		URL:     url,
-		Err:     err,
+		Report:       "fail_bad_manifests",
+		ShortMessage: "Failed to parse AES manifests",
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about downloading AES manifests to continue installing Ambassador Edge Stack.", url),
+		URL:          url,
+		Err:          err,
 	}
 }
 
@@ -120,15 +125,16 @@ This tool does not support upgrades/downgrades at this time.
 The installer will now quit to avoid corrupting an existing installation of AES.
 `
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/incompatible-crd-versions"
-	message := fmt.Sprintf("Existing AES %s found when installing AES %s\nVisit %v for a more detailed explanation and step-by-step instructions about updating CRD verions to continue installing Ambassador Edge Stack\n%s",
-		installedVersion, i.version, url, abortExisting)
+	message := fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about updating CRD verions to continue installing Ambassador Edge Stack\n%s",
+		url, abortExisting)
 
 	i.Report("fail_existing_aes", ScoutMeta{"installing", i.version}, ScoutMeta{"found", installedVersion})
 
 	return Result{
-		URL:     url,
-		Message: message,
-		Err:     errors.Errorf("Ambassador Edge Stack %s already installed", installedVersion),
+		URL:          url,
+		ShortMessage: fmt.Sprintf("Found incompatible AES CRD versions: Existing AES %s found when installing AES %s\n", installedVersion, i.version),
+		Message:      message,
+		Err:          errors.Errorf("Ambassador Edge Stack %s already installed", installedVersion),
 	}
 }
 
@@ -136,10 +142,11 @@ The installer will now quit to avoid corrupting an existing installation of AES.
 func (i *Installer) ExistingCRDsError() Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/existing-crds"
 	return Result{
-		Report:  "fail_existing_crds",
-		Message: fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about removing existing CRDs to continue installing Ambassador Edge Stack.", url),
-		URL:     url,
-		Err:     errors.New("found Ambassador CRDs in your cluster, but no AES installation"),
+		Report:       "fail_existing_crds",
+		ShortMessage: "Found existing AES CRD but no Ambassador Edge Stack installation",
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about removing existing CRDs to continue installing Ambassador Edge Stack.", url),
+		URL:          url,
+		Err:          errors.New("found Ambassador CRDs in your cluster, but no AES installation"),
 	}
 }
 
@@ -261,9 +268,10 @@ func (i *Installer) DNSNameBodyError(err error) Result {
 
 	url := "https://www.getambassador.io/docs/topics/install/help/dns-name-body"
 	return Result{
-		Message: fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about aquirering a DNS name to continue installing Ambassador Edge Stack.", url),
-		URL:     url,
-		Err:     errors.Wrap(err, "acquire DNS name (read body)"),
+		ShortMessage: "Failed to register DNS name for the current installation",
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about aquirering a DNS name to continue installing Ambassador Edge Stack.", url),
+		URL:          url,
+		Err:          errors.Wrap(err, "acquire DNS name (read body)"),
 	}
 }
 
@@ -292,11 +300,12 @@ You can use port forwarding to access your Edge Stack installation and the Edge 
 func (i *Installer) DNSPropagationError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/dns-propagation"
 	return Result{
-		Report:   "dns_name_propagation_timeout",
-		Message:  fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about aquirering and resolving a DNS name to continue installing Ambassador Edge Stack.", url),
-		TryAgain: true,
-		URL:      url,
-		Err:      err,
+		Report:       "dns_name_propagation_timeout",
+		ShortMessage: "Unable to resolve your new DNS name on this machine",
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about aquirering and resolving a DNS name to continue installing Ambassador Edge Stack.", url),
+		TryAgain:     true,
+		URL:          url,
+		Err:          err,
 	}
 }
 
@@ -306,9 +315,10 @@ func (i *Installer) HostResourceCreationError(err error) Result {
 
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/host-resource-creation"
 	return Result{
-		Message: fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about creating a Host resource to continue installing Ambassador Edge Stack.", url),
-		URL:     url,
-		Err:     err,
+		ShortMessage: "Failed to create a Host resource in your cluster. This is unexpected.",
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about creating a Host resource to continue installing Ambassador Edge Stack.", url),
+		URL:          url,
+		Err:          err,
 	}
 }
 
@@ -316,11 +326,12 @@ func (i *Installer) HostResourceCreationError(err error) Result {
 func (i *Installer) CertificateProvisionError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/certificate-provision"
 	return Result{
-		Report:   "cert_provision_failed",
-		Message:  fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about provisionning a TLS certificate to continue installing Ambassador Edge Stack.", url),
-		TryAgain: true,
-		URL:      url,
-		Err:      err,
+		Report:       "cert_provision_failed",
+		ShortMessage: "Unable to acquire a TLS certificate from Let's Encrypt",
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about provisionning a TLS certificate to continue installing Ambassador Edge Stack.", url),
+		TryAgain:     true,
+		URL:          url,
+		Err:          err,
 	}
 }
 
@@ -328,10 +339,11 @@ func (i *Installer) CertificateProvisionError(err error) Result {
 func (i *Installer) HostRetrievalError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/host-retrieval"
 	return Result{
-		Message:  fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about retrieving the Host resource to continue installing Ambassador Edge Stack.", url),
-		TryAgain: true,
-		URL:      url,
-		Err:      err,
+		ShortMessage: "Failed to retrieve the Host resource from your cluster that was just created. This is unexpected.",
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about retrieving the Host resource to continue installing Ambassador Edge Stack.", url),
+		TryAgain:     true,
+		URL:          url,
+		Err:          err,
 	}
 }
 
