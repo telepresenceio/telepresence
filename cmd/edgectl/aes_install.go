@@ -612,10 +612,10 @@ func (i *Installer) Perform(kcontext string) Result {
 			i.ShowAESExistingVersion(i.version)
 		case installedVersion != "":
 			i.ShowAESExistingVersion(installedVersion)
-			return i.IncompatibleCRDVersionsError(err, installedVersion)
+			return i.IncompatibleCRDVersionsError(installedVersion)
 		default:
 			i.ShowAESCRDsButNoAESInstallation()
-			return i.ExistingCRDsError(err)
+			return i.ExistingCRDsError()
 		}
 	}
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/pkg/errors"
 )
 
@@ -114,7 +115,7 @@ func (i *Installer) ManifestParsingError(err error, matches []string) Result {
 }
 
 // Existing AES CRD's of incompatible version
-func (i *Installer) IncompatibleCRDVersionsError(err error, installedVersion string) Result {
+func (i *Installer) IncompatibleCRDVersionsError(installedVersion string) Result {
 	abortExisting := `
 This tool does not support upgrades/downgrades at this time.
 The installer will now quit to avoid corrupting an existing installation of AES.
@@ -127,12 +128,12 @@ The installer will now quit to avoid corrupting an existing installation of AES.
 	return Result{
 		URL:     "https://www.getambassador.io/docs/topics/install/help/incompatible-crd-versions",
 		Message: message,
-		Err:     err,
+		Err:     errors.Errorf("Ambassador Edge Stack %s already installed", installedVersion),
 	}
 }
 
 // Existing AES CRD's, unable to upgrade.
-func (i *Installer) ExistingCRDsError(err error) Result {
+func (i *Installer) ExistingCRDsError() Result {
 	abortCRDs := `You can manually remove installed CRDs if you are confident they are not in use by any installation. Removing the CRDs will cause your existing Ambassador Mappings and other resources to be deleted as well.
 
 <bold>$ kubectl delete crd -l product=aes</>
@@ -143,7 +144,7 @@ The installer will now quit to avoid corrupting an existing (but undetected) ins
 		Report:  "fail_existing_crds",
 		Message: abortCRDs,
 		URL:     "https://www.getambassador.io/docs/topics/install/help/existing-crds",
-		Err:     err,
+		Err:     errors.New("found Ambassador CRDs in your cluster, but no AES installation"),
 	}
 }
 
@@ -203,10 +204,10 @@ func (i *Installer) KnownLocalClusterResult() Result {
 	message += "\n\n"
 
 	return Result{
-		Report: "cluster_not_accessible",
+		Report:  "cluster_not_accessible",
 		Message: message,
-		URL:    seeDocsURL,
-		Err:    nil,
+		URL:     seeDocsURL,
+		Err:     nil,
 	}
 }
 
@@ -221,10 +222,10 @@ func (i *Installer) LoadBalancerError(err error) Result {
 
 	return Result{
 
-		Report: "fail_loadbalancer_timeout",
+		Report:  "fail_loadbalancer_timeout",
 		Message: message,
-		URL:    "https://www.getambassador.io/docs/topics/install/help/load-balancer",
-		Err:    err,
+		URL:     "https://www.getambassador.io/docs/topics/install/help/load-balancer",
+		Err:     err,
 	}
 }
 
@@ -238,10 +239,10 @@ func (i *Installer) AESACMEChallengeError(err error) Result {
 
 	return Result{
 		Report:   "aes_listening_timeout",
-		Message: message,
+		Message:  message,
 		TryAgain: true,
-		URL: "https://www.getambassador.io/docs/topics/install/help/aes-acme-challenge",
-		Err: err,
+		URL:      "https://www.getambassador.io/docs/topics/install/help/aes-acme-challenge",
+		Err:      err,
 	}
 }
 
