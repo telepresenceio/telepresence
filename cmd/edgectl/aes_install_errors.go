@@ -223,10 +223,11 @@ Visit %v for a more detailed explanation and step-by-step instructions about exp
 	message += "\n\n"
 
 	return Result{
-		Report:  "fail_loadbalancer_timeout",
-		Message: message,
-		URL:     url,
-		Err:     err,
+		Report:       "fail_loadbalancer_timeout",
+		ShortMessage: "Unable to provision a load balancer or retrieve the IP address",
+		Message:      message,
+		URL:          url,
+		Err:          err,
 	}
 }
 
@@ -243,11 +244,12 @@ func (i *Installer) AESACMEChallengeError(err error) Result {
 	message += "\n\n"
 
 	return Result{
-		Report:   "aes_listening_timeout",
-		Message:  message,
-		TryAgain: true,
-		URL:      url,
-		Err:      err,
+		Report:       "aes_listening_timeout",
+		ShortMessage: "Ambassador Edge Stack failed to respond to the ACME challenge.",
+		Message:      message,
+		TryAgain:     true,
+		URL:          url,
+		Err:          err,
 	}
 }
 
