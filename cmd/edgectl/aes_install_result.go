@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"text/template"
 
 	"github.com/gookit/color"
@@ -102,7 +101,6 @@ func (i *Installer) ShowResult(r Result) {
 
 			if r.URL != "" {
 				i.show.Println()
-				i.ShowWrapped(fmt.Sprintf("Visit %s for more information and instructions.", r.URL))
 
 				if err := browser.OpenURL(r.URL); err != nil {
 					i.log.Printf("Failed to open browser: %+v", err)
@@ -130,11 +128,7 @@ func (i *Installer) ShowResult(r Result) {
 			i.ShowTemplated(r.Message, templateData...)
 
 			if r.URL != "" {
-				// TODO: Consider leaving out this fixed "visit" message.
-				// Instead, it may be better to let Result.Message offer useful
-				// context for visiting a URL.
 				i.show.Println()
-				i.ShowWrapped(fmt.Sprintf("Visit %s for more information and instructions.", r.URL))
 
 				if err := browser.OpenURL(r.URL); err != nil {
 					i.log.Printf("Failed to open browser: %+v", err)
