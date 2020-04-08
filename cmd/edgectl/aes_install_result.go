@@ -94,6 +94,7 @@ func (i *Installer) ShowResult(r Result) {
 		}
 
 		if r.ShortMessage != "" {
+			i.show.Println()
 			i.show.Println(r.ShortMessage)
 		}
 

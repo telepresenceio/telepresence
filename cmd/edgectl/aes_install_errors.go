@@ -122,10 +122,10 @@ func (i *Installer) ManifestParsingError(err error, matches []string) Result {
 func (i *Installer) IncompatibleCRDVersionsError(installedVersion string) Result {
 	abortExisting := `
 This tool does not support upgrades/downgrades at this time.
-The installer will now quit to avoid corrupting an existing installation of AES.
-`
+The installer will quit to avoid corrupting an existing installation of AES.`
+
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/incompatible-crd-versions"
-	message := fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about updating CRD verions to continue installing Ambassador Edge Stack\n%s",
+	message := fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about updating CRD versions to continue installing Ambassador Edge Stack.\n%s",
 		url, abortExisting)
 
 	i.Report("fail_existing_aes", ScoutMeta{"installing", i.version}, ScoutMeta{"found", installedVersion})
