@@ -539,6 +539,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	}
 
 	aesManifests, err := getManifest(fmt.Sprintf("https://%s/yaml/aes.yaml", manifestsDomain))
+
 	if err != nil {
 		return i.AESManifestsError(err)
 	}
@@ -643,6 +644,9 @@ func (i *Installer) Perform(kcontext string) Result {
 
 	// Wait for Ambassador Pod; grab AES install ID
 	i.ShowCheckingAESPodDeployment()
+
+	return i.AESPodStartupError(errors.New("timed out waiting for AES pod startup (or interrupted)")) // TODO: test, remove for production
+
 	if err := i.loopUntil("AES pod startup", i.GrabAESInstallID, lc2); err != nil {
 		return i.AESPodStartupError(err)
 	}
