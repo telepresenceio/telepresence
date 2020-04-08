@@ -271,7 +271,7 @@ func (i *Installer) DNSNameBodyError(err error) Result {
 	url := "https://www.getambassador.io/docs/topics/install/help/dns-name-body"
 	return Result{
 		ShortMessage: "Failed to register DNS name for the current installation",
-		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about aquirering a DNS name to continue installing Ambassador Edge Stack.", url),
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about acquiring a DNS name to continue installing Ambassador Edge Stack.", url),
 		URL:          url,
 		Err:          errors.Wrap(err, "acquire DNS name (read body)"),
 	}
@@ -304,7 +304,7 @@ func (i *Installer) DNSPropagationError(err error) Result {
 	return Result{
 		Report:       "dns_name_propagation_timeout",
 		ShortMessage: "Unable to resolve your new DNS name on this machine",
-		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about aquirering and resolving a DNS name to continue installing Ambassador Edge Stack.", url),
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about acquiring and resolving a DNS name to continue installing Ambassador Edge Stack.", url),
 		TryAgain:     true,
 		URL:          url,
 		Err:          err,
