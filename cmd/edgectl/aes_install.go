@@ -758,7 +758,7 @@ func (i *Installer) Perform(kcontext string) Result {
 
 	futureLogin := `In the future, to log in to the Ambassador Edge Policy Console, run 
 %s`
-	i.ShowWrapped(fmt.Sprintf(futureLogin, color.Bold.Sprintf("edgectl login "+i.hostname)))
+	i.ShowWrapped(fmt.Sprintf(futureLogin, color.Bold.Sprintf("$ edgectl login "+i.hostname)))
 
 	if err := i.CheckAESHealth(); err != nil {
 		i.Report("aes_health_bad", ScoutMeta{"err", err.Error()})

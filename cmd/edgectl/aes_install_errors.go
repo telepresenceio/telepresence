@@ -11,8 +11,7 @@ import (
 // - Have a reasonable user message;
 // - Have a page in our documentation that explains the error and what can be done to resolve it.
 
-// Useful strings, used more than once...
-const tryAgain = "If this appears to be a transient failure, please try running the installer again. It is safe to run the installer repeatedly on a cluster."
+// Useful string, used more than once...
 const noTlsSuccess = "<bold>You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically.</>"
 
 // User interrupted the email request.
@@ -145,7 +144,7 @@ func (i *Installer) IncompatibleCRDVersionsError(installedVersion string) Result
 This tool does not support upgrades/downgrades at this time.
 The installer will quit to avoid corrupting an existing installation of AES.`
 
-	message := fmt.Sprintf("Visit #{url} for a more detailed explanation and step-by-step instructions about updating CRD versions to continue installing Ambassador Edge Stack.\n#{abortExisting}")
+	message := fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about updating CRD versions to continue installing Ambassador Edge Stack.\n%v", url, abortExisting)
 
 	return Result{
 		URL:          url,
@@ -175,7 +174,7 @@ func (i *Installer) InstallCRDsError(err error) Result {
 	return Result{
 		Report:       "fail_install_crds",
 		ShortMessage: "An error occurred while applying Kubernetes manifests",
-		Message:      fmt.Sprintf("Visit #{url} for a more detailed explanation and suggestions on how to continue installing Ambassador Edge Stack."),
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and suggestions on how to continue installing Ambassador Edge Stack.", url),
 		URL:          url,
 		Err:          err,
 	}
@@ -188,7 +187,7 @@ func (i *Installer) WaitCRDsError(err error) Result {
 	return Result{
 		Report:       "fail_wait_crds",
 		ShortMessage: "An error occurred while applying Kubernetes manifests",
-		Message:      fmt.Sprintf("Visit #{url} for a more detailed explanation and suggestions on how to continue installing Ambassador Edge Stack."),
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and suggestions on how to continue installing Ambassador Edge Stack.", url),
 		URL:          url,
 		Err:          err,
 	}
@@ -201,7 +200,7 @@ func (i *Installer) InstallAESError(err error) Result {
 	return Result{
 		Report:       "fail_install_aes",
 		ShortMessage: "An error occurred while applying Kubernetes manifests",
-		Message:      fmt.Sprintf("Visit #{url} for a more detailed explanation and suggestions on how to continue installing Ambassador Edge Stack."),
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and suggestions on how to continue installing Ambassador Edge Stack.", url),
 		URL:          url,
 		Err:          err,
 	}
@@ -214,7 +213,7 @@ func (i *Installer) WaitForAESError(err error) Result {
 	return Result{
 		Report:       "fail_wait_aes",
 		ShortMessage: "An error occurred while applying Kubernetes manifests",
-		Message:      fmt.Sprintf("Visit #{url} for a more detailed explanation and suggestions on how to continue installing Ambassador Edge Stack."),
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and suggestions on how to continue installing Ambassador Edge Stack.", url),
 		URL:          url,
 		Err:          err,
 	}
@@ -227,7 +226,7 @@ func (i *Installer) AESPodStartupError(err error) Result {
 	return Result{
 		Report:       "fail_pod_timeout",
 		ShortMessage: "The installer was unable to talk to your AES pod",
-		Message:      fmt.Sprintf("Visit #{url} for a more detailed explanation and step-by-step instructions about resolving this problem."),
+		Message:      fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about resolving this problem.", url),
 		URL:          url,
 		Err:          err,
 	}
@@ -259,7 +258,7 @@ func (i *Installer) LoadBalancerError(err error) Result {
 
 	message := noTlsSuccess
 	message += "\n\n"
-	message += fmt.Sprintf("Visit #{url} for a more detailed explanation and step-by-step instructions about exposing a public load balancer to complete the Ambassador Edge Stack installation.")
+	message += fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about exposing a public load balancer to complete the Ambassador Edge Stack installation.", url)
 	message += "\n\n"
 
 	return Result{
@@ -279,8 +278,6 @@ func (i *Installer) AESACMEChallengeError(err error) Result {
 	message := "<bold>It seems AES did not start in the expected time, or the AES load balancer is not reachable from here.</>"
 	message += "\n"
 	message += fmt.Sprintf("Visit %v for a more detailed explanation and step-by-step instructions about completing the ACME challenge to finish installing Ambassador Edge Stack.", url)
-	message += "\n\n"
-	message += tryAgain
 	message += "\n\n"
 
 	return Result{
@@ -403,10 +400,9 @@ func (i *Installer) AESLoginError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/aes-login"
 
 	return Result{
-		ShortMessage: "The installer failed to log in to your cluster.",
-		Message:      fmt.Sprintf("Visit #{url} for a more detailed explanation and suggestions on how to resolve this problem."),
-		URL:          url,
-		Err:          err,
+		Message: fmt.Sprintf("The installer failed to log in to the Ambassador Edge Policy Console.\n\nVisit %v for a more detailed explanation and suggestions on how to resolve this problem.", url),
+		URL:     url,
+		Err:     nil,
 	}
 }
 

@@ -115,7 +115,7 @@ func (i *Installer) ShowResult(r Result) {
 
 			if r.TryAgain {
 				i.show.Println()
-				i.ShowWrapped(tryAgain)
+				i.ShowWrapped("If this appears to be a transient failure, please try running the installer again. It is safe to run the installer repeatedly on a cluster.")
 				i.show.Println()
 			}
 		}
@@ -128,9 +128,6 @@ func (i *Installer) ShowResult(r Result) {
 		}
 
 		if r.Message != "" {
-			i.show.Println()
-			i.show.Println("AES Installation Complete!")
-			i.show.Println("========================================================================")
 			i.show.Println()
 			i.ShowTemplated(r.Message, templateData...)
 
