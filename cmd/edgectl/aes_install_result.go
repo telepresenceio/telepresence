@@ -112,14 +112,7 @@ func (i *Installer) ShowResult(r Result) {
 					i.log.Printf("Failed to open browser: %+v", err)
 				}
 			}
-
-			if r.TryAgain {
-				i.show.Println()
-				i.ShowWrapped("If this appears to be a transient failure, please try running the installer again. It is safe to run the installer repeatedly on a cluster.")
-				i.show.Println()
-			}
 		}
-
 	} else {
 		// Success
 

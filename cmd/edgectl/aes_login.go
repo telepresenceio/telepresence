@@ -3,12 +3,12 @@ package main
 import (
 	"crypto/rsa"
 	"fmt"
+	"github.com/pkg/browser"
 	"time"
 
 	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gookit/color"
-	"github.com/pkg/browser"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -87,12 +87,30 @@ func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, openI
 	// Output
 	url := fmt.Sprintf("https://%s/edge_stack/admin/#%s", hostname, tokenString)
 
+	// Remember if the browser successfully opened the URL
+	browserOpened := false
+
+	if openInBrowser {
+		err = browser.OpenURL(url)
+		if err == nil {
+			browserOpened = true
+		} else {
+			fmt.Println("Unexpected error while trying to open your browser.")
+			err = errors.Wrap(err, "browse")
+		}
+	}
+
 	if showURL {
-		fmt.Println("Visit the following URL to access the Ambassador Edge Policy Console:")
+		if browserOpened {
+			fmt.Println("We've opened the Ambassador Edge Policy Console for you in your browser:")
+		} else {
+			fmt.Println("Visit the following URL to access the Ambassador Edge Policy Console:")
+		}
+
 		fmt.Println(url)
 
 		// Whitespace if we are also showing the token or opening in the browser
-		if showToken || openInBrowser {
+		if showToken {
 			fmt.Println()
 		}
 	}
@@ -100,22 +118,8 @@ func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, openI
 	if showToken {
 		fmt.Println("The login token is")
 		fmt.Println("    ", tokenString)
-
-		// Whitespace if we are also opening the URL in the browser.
-		if openInBrowser {
-			fmt.Println()
-		}
 	}
 
-	if openInBrowser {
-		err = browser.OpenURL(url)
-		if err != nil {
-			fmt.Println("Unexpected error while trying to open your browser.")
-			err = errors.Wrap(err, "browse")
-		} else {
-			fmt.Println("The Ambassador Edge Policy Console has been opened in your browser.")
-		}
-	}
 
 	return err
 }

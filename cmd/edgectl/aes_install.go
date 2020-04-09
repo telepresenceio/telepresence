@@ -493,6 +493,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		return i.NoClusterError(err)
 	}
 	i.restConfig, err = i.kubeinfo.GetRestConfig()
+
 	if err != nil {
 		return i.GetRestConfigError(err)
 	}
@@ -679,6 +680,7 @@ func (i *Installer) Perform(kcontext string) Result {
 
 	// Wait for Ambassador to be ready to serve ACME requests.
 	i.ShowAESRespondingToACME()
+
 	if err := i.loopUntil("AES to serve ACME", i.CheckAESServesACME, lc2); err != nil {
 		return i.AESACMEChallengeError(err)
 	}
@@ -725,6 +727,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	// Wait for DNS to propagate. This tries to avoid waiting for a ten
 	// minute error backoff if the ACME registration races ahead of the DNS
 	// name appearing for LetsEncrypt.
+
 	if err := i.loopUntil("DNS propagation to this host", i.CheckHostnameFound, lc2); err != nil {
 		return i.DNSPropagationError(err)
 	}
@@ -744,6 +747,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	}
 	i.Report("cert_provisioned")
 	i.ShowTLSConfiguredSuccessfully()
+
 	if err := i.ShowKubectl("show Host", "", "get", "host", i.hostname); err != nil {
 		return i.HostRetrievalError(err)
 	}

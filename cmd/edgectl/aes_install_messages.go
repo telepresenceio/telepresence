@@ -61,8 +61,8 @@ func (i *Installer) ShowAESConfiguringTLS() {
 	i.show.Println("-> Automatically configuring TLS")
 }
 
-func (i *Installer) ShowFailedToCreateDNSName(message string) {
-	i.show.Println("-> Failed to create a DNS name:", message)
+func (i *Installer) ShowFailedToCreateDNSName(dnsName string) {
+	i.show.Println("-> Failed to create a DNS name:", dnsName)
 }
 
 func (i *Installer) ShowAcquiringDNSName(hostname string) {
@@ -92,7 +92,7 @@ func (i *Installer) ShowAESInstallationComplete() {
 
 	// Show congratulations message
 	i.show.Println()
-	i.ShowTemplated(color.Bold.Sprintf("Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit https://{{.hostname}}/"))
+	i.ShowTemplated(color.Bold.Sprintf("Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. You can find it at your custom URL: https://{{.hostname}}/"))
 	i.show.Println()
 
 }
