@@ -142,7 +142,6 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 		if !skipReport {
 			i.generateCrashReport(runErrors[0])
 		}
-		i.show.Println()
 		i.show.Printf("Full logs at %s\n\n", i.logName)
 		return runErrors[0]
 	}
@@ -645,8 +644,6 @@ func (i *Installer) Perform(kcontext string) Result {
 	// Wait for Ambassador Pod; grab AES install ID
 	i.ShowCheckingAESPodDeployment()
 
-	return i.AESPodStartupError(errors.New("timed out waiting for AES pod startup (or interrupted)")) // TODO: test, remove for production
-
 	if err := i.loopUntil("AES pod startup", i.GrabAESInstallID, lc2); err != nil {
 		return i.AESPodStartupError(err)
 	}
@@ -701,6 +698,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	buf := new(bytes.Buffer)
 	_ = json.NewEncoder(buf).Encode(regData)
 	resp, err := http.Post(regURL, "application/json", buf)
+
 	if err != nil {
 		return i.DNSNamePostError(err)
 	}

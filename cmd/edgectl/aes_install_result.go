@@ -116,6 +116,7 @@ func (i *Installer) ShowResult(r Result) {
 			if r.TryAgain {
 				i.show.Println()
 				i.ShowWrapped(tryAgain)
+				i.show.Println()
 			}
 		}
 

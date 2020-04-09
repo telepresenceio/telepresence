@@ -310,7 +310,7 @@ func (i *Installer) DNSNamePostError(err error) Result {
 
 // Unable to fetch the response from the HTTP Post to Metriton.
 func (i *Installer) DNSNameBodyError(err error) Result {
-	url := "https://www.getambassador.io/docs/topics/install/help/dns-name-body"
+	url := "https://www.getambassador.io/docs/latest/topics/install/help/dns-name-body"
 	i.Report("dns_name_failure", ScoutMeta{"err", err.Error()})
 
 	return Result{
