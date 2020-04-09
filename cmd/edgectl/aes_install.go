@@ -663,6 +663,7 @@ func (i *Installer) Perform(kcontext string) Result {
 
 	if isKnownLocalCluster {
 		i.ShowLocalClusterDetected()
+		i.ShowAESInstallationPartiallyComplete()
 		return i.KnownLocalClusterResult()
 	}
 
@@ -672,6 +673,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	if err := i.loopUntil("Load Balancer", i.GrabLoadBalancerAddress, lc5); err != nil {
 		return i.LoadBalancerError(err)
 	}
+
 	i.Report("cluster_accessible")
 	i.ShowAESInstallAddress(i.address)
 
@@ -713,6 +715,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	if resp.StatusCode != 200 {
 		message := strings.TrimSpace(string(content))
 		i.ShowFailedToCreateDNSName(message)
+		i.ShowAESInstallationPartiallyComplete()
 		return i.AESInstalledNoDNSResult(resp.StatusCode, message)
 	}
 

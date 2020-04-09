@@ -78,13 +78,20 @@ func (i *Installer) ShowTLSConfiguredSuccessfully() {
 }
 
 // AES installation complete!
+func (i *Installer) ShowAESInstallationPartiallyComplete() {
+	i.show.Println()
+	i.show.Println("AES Installation Complete!")
+	i.show.Println("========================================================================")
+}
+
+// AES installation complete!
 func (i *Installer) ShowAESInstallationComplete() {
 	i.show.Println()
 	i.show.Println("AES Installation Complete!")
 	i.show.Println("========================================================================")
-	i.show.Println()
 
 	// Show congratulations message
+	i.show.Println()
 	i.ShowTemplated(color.Bold.Sprintf("Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. Visit https://{{.hostname}}/"))
 	i.show.Println()
 

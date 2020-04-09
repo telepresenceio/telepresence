@@ -322,8 +322,7 @@ func (i *Installer) AESInstalledNoDNSResult(statusCode int, message string) Resu
 	url := "https://www.getambassador.io/docs/latest/tutorials/getting-started/"
 	i.Report("dns_name_failure", ScoutMeta{"code", statusCode}, ScoutMeta{"err", message})
 
-	success := `
-<bold>Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically.</>
+	success := `<bold>Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically.</>
 
 If this IP address is reachable from here, you can access your installation without a DNS name. The following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.
 <bold>$ edgectl login -n ambassador {{ .address }}</>
