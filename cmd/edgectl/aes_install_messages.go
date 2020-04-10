@@ -17,8 +17,8 @@ func (i *Installer) ShowAESVersionBeingInstalled() {
 	i.show.Println(fmt.Sprintf("-> Installing the Ambassador Edge Stack %s.", i.version))
 }
 
-func (i *Installer) ShowAESExistingVersion(versionName string) {
-	i.show.Println(fmt.Sprintf("   Ambassador Edge Stack %s already installed", versionName))
+func (i *Installer) ShowAESExistingVersion(versionName string, method string) {
+	i.show.Println(fmt.Sprintf("   Ambassador Edge Stack %s already installed with %s", versionName, method))
 }
 
 func (i *Installer) ShowAESCRDsButNoAESInstallation() {
@@ -26,7 +26,11 @@ func (i *Installer) ShowAESCRDsButNoAESInstallation() {
 }
 
 func (i *Installer) ShowDownloadingImages() {
-	i.show.Println("-> Downloading images. (This may take a minute.)")
+	i.show.Println("-> Downloading latest version. (This may take a minute.)")
+}
+
+func (i *Installer) ShowInstalling(version string) {
+	i.show.Println(fmt.Sprintf("-> Installing Ambassador Edge Stack %s. (This may take a minute.)", version))
 }
 
 func (i *Installer) ShowCheckingAESPodDeployment() {
