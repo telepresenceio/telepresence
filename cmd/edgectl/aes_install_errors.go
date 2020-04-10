@@ -14,6 +14,13 @@ import (
 // Useful string, used more than once...
 const noTlsSuccess = "<bold>You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically.</>"
 
+// An internal error that should never happen.
+func (i *Installer) InternalError(err error) Result {
+	return Result{
+		Err: err,
+	}
+}
+
 // User interrupted the email request.
 func (i *Installer) EmailRequestError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/email-request"
@@ -93,100 +100,29 @@ func (i *Installer) GetVersionsError(err error) Result {
 	}
 }
 
-// Unable to fetch the AES CRD manifests (aes-crds.yaml)
-func (i *Installer) AESCRDManifestsError(err error) Result {
+// Unable to download the latest Chart
+func (i *Installer) DownloadError(err error) Result {
 	i.Report("fail_no_internet", ScoutMeta{"err", err.Error()})
 
-	url := "https://www.getambassador.io/docs/latest/topics/install/help/aes-crd-manifests"
+	url := "https://www.getambassador.io/docs/latest/topics/install/help/download-error"
 
 	return Result{
-		ShortMessage: "The installer failed to download the AES CRD manifests",
-		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about downloading AES CRD manifests to continue installing Ambassador Edge Stack at %v", url),
+		ShortMessage: "The installer failed to download AES",
+		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about downloading the AES Chart to continue installing Ambassador Edge Stack at %v", url),
 		URL:          url,
-		Err:          errors.Wrap(err, "Failed to download AES CRD manifests"),
+		Err:          errors.Wrap(err, "Failed to download AES"),
 	}
 }
 
-// Unable to fetch the AES manifests (aes.yaml)
-func (i *Installer) AESManifestsError(err error) Result {
-	i.Report("fail_no_internet", ScoutMeta{"err", err.Error()})
-
-	url := "https://www.getambassador.io/docs/latest/topics/install/help/aes-manifests"
-	return Result{
-		ShortMessage: "The installer failed to download the AES manifests",
-		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about downloading AES manifests to continue installing Ambassador Edge Stack at %v", url),
-		URL:          url,
-		Err:          errors.Wrap(err, "Failed to download AES manifests"),
-	}
-}
-
-// Unable to parse the downloaded AES manifests
-func (i *Installer) ManifestParsingError(err error, matches []string) Result {
-	url := "https://www.getambassador.io/docs/latest/topics/install/help/manifest-parsing"
-
-	i.log.Printf("matches is %+v", matches)
+func (i *Installer) ExistingInstallationFoundError(installedVersion string) Result {
+	url := "https://www.getambassador.io/docs/latest/topics/install/help/existing-installation"
 
 	return Result{
-		Report:       "fail_bad_manifests",
-		ShortMessage: "The installer failed to parse AES manifests",
-		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about downloading AES manifests to continue installing Ambassador Edge Stack at %v", url),
+		Report:       "fail_existing_installation",
+		ShortMessage: "The installer found an AES installation",
+		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about removing existing installation to continue installing Ambassador Edge Stack at %v", url),
 		URL:          url,
-		Err:          err,
-	}
-}
-
-// Existing AES CRD's of incompatible version
-func (i *Installer) IncompatibleCRDVersionsError(installedVersion string) Result {
-	url := "https://www.getambassador.io/docs/latest/topics/install/help/incompatible-crd-versions"
-	i.Report("fail_existing_aes", ScoutMeta{"installing", i.version}, ScoutMeta{"found", installedVersion})
-
-	message := "\nThis tool does not support upgrades/downgrades at this time.\nThe installer will stop to avoid corrupting an existing installation of AES.\n\n"
-	message += fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about updating CRD versions to continue installing Ambassador Edge Stack at %v", url)
-
-	return Result{
-		URL:          url,
-		ShortMessage: fmt.Sprintf("The installer found incompatible AES CRD versions"),
-		Message:      message,
-		Err:          errors.Errorf("Ambassador Edge Stack %s already installed", installedVersion),
-	}
-}
-
-// Existing AES CRD's, unable to upgrade.
-func (i *Installer) ExistingCRDsError() Result {
-	url := "https://www.getambassador.io/docs/latest/topics/install/help/existing-crds"
-
-	return Result{
-		Report:       "fail_existing_crds",
-		ShortMessage: "The installer found an incomplete AES installation",
-		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about removing existing CRDs to continue installing Ambassador Edge Stack at %v", url),
-		URL:          url,
-		Err:          errors.New("Incomplete AES installation"),
-	}
-}
-
-// Unable to kubectl apply the aes-crd.yaml manifests
-func (i *Installer) InstallCRDsError(err error) Result {
-	url := "https://www.getambassador.io/docs/latest/topics/install/help/install-crds"
-
-	return Result{
-		Report:       "fail_install_crds",
-		ShortMessage: "An error occurred while applying Kubernetes manifests",
-		Message:      fmt.Sprintf("Find a more detailed explanation and suggestions on how to continue installing Ambassador Edge Stack at %v", url),
-		URL:          url,
-		Err:          err,
-	}
-}
-
-// 90-second timeout on waiting for aes-crd.yaml manifests to be established
-func (i *Installer) WaitCRDsError(err error) Result {
-	url := "https://www.getambassador.io/docs/latest/topics/install/help/wait-crds"
-
-	return Result{
-		Report:       "fail_wait_crds",
-		ShortMessage: "An error occurred while applying Kubernetes manifests",
-		Message:      fmt.Sprintf("Find a more detailed explanation and suggestions on how to continue installing Ambassador Edge Stack at %v", url),
-		URL:          url,
-		Err:          err,
+		Err:          errors.New("Previous AES installation"),
 	}
 }
 
@@ -196,20 +132,7 @@ func (i *Installer) InstallAESError(err error) Result {
 
 	return Result{
 		Report:       "fail_install_aes",
-		ShortMessage: "An error occurred while applying Kubernetes manifests",
-		Message:      fmt.Sprintf("Find a more detailed explanation and suggestions on how to continue installing Ambassador Edge Stack at %v", url),
-		URL:          url,
-		Err:          err,
-	}
-}
-
-//90-second timeout on waiting for aes.yaml manifests to be deployed and available
-func (i *Installer) WaitForAESError(err error) Result {
-	url := "https://www.getambassador.io/docs/latest/topics/install/help/wait-for-aes"
-
-	return Result{
-		Report:       "fail_wait_aes",
-		ShortMessage: "An error occurred while applying Kubernetes manifests",
+		ShortMessage: "An error occurred while installing AES",
 		Message:      fmt.Sprintf("Find a more detailed explanation and suggestions on how to continue installing Ambassador Edge Stack at %v", url),
 		URL:          url,
 		Err:          err,
@@ -230,13 +153,18 @@ func (i *Installer) AESPodStartupError(err error) Result {
 }
 
 // docker-desktop, minikube, or kind: local cluster so no automatic TLS.
-func (i *Installer) KnownLocalClusterResult() Result {
+func (i *Installer) KnownLocalClusterResult(ci clusterInfo) Result {
 	url := "https://www.getambassador.io/docs/latest/tutorials/getting-started/"
+
+	getServiceIPmsg := "kubectl get services -n ambassador ambassador"
+	if ci.customMessages.getServiceIP != "" {
+		getServiceIPmsg = ci.customMessages.getServiceIP
+	}
 
 	message := noTlsSuccess
 	message += "\n\n"
 	message += "Determine the IP address and port number of your Ambassador service, e.g.\n"
-	message += "<bold>$ minikube service -n ambassador ambassador</>\n\n"
+	message += fmt.Sprintf("<bold>$ %s </>\n\n", getServiceIPmsg)
 	message += "The following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.\n"
 	message += "<bold>$ edgectl login -n ambassador IP_ADDRESS:PORT</>"
 	message += "\n\n"

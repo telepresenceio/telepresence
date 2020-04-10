@@ -20,20 +20,55 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/pkg/browser"
-
-	"github.com/datawire/ambassador/pkg/k8s"
-	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/gookit/color"
+	"github.com/pkg/browser"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"helm.sh/helm/v3/pkg/strvals"
 	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sVersion "k8s.io/apimachinery/pkg/version"
 	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
+
+	"github.com/datawire/ambassador/pkg/helm"
+	"github.com/datawire/ambassador/pkg/k8s"
+	"github.com/datawire/ambassador/pkg/supervisor"
+)
+
+const (
+	// default Helm version rule
+	defHelmVersionRule = "*"
+
+	// defInstallNamespace is the default installation namespace
+	defInstallNamespace = "ambassador"
+
+	// env variable used for specifying an alternative Helm repo
+	defEnvVarHelmRepo = "AES_HELM_REPO"
+
+	// env variable used for specifying a SemVer for whitelisting Charts
+	// For example, '1.3.*' will install the latest Chart from the Helm repo that installs
+	// an image with a '1.3.*' tag.
+	defEnvVarChartVersionRule = "AES_CHART_VERSION"
+
+	// env variable used for specifying the image repository (ie, 'quay.io/datawire/aes')
+	// this will install the latest Chart from the Helm repo, but with an overridden `image.repository`
+	defEnvVarImageRepo = "AES_IMAGE_REPOSITORY"
+
+	// env variable used for overriding the image tag (ie, '1.3.2')
+	// this will install the latest Chart from the Helm repo, but with an overridden `image.tag`
+	defEnvVarImageTag = "AES_IMAGE_TAG"
 )
 
 var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+
+var (
+	// defChartValues defines some default values for the Helm chart
+	// see https://github.com/datawire/ambassador-chart#configuration
+	defChartValues = map[string]interface{}{
+		"replicaCount":   "1",
+		"deploymentTool": "edgectl", // undocumented value, used for setting the "app.kubernetes.io/managed-by"
+	}
+)
 
 func aesInstallCmd() *cobra.Command {
 	res := &cobra.Command{
@@ -148,22 +183,6 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func getManifest(url string) (string, error) {
-	res, err := http.Get(url)
-	if err != nil {
-		return "", err
-	}
-	bodyBytes, err := ioutil.ReadAll(res.Body)
-	res.Body.Close()
-	if err != nil {
-		return "", err
-	}
-	if res.StatusCode != 200 {
-		return "", errors.Errorf("Bad status: %d", res.StatusCode)
-	}
-	return string(bodyBytes), nil
-}
-
 // LoopFailedError is a fatal error for loopUntil(...)
 type LoopFailedError string
 
@@ -226,6 +245,7 @@ func (i *Installer) loopUntil(what string, how func() error, lc *loopConfig) err
 // to report the "deploy" status to metrics.
 func (i *Installer) GrabAESInstallID() error {
 	aesImage := "quay.io/datawire/aes:" + i.version
+	i.log.Printf("> aesImage = %s", aesImage)
 	podName := ""
 	containerName := ""
 	podInterface := i.coreClient.Pods("ambassador") // namespace
@@ -278,7 +298,7 @@ PodsLoop:
 // GrabLoadBalancerAddress retrieves the AES service load balancer's address (IP
 // address or hostname)
 func (i *Installer) GrabLoadBalancerAddress() error {
-	serviceInterface := i.coreClient.Services("ambassador") // namespace
+	serviceInterface := i.coreClient.Services(defInstallNamespace) // namespace
 	service, err := serviceInterface.Get("ambassador", k8sTypesMetaV1.GetOptions{})
 	if err != nil {
 		return err
@@ -394,52 +414,21 @@ func (i *Installer) CheckACMEIsDone() error {
 	return nil
 }
 
-// GetAESCRDs returns the names of the AES CRDs available in the cluster (and
-// logs them as a side effect)
-func (i *Installer) GetAESCRDs() ([]string, error) {
-	crds, err := i.CaptureKubectl("get AES crds", "", "get", "crds", "-lproduct=aes", "-o", "name")
-	if err != nil {
-		return nil, err
-	}
-	res := make([]string, 0, 15)
-	scanner := bufio.NewScanner(strings.NewReader(crds))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line != "" {
-			res = append(res, line)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
-// GetInstalledImageVersion returns the image of the installed AES deployment or the
-// empty string if none is found.
-// TODO: Try to search all namespaces (which may fail due to RBAC) and capture a
-// correct namespace for an Ambassador installation (what if there is more than
-// one?), then proceed operating on that Ambassador in that namespace. Right now
-// we hard-code the "ambassador" namespace in a number of spots.
-// TODO: Also look for Ambassador OSS and do something intelligent.
-func (i *Installer) GetInstalledImageVersion() (string, error) {
-	aesVersionRE := regexp.MustCompile("quay[.]io/datawire/aes:([[:^space:]]+)")
-	deploys, err := i.CaptureKubectl("get AES deployment", "", "-nambassador", "get", "deploy", "-lproduct=aes", "-o", "go-template={{range .items}}{{range .spec.template.spec.containers}}{{.image}}\n{{end}}{{end}}")
-	if err != nil {
-		return "", err
-	}
-	scanner := bufio.NewScanner(strings.NewReader(deploys))
-	for scanner.Scan() {
-		image := strings.TrimSpace(scanner.Text())
-		if matches := aesVersionRE.FindStringSubmatch(image); len(matches) == 2 {
-			return matches[1], nil
-		}
-	}
-	return "", scanner.Err()
+// CreateNamespace creates the namespace for installing AES
+func (i *Installer) CreateNamespace() error {
+	i.CaptureKubectl("create namespace", "", "create", "namespace", defInstallNamespace)
+	// ignore errors: it will fail if the namespace already exists
+	// TODO: check that the error message contains "already exists"
+	return nil
 }
 
 // Perform is the main function for the installer
 func (i *Installer) Perform(kcontext string) Result {
+	chartValues := map[string]interface{}{}
+	for key, value := range defChartValues {
+		strvals.ParseInto(fmt.Sprintf("%s=%s", key, value), chartValues)
+	}
+
 	// Start
 	i.Report("install")
 
@@ -482,8 +471,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	i.ShowBeginAESInstallation()
 
 	// Attempt to use kubectl
-	_, err = i.GetKubectlPath()
-	if err != nil {
+	if _, err = i.GetKubectlPath(); err != nil {
 		return i.NoKubectlError(err)
 	}
 
@@ -523,123 +511,132 @@ func (i *Installer) Perform(kcontext string) Result {
 	i.SetMetadatum("kubectl Version", "kubectl_v", i.k8sVersion.Client.GitVersion)
 	i.SetMetadatum("K8s Version", "k8s_v", i.k8sVersion.Server.GitVersion)
 
-	// Allow overriding the source domain (e.g., for smoke tests before release)
-	manifestsDomain := "www.getambassador.io"
-	domainOverrideVar := "AES_MANIFESTS_DOMAIN"
-	overrideMessage := "Downloading manifests from override domain %q instead of default %q because the environment variable %s is set."
-	if amd := os.Getenv(domainOverrideVar); amd != "" {
-		i.ShowWrapped(fmt.Sprintf(overrideMessage, amd, manifestsDomain, domainOverrideVar))
-		manifestsDomain = amd
+	// Try to grab some cluster info
+	if err := i.UpdateClusterInfo(); err != nil {
+		return i.NoClusterError(err)
 	}
+	i.SetMetadatum("Cluster Info", "cluster_info", i.clusterinfo.name)
 
-	// Download AES manifests
-	crdManifests, err := getManifest(fmt.Sprintf("https://%s/yaml/aes-crds.yaml", manifestsDomain))
+	// Try to verify the existence of an Ambassador deployment in the Ambassador
+	// namespace.
+	getDeployForLabel := func(label string) (res string, err error) {
+		return i.CaptureKubectl("get AES deployment", "",
+			"-n", defInstallNamespace,
+			"get", "deploy",
+			"-l", label,
+			"-o", "go-template='{{range .items}}{{range .spec.template.spec.containers}}{{.image}}\n{{end}}{{end}}'")
+	}
+	installedVersion, installedInfo, err := getExistingInstallation(getDeployForLabel)
 	if err != nil {
-		return i.AESCRDManifestsError(err)
+		i.show.Println("Failed to look for an existing installation:", err)
+		installedVersion = "" // Things will likely fail when we try to apply manifests
 	}
 
-	aesManifests, err := getManifest(fmt.Sprintf("https://%s/yaml/aes.yaml", manifestsDomain))
+	if installedVersion != "" {
+		i.SetMetadatum("Cluster Info", "managed", installedInfo.Name)
+		i.ShowAESExistingVersion(installedVersion, installedInfo.LongName)
+		i.Report("deploy", ScoutMeta{"already_installed", true})
 
-	if err != nil {
-		return i.AESManifestsError(err)
-	}
+		switch installedInfo.Method {
+		case instOSS, instAES, instEdgectl, instOperator:
+			return i.ExistingInstallationFoundError(installedVersion)
+		case instHelm:
+			// if a previous Helm installation has been found MAYBE we can continue with
+			// the setup: it depends on the version
+			// continue with the setup and check the version later on
+			i.ShowWrapped("-> Ambassador was installed with Helm...")
 
-	// Figure out what version of AES is being installed
-	aesVersionRE := regexp.MustCompile("image: quay[.]io/datawire/aes:([[:^space:]]+)[[:space:]]")
-	matches := aesVersionRE.FindStringSubmatch(aesManifests)
-	if len(matches) != 2 {
-		return i.ManifestParsingError(err, matches)
-	}
-
-	i.version = matches[1]
-	i.SetMetadatum("AES version being installed", "aes_version", i.version)
-
-	// Display version information
-	i.ShowAESVersionBeingInstalled()
-
-	// Try to determine cluster type from node labels
-	isKnownLocalCluster := false
-	if clusterNodeLabels, err := i.CaptureKubectl("get node labels", "", "get", "no", "-Lkubernetes.io/hostname"); err == nil {
-		clusterInfo := "unknown"
-		if strings.Contains(clusterNodeLabels, "docker-desktop") {
-			clusterInfo = "docker-desktop"
-			isKnownLocalCluster = true
-		} else if strings.Contains(clusterNodeLabels, "minikube") {
-			clusterInfo = "minikube"
-			isKnownLocalCluster = true
-		} else if strings.Contains(clusterNodeLabels, "kind") {
-			clusterInfo = "kind"
-			isKnownLocalCluster = true
-		} else if strings.Contains(clusterNodeLabels, "gke") {
-			clusterInfo = "gke"
-		} else if strings.Contains(clusterNodeLabels, "aks") {
-			clusterInfo = "aks"
-		} else if strings.Contains(clusterNodeLabels, "compute") {
-			clusterInfo = "eks"
-		} else if strings.Contains(clusterNodeLabels, "ec2") {
-			clusterInfo = "ec2"
-		}
-		i.SetMetadatum("Cluster Info", "cluster_info", clusterInfo)
-	}
-
-	// Find existing AES CRDs
-	aesCrds, err := i.GetAESCRDs()
-	if err != nil {
-		i.show.Println("Failed to get existing CRDs:", err)
-		aesCrds = []string{}
-		// Things will likely fail when we try to apply CRDs
-	}
-
-	// Figure out whether we need to apply the manifests
-	// TODO: Parse the downloaded manifests and look for specific CRDs.
-	// Installed CRDs may be out of date or incomplete (e.g., if there's an
-	// OSS installation present).
-	alreadyApplied := false
-
-	if len(aesCrds) > 0 {
-		// AES CRDs exist so there is likely an existing installation. Try to
-		// verify the existence of an Ambassador deployment in the Ambassador
-		// namespace.
-		installedVersion, err := i.GetInstalledImageVersion()
-		if err != nil {
-			i.show.Println("Failed to look for an existing installation:", err)
-			installedVersion = ""
-			// Things will likely fail when we try to apply manifests
-		}
-
-		switch {
-		case i.version == installedVersion:
-			alreadyApplied = true
-			i.ShowAESExistingVersion(i.version)
-		case installedVersion != "":
-			i.ShowAESExistingVersion(installedVersion)
-			return i.IncompatibleCRDVersionsError(installedVersion)
 		default:
-			i.ShowAESCRDsButNoAESInstallation()
-			return i.ExistingCRDsError()
+			// any other case: continue with the rest of the setup
 		}
 	}
 
-	if !alreadyApplied {
-		// Install the AES manifests
-
-		i.ShowDownloadingImages()
-
-		if err := i.ShowKubectl("install CRDs", crdManifests, "apply", "-f", "-"); err != nil {
-			return i.InstallCRDsError(err)
+	// the Helm chart heuristics look for the latest release that matches `version_rule`
+	version_rule := defHelmVersionRule
+	if vr := os.Getenv(defEnvVarChartVersionRule); vr != "" {
+		i.ShowWrapped(fmt.Sprintf("Overriding Chart version rule from %q: %s.", defEnvVarChartVersionRule, vr))
+		version_rule = vr
+	} else {
+		// Allow overriding the image repo and tag
+		// This is mutually exclusive with the Chart version rule: it would be too messy otherwise.
+		if ir := os.Getenv(defEnvVarImageRepo); ir != "" {
+			i.ShowWrapped(fmt.Sprintf("Overriding image repo from %q: %s.", defEnvVarImageRepo, ir))
+			strvals.ParseInto(fmt.Sprintf("image.repository=%s", ir), chartValues)
 		}
 
-		if err := i.ShowKubectl("wait for CRDs", "", "wait", "--for", "condition=established", "--timeout=90s", "crd", "-lproduct=aes"); err != nil {
-			return i.WaitCRDsError(err)
+		if it := os.Getenv(defEnvVarImageTag); it != "" {
+			i.ShowWrapped(fmt.Sprintf("Overriding image tag from %q: %s.", defEnvVarImageTag, it))
+			strvals.ParseInto(fmt.Sprintf("image.tag=%s", it), chartValues)
 		}
+	}
 
-		if err := i.ShowKubectl("install AES", aesManifests, "apply", "-f", "-"); err != nil {
+	// create a new parsed checker for versions
+	chartVersion, err := helm.NewChartVersionRule(version_rule)
+	if err != nil {
+		// this should never happen: it currently breaks only if the version rule ("*") is wrong
+		return i.InternalError(err)
+	}
+
+	helmDownloaderOptions := helm.HelmDownloaderOptions{
+		Version:  chartVersion,
+		Logger:   i.log,
+		KubeInfo: i.kubeinfo,
+	}
+	if u := os.Getenv(defEnvVarHelmRepo); u != "" {
+		i.ShowWrapped(fmt.Sprintf("Overriding Helm repo from %q: %s.", defEnvVarHelmRepo, u))
+		helmDownloaderOptions.URL = u
+	}
+
+	// create a new manager for the remote Helm repo URL
+	chartDown, err := helm.NewHelmDownloader(helmDownloaderOptions)
+	if err != nil {
+		// this should never happen: it currently breaks only if the Helm repo URL cannot be parsed
+		return i.InternalError(err)
+	}
+
+	i.ShowDownloadingImages()
+	if err := chartDown.Download(); err != nil {
+		return i.DownloadError(err)
+	}
+	defer func() { _ = chartDown.Cleanup() }()
+
+	// the AES version we have downloaded
+	i.version = strings.Trim(chartDown.GetChart().AppVersion, "\n")
+
+	if installedInfo.Method == instHelm {
+		// if a previous Helm installation was found, check that the version matches
+		// the downloaded chart version, because we do not support upgrades
+		if installedVersion != i.version {
+			return i.ExistingInstallationFoundError(installedVersion)
+		}
+	} else if installedInfo.Method == instNone {
+		// nothing was installed: install the Chart
+		i.ShowInstalling(i.version)
+		err = i.CreateNamespace()
+		if err != nil {
+			i.ShowWrapped(fmt.Sprintf("Namespace creation failed: %s", err))
+			i.Report("fail_install_aes", ScoutMeta{"err", err.Error()})
 			return i.InstallAESError(err)
 		}
 
-		if err := i.ShowKubectl("wait for AES", "", "-n", "ambassador", "wait", "--for", "condition=available", "--timeout=90s", "deploy", "-lproduct=aes"); err != nil {
-			return i.WaitForAESError(err)
+		i.clusterinfo.CopyChartValuesTo(chartValues)
+
+		installedRelease, err := chartDown.Install(defInstallNamespace, chartValues)
+		if err != nil {
+			msg := fmt.Sprintf("Installation of a release failed: %s", err)
+			if installedRelease != nil {
+				msg += fmt.Sprintf(" (version %s)", installedRelease.Chart.AppVersion())
+			}
+			i.ShowWrapped(msg)
+			if ir := os.Getenv("DEBUG"); ir != "" {
+				i.ShowWrapped(installedRelease.Info.Notes)
+			}
+			i.Report("fail_install_aes", ScoutMeta{"err", err.Error()})
+			return i.InstallAESError(err)
 		}
+
+		// record that this cluster is managed with edgectl
+		i.SetMetadatum("Cluster Info", "managed", "edgectl")
 	}
 
 	// Wait for Ambassador Pod; grab AES install ID
@@ -648,24 +645,16 @@ func (i *Installer) Perform(kcontext string) Result {
 	if err := i.loopUntil("AES pod startup", i.GrabAESInstallID, lc2); err != nil {
 		return i.AESPodStartupError(err)
 	}
-
-	// Grab Helm information if present
-	if managedDeployment, err := i.CaptureKubectl("get deployment labels", "", "get", "-n", "ambassador", "deployments", "ambassador", "-Lapp.kubernetes.io/managed-by"); err == nil {
-		if strings.Contains(managedDeployment, "Helm") {
-			i.SetMetadatum("Cluster Info", "managed", "helm")
-		}
-	}
-
 	i.Report("deploy")
 
 	// Don't proceed any further if we know we are using a local (not publicly
 	// accessible) cluster. There's no point wasting the user's time on
 	// timeouts.
 
-	if isKnownLocalCluster {
+	if i.clusterinfo.isLocal {
 		i.ShowLocalClusterDetected()
 		i.ShowAESInstallationPartiallyComplete()
-		return i.KnownLocalClusterResult()
+		return i.KnownLocalClusterResult(i.clusterinfo)
 	}
 
 	// Grab load balancer address
@@ -780,9 +769,10 @@ func (i *Installer) Perform(kcontext string) Result {
 type Installer struct {
 	// Cluster
 
-	kubeinfo   *k8s.KubeInfo
-	restConfig *rest.Config
-	coreClient *k8sClientCoreV1.CoreV1Client
+	kubeinfo    *k8s.KubeInfo
+	restConfig  *rest.Config
+	coreClient  *k8sClientCoreV1.CoreV1Client
+	clusterinfo clusterInfo
 
 	// Reporting
 
@@ -843,11 +833,18 @@ func (i *Installer) Quit() {
 	i.cancel()
 }
 
-func (i *Installer) ShowWrapped(text string) {
-	text = strings.Trim(text, "\n")                  // Drop leading and trailing newlines
-	for _, para := range strings.Split(text, "\n") { // Preserve newlines in the text
-		for _, line := range doWordWrap(para, "", 79) { // But wrap text too
-			i.show.Println(line)
+// ShowWrapped displays to the user (via the show logger) the text items passed
+// in with word wrapping applied. Leading and trailing newlines are dropped in
+// each text item (to make it easier to use multiline constants), but newlines
+// within each item are preserved. Use an empty string item to include a blank
+// line in the output between other items.
+func (i *Installer) ShowWrapped(texts ...string) {
+	for _, text := range texts {
+		text = strings.Trim(text, "\n")                  // Drop leading and trailing newlines
+		for _, para := range strings.Split(text, "\n") { // Preserve newlines in the text
+			for _, line := range doWordWrap(para, "", 79) { // But wrap text too
+				i.show.Println(line)
+			}
 		}
 	}
 }
@@ -910,6 +907,15 @@ func (i *Installer) SilentCaptureKubectl(name, input string, args ...string) (re
 	}
 	kargs = append([]string{kubectl}, kargs...)
 	return i.Capture(name, false, input, kargs...)
+}
+
+// GetCLusterInfo returns the cluster information
+func (i *Installer) UpdateClusterInfo() error {
+	// Try to determine cluster type from node labels
+	if clusterNodeLabels, err := i.CaptureKubectl("get node labels", "", "get", "no", "-Lkubernetes.io/hostname"); err == nil {
+		i.clusterinfo = newClusterInfoFromNodeLabels(clusterNodeLabels)
+	}
+	return nil
 }
 
 // GetKubectlPath returns the full path to the kubectl executable, or an error if not found
