@@ -26,11 +26,11 @@ func (i *Installer) ShowAESCRDsButNoAESInstallation() {
 }
 
 func (i *Installer) ShowDownloadingImages() {
-	i.show.Println("-> Downloading latest version. (This may take a minute.)")
+	i.show.Println("-> Downloading latest version")
 }
 
 func (i *Installer) ShowInstalling(version string) {
-	i.show.Println(fmt.Sprintf("-> Installing Ambassador Edge Stack %s. (This may take a minute.)", version))
+	i.show.Println(fmt.Sprintf("-> Installing Ambassador Edge Stack %s", version))
 }
 
 func (i *Installer) ShowCheckingAESPodDeployment() {
