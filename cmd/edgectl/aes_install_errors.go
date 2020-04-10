@@ -16,8 +16,13 @@ const noTlsSuccess = "<bold>You've successfully installed the Ambassador Edge St
 
 // An internal error that should never happen.
 func (i *Installer) InternalError(err error) Result {
+	url := "https://www.getambassador.io/docs/latest/tutorials/getting-started/"
+
 	return Result{
-		Err: err,
+		ShortMessage: "The installer experienced an internal error",
+		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about how to continue installing Ambassador Edge Stack at %v", url),
+		URL:          url,
+		Err:          err,
 	}
 }
 
@@ -123,6 +128,19 @@ func (i *Installer) ExistingInstallationFoundError(installedVersion string) Resu
 		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about removing existing installation to continue installing Ambassador Edge Stack at %v", url),
 		URL:          url,
 		Err:          errors.New("Previous AES installation"),
+	}
+}
+
+func (i *Installer) NamespaceCreationFailed(err error) Result {
+	i.Report("fail_install_aes", ScoutMeta{"err", err.Error()})
+	url := "https://www.getambassador.io/docs/latest/topics/install/help/install-aes"
+
+	return Result{
+		Report:       "fail_install_aes",
+		ShortMessage: "Namespace creation failed while installing AES",
+		Message:      fmt.Sprintf("Find a more detailed explanation and suggestions on how to continue installing Ambassador Edge Stack at %v", url),
+		URL:          url,
+		Err:          err,
 	}
 }
 
