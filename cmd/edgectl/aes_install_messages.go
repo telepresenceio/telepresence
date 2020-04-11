@@ -32,8 +32,8 @@ func (i *Installer) ShowBeginAESInstallation() {
 	i.show.Println("Beginning Ambassador Edge Stack Installation")
 }
 
-func (i *Installer) ShowFailedToLookForExistingVersion(err error) {
-	i.show.Println("Failed to look for an existing installation:", err)
+func (i *Installer) ShowFailedWhenLookingForExistingVersion() {
+	i.show.Println("-> Failed when looking for an existing installation")
 }
 
 func (i *Installer) ShowAESVersionBeingInstalled() {
@@ -41,31 +41,35 @@ func (i *Installer) ShowAESVersionBeingInstalled() {
 }
 
 func (i *Installer) ShowAESExistingVersion(versionName string, method string) {
-	i.show.Println(fmt.Sprintf("   Ambassador Edge Stack %s already installed with %s", versionName, method))
+	i.show.Println(fmt.Sprintf("-> Ambassador Edge Stack %s was already installed using %s", versionName, method))
 }
 
 func (i *Installer) ShowAESInstalledByHelm() {
-	i.ShowWrapped("-> Ambassador was installed with Helm")
+	i.show.Println("-> Ambassador was installed with Helm")
+}
+
+func (i *Installer) FindingRepositoriesAndVersions() {
+	i.show.Println("-> Finding repositories and chart versions")
 }
 
 func (i *Installer) ShowOverridingChartVersion(aesChartVersion string, version string) {
-	i.ShowWrapped(fmt.Sprintf("   Overriding Chart version rule from %q: %s.", aesChartVersion, version))
+	i.show.Println(fmt.Sprintf("   Overriding chart version rule using %s = %s", aesChartVersion, version))
 }
 
 func (i *Installer) ShowOverridingImageRepo(aesImageRepo string, repo string) {
-	i.ShowWrapped(fmt.Sprintf("   Overriding image repo from %q: %s.", aesImageRepo, repo))
+	i.show.Println(fmt.Sprintf("   Overriding image repo using %s = %s", aesImageRepo, repo))
 }
 
 func (i *Installer) ShowOverridingImageTag(aesImageTag string, tag string) {
-	i.ShowWrapped(fmt.Sprintf("   Overriding image tag from %q: %s.", aesImageTag, tag))
+	i.show.Println(fmt.Sprintf("   Overriding image tag using %s = %s", aesImageTag, tag))
 }
 
 func (i *Installer) ShowOverridingHelmRepo(aesHelmRepo string, repo string) {
-	i.ShowWrapped(fmt.Sprintf("   Overriding Helm repo from %q: %s.", aesHelmRepo, repo))
+	i.show.Println(fmt.Sprintf("   Overriding Helm repo using %s = %s", aesHelmRepo, repo))
 }
 
 func (i *Installer) ShowAESCRDsButNoAESInstallation() {
-	i.show.Println("-> Found Ambassador CRDs in your cluster, but no AES installation.")
+	i.show.Println("-> Found Ambassador CRDs in your cluster, but no Edge Stack installation.")
 }
 
 func (i *Installer) ShowDownloadingImages() {
@@ -89,11 +93,11 @@ func (i *Installer) ShowProvisioningLoadBalancer() {
 }
 
 func (i *Installer) ShowAESInstallAddress(address string) {
-	i.show.Println("-> Your AES installation's address is", color.Bold.Sprintf(address))
+	i.show.Println("-> Your Ambassador Edge Stack installation's address is", color.Bold.Sprintf(address))
 }
 
 func (i *Installer) ShowAESRespondingToACME() {
-	i.show.Println("-> Checking that AES is responding to ACME challenge")
+	i.show.Println("-> Checking that Ambassador Edge Stack is responding to ACME challenge")
 }
 
 func (i *Installer) ShowWaiting(what string) {
@@ -127,14 +131,14 @@ func (i *Installer) ShowTLSConfiguredSuccessfully() {
 // AES installation partially complete -- other instructions follow.
 func (i *Installer) ShowAESInstallationPartiallyComplete() {
 	i.show.Println()
-	i.show.Println("AES Installation Complete!")
+	i.show.Println("Ambassador Edge Stack Installation Complete!")
 	i.show.Println("========================================================================")
 }
 
 // AES installation complete!
 func (i *Installer) ShowAESInstallationComplete() {
 	i.show.Println()
-	i.show.Println("AES Installation Complete!")
+	i.show.Println("Ambassador Edge Stack Installation Complete!")
 	i.show.Println("========================================================================")
 
 	// Show congratulations message

@@ -523,8 +523,9 @@ func (i *Installer) Perform(kcontext string) Result {
 			"-o", "go-template='{{range .items}}{{range .spec.template.spec.containers}}{{.image}}\n{{end}}{{end}}'")
 	}
 	installedVersion, installedInfo, err := getExistingInstallation(getDeployForLabel)
+
 	if err != nil {
-		i.ShowFailedToLookForExistingVersion(err)
+		i.ShowFailedWhenLookingForExistingVersion()
 		installedVersion = "" // Things will likely fail when we try to apply manifests
 	}
 
@@ -535,7 +536,7 @@ func (i *Installer) Perform(kcontext string) Result {
 
 		switch installedInfo.Method {
 		case instOSS, instAES, instEdgectl, instOperator:
-			return i.ExistingInstallationFoundError(installedVersion)
+			return i.CantReplaceExistingInstallationError(installedVersion)
 		case instHelm:
 			// if a previous Helm installation has been found MAYBE we can continue with
 			// the setup: it depends on the version
@@ -546,6 +547,9 @@ func (i *Installer) Perform(kcontext string) Result {
 			// any other case: continue with the rest of the setup
 		}
 	}
+
+	// New Helm-based install
+	i.FindingRepositoriesAndVersions()
 
 	// the Helm chart heuristics look for the latest release that matches `version_rule`
 	version_rule := defHelmVersionRule
@@ -590,7 +594,6 @@ func (i *Installer) Perform(kcontext string) Result {
 		return i.InternalError(err)
 	}
 
-	i.ShowDownloadingImages()
 	if err := chartDown.Download(); err != nil {
 		return i.DownloadError(err)
 	}
@@ -603,7 +606,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		// if a previous Helm installation was found, check that the version matches
 		// the downloaded chart version, because we do not support upgrades
 		if installedVersion != i.version {
-			return i.ExistingInstallationFoundError(installedVersion)
+			return i.CantReplaceExistingInstallationError(installedVersion)
 		}
 	} else if installedInfo.Method == instNone {
 		// nothing was installed: install the Chart
@@ -618,18 +621,18 @@ func (i *Installer) Perform(kcontext string) Result {
 
 		installedRelease, err := chartDown.Install(defInstallNamespace, chartValues)
 		if err != nil {
-			msg := fmt.Sprintf("Installation of a release failed: %s", err)
+			version := ""
 			if installedRelease != nil {
-				msg += fmt.Sprintf(" (version %s)", installedRelease.Chart.AppVersion())
+				version = installedRelease.Chart.AppVersion()
 			}
 
-			i.ShowWrapped(msg)
+			notes := ""
 			if ir := os.Getenv("DEBUG"); ir != "" {
-				i.ShowWrapped(installedRelease.Info.Notes)
+				notes = installedRelease.Info.Notes
 			}
 
-			i.Report("fail_install_aes", ScoutMeta{"err", err.Error()})
-			return i.InstallAESError(err)
+			// Helm downloader failed
+			return i.FailedToInstallChart(err, version, notes)
 		}
 
 		// record that this cluster is managed with edgectl

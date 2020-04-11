@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-
 	"github.com/pkg/errors"
 )
 
@@ -119,15 +118,15 @@ func (i *Installer) DownloadError(err error) Result {
 	}
 }
 
-func (i *Installer) ExistingInstallationFoundError(installedVersion string) Result {
+func (i *Installer) CantReplaceExistingInstallationError(installedVersion string) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/existing-installation"
 
 	return Result{
 		Report:       "fail_existing_installation",
-		ShortMessage: "The installer found an AES installation",
-		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about removing existing installation to continue installing Ambassador Edge Stack at %v", url),
+		ShortMessage: "The installer is unable to replace an existing installation",
+		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about removing an existing installation to continue installing Ambassador Edge Stack at %v", url),
 		URL:          url,
-		Err:          errors.New("Previous AES installation"),
+		Err:          errors.New("Can't replace existing installation"),
 	}
 }
 
@@ -138,6 +137,34 @@ func (i *Installer) NamespaceCreationFailed(err error) Result {
 	return Result{
 		Report:       "fail_install_aes",
 		ShortMessage: "Namespace creation failed while installing AES",
+		Message:      fmt.Sprintf("Find a more detailed explanation and suggestions on how to continue installing Ambassador Edge Stack at %v", url),
+		URL:          url,
+		Err:          err,
+	}
+}
+
+func (i *Installer) FailedToInstallChart(err error, version string, notes string) Result {
+	url := "https://www.getambassador.io/docs/latest/topics/install/help/install-aes"
+	i.Report("fail_install_aes", ScoutMeta{"err", err.Error()})
+
+	msg := fmt.Sprintf("Failed to install Helm chart: %s", err)
+
+	if version != "" {
+		msg += "\n\n"
+		msg += version
+	}
+
+	if notes != "" {
+		msg += "\n\n"
+		msg += notes
+	}
+
+	// TODO: decide what to do with the composed message.  It's too long for a ShortMessage and too detailed
+	// TODO: for a Message.  Ideally this information should be in a dedicated documentation page.
+
+	return Result{
+		Report:       "fail_install_aes",
+		ShortMessage: "Failed to install Helm chart",
 		Message:      fmt.Sprintf("Find a more detailed explanation and suggestions on how to continue installing Ambassador Edge Stack at %v", url),
 		URL:          url,
 		Err:          err,
