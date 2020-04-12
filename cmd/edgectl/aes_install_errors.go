@@ -336,7 +336,7 @@ func (i *Installer) CertificateProvisionError(err error) Result {
 	return Result{
 		Report:       "cert_provision_failed",
 		ShortMessage: "The installer was unable to acquire a TLS certificate from Let's Encrypt",
-		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about provisionning a TLS certificate to continue installing Ambassador Edge Stack at %v", url),
+		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about provisioning a TLS certificate to continue installing Ambassador Edge Stack at %v", url),
 		TryAgain:     true,
 		URL:          url,
 		Err:          err,
