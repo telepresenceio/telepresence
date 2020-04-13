@@ -512,6 +512,9 @@ func (i *Installer) Perform(kcontext string) Result {
 		return i.NoClusterError(err)
 	}
 	i.SetMetadatum("Cluster Info", "cluster_info", i.clusterinfo.name)
+	
+	// New Helm-based install
+	i.FindingRepositoriesAndVersions()
 
 	// Try to verify the existence of an Ambassador deployment in the Ambassador
 	// namespace.
@@ -535,21 +538,15 @@ func (i *Installer) Perform(kcontext string) Result {
 		i.Report("deploy", ScoutMeta{"already_installed", true})
 
 		switch installedInfo.Method {
-		case instOSS, instAES, instEdgectl, instOperator:
+		case instOSS, instAES, instOperator:
 			return i.CantReplaceExistingInstallationError(installedVersion)
-		case instHelm:
-			// if a previous Helm installation has been found MAYBE we can continue with
-			// the setup: it depends on the version
-			// continue with the setup and check the version later on
-			i.ShowAESInstalledByHelm()
-
+		case instEdgectl, instHelm:
+			// if a previous Helm/Edgectl installation has been found MAYBE we can continue with
+			// the setup: it depends on the version: continue with the setup and check the version later on
 		default:
 			// any other case: continue with the rest of the setup
 		}
 	}
-
-	// New Helm-based install
-	i.FindingRepositoriesAndVersions()
 
 	// the Helm chart heuristics look for the latest release that matches `version_rule`
 	version_rule := defHelmVersionRule
@@ -602,8 +599,8 @@ func (i *Installer) Perform(kcontext string) Result {
 	// the AES version we have downloaded
 	i.version = strings.Trim(chartDown.GetChart().AppVersion, "\n")
 
-	if installedInfo.Method == instHelm {
-		// if a previous Helm installation was found, check that the version matches
+	if installedInfo.Method == instHelm ||  installedInfo.Method == instEdgectl {
+		// if a previous installation was found, check that the installed version matches
 		// the downloaded chart version, because we do not support upgrades
 		if installedVersion != i.version {
 			return i.CantReplaceExistingInstallationError(installedVersion)

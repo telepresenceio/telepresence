@@ -44,10 +44,6 @@ func (i *Installer) ShowAESExistingVersion(versionName string, method string) {
 	i.show.Println(fmt.Sprintf("-> Ambassador Edge Stack %s was already installed using %s", versionName, method))
 }
 
-func (i *Installer) ShowAESInstalledByHelm() {
-	i.show.Println("-> Ambassador was installed with Helm")
-}
-
 func (i *Installer) FindingRepositoriesAndVersions() {
 	i.show.Println("-> Finding repositories and chart versions")
 }
