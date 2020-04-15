@@ -706,10 +706,12 @@ func (i *Installer) Perform(kcontext string) Result {
 		return i.DNSNameBodyError(err)
 	}
 
-	// Without and with DNS
-	dnsSuccess := true
-	dnsMessage := ""
+	// With and without DNS.  In case of no DNS, different error messages and resulthandling.
+	dnsSuccess := true // Assume success with DNS
+	dnsMessage := ""   // Message for error reporting in case of no DNS
+	hostName := ""     // Login to this (hostname or IP address)
 
+	// Was there a DNS name post response?
 	if resp.StatusCode == 200 {
 		// Have DNS name--now wait for it to propagate.
 		i.hostname = string(content)
@@ -744,24 +746,30 @@ func (i *Installer) Perform(kcontext string) Result {
 			return i.HostRetrievalError(err)
 		}
 
-		// Made it through with DNS and TLS.
+		// Made it through with DNS and TLS.  Set hostName to the DNS name that was given.
+		hostName = i.hostname
 		dnsSuccess = true
 	} else {
-		// Failure case: couldn't create DNS name.  Override i.hostname with the IP address of the host.
-		i.hostname = i.address
+		// Failure case: couldn't create DNS name.  Set hostName the IP address of the host.
+		hostName = i.address
 		dnsMessage = strings.TrimSpace(string(content))
 		i.ShowFailedToCreateDNSName(dnsMessage)
 		dnsSuccess = false
 	}
 
 	// All done!
-	i.ShowAESInstallationComplete()
+	if dnsSuccess {
+		i.ShowAESInstallationComplete()
+	} else {
+		i.ShowAESInstallationCompleteNoDNS()
+	}
 
 	// Open a browser window to the Edge Policy Console
-	if err := do_login(i.kubeinfo, kcontext, "ambassador", i.hostname, true, true, false); err != nil {
+	if err := do_login(i.kubeinfo, kcontext, "ambassador", hostName, true, true, false); err != nil {
 		return i.AESLoginError(err)
 	}
 
+	// Check to see if AES is ready
 	if err := i.CheckAESHealth(); err != nil {
 		i.Report("aes_health_bad", ScoutMeta{"err", err.Error()})
 	} else {
@@ -771,9 +779,10 @@ func (i *Installer) Perform(kcontext string) Result {
 	// Normal result (with DNS success) or result without DNS.
 	if dnsSuccess {
 		// Show how to use edgectl login in the future
-		return i.AESLoginSuccessResult(i.hostname)
+		return i.AESInstalledResult(i.hostname)
 	} else {
-		return i.AESInstalledNoDNSResult(resp.StatusCode, dnsMessage)
+		// Show how to login without DNS.
+		return i.AESInstalledNoDNSResult(resp.StatusCode, dnsMessage, i.address)
 	}
 }
 

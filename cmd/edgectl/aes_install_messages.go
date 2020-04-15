@@ -124,11 +124,19 @@ func (i *Installer) ShowTLSConfiguredSuccessfully() {
 	i.show.Println("-> TLS configured successfully")
 }
 
-// AES installation partially complete -- other instructions follow.
-func (i *Installer) ShowAESInstallationPartiallyComplete() {
+// AES installation complete, but no DNS.
+func (i *Installer) ShowAESInstallationCompleteNoDNS() {
 	i.show.Println()
 	i.show.Println("Ambassador Edge Stack Installation Complete!")
 	i.show.Println("========================================================================")
+
+	// Show congratulations message
+	i.show.Println()
+	message := "<bold>Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically.</>\n\n"
+	message += "If the IP address is reachable from your computer, you can access your installation without a DNS name. The following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.\n"
+	message += "<bold>$ edgectl login -n ambassador {{ .address }}</>\n\n"
+	i.ShowTemplated(message)
+	i.show.Println()
 }
 
 // AES installation complete!
@@ -139,6 +147,7 @@ func (i *Installer) ShowAESInstallationComplete() {
 
 	// Show congratulations message
 	i.show.Println()
-	i.ShowTemplated(color.Bold.Sprintf("Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. You can find it at your custom URL: https://{{.hostname}}/"))
+	message := color.Bold.Sprintf("Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. You can find it at your custom URL: https://{{.hostname}}/")
+	i.ShowTemplated(message)
 	i.show.Println()
 }
