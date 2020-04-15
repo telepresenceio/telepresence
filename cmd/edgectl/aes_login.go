@@ -3,8 +3,9 @@ package main
 import (
 	"crypto/rsa"
 	"fmt"
-	"github.com/pkg/browser"
 	"time"
+
+	"github.com/pkg/browser"
 
 	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/dgrijalva/jwt-go"
@@ -119,7 +120,6 @@ func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, openI
 		fmt.Println("The login token is")
 		fmt.Println("    ", tokenString)
 	}
-
 
 	return err
 }
