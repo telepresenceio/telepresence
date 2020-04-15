@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+
+	"github.com/gookit/color"
 	"github.com/pkg/errors"
 )
 
@@ -294,7 +296,6 @@ func (i *Installer) AESInstalledNoDNSResult(statusCode int, dnsName string) Resu
 	message := "<bold>Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically.</>\n\n"
 	message += "If the IP address is reachable from your computer, you can access your installation without a DNS name. The following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.\n"
 	message += "<bold>$ edgectl login -n ambassador {{ .address }}</>\n\n"
-	message += fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about addressing this issue at %v", url)
 
 	return Result{
 		Message: message,
@@ -373,8 +374,12 @@ func (i *Installer) AESLoginError(err error) Result {
 }
 
 // AES login successful!
-func (i *Installer) AESLoginSuccessResult() Result {
+func (i *Installer) AESLoginSuccessResult(hostname string) Result {
+	message := "In the future, to log in to the Ambassador Edge Policy Console, run\n"
+	message += color.Bold.Sprintf("$ edgectl login " + hostname)
+
 	return Result{
-		Err: nil,
+		Message: message,
+		Err:     nil,
 	}
 }

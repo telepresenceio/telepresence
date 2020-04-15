@@ -108,8 +108,8 @@ func (i *Installer) ShowAESConfiguringTLS() {
 	i.show.Println("-> Automatically configuring TLS")
 }
 
-func (i *Installer) ShowFailedToCreateDNSName(dnsName string) {
-	i.show.Println("-> Failed to create a DNS name:", dnsName)
+func (i *Installer) ShowFailedToCreateDNSName(message string) {
+	i.show.Println("   Failed to create a DNS name:", message)
 }
 
 func (i *Installer) ShowAcquiringDNSName(hostname string) {
@@ -142,11 +142,3 @@ func (i *Installer) ShowAESInstallationComplete() {
 	i.ShowTemplated(color.Bold.Sprintf("Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. You can find it at your custom URL: https://{{.hostname}}/"))
 	i.show.Println()
 }
-
-// Show how to use edgectl login in the future
-func (i *Installer) ShowFutureLogin(hostname string) {
-	i.show.Println()
-	futureLogin := "In the future, to log in to the Ambassador Edge Policy Console, run\n%s"
-	i.ShowWrapped(fmt.Sprintf(futureLogin, color.Bold.Sprintf("$ edgectl login " + hostname)))
-}
-
