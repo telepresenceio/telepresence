@@ -46,9 +46,15 @@ TELEPRESENCE_REMOTE_IMAGE = "{}/telepresence-k8s:{}".format(
 TELEPRESENCE_REMOTE_IMAGE_PRIV = "{}/telepresence-k8s-priv:{}".format(
     REGISTRY, image_version
 )
-TELEPRESENCE_REMOTE_IMAGE_OCP = "{}/telepresence-ocp:{}".format(
-    REGISTRY, image_version
-)
+# Use the default remote image if TELEPRESENCE_OCP_USE_DEFAULT_IMAGE
+# is non-empty. This ensures that ocp users have a well-tested
+# alternative to the centos image should they desire it.
+if os.environ.get("TELEPRESENCE_OCP_USE_DEFAULT_IMAGE", ""):
+    TELEPRESENCE_REMOTE_IMAGE_OCP = TELEPRESENCE_REMOTE_IMAGE
+else:
+    TELEPRESENCE_REMOTE_IMAGE_OCP = "{}/telepresence-ocp:{}".format(
+        REGISTRY, image_version
+    )
 
 # This path points to one of
 # - the telepresence executable zip file, for an installed telepresence
