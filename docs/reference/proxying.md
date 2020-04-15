@@ -29,7 +29,7 @@ This limitation is the default on OpenShift.
 The locally running process wrapped by `telepresence` has access to everything that a normal Kubernetes pod would have access to.
 That means `Service` instances, their corresponding DNS entries, and any cloud resources you can normally access from Kubernetes.
 
-To see this in action, let's start a `Service` and `Deployment` called `"helloworld"` in Kubernetes in the default namespace `"default"`, and wait until it's up and running.
+To see this in action, let's start a `Service` and `Pod` called `"helloworld"` in Kubernetes in the default namespace `"default"`, and wait until it's up and running.
 The resulting `Service` will have three DNS records you can use:
 
 1. `helloworld`, from a pod in the `default` namespace.
@@ -46,9 +46,9 @@ $ kubectl run --expose helloworld --image=nginx:alpine --port=80
 Wait 30 seconds and make sure a new pod is available in `Running` state:
 
 ```console
-$ kubectl get pod --selector=run=helloworld
+$ kubectl get pod helloworld
 NAME                          READY     STATUS    RESTARTS   AGE
-helloworld-1333052153-63kkw   1/1       Running   0          33s
+helloworld                    1/1       Running   0          33s
 ```
 
 Now you can send queries to the new `Service` as if you were running inside Kubernetes:

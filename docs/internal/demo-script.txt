@@ -1,9 +1,10 @@
 # Let's say I have an nginx server running in Kubernetes:
-kubectl run --expose --port 80 mynginx --image=nginx
+kubectl create deployment mynginx --image=nginx
+kubectl expose deployment nginx --port=80
 # I'll start a Telepresence proxy in the Kubernetes cluster:
-kubectl run --port 8080 myserver --image=datawire/telepresence-k8s:0.41
+kubectl create deployment myserver --image=datawire/telepresence-k8s:0.41
 # I'll expose it to the Internet:
-kubectl expose deployment myserver --type=LoadBalancer --name=myserver
+kubectl expose deployment myserver --type=LoadBalancer --name=myserver --port=8080
 # Next, I'll start a shell session whose contents will be proxied to Kubernetes:
 telepresence --method inject-tcp --deployment myserver --expose 8080 --run-shell
 # I will start a local web server on port 8080:

@@ -5,10 +5,11 @@ Because of the way Go is implemented you will need to use `--method vpn-tcp` wit
 
 ### A Go program talking to Kubernetes
 
-First, start a web server inside Kubernetes:
+First, start a web server inside Kubernetes and expose it via a service:
 
 ```console
-$ kubectl run hello-world --image=datawire/hello-world --port=8000 --expose
+$ kubectl create deployment hello-world --image=datawire/hello-world
+$ kubectl expose deployment hello-world --port=8000
 ```
 
 Next, install a neat little Go program called [wuzz](https://github.com/asciimoo/wuzz), an interactive HTTP client.
