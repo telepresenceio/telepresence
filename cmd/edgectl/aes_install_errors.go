@@ -362,7 +362,7 @@ func (i *Installer) AESLoginError(err error) Result {
 func (i *Installer) AESInstalledNoDNSResult(statusCode int, dnsMessage string, hostIP string) Result {
 	i.Report("dns_name_failure", ScoutMeta{"code", statusCode}, ScoutMeta{"err", dnsMessage})
 
-	message := "In the future, the following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.\n"
+	message := "In the future, the following command will log in to the Ambassador Edge Policy Console once you accept a self-signed certificate in your browser.\n"
 	message += color.Bold.Sprintf("$ edgectl login " + hostIP)
 
 	return Result{
@@ -373,7 +373,7 @@ func (i *Installer) AESInstalledNoDNSResult(statusCode int, dnsMessage string, h
 
 // AES login successful!
 func (i *Installer) AESInstalledResult(hostname string) Result {
-	message := "In the future, to log in to the Ambassador Edge Policy Console, run\n"
+	message := "In the future, the following command will log in to the Ambassador Edge Policy Console.\n"
 	message += color.Bold.Sprintf("$ edgectl login " + hostname)
 
 	return Result{
