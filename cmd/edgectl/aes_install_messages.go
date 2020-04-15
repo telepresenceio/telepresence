@@ -139,9 +139,8 @@ func (i *Installer) ShowAESInstallationCompleteNoDNS() {
 
 	// Show congratulations message
 	i.show.Println()
-	message := "<bold>Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically.</>\n\n"
-	message += "If the IP address is reachable from your computer, you can access your installation without a DNS name. The following command will open the Edge Policy Console once you accept a self-signed certificate in your browser.\n"
-	message += "<bold>$ edgectl login -n ambassador {{ .address }}</>\n\n"
+	message := "<bold>Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically. "
+	message += "If the IP address is reachable from your computer, you can access your installation without a DNS name.</>\n"
 	i.ShowTemplated(message)
 	i.show.Println()
 }
