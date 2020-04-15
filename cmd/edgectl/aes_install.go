@@ -564,6 +564,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		if it := os.Getenv(defEnvVarImageTag); it != "" {
 			i.ShowOverridingImageTag(defEnvVarImageTag, it)
 			strvals.ParseInto(fmt.Sprintf("image.tag=%s", it), chartValues)
+			i.version = it
 		}
 	}
 
@@ -596,8 +597,10 @@ func (i *Installer) Perform(kcontext string) Result {
 	}
 	defer func() { _ = chartDown.Cleanup() }()
 
-	// the AES version we have downloaded
-	i.version = strings.Trim(chartDown.GetChart().AppVersion, "\n")
+	if i.version == "" {
+		// set the AES version to the version in the Chart we have downloaded
+		i.version = strings.Trim(chartDown.GetChart().AppVersion, "\n")
+	}
 
 	if installedInfo.Method == instHelm ||  installedInfo.Method == instEdgectl {
 		// if a previous installation was found, check that the installed version matches
