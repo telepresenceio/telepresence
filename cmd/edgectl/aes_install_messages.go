@@ -124,6 +124,13 @@ func (i *Installer) ShowTLSConfiguredSuccessfully() {
 	i.show.Println("-> TLS configured successfully")
 }
 
+// AES installation partially complete -- other instructions follow.
+func (i *Installer) ShowAESInstallationPartiallyComplete() {
+	i.show.Println()
+	i.show.Println("Ambassador Edge Stack Installation Complete!")
+	i.show.Println("========================================================================")
+}
+
 // AES installation complete, but no DNS.
 func (i *Installer) ShowAESInstallationCompleteNoDNS() {
 	i.show.Println()
