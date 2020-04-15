@@ -170,7 +170,11 @@ def podCIDRs(runner: Runner):
     if len(cidrs) == 0:
         # Fallback to using pod IPs:
         pods = json.loads(
-            runner.get_output(runner.kubectl("get", "pods", "-o", "json"))
+            runner.get_output(
+                runner.kubectl(
+                    "get", "pods", "--all-namespaces", "-o", "json"
+                )
+            )
         )["items"]
         pod_ips = []
         for pod in pods:
