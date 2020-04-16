@@ -512,7 +512,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		return i.NoClusterError(err)
 	}
 	i.SetMetadatum("Cluster Info", "cluster_info", i.clusterinfo.name)
-	
+
 	// New Helm-based install
 	i.FindingRepositoriesAndVersions()
 
@@ -599,7 +599,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	// the AES version we have downloaded
 	i.version = strings.Trim(chartDown.GetChart().AppVersion, "\n")
 
-	if installedInfo.Method == instHelm ||  installedInfo.Method == instEdgectl {
+	if installedInfo.Method == instHelm || installedInfo.Method == instEdgectl {
 		// if a previous installation was found, check that the installed version matches
 		// the downloaded chart version, because we do not support upgrades
 		if installedVersion != i.version {
@@ -745,8 +745,8 @@ func (i *Installer) Perform(kcontext string) Result {
 	// All done!
 	i.ShowAESInstallationComplete()
 
-	// Open a browser window to the Edge Policy Console
-	if err := do_login(i.kubeinfo, kcontext, "ambassador", i.hostname, true, true, false); err != nil {
+	// Open a browser window to the Edge Policy Console, with first-time flag.
+	if err := do_login(i.kubeinfo, kcontext, "ambassador", hostName, true, true, false, true); err != nil {
 		return i.AESLoginError(err)
 	}
 

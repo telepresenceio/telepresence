@@ -147,6 +147,5 @@ func (i *Installer) ShowAESInstallationComplete() {
 func (i *Installer) ShowFutureLogin(hostname string) {
 	i.show.Println()
 	futureLogin := "In the future, to log in to the Ambassador Edge Policy Console, run\n%s"
-	i.ShowWrapped(fmt.Sprintf(futureLogin, color.Bold.Sprintf("$ edgectl login " + hostname)))
+	i.ShowWrapped(fmt.Sprintf(futureLogin, color.Bold.Sprintf("$ edgectl login "+hostname)))
 }
-

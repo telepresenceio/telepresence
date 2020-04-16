@@ -3,8 +3,9 @@ package main
 import (
 	"crypto/rsa"
 	"fmt"
-	"github.com/pkg/browser"
 	"time"
+
+	"github.com/pkg/browser"
 
 	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/dgrijalva/jwt-go"
@@ -31,6 +32,7 @@ func aesLogin(cmd *cobra.Command, args []string) error {
 	namespace, _ := cmd.Flags().GetString("namespace")
 	justShowURL, _ := cmd.Flags().GetBool("url")
 	showToken, _ := cmd.Flags().GetBool("token")
+	firstTime, _ := cmd.Flags().GetBool("firstTime")
 
 	// Figure out the correct hostname
 	hostname := args[0]
@@ -38,10 +40,10 @@ func aesLogin(cmd *cobra.Command, args []string) error {
 	// Prepare to talk to the cluster
 	kubeinfo := k8s.NewKubeInfo("", context, namespace) // Default namespace is "ambassador"
 
-	return do_login(kubeinfo, context, namespace, hostname, !justShowURL, justShowURL, showToken)
+	return do_login(kubeinfo, context, namespace, hostname, !justShowURL, justShowURL, showToken, firstTime)
 }
 
-func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, openInBrowser, showURL, showToken bool) error {
+func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, openInBrowser, showURL, showToken, firstTime bool) error {
 	restconfig, err := kubeinfo.GetRestConfig()
 	if err != nil {
 		return errors.Wrap(err, "Failed to connect to cluster (rest)")
@@ -119,7 +121,6 @@ func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, openI
 		fmt.Println("The login token is")
 		fmt.Println("    ", tokenString)
 	}
-
 
 	return err
 }
