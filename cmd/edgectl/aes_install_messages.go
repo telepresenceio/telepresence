@@ -104,6 +104,14 @@ func (i *Installer) ShowTimedOut(what string) {
 	i.show.Printf("   Timed out waiting for %s (or interrupted)", what)
 }
 
+func (i *Installer) ShowLookingForExistingHost() {
+	i.show.Printf("-> Looking for a Host resource in the existing installation")
+}
+
+func (i *Installer) ShowExistingHostFound(name, namespace string) {
+	i.show.Printf("   Found %s in the %s namespace", name, namespace)
+}
+
 func (i *Installer) ShowAESConfiguringTLS() {
 	i.show.Println("-> Automatically configuring TLS")
 }

@@ -754,7 +754,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	i.Report("aes_listening")
 
 	if installedVersion != "" {
-		i.show.Printf("-> Looking for a Host resource in the existing installation")
+		i.ShowLookingForExistingHost()
 		hostResource, err := i.FindMatchingHostResource()
 		if err != nil {
 			i.log.Printf("Failed to look for Hosts: %+v", err)
@@ -762,11 +762,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		}
 		if hostResource != nil {
 			i.hostname = hostResource.Spec().GetString("hostname")
-			i.ShowWrapped("", fmt.Sprintf(
-				"Found an existing Host resource: Host %s in namespace %s",
-				hostResource.Name(),
-				hostResource.Namespace(),
-			))
+			i.ShowExistingHostFound(hostResource.Name(), hostResource.Namespace())
 			i.ShowAESAlreadyInstalled()
 			return i.AESAlreadyInstalledResult()
 		}
