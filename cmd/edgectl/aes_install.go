@@ -377,6 +377,84 @@ func (i *Installer) CheckHostnameFound() error {
 	return err
 }
 
+// FindMatchingHostResource returns a Host resource from the cluster that
+// matches the load balancer's address. The Host resource must refer to a
+// *.edgestack.me domain and be in the Ready state.
+func (i *Installer) FindMatchingHostResource() (*k8s.Resource, error) {
+	client, err := k8s.NewClient(i.kubeinfo)
+	if err != nil {
+		return nil, err
+	}
+
+	resources, err := client.List("Host")
+	if err != nil {
+		return nil, err
+	}
+
+	for _, resource := range resources {
+		i.log.Printf("Considering Host %q in ns %q", resource.Name(), resource.Namespace())
+
+		hostname := resource.Spec().GetString("hostname")
+		if !strings.HasSuffix(strings.ToLower(hostname), ".edgestack.me") {
+			i.log.Printf("--> hostname %q is not a *.edgestack.me address", hostname)
+			continue
+		}
+
+		state := resource.Status().GetString("state")
+		if state != "Ready" {
+			i.log.Printf("--> state %q is not Ready", state)
+			continue
+		}
+
+		if !i.HostnameMatchesLBAddress(hostname) {
+			i.log.Printf("--> name does not match load balancer address")
+			continue
+		}
+
+		i.log.Printf("--> success (hostname is %q)", hostname)
+		return &resource, nil
+	}
+
+	return nil, nil
+}
+
+// HostnameMatchesLBAddress returns whether a *.edgestack.me hostname matches a
+// load balancer address, which may be a name or an IP.
+func (i *Installer) HostnameMatchesLBAddress(hostname string) bool {
+	i.log.Printf("--> Matching hostname %q with LB address %q", hostname, i.address)
+	if ip := net.ParseIP(i.address); ip != nil {
+		// Address is an IP address, so hostname should have a DNS A (Address)
+		// record that points to this IP address
+		hostnameIPs, err := net.LookupIP(hostname)
+		if err != nil {
+			i.log.Printf("    --> hostname IP lookup failed: %+v", err)
+			return false
+		}
+		if len(hostnameIPs) != 1 {
+			i.log.Printf("    --> Got %d results instead of 1: %q", len(hostnameIPs), hostnameIPs)
+			return false
+		}
+		if !ip.Equal(hostnameIPs[0]) {
+			i.log.Printf("    --> hostname IP %q did not match address IP %q", hostnameIPs[0], ip)
+			return false
+		}
+	} else {
+		// Address is a DNS name, so hostname should have a DNS CNAME (Canonical
+		// Name) record that points to this DNS name
+		cname, err := net.LookupCNAME(hostname)
+		if err != nil {
+			i.log.Printf("    --> hostname CNAME lookup failed: %+v", err)
+			return false
+		}
+		if !strings.EqualFold(cname, i.address) {
+			i.log.Printf("    --> hostname CNAME %q did not match address %q", cname, i.address)
+			return false
+		}
+	}
+	i.log.Printf("    --> matched")
+	return true
+}
+
 // CheckACMEIsDone queries the Host object and succeeds if its state is Ready.
 func (i *Installer) CheckACMEIsDone() error {
 	state, err := i.CaptureKubectl("get Host state", "", "get", "host", i.hostname, "-o", "go-template={{.status.state}}")
@@ -674,6 +752,22 @@ func (i *Installer) Perform(kcontext string) Result {
 		return i.AESACMEChallengeError(err)
 	}
 	i.Report("aes_listening")
+
+	if installedVersion != "" {
+		i.ShowLookingForExistingHost()
+		hostResource, err := i.FindMatchingHostResource()
+		if err != nil {
+			i.log.Printf("Failed to look for Hosts: %+v", err)
+			hostResource = nil
+		}
+		if hostResource != nil {
+			i.hostname = hostResource.Spec().GetString("hostname")
+			i.ShowExistingHostFound(hostResource.Name(), hostResource.Namespace())
+			i.ShowAESAlreadyInstalled()
+			return i.AESAlreadyInstalledResult()
+		}
+	}
+
 	i.ShowAESConfiguringTLS()
 
 	// Send a request to acquire a DNS name for this cluster's load balancer

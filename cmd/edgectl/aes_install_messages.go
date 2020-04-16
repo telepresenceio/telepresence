@@ -104,6 +104,14 @@ func (i *Installer) ShowTimedOut(what string) {
 	i.show.Printf("   Timed out waiting for %s (or interrupted)", what)
 }
 
+func (i *Installer) ShowLookingForExistingHost() {
+	i.show.Printf("-> Looking for a Host resource in the existing installation")
+}
+
+func (i *Installer) ShowExistingHostFound(name, namespace string) {
+	i.show.Printf("   Found %s in the %s namespace", name, namespace)
+}
+
 func (i *Installer) ShowAESConfiguringTLS() {
 	i.show.Println("-> Automatically configuring TLS")
 }
@@ -156,4 +164,16 @@ func (i *Installer) ShowAESInstallationComplete() {
 	message := color.Bold.Sprintf("Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. You can find it at your custom URL: https://{{.hostname}}/")
 	i.ShowTemplated(message)
 	i.show.Println()
+}
+
+// AES already installed
+func (i *Installer) ShowAESAlreadyInstalled() {
+	i.show.Println()
+	i.show.Println("Ambassador Edge Stack Already Installed")
+	i.show.Println("========================================================================")
+
+	// Show congratulations message
+	i.show.Println()
+	message := color.Bold.Sprintf("Congratulations! The Ambassador Edge Stack is already installed in your Kubernetes cluster. You can find it at your custom URL: https://{{.hostname}}/")
+	i.ShowTemplated(message)
 }
