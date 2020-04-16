@@ -564,6 +564,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		if it := os.Getenv(defEnvVarImageTag); it != "" {
 			i.ShowOverridingImageTag(defEnvVarImageTag, it)
 			strvals.ParseInto(fmt.Sprintf("image.tag=%s", it), chartValues)
+			i.version = it
 		}
 	}
 
@@ -596,8 +597,10 @@ func (i *Installer) Perform(kcontext string) Result {
 	}
 	defer func() { _ = chartDown.Cleanup() }()
 
-	// the AES version we have downloaded
-	i.version = strings.Trim(chartDown.GetChart().AppVersion, "\n")
+	if i.version == "" {
+		// set the AES version to the version in the Chart we have downloaded
+		i.version = strings.Trim(chartDown.GetChart().AppVersion, "\n")
+	}
 
 	if installedInfo.Method == instHelm || installedInfo.Method == instEdgectl {
 		// if a previous installation was found, check that the installed version matches
@@ -703,63 +706,84 @@ func (i *Installer) Perform(kcontext string) Result {
 		return i.DNSNameBodyError(err)
 	}
 
-	if resp.StatusCode != 200 {
-		message := strings.TrimSpace(string(content))
-		i.ShowFailedToCreateDNSName(message)
-		i.ShowAESInstallationPartiallyComplete()
-		return i.AESInstalledNoDNSResult(resp.StatusCode, message)
-	}
+	// With and without DNS.  In case of no DNS, different error messages and resulthandling.
+	dnsSuccess := true // Assume success with DNS
+	dnsMessage := ""   // Message for error reporting in case of no DNS
+	hostName := ""     // Login to this (hostname or IP address)
 
-	i.hostname = string(content)
-	i.ShowAcquiringDNSName(i.hostname)
+	// Was there a DNS name post response?
+	if resp.StatusCode == 200 {
+		// Have DNS name--now wait for it to propagate.
+		i.hostname = string(content)
+		i.ShowAcquiringDNSName(i.hostname)
 
-	// Wait for DNS to propagate. This tries to avoid waiting for a ten
-	// minute error backoff if the ACME registration races ahead of the DNS
-	// name appearing for LetsEncrypt.
+		// Wait for DNS to propagate. This tries to avoid waiting for a ten
+		// minute error backoff if the ACME registration races ahead of the DNS
+		// name appearing for LetsEncrypt.
 
-	if err := i.loopUntil("DNS propagation to this host", i.CheckHostnameFound, lc2); err != nil {
-		return i.DNSPropagationError(err)
-	}
+		if err := i.loopUntil("DNS propagation to this host", i.CheckHostnameFound, lc2); err != nil {
+			return i.DNSPropagationError(err)
+		}
 
-	i.Report("dns_name_propagated")
+		i.Report("dns_name_propagated")
 
-	// Create a Host resource
-	hostResource := fmt.Sprintf(hostManifest, i.hostname, i.hostname, emailAddress)
-	if err := i.ShowKubectl("install Host resource", hostResource, "apply", "-f", "-"); err != nil {
-		return i.HostResourceCreationError(err)
-	}
+		// Create a Host resource
+		hostResource := fmt.Sprintf(hostManifest, i.hostname, i.hostname, emailAddress)
+		if err := i.ShowKubectl("install Host resource", hostResource, "apply", "-f", "-"); err != nil {
+			return i.HostResourceCreationError(err)
+		}
 
-	i.ShowObtainingTLSCertificate()
+		i.ShowObtainingTLSCertificate()
 
-	if err := i.loopUntil("TLS certificate acquisition", i.CheckACMEIsDone, lc5); err != nil {
-		return i.CertificateProvisionError(err)
-	}
+		if err := i.loopUntil("TLS certificate acquisition", i.CheckACMEIsDone, lc5); err != nil {
+			return i.CertificateProvisionError(err)
+		}
 
-	i.Report("cert_provisioned")
-	i.ShowTLSConfiguredSuccessfully()
+		i.Report("cert_provisioned")
+		i.ShowTLSConfiguredSuccessfully()
 
-	if err := i.ShowKubectl("show Host", "", "get", "host", i.hostname); err != nil {
-		return i.HostRetrievalError(err)
+		if err := i.ShowKubectl("show Host", "", "get", "host", i.hostname); err != nil {
+			return i.HostRetrievalError(err)
+		}
+
+		// Made it through with DNS and TLS.  Set hostName to the DNS name that was given.
+		hostName = i.hostname
+		dnsSuccess = true
+	} else {
+		// Failure case: couldn't create DNS name.  Set hostName the IP address of the host.
+		hostName = i.address
+		dnsMessage = strings.TrimSpace(string(content))
+		i.ShowFailedToCreateDNSName(dnsMessage)
+		dnsSuccess = false
 	}
 
 	// All done!
-	i.ShowAESInstallationComplete()
+	if dnsSuccess {
+		i.ShowAESInstallationComplete()
+	} else {
+		i.ShowAESInstallationCompleteNoDNS()
+	}
 
 	// Open a browser window to the Edge Policy Console, with first-time flag.
 	if err := do_login(i.kubeinfo, kcontext, "ambassador", hostName, true, true, false, true); err != nil {
 		return i.AESLoginError(err)
 	}
 
-	// Show how to use edgectl login in the future
-	i.ShowFutureLogin(i.hostname)
-
+	// Check to see if AES is ready
 	if err := i.CheckAESHealth(); err != nil {
 		i.Report("aes_health_bad", ScoutMeta{"err", err.Error()})
 	} else {
 		i.Report("aes_health_good")
 	}
 
-	return i.AESLoginSuccessResult()
+	// Normal result (with DNS success) or result without DNS.
+	if dnsSuccess {
+		// Show how to use edgectl login in the future
+		return i.AESInstalledResult(i.hostname)
+	} else {
+		// Show how to login without DNS.
+		return i.AESInstalledNoDNSResult(resp.StatusCode, dnsMessage, i.address)
+	}
 }
 
 // Installer represents the state of the installation process

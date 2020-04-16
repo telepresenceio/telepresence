@@ -108,8 +108,8 @@ func (i *Installer) ShowAESConfiguringTLS() {
 	i.show.Println("-> Automatically configuring TLS")
 }
 
-func (i *Installer) ShowFailedToCreateDNSName(dnsName string) {
-	i.show.Println("-> Failed to create a DNS name:", dnsName)
+func (i *Installer) ShowFailedToCreateDNSName(message string) {
+	i.show.Println("   Failed to create a DNS name:", message)
 }
 
 func (i *Installer) ShowAcquiringDNSName(hostname string) {
@@ -131,6 +131,20 @@ func (i *Installer) ShowAESInstallationPartiallyComplete() {
 	i.show.Println("========================================================================")
 }
 
+// AES installation complete, but no DNS.
+func (i *Installer) ShowAESInstallationCompleteNoDNS() {
+	i.show.Println()
+	i.show.Println("Ambassador Edge Stack Installation Complete!")
+	i.show.Println("========================================================================")
+
+	// Show congratulations message
+	i.show.Println()
+	message := "<bold>Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically. "
+	message += "If the IP address is reachable from your computer, you can access your installation without a DNS name.</>\n"
+	i.ShowTemplated(message)
+	i.show.Println()
+}
+
 // AES installation complete!
 func (i *Installer) ShowAESInstallationComplete() {
 	i.show.Println()
@@ -139,13 +153,7 @@ func (i *Installer) ShowAESInstallationComplete() {
 
 	// Show congratulations message
 	i.show.Println()
-	i.ShowTemplated(color.Bold.Sprintf("Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. You can find it at your custom URL: https://{{.hostname}}/"))
+	message := color.Bold.Sprintf("Congratulations! You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. You can find it at your custom URL: https://{{.hostname}}/")
+	i.ShowTemplated(message)
 	i.show.Println()
-}
-
-// Show how to use edgectl login in the future
-func (i *Installer) ShowFutureLogin(hostname string) {
-	i.show.Println()
-	futureLogin := "In the future, to log in to the Ambassador Edge Policy Console, run\n%s"
-	i.ShowWrapped(fmt.Sprintf(futureLogin, color.Bold.Sprintf("$ edgectl login "+hostname)))
 }
