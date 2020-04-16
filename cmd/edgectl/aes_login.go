@@ -32,7 +32,7 @@ func aesLogin(cmd *cobra.Command, args []string) error {
 	namespace, _ := cmd.Flags().GetString("namespace")
 	justShowURL, _ := cmd.Flags().GetBool("url")
 	showToken, _ := cmd.Flags().GetBool("token")
-	firstTime, _ := cmd.Flags().GetBool("firstTime")
+	firstInstall, _ := cmd.Flags().GetBool("firstInstall")
 
 	// Figure out the correct hostname
 	hostname := args[0]
@@ -40,10 +40,10 @@ func aesLogin(cmd *cobra.Command, args []string) error {
 	// Prepare to talk to the cluster
 	kubeinfo := k8s.NewKubeInfo("", context, namespace) // Default namespace is "ambassador"
 
-	return do_login(kubeinfo, context, namespace, hostname, !justShowURL, justShowURL, showToken, firstTime)
+	return do_login(kubeinfo, context, namespace, hostname, !justShowURL, justShowURL, showToken, firstInstall)
 }
 
-func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, openInBrowser, showURL, showToken, firstTime bool) error {
+func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, openInBrowser, showURL, showToken, firstInstall bool) error {
 	restconfig, err := kubeinfo.GetRestConfig()
 	if err != nil {
 		return errors.Wrap(err, "Failed to connect to cluster (rest)")
@@ -87,7 +87,7 @@ func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, openI
 	}
 
 	// Output
-	url := fmt.Sprintf("https://%s/edge_stack/admin/?first-install=%v#%s", hostname, firstTime, tokenString)
+	url := fmt.Sprintf("https://%s/edge_stack/admin/?first-install=%v#%s", hostname, firstInstall, tokenString)
 
 	// Remember if the browser successfully opened the URL
 	browserOpened := false
