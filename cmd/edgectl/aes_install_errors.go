@@ -381,3 +381,14 @@ func (i *Installer) AESInstalledResult(hostname string) Result {
 		Err:     nil,
 	}
 }
+
+// AES already installed. Suggest using "edgectl login" instead.
+func (i *Installer) AESAlreadyInstalledResult() Result {
+	message := "Use the following command to open the Ambassador Edge Policy Console:\n"
+	message += color.Bold.Sprintf("$ edgectl login {{.hostname}}")
+
+	return Result{
+		Message: message,
+		Err:     nil,
+	}
+}

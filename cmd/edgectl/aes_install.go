@@ -752,6 +752,26 @@ func (i *Installer) Perform(kcontext string) Result {
 		return i.AESACMEChallengeError(err)
 	}
 	i.Report("aes_listening")
+
+	if installedVersion != "" {
+		i.show.Printf("-> Looking for a Host resource in the existing installation")
+		hostResource, err := i.FindMatchingHostResource()
+		if err != nil {
+			i.log.Printf("Failed to look for Hosts: %+v", err)
+			hostResource = nil
+		}
+		if hostResource != nil {
+			i.hostname = hostResource.Spec().GetString("hostname")
+			i.ShowWrapped("", fmt.Sprintf(
+				"Found an existing Host resource: Host %s in namespace %s",
+				hostResource.Name(),
+				hostResource.Namespace(),
+			))
+			i.ShowAESAlreadyInstalled()
+			return i.AESAlreadyInstalledResult()
+		}
+	}
+
 	i.ShowAESConfiguringTLS()
 
 	// Send a request to acquire a DNS name for this cluster's load balancer

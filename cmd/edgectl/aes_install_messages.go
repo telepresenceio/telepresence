@@ -157,3 +157,15 @@ func (i *Installer) ShowAESInstallationComplete() {
 	i.ShowTemplated(message)
 	i.show.Println()
 }
+
+// AES already installed
+func (i *Installer) ShowAESAlreadyInstalled() {
+	i.show.Println()
+	i.show.Println("Ambassador Edge Stack Already Installed")
+	i.show.Println("========================================================================")
+
+	// Show congratulations message
+	i.show.Println()
+	message := color.Bold.Sprintf("Congratulations! The Ambassador Edge Stack is already installed in your Kubernetes cluster. You can find it at your custom URL: https://{{.hostname}}/")
+	i.ShowTemplated(message)
+}
