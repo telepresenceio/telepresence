@@ -1,8 +1,12 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -33,6 +37,23 @@ to troubleshoot problems.
 
 // edgectl is the full path to the Edge Control binary
 var edgectl string
+
+var simpleTransport = &http.Transport{
+	// #nosec G402
+	TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	Proxy:           nil,
+	DialContext: (&net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 1 * time.Second,
+		DualStack: true,
+	}).DialContext,
+	DisableKeepAlives: true,
+}
+
+var hClient = &http.Client{
+	Transport: simpleTransport,
+	Timeout:   15 * time.Second,
+}
 
 func main() {
 	// Figure out our executable and save it
@@ -93,7 +114,7 @@ func getRootCommand() *cobra.Command {
 	}
 
 	myHelp := myName + `
-  https://www.getambassador.io/user-guide/install/
+  https://www.getambassador.io/docs/latest/topics/install/
 `
 
 	rootCmd := &cobra.Command{
@@ -102,6 +123,9 @@ func getRootCommand() *cobra.Command {
 		Long:         myHelp,
 		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
 	}
+	_ = rootCmd.PersistentFlags().Bool(
+		"no-report", false, "turn off anonymous crash reports and log submission on failure",
+	)
 
 	// Hidden/internal commands. These are called by Edge Control itself from
 	// the correct context and execute in-place immediately.
@@ -162,7 +186,7 @@ func getRootCommand() *cobra.Command {
 	}
 	loginCmd := &cobra.Command{
 		Use:   "login [flags] HOSTNAME",
-		Short: "Access the Ambassador Edge Policy Console",
+		Short: "Log in to the Ambassador Edge Policy Console",
 		Args:  cobra.ExactArgs(1),
 		RunE:  aesLogin,
 	}
