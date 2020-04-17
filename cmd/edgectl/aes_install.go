@@ -861,7 +861,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		i.ShowAESInstallationCompleteNoDNS()
 	}
 
-	// Open a browser window to the Edge Policy Console, with first-time flag.
+	// Open a browser window to the Edge Policy Console, with a welcome section or modal dialog.
 	if err := do_login(i.kubeinfo, kcontext, "ambassador", hostName, true, true, false, true); err != nil {
 		return i.AESLoginError(err)
 	}
