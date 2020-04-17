@@ -3,13 +3,13 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 
-	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+
+	"github.com/datawire/ambassador/pkg/k8s"
 )
 
 func aesLicense(cmd *cobra.Command, args []string) error {
@@ -26,11 +26,9 @@ func aesLicense(cmd *cobra.Command, args []string) error {
 	}
 	apply := exec.Command("kubectl", kargs...)
 	apply.Stdin = strings.NewReader(manifest)
-	apply.Stdout = os.Stdout
-	apply.Stderr = os.Stderr
-	err = apply.Run()
+	output, err := apply.CombinedOutput()
 	if err != nil {
-		return errors.Wrap(err, "kubectl apply")
+		return errors.Wrapf(err, "kubectl apply: %s", output)
 	}
 
 	fmt.Println("License applied!")
