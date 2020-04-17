@@ -87,7 +87,12 @@ func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, openI
 	}
 
 	// Output
-	url := fmt.Sprintf("https://%s/edge_stack/admin/?first-install=%v#%s", hostname, firstInstall, tokenString)
+	url := ""
+	if firstInstall {
+		url = fmt.Sprintf("https://%s/edge_stack/admin/?first-install=true#%s", hostname, tokenString)
+	} else {
+		url = fmt.Sprintf("https://%s/edge_stack/admin/#%s", hostname, tokenString)
+	}
 
 	// Remember if the browser successfully opened the URL
 	browserOpened := false
