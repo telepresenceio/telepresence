@@ -246,7 +246,7 @@ func (i *Installer) loopUntil(what string, how func() error, lc *loopConfig) err
 // the Pod is Running (though not necessarily Ready). This should be good enough
 // to report the "deploy" status to metrics.
 func (i *Installer) GrabAESInstallID() error {
-	aesImage := "quay.io/datawire/aes:" + i.version
+	aesImage := i.imageRepo + ":" + i.version
 	i.log.Printf("> aesImage = %s", aesImage)
 	podName := ""
 	containerName := ""
@@ -640,6 +640,9 @@ func (i *Installer) Perform(kcontext string) Result {
 		if ir := os.Getenv(defEnvVarImageRepo); ir != "" {
 			i.ShowOverridingImageRepo(defEnvVarImageRepo, ir)
 			strvals.ParseInto(fmt.Sprintf("image.repository=%s", ir), chartValues)
+			i.imageRepo = ir
+		} else {
+			i.imageRepo = "quay.io/datawire/aes"
 		}
 
 		if it := os.Getenv(defEnvVarImageTag); it != "" {
@@ -909,7 +912,8 @@ type Installer struct {
 	// Install results
 
 	k8sVersion kubernetesVersion // cluster version information
-	version    string            // which AES is being installed
+	imageRepo  string            // from which docker repo is AES being installed
+	version    string            // which AES version is being installed
 	address    string            // load balancer address
 	hostname   string            // of the Host resource
 	clusterID  string            // the Ambassador unique clusterID
