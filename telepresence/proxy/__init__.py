@@ -74,11 +74,7 @@ def setup(runner: Runner, args):
     if args.new_deployment is not None:
         # This implies --new-deployment
         deployment_arg = args.new_deployment
-        if runner.kubectl.cluster_is_openshift:
-            # FIXME: This will not clean up the new dc
-            deployment_type = "deploymentconfig"
-        else:
-            deployment_type = "deployment"
+        deployment_type = "deployment"
         operation = create_new_deployment
         args.operation = "new_deployment"
 
