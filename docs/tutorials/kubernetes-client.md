@@ -11,7 +11,8 @@ This allows you to use your local tools on your laptop to communicate with proce
 You should start by running a service in the cluster:
 
 ```console
-$ kubectl run myservice --image=datawire/hello-world --port=8000 --expose
+$ kubectl create deployment myservice --image=datawire/hello-world
+$ kubectl expose deployment myservice --port=8000
 $ kubectl get service myservice
 NAME        CLUSTER-IP   EXTERNAL-IP   PORT(S)    AGE
 myservice   10.0.0.12    <none>        8000/TCP   1m

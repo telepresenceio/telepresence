@@ -8,8 +8,8 @@
 You should start a `Deployment` and publicly exposed `Service` like this:
 
 ```console
-$ kubectl run hello-world --image=datawire/hello-world --port=8000
-$ kubectl expose deployment hello-world --type=LoadBalancer --name=hello-world
+$ kubectl create deployment hello-world --image=datawire/hello-world
+$ kubectl expose deployment hello-world --type=LoadBalancer --port=8000
 ```
 
 > **If your cluster is in the cloud** you can find the address of the resulting `Service` like this:

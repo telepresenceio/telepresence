@@ -14,10 +14,10 @@ In this HOWTO, we'll walk through how to use Telepresence with a containerized D
 We'll start with a quick example. Start by running a service in the cluster:
 
 ```console
-$ kubectl run hello-world --image=datawire/hello-world --port 8000 --expose
-[...]
-service/hello-world created
+$ kubectl create deployment hello-world --image=datawire/hello-world
 deployment.apps/hello-world created
+$ kubectl expose deployment hello-world --port=8000
+service/hello-world created
 $ kubectl get service hello-world
 NAME          TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
 hello-world   ClusterIP   10.111.122.25   <none>        8000/TCP   45s
