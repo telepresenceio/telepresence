@@ -29,15 +29,15 @@ install_rpm = """
 distros = [
     ("ubuntu", "xenial", "deb", ubuntu_deps, install_deb),  # 16.04 (LTS2021)
     ("ubuntu", "bionic", "deb", ubuntu_deps_2, install_deb),  # 18.04 (LTS2023)
-    ("ubuntu", "cosmic", "deb", ubuntu_deps_2, install_deb),  # 18.10 20190718
-    ("ubuntu", "disco", "deb", ubuntu_deps_2, install_deb),  # 19.04 20200123
-    ("ubuntu", "eoan", "deb", ubuntu_deps_2, install_deb),  # 19.10
+    ("ubuntu", "eoan", "deb", ubuntu_deps_2, install_deb),  # 19.10 20200717
+    # ("ubuntu", "focal", "deb", ubuntu_deps_2, install_deb), # 20.04 (LTS2025)
     ("debian", "stretch", "deb", ubuntu_deps, install_deb),  # 9
     ("debian", "buster", "deb", ubuntu_deps_2, install_deb),  # 10
     ("fedora", "26", "rpm", fedora_deps, install_rpm),  # EOL 2018-05-29
     ("fedora", "27", "rpm", fedora_deps, install_rpm),  # EOL 2018-11-30
     ("fedora", "28", "rpm", fedora_deps, install_rpm),  # EOL 2019-05-28
     ("fedora", "29", "rpm", fedora_deps, install_rpm),  # EOL 2019-11-30
-    ("fedora", "30", "rpm", fedora_deps, install_rpm),
+    ("fedora", "30", "rpm", fedora_deps, install_rpm),  # EOL 2020-05-26
     ("fedora", "31", "rpm", fedora_deps, install_rpm),
+    # ("fedora", "32", "rpm", fedora_deps, install_rpm),
 ]
