@@ -806,7 +806,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		return i.DNSNameBodyError(err)
 	}
 
-	// With and without DNS.  In case of no DNS, different error messages and resulthandling.
+	// With and without DNS.  In case of no DNS, different error messages and result handling.
 	dnsSuccess := true // Assume success with DNS
 	dnsMessage := ""   // Message for error reporting in case of no DNS
 	hostName := ""     // Login to this (hostname or IP address)
@@ -864,8 +864,8 @@ func (i *Installer) Perform(kcontext string) Result {
 		i.ShowAESInstallationCompleteNoDNS()
 	}
 
-	// Open a browser window to the Edge Policy Console
-	if err := do_login(i.kubeinfo, kcontext, "ambassador", hostName, true, true, false); err != nil {
+	// Open a browser window to the Edge Policy Console, with a welcome section or modal dialog.
+	if err := do_login(i.kubeinfo, kcontext, "ambassador", hostName, true, true, false, true); err != nil {
 		return i.AESLoginError(err)
 	}
 

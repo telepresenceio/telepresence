@@ -39,10 +39,10 @@ func aesLogin(cmd *cobra.Command, args []string) error {
 	// Prepare to talk to the cluster
 	kubeinfo := k8s.NewKubeInfo("", context, namespace) // Default namespace is "ambassador"
 
-	return do_login(kubeinfo, context, namespace, hostname, !justShowURL, justShowURL, showToken)
+	return do_login(kubeinfo, context, namespace, hostname, !justShowURL, justShowURL, showToken, false)
 }
 
-func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, openInBrowser, showURL, showToken bool) error {
+func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, openInBrowser, showURL, showToken, showWelcome bool) error {
 	restconfig, err := kubeinfo.GetRestConfig()
 	if err != nil {
 		return errors.Wrap(err, "Failed to connect to cluster (rest)")
@@ -86,7 +86,12 @@ func do_login(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, openI
 	}
 
 	// Output
-	url := fmt.Sprintf("https://%s/edge_stack/admin/#%s", hostname, tokenString)
+	url := ""
+	if showWelcome {
+		url = fmt.Sprintf("https://%s/edge_stack/admin/?welcome=true#%s", hostname, tokenString)
+	} else {
+		url = fmt.Sprintf("https://%s/edge_stack/admin/#%s", hostname, tokenString)
+	}
 
 	// Remember if the browser successfully opened the URL
 	browserOpened := false
