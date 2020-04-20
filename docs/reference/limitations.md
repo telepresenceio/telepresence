@@ -40,17 +40,6 @@ spec:
               fieldPath: status.podIP
 </code></pre>
 
-#### EC2
-
-Amazon EC2 instances inside a VPC use a custom DNS setup that resolves internal names. This will prevent Telepresence from working properly. To resolve this issue, override the default name servers, e.g.,
-
-```
-sudo echo 'supersede domain-name-servers 8.8.8.8, 8.8.4.4;' >> /etc/dhcp/dhclient.conf
-sudo dhclient
-```
-
-For more details see [issue # 462](https://github.com/datawire/telepresence/issues/462).
-
 #### Fedora 18+/CentOS 7+/RHEL 7+ and `--docker-run`
 
 Fedora 18+/CentOS 7+/RHEL 7+ ship with firewalld enabled and running by default. In its default configuration this will drop traffic on unknown ports originating from Docker's default bridge network - usually `172.17.0.0/16`. 
