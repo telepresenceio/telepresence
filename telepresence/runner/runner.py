@@ -162,6 +162,7 @@ class Runner:
         if context:
             frame = currentframe()
             assert frame is not None  # mypy
+            assert frame.f_back is not None  # mypy
             info = getframeinfo(frame.f_back)
             tag = "{}:{}({})".format(
                 os.path.basename(info.filename), info.lineno,

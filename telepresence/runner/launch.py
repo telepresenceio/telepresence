@@ -110,6 +110,7 @@ def _launch_command(
     if done and threads:
         Thread(target=joiner, daemon=True).start()
     if in_data:
+        assert process.stdin is not None  # mypy
         process.stdin.write(str(in_data, "utf-8"))
         process.stdin.close()
     return process
