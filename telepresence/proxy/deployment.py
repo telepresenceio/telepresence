@@ -95,6 +95,62 @@ def existing_deployment_openshift(
     return deployment_arg, run_id
 
 
+_deployment_template = """apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    telepresence: {run_id}
+  name: {name}
+spec:
+  selector:
+    matchLabels:
+      telepresence: {run_id}
+  template:
+    metadata:
+      labels:
+        telepresence: {run_id}
+    spec:
+      containers:
+      - {env_field}image: {image_name}
+        name: {name}
+        resources:
+          limits:
+            cpu: "1"
+            memory: 256Mi
+          requests:
+            cpu: 25m
+            memory: 64Mi
+      {service_account_field}
+"""
+
+
+def _get_deployment_yaml(
+    name: str,
+    run_id: str,
+    image_name: str,
+    service_account: str,
+    env: Dict,
+) -> str:
+    service_account_field = ""
+    if service_account:
+        service_account_field = "serviceAccount: %s" % service_account
+    env_field = ""
+    if env:
+        env_lines = ["env:\n"]
+        for key, value in env.items():
+            env_lines.append("        - name: %s\n" % key)
+            env_lines.append("          value: %s\n" % value)
+        env_lines.append("        ")
+        env_field = "".join(env_lines)
+    return _deployment_template.format(
+        name=name,
+        run_id=run_id,
+        image_name=image_name,
+        env_field=env_field,
+        service_account_field=service_account_field,
+    )
+
+
 def create_new_deployment(
     runner: Runner,
     deployment_arg: str,
@@ -126,36 +182,52 @@ def create_new_deployment(
 
     runner.add_cleanup("Delete new deployment", remove_existing_deployment)
     remove_existing_deployment(quiet=True)
-    command = [
-        "run",  # This will result in using Deployment:
-        "--restart=Always",
-        "--limits=cpu=1000m,memory=256Mi",
-        "--requests=cpu=25m,memory=64Mi",
-        deployment_arg,
-        "--image=" + get_image_name(runner, expose),
-        "--labels=telepresence=" + run_id,
-    ]
-    # Provide a stable argument ordering.  Reverse it because that happens to
-    # make some current tests happy but in the long run that's totally
-    # arbitrary and doesn't need to be maintained.  See issue 494.
-    for port in sorted(expose.remote(), reverse=True):
-        command.append("--port={}".format(port))
-    if service_account:
-        command.append("--serviceaccount={}".format(service_account))
-    if expose.remote():
-        command.append("--expose")
-    # If we're on local VM we need to use different nameserver to prevent
-    # infinite loops caused by sshuttle:
+    # Define the deployment as yaml
+    env = {}
     if custom_nameserver:
-        command.append("--env=TELEPRESENCE_NAMESERVER=" + custom_nameserver)
+        # If we're on local VM we need to use different nameserver to prevent
+        # infinite loops caused by sshuttle:
+        env["TELEPRESENCE_NAMESERVER"] = custom_nameserver
+    # Create the deployment via yaml
+    deployment_yaml = _get_deployment_yaml(
+        deployment_arg,
+        run_id,
+        get_image_name(runner, expose),
+        service_account,
+        env,
+    )
     try:
-        runner.check_call(runner.kubectl(*command))
+        runner.check_call(
+            runner.kubectl("create", "-f", "-"),
+            input=deployment_yaml.encode("utf-8")
+        )
     except CalledProcessError as exc:
         raise runner.fail(
             "Failed to create deployment {}:\n{}".format(
                 deployment_arg, exc.stderr
             )
         )
+    # Expose the deployment with a service
+    if expose.remote():
+        command = [
+            "expose",
+            "deployment",
+            deployment_arg,
+        ]
+        # Provide a stable argument ordering.  Reverse it because that
+        # happens to make some current tests happy but in the long run
+        # that's totally arbitrary and doesn't need to be maintained.
+        # See issue 494.
+        for port in sorted(expose.remote(), reverse=True):
+            command.append("--port={}".format(port))
+        try:
+            runner.check_call(runner.kubectl(*command))
+        except CalledProcessError as exc:
+            raise runner.fail(
+                "Failed to expose deployment {}:\n{}".format(
+                    deployment_arg, exc.stderr
+                )
+            )
     span.end()
     return deployment_arg, run_id
 
