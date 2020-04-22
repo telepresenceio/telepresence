@@ -130,11 +130,18 @@ class LocalResolver(object):
         """
         new_query = deepcopy(query)
         if not query.name.name.endswith(b".local"):
+            # Number of parts is used to guess the kind of input address, and
+            # how to complete it
             parts = query.name.name.split(b".")
             if len(parts) == 1:
+                # Only local service name is provided -> append namespace
                 parts.append(self.namespace.encode("ascii"))
-            assert len(parts) == 2
-            new_query.name.name = b".".join(parts) + b".svc.cluster.local"
+            if len(parts) == 2:
+                # Service name and namespace provided
+                new_query.name.name = b".".join(parts) + b".svc.cluster.local"
+            elif parts[-1] == b"svc":
+                # xxx.svc provided (strimzi-kafka like)
+                new_query.name.name = b".".join(parts + [b"cluster.local"])
 
         def fallback(err):
             print(
@@ -255,10 +262,12 @@ class LocalResolver(object):
             # doesn't know about.
             if self.noloop:
                 # maybe be servicename, service.namespace, or something.local
+                # or service.anything.namespace.svc
                 # (.local is used for both services and pods):
                 if query.name.name.count(b".") in (
                     0, 1
-                ) or query.name.name.endswith(b".local"):
+                ) or query.name.name.endswith(
+                        b".local") or b".svc" in query.name.name:
                     return self._no_loop_kube_query(
                         query, timeout=timeout, real_name=real_name
                     )
