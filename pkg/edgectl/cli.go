@@ -288,7 +288,7 @@ func (d *Daemon) GetRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 
 	interceptCmd.AddCommand(interceptAddCmd)
 	interceptCG := []CmdGroup{
-		CmdGroup{
+		{
 			GroupName: "Available Commands",
 			CmdNames:  []string{"available", "list", "add", "remove"},
 		},

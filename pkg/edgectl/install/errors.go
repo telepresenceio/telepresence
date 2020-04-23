@@ -18,7 +18,7 @@ import (
 const noTlsSuccess = "<bold>You've successfully installed the Ambassador Edge Stack in your Kubernetes cluster. However, we cannot connect to your cluster from the Internet, so we could not configure TLS automatically.</>"
 
 // An internal error that should never happen.
-func (i *Installer) InternalError(err error) Result {
+func (i *Installer) resInternalError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/tutorials/getting-started/"
 
 	return Result{
@@ -30,7 +30,7 @@ func (i *Installer) InternalError(err error) Result {
 }
 
 // User interrupted the email request.
-func (i *Installer) EmailRequestError(err error) Result {
+func (i *Installer) resEmailRequestError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/email-request"
 
 	return Result{
@@ -44,7 +44,7 @@ func (i *Installer) EmailRequestError(err error) Result {
 // AESInstallMessage occurs here in the sequence.
 
 // Unable to get a kubectl path.
-func (i *Installer) NoKubectlError(err error) Result {
+func (i *Installer) resNoKubectlError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/no-kubectl"
 
 	return Result{
@@ -57,7 +57,7 @@ func (i *Installer) NoKubectlError(err error) Result {
 }
 
 // Unable to get cluster information
-func (i *Installer) NoClusterError(err error) Result {
+func (i *Installer) resNoClusterError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/no-cluster"
 
 	return Result{
@@ -70,7 +70,7 @@ func (i *Installer) NoClusterError(err error) Result {
 }
 
 // Unable to get client configuration or namespace
-func (i *Installer) GetRestConfigError(err error) Result {
+func (i *Installer) resGetRestConfigError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/get-rest-config"
 
 	return Result{
@@ -83,7 +83,7 @@ func (i *Installer) GetRestConfigError(err error) Result {
 }
 
 // Unable to create a new CoreV1Client for the given configuration.
-func (i *Installer) NewForConfigError(err error) Result {
+func (i *Installer) resNewForConfigError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/new-for-config"
 
 	return Result{
@@ -96,7 +96,7 @@ func (i *Installer) NewForConfigError(err error) Result {
 }
 
 // Unable to get versions via kubectl
-func (i *Installer) GetVersionsError(err error) Result {
+func (i *Installer) resGetVersionsError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/get-versions"
 
 	return Result{
@@ -109,7 +109,7 @@ func (i *Installer) GetVersionsError(err error) Result {
 }
 
 // Unable to download the latest Chart
-func (i *Installer) DownloadError(err error) Result {
+func (i *Installer) resDownloadError(err error) Result {
 	i.Report("fail_no_internet", edgectl.ScoutMeta{"err", err.Error()})
 
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/download-error"
@@ -122,7 +122,7 @@ func (i *Installer) DownloadError(err error) Result {
 	}
 }
 
-func (i *Installer) CantReplaceExistingInstallationError(installedVersion string) Result {
+func (i *Installer) resCantReplaceExistingInstallationError(installedVersion string) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/existing-installation"
 
 	return Result{
@@ -134,7 +134,7 @@ func (i *Installer) CantReplaceExistingInstallationError(installedVersion string
 	}
 }
 
-func (i *Installer) NamespaceCreationFailed(err error) Result {
+func (i *Installer) resNamespaceCreationError(err error) Result {
 	i.Report("fail_install_aes", edgectl.ScoutMeta{"err", err.Error()})
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/install-aes"
 
@@ -147,7 +147,7 @@ func (i *Installer) NamespaceCreationFailed(err error) Result {
 	}
 }
 
-func (i *Installer) FailedToInstallChart(err error, version string, notes string) Result {
+func (i *Installer) resFailedToInstallChartError(err error, version string, notes string) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/install-aes"
 	i.Report("fail_install_aes", edgectl.ScoutMeta{"err", err.Error()})
 
@@ -176,7 +176,7 @@ func (i *Installer) FailedToInstallChart(err error, version string, notes string
 }
 
 // Unable to kubectl apply the aes.yaml manifests
-func (i *Installer) InstallAESError(err error) Result {
+func (i *Installer) resInstallAESError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/install-aes"
 
 	return Result{
@@ -189,7 +189,7 @@ func (i *Installer) InstallAESError(err error) Result {
 }
 
 // Unable to get the AES Install ID via kubectl exec to ask for the pod ID
-func (i *Installer) AESPodStartupError(err error) Result {
+func (i *Installer) resAESPodStartupError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/aes-pod-startup"
 
 	return Result{
@@ -202,7 +202,7 @@ func (i *Installer) AESPodStartupError(err error) Result {
 }
 
 // docker-desktop, minikube, or kind: local cluster so no automatic TLS.
-func (i *Installer) KnownLocalClusterResult(ci clusterInfo) Result {
+func (i *Installer) resKnownLocalClusterResult(ci clusterInfo) Result {
 	url := "https://www.getambassador.io/docs/latest/tutorials/getting-started/"
 
 	getServiceIPmsg := "kubectl get services -n ambassador ambassador"
@@ -227,7 +227,7 @@ func (i *Installer) KnownLocalClusterResult(ci clusterInfo) Result {
 }
 
 // Unable to provision a load balancer (failed to retrieve the IP address)
-func (i *Installer) LoadBalancerError(err error) Result {
+func (i *Installer) resLoadBalancerError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/load-balancer"
 
 	message := noTlsSuccess
@@ -246,7 +246,7 @@ func (i *Installer) LoadBalancerError(err error) Result {
 
 // AES failed to respond to the ACME challenge.  This may be because AES did not start quickly enough or
 // if the AES load balancer is not reachable.
-func (i *Installer) AESACMEChallengeError(err error) Result {
+func (i *Installer) resAESACMEChallengeError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/aes-acme-challenge"
 
 	message := "<bold>It seems AES did not start in the expected time, or the AES load balancer is not reachable from here.</>"
@@ -265,7 +265,7 @@ func (i *Installer) AESACMEChallengeError(err error) Result {
 
 // Unable to make an HTTP Post to Metriton at https://metriton.datawire.io/register-domain
 // and so cannot acquire a DNS name for the cluster's load balancer.
-func (i *Installer) DNSNamePostError(err error) Result {
+func (i *Installer) resDNSNamePostError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/dns-name-post"
 	i.Report("dns_name_failure", edgectl.ScoutMeta{"err", err.Error()})
 
@@ -278,7 +278,7 @@ func (i *Installer) DNSNamePostError(err error) Result {
 }
 
 // Unable to fetch the response from the HTTP Post to Metriton.
-func (i *Installer) DNSNameBodyError(err error) Result {
+func (i *Installer) resDNSNameBodyError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/dns-name-body"
 	i.Report("dns_name_failure", edgectl.ScoutMeta{"err", err.Error()})
 
@@ -291,7 +291,7 @@ func (i *Installer) DNSNameBodyError(err error) Result {
 }
 
 // The DNS name propagation timed out, so unable to resolve the name.
-func (i *Installer) DNSPropagationError(err error) Result {
+func (i *Installer) resDNSPropagationError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/dns-propagation"
 
 	return Result{
@@ -305,7 +305,7 @@ func (i *Installer) DNSPropagationError(err error) Result {
 }
 
 // In attempting to kubectl apply the hostResource yaml, kubectl failed.
-func (i *Installer) HostResourceCreationError(err error) Result {
+func (i *Installer) resHostResourceCreationError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/host-resource-creation"
 	i.Report("fail_host_resource", edgectl.ScoutMeta{"err", err.Error()})
 
@@ -318,7 +318,7 @@ func (i *Installer) HostResourceCreationError(err error) Result {
 }
 
 // Unable to acquire a TLS certificate from Let's Encrypt
-func (i *Installer) CertificateProvisionError(err error) Result {
+func (i *Installer) resCertificateProvisionError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/certificate-provision"
 
 	return Result{
@@ -332,7 +332,7 @@ func (i *Installer) CertificateProvisionError(err error) Result {
 }
 
 // Unable to acquire a TLS certificate from Let's Encrypt
-func (i *Installer) HostRetrievalError(err error) Result {
+func (i *Installer) resHostRetrievalError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/host-retrieval"
 
 	return Result{
@@ -347,7 +347,7 @@ func (i *Installer) HostRetrievalError(err error) Result {
 // AESInstallCompleteMessage occurs here in the sequence.
 
 // Attempted to log in to the cluster but failed.
-func (i *Installer) AESLoginError(err error) Result {
+func (i *Installer) resAESLoginError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/aes-login"
 
 	message := "The installer failed to log in to the Ambassador Edge Policy Console.\n\n"
@@ -361,7 +361,7 @@ func (i *Installer) AESLoginError(err error) Result {
 }
 
 // Successful installation but no DNS.
-func (i *Installer) AESInstalledNoDNSResult(statusCode int, dnsMessage string, hostIP string) Result {
+func (i *Installer) resAESInstalledNoDNSResult(statusCode int, dnsMessage string, hostIP string) Result {
 	i.Report("dns_name_failure", edgectl.ScoutMeta{"code", statusCode}, edgectl.ScoutMeta{"err", dnsMessage})
 
 	message := "In the future, the following command will log in to the Ambassador Edge Policy Console once you accept a self-signed certificate in your browser.\n"
@@ -374,7 +374,7 @@ func (i *Installer) AESInstalledNoDNSResult(statusCode int, dnsMessage string, h
 }
 
 // AES login successful!
-func (i *Installer) AESInstalledResult(hostname string) Result {
+func (i *Installer) resAESInstalledResult(hostname string) Result {
 	message := "In the future, the following command will log in to the Ambassador Edge Policy Console.\n"
 	message += color.Bold.Sprintf("$ edgectl login " + hostname)
 
@@ -385,7 +385,7 @@ func (i *Installer) AESInstalledResult(hostname string) Result {
 }
 
 // AES already installed. Suggest using "edgectl login" instead.
-func (i *Installer) AESAlreadyInstalledResult() Result {
+func (i *Installer) resAESAlreadyInstalledResult() Result {
 	message := "Use the following command to open the Ambassador Edge Policy Console:\n"
 	message += color.Bold.Sprintf("$ edgectl login {{.hostname}}")
 

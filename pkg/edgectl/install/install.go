@@ -540,7 +540,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	case emailAddress = <-gotEmail:
 		// Continue
 	case <-i.ctx.Done():
-		return i.EmailRequestError(errors.New("Interrupted"))
+		return i.resEmailRequestError(errors.New("Interrupted"))
 	}
 
 	i.log.Printf("Using email address %q", emailAddress)
@@ -550,28 +550,28 @@ func (i *Installer) Perform(kcontext string) Result {
 
 	// Attempt to use kubectl
 	if _, err = i.GetKubectlPath(); err != nil {
-		return i.NoKubectlError(err)
+		return i.resNoKubectlError(err)
 	}
 
 	// Attempt to talk to the specified cluster
 	i.kubeinfo = k8s.NewKubeInfo("", kcontext, "")
 	if err := i.ShowKubectl("cluster-info", "", "cluster-info"); err != nil {
-		return i.NoClusterError(err)
+		return i.resNoClusterError(err)
 	}
 	i.restConfig, err = i.kubeinfo.GetRestConfig()
 
 	if err != nil {
-		return i.GetRestConfigError(err)
+		return i.resGetRestConfigError(err)
 	}
 
 	i.coreClient, err = k8sClientCoreV1.NewForConfig(i.restConfig)
 	if err != nil {
-		return i.NewForConfigError(err)
+		return i.resNewForConfigError(err)
 	}
 
 	versions, err := i.CaptureKubectl("get versions", "", "version", "-o", "json")
 	if err != nil {
-		return i.GetVersionsError(err)
+		return i.resGetVersionsError(err)
 	}
 
 	kubernetesVersion := &kubernetesVersion{}
@@ -591,7 +591,7 @@ func (i *Installer) Perform(kcontext string) Result {
 
 	// Try to grab some cluster info
 	if err := i.UpdateClusterInfo(); err != nil {
-		return i.NoClusterError(err)
+		return i.resNoClusterError(err)
 	}
 	i.SetMetadatum("Cluster Info", "cluster_info", i.clusterinfo.name)
 
@@ -621,7 +621,7 @@ func (i *Installer) Perform(kcontext string) Result {
 
 		switch installedInfo.Method {
 		case instOSS, instAES, instOperator:
-			return i.CantReplaceExistingInstallationError(installedVersion)
+			return i.resCantReplaceExistingInstallationError(installedVersion)
 		case instEdgectl, instHelm:
 			// if a previous Helm/Edgectl installation has been found MAYBE we can continue with
 			// the setup: it depends on the version: continue with the setup and check the version later on
@@ -657,7 +657,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	chartVersion, err := helm.NewChartVersionRule(version_rule)
 	if err != nil {
 		// this should never happen: it currently breaks only if the version rule ("*") is wrong
-		return i.InternalError(err)
+		return i.resInternalError(err)
 	}
 
 	helmDownloaderOptions := helm.HelmDownloaderOptions{
@@ -674,11 +674,11 @@ func (i *Installer) Perform(kcontext string) Result {
 	chartDown, err := helm.NewHelmDownloader(helmDownloaderOptions)
 	if err != nil {
 		// this should never happen: it currently breaks only if the Helm repo URL cannot be parsed
-		return i.InternalError(err)
+		return i.resInternalError(err)
 	}
 
 	if err := chartDown.Download(); err != nil {
-		return i.DownloadError(err)
+		return i.resDownloadError(err)
 	}
 	defer func() { _ = chartDown.Cleanup() }()
 
@@ -691,7 +691,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		// if a previous installation was found, check that the installed version matches
 		// the downloaded chart version, because we do not support upgrades
 		if installedVersion != i.version {
-			return i.CantReplaceExistingInstallationError(installedVersion)
+			return i.resCantReplaceExistingInstallationError(installedVersion)
 		}
 	} else if installedInfo.Method == instNone {
 		// nothing was installed: install the Chart
@@ -699,7 +699,7 @@ func (i *Installer) Perform(kcontext string) Result {
 
 		err = i.CreateNamespace()
 		if err != nil {
-			return i.NamespaceCreationFailed(err)
+			return i.resNamespaceCreationError(err)
 		}
 
 		i.clusterinfo.CopyChartValuesTo(chartValues)
@@ -717,7 +717,7 @@ func (i *Installer) Perform(kcontext string) Result {
 			}
 
 			// Helm downloader failed
-			return i.FailedToInstallChart(err, version, notes)
+			return i.resFailedToInstallChartError(err, version, notes)
 		}
 
 		// record that this cluster is managed with edgectl
@@ -728,7 +728,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	i.ShowCheckingAESPodDeployment()
 
 	if err := i.loopUntil("AES pod startup", i.GrabAESInstallID, lc2); err != nil {
-		return i.AESPodStartupError(err)
+		return i.resAESPodStartupError(err)
 	}
 	i.Report("deploy")
 
@@ -739,14 +739,14 @@ func (i *Installer) Perform(kcontext string) Result {
 	if i.clusterinfo.isLocal {
 		i.ShowLocalClusterDetected()
 		i.ShowAESInstallationPartiallyComplete()
-		return i.KnownLocalClusterResult(i.clusterinfo)
+		return i.resKnownLocalClusterResult(i.clusterinfo)
 	}
 
 	// Grab load balancer address
 	i.ShowProvisioningLoadBalancer()
 
 	if err := i.loopUntil("Load Balancer", i.GrabLoadBalancerAddress, lc5); err != nil {
-		return i.LoadBalancerError(err)
+		return i.resLoadBalancerError(err)
 	}
 
 	i.Report("cluster_accessible")
@@ -756,7 +756,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	i.ShowAESRespondingToACME()
 
 	if err := i.loopUntil("AES to serve ACME", i.CheckAESServesACME, lc2); err != nil {
-		return i.AESACMEChallengeError(err)
+		return i.resAESACMEChallengeError(err)
 	}
 	i.Report("aes_listening")
 
@@ -771,7 +771,7 @@ func (i *Installer) Perform(kcontext string) Result {
 			i.hostname = hostResource.Spec().GetString("hostname")
 			i.ShowExistingHostFound(hostResource.Name(), hostResource.Namespace())
 			i.ShowAESAlreadyInstalled()
-			return i.AESAlreadyInstalledResult()
+			return i.resAESAlreadyInstalledResult()
 		}
 	}
 
@@ -797,14 +797,14 @@ func (i *Installer) Perform(kcontext string) Result {
 	resp, err := http.Post(regURL, "application/json", buf)
 
 	if err != nil {
-		return i.DNSNamePostError(err)
+		return i.resDNSNamePostError(err)
 	}
 
 	content, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 
 	if err != nil {
-		return i.DNSNameBodyError(err)
+		return i.resDNSNameBodyError(err)
 	}
 
 	// With and without DNS.  In case of no DNS, different error messages and result handling.
@@ -823,7 +823,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		// name appearing for LetsEncrypt.
 
 		if err := i.loopUntil("DNS propagation to this host", i.CheckHostnameFound, lc2); err != nil {
-			return i.DNSPropagationError(err)
+			return i.resDNSPropagationError(err)
 		}
 
 		i.Report("dns_name_propagated")
@@ -831,20 +831,20 @@ func (i *Installer) Perform(kcontext string) Result {
 		// Create a Host resource
 		hostResource := fmt.Sprintf(hostManifest, i.hostname, i.hostname, emailAddress)
 		if err := i.ShowKubectl("install Host resource", hostResource, "apply", "-f", "-"); err != nil {
-			return i.HostResourceCreationError(err)
+			return i.resHostResourceCreationError(err)
 		}
 
 		i.ShowObtainingTLSCertificate()
 
 		if err := i.loopUntil("TLS certificate acquisition", i.CheckACMEIsDone, lc5); err != nil {
-			return i.CertificateProvisionError(err)
+			return i.resCertificateProvisionError(err)
 		}
 
 		i.Report("cert_provisioned")
 		i.ShowTLSConfiguredSuccessfully()
 
 		if err := i.ShowKubectl("show Host", "", "get", "host", i.hostname); err != nil {
-			return i.HostRetrievalError(err)
+			return i.resHostRetrievalError(err)
 		}
 
 		// Made it through with DNS and TLS.  Set hostName to the DNS name that was given.
@@ -867,7 +867,7 @@ func (i *Installer) Perform(kcontext string) Result {
 
 	// Open a browser window to the Edge Policy Console, with a welcome section or modal dialog.
 	if err := edgectl.DoLogin(i.kubeinfo, kcontext, "ambassador", hostName, true, true, false, true); err != nil {
-		return i.AESLoginError(err)
+		return i.resAESLoginError(err)
 	}
 
 	// Check to see if AES is ready
@@ -880,10 +880,10 @@ func (i *Installer) Perform(kcontext string) Result {
 	// Normal result (with DNS success) or result without DNS.
 	if dnsSuccess {
 		// Show how to use edgectl login in the future
-		return i.AESInstalledResult(i.hostname)
+		return i.resAESInstalledResult(i.hostname)
 	} else {
 		// Show how to login without DNS.
-		return i.AESInstalledNoDNSResult(resp.StatusCode, dnsMessage, i.address)
+		return i.resAESInstalledNoDNSResult(resp.StatusCode, dnsMessage, i.address)
 	}
 }
 
