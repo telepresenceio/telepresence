@@ -71,24 +71,6 @@ var (
 	}
 )
 
-func AESInstallCmd() *cobra.Command {
-	res := &cobra.Command{
-		Use:   "install",
-		Short: "Install the Ambassador Edge Stack in your cluster",
-		Args:  cobra.ExactArgs(0),
-		RunE:  aesInstall,
-	}
-	_ = res.Flags().StringP(
-		"context", "c", "",
-		"The Kubernetes context to use. Defaults to the current kubectl context.",
-	)
-	_ = res.Flags().BoolP(
-		"verbose", "v", false,
-		"Show all output. Defaults to sending most output to the logfile.",
-	)
-	return res
-}
-
 func getEmailAddress(defaultEmail string, log *log.Logger) string {
 	prompt := fmt.Sprintf("Email address [%s]: ", defaultEmail)
 	errorFallback := defaultEmail
@@ -120,7 +102,7 @@ func getEmailAddress(defaultEmail string, log *log.Logger) string {
 	}
 }
 
-func aesInstall(cmd *cobra.Command, args []string) error {
+func AESInstall(cmd *cobra.Command, args []string) error {
 	skipReport, _ := cmd.Flags().GetBool("no-report")
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	kcontext, _ := cmd.Flags().GetString("context")
@@ -973,7 +955,6 @@ func (i *Installer) ShowWrapped(texts ...string) {
 }
 
 // Kubernetes Cluster
-
 
 // GetCLusterInfo returns the cluster information
 func (i *Installer) UpdateClusterInfo() error {

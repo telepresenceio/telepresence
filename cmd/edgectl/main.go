@@ -168,7 +168,22 @@ func getRootCommand() *cobra.Command {
 		"The Kubernetes namespace to use. Defaults to ambassador.",
 	)
 	rootCmd.AddCommand(licenseCmd)
-	rootCmd.AddCommand(install.AESInstallCmd())
+
+	installCmd := &cobra.Command{
+		Use:   "install",
+		Short: "Install the Ambassador Edge Stack in your cluster",
+		Args:  cobra.ExactArgs(0),
+		RunE:  install.AESInstall,
+	}
+	_ = installCmd.Flags().StringP(
+		"context", "c", "",
+		"The Kubernetes context to use. Defaults to the current kubectl context.",
+	)
+	_ = installCmd.Flags().BoolP(
+		"verbose", "v", false,
+		"Show all output. Defaults to sending most output to the logfile.",
+	)
+	rootCmd.AddCommand(installCmd)
 
 	// Daemon commands. These should be forwarded to the daemon.
 
