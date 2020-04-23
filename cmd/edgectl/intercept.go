@@ -173,7 +173,7 @@ func (d *Daemon) AddIntercept(p *supervisor.Process, out *Emitter, ii *Intercept
 
 		switch len(matches) {
 		case 0:
-			out.Printf("No interceptable deployment matching %s found", ii.Name)
+			out.Printf("No interceptable deployment matching %s found\n", ii.Deployment)
 			out.Send("failed", "no interceptable deployment matches")
 			out.SendExit(1)
 			return nil
@@ -181,7 +181,7 @@ func (d *Daemon) AddIntercept(p *supervisor.Process, out *Emitter, ii *Intercept
 		case 1:
 			// Good to go.
 			ii.Namespace = matches[0].Namespace
-			out.Printf("Using deployment %s in namespace %s\n", ii.Name, ii.Namespace)
+			out.Printf("Using deployment %s in namespace %s\n", ii.Deployment, ii.Namespace)
 
 		default:
 			out.Printf("Found more than one possible match:\n")
