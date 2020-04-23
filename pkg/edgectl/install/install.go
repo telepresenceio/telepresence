@@ -29,6 +29,7 @@ import (
 	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 
+	"github.com/datawire/ambassador/internal/pkg/edgectl"
 	"github.com/datawire/ambassador/pkg/helm"
 	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/datawire/ambassador/pkg/metriton"
@@ -132,8 +133,8 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 
 	// Both printed and logged when verbose (Installer.log is responsible for --verbose)
 	i.log.Printf("INFO: install_id = %v; trace_id = %v",
-		i.scout.reporter.InstallID(),
-		i.scout.reporter.BaseMetadata["trace_id"])
+		i.scout.Reporter.InstallID(),
+		i.scout.Reporter.BaseMetadata["trace_id"])
 
 	sup := supervisor.WithContext(i.ctx)
 	sup.Logger = i.log
@@ -146,7 +147,7 @@ func aesInstall(cmd *cobra.Command, args []string) error {
 			p.Ready()
 			select {
 			case sig := <-sigs:
-				i.Report("user_interrupted", ScoutMeta{"signal", fmt.Sprintf("%+v", sig)})
+				i.Report("user_interrupted", edgectl.ScoutMeta{"signal", fmt.Sprintf("%+v", sig)})
 				i.Quit()
 			case <-p.Shutdown():
 			}
@@ -616,7 +617,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	if installedVersion != "" {
 		i.SetMetadatum("Cluster Info", "managed", installedInfo.Name)
 		i.ShowAESExistingVersion(installedVersion, installedInfo.LongName)
-		i.Report("deploy", ScoutMeta{"already_installed", true})
+		i.Report("deploy", edgectl.ScoutMeta{"already_installed", true})
 
 		switch installedInfo.Method {
 		case instOSS, instAES, instOperator:
@@ -782,7 +783,7 @@ func (i *Installer) Perform(kcontext string) Result {
 
 	if !metriton.IsDisabledByUser() {
 		regData.AESInstallId = i.clusterID
-		regData.EdgectlInstallId = i.scout.reporter.InstallID()
+		regData.EdgectlInstallId = i.scout.Reporter.InstallID()
 	}
 
 	if net.ParseIP(i.address) != nil {
@@ -865,13 +866,13 @@ func (i *Installer) Perform(kcontext string) Result {
 	}
 
 	// Open a browser window to the Edge Policy Console, with a welcome section or modal dialog.
-	if err := do_login(i.kubeinfo, kcontext, "ambassador", hostName, true, true, false, true); err != nil {
+	if err := edgectl.DoLogin(i.kubeinfo, kcontext, "ambassador", hostName, true, true, false, true); err != nil {
 		return i.AESLoginError(err)
 	}
 
 	// Check to see if AES is ready
 	if err := i.CheckAESHealth(); err != nil {
-		i.Report("aes_health_bad", ScoutMeta{"err", err.Error()})
+		i.Report("aes_health_bad", edgectl.ScoutMeta{"err", err.Error()})
 	} else {
 		i.Report("aes_health_good")
 	}
@@ -897,7 +898,7 @@ type Installer struct {
 
 	// Reporting
 
-	scout *Scout
+	scout *edgectl.Scout
 
 	// Logging and management
 
@@ -932,16 +933,16 @@ func NewInstaller(verbose bool) *Installer {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	i := &Installer{
-		scout:   NewScout("install"),
+		scout:   edgectl.NewScout("install"),
 		ctx:     ctx,
 		cancel:  cancel,
 		show:    log.New(io.MultiWriter(os.Stdout, logfile), "", 0),
 		logName: logfileName,
 	}
 	if verbose {
-		i.log = log.New(io.MultiWriter(logfile, NewLoggingWriter(log.New(os.Stderr, "== ", 0))), "", log.Ltime)
-		i.cmdOut = log.New(io.MultiWriter(logfile, NewLoggingWriter(log.New(os.Stderr, "=- ", 0))), "", 0)
-		i.cmdErr = log.New(io.MultiWriter(logfile, NewLoggingWriter(log.New(os.Stderr, "=x ", 0))), "", 0)
+		i.log = log.New(io.MultiWriter(logfile, edgectl.NewLoggingWriter(log.New(os.Stderr, "== ", 0))), "", log.Ltime)
+		i.cmdOut = log.New(io.MultiWriter(logfile, edgectl.NewLoggingWriter(log.New(os.Stderr, "=- ", 0))), "", 0)
+		i.cmdErr = log.New(io.MultiWriter(logfile, edgectl.NewLoggingWriter(log.New(os.Stderr, "=x ", 0))), "", 0)
 	} else {
 		i.log = log.New(logfile, "", log.Ltime)
 		i.cmdOut = log.New(logfile, "", 0)
@@ -987,8 +988,8 @@ func (i *Installer) ShowKubectl(name string, input string, args ...string) error
 	i.log.Printf("$ %v %s", kubectl, strings.Join(kargs, " "))
 	cmd := exec.Command(kubectl, kargs...)
 	cmd.Stdin = strings.NewReader(input)
-	cmd.Stdout = NewLoggingWriter(i.cmdOut)
-	cmd.Stderr = NewLoggingWriter(i.cmdErr)
+	cmd.Stdout = edgectl.NewLoggingWriter(i.cmdOut)
+	cmd.Stderr = edgectl.NewLoggingWriter(i.cmdErr)
 	if err := cmd.Run(); err != nil {
 		return errors.Wrap(err, name)
 	}
@@ -1053,11 +1054,11 @@ func (i *Installer) Capture(name string, logToStdout bool, input string, args ..
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = strings.NewReader(input)
 	if logToStdout {
-		cmd.Stdout = io.MultiWriter(NewLoggingWriter(i.cmdOut), resAsBytes)
+		cmd.Stdout = io.MultiWriter(edgectl.NewLoggingWriter(i.cmdOut), resAsBytes)
 	} else {
 		cmd.Stdout = resAsBytes
 	}
-	cmd.Stderr = NewLoggingWriter(i.cmdErr)
+	cmd.Stderr = edgectl.NewLoggingWriter(i.cmdErr)
 	err = cmd.Run()
 	if err != nil {
 		err = errors.Wrap(err, name)
@@ -1076,7 +1077,7 @@ func (i *Installer) SetMetadatum(name, key string, value interface{}) {
 }
 
 // Report sends an event to Metriton
-func (i *Installer) Report(eventName string, meta ...ScoutMeta) {
+func (i *Installer) Report(eventName string, meta ...edgectl.ScoutMeta) {
 	i.log.Println("[Metrics]", eventName)
 	if err := i.scout.Report(eventName, meta...); err != nil {
 		i.log.Println("[Metrics]", eventName, err)

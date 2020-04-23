@@ -6,25 +6,27 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+
+	"github.com/datawire/ambassador/internal/pkg/edgectl"
 )
 
 func (i *Installer) generateCrashReport(sourceError error) {
 	reportURL := "https://metriton.datawire.io/crash-report"
 
 	report := &crashReportCreationRequest{
-		Product:        "edgectl",
-		Command:        "install",
-		ProductVersion: DisplayVersion(),
-		Error:          sourceError.Error(),
-		AESVersion:     i.version,
-		Address:        i.address,
-		Hostname:       i.hostname,
-		ClusterID:      i.clusterID,
-		InstallID:      i.scout.reporter.InstallID(),
-		TraceID:        fmt.Sprintf("%v", i.scout.reporter.BaseMetadata["trace_id"]),
-		ClusterInfo:    fmt.Sprintf("%v", i.scout.reporter.BaseMetadata["cluster_info"]),
-		Managed:        fmt.Sprintf("%v", i.scout.reporter.BaseMetadata["managed"]),
-		KubectlVersion: i.k8sVersion.Client.GitVersion,
+		Product:         "edgectl",
+		Command:         "install",
+		ProductVersion:  edgectl.DisplayVersion(),
+		Error:           sourceError.Error(),
+		AESVersion:      i.version,
+		Address:         i.address,
+		Hostname:        i.hostname,
+		ClusterID:       i.clusterID,
+		InstallID:       i.scout.Reporter.InstallID(),
+		TraceID:         fmt.Sprintf("%v", i.scout.Reporter.BaseMetadata["trace_id"]),
+		ClusterInfo:     fmt.Sprintf("%v", i.scout.Reporter.BaseMetadata["cluster_info"]),
+		Managed:         fmt.Sprintf("%v", i.scout.Reporter.BaseMetadata["managed"]),
+		KubectlVersion:  i.k8sVersion.Client.GitVersion,
 		KubectlPlatform: i.k8sVersion.Client.Platform,
 		K8sVersion:      i.k8sVersion.Server.GitVersion,
 		K8sPlatform:     i.k8sVersion.Server.Platform,
@@ -50,7 +52,7 @@ func (i *Installer) generateCrashReport(sourceError error) {
 		return
 	}
 	i.log.Printf("uploading anonymous crash report and logs under report ID: %v", crashReport.ReportId)
-	i.Report("crash_report", ScoutMeta{"crash_report_id", crashReport.ReportId})
+	i.Report("crash_report", edgectl.ScoutMeta{"crash_report_id", crashReport.ReportId})
 	i.uploadCrashReportData(crashReport, i.gatherCrashReportData())
 }
 

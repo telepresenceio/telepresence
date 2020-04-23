@@ -5,6 +5,8 @@ import (
 
 	"github.com/gookit/color"
 	"github.com/pkg/errors"
+
+	"github.com/datawire/ambassador/internal/pkg/edgectl"
 )
 
 // Each error listed here of the form *Error() should:
@@ -108,7 +110,7 @@ func (i *Installer) GetVersionsError(err error) Result {
 
 // Unable to download the latest Chart
 func (i *Installer) DownloadError(err error) Result {
-	i.Report("fail_no_internet", ScoutMeta{"err", err.Error()})
+	i.Report("fail_no_internet", edgectl.ScoutMeta{"err", err.Error()})
 
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/download-error"
 
@@ -133,7 +135,7 @@ func (i *Installer) CantReplaceExistingInstallationError(installedVersion string
 }
 
 func (i *Installer) NamespaceCreationFailed(err error) Result {
-	i.Report("fail_install_aes", ScoutMeta{"err", err.Error()})
+	i.Report("fail_install_aes", edgectl.ScoutMeta{"err", err.Error()})
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/install-aes"
 
 	return Result{
@@ -147,7 +149,7 @@ func (i *Installer) NamespaceCreationFailed(err error) Result {
 
 func (i *Installer) FailedToInstallChart(err error, version string, notes string) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/install-aes"
-	i.Report("fail_install_aes", ScoutMeta{"err", err.Error()})
+	i.Report("fail_install_aes", edgectl.ScoutMeta{"err", err.Error()})
 
 	msg := fmt.Sprintf("Failed to install Helm chart: %s", err)
 
@@ -265,7 +267,7 @@ func (i *Installer) AESACMEChallengeError(err error) Result {
 // and so cannot acquire a DNS name for the cluster's load balancer.
 func (i *Installer) DNSNamePostError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/dns-name-post"
-	i.Report("dns_name_failure", ScoutMeta{"err", err.Error()})
+	i.Report("dns_name_failure", edgectl.ScoutMeta{"err", err.Error()})
 
 	return Result{
 		ShortMessage: "Failed to register DNS name for the current installation",
@@ -278,7 +280,7 @@ func (i *Installer) DNSNamePostError(err error) Result {
 // Unable to fetch the response from the HTTP Post to Metriton.
 func (i *Installer) DNSNameBodyError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/dns-name-body"
-	i.Report("dns_name_failure", ScoutMeta{"err", err.Error()})
+	i.Report("dns_name_failure", edgectl.ScoutMeta{"err", err.Error()})
 
 	return Result{
 		ShortMessage: "Failed to register DNS name for the current installation",
@@ -305,7 +307,7 @@ func (i *Installer) DNSPropagationError(err error) Result {
 // In attempting to kubectl apply the hostResource yaml, kubectl failed.
 func (i *Installer) HostResourceCreationError(err error) Result {
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/host-resource-creation"
-	i.Report("fail_host_resource", ScoutMeta{"err", err.Error()})
+	i.Report("fail_host_resource", edgectl.ScoutMeta{"err", err.Error()})
 
 	return Result{
 		ShortMessage: "The installer failed to create a Host resource in your cluster. This is unexpected.",
@@ -360,7 +362,7 @@ func (i *Installer) AESLoginError(err error) Result {
 
 // Successful installation but no DNS.
 func (i *Installer) AESInstalledNoDNSResult(statusCode int, dnsMessage string, hostIP string) Result {
-	i.Report("dns_name_failure", ScoutMeta{"code", statusCode}, ScoutMeta{"err", dnsMessage})
+	i.Report("dns_name_failure", edgectl.ScoutMeta{"code", statusCode}, edgectl.ScoutMeta{"err", dnsMessage})
 
 	message := "In the future, the following command will log in to the Ambassador Edge Policy Console once you accept a self-signed certificate in your browser.\n"
 	message += color.Bold.Sprintf("$ edgectl login " + hostIP)

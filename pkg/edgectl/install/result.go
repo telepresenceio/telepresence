@@ -6,6 +6,8 @@ import (
 
 	"github.com/gookit/color"
 	"github.com/pkg/browser"
+
+	"github.com/datawire/ambassador/internal/pkg/edgectl"
 )
 
 // Result represents the result of an installation attempt
@@ -76,11 +78,11 @@ func (i *Installer) ShowTemplated(text string, more ...AdditionalDatum) {
 }
 func (i *Installer) ShowResult(r Result) {
 	templateData := []AdditionalDatum{
-		AdditionalDatum{key: "Report", value: r.Report},
-		AdditionalDatum{key: "Message", value: r.Message},
-		AdditionalDatum{key: "TryAgain", value: r.TryAgain},
-		AdditionalDatum{key: "URL", value: r.URL},
-		AdditionalDatum{key: "Err", value: r.Err},
+		{key: "Report", value: r.Report},
+		{key: "Message", value: r.Message},
+		{key: "TryAgain", value: r.TryAgain},
+		{key: "URL", value: r.URL},
+		{key: "Err", value: r.Err},
 	}
 
 	if r.Err != nil {
@@ -90,7 +92,7 @@ func (i *Installer) ShowResult(r Result) {
 		i.log.Printf(" Error: %+v", r.Err)
 
 		if r.Report != "" {
-			i.Report(r.Report, ScoutMeta{"err", r.Err.Error()})
+			i.Report(r.Report, edgectl.ScoutMeta{"err", r.Err.Error()})
 		}
 
 		if r.ShortMessage != "" {

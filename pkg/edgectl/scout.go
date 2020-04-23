@@ -12,7 +12,7 @@ import (
 
 type Scout struct {
 	index    int
-	reporter *metriton.Reporter
+	Reporter *metriton.Reporter
 }
 
 type ScoutMeta struct {
@@ -22,7 +22,7 @@ type ScoutMeta struct {
 
 func NewScout(mode string) (s *Scout) {
 	return &Scout{
-		reporter: &metriton.Reporter{
+		Reporter: &metriton.Reporter{
 			Application: "edgectl",
 			Version:     Version,
 			GetInstallID: func(r *metriton.Reporter) (string, error) {
@@ -44,11 +44,11 @@ func NewScout(mode string) (s *Scout) {
 }
 
 func (s *Scout) SetMetadatum(key string, value interface{}) {
-	oldValue, ok := s.reporter.BaseMetadata[key]
+	oldValue, ok := s.Reporter.BaseMetadata[key]
 	if ok {
 		panic(fmt.Sprintf("trying to replace metadata[%q] = %q with %q", key, oldValue, value))
 	}
-	s.reporter.BaseMetadata[key] = value
+	s.Reporter.BaseMetadata[key] = value
 }
 
 func (s *Scout) Report(action string, meta ...ScoutMeta) error {
@@ -66,7 +66,7 @@ func (s *Scout) Report(action string, meta ...ScoutMeta) error {
 		metadata[metaItem.Key] = metaItem.Value
 	}
 
-	_, err := s.reporter.Report(context.TODO(), metadata)
+	_, err := s.Reporter.Report(context.TODO(), metadata)
 	if err != nil {
 		return errors.Wrap(err, "scout report")
 	}

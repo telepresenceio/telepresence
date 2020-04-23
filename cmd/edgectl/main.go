@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/ambassador/internal/pkg/edgectl"
+	install "github.com/datawire/ambassador/internal/pkg/edgectl/install"
 )
 
 // Version is inserted at build using --ldflags -X
@@ -167,7 +168,7 @@ func getRootCommand() *cobra.Command {
 		"The Kubernetes namespace to use. Defaults to ambassador.",
 	)
 	rootCmd.AddCommand(licenseCmd)
-	rootCmd.AddCommand(edgectl.AESInstallCmd())
+	rootCmd.AddCommand(install.AESInstallCmd())
 
 	// Daemon commands. These should be forwarded to the daemon.
 
