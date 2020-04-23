@@ -1,10 +1,12 @@
-package main
+package edgectl
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -13,6 +15,23 @@ import (
 
 	"github.com/datawire/ambassador/pkg/supervisor"
 )
+
+var simpleTransport = &http.Transport{
+	// #nosec G402
+	TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	Proxy:           nil,
+	DialContext: (&net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 1 * time.Second,
+		DualStack: true,
+	}).DialContext,
+	DisableKeepAlives: true,
+}
+
+var hClient = &http.Client{
+	Transport: simpleTransport,
+	Timeout:   15 * time.Second,
+}
 
 // Connect the daemon to a cluster
 func (d *Daemon) Connect(
@@ -55,7 +74,7 @@ func (d *Daemon) Connect(
 	bridge, err := CheckedRetryingCommand(
 		p,
 		"bridge",
-		[]string{edgectl, "teleproxy", "bridge", cluster.context, cluster.namespace},
+		[]string{GetExe(), "teleproxy", "bridge", cluster.context, cluster.namespace},
 		rai,
 		checkBridge,
 		15*time.Second,

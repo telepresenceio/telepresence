@@ -1,4 +1,4 @@
-package main
+package edgectl
 
 import (
 	"bufio"
@@ -26,7 +26,7 @@ type ClientMessage struct {
 // exit with the specified status
 const ExitPrefix = "-- exit "
 
-func isServerRunning() bool {
+func IsServerRunning() bool {
 	conn, err := net.Dial("unix", socketName)
 	if err != nil {
 		return false
@@ -36,7 +36,7 @@ func isServerRunning() bool {
 	data := ClientMessage{
 		Args:          []string{"edgectl", "version"},
 		APIVersion:    apiVersion,
-		ClientVersion: displayVersion,
+		ClientVersion: DisplayVersion(),
 	}
 	encoder := json.NewEncoder(conn)
 	if err := encoder.Encode(&data); err != nil {
@@ -50,7 +50,7 @@ func isServerRunning() bool {
 	return true
 }
 
-func mainViaDaemon() error {
+func MainViaDaemon() error {
 	conn, err := net.Dial("unix", socketName)
 	if err != nil {
 		return err
@@ -66,7 +66,7 @@ func mainViaDaemon() error {
 		Args:          os.Args,
 		RAI:           rai,
 		APIVersion:    apiVersion,
-		ClientVersion: displayVersion,
+		ClientVersion: DisplayVersion(),
 	}
 	encoder := json.NewEncoder(conn)
 	if err := encoder.Encode(&data); err != nil {

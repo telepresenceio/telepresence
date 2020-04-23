@@ -1,4 +1,4 @@
-package main
+package edgectl
 
 import (
 	"bytes"
@@ -12,19 +12,19 @@ func (i *Installer) generateCrashReport(sourceError error) {
 	reportURL := "https://metriton.datawire.io/crash-report"
 
 	report := &crashReportCreationRequest{
-		Product:         "edgectl",
-		Command:         "install",
-		ProductVersion:  displayVersion,
-		Error:           sourceError.Error(),
-		AESVersion:      i.version,
-		Address:         i.address,
-		Hostname:        i.hostname,
-		ClusterID:       i.clusterID,
-		InstallID:       i.scout.reporter.InstallID(),
-		TraceID:         fmt.Sprintf("%v", i.scout.reporter.BaseMetadata["trace_id"]),
-		ClusterInfo:     fmt.Sprintf("%v", i.scout.reporter.BaseMetadata["cluster_info"]),
-		Managed:         fmt.Sprintf("%v", i.scout.reporter.BaseMetadata["managed"]),
-		KubectlVersion:  i.k8sVersion.Client.GitVersion,
+		Product:        "edgectl",
+		Command:        "install",
+		ProductVersion: DisplayVersion(),
+		Error:          sourceError.Error(),
+		AESVersion:     i.version,
+		Address:        i.address,
+		Hostname:       i.hostname,
+		ClusterID:      i.clusterID,
+		InstallID:      i.scout.reporter.InstallID(),
+		TraceID:        fmt.Sprintf("%v", i.scout.reporter.BaseMetadata["trace_id"]),
+		ClusterInfo:    fmt.Sprintf("%v", i.scout.reporter.BaseMetadata["cluster_info"]),
+		Managed:        fmt.Sprintf("%v", i.scout.reporter.BaseMetadata["managed"]),
+		KubectlVersion: i.k8sVersion.Client.GitVersion,
 		KubectlPlatform: i.k8sVersion.Client.Platform,
 		K8sVersion:      i.k8sVersion.Server.GitVersion,
 		K8sPlatform:     i.k8sVersion.Server.Platform,

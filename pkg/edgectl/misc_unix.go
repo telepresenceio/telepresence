@@ -1,6 +1,6 @@
 // +build !windows
 
-package main
+package edgectl
 
 import (
 	"bytes"
@@ -90,18 +90,18 @@ func GuessRunAsInfo(p *supervisor.Process) (*RunAsInfo, error) {
 	return &res, nil
 }
 
-func launchDaemon(ccmd *cobra.Command, _ []string) error {
+func LaunchDaemon(ccmd *cobra.Command, _ []string) error {
 	if os.Geteuid() != 0 {
 		fmt.Println("Edge Control Daemon must be launched as root.")
 		fmt.Printf("\n  sudo %s\n\n", ccmd.CommandPath())
 		return errors.New("root privileges required")
 	}
-	fmt.Println("Launching Edge Control Daemon", displayVersion)
+	fmt.Println("Launching Edge Control Daemon", DisplayVersion())
 
 	dns, _ := ccmd.Flags().GetString("dns")
 	fallback, _ := ccmd.Flags().GetString("fallback")
 
-	cmd := exec.Command(edgectl, "daemon-foreground", dns, fallback)
+	cmd := exec.Command(GetExe(), "daemon-foreground", dns, fallback)
 	cmd.Env = os.Environ()
 	cmd.Stdin = nil
 	cmd.Stdout = nil
@@ -115,7 +115,7 @@ func launchDaemon(ccmd *cobra.Command, _ []string) error {
 
 	success := false
 	for count := 0; count < 40; count++ {
-		if isServerRunning() {
+		if IsServerRunning() {
 			success = true
 			break
 		}

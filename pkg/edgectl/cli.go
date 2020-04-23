@@ -1,4 +1,4 @@
-package main
+package edgectl
 
 import (
 	"fmt"
@@ -14,7 +14,7 @@ import (
 
 func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *ClientMessage) error {
 	out := NewEmitter(conn)
-	rootCmd := d.getRootCommand(p, out, data)
+	rootCmd := d.GetRootCommand(p, out, data)
 	rootCmd.SetOutput(conn) // FIXME replace with SetOut and SetErr
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
 		if batch, _ := cmd.Flags().GetBool("batch"); batch {
@@ -29,7 +29,7 @@ func (d *Daemon) handleCommand(p *supervisor.Process, conn net.Conn, data *Clien
 	return out.Err()
 }
 
-func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *ClientMessage) *cobra.Command {
+func (d *Daemon) GetRootCommand(p *supervisor.Process, out *Emitter, data *ClientMessage) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:          "edgectl",
 		Short:        "Edge Control",
@@ -44,7 +44,7 @@ func (d *Daemon) getRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 		Args:  cobra.ExactArgs(0),
 		RunE: func(_ *cobra.Command, _ []string) error {
 			out.Println("Client", data.ClientVersion)
-			out.Println("Daemon", displayVersion)
+			out.Println("Daemon", DisplayVersion())
 			out.Send("daemon.version", Version)
 			out.Send("daemon.apiVersion", apiVersion)
 			return out.Err()

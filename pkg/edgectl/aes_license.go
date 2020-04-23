@@ -1,4 +1,4 @@
-package main
+package edgectl
 
 import (
 	"encoding/base64"
@@ -12,7 +12,7 @@ import (
 	"github.com/datawire/ambassador/pkg/k8s"
 )
 
-func aesLicense(cmd *cobra.Command, args []string) error {
+func AESLicense(cmd *cobra.Command, args []string) error {
 	context, _ := cmd.Flags().GetString("context")
 	namespace, _ := cmd.Flags().GetString("namespace")
 	licenseKey := args[0]

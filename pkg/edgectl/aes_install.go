@@ -1,4 +1,4 @@
-package main
+package edgectl
 
 import (
 	"bufio"
@@ -70,7 +70,7 @@ var (
 	}
 )
 
-func aesInstallCmd() *cobra.Command {
+func AESInstallCmd() *cobra.Command {
 	res := &cobra.Command{
 		Use:   "install",
 		Short: "Install the Ambassador Edge Stack in your cluster",

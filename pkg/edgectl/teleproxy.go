@@ -1,6 +1,6 @@
 // +build !windows
 
-package main
+package edgectl
 
 import (
 	"os"
@@ -21,7 +21,7 @@ func RunAsTeleproxyIntercept(dns, fallback string) error {
 		DNSIP:      dns,
 		FallbackIP: fallback,
 	}
-	return teleproxy.RunTeleproxy(tele, displayVersion)
+	return teleproxy.RunTeleproxy(tele, DisplayVersion())
 }
 
 // RunAsTeleproxyBridge is the main function when executing as
@@ -32,5 +32,5 @@ func RunAsTeleproxyBridge(context, namespace string) error {
 		Context:   context,
 		Namespace: namespace,
 	}
-	return teleproxy.RunTeleproxy(tele, displayVersion)
+	return teleproxy.RunTeleproxy(tele, DisplayVersion())
 }

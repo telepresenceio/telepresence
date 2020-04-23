@@ -1,4 +1,4 @@
-package main
+package edgectl
 
 import (
 	"crypto/rsa"
@@ -7,7 +7,6 @@ import (
 
 	"github.com/pkg/browser"
 
-	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gookit/color"
 	"github.com/pkg/errors"
@@ -15,6 +14,8 @@ import (
 	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
+
+	"github.com/datawire/ambassador/pkg/k8s"
 )
 
 const SecretName = "ambassador-internal"
@@ -24,7 +25,7 @@ type LoginClaimsV1 struct {
 	jwt.StandardClaims
 }
 
-func aesLogin(cmd *cobra.Command, args []string) error {
+func AESLogin(cmd *cobra.Command, args []string) error {
 	fmt.Println(color.Info.Sprintf("Connecting to the Ambassador Edge Policy Console in this cluster..."))
 
 	// Grab options
