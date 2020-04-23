@@ -289,7 +289,7 @@ PodsLoop:
 	}
 
 	// Retrieve the cluster ID
-	clusterID, err := i.CaptureKubectl("get cluster ID", "", "-n", "ambassador", "exec", podName, "-c", containerName, "python3", "kubewatch.py")
+	clusterID, err := i.captureKubectl("get cluster ID", "", "-n", "ambassador", "exec", podName, "-c", containerName, "python3", "kubewatch.py")
 	if err != nil {
 		return err
 	}
@@ -461,12 +461,12 @@ func (i *Installer) HostnameMatchesLBAddress(hostname string) bool {
 
 // CheckACMEIsDone queries the Host object and succeeds if its state is Ready.
 func (i *Installer) CheckACMEIsDone() error {
-	state, err := i.CaptureKubectl("get Host state", "", "get", "host", i.hostname, "-o", "go-template={{.status.state}}")
+	state, err := i.captureKubectl("get Host state", "", "get", "host", i.hostname, "-o", "go-template={{.status.state}}")
 	if err != nil {
 		return LoopFailedError(err.Error())
 	}
 	if state == "Error" {
-		reason, err := i.CaptureKubectl("get Host error", "", "get", "host", i.hostname, "-o", "go-template={{.status.errorReason}}")
+		reason, err := i.captureKubectl("get Host error", "", "get", "host", i.hostname, "-o", "go-template={{.status.errorReason}}")
 		if err != nil {
 			return LoopFailedError(err.Error())
 		}
@@ -495,7 +495,7 @@ func (i *Installer) CheckACMEIsDone() error {
 
 // CreateNamespace creates the namespace for installing AES
 func (i *Installer) CreateNamespace() error {
-	i.CaptureKubectl("create namespace", "", "create", "namespace", defInstallNamespace)
+	i.captureKubectl("create namespace", "", "create", "namespace", defInstallNamespace)
 	// ignore errors: it will fail if the namespace already exists
 	// TODO: check that the error message contains "already exists"
 	return nil
@@ -549,13 +549,13 @@ func (i *Installer) Perform(kcontext string) Result {
 	i.ShowBeginAESInstallation()
 
 	// Attempt to use kubectl
-	if _, err = i.GetKubectlPath(); err != nil {
+	if _, err = i.getKubectlPath(); err != nil {
 		return i.resNoKubectlError(err)
 	}
 
 	// Attempt to talk to the specified cluster
 	i.kubeinfo = k8s.NewKubeInfo("", kcontext, "")
-	if err := i.ShowKubectl("cluster-info", "", "cluster-info"); err != nil {
+	if err := i.showKubectl("cluster-info", "", "cluster-info"); err != nil {
 		return i.resNoClusterError(err)
 	}
 	i.restConfig, err = i.kubeinfo.GetRestConfig()
@@ -569,7 +569,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		return i.resNewForConfigError(err)
 	}
 
-	versions, err := i.CaptureKubectl("get versions", "", "version", "-o", "json")
+	versions, err := i.captureKubectl("get versions", "", "version", "-o", "json")
 	if err != nil {
 		return i.resGetVersionsError(err)
 	}
@@ -601,7 +601,7 @@ func (i *Installer) Perform(kcontext string) Result {
 	// Try to verify the existence of an Ambassador deployment in the Ambassador
 	// namespace.
 	getDeployForLabel := func(label string) (res string, err error) {
-		return i.CaptureKubectl("get AES deployment", "",
+		return i.captureKubectl("get AES deployment", "",
 			"-n", defInstallNamespace,
 			"get", "deploy",
 			"-l", label,
@@ -830,7 +830,7 @@ func (i *Installer) Perform(kcontext string) Result {
 
 		// Create a Host resource
 		hostResource := fmt.Sprintf(hostManifest, i.hostname, i.hostname, emailAddress)
-		if err := i.ShowKubectl("install Host resource", hostResource, "apply", "-f", "-"); err != nil {
+		if err := i.showKubectl("install Host resource", hostResource, "apply", "-f", "-"); err != nil {
 			return i.resHostResourceCreationError(err)
 		}
 
@@ -843,7 +843,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		i.Report("cert_provisioned")
 		i.ShowTLSConfiguredSuccessfully()
 
-		if err := i.ShowKubectl("show Host", "", "get", "host", i.hostname); err != nil {
+		if err := i.showKubectl("show Host", "", "get", "host", i.hostname); err != nil {
 			return i.resHostRetrievalError(err)
 		}
 
@@ -974,75 +974,18 @@ func (i *Installer) ShowWrapped(texts ...string) {
 
 // Kubernetes Cluster
 
-// ShowKubectl calls kubectl and dumps the output to the logger. Use this for
-// side effects.
-func (i *Installer) ShowKubectl(name string, input string, args ...string) error {
-	kargs, err := i.kubeinfo.GetKubectlArray(args...)
-	if err != nil {
-		return errors.Wrapf(err, "cluster access for %s", name)
-	}
-	kubectl, err := i.GetKubectlPath()
-	if err != nil {
-		return errors.Wrapf(err, "kubectl not found %s", name)
-	}
-	i.log.Printf("$ %v %s", kubectl, strings.Join(kargs, " "))
-	cmd := exec.Command(kubectl, kargs...)
-	cmd.Stdin = strings.NewReader(input)
-	cmd.Stdout = edgectl.NewLoggingWriter(i.cmdOut)
-	cmd.Stderr = edgectl.NewLoggingWriter(i.cmdErr)
-	if err := cmd.Run(); err != nil {
-		return errors.Wrap(err, name)
-	}
-	return nil
-}
-
-// CaptureKubectl calls kubectl and returns its stdout, dumping all the output
-// to the logger.
-func (i *Installer) CaptureKubectl(name, input string, args ...string) (res string, err error) {
-	res = ""
-	kargs, err := i.kubeinfo.GetKubectlArray(args...)
-	if err != nil {
-		err = errors.Wrapf(err, "cluster access for %s", name)
-		return
-	}
-	kubectl, err := i.GetKubectlPath()
-	if err != nil {
-		err = errors.Wrapf(err, "kubectl not found %s", name)
-		return
-	}
-	kargs = append([]string{kubectl}, kargs...)
-	return i.Capture(name, true, input, kargs...)
-}
-
-// SilentCaptureKubectl calls kubectl and returns its stdout
-// without dumping all the output to the logger.
-func (i *Installer) SilentCaptureKubectl(name, input string, args ...string) (res string, err error) {
-	res = ""
-	kargs, err := i.kubeinfo.GetKubectlArray(args...)
-	if err != nil {
-		err = errors.Wrapf(err, "cluster access for %s", name)
-		return
-	}
-	kubectl, err := i.GetKubectlPath()
-	if err != nil {
-		err = errors.Wrapf(err, "kubectl not found %s", name)
-		return
-	}
-	kargs = append([]string{kubectl}, kargs...)
-	return i.Capture(name, false, input, kargs...)
-}
 
 // GetCLusterInfo returns the cluster information
 func (i *Installer) UpdateClusterInfo() error {
 	// Try to determine cluster type from node labels
-	if clusterNodeLabels, err := i.CaptureKubectl("get node labels", "", "get", "no", "-Lkubernetes.io/hostname"); err == nil {
+	if clusterNodeLabels, err := i.captureKubectl("get node labels", "", "get", "no", "-Lkubernetes.io/hostname"); err == nil {
 		i.clusterinfo = newClusterInfoFromNodeLabels(clusterNodeLabels)
 	}
 	return nil
 }
 
-// GetKubectlPath returns the full path to the kubectl executable, or an error if not found
-func (i *Installer) GetKubectlPath() (string, error) {
+// getKubectlPath returns the full path to the kubectl executable, or an error if not found
+func (i *Installer) getKubectlPath() (string, error) {
 	return exec.LookPath("kubectl")
 }
 
