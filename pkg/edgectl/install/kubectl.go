@@ -9,6 +9,11 @@ import (
 	"github.com/datawire/ambassador/internal/pkg/edgectl"
 )
 
+// getKubectlPath returns the full path to the kubectl executable, or an error if not found
+func (i *Installer) getKubectlPath() (string, error) {
+	return exec.LookPath("kubectl")
+}
+
 // showKubectl calls kubectl and dumps the output to the logger. Use this for
 // side effects.
 func (i *Installer) showKubectl(name string, input string, args ...string) error {
