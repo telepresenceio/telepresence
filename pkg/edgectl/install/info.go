@@ -1,11 +1,14 @@
 package edgectl
 
 import (
-	"bufio"
+	"io/ioutil"
 	"regexp"
 	"strings"
 
 	"helm.sh/helm/v3/pkg/strvals"
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 //
@@ -98,24 +101,46 @@ var clusterInfoDatabase = map[int]clusterInfo{
 	},
 }
 
-func newClusterInfoFromNodeLabels(clusterNodeLabels string) clusterInfo {
-	if strings.Contains(clusterNodeLabels, "docker-desktop") {
-		return clusterInfoDatabase[clusterDockerDesktop]
-	} else if strings.Contains(clusterNodeLabels, "minikube") {
-		return clusterInfoDatabase[clusterMinikube]
-	} else if strings.Contains(clusterNodeLabels, "kind") {
-		return clusterInfoDatabase[clusterKIND]
-	} else if strings.Contains(clusterNodeLabels, "k3d") {
-		return clusterInfoDatabase[clusterK3D]
-	} else if strings.Contains(clusterNodeLabels, "gke") {
-		return clusterInfoDatabase[clusterGKE]
-	} else if strings.Contains(clusterNodeLabels, "aks") {
-		return clusterInfoDatabase[clusterAKS]
-	} else if strings.Contains(clusterNodeLabels, "compute") {
-		return clusterInfoDatabase[clusterEKS]
-	} else if strings.Contains(clusterNodeLabels, "ec2") {
-		return clusterInfoDatabase[clusterEC2]
+func NewClusterInfo(kubectl Kubectl) clusterInfo {
+	// Try to determine cluster type from node labels
+	nodesList, err := kubectl.WithStdout(ioutil.Discard).List("nodes", "", []string{})
+	if err != nil {
+		// ignore errors if we cannot detect the cluster type
+		return clusterInfo{}
 	}
+	nodes, err := nodesList.ToList()
+	if nodes == nil {
+		return clusterInfo{}
+	}
+	items := nodes.Items
+	if len(items) == 0 {
+		return clusterInfo{}
+	}
+
+	return newClusterInfoFromNodeLabels(nodes.Items[0].GetLabels())
+}
+
+func newClusterInfoFromNodeLabels(clusterNodeLabels map[string]string) clusterInfo {
+	for _, label := range clusterNodeLabels {
+		if strings.Contains(label, "docker-desktop") {
+			return clusterInfoDatabase[clusterDockerDesktop]
+		} else if strings.Contains(label, "minikube") {
+			return clusterInfoDatabase[clusterMinikube]
+		} else if strings.Contains(label, "kind") {
+			return clusterInfoDatabase[clusterKIND]
+		} else if strings.Contains(label, "k3d") {
+			return clusterInfoDatabase[clusterK3D]
+		} else if strings.Contains(label, "gke") {
+			return clusterInfoDatabase[clusterGKE]
+		} else if strings.Contains(label, "aks") {
+			return clusterInfoDatabase[clusterAKS]
+		} else if strings.Contains(label, "compute") {
+			return clusterInfoDatabase[clusterEKS]
+		} else if strings.Contains(label, "ec2") {
+			return clusterInfoDatabase[clusterEC2]
+		}
+	}
+
 	return clusterInfoDatabase[clusterUnknown]
 }
 
@@ -182,8 +207,6 @@ var defInstallationMethodsInfo = []installationMethodInfo{
 	},
 }
 
-type deployGetter func(string) (string, error)
-
 // getExistingInstallation tries to find an existing deployment by looking at a list of predefined labels,
 // If such a deployment is found, it returns the image and the installation "family" (aes, oss, helm, etc).
 // It returns an empty string if no installation could be found.
@@ -193,20 +216,35 @@ type deployGetter func(string) (string, error)
 //       one?), then proceed operating on that Ambassador in that namespace. Right now
 //       we hard-code the "ambassador" namespace in a number of spots.
 //
-func getExistingInstallation(deploys deployGetter) (string, installationMethodInfo, error) {
+func getExistingInstallation(kubectl Kubectl) (string, installationMethodInfo, error) {
 	findFor := func(label string, imageRe *regexp.Regexp) (string, error) {
-		deploys, err := deploys(label)
-		if err != nil {
+		deploys, err := kubectl.WithStdout(ioutil.Discard).List("deployments", defInstallNamespace, []string{label})
+		if deploys == nil {
 			return "", err
 		}
-		scanner := bufio.NewScanner(strings.NewReader(deploys))
-		for scanner.Scan() {
-			image := strings.TrimSpace(scanner.Text())
-			if matches := imageRe.FindStringSubmatch(image); len(matches) == 2 {
-				return matches[1], nil
+		var items []unstructured.Unstructured
+		if !deploys.IsList() {
+			items = []unstructured.Unstructured{*deploys}
+		} else {
+			l, err := deploys.ToList()
+			if err != nil {
+				return "", err
+			}
+			items = l.Items
+		}
+		for _, deploy := range items {
+			deployment := appsv1.Deployment{}
+			if err := runtime.DefaultUnstructuredConverter.FromUnstructured(deploy.UnstructuredContent(), &deployment); err != nil {
+				continue
+			}
+			containers := deployment.Spec.Template.Spec.Containers
+			for _, container := range containers {
+				if matches := imageRe.FindStringSubmatch(container.Image); len(matches) == 2 {
+					return matches[1], nil
+				}
 			}
 		}
-		return "", scanner.Err()
+		return "", nil
 	}
 
 	for _, info := range defInstallationMethodsInfo {
@@ -221,5 +259,6 @@ func getExistingInstallation(deploys deployGetter) (string, installationMethodIn
 			return version, info, nil
 		}
 	}
+
 	return "", installationMethodInfo{Method: instNone}, nil
 }

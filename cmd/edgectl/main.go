@@ -226,7 +226,7 @@ func forwardToDaemon(cmd *cobra.Command, _ []string) error {
 		// The version command is special because it must emit the client
 		// version if the daemon is unavailable.
 		if cmd.Use == "version" {
-			fmt.Println("Client", edgectl.DisplayVersion)
+			fmt.Println("Client", edgectl.DisplayVersion())
 		}
 		fmt.Println("Unable to connect to the daemon (See \"edgectl help daemon\")")
 	}

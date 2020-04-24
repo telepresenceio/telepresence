@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -23,7 +22,7 @@ import (
 	"github.com/spf13/cobra"
 	"helm.sh/helm/v3/pkg/strvals"
 	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	k8sVersion "k8s.io/apimachinery/pkg/version"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 
@@ -180,10 +179,11 @@ PodsLoop:
 	}
 
 	// Retrieve the cluster ID
-	clusterID, err := i.captureKubectl("get cluster ID", "", "-n", "ambassador", "exec", podName, "-c", containerName, "python3", "kubewatch.py")
+	clusterID, err := i.kubectl.Exec(podName, containerName, "ambassador", "python3", "kubewatch.py")
 	if err != nil {
 		return err
 	}
+
 	i.clusterID = clusterID
 	i.SetMetadatum("Cluster ID", "aes_install_id", clusterID)
 	return nil
@@ -352,12 +352,17 @@ func (i *Installer) HostnameMatchesLBAddress(hostname string) bool {
 
 // CheckACMEIsDone queries the Host object and succeeds if its state is Ready.
 func (i *Installer) CheckACMEIsDone() error {
-	state, err := i.captureKubectl("get Host state", "", "get", "host", i.hostname, "-o", "go-template={{.status.state}}")
+
+	host, err := i.kubectl.Get("host", i.hostname, "")
+	if err != nil {
+		return LoopFailedError(err.Error())
+	}
+	state, _, err := unstructured.NestedString(host.Object, "status", "state")
 	if err != nil {
 		return LoopFailedError(err.Error())
 	}
 	if state == "Error" {
-		reason, err := i.captureKubectl("get Host error", "", "get", "host", i.hostname, "-o", "go-template={{.status.errorReason}}")
+		reason, _, err := unstructured.NestedString(host.Object, "status", "errorReason")
 		if err != nil {
 			return LoopFailedError(err.Error())
 		}
@@ -386,7 +391,7 @@ func (i *Installer) CheckACMEIsDone() error {
 
 // CreateNamespace creates the namespace for installing AES
 func (i *Installer) CreateNamespace() error {
-	i.captureKubectl("create namespace", "", "create", "namespace", defInstallNamespace)
+	_ = i.kubectl.Create("namespace", defInstallNamespace, "")
 	// ignore errors: it will fail if the namespace already exists
 	// TODO: check that the error message contains "already exists"
 	return nil
@@ -440,15 +445,20 @@ func (i *Installer) Perform(kcontext string) Result {
 	i.ShowBeginAESInstallation()
 
 	// Attempt to use kubectl
-	if _, err = i.getKubectlPath(); err != nil {
+	if _, err = getKubectlPath(); err != nil {
 		return i.resNoKubectlError(err)
 	}
 
 	// Attempt to talk to the specified cluster
 	i.kubeinfo = k8s.NewKubeInfo("", kcontext, "")
-	if err := i.showKubectl("cluster-info", "", "cluster-info"); err != nil {
+	i.kubectl, err = i.NewSimpleKubectl()
+	if err != nil {
+	}
+
+	if _, err := i.kubectl.ClusterInfo(); err != nil {
 		return i.resNoClusterError(err)
 	}
+
 	i.restConfig, err = i.kubeinfo.GetRestConfig()
 
 	if err != nil {
@@ -460,30 +470,18 @@ func (i *Installer) Perform(kcontext string) Result {
 		return i.resNewForConfigError(err)
 	}
 
-	versions, err := i.captureKubectl("get versions", "", "version", "-o", "json")
+	i.k8sVersion, err = i.kubectl.WithStdout(ioutil.Discard).Version()
 	if err != nil {
 		return i.resGetVersionsError(err)
 	}
 
-	kubernetesVersion := &kubernetesVersion{}
-	err = json.Unmarshal([]byte(versions), kubernetesVersion)
-	if err != nil {
-		// We tried to extract Kubernetes client and server versions but failed.
-		// This should not happen since we already validated the cluster-info, but still...
-		// It's not critical if this information is missing, other than for debugging purposes.
-		i.log.Printf("failed to read Kubernetes client and server versions: %v", err.Error())
-	}
-
-	i.k8sVersion = *kubernetesVersion
 	// Metriton tries to parse fields with `version` in their keys and discards them if it can't.
 	// Using _v to keep the version value as string since Kubernetes versions vary in formats.
 	i.SetMetadatum("kubectl Version", "kubectl_v", i.k8sVersion.Client.GitVersion)
 	i.SetMetadatum("K8s Version", "k8s_v", i.k8sVersion.Server.GitVersion)
 
 	// Try to grab some cluster info
-	if err := i.UpdateClusterInfo(); err != nil {
-		return i.resNoClusterError(err)
-	}
+	i.clusterinfo = NewClusterInfo(i.kubectl)
 	i.SetMetadatum("Cluster Info", "cluster_info", i.clusterinfo.name)
 
 	// New Helm-based install
@@ -491,14 +489,7 @@ func (i *Installer) Perform(kcontext string) Result {
 
 	// Try to verify the existence of an Ambassador deployment in the Ambassador
 	// namespace.
-	getDeployForLabel := func(label string) (res string, err error) {
-		return i.captureKubectl("get AES deployment", "",
-			"-n", defInstallNamespace,
-			"get", "deploy",
-			"-l", label,
-			"-o", "go-template='{{range .items}}{{range .spec.template.spec.containers}}{{.image}}\n{{end}}{{end}}'")
-	}
-	installedVersion, installedInfo, err := getExistingInstallation(getDeployForLabel)
+	installedVersion, installedInfo, err := getExistingInstallation(i.kubectl)
 
 	if err != nil {
 		i.ShowFailedWhenLookingForExistingVersion()
@@ -721,7 +712,7 @@ func (i *Installer) Perform(kcontext string) Result {
 
 		// Create a Host resource
 		hostResource := fmt.Sprintf(hostManifest, i.hostname, i.hostname, emailAddress)
-		if err := i.showKubectl("install Host resource", hostResource, "apply", "-f", "-"); err != nil {
+		if err := i.kubectl.Apply(hostResource, ""); err != nil {
 			return i.resHostResourceCreationError(err)
 		}
 
@@ -734,7 +725,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		i.Report("cert_provisioned")
 		i.ShowTLSConfiguredSuccessfully()
 
-		if err := i.showKubectl("show Host", "", "get", "host", i.hostname); err != nil {
+		if _, err := i.kubectl.Get("host", i.hostname, ""); err != nil {
 			return i.resHostRetrievalError(err)
 		}
 
@@ -783,6 +774,7 @@ type Installer struct {
 	// Cluster
 
 	kubeinfo    *k8s.KubeInfo
+	kubectl     Kubectl
 	restConfig  *rest.Config
 	coreClient  *k8sClientCoreV1.CoreV1Client
 	clusterinfo clusterInfo
@@ -803,7 +795,7 @@ type Installer struct {
 
 	// Install results
 
-	k8sVersion kubernetesVersion // cluster version information
+	k8sVersion KubernetesVersion // cluster version information
 	imageRepo  string            // from which docker repo is AES being installed
 	version    string            // which AES version is being installed
 	address    string            // load balancer address
@@ -822,6 +814,7 @@ func NewInstaller(verbose bool) *Installer {
 		logfile = os.Stderr
 		fmt.Fprintf(logfile, "WARNING: Failed to open logfile %q: %+v\n", logfileName, err)
 	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	i := &Installer{
 		scout:   edgectl.NewScout("install"),
@@ -830,6 +823,7 @@ func NewInstaller(verbose bool) *Installer {
 		show:    log.New(io.MultiWriter(os.Stdout, logfile), "", 0),
 		logName: logfileName,
 	}
+
 	if verbose {
 		i.log = log.New(io.MultiWriter(logfile, edgectl.NewLoggingWriter(log.New(os.Stderr, "== ", 0))), "", log.Ltime)
 		i.cmdOut = log.New(io.MultiWriter(logfile, edgectl.NewLoggingWriter(log.New(os.Stderr, "=- ", 0))), "", 0)
@@ -847,38 +841,6 @@ func (i *Installer) Quit() {
 	i.cancel()
 }
 
-// Kubernetes Cluster
-
-// GetCLusterInfo returns the cluster information
-func (i *Installer) UpdateClusterInfo() error {
-	// Try to determine cluster type from node labels
-	if clusterNodeLabels, err := i.captureKubectl("get node labels", "", "get", "no", "-Lkubernetes.io/hostname"); err == nil {
-		i.clusterinfo = newClusterInfoFromNodeLabels(clusterNodeLabels)
-	}
-	return nil
-}
-
-// Capture calls a command and returns its stdout
-func (i *Installer) Capture(name string, logToStdout bool, input string, args ...string) (res string, err error) {
-	res = ""
-	resAsBytes := &bytes.Buffer{}
-	i.log.Printf("$ %s", strings.Join(args, " "))
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stdin = strings.NewReader(input)
-	if logToStdout {
-		cmd.Stdout = io.MultiWriter(edgectl.NewLoggingWriter(i.cmdOut), resAsBytes)
-	} else {
-		cmd.Stdout = resAsBytes
-	}
-	cmd.Stderr = edgectl.NewLoggingWriter(i.cmdErr)
-	err = cmd.Run()
-	if err != nil {
-		err = errors.Wrap(err, name)
-	}
-	res = resAsBytes.String()
-	return
-}
-
 // Metrics
 
 // SetMetadatum adds a key-value pair to the metrics extra traits field. All
@@ -894,11 +856,6 @@ func (i *Installer) Report(eventName string, meta ...edgectl.ScoutMeta) {
 	if err := i.scout.Report(eventName, meta...); err != nil {
 		i.log.Println("[Metrics]", eventName, err)
 	}
-}
-
-type kubernetesVersion struct {
-	Client k8sVersion.Info `json:"clientVersion"`
-	Server k8sVersion.Info `json:"serverVersion"`
 }
 
 // registration is used to register edgestack.me domains

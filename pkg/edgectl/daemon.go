@@ -66,7 +66,7 @@ func RunAsDaemon(dns, fallback string) error {
 	})
 
 	sup.Logger.Printf("---")
-	sup.Logger.Printf("Edge Control daemon %s starting...", DisplayVersion)
+	sup.Logger.Printf("Edge Control daemon %s starting...", DisplayVersion())
 	sup.Logger.Printf("PID is %d", os.Getpid())
 	runErrors := sup.Run()
 
@@ -77,7 +77,7 @@ func RunAsDaemon(dns, fallback string) error {
 			sup.Logger.Printf("- %v", err)
 		}
 	}
-	sup.Logger.Printf("Edge Control daemon %s is done.", DisplayVersion)
+	sup.Logger.Printf("Edge Control daemon %s is done.", DisplayVersion())
 	return errors.New("edgectl daemon has exited")
 }
 
@@ -119,12 +119,12 @@ func (d *Daemon) handle(p *supervisor.Process, conn net.Conn) error {
 	data := &ClientMessage{}
 	if err := decoder.Decode(data); err != nil {
 		p.Logf("Failed to read message: %v", err)
-		fmt.Fprintln(conn, "API mismatch. Server", DisplayVersion)
+		fmt.Fprintln(conn, "API mismatch. Server", DisplayVersion())
 		return nil
 	}
 	if data.APIVersion != apiVersion {
 		p.Logf("API version mismatch (got %d, need %d)", data.APIVersion, apiVersion)
-		fmt.Fprintf(conn, "API version mismatch (got %d, server %s)", data.APIVersion, DisplayVersion)
+		fmt.Fprintf(conn, "API version mismatch (got %d, server %s)", data.APIVersion, DisplayVersion())
 		return nil
 	}
 	p.Logf("Received command: %q", data.Args)

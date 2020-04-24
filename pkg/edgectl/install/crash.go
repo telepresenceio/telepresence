@@ -72,14 +72,13 @@ func (i *Installer) gatherCrashReportData() []byte {
 	}
 
 	buffer.WriteString("\n========== kubectl describe ==========\n")
-	describe, err := i.silentCaptureKubectl("describe ambassador namespace", "", "-n", "ambassador", "describe", "all")
-	if err != nil {
+	if _, err := i.kubectl.WithStdout(buffer).Describe("all", defInstallNamespace); err != nil {
 		i.log.Printf("failed to describe ambassador resources: %v", err.Error())
 	}
-	buffer.WriteString(describe)
 
 	buffer.WriteString("\n========== kubectl logs ==========\n")
-	ambassadorLogs, err := i.silentCaptureKubectl("read ambassador logs", "", "-n", "ambassador", "logs", "deployments/ambassador", "--tail=1000")
+	// i.silentCaptureKubectl("read ambassador logs", "", "-n", "ambassador", "logs", "deployments/ambassador", "--tail=1000"
+	ambassadorLogs, err := i.kubectl.WithStdout(buffer).Logs("deployments/ambassador", defInstallNamespace)
 	if err != nil {
 		i.log.Printf("failed to read ambassador logs: %v", err.Error())
 	}
