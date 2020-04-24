@@ -178,6 +178,7 @@ jobs:
           name: "setup non-Python environment"
           command: |
             # Note hard-coded OSX platform
+            echo 'export CLOUDSDK_PYTHON=/usr/bin/python' >> ${BASH_ENV}
             ./environment-setup.sh datawireio telepresence-testing us-central1-a osx
             echo 'PATH=${HOME}/google-cloud-sdk/bin:${PATH}' >> ${BASH_ENV}
             # If we installed kubectl, it was into ${PWD}

@@ -30,7 +30,7 @@ distros = [
     ("ubuntu", "xenial", "deb", ubuntu_deps, install_deb),  # 16.04 (LTS2021)
     ("ubuntu", "bionic", "deb", ubuntu_deps_2, install_deb),  # 18.04 (LTS2023)
     ("ubuntu", "eoan", "deb", ubuntu_deps_2, install_deb),  # 19.10 20200717
-    # ("ubuntu", "focal", "deb", ubuntu_deps_2, install_deb), # 20.04 (LTS2025)
+    ("ubuntu", "focal", "deb", ubuntu_deps_2, install_deb),  # 20.04 (LTS2025)
     ("debian", "stretch", "deb", ubuntu_deps, install_deb),  # 9
     ("debian", "buster", "deb", ubuntu_deps_2, install_deb),  # 10
     ("fedora", "26", "rpm", fedora_deps, install_rpm),  # EOL 2018-05-29
@@ -39,5 +39,5 @@ distros = [
     ("fedora", "29", "rpm", fedora_deps, install_rpm),  # EOL 2019-11-30
     ("fedora", "30", "rpm", fedora_deps, install_rpm),  # EOL 2020-05-26
     ("fedora", "31", "rpm", fedora_deps, install_rpm),
-    # ("fedora", "32", "rpm", fedora_deps, install_rpm),
+    ("fedora", "32", "rpm", fedora_deps, install_rpm),
 ]
