@@ -20,7 +20,7 @@ OS=$4
 case "${OS}" in
     osx)
         brew update > /dev/null
-        brew install python3 || brew upgrade python
+        brew install python3 || brew upgrade python || brew link --overwrite python
         brew cask install osxfuse
         brew install sshfs
         pip3 install virtualenv
