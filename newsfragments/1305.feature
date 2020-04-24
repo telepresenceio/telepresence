@@ -1,0 +1,1 @@
+The `TELEPRESENCE_USE_OCP_IMAGE` environment variable can be set to `YES` or `NO` to require or disallow use of Telepresence's OCP-specific proxy image, or to `AUTO` to let Telepresence decide as before.
