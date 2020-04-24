@@ -57,6 +57,7 @@ print(
         dict(
             env=dict(os.environ),
             hostname=open("/etc/hostname").read(),
+            hosts=open("/etc/hosts").read(),
             resolv=open("/etc/resolv.conf").read(),
             mountpoints=get_mount_points(),
         )

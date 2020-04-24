@@ -71,6 +71,37 @@ def parse_resolv_conf(contents: str) -> List[str]:
     return res
 
 
+def parse_hosts_aliases(contents: str) -> List[str]:
+    """
+    Try to extract IP, and corresponding host names from hosts file for each
+    hostAlias, and create the corresponding --add-host docker run argument.
+    """
+    res = []
+
+    host_alias = False
+
+    for line in contents.splitlines():
+
+        line = line.strip()
+
+        if not line:
+            continue
+
+        if line.startswith("#"):
+            host_alias = line.__contains__("HostAliases")
+            continue
+
+        if host_alias:
+            tokens = line.split()
+            ip = tokens[0]
+            hosts = tokens[1:]
+
+            for host in hosts:
+                res.append("--add-host={}:{}".format(host, ip))
+
+    return res
+
+
 def run_docker_command(
     runner: Runner,
     remote_info: RemoteInfo,
@@ -120,6 +151,8 @@ def run_docker_command(
     dns_args = []
     if "hostname" in pod_info:
         dns_args.append("--hostname={}".format(pod_info["hostname"].strip()))
+    if "hosts" in pod_info:
+        dns_args.extend(parse_hosts_aliases(pod_info["hosts"]))
     if "resolv" in pod_info:
         dns_args.extend(parse_resolv_conf(pod_info["resolv"]))
 

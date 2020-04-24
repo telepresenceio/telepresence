@@ -461,6 +461,20 @@ def test_resolve_names(probe):
 
 
 @with_probe
+def test_resolve_host_alias(probe):
+    """
+    Name resolution is performed in the context of the Kubernetes cluster.
+    """
+    if probe.method.name != "container" or probe.operation.name != "swap":
+        pytest.skip("Test only applies to container --swap-deployment usage.")
+
+    result = probe.result()
+    result.write("gethostbyname foo.local")
+    success, reply = loads(result.read())
+    assert success and IPv4Address(reply), reply
+
+
+@with_probe
 def test_resolve_names_failure(probe):
     """
     Attempted resolution of non-existent names results in blah blah blah
