@@ -1,4 +1,0 @@
-Add support of xxx.yyy.zzz.svc kube addresses DNS resolution, on top of
-already supported "service" and "service.namespace".
-This is required to handle Strimzi kafka auto-generated addresses for
-example (see strimzi/strimzi-kafka-operator#2656).

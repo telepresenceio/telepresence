@@ -1,1 +1,0 @@
-Telepresence creates new deployments using `kubectl create` rather than `kubectl run`. This allows the new deployment operation to succeed with `kubectl` version 1.18 and later.

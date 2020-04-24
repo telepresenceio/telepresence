@@ -1,1 +1,0 @@
-Adds remote pod host entries form k8s cluster to local running telepresence container. 

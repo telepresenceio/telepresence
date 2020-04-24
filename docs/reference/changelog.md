@@ -1,11 +1,45 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.105 (April 24, 2020)
+
+Features:
+
+* The `TELEPRESENCE_USE_OCP_IMAGE` environment variable can be set to `YES` or `NO` to require or disallow use of Telepresence's OCP-specific proxy image, or to `AUTO` to let Telepresence decide as before.
+  Thanks to Maru Newby for the patch.
+* When performing a swap deployment operation with the container method, host entries are reflected in the local container.
+  Thanks to Charlie Catney for the patch.
+  ([#1097](https://github.com/telepresenceio/telepresence/issues/1097))
+* When using the vpn-tcp method, DNS resolution of names of the form xxx.yyy.zzz.svc is supported.
+  This is required to handle Strimzi kafka auto-generated addresses for
+  example (see strimzi/strimzi-kafka-operator#2656).
+  Thanks to Aurelien Grenotton for the patch.
+  ([#560](https://github.com/telepresenceio/telepresence/issues/560))
+
+Bug fixes:
+
+* Telepresence creates new deployments using `kubectl create` rather than `kubectl run`. This allows the new deployment operation to succeed with `kubectl` version 1.18 and later.
+  Thanks to Maru Newby for the patch.
+  ([#1297](https://github.com/telepresenceio/telepresence/issues/1297))
+* The vpn-tcp method uses an even more robust heuristic to determine the Pod IP space.
+  Thanks to Maru Newby for the patch.
+  ([#1201](https://github.com/telepresenceio/telepresence/issues/1201))
+
+Misc:
+
+* Documentation for using Kubernetes client libaries has been expanded.
+  Thanks to Guray Yildirim for the patch.
+  ([#1245](https://github.com/telepresenceio/telepresence/issues/1245))
+* Telepresence has native packages for Fedora 31 and Ubuntu Eoan.
+  Packages for even newer releases will be available once our provider supports them.
+  ([#1236](https://github.com/telepresenceio/telepresence/issues/1236))
+* * Telepresence is no longer packaged for Ubuntu 18.10 (Cosmic Cuttlefish) or Ubuntu 19.04 (Disco Dingo) as those releases have [reached end of life](https://wiki.ubuntu.com/Releases#End_of_Life).
+
 #### 0.104 (January 23, 2020)
 
 Bug fixes:
 
-* Using --also-proxy proxies all resolved IPs for a hostname.
+* Using `--also-proxy` proxies all resolved IPs for a hostname.
   Thanks to Markus Maga for the patch.
   ([#379](https://github.com/telepresenceio/telepresence/issues/379))
 * The context specified at the command line is used with all startup operations.
