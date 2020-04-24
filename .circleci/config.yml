@@ -161,7 +161,7 @@ jobs:
 
   check-cluster-macos:
     macos:
-      xcode: "9.0"
+      xcode: "10.1.0"
 
     environment:
       - PROJECT_NAME: "datawireio"
