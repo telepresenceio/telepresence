@@ -91,6 +91,7 @@ virtualenv: dev-requirements.txt k8s-proxy/requirements.txt  ## Set up Python3 v
 	$(PIP) install -U pip || $(DIRFAIL)
 	$(PIP) install -r dev-requirements.txt || $(DIRFAIL)
 	$(PIP) install -r k8s-proxy/requirements.txt || $(DIRFAIL)
+	$(PIP) install setuptools_scm || $(DIRFAIL) # Ensure subsequent line executes without error on macos
 	$(PIP) install git+https://github.com/datawire/sshuttle.git@telepresence || $(DIRFAIL)
 	$(PIP) install --no-use-pep517 -e . || $(DIRFAIL)
 
