@@ -166,8 +166,6 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
             "kubectl",
             "--namespace={}".format(namespace),
             "exec",
-            "-i",
-            "-t",
             HELPER_NAME,
             "--",
             "sh",
