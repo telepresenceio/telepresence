@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import json
+import os
 from copy import deepcopy
 from subprocess import CalledProcessError
 from typing import Dict, Optional, Tuple
@@ -29,10 +30,27 @@ from .remote import get_deployment_json
 
 def get_image_name(runner: Runner, expose: PortMapping) -> str:
     """
-    Return the correct Telepresence image name (privileged or not) depending on
-    whether any privileged ports (< 1024) are used.
+    Return the correct Telepresence image name (OpenShift-specific, privileged,
+    or not) accounting for the existence of an OpenShift cluster, user
+    overrides, and the use of privileged ports (< 1024).
     """
-    if runner.kubectl.cluster_is_openshift:
+    ocp_env_name = "TELEPRESENCE_USE_OCP_IMAGE"
+    ocp_env_value = os.environ.get(ocp_env_name, "auto")
+    ocp_env = ocp_env_value.lower()
+    if ocp_env in ("true", "on", "yes", "1", "always"):
+        return TELEPRESENCE_REMOTE_IMAGE_OCP
+
+    ocp_image_allowed = True
+    if ocp_env in ("false", "off", "no", "0", "never"):
+        ocp_image_allowed = False
+    elif ocp_env not in ("auto", "automatic", "default"):
+        runner.show(
+            "\nWARNING: Ignoring {} environment variable with value {!r}. "
+            "Accepted values are YES or NO or AUTO. "
+            "Using AUTO.".format(ocp_env_name, ocp_env_value)
+        )
+
+    if ocp_image_allowed and runner.kubectl.cluster_is_openshift:
         return TELEPRESENCE_REMOTE_IMAGE_OCP
     if expose.has_privileged_ports():
         return TELEPRESENCE_REMOTE_IMAGE_PRIV
