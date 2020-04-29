@@ -1,4 +1,4 @@
-package edgectl
+package main
 
 import (
 	"fmt"
