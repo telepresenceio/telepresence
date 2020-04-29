@@ -15,7 +15,7 @@ func GuessRunAsInfo(_ *supervisor.Process) (*RunAsInfo, error) {
 	return nil, errors.New("Not implemented on this platform")
 }
 
-func launchDaemon(_ *cobra.Command, _ []string) error {
+func LaunchDaemon(_ *cobra.Command, _ []string) error {
 	return errors.New("Not implemented on this platform")
 }
 
