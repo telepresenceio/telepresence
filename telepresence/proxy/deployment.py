@@ -62,6 +62,7 @@ def existing_deployment(
     deployment_arg: str,
     expose: PortMapping,
     custom_nameserver: Optional[str],
+    suppress_proxy_output: Optional[bool],
     service_account: str,
 ) -> Tuple[str, Optional[str]]:
     """
@@ -88,6 +89,7 @@ def existing_deployment_openshift(
     deployment_arg: str,
     expose: PortMapping,
     custom_nameserver: Optional[str],
+    suppress_proxy_output: Optional[bool],
     service_account: str,
 ) -> Tuple[str, Optional[str]]:
     """
@@ -174,6 +176,7 @@ def create_new_deployment(
     deployment_arg: str,
     expose: PortMapping,
     custom_nameserver: Optional[str],
+    suppress_proxy_output: Optional[bool],
     service_account: str,
 ) -> Tuple[str, str]:
     """
@@ -206,6 +209,9 @@ def create_new_deployment(
         # If we're on local VM we need to use different nameserver to prevent
         # infinite loops caused by sshuttle:
         env["TELEPRESENCE_NAMESERVER"] = custom_nameserver
+    if suppress_proxy_output:
+        # Pass an environment variable to the proxy so it hides its output.
+        env["TELEPRESENCE_SUPPRESS_PROXY_OUTPUT"] = "1"
     # Create the deployment via yaml
     deployment_yaml = _get_deployment_yaml(
         deployment_arg,
@@ -270,6 +276,7 @@ def supplant_deployment(
     deployment_arg: str,
     expose: PortMapping,
     custom_nameserver: Optional[str],
+    suppress_proxy_output: Optional[bool],
     service_account: str,
 ) -> Tuple[str, str]:
     """
@@ -304,6 +311,7 @@ def supplant_deployment(
         expose,
         service_account,
         custom_nameserver,
+        suppress_proxy_output,
     )
 
     # Compute a new name that isn't too long, i.e. up to 63 characters.
@@ -368,6 +376,7 @@ def new_swapped_deployment(
     expose: PortMapping,
     service_account: str,
     custom_nameserver: Optional[str],
+    suppress_proxy_output: Optional[bool],
 ) -> Dict:
     """
     Create a new Deployment that uses telepresence-k8s image.
@@ -427,6 +436,12 @@ def new_swapped_deployment(
                     "name": "TELEPRESENCE_NAMESERVER",
                     "value": custom_nameserver,
                 })
+            # Pass an environment variable to the proxy so it hides its output.
+            if suppress_proxy_output:
+                container.setdefault("env", []).append({
+                    "name": "TELEPRESENCE_SUPPRESS_PROXY_OUTPUT",
+                    "value": "1",
+                })
             # Add namespace environment variable to support deployments using
             # automountServiceAccountToken: false. To be used by forwarder.py
             # in the k8s-proxy.
@@ -451,6 +466,7 @@ def swap_deployment_openshift(
     deployment_arg: str,
     expose: PortMapping,
     custom_nameserver: Optional[str],
+    suppress_proxy_output: Optional[bool],
     service_account: str,
 ) -> Tuple[str, str]:
     """
@@ -520,6 +536,7 @@ def swap_deployment_openshift(
         expose,
         service_account,
         custom_nameserver,
+        suppress_proxy_output,
     )
 
     apply_json(new_dc_json)

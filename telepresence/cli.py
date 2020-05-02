@@ -214,6 +214,11 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
         )
     )
     parser.add_argument(
+        "--suppress-proxy-output",
+        action='store_true',
+        help=("Hides the output of the Telepresence proxy")
+    )
+    parser.add_argument(
         "--method",
         "-m",
         choices=["inject-tcp", "vpn-tcp", "container"],

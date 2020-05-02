@@ -46,7 +46,7 @@ def _get_marks(items):
 def _probe_parametrize(fixture_name):
     """
     Create a "parametrized" pytest fixture which will supply Probes (one for
-    each coordinate in the cartesion space defined by METHODS and OPERATIONS)
+    each coordinate in the cartesian space defined by METHODS and OPERATIONS)
     to test functions which use it.
     """
     return pytest.mark.parametrize(

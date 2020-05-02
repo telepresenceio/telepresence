@@ -219,7 +219,7 @@ def test_swap_deployment_changes():
     expected = yaml.safe_load(SWAPPED_DEPLOYMENT)
     ports = telepresence.cli.PortMapping.parse(["9999"])
     actual = telepresence.proxy.deployment.new_swapped_deployment(
-        runner, original, "nginxhttps", "random_id_123", ports, "", False
+        runner, original, "nginxhttps", "random_id_123", ports, "", None, False
     )
     image = actual["spec"]["template"]["spec"]["containers"][1]["image"]
     assert "/telepresence-k8s-priv:" in image
@@ -237,7 +237,7 @@ def test_swap_deployment_changes():
         "containerPort"] = 8080
     ports = telepresence.cli.PortMapping.parse(["9999"])
     actual = telepresence.proxy.deployment.new_swapped_deployment(
-        runner, original, "nginxhttps", "random_id_123", ports, "", False
+        runner, original, "nginxhttps", "random_id_123", ports, "", None, False
     )
     image = actual["spec"]["template"]["spec"]["containers"][1]["image"]
     assert "/telepresence-k8s:" in image
@@ -245,6 +245,32 @@ def test_swap_deployment_changes():
     assert actual == expected
     assert (9999, 9999) in ports.local_to_remote()
     assert (8080, 8080) in ports.local_to_remote()
+
+    # Test suppress proxy output env var was set.
+    original = yaml.safe_load(COMPLEX_DEPLOYMENT)
+    initial_env = [{"name": "INITIAL_ENV_VAR", "value": "initial_value"}]
+    original["spec"]["template"]["spec"]["containers"][1]["env"] = initial_env
+    expected = yaml.safe_load(SWAPPED_DEPLOYMENT)
+    actual = telepresence.proxy.deployment.new_swapped_deployment(
+        runner, original, "nginxhttps", "random_id_123", ports, "", None, True
+    )
+    image = actual["spec"]["template"]["spec"]["containers"][1]["image"]
+    expected["spec"]["template"]["spec"]["containers"][1]["image"] = image
+    expected["spec"]["template"]["spec"]["containers"][1]["env"].append({
+        "name": "INITIAL_ENV_VAR",
+        "value": "initial_value"
+    })
+    expected["spec"]["template"]["spec"]["containers"][1]["env"].append({
+        "name": "TELEPRESENCE_SUPPRESS_PROXY_OUTPUT",
+        "value": "1"
+    })
+    actual["spec"]["template"]["spec"]["containers"][1]["env"].sort(
+        key=lambda var: var["name"]
+    )
+    expected["spec"]["template"]["spec"]["containers"][1]["env"].sort(
+        key=lambda var: var["name"]
+    )
+    assert actual == expected
 
     # Test with OpenShift.
     runner.kubectl = runner.kubectl._replace(
@@ -259,7 +285,7 @@ def test_swap_deployment_changes():
         "containerPort"] = 8080
     ports = telepresence.cli.PortMapping.parse(["9999"])
     actual = telepresence.proxy.deployment.new_swapped_deployment(
-        runner, original, "nginxhttps", "random_id_123", ports, "", False
+        runner, original, "nginxhttps", "random_id_123", ports, "", None, False
     )
     image = actual["spec"]["template"]["spec"]["containers"][1]["image"]
     assert "/telepresence-ocp:" in image
