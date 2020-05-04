@@ -41,6 +41,8 @@ const (
 	defInstallNamespace = "ambassador"
 
 	// env variable used for specifying an alternative Helm repo
+	// For example, 'https://github.com/datawire/ambassador-chart/archive/BRANCH_NAME.zip'
+	// use the GitHub "Clone or download" > "Download ZIP" link
 	defEnvVarHelmRepo = "AES_HELM_REPO"
 
 	// env variable used for specifying a SemVer for whitelisting Charts
@@ -61,8 +63,9 @@ var (
 	// defChartValues defines some default values for the Helm chart
 	// see https://github.com/datawire/ambassador-chart#configuration
 	defChartValues = map[string]interface{}{
-		"replicaCount":   "1",
-		"deploymentTool": "edgectl", // undocumented value, used for setting the "app.kubernetes.io/managed-by"
+		"replicaCount":           "1",
+		"servicePreview.enabled": true,
+		"deploymentTool":         "edgectl", // undocumented value, used for setting the "app.kubernetes.io/managed-by"
 	}
 )
 
