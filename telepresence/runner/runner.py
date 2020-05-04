@@ -129,7 +129,10 @@ class Runner:
         # Docker for Windows can't access /tmp, so use a directory it can
         tmp_dir = "/tmp"
         if self.is_wsl:
-            tmp_dir = "/c/temp"
+            c_drive = "/mnt/c"
+            if not os.path.exists(c_drive):
+                c_drive = "/c"
+            tmp_dir = os.path.join(c_drive, "Temp")
         if not os.path.exists(tmp_dir):
             os.makedirs(tmp_dir)
         self.temp = Path(mkdtemp(prefix="tel-", dir=tmp_dir))
