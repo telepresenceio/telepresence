@@ -20,6 +20,7 @@ type ClientMessage struct {
 	RAI           *RunAsInfo
 	APIVersion    int
 	ClientVersion string
+	InstallID     string
 }
 
 // ExitPrefix is the token used by the daemon ot tell the client to
@@ -62,11 +63,16 @@ func MainViaDaemon() error {
 		return errors.Wrap(err, "failed to get local info")
 	}
 
+	// Create or read the install ID here, as the user, and pass it to the
+	// daemon, where it will be used to send reports.
+	installID := NewScout("unused").Reporter.InstallID()
+
 	data := ClientMessage{
 		Args:          os.Args,
 		RAI:           rai,
 		APIVersion:    apiVersion,
 		ClientVersion: DisplayVersion(),
+		InstallID:     installID,
 	}
 	encoder := json.NewEncoder(conn)
 	if err := encoder.Encode(&data); err != nil {

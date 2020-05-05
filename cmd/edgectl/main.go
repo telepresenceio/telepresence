@@ -70,7 +70,7 @@ func getRootCommand() *cobra.Command {
 `
 
 	rootCmd := &cobra.Command{
-		Use:          "edgectlExe",
+		Use:          "edgectl",
 		Short:        myName,
 		Long:         myHelp,
 		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
