@@ -42,6 +42,23 @@ func (ii *InterceptInfo) path() string {
 	return fmt.Sprintf("intercept/%s/%s", ii.Namespace, ii.Deployment)
 }
 
+// PreviewURL returns the Service Preview URL for this intercept if it is
+// configured appropriately, or the empty string otherwise.
+func (ii *InterceptInfo) PreviewURL(hostname string) (url string) {
+	if len(ii.Patterns) != 1 {
+		return
+	}
+
+	for header, token := range ii.Patterns {
+		if strings.ToLower(header) != "x-service-preview" {
+			return
+		}
+		url = fmt.Sprintf("https://%s/.ambassador/service-preview/%s/", hostname, token)
+	}
+
+	return
+}
+
 // Acquire an intercept from the traffic manager
 func (ii *InterceptInfo) Acquire(_ *supervisor.Process, tm *TrafficManager) (int, error) {
 	reqPatterns := make([]map[string]string, 0, len(ii.Patterns))
@@ -110,9 +127,15 @@ func (d *Daemon) ListIntercepts(_ *supervisor.Process, out *Emitter) error {
 		out.Send("intercept", msg)
 		return nil
 	}
+	var previewURL string
 	for idx, cept := range d.intercepts {
 		ii := cept.ii
+		url := ii.PreviewURL("$EDGE")
 		out.Printf("%4d. %s\n", idx+1, ii.Name)
+		if url != "" {
+			previewURL = url
+			out.Println("      (preview URL available)")
+		}
 		out.Send(fmt.Sprintf("local_intercept.%d", idx+1), ii.Name)
 		key := "local_intercept." + ii.Name
 		out.Printf("      Intercepting requests to %s when\n", ii.Deployment)
@@ -124,6 +147,9 @@ func (d *Daemon) ListIntercepts(_ *supervisor.Process, out *Emitter) error {
 		out.Printf("      and redirecting them to %s:%d\n", ii.TargetHost, ii.TargetPort)
 		out.Send(key+".host", ii.TargetHost)
 		out.Send(key+".port", ii.TargetPort)
+	}
+	if previewURL != "" {
+		out.Println("Share a preview of your changes with anyone by visiting\n  ", previewURL)
 	}
 	if len(d.intercepts) == 0 {
 		out.Println("No intercepts")

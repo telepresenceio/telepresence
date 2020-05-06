@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/datawire/ambassador/pkg/supervisor"
 )
@@ -234,8 +235,10 @@ func (d *Daemon) GetRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 		},
 	})
 	intercept := InterceptInfo{}
+	interceptPreview := true
+	var interceptAddCmdFlags *pflag.FlagSet
 	interceptAddCmd := &cobra.Command{
-		Use:   "add DEPLOYMENT -t [HOST:]PORT -m HEADER=REGEX ...",
+		Use:   "add DEPLOYMENT -t [HOST:]PORT ([-p] | -m HEADER=REGEX ...)",
 		Short: "Add a deployment intercept",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -265,26 +268,69 @@ func (d *Daemon) GetRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 			}
 			port, err := strconv.Atoi(portStr)
 			if err != nil {
-				out.Printf("Failed to parse %q as HOST:PORT: %v", intercept.TargetHost, err)
+				out.Printf("Failed to parse %q as HOST:PORT: %v\n", intercept.TargetHost, err)
 				out.Send("failed", "parse target")
 				out.SendExit(1)
 				return nil
 			}
 			intercept.TargetHost = host
 			intercept.TargetPort = port
+
+			if interceptAddCmdFlags.Changed("preview") && interceptPreview {
+				// User specified --preview (or --preview=true) at the command line
+				if len(intercept.Patterns) > 0 {
+					out.Println("Error: Cannot use --match and --preview at the same time")
+					out.Send("failed", "both match and preview")
+					out.SendExit(1)
+					return nil
+				} else {
+					// ok: --preview=true and no --match
+				}
+			} else if interceptAddCmdFlags.Changed("preview") && !interceptPreview {
+				// User specified --preview=false at the command line
+				if len(intercept.Patterns) > 0 {
+					// ok: --preview=false and at least one --match
+				} else {
+					out.Println("Error: Must specify --match when using --preview=false")
+					out.Send("failed", "neither match nor preview")
+					out.SendExit(1)
+					return nil
+				}
+			} else {
+				// User did not specify --preview at the command line
+				if len(intercept.Patterns) > 0 {
+					// ok: at least one --match
+					interceptPreview = false
+				} else {
+					// ok: neither --match nor --preview, fall back to preview
+					interceptPreview = true
+				}
+			}
+
+			if interceptPreview {
+				intercept.Patterns = make(map[string]string)
+				intercept.Patterns["x-service-preview"] = data.InstallID
+			}
+
 			if err := d.AddIntercept(p, out, &intercept); err != nil {
 				return err
 			}
+
+			if url := intercept.PreviewURL("$EDGE"); url != "" {
+				out.Println("Share a preview of your changes with anyone by visiting\n  ", url)
+			}
+
 			return out.Err()
 		},
 	}
 	interceptAddCmd.Flags().StringVarP(&intercept.Name, "name", "n", "", "a name for this intercept")
-	interceptAddCmd.Flags().StringVarP(&intercept.Prefix, "prefix", "p", "", "prefix to intercept (default /)")
+	interceptAddCmd.Flags().StringVar(&intercept.Prefix, "prefix", "/", "prefix to intercept (default /)")
+	interceptAddCmd.Flags().BoolVarP(&interceptPreview, "preview", "p", true, "use a preview URL") // FIXME help text needs work
 	interceptAddCmd.Flags().StringVarP(&intercept.TargetHost, "target", "t", "", "the [HOST:]PORT to forward to")
 	_ = interceptAddCmd.MarkFlagRequired("target")
 	interceptAddCmd.Flags().StringToStringVarP(&intercept.Patterns, "match", "m", nil, "match expression (HEADER=REGEX)")
-	_ = interceptAddCmd.MarkFlagRequired("match")
 	interceptAddCmd.Flags().StringVarP(&intercept.Namespace, "namespace", "", "", "Kubernetes namespace in which to create mapping for intercept")
+	interceptAddCmdFlags = interceptAddCmd.Flags()
 
 	interceptCmd.AddCommand(interceptAddCmd)
 	interceptCG := []CmdGroup{
