@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +38,7 @@ var hClient = &http.Client{
 func (d *Daemon) Connect(
 	p *supervisor.Process, out *Emitter, rai *RunAsInfo,
 	context, namespace, managerNs string, kargs []string,
+	installID string, isCI bool,
 ) error {
 	// Sanity checks
 	if d.cluster != nil {
@@ -96,7 +98,7 @@ func (d *Daemon) Connect(
 	out.Send("cluster.context", d.cluster.Context())
 	out.Send("cluster.server", d.cluster.Server())
 
-	tmgr, err := NewTrafficManager(p, d.cluster, managerNs)
+	tmgr, err := NewTrafficManager(p, d.cluster, managerNs, installID, isCI)
 	if err != nil {
 		out.Println()
 		out.Println("Unable to connect to the traffic manager in your cluster.")
@@ -163,11 +165,13 @@ type TrafficManager struct {
 	interceptables []string
 	totalClusCepts int
 	snapshotSent   bool
+	installID      string // edgectl's install ID
+	connectCI      bool   // whether --ci was passed to connect
 }
 
 // NewTrafficManager returns a TrafficManager resource for the given
 // cluster if it has a Traffic Manager service.
-func NewTrafficManager(p *supervisor.Process, cluster *KCluster, managerNs string) (*TrafficManager, error) {
+func NewTrafficManager(p *supervisor.Process, cluster *KCluster, managerNs string, installID string, isCI bool) (*TrafficManager, error) {
 	cmd := cluster.GetKubectlCmd(p, "get", "-n", managerNs, "svc/telepresence-proxy", "deploy/telepresence-proxy")
 	err := cmd.Run()
 	if err != nil {
@@ -188,6 +192,8 @@ func NewTrafficManager(p *supervisor.Process, cluster *KCluster, managerNs strin
 		apiPort:   apiPort,
 		sshPort:   sshPort,
 		namespace: managerNs,
+		installID: installID,
+		connectCI: isCI,
 	}
 
 	pf, err := CheckedRetryingCommand(p, "traffic-kpf", kpfArgs, cluster.RAI(), tm.check, 15*time.Second)
@@ -257,6 +263,10 @@ func (tm *TrafficManager) request(method, path string, data []byte) (result stri
 	if err != nil {
 		return
 	}
+
+	req.Header.Set("edgectl-install-id", tm.installID)
+	req.Header.Set("edgectl-connect-ci", strconv.FormatBool(tm.connectCI))
+
 	resp, err := hClient.Do(req)
 	if err != nil {
 		err = errors.Wrap(err, "get")
