@@ -223,9 +223,10 @@ func (d *Daemon) GetRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 		},
 	})
 	interceptCmd.AddCommand(&cobra.Command{
-		Use:   "remove",
-		Short: "Deactivate and remove an existent intercept",
-		Args:  cobra.MinimumNArgs(1),
+		Use:     "remove [flags] DEPLOYMENT",
+		Aliases: []string{"delete"},
+		Short:   "Deactivate and remove an existent intercept",
+		Args:    cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := strings.TrimSpace(args[0])
 			if err := d.RemoveIntercept(p, out, name); err != nil {
@@ -238,7 +239,7 @@ func (d *Daemon) GetRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 	interceptPreview := true
 	var interceptAddCmdFlags *pflag.FlagSet
 	interceptAddCmd := &cobra.Command{
-		Use:   "add DEPLOYMENT -t [HOST:]PORT ([-p] | -m HEADER=REGEX ...)",
+		Use:   "add [flags] DEPLOYMENT -t [HOST:]PORT ([-p] | -m HEADER=REGEX ...)",
 		Short: "Add a deployment intercept",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -332,7 +333,7 @@ func (d *Daemon) GetRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 		},
 	}
 	interceptAddCmd.Flags().StringVarP(&intercept.Name, "name", "n", "", "a name for this intercept")
-	interceptAddCmd.Flags().StringVar(&intercept.Prefix, "prefix", "/", "prefix to intercept (default /)")
+	interceptAddCmd.Flags().StringVar(&intercept.Prefix, "prefix", "/", "prefix to intercept")
 	interceptAddCmd.Flags().BoolVarP(&interceptPreview, "preview", "p", true, "use a preview URL") // this default is unused
 	interceptAddCmd.Flags().StringVarP(&intercept.TargetHost, "target", "t", "", "the [HOST:]PORT to forward to")
 	_ = interceptAddCmd.MarkFlagRequired("target")
