@@ -276,9 +276,17 @@ func (d *Daemon) GetRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 			intercept.TargetHost = host
 			intercept.TargetPort = port
 
-			if interceptAddCmdFlags.Changed("preview") && interceptPreview {
+			// If the user specifies --preview on the command line, then use its
+			// value (--preview is the same as --preview=true, or it could be
+			// --preview=false). But if the user does not specify --preview on
+			// the command line, compute its value from the presence or absence
+			// of --match, since they are mutually exclusive.
+			userSetPreviewFlag := interceptAddCmdFlags.Changed("preview")
+			userSetMatchFlag := len(intercept.Patterns) > 0
+
+			if userSetPreviewFlag && interceptPreview {
 				// User specified --preview (or --preview=true) at the command line
-				if len(intercept.Patterns) > 0 {
+				if userSetMatchFlag {
 					out.Println("Error: Cannot use --match and --preview at the same time")
 					out.Send("failed", "both match and preview")
 					out.SendExit(1)
@@ -286,9 +294,9 @@ func (d *Daemon) GetRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 				} else {
 					// ok: --preview=true and no --match
 				}
-			} else if interceptAddCmdFlags.Changed("preview") && !interceptPreview {
+			} else if userSetPreviewFlag && !interceptPreview {
 				// User specified --preview=false at the command line
-				if len(intercept.Patterns) > 0 {
+				if userSetMatchFlag {
 					// ok: --preview=false and at least one --match
 				} else {
 					out.Println("Error: Must specify --match when using --preview=false")
@@ -298,7 +306,7 @@ func (d *Daemon) GetRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 				}
 			} else {
 				// User did not specify --preview at the command line
-				if len(intercept.Patterns) > 0 {
+				if userSetMatchFlag {
 					// ok: at least one --match
 					interceptPreview = false
 				} else {
@@ -325,7 +333,7 @@ func (d *Daemon) GetRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 	}
 	interceptAddCmd.Flags().StringVarP(&intercept.Name, "name", "n", "", "a name for this intercept")
 	interceptAddCmd.Flags().StringVar(&intercept.Prefix, "prefix", "/", "prefix to intercept (default /)")
-	interceptAddCmd.Flags().BoolVarP(&interceptPreview, "preview", "p", true, "use a preview URL") // FIXME help text needs work
+	interceptAddCmd.Flags().BoolVarP(&interceptPreview, "preview", "p", true, "use a preview URL") // this default is unused
 	interceptAddCmd.Flags().StringVarP(&intercept.TargetHost, "target", "t", "", "the [HOST:]PORT to forward to")
 	_ = interceptAddCmd.MarkFlagRequired("target")
 	interceptAddCmd.Flags().StringToStringVarP(&intercept.Patterns, "match", "m", nil, "match expression (HEADER=REGEX)")
