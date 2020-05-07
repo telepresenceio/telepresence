@@ -58,7 +58,10 @@ func (out *Emitter) Println(a ...interface{}) {
 // Errors are collected and returned by Err().
 func (out *Emitter) SendExit(code int) {
 	if out.err == nil {
-		_, out.err = fmt.Fprintf(out.w, "%s%d", ExitPrefix, code)
+		_, out.err = fmt.Fprintf(out.w, "%s%d\n", ExitPrefix, code)
+	}
+	if out.err == nil {
+		out.err = fmt.Errorf("exit code %d sent", code)
 	}
 }
 
