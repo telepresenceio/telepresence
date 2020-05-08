@@ -42,12 +42,19 @@ func (d *Daemon) Status(_ *supervisor.Process, out *Emitter) error {
 		out.Println("  Intercepts:    Unavailable: no traffic manager")
 		out.Send("intercept", nil)
 	case !d.trafficMgr.IsOkay():
-		out.Println("  Intercepts:    (connecting to traffic manager...)")
+		if d.trafficMgr.apiErr != nil {
+			out.Printf("  Intercepts:    %s", d.trafficMgr.apiErr.Error())
+		} else {
+			out.Println("  Intercepts:    (connecting to traffic manager...)")
+		}
 		out.Send("intercept.connected", false)
 	default:
 		out.Send("intercept.connected", true)
 		out.Printf("  Interceptable: %d deployments\n", len(d.trafficMgr.interceptables))
 		out.Printf("  Intercepts:    %d total, %d local\n", d.trafficMgr.totalClusCepts, len(d.intercepts))
+		if d.trafficMgr.licenseInfo != "" {
+			out.Println(d.trafficMgr.licenseInfo)
+		}
 		out.Send("interceptable", len(d.trafficMgr.interceptables))
 		out.Send("cluster_intercepts", d.trafficMgr.totalClusCepts)
 		out.Send("local_intercepts", len(d.intercepts))

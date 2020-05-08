@@ -167,6 +167,8 @@ type TrafficManager struct {
 	snapshotSent   bool
 	installID      string // edgectl's install ID
 	connectCI      bool   // whether --ci was passed to connect
+	apiErr         error  // holds the latest traffic-manager API error
+	licenseInfo    string // license information from traffic-manager
 }
 
 // NewTrafficManager returns a TrafficManager resource for the given
@@ -205,15 +207,26 @@ func NewTrafficManager(p *supervisor.Process, cluster *KCluster, managerNs strin
 }
 
 func (tm *TrafficManager) check(p *supervisor.Process) error {
-	body, _, err := tm.request("GET", "state", []byte{})
+	body, code, err := tm.request("GET", "state", []byte{})
+
 	if err != nil {
 		return err
 	}
+
+	if code != http.StatusOK {
+		tm.apiErr = fmt.Errorf("%v: %v", code, body)
+		return tm.apiErr
+	}
+	tm.apiErr = nil
+
 	var state map[string]interface{}
 	if err := json.Unmarshal([]byte(body), &state); err != nil {
 		p.Logf("check: bad JSON from tm: %v", err)
 		p.Logf("check: JSON data is: %q", body)
 		return err
+	}
+	if licenseInfo, ok := state["LicenseInfo"]; ok {
+		tm.licenseInfo = licenseInfo.(string)
 	}
 	deployments, ok := state["Deployments"].(map[string]interface{})
 	if !ok {
