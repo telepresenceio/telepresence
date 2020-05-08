@@ -20,7 +20,11 @@ func (d *Daemon) interceptMessage() string {
 	case d.trafficMgr == nil:
 		return "Intercept unavailable: no traffic manager"
 	case !d.trafficMgr.IsOkay():
-		return "Connecting to traffic manager..."
+		if d.trafficMgr.apiErr != nil {
+			return d.trafficMgr.apiErr.Error()
+		} else {
+			return "Connecting to traffic manager..."
+		}
 	default:
 		return ""
 	}
