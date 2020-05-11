@@ -43,7 +43,7 @@ func (d *Daemon) Status(_ *supervisor.Process, out *Emitter) error {
 		out.Send("intercept", nil)
 	case !d.trafficMgr.IsOkay():
 		if d.trafficMgr.apiErr != nil {
-			out.Printf("  Intercepts:    %s", d.trafficMgr.apiErr.Error())
+			out.Printf("  Intercepts:    %s\n", d.trafficMgr.apiErr.Error())
 		} else {
 			out.Println("  Intercepts:    (connecting to traffic manager...)")
 		}
