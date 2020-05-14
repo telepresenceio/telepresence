@@ -57,6 +57,10 @@ const (
 	// env variable used for overriding the image tag (ie, '1.3.2')
 	// this will install the latest Chart from the Helm repo, but with an overridden `image.tag`
 	defEnvVarImageTag = "AES_IMAGE_TAG"
+
+	// env variable used for specifying the helm install should be scoped to a single namespace (ie, 'true')
+	// this will install the latest Chart from the Helm repo, but with an overridden `scope.singleNamespace`
+	defEnvVarSingleNamespace = "AES_SINGLE_NAMESPACE"
 )
 
 var (
@@ -538,6 +542,11 @@ func (i *Installer) Perform(kcontext string) Result {
 		}
 	}
 
+	if it := os.Getenv(defEnvVarSingleNamespace); it != "" {
+		i.ShowOverridingInstallOption(defEnvVarSingleNamespace, it)
+		strvals.ParseInto(fmt.Sprintf("scope.singleNamespace=%s", it), chartValues)
+	}
+
 	// create a new parsed checker for versions
 	chartVersion, err := helm.NewChartVersionRule(version_rule)
 	if err != nil {
@@ -714,7 +723,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		i.Report("dns_name_propagated")
 
 		// Create a Host resource
-		hostResource := fmt.Sprintf(hostManifest, i.hostname, i.hostname, emailAddress)
+		hostResource := fmt.Sprintf(hostManifest, defInstallNamespace, i.hostname, i.hostname, emailAddress)
 		if err := i.kubectl.Apply(hostResource, ""); err != nil {
 			return i.resHostResourceCreationError(err)
 		}
@@ -874,6 +883,7 @@ const hostManifest = `
 apiVersion: getambassador.io/v2
 kind: Host
 metadata:
+  namespace: %s
   name: %s
 spec:
   hostname: %s

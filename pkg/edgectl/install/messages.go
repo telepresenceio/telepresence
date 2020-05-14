@@ -60,6 +60,10 @@ func (i *Installer) ShowOverridingImageTag(aesImageTag string, tag string) {
 	i.show.Println(fmt.Sprintf("   Overriding image tag using %s = %s", aesImageTag, tag))
 }
 
+func (i *Installer) ShowOverridingInstallOption(optionTag string, tagValue string) {
+	i.show.Println(fmt.Sprintf("   Overriding install option using %s = %s", optionTag, tagValue))
+}
+
 func (i *Installer) ShowOverridingHelmRepo(aesHelmRepo string, repo string) {
 	i.show.Println(fmt.Sprintf("   Overriding Helm repo using %s = %s", aesHelmRepo, repo))
 }
