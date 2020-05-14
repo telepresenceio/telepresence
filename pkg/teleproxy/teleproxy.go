@@ -649,12 +649,12 @@ func bridges(p *supervisor.Process, tele *Teleproxy) {
 				}
 
 				// FIXME why do we ignore this error?
-				_ = w.Watch("services", func(w *k8s.Watcher) {
+				_ = w.WatchQuery(k8s.Query{Kind: "services", Namespace: k8s.NamespaceAll}, func(w *k8s.Watcher) {
 					updateTable(w)
 				})
 
 				// FIXME why do we ignore this error?
-				_ = w.Watch("pods", func(w *k8s.Watcher) {
+				_ = w.WatchQuery(k8s.Query{Kind: "pods", Namespace: k8s.NamespaceAll}, func(w *k8s.Watcher) {
 					updateTable(w)
 				})
 				return nil
