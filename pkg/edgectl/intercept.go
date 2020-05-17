@@ -33,7 +33,7 @@ func (d *Daemon) interceptMessage() string {
 // InterceptInfo tracks one intercept operation
 type InterceptInfo struct {
 	Name       string // Name of the intercept (user/logging)
-	Namespace  string // Name in which to create the Intercept mapping
+	Namespace  string // Namespace in which to create the Intercept mapping
 	Deployment string // Name of the deployment being intercepted
 	Prefix     string // Prefix to intercept (default /)
 	Patterns   map[string]string
@@ -134,7 +134,7 @@ func (d *Daemon) ListIntercepts(_ *supervisor.Process, out *Emitter) error {
 	var previewURL string
 	for idx, cept := range d.intercepts {
 		ii := cept.ii
-		url := ii.PreviewURL("$EDGE")
+		url := ii.PreviewURL(d.trafficMgr.previewHost)
 		out.Printf("%4d. %s\n", idx+1, ii.Name)
 		if url != "" {
 			previewURL = url

@@ -342,7 +342,7 @@ func (d *Daemon) GetRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 				return err
 			}
 
-			if url := intercept.PreviewURL("$EDGE"); url != "" {
+			if url := intercept.PreviewURL(d.trafficMgr.previewHost); url != "" {
 				out.Println("Share a preview of your changes with anyone by visiting\n  ", url)
 			}
 

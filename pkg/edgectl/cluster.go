@@ -169,6 +169,7 @@ type TrafficManager struct {
 	connectCI      bool   // whether --ci was passed to connect
 	apiErr         error  // holds the latest traffic-manager API error
 	licenseInfo    string // license information from traffic-manager
+	previewHost    string // hostname to use for preview URLs, if enabled
 }
 
 // NewTrafficManager returns a TrafficManager resource for the given
@@ -191,11 +192,12 @@ func NewTrafficManager(p *supervisor.Process, cluster *KCluster, managerNs strin
 	kpfArgStr := fmt.Sprintf("port-forward -n %s svc/telepresence-proxy %d:8022 %d:8081", managerNs, sshPort, apiPort)
 	kpfArgs := cluster.GetKubectlArgs(strings.Fields(kpfArgStr)...)
 	tm := &TrafficManager{
-		apiPort:   apiPort,
-		sshPort:   sshPort,
-		namespace: managerNs,
-		installID: installID,
-		connectCI: isCI,
+		apiPort:     apiPort,
+		sshPort:     sshPort,
+		namespace:   managerNs,
+		installID:   installID,
+		connectCI:   isCI,
+		previewHost: "$EDGE",
 	}
 
 	pf, err := CheckedRetryingCommand(p, "traffic-kpf", kpfArgs, cluster.RAI(), tm.check, 15*time.Second)
@@ -208,7 +210,6 @@ func NewTrafficManager(p *supervisor.Process, cluster *KCluster, managerNs strin
 
 func (tm *TrafficManager) check(p *supervisor.Process) error {
 	body, code, err := tm.request("GET", "state", []byte{})
-
 	if err != nil {
 		return err
 	}
