@@ -334,6 +334,15 @@ func (d *Daemon) GetRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 			}
 
 			if interceptPreview {
+				if d.trafficMgr.previewHost == "" {
+					out.Println("Your cluster is not configured for Preview URLs.")
+					out.Println("(Could not find a Host resource that enables Path-type Preview URLs.)")
+					out.Println("Please specify one or more header matches using --match.")
+					out.Send("failed", "preview requested but unavailable")
+					out.SendExit(1)
+					return nil
+				}
+
 				intercept.Patterns = make(map[string]string)
 				intercept.Patterns["x-service-preview"] = data.InstallID
 			}
