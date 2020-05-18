@@ -49,7 +49,7 @@ func (ii *InterceptInfo) path() string {
 // PreviewURL returns the Service Preview URL for this intercept if it is
 // configured appropriately, or the empty string otherwise.
 func (ii *InterceptInfo) PreviewURL(hostname string) (url string) {
-	if len(ii.Patterns) != 1 {
+	if hostname == "" || len(ii.Patterns) != 1 {
 		return
 	}
 

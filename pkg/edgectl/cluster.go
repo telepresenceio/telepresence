@@ -14,6 +14,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
@@ -73,6 +74,12 @@ func (d *Daemon) Connect(
 	}
 	d.cluster = cluster
 
+	previewHost, err := getClusterPreviewHostname(p, cluster)
+	if err != nil {
+		p.Logf("get preview URL hostname: %+v", err)
+		previewHost = ""
+	}
+
 	bridge, err := CheckedRetryingCommand(
 		p,
 		"bridge",
@@ -107,6 +114,7 @@ func (d *Daemon) Connect(
 		// out.Println("Use <some command> to set up the traffic manager.") // FIXME
 		out.Send("intercept", false)
 	} else {
+		tmgr.previewHost = previewHost
 		d.trafficMgr = tmgr
 		out.Send("intercept", true)
 	}
@@ -138,6 +146,79 @@ func (d *Daemon) Disconnect(p *supervisor.Process, out *Emitter) error {
 	out.Println("Disconnected")
 	out.Send("disconnect", "Disconnected")
 	return err
+}
+
+// getClusterPreviewHostname returns the hostname of the first Host resource it
+// finds that has Preview URLs enabled with a supported URL type.
+func getClusterPreviewHostname(p *supervisor.Process, cluster *KCluster) (hostname string, err error) {
+	p.Log("Looking for a Host with Preview URLs enabled")
+
+	// kubectl get hosts, in all namespaces or in this namespace
+	var outBytes []byte
+	outBytes, err = func() ([]byte, error) {
+		clusterCmd := cluster.GetKubectlCmdNoNamespace(p, "get", "host", "-o", "yaml", "--all-namespaces")
+		if outBytes, err := clusterCmd.CombinedOutput(); err == nil {
+			return outBytes, nil
+		}
+
+		nsCmd := cluster.GetKubectlCmd(p, "get", "host", "-o", "yaml")
+		if outBytes, err := nsCmd.CombinedOutput(); err == nil {
+			return outBytes, nil
+		} else {
+			return nil, err
+		}
+	}()
+	if err != nil {
+		return
+	}
+
+	// Parse the output
+	hostLists, kerr := k8s.ParseResources("get hosts", string(outBytes))
+	if kerr != nil {
+		err = kerr
+		return
+	}
+	if len(hostLists) != 1 {
+		err = errors.Errorf("weird result with length %d", len(hostLists))
+		return
+	}
+
+	// Grab the "items" slice, as the result should be a list of Host resources
+	hostItems := k8s.Map(hostLists[0]).GetMaps("items")
+	p.Logf("Found %d Host resources", len(hostItems))
+
+	// Loop over Hosts looking for a Preview URL hostname
+	for _, hostItem := range hostItems {
+		host := k8s.Resource(hostItem)
+		logEntry := fmt.Sprintf("- Host %s / %s: %%s", host.Namespace(), host.Name())
+
+		previewUrlSpec := host.Spec().GetMap("previewUrl")
+		if len(previewUrlSpec) == 0 {
+			p.Logf(logEntry, "no preview URL config")
+			continue
+		}
+
+		if enabled, ok := previewUrlSpec["enabled"].(bool); !ok || !enabled {
+			p.Logf(logEntry, "preview URL not enabled")
+			continue
+		}
+
+		if pType, ok := previewUrlSpec["type"].(string); !ok || pType != "Path" {
+			p.Logf(logEntry+": %#v", "unsupported preview URL type", previewUrlSpec["type"])
+			continue
+		}
+
+		if hostname = host.Spec().GetString("hostname"); hostname == "" {
+			p.Logf(logEntry, "empty hostname???")
+			continue
+		}
+
+		p.Logf(logEntry+": %q", "SUCCESS! Hostname is", hostname)
+		return
+	}
+
+	p.Logf("No appropriate Host resource found.")
+	return
 }
 
 // checkBridge checks the status of teleproxy bridge by doing the equivalent of
@@ -192,12 +273,11 @@ func NewTrafficManager(p *supervisor.Process, cluster *KCluster, managerNs strin
 	kpfArgStr := fmt.Sprintf("port-forward -n %s svc/telepresence-proxy %d:8022 %d:8081", managerNs, sshPort, apiPort)
 	kpfArgs := cluster.GetKubectlArgs(strings.Fields(kpfArgStr)...)
 	tm := &TrafficManager{
-		apiPort:     apiPort,
-		sshPort:     sshPort,
-		namespace:   managerNs,
-		installID:   installID,
-		connectCI:   isCI,
-		previewHost: "$EDGE",
+		apiPort:   apiPort,
+		sshPort:   sshPort,
+		namespace: managerNs,
+		installID: installID,
+		connectCI: isCI,
 	}
 
 	pf, err := CheckedRetryingCommand(p, "traffic-kpf", kpfArgs, cluster.RAI(), tm.check, 15*time.Second)
