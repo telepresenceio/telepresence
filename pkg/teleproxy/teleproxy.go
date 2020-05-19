@@ -573,90 +573,6 @@ func bridges(p *supervisor.Process, tele *Teleproxy) {
 				if err != nil {
 					return err
 				}
-
-				updateTable := func(w *k8s.Watcher) {
-					table := route.Table{Name: "kubernetes"}
-
-					for _, svc := range w.List("services") {
-						decoded := svcResource{}
-						err := svc.Decode(&decoded)
-						if err != nil {
-							p.Logf("error decoding service: %v", err)
-							continue
-						}
-
-						spec := decoded.Spec
-
-						ports := ""
-						for _, port := range spec.Ports {
-							if ports == "" {
-								ports = fmt.Sprintf("%d", port.Port)
-							} else {
-								ports = fmt.Sprintf("%s,%d", ports, port.Port)
-							}
-						}
-
-						ip := spec.ClusterIP
-						// for headless services the IP is None, we
-						// should properly handle these by listening
-						// for endpoints and returning multiple A
-						// records at some point
-						if ip != "" && ip != "None" {
-							qualName := svc.Name() + "." + svc.Namespace() + ".svc.cluster.local"
-							table.Add(route.Route{
-								Name:   qualName,
-								Ip:     ip,
-								Port:   ports,
-								Proto:  "tcp",
-								Target: ProxyRedirPort,
-							})
-						}
-					}
-
-					for _, pod := range w.List("pods") {
-						qname := ""
-
-						hostname, ok := pod.Spec()["hostname"]
-						if ok && hostname != "" {
-							qname += hostname.(string)
-						}
-
-						subdomain, ok := pod.Spec()["subdomain"]
-						if ok && subdomain != "" {
-							qname += "." + subdomain.(string)
-						}
-
-						if qname == "" {
-							// Note: this is a departure from kubernetes, kubernetes will
-							// simply not publish a dns name in this case.
-							qname = pod.Name() + "." + pod.Namespace() + ".pod.cluster.local"
-						} else {
-							qname += ".svc.cluster.local"
-						}
-
-						ip, ok := pod.Status()["podIP"]
-						if ok && ip != "" {
-							table.Add(route.Route{
-								Name:   qname,
-								Ip:     ip.(string),
-								Proto:  "tcp",
-								Target: ProxyRedirPort,
-							})
-						}
-					}
-
-					post(table)
-				}
-
-				// FIXME why do we ignore this error?
-				_ = w.WatchQuery(k8s.Query{Kind: "services", Namespace: k8s.NamespaceAll}, func(w *k8s.Watcher) {
-					updateTable(w)
-				})
-
-				// FIXME why do we ignore this error?
-				_ = w.WatchQuery(k8s.Query{Kind: "pods", Namespace: k8s.NamespaceAll}, func(w *k8s.Watcher) {
-					updateTable(w)
-				})
 				return nil
 			}, func() error {
 				return errAborted
@@ -669,6 +585,104 @@ func bridges(p *supervisor.Process, tele *Teleproxy) {
 			if err != nil {
 				return err
 			}
+			updateTable := func(w *k8s.Watcher) {
+				table := route.Table{Name: "kubernetes"}
+
+				for _, svc := range w.List("services") {
+					decoded := svcResource{}
+					err := svc.Decode(&decoded)
+					if err != nil {
+						p.Logf("error decoding service: %v", err)
+						continue
+					}
+
+					spec := decoded.Spec
+
+					ports := ""
+					for _, port := range spec.Ports {
+						if ports == "" {
+							ports = fmt.Sprintf("%d", port.Port)
+						} else {
+							ports = fmt.Sprintf("%s,%d", ports, port.Port)
+						}
+					}
+
+					ip := spec.ClusterIP
+					// for headless services the IP is None, we
+					// should properly handle these by listening
+					// for endpoints and returning multiple A
+					// records at some point
+					if ip != "" && ip != "None" {
+						qualName := svc.Name() + "." + svc.Namespace() + ".svc.cluster.local"
+						table.Add(route.Route{
+							Name:   qualName,
+							Ip:     ip,
+							Port:   ports,
+							Proto:  "tcp",
+							Target: ProxyRedirPort,
+						})
+					}
+				}
+
+				for _, pod := range w.List("pods") {
+					qname := ""
+
+					hostname, ok := pod.Spec()["hostname"]
+					if ok && hostname != "" {
+						qname += hostname.(string)
+					}
+
+					subdomain, ok := pod.Spec()["subdomain"]
+					if ok && subdomain != "" {
+						qname += "." + subdomain.(string)
+					}
+
+					if qname == "" {
+						// Note: this is a departure from kubernetes, kubernetes will
+						// simply not publish a dns name in this case.
+						qname = pod.Name() + "." + pod.Namespace() + ".pod.cluster.local"
+					} else {
+						qname += ".svc.cluster.local"
+					}
+
+					ip, ok := pod.Status()["podIP"]
+					if ok && ip != "" {
+						table.Add(route.Route{
+							Name:   qname,
+							Ip:     ip.(string),
+							Proto:  "tcp",
+							Target: ProxyRedirPort,
+						})
+					}
+				}
+
+				post(table)
+			}
+
+			setupWatches := func(namespace string) {
+				if err := w.WatchQuery(k8s.Query{Kind: "services", Namespace: namespace}, updateTable); err != nil {
+					// FIXME why do we ignore this error?
+					p.Logf("watch services: %+v", err)
+				}
+
+				if err := w.WatchQuery(k8s.Query{Kind: "pods", Namespace: namespace}, updateTable); err != nil {
+					// FIXME why do we ignore this error?
+					p.Logf("watch pods: %+v", err)
+				}
+			}
+
+			setupWatches(k8s.NamespaceAll)
+			defer func() {
+				if r := recover(); r != nil {
+					p.Logf("recovered: %v", r)
+					ns, _ := kubeinfo.Namespace()
+					if ns == "" {
+						ns = "default"
+					}
+					p.Logf("setting up watches on namespace: %v", ns)
+					setupWatches(ns)
+				}
+			}()
 
 			w.Start()
 			p.Ready()
