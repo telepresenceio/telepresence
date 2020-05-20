@@ -222,9 +222,11 @@ func getClusterPreviewHostname(p *supervisor.Process, cluster *KCluster) (hostna
 }
 
 // checkBridge checks the status of teleproxy bridge by doing the equivalent of
-// curl -k https://kubernetes/api/.
+// curl http://teleproxy. Note there is no namespace specified, as we are
+// checking for bridge status in the current namespace. We only care the service
+// responds, no matter what the response may be.
 func checkBridge(p *supervisor.Process) error {
-	res, err := hClient.Get("https://kubernetes.default/api/")
+	res, err := hClient.Get("http://teleproxy")
 	if err != nil {
 		return errors.Wrap(err, "get")
 	}
