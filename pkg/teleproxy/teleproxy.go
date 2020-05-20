@@ -659,7 +659,7 @@ func bridges(p *supervisor.Process, tele *Teleproxy) {
 				post(table)
 			}
 
-			setupWatches := func(namespace string) {
+			startWatches := func(namespace string) {
 				if err := w.WatchQuery(k8s.Query{Kind: "services", Namespace: namespace}, updateTable); err != nil {
 					// FIXME why do we ignore this error?
 					p.Logf("watch services: %+v", err)
@@ -669,10 +669,16 @@ func bridges(p *supervisor.Process, tele *Teleproxy) {
 					// FIXME why do we ignore this error?
 					p.Logf("watch pods: %+v", err)
 				}
+
+				w.Start()
+				p.Ready()
+				<-p.Shutdown()
+				w.Stop()
 			}
 
-			setupWatches(k8s.NamespaceAll)
-			defer func() {
+			// Since w.WatchQuery panics instead of returning errors, wrap the watch setup and startup process in
+			// a function call and use go's recovery mechanism to setup fallback watches on a single-namespace.
+			watchRecovery := func() {
 				if r := recover(); r != nil {
 					p.Logf("recovered: %v", r)
 					ns, _ := kubeinfo.Namespace()
@@ -680,14 +686,12 @@ func bridges(p *supervisor.Process, tele *Teleproxy) {
 						ns = "default"
 					}
 					p.Logf("setting up watches on namespace: %v", ns)
-					setupWatches(ns)
+					startWatches(ns)
 				}
-			}()
-
-			w.Start()
-			p.Ready()
-			<-p.Shutdown()
-			w.Stop()
+				return
+			}
+			defer watchRecovery()
+			startWatches(k8s.NamespaceAll)
 
 			return nil
 		},
