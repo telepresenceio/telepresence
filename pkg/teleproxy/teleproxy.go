@@ -745,6 +745,7 @@ metadata:
   labels:
     name: teleproxy
 spec:
+  hostname: traffic-proxy
   containers:
   - name: proxy
     image: datawire/telepresence-k8s:0.75
