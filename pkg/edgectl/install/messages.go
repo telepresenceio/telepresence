@@ -12,6 +12,11 @@ func (i *Installer) ShowFirstInstalling() {
 	i.show.Println(color.Bold.Sprintf("Installing the Ambassador Edge Stack"))
 }
 
+func (i *Installer) ShowFirstUpgrading() {
+	i.show.Println()
+	i.show.Println(color.Bold.Sprintf("Upgrading the Ambassador API Gateway to Ambassador Edge Stack"))
+}
+
 func (i *Installer) ShowScoutDisabled() {
 	i.show.Printf("INFO: phone-home is disabled by environment variable")
 }
@@ -32,6 +37,12 @@ func (i *Installer) ShowBeginAESInstallation() {
 	i.show.Println("Beginning Ambassador Edge Stack Installation")
 }
 
+func (i *Installer) ShowBeginAOSSUpgrade() {
+	i.show.Println()
+	i.show.Println("========================================================================")
+	i.show.Println("Beginning Ambassador API Gateway upgrade")
+}
+
 func (i *Installer) ShowFailedWhenLookingForExistingVersion() {
 	i.show.Println("-> Failed when looking for an existing installation")
 }
@@ -42,6 +53,10 @@ func (i *Installer) ShowAESVersionBeingInstalled() {
 
 func (i *Installer) ShowAESExistingVersion(versionName string, method string) {
 	i.show.Println(fmt.Sprintf("-> Ambassador Edge Stack %s was already installed using %s", versionName, method))
+}
+
+func (i *Installer) ShowAOSSExistingVersion(versionName string, method string) {
+	i.show.Println(fmt.Sprintf("-> Ambassador API Gateway %s was already installed using %s", versionName, method))
 }
 
 func (i *Installer) FindingRepositoriesAndVersions() {
@@ -74,6 +89,10 @@ func (i *Installer) ShowDownloadingImages() {
 
 func (i *Installer) ShowInstalling(version string) {
 	i.show.Println(fmt.Sprintf("-> Installing Ambassador Edge Stack %s", version))
+}
+
+func (i *Installer) ShowUpgrading(version string) {
+	i.show.Println(fmt.Sprintf("-> Upgrading Ambassador API Gateway to Ambassador Edge Stack %s", version))
 }
 
 func (i *Installer) ShowCheckingAESPodDeployment() {

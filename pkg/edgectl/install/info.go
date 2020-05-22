@@ -154,15 +154,27 @@ const (
 	instAES
 	instEdgectl
 	instOperator
+	instOperatorKIND
+	instOperatorKOPS
+	instOperatorKubespray
+	instOperatorMinikube
+	instOperatorK3S
 	instHelm
 )
 
+var (
+	regexAOSSImage = regexp.MustCompile("datawire/ambassador:([[:^space:]]+)")
+
+	regexAESImage = regexp.MustCompile("datawire/aes:([[:^space:]]+)")
+)
+
 type installationMethodInfo struct {
-	Method   int
-	Label    string
-	Name     string
-	LongName string
-	Image    *regexp.Regexp
+	Method    int
+	Label     string
+	Name      string
+	LongName  string
+	Image     *regexp.Regexp
+	Namespace string
 }
 
 // defInstallationMethodsInfo contains information
@@ -171,39 +183,84 @@ type installationMethodInfo struct {
 // NOTE: this is an ordered-list: higher-precision labels are first
 var defInstallationMethodsInfo = []installationMethodInfo{
 	{
-		Method:   instEdgectl,
-		Label:    "app.kubernetes.io/managed-by=edgectl",
-		Name:     "edgectl",
-		LongName: "edgectl",
-		Image:    regexp.MustCompile("quay[.]io/datawire/aes:([[:^space:]]+)"),
+		Method:    instEdgectl,
+		Label:     "app.kubernetes.io/managed-by=edgectl",
+		Name:      "edgectl",
+		LongName:  "edgectl",
+		Image:     regexAESImage,
+		Namespace: defInstallNamespace,
 	},
 	{
-		Method:   instOperator,
-		Label:    "app.kubernetes.io/name=ambassador,app.kubernetes.io/managed-by in (amb-oper,amb-oper-manifest,amb-oper-helm,amb-oper-azure)",
-		Name:     "operator",
-		LongName: "the Ambassador Operator",
-		Image:    regexp.MustCompile("quay[.]io/datawire/aes:([[:^space:]]+)"),
+		Method:    instOperatorKIND,
+		Label:     "app.kubernetes.io/name=ambassador,app.kubernetes.io/managed-by=amb-oper-kind",
+		Name:      "operator",
+		LongName:  "the Ambassador Operator (in KIND)",
+		Image:     regexAOSSImage,
+		Namespace: defInstallNamespace,
 	},
 	{
-		Method:   instHelm,
-		Label:    "app.kubernetes.io/name=ambassador",
-		Name:     "helm",
-		LongName: "Helm",
-		Image:    regexp.MustCompile("quay[.]io/datawire/aes:([[:^space:]]+)"),
+		Method:    instOperatorK3S,
+		Label:     "app.kubernetes.io/name=ambassador,app.kubernetes.io/managed-by=amb-oper-k3s",
+		Name:      "operator",
+		LongName:  "the Ambassador Operator (in K3S)",
+		Image:     regexAOSSImage,
+		Namespace: defInstallNamespace,
 	},
 	{
-		Method:   instAES,
-		Label:    "product=aes",
-		Name:     "aes",
-		LongName: "AES manifests",
-		Image:    regexp.MustCompile("quay[.]io/datawire/aes:([[:^space:]]+)"),
+		Method:    instOperatorMinikube,
+		Label:     "app.kubernetes.io/name=ambassador,app.kubernetes.io/managed-by=amb-oper-minikube",
+		Name:      "operator",
+		LongName:  "the Ambassador Operator (in Minikube)",
+		Image:     regexAOSSImage,
+		Namespace: defInstallNamespace,
 	},
 	{
-		Method:   instOSS,
-		Label:    "service=ambassador",
-		Name:     "oss",
-		LongName: "OSS manifests",
-		Image:    regexp.MustCompile("quay[.]io/datawire/ambassador:([[:^space:]]+)"),
+		Method:    instOperatorKOPS,
+		Label:     "app.kubernetes.io/name=ambassador,app.kubernetes.io/managed-by=amb-oper-kops",
+		Name:      "operator",
+		LongName:  "the Ambassador Operator (in KOPS)",
+		Image:     regexAOSSImage,
+		Namespace: defInstallNamespace,
+	},
+	{
+		Method:    instOperatorKubespray,
+		Label:     "app.kubernetes.io/name=ambassador,app.kubernetes.io/managed-by=amb-oper-kubespray",
+		Name:      "operator",
+		LongName:  "the Ambassador Operator (in Kubespray)",
+		Image:     regexAOSSImage,
+		Namespace: defInstallNamespace,
+	},
+	{
+		Method:    instOperator,
+		Label:     "app.kubernetes.io/name=ambassador,app.kubernetes.io/managed-by in (amb-oper,amb-oper-manifest,amb-oper-helm,amb-oper-azure)",
+		Name:      "operator",
+		LongName:  "the Ambassador Operator",
+		Image:     regexAESImage,
+		Namespace: defInstallNamespace,
+	},
+	{
+		Method:    instHelm,
+		Label:     "app.kubernetes.io/name=ambassador",
+		Name:      "helm",
+		LongName:  "Helm",
+		Image:     regexAESImage,
+		Namespace: defInstallNamespace,
+	},
+	{
+		Method:    instAES,
+		Label:     "product=aes",
+		Name:      "aes",
+		LongName:  "AES manifests",
+		Image:     regexAESImage,
+		Namespace: defInstallNamespace,
+	},
+	{
+		Method:    instOSS,
+		Label:     "service=ambassador",
+		Name:      "oss",
+		LongName:  "OSS manifests",
+		Image:     regexAOSSImage,
+		Namespace: "default",
 	},
 }
 
@@ -217,8 +274,8 @@ var defInstallationMethodsInfo = []installationMethodInfo{
 //       we hard-code the "ambassador" namespace in a number of spots.
 //
 func getExistingInstallation(kubectl Kubectl) (string, installationMethodInfo, error) {
-	findFor := func(label string, imageRe *regexp.Regexp) (string, error) {
-		deploys, err := kubectl.WithStdout(ioutil.Discard).List("deployments", defInstallNamespace, []string{label})
+	findFor := func(label string, imageRe *regexp.Regexp, namespace string) (string, error) {
+		deploys, err := kubectl.WithStdout(ioutil.Discard).List("deployments", namespace, []string{label})
 		if deploys == nil {
 			return "", err
 		}
@@ -251,7 +308,7 @@ func getExistingInstallation(kubectl Kubectl) (string, installationMethodInfo, e
 		if info.Label == "" {
 			continue
 		}
-		version, err := findFor(info.Label, info.Image)
+		version, err := findFor(info.Label, info.Image, info.Namespace)
 		if err != nil {
 			continue // ignore errors
 		}

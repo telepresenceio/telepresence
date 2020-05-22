@@ -134,6 +134,61 @@ func (i *Installer) resCantReplaceExistingInstallationError(installedVersion str
 	}
 }
 
+func (i *Installer) resUpgradeTooOldOSSError(installedVersion, latestVersion string) Result {
+	url := "https://www.getambassador.io/docs/latest/topics/install/help/upgrade-tool-old"
+
+	return Result{
+		Report: "fail_old_oss_installation",
+		ShortMessage: fmt.Sprintf("The upgrader is unable to upgrade an API Gateway %s installation to Edge Stack %s",
+			installedVersion, latestVersion),
+		Message: fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about upgrading an existing installation to continue upgrading Ambassador API Gateway to Edge Stack at %v", url),
+		URL:     url,
+		Err:     errors.New(fmt.Sprintf("Can't upgrade an OSS %s installation to AES %s", installedVersion, latestVersion)),
+	}
+}
+
+// resUpgradeNoOSSFound returns an error when OSS was not found
+func (i *Installer) resUpgradeNoOSSFound(err error) Result {
+	url := "https://www.getambassador.io/docs/latest/topics/install/help/upgrade-no-oss-found"
+	if err == nil {
+		err = errUpgradeNoAmbInst
+	}
+
+	return Result{
+		Report:       "fail_no_oss_found",
+		ShortMessage: fmt.Sprintf("The upgrader is unable to find a valid Ambassador API Gateway installation: %s.", err),
+		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about upgrading an existing installation to continue upgrading Ambassador API Gateway to Edge Stack at %v", url),
+		URL:          url,
+		Err:          err,
+	}
+}
+
+// resUpgradeApplyError returns an error when applying the new manifest
+func (i *Installer) resUpgradeApplyError(err error) Result {
+	url := "https://www.getambassador.io/docs/latest/topics/install/help/upgrade-apply-error"
+
+	return Result{
+		Report:       "fail_upgrade_apply",
+		ShortMessage: "The installer could not update the AmbassadorInstallation manifest in your cluster",
+		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about how to set up your Kubernetes environment to continue installing Ambassador Edge Stack at %v", url),
+		URL:          url,
+		Err:          err,
+	}
+}
+
+// resUpgradeFailed returns a generic error on upgrades
+func (i *Installer) resUpgradeFailed(err error) Result {
+	url := "https://www.getambassador.io/docs/latest/topics/install/help/upgrade-error"
+
+	return Result{
+		Report:       "fail_upgrade",
+		ShortMessage: fmt.Sprintf("The upgrader failed to install Ambassador Edge Stack: %s.", err),
+		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about upgrading an existing installation to continue upgrading Ambassador API Gateway to Edge Stack at %v", url),
+		URL:          url,
+		Err:          err,
+	}
+}
+
 func (i *Installer) resNamespaceCreationError(err error) Result {
 	i.Report("fail_install_aes", edgectl.ScoutMeta{"err", err.Error()})
 	url := "https://www.getambassador.io/docs/latest/topics/install/help/install-aes"

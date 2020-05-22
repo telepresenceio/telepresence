@@ -23,7 +23,7 @@ func main() {
 		cg = []edgectl.CmdGroup{
 			{
 				GroupName: "Management Commands",
-				CmdNames:  []string{"install", "login", "license"},
+				CmdNames:  []string{"install", "upgrade", "login", "license"},
 			},
 			{
 				GroupName: "Development Commands",
@@ -184,6 +184,23 @@ func getRootCommand() *cobra.Command {
 		"Show all output. Defaults to sending most output to the logfile.",
 	)
 	rootCmd.AddCommand(installCmd)
+
+	upgradeCmd := &cobra.Command{
+		Use:   "upgrade",
+		Short: "Upgrade an Ambassador API Gateway installation managed by the Operator to Ambassador Edge Stack",
+		Args:  cobra.ExactArgs(0),
+		RunE:  install.AOSSUpgrade,
+	}
+	_ = upgradeCmd.Flags().StringP(
+		"context", "c", "",
+		"The Kubernetes context to use. Defaults to the current kubectl context.",
+	)
+	_ = upgradeCmd.Flags().BoolP(
+		"verbose", "v", false,
+		"Show all output. Defaults to sending most output to the logfile.",
+	)
+	rootCmd.AddCommand(upgradeCmd)
+
 
 	// Daemon commands. These should be forwarded to the daemon.
 
