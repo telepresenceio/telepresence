@@ -136,6 +136,7 @@ def _set_expose_ports(expose, deployment_arg, d_json):
                 port["containerPort"] for port in container.get("ports", [])
                 if port["protocol"] == "TCP"
             ])
+            break
 
 
 _deployment_template = """apiVersion: apps/v1
