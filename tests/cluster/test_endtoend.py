@@ -335,8 +335,8 @@ def test_network_routing_from_cluster_auto_expose_same(probe):
     otherwise we will miss bugs where a Telepresence proxy container is added
     rather than being swapped.
     """
-    if probe.operation.name != "swap":
-        pytest.skip("Test only applies to --swap-deployment usage.")
+    if probe.operation.name not in ("swap", "existing"):
+        pytest.skip("Test only applies to --swap-deployment and --deployment usage.")
 
     result = probe.result()
     http = probe.operation.http_server_auto_expose_same
@@ -351,8 +351,8 @@ def test_network_routing_from_cluster_auto_expose_diff(probe):
     Like ``test_network_routing_from_cluster_auto_expose_same`` but for the
     case where the exposed port and the container port are different.
     """
-    if probe.operation.name != "swap":
-        pytest.skip("Test only applies to --swap-deployment usage.")
+    if probe.operation.name not in ("swap", "existing"):
+        pytest.skip("Test only applies to --swap-deployment and --deployment usage.")
 
     result = probe.result()
     http = probe.operation.http_server_auto_expose_diff
