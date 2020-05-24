@@ -360,7 +360,7 @@ func (i *Installer) HostnameMatchesLBAddress(hostname string) bool {
 // CheckACMEIsDone queries the Host object and succeeds if its state is Ready.
 func (i *Installer) CheckACMEIsDone() error {
 
-	host, err := i.kubectl.Get("host", i.hostname, "")
+	host, err := i.kubectl.Get("host", i.hostname, defInstallNamespace)
 	if err != nil {
 		return LoopFailedError(err.Error())
 	}
@@ -723,8 +723,8 @@ func (i *Installer) Perform(kcontext string) Result {
 		i.Report("dns_name_propagated")
 
 		// Create a Host resource
-		hostResource := fmt.Sprintf(hostManifest, defInstallNamespace, i.hostname, i.hostname, emailAddress)
-		if err := i.kubectl.Apply(hostResource, ""); err != nil {
+		hostResource := fmt.Sprintf(hostManifest, i.hostname, i.hostname, emailAddress)
+		if err := i.kubectl.Apply(hostResource, defInstallNamespace); err != nil {
 			return i.resHostResourceCreationError(err)
 		}
 
@@ -737,7 +737,7 @@ func (i *Installer) Perform(kcontext string) Result {
 		i.Report("cert_provisioned")
 		i.ShowTLSConfiguredSuccessfully()
 
-		if _, err := i.kubectl.Get("host", i.hostname, ""); err != nil {
+		if _, err := i.kubectl.Get("host", i.hostname, defInstallNamespace); err != nil {
 			return i.resHostRetrievalError(err)
 		}
 
@@ -883,7 +883,6 @@ const hostManifest = `
 apiVersion: getambassador.io/v2
 kind: Host
 metadata:
-  namespace: %s
   name: %s
 spec:
   hostname: %s
