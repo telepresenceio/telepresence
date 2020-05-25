@@ -51,6 +51,40 @@ func getEmailAddress(defaultEmail string, log *log.Logger) string {
 	}
 }
 
+func (i *Installer) AskEmail() (string, Result) {
+	// Attempt to grab a reasonable default for the user's email address
+	defaultEmail, err := i.Capture("get email", true, "", "git", "config", "--global", "user.email")
+	if err != nil {
+		i.log.Print(err)
+		defaultEmail = ""
+	} else {
+		defaultEmail = strings.TrimSpace(defaultEmail)
+		if !validEmailAddress.MatchString(defaultEmail) {
+			defaultEmail = ""
+		}
+	}
+
+	// Ask for the user's email address
+	i.ShowRequestEmail()
+
+	// Do the goroutine dance to let the user hit Ctrl-C at the email prompt
+	gotEmail := make(chan string)
+	var emailAddress string
+	go func() {
+		gotEmail <- getEmailAddress(defaultEmail, i.log)
+		close(gotEmail)
+	}()
+	select {
+	case emailAddress = <-gotEmail:
+		// Continue
+	case <-i.ctx.Done():
+		return "", i.resEmailRequestError(errors.New("Interrupted"))
+	}
+
+	i.log.Printf("Using email address %q", emailAddress)
+	return emailAddress, Result{}
+}
+
 // LoopFailedError is a fatal error for loopUntil(...)
 type LoopFailedError string
 

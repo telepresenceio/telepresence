@@ -1,9 +1,7 @@
 package edgectl
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -22,7 +20,6 @@ import (
 	"github.com/spf13/cobra"
 	"helm.sh/helm/v3/pkg/strvals"
 	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 
@@ -39,6 +36,9 @@ const (
 
 	// defInstallNamespace is the default installation namespace
 	defInstallNamespace = "ambassador"
+
+	// defImageRepo is tyhe default image (with no tag)
+	defImageRepo = "docker.io/datawire/aes"
 
 	// env variable used for specifying an alternative Helm repo
 	// For example, 'https://github.com/datawire/ambassador-chart/archive/BRANCH_NAME.zip'
@@ -148,8 +148,8 @@ func (i *Installer) GrabAESInstallID() error {
 	i.log.Printf("> aesImage = %s", aesImage)
 	podName := ""
 	containerName := ""
-	podInterface := i.coreClient.Pods("ambassador") // namespace
-	i.log.Print("> k -n ambassador get po")
+	podInterface := i.coreClient.Pods(defInstallNamespace) // namespace
+	i.log.Printf("> k -n %s get po", defInstallNamespace)
 	pods, err := podInterface.List(k8sTypesMetaV1.ListOptions{})
 	if err != nil {
 		return err
@@ -266,17 +266,6 @@ func (i *Installer) CheckAESHealth() error {
 	}
 
 	return nil
-}
-
-// CheckHostnameFound tries to connect to check-blah.hostname to see whether DNS
-// has propagated. Each connect talks to a different hostname to try to avoid
-// NXDOMAIN caching.
-func (i *Installer) CheckHostnameFound() error {
-	conn, err := net.Dial("tcp", fmt.Sprintf("check-%d.%s:443", time.Now().Unix(), i.hostname))
-	if err == nil {
-		conn.Close()
-	}
-	return err
 }
 
 // FindMatchingHostResource returns a Host resource from the cluster that
@@ -406,6 +395,8 @@ func (i *Installer) CreateNamespace() error {
 
 // Perform is the main function for the installer
 func (i *Installer) Perform(kcontext string) Result {
+	var err error
+
 	chartValues := map[string]interface{}{}
 	for key, value := range defChartValues {
 		strvals.ParseInto(fmt.Sprintf("%s=%s", key, value), chartValues)
@@ -417,36 +408,10 @@ func (i *Installer) Perform(kcontext string) Result {
 	// Bold: Installing the Ambassador Edge Stack
 	i.ShowFirstInstalling()
 
-	// Attempt to grab a reasonable default for the user's email address
-	defaultEmail, err := i.Capture("get email", true, "", "git", "config", "--global", "user.email")
-	if err != nil {
-		i.log.Print(err)
-		defaultEmail = ""
-	} else {
-		defaultEmail = strings.TrimSpace(defaultEmail)
-		if !validEmailAddress.MatchString(defaultEmail) {
-			defaultEmail = ""
-		}
+	emailAddress, result := i.AskEmail()
+	if result.Err != nil {
+		return result
 	}
-
-	// Ask for the user's email address
-	i.ShowRequestEmail()
-
-	// Do the goroutine dance to let the user hit Ctrl-C at the email prompt
-	gotEmail := make(chan string)
-	var emailAddress string
-	go func() {
-		gotEmail <- getEmailAddress(defaultEmail, i.log)
-		close(gotEmail)
-	}()
-	select {
-	case emailAddress = <-gotEmail:
-		// Continue
-	case <-i.ctx.Done():
-		return i.resEmailRequestError(errors.New("Interrupted"))
-	}
-
-	i.log.Printf("Using email address %q", emailAddress)
 
 	// Beginning the AES Installation
 	i.ShowBeginAESInstallation()
@@ -467,7 +432,6 @@ func (i *Installer) Perform(kcontext string) Result {
 	}
 
 	i.restConfig, err = i.kubeinfo.GetRestConfig()
-
 	if err != nil {
 		return i.resGetRestConfigError(err)
 	}
@@ -532,7 +496,7 @@ func (i *Installer) Perform(kcontext string) Result {
 			strvals.ParseInto(fmt.Sprintf("image.repository=%s", ir), chartValues)
 			i.imageRepo = ir
 		} else {
-			i.imageRepo = "quay.io/datawire/aes"
+			i.imageRepo = defImageRepo
 		}
 
 		if it := os.Getenv(defEnvVarImageTag); it != "" {
@@ -669,90 +633,13 @@ func (i *Installer) Perform(kcontext string) Result {
 		}
 	}
 
-	i.ShowAESConfiguringTLS()
-
-	// Send a request to acquire a DNS name for this cluster's load balancer
-	regURL := "https://metriton.datawire.io/register-domain"
-	regData := &registration{Email: emailAddress}
-
-	if !metriton.IsDisabledByUser() {
-		regData.AESInstallId = i.clusterID
-		regData.EdgectlInstallId = i.scout.Reporter.InstallID()
-	}
-
-	if net.ParseIP(i.address) != nil {
-		regData.Ip = i.address
-	} else {
-		regData.Hostname = i.address
-	}
-
-	buf := new(bytes.Buffer)
-	_ = json.NewEncoder(buf).Encode(regData)
-	resp, err := http.Post(regURL, "application/json", buf)
-
-	if err != nil {
-		return i.resDNSNamePostError(err)
-	}
-
-	content, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-
-	if err != nil {
-		return i.resDNSNameBodyError(err)
-	}
-
-	// With and without DNS.  In case of no DNS, different error messages and result handling.
-	dnsSuccess := true // Assume success with DNS
-	dnsMessage := ""   // Message for error reporting in case of no DNS
-	hostName := ""     // Login to this (hostname or IP address)
-
-	// Was there a DNS name post response?
-	if resp.StatusCode == 200 {
-		// Have DNS name--now wait for it to propagate.
-		i.hostname = string(content)
-		i.ShowAcquiringDNSName(i.hostname)
-
-		// Wait for DNS to propagate. This tries to avoid waiting for a ten
-		// minute error backoff if the ACME registration races ahead of the DNS
-		// name appearing for LetsEncrypt.
-
-		if err := i.loopUntil("DNS propagation to this host", i.CheckHostnameFound, lc2); err != nil {
-			return i.resDNSPropagationError(err)
-		}
-
-		i.Report("dns_name_propagated")
-
-		// Create a Host resource
-		hostResource := fmt.Sprintf(hostManifest, i.hostname, i.hostname, emailAddress)
-		if err := i.kubectl.Apply(hostResource, defInstallNamespace); err != nil {
-			return i.resHostResourceCreationError(err)
-		}
-
-		i.ShowObtainingTLSCertificate()
-
-		if err := i.loopUntil("TLS certificate acquisition", i.CheckACMEIsDone, lc5); err != nil {
-			return i.resCertificateProvisionError(err)
-		}
-
-		i.Report("cert_provisioned")
-		i.ShowTLSConfiguredSuccessfully()
-
-		if _, err := i.kubectl.Get("host", i.hostname, defInstallNamespace); err != nil {
-			return i.resHostRetrievalError(err)
-		}
-
-		// Made it through with DNS and TLS.  Set hostName to the DNS name that was given.
-		hostName = i.hostname
-		dnsSuccess = true
-	} else {
-		// Failure case: couldn't create DNS name.  Set hostName the IP address of the host.
-		hostName = i.address
-		dnsMessage = strings.TrimSpace(string(content))
-		i.ShowFailedToCreateDNSName(dnsMessage)
-		dnsSuccess = false
+	dnsMessage, hostName, resp, res := i.ConfigureTLS(emailAddress)
+	if res.Err != nil {
+		return result
 	}
 
 	// All done!
+	dnsSuccess := hostName == i.hostname
 	if dnsSuccess {
 		i.ShowAESInstallationComplete()
 	} else {
