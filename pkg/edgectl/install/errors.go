@@ -156,7 +156,7 @@ func (i *Installer) resUpgradeNoOSSFound(err error) Result {
 
 	return Result{
 		Report:       "fail_no_oss_found",
-		ShortMessage: fmt.Sprintf("The upgrader is unable to find a valid Ambassador API Gateway installation: %s.", err),
+		ShortMessage: fmt.Sprintf("The upgrader is unable to find a valid Ambassador API Gateway installation:\n%s.", err),
 		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about upgrading an existing installation to continue upgrading Ambassador API Gateway to Edge Stack at %v", url),
 		URL:          url,
 		Err:          err,
@@ -182,7 +182,7 @@ func (i *Installer) resUpgradeFailed(err error) Result {
 
 	return Result{
 		Report:       "fail_upgrade",
-		ShortMessage: fmt.Sprintf("The upgrader failed to install Ambassador Edge Stack: %s.", err),
+		ShortMessage: fmt.Sprintf("The upgrader failed to install Ambassador Edge Stack:\n%s.", err),
 		Message:      fmt.Sprintf("Find a more detailed explanation and step-by-step instructions about upgrading an existing installation to continue upgrading Ambassador API Gateway to Edge Stack at %v", url),
 		URL:          url,
 		Err:          err,
