@@ -72,7 +72,7 @@ func (i *Installer) ConfigureTLS(emailAddress string) (string, string, *http.Res
 
 		// Create a Host resource
 		hostResource := fmt.Sprintf(hostManifest, i.hostname, i.hostname, emailAddress)
-		if err := i.kubectl.Apply(hostResource, ""); err != nil {
+		if err := i.kubectl.Apply(hostResource, defInstallNamespace); err != nil {
 			return "", "", nil, i.resHostResourceCreationError(err)
 		}
 
@@ -85,7 +85,7 @@ func (i *Installer) ConfigureTLS(emailAddress string) (string, string, *http.Res
 		i.Report("cert_provisioned")
 		i.ShowTLSConfiguredSuccessfully()
 
-		if _, err := i.kubectl.Get("host", i.hostname, ""); err != nil {
+		if _, err := i.kubectl.Get("host", i.hostname, defInstallNamespace); err != nil {
 			return "", "", nil, i.resHostRetrievalError(err)
 		}
 
@@ -103,7 +103,7 @@ func (i *Installer) ConfigureTLS(emailAddress string) (string, string, *http.Res
 // CheckACMEIsDone queries the Host object and succeeds if its state is Ready.
 func (i *Installer) CheckACMEIsDone() error {
 
-	host, err := i.kubectl.Get("host", i.hostname, "")
+	host, err := i.kubectl.Get("host", i.hostname, defInstallNamespace)
 	if err != nil {
 		return LoopFailedError(err.Error())
 	}

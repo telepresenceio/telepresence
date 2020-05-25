@@ -346,45 +346,6 @@ func (i *Installer) HostnameMatchesLBAddress(hostname string) bool {
 	return true
 }
 
-// CheckACMEIsDone queries the Host object and succeeds if its state is Ready.
-func (i *Installer) CheckACMEIsDone() error {
-
-	host, err := i.kubectl.Get("host", i.hostname, defInstallNamespace)
-	if err != nil {
-		return LoopFailedError(err.Error())
-	}
-	state, _, err := unstructured.NestedString(host.Object, "status", "state")
-	if err != nil {
-		return LoopFailedError(err.Error())
-	}
-	if state == "Error" {
-		reason, _, err := unstructured.NestedString(host.Object, "status", "errorReason")
-		if err != nil {
-			return LoopFailedError(err.Error())
-		}
-		// This heuristic tries to detect whether the error is that the ACME
-		// provider got NXDOMAIN for the provided hostname. It specifically
-		// handles the error message returned by Let's Encrypt in Feb 2020, but
-		// it may cover others as well. The AES ACME controller retries much
-		// sooner if this heuristic is tripped, so we should continue to wait
-		// rather than giving up.
-		isAcmeNxDomain := strings.Contains(reason, "NXDOMAIN") || strings.Contains(reason, "urn:ietf:params:acme:error:dns")
-		if isAcmeNxDomain {
-			return errors.New("Waiting for NXDOMAIN retry")
-		}
-
-		// TODO: Windows incompatible, will not be bold but otherwise functions.
-		// TODO: rewrite Installer.show to make explicit calls to color.Bold.Printf(...) instead,
-		// TODO: along with logging.  Search for color.Bold to find usages.
-		i.ShowACMEFailed(reason)
-		return LoopFailedError(fmt.Sprintf("ACME failed. More information: kubectl get host %s -o yaml", i.hostname))
-	}
-	if state != "Ready" {
-		return errors.Errorf("Host state is %s, not Ready", state)
-	}
-	return nil
-}
-
 // CreateNamespace creates the namespace for installing AES
 func (i *Installer) CreateNamespace() error {
 	_ = i.kubectl.Create("namespace", defInstallNamespace, "")
