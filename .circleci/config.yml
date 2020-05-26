@@ -91,7 +91,7 @@ jobs:
       # https://circleci.com/docs/2.0/building-docker-images/
       - forked-pr-return
       - setup_remote_docker:
-          version: 18.05.0-ce
+          version: 19.03.8
           docker_layer_caching: true
       - checkout
       - run: docker login -p "$DOCKER_PASSWORD" -u d6eautomaton
@@ -106,7 +106,7 @@ jobs:
       # https://circleci.com/docs/2.0/building-docker-images/
       - forked-pr-return
       - setup_remote_docker:
-          version: 18.05.0-ce
+          version: 19.03.8
           docker_layer_caching: true
       - checkout
       - run: packaging/deploy.py
