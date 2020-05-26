@@ -111,10 +111,10 @@ var lc5 = &loopConfig{
 	timeout:      5 * time.Minute,
 }
 
-var lc6 = &loopConfig{
+var lc10 = &loopConfig{
 	sleepTime:    3 * time.Second,
 	progressTime: 30 * time.Second,
-	timeout:      6 * time.Minute,
+	timeout:      10 * time.Minute,
 }
 
 // loopUntil repeatedly calls a function until it succeeds, using a
