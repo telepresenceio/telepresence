@@ -169,11 +169,11 @@ var (
 )
 
 type installationMethodInfo struct {
-	Method    int
-	Label     string
-	Name      string
-	LongName  string
-	Image     *regexp.Regexp
+	Method   int
+	Label    string
+	Name     string
+	LongName string
+	Image    *regexp.Regexp
 	Namespace string
 }
 
@@ -183,10 +183,10 @@ type installationMethodInfo struct {
 // NOTE: this is an ordered-list: higher-precision labels are first
 var defInstallationMethodsInfo = []installationMethodInfo{
 	{
-		Method:    instEdgectl,
-		Label:     "app.kubernetes.io/managed-by=edgectl",
-		Name:      "edgectl",
-		LongName:  "edgectl",
+		Method:   instEdgectl,
+		Label:    "app.kubernetes.io/managed-by=edgectl",
+		Name:     "edgectl",
+		LongName: "edgectl",
 		Image:     regexAESImage,
 		Namespace: defInstallNamespace,
 	},
@@ -231,34 +231,34 @@ var defInstallationMethodsInfo = []installationMethodInfo{
 		Namespace: defInstallNamespace,
 	},
 	{
-		Method:    instOperator,
-		Label:     "app.kubernetes.io/name=ambassador,app.kubernetes.io/managed-by in (amb-oper,amb-oper-manifest,amb-oper-helm,amb-oper-azure)",
-		Name:      "operator",
-		LongName:  "the Ambassador Operator",
+		Method:   instOperator,
+		Label:    "app.kubernetes.io/name=ambassador,app.kubernetes.io/managed-by in (amb-oper,amb-oper-manifest,amb-oper-helm,amb-oper-azure)",
+		Name:     "operator",
+		LongName: "the Ambassador Operator",
 		Image:     regexAESImage,
 		Namespace: defInstallNamespace,
 	},
 	{
-		Method:    instHelm,
-		Label:     "app.kubernetes.io/name=ambassador",
-		Name:      "helm",
-		LongName:  "Helm",
+		Method:   instHelm,
+		Label:    "app.kubernetes.io/name=ambassador",
+		Name:     "helm",
+		LongName: "Helm",
 		Image:     regexAESImage,
 		Namespace: defInstallNamespace,
 	},
 	{
-		Method:    instAES,
-		Label:     "product=aes",
-		Name:      "aes",
-		LongName:  "AES manifests",
+		Method:   instAES,
+		Label:    "product=aes",
+		Name:     "aes",
+		LongName: "AES manifests",
 		Image:     regexAESImage,
 		Namespace: defInstallNamespace,
 	},
 	{
-		Method:    instOSS,
-		Label:     "service=ambassador",
-		Name:      "oss",
-		LongName:  "OSS manifests",
+		Method:   instOSS,
+		Label:    "service=ambassador",
+		Name:     "oss",
+		LongName: "OSS manifests",
 		Image:     regexAOSSImage,
 		Namespace: "default",
 	},

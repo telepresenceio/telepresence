@@ -50,7 +50,7 @@ const (
 	// an image with a '1.3.*' tag.
 	defEnvVarChartVersionRule = "AES_CHART_VERSION"
 
-	// env variable used for specifying the image repository (ie, 'quay.io/datawire/aes')
+	// env variable used for specifying the image repository (ie, 'docker.io/datawire/aes')
 	// this will install the latest Chart from the Helm repo, but with an overridden `image.repository`
 	defEnvVarImageRepo = "AES_IMAGE_REPOSITORY"
 
