@@ -48,7 +48,7 @@ const (
 	// an image with a '1.3.*' tag.
 	defEnvVarChartVersionRule = "AES_CHART_VERSION"
 
-	// env variable used for specifying the image repository (ie, 'quay.io/datawire/aes')
+	// env variable used for specifying the image repository (ie, 'docker.io/datawire/aes')
 	// this will install the latest Chart from the Helm repo, but with an overridden `image.repository`
 	defEnvVarImageRepo = "AES_IMAGE_REPOSITORY"
 
@@ -525,7 +525,7 @@ func (i *Installer) Perform(kcontext string) Result {
 			strvals.ParseInto(fmt.Sprintf("image.repository=%s", ir), chartValues)
 			i.imageRepo = ir
 		} else {
-			i.imageRepo = "quay.io/datawire/aes"
+			i.imageRepo = "docker.io/datawire/aes"
 		}
 
 		if it := os.Getenv(defEnvVarImageTag); it != "" {
