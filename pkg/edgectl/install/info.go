@@ -163,9 +163,8 @@ const (
 )
 
 var (
-	regexAOSSImage = regexp.MustCompile("datawire/ambassador:([[:^space:]]+)")
-
-	regexAESImage = regexp.MustCompile("datawire/aes:([[:^space:]]+)")
+	regexAOSSImage = regexp.MustCompile(`\bdatawire/ambassador:(\S+)`)
+	regexAESImage = regexp.MustCompile(`\bdatawire/aes:(\S+)`)
 )
 
 type installationMethodInfo struct {
