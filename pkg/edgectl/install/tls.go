@@ -78,7 +78,7 @@ func (i *Installer) ConfigureTLS(emailAddress string) (string, string, *http.Res
 
 		i.ShowObtainingTLSCertificate()
 
-		if err := i.loopUntil("TLS certificate acquisition", i.CheckACMEIsDone, lc5); err != nil {
+		if err := i.loopUntil("TLS certificate acquisition", i.CheckACMEIsDone, lc10); err != nil {
 			return "", "", nil, i.resCertificateProvisionError(err)
 		}
 

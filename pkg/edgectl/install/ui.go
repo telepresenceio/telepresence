@@ -111,6 +111,12 @@ var lc5 = &loopConfig{
 	timeout:      5 * time.Minute,
 }
 
+var lc10 = &loopConfig{
+	sleepTime:    3 * time.Second,
+	progressTime: 30 * time.Second,
+	timeout:      10 * time.Minute,
+}
+
 // loopUntil repeatedly calls a function until it succeeds, using a
 // (presently-fixed) loop period and timeout.
 func (i *Installer) loopUntil(what string, how func() error, lc *loopConfig) error {
