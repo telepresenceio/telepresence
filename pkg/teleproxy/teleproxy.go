@@ -770,7 +770,7 @@ spec:
   hostname: traffic-proxy
   containers:
   - name: proxy
-    image: datawire/telepresence-k8s:0.75
+    image: docker.io/datawire/telepresence-k8s:0.75
     ports:
     - protocol: TCP
       containerPort: 8022
