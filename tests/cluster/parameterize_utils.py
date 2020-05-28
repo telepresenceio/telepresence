@@ -449,17 +449,21 @@ def cleanup_service(deployment_ident):
 
 
 INJECT_TCP_METHOD = _InjectTCPMethod()
-NEW_DEPLOYMENT_OPERATION = _NewDeploymentOperation()
+
+
+def NEW_DEPLOYMENT_OPERATION_GETTER():
+    return _NewDeploymentOperation()
+
 
 METHODS = [
     _ContainerMethod(),
     _VPNTCPMethod(),
     INJECT_TCP_METHOD,
 ]
-OPERATIONS = [
-    _ExistingDeploymentOperation(False),
-    _ExistingDeploymentOperation(True),
-    NEW_DEPLOYMENT_OPERATION,
+OPERATION_GETTERS = [
+    lambda: _ExistingDeploymentOperation(False),
+    lambda: _ExistingDeploymentOperation(True),
+    NEW_DEPLOYMENT_OPERATION_GETTER,
 ]
 
 
