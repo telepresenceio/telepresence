@@ -11,21 +11,13 @@ Put tests in this module if they don't use ``with_probe`` but do use
 """
 
 import subprocess
-from shutil import (
-    which,
-)
-from time import (
-    sleep,
-    time,
-)
+from shutil import which
+from time import sleep, time
 
 import pytest
 
 from .parameterize_utils import (
-    INJECT_TCP_METHOD,
-    NEW_DEPLOYMENT_OPERATION,
-    NoTaggedValue,
-    Probe,
+    INJECT_TCP_METHOD, NEW_DEPLOYMENT_OPERATION_GETTER, NoTaggedValue, Probe
 )
 
 
@@ -45,7 +37,9 @@ def test_disconnect(request):
     # Just pick a semi-arbitrary Probe configuration.  We do need to have
     # kubectl available in the Telepresence execution context for
     # ``disconnect_telepresence`` to work, though.
-    probe = Probe(request, INJECT_TCP_METHOD, NEW_DEPLOYMENT_OPERATION)
+    probe = Probe(
+        request, INJECT_TCP_METHOD, NEW_DEPLOYMENT_OPERATION_GETTER()
+    )
     request.addfinalizer(probe.cleanup)
 
     probe_result = probe.result()

@@ -72,7 +72,15 @@ def existing_deployment(
         "Deployment {}".format(deployment_arg)
     )
     try:
-        runner.check_call(runner.kubectl("get", "deployment", deployment_arg))
+        d_json = json.loads(
+            runner.get_output(
+                runner.kubectl(
+                    "get", "deployment", deployment_arg, "-o", "json"
+                )
+            )
+        )
+
+        _set_expose_ports(expose, deployment_arg, d_json)
     except CalledProcessError as exc:
         raise runner.fail(
             "Failed to find deployment {}:\n{}".format(
@@ -98,11 +106,15 @@ def existing_deployment_openshift(
         "DeploymentConfig {}".format(deployment_arg)
     )
     try:
-        # FIXME: This call is redundant, as we already check for an existing dc
-        # just to get to this code path in the first place.
-        runner.check_call(
-            runner.kubectl("get", "deploymentconfig", deployment_arg)
+        d_json = json.loads(
+            runner.get_output(
+                runner.kubectl(
+                    "get", "deploymentconfig", deployment_arg, "-o", "json"
+                )
+            )
         )
+
+        _set_expose_ports(expose, deployment_arg, d_json)
     except CalledProcessError as exc:
         raise runner.fail(
             "Failed to find deploymentconfig {}:\n{}".format(
@@ -111,6 +123,20 @@ def existing_deployment_openshift(
         )
     run_id = None
     return deployment_arg, run_id
+
+
+def _set_expose_ports(expose, deployment_arg, d_json):
+    deployment, container = _split_deployment_container(deployment_arg)
+    container_to_update = _get_container_name(container, d_json)
+
+    for container in d_json["spec"]["template"]["spec"]["containers"]:
+        if container["name"] == container_to_update:
+            # Merge container ports into the expose list
+            expose.merge_automatic_ports([
+                port["containerPort"] for port in container.get("ports", [])
+                if port["protocol"] == "TCP"
+            ])
+            break
 
 
 _deployment_template = """apiVersion: apps/v1
