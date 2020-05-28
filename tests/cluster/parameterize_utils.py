@@ -190,26 +190,6 @@ class _ExistingDeploymentOperation(object):
             # command is restored after Telepresence swaps the original
             # deployment back in.
             self.container_args = ["/hello-openshift"]
-            self.http_server_auto_expose_same = HTTPServer(
-                random_port(),
-                None,
-                random_name("auto-same"),
-            )
-            print(
-                "HTTP Server auto-expose same-port: {}".format(
-                    self.http_server_auto_expose_same.remote_port,
-                )
-            )
-            self.http_server_auto_expose_diff = HTTPServer(
-                12330,
-                random_port(),
-                random_name("auto-diff"),
-            )
-            print(
-                "HTTP Server auto-expose diff-port: {}".format(
-                    self.http_server_auto_expose_diff.remote_port,
-                )
-            )
         else:
             self.name = "existing"
             self.image = "{}/telepresence-k8s:{}".format(
@@ -219,25 +199,43 @@ class _ExistingDeploymentOperation(object):
             self.replicas = 1
             self.container_args = None
 
+        self.http_server_auto_expose_same = HTTPServer(
+            random_port(),
+            None,
+            random_name("auto-same"),
+        )
+        print(
+            "HTTP Server auto-expose same-port: {}".format(
+                self.http_server_auto_expose_same.remote_port,
+            )
+        )
+        self.http_server_auto_expose_diff = HTTPServer(
+            12330,
+            random_port(),
+            random_name("auto-diff"),
+        )
+        print(
+            "HTTP Server auto-expose diff-port: {}".format(
+                self.http_server_auto_expose_diff.remote_port,
+            )
+        )
+
     def inherits_deployment_environment(self):
         return True
 
     def prepare_deployment(self, deployment_ident, environ):
-        if self.swap:
-            ports = [
-                {
-                    "containerPort": self.http_server_auto_expose_same.
-                    local_port,
-                    "hostPort": self.http_server_auto_expose_same.remote_port,
-                },
-                {
-                    "containerPort": self.http_server_auto_expose_diff.
-                    local_port,
-                    "hostPort": self.http_server_auto_expose_diff.remote_port,
-                },
-            ]
-        else:
-            ports = []
+        ports = [
+            {
+                "name": "samehttp",
+                "containerPort": self.http_server_auto_expose_same.local_port,
+                "hostPort": self.http_server_auto_expose_same.remote_port,
+            },
+            {
+                "name": "diffhttp",
+                "containerPort": self.http_server_auto_expose_diff.local_port,
+                "hostPort": self.http_server_auto_expose_diff.remote_port,
+            },
+        ]
 
         create_deployment(
             deployment_ident,
@@ -259,12 +257,10 @@ class _ExistingDeploymentOperation(object):
             self.envfile.unlink()
 
     def auto_http_servers(self):
-        if self.swap:
-            return [
-                self.http_server_auto_expose_same,
-                self.http_server_auto_expose_diff,
-            ]
-        return []
+        return [
+            self.http_server_auto_expose_same,
+            self.http_server_auto_expose_diff,
+        ]
 
     def prepare_service(self, deployment_ident, ports):
         create_service(deployment_ident, ports)
@@ -904,7 +900,7 @@ class Probe(object):
     )
     print(
         "HTTP Server diff-port: {}".format(
-            HTTP_SERVER_SAME_PORT.remote_port,
+            HTTP_SERVER_DIFFERENT_PORT.remote_port,
         )
     )
     HTTP_SERVER_LOW_PORT = HTTPServer(
