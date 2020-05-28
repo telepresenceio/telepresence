@@ -88,12 +88,12 @@ DIRFAIL = { r=$$?; rm -rf $@; exit $$r; }
 virtualenv: dev-requirements.txt k8s-proxy/requirements.txt  ## Set up Python3 virtual environment for development
 	rm -rf $@ || true
 	python3 -m venv $@ || $(DIRFAIL)
-	$(PIP) install -U pip || $(DIRFAIL)
-	$(PIP) install -r dev-requirements.txt || $(DIRFAIL)
-	$(PIP) install -r k8s-proxy/requirements.txt || $(DIRFAIL)
-	$(PIP) install setuptools_scm || $(DIRFAIL) # Ensure subsequent line executes without error on macos
-	$(PIP) install git+https://github.com/datawire/sshuttle.git@telepresence || $(DIRFAIL)
-	$(PIP) install --no-use-pep517 -e . || $(DIRFAIL)
+	$(PIP) install -q -U pip || $(DIRFAIL)
+	$(PIP) install -q -r dev-requirements.txt || $(DIRFAIL)
+	$(PIP) install -q -r k8s-proxy/requirements.txt || $(DIRFAIL)
+	$(PIP) install -q setuptools_scm || $(DIRFAIL) # Ensure subsequent line executes without error on macos
+	$(PIP) install -q git+https://github.com/datawire/sshuttle.git@telepresence || $(DIRFAIL)
+	$(PIP) install -q --no-use-pep517 -e . || $(DIRFAIL)
 
 lint: virtualenv  ## Run the linters used by CI (implies 'virtualenv')
 	./tools/license-check
