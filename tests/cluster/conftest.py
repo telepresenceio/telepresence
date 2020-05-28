@@ -2,17 +2,11 @@
 Configure pytest for the Telepresence end-to-end test suite.
 """
 
-from itertools import (
-    product,
-)
+from itertools import product
 
 import pytest
 
-from .parameterize_utils import (
-    METHODS,
-    OPERATIONS,
-    Probe,
-)
+from .parameterize_utils import METHODS, OPERATION_GETTERS, Probe
 
 
 # Mark this as the `probe` fixture and declare that instances of it may be
@@ -49,6 +43,10 @@ def _probe_parametrize(fixture_name):
     each coordinate in the cartesion space defined by METHODS and OPERATIONS)
     to test functions which use it.
     """
+    param_values = [
+        (method, op_getter())
+        for method, op_getter in product(METHODS, OPERATION_GETTERS)
+    ]
     return pytest.mark.parametrize(
         # Parameterize the probe parameter to decorated methods
         fixture_name,
@@ -57,7 +55,7 @@ def _probe_parametrize(fixture_name):
         # operations.
         [
             pytest.param(value, marks=_get_marks(value))
-            for value in product(METHODS, OPERATIONS)
+            for value in param_values
         ],
 
         # Use the `name` of methods and operations to generate readable
