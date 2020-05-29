@@ -22,13 +22,13 @@ case "${OS}" in
         brew update > /dev/null
         brew install python3 || brew upgrade python || brew link --overwrite python
         brew cask install osxfuse
-        brew install sshfs
+        brew install sshfs torsocks
         pip3 install virtualenv
         ;;
 
     linux)
         sudo apt-get install \
-             sshfs conntrack \
+             sshfs conntrack torsocks \
              lsb-release
         ;;
 
@@ -46,9 +46,6 @@ docker version || true
 
 # Make sure gcloud is installed.  This includes kubectl.
 ./ci/setup-gcloud.sh "${PROJECT_NAME}" "${CLUSTER_NAME}" "${CLOUDSDK_COMPUTE_ZONE}" "${OS}"
-
-# Make sure torsocks is installed:
-./ci/build-torsocks.sh "${OS}"
 
 # Make sure Docker sshfs plugin is installed.
 docker plugin install --grant-all-permissions vieux/sshfs || true
