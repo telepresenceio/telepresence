@@ -6,12 +6,12 @@ workflows:
   version: 2
   ci:
     jobs:
-      - check-local
+      #- check-local
       - build-image
-      - deploy
-      - check-cluster-macos:
-          requires:
-            - build-image
+      #- deploy
+      #- check-cluster-macos:
+      #    requires:
+      #      - build-image
       - check-cluster-linux:
           requires:
             - build-image
@@ -128,10 +128,9 @@ jobs:
 
     steps:
       - forked-pr-return
-      - run: sudo apt-get --quiet update
+      - run: sudo apt-get -qq update
       - run: pyenv versions
-      - run: pyenv install 3.5.3
-      - run: pyenv global 2.7.12 3.5.3
+      - run: pyenv global 2.7.17 3.5.9
       - checkout
       - decrypt-gcloud-keys
 
@@ -161,7 +160,7 @@ jobs:
 
   check-cluster-macos:
     macos:
-      xcode: "10.1.0"
+      xcode: "9.0"
 
     environment:
       - PROJECT_NAME: "datawireio"
