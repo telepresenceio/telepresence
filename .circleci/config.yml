@@ -120,18 +120,17 @@ jobs:
     machine:
       enabled: true
       # https://circleci.com/docs/2.0/configuration-reference/#machine
-      # Ubuntu 14.04 + docker 17.11.0-ce + docker-compose 1.17.1
-      image: "circleci/classic:201711-01"
+      # Ubuntu 16.04, docker 19.03.8, docker-compose 1.25.5
+      image: "ubuntu-1604:202004-01"
 
     environment:
       - PROJECT_NAME: "datawireio"
 
     steps:
       - forked-pr-return
-      - run: sudo apt-get --quiet update
+      - run: sudo apt-get -qq update
       - run: pyenv versions
-      - run: pyenv install 3.5.3
-      - run: pyenv global 2.7.12 3.5.3
+      - run: pyenv global 2.7.17 3.5.9
       - checkout
       - decrypt-gcloud-keys
 
