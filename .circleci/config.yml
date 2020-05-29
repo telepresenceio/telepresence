@@ -120,8 +120,8 @@ jobs:
     machine:
       enabled: true
       # https://circleci.com/docs/2.0/configuration-reference/#machine
-      # Ubuntu 14.04 + docker 17.11.0-ce + docker-compose 1.17.1
-      image: "circleci/classic:201711-01"
+      # Ubuntu 16.04, docker 19.03.8, docker-compose 1.25.5
+      image: "ubuntu-1604:202004-01"
 
     environment:
       - PROJECT_NAME: "datawireio"
@@ -161,7 +161,7 @@ jobs:
 
   check-cluster-macos:
     macos:
-      xcode: "9.0"
+      xcode: "10.1.0"
 
     environment:
       - PROJECT_NAME: "datawireio"
