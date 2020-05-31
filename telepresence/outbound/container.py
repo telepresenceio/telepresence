@@ -22,6 +22,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 from telepresence import TELEPRESENCE_LOCAL_IMAGE
 from telepresence.cli import PortMapping
 from telepresence.connect import SSH
+from telepresence.outbound.cidr import get_proxy_cidrs
 from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.utilities import find_free_port, random_name
@@ -143,7 +144,7 @@ def run_docker_command(
     # Start the network (sshuttle) container:
     name = random_name()
     config = {
-        "cidrs": ["0/0"],
+        "cidrs": get_proxy_cidrs(runner, remote_info),
         "expose_ports": list(expose.local_to_remote()),
         "to_pod": to_pod,
         "from_pod": from_pod,

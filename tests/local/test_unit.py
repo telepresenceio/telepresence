@@ -28,6 +28,7 @@ from hypothesis import strategies as st
 import telepresence.cli
 import telepresence.main
 import telepresence.outbound.container
+import telepresence.outbound.cidr
 import telepresence.outbound.vpn
 import telepresence.proxy.deployment
 import telepresence.runner.output
@@ -296,7 +297,7 @@ def test_covering_cidr(ips):
 
     In particular, that means any subnets should *not* cover all given IPs.
     """
-    cidr = telepresence.outbound.vpn.covering_cidr(ips)
+    cidr = telepresence.outbound.cidr.covering_cidr(ips)
     assert isinstance(cidr, str)
     cidr = ipaddress.IPv4Network(cidr)
     assert cidr.prefixlen <= 24
