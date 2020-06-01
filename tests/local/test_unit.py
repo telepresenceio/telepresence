@@ -16,6 +16,7 @@ Unit tests (in-memory, small units of code).
 """
 
 import ipaddress
+import itertools
 import subprocess
 import sys
 import tempfile
@@ -289,25 +290,47 @@ ips = st.lists(elements=ip, min_size=1)
 
 
 @given(ips)
+@example(["10.0.0.1", "10.0.1.1"])
 @example(["1.2.3.4", "1.2.3.5"])
-@example(["0.0.0.1", "255.255.255.255"])
+@example(["128.0.0.1", "255.255.255.255"])
+@example(["172.17.0.6", "192.168.64.5"])
 def test_covering_cidr(ips):
     """
     covering_cidr() gets the minimal CIDR that covers given IPs.
 
     In particular, that means any subnets should *not* cover all given IPs.
     """
-    cidr = telepresence.outbound.cidr.covering_cidr(ips)
-    assert isinstance(cidr, str)
-    cidr = ipaddress.IPv4Network(cidr)
-    assert cidr.prefixlen <= 24
+    cidrs = telepresence.outbound.cidr.covering_cidr(ips)
+    assert isinstance(cidrs, list)
+    assert all(isinstance(cidr, str) for cidr in cidrs)
+    cidrs = [ipaddress.IPv4Network(cidr) for cidr in cidrs]
     # All IPs in given CIDR:
     ips = [ipaddress.IPv4Address(i) for i in ips]
-    assert all([ip in cidr for ip in ips])
+    assert all(any(ip in cidr for cidr in cidrs) for ip in ips)
+
     # Subnets do not contain all IPs if we're not in minimum 24 bit CIDR:
-    if cidr.prefixlen < 24:
-        for subnet in cidr.subnets():
-            assert not all([ip in subnet for ip in ips])
+    for cidr in cidrs:
+        if cidr.prefixlen < 24:
+            for subnet in cidr.subnets():
+                assert not all(ip in subnet for ip in ips)
+
+    # Private ips weren't converted into global network.
+    private_ips = [ip for ip in ips if not ip.is_global]
+    private_cidrs = [cidr for cidr in cidrs if not cidr.is_global]
+    assert all(cidr.prefixlen <= 24 for cidr in private_cidrs)
+    assert all(any(ip in cidr for cidr in private_cidrs) for ip in private_ips)
+
+    # Global ips were converted into /32.
+    global_ips = [ip for ip in ips if ip.is_global]
+    global_cidrs = [cidr for cidr in cidrs if cidr.is_global]
+    assert all(any(ip in cidr for cidr in global_cidrs) for ip in global_ips)
+    assert all(cidr.prefixlen == 31 for cidr in global_cidrs)
+
+    # No network overlaps.
+    assert not any(
+        cidr.overlaps(other)
+        for cidr, other in itertools.combinations(cidrs, 2)
+    )
 
 
 def test_output_file():

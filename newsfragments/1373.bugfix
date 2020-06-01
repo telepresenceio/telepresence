@@ -1,0 +1,1 @@
+Avoid generating global networks when guessing podsCIDR and service sCIDR for container and VPN sshuttle routing configuration.

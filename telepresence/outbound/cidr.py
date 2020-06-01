@@ -14,15 +14,16 @@
 
 import ipaddress
 import json
+from itertools import chain
 from subprocess import CalledProcessError
-from typing import List, Optional
+from typing import List
 
 from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.utilities import random_name
 
 
-def covering_cidr(ips: List[str]) -> str:
+def covering_cidr(ips: List[str]) -> List[str]:
     """
     Given list of IPs, return CIDR that covers them all.
 
@@ -32,13 +33,32 @@ def covering_cidr(ips: List[str]) -> str:
         return list(ipaddress.collapse_addresses(ns))
 
     assert len(ips) > 0
+    ip_addresses = map(ipaddress.IPv4Address, ips)
     networks = collapse([
-        ipaddress.IPv4Interface(ip + "/24").network for ip in ips
+        ipaddress.IPv4Interface(str(ip) +
+                                ("/31" if ip.is_global else "/24")).network
+        for ip in ip_addresses
     ])
     # Increase network size until it combines everything:
+    results = []
     while len(networks) > 1:
-        networks = collapse([networks[0].supernet()] + networks[1:])
-    return networks[0].with_prefixlen
+        network = networks[0]
+        rest = networks[1:]
+        supernet = network.supernet()
+
+        while not supernet.is_global:
+            collapsed_networks = collapse([supernet] + rest)
+            # Keep the supernet if it did collapse networks together.
+            if len(collapsed_networks) <= len(rest):
+                network = supernet
+                rest = [n for n in rest if not n.subnet_of(network)]
+
+            supernet = supernet.supernet()
+
+        networks = rest
+        results.append(network)
+
+    return [n.with_prefixlen for n in chain(results, networks)]
 
 
 # Script to dump resolved IPs to stdout as JSON list:
@@ -83,7 +103,7 @@ def get_proxy_cidrs(
     result = set(k8s_resolve(runner, remote_info, hosts_or_ips))
     context_cache = runner.cache.child(runner.kubectl.context)
     result.update(context_cache.lookup("podCIDRs", lambda: podCIDRs(runner)))
-    result.add(
+    result.update(
         context_cache.lookup("serviceCIDR", lambda: serviceCIDR(runner))
     )
 
@@ -195,13 +215,12 @@ def podCIDRs(runner: Runner):
                 # Apparently a problem on OpenShift
                 pass
         if pod_ips:
-            cidrs.add(covering_cidr(pod_ips))
+            cidrs.update(covering_cidr(pod_ips))
 
-    valid_cidrs = filter(is_private_cidr, cidrs)
-    return list(valid_cidrs)
+    return list(cidrs)
 
 
-def serviceCIDR(runner: Runner):
+def serviceCIDR(runner: Runner) -> List[str]:
     """
     Get cluster service IP range.
     """
@@ -211,7 +230,7 @@ def serviceCIDR(runner: Runner):
     return serviceCIDR
 
 
-def cluster_serviceCIDR(runner: Runner) -> Optional[str]:
+def cluster_serviceCIDR(runner: Runner) -> List[str]:
     """
     Get cluster service IP range from apiserver.
     """
@@ -227,12 +246,12 @@ def cluster_serviceCIDR(runner: Runner) -> Optional[str]:
 
             for param in container["command"]:
                 if param.startswith("--service-cluster-ip-range="):
-                    return param.split("=", 1)[1]
-            return None
-    return None
+                    return [param.split("=", 1)[1]]
+            return []
+    return []
 
 
-def guess_serviceCIDR(runner: Runner) -> str:
+def guess_serviceCIDR(runner: Runner) -> List[str]:
     """
     Get service IP range, based on heuristic of constructing CIDR from
     existing Service IPs. We create more services if there are less
@@ -262,7 +281,7 @@ def guess_serviceCIDR(runner: Runner) -> str:
     if new_services:
         service_ips = get_service_ips()
     # Store Service CIDR:
-    service_cidr = covering_cidr(service_ips)
+    service_cidrs = covering_cidr(service_ips)
     # Delete new services:
     for new_service in new_services:
         runner.check_call(runner.kubectl("delete", "service", new_service))
@@ -272,7 +291,7 @@ def guess_serviceCIDR(runner: Runner) -> str:
             "Guessing that Services IP range is {}. Services started after"
             " this point will be inaccessible if are outside this range;"
             " restart telepresence if you can't access a "
-            "new Service.\n".format(service_cidr)
+            "new Service.\n".format(service_cidrs)
         )
 
-    return service_cidr
+    return service_cidrs
