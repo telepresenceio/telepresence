@@ -226,11 +226,11 @@ func getClusterPreviewHostname(p *supervisor.Process, cluster *KCluster) (hostna
 }
 
 // checkBridge checks the status of teleproxy bridge by doing the equivalent of
-//  curl http://traffic-proxy.svc.cluster.local:8022.
+//  curl http://traffic-proxy.svc:8022.
 // Note there is no namespace specified, as we are checking for bridge status in the
 // current namespace.
 func checkBridge(p *supervisor.Process) error {
-	address := "traffic-proxy.svc.cluster.local:8022"
+	address := "traffic-proxy.svc:8022"
 	conn, err := net.DialTimeout("tcp", address, 15*time.Second)
 	if err != nil {
 		return errors.Wrap(err, "tcp connect")
