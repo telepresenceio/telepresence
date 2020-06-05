@@ -42,7 +42,7 @@ func main() {
 		cg = []edgectl.CmdGroup{
 			{
 				GroupName: "Management Commands",
-				CmdNames:  []string{"install", "login", "license"},
+				CmdNames:  []string{"install", "upgrade", "login", "license"},
 			},
 			{
 				GroupName: "Other Commands",
@@ -200,7 +200,6 @@ func getRootCommand() *cobra.Command {
 		"Show all output. Defaults to sending most output to the logfile.",
 	)
 	rootCmd.AddCommand(upgradeCmd)
-
 
 	// Daemon commands. These should be forwarded to the daemon.
 
