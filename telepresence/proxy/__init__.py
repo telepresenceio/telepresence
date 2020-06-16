@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import re
 from subprocess import CalledProcessError
 
 from telepresence.runner import Runner
@@ -94,7 +95,7 @@ def setup(runner: Runner, args):
     # loop... We've fixed that for most cases by setting a distinct name server
     # for the proxy to use when making a new proxy pod, but that does not work
     # for --deployment.
-    custom_nameserver = None
+    deployment_env = {}
     if args.method == "vpn-tcp" and runner.kubectl.in_local_vm:
         if args.operation == "deployment":
             raise runner.fail(
@@ -103,7 +104,20 @@ def setup(runner: Runner, args):
                 " --new-deployment instead."
             )
         try:
-            custom_nameserver = get_alternate_nameserver()
+            deployment_env["TELEPRESENCE_NAMESERVER"] \
+                = get_alternate_nameserver()
+            if args.also_proxy:
+                proxy_names = []
+                for name in args.also_proxy:
+                    if not (
+                        re.search(r"[^\w.]", name)
+                        or re.match(r"^(?:\d+\.){3}\d+$", name)
+                    ):
+                        proxy_names.append(name)
+                if proxy_names:
+                    deployment_env["TELEPRESENCE_LOCAL_NAMES"] \
+                        = ",".join(proxy_names)
+
         except Exception as exc:
             raise runner.fail(
                 "Failed to find a fallback nameserver: {}".format(exc)
@@ -124,7 +138,7 @@ def setup(runner: Runner, args):
                     )
                 )
         tel_deployment, run_id = operation(
-            runner_, deployment_arg, args.expose, custom_nameserver,
+            runner_, deployment_arg, args.expose, deployment_env,
             args.service_account
         )
         remote_info = get_remote_info(

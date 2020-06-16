@@ -61,7 +61,7 @@ def existing_deployment(
     runner: Runner,
     deployment_arg: str,
     expose: PortMapping,
-    custom_nameserver: Optional[str],
+    deployment_env: Dict,
     service_account: str,
 ) -> Tuple[str, Optional[str]]:
     """
@@ -95,7 +95,7 @@ def existing_deployment_openshift(
     runner: Runner,
     deployment_arg: str,
     expose: PortMapping,
-    custom_nameserver: Optional[str],
+    deployment_env: Dict,
     service_account: str,
 ) -> Tuple[str, Optional[str]]:
     """
@@ -199,7 +199,7 @@ def create_new_deployment(
     runner: Runner,
     deployment_arg: str,
     expose: PortMapping,
-    custom_nameserver: Optional[str],
+    deployment_env: Dict,
     service_account: str,
 ) -> Tuple[str, str]:
     """
@@ -227,18 +227,13 @@ def create_new_deployment(
     runner.add_cleanup("Delete new deployment", remove_existing_deployment)
     remove_existing_deployment(quiet=True)
     # Define the deployment as yaml
-    env = {}
-    if custom_nameserver:
-        # If we're on local VM we need to use different nameserver to prevent
-        # infinite loops caused by sshuttle:
-        env["TELEPRESENCE_NAMESERVER"] = custom_nameserver
     # Create the deployment via yaml
     deployment_yaml = _get_deployment_yaml(
         deployment_arg,
         run_id,
         get_image_name(runner, expose),
         service_account,
-        env,
+        deployment_env,
     )
     try:
         runner.check_call(
@@ -295,7 +290,7 @@ def supplant_deployment(
     runner: Runner,
     deployment_arg: str,
     expose: PortMapping,
-    custom_nameserver: Optional[str],
+    deployment_env: Dict,
     service_account: str,
 ) -> Tuple[str, str]:
     """
@@ -329,7 +324,7 @@ def supplant_deployment(
         run_id,
         expose,
         service_account,
-        custom_nameserver,
+        deployment_env,
     )
 
     # Compute a new name that isn't too long, i.e. up to 63 characters.
@@ -393,7 +388,7 @@ def new_swapped_deployment(
     run_id: str,
     expose: PortMapping,
     service_account: str,
-    custom_nameserver: Optional[str],
+    deployment_env: Dict,
 ) -> Dict:
     """
     Create a new Deployment that uses telepresence-k8s image.
@@ -403,7 +398,7 @@ def new_swapped_deployment(
     1. Changes to single replica.
     2. Disables command, args, livenessProbe, readinessProbe, workingDir.
     3. Adds labels.
-    4. Adds TELEPRESENCE_NAMESERVER env variable, if requested.
+    4. Adds environment variables.
     5. Runs as root, if requested.
     6. Sets terminationMessagePolicy.
     7. Adds TELEPRESENCE_CONTAINER_NAMESPACE env variable so the forwarder does
@@ -448,11 +443,12 @@ def new_swapped_deployment(
             # We don't write out termination file:
             container["terminationMessagePolicy"] = "FallbackToLogsOnError"
             # Use custom name server if necessary:
-            if custom_nameserver:
-                container.setdefault("env", []).append({
-                    "name": "TELEPRESENCE_NAMESERVER",
-                    "value": custom_nameserver,
-                })
+            if deployment_env:
+                for key, value in deployment_env.items():
+                    container.setdefault("env", []).append({
+                        "name": key,
+                        "value": value,
+                    })
             # Add namespace environment variable to support deployments using
             # automountServiceAccountToken: false. To be used by forwarder.py
             # in the k8s-proxy.
@@ -476,7 +472,7 @@ def swap_deployment_openshift(
     runner: Runner,
     deployment_arg: str,
     expose: PortMapping,
-    custom_nameserver: Optional[str],
+    deployment_env: Dict,
     service_account: str,
 ) -> Tuple[str, str]:
     """
@@ -545,7 +541,7 @@ def swap_deployment_openshift(
         run_id,
         expose,
         service_account,
-        custom_nameserver,
+        deployment_env,
     )
 
     apply_json(new_dc_json)
