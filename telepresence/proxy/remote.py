@@ -24,11 +24,7 @@ class RemoteInfo(object):
     """
     Information about the remote setup.
 
-    :ivar namespace str: The Kubernetes namespace.
-    :ivar context str: The Kubernetes context.
-    :ivar deployment_name str: The name of the Deployment object.
     :ivar pod_name str: The name of the pod created by the Deployment.
-    :ivar deployment_config dict: The decoded k8s object (i.e. JSON/YAML).
     :ivar container_config dict: The container within the Deployment JSON.
     :ivar container_name str: The name of the container.
     """
@@ -39,9 +35,7 @@ class RemoteInfo(object):
         pod_name: str,
         deployment_config: dict,
     ) -> None:
-        self.deployment_name = deployment_name
         self.pod_name = pod_name
-        self.deployment_config = deployment_config
         cs = deployment_config["spec"]["template"]["spec"]["containers"]
         containers = [c for c in cs if "/telepresence-" in c["image"]]
         if not containers:
@@ -102,6 +96,17 @@ def get_deployment_json(
 def wait_for_pod(runner: Runner, remote_info: RemoteInfo) -> None:
     """Wait for the pod to start running."""
     span = runner.span()
+    try:
+        runner.check_call(
+            runner.kubectl(
+                "wait",
+                "--for=condition=ready",
+                "--timeout=60s",
+                "pod/" + remote_info.pod_name,
+            )
+        )
+    except CalledProcessError:
+        pass
     for _ in runner.loop_until(120, 0.25):
         try:
             pod = json.loads(
