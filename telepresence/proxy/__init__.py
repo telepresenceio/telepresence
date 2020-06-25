@@ -76,32 +76,26 @@ def setup(runner: Runner, args):
     # Figure out which operation the user wants
     if args.deployment is not None:
         # This implies --deployment
-        deployment_arg = args.deployment
-        if _dc_exists(runner, deployment_arg):
+        if _dc_exists(runner, args.deployment_arg):
             operation = existing_deployment_openshift
             deployment_type = "deploymentconfig"
         else:
             operation = existing_deployment
             deployment_type = "deployment"
-        args.operation = "deployment"
 
     if args.new_deployment is not None:
         # This implies --new-deployment
-        deployment_arg = args.new_deployment
         deployment_type = "deployment"
         operation = create_new_deployment
-        args.operation = "new_deployment"
 
     if args.swap_deployment is not None:
         # This implies --swap-deployment
-        deployment_arg = args.swap_deployment
-        if _dc_exists(runner, deployment_arg):
+        if _dc_exists(runner, args.deployment_arg):
             operation = swap_deployment_openshift
             deployment_type = "deploymentconfig"
         else:
             operation = supplant_deployment
             deployment_type = "deployment"
-        args.operation = "swap_deployment"
 
     # minikube/minishift break DNS because DNS gets captured, sent to minikube,
     # which sends it back to the DNS server set by host, resulting in a DNS
@@ -138,7 +132,7 @@ def setup(runner: Runner, args):
 
     def start_proxy(runner_: Runner) -> RemoteInfo:
         tel_deployment, run_id = operation(
-            runner_, deployment_arg, args.expose, deployment_env,
+            runner_, args.deployment_arg, args.expose, deployment_env,
             args.service_account
         )
         remote_info = get_remote_info(
