@@ -60,6 +60,19 @@ def setup(runner: Runner, args):
     ):
         raise runner.fail("OpenShift does not support ports <1024.")
 
+    # Check the service account, if present
+    if args.service_account:
+        try:
+            runner.check_call(
+                runner.kubectl("get", "serviceaccount", args.service_account)
+            )
+        except CalledProcessError as exc:
+            raise runner.fail(
+                "Check service account {} failed:\n{}".format(
+                    args.service_account, exc.stderr
+                )
+            )
+
     # Figure out which operation the user wants
     if args.deployment is not None:
         # This implies --deployment
@@ -124,19 +137,6 @@ def setup(runner: Runner, args):
             )
 
     def start_proxy(runner_: Runner) -> RemoteInfo:
-        if args.service_account:
-            try:
-                runner_.check_call(
-                    runner_.kubectl(
-                        "get", "serviceaccount", args.service_account
-                    )
-                )
-            except CalledProcessError as exc:
-                raise runner.fail(
-                    "Check service account {} failed:\n{}".format(
-                        args.service_account, exc.stderr
-                    )
-                )
         tel_deployment, run_id = operation(
             runner_, deployment_arg, args.expose, deployment_env,
             args.service_account
