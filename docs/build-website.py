@@ -92,7 +92,7 @@ def main():
     landing_page = landing_page.replace("{{ VERSION }}", version)
     (out / "index.html").write_text(landing_page)
     community_page = (docs / "community.html").read_text()
-    (out / "index.html").write_text(community_page)
+    (out / "community/index.html").write_text(community_page)
 
 
 if __name__ == "__main__":
