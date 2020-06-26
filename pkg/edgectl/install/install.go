@@ -150,7 +150,7 @@ func (i *Installer) GrabAESInstallID() error {
 	containerName := ""
 	podInterface := i.coreClient.Pods(defInstallNamespace) // namespace
 	i.log.Printf("> k -n %s get po", defInstallNamespace)
-	pods, err := podInterface.List(k8sTypesMetaV1.ListOptions{})
+	pods, err := podInterface.List(context.TODO(), k8sTypesMetaV1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -200,7 +200,7 @@ PodsLoop:
 // address or hostname)
 func (i *Installer) GrabLoadBalancerAddress() error {
 	serviceInterface := i.coreClient.Services(defInstallNamespace) // namespace
-	service, err := serviceInterface.Get("ambassador", k8sTypesMetaV1.GetOptions{})
+	service, err := serviceInterface.Get(context.TODO(), "ambassador", k8sTypesMetaV1.GetOptions{})
 	if err != nil {
 		return err
 	}

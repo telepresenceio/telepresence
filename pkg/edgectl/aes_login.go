@@ -1,6 +1,7 @@
 package edgectl
 
 import (
+	"context"
 	"crypto/rsa"
 	"fmt"
 	"time"
@@ -138,7 +139,7 @@ func getSigningKey(restconfig *rest.Config, namespace string) (*rsa.PrivateKey, 
 		return nil, errors.Wrap(err, "Failed to connect to cluster (core)")
 	}
 	secretInterface := coreClient.Secrets(namespace)
-	secret, err := secretInterface.Get(SecretName, k8sTypesMetaV1.GetOptions{})
+	secret, err := secretInterface.Get(context.TODO(), SecretName, k8sTypesMetaV1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
