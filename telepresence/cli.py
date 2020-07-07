@@ -282,7 +282,7 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--wait-timeout",
         dest="wait_timeout",
-        type=int,
+        type=float,
         default=120,
         help=("Wait for pod timeout.")
     )

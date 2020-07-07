@@ -99,7 +99,9 @@ def get_deployment_json(
         span.end()
 
 
-def wait_for_pod(runner: Runner, remote_info: RemoteInfo, wait_timeout: int) -> None:
+def wait_for_pod(
+    runner: Runner, remote_info: RemoteInfo, wait_timeout: float
+) -> None:
     """Wait for the pod to start running."""
     span = runner.span()
     for _ in runner.loop_until(wait_timeout, 0.25):
@@ -131,7 +133,7 @@ def get_remote_info(
     deployment_name: str,
     deployment_type: str,
     run_id: Optional[str] = None,
-    wait_timeout: Optional[int] = 120,
+    wait_timeout: float = 120,
 ) -> RemoteInfo:
     """
     Given the deployment name, return a RemoteInfo object.
