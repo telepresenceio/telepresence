@@ -284,7 +284,7 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
         dest="wait_timeout",
         type=float,
         default=120,
-        help=("Wait for pod timeout.")
+        help=("Wait timeout for pod creation.")
     )
     parser.add_argument(
         "--serviceaccount",
