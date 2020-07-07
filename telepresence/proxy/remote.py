@@ -99,10 +99,10 @@ def get_deployment_json(
         span.end()
 
 
-def wait_for_pod(runner: Runner, remote_info: RemoteInfo) -> None:
+def wait_for_pod(runner: Runner, remote_info: RemoteInfo, wait_timeout: int) -> None:
     """Wait for the pod to start running."""
     span = runner.span()
-    for _ in runner.loop_until(120, 0.25):
+    for _ in runner.loop_until(wait_timeout, 0.25):
         try:
             pod = json.loads(
                 runner.get_output(
@@ -131,6 +131,7 @@ def get_remote_info(
     deployment_name: str,
     deployment_type: str,
     run_id: Optional[str] = None,
+    wait_timeout: Optional[int] = 120,
 ) -> RemoteInfo:
     """
     Given the deployment name, return a RemoteInfo object.
@@ -154,7 +155,7 @@ def get_remote_info(
     if run_id:
         cmd.append("--selector=telepresence={}".format(run_id))
 
-    for _ in runner.loop_until(120, 1):
+    for _ in runner.loop_until(wait_timeout, 1):
         pods = json.loads(runner.get_output(runner.kubectl(*cmd)))["items"]
         for pod in pods:
             name = pod["metadata"]["name"]
@@ -190,7 +191,7 @@ def get_remote_info(
                 ).format(remote_version, image_version))
 
             # Wait for pod to be running:
-            wait_for_pod(runner, remote_info)
+            wait_for_pod(runner, remote_info, wait_timeout)
             span.end()
             return remote_info
 

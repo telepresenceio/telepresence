@@ -280,6 +280,13 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
         )
     )
     parser.add_argument(
+        "--wait-timeout",
+        dest="wait_timeout",
+        type=int,
+        default=120,
+        help=("Wait for pod timeout.")
+    )
+    parser.add_argument(
         "--serviceaccount",
         dest="service_account",
         default=None,
@@ -457,6 +464,9 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
         args.swap_deployment is None
     ):
         args.new_deployment = random_name()
+
+    if args.wait_timeout is None:
+        args.wait_timeout = 120
 
     if args.docker_mount:
         args.mount = False
