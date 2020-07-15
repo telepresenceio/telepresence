@@ -25,7 +25,7 @@ from telepresence import (
 from telepresence.cli import PortMapping
 from telepresence.runner import Runner
 
-from .remote import get_deployment_json
+from .remote import get_deployment
 
 
 def get_image_name(runner: Runner, expose: PortMapping) -> str:
@@ -310,11 +310,7 @@ def supplant_deployment(
     )
 
     deployment, container = _split_deployment_container(deployment_arg)
-    deployment_json = get_deployment_json(
-        runner,
-        deployment,
-        "deployment",
-    )
+    deployment_json = get_deployment(runner, deployment)
     container = _get_container_name(container, deployment_json)
 
     new_deployment_json = new_swapped_deployment(

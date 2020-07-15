@@ -453,10 +453,20 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
             args.method = "container"
         else:
             args.method = "vpn-tcp"
-    if args.deployment is None and args.new_deployment is None and (
-        args.swap_deployment is None
-    ):
+
+    if args.deployment is not None:
+        args.operation = "deployment"
+        args.deployment_arg = args.deployment
+    elif args.swap_deployment is not None:
+        args.operation = "swap_deployment"
+        args.deployment_arg = args.swap_deployment
+    elif args.new_deployment is not None:
+        args.operation = "new_deployment"
+        args.deployment_arg = args.new_deployment
+    else:
+        args.operation = "new_deployment"
         args.new_deployment = random_name()
+        args.deployment_arg = args.new_deployment
 
     if args.docker_mount:
         args.mount = False
