@@ -81,8 +81,17 @@ class LocalResolver(object):
         list is maintained in order of longest suffixes to shortest suffixes.
     """
 
-    def __init__(self, telepresence_nameserver, namespace):
+    def __init__(
+        self,
+        telepresence_nameserver,
+        namespace,
+        telepresence_local_names=""
+    ):
         self.noloop = telepresence_nameserver is not None
+        if telepresence_local_names:
+            self.local_names = telepresence_local_names.encode().split(b",")
+        else:
+            self.local_names = []
         self.namespace = namespace
         # The default Twisted client.Resolver *almost* does what we want...
         # except it doesn't support ndots! So we manually deal with A records
@@ -264,10 +273,12 @@ class LocalResolver(object):
                 # maybe be servicename, service.namespace, or something.local
                 # or service.anything.namespace.svc
                 # (.local is used for both services and pods):
-                if query.name.name.count(b".") in (
-                    0, 1
-                ) or query.name.name.endswith(
-                        b".local") or b".svc" in query.name.name:
+                if (query.name.name.count(b".") in (0, 1)
+                        or query.name.name.endswith(b".local")
+                        or b".svc" in query.name.name
+                        or query.name.name in self.local_names
+                        or any(query.name.name.endswith(b"." + name)
+                               for name in self.local_names)):
                     return self._no_loop_kube_query(
                         query, timeout=timeout, real_name=real_name
                     )

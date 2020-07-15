@@ -102,10 +102,13 @@ def main():
         exit("ERROR: Failed to determine namespace")
     print("Pod's namespace is {!r}".format(namespace))
     telepresence_nameserver = os.environ.get("TELEPRESENCE_NAMESERVER")
+    telepresence_local_names = os.environ.get("TELEPRESENCE_LOCAL_NAMES")
     reactor.suggestThreadPoolSize(50)
     periodic.setup(reactor)
     print("Listening...")
-    listen(resolver.LocalResolver(telepresence_nameserver, namespace))
+    listen(resolver.LocalResolver(
+        telepresence_nameserver, namespace, telepresence_local_names
+    ))
 
 
 main()
