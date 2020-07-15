@@ -184,7 +184,10 @@ def podCIDRs(runner: Runner):
         pod_ips = []
         for pod in pods:
             try:
-                pod_ips.append(pod["status"]["podIP"])
+                ip = pod["status"]["podIP"]
+                if runner.kubectl.in_local_vm and ip in runner.kubectl.server:
+                    continue
+                pod_ips.append(ip)
             except KeyError:
                 # Apparently a problem on OpenShift
                 pass
