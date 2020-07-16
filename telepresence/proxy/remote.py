@@ -14,10 +14,12 @@
 
 import json
 from subprocess import CalledProcessError
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from telepresence import image_version
 from telepresence.runner import Runner
+
+from .manifest import Manifest
 
 
 class RemoteInfo(object):
@@ -28,27 +30,30 @@ class RemoteInfo(object):
     :ivar container_config dict: The container within the Deployment JSON.
     :ivar container_name str: The name of the container.
     """
-    def __init__(
-        self,
-        runner: Runner,
-        deployment_name: str,
-        pod_name: str,
-        deployment_config: dict,
-    ) -> None:
+    def __init__(self, pod_name: str, pod_spec: Manifest) -> None:
         self.pod_name = pod_name
-        cs = deployment_config["spec"]["template"]["spec"]["containers"]
-        containers = [c for c in cs if "/telepresence-" in c["image"]]
-        if not containers:
+        self.pod_spec = pod_spec
+
+        containers = pod_spec["containers"]  # type: List[Manifest]
+        tel_containers = [
+            idx for idx, c in enumerate(containers)
+            if "/telepresence-" in c["image"]
+        ]
+        if not tel_containers:
             raise RuntimeError(
                 "Could not find container with image "
-                "'datawire/telepresence-k8s' in pod {}.".format(pod_name)
+                "'*/telepresence-*' in pod {}.".format(pod_name)
             )
-        self.container_config = containers[0]  # type: Dict
-        self.container_name = self.container_config["name"]  # type: str
+
+        self._container_index = tel_containers[0]
+        tel_container = containers[self._container_index]  # type: Manifest
+        self.container_name = tel_container["name"]  # type: str
 
     def remote_telepresence_version(self) -> str:
         """Return the version used by the remote Telepresence container."""
-        name, version = self.container_config["image"].rsplit(":", 1)
+        containers = self.pod_spec["containers"]  # type: List[Manifest]
+        tel_container = containers[self._container_index]
+        name, version = tel_container["image"].rsplit(":", 1)
         if name.endswith("telepresence-proxy"):
             return image_version
         return version
@@ -139,7 +144,7 @@ def wait_for_pod(runner: Runner, remote_info: RemoteInfo) -> None:
 def get_remote_info(
     runner: Runner,
     deployment_name: str,
-    deployment_type: str,
+    unused_deployment_type: str,
     run_id: Optional[str] = None,
 ) -> RemoteInfo:
     """
@@ -181,12 +186,7 @@ def get_remote_info(
                 continue
 
             runner.write("Looks like we've found our pod!\n")
-            remote_info = RemoteInfo(
-                runner,
-                deployment_name,
-                name,
-                deployment,
-            )
+            remote_info = RemoteInfo(name, pod["spec"])
 
             # Ensure remote container is running same version as we are:
             remote_version = remote_info.remote_telepresence_version()
@@ -210,3 +210,9 @@ def get_remote_info(
         "Telepresence pod not found for Deployment '{}'.".
         format(deployment_name)
     )
+
+
+def make_remote_info_from_pod(pod: Manifest) -> RemoteInfo:
+    pod_name = pod["metadata"]["name"]  # type: str
+    pod_spec = pod["spec"]  # type: Manifest
+    return RemoteInfo(pod_name, pod_spec)
