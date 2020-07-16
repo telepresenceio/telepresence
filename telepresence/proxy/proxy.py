@@ -25,7 +25,7 @@ from .deployment import (
     create_new_deployment, existing_deployment, existing_deployment_openshift,
     supplant_deployment, swap_deployment_openshift
 )
-from .operation import ProxyIntent, Legacy
+from .operation import ProxyIntent, ProxyOperation, Legacy, New
 from .remote import RemoteInfo, get_remote_info
 
 
@@ -144,11 +144,13 @@ def setup(runner: Runner,
     # Figure out which operation the user wants
     if args.operation == "deployment":
         if _dc_exists(runner, args.deployment_arg):
-            operation = Legacy(intent, existing_deployment_openshift)
+            operation = Legacy(
+                intent, existing_deployment_openshift
+            )  # type: ProxyOperation
         else:
             operation = Legacy(intent, existing_deployment)
     elif args.operation == "new_deployment":
-        operation = Legacy(intent, create_new_deployment)
+        operation = New(intent)
     else:
         assert args.operation == "swap_deployment"
         if _dc_exists(runner, args.deployment_arg):
