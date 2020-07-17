@@ -216,3 +216,52 @@ def make_remote_info_from_pod(pod: Manifest) -> RemoteInfo:
     pod_name = pod["metadata"]["name"]  # type: str
     pod_spec = pod["spec"]  # type: Manifest
     return RemoteInfo(pod_name, pod_spec)
+
+
+def get_pod_for_deployment(
+    runner: Runner,
+    deployment: Manifest,
+) -> Manifest:
+    """
+    Given a Deployment manifest, return a Pod manifest from the cluster.
+    """
+    span = runner.span()
+
+    deployment_name = deployment["metadata"]["name"]  # type: str
+    pod_metadata = deployment["spec"]["template"]["metadata"]  # type: Manifest
+    expected_labels = pod_metadata.get("labels", {})  # type: Dict[str, str]
+    cmd = "get pod -o json".split()
+    for key, value in expected_labels.items():
+        cmd.append("-l={}={}".format(key, value))
+
+    runner.write("Searching for Telepresence pod:")
+    runner.write("  with name {}-*".format(deployment_name))
+    runner.write("  with labels {}".format(expected_labels))
+
+    for _ in runner.loop_until(120, 1):
+        pods = json.loads(runner.get_output(runner.kubectl(*cmd)))["items"]
+        for pod in pods:
+            name = pod["metadata"]["name"]
+            phase = pod["status"]["phase"]
+            labels = pod["metadata"].get("labels", {})
+            runner.write("Checking {}".format(name))
+            if not name.startswith(deployment_name + "-"):
+                runner.write("--> Name does not match")
+                continue
+            if phase not in ("Pending", "Running"):
+                runner.write("--> Wrong phase: {}".format(phase))
+                continue
+            if not set(expected_labels.items()).issubset(set(labels.items())):
+                runner.write("--> Labels don't match: {}".format(labels))
+                continue
+
+            runner.write("Looks like we've found our pod!\n")
+            span.end()
+            return pod
+
+    # Didn't find pod...
+    span.end()
+    raise RuntimeError(
+        "Telepresence pod not found for Deployment '{}'.".
+        format(deployment_name)
+    )
