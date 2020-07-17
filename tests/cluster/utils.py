@@ -142,6 +142,7 @@ def query_from_cluster(url, namespace, tries=10, retries_on_empty=0):
             #
             # If this request succeeds then we're done and we can break out of
             # the loop.
+            rm -f output
             wget --server-response --output-document=output -T3 \
                 {url} 2>&1 && break
             sleep 0.9
