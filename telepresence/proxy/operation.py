@@ -14,8 +14,9 @@
 
 import json
 from subprocess import CalledProcessError
-from typing import Callable, Dict, List, NamedTuple, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, NamedTuple, Optional, Tuple
 
+from telepresence import image_version
 from telepresence.cli import PortMapping
 from telepresence.runner import Runner
 
@@ -24,7 +25,8 @@ from .manifest import (
     Manifest, make_k8s_list, make_new_proxy_pod_manifest, make_svc_manifest
 )
 from .remote import (
-    RemoteInfo, get_remote_info, make_remote_info_from_pod, wait_for_pod
+    RemoteInfo, get_remote_info, make_remote_info_from_pod, wait_for_pod,
+    get_deployment, get_pod_for_deployment
 )
 
 ProxyIntent = NamedTuple(
@@ -150,7 +152,6 @@ class New(ProxyOperation):
         return self.remote_info
 
 
-# os.environ.get("TELEPRESENCE_USE_DEPLOYMENT", "")
 """
 class Swap(ProxyOperation):
     def prepare(self, runner: Runner) -> None:
@@ -183,28 +184,55 @@ class Swap(ProxyOperation):
 
         return self.remote_info
 
+"""
+
+
+def ensure_correct_version(runner: Runner, remote_info: RemoteInfo) -> None:
+    """
+    Ensure remote container is running same version as we are
+    """
+    remote_version = remote_info.remote_telepresence_version()
+    if remote_version != image_version:
+        runner.write("Pod is running Tel {}".format(remote_version))
+        raise runner.fail((
+            "The remote datawire/telepresence-k8s container is " +
+            "running version {}, but this tool is version {}. " +
+            "Please make sure both are running the same version."
+        ).format(remote_version, image_version))
+
+
+def set_expose_ports(
+    expose: PortMapping, pod: Manifest, container_name: str
+) -> None:
+    """
+    Merge container ports into the expose list
+    """
+    containers = pod["spec"]["containers"]  # type: Iterable[Manifest]
+    for container in containers:
+        if not container_name or container["name"] == container_name:
+            expose.merge_automatic_ports([
+                port["containerPort"] for port in container.get("ports", [])
+                if port["protocol"] == "TCP"
+            ])
+            break
+
 
 class Existing(ProxyOperation):
     def prepare(self, runner: Runner) -> None:
-        # Grab original Deployment's manifest
-        deployment = get_deployment(runner, name)  # from .remote
-        deployment_name = deployment["metadata"]["name"]  # type: str
-        deployment_type = deployment["kind"]  # type: str
-
-        # Find the Pod for this Deployment
-        # FIXME: Implement this
-        # TODO: This really does too much work; simplify it!
-        # E.g., this waits for the pod, which we don't want to do so early...
-        self.remote_info = get_remote_info(
-            runner, deployment_name, deployment_type, runner.session_id
-        )
+        deployment = get_deployment(runner, self.intent.name)  # type: Manifest
+        pod = get_pod_for_deployment(runner, deployment)  # type: Manifest
+        set_expose_ports(self.intent.expose, pod, self.intent.container)
+        self.remote_info = RemoteInfo(pod["metadata"]["name"], pod["spec"])
+        ensure_correct_version(runner, self.remote_info)
 
     def act(self, runner: Runner) -> RemoteInfo:
         assert self.remote_info is not None
 
-        # Nothing to do here, right?
+        runner.show(
+            "Starting network proxy to cluster using "
+            "the existing proxy Deployment {}".format(self.intent.name)
+        )
 
         wait_for_pod(runner, self.remote_info)
 
         return self.remote_info
-"""
