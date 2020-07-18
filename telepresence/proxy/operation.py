@@ -14,7 +14,9 @@
 
 import json
 from subprocess import CalledProcessError
-from typing import Callable, Dict, Iterable, List, NamedTuple, Optional, Tuple
+from typing import (
+    Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Tuple
+)
 
 from telepresence import image_version
 from telepresence.cli import PortMapping
@@ -22,11 +24,12 @@ from telepresence.runner import Runner
 
 from .deployment import get_image_name
 from .manifest import (
-    Manifest, make_k8s_list, make_new_proxy_pod_manifest, make_svc_manifest
+    Manifest, make_k8s_list, make_new_proxy_pod_manifest, make_pod_manifest,
+    make_svc_manifest
 )
 from .remote import (
-    RemoteInfo, get_remote_info, make_remote_info_from_pod, wait_for_pod,
-    get_deployment, get_pod_for_deployment
+    RemoteInfo, get_deployment, get_pod_for_deployment, get_remote_info,
+    make_remote_info_from_pod, wait_for_pod
 )
 
 ProxyIntent = NamedTuple(
@@ -43,7 +46,6 @@ ProxyIntent = NamedTuple(
 class ProxyOperation:
     def __init__(self, intent: ProxyIntent) -> None:
         self.intent = intent
-        self.remote_info = None  # type: Optional[RemoteInfo]
 
     def prepare(self, runner: Runner) -> None:
         pass
@@ -84,6 +86,36 @@ class Legacy(ProxyOperation):
         return remote_info
 
 
+def create_with_cleanup(runner: Runner, manifests: Iterable[Manifest]) -> None:
+    kinds = set(str(manifest["kind"]).capitalize() for manifest in manifests)
+    kinds_display = ", ".join(kinds)
+    manifest_list = make_k8s_list(manifests)
+    manifest_json = json.dumps(manifest_list)
+    try:
+        runner.check_call(
+            runner.kubectl("create", "-f", "-"),
+            input=manifest_json.encode("utf-8")
+        )
+    except CalledProcessError as exc:
+        raise runner.fail(
+            "Failed to create {}:\n{}".format(kinds_display, exc.stderr)
+        )
+
+    def clean_up():
+        runner.show("Cleaning up {}".format(kinds_display))
+        runner.check_call(
+            runner.kubectl(
+                "delete",
+                "--ignore-not-found",
+                "--wait=false",
+                "--selector=telepresence=" + runner.session_id,
+                ",".join(kinds),
+            )
+        )
+
+    runner.add_cleanup("Delete proxy {}".format(kinds_display), clean_up)
+
+
 class New(ProxyOperation):
     def prepare(self, runner: Runner) -> None:
         self.manifests = []  # type: List[Manifest]
@@ -112,79 +144,15 @@ class New(ProxyOperation):
         self.remote_info = make_remote_info_from_pod(pod)
 
     def act(self, runner: Runner) -> RemoteInfo:
-        assert self.remote_info is not None
-
         runner.show(
             "Starting network proxy to cluster using "
             "new Pod {}".format(self.intent.name)
         )
-
-        manifest_list = make_k8s_list(self.manifests)
-        manifest_json = json.dumps(manifest_list)
-        try:
-            runner.check_call(
-                runner.kubectl("create", "-f", "-"),
-                input=manifest_json.encode("utf-8")
-            )
-        except CalledProcessError as exc:
-            raise runner.fail(
-                "Failed to create Pod/Service {}:\n{}".format(
-                    self.intent.name, exc.stderr
-                )
-            )
-
-        def clean_up():
-            runner.show("Cleaning up Pod/Service {}".format(self.intent.name))
-            runner.check_call(
-                runner.kubectl(
-                    "delete",
-                    "--ignore-not-found",
-                    "--wait=false",
-                    "--selector=telepresence=" + runner.session_id,
-                    "svc,pod",
-                )
-            )
-
-        runner.add_cleanup("Delete new Pod/Service", clean_up)
+        create_with_cleanup(runner, self.manifests)
 
         wait_for_pod(runner, self.remote_info)
 
         return self.remote_info
-
-
-"""
-class Swap(ProxyOperation):
-    def prepare(self, runner: Runner) -> None:
-        # Grab original deployment's Pod Config
-        deployment = get_deployment(runner, name)  # from .remote
-
-        # Compute proxy Pod's manifest
-        pod_spec = deployment["spec"]["template"]["spec"]
-        # TODO: perform the usual swap changes
-        # TODO: rip off from new_swapped_deployment(...)
-        # FIXME: Implement this...
-
-        # FIXME: Copy-pasta from New.prepare(...)
-        # FIXME: factor out more of making a Tel pod?
-        pod = make_new_proxy_pod_manifest(...)
-
-        self.remote_info = make_remote_info_from_pod(pod)
-
-    def act(self, runner: Runner) -> RemoteInfo:
-        assert self.remote_info is not None
-
-        # FIXME: Copy-pasta from New.act(...)
-        # Apply the manifest
-        # Set up for cleanup
-
-        # FIXME: Factor this out?
-        # This all seems repetitive
-
-        wait_for_pod(runner, self.remote_info)
-
-        return self.remote_info
-
-"""
 
 
 def ensure_correct_version(runner: Runner, remote_info: RemoteInfo) -> None:
@@ -217,20 +185,126 @@ def set_expose_ports(
             break
 
 
+class Swap(ProxyOperation):
+    def prepare(self, runner: Runner) -> None:
+        self.manifests = []  # type: List[Manifest]
+
+        # Grab original deployment's Pod Config
+        deployment = get_deployment(runner, self.intent.name)  # type: Manifest
+        self.deployment_type = deployment["kind"]  # type: str
+        self.original_replicas = deployment["spec"]["replicas"]  # type: str
+
+        # Compute a new name that isn't too long, i.e. up to 63 characters.
+        # https://github.com/kubernetes/community/blob/master/contributors/design-proposals/architecture/identifiers.md
+        new_pod_name = "{name:.{max_width}s}-{id}".format(
+            name=self.intent.name,
+            id=runner.session_id,
+            max_width=(50 - (len(runner.session_id) + 1))
+        )
+
+        # Perform the relevant swap changes to the pod spec
+        pod_spec = deployment["spec"]["template"]["spec"]
+        pod_spec["restartPolicy"] = "Never"
+        if self.intent.service_account:
+            pod_spec["serviceAccount"] = self.intent.service_account
+
+        # Find the relevant container
+        if self.intent.container:
+            containers = pod_spec["containers"]  # type: Iterable[Manifest]
+            for candidate in containers:
+                if candidate["name"] == self.intent.container:
+                    container = candidate
+                    break
+        else:
+            container = pod_spec["containers"][0]
+
+        # Perform the relevant swap changes to the container
+        container["image"] = get_image_name(runner, self.intent.expose)
+        container["imagePullPolicy"] = "IfNotPresent"
+        container["command"] = ["/usr/src/app/run.sh"]
+        container["terminationMessagePolicy"] = "FallbackToLogsOnError"
+
+        empty_env = []  # type: List[Dict[str, Any]]
+        container.setdefault("env", empty_env)
+        container["env"].extend(
+            dict(name=k, value=v) for k, v in self.intent.env.items()
+        )
+        # Add namespace environment variable to support deployments using
+        # automountServiceAccountToken: false. To be used by forwarder.py
+        # in the k8s-proxy.
+        container["env"].append({
+            "name": "TELEPRESENCE_CONTAINER_NAMESPACE",
+            "valueFrom": {
+                "fieldRef": {
+                    "fieldPath": "metadata.namespace"
+                }
+            }
+        })
+
+        for unneeded in [
+            "args", "livenessProbe", "readinessProbe", "workingDir",
+            "lifecycle"
+        ]:
+            try:
+                container.pop(unneeded)
+            except KeyError:
+                pass
+
+        labels = dict(telepresence=runner.session_id)  # type: Dict[str, str]
+        labels.update(deployment["spec"]["template"]["metadata"]["labels"])
+
+        # Construct a Pod manifest
+        pod = make_pod_manifest(new_pod_name, labels, pod_spec)
+        self.manifests.append(pod)
+
+        set_expose_ports(self.intent.expose, pod, self.intent.container)
+
+        self.remote_info = make_remote_info_from_pod(pod)
+
+    def act(self, runner: Runner) -> RemoteInfo:
+        runner.show(
+            "Starting network proxy to cluster by swapping out " +
+            "{} {} ".format(self.deployment_type, self.intent.name) +
+            "with a proxy Pod"
+        )
+
+        def resize_original(replicas):
+            """Resize the original deployment (kubectl scale)"""
+            runner.check_call(
+                runner.kubectl(
+                    "scale", self.deployment_type, self.intent.name,
+                    "--replicas={}".format(replicas)
+                )
+            )
+
+        create_with_cleanup(runner, self.manifests)
+
+        # Scale down the original deployment
+        runner.add_cleanup(
+            "Re-scale original deployment", resize_original,
+            self.original_replicas
+        )
+        resize_original(0)
+
+        wait_for_pod(runner, self.remote_info)
+
+        return self.remote_info
+
+
 class Existing(ProxyOperation):
     def prepare(self, runner: Runner) -> None:
         deployment = get_deployment(runner, self.intent.name)  # type: Manifest
+        self.deployment_type = deployment["kind"]  # type: str
         pod = get_pod_for_deployment(runner, deployment)  # type: Manifest
         set_expose_ports(self.intent.expose, pod, self.intent.container)
-        self.remote_info = RemoteInfo(pod["metadata"]["name"], pod["spec"])
+        self.remote_info = make_remote_info_from_pod(pod)
         ensure_correct_version(runner, self.remote_info)
 
     def act(self, runner: Runner) -> RemoteInfo:
-        assert self.remote_info is not None
-
         runner.show(
-            "Starting network proxy to cluster using "
-            "the existing proxy Deployment {}".format(self.intent.name)
+            "Starting network proxy to cluster using " +
+            "the existing proxy " +
+            "{} {}".format(self.deployment_type, self.intent.name)
         )
 
         wait_for_pod(runner, self.remote_info)
