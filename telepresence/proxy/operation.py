@@ -101,7 +101,7 @@ def create_with_cleanup(runner: Runner, manifests: Iterable[Manifest]) -> None:
             "Failed to create {}:\n{}".format(kinds_display, exc.stderr)
         )
 
-    def clean_up():
+    def clean_up() -> None:
         runner.show("Cleaning up {}".format(kinds_display))
         runner.check_call(
             runner.kubectl(
@@ -268,7 +268,7 @@ class Swap(ProxyOperation):
             "with a proxy Pod"
         )
 
-        def resize_original(replicas):
+        def resize_original(replicas: str) -> None:
             """Resize the original deployment (kubectl scale)"""
             runner.check_call(
                 runner.kubectl(
@@ -284,7 +284,7 @@ class Swap(ProxyOperation):
             "Re-scale original deployment", resize_original,
             self.original_replicas
         )
-        resize_original(0)
+        resize_original("0")
 
         wait_for_pod(runner, self.remote_info)
 

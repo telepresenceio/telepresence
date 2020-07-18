@@ -155,7 +155,8 @@ def setup(runner: Runner,
     return operation.act
 
 
-def legacy_setup(runner: Runner, args):
+def legacy_setup(runner: Runner,
+                 args: argparse.Namespace) -> Callable[[Runner], RemoteInfo]:
     """
     Determine how the user wants to set up the proxy in the cluster.
     """

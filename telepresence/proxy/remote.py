@@ -53,7 +53,7 @@ class RemoteInfo(object):
         """Return the version used by the remote Telepresence container."""
         containers = self.pod_spec["containers"]  # type: List[Manifest]
         tel_container = containers[self._container_index]
-        name, version = tel_container["image"].rsplit(":", 1)
+        name, version = str(tel_container["image"]).rsplit(":", 1)
         if name.endswith("telepresence-proxy"):
             return image_version
         return version
@@ -98,7 +98,8 @@ def get_deployment(runner: Runner, name: str) -> Dict[str, Any]:
             )
 
     # Parse the resulting manifest
-    deployment = json.loads(manifest)  # This failing is likely a bug, so crash
+    # This failing is likely a bug, so crash...
+    deployment = json.loads(manifest)  # type: Manifest
 
     return deployment
 
@@ -239,7 +240,8 @@ def get_pod_for_deployment(
     runner.write("  with labels {}".format(expected_labels))
 
     for _ in runner.loop_until(120, 1):
-        pods = json.loads(runner.get_output(runner.kubectl(*cmd)))["items"]
+        manifest_list = json.loads(runner.get_output(runner.kubectl(*cmd)))
+        pods = manifest_list["items"]  # type: List[Manifest]
         for pod in pods:
             name = pod["metadata"]["name"]
             phase = pod["status"]["phase"]
