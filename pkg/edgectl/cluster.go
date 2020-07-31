@@ -204,10 +204,10 @@ func getClusterPreviewHostname(p *supervisor.Process, cluster *KCluster) (hostna
 			continue
 		}
 
-		// missing type, default is "Path" --> success
-		// type is present, set to "Path" --> success
+		// missing type, default is "path" --> success
+		// type is present, set to "path" --> success
 		// otherwise --> failure
-		if pType, ok := previewUrlSpec["type"].(string); ok && pType != "Path" {
+		if pType, ok := previewUrlSpec["type"].(string); ok && pType != "path" {
 			p.Logf(logEntry+": %#v", "unsupported preview URL type", previewUrlSpec["type"])
 			continue
 		}
