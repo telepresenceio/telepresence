@@ -98,7 +98,9 @@ def get_deployment(runner: Runner, name: str) -> Dict[str, Any]:
     return deployment
 
 
-def wait_for_pod(runner: Runner, remote_info: RemoteInfo, wait_timeout: float) -> None:
+def wait_for_pod(
+    runner: Runner, remote_info: RemoteInfo, wait_timeout: float
+) -> None:
     """Wait for the pod to start running."""
     span = runner.span()
     try:
