@@ -14,7 +14,7 @@
 
 import json
 from subprocess import CalledProcessError
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from telepresence import image_version
 from telepresence.runner import Runner
@@ -24,11 +24,7 @@ class RemoteInfo(object):
     """
     Information about the remote setup.
 
-    :ivar namespace str: The Kubernetes namespace.
-    :ivar context str: The Kubernetes context.
-    :ivar deployment_name str: The name of the Deployment object.
     :ivar pod_name str: The name of the pod created by the Deployment.
-    :ivar deployment_config dict: The decoded k8s object (i.e. JSON/YAML).
     :ivar container_config dict: The container within the Deployment JSON.
     :ivar container_name str: The name of the container.
     """
@@ -39,9 +35,7 @@ class RemoteInfo(object):
         pod_name: str,
         deployment_config: dict,
     ) -> None:
-        self.deployment_name = deployment_name
         self.pod_name = pod_name
-        self.deployment_config = deployment_config
         cs = deployment_config["spec"]["template"]["spec"]["containers"]
         containers = [c for c in cs if "/telepresence-" in c["image"]]
         if not containers:
@@ -60,50 +54,64 @@ class RemoteInfo(object):
         return version
 
 
-def get_deployment_json(
-    runner: Runner,
-    deployment_name: str,
-    deployment_type: str,
-    run_id: Optional[str] = None,
-) -> Dict:
-    """Get the decoded JSON for a deployment.
-
-    If this is a Deployment we created, the run_id is also passed in - this is
-    the session id we set for the telepresence label. Otherwise run_id is None
-    and the Deployment name must be used to locate the Deployment.
+def get_deployment(runner: Runner, name: str) -> Dict[str, Any]:
     """
-    span = runner.span()
-    try:
-        get_deployment = [
-            "get",
-            deployment_type,
-            "-o",
-            "json",
-        ]
-        if run_id is None:
-            kcmd = get_deployment + [deployment_name]
-            output = runner.get_output(runner.kubectl(*kcmd))
-            return json.loads(output)
-        else:
-            # When using a selector we get a list of objects, not just one:
-            kcmd = get_deployment + ["--selector=telepresence=" + run_id]
-            output = runner.get_output(runner.kubectl(*kcmd))
-            return json.loads(output)["items"][0]
-    except CalledProcessError as e:
-        raise runner.fail(
-            "Failed to find deployment {}:\n{}".format(
-                deployment_name, e.stdout
+    Retrieve the Deployment/DeploymentConfig manifest named, or emit an error
+    message for the user.
+    """
+    if ":" in name:
+        name, container = name.split(":", 1)
+
+    kube = runner.kubectl
+    manifest = ""
+
+    # Maybe try to find an OpenShift DeploymentConfig
+    if kube.command == "oc" and kube.cluster_is_openshift:
+        try:
+            manifest = runner.get_output(
+                runner.kubectl("get", "dc", name, "-o", "json"),
+                reveal=True,
             )
-        )
-    finally:
-        span.end()
+        except CalledProcessError as exc:
+            runner.show(
+                "Failed to find DeploymentConfig {}:\n  {}".format(
+                    name, exc.stderr
+                )
+            )
+            runner.show("Will try regular Kubernetes Deployment.")
+
+    # No DC or no OpenShift, look for a Deployment
+    if manifest == "":
+        try:
+            manifest = runner.get_output(
+                runner.kubectl("get", "deploy", name, "-o", "json"),
+                reveal=True,
+            )
+        except CalledProcessError as exc:
+            raise runner.fail(
+                "Failed to find Deployment {}:\n  {}".format(name, exc.stderr)
+            )
+
+    # Parse the resulting manifest
+    deployment = json.loads(manifest)  # This failing is likely a bug, so crash
+
+    return deployment
 
 
-def wait_for_pod(
-    runner: Runner, remote_info: RemoteInfo, wait_timeout: float
-) -> None:
+def wait_for_pod(runner: Runner, remote_info: RemoteInfo, wait_timeout: float) -> None:
     """Wait for the pod to start running."""
     span = runner.span()
+    try:
+        runner.check_call(
+            runner.kubectl(
+                "wait",
+                "--for=condition=ready",
+                "--timeout=60s",
+                "pod/" + remote_info.pod_name,
+            )
+        )
+    except CalledProcessError:
+        pass
     for _ in runner.loop_until(wait_timeout, 0.25):
         try:
             pod = json.loads(
@@ -143,9 +151,8 @@ def get_remote_info(
     is None and the Deployment name must be used to locate the Deployment.
     """
     span = runner.span()
-    deployment = get_deployment_json(
-        runner, deployment_name, deployment_type, run_id=run_id
-    )
+
+    deployment = get_deployment(runner, deployment_name)
     dst_metadata = deployment["spec"]["template"]["metadata"]
     expected_labels = dst_metadata.get("labels", {})
 
