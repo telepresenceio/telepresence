@@ -12,6 +12,7 @@
   "scripts": {
     "postinstall": "gitbook install",
     "build": "gitbook build",
+    "build-noindex": "npm run build && echo 'User-agent: *\nDisallow: /' > _book/robots.txt",
     "start": "gitbook serve"
   },
   "repository": {
