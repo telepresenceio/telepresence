@@ -37,6 +37,7 @@ type InterceptInfo struct {
 	Deployment string // Name of the deployment being intercepted
 	Prefix     string // Prefix to intercept (default /)
 	Patterns   map[string]string
+	GRPC       bool // GRPC flag to set on the Intercept mapping. Ideally we'd get this from the Traffic-Manager interceptables instead of having to pass it as a CLI argument.
 	TargetHost string
 	TargetPort int
 }
@@ -197,7 +198,7 @@ func (d *Daemon) AddIntercept(p *supervisor.Process, out *Emitter, ii *Intercept
 
 			if ii.Deployment == appName {
 				// Abuse InterceptInfo rather than defining a new tuple type.
-				matches = append(matches, InterceptInfo{"", appNamespace, appName, "", nil, "", 0})
+				matches = append(matches, InterceptInfo{"", appNamespace, appName, "", nil, false, "", 0})
 			}
 		}
 
@@ -312,10 +313,13 @@ type mappingMetadata struct {
 }
 
 type mappingSpec struct {
-	AmbassadorID []string          `json:"ambassador_id"`
-	Prefix       string            `json:"prefix"`
-	Service      string            `json:"service"`
-	RegexHeaders map[string]string `json:"regex_headers"`
+	AmbassadorID  []string          `json:"ambassador_id"`
+	Prefix        string            `json:"prefix"`
+	Service       string            `json:"service"`
+	RegexHeaders  map[string]string `json:"regex_headers"`
+	GRPC          bool              `json:"grpc"`
+	TimeoutMs     int               `json:"timeout_ms"`
+	IdleTimeoutMs int               `json:"idle_timeout_ms"`
 }
 
 type interceptMapping struct {
@@ -339,7 +343,7 @@ func MakeIntercept(p *supervisor.Process, out *Emitter, tm *TrafficManager, clus
 	cept.doQuit = cept.quit
 	cept.setup(p.Supervisor(), ii.Name)
 
-	p.Logf("%s: Intercepting via port %v, using namespace %v", ii.Name, port, ii.Namespace)
+	p.Logf("%s: Intercepting via port %v, grpc %v, using namespace %v", ii.Name, port, ii.GRPC, ii.Namespace)
 
 	mapping := interceptMapping{
 		APIVersion: "getambassador.io/v2",
@@ -349,10 +353,13 @@ func MakeIntercept(p *supervisor.Process, out *Emitter, tm *TrafficManager, clus
 			Namespace: ii.Namespace,
 		},
 		Spec: mappingSpec{
-			AmbassadorID: []string{fmt.Sprintf("intercept-%s", ii.Deployment)},
-			Prefix:       ii.Prefix,
-			Service:      fmt.Sprintf("telepresence-proxy.%s:%d", tm.namespace, port),
-			RegexHeaders: ii.Patterns,
+			AmbassadorID:  []string{fmt.Sprintf("intercept-%s", ii.Deployment)},
+			Prefix:        ii.Prefix,
+			Service:       fmt.Sprintf("telepresence-proxy.%s:%d", tm.namespace, port),
+			RegexHeaders:  ii.Patterns,
+			GRPC:          ii.GRPC, // Set the grpc flag on the Intercept mapping
+			TimeoutMs:     60000,   // Making sure we don't have shorter timeouts on intercepts than the original Mapping
+			IdleTimeoutMs: 60000,
 		},
 	}
 
