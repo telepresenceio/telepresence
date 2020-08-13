@@ -736,4 +736,6 @@ spec:
   hostname: %s
   acmeProvider:
     email: %s
+  previewUrl:
+    enabled: true
 `
