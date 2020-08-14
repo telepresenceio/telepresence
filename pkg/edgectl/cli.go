@@ -361,6 +361,7 @@ func (d *Daemon) GetRootCommand(p *supervisor.Process, out *Emitter, data *Clien
 	interceptAddCmd.Flags().StringVarP(&intercept.Name, "name", "n", "", "a name for this intercept")
 	interceptAddCmd.Flags().StringVar(&intercept.Prefix, "prefix", "/", "prefix to intercept")
 	interceptAddCmd.Flags().BoolVarP(&interceptPreview, "preview", "p", true, "use a preview URL") // this default is unused
+	interceptAddCmd.Flags().BoolVarP(&intercept.GRPC, "grpc", "", false, "intercept GRPC traffic")
 	interceptAddCmd.Flags().StringVarP(&intercept.TargetHost, "target", "t", "", "the [HOST:]PORT to forward to")
 	_ = interceptAddCmd.MarkFlagRequired("target")
 	interceptAddCmd.Flags().StringToStringVarP(&intercept.Patterns, "match", "m", nil, "match expression (HEADER=REGEX)")
