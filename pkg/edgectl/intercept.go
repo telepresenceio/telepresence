@@ -315,6 +315,7 @@ type mappingMetadata struct {
 type mappingSpec struct {
 	AmbassadorID  []string          `json:"ambassador_id"`
 	Prefix        string            `json:"prefix"`
+	Rewrite       string            `json:"rewrite"`
 	Service       string            `json:"service"`
 	RegexHeaders  map[string]string `json:"regex_headers"`
 	GRPC          bool              `json:"grpc"`
@@ -355,6 +356,7 @@ func MakeIntercept(p *supervisor.Process, out *Emitter, tm *TrafficManager, clus
 		Spec: mappingSpec{
 			AmbassadorID:  []string{fmt.Sprintf("intercept-%s", ii.Deployment)},
 			Prefix:        ii.Prefix,
+			Rewrite:       ii.Prefix,
 			Service:       fmt.Sprintf("telepresence-proxy.%s:%d", tm.namespace, port),
 			RegexHeaders:  ii.Patterns,
 			GRPC:          ii.GRPC, // Set the grpc flag on the Intercept mapping
