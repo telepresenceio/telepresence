@@ -542,15 +542,6 @@ func updateTable(p *supervisor.Process, w *k8s.Watcher) {
 
 		spec := decoded.Spec
 
-		ports := ""
-		for _, port := range spec.Ports {
-			if ports == "" {
-				ports = fmt.Sprintf("%d", port.Port)
-			} else {
-				ports = fmt.Sprintf("%s,%d", ports, port.Port)
-			}
-		}
-
 		ip := spec.ClusterIP
 		// for headless services the IP is None, we
 		// should properly handle these by listening
@@ -558,6 +549,29 @@ func updateTable(p *supervisor.Process, w *k8s.Watcher) {
 		// records at some point
 		if ip != "" && ip != "None" {
 			qualName := svc.Name() + "." + svc.Namespace() + ".svc.cluster.local"
+
+			ports := ""
+			for _, port := range spec.Ports {
+				if ports == "" {
+					ports = fmt.Sprintf("%d", port.Port)
+				} else {
+					ports = fmt.Sprintf("%s,%d", ports, port.Port)
+				}
+
+				// Kubernetes creates records for all named ports, of the form
+				//_my-port-name._my-port-protocol.my-svc.my-namespace.svc.cluster-domain.example
+				// https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#srv-records
+				if port.Name != "" {
+					table.Add(route.Route{
+						Name:   fmt.Sprintf("_%v._%v.%v", port.Name, strings.ToLower(port.Protocol), qualName),
+						Ip:     ip,
+						Port:   ports,
+						Proto:  strings.ToLower(port.Protocol),
+						Target: ProxyRedirPort,
+					})
+				}
+			}
+
 			table.Add(route.Route{
 				Name:   qualName,
 				Ip:     ip,
