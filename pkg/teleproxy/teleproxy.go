@@ -563,7 +563,7 @@ func updateTable(p *supervisor.Process, w *k8s.Watcher) {
 				// https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#srv-records
 				if port.Name != "" {
 					table.Add(route.Route{
-						Name:   fmt.Sprintf("_%v._%v.%v", port.Name, port.Protocol, qualName),
+						Name:   fmt.Sprintf("_%v._%v.%v", port.Name, strings.ToLower(port.Protocol), qualName),
 						Ip:     ip,
 						Port:   ports,
 						Proto:  strings.ToLower(port.Protocol),
