@@ -189,8 +189,6 @@ func (i *Interceptor) update(p *supervisor.Process, table rt.Table) error {
 		// A nil Route (when oldRouteOk != true) will compare
 		// inequal to any valid new Route.
 		if newRoute != oldRoute {
-			log.Printf("INT: new route %v:%v domain %v does not match old route", newRoute.Ip, newRoute.Port, newRoute.Domain())
-			log.Printf("INT: old route exists for %v:%v and domain %v", oldRoute.Ip, oldRoute.Port, oldRoute.Domain())
 			// We're updating a route. Make sure DNS waits until the new answer
 			// is ready, i.e. don't serve the old answer.
 			i.domainsLock.Lock()
