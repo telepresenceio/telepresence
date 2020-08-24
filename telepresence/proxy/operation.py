@@ -135,20 +135,26 @@ def ensure_correct_version(runner: Runner, remote_info: RemoteInfo) -> None:
         ).format(remote_version, image_version))
 
 
+def find_container(pod_spec: Manifest, container_name: str) -> Manifest:
+    containers = pod_spec["containers"]  # type: Iterable[Manifest]
+    for container in containers:
+        if not container_name or container["name"] == container_name:
+            return container
+    return {}
+
+
 def set_expose_ports(
     expose: PortMapping, pod: Manifest, container_name: str
 ) -> None:
     """
     Merge container ports into the expose list
     """
-    containers = pod["spec"]["containers"]  # type: Iterable[Manifest]
-    for container in containers:
-        if not container_name or container["name"] == container_name:
-            expose.merge_automatic_ports([
-                port["containerPort"] for port in container.get("ports", [])
-                if port["protocol"] == "TCP"
-            ])
-            break
+    pod_spec = pod["spec"]  # type: Manifest
+    container = find_container(pod_spec, container_name)
+    expose.merge_automatic_ports([
+        port["containerPort"] for port in container.get("ports", [])
+        if port["protocol"] == "TCP"
+    ])
 
 
 class Swap(ProxyOperation):
@@ -175,14 +181,12 @@ class Swap(ProxyOperation):
             pod_spec["serviceAccount"] = self.intent.service_account
 
         # Find the relevant container
-        if self.intent.container:
-            containers = pod_spec["containers"]  # type: Iterable[Manifest]
-            for candidate in containers:
-                if candidate["name"] == self.intent.container:
-                    container = candidate
-                    break
-        else:
-            container = pod_spec["containers"][0]
+        container = find_container(pod_spec, self.intent.container)
+        if not container:
+            raise runner.fail(
+                "Unable to find container {} in pod spec for deployment {}".
+                format(self.intent.container, self.intent.name)
+            )
 
         # Perform the relevant swap changes to the container
         container["image"] = get_image_name(runner, self.intent.expose)
