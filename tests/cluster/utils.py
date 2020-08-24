@@ -222,6 +222,19 @@ def run_helper(namespace):
     ]
     if is_helper_running(namespace):
         return
+
+    # If the helper pod dies but the service sticks around, then the --expose
+    # in the run command may fail depending on which version of kubectl you're
+    # using... So delete everything if you're launching anything.
+    check_call([
+        KUBECTL,
+        "--namespace={}".format(namespace),
+        "delete",
+        "--ignore-not-found",
+        "svc,deploy,po",
+        HELPER_NAME,
+    ])
+
     check_call(cmd)
     for i in range(240):
         if is_helper_running(namespace):
