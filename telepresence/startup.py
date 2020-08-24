@@ -153,16 +153,8 @@ def set_kube_command(runner: Runner, args) -> None:
     else:
         raise runner.fail("Error: Unable to find cluster information")
 
-    # Check if the requested namespace exists
-    try:
-        runner.get_output([
-            *prelim_command_with_context, "get", "ns", args.namespace
-        ]).split("\n")
-        namespace = args.namespace
-    except CalledProcessError:
-        raise runner.fail(
-            "Error: Namespace '{}' does not exist".format(args.namespace)
-        )
+    # Rely on code later to report an invalid namespace argument
+    namespace = args.namespace
 
     for cluster_setting in kubectl_config["clusters"]:
         if cluster_setting["name"] == cluster:
