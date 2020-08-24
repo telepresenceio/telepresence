@@ -14,9 +14,7 @@
 
 import json
 from subprocess import CalledProcessError
-from typing import (
-    Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Tuple
-)
+from typing import Any, Dict, Iterable, List, NamedTuple
 
 from telepresence import image_version
 from telepresence.cli import PortMapping
@@ -28,7 +26,7 @@ from .manifest import (
     make_svc_manifest
 )
 from .remote import (
-    RemoteInfo, get_deployment, get_pod_for_deployment, get_remote_info,
+    RemoteInfo, get_deployment, get_pod_for_deployment,
     make_remote_info_from_pod, wait_for_pod
 )
 
@@ -52,38 +50,6 @@ class ProxyOperation:
 
     def act(self, _: Runner) -> RemoteInfo:
         raise NotImplementedError()
-
-
-LegacyOperation = Callable[[Runner, str, PortMapping, Dict[str, str], str],
-                           Tuple[str, Optional[str]]]
-
-
-class Legacy(ProxyOperation):
-    def __init__(self, intent: ProxyIntent, legacy_op: LegacyOperation):
-        super().__init__(intent)
-        self.op = legacy_op
-
-    def act(self, runner: Runner) -> RemoteInfo:
-        deployment_arg = self.intent.name
-        if self.intent.container:
-            deployment_arg += ":" + self.intent.container
-
-        tel_deployment, run_id = self.op(
-            runner,
-            deployment_arg,
-            self.intent.expose,
-            self.intent.env,
-            self.intent.service_account,
-        )
-
-        remote_info = get_remote_info(
-            runner,
-            tel_deployment,
-            "unused, right?",
-            run_id=run_id,
-        )
-
-        return remote_info
 
 
 def create_with_cleanup(runner: Runner, manifests: Iterable[Manifest]) -> None:
