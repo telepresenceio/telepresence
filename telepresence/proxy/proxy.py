@@ -101,12 +101,12 @@ def setup(runner: Runner,
         name, container = name.split(":", 1)
     deployment_env = {}  # type: Dict[str, str]
 
-    # minikube/minishift break DNS because DNS gets captured, sent to minikube,
-    # which sends it back to the DNS server set by host, resulting in a DNS
-    # loop... We've fixed that for most cases by setting a distinct name server
-    # for the proxy to use when making a new proxy pod, but that does not work
-    # for --deployment.
     if args.method == "vpn-tcp" and runner.kubectl.in_local_vm:
+        # minikube/minishift break DNS because DNS gets captured, sent to
+        # minikube, which sends it back to the DNS server set by host,
+        # resulting in a DNS loop... We've fixed that for most cases by setting
+        # a distinct name server for the proxy to use when making a new proxy
+        # pod, but that does not work automatically for --deployment.
         if args.operation == "deployment":
             raise runner.fail(
                 "vpn-tcp method doesn't work with minikube/minishift when"
@@ -116,22 +116,26 @@ def setup(runner: Runner,
         try:
             deployment_env["TELEPRESENCE_NAMESERVER"] \
                 = get_alternate_nameserver()
-            if args.also_proxy:
-                proxy_names = []
-                for name in args.also_proxy:
-                    if not (
-                        re.search(r"[^\w.]", name)
-                        or re.match(r"^(?:\d+\.){3}\d+$", name)
-                    ):
-                        proxy_names.append(name)
-                if proxy_names:
-                    deployment_env["TELEPRESENCE_LOCAL_NAMES"] \
-                        = ",".join(proxy_names)
-
         except Exception as exc:
             raise runner.fail(
                 "Failed to find a fallback nameserver: {}".format(exc)
             )
+
+        # Support resolving a passed-in set of local names in the proxy.
+        # Otherwise local name resolution is broken while Telepresence is
+        # running, because Telepresence must use an alternate name server (see
+        # DNS loop above) that presumably doesn't know your local setup.
+        if args.also_proxy:
+            proxy_names = []
+            for name in args.also_proxy:
+                if not (
+                    re.search(r"[^\w.]", name)
+                    or re.match(r"^(?:\d+\.){3}\d+$", name)
+                ):
+                    proxy_names.append(name)
+            if proxy_names:
+                deployment_env["TELEPRESENCE_LOCAL_NAMES"] \
+                    = ",".join(proxy_names)
 
     intent = ProxyIntent(
         name,
