@@ -42,17 +42,32 @@ ProxyIntent = NamedTuple(
 
 
 class ProxyOperation:
+    """Base class for proxy operation implementations."""
     def __init__(self, intent: ProxyIntent) -> None:
         self.intent = intent
 
-    def prepare(self, runner: Runner) -> None:
-        pass
+    def prepare(self, _: Runner) -> None:
+        """Perform fast, read-only tasks to prepare for this operation.
+
+        This will be called in the intent phase.
+        """
+        raise NotImplementedError()
 
     def act(self, _: Runner) -> RemoteInfo:
+        """Perform the required work to enact this operation.
+
+        This will be called in the action phase.
+        """
         raise NotImplementedError()
 
 
 def create_with_cleanup(runner: Runner, manifests: Iterable[Manifest]) -> None:
+    """Create resources and set up their removal at cleanup.
+
+    Uses "kubectl create" with the supplied manifests to create resources.
+    Assumes that all the created resources include the telepresence label so it
+    can use a label selector to delete those resources.
+    """
     kinds = set(str(manifest["kind"]).capitalize() for manifest in manifests)
     kinds_display = ", ".join(kinds)
     manifest_list = make_k8s_list(manifests)
@@ -83,6 +98,7 @@ def create_with_cleanup(runner: Runner, manifests: Iterable[Manifest]) -> None:
 
 
 class New(ProxyOperation):
+    """Perform the (now misnamed) new deployment proxy operation."""
     def prepare(self, runner: Runner) -> None:
         self.manifests = []  # type: List[Manifest]
 
@@ -121,21 +137,12 @@ class New(ProxyOperation):
         return self.remote_info
 
 
-def ensure_correct_version(runner: Runner, remote_info: RemoteInfo) -> None:
-    """
-    Ensure remote container is running same version as we are
-    """
-    remote_version = remote_info.remote_telepresence_version()
-    if remote_version != image_version:
-        runner.write("Pod is running Tel {}".format(remote_version))
-        raise runner.fail((
-            "The remote datawire/telepresence-k8s container is " +
-            "running version {}, but this tool is version {}. " +
-            "Please make sure both are running the same version."
-        ).format(remote_version, image_version))
-
-
 def find_container(pod_spec: Manifest, container_name: str) -> Manifest:
+    """Return the named container manifest from a pod spec.
+
+    If no container is named, return the first container. If the named
+    container connot be found, return an empty manifest.
+    """
     containers = pod_spec["containers"]  # type: Iterable[Manifest]
     for container in containers:
         if not container_name or container["name"] == container_name:
@@ -146,9 +153,7 @@ def find_container(pod_spec: Manifest, container_name: str) -> Manifest:
 def set_expose_ports(
     expose: PortMapping, pod: Manifest, container_name: str
 ) -> None:
-    """
-    Merge container ports into the expose list
-    """
+    """Merge container ports into the expose list."""
     pod_spec = pod["spec"]  # type: Manifest
     container = find_container(pod_spec, container_name)
     expose.merge_automatic_ports([
@@ -158,15 +163,16 @@ def set_expose_ports(
 
 
 class Swap(ProxyOperation):
+    """Perform the swap deployment proxy operation."""
     def prepare(self, runner: Runner) -> None:
         self.manifests = []  # type: List[Manifest]
 
-        # Grab original deployment's Pod Config
+        # Grab original deployment's pod config
         deployment = get_deployment(runner, self.intent.name)  # type: Manifest
         self.deployment_type = deployment["kind"]  # type: str
         self.original_replicas = deployment["spec"]["replicas"]  # type: str
 
-        # Compute a new name that isn't too long, i.e. up to 63 characters.
+        # Compute a new name that isn't too long
         # https://github.com/kubernetes/community/blob/master/contributors/design-proposals/architecture/identifiers.md
         new_pod_name = "{name:.{max_width}s}-{id}".format(
             name=self.intent.name,
@@ -239,7 +245,7 @@ class Swap(ProxyOperation):
         )
 
         def resize_original(replicas: str) -> None:
-            """Resize the original deployment (kubectl scale)"""
+            """Resize the original deployment (kubectl scale)."""
             runner.check_call(
                 runner.kubectl(
                     "scale", self.deployment_type, self.intent.name,
@@ -262,13 +268,26 @@ class Swap(ProxyOperation):
 
 
 class Existing(ProxyOperation):
+    """Perform the existing deployment proxy operation."""
     def prepare(self, runner: Runner) -> None:
+        # Grab the existing deployment's pod config
         deployment = get_deployment(runner, self.intent.name)  # type: Manifest
         self.deployment_type = deployment["kind"]  # type: str
         pod = get_pod_for_deployment(runner, deployment)  # type: Manifest
+
         set_expose_ports(self.intent.expose, pod, self.intent.container)
+
         self.remote_info = make_remote_info_from_pod(pod)
-        ensure_correct_version(runner, self.remote_info)
+
+        # Ensure the remote container has the same version as us.
+        remote_version = self.remote_info.remote_telepresence_version()
+        if remote_version != image_version:
+            runner.write("Pod is running Tel {}".format(remote_version))
+            raise runner.fail((
+                "The remote datawire/telepresence-k8s container is " +
+                "running version {}, but this tool is version {}. " +
+                "Please make sure both are running the same version."
+            ).format(remote_version, image_version))
 
     def act(self, runner: Runner) -> RemoteInfo:
         runner.show(
