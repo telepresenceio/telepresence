@@ -279,7 +279,10 @@ At the moment, the Linux packages are not tested, other than a minor smoke test.
    * `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` for AWS S3 access
 7. Run the release script.  
    `ci/release.sh`
-8. Post the release announcement on Slack et al.
+8. Log in to [Netlify](https://app.netlify.com/teams/telepresence/sites) and rebuild the Telepresence website.
+   Select "Deploys" then "Trigger Deploy" then "Clear cache and deploy site" to get a clean build.
+   Without this step, more often than not, the website will display an old version number.
+9. Post the release announcement on Slack et al.
    The release script outputs the announcement, or you can find it in `dist/announcement.md`.
 
 #### What the release script does
