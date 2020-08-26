@@ -1,0 +1,1 @@
+The Telepresence proxy runs in a bare Pod rather than one managed by a Deployment. If you experience problems, please file an issue, and set the environment variable `TELEPRESENCE_USE_DEPLOYMENT` to any non-empty value to force the old behavior.
