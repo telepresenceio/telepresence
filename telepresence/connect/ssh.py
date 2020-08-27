@@ -37,6 +37,8 @@ class SSH(object):
             "-oStrictHostKeyChecking=no",
             # Don't store host key:
             "-oUserKnownHostsFile=/dev/null",
+            # Possibly work around a weird MacOS bug:
+            "-oConnectTimeout=5",
         ]
 
     def command(
