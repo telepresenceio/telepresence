@@ -23,6 +23,19 @@ from telepresence.runner import Runner
 from telepresence.utilities import random_name
 
 
+def _is_subnet_of(a: ipaddress.IPv4Network, b: ipaddress.IPv4Network) -> bool:
+    try:
+        return (
+            b.network_address <= a.network_address
+            and b.broadcast_address >= a.broadcast_address
+        )
+    except AttributeError:
+        raise TypeError(
+            "Unable to test subnet containment " +
+            "between {} and {}".format(a, b)
+        )
+
+
 def covering_cidrs(ips: List[str]) -> List[str]:
     """
     Given list of IPs, return a list of CIDRs that covers them all.
@@ -53,7 +66,7 @@ def covering_cidrs(ips: List[str]) -> List[str]:
             # Keep the supernet if it did collapse networks together.
             if len(collapsed_networks) <= len(rest):
                 network = supernet
-                rest = [n for n in rest if not n.subnet_of(network)]
+                rest = [n for n in rest if not _is_subnet_of(n, network)]
 
             supernet = supernet.supernet()
 
