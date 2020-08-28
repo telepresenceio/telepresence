@@ -1,6 +1,36 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.106 (August 28, 2020)
+
+Features:
+
+* The Telepresence proxy runs in a bare Pod rather than one managed by a Deployment.
+  If you experience problems, **please file an issue**, and set the environment variable `TELEPRESENCE_USE_DEPLOYMENT` to any non-empty value to force the old behavior.
+  Thanks to Maru Newby and Vladimir Kulev for early bug fixes.
+  ([#1041](https://github.com/telepresenceio/telepresence/issues/1041))
+* When using the vpn-tcp method with a local cluster, Telepresence now supports resolving additional names via the Telepresence proxy.
+  This makes it possible to properly handle DNS resolution for Minikube ingresses.
+  Thanks to Vladimir Kulev for the patch.
+  ([#1385](https://github.com/telepresenceio/telepresence/issues/1385))
+
+Bug fixes:
+
+* Telepresence now automatically exposes ports defined in the Deployment/DeploymentConfig when using an existing Deployment.
+  Telepresence already did this when swapping deployments.
+  Thanks to Aslak Knutsen for the patch.
+  ([#1356](https://github.com/telepresenceio/telepresence/issues/1356))
+* When running on Windows Subsystem for Linux, Telepresence chooses a temporary directory that exists on Debian/Ubuntu WSL installations.
+  It falls back to the old value if `/mnt/c` is not available.
+  Thanks to Mark Lee for the patch.
+  ([#1176](https://github.com/telepresenceio/telepresence/issues/1176))
+* Telepresence avoids proxying the external IP of a local cluster when using the vpn-tcp method.
+  Thanks to Vladimir Kulev for the patch.
+  ([#1380](https://github.com/telepresenceio/telepresence/issues/1380))
+* Telepresence avoids generating global networks when guessing Pod and Service networks for the vpn-tcp method.
+  Thanks to Israël Hallé for the patch.
+  ([#1420](https://github.com/telepresenceio/telepresence/issues/1420))
+
 #### 0.105 (April 24, 2020)
 
 Features:
@@ -33,7 +63,7 @@ Misc:
 * Telepresence has native packages for Fedora 31 and Ubuntu Eoan.
   Packages for even newer releases will be available once our provider supports them.
   ([#1236](https://github.com/telepresenceio/telepresence/issues/1236))
-* * Telepresence is no longer packaged for Ubuntu 18.10 (Cosmic Cuttlefish) or Ubuntu 19.04 (Disco Dingo) as those releases have [reached end of life](https://wiki.ubuntu.com/Releases#End_of_Life).
+* Telepresence is no longer packaged for Ubuntu 18.10 (Cosmic Cuttlefish) or Ubuntu 19.04 (Disco Dingo) as those releases have [reached end of life](https://wiki.ubuntu.com/Releases#End_of_Life).
 
 #### 0.104 (January 23, 2020)
 

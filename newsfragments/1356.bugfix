@@ -1,1 +1,0 @@
-Auto expose containerPorts as defined in the Deployment/DeploymentConfig when using existing Deployments

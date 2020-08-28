@@ -1,2 +1,0 @@
-WSL: use a temp dir that exists on Debian/Ubuntu WSL. It falls back to the old value if `/mnt/c`
-is not available.
