@@ -127,12 +127,12 @@ def setup(runner: Runner,
         # DNS loop above) that presumably doesn't know your local setup.
         if args.also_proxy:
             proxy_names = []
-            for name in args.also_proxy:
+            for proxy_name in args.also_proxy:
                 if not (
-                    re.search(r"[^\w.]", name)
-                    or re.match(r"^(?:\d+\.){3}\d+$", name)
+                    re.search(r"[^\w.]", proxy_name)
+                    or re.match(r"^(?:\d+\.){3}\d+$", proxy_name)
                 ):
-                    proxy_names.append(name)
+                    proxy_names.append(proxy_name)
             if proxy_names:
                 deployment_env["TELEPRESENCE_LOCAL_NAMES"] \
                     = ",".join(proxy_names)
