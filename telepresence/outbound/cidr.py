@@ -244,11 +244,16 @@ def cluster_serviceCIDR(runner: Runner) -> List[str]:
     """
     Get cluster service IP range from apiserver.
     """
-    pods = json.loads(
-        runner.get_output(
-            runner.kubectl("get", "pods", "-n", "kube-system", "-o", "json")
-        )
-    )["items"]
+    try:
+        pods = json.loads(
+            runner.get_output(
+                runner.kubectl(
+                    "get", "pods", "-n", "kube-system", "-o", "json"
+                )
+            )
+        )["items"]
+    except CalledProcessError:
+        return []
     for pod_data in pods:
         for container in pod_data["spec"]["containers"]:
             if container["name"] != "kube-apiserver":
