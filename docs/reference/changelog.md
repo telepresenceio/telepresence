@@ -1,7 +1,7 @@
 # Changelog
 
 <!--- towncrier start line -->
-#### 0.106 (August 28, 2020)
+#### 0.107 (August 29, 2020)
 
 Features:
 

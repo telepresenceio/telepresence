@@ -97,7 +97,7 @@ def emit_release_info(version, notices=None):
         out.write(_S3_RELEASE.format(**locals()))
 
 
-def emit_announcement(version):
+def emit_announcement_gitter(version):
     """Extract the latest changelog entry as a release announcement."""
     changelog = PROJECT / "docs" / "reference" / "changelog.md"
     announcement = DIST / "announcement.md"
@@ -119,6 +119,14 @@ def emit_announcement(version):
                 "or "
                 "[Upgrade](https://www.telepresence.io/reference/upgrade).\n"
             )
+
+
+def emit_announcement(version):
+    """Emit the release announcement in Slack format"""
+    announcement = DIST / "announcement.md"
+    with announcement.open("w") as dest:
+        dest.write("**Telepresence {}** has been released! ".format(version))
+        dest.write("https://www.telepresence.io/reference/changelog\n")
 
 
 def emit_machinery():
