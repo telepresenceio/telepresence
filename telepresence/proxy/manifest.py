@@ -48,16 +48,11 @@ def make_svc_manifest(
     return manifest
 
 
-def make_pod_manifest(
-    name: str, labels: Dict[str, str], pod_spec: Manifest
-) -> Manifest:
+def make_pod_manifest(pod_metadata: Manifest, pod_spec: Manifest) -> Manifest:
     manifest = {
         "apiVersion": "v1",
         "kind": "Pod",
-        "metadata": {
-            "name": name,
-            "labels": labels,
-        },
+        "metadata": pod_metadata,
         "spec": pod_spec,
     }
     return manifest
@@ -70,6 +65,11 @@ def make_new_proxy_pod_manifest(
     service_account: str,
     env: Dict[str, str],
 ) -> Manifest:
+
+    pod_metadata = {
+        "name": name,
+        "labels": dict(telepresence=run_id),
+    }
 
     pod_spec = {
         "containers": [{
@@ -93,6 +93,6 @@ def make_new_proxy_pod_manifest(
     if service_account:
         pod_spec["serviceAccount"] = service_account
 
-    pod = make_pod_manifest(name, dict(telepresence=run_id), pod_spec)
+    pod = make_pod_manifest(pod_metadata, pod_spec)
 
     return pod
