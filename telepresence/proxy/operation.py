@@ -172,6 +172,8 @@ class Swap(ProxyOperation):
         self.deployment_type = deployment["kind"]  # type: str
         self.original_replicas = deployment["spec"]["replicas"]  # type: str
 
+        template = deployment["spec"]["template"]  # type: Manifest
+
         # Compute a new name that isn't too long
         # https://github.com/kubernetes/community/blob/master/contributors/design-proposals/architecture/identifiers.md
         new_pod_name = "{name:.{max_width}s}-{id}".format(
@@ -180,8 +182,15 @@ class Swap(ProxyOperation):
             max_width=(50 - (len(runner.session_id) + 1))
         )
 
+        # Construct the new Pod's metadata
+        pod_metadata = template["metadata"]  # type: Manifest
+        pod_metadata["name"] = new_pod_name
+
+        labels = pod_metadata.setdefault("labels", {})  # type: Dict[str, str]
+        labels["telepresence"] = runner.session_id
+
         # Perform the relevant swap changes to the pod spec
-        pod_spec = deployment["spec"]["template"]["spec"]
+        pod_spec = template["spec"]
         pod_spec["restartPolicy"] = "Never"
         if self.intent.service_account:
             pod_spec["serviceAccount"] = self.intent.service_account
@@ -226,11 +235,8 @@ class Swap(ProxyOperation):
             except KeyError:
                 pass
 
-        labels = dict(telepresence=runner.session_id)  # type: Dict[str, str]
-        labels.update(deployment["spec"]["template"]["metadata"]["labels"])
-
         # Construct a Pod manifest
-        pod = make_pod_manifest(new_pod_name, labels, pod_spec)
+        pod = make_pod_manifest(pod_metadata, pod_spec)
         self.manifests.append(pod)
 
         set_expose_ports(self.intent.expose, pod, self.intent.container)
