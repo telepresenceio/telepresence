@@ -1,1 +1,0 @@
-When swapping a Deployment, Telepresence correctly sets annotations and other metadata in the proxy Pod.

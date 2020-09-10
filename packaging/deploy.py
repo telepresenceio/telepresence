@@ -125,7 +125,7 @@ def emit_announcement(version):
     """Emit the release announcement in Slack format"""
     announcement = DIST / "announcement.md"
     with announcement.open("w") as dest:
-        dest.write("**Telepresence {}** has been released! ".format(version))
+        dest.write("*Telepresence {}* has been released! ".format(version))
         dest.write("https://www.telepresence.io/reference/changelog\n")
 
 

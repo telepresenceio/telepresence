@@ -1,6 +1,13 @@
 # Changelog
 
 <!--- towncrier start line -->
+#### 0.108 (September 10, 2020)
+
+Bug fixes:
+
+* When swapping a Deployment, Telepresence correctly sets annotations and other metadata in the proxy Pod.
+  ([#1430](https://github.com/telepresenceio/telepresence/issues/1430))
+
 #### 0.107 (August 29, 2020)
 
 Features:
