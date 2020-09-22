@@ -56,7 +56,7 @@ func (rai *RunAsInfo) Command(p *supervisor.Process, args ...string) *supervisor
 		} else {
 			// FIXME(ark3): The above _should_ work on Linux, but
 			// doesn't work on my machine. I don't know why (yet).
-			cmd = p.Command("su", "-m", rai.Name, "-c", shellquote.Join(args...))
+			cmd = p.Command("su", "-m", rai.Name, "-s", "/bin/sh", "-c", shellquote.Join(args...))
 		}
 	}
 	cmd.Env = rai.Env
