@@ -1,4 +1,4 @@
-package edgectl
+package client
 
 import (
 	"bufio"

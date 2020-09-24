@@ -1,4 +1,4 @@
-package edgectl
+package daemon
 
 import (
 	"bytes"
@@ -6,11 +6,11 @@ import (
 	"os"
 	"sort"
 
+	"github.com/datawire/ambassador/internal/pkg/edgectl"
+	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
 	"gopkg.in/natefinch/lumberjack.v2"
-
-	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
 // DaemonFormatter formats log messages for the Edge Control Daemon
@@ -55,7 +55,7 @@ func SetUpLogging() supervisor.Logger {
 	} else {
 		formatter.TimestampFormat = "2006/01/02 15:04:05"
 		logger.SetOutput(&lumberjack.Logger{
-			Filename:   logfile,
+			Filename:   edgectl.Logfile,
 			MaxSize:    10,   // megabytes
 			MaxBackups: 3,    // in the same directory
 			MaxAge:     60,   // days

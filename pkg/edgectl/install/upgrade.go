@@ -13,17 +13,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/datawire/ambassador/internal/pkg/edgectl"
+	"github.com/datawire/ambassador/internal/pkg/edgectl/client"
+	"github.com/datawire/ambassador/pkg/helm"
+	"github.com/datawire/ambassador/pkg/k8s"
+	"github.com/datawire/ambassador/pkg/metriton"
+	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/browser"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"helm.sh/helm/v3/pkg/strvals"
 	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
-
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/pkg/helm"
-	"github.com/datawire/ambassador/pkg/k8s"
-	"github.com/datawire/ambassador/pkg/metriton"
-	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
 var (
@@ -63,7 +63,7 @@ func AOSSUpgrade(cmd *cobra.Command, args []string) error {
 			p.Ready()
 			select {
 			case sig := <-sigs:
-				i.Report("user_interrupted", edgectl.ScoutMeta{"signal", fmt.Sprintf("%+v", sig)})
+				i.Report("user_interrupted", client.ScoutMeta{"signal", fmt.Sprintf("%+v", sig)})
 				i.Quit()
 			case <-p.Shutdown():
 			}
@@ -121,7 +121,7 @@ func NewUpgrader(verbose bool) *Upgrader {
 	ctx, cancel := context.WithCancel(context.Background())
 	i := Upgrader{
 		Installer{
-			scout:   edgectl.NewScout("upgrade"),
+			scout:   client.NewScout("upgrade"),
 			ctx:     ctx,
 			cancel:  cancel,
 			show:    log.New(io.MultiWriter(os.Stdout, logfile), "", 0),
@@ -130,9 +130,9 @@ func NewUpgrader(verbose bool) *Upgrader {
 	}
 
 	if verbose {
-		i.log = log.New(io.MultiWriter(logfile, edgectl.NewLoggingWriter(log.New(os.Stderr, "== ", 0))), "", log.Ltime)
-		i.cmdOut = log.New(io.MultiWriter(logfile, edgectl.NewLoggingWriter(log.New(os.Stderr, "=- ", 0))), "", 0)
-		i.cmdErr = log.New(io.MultiWriter(logfile, edgectl.NewLoggingWriter(log.New(os.Stderr, "=x ", 0))), "", 0)
+		i.log = log.New(io.MultiWriter(logfile, NewLoggingWriter(log.New(os.Stderr, "== ", 0))), "", log.Ltime)
+		i.cmdOut = log.New(io.MultiWriter(logfile, NewLoggingWriter(log.New(os.Stderr, "=- ", 0))), "", 0)
+		i.cmdErr = log.New(io.MultiWriter(logfile, NewLoggingWriter(log.New(os.Stderr, "=x ", 0))), "", 0)
 	} else {
 		i.log = log.New(logfile, "", log.Ltime)
 		i.cmdOut = log.New(logfile, "", 0)
@@ -395,7 +395,7 @@ func (i *Upgrader) Perform(kcontext string) Result {
 	// Check to see if AES is ready
 	if err := i.CheckAESHealth(); err != nil {
 		i.Report("aes_health_bad",
-			edgectl.ScoutMeta{"err", err.Error()})
+			client.ScoutMeta{"err", err.Error()})
 	} else {
 		i.Report("aes_health_good")
 	}

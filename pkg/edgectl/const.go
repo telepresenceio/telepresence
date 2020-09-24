@@ -6,9 +6,9 @@ import (
 )
 
 const (
-	socketName = "/var/run/edgectl.socket"
-	logfile    = "/tmp/edgectl.log"
-	apiVersion = 1
+	DaemonSocketName = "/var/run/edgectl-daemon.socket"
+	Logfile          = "/tmp/edgectl.log"
+	ApiVersion       = 2
 )
 
 var Version = "(unknown version)"
@@ -20,7 +20,7 @@ func SetVersion(v string) {
 
 // DisplayVersion returns a printable version for `edgectl`
 func DisplayVersion() string {
-	return fmt.Sprintf("v%s (api v%d)", Version, apiVersion)
+	return fmt.Sprintf("v%s (api v%d)", Version, ApiVersion)
 }
 
 func GetExe() string {

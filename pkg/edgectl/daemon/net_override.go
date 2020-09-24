@@ -1,21 +1,21 @@
-package edgectl
+package daemon
 
 import (
 	"fmt"
 	"io/ioutil"
 	"time"
 
-	"github.com/pkg/errors"
-
+	"github.com/datawire/ambassador/internal/pkg/edgectl"
 	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/pkg/errors"
 )
 
 // MakeNetOverride sets up the network override resource for the daemon
-func (d *Daemon) MakeNetOverride(p *supervisor.Process) error {
+func (d *daemon) MakeNetOverride(p *supervisor.Process) error {
 	netOverride, err := CheckedRetryingCommand(
 		p,
 		"netOverride",
-		[]string{GetExe(), "teleproxy", "intercept", d.dns, d.fallback},
+		[]string{edgectl.GetExe(), "teleproxy", "intercept", d.dns, d.fallback},
 		&RunAsInfo{},
 		checkNetOverride,
 		10*time.Second,

@@ -6,17 +6,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pkg/browser"
-
+	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/dgrijalva/jwt-go"
-	"github.com/gookit/color"
+	"github.com/pkg/browser"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
-
-	"github.com/datawire/ambassador/pkg/k8s"
 )
 
 const SecretName = "ambassador-internal"
@@ -24,24 +20,6 @@ const SecretName = "ambassador-internal"
 type LoginClaimsV1 struct {
 	LoginTokenVersion string `json:"login_token_version"`
 	jwt.StandardClaims
-}
-
-func AESLogin(cmd *cobra.Command, args []string) error {
-	fmt.Println(color.Info.Sprintf("Connecting to the Ambassador Edge Policy Console in this cluster..."))
-
-	// Grab options
-	context, _ := cmd.Flags().GetString("context")
-	namespace, _ := cmd.Flags().GetString("namespace")
-	justShowURL, _ := cmd.Flags().GetBool("url")
-	showToken, _ := cmd.Flags().GetBool("token")
-
-	// Figure out the correct hostname
-	hostname := args[0]
-
-	// Prepare to talk to the cluster
-	kubeinfo := k8s.NewKubeInfo("", context, namespace) // Default namespace is "ambassador"
-
-	return DoLogin(kubeinfo, context, namespace, hostname, !justShowURL, justShowURL, showToken, false)
 }
 
 func DoLogin(kubeinfo *k8s.KubeInfo, context, namespace, hostname string, openInBrowser, showURL, showToken, showWelcome bool) error {

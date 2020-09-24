@@ -1,4 +1,4 @@
-package edgectl
+package daemon
 
 import (
 	"fmt"

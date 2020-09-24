@@ -1,14 +1,11 @@
-package edgectl
+package daemon
 
 import (
-	"os"
-	"os/user"
 	"runtime"
 
-	"github.com/kballard/go-shellquote"
-	"github.com/pkg/errors"
-
+	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
 	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/kballard/go-shellquote"
 )
 
 // RunAsInfo contains the information required to launch a subprocess as the
@@ -20,22 +17,12 @@ type RunAsInfo struct {
 	Env  []string
 }
 
-// GetRunAsInfo returns an RAI for the current user context
-func GetRunAsInfo() (*RunAsInfo, error) {
-	user, err := user.Current()
-	if err != nil {
-		return nil, errors.Wrap(err, "user.Current()")
+func runAsUserFromRPC(u *rpc.ConnectRequest_UserInfo) *RunAsInfo {
+	return &RunAsInfo{
+		Name: u.Name,
+		Cwd:  u.Cwd,
+		Env:  u.Env,
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, errors.Wrap(err, "os.Getwd()")
-	}
-	rai := &RunAsInfo{
-		Name: user.Username,
-		Cwd:  cwd,
-		Env:  os.Environ(),
-	}
-	return rai, nil
 }
 
 // Command returns a supervisor.Cmd that is configured to run a subprocess as

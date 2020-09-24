@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
+	"github.com/datawire/ambassador/internal/pkg/edgectl/daemon"
 
 	"github.com/datawire/ambassador/internal/pkg/edgectl"
+	"github.com/datawire/ambassador/internal/pkg/edgectl/client"
 	install "github.com/datawire/ambassador/internal/pkg/edgectl/install"
+	"github.com/spf13/cobra"
 )
 
 // Version is inserted at build using --ldflags -X
@@ -18,9 +20,9 @@ func main() {
 
 	rootCmd := getRootCommand()
 
-	var cg []edgectl.CmdGroup
-	if edgectl.DaemonWorks() {
-		cg = []edgectl.CmdGroup{
+	var cg []client.CmdGroup
+	if client.DaemonWorks() {
+		cg = []client.CmdGroup{
 			{
 				GroupName: "Management Commands",
 				CmdNames:  []string{"install", "upgrade", "login", "license"},
@@ -39,7 +41,7 @@ func main() {
 			},
 		}
 	} else {
-		cg = []edgectl.CmdGroup{
+		cg = []client.CmdGroup{
 			{
 				GroupName: "Management Commands",
 				CmdNames:  []string{"install", "upgrade", "login", "license"},
@@ -51,7 +53,7 @@ func main() {
 		}
 	}
 
-	usageFunc := edgectl.NewCmdUsage(rootCmd, cg)
+	usageFunc := client.NewCmdUsage(rootCmd, cg)
 	rootCmd.SetUsageFunc(usageFunc)
 	err := rootCmd.Execute()
 	if err != nil {
@@ -61,7 +63,7 @@ func main() {
 
 func getRootCommand() *cobra.Command {
 	myName := "Edge Control"
-	if !edgectl.IsServerRunning() {
+	if !client.IsServerRunning() {
 		myName = "Edge Control (daemon unavailable)"
 	}
 
@@ -88,7 +90,7 @@ func getRootCommand() *cobra.Command {
 		Args:   cobra.ExactArgs(2),
 		Hidden: true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return edgectl.RunAsDaemon(args[0], args[1])
+			return daemon.RunAsDaemon(args[0], args[1])
 		},
 	})
 	teleproxyCmd := &cobra.Command{
@@ -102,7 +104,7 @@ func getRootCommand() *cobra.Command {
 		Args:   cobra.ExactArgs(2),
 		Hidden: true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return edgectl.RunAsTeleproxyIntercept(args[0], args[1])
+			return daemon.RunAsTeleproxyIntercept(args[0], args[1])
 		},
 	})
 	teleproxyCmd.AddCommand(&cobra.Command{
@@ -111,20 +113,20 @@ func getRootCommand() *cobra.Command {
 		Args:   cobra.ExactArgs(2),
 		Hidden: true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return edgectl.RunAsTeleproxyBridge(args[0], args[1])
+			return daemon.RunAsTeleproxyBridge(args[0], args[1])
 		},
 	})
 	rootCmd.AddCommand(teleproxyCmd)
 
 	// Client commands. These are never sent to the daemon.
 
-	if edgectl.DaemonWorks() {
+	if client.DaemonWorks() {
 		daemonCmd := &cobra.Command{
 			Use:   "daemon",
 			Short: "Launch Edge Control Daemon in the background (sudo)",
-			Long:  edgectl.DaemonHelp,
+			Long:  daemon.Help,
 			Args:  cobra.ExactArgs(0),
-			RunE:  edgectl.LaunchDaemon,
+			RunE:  client.LaunchDaemon,
 		}
 		_ = daemonCmd.Flags().String(
 			"dns", "",
@@ -135,12 +137,136 @@ func getRootCommand() *cobra.Command {
 			"DNS fallback, how non-cluster DNS queries are resolved. Defaults to Google DNS (8.8.8.8).",
 		)
 		rootCmd.AddCommand(daemonCmd)
+
+		rootCmd.AddCommand(&cobra.Command{
+			Use:   "status",
+			Short: "Show connectivity status",
+			Args:  cobra.ExactArgs(0),
+			RunE:  client.Status,
+		})
+
+		cr := &client.ConnectInfo{}
+		connectCmd := &cobra.Command{
+			Use:   "connect [flags] [-- additional kubectl arguments...]",
+			Short: "Connect to a cluster",
+			RunE:  cr.Connect,
+		}
+		connectFlags := connectCmd.Flags()
+		connectFlags.StringVarP(&cr.Context,
+			"context", "c", "",
+			"The Kubernetes context to use. Defaults to the current kubectl context.",
+		)
+		connectFlags.StringVarP(&cr.Namespace,
+			"namespace", "n", "",
+			"The Kubernetes namespace to use. Defaults to kubectl's default for the context.",
+		)
+		connectFlags.StringVarP(&cr.ManagerNS,
+			"manager-namespace", "m", "ambassador",
+			"The Kubernetes namespace in which the Traffic Manager is running.",
+		)
+		connectFlags.BoolVar(&cr.IsCI, "ci", false, "This session is a CI run.")
+		rootCmd.AddCommand(connectCmd)
+
+		rootCmd.AddCommand(&cobra.Command{
+			Use:   "disconnect",
+			Short: "Disconnect from the connected cluster",
+			Args:  cobra.ExactArgs(0),
+			RunE:  client.Disconnect,
+		})
+		rootCmd.AddCommand(&cobra.Command{
+			Use:   "pause",
+			Short: "Turn off network overrides (to use a VPN)",
+			Args:  cobra.ExactArgs(0),
+			RunE:  client.Pause,
+		})
+		rootCmd.AddCommand(&cobra.Command{
+			Use:     "resume",
+			Short:   "Turn network overrides on (after using edgectl pause)",
+			Aliases: []string{"unpause"},
+			Args:    cobra.ExactArgs(0),
+			RunE:    client.Resume,
+		})
+		rootCmd.AddCommand(&cobra.Command{
+			Use:   "quit",
+			Short: "Tell Edge Control Daemon to quit (for upgrades)",
+			Args:  cobra.ExactArgs(0),
+			RunE:  client.Quit,
+		})
+		rootCmd.AddCommand(&cobra.Command{
+			Use:   "version",
+			Short: "Show program's version number and exit",
+			Args:  cobra.ExactArgs(0),
+			RunE:  client.Version,
+		})
+		interceptCmd := &cobra.Command{
+			Use: "intercept",
+			Long: "Manage deployment intercepts. An intercept arranges for a subset of requests to be " +
+				"diverted to the local machine.",
+			Short: "Manage deployment intercepts",
+		}
+		interceptCmd.AddCommand(&cobra.Command{
+			Use:     "available",
+			Aliases: []string{"avail"},
+			Short:   "List deployments available for intercept",
+			Args:    cobra.ExactArgs(0),
+			RunE:    client.AvailableIntercepts,
+		})
+		interceptCmd.AddCommand(&cobra.Command{
+			Use:   "list",
+			Short: "List current intercepts",
+			Args:  cobra.ExactArgs(0),
+			RunE:  client.ListIntercepts,
+		})
+		interceptCmd.AddCommand(&cobra.Command{
+			Use:     "remove [flags] DEPLOYMENT",
+			Aliases: []string{"delete"},
+			Short:   "Deactivate and remove an existent intercept",
+			Args:    cobra.MinimumNArgs(1),
+			RunE:    client.RemoveIntercept,
+		})
+		intercept := client.InterceptInfo{}
+		interceptAddCmd := &cobra.Command{
+			Use:   "add [flags] DEPLOYMENT -t [HOST:]PORT ([-p] | -m HEADER=REGEX ...)",
+			Short: "Add a deployment intercept",
+			Args:  cobra.ExactArgs(1),
+			RunE:  intercept.AddIntercept,
+		}
+		interceptAddCmd.Flags().StringVarP(&intercept.Name, "name", "n", "", "a name for this intercept")
+		interceptAddCmd.Flags().StringVar(&intercept.Prefix, "prefix", "/", "prefix to intercept")
+		interceptAddCmd.Flags().BoolVarP(&intercept.Preview, "preview", "p", true, "use a preview URL") // this default is unused
+		interceptAddCmd.Flags().BoolVarP(&intercept.GRPC, "grpc", "", false, "intercept GRPC traffic")
+		interceptAddCmd.Flags().StringVarP(&intercept.TargetHost, "target", "t", "", "the [HOST:]PORT to forward to")
+		_ = interceptAddCmd.MarkFlagRequired("target")
+		interceptAddCmd.Flags().StringToStringVarP(&intercept.Patterns, "match", "m", nil, "match expression (HEADER=REGEX)")
+		interceptAddCmd.Flags().StringVarP(&intercept.Namespace, "namespace", "", "", "Kubernetes namespace in which to create mapping for intercept")
+
+		interceptCmd.AddCommand(interceptAddCmd)
+		interceptCG := []client.CmdGroup{
+			{
+				GroupName: "Available Commands",
+				CmdNames:  []string{"available", "list", "add", "remove"},
+			},
+		}
+		interceptCmd.SetUsageFunc(client.NewCmdUsage(interceptCmd, interceptCG))
+		rootCmd.AddCommand(interceptCmd)
+	} else {
+		rootCmd.AddCommand(&cobra.Command{
+			Use:   "version",
+			Short: "Show program's version number and exit",
+			Args:  cobra.ExactArgs(0),
+			RunE: func(_ *cobra.Command, _ []string) error {
+				fmt.Println("Client", edgectl.DisplayVersion())
+				fmt.Println("Daemon unavailable on this platform")
+				return nil
+			},
+		})
 	}
+
 	loginCmd := &cobra.Command{
 		Use:   "login [flags] HOSTNAME",
 		Short: "Log in to the Ambassador Edge Policy Console",
 		Args:  cobra.ExactArgs(1),
-		RunE:  edgectl.AESLogin,
+		RunE:  client.AESLogin,
 	}
 	_ = loginCmd.Flags().StringP(
 		"context", "c", "",
@@ -157,7 +283,7 @@ func getRootCommand() *cobra.Command {
 		Use:   "license [flags] LICENSE_KEY",
 		Short: "Set or update the Ambassador Edge Stack license key",
 		Args:  cobra.ExactArgs(1),
-		RunE:  edgectl.AESLicense,
+		RunE:  client.AESLicense,
 	}
 	_ = licenseCmd.Flags().StringP(
 		"context", "c", "",
@@ -201,50 +327,6 @@ func getRootCommand() *cobra.Command {
 	)
 	rootCmd.AddCommand(upgradeCmd)
 
-	// Daemon commands. These should be forwarded to the daemon.
-
-	if edgectl.DaemonWorks() {
-		nilDaemon := &edgectl.Daemon{}
-		daemonCmd := nilDaemon.GetRootCommand(nil, nil, nil)
-		walkSubcommands(daemonCmd)
-		rootCmd.AddCommand(daemonCmd.Commands()...)
-		rootCmd.PersistentFlags().AddFlagSet(daemonCmd.PersistentFlags())
-	} else {
-		rootCmd.AddCommand(&cobra.Command{
-			Use:   "version",
-			Short: "Show program's version number and exit",
-			Args:  cobra.ExactArgs(0),
-			RunE: func(_ *cobra.Command, _ []string) error {
-				fmt.Println("Client", edgectl.DisplayVersion())
-				fmt.Println("Daemon unavailable on this platform")
-				return nil
-			},
-		})
-	}
-
 	rootCmd.InitDefaultHelpCmd()
-
 	return rootCmd
-}
-
-func walkSubcommands(cmd *cobra.Command) {
-	for _, subCmd := range cmd.Commands() {
-		walkSubcommands(subCmd)
-	}
-	if cmd.RunE != nil {
-		cmd.RunE = forwardToDaemon
-	}
-}
-
-func forwardToDaemon(cmd *cobra.Command, _ []string) error {
-	err := edgectl.MainViaDaemon()
-	if err != nil {
-		// The version command is special because it must emit the client
-		// version if the daemon is unavailable.
-		if cmd.Use == "version" {
-			fmt.Println("Client", edgectl.DisplayVersion())
-		}
-		fmt.Println("Unable to connect to the daemon (See \"edgectl help daemon\")")
-	}
-	return err
 }

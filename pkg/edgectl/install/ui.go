@@ -14,8 +14,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
 )
 
 var validEmailAddress = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
@@ -192,11 +190,11 @@ func (i *Installer) Capture(name string, logToStdout bool, input string, args ..
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = strings.NewReader(input)
 	if logToStdout {
-		cmd.Stdout = io.MultiWriter(edgectl.NewLoggingWriter(i.cmdOut), resAsBytes)
+		cmd.Stdout = io.MultiWriter(NewLoggingWriter(i.cmdOut), resAsBytes)
 	} else {
 		cmd.Stdout = resAsBytes
 	}
-	cmd.Stderr = edgectl.NewLoggingWriter(i.cmdErr)
+	cmd.Stderr = NewLoggingWriter(i.cmdErr)
 	err = cmd.Run()
 	if err != nil {
 		err = errors.Wrap(err, name)

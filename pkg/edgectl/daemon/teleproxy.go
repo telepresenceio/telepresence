@@ -1,13 +1,13 @@
 // +build !windows
 
-package edgectl
+package daemon
 
 import (
 	"os"
 
-	"github.com/pkg/errors"
-
+	"github.com/datawire/ambassador/internal/pkg/edgectl"
 	"github.com/datawire/ambassador/pkg/teleproxy"
+	"github.com/pkg/errors"
 )
 
 // RunAsTeleproxyIntercept is the main function when executing as
@@ -21,7 +21,7 @@ func RunAsTeleproxyIntercept(dns, fallback string) error {
 		DNSIP:      dns,
 		FallbackIP: fallback,
 	}
-	return teleproxy.RunTeleproxy(tele, DisplayVersion())
+	return teleproxy.RunTeleproxy(tele, edgectl.DisplayVersion())
 }
 
 // RunAsTeleproxyBridge is the main function when executing as
@@ -32,5 +32,5 @@ func RunAsTeleproxyBridge(context, namespace string) error {
 		Context:   context,
 		Namespace: namespace,
 	}
-	return teleproxy.RunTeleproxy(tele, DisplayVersion())
+	return teleproxy.RunTeleproxy(tele, edgectl.DisplayVersion())
 }

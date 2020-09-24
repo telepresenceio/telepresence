@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/datawire/ambassador/internal/pkg/edgectl"
+	"github.com/datawire/ambassador/internal/pkg/edgectl/client"
 )
 
 func (i *Installer) generateCrashReport(sourceError error) {
@@ -52,7 +53,7 @@ func (i *Installer) generateCrashReport(sourceError error) {
 		return
 	}
 	i.log.Printf("uploading anonymous crash report and logs under report ID: %v", crashReport.ReportId)
-	i.Report("crash_report", edgectl.ScoutMeta{"crash_report_id", crashReport.ReportId})
+	i.Report("crash_report", client.ScoutMeta{"crash_report_id", crashReport.ReportId})
 	i.uploadCrashReportData(crashReport, i.gatherCrashReportData())
 }
 

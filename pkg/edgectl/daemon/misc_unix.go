@@ -1,6 +1,6 @@
 // +build !windows
 
-package edgectl
+package daemon
 
 import (
 	"bytes"
@@ -9,16 +9,12 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
-	"os/exec"
 	"runtime"
 	"strings"
 	"syscall"
-	"time"
-
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 
 	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/pkg/errors"
 )
 
 // GuessRunAsInfo attempts to construct a RunAsInfo for the user logged in at
@@ -90,48 +86,6 @@ func GuessRunAsInfo(p *supervisor.Process) (*RunAsInfo, error) {
 	return &res, nil
 }
 
-func LaunchDaemon(ccmd *cobra.Command, _ []string) error {
-	if os.Geteuid() != 0 {
-		fmt.Println("Edge Control Daemon must be launched as root.")
-		fmt.Printf("\n  sudo %s\n\n", ccmd.CommandPath())
-		return errors.New("root privileges required")
-	}
-	fmt.Println("Launching Edge Control Daemon", DisplayVersion())
-
-	dns, _ := ccmd.Flags().GetString("dns")
-	fallback, _ := ccmd.Flags().GetString("fallback")
-
-	cmd := exec.Command(GetExe(), "daemon-foreground", dns, fallback)
-	cmd.Env = os.Environ()
-	cmd.Stdin = nil
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	cmd.ExtraFiles = nil
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	err := cmd.Start()
-	if err != nil {
-		return errors.Wrap(err, "failed to launch the server")
-	}
-
-	success := false
-	for count := 0; count < 40; count++ {
-		if IsServerRunning() {
-			success = true
-			break
-		}
-		if count == 4 {
-			fmt.Println("Waiting for daemon to start...")
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	if !success {
-		fmt.Println("Server did not come up!")
-		fmt.Printf("Take a look at %s for more information.\n", logfile)
-		return errors.New("launch failed")
-	}
-	return nil
-}
-
 // GetFreePort asks the kernel for a free open port that is ready to use.
 // Similar to telepresence.utilities.find_free_port()
 func GetFreePort() (int, error) {
@@ -153,9 +107,4 @@ func GetFreePort() (int, error) {
 	}
 	defer l.Close()
 	return l.Addr().(*net.TCPAddr).Port, nil
-}
-
-// DaemonWorks returns whether the daemon can function on this platform
-func DaemonWorks() bool {
-	return true
 }

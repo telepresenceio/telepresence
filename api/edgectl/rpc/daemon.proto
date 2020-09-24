@@ -1,0 +1,233 @@
+syntax = "proto3";
+
+option go_package = "edgectl/rpc";
+option java_multiple_files = true;
+option java_package = "io.datawire.api.edgectl.rpc";
+option java_outer_classname = "DaemonProto";
+
+package edgectl;
+
+// The Daemon service is responsible for connecting to the traffic manager and manage
+// intercepts.
+service Daemon {
+    // Returns version information from the Daemon
+    rpc Version(Empty) returns (VersionResponse);
+
+    // Returns the current connectivity status
+    rpc Status(Empty) returns (StatusResponse);
+
+    // Connects the daemon to a cluster
+    rpc Connect(ConnectRequest) returns (ConnectResponse);
+
+    // Disconnects the daemon from a connected cluster
+    rpc Disconnect(Empty) returns (DisconnectResponse);
+
+    // Adds a deployment intercept
+    rpc AddIntercept(InterceptRequest) returns (InterceptResponse);
+
+    // Deactivates and removes an existent deployment intercept.
+    rpc RemoveIntercept(RemoveInterceptRequest) returns (InterceptResponse);
+
+    // Returns a list of deployments available for intercept.
+    rpc AvailableIntercepts(Empty) returns (AvailableInterceptsResponse);
+
+    // Returns a list of currently active intercepts.
+    rpc ListIntercepts(Empty) returns (ListInterceptsResponse);
+
+    // Turns network overrides off.
+    rpc Pause(Empty) returns (PauseResponse);
+
+    // Turns network overrides back on (after using Pause)
+    rpc Resume(Empty) returns (ResumeResponse);
+
+    // Quits (terminates) the service.
+    rpc Quit(Empty) returns (Empty);
+}
+
+// ConnectRequest contains the information needed to connect ot a cluster.
+message ConnectRequest {
+    string Context = 1;
+    string Namespace = 2;
+    string ManagerNS = 3;
+    string InstallID = 4;
+    bool IsCI = 5;
+    int32 WaitForNetwork = 6;
+    repeated string Args = 7;
+
+    // UserInfo contains information needed when the daemon shells out as another user.
+    // This is subject to change in the near future and this message type will be removed.
+    message UserInfo {
+        string Name = 1;
+        string Cwd = 2;
+        repeated string Env = 3;
+    }
+
+    UserInfo User = 8; // Remove when connector runs as user
+}
+
+message ConnectResponse {
+    enum ErrType {
+        Ok = 0;
+        AlreadyConnected = 1;
+        Disconnecting = 2;
+        Paused = 3;
+        EstablishingOverrides = 4;
+        ClusterFailed = 5;
+        BridgeFailed = 6;
+        TrafficManagerFailed = 7;
+    }
+    ErrType Error = 1;
+    string ErrorText = 2;
+    string ClusterContext = 3;
+    string ClusterServer = 4;
+}
+
+message DisconnectResponse {
+    enum ErrType {
+        Ok = 0;
+        NotConnected = 1;
+        DisconnectFailed = 2;
+    }
+    ErrType Error = 1;
+    string ErrorText = 2;
+}
+
+
+message PauseResponse {
+    enum ErrType {
+        Ok = 0;
+        AlreadyPaused = 1;
+        ConnectedToCluster = 2;
+        UnexpectedPauseError = 3;
+    }
+    ErrType Error = 1;
+    string ErrorText= 2;
+}
+
+message ResumeResponse {
+    enum ErrType {
+        Ok = 0;
+        NotPaused = 1;
+        ReEstablishing = 2;
+        UnexpectedResumeError = 3;
+    }
+    ErrType Error = 1;
+    string ErrorText= 2;
+}
+
+message Empty {}
+
+message VersionResponse {
+    int32 APIVersion = 1;
+    string Version = 2;
+}
+
+
+message StatusResponse {
+    enum ErrType {
+        Ok = 0;
+        Paused = 1;
+        NoNetwork = 2;
+        Disconnected = 3;
+    }
+    ErrType Error = 1;
+    string ErrorText = 2;
+    bool Bridge = 3;
+
+    message ClusterInfo {
+        bool Connected = 1;
+        string Server = 2;
+        string Context = 3;
+    }
+    ClusterInfo Cluster = 4;
+
+    message InterceptsInfo {
+        bool Connected = 1;
+        int32 InterceptableCount = 2;
+        int32 ClusterIntercepts = 3;
+        int32 LocalIntercepts = 4;
+        string LicenseInfo = 5;
+    }
+    InterceptsInfo Intercepts = 5;
+}
+
+// InterceptRequest contains the information needed to add a deployment intercept.
+message InterceptRequest {
+    // Name of the intercept
+    string Name = 1;
+
+    // Namespace in which to create the Intercept mapping
+    string Namespace = 2;
+
+    // Name of the deployment being intercepted
+    string Deployment = 3;
+
+    // Prefix to intercept (default /)
+    string Prefix = 4;
+
+    string TargetHost = 5;
+
+    int32 TargetPort = 6;
+
+    // GRPC flag to set on the Intercept mapping. Ideally we'd get this from the
+    // Traffic-Manager interceptables instead of having to pass it as a CLI argument.
+    bool GRPC = 7;
+
+    bool Preview = 8;
+
+    map<string,string> Patterns = 9;
+}
+
+message RemoveInterceptRequest {
+    // Name of the intercept
+    string Name = 1;
+}
+
+// InterceptError is a common error type used by the intercept call family (add, remove, list, available).
+enum InterceptError {
+    InterceptOk = 0;
+    NoPreviewHost = 1;
+    NoConnection = 2;
+    NoTrafficManager = 3;
+    TrafficManagerConnecting = 4;
+    TrafficManagerError = 5;
+    AlreadyExists = 6;
+    NoAcceptableDeployment = 7;
+    AmbiguousMatch = 8;
+    FailedToEstablish = 9;
+    FailedToRemove = 10;
+    NotFound = 11;
+}
+
+message InterceptResponse {
+    InterceptError Error = 1;
+    string PreviewURL = 2;
+    string Text = 3;
+}
+
+message ListInterceptsResponse {
+    InterceptError Error = 1;
+    string Text = 2;
+
+    message ListEntry {
+        string Name = 1;
+        string Namespace = 2;
+        string Deployment = 3;
+        string PreviewURL = 4;
+        map<string,string> Patterns = 5;
+        string TargetHost = 6;
+        int32 TargetPort = 7;
+    }
+    repeated ListEntry Intercepts = 3;
+}
+
+message AvailableInterceptsResponse {
+    InterceptError Error = 1;
+    string Text = 2;
+
+    message ListEntry {
+        string Namespace = 1;
+        string Deployment = 2;
+    }
+    repeated ListEntry Intercepts = 3;
+}

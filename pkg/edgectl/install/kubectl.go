@@ -9,8 +9,6 @@ import (
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8sVersion "k8s.io/apimachinery/pkg/version"
-
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
 )
 
 const (
@@ -237,8 +235,8 @@ func (i *Installer) NewSimpleKubectl() (res SimpleKubectl, err error) {
 		exe:    kubectl,
 		args:   args,
 		stdin:  bytes.NewBufferString(""),
-		stdout: edgectl.NewLoggingWriter(i.cmdOut),
-		stderr: edgectl.NewLoggingWriter(i.cmdErr),
+		stdout: NewLoggingWriter(i.cmdOut),
+		stderr: NewLoggingWriter(i.cmdErr),
 	}
 	return
 }

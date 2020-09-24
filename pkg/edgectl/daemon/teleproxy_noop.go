@@ -1,6 +1,6 @@
 // +build windows
 
-package edgectl
+package daemon
 
 import (
 	"github.com/pkg/errors"

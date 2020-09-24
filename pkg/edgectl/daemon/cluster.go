@@ -1,4 +1,4 @@
-package edgectl
+package daemon
 
 import (
 	"bufio"
@@ -13,10 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
-
+	"github.com/datawire/ambassador/internal/pkg/edgectl"
+	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
 	"github.com/datawire/ambassador/pkg/k8s"
+	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/pkg/errors"
 )
 
 var simpleTransport = &http.Transport{
@@ -36,42 +38,54 @@ var hClient = &http.Client{
 	Timeout:   15 * time.Second,
 }
 
-// Connect the daemon to a cluster
-func (d *Daemon) Connect(
-	p *supervisor.Process, out *Emitter, rai *RunAsInfo,
-	context, namespace, managerNs string, kargs []string,
-	installID string, isCI bool,
-) error {
-	// Sanity checks
-	if d.cluster != nil {
-		out.Println("Already connected")
-		out.Send("connect", "Already connected")
-		return nil
-	}
-	if d.bridge != nil {
-		out.Println("Not ready: Trying to disconnect")
-		out.Send("connect", "Not ready: Trying to disconnect")
-		return nil
-	}
-	if d.network == nil {
-		out.Println("Not ready: Network overrides are paused (use \"edgectl resume\")")
-		out.Send("connect", "Not ready: Paused")
-		return nil
-	}
-	if !d.network.IsOkay() {
-		out.Println("Not ready: Establishing network overrides")
-		out.Send("connect", "Not ready: Establishing network overrides")
-		return nil
+// connect the daemon to a cluster
+func (d *daemon) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.ConnectResponse {
+	reporter := &metriton.Reporter{
+		Application:  "edgectl",
+		Version:      edgectl.Version,
+		GetInstallID: func(_ *metriton.Reporter) (string, error) { return cr.InstallID, nil },
+		BaseMetadata: map[string]interface{}{"mode": "daemon"},
 	}
 
-	out.Printf("Connecting to traffic manager in namespace %s...\n", managerNs)
-	out.Send("connect", "Connecting...")
-	cluster, err := TrackKCluster(p, rai, context, namespace, kargs)
+	if _, err := reporter.Report(p.Context(), map[string]interface{}{"action": "connect"}); err != nil {
+		p.Logf("report failed: %+v", err)
+	}
+
+	// Sanity checks
+	r := &rpc.ConnectResponse{}
+	if d.cluster != nil {
+		r.Error = rpc.ConnectResponse_AlreadyConnected
+		return r
+	}
+	if d.bridge != nil {
+		r.Error = rpc.ConnectResponse_Disconnecting
+		return r
+	}
+	if d.network == nil {
+		r.Error = rpc.ConnectResponse_Paused
+		return r
+	}
+	nwOk := d.network.IsOkay()
+	if !nwOk {
+		if cr.WaitForNetwork > 0 {
+			// wait the given number of seconds, checking every fifth of a second.
+			for i := 5 * cr.WaitForNetwork; !nwOk && i > 0; i-- {
+				time.Sleep(200 * time.Millisecond)
+				nwOk = d.network.IsOkay()
+			}
+		}
+		if !nwOk {
+			r.Error = rpc.ConnectResponse_EstablishingOverrides
+			return r
+		}
+	}
+
+	p.Logf("Connecting to traffic manager in namespace %s...", cr.ManagerNS)
+	cluster, err := TrackKCluster(p, runAsUserFromRPC(cr.User), cr.Context, cr.Namespace, cr.Args)
 	if err != nil {
-		out.Println(err.Error())
-		out.Send("failed", err.Error())
-		out.SendExit(1)
-		return nil
+		r.Error = rpc.ConnectResponse_ClusterFailed
+		r.ErrorText = err.Error()
+		return r
 	}
 	d.cluster = cluster
 
@@ -81,56 +95,49 @@ func (d *Daemon) Connect(
 		previewHost = ""
 	}
 
+	rai := runAsUserFromRPC(cr.User)
 	bridge, err := CheckedRetryingCommand(
 		p,
 		"bridge",
-		[]string{GetExe(), "teleproxy", "bridge", cluster.context, cluster.namespace},
+		[]string{edgectl.GetExe(), "teleproxy", "bridge", cluster.context, cluster.namespace},
 		rai,
 		checkBridge,
 		15*time.Second,
 	)
 	if err != nil {
-		out.Println(err.Error())
-		out.Send("failed", err.Error())
-		out.SendExit(1)
 		d.cluster.Close()
 		d.cluster = nil
-		return nil
+		r.Error = rpc.ConnectResponse_BridgeFailed
+		r.ErrorText = err.Error()
+		return r
 	}
 	d.bridge = bridge
 	d.cluster.SetBridgeCheck(d.bridge.IsOkay)
+	p.Logf("Connected to context %s (%s)", d.cluster.Context(), d.cluster.Server())
 
-	out.Printf(
-		"Connected to context %s (%s)\n", d.cluster.Context(), d.cluster.Server(),
-	)
-	out.Send("cluster.context", d.cluster.Context())
-	out.Send("cluster.server", d.cluster.Server())
+	r.ClusterContext = d.cluster.Context()
+	r.ClusterServer = d.cluster.Server()
 
-	tmgr, err := NewTrafficManager(p, d.cluster, managerNs, installID, isCI)
+	tmgr, err := NewTrafficManager(p, d.cluster, cr.ManagerNS, cr.InstallID, cr.IsCI)
 	if err != nil {
-		out.Println()
-		out.Println("Unable to connect to the traffic manager in your cluster.")
-		out.Println("The intercept feature will not be available.")
-		out.Println("Error was:", err)
-		// out.Println("Use <some command> to set up the traffic manager.") // FIXME
-		out.Send("intercept", false)
-	} else {
-		tmgr.previewHost = previewHost
-		d.trafficMgr = tmgr
-		out.Send("intercept", true)
+		p.Logf("Unable to connect to TrafficManager: %s", err)
+		r.Error = rpc.ConnectResponse_TrafficManagerFailed
+		r.ErrorText = err.Error()
+		return r
 	}
-	return nil
+	tmgr.previewHost = previewHost
+	d.trafficMgr = tmgr
+	return r
 }
 
-// Disconnect from the connected cluster
-func (d *Daemon) Disconnect(p *supervisor.Process, out *Emitter) error {
+// disconnect from the connected cluster
+func (d *daemon) disconnect(p *supervisor.Process) *rpc.DisconnectResponse {
 	// Sanity checks
+	r := &rpc.DisconnectResponse{}
 	if d.cluster == nil {
-		out.Println("Not connected (use 'edgectl connect' to connect to your cluster)")
-		out.Send("disconnect", "Not connected")
-		return nil
+		r.Error = rpc.DisconnectResponse_NotConnected
+		return r
 	}
-
 	_ = d.ClearIntercepts(p)
 	if d.bridge != nil {
 		d.cluster.SetBridgeCheck(nil) // Stop depending on this bridge
@@ -143,10 +150,11 @@ func (d *Daemon) Disconnect(p *supervisor.Process, out *Emitter) error {
 	}
 	err := d.cluster.Close()
 	d.cluster = nil
-
-	out.Println("Disconnected")
-	out.Send("disconnect", "Disconnected")
-	return err
+	if err != nil {
+		r.Error = rpc.DisconnectResponse_DisconnectFailed
+		r.ErrorText = err.Error()
+	}
+	return r
 }
 
 // getClusterPreviewHostname returns the hostname of the first Host resource it
@@ -229,7 +237,7 @@ func getClusterPreviewHostname(p *supervisor.Process, cluster *KCluster) (hostna
 //  curl http://traffic-proxy.svc:8022.
 // Note there is no namespace specified, as we are checking for bridge status in the
 // current namespace.
-func checkBridge(p *supervisor.Process) error {
+func checkBridge(_ *supervisor.Process) error {
 	address := "traffic-proxy.svc:8022"
 	conn, err := net.DialTimeout("tcp", address, 15*time.Second)
 	if err != nil {
