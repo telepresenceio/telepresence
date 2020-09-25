@@ -82,56 +82,56 @@ func RunAsDaemon(dns, fallback string) error {
 	return errors.New("edgectl daemon has exited")
 }
 
-type grcpService struct {
+type grpcService struct {
 	s *grpc.Server
 	d *daemon
 	p *supervisor.Process
 }
 
-func (s *grcpService) Version(_ context.Context, _ *rpc.Empty) (*rpc.VersionResponse, error) {
+func (s *grpcService) Version(_ context.Context, _ *rpc.Empty) (*rpc.VersionResponse, error) {
 	return &rpc.VersionResponse{
 		APIVersion: edgectl.ApiVersion,
 		Version:    edgectl.Version,
 	}, nil
 }
 
-func (s *grcpService) Status(_ context.Context, _ *rpc.Empty) (*rpc.StatusResponse, error) {
+func (s *grpcService) Status(_ context.Context, _ *rpc.Empty) (*rpc.StatusResponse, error) {
 	return s.d.status(s.p), nil
 }
 
-func (s *grcpService) Connect(_ context.Context, cr *rpc.ConnectRequest) (*rpc.ConnectResponse, error) {
+func (s *grpcService) Connect(_ context.Context, cr *rpc.ConnectRequest) (*rpc.ConnectResponse, error) {
 	return s.d.connect(s.p, cr), nil
 }
 
-func (s *grcpService) Disconnect(_ context.Context, _ *rpc.Empty) (*rpc.DisconnectResponse, error) {
+func (s *grpcService) Disconnect(_ context.Context, _ *rpc.Empty) (*rpc.DisconnectResponse, error) {
 	return s.d.disconnect(s.p), nil
 }
 
-func (s *grcpService) AddIntercept(_ context.Context, ir *rpc.InterceptRequest) (*rpc.InterceptResponse, error) {
+func (s *grpcService) AddIntercept(_ context.Context, ir *rpc.InterceptRequest) (*rpc.InterceptResponse, error) {
 	return s.d.addIntercept(s.p, ir), nil
 }
 
-func (s *grcpService) RemoveIntercept(_ context.Context, rr *rpc.RemoveInterceptRequest) (*rpc.InterceptResponse, error) {
+func (s *grpcService) RemoveIntercept(_ context.Context, rr *rpc.RemoveInterceptRequest) (*rpc.InterceptResponse, error) {
 	return s.d.removeIntercept(s.p, rr.Name), nil
 }
 
-func (s *grcpService) AvailableIntercepts(_ context.Context, _ *rpc.Empty) (*rpc.AvailableInterceptsResponse, error) {
+func (s *grpcService) AvailableIntercepts(_ context.Context, _ *rpc.Empty) (*rpc.AvailableInterceptsResponse, error) {
 	return s.d.availableIntercepts(s.p), nil
 }
 
-func (s *grcpService) ListIntercepts(_ context.Context, _ *rpc.Empty) (*rpc.ListInterceptsResponse, error) {
+func (s *grpcService) ListIntercepts(_ context.Context, _ *rpc.Empty) (*rpc.ListInterceptsResponse, error) {
 	return s.d.listIntercepts(s.p), nil
 }
 
-func (s *grcpService) Pause(ctx context.Context, empty *rpc.Empty) (*rpc.PauseResponse, error) {
+func (s *grpcService) Pause(ctx context.Context, empty *rpc.Empty) (*rpc.PauseResponse, error) {
 	return s.d.pause(s.p), nil
 }
 
-func (s *grcpService) Resume(ctx context.Context, empty *rpc.Empty) (*rpc.ResumeResponse, error) {
+func (s *grpcService) Resume(ctx context.Context, empty *rpc.Empty) (*rpc.ResumeResponse, error) {
 	return s.d.resume(s.p), nil
 }
 
-func (s *grcpService) Quit(ctx context.Context, empty *rpc.Empty) (*rpc.Empty, error) {
+func (s *grpcService) Quit(ctx context.Context, empty *rpc.Empty) (*rpc.Empty, error) {
 	// GracefulStop() must be called in a separate go routine since it will await the
 	// client disconnect. That doesn't happen until this function returns.
 	go s.s.GracefulStop()
@@ -151,7 +151,7 @@ func (d *daemon) runGRPCService(daemonProc *supervisor.Process) error {
 	}
 
 	grpcServer := grpc.NewServer()
-	rpc.RegisterDaemonServer(grpcServer, &grcpService{
+	rpc.RegisterDaemonServer(grpcServer, &grpcService{
 		s: grpcServer,
 		d: d,
 		p: daemonProc,
