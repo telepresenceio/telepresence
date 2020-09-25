@@ -222,8 +222,8 @@ func Resume(cmd *cobra.Command, _ []string) error {
 func Quit(cmd *cobra.Command, _ []string) error {
 	return withDaemon(func(d rpc.DaemonClient) error {
 		fmt.Fprintln(cmd.OutOrStdout(), "Edge Control Daemon quitting...")
-		_, err := d.Quit(context.Background(), &rpc.Empty{})
-		return err
+		_, _ = d.Quit(context.Background(), &rpc.Empty{})
+		return nil
 	})
 }
 
