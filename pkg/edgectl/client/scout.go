@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+
+	"github.com/datawire/ambassador/internal/pkg/edgectl"
+	"github.com/datawire/ambassador/pkg/metriton"
 )
 
 type Scout struct {

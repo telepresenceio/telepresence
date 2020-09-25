@@ -3,9 +3,10 @@ package daemon
 import (
 	"runtime"
 
+	"github.com/kballard/go-shellquote"
+
 	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
 	"github.com/datawire/ambassador/pkg/supervisor"
-	"github.com/kballard/go-shellquote"
 )
 
 // RunAsInfo contains the information required to launch a subprocess as the

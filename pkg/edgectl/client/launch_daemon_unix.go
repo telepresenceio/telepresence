@@ -12,9 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+
+	"github.com/datawire/ambassador/internal/pkg/edgectl"
 )
 
 // LaunchDaemon will launch the daemon responsible for doing the intercepts. Only the root

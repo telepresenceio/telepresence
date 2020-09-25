@@ -5,9 +5,10 @@ package daemon
 import (
 	"os"
 
+	"github.com/pkg/errors"
+
 	"github.com/datawire/ambassador/internal/pkg/edgectl"
 	"github.com/datawire/ambassador/pkg/teleproxy"
-	"github.com/pkg/errors"
 )
 
 // RunAsTeleproxyIntercept is the main function when executing as

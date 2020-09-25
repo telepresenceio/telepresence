@@ -9,11 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
+
+	"github.com/datawire/ambassador/internal/pkg/edgectl"
+	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
 )
 
 // IsServerRunning reports whether or not the daemon server is running.

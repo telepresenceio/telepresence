@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
 	"github.com/datawire/ambassador/pkg/supervisor"
-	"github.com/pkg/errors"
 )
 
 func (d *daemon) interceptStatus() (rpc.InterceptError, string) {

@@ -5,11 +5,12 @@ import (
 	"net"
 	"os"
 
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
+
 	"github.com/datawire/ambassador/internal/pkg/edgectl"
 	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
 	"github.com/datawire/ambassador/pkg/supervisor"
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
 )
 
 var Help = `The Edge Control Daemon is a long-lived background component that manages

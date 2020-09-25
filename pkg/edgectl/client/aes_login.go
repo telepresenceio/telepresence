@@ -3,10 +3,11 @@ package client
 import (
 	"fmt"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/gookit/color"
 	"github.com/spf13/cobra"
+
+	"github.com/datawire/ambassador/internal/pkg/edgectl"
+	"github.com/datawire/ambassador/pkg/k8s"
 )
 
 func AESLogin(cmd *cobra.Command, args []string) error {

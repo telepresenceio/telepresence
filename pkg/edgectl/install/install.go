@@ -15,12 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/internal/pkg/edgectl/client"
-	"github.com/datawire/ambassador/pkg/helm"
-	"github.com/datawire/ambassador/pkg/k8s"
-	"github.com/datawire/ambassador/pkg/metriton"
-	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/browser"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -28,6 +22,13 @@ import (
 	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
+
+	"github.com/datawire/ambassador/internal/pkg/edgectl"
+	"github.com/datawire/ambassador/internal/pkg/edgectl/client"
+	"github.com/datawire/ambassador/pkg/helm"
+	"github.com/datawire/ambassador/pkg/k8s"
+	"github.com/datawire/ambassador/pkg/metriton"
+	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
 const (

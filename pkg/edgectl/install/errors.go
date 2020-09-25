@@ -3,9 +3,10 @@ package edgectl
 import (
 	"fmt"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl/client"
 	"github.com/gookit/color"
 	"github.com/pkg/errors"
+
+	"github.com/datawire/ambassador/internal/pkg/edgectl/client"
 )
 
 // Each error listed here of the form *Error() should:

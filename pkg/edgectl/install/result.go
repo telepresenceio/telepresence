@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"text/template"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl/client"
 	"github.com/gookit/color"
 	"github.com/pkg/browser"
+
+	"github.com/datawire/ambassador/internal/pkg/edgectl/client"
 )
 
 // Result represents the result of an installation attempt

@@ -5,9 +5,10 @@ import (
 	"io/ioutil"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/datawire/ambassador/internal/pkg/edgectl"
 	"github.com/datawire/ambassador/pkg/supervisor"
-	"github.com/pkg/errors"
 )
 
 // MakeNetOverride sets up the network override resource for the daemon

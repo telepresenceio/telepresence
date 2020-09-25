@@ -3,8 +3,9 @@
 package daemon
 
 import (
-	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
+
+	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
 // GuessRunAsInfo attempts to construct a RunAsInfo for the user logged in at

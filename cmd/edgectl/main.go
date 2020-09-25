@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl/daemon"
+	"github.com/spf13/cobra"
 
 	"github.com/datawire/ambassador/internal/pkg/edgectl"
 	"github.com/datawire/ambassador/internal/pkg/edgectl/client"
+	"github.com/datawire/ambassador/internal/pkg/edgectl/daemon"
 	install "github.com/datawire/ambassador/internal/pkg/edgectl/install"
-	"github.com/spf13/cobra"
 )
 
 // Version is inserted at build using --ldflags -X

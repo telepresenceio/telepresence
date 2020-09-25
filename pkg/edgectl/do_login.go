@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/pkg/browser"
 	"github.com/pkg/errors"
 	k8sTypesMetaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sClientCoreV1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
+
+	"github.com/datawire/ambassador/pkg/k8s"
 )
 
 const SecretName = "ambassador-internal"
