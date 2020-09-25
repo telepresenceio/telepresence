@@ -79,10 +79,13 @@ func (x *ConnectInfo) Connect(cmd *cobra.Command, args []string) error {
 	case rpc.ConnectResponse_ClusterFailed, rpc.ConnectResponse_BridgeFailed:
 		fmt.Fprintln(stderr, r.ErrorText)
 	case rpc.ConnectResponse_TrafficManagerFailed:
-		fmt.Fprintln(stderr)
-		fmt.Fprintln(stderr, "Unable to connect to the traffic manager in your cluster.")
-		fmt.Fprintln(stderr, "The intercept feature will not be available.")
-		fmt.Fprintln(stderr, "Error was:", r.ErrorText)
+		stdout := cmd.OutOrStdout()
+		fmt.Fprintf(stdout, "Connected to context %s (%s)\n", r.ClusterContext, r.ClusterServer)
+		fmt.Fprintln(stdout)
+		fmt.Fprintln(stdout, "Unable to connect to the traffic manager in your cluster.")
+		fmt.Fprintln(stdout, "The intercept feature will not be available.")
+		fmt.Fprintln(stdout, "Error was:", r.ErrorText)
+		return nil
 	}
 	os.Exit(1)
 	return nil
