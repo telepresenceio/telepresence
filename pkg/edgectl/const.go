@@ -6,9 +6,8 @@ import (
 )
 
 const (
-	DaemonSocketName = "/var/run/edgectl-daemon.socket"
-	Logfile          = "/tmp/edgectl.log"
-	ApiVersion       = 2
+	Logfile    = "/tmp/edgectl.log"
+	ApiVersion = 3
 )
 
 var Version = "(unknown version)"
@@ -23,9 +22,8 @@ func DisplayVersion() string {
 	return fmt.Sprintf("v%s (api v%d)", Version, ApiVersion)
 }
 
+// GetExe returns the name of the running executable
 func GetExe() string {
-	executable := ""
-
 	// Figure out our executable
 	executable, err := os.Executable()
 	if err != nil {

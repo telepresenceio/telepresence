@@ -8,8 +8,10 @@ import (
 
 	"github.com/datawire/ambassador/internal/pkg/edgectl"
 	"github.com/datawire/ambassador/internal/pkg/edgectl/client"
+	"github.com/datawire/ambassador/internal/pkg/edgectl/connector"
 	"github.com/datawire/ambassador/internal/pkg/edgectl/daemon"
 	install "github.com/datawire/ambassador/internal/pkg/edgectl/install"
+	"github.com/datawire/ambassador/internal/pkg/edgectl/teleproxy"
 )
 
 // Version is inserted at build using --ldflags -X
@@ -90,7 +92,16 @@ func getRootCommand() *cobra.Command {
 		Args:   cobra.ExactArgs(2),
 		Hidden: true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return daemon.RunAsDaemon(args[0], args[1])
+			return daemon.Run(args[0], args[1])
+		},
+	})
+	rootCmd.AddCommand(&cobra.Command{
+		Use:    "connector-foreground",
+		Short:  "Launch Edge Control Connector in the foreground (debug)",
+		Args:   cobra.ExactArgs(0),
+		Hidden: true,
+		RunE: func(_ *cobra.Command, args []string) error {
+			return connector.Run()
 		},
 	})
 	teleproxyCmd := &cobra.Command{
@@ -104,7 +115,7 @@ func getRootCommand() *cobra.Command {
 		Args:   cobra.ExactArgs(2),
 		Hidden: true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return daemon.RunAsTeleproxyIntercept(args[0], args[1])
+			return teleproxy.RunAsIntercept(args[0], args[1])
 		},
 	})
 	teleproxyCmd.AddCommand(&cobra.Command{
@@ -113,7 +124,7 @@ func getRootCommand() *cobra.Command {
 		Args:   cobra.ExactArgs(2),
 		Hidden: true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return daemon.RunAsTeleproxyBridge(args[0], args[1])
+			return teleproxy.RunAsBridge(args[0], args[1])
 		},
 	})
 	rootCmd.AddCommand(teleproxyCmd)

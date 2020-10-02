@@ -1,6 +1,6 @@
 // +build !windows
 
-package daemon
+package teleproxy
 
 import (
 	"os"
@@ -11,9 +11,9 @@ import (
 	"github.com/datawire/ambassador/pkg/teleproxy"
 )
 
-// RunAsTeleproxyIntercept is the main function when executing as
+// RunAsIntercept is the main function when executing as
 // teleproxy intercept
-func RunAsTeleproxyIntercept(dns, fallback string) error {
+func RunAsIntercept(dns, fallback string) error {
 	if os.Geteuid() != 0 {
 		return errors.New("edgectl daemon as teleproxy intercept must run as root")
 	}
@@ -25,9 +25,9 @@ func RunAsTeleproxyIntercept(dns, fallback string) error {
 	return teleproxy.RunTeleproxy(tele, edgectl.DisplayVersion())
 }
 
-// RunAsTeleproxyBridge is the main function when executing as
+// RunAsBridge is the main function when executing as
 // teleproxy bridge
-func RunAsTeleproxyBridge(context, namespace string) error {
+func RunAsBridge(context, namespace string) error {
 	tele := &teleproxy.Teleproxy{
 		Mode:      "bridge",
 		Context:   context,

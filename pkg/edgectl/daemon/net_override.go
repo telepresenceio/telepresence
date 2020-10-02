@@ -11,14 +11,14 @@ import (
 	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
-// MakeNetOverride sets up the network override resource for the daemon
-func (d *daemon) MakeNetOverride(p *supervisor.Process) error {
-	netOverride, err := CheckedRetryingCommand(
+// makeNetOverride sets up the network override resource for the daemon
+func (d *service) makeNetOverride(p *supervisor.Process) error {
+	netOverride, err := edgectl.CheckedRetryingCommand(
 		p,
 		"netOverride",
-		[]string{edgectl.GetExe(), "teleproxy", "intercept", d.dns, d.fallback},
-		&RunAsInfo{},
-		checkNetOverride,
+		edgectl.GetExe(),
+		[]string{"teleproxy", "intercept", d.dns, d.fallback},
+		d.checkNetOverride,
 		10*time.Second,
 	)
 	if err != nil {
@@ -30,8 +30,8 @@ func (d *daemon) MakeNetOverride(p *supervisor.Process) error {
 
 // checkNetOverride checks the status of teleproxy intercept by doing the
 // equivalent of curl http://teleproxy/api/tables/.
-func checkNetOverride(p *supervisor.Process) error {
-	res, err := hClient.Get(fmt.Sprintf(
+func (d *service) checkNetOverride(_ *supervisor.Process) error {
+	res, err := d.hClient.Get(fmt.Sprintf(
 		"http://teleproxy%d.cachebust.telepresence.io/api/tables",
 		time.Now().Unix(),
 	))

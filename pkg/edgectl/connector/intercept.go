@@ -1,4 +1,4 @@
-package daemon
+package connector
 
 import (
 	"encoding/json"
@@ -10,22 +10,23 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/datawire/ambassador/internal/pkg/edgectl"
 	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
 	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
-func (d *daemon) interceptStatus() (rpc.InterceptError, string) {
+func (s *service) interceptStatus() (rpc.InterceptError, string) {
 	ie := rpc.InterceptError_InterceptOk
 	msg := ""
 	switch {
-	case d.cluster == nil:
+	case s.cluster == nil:
 		ie = rpc.InterceptError_NoConnection
-	case d.trafficMgr == nil:
+	case s.trafficMgr == nil:
 		ie = rpc.InterceptError_NoTrafficManager
-	case !d.trafficMgr.IsOkay():
-		if d.trafficMgr.apiErr != nil {
+	case !s.trafficMgr.IsOkay():
+		if s.trafficMgr.apiErr != nil {
 			ie = rpc.InterceptError_TrafficManagerError
-			msg = d.trafficMgr.apiErr.Error()
+			msg = s.trafficMgr.apiErr.Error()
 		} else {
 			ie = rpc.InterceptError_TrafficManagerConnecting
 		}
@@ -43,9 +44,9 @@ func (ii *InterceptInfo) path() string {
 	return fmt.Sprintf("intercept/%s/%s", ii.Namespace, ii.Deployment)
 }
 
-// PreviewURL returns the Service Preview URL for this intercept if it is
+// previewURL returns the Service Preview URL for this intercept if it is
 // configured appropriately, or the empty string otherwise.
-func (ii *InterceptInfo) PreviewURL(hostname string) (url string) {
+func (ii *InterceptInfo) previewURL(hostname string) (url string) {
 	if hostname == "" || len(ii.Patterns) != 1 {
 		return
 	}
@@ -60,8 +61,8 @@ func (ii *InterceptInfo) PreviewURL(hostname string) (url string) {
 	return
 }
 
-// Acquire an intercept from the traffic manager
-func (ii *InterceptInfo) Acquire(_ *supervisor.Process, tm *TrafficManager) (int, error) {
+// acquire an intercept from the traffic manager
+func (ii *InterceptInfo) acquire(_ *supervisor.Process, tm *trafficManager) (int, error) {
 	reqPatterns := make([]map[string]string, 0, len(ii.Patterns))
 	for header, regex := range ii.Patterns {
 		pattern := map[string]string{"name": header, "regex_match": regex}
@@ -93,9 +94,9 @@ func (ii *InterceptInfo) Acquire(_ *supervisor.Process, tm *TrafficManager) (int
 	return port, nil
 }
 
-// Retain the given intercept. This likely needs to be called every
+// retain the given intercept. This likely needs to be called every
 // five seconds or so.
-func (ii *InterceptInfo) Retain(_ *supervisor.Process, tm *TrafficManager, port int) error {
+func (ii *InterceptInfo) retain(_ *supervisor.Process, tm *trafficManager, port int) error {
 	data := []byte(fmt.Sprintf("{\"port\": %d}", port))
 	result, code, err := tm.request("POST", ii.path(), data)
 	if err != nil {
@@ -107,8 +108,8 @@ func (ii *InterceptInfo) Retain(_ *supervisor.Process, tm *TrafficManager, port 
 	return nil
 }
 
-// Release the given intercept.
-func (ii *InterceptInfo) Release(_ *supervisor.Process, tm *TrafficManager, port int) error {
+// release the given intercept.
+func (ii *InterceptInfo) release(_ *supervisor.Process, tm *trafficManager, port int) error {
 	data := []byte(fmt.Sprintf("%d", port))
 	result, code, err := tm.request("DELETE", ii.path(), data)
 	if err != nil {
@@ -121,20 +122,20 @@ func (ii *InterceptInfo) Release(_ *supervisor.Process, tm *TrafficManager, port
 }
 
 // listIntercepts lists active intercepts
-func (d *daemon) listIntercepts(_ *supervisor.Process) *rpc.ListInterceptsResponse {
+func (s *service) listIntercepts(_ *supervisor.Process) *rpc.ListInterceptsResponse {
 	r := &rpc.ListInterceptsResponse{}
-	r.Error, r.Text = d.interceptStatus()
+	r.Error, r.Text = s.interceptStatus()
 	if r.Error != rpc.InterceptError_InterceptOk {
 		return r
 	}
-	r.Intercepts = make([]*rpc.ListInterceptsResponse_ListEntry, len(d.intercepts))
-	for idx, cept := range d.intercepts {
+	r.Intercepts = make([]*rpc.ListInterceptsResponse_ListEntry, len(s.intercepts))
+	for idx, cept := range s.intercepts {
 		ii := cept.ii
 		r.Intercepts[idx] = &rpc.ListInterceptsResponse_ListEntry{
 			Name:       ii.Name,
 			Namespace:  ii.Namespace,
 			Deployment: ii.Deployment,
-			PreviewURL: ii.PreviewURL(d.trafficMgr.previewHost),
+			PreviewURL: ii.previewURL(s.trafficMgr.previewHost),
 			Patterns:   ii.Patterns,
 			TargetHost: ii.TargetHost,
 			TargetPort: ii.TargetPort,
@@ -143,20 +144,20 @@ func (d *daemon) listIntercepts(_ *supervisor.Process) *rpc.ListInterceptsRespon
 	return r
 }
 
-func (d *daemon) availableIntercepts(_ *supervisor.Process) *rpc.AvailableInterceptsResponse {
+func (s *service) availableIntercepts(_ *supervisor.Process) *rpc.AvailableInterceptsResponse {
 	r := &rpc.AvailableInterceptsResponse{}
-	r.Error, r.Text = d.interceptStatus()
+	r.Error, r.Text = s.interceptStatus()
 	if r.Error != rpc.InterceptError_InterceptOk {
 		return r
 	}
-	is := d.trafficMgr.interceptables
+	is := s.trafficMgr.interceptables
 	r.Intercepts = make([]*rpc.AvailableInterceptsResponse_ListEntry, len(is))
 	for idx, deployment := range is {
 		fields := strings.SplitN(deployment, "/", 2)
 		var av *rpc.AvailableInterceptsResponse_ListEntry
 		if len(fields) != 2 {
 			av = &rpc.AvailableInterceptsResponse_ListEntry{
-				Namespace:  d.cluster.namespace,
+				Namespace:  s.cluster.namespace,
 				Deployment: deployment,
 			}
 		} else {
@@ -171,19 +172,19 @@ func (d *daemon) availableIntercepts(_ *supervisor.Process) *rpc.AvailableInterc
 }
 
 // addIntercept adds one intercept
-func (d *daemon) addIntercept(p *supervisor.Process, ir *rpc.InterceptRequest) *rpc.InterceptResponse {
+func (s *service) addIntercept(p *supervisor.Process, ir *rpc.InterceptRequest) *rpc.InterceptResponse {
 	r := &rpc.InterceptResponse{}
-	if ir.Preview && d.trafficMgr.previewHost == "" {
+	if ir.Preview && s.trafficMgr.previewHost == "" {
 		r.Error = rpc.InterceptError_NoPreviewHost
 		return r
 	}
 
-	r.Error, r.Text = d.interceptStatus()
+	r.Error, r.Text = s.interceptStatus()
 	if r.Error != rpc.InterceptError_InterceptOk {
 		return r
 	}
 
-	for _, ic := range d.intercepts {
+	for _, ic := range s.intercepts {
 		if ic.ii.Name == ir.Name {
 			r.Error = rpc.InterceptError_AlreadyExists
 			r.Text = ir.Name
@@ -196,10 +197,10 @@ func (d *daemon) addIntercept(p *supervisor.Process, ir *rpc.InterceptRequest) *
 		// Nope. See if we have an interceptable that matches the name.
 
 		matches := make([][]string, 0)
-		for _, deployment := range d.trafficMgr.interceptables {
+		for _, deployment := range s.trafficMgr.interceptables {
 			fields := strings.SplitN(deployment, "/", 2)
 			if len(fields) != 2 {
-				fields = []string{d.cluster.namespace, fields[0]}
+				fields = []string{s.cluster.namespace, fields[0]}
 			}
 
 			if ir.Deployment == fields[1] {
@@ -226,18 +227,18 @@ func (d *daemon) addIntercept(p *supervisor.Process, ir *rpc.InterceptRequest) *
 	}
 
 	ii := &InterceptInfo{ir}
-	ic, err := MakeIntercept(p, d.trafficMgr, d.cluster, ii)
+	ic, err := makeIntercept(p, s.trafficMgr, s.cluster, ii)
 	if err != nil {
 		r.Error = rpc.InterceptError_FailedToEstablish
 		r.Text = err.Error()
 		return r
 	}
 
-	if d.trafficMgr.previewHost != "" {
-		r.PreviewURL = ii.PreviewURL(d.trafficMgr.previewHost)
+	if s.trafficMgr.previewHost != "" {
+		r.PreviewURL = ii.previewURL(s.trafficMgr.previewHost)
 	}
 
-	d.intercepts = append(d.intercepts, ic)
+	s.intercepts = append(s.intercepts, ic)
 
 	// return OK status and the chosen namespace
 	r.Text = ir.Namespace
@@ -245,11 +246,11 @@ func (d *daemon) addIntercept(p *supervisor.Process, ir *rpc.InterceptRequest) *
 }
 
 // removeIntercept removes one intercept by name
-func (d *daemon) removeIntercept(_ *supervisor.Process, name string) *rpc.InterceptResponse {
+func (s *service) removeIntercept(_ *supervisor.Process, name string) *rpc.InterceptResponse {
 	r := &rpc.InterceptResponse{}
-	for idx, cept := range d.intercepts {
+	for idx, cept := range s.intercepts {
 		if cept.ii.Name == name {
-			d.intercepts = append(d.intercepts[:idx], d.intercepts[idx+1:]...)
+			s.intercepts = append(s.intercepts[:idx], s.intercepts[idx+1:]...)
 			if err := cept.Close(); err != nil {
 				r.Error = rpc.InterceptError_FailedToRemove
 				r.Text = err.Error()
@@ -257,7 +258,7 @@ func (d *daemon) removeIntercept(_ *supervisor.Process, name string) *rpc.Interc
 			return r
 		}
 	}
-	r.Error, r.Text = d.interceptStatus()
+	r.Error, r.Text = s.interceptStatus()
 	if r.Error == rpc.InterceptError_InterceptOk {
 		r.Error = rpc.InterceptError_NotFound
 		r.Text = name
@@ -265,36 +266,36 @@ func (d *daemon) removeIntercept(_ *supervisor.Process, name string) *rpc.Interc
 	return r
 }
 
-// ClearIntercepts removes all intercepts
-func (d *daemon) ClearIntercepts(p *supervisor.Process) error {
-	for _, cept := range d.intercepts {
+// clearIntercepts removes all intercepts
+func (s *service) clearIntercepts(p *supervisor.Process) error {
+	for _, cept := range s.intercepts {
 		if err := cept.Close(); err != nil {
 			p.Logf("Closing intercept %q: %v", cept.ii.Name, err)
 		}
 	}
-	d.intercepts = d.intercepts[:0]
+	s.intercepts = s.intercepts[:0]
 	return nil
 }
 
-// Intercept is a Resource handle that represents a live intercept
-type Intercept struct {
+// intercept is a Resource handle that represents a live intercept
+type intercept struct {
 	ii            *InterceptInfo
-	tm            *TrafficManager
-	cluster       *KCluster
+	tm            *trafficManager
+	cluster       *k8sCluster
 	port          int
-	crc           Resource
+	crc           edgectl.Resource
 	mappingExists bool
-	ResourceBase
+	edgectl.ResourceBase
 }
 
 // removeMapping drops an Intercept's mapping if needed (and possible).
-func (cept *Intercept) removeMapping(p *supervisor.Process) error {
+func (cept *intercept) removeMapping(p *supervisor.Process) error {
 	var err error
 	err = nil
 
 	if cept.mappingExists {
 		p.Logf("%v: Deleting mapping in namespace %v", cept.ii.Name, cept.ii.Namespace)
-		del := cept.cluster.GetKubectlCmd(p, "delete", "-n", cept.ii.Namespace, "mapping", fmt.Sprintf("%s-mapping", cept.ii.Name))
+		del := cept.cluster.getKubectlCmd(p, "delete", "-n", cept.ii.Namespace, "mapping", fmt.Sprintf("%s-mapping", cept.ii.Name))
 		err = del.Run()
 		p.Logf("%v: Deleted mapping in namespace %v", cept.ii.Name, cept.ii.Namespace)
 	}
@@ -329,19 +330,17 @@ type interceptMapping struct {
 	Spec       mappingSpec     `json:"spec"`
 }
 
-// MakeIntercept acquires an intercept and returns a Resource handle
+// makeIntercept acquires an intercept and returns a Resource handle
 // for it
-func MakeIntercept(p *supervisor.Process, tm *TrafficManager, cluster *KCluster, ii *InterceptInfo) (*Intercept, error) {
-	port, err := ii.Acquire(p, tm)
+func makeIntercept(p *supervisor.Process, tm *trafficManager, cluster *k8sCluster, ii *InterceptInfo) (*intercept, error) {
+	port, err := ii.acquire(p, tm)
 	if err != nil {
 		return nil, err
 	}
 
-	cept := &Intercept{ii: ii, tm: tm, cluster: cluster, port: port}
+	cept := &intercept{ii: ii, tm: tm, cluster: cluster, port: port}
 	cept.mappingExists = false
-	cept.doCheck = cept.check
-	cept.doQuit = cept.quit
-	cept.setup(p.Supervisor(), ii.Name)
+	cept.Setup(p.Supervisor(), ii.Name, cept.check, cept.quit)
 
 	p.Logf("%s: Intercepting via port %v, grpc %v, using namespace %v", ii.Name, port, ii.GRPC, ii.Namespace)
 
@@ -358,7 +357,7 @@ func MakeIntercept(p *supervisor.Process, tm *TrafficManager, cluster *KCluster,
 			Rewrite:       ii.Prefix,
 			Service:       fmt.Sprintf("telepresence-proxy.%s:%d", tm.namespace, port),
 			RegexHeaders:  ii.Patterns,
-			GRPC:          ii.GRPC, // Set the grpc flag on the Intercept mapping
+			GRPC:          ii.GRPC, // Set the grpc flag on the intercept mapping
 			TimeoutMs:     60000,   // Making sure we don't have shorter timeouts on intercepts than the original Mapping
 			IdleTimeoutMs: 60000,
 		},
@@ -370,7 +369,7 @@ func MakeIntercept(p *supervisor.Process, tm *TrafficManager, cluster *KCluster,
 		return nil, errors.Wrap(err, "Intercept: mapping could not be constructed")
 	}
 
-	apply := cluster.GetKubectlCmdNoNamespace(p, "apply", "-f", "-")
+	apply := cluster.getKubectlCmdNoNamespace(p, "apply", "-f", "-")
 	apply.Stdin = strings.NewReader(string(manifest))
 	err = apply.Run()
 
@@ -382,8 +381,8 @@ func MakeIntercept(p *supervisor.Process, tm *TrafficManager, cluster *KCluster,
 
 	cept.mappingExists = true
 
-	sshCmd := []string{
-		"ssh", "-C", "-N", "telepresence@localhost",
+	sshArgs := []string{
+		"-C", "-N", "telepresence@localhost",
 		"-oConnectTimeout=10", "-oExitOnForwardFailure=yes",
 		"-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null",
 		"-p", strconv.Itoa(tm.sshPort),
@@ -392,7 +391,7 @@ func MakeIntercept(p *supervisor.Process, tm *TrafficManager, cluster *KCluster,
 
 	p.Logf("%s: starting SSH tunnel", ii.Name)
 
-	ssh, err := CheckedRetryingCommand(p, ii.Name+"-ssh", sshCmd, nil, nil, 5*time.Second)
+	ssh, err := edgectl.CheckedRetryingCommand(p, ii.Name+"-ssh", "ssh", sshArgs, nil, 5*time.Second)
 	if err != nil {
 		_ = cept.Close()
 		return nil, err
@@ -403,12 +402,12 @@ func MakeIntercept(p *supervisor.Process, tm *TrafficManager, cluster *KCluster,
 	return cept, nil
 }
 
-func (cept *Intercept) check(p *supervisor.Process) error {
-	return cept.ii.Retain(p, cept.tm, cept.port)
+func (cept *intercept) check(p *supervisor.Process) error {
+	return cept.ii.retain(p, cept.tm, cept.port)
 }
 
-func (cept *Intercept) quit(p *supervisor.Process) error {
-	cept.done = true
+func (cept *intercept) quit(p *supervisor.Process) error {
+	cept.SetDone()
 
 	p.Logf("cept.Quit removing %v", cept.ii.Name)
 
@@ -424,7 +423,7 @@ func (cept *Intercept) quit(p *supervisor.Process) error {
 
 	p.Logf("cept.Quit releasing %v", cept.ii.Name)
 
-	if err := cept.ii.Release(p, cept.tm, cept.port); err != nil {
+	if err := cept.ii.release(p, cept.tm, cept.port); err != nil {
 		p.Log(err)
 	}
 

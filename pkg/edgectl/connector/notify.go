@@ -1,4 +1,4 @@
-package daemon
+package connector
 
 import (
 	"fmt"
@@ -8,7 +8,6 @@ import (
 )
 
 var (
-	notifyRAI     *RunAsInfo
 	notifyEnabled = false
 )
 
@@ -22,27 +21,21 @@ func Notify(p *supervisor.Process, message string) {
 		return
 	}
 
-	if notifyRAI == nil {
-		var err error
-		notifyRAI, err = GuessRunAsInfo(p)
-		if err != nil {
-			p.Log(err)
-			notifyRAI = &RunAsInfo{}
-		}
-	}
-
+	var exe string
 	var args []string
 	switch runtime.GOOS {
 	case "darwin":
 		script := fmt.Sprintf("display notification \"Edge Control Daemon\" with title \"%s\"", message)
-		args = []string{"osascript", "-e", script}
+		exe = "osascript"
+		args = []string{"-e", script}
 	case "linux":
-		args = []string{"notify-send", "Edge Control Daemon", message}
+		exe = "notify-send"
+		args = []string{"Edge Control Daemon", message}
 	default:
 		return
 	}
 
-	cmd := notifyRAI.Command(p, args...)
+	cmd := p.Command(exe, args...)
 	if err := cmd.Run(); err != nil {
 		p.Logf("ERROR while notifying: %v", err)
 	}

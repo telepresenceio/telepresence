@@ -7,20 +7,39 @@ option java_outer_classname = "DaemonProto";
 
 package edgectl;
 
-// The Daemon service is responsible for connecting to the traffic manager and manage
-// intercepts.
+// The Daemon service is responsible for managing network overrides and also acts as the
+// central point for logging.
 service Daemon {
     // Returns version information from the Daemon
     rpc Version(Empty) returns (VersionResponse);
 
     // Returns the current connectivity status
-    rpc Status(Empty) returns (StatusResponse);
+    rpc Status(Empty) returns (DaemonStatusResponse);
+
+    // Turns network overrides off.
+    rpc Pause(Empty) returns (PauseResponse);
+
+    // Turns network overrides back on (after using Pause)
+    rpc Resume(Empty) returns (ResumeResponse);
+
+    // Logger accepts a stream that can be used for posting messages to the daemon logger.
+    rpc Logger(stream LogMessage) returns (Empty);
+
+    // Quits (terminates) the service.
+    rpc Quit(Empty) returns (Empty);
+}
+
+// The Connector service is responsible for connecting to the traffic manager and manage
+// intercepts. It can only run when a Daemon is running.
+service Connector {
+    // Returns version information from the Connector
+    rpc Version(Empty) returns (VersionResponse);
+
+    // Returns the current connectivity status
+    rpc Status(Empty) returns (ConnectorStatusResponse);
 
     // Connects the daemon to a cluster
     rpc Connect(ConnectRequest) returns (ConnectResponse);
-
-    // Disconnects the daemon from a connected cluster
-    rpc Disconnect(Empty) returns (DisconnectResponse);
 
     // Adds a deployment intercept
     rpc AddIntercept(InterceptRequest) returns (InterceptResponse);
@@ -34,14 +53,15 @@ service Daemon {
     // Returns a list of currently active intercepts.
     rpc ListIntercepts(Empty) returns (ListInterceptsResponse);
 
-    // Turns network overrides off.
-    rpc Pause(Empty) returns (PauseResponse);
-
-    // Turns network overrides back on (after using Pause)
-    rpc Resume(Empty) returns (ResumeResponse);
-
     // Quits (terminates) the service.
     rpc Quit(Empty) returns (Empty);
+}
+
+// LogMessage carries a message and a flag telling the service if the message is intended for
+// debugging or more general info.
+message LogMessage {
+    bool IsDebug = 1;
+    string text = 2;
 }
 
 // ConnectRequest contains the information needed to connect ot a cluster.
@@ -53,16 +73,6 @@ message ConnectRequest {
     bool IsCI = 5;
     int32 WaitForNetwork = 6;
     repeated string Args = 7;
-
-    // UserInfo contains information needed when the daemon shells out as another user.
-    // This is subject to change in the near future and this message type will be removed.
-    message UserInfo {
-        string Name = 1;
-        string Cwd = 2;
-        repeated string Env = 3;
-    }
-
-    UserInfo User = 8; // Remove when connector runs as user
 }
 
 message ConnectResponse {
@@ -70,28 +80,15 @@ message ConnectResponse {
         Ok = 0;
         AlreadyConnected = 1;
         Disconnecting = 2;
-        Paused = 3;
-        EstablishingOverrides = 4;
-        ClusterFailed = 5;
-        BridgeFailed = 6;
-        TrafficManagerFailed = 7;
+        ClusterFailed = 3;
+        BridgeFailed = 4;
+        TrafficManagerFailed = 5;
     }
     ErrType Error = 1;
     string ErrorText = 2;
     string ClusterContext = 3;
     string ClusterServer = 4;
 }
-
-message DisconnectResponse {
-    enum ErrType {
-        Ok = 0;
-        NotConnected = 1;
-        DisconnectFailed = 2;
-    }
-    ErrType Error = 1;
-    string ErrorText = 2;
-}
-
 
 message PauseResponse {
     enum ErrType {
@@ -123,12 +120,21 @@ message VersionResponse {
 }
 
 
-message StatusResponse {
+message DaemonStatusResponse {
     enum ErrType {
         Ok = 0;
-        Paused = 1;
-        NoNetwork = 2;
-        Disconnected = 3;
+        NotStarted = 1;
+        Paused = 2;
+        NoNetwork = 3;
+     }
+    ErrType Error = 1;
+}
+
+message ConnectorStatusResponse {
+    enum ErrType {
+        Ok = 0;
+        NotStarted = 1;
+        Disconnected = 2;
     }
     ErrType Error = 1;
     string ErrorText = 2;
