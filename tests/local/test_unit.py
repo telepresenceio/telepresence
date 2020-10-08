@@ -178,6 +178,8 @@ spec:
       - name: nginxhttps
         image: ___replace___me___
         command: ["/usr/src/app/run.sh"]
+        securityContext:
+          runAsUser: 0
         terminationMessagePolicy: "FallbackToLogsOnError"
         imagePullPolicy: "IfNotPresent"
         ports:

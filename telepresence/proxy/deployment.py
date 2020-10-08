@@ -436,6 +436,8 @@ def new_swapped_deployment(
                     pass
             # Set running command explicitly
             container["command"] = ["/usr/src/app/run.sh"]
+            # Run the container as root. Required by telepresence images.
+            container.setdefault("securityContext", {})["runAsUser"] = 0
             # We don't write out termination file:
             container["terminationMessagePolicy"] = "FallbackToLogsOnError"
             # Use custom name server if necessary:

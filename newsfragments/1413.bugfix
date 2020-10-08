@@ -1,0 +1,1 @@
+Swapping a deployment with a securityContext.runAsUser other than root no longer fail.
