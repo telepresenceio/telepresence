@@ -28,9 +28,14 @@ func Version(cmd *cobra.Command, _ []string) error {
 	av, dv, err := daemonVersion()
 	if err == nil {
 		fmt.Fprintf(cmd.OutOrStdout(), "Client %s\nDaemon v%s (api v%d)\n", edgectl.DisplayVersion(), dv, av)
-		os.Exit(0)
+		return nil
 	}
-	return err
+	if os.IsNotExist(err) {
+		fmt.Fprintf(cmd.OutOrStdout(), "Client %s\nDaemon is not running (see \"edgectl help daemon\")\n", edgectl.DisplayVersion())
+		return nil
+	}
+	// Socket exists but connection failed anyway.
+	return fmt.Errorf("Client %s\nUnable to connect to daemon: %s", edgectl.DisplayVersion(), err.Error())
 }
 
 // A ConnectInfo contains all information needed to connect to a cluster.
@@ -414,6 +419,10 @@ func RemoveIntercept(cmd *cobra.Command, args []string) error {
 }
 
 func daemonVersion() (apiVersion int, version string, err error) {
+	_, err = os.Stat(edgectl.DaemonSocketName)
+	if err != nil {
+		return
+	}
 	err = withDaemon(func(d rpc.DaemonClient) error {
 		vi, err := d.Version(context.Background(), &rpc.Empty{})
 		if err == nil {
