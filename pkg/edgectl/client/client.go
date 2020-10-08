@@ -149,6 +149,9 @@ func Status(cmd *cobra.Command, _ []string) error {
 			if ic.Connected {
 				fmt.Fprintf(out, "  Interceptable: %d deployments\n", ic.InterceptableCount)
 				fmt.Fprintf(out, "  Intercepts:    %d total, %d local\n", ic.ClusterIntercepts, ic.LocalIntercepts)
+				if ic.LicenseInfo != "" {
+					fmt.Fprintln(out, ic.LicenseInfo)
+				}
 				break
 			}
 			if s.ErrorText != "" {
