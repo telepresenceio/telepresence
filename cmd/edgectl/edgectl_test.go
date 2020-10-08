@@ -128,7 +128,6 @@ func TestSmokeOutbound(t *testing.T) {
 	}()
 
 	fmt.Println("pre-daemon")
-	require.NoError(t, run(executable, "version"), "version with no daemon")
 	require.Error(t, run(executable, "status"), "status with no daemon")
 	require.Error(t, run(executable, "daemon"), "daemon without sudo")
 

@@ -33,8 +33,7 @@ func Version(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 	if err == daemonIsNotRunning {
-		fmt.Fprintf(cmd.OutOrStdout(), "Client %s\n%s\n", edgectl.DisplayVersion(), err.Error())
-		return nil
+		return fmt.Errorf("Client %s\n%s\n", edgectl.DisplayVersion(), err.Error())
 	}
 	// Socket exists but connection failed anyway.
 	return fmt.Errorf("Client %s\nUnable to connect to daemon: %s", edgectl.DisplayVersion(), err.Error())
