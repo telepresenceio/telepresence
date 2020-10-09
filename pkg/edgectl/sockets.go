@@ -35,6 +35,24 @@ func WaitUntilSocketVanishes(name, path string, ttw time.Duration) (err error) {
 	return fmt.Errorf("timeout while waiting for %s to exit", name)
 }
 
+// WaitUntilSocketAppears waits until the socket at the given path comes into
+// existence and returns when that happens. The wait will be max ttw (time to wait) long.
+// An error is returned if that time is exceeded before the socket is removed.
+func WaitUntilSocketAppears(name, path string, ttw time.Duration) (err error) {
+	giveUp := time.Now().Add(ttw)
+	for giveUp.After(time.Now()) {
+		_, err = os.Stat(path)
+		if err == nil {
+			return
+		}
+		if !os.IsNotExist(err) {
+			return err
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return fmt.Errorf("timeout while waiting for %s to exit", name)
+}
+
 func SocketURL(socket string) string {
 	// TODO: Revise use of passthrough once this is fixed in grpc-go.
 	//  see: https://github.com/grpc/grpc-go/issues/1741

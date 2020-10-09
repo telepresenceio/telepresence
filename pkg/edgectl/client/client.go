@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
@@ -19,15 +20,14 @@ import (
 
 // IsServerRunning reports whether or not the daemon server is running.
 func IsServerRunning() bool {
-	_, _, err := daemonVersion()
-	return err == nil
+	return assertDaemonStarted() == nil
 }
 
 var daemonIsNotRunning = errors.New("Daemon is not running (see \"edgectl help daemon\")")
 
 // Version requests version info from the daemon and prints both client and daemon version.
 func Version(cmd *cobra.Command, _ []string) error {
-	av, dv, err := daemonVersion()
+	av, dv, err := daemonVersion(cmd.OutOrStdout())
 	if err == nil {
 		fmt.Fprintf(cmd.OutOrStdout(), "Client %s\nDaemon v%s (api v%d)\n", edgectl.DisplayVersion(), dv, av)
 		return nil
@@ -47,7 +47,7 @@ type ConnectInfo struct {
 
 // Connect asks the daemon to connect to a cluster
 func (x *ConnectInfo) Connect(cmd *cobra.Command, args []string) error {
-	ds, err := daemonStatus()
+	ds, err := daemonStatus(cmd.OutOrStdout())
 	if err != nil {
 		return err
 	}
@@ -160,7 +160,7 @@ func Disconnect(_ *cobra.Command, _ []string) error {
 func Status(cmd *cobra.Command, _ []string) error {
 	var ds *rpc.DaemonStatusResponse
 	var err error
-	if ds, err = daemonStatus(); err != nil {
+	if ds, err = daemonStatus(cmd.OutOrStdout()); err != nil {
 		return err
 	}
 
@@ -221,11 +221,11 @@ func Status(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func daemonStatus() (status *rpc.DaemonStatusResponse, err error) {
+func daemonStatus(out io.Writer) (status *rpc.DaemonStatusResponse, err error) {
 	if assertDaemonStarted() != nil {
 		return &rpc.DaemonStatusResponse{Error: rpc.DaemonStatusResponse_NotStarted}, nil
 	}
-	err = withDaemon(func(d rpc.DaemonClient) error {
+	err = withDaemon(out, func(d rpc.DaemonClient) error {
 		status, err = d.Status(context.Background(), &rpc.Empty{})
 		return err
 	})
@@ -247,7 +247,7 @@ func connectorStatus() (status *rpc.ConnectorStatusResponse, err error) {
 func Pause(cmd *cobra.Command, _ []string) error {
 	var r *rpc.PauseResponse
 	var err error
-	err = withDaemon(func(d rpc.DaemonClient) error {
+	err = withDaemon(cmd.OutOrStdout(), func(d rpc.DaemonClient) error {
 		r, err = d.Pause(context.Background(), &rpc.Empty{})
 		return err
 	})
@@ -277,7 +277,7 @@ Please disconnect before pausing.`
 func Resume(cmd *cobra.Command, _ []string) error {
 	var r *rpc.ResumeResponse
 	var err error
-	err = withDaemon(func(d rpc.DaemonClient) error {
+	err = withDaemon(cmd.OutOrStdout(), func(d rpc.DaemonClient) error {
 		r, err = d.Resume(context.Background(), &rpc.Empty{})
 		return err
 	})
@@ -301,24 +301,11 @@ func Resume(cmd *cobra.Command, _ []string) error {
 
 // Quit sends the quit message to the daemon and waits for it to exit.
 func Quit(cmd *cobra.Command, _ []string) error {
-	out := cmd.OutOrStdout()
-	if assertDaemonStarted() != nil {
-		fmt.Fprintln(out, "Edge Control Daemon is not running")
-		return nil
-	}
-	return withDaemon(func(d rpc.DaemonClient) error {
-		fmt.Fprint(out, "Edge Control Daemon quitting...")
-		_, err := d.Quit(context.Background(), &rpc.Empty{})
-		if err == nil {
-			err = edgectl.WaitUntilSocketVanishes("daemon", edgectl.DaemonSocketName, 5*time.Second)
-		}
-		if err == nil {
-			fmt.Fprintln(out, "done")
-		} else {
-			fmt.Fprintln(out)
-		}
+	ds, err := newDaemonState(cmd.OutOrStdout(), "", "")
+	if err != nil {
 		return err
-	})
+	}
+	return ds.DeactivateState()
 }
 
 // An InterceptInfo contains all information needed to add a deployment intercept.
@@ -497,8 +484,8 @@ func RemoveIntercept(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func daemonVersion() (apiVersion int, version string, err error) {
-	err = withDaemon(func(d rpc.DaemonClient) error {
+func daemonVersion(out io.Writer) (apiVersion int, version string, err error) {
+	err = withDaemon(out, func(d rpc.DaemonClient) error {
 		vi, err := d.Version(context.Background(), &rpc.Empty{})
 		if err == nil {
 			apiVersion = int(vi.APIVersion)
@@ -543,17 +530,14 @@ func withConnector(f func(rpc.ConnectorClient) error) error {
 
 // withDaemon establishes a connection, calls the function with the gRPC client, and ensures
 // that the connection is closed.
-func withDaemon(f func(rpc.DaemonClient) error) error {
-	var err error
-	if err = assertDaemonStarted(); err != nil {
+func withDaemon(out io.Writer, f func(rpc.DaemonClient) error) error {
+	// OK with dns and fallback empty. Daemon must be up and running
+	ds, err := newDaemonState(out, "", "")
+	if err != nil {
 		return err
 	}
-	var conn *grpc.ClientConn
-	if conn, err = grpc.Dial(edgectl.SocketURL(edgectl.DaemonSocketName), grpc.WithInsecure()); err != nil {
-		return err
-	}
-	defer conn.Close()
-	return f(rpc.NewDaemonClient(conn))
+	defer ds.disconnect()
+	return f(ds.grpc)
 }
 
 func interceptMessage(ie rpc.InterceptError, txt string) string {

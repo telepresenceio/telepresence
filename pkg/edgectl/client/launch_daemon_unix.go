@@ -12,7 +12,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -32,41 +31,13 @@ func LaunchDaemon(cmd *cobra.Command, args []string) error {
 	}
 	dns, _ := cmd.Flags().GetString("dns")
 	fallback, _ := cmd.Flags().GetString("fallback")
-	started, err := ensureDaemonRunning(dns, fallback)
-	if err != nil {
-		return err
-	}
-	if !started {
+	ds, err := newDaemonState(cmd.OutOrStdout(), dns, fallback)
+	defer ds.disconnect()
+	if err == nil {
 		return errors.New("Daemon already started")
 	}
-	return nil
-}
-
-func ensureDaemonRunning(dns, fallback string) (bool, error) {
-	quitLegacyDaemon()
-
-	if assertDaemonStarted() == nil {
-		// Daemon is already running
-		return false, nil
-	}
-
-	fmt.Println("Launching Edge Control Daemon", edgectl.DisplayVersion())
-
-	err := runAsRoot(edgectl.GetExe(), []string{"daemon-foreground", dns, fallback})
-	if err != nil {
-		return false, errors.Wrap(err, "failed to launch the server")
-	}
-
-	for count := 0; count < 40; count++ {
-		if IsServerRunning() {
-			return true, nil
-		}
-		if count == 4 {
-			fmt.Println("Waiting for daemon to start...")
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	return false, fmt.Errorf("Daemon service did not come up!\nTake a look at %s for more information.", edgectl.Logfile)
+	_, err = ds.EnsureState()
+	return err
 }
 
 // DaemonWorks returns whether the daemon can function on this platform
@@ -77,7 +48,7 @@ func DaemonWorks() bool {
 const legacySocketName = "/var/run/edgectl.socket"
 
 // quitLegacyDaemon ensures that an older version of the daemon quits and removes the old socket.
-func quitLegacyDaemon() {
+func quitLegacyDaemon(out io.Writer) {
 	if !edgectl.SocketExists(legacySocketName) {
 		return // no legacy daemon is running
 	}
@@ -87,7 +58,7 @@ func quitLegacyDaemon() {
 		io.WriteString(conn, `{"Args": ["edgectl", "quit"], "APIVersion": 1}`)
 		scanner := bufio.NewScanner(conn)
 		for scanner.Scan() {
-			fmt.Printf("Legacy daemon: %s\n", scanner.Text())
+			fmt.Fprintf(out, "Legacy daemon: %s\n", scanner.Text())
 		}
 	}
 }
