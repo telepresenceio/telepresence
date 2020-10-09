@@ -4,15 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc"
 
 	"github.com/datawire/ambassador/internal/pkg/edgectl"
 	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
@@ -47,113 +44,32 @@ type ConnectInfo struct {
 
 // Connect asks the daemon to connect to a cluster
 func (x *ConnectInfo) Connect(cmd *cobra.Command, args []string) error {
-	ds, err := daemonStatus(cmd.OutOrStdout())
+	ds, err := newDaemonState(cmd.OutOrStdout(), "", "")
 	if err != nil {
 		return err
 	}
-	switch ds.Error {
-	case rpc.DaemonStatusResponse_Ok:
-	case rpc.DaemonStatusResponse_NotStarted:
-		return assertDaemonStarted()
-	case rpc.DaemonStatusResponse_NoNetwork:
-		return errors.New("Unable to connect: Network overrides are not established")
-	case rpc.DaemonStatusResponse_Paused:
-		return errors.New("Unable to connect: Network overrides are paused (use 'edgectl resume')")
-	}
-
-	if assertConnectorStarted() == nil {
-		fmt.Fprintln(cmd.OutOrStdout(), "Already connected")
-		return nil
-	}
-
-	connectorCmd := exec.Command(edgectl.GetExe(), "connector-foreground")
-	connectorCmd.Env = os.Environ()
-	if err = connectorCmd.Start(); err != nil {
-		return errors.Wrap(err, "failed to launch the connector service")
-	}
-
-	x.Args = args
-	x.InstallID = NewScout("unused").Reporter.InstallID()
+	defer ds.disconnect()
 
 	// When set, wait that number of seconds for network before returning ConnectResponse_EstablishingOverrides
 	x.WaitForNetwork = 0
 
-	// TODO: Progress reporting during connect. Either divide into several calls and report completion
-	//  of each, or use a stream. Can be made as part of ticket #1334.
-	var r *rpc.ConnectResponse
-	fmt.Fprintf(cmd.OutOrStdout(), "Connecting to traffic manager in namespace %s...\n", x.ManagerNS)
-
-	success := false
-	for count := 0; count < 40; count++ {
-		err = withConnector(func(c rpc.ConnectorClient) error {
-			r, err = c.Connect(context.Background(), &x.ConnectRequest)
-			success = err == nil
-			return err
-		})
-		if success {
-			break
-		}
-		if count == 4 {
-			fmt.Println("Waiting for connector to start...")
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	if !success {
-		sb := strings.Builder{}
-		sb.WriteString("Connector service did not come up!")
-		if err != nil {
-			sb.WriteString("\nError was: ")
-			sb.WriteString(err.Error())
-		}
-		sb.WriteString("\nTake a look at ")
-		sb.WriteString(edgectl.Logfile)
-		sb.WriteString(" for more information.")
-		err = errors.New(sb.String())
-	}
-	if err != nil {
-		return err
+	cs, err := newConnectorState(ds.grpc, &x.ConnectRequest, cmd.OutOrStdout())
+	defer cs.disconnect()
+	if err == nil {
+		return errors.New("Already connected")
 	}
 
-	var msg string
-	switch r.Error {
-	case rpc.ConnectResponse_Ok:
-		fmt.Fprintf(cmd.OutOrStdout(), "Connected to context %s (%s)\n", r.ClusterContext, r.ClusterServer)
-		return nil
-	case rpc.ConnectResponse_AlreadyConnected:
-		fmt.Fprintln(cmd.OutOrStdout(), "Already connected")
-		return nil
-	case rpc.ConnectResponse_TrafficManagerFailed:
-		fmt.Fprintf(cmd.OutOrStdout(), `Connected to context %s (%s)
-
-Unable to connect to the traffic manager.
-The intercept feature will not be available.
-Error was: %s
-`, r.ClusterContext, r.ClusterServer, r.ErrorText)
-
-		// The connect is considered a success. There's still a cluster connection and bridge.
-		return nil
-	case rpc.ConnectResponse_Disconnecting:
-		msg = "Unable to connect while disconnecting"
-	case rpc.ConnectResponse_ClusterFailed, rpc.ConnectResponse_BridgeFailed:
-		msg = r.ErrorText
-	}
-	return errors.New(msg)
+	_, err = cs.EnsureState()
+	return err
 }
 
 // Disconnect asks the daemon to disconnect from the connected cluster
-func Disconnect(_ *cobra.Command, _ []string) error {
-	if assertConnectorStarted() != nil {
-		return errors.New("Not connected")
-	}
-	var err error
-	err = withConnector(func(d rpc.ConnectorClient) error {
-		_, err = d.Quit(context.Background(), &rpc.Empty{})
-		return err
-	})
+func Disconnect(cmd *cobra.Command, _ []string) error {
+	cs, err := newConnectorState(nil, nil, cmd.OutOrStdout())
 	if err != nil {
 		return err
 	}
-	return edgectl.WaitUntilSocketVanishes("connector", edgectl.ConnectorSocketName, 5*time.Second)
+	return cs.DeactivateState()
 }
 
 // Status will retrieve connectivity status from the daemon and print it on stdout.
@@ -178,7 +94,7 @@ func Status(cmd *cobra.Command, _ []string) error {
 	}
 
 	var cs *rpc.ConnectorStatusResponse
-	if cs, err = connectorStatus(); err != nil {
+	if cs, err = connectorStatus(cmd.OutOrStdout()); err != nil {
 		return err
 	}
 	switch cs.Error {
@@ -232,11 +148,11 @@ func daemonStatus(out io.Writer) (status *rpc.DaemonStatusResponse, err error) {
 	return
 }
 
-func connectorStatus() (status *rpc.ConnectorStatusResponse, err error) {
+func connectorStatus(out io.Writer) (status *rpc.ConnectorStatusResponse, err error) {
 	if assertConnectorStarted() != nil {
 		return &rpc.ConnectorStatusResponse{Error: rpc.ConnectorStatusResponse_NotStarted}, nil
 	}
-	err = withConnector(func(d rpc.ConnectorClient) error {
+	err = withConnector(out, func(d rpc.ConnectorClient) error {
 		status, err = d.Status(context.Background(), &rpc.Empty{})
 		return err
 	})
@@ -384,7 +300,7 @@ func (x *InterceptInfo) AddIntercept(cmd *cobra.Command, args []string) error {
 	}
 
 	var r *rpc.InterceptResponse
-	err = withConnector(func(c rpc.ConnectorClient) error {
+	err = withConnector(cmd.OutOrStdout(), func(c rpc.ConnectorClient) error {
 		r, err = c.AddIntercept(context.Background(), &x.InterceptRequest)
 		return err
 	})
@@ -406,7 +322,7 @@ func (x *InterceptInfo) AddIntercept(cmd *cobra.Command, args []string) error {
 func AvailableIntercepts(cmd *cobra.Command, _ []string) error {
 	var r *rpc.AvailableInterceptsResponse
 	var err error
-	err = withConnector(func(c rpc.ConnectorClient) error {
+	err = withConnector(cmd.OutOrStdout(), func(c rpc.ConnectorClient) error {
 		r, err = c.AvailableIntercepts(context.Background(), &rpc.Empty{})
 		return err
 	})
@@ -432,7 +348,7 @@ func AvailableIntercepts(cmd *cobra.Command, _ []string) error {
 func ListIntercepts(cmd *cobra.Command, _ []string) error {
 	var r *rpc.ListInterceptsResponse
 	var err error
-	err = withConnector(func(c rpc.ConnectorClient) error {
+	err = withConnector(cmd.OutOrStdout(), func(c rpc.ConnectorClient) error {
 		r, err = c.ListIntercepts(context.Background(), &rpc.Empty{})
 		return err
 	})
@@ -471,7 +387,7 @@ func RemoveIntercept(cmd *cobra.Command, args []string) error {
 	name := strings.TrimSpace(args[0])
 	var r *rpc.InterceptResponse
 	var err error
-	err = withConnector(func(c rpc.ConnectorClient) error {
+	err = withConnector(cmd.OutOrStdout(), func(c rpc.ConnectorClient) error {
 		r, err = c.RemoveIntercept(context.Background(), &rpc.RemoveInterceptRequest{Name: name})
 		return err
 	})
@@ -512,20 +428,18 @@ func assertDaemonStarted() error {
 
 // withDaemon establishes a connection, calls the function with the gRPC client, and ensures
 // that the connection is closed.
-func withConnector(f func(rpc.ConnectorClient) error) error {
-	var err error
-	if err = assertDaemonStarted(); err != nil {
+func withConnector(out io.Writer, f func(rpc.ConnectorClient) error) error {
+	ds, err := newDaemonState(out, "", "")
+	if err != nil {
 		return err
 	}
-	if err = assertConnectorStarted(); err != nil {
+	defer ds.disconnect()
+	cs, err := newConnectorState(ds.grpc, nil, out)
+	if err != nil {
 		return err
 	}
-	var conn *grpc.ClientConn
-	if conn, err = grpc.Dial(edgectl.SocketURL(edgectl.ConnectorSocketName), grpc.WithInsecure()); err != nil {
-		return err
-	}
-	defer conn.Close()
-	return f(rpc.NewConnectorClient(conn))
+	defer cs.disconnect()
+	return f(cs.grpc)
 }
 
 // withDaemon establishes a connection, calls the function with the gRPC client, and ensures
