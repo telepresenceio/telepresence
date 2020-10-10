@@ -230,21 +230,33 @@ type InterceptInfo struct {
 }
 
 // AddIntercept tells the daemon to add a deployment intercept.
-func (x *InterceptInfo) AddIntercept(cmd *cobra.Command, args []string) error {
-	x.Deployment = args[0]
-	if x.Name == "" {
-		x.Name = fmt.Sprintf("cept-%d", time.Now().Unix())
+func (ii *InterceptInfo) AddIntercept(cmd *cobra.Command, args []string) error {
+	ii.Deployment = args[0]
+	err := prepareIntercept(cmd, &ii.InterceptRequest)
+	if err != nil {
+		return err
+	}
+	return withConnector(cmd.OutOrStdout(), func(c rpc.ConnectorClient) error {
+		is := newInterceptState(c, &ii.InterceptRequest, cmd.OutOrStdout())
+		_, err = is.EnsureState()
+		return err
+	})
+}
+
+func prepareIntercept(cmd *cobra.Command, ii *rpc.InterceptRequest) error {
+	if ii.Name == "" {
+		ii.Name = fmt.Sprintf("cept-%d", time.Now().Unix())
 	}
 
 	// if intercept.Namespace == "" {
 	// 	intercept.Namespace = "default"
 	// }
 
-	if x.Prefix == "" {
-		x.Prefix = "/"
+	if ii.Prefix == "" {
+		ii.Prefix = "/"
 	}
 	var host, portStr string
-	hp := strings.SplitN(x.TargetHost, ":", 2)
+	hp := strings.SplitN(ii.TargetHost, ":", 2)
 	if len(hp) < 2 {
 		portStr = hp[0]
 	} else {
@@ -257,10 +269,10 @@ func (x *InterceptInfo) AddIntercept(cmd *cobra.Command, args []string) error {
 	port, err := strconv.Atoi(portStr)
 
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("Failed to parse %q as HOST:PORT: %v\n", x.TargetHost))
+		return errors.Wrap(err, fmt.Sprintf("Failed to parse %q as HOST:PORT: %v\n", ii.TargetHost))
 	}
-	x.TargetHost = host
-	x.TargetPort = int32(port)
+	ii.TargetHost = host
+	ii.TargetPort = int32(port)
 
 	// If the user specifies --preview on the command line, then use its
 	// value (--preview is the same as --preview=true, or it could be
@@ -268,16 +280,16 @@ func (x *InterceptInfo) AddIntercept(cmd *cobra.Command, args []string) error {
 	// the command line, compute its value from the presence or absence
 	// of --match, since they are mutually exclusive.
 	userSetPreviewFlag := cmd.Flags().Changed("preview")
-	userSetMatchFlag := len(x.Patterns) > 0
+	userSetMatchFlag := len(ii.Patterns) > 0
 
 	switch {
-	case userSetPreviewFlag && x.Preview:
+	case userSetPreviewFlag && ii.Preview:
 		// User specified --preview (or --preview=true) at the command line
 		if userSetMatchFlag {
 			return errors.New("Error: Cannot use --match and --preview at the same time")
 		}
 		// ok: --preview=true and no --match
-	case userSetPreviewFlag && !x.Preview:
+	case userSetPreviewFlag && !ii.Preview:
 		// User specified --preview=false at the command line
 		if !userSetMatchFlag {
 			return errors.New("Error: Must specify --match when using --preview=false")
@@ -287,33 +299,16 @@ func (x *InterceptInfo) AddIntercept(cmd *cobra.Command, args []string) error {
 		// User did not specify --preview at the command line
 		if userSetMatchFlag {
 			// ok: at least one --match
-			x.Preview = false
+			ii.Preview = false
 		} else {
 			// ok: neither --match nor --preview, fall back to preview
-			x.Preview = true
+			ii.Preview = true
 		}
 	}
 
-	if x.Preview {
-		x.Patterns = make(map[string]string)
-		x.Patterns["x-service-preview"] = NewScout("unused").Reporter.InstallID()
-	}
-
-	var r *rpc.InterceptResponse
-	err = withConnector(cmd.OutOrStdout(), func(c rpc.ConnectorClient) error {
-		r, err = c.AddIntercept(context.Background(), &x.InterceptRequest)
-		return err
-	})
-	if err != nil {
-		return err
-	}
-	if r.Error != rpc.InterceptError_InterceptOk {
-		return errors.New(interceptMessage(r.Error, r.Text))
-	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Using deployment %s in namespace %s\n", x.Deployment, r.Text)
-
-	if r.PreviewURL != "" {
-		fmt.Fprintln(cmd.OutOrStdout(), "Share a preview of your changes with anyone by visiting\n  ", r.PreviewURL)
+	if ii.Preview {
+		ii.Patterns = make(map[string]string)
+		ii.Patterns["x-service-preview"] = NewScout("unused").Reporter.InstallID()
 	}
 	return nil
 }
@@ -384,20 +379,10 @@ func ListIntercepts(cmd *cobra.Command, _ []string) error {
 
 // RemoveIntercept tells the daemon to deactivate and remove an existent intercept
 func RemoveIntercept(cmd *cobra.Command, args []string) error {
-	name := strings.TrimSpace(args[0])
-	var r *rpc.InterceptResponse
-	var err error
-	err = withConnector(cmd.OutOrStdout(), func(c rpc.ConnectorClient) error {
-		r, err = c.RemoveIntercept(context.Background(), &rpc.RemoveInterceptRequest{Name: name})
-		return err
+	return withConnector(cmd.OutOrStdout(), func(c rpc.ConnectorClient) error {
+		is := newInterceptState(c, &rpc.InterceptRequest{Name: strings.TrimSpace(args[0])}, cmd.OutOrStdout())
+		return is.DeactivateState()
 	})
-	if err != nil {
-		return err
-	}
-	if r.Error != rpc.InterceptError_InterceptOk {
-		return errors.New(interceptMessage(r.Error, r.Text))
-	}
-	return nil
 }
 
 func daemonVersion(out io.Writer) (apiVersion int, version string, err error) {
