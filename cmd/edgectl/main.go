@@ -35,7 +35,7 @@ func main() {
 			},
 			{
 				GroupName: "Advanced Commands",
-				CmdNames:  []string{"daemon", "pause", "resume", "quit"},
+				CmdNames:  []string{"daemon", "pause", "resume", "quit", "run"},
 			},
 			{
 				GroupName: "Other Commands",
@@ -260,6 +260,30 @@ func getRootCommand() *cobra.Command {
 		}
 		interceptCmd.SetUsageFunc(client.NewCmdUsage(interceptCmd, interceptCG))
 		rootCmd.AddCommand(interceptCmd)
+
+		runInfo := &client.RunInfo{}
+		runCmd := &cobra.Command{
+			Use:   "run",
+			Short: "Launch Daemon, connect to traffic manager, intercept a deployment, and run a command",
+			Long:  client.RunHelp,
+			Args:  cobra.MinimumNArgs(1),
+			RunE:  runInfo.RunCommand,
+		}
+		runFlags := runCmd.Flags()
+		runFlags.StringVarP(&runInfo.Deployment, "deployment", "d", "", "name of deployment to intercept")
+		runFlags.StringVarP(&runInfo.Name, "name", "n", "", "a name for this intercept")
+		runFlags.StringVar(&runInfo.Prefix, "prefix", "/", "prefix to intercept")
+		runFlags.BoolVarP(&runInfo.Preview, "preview", "p", true, "use a preview URL") // this default is unused
+		runFlags.BoolVarP(&runInfo.GRPC, "grpc", "", false, "intercept GRPC traffic")
+		runFlags.StringVarP(&runInfo.TargetHost, "target", "t", "", "the [HOST:]PORT to forward to")
+		_ = runCmd.MarkFlagRequired("target")
+		runFlags.StringToStringVarP(&runInfo.Patterns, "match", "m", nil, "match expression (HEADER=REGEX)")
+		runFlags.StringVarP(&runInfo.InterceptRequest.Namespace, "namespace", "", "", "Kubernetes namespace in which to create mapping for intercept")
+		runFlags.StringVarP(&runInfo.ManagerNS,
+			"manager-namespace", "", "ambassador",
+			"The Kubernetes namespace in which the Traffic Manager is running.",
+		)
+		rootCmd.AddCommand(runCmd)
 	} else {
 		rootCmd.AddCommand(&cobra.Command{
 			Use:   "version",
