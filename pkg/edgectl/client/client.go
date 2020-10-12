@@ -43,7 +43,7 @@ type ConnectInfo struct {
 }
 
 // Connect asks the daemon to connect to a cluster
-func (x *ConnectInfo) Connect(cmd *cobra.Command, args []string) error {
+func (ci *ConnectInfo) Connect(cmd *cobra.Command, args []string) error {
 	ds, err := newDaemonState(cmd.OutOrStdout(), "", "")
 	if err != nil {
 		return err
@@ -51,9 +51,9 @@ func (x *ConnectInfo) Connect(cmd *cobra.Command, args []string) error {
 	defer ds.disconnect()
 
 	// When set, wait that number of seconds for network before returning ConnectResponse_EstablishingOverrides
-	x.WaitForNetwork = 0
+	ci.WaitForNetwork = 0
 
-	cs, err := newConnectorState(ds.grpc, &x.ConnectRequest, cmd.OutOrStdout())
+	cs, err := newConnectorState(ds.grpc, &ci.ConnectRequest, cmd.OutOrStdout())
 	defer cs.disconnect()
 	if err == nil {
 		return errors.New("Already connected")
