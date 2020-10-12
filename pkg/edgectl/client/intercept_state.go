@@ -36,6 +36,8 @@ func (is *interceptState) EnsureState() (bool, error) {
 	case rpc.InterceptError_AlreadyExists:
 		fmt.Fprintln(is.out, interceptMessage(r.Error, r.Text))
 		return false, nil
+	case rpc.InterceptError_NoConnection:
+		return false, connectorIsNotRunning
 	}
 	return false, errors.New(interceptMessage(r.Error, r.Text))
 }

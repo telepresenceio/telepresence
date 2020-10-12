@@ -38,7 +38,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 		switch dr.Error {
 		case rpc.DaemonStatusResponse_Ok:
 		case rpc.DaemonStatusResponse_NotStarted:
-			return false, assertDaemonStarted()
+			return false, daemonIsNotRunning
 		case rpc.DaemonStatusResponse_NoNetwork:
 			if attempt >= 40 {
 				return false, errors.New("Unable to connect: Network overrides are not established")

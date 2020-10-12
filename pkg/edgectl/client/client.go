@@ -20,7 +20,8 @@ func IsServerRunning() bool {
 	return assertDaemonStarted() == nil
 }
 
-var daemonIsNotRunning = errors.New("Daemon is not running (see \"edgectl help daemon\")")
+var daemonIsNotRunning = errors.New("The edgectl daemon has not been started.\nUse 'sudo edgectl daemon' to start it.")
+var connectorIsNotRunning = errors.New("Not connected (use 'edgectl connect' to connect to your cluster)")
 
 // Version requests version info from the daemon and prints both client and daemon version.
 func Version(cmd *cobra.Command, _ []string) error {
@@ -83,7 +84,7 @@ func Status(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
 	switch ds.Error {
 	case rpc.DaemonStatusResponse_NotStarted:
-		fmt.Fprintln(out, "Daemon is not started. Use 'sudo edgectl daemon' to start it.")
+		fmt.Fprintln(out, daemonIsNotRunning)
 		return nil
 	case rpc.DaemonStatusResponse_Paused:
 		fmt.Fprintln(out, "Network overrides are paused")
@@ -130,7 +131,7 @@ func Status(cmd *cobra.Command, _ []string) error {
 			fmt.Fprintln(out, "  Intercepts:    (connecting to traffic manager...)")
 		}
 	case rpc.ConnectorStatusResponse_NotStarted:
-		fmt.Fprintln(out, "Not connected (use 'edgectl connect' to connect to your cluster)")
+		fmt.Fprintln(out, connectorIsNotRunning)
 	case rpc.ConnectorStatusResponse_Disconnected:
 		fmt.Fprintln(out, "Disconnecting")
 	}
@@ -401,14 +402,14 @@ func assertConnectorStarted() error {
 	if edgectl.SocketExists(edgectl.ConnectorSocketName) {
 		return nil
 	}
-	return errors.New("Not connected (use 'edgectl connect' to connect to your cluster)")
+	return connectorIsNotRunning
 }
 
 func assertDaemonStarted() error {
 	if edgectl.SocketExists(edgectl.DaemonSocketName) {
 		return nil
 	}
-	return errors.New("The edgectl daemon has not been started.\nUse 'sudo edgectl daemon' to start it.")
+	return daemonIsNotRunning
 }
 
 // withDaemon establishes a connection, calls the function with the gRPC client, and ensures
@@ -448,7 +449,7 @@ func interceptMessage(ie rpc.InterceptError, txt string) string {
 (Could not find a Host resource that enables Path-type Preview URLs.)
 Please specify one or more header matches using --match.`
 	case rpc.InterceptError_NoConnection:
-		msg = "Not connected (use 'edgectl connect' to connect to your cluster)"
+		msg = connectorIsNotRunning.Error()
 	case rpc.InterceptError_NoTrafficManager:
 		msg = "Intercept unavailable: no traffic manager"
 	case rpc.InterceptError_TrafficManagerConnecting:
