@@ -207,10 +207,39 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 		p.Logf("Unable to connect to TrafficManager: %s", err)
 		r.Error = rpc.ConnectResponse_TrafficManagerFailed
 		r.ErrorText = err.Error()
+		if cr.InterceptEnabled {
+			// No point in continuing without a traffic manager
+			s.p.Supervisor().Shutdown()
+		}
 		return r
 	}
 	tmgr.previewHost = previewHost
 	s.trafficMgr = tmgr
+
+	if !cr.InterceptEnabled {
+		return r
+	}
+
+	// Wait for traffic manager to connect
+	maxAttempts := 30 * 4 // 30 seconds max wait
+	attempts := 0
+	p.Log("Waiting for TrafficManager to connect")
+	for ; !tmgr.IsOkay() && attempts < maxAttempts; attempts++ {
+		if s.trafficMgr.apiErr != nil {
+			r.Error = rpc.ConnectResponse_TrafficManagerFailed
+			r.ErrorText = s.trafficMgr.apiErr.Error()
+			// No point in continuing without a traffic manager
+			s.p.Supervisor().Shutdown()
+			break
+		}
+		time.Sleep(time.Second / 4)
+	}
+	if attempts == maxAttempts {
+		r.Error = rpc.ConnectResponse_TrafficManagerFailed
+		r.ErrorText = "Timeout waiting for traffic manager"
+		p.Log(r.ErrorText)
+		s.p.Supervisor().Shutdown()
+	}
 	return r
 }
 

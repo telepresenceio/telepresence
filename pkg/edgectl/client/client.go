@@ -51,8 +51,8 @@ func (ci *ConnectInfo) Connect(cmd *cobra.Command, args []string) error {
 	}
 	defer ds.disconnect()
 
-	// When set, wait that number of seconds for network before returning ConnectResponse_EstablishingOverrides
-	ci.WaitForNetwork = 0
+	// When set, require a traffic manager and wait until it is connected
+	ci.InterceptEnabled = false
 
 	cs, err := newConnectorState(ds.grpc, &ci.ConnectRequest, cmd.OutOrStdout())
 	defer cs.disconnect()
