@@ -1,9 +1,11 @@
 package client
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"time"
 
 	"github.com/pkg/errors"
@@ -97,4 +99,22 @@ func (ds *daemonState) version() (int, string, error) {
 		return 0, "", err
 	}
 	return int(vi.APIVersion), vi.Version, nil
+}
+
+const legacySocketName = "/var/run/edgectl.socket"
+
+// quitLegacyDaemon ensures that an older version of the daemon quits and removes the old socket.
+func quitLegacyDaemon(out io.Writer) {
+	if !edgectl.SocketExists(legacySocketName) {
+		return // no legacy daemon is running
+	}
+	if conn, err := net.Dial("unix", legacySocketName); err == nil {
+		defer conn.Close()
+
+		io.WriteString(conn, `{"Args": ["edgectl", "quit"], "APIVersion": 1}`)
+		scanner := bufio.NewScanner(conn)
+		for scanner.Scan() {
+			fmt.Fprintf(out, "Legacy daemon: %s\n", scanner.Text())
+		}
+	}
 }
