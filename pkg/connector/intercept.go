@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/telepresence2/pkg/common"
+	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
 func (s *service) interceptStatus() (rpc.InterceptError, string) {
@@ -283,9 +283,9 @@ type intercept struct {
 	tm            *trafficManager
 	cluster       *k8sCluster
 	port          int
-	crc           edgectl.Resource
+	crc           common.Resource
 	mappingExists bool
-	edgectl.ResourceBase
+	common.ResourceBase
 }
 
 // removeMapping drops an Intercept's mapping if needed (and possible).
@@ -391,7 +391,7 @@ func makeIntercept(p *supervisor.Process, tm *trafficManager, cluster *k8sCluste
 
 	p.Logf("%s: starting SSH tunnel", ii.Name)
 
-	ssh, err := edgectl.CheckedRetryingCommand(p, ii.Name+"-ssh", "ssh", sshArgs, nil, 5*time.Second)
+	ssh, err := common.CheckedRetryingCommand(p, ii.Name+"-ssh", "ssh", sshArgs, nil, 5*time.Second)
 	if err != nil {
 		_ = cept.Close()
 		return nil, err

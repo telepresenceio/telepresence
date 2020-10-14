@@ -11,8 +11,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
+	"github.com/datawire/telepresence2/pkg/common"
+	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
 // IsServerRunning reports whether or not the daemon server is running.
@@ -27,10 +27,10 @@ var connectorIsNotRunning = errors.New("Not connected (use 'edgectl connect' to 
 func Version(cmd *cobra.Command, _ []string) error {
 	av, dv, err := daemonVersion(cmd.OutOrStdout())
 	if err == nil {
-		fmt.Fprintf(cmd.OutOrStdout(), "Client %s\nDaemon v%s (api v%d)\n", edgectl.DisplayVersion(), dv, av)
+		fmt.Fprintf(cmd.OutOrStdout(), "Client %s\nDaemon v%s (api v%d)\n", common.DisplayVersion(), dv, av)
 		return nil
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Client %s\n", edgectl.DisplayVersion())
+	fmt.Fprintf(cmd.OutOrStdout(), "Client %s\n", common.DisplayVersion())
 	if err != daemonIsNotRunning {
 		// Socket exists but connection failed anyway.
 		err = fmt.Errorf("Unable to connect to daemon: %s", err)
@@ -399,14 +399,14 @@ func daemonVersion(out io.Writer) (apiVersion int, version string, err error) {
 }
 
 func assertConnectorStarted() error {
-	if edgectl.SocketExists(edgectl.ConnectorSocketName) {
+	if common.SocketExists(common.ConnectorSocketName) {
 		return nil
 	}
 	return connectorIsNotRunning
 }
 
 func assertDaemonStarted() error {
-	if edgectl.SocketExists(edgectl.DaemonSocketName) {
+	if common.SocketExists(common.DaemonSocketName) {
 		return nil
 	}
 	return daemonIsNotRunning

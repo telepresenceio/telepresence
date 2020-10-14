@@ -5,18 +5,18 @@ import (
 	"io/ioutil"
 	"time"
 
+	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/telepresence2/pkg/common"
 )
 
 // makeNetOverride sets up the network override resource for the daemon
 func (d *service) makeNetOverride(p *supervisor.Process) error {
-	netOverride, err := edgectl.CheckedRetryingCommand(
+	netOverride, err := common.CheckedRetryingCommand(
 		p,
 		"netOverride",
-		edgectl.GetExe(),
+		common.GetExe(),
 		[]string{"teleproxy", "intercept", d.dns, d.fallback},
 		d.checkNetOverride,
 		10*time.Second,

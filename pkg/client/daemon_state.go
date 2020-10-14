@@ -11,8 +11,8 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
+	"github.com/datawire/telepresence2/pkg/common"
+	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
 type daemonState struct {
@@ -38,15 +38,15 @@ func (ds *daemonState) EnsureState() (bool, error) {
 	}
 	quitLegacyDaemon(ds.out)
 
-	fmt.Fprintln(ds.out, "Launching Edge Control Daemon", edgectl.DisplayVersion())
+	fmt.Fprintln(ds.out, "Launching Edge Control Daemon", common.DisplayVersion())
 
-	err := runAsRoot(edgectl.GetExe(), []string{"daemon-foreground", ds.dns, ds.fallback})
+	err := runAsRoot(common.GetExe(), []string{"daemon-foreground", ds.dns, ds.fallback})
 	if err != nil {
 		return false, errors.Wrap(err, "failed to launch the server")
 	}
 
-	if err = edgectl.WaitUntilSocketAppears("daemon", edgectl.DaemonSocketName, 10*time.Second); err != nil {
-		return false, fmt.Errorf("Daemon service did not come up!\nTake a look at %s for more information.", edgectl.Logfile)
+	if err = common.WaitUntilSocketAppears("daemon", common.DaemonSocketName, 10*time.Second); err != nil {
+		return false, fmt.Errorf("Daemon service did not come up!\nTake a look at %s for more information.", common.Logfile)
 	}
 	err = ds.connect()
 	return err == nil, err
@@ -60,7 +60,7 @@ func (ds *daemonState) DeactivateState() error {
 	_, err := ds.grpc.Quit(context.Background(), &rpc.Empty{})
 	ds.disconnect()
 	if err == nil {
-		err = edgectl.WaitUntilSocketVanishes("daemon", edgectl.DaemonSocketName, 5*time.Second)
+		err = common.WaitUntilSocketVanishes("daemon", common.DaemonSocketName, 5*time.Second)
 	}
 	if err == nil {
 		fmt.Fprintln(ds.out, "done")
@@ -77,7 +77,7 @@ func (ds *daemonState) isConnected() bool {
 
 // connect opens the client connection to the daemon.
 func (ds *daemonState) connect() (err error) {
-	if ds.conn, err = grpc.Dial(edgectl.SocketURL(edgectl.DaemonSocketName), grpc.WithInsecure()); err == nil {
+	if ds.conn, err = grpc.Dial(common.SocketURL(common.DaemonSocketName), grpc.WithInsecure()); err == nil {
 		ds.grpc = rpc.NewDaemonClient(ds.conn)
 	}
 	return
@@ -101,11 +101,11 @@ func (ds *daemonState) version() (int, string, error) {
 	return int(vi.APIVersion), vi.Version, nil
 }
 
-const legacySocketName = "/var/run/edgectl.socket"
+const legacySocketName = "/var/run/common.socket"
 
 // quitLegacyDaemon ensures that an older version of the daemon quits and removes the old socket.
 func quitLegacyDaemon(out io.Writer) {
-	if !edgectl.SocketExists(legacySocketName) {
+	if !common.SocketExists(legacySocketName) {
 		return // no legacy daemon is running
 	}
 	if conn, err := net.Dial("unix", legacySocketName); err == nil {

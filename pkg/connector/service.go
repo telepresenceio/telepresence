@@ -11,13 +11,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/datawire/ambassador/pkg/metriton"
+	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
-	"github.com/datawire/ambassador/pkg/metriton"
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/telepresence2/pkg/common"
+	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
 var Help = `The Edge Control Connect is a background component that manages a connection. It
@@ -27,15 +27,16 @@ Launch the Edge Control Connector:
     edgectl connect
 
 The Connector uses the Daemon's log so its output can be found in
-    ` + edgectl.Logfile + `
+    ` + common.Logfile + `
 to troubleshoot problems.
 `
 
 // service represents the state of the Edge Control Connector
 type service struct {
+	rpc.UnimplementedConnectorServer
 	daemon     rpc.DaemonClient
 	cluster    *k8sCluster
-	bridge     edgectl.Resource
+	bridge     common.Resource
 	trafficMgr *trafficManager
 	intercepts []*intercept
 	grpc       *grpc.Server
@@ -45,7 +46,7 @@ type service struct {
 // Run is the main function when executing as the connector
 func Run() error {
 	// establish a connection to the daemon gRPC service
-	conn, err := grpc.Dial(edgectl.SocketURL(edgectl.DaemonSocketName), grpc.WithInsecure())
+	conn, err := grpc.Dial(common.SocketURL(common.DaemonSocketName), grpc.WithInsecure())
 	if err != nil {
 		return err
 	}
@@ -69,14 +70,14 @@ func Run() error {
 			sup.Logger.Printf("- %v", err)
 		}
 	}
-	sup.Logger.Printf("Edge Control collector %s is done.", edgectl.DisplayVersion())
+	sup.Logger.Printf("Edge Control collector %s is done.", common.DisplayVersion())
 	return nil
 }
 
 func (s *service) Version(_ context.Context, _ *rpc.Empty) (*rpc.VersionResponse, error) {
 	return &rpc.VersionResponse{
-		APIVersion: edgectl.ApiVersion,
-		Version:    edgectl.Version,
+		APIVersion: common.ApiVersion,
+		Version:    common.Version,
 	}, nil
 }
 
@@ -122,12 +123,12 @@ func (s *service) setUpLogging(sup *supervisor.Supervisor) error {
 // runGRPCService is the main gRPC server loop.
 func (s *service) runGRPCService(p *supervisor.Process) error {
 	p.Log("---")
-	p.Logf("Edge Control Collector %s starting...", edgectl.DisplayVersion())
+	p.Logf("Edge Control Collector %s starting...", common.DisplayVersion())
 	p.Logf("PID is %d", os.Getpid())
 	p.Log("")
 
 	// Listen on unix domain socket
-	unixListener, err := net.Listen("unix", edgectl.ConnectorSocketName)
+	unixListener, err := net.Listen("unix", common.ConnectorSocketName)
 	if err != nil {
 		return errors.Wrap(err, "listen")
 	}
@@ -145,7 +146,7 @@ func (s *service) runGRPCService(p *supervisor.Process) error {
 func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.ConnectResponse {
 	reporter := &metriton.Reporter{
 		Application:  "edgectl",
-		Version:      edgectl.Version,
+		Version:      common.Version,
 		GetInstallID: func(_ *metriton.Reporter) (string, error) { return cr.InstallID, nil },
 		BaseMetadata: map[string]interface{}{"mode": "daemon"},
 	}
@@ -180,10 +181,10 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 		previewHost = ""
 	}
 
-	bridge, err := edgectl.CheckedRetryingCommand(
+	bridge, err := common.CheckedRetryingCommand(
 		p,
 		"bridge",
-		edgectl.GetExe(),
+		common.GetExe(),
 		[]string{"teleproxy", "bridge", cluster.ctx, cluster.namespace},
 		checkBridge,
 		15*time.Second,

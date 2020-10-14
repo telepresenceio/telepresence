@@ -11,12 +11,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/telepresence2/pkg/common"
+	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
 var Help = `The Edge Control Daemon is a long-lived background component that manages
@@ -26,13 +26,14 @@ Launch the Edge Control Daemon:
     sudo edgectl service
 
 Examine the Daemon's log output in
-    ` + edgectl.Logfile + `
+    ` + common.Logfile + `
 to troubleshoot problems.
 `
 
 // daemon represents the state of the Edge Control Daemon
 type service struct {
-	network  edgectl.Resource
+	rpc.UnimplementedDaemonServer
+	network  common.Resource
 	dns      string
 	fallback string
 	grpc     *grpc.Server
@@ -78,7 +79,7 @@ func Run(dns, fallback string) error {
 	})
 
 	sup.Logger.Printf("---")
-	sup.Logger.Printf("Edge Control daemon %s starting...", edgectl.DisplayVersion())
+	sup.Logger.Printf("Edge Control daemon %s starting...", common.DisplayVersion())
 	sup.Logger.Printf("PID is %d", os.Getpid())
 	runErrors := sup.Run()
 
@@ -89,7 +90,7 @@ func Run(dns, fallback string) error {
 			sup.Logger.Printf("- %v", err)
 		}
 	}
-	sup.Logger.Printf("Edge Control daemon %s is done.", edgectl.DisplayVersion())
+	sup.Logger.Printf("Edge Control daemon %s is done.", common.DisplayVersion())
 	return errors.New("edgectl daemon has exited")
 }
 
@@ -109,8 +110,8 @@ func (d *service) Logger(server rpc.Daemon_LoggerServer) error {
 
 func (d *service) Version(_ context.Context, _ *rpc.Empty) (*rpc.VersionResponse, error) {
 	return &rpc.VersionResponse{
-		APIVersion: edgectl.ApiVersion,
-		Version:    edgectl.Version,
+		APIVersion: common.ApiVersion,
+		Version:    common.Version,
 	}, nil
 }
 
@@ -132,7 +133,7 @@ func (d *service) Pause(_ context.Context, _ *rpc.Empty) (*rpc.PauseResponse, er
 	switch {
 	case d.network == nil:
 		r.Error = rpc.PauseResponse_AlreadyPaused
-	case edgectl.SocketExists(edgectl.ConnectorSocketName):
+	case common.SocketExists(common.ConnectorSocketName):
 		r.Error = rpc.PauseResponse_ConnectedToCluster
 	default:
 		if err := d.network.Close(); err != nil {
@@ -168,11 +169,11 @@ func (d *service) Quit(_ context.Context, _ *rpc.Empty) (*rpc.Empty, error) {
 
 func (d *service) runGRPCService(p *supervisor.Process) error {
 	// Listen on unix domain socket
-	unixListener, err := net.Listen("unix", edgectl.DaemonSocketName)
+	unixListener, err := net.Listen("unix", common.DaemonSocketName)
 	if err != nil {
 		return errors.Wrap(err, "listen")
 	}
-	err = os.Chmod(edgectl.DaemonSocketName, 0777)
+	err = os.Chmod(common.DaemonSocketName, 0777)
 	if err != nil {
 		return errors.Wrap(err, "chmod")
 	}
@@ -202,10 +203,10 @@ func (d *service) handleSignalsAndShutdown() {
 		d.p.Log("Shutting down")
 	}
 
-	if !edgectl.SocketExists(edgectl.ConnectorSocketName) {
+	if !common.SocketExists(common.ConnectorSocketName) {
 		return
 	}
-	conn, err := grpc.Dial(edgectl.SocketURL(edgectl.ConnectorSocketName), grpc.WithInsecure())
+	conn, err := grpc.Dial(common.SocketURL(common.ConnectorSocketName), grpc.WithInsecure())
 	if err != nil {
 		return
 	}

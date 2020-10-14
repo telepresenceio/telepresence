@@ -1,4 +1,4 @@
-module github.com/datawire/telepresence
+module github.com/datawire/telepresence2
 
 go 1.15
 

@@ -11,8 +11,8 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
+	"github.com/datawire/telepresence2/pkg/common"
+	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
 type connectorState struct {
@@ -53,7 +53,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 
 	cs.cr.InstallID = NewScout("unused").Reporter.InstallID()
 
-	connectorCmd := exec.Command(edgectl.GetExe(), "connector-foreground")
+	connectorCmd := exec.Command(common.GetExe(), "connector-foreground")
 	connectorCmd.Env = os.Environ()
 	err := connectorCmd.Start()
 	if err != nil {
@@ -65,8 +65,8 @@ func (cs *connectorState) EnsureState() (bool, error) {
 	var r *rpc.ConnectResponse
 	fmt.Fprintf(cs.out, "Connecting to traffic manager in namespace %s...\n", cs.cr.ManagerNS)
 
-	if err = edgectl.WaitUntilSocketAppears("connector", edgectl.ConnectorSocketName, 10*time.Second); err != nil {
-		return false, fmt.Errorf("Connector service did not come up!\nTake a look at %s for more information.", edgectl.Logfile)
+	if err = common.WaitUntilSocketAppears("connector", common.ConnectorSocketName, 10*time.Second); err != nil {
+		return false, fmt.Errorf("Connector service did not come up!\nTake a look at %s for more information.", common.Logfile)
 	}
 	err = cs.connect()
 	if err != nil {
@@ -113,7 +113,7 @@ func (cs *connectorState) DeactivateState() error {
 	_, err := cs.grpc.Quit(context.Background(), &rpc.Empty{})
 	cs.disconnect()
 	if err == nil {
-		err = edgectl.WaitUntilSocketVanishes("connector", edgectl.ConnectorSocketName, 5*time.Second)
+		err = common.WaitUntilSocketVanishes("connector", common.ConnectorSocketName, 5*time.Second)
 	}
 	if err == nil {
 		fmt.Fprintln(cs.out, "done")
@@ -139,7 +139,7 @@ func (cs *connectorState) isConnected() bool {
 
 // connect opens the client connection to the daemon.
 func (cs *connectorState) connect() (err error) {
-	if cs.conn, err = grpc.Dial(edgectl.SocketURL(edgectl.ConnectorSocketName), grpc.WithInsecure()); err == nil {
+	if cs.conn, err = grpc.Dial(common.SocketURL(common.ConnectorSocketName), grpc.WithInsecure()); err == nil {
 		cs.grpc = rpc.NewConnectorClient(cs.conn)
 	}
 	return

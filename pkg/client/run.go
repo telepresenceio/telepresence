@@ -11,8 +11,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
+	"github.com/datawire/telepresence2/pkg/common"
+	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
 var RunHelp = `edgectl run is a shorthand command for starting the daemon, connecting to the traffic
@@ -55,15 +55,15 @@ func (ri *RunInfo) RunCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	out := cmd.OutOrStdout()
-	return edgectl.WithEnsuredState(ds, func() error {
+	return common.WithEnsuredState(ds, func() error {
 		ri.InterceptEnabled = true
 		cs, err := newConnectorState(ds.grpc, &ri.ConnectRequest, out)
 		if err != nil && err != connectorIsNotRunning {
 			return err
 		}
-		return edgectl.WithEnsuredState(cs, func() error {
+		return common.WithEnsuredState(cs, func() error {
 			is := newInterceptState(cs.grpc, &ri.InterceptRequest, out)
-			return edgectl.WithEnsuredState(is, func() error {
+			return common.WithEnsuredState(is, func() error {
 				return start(args[0], args[1:], true, cmd.InOrStdin(), out, cmd.OutOrStderr())
 			})
 		})

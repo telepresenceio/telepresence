@@ -6,10 +6,9 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-
-	"github.com/datawire/ambassador/pkg/k8s"
 )
 
 func AESLicense(cmd *cobra.Command, args []string) error {

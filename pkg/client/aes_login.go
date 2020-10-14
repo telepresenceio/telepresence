@@ -3,11 +3,11 @@ package client
 import (
 	"fmt"
 
+	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/gookit/color"
 	"github.com/spf13/cobra"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/pkg/k8s"
+	"github.com/datawire/telepresence2/pkg/common"
 )
 
 func AESLogin(cmd *cobra.Command, args []string) error {
@@ -25,5 +25,5 @@ func AESLogin(cmd *cobra.Command, args []string) error {
 	// Prepare to talk to the cluster
 	kubeinfo := k8s.NewKubeInfo("", context, namespace) // Default namespace is "ambassador"
 
-	return edgectl.DoLogin(kubeinfo, context, namespace, hostname, !justShowURL, justShowURL, showToken, false)
+	return common.DoLogin(kubeinfo, context, namespace, hostname, !justShowURL, justShowURL, showToken, false)
 }

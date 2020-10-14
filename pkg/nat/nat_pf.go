@@ -7,9 +7,8 @@ import (
 	"net"
 	"strings"
 
-	ppf "github.com/datawire/pf"
-
 	"github.com/datawire/ambassador/pkg/supervisor"
+	ppf "github.com/datawire/pf"
 )
 
 type Translator struct {

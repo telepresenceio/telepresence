@@ -1,4 +1,4 @@
-package edgectl
+package common
 
 import (
 	"time"

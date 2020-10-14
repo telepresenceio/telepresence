@@ -6,8 +6,9 @@ import (
 	"io"
 	"strings"
 
-	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
 	"github.com/pkg/errors"
+
+	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
 type interceptState struct {

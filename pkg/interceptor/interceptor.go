@@ -9,8 +9,8 @@ import (
 
 	"github.com/datawire/ambassador/pkg/supervisor"
 
-	"github.com/datawire/ambassador/internal/pkg/nat"
-	rt "github.com/datawire/ambassador/internal/pkg/route"
+	"github.com/datawire/telepresence2/pkg/nat"
+	rt "github.com/datawire/telepresence2/pkg/route"
 )
 
 type Interceptor struct {

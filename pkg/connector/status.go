@@ -1,8 +1,8 @@
 package connector
 
 import (
-	"github.com/datawire/ambassador/pkg/api/edgectl/rpc"
 	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
 // status reports the current status of the daemon

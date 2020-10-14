@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/pkg/metriton"
+	"github.com/datawire/telepresence2/pkg/common"
 )
 
 type Scout struct {
@@ -25,7 +25,7 @@ func NewScout(mode string) (s *Scout) {
 	return &Scout{
 		Reporter: &metriton.Reporter{
 			Application: "edgectl",
-			Version:     edgectl.Version,
+			Version:     common.Version,
 			GetInstallID: func(r *metriton.Reporter) (string, error) {
 				id, err := metriton.InstallIDFromFilesystem(r)
 				if err != nil {

@@ -12,16 +12,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/telepresence2/pkg/common"
 )
 
 // trafficManager is a handle to access the Traffic Manager in a
 // cluster.
 type trafficManager struct {
-	crc            edgectl.Resource
+	crc            common.Resource
 	apiPort        int
 	sshPort        int
 	namespace      string
@@ -74,7 +74,7 @@ func newTrafficManager(p *supervisor.Process, cluster *k8sCluster, managerNs str
 				DisableKeepAlives: true,
 			}}}
 
-	pf, err := edgectl.CheckedRetryingCommand(p, "traffic-kpf", "kubectl", kpfArgs, tm.check, 15*time.Second)
+	pf, err := common.CheckedRetryingCommand(p, "traffic-kpf", "kubectl", kpfArgs, tm.check, 15*time.Second)
 	if err != nil {
 		return nil, err
 	}

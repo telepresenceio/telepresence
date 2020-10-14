@@ -1,13 +1,12 @@
-package edgectl
+package common
 
 import (
 	"fmt"
 	"syscall"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/pkg/errors"
 )
 
 // crCmd is a handle to a checked retrying command

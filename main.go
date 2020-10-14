@@ -6,19 +6,18 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/datawire/ambassador/internal/pkg/edgectl"
-	"github.com/datawire/ambassador/internal/pkg/edgectl/client"
-	"github.com/datawire/ambassador/internal/pkg/edgectl/connector"
-	"github.com/datawire/ambassador/internal/pkg/edgectl/daemon"
-	install "github.com/datawire/ambassador/internal/pkg/edgectl/install"
-	"github.com/datawire/ambassador/internal/pkg/edgectl/teleproxy"
+	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/common"
+	"github.com/datawire/telepresence2/pkg/connector"
+	"github.com/datawire/telepresence2/pkg/daemon"
+	"github.com/datawire/telepresence2/pkg/teleproxy"
 )
 
 // Version is inserted at build using --ldflags -X
 var Version = "(unknown version)"
 
 func main() {
-	edgectl.SetVersion(Version)
+	common.SetVersion(Version)
 
 	rootCmd := getRootCommand()
 
@@ -290,7 +289,7 @@ func getRootCommand() *cobra.Command {
 			Short: "Show program's version number and exit",
 			Args:  cobra.ExactArgs(0),
 			RunE: func(_ *cobra.Command, _ []string) error {
-				fmt.Println("Client", edgectl.DisplayVersion())
+				fmt.Println("Client", common.DisplayVersion())
 				fmt.Println("Daemon unavailable on this platform")
 				return nil
 			},
@@ -329,38 +328,6 @@ func getRootCommand() *cobra.Command {
 		"The Kubernetes namespace to use. Defaults to ambassador.",
 	)
 	rootCmd.AddCommand(licenseCmd)
-
-	installCmd := &cobra.Command{
-		Use:   "install",
-		Short: "Install the Ambassador Edge Stack in your cluster",
-		Args:  cobra.ExactArgs(0),
-		RunE:  install.AESInstall,
-	}
-	_ = installCmd.Flags().StringP(
-		"context", "c", "",
-		"The Kubernetes context to use. Defaults to the current kubectl context.",
-	)
-	_ = installCmd.Flags().BoolP(
-		"verbose", "v", false,
-		"Show all output. Defaults to sending most output to the logfile.",
-	)
-	rootCmd.AddCommand(installCmd)
-
-	upgradeCmd := &cobra.Command{
-		Use:   "upgrade",
-		Short: "Upgrade an Ambassador API Gateway installation managed by the Operator to Ambassador Edge Stack",
-		Args:  cobra.ExactArgs(0),
-		RunE:  install.AOSSUpgrade,
-	}
-	_ = upgradeCmd.Flags().StringP(
-		"context", "c", "",
-		"The Kubernetes context to use. Defaults to the current kubectl context.",
-	)
-	_ = upgradeCmd.Flags().BoolP(
-		"verbose", "v", false,
-		"Show all output. Defaults to sending most output to the logfile.",
-	)
-	rootCmd.AddCommand(upgradeCmd)
 
 	rootCmd.InitDefaultHelpCmd()
 	return rootCmd

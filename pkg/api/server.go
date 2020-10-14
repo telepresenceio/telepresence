@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/datawire/ambassador/internal/pkg/dns"
-	"github.com/datawire/ambassador/internal/pkg/interceptor"
-	"github.com/datawire/ambassador/internal/pkg/route"
+	"github.com/datawire/telepresence2/pkg/dns"
+	"github.com/datawire/telepresence2/pkg/interceptor"
+	"github.com/datawire/telepresence2/pkg/route"
 )
 
 type APIServer struct {
