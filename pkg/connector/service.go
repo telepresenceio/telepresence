@@ -20,18 +20,18 @@ import (
 	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
-var Help = `The Edge Control Connect is a background component that manages a connection. It
+var Help = `The Telepresence Connect is a background component that manages a connection. It
 requires that a daemon is already running.
 
-Launch the Edge Control Connector:
-    edgectl connect
+Launch the Telepresence Connector:
+    telepresence connect
 
 The Connector uses the Daemon's log so its output can be found in
     ` + common.Logfile + `
 to troubleshoot problems.
 `
 
-// service represents the state of the Edge Control Connector
+// service represents the state of the Telepresence Connector
 type service struct {
 	rpc.UnimplementedConnectorServer
 	daemon     rpc.DaemonClient
@@ -70,7 +70,7 @@ func Run() error {
 			sup.Logger.Printf("- %v", err)
 		}
 	}
-	sup.Logger.Printf("Edge Control collector %s is done.", common.DisplayVersion())
+	sup.Logger.Printf("Telepresence collector %s is done.", common.DisplayVersion())
 	return nil
 }
 
@@ -123,7 +123,7 @@ func (s *service) setUpLogging(sup *supervisor.Supervisor) error {
 // runGRPCService is the main gRPC server loop.
 func (s *service) runGRPCService(p *supervisor.Process) error {
 	p.Log("---")
-	p.Logf("Edge Control Collector %s starting...", common.DisplayVersion())
+	p.Logf("Telepresence Collector %s starting...", common.DisplayVersion())
 	p.Logf("PID is %d", os.Getpid())
 	p.Log("")
 
@@ -145,7 +145,7 @@ func (s *service) runGRPCService(p *supervisor.Process) error {
 // connect the daemon to a cluster
 func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.ConnectResponse {
 	reporter := &metriton.Reporter{
-		Application:  "edgectl",
+		Application:  "telepresence",
 		Version:      common.Version,
 		GetInstallID: func(_ *metriton.Reporter) (string, error) { return cr.InstallID, nil },
 		BaseMetadata: map[string]interface{}{"mode": "daemon"},

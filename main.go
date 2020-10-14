@@ -63,9 +63,9 @@ func main() {
 }
 
 func getRootCommand() *cobra.Command {
-	myName := "Edge Control"
+	myName := "Telepresence"
 	if !client.IsServerRunning() {
-		myName = "Edge Control (daemon unavailable)"
+		myName = "Telepresence (daemon unavailable)"
 	}
 
 	myHelp := myName + `
@@ -73,7 +73,7 @@ func getRootCommand() *cobra.Command {
 `
 
 	rootCmd := &cobra.Command{
-		Use:          "edgectl",
+		Use:          "telepresence",
 		Short:        myName,
 		Long:         myHelp,
 		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
@@ -82,12 +82,12 @@ func getRootCommand() *cobra.Command {
 		"no-report", false, "turn off anonymous crash reports and log submission on failure",
 	)
 
-	// Hidden/internal commands. These are called by Edge Control itself from
+	// Hidden/internal commands. These are called by Telepresence itself from
 	// the correct context and execute in-place immediately.
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:    "daemon-foreground",
-		Short:  "Launch Edge Control Daemon in the foreground (debug)",
+		Short:  "Launch Telepresence Daemon in the foreground (debug)",
 		Args:   cobra.ExactArgs(2),
 		Hidden: true,
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -96,7 +96,7 @@ func getRootCommand() *cobra.Command {
 	})
 	rootCmd.AddCommand(&cobra.Command{
 		Use:    "connector-foreground",
-		Short:  "Launch Edge Control Connector in the foreground (debug)",
+		Short:  "Launch Telepresence Connector in the foreground (debug)",
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -133,7 +133,7 @@ func getRootCommand() *cobra.Command {
 	if client.DaemonWorks() {
 		daemonCmd := &cobra.Command{
 			Use:   "daemon",
-			Short: "Launch Edge Control Daemon in the background (sudo)",
+			Short: "Launch Telepresence Daemon in the background (sudo)",
 			Long:  daemon.Help,
 			Args:  cobra.ExactArgs(0),
 			RunE:  client.LaunchDaemon,
@@ -191,14 +191,14 @@ func getRootCommand() *cobra.Command {
 		})
 		rootCmd.AddCommand(&cobra.Command{
 			Use:     "resume",
-			Short:   "Turn network overrides on (after using edgectl pause)",
+			Short:   "Turn network overrides on (after using telepresence pause)",
 			Aliases: []string{"unpause"},
 			Args:    cobra.ExactArgs(0),
 			RunE:    client.Resume,
 		})
 		rootCmd.AddCommand(&cobra.Command{
 			Use:   "quit",
-			Short: "Tell Edge Control Daemon to quit (for upgrades)",
+			Short: "Tell Telepresence Daemon to quit (for upgrades)",
 			Args:  cobra.ExactArgs(0),
 			RunE:  client.Quit,
 		})

@@ -80,7 +80,7 @@ func captureCmd(cmd *exec.Cmd) (string, error) {
 // doBuildExecutable calls make in a subprocess running as the user
 func doBuildExecutable() {
 	if !strings.Contains(os.Getenv("MAKEFLAGS"), "--jobserver-auth") {
-		err := run("make", "-C", "../..", "bin_"+runtime.GOOS+"_"+runtime.GOARCH+"/edgectl")
+		err := run("make", "-C", "../..", "bin_"+runtime.GOOS+"_"+runtime.GOARCH+"/telepresence")
 		if err != nil {
 			log.Fatalf("build executable: %v", err)
 		}
@@ -89,19 +89,19 @@ func doBuildExecutable() {
 
 var buildExecutable = testprocess.Make(doBuildExecutable)
 
-var executable = "../../bin_" + runtime.GOOS + "_" + runtime.GOARCH + "/edgectl"
+var executable = "../../bin_" + runtime.GOOS + "_" + runtime.GOARCH + "/telepresence"
 
 func TestSmokeOutbound(t *testing.T) {
 	var out string
 	var err error
 
-	namespace := fmt.Sprintf("edgectl-%d", os.Getpid())
+	namespace := fmt.Sprintf("telepresence-%d", os.Getpid())
 	nsArg := fmt.Sprintf("--namespace=%s", namespace)
 
 	fmt.Println("setup")
 	require.NoError(t, run("sudo", "true"), "setup: acquire privileges")
 	require.NoError(t, run("printenv", "KUBECONFIG"), "setup: ensure cluster is set")
-	require.NoError(t, run("sudo", "rm", "-f", "/tmp/edgectl.log"), "setup: remove old log")
+	require.NoError(t, run("sudo", "rm", "-f", "/tmp/telepresence.log"), "setup: remove old log")
 	require.NoError(t,
 		run("kubectl", "delete", "pod", "teleproxy", "--ignore-not-found", "--wait=true"),
 		"setup: check cluster connectivity",

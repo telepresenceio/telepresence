@@ -28,7 +28,7 @@ type trafficManager struct {
 	interceptables []string
 	totalClusCepts int
 	snapshotSent   bool
-	installID      string // edgectl's install ID
+	installID      string // telepresence's install ID
 	connectCI      bool   // whether --ci was passed to connect
 	apiErr         error  // holds the latest traffic-manager API error
 	licenseInfo    string // license information from traffic-manager
@@ -152,8 +152,8 @@ func (tm *trafficManager) request(method, path string, data []byte) (result stri
 		return
 	}
 
-	req.Header.Set("edgectl-install-id", tm.installID)
-	req.Header.Set("edgectl-connect-ci", strconv.FormatBool(tm.connectCI))
+	req.Header.Set("telepresence-install-id", tm.installID)
+	req.Header.Set("telepresence-connect-ci", strconv.FormatBool(tm.connectCI))
 
 	resp, err := tm.hClient.Do(req)
 	if err != nil {

@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	Logfile    = "/tmp/edgectl.log"
+	Logfile    = "/tmp/telepresence.log"
 	ApiVersion = 3
 )
 
@@ -17,7 +17,7 @@ func SetVersion(v string) {
 	Version = v
 }
 
-// DisplayVersion returns a printable version for `edgectl`
+// DisplayVersion returns a printable version for `telepresence`
 func DisplayVersion() string {
 	return fmt.Sprintf("v%s (api v%d)", Version, ApiVersion)
 }

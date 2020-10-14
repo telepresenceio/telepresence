@@ -6,7 +6,7 @@ import (
 	"github.com/datawire/ambassador/pkg/supervisor"
 )
 
-// Resource represents one thing managed by edgectl background processes. Examples include
+// Resource represents one thing managed by telepresence background processes. Examples include
 // network intercepts (via teleproxy intercept) and cluster connectivity.
 type Resource interface {
 	Name() string

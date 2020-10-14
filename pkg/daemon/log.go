@@ -14,7 +14,7 @@ import (
 	"github.com/datawire/telepresence2/pkg/common"
 )
 
-// formatter formats log messages for the Edge Control Daemon
+// formatter formats log messages for the Telepresence Daemon
 type formatter struct {
 	timestampFormat string
 }
@@ -45,7 +45,7 @@ func (f *formatter) Format(entry *logrus.Entry) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// setUpLogging sets up standard Edge Control Daemon logging
+// setUpLogging sets up standard Telepresence Daemon logging
 func setUpLogging() supervisor.Logger {
 	loggingToTerminal := terminal.IsTerminal(int(os.Stdout.Fd()))
 	logger := logrus.StandardLogger()

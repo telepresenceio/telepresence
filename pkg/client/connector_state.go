@@ -46,7 +46,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 			time.Sleep(250 * time.Millisecond)
 			continue
 		case rpc.DaemonStatusResponse_Paused:
-			return false, errors.New("Unable to connect: Network overrides are paused (use 'edgectl resume')")
+			return false, errors.New("Unable to connect: Network overrides are paused (use 'telepresence resume')")
 		}
 		break
 	}

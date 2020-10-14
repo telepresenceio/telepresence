@@ -19,18 +19,18 @@ import (
 	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
-var Help = `The Edge Control Daemon is a long-lived background component that manages
+var Help = `The Telepresence Daemon is a long-lived background component that manages
 connections and network state.
 
-Launch the Edge Control Daemon:
-    sudo edgectl service
+Launch the Telepresence Daemon:
+    sudo telepresence service
 
 Examine the Daemon's log output in
     ` + common.Logfile + `
 to troubleshoot problems.
 `
 
-// daemon represents the state of the Edge Control Daemon
+// daemon represents the state of the Telepresence Daemon
 type service struct {
 	rpc.UnimplementedDaemonServer
 	network  common.Resource
@@ -44,7 +44,7 @@ type service struct {
 // Run is the main function when executing as the daemon
 func Run(dns, fallback string) error {
 	if os.Geteuid() != 0 {
-		return errors.New("edgectl daemon must run as root")
+		return errors.New("telepresence daemon must run as root")
 	}
 
 	d := &service{dns: dns, fallback: fallback, hClient: &http.Client{
@@ -79,7 +79,7 @@ func Run(dns, fallback string) error {
 	})
 
 	sup.Logger.Printf("---")
-	sup.Logger.Printf("Edge Control daemon %s starting...", common.DisplayVersion())
+	sup.Logger.Printf("Telepresence daemon %s starting...", common.DisplayVersion())
 	sup.Logger.Printf("PID is %d", os.Getpid())
 	runErrors := sup.Run()
 
@@ -90,8 +90,8 @@ func Run(dns, fallback string) error {
 			sup.Logger.Printf("- %v", err)
 		}
 	}
-	sup.Logger.Printf("Edge Control daemon %s is done.", common.DisplayVersion())
-	return errors.New("edgectl daemon has exited")
+	sup.Logger.Printf("Telepresence daemon %s is done.", common.DisplayVersion())
+	return errors.New("telepresence daemon has exited")
 }
 
 func (d *service) Logger(server rpc.Daemon_LoggerServer) error {

@@ -13,7 +13,7 @@ import (
 // teleproxy intercept
 func RunAsIntercept(dns, fallback string) error {
 	if os.Geteuid() != 0 {
-		return errors.New("edgectl daemon as teleproxy intercept must run as root")
+		return errors.New("telepresence daemon as teleproxy intercept must run as root")
 	}
 	tele := &Teleproxy{
 		Mode:       "intercept",

@@ -25,12 +25,12 @@ func Notify(p *supervisor.Process, message string) {
 	var args []string
 	switch runtime.GOOS {
 	case "darwin":
-		script := fmt.Sprintf("display notification \"Edge Control Daemon\" with title \"%s\"", message)
+		script := fmt.Sprintf("display notification \"Telepresence Daemon\" with title \"%s\"", message)
 		exe = "osascript"
 		args = []string{"-e", script}
 	case "linux":
 		exe = "notify-send"
-		args = []string{"Edge Control Daemon", message}
+		args = []string{"Telepresence Daemon", message}
 	default:
 		return
 	}

@@ -15,7 +15,7 @@ import (
 	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
-var RunHelp = `edgectl run is a shorthand command for starting the daemon, connecting to the traffic
+var RunHelp = `telepresence run is a shorthand command for starting the daemon, connecting to the traffic
 manager, adding an intercept, running a command, and then removing the intercept,
 disconnecting, and quitting the daemon.
 
@@ -28,7 +28,7 @@ Unless the daemon is already started, an attempt will be made to start it. This 
 involve a call to sudo unless this command is run as root (not recommended).
 
 Run a command:
-    edgectl run -d hello -n example-url -t 9000 -- <command> arguments...
+    telepresence run -d hello -n example-url -t 9000 -- <command> arguments...
 `
 
 // RunInfo contains all parameters needed in order to run an intercepted command.

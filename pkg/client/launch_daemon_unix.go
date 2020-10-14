@@ -15,7 +15,7 @@ import (
 func LaunchDaemon(cmd *cobra.Command, args []string) error {
 	if os.Geteuid() != 0 {
 		// TODO: Attempt a sudo instead of reporting error
-		return fmt.Errorf(`Edge Control Daemon must be launched as root.
+		return fmt.Errorf(`Telepresence Daemon must be launched as root.
 
  sudo %s
 `, cmd.CommandPath())

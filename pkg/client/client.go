@@ -20,8 +20,8 @@ func IsServerRunning() bool {
 	return assertDaemonStarted() == nil
 }
 
-var daemonIsNotRunning = errors.New("The edgectl daemon has not been started.\nUse 'sudo edgectl daemon' to start it.")
-var connectorIsNotRunning = errors.New("Not connected (use 'edgectl connect' to connect to your cluster)")
+var daemonIsNotRunning = errors.New("The telepresence daemon has not been started.\nUse 'sudo telepresence daemon' to start it.")
+var connectorIsNotRunning = errors.New("Not connected (use 'telepresence connect' to connect to your cluster)")
 
 // Version requests version info from the daemon and prints both client and daemon version.
 func Version(cmd *cobra.Command, _ []string) error {
@@ -176,13 +176,13 @@ func Pause(cmd *cobra.Command, _ []string) error {
 	case rpc.PauseResponse_Ok:
 		stdout := cmd.OutOrStdout()
 		fmt.Fprintln(stdout, "Network overrides paused.")
-		fmt.Fprintln(stdout, `Use "edgectl resume" to reestablish network overrides.`)
+		fmt.Fprintln(stdout, `Use "telepresence resume" to reestablish network overrides.`)
 		return nil
 	case rpc.PauseResponse_AlreadyPaused:
 		msg = "Network overrides are already paused"
 	case rpc.PauseResponse_ConnectedToCluster:
-		msg = `Edge Control is connected to a cluster.
-See "edgectl status" for details.
+		msg = `Telepresence is connected to a cluster.
+See "telepresence status" for details.
 Please disconnect before pausing.`
 	default:
 		msg = fmt.Sprintf("Unexpected error while pausing: %v\n", r.ErrorText)

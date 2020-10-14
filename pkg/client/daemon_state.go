@@ -38,7 +38,7 @@ func (ds *daemonState) EnsureState() (bool, error) {
 	}
 	quitLegacyDaemon(ds.out)
 
-	fmt.Fprintln(ds.out, "Launching Edge Control Daemon", common.DisplayVersion())
+	fmt.Fprintln(ds.out, "Launching Telepresence Daemon", common.DisplayVersion())
 
 	err := runAsRoot(common.GetExe(), []string{"daemon-foreground", ds.dns, ds.fallback})
 	if err != nil {
@@ -56,7 +56,7 @@ func (ds *daemonState) DeactivateState() error {
 	if !ds.isConnected() {
 		return nil
 	}
-	fmt.Fprint(ds.out, "Edge Control Daemon quitting...")
+	fmt.Fprint(ds.out, "Telepresence Daemon quitting...")
 	_, err := ds.grpc.Quit(context.Background(), &rpc.Empty{})
 	ds.disconnect()
 	if err == nil {
@@ -101,7 +101,7 @@ func (ds *daemonState) version() (int, string, error) {
 	return int(vi.APIVersion), vi.Version, nil
 }
 
-const legacySocketName = "/var/run/common.socket"
+const legacySocketName = "/var/run/edgectl.socket"
 
 // quitLegacyDaemon ensures that an older version of the daemon quits and removes the old socket.
 func quitLegacyDaemon(out io.Writer) {

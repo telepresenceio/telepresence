@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	ConnectorSocketName = "/tmp/edgectl-connector.socket"
-	DaemonSocketName    = "/var/run/edgectl-daemon.socket"
+	ConnectorSocketName = "/tmp/telepresence-connector.socket"
+	DaemonSocketName    = "/var/run/telepresence-daemon.socket"
 )
 
 // FileExists returns true if a socket is found at the given path

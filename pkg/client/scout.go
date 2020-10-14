@@ -24,7 +24,7 @@ type ScoutMeta struct {
 func NewScout(mode string) (s *Scout) {
 	return &Scout{
 		Reporter: &metriton.Reporter{
-			Application: "edgectl",
+			Application: "telepresence",
 			Version:     common.Version,
 			GetInstallID: func(r *metriton.Reporter) (string, error) {
 				id, err := metriton.InstallIDFromFilesystem(r)
