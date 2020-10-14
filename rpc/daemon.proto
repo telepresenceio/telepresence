@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-option go_package = "edgectl/rpc";
+option go_package = "pkg/rpc";
 option java_multiple_files = true;
-option java_package = "io.datawire.api.edgectl.rpc";
+option java_package = "io.datawire.telepresence.rpc";
 option java_outer_classname = "DaemonProto";
 
-package edgectl;
+package telepresence;
 
 // The Daemon service is responsible for managing network overrides and also acts as the
 // central point for logging.
