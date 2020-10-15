@@ -26,7 +26,7 @@ func main() {
 		cg = []client.CmdGroup{
 			{
 				GroupName: "Management Commands",
-				CmdNames:  []string{"install", "upgrade", "login", "license"},
+				CmdNames:  []string{"login", "license"},
 			},
 			{
 				GroupName: "Development Commands",
@@ -45,7 +45,7 @@ func main() {
 		cg = []client.CmdGroup{
 			{
 				GroupName: "Management Commands",
-				CmdNames:  []string{"install", "upgrade", "login", "license"},
+				CmdNames:  []string{"login", "license"},
 			},
 			{
 				GroupName: "Other Commands",

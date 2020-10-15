@@ -270,7 +270,7 @@ func prepareIntercept(cmd *cobra.Command, ii *rpc.InterceptRequest) error {
 	port, err := strconv.Atoi(portStr)
 
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("Failed to parse %q as HOST:PORT: %v\n", ii.TargetHost))
+		return errors.Wrap(err, fmt.Sprintf("Failed to parse %q as HOST:PORT: %v\n", ii.TargetHost, err))
 	}
 	ii.TargetHost = host
 	ii.TargetPort = int32(port)

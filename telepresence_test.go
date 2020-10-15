@@ -77,19 +77,17 @@ func captureCmd(cmd *exec.Cmd) (string, error) {
 	return out, err
 }
 
-// doBuildExecutable calls make in a subprocess running as the user
+var executable = "bin_" + runtime.GOOS + "_" + runtime.GOARCH + "/telepresence"
+
+// doBuildExecutable calls go build
 func doBuildExecutable() {
-	if !strings.Contains(os.Getenv("MAKEFLAGS"), "--jobserver-auth") {
-		err := run("make", "-C", "../..", "bin_"+runtime.GOOS+"_"+runtime.GOARCH+"/telepresence")
-		if err != nil {
-			log.Fatalf("build executable: %v", err)
-		}
+	err := run("go", "build", "-o", executable, ".")
+	if err != nil {
+		log.Fatalf("build executable: %v", err)
 	}
 }
 
 var buildExecutable = testprocess.Make(doBuildExecutable)
-
-var executable = "../../bin_" + runtime.GOOS + "_" + runtime.GOARCH + "/telepresence"
 
 func TestSmokeOutbound(t *testing.T) {
 	var out string
