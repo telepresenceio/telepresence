@@ -310,7 +310,7 @@ func (s *service) handleSignalsAndShutdown() {
 
 	defer cluster.Close()
 
-	_ = s.clearIntercepts(s.p)
+	s.clearIntercepts(s.p)
 	if bridge != nil {
 		cluster.setBridgeCheck(nil) // Stop depending on this bridge
 		_ = bridge.Close()

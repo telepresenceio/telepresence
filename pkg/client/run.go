@@ -88,7 +88,7 @@ func start(exe string, args []string, wait bool, stdin io.Reader, stdout, stderr
 		return fmt.Errorf("%s %s: %v\n", exe, strings.Join(args, " "), err)
 	}
 	if !wait {
-		cmd.Process.Release()
+		_ = cmd.Process.Release()
 		return nil
 	}
 

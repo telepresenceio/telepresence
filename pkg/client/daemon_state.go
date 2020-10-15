@@ -93,14 +93,6 @@ func (ds *daemonState) disconnect() {
 	}
 }
 
-func (ds *daemonState) version() (int, string, error) {
-	vi, err := ds.grpc.Version(context.Background(), &rpc.Empty{})
-	if err != nil {
-		return 0, "", err
-	}
-	return int(vi.APIVersion), vi.Version, nil
-}
-
 const legacySocketName = "/var/run/edgectl.socket"
 
 // quitLegacyDaemon ensures that an older version of the daemon quits and removes the old socket.
@@ -111,7 +103,7 @@ func quitLegacyDaemon(out io.Writer) {
 	if conn, err := net.Dial("unix", legacySocketName); err == nil {
 		defer conn.Close()
 
-		io.WriteString(conn, `{"Args": ["edgectl", "quit"], "APIVersion": 1}`)
+		_, _ = io.WriteString(conn, `{"Args": ["edgectl", "quit"], "APIVersion": 1}`)
 		scanner := bufio.NewScanner(conn)
 		for scanner.Scan() {
 			fmt.Fprintf(out, "Legacy daemon: %s\n", scanner.Text())

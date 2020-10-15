@@ -55,7 +55,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 				Hdr: dns.RR_Header{Name: r.Question[0].Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60},
 				A:   net.ParseIP(ip),
 			})
-			w.WriteMsg(&msg)
+			_ = w.WriteMsg(&msg)
 			return
 		}
 	default:
@@ -66,7 +66,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			msg.SetReply(r)
 			msg.Authoritative = true
 			msg.RecursionAvailable = true
-			w.WriteMsg(&msg)
+			_ = w.WriteMsg(&msg)
 			return
 		}
 	}
@@ -76,7 +76,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		log(err.Error())
 		return
 	}
-	w.WriteMsg(in)
+	_ = w.WriteMsg(in)
 }
 
 func (s *Server) Start(p *supervisor.Process) error {

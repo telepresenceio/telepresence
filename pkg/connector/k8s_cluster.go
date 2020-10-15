@@ -144,12 +144,11 @@ func trackKCluster(
 
 // getClusterPreviewHostname returns the hostname of the first Host resource it
 // finds that has Preview URLs enabled with a supported URL type.
-func (c *k8sCluster) getClusterPreviewHostname(p *supervisor.Process) (hostname string, err error) {
+func (c *k8sCluster) getClusterPreviewHostname(p *supervisor.Process) (string, error) {
 	p.Log("Looking for a Host with Preview URLs enabled")
 
 	// kubectl get hosts, in all namespaces or in this namespace
-	var outBytes []byte
-	outBytes, err = func() ([]byte, error) {
+	outBytes, err := func() ([]byte, error) {
 		clusterCmd := c.getKubectlCmdNoNamespace(p, "get", "host", "-o", "yaml", "--all-namespaces")
 		if outBytes, err := clusterCmd.CombinedOutput(); err == nil {
 			return outBytes, nil
@@ -163,18 +162,16 @@ func (c *k8sCluster) getClusterPreviewHostname(p *supervisor.Process) (hostname 
 		}
 	}()
 	if err != nil {
-		return
+		return "", err
 	}
 
 	// Parse the output
-	hostLists, kerr := k8s.ParseResources("get hosts", string(outBytes))
-	if kerr != nil {
-		err = kerr
-		return
+	hostLists, err := k8s.ParseResources("get hosts", string(outBytes))
+	if err != nil {
+		return "", err
 	}
 	if len(hostLists) != 1 {
-		err = errors.Errorf("weird result with length %d", len(hostLists))
-		return
+		return "", errors.Errorf("weird result with length %d", len(hostLists))
 	}
 
 	// Grab the "items" slice, as the result should be a list of Host resources
@@ -205,15 +202,16 @@ func (c *k8sCluster) getClusterPreviewHostname(p *supervisor.Process) (hostname 
 			continue
 		}
 
+		var hostname string
 		if hostname = host.Spec().GetString("hostname"); hostname == "" {
 			p.Logf(logEntry, "empty hostname???")
 			continue
 		}
 
 		p.Logf(logEntry+": %q", "SUCCESS! Hostname is", hostname)
-		return
+		return hostname, nil
 	}
 
 	p.Logf("No appropriate Host resource found.")
-	return
+	return "", nil
 }

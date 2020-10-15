@@ -90,11 +90,11 @@ func (p *Proxy) handleConnection(conn *net.TCPConn) {
 func (p *Proxy) pipe(from, to *net.TCPConn, done tpu.Latch) {
 	defer func() {
 		p.log("CLOSED WRITE %v", to.RemoteAddr())
-		to.CloseWrite()
+		_ = to.CloseWrite()
 	}()
 	defer func() {
 		p.log("CLOSED READ %v", from.RemoteAddr())
-		from.CloseRead()
+		_ = from.CloseRead()
 	}()
 	defer done.Notify()
 

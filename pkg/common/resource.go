@@ -20,10 +20,10 @@ type ResourceBase struct {
 	doCheck func(*supervisor.Process) error
 	doQuit  func(*supervisor.Process) error
 	tasks   chan func(*supervisor.Process) error
-	okay    bool          // (monitor) cmd is running and check passes
 	transAt time.Time     // (monitor) time of transition (okay value changed)
-	done    bool          // (Close) to get everything to quit
 	end     chan struct{} // (Close) closed when the processor finishes
+	okay    bool          // (monitor) cmd is running and check passes
+	done    bool          // (Close) to get everything to quit
 }
 
 func (rb *ResourceBase) AddTask(task func(*supervisor.Process) error) {

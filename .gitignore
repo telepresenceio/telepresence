@@ -27,3 +27,5 @@
 .idea
 *.iml
 *.swp
+
+bin_*

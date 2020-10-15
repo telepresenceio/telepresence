@@ -70,21 +70,25 @@ func (w *Watcher) Stop() {
 	<-w.done
 }
 
-func (w *Watcher) containers() (result map[string]string, err error) {
+func (w *Watcher) containers() (map[string]string, error) {
 	ids, err := tpu.CmdLogf([]string{"docker", "container", "list", "-q"}, w.log)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	lines := ""
 	if ids != "" {
-		lines, err = tpu.CmdLogf(append([]string{"docker", "inspect", "--format={{.Name}} {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", "--"}, strings.Fields(ids)...), w.log)
+		lines, err = tpu.CmdLogf(append([]string{
+			"docker",
+			"inspect",
+			"--format={{.Name}} {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+			"--"}, strings.Fields(ids)...), w.log)
 		if err != nil {
-			return
+			return nil, err
 		}
 	}
 
-	result = make(map[string]string)
+	result := make(map[string]string)
 	for _, line := range strings.Split(lines, "\n") {
 		parts := strings.Fields(line)
 		if len(parts) == 2 {
@@ -95,8 +99,7 @@ func (w *Watcher) containers() (result map[string]string, err error) {
 			w.log("error parsing: %s", line)
 		}
 	}
-
-	return
+	return result, nil
 }
 
 func (w *Watcher) checkDocker(warn bool) bool {

@@ -21,7 +21,7 @@ func (t *Translator) ipt(p *supervisor.Process, args ...string) {
 	if err != nil {
 		panic(err)
 	}
-	cmd.Wait()
+	_ = cmd.Wait()
 }
 
 func (t *Translator) Enable(p *supervisor.Process) {
@@ -109,7 +109,7 @@ func (t *Translator) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host str
 	// Example result: &{Multiaddr:[2 0 31 144 206 190 36 45 0 0 0 0 0 0 0 0] Interface:0}
 	// port starts at the 3rd byte and is 2 bytes long (31 144 = port 8080)
 	// IPv6 version, didn't find a way to detect network family
-	//addr, err := syscall.GetsockoptIPv6Mreq(int(fd), syscall.IPPROTO_IPV6, IP6T_SO_ORIGINAL_DST)
+	// addr, err := syscall.GetsockoptIPv6Mreq(int(fd), syscall.IPPROTO_IPV6, IP6T_SO_ORIGINAL_DST)
 	// IPv4 address starts at the 5th byte, 4 bytes long (206 190 36 45)
 	rawConn, err := conn.SyscallConn()
 	if err != nil {

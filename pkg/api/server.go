@@ -30,7 +30,7 @@ func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
 			if result == "" {
 				http.NotFound(w, r)
 			} else {
-				w.Write(append([]byte(result), '\n'))
+				_, _ = w.Write(append([]byte(result), '\n'))
 			}
 		case http.MethodPost:
 			d := json.NewDecoder(r.Body)
@@ -57,7 +57,7 @@ func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
 			if err != nil {
 				panic(err)
 			} else {
-				w.Write(result)
+				_, _ = w.Write(result)
 			}
 		case http.MethodPost:
 			d := json.NewDecoder(r.Body)
@@ -70,12 +70,12 @@ func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
 		}
 	})
 	handler.HandleFunc("/api/shutdown", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Goodbye!\n"))
+		_, _ = w.Write([]byte("Goodbye!\n"))
 		p, err := os.FindProcess(os.Getpid())
 		if err != nil {
 			panic(err)
 		}
-		p.Signal(os.Interrupt)
+		_ = p.Signal(os.Interrupt)
 	})
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

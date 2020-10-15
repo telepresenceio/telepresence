@@ -27,13 +27,13 @@ type trafficManager struct {
 	namespace      string
 	interceptables []string
 	totalClusCepts int
-	snapshotSent   bool
 	installID      string // telepresence's install ID
-	connectCI      bool   // whether --ci was passed to connect
 	apiErr         error  // holds the latest traffic-manager API error
 	licenseInfo    string // license information from traffic-manager
 	previewHost    string // hostname to use for preview URLs, if enabled
 	hClient        *http.Client
+	snapshotSent   bool
+	connectCI      bool // whether --ci was passed to connect
 }
 
 // newTrafficManager returns a TrafficManager resource for the given

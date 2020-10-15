@@ -197,7 +197,6 @@ func RunTeleproxy(tele *Teleproxy, version string) error {
 					}
 				}
 			}
-			return nil
 		},
 	})
 
@@ -558,7 +557,7 @@ func updateTable(p *supervisor.Process, w *k8s.Watcher) {
 				}
 
 				// Kubernetes creates records for all named ports, of the form
-				//_my-port-name._my-port-protocol.my-svc.my-namespace.svc.cluster-domain.example
+				// _my-port-name._my-port-protocol.my-svc.my-namespace.svc.cluster-domain.example
 				// https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#srv-records
 				if port.Name != "" {
 					table.Add(route.Route{
@@ -768,6 +767,7 @@ func post(tables ...route.Table) {
 		log.Printf("BRG: error posting update to %s: %v", jnames, err)
 	} else {
 		log.Printf("BRG: posted update to %s: %v", jnames, resp.StatusCode)
+		resp.Body.Close()
 	}
 }
 
@@ -821,7 +821,6 @@ func connect(tele *Teleproxy) {
 		Requires: []string{K8sApplyWorker},
 		Retry:    true,
 		Work: func(p *supervisor.Process) (err error) {
-
 			kubeinfo := k8s.NewKubeInfo(tele.Kubeconfig, tele.Context, tele.Namespace)
 			args, err := kubeinfo.GetKubectlArray("port-forward", "pod/teleproxy", "8022")
 			if err != nil {

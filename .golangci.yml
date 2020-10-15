@@ -1,0 +1,77 @@
+run:
+  build-tags:
+    - citest
+
+issues:
+  exclude-use-default: false
+  exclude:
+    - Error return value of `(\w+\.)+(Close|Flush|Remove|(Un)?Setenv|(Fp|P)rint(f|ln))\` is not checked
+    - 'structtag: struct field \w+ repeats json tag'
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - const
+        - dupl
+        - gochecknoglobals
+        - goconst
+        - golint
+        - lll
+        - unparam
+
+linters-settings:
+  gocyclo:
+    min-complexity: 35
+
+  gocognit:
+    min-complexity: 60
+
+  lll:
+    line-length: 180
+    tab-width: 2
+
+  misspell:
+    ignore-words:
+      - mosquitto
+
+linters:
+  disable-all: true
+  enable:
+    - bodyclose
+    - deadcode
+    - depguard
+    - dogsled
+    - errcheck
+    - gocognit
+    - gocritic
+    - gocyclo
+    - gofmt
+    - goimports
+    - gosimple
+    - govet
+    - ineffassign
+    - lll
+    - maligned
+    - misspell
+    - nakedret
+    - prealloc
+    - scopelint
+    - structcheck
+    - staticcheck
+    - typecheck
+    - unconvert
+    - unused
+    - varcheck
+    - whitespace
+
+  # don't enable:
+  # - dupl
+  # - funlen
+  # - gochecknoglobals
+  # - gochecknoinits
+  # - goconst
+  # - godox
+  # - golint
+  # - gosec
+  # - interfacer
+  # - stylecheck
+  # - unparam

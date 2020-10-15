@@ -76,8 +76,8 @@ func tcp_listener(p *supervisor.Process, port int) error {
 
 func listeners(p *supervisor.Process, ports []int) error {
 	for _, port := range ports {
-		p.GoName(fmt.Sprintf("UDP-%d", port), supervisor.WorkFunc(udp_listener, port))
-		p.GoName(fmt.Sprintf("TCP-%d", port), supervisor.WorkFunc(tcp_listener, port))
+		_ = p.GoName(fmt.Sprintf("UDP-%d", port), supervisor.WorkFunc(udp_listener, port))
+		_ = p.GoName(fmt.Sprintf("TCP-%d", port), supervisor.WorkFunc(tcp_listener, port))
 	}
 	p.Ready()
 	<-p.Shutdown()
@@ -96,7 +96,7 @@ func checkForwardTCP(t *testing.T, fromIP string, ports []string, toPort string)
 			continue
 		}
 		defer c.Close()
-		c.(*net.TCPConn).SetDeadline(deadline)
+		_ = c.(*net.TCPConn).SetDeadline(deadline)
 
 		var buf [1024]byte
 		n, err := c.Read(buf[:1024])
@@ -198,7 +198,6 @@ func TestTranslator(t *testing.T) {
 	if len(errs) > 0 {
 		t.Errorf("unexpected errors: %v", errs)
 	}
-
 }
 
 func TestSorted(t *testing.T) {

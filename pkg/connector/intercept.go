@@ -267,14 +267,13 @@ func (s *service) removeIntercept(_ *supervisor.Process, name string) *rpc.Inter
 }
 
 // clearIntercepts removes all intercepts
-func (s *service) clearIntercepts(p *supervisor.Process) error {
+func (s *service) clearIntercepts(p *supervisor.Process) {
 	for _, cept := range s.intercepts {
 		if err := cept.Close(); err != nil {
 			p.Logf("Closing intercept %q: %v", cept.ii.Name, err)
 		}
 	}
 	s.intercepts = s.intercepts[:0]
-	return nil
 }
 
 // intercept is a Resource handle that represents a live intercept
