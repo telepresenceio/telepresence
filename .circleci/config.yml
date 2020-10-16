@@ -1,0 +1,129 @@
+version: 2.1
+
+commands:
+  install-go:
+    parameters:
+      version:
+        type: string
+        default: "1.15"
+    steps:
+      - run:
+          name: "Install Go << parameters.version >>"
+          command: |
+            set -x
+            if [[ $OS == Windows_NT ]]; then
+              curl https://dl.google.com/go/go<< parameters.version >>.windows-amd64.zip -o /tmp/go.zip
+              mv /c/go /c/go-112
+              unzip -q /tmp/go.zip -d /c/
+            else
+              curl https://dl.google.com/go/go<< parameters.version >>.$(uname -s | tr A-Z a-z)-amd64.tar.gz -o /tmp/go.tar.gz
+              tar -C /tmp -xzf /tmp/go.tar.gz
+              echo 'export PATH=/tmp/go/bin:$PATH' >> "$BASH_ENV"
+              if [ -z "$(/tmp/go/bin/go env GOPROXY)" ]; then
+                echo 'export GOPROXY=https://proxy.golang.org' >> "$BASH_ENV"
+              fi
+              . "$BASH_ENV"
+            fi
+            go version
+
+  install-lint:
+    steps:
+      - run:
+          name: Set up GolangCI-Lint
+          command: curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- latest
+
+  go-build:
+    steps:
+      - run:
+          name: Build
+          command: go build -o bin_linux_amd64/telepresence2 .
+
+  go-test:
+    steps:
+      - run:
+          name: Test
+          command: go test ./...
+
+  go-lint:
+    steps:
+      - run:
+          name: Lint
+          command: ./bin/golangci-lint run ./...
+
+  install-kubectl:
+    parameters:
+      version:
+        type: string
+        default: "1.14.0"
+    steps:
+      - run:
+          name: "Install kubectl << parameters.version >>"
+          command: |
+            curl -L --fail -o /tmp/kubectl https://storage.googleapis.com/kubernetes-release/release/v<< parameters.version >>/bin/$(uname -s | tr A-Z a-z)/amd64/kubectl
+            sudo install /tmp/kubectl /usr/local/bin/kubectl
+
+  "config-cluster-and-registry":
+    steps:
+      - run:
+          name: "Configure Kubernetes cluster and Docker registry"
+          working_directory: ~/project
+          command: |
+            if [[ -z "$DEV_REGISTRY" ]]; then
+              echo >>"$BASH_ENV" 'export DEV_REGISTRY=127.0.0.1:31000'
+            fi
+            if [[ -n "$DOCKER_BUILD_USERNAME" && -n "DOCKER_BUILD_PASSWORD" ]]; then
+              docker login -u="${DOCKER_BUILD_USERNAME}" -p="${DOCKER_BUILD_PASSWORD}" "${DEV_REGISTRY%%/*}"
+            fi
+
+            ./.ci/kubeception-claim
+            echo >>"$BASH_ENV" 'if test -e ~/kubeception-claim.txt; then'
+            echo >>"$BASH_ENV" '  export DEV_KUBECONFIG=~/.kube/$(cat ~/kubeception-claim.txt).yaml'
+            echo >>"$BASH_ENV" 'fi'
+
+            echo >>"$BASH_ENV" 'unset BASH_ENV'
+
+  "teardown-cluster":
+    steps:
+      - run:
+          working_directory: ~/project
+          command: "./.ci/kubeception-unclaim"
+          when: "always"
+
+  "save-logs":
+    steps:
+      - run:
+          name: "Gather logs"
+          when: always
+          command: |
+            rsync -ma --include='*/' --include='*.tap' --include='*.log' --include='Test*.webm' --exclude='*' . /tmp/test-logs
+      - store_artifacts:
+          name: "Store logs"
+          path: /tmp/test-logs
+          destination: test-logs
+
+jobs:
+  test:
+    executor: oss-linux
+    steps:
+      - checkout
+      - install-go
+      - go-build
+      - install-kubectl
+      - config-cluster-and-registry
+      - go-test
+      - save-logs
+      - teardown-cluster
+      - install-lint
+      - go-lint
+
+workflows:
+  'OSS: Dev':
+    jobs:
+      - test:
+          name: "test"
+
+executors:
+  oss-linux:
+    machine:
+      image: "ubuntu-2004:202008-01"
+    working_directory: ~/project
