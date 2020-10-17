@@ -14,15 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 
-SOURCE="${BASH_SOURCE[0]}"
-while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
-  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
-  SOURCE="$(readlink "$SOURCE")"
-  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
-done
-DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+DIR=$( dirname "${BASH_SOURCE[0]}" )
+source $DIR/helpers
 
-source ./.ci/helpers
+set -o errexit
+set -o nounset
+set -o xtrace
 
 # This block gets a kluster from kubeception.
 # The KUBECEPTION_TOKEN env var is set in the circleci webui.
@@ -34,5 +31,6 @@ if [ -n "${KUBECEPTION_TOKEN}" ]; then
     # get a kluster with a 1 timeout that is size "medium"
     get_cluster ${DEV_KUBECONFIG} 28800 medium
     kubectl --kubeconfig ${DEV_KUBECONFIG} -n default get service kubernetes
-    exit
+    exit 0
 fi
+exit 1

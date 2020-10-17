@@ -42,7 +42,7 @@ commands:
     steps:
       - run:
           name: Test
-          command: go test ./...
+          command: DTEST_KUBECONFIG=$DEV_KUBECONFIG go test ./...
 
   go-lint:
     steps:
