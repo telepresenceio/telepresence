@@ -145,16 +145,16 @@ var mappings = []struct {
 	notForwarded []string
 }{
 	{"1", "", "4321", []string{"80", "8080"}, nil},
-	{"2", "", "1234", []string{"80", "8080"}, nil},
-	{"3", "", "1234", []string{"80", "8080"}, nil},
-	{"4", "443", "1234", []string{"443"}, []string{"80", "8080"}},
+	{"2", "", "2134", []string{"80", "8080"}, nil},
+	{"3", "", "2134", []string{"80", "8080"}, nil},
+	{"4", "443", "2134", []string{"443"}, []string{"80", "8080"}},
 }
 
 func TestTranslator(t *testing.T) {
 	sup := supervisor.WithContext(context.Background())
 	sup.Supervise(&supervisor.Worker{
 		Name: "listeners",
-		Work: supervisor.WorkFunc(listeners, []int{1234, 4321}),
+		Work: supervisor.WorkFunc(listeners, []int{2134, 4321}),
 	})
 	sup.Supervise(&supervisor.Worker{
 		Name:     "nat",
@@ -207,13 +207,13 @@ func TestSorted(t *testing.T) {
 		tr.ForwardTCP(p, "192.0.2.1", "", "4321")
 		tr.ForwardTCP(p, "192.0.2.3", "", "4323")
 		tr.ForwardTCP(p, "192.0.2.2", "", "4322")
-		tr.ForwardUDP(p, "192.0.2.4", "", "1234")
+		tr.ForwardUDP(p, "192.0.2.4", "", "2134")
 		entries := tr.sorted()
 		if !reflect.DeepEqual(entries, []Entry{
 			{Address{"tcp", "192.0.2.1", ""}, "4321"},
 			{Address{"tcp", "192.0.2.2", ""}, "4322"},
 			{Address{"tcp", "192.0.2.3", ""}, "4323"},
-			{Address{"udp", "192.0.2.4", ""}, "1234"},
+			{Address{"udp", "192.0.2.4", ""}, "2134"},
 		}) {
 			t.Errorf("not sorted: %s", entries)
 		}
