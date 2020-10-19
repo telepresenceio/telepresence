@@ -12,21 +12,25 @@ GOBIN=$(word 1, $(subst :, ,$(GOPATH)))/bin
 
 export PATH := $(BUILDDIR)/bin:$(PATH)
 
+env:
+	@echo $(GOBIN)
+
 # Install protoc under $BUILDDIR. A protoc that is already installed locally cannot be trusted since this must be the exact
 # same version as used when running CI. If it isn't, the generate-check will fail.
 PROTOC_VERSION=3.13.0
 PROTOC=$(BINDIR)/protoc
+PROTOC_ZIP=protoc-$(PROTOC_VERSION)-$(subst darwin,osx,$(GOHOSTOS))-$(shell uname -m).zip
 $(PROTOC):
 	mkdir -p $(BINDIR)
-	curl -sfL https://github.com/protocolbuffers/protobuf/releases/download/v$(PROTOC_VERSION)/protoc-$(PROTOC_VERSION)-$(GOHOSTOS)-$(shell uname -m).zip -o $(BUILDDIR)/protoc-$(PROTOC_VERSION).zip
-	cd $(BUILDDIR) && unzip protoc-$(PROTOC_VERSION).zip
+	curl -sfL https://github.com/protocolbuffers/protobuf/releases/download/v$(PROTOC_VERSION)/$(PROTOC_ZIP) -o $(BUILDDIR)/$(PROTOC_ZIP)
+	cd $(BUILDDIR) && unzip $(PROTOC_ZIP)
 
 # Install protoc-gen and protoc-gen-go-grpc
 $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc: go.mod
 	go get github.com/golang/protobuf/protoc-gen-go google.golang.org/grpc/cmd/protoc-gen-go-grpc
 
 # proto/gRPC generation using protoc
-pkg/%.pb.go pkg/%_grpc.pb.go: %.proto $(PROTOC) $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc $(GOBIN)/protoc
+pkg/%.pb.go pkg/%_grpc.pb.go: %.proto $(PROTOC) $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc
 	$(PROTOC) --proto_path=. --go_out=. --go-grpc_out=. $<
 
 TP_RPC_FILES = pkg/rpc/daemon.pb.go pkg/rpc/daemon_grpc.pb.go
@@ -39,7 +43,8 @@ generate-clean: ## (Generate) delete generated files that get checked in to Git.
 	rm -rf pkg/rpc/*
 
 # pkg sources excluding rpc
-TP_PKG_SOURCES = $(shell find pkg -type f -name '*.go' | grep -v '/testdata/' | grep -v '_test.go' | grep -v '/rpc/')
+TP_PKG_SOURCES = $(shell find pkg -type f -name '*.go' | grep -v '_test.go' | grep -v '/rpc/')
+TP_TEST_SOURCES = telepresence_test.go $(shell find pkg -type f -name '*_test.go')
 
 $(BINDIR)/telepresence: main.go $(TP_PKG_SOURCES) $(TP_RPC_FILES)
 	mkdir -p $(BINDIR)
@@ -60,7 +65,7 @@ lint: $(BINDIR)/golangci-lint ## (Lint) runs golangci-lint
 	$(BINDIR)/golangci-lint run ./...
 
 .phony: test
-test: build ## (Test) runs go test
+test: build $(TP_TEST_SOURCES) ## (Test) runs go test
 	go test .
 
 .PHONY: all

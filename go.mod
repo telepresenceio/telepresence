@@ -27,3 +27,9 @@ require (
 )
 
 replace github.com/Azure/go-autorest v10.8.1+incompatible => github.com/Azure/go-autorest v13.3.2+incompatible
+
+// This is a workaround for a Go backwards incompatibility problem introduced in 1.15.2 which breaks
+// github/docker/docker/pkg/term on darwin because unix.SYS_IOCTL no longer exists. Having ambassador use
+// a more recent version of k8s.io/kubectl/pkg/util/term in (this is where the dependency is introduced) will
+// likely also solve the problem. The github.com/docker/docker is deprecated.
+replace github.com/docker/docker v1.4.2-0.20200203170920-46ec8731fbce => github.com/moby/moby v1.13.1
