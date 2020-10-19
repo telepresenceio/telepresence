@@ -26,42 +26,36 @@ commands:
             fi
             go version
 
-  install-lint:
-    steps:
-      - run:
-          name: Set up GolangCI-Lint
-          command: curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- latest
-
   go-check-generate:
     steps:
       - run:
           name: Check Generate
-          command: protoc --proto_path=. --go_out=.. --go-grpc_out=.. daemon.proto && git diff --quiet HEAD ../pkg/rpc
+          command: make generate-clean generate && git diff --quiet HEAD ../pkg/rpc
           working_directory: rpc
 
   go-build:
     steps:
       - run:
           name: Build
-          command: go build -o bin_linux_amd64/telepresence2 .
+          command: make build
 
   go-test:
     steps:
       - run:
           name: Test
-          command: DTEST_KUBECONFIG=$DEV_KUBECONFIG go test ./...
+          command: DTEST_KUBECONFIG=$DEV_KUBECONFIG make test
 
   go-lint:
     steps:
       - run:
           name: Lint
-          command: ./bin/golangci-lint run ./...
+          command: make lint
 
   install-kubectl:
     parameters:
       version:
         type: string
-        default: "1.14.0"
+        default: "1.19.3"
     steps:
       - run:
           name: "Install kubectl << parameters.version >>"
