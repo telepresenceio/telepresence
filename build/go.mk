@@ -14,12 +14,19 @@ BLU='\033[1;34m'
 CYN='\033[1;36m'
 END='\033[0m'
 
+PROTOC_VERSION=3.13.0
+
+# Install protoc under $GOBIN
+$(GOBIN)/protoc:
+	curl -sfL https://github.com/protocolbuffers/protobuf/releases/download/v$(PROTOC_VERSION)/protoc-$(PROTOC_VERSION)-$(GOHOSTOS)-$(shell uname -m).zip -o /tmp/protoc-$(PROTOC_VERSION).zip
+	cd $(dir $(GOBIN)) && unzip /tmp/protoc-$(PROTOC_VERSION).zip
+
 # Install protoc-gen and protoc-gen-go-grpc
 $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc:
 	go get github.com/golang/protobuf/protoc-gen-go google.golang.org/grpc/cmd/protoc-gen-go-grpc
 
 .PHONY: protoc-tools
-protoc-tools: go.mod $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc
+protoc-tools: go.mod $(GOBIN)/protoc $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc $(GOBIN)/protoc
 
 # proto/gRPC generation using protoc
 pkg/%.pb.go pkg/%_grpc.pb.go: %.proto
