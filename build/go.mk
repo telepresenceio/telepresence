@@ -6,6 +6,7 @@ GOHOSTOS=$(shell go env GOHOSTOS)
 GOHOSTARCH=$(shell go env GOHOSTARCH)
 
 BINDIR=bin_$(GOHOSTOS)_$(GOHOSTARCH)
+GOBIN=$(word 1, $(subst :, ,$(GOPATH)))/bin
 
 RED='\033[1;31m'
 GRN='\033[1;32m'
@@ -14,11 +15,11 @@ CYN='\033[1;36m'
 END='\033[0m'
 
 # Install protoc-gen and protoc-gen-go-grpc
-$(GOPATH)/bin/protoc-gen-go $(GOPATH)/bin/protoc-gen-go-grpc:
+$(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc:
 	go get github.com/golang/protobuf/protoc-gen-go google.golang.org/grpc/cmd/protoc-gen-go-grpc
 
 .PHONY: protoc-tools
-protoc-tools: go.mod $(GOPATH)/bin/protoc-gen-go $(GOPATH)/bin/protoc-gen-go-grpc
+protoc-tools: go.mod $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc
 
 # proto/gRPC generation using protoc
 pkg/%.pb.go pkg/%_grpc.pb.go: %.proto
@@ -53,30 +54,12 @@ $(BINDIR)/golangci-lint: ## (Lint) install golangci-lint
 lint: $(BINDIR)/golangci-lint ## (Lint) runs golangci-lint
 	$(BINDIR)/golangci-lint run ./...
 
-.phony: gotest
-gotest: build  ## (Test) runs go test
+.phony: test
+test: build  ## (Test) runs go test
 	go test .
 
-define targets-string
-  $(BLD)$(MAKE) $(BLU)help$(END)            -- displays the main help message.
-
-  $(BLD)$(MAKE) $(BLU)targets$(END)         -- displays this message.
-
-  $(BLD)$(MAKE) $(BLU)clean$(END)           -- cleans built artefacts.
-
-  $(BLD)$(MAKE) $(BLU)generate-clean$(END)  -- delete generated files that get checked in to Git.
-
-  $(BLD)$(MAKE) $(BLU)generate$(END)        -- update generated files that get checked in to Git.
-
-  $(BLD)$(MAKE) $(BLU)lint$(END)            -- runs golangci-lint.
-
-  $(BLD)$(MAKE) $(BLU)build$(END)           -- runs go build
-
-  $(BLD)$(MAKE) $(BLU)clean$(END)           -- runs go test
-endef
-
 .PHONY: all
-all: gotest
+all: test
 
 .PHONY: help
 help:  ## (Common) Show this message

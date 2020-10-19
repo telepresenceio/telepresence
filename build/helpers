@@ -86,9 +86,9 @@ start_cluster() {
         return 1
     fi
     curl -s -H "Authorization: bearer ${KUBECEPTION_TOKEN}" "https://sw.bakerstreet.io/kubeception/api/klusters/ci-?generate=true&timeoutSecs=${timeout}&profile=${profile}" -X PUT > "${kubeconfig}"
-    printf "${BLU}Acquiring cluster:\n==${END}\n" 1>&2
+    printf "%sAcquiring cluster:\n==%s\n" "${BLU}" "${END}" 1>&2
     cat "${kubeconfig}" 1>&2
-    printf "${BLU}==${END}\n" 1>&2
+    printf "%s==%s\n" "${BLU}" "${END}" 1>&2
 }
 
 await_cluster() {

@@ -30,8 +30,7 @@ commands:
     steps:
       - run:
           name: Check Generate
-          command: make generate-clean generate && git diff --quiet HEAD ../pkg/rpc
-          working_directory: rpc
+          command: make generate-clean generate && git diff --quiet HEAD pkg/rpc
 
   go-build:
     steps:
@@ -106,13 +105,13 @@ jobs:
     steps:
       - checkout
       - install-go
+      - go-check-generate
       - go-build
       - install-kubectl
       - config-cluster-and-registry
       - go-test
       - save-logs
       - teardown-cluster
-      - install-lint
       - go-lint
 
 workflows:
