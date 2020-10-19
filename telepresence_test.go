@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"runtime"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -77,7 +77,7 @@ func captureCmd(cmd *exec.Cmd) (string, error) {
 	return out, err
 }
 
-var executable = "bin_" + runtime.GOOS + "_" + runtime.GOARCH + "/telepresence"
+var executable = filepath.Join("build-output", "bin", "/telepresence")
 
 // doBuildExecutable calls go build
 func doBuildExecutable() {
