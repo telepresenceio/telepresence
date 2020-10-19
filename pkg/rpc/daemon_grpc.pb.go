@@ -320,7 +320,7 @@ var _Daemon_serviceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "daemon.proto",
+	Metadata: "rpc/daemon.proto",
 }
 
 // ConnectorClient is the client API for Connector service.
@@ -671,5 +671,5 @@ var _Connector_serviceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "daemon.proto",
+	Metadata: "rpc/daemon.proto",
 }

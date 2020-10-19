@@ -32,6 +32,13 @@ commands:
           name: Set up GolangCI-Lint
           command: curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- latest
 
+  go-check-generate:
+    steps:
+      - run:
+          name: Check Generate
+          command: protoc --proto_path=. --go_out=.. --go-grpc_out=.. daemon.proto && git diff --quiet HEAD ../pkg/rpc
+          working_directory: rpc
+
   go-build:
     steps:
       - run:
@@ -66,7 +73,6 @@ commands:
     steps:
       - run:
           name: "Configure Kubernetes cluster and Docker registry"
-          working_directory: ~/project
           command: |
             if [[ -z "$DEV_REGISTRY" ]]; then
               echo >>"$BASH_ENV" 'export DEV_REGISTRY=127.0.0.1:31000'
@@ -75,7 +81,7 @@ commands:
               docker login -u="${DOCKER_BUILD_USERNAME}" -p="${DOCKER_BUILD_PASSWORD}" "${DEV_REGISTRY%%/*}"
             fi
 
-            ./.ci/kubeception-claim
+            build/kubeception-claim
             echo >>"$BASH_ENV" 'if test -e ~/kubeception-claim.txt; then'
             echo >>"$BASH_ENV" '  export DEV_KUBECONFIG=~/.kube/$(cat ~/kubeception-claim.txt).yaml'
             echo >>"$BASH_ENV" 'fi'
@@ -85,8 +91,7 @@ commands:
   "teardown-cluster":
     steps:
       - run:
-          working_directory: ~/project
-          command: "./.ci/kubeception-unclaim"
+          command: "build/kubeception-unclaim"
           when: "always"
 
   "save-logs":
