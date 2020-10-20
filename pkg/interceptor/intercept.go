@@ -3,6 +3,7 @@ package interceptor
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"os"
 	"runtime"
@@ -132,7 +133,7 @@ func Start(p *supervisor.Process, dnsIP, fallbackIP string, noCheck, noSearch bo
 			if strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
 				fields := strings.Fields(line)
 				dnsIP = fields[1]
-				// log.Printf("TPY: Automatically set -dns=%v", dnsIP)
+				log.Printf("TPY: Automatically set -dns=%v", dnsIP)
 				break
 			}
 		}
@@ -147,7 +148,7 @@ func Start(p *supervisor.Process, dnsIP, fallbackIP string, noCheck, noSearch bo
 		} else {
 			fallbackIP = "8.8.8.8"
 		}
-		// log.Printf("TPY: Automatically set -fallback=%v", fallbackIP)
+		log.Printf("TPY: Automatically set -fallback=%v", fallbackIP)
 	}
 	if fallbackIP == dnsIP {
 		return errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
@@ -272,7 +273,7 @@ func Start(p *supervisor.Process, dnsIP, fallbackIP string, noCheck, noSearch bo
 					return errors.Wrap(err, "SELF CHECK FAILED")
 				}
 			} else {
-				// p.Logf("SELF CHECK PASSED, SIGNALING READY")
+				p.Logf("SELF CHECK PASSED, SIGNALING READY")
 			}
 
 			err = p.Do(func() error {

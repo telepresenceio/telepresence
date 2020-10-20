@@ -68,6 +68,7 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	sup := supervisor.WithContext(ctx)
 	if err = d.setUpLogging(sup); err != nil {
+		cancel()
 		return err
 	}
 
