@@ -66,7 +66,7 @@ lint: $(BINDIR)/golangci-lint ## (Lint) runs golangci-lint
 
 .phony: test
 test: build $(TP_TEST_SOURCES) ## (Test) runs go test
-	go test .
+	go test -v .
 
 .PHONY: all
 all: test
