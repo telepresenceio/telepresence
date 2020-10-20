@@ -83,6 +83,12 @@ func start(exe string, args []string, wait bool, stdin io.Reader, stdout, stderr
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	cmd.Stdin = stdin
+	if !wait {
+		// Process must live in a process group of its own to prevent
+		// getting affected by <ctrl-c> in the terminal
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	}
+
 	var err error
 	if err = cmd.Start(); err != nil {
 		return fmt.Errorf("%s %s: %v\n", exe, strings.Join(args, " "), err)

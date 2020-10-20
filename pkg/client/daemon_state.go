@@ -57,7 +57,10 @@ func (ds *daemonState) DeactivateState() error {
 		return nil
 	}
 	fmt.Fprint(ds.out, "Telepresence Daemon quitting...")
-	_, err := ds.grpc.Quit(context.Background(), &rpc.Empty{})
+	var err error
+	if common.SocketExists(common.DaemonSocketName) {
+		_, err = ds.grpc.Quit(context.Background(), &rpc.Empty{})
+	}
 	ds.disconnect()
 	if err == nil {
 		err = common.WaitUntilSocketVanishes("daemon", common.DaemonSocketName, 5*time.Second)

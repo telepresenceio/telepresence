@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/datawire/telepresence2/pkg/connector"
+
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/common"
-	"github.com/datawire/telepresence2/pkg/connector"
 	"github.com/datawire/telepresence2/pkg/daemon"
 	"github.com/datawire/telepresence2/pkg/teleproxy"
 )
@@ -85,48 +86,9 @@ func getRootCommand() *cobra.Command {
 	// Hidden/internal commands. These are called by Telepresence itself from
 	// the correct context and execute in-place immediately.
 
-	rootCmd.AddCommand(&cobra.Command{
-		Use:    "daemon-foreground",
-		Short:  "Launch Telepresence Daemon in the foreground (debug)",
-		Args:   cobra.ExactArgs(2),
-		Hidden: true,
-		RunE: func(_ *cobra.Command, args []string) error {
-			return daemon.Run(args[0], args[1])
-		},
-	})
-	rootCmd.AddCommand(&cobra.Command{
-		Use:    "connector-foreground",
-		Short:  "Launch Telepresence Connector in the foreground (debug)",
-		Args:   cobra.ExactArgs(0),
-		Hidden: true,
-		RunE: func(_ *cobra.Command, args []string) error {
-			return connector.Run()
-		},
-	})
-	teleproxyCmd := &cobra.Command{
-		Use:    "teleproxy",
-		Short:  "Impersonate Teleproxy (for internal use)",
-		Hidden: true,
-	}
-	teleproxyCmd.AddCommand(&cobra.Command{
-		Use:    "intercept",
-		Short:  "Impersonate Teleproxy Intercept (for internal use)",
-		Args:   cobra.ExactArgs(2),
-		Hidden: true,
-		RunE: func(_ *cobra.Command, args []string) error {
-			return teleproxy.RunAsIntercept(args[0], args[1])
-		},
-	})
-	teleproxyCmd.AddCommand(&cobra.Command{
-		Use:    "bridge",
-		Short:  "Impersonate Teleproxy Bridge (for internal use)",
-		Args:   cobra.ExactArgs(2),
-		Hidden: true,
-		RunE: func(_ *cobra.Command, args []string) error {
-			return teleproxy.RunAsBridge(args[0], args[1])
-		},
-	})
-	rootCmd.AddCommand(teleproxyCmd)
+	rootCmd.AddCommand(daemon.Command())
+	rootCmd.AddCommand(connector.Command())
+	rootCmd.AddCommand(teleproxy.Command())
 
 	// Client commands. These are never sent to the daemon.
 

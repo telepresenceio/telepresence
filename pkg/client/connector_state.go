@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"os/exec"
 	"time"
 
 	"github.com/pkg/errors"
@@ -53,9 +51,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 
 	cs.cr.InstallID = NewScout("unused").Reporter.InstallID()
 
-	connectorCmd := exec.Command(common.GetExe(), "connector-foreground")
-	connectorCmd.Env = os.Environ()
-	err := connectorCmd.Start()
+	err := start(common.GetExe(), []string{"connector-foreground"}, false, nil, nil, nil)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to launch the connector service")
 	}
@@ -110,7 +106,10 @@ func (cs *connectorState) DeactivateState() error {
 		return nil
 	}
 	fmt.Fprint(cs.out, "Disconnecting...")
-	_, err := cs.grpc.Quit(context.Background(), &rpc.Empty{})
+	var err error
+	if common.SocketExists(common.ConnectorSocketName) {
+		_, err = cs.grpc.Quit(context.Background(), &rpc.Empty{})
+	}
 	cs.disconnect()
 	if err == nil {
 		err = common.WaitUntilSocketVanishes("connector", common.ConnectorSocketName, 5*time.Second)

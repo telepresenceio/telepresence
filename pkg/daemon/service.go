@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -41,8 +43,20 @@ type service struct {
 	p        *supervisor.Process
 }
 
-// Run is the main function when executing as the daemon
-func Run(dns, fallback string) error {
+func Command() *cobra.Command {
+	return &cobra.Command{
+		Use:    "daemon-foreground",
+		Short:  "Launch Telepresence Daemon in the foreground (debug)",
+		Args:   cobra.ExactArgs(2),
+		Hidden: true,
+		RunE: func(_ *cobra.Command, args []string) error {
+			return run(args[0], args[1])
+		},
+	}
+}
+
+// run is the main function when executing as the daemon
+func run(dns, fallback string) error {
 	if os.Geteuid() != 0 {
 		return errors.New("telepresence daemon must run as root")
 	}
@@ -199,6 +213,7 @@ func (d *service) handleSignalsAndShutdown() {
 	select {
 	case sig := <-interrupt:
 		d.p.Logf("Received signal %s", sig)
+		d.p.Supervisor().Shutdown()
 	case <-d.p.Shutdown():
 		d.p.Log("Shutting down")
 	}

@@ -13,7 +13,7 @@ import (
 	rt "github.com/datawire/telepresence2/pkg/route"
 )
 
-type Interceptor struct {
+type interceptor struct {
 	translator *nat.Translator
 	tables     map[string]rt.Table
 	tablesLock sync.RWMutex
@@ -27,8 +27,8 @@ type Interceptor struct {
 	work chan func(*supervisor.Process) error
 }
 
-func NewInterceptor(name string) *Interceptor {
-	ret := &Interceptor{
+func newInterceptor(name string) *interceptor {
+	ret := &interceptor{
 		tables:     make(map[string]rt.Table),
 		translator: nat.NewTranslator(name),
 		domains:    make(map[string]rt.Route),
@@ -39,7 +39,7 @@ func NewInterceptor(name string) *Interceptor {
 	return ret
 }
 
-func (i *Interceptor) Work(p *supervisor.Process) error {
+func (i *interceptor) Work(p *supervisor.Process) error {
 	i.translator.Enable(p)
 	i.tablesLock.Unlock()
 
@@ -65,7 +65,7 @@ func (i *Interceptor) Work(p *supervisor.Process) error {
 // all the suffixes in the search path, and returns a Route on success
 // or nil on failure. This implementation does not count the number of
 // dots in the query.
-func (i *Interceptor) Resolve(query string) *rt.Route {
+func (i *interceptor) Resolve(query string) *rt.Route {
 	if !strings.HasSuffix(query, ".") {
 		query += "."
 	}
@@ -92,12 +92,12 @@ func (i *Interceptor) Resolve(query string) *rt.Route {
 	return nil
 }
 
-func (i *Interceptor) Destination(conn *net.TCPConn) (string, error) {
+func (i *interceptor) Destination(conn *net.TCPConn) (string, error) {
 	_, host, err := i.translator.GetOriginalDst(conn)
 	return host, err
 }
 
-func (i *Interceptor) Render(table string) string {
+func (i *interceptor) Render(table string) string {
 	var obj interface{}
 
 	if table == "" {
@@ -126,7 +126,7 @@ func (i *Interceptor) Render(table string) string {
 	}
 }
 
-func (i *Interceptor) Delete(table string) bool {
+func (i *interceptor) Delete(table string) bool {
 	result := make(chan bool)
 	i.work <- func(p *supervisor.Process) error {
 		i.tablesLock.Lock()
@@ -162,7 +162,7 @@ func (i *Interceptor) Delete(table string) bool {
 	return <-result
 }
 
-func (i *Interceptor) Update(table rt.Table) {
+func (i *interceptor) Update(table rt.Table) {
 	result := make(chan struct{})
 	i.work <- func(p *supervisor.Process) error {
 		defer close(result)
@@ -171,7 +171,7 @@ func (i *Interceptor) Update(table rt.Table) {
 	<-result
 }
 
-func (i *Interceptor) update(p *supervisor.Process, table rt.Table) error {
+func (i *interceptor) update(p *supervisor.Process, table rt.Table) error {
 	// Make a copy of the current table
 	i.tablesLock.Lock()
 	oldTable, ok := i.tables[table.Name]
@@ -259,7 +259,7 @@ func (i *Interceptor) update(p *supervisor.Process, table rt.Table) error {
 }
 
 // SetSearchPath updates the DNS search path used by the resolver
-func (i *Interceptor) SetSearchPath(paths []string) {
+func (i *interceptor) SetSearchPath(paths []string) {
 	i.searchLock.Lock()
 	defer i.searchLock.Unlock()
 
@@ -267,7 +267,7 @@ func (i *Interceptor) SetSearchPath(paths []string) {
 }
 
 // GetSearchPath retrieves the current search path
-func (i *Interceptor) GetSearchPath() []string {
+func (i *interceptor) GetSearchPath() []string {
 	i.searchLock.RLock()
 	defer i.searchLock.RUnlock()
 

@@ -1,4 +1,4 @@
-package api
+package interceptor
 
 import (
 	"context"
@@ -9,16 +9,15 @@ import (
 	"os"
 
 	"github.com/datawire/telepresence2/pkg/dns"
-	"github.com/datawire/telepresence2/pkg/interceptor"
 	"github.com/datawire/telepresence2/pkg/route"
 )
 
-type APIServer struct {
+type apiServer struct {
 	listener net.Listener
 	server   http.Server
 }
 
-func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
+func (i *interceptor) newAPIServer() (*apiServer, error) {
 	handler := http.NewServeMux()
 	tables := "/api/tables/"
 	handler.HandleFunc(tables, func(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +25,7 @@ func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
 
 		switch r.Method {
 		case http.MethodGet:
-			result := iceptor.Render(table)
+			result := i.Render(table)
 			if result == "" {
 				http.NotFound(w, r)
 			} else {
@@ -40,19 +39,19 @@ func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
 				http.Error(w, err.Error(), 400)
 			} else {
 				for _, t := range table {
-					iceptor.Update(t)
+					i.Update(t)
 				}
 				dns.Flush()
 			}
 		case http.MethodDelete:
-			iceptor.Delete(table)
+			i.Delete(table)
 		}
 	})
 	handler.HandleFunc("/api/search", func(w http.ResponseWriter, r *http.Request) {
 		var paths []string
 		switch r.Method {
 		case http.MethodGet:
-			paths = iceptor.GetSearchPath()
+			paths = i.GetSearchPath()
 			result, err := json.Marshal(paths)
 			if err != nil {
 				panic(err)
@@ -65,7 +64,7 @@ func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
 			if err != nil {
 				http.Error(w, err.Error(), 400)
 			} else {
-				iceptor.SetSearchPath(paths)
+				i.SetSearchPath(paths)
 			}
 		}
 	})
@@ -83,7 +82,7 @@ func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
 		return nil, err
 	}
 
-	return &APIServer{
+	return &apiServer{
 		listener: ln,
 		server: http.Server{
 			Handler: handler,
@@ -91,7 +90,7 @@ func NewAPIServer(iceptor *interceptor.Interceptor) (*APIServer, error) {
 	}, nil
 }
 
-func (a *APIServer) Port() string {
+func (a *apiServer) Port() string {
 	_, port, err := net.SplitHostPort(a.listener.Addr().String())
 	if err != nil {
 		panic(err)
@@ -99,7 +98,7 @@ func (a *APIServer) Port() string {
 	return port
 }
 
-func (a *APIServer) Start() {
+func (a *apiServer) Start() {
 	go func() {
 		if err := a.server.Serve(a.listener); err != http.ErrServerClosed {
 			// Error starting or closing listener:
@@ -108,7 +107,7 @@ func (a *APIServer) Start() {
 	}()
 }
 
-func (a *APIServer) Stop() {
+func (a *apiServer) Stop() {
 	if err := a.server.Shutdown(context.Background()); err != nil {
 		// Error from closing listeners, or context timeout:
 		log.Printf("API Server Shutdown: %v", err)

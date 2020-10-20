@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
@@ -43,8 +45,20 @@ type service struct {
 	p          *supervisor.Process
 }
 
-// Run is the main function when executing as the connector
-func Run() error {
+func Command() *cobra.Command {
+	return &cobra.Command{
+		Use:    "connector-foreground",
+		Short:  "Launch Telepresence Connector in the foreground (debug)",
+		Args:   cobra.ExactArgs(0),
+		Hidden: true,
+		RunE: func(_ *cobra.Command, args []string) error {
+			return run()
+		},
+	}
+}
+
+// run is the main function when executing as the connector
+func run() error {
 	// establish a connection to the daemon gRPC service
 	conn, err := grpc.Dial(common.SocketURL(common.DaemonSocketName), grpc.WithInsecure())
 	if err != nil {
@@ -123,7 +137,7 @@ func (s *service) setUpLogging(sup *supervisor.Supervisor) error {
 // runGRPCService is the main gRPC server loop.
 func (s *service) runGRPCService(p *supervisor.Process) error {
 	p.Log("---")
-	p.Logf("Telepresence Collector %s starting...", common.DisplayVersion())
+	p.Logf("Telepresence Connector %s starting...", common.DisplayVersion())
 	p.Logf("PID is %d", os.Getpid())
 	p.Log("")
 
@@ -249,6 +263,7 @@ type daemonLogger struct {
 	stream rpc.Daemon_LoggerClient
 }
 
+// Printf implements the supervisor.Logger interface
 func (d *daemonLogger) Printf(format string, v ...interface{}) {
 	txt := fmt.Sprintf(format, v...)
 	err := d.stream.Send(&rpc.LogMessage{Text: txt})
