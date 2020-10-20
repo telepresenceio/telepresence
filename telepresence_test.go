@@ -96,28 +96,30 @@ func TestSmokeOutbound(t *testing.T) {
 	namespace := fmt.Sprintf("telepresence-%d", os.Getpid())
 	nsArg := fmt.Sprintf("--namespace=%s", namespace)
 
-	fmt.Println("setup")
-	require.NoError(t, run("sudo", "true"), "setup: acquire privileges")
-	require.NoError(t, run("printenv", "KUBECONFIG"), "setup: ensure cluster is set")
-	require.NoError(t, run("sudo", "rm", "-f", "/tmp/telepresence.log"), "setup: remove old log")
-	require.NoError(t,
-		run("kubectl", "delete", "pod", "teleproxy", "--ignore-not-found", "--wait=true"),
-		"setup: check cluster connectivity",
-	)
-	require.NoError(t, runCmd(buildExecutable), "setup: build executable")
-	require.NoError(t, run("kubectl", "create", "namespace", namespace), "setup: create test namespace")
-	require.NoError(t,
-		run("kubectl", nsArg, "create", "deploy", "hello-world", "--image=ark3/hello-world"),
-		"setup: create deployment",
-	)
-	require.NoError(t,
-		run("kubectl", nsArg, "expose", "deploy", "hello-world", "--port=80", "--target-port=8000"),
-		"setup: create service",
-	)
-	require.NoError(t,
-		run("kubectl", nsArg, "get", "svc,deploy", "hello-world"),
-		"setup: check svc/deploy",
-	)
+	t.Run("setup", func(t *testing.T) {
+		require.NoError(t, run("sudo", "true"), "setup: acquire privileges")
+		require.NoError(t, run("printenv", "KUBECONFIG"), "setup: ensure cluster is set")
+		require.NoError(t, run("sudo", "rm", "-f", "/tmp/telepresence.log"), "setup: remove old log")
+		require.NoError(t,
+			run("kubectl", "delete", "pod", "teleproxy", "--ignore-not-found", "--wait=true"),
+			"setup: check cluster connectivity",
+		)
+		require.NoError(t, runCmd(buildExecutable), "setup: build executable")
+		require.NoError(t, run("kubectl", "create", "namespace", namespace), "setup: create test namespace")
+		require.NoError(t,
+			run("kubectl", nsArg, "create", "deploy", "hello-world", "--image=ark3/hello-world"),
+			"setup: create deployment",
+		)
+		require.NoError(t,
+			run("kubectl", nsArg, "expose", "deploy", "hello-world", "--port=80", "--target-port=8000"),
+			"setup: create service",
+		)
+		require.NoError(t,
+			run("kubectl", nsArg, "get", "svc,deploy", "hello-world"),
+			"setup: check svc/deploy",
+		)
+	})
+
 	defer func() {
 		require.NoError(t,
 			run("kubectl", "delete", "namespace", namespace, "--wait=false"),
@@ -125,18 +127,18 @@ func TestSmokeOutbound(t *testing.T) {
 		)
 	}()
 
-	fmt.Println("pre-daemon")
-	require.NoError(t, run(executable, "status"), "status with no daemon")
-	require.Error(t, run(executable, "daemon"), "daemon without sudo")
+	t.Run("pre-daemon", func(t *testing.T) {
+		require.NoError(t, run(executable, "status"), "status with no daemon")
+		require.Error(t, run(executable, "daemon"), "daemon without sudo")
 
-	fmt.Println("launch daemon")
-	require.NoError(t, run("sudo", executable, "daemon"), "launch daemon")
-	require.NoError(t, run(executable, "version"), "version with daemon")
-	require.NoError(t, run(executable, "status"), "status with daemon")
+		fmt.Println("launch daemon")
+		require.NoError(t, run("sudo", executable, "daemon"), "launch daemon")
+		require.NoError(t, run(executable, "version"), "version with daemon")
+		require.NoError(t, run(executable, "status"), "status with daemon")
+	})
 	defer func() { require.NoError(t, run(executable, "quit"), "quit daemon") }()
 
-	fmt.Println("await net overrides")
-	func() {
+	t.Run("await net overrides", func(t *testing.T) {
 		for i := 0; i < 120; i++ {
 			out, _ := capture(executable, "status")
 			if !strings.Contains(out, "Network overrides NOT established") {
@@ -145,15 +147,16 @@ func TestSmokeOutbound(t *testing.T) {
 			time.Sleep(500 * time.Millisecond)
 		}
 		t.Fatal("timed out waiting for net overrides")
-	}()
+	})
 
-	fmt.Println("connect")
-	require.NoError(t, run(executable, "connect", "-n", namespace), "connect")
-	out, err = capture(executable, "status")
-	require.NoError(t, err, "status connected")
-	if !strings.Contains(out, "Context") {
-		t.Fatal("Expected Context in connected status output")
-	}
+	t.Run("connect", func(t *testing.T) {
+		require.NoError(t, run(executable, "connect", "-n", namespace), "connect")
+		out, err = capture(executable, "status")
+		require.NoError(t, err, "status connected")
+		if !strings.Contains(out, "Context") {
+			t.Fatal("Expected Context in connected status output")
+		}
+	})
 	defer func() {
 		require.NoError(t,
 			run("kubectl", "delete", "pod", "teleproxy", "--ignore-not-found", "--wait=false"),
@@ -161,8 +164,7 @@ func TestSmokeOutbound(t *testing.T) {
 		)
 	}()
 
-	fmt.Println("await bridge")
-	func() {
+	t.Run("await bridge", func(t *testing.T) {
 		for i := 0; i < 120; i++ {
 			out, _ := capture(executable, "status")
 			if strings.Contains(out, "Proxy:         ON") {
@@ -172,10 +174,9 @@ func TestSmokeOutbound(t *testing.T) {
 		}
 		_ = run("kubectl", "get", "pod", "teleproxy")
 		t.Fatal("timed out waiting for bridge")
-	}()
+	})
 
-	fmt.Println("await service")
-	func() {
+	t.Run("await service", func(t *testing.T) {
 		for i := 0; i < 120; i++ {
 			err := run(
 				"kubectl", nsArg, "run", "curl-from-cluster", "--rm", "-it",
@@ -189,22 +190,24 @@ func TestSmokeOutbound(t *testing.T) {
 			time.Sleep(500 * time.Millisecond)
 		}
 		t.Fatal("timed out waiting for hello-world service")
-	}()
+	})
 
-	fmt.Println("check bridge")
-	require.NoError(t, run("curl", "-sv", "hello-world."+namespace), "check bridge")
+	t.Run("check bridge", func(t *testing.T) {
+		require.NoError(t, run("curl", "-sv", "hello-world."+namespace), "check bridge")
+	})
 
-	fmt.Println("wind down")
-	out, err = capture(executable, "status")
-	require.NoError(t, err, "status connected")
-	if !strings.Contains(out, "Context") {
-		t.Fatal("Expected Context in connected status output")
-	}
-	require.NoError(t, run(executable, "disconnect"), "disconnect")
-	out, err = capture(executable, "status")
-	require.NoError(t, err, "status disconnected")
-	if !strings.Contains(out, "Not connected") {
-		t.Fatal("Expected Not connected in status output")
-	}
-	require.Error(t, run("curl", "-sv", "hello-world."+namespace), "check disconnected")
+	t.Run("wind down", func(t *testing.T) {
+		out, err = capture(executable, "status")
+		require.NoError(t, err, "status connected")
+		if !strings.Contains(out, "Context") {
+			t.Fatal("Expected Context in connected status output")
+		}
+		require.NoError(t, run(executable, "disconnect"), "disconnect")
+		out, err = capture(executable, "status")
+		require.NoError(t, err, "status disconnected")
+		if !strings.Contains(out, "Not connected") {
+			t.Fatal("Expected Not connected in status output")
+		}
+		require.Error(t, run("curl", "-sv", "hello-world."+namespace), "check disconnected")
+	})
 }
