@@ -1,23 +1,21 @@
 package connector
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
-
-	"github.com/spf13/cobra"
 
 	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
+	"github.com/datawire/telepresence2/pkg/bridges"
 	"github.com/datawire/telepresence2/pkg/common"
 	"github.com/datawire/telepresence2/pkg/rpc"
 )
@@ -38,7 +36,6 @@ type service struct {
 	rpc.UnimplementedConnectorServer
 	daemon     rpc.DaemonClient
 	cluster    *k8sCluster
-	bridge     common.Resource
 	trafficMgr *trafficManager
 	intercepts []*intercept
 	grpc       *grpc.Server
@@ -175,7 +172,7 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 		r.Error = rpc.ConnectResponse_AlreadyConnected
 		return r
 	}
-	if s.bridge != nil {
+	if !s.cluster.isBridgeOkay() {
 		r.Error = rpc.ConnectResponse_Disconnecting
 		return r
 	}
@@ -195,23 +192,18 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 		previewHost = ""
 	}
 
-	bridge, err := common.CheckedRetryingCommand(
-		p,
-		"bridge",
-		common.GetExe(),
-		[]string{"teleproxy", "bridge", cluster.ctx, cluster.namespace},
-		checkBridge,
-		15*time.Second,
-	)
-	if err != nil {
+	br := bridges.NewService("", cluster.ctx, cluster.namespace)
+	if err = br.Start(p); err != nil {
 		r.Error = rpc.ConnectResponse_BridgeFailed
 		r.ErrorText = err.Error()
 		// No point in continuing without a bridge
 		s.p.Supervisor().Shutdown()
 		return r
 	}
-	s.bridge = bridge
-	s.cluster.setBridgeCheck(s.bridge.IsOkay)
+	s.cluster.setBridgeCheck(func() bool {
+		return br.Check(p)
+	})
+
 	p.Logf("Connected to context %s (%s)", s.cluster.context(), s.cluster.server())
 
 	r.ClusterContext = s.cluster.context()
@@ -272,31 +264,6 @@ func (d *daemonLogger) Printf(format string, v ...interface{}) {
 	}
 }
 
-// checkBridge checks the status of teleproxy bridge by doing the equivalent of
-//  curl http://traffic-proxy.svc:8022.
-// Note there is no namespace specified, as we are checking for bridge status in the
-// current namespace.
-func checkBridge(_ *supervisor.Process) error {
-	address := "traffic-proxy.svc:8022"
-	conn, err := net.DialTimeout("tcp", address, 15*time.Second)
-	if err != nil {
-		return errors.Wrap(err, "tcp connect")
-	}
-	if conn != nil {
-		defer conn.Close()
-		msg, _, err := bufio.NewReader(conn).ReadLine()
-		if err != nil {
-			return errors.Wrap(err, "tcp read")
-		}
-		if !strings.Contains(string(msg), "SSH") {
-			return fmt.Errorf("expected SSH prompt, got: %v", string(msg))
-		}
-	} else {
-		return fmt.Errorf("fail to establish tcp connection to %v", address)
-	}
-	return nil
-}
-
 // handleSignalsAndShutdown ensures that the connector quits gracefully when receiving a signal
 // or when the supervisor wants to shutdown.
 func (s *service) handleSignalsAndShutdown() {
@@ -316,20 +283,13 @@ func (s *service) handleSignalsAndShutdown() {
 		return
 	}
 	s.cluster = nil
-
-	bridge := s.bridge
 	trafficMgr := s.trafficMgr
 
-	s.bridge = nil
 	s.trafficMgr = nil
 
 	defer cluster.Close()
 
 	s.clearIntercepts(s.p)
-	if bridge != nil {
-		cluster.setBridgeCheck(nil) // Stop depending on this bridge
-		_ = bridge.Close()
-	}
 	if trafficMgr != nil {
 		_ = trafficMgr.Close()
 	}

@@ -17,7 +17,7 @@ func (s *service) status(_ *supervisor.Process) *rpc.ConnectorStatusResponse {
 		Server:    s.cluster.server(),
 		Context:   s.cluster.context(),
 	}
-	r.Bridge = s.bridge != nil && s.bridge.IsOkay()
+	r.Bridge = s.cluster.isBridgeOkay()
 
 	if s.trafficMgr == nil {
 		return r
