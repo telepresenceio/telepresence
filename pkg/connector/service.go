@@ -36,6 +36,7 @@ type service struct {
 	rpc.UnimplementedConnectorServer
 	daemon     rpc.DaemonClient
 	cluster    *k8sCluster
+	bridge     bridges.Service
 	trafficMgr *trafficManager
 	intercepts []*intercept
 	grpc       *grpc.Server
@@ -64,14 +65,17 @@ func run() error {
 	defer conn.Close()
 
 	d := &service{daemon: rpc.NewDaemonClient(conn)}
-	sup := supervisor.WithContext(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	sup := supervisor.WithContext(ctx)
 	if err = d.setUpLogging(sup); err != nil {
 		return err
 	}
 
 	sup.Supervise(&supervisor.Worker{
 		Name: "connector",
-		Work: d.runGRPCService,
+		Work: func(p *supervisor.Process) error {
+			return d.runGRPCService(p, cancel)
+		},
 	})
 	runErrors := sup.Run()
 
@@ -81,7 +85,7 @@ func run() error {
 			sup.Logger.Printf("- %v", err)
 		}
 	}
-	sup.Logger.Printf("Telepresence collector %s is done.", common.DisplayVersion())
+	sup.Logger.Printf("Telepresence connector %s is done.", common.DisplayVersion())
 	return nil
 }
 
@@ -132,7 +136,7 @@ func (s *service) setUpLogging(sup *supervisor.Supervisor) error {
 }
 
 // runGRPCService is the main gRPC server loop.
-func (s *service) runGRPCService(p *supervisor.Process) error {
+func (s *service) runGRPCService(p *supervisor.Process, cancel func()) error {
 	p.Log("---")
 	p.Logf("Telepresence Connector %s starting...", common.DisplayVersion())
 	p.Logf("PID is %d", os.Getpid())
@@ -147,7 +151,7 @@ func (s *service) runGRPCService(p *supervisor.Process) error {
 	s.p = p
 	rpc.RegisterConnectorServer(s.grpc, s)
 
-	go s.handleSignalsAndShutdown()
+	go s.handleSignalsAndShutdown(cancel)
 
 	p.Ready()
 	return errors.Wrap(s.grpc.Serve(unixListener), "connector gRCP server")
@@ -172,7 +176,7 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 		r.Error = rpc.ConnectResponse_AlreadyConnected
 		return r
 	}
-	if !s.cluster.isBridgeOkay() {
+	if s.bridge != nil {
 		r.Error = rpc.ConnectResponse_Disconnecting
 		return r
 	}
@@ -200,6 +204,7 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 		s.p.Supervisor().Shutdown()
 		return r
 	}
+	s.bridge = br
 	s.cluster.setBridgeCheck(func() bool {
 		return br.Check(p)
 	})
@@ -266,16 +271,26 @@ func (d *daemonLogger) Printf(format string, v ...interface{}) {
 
 // handleSignalsAndShutdown ensures that the connector quits gracefully when receiving a signal
 // or when the supervisor wants to shutdown.
-func (s *service) handleSignalsAndShutdown() {
+func (s *service) handleSignalsAndShutdown(cancel func()) {
 	defer s.grpc.GracefulStop()
 
 	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
-	select {
-	case sig := <-interrupt:
-		s.p.Logf("Received signal %s", sig)
-	case <-s.p.Shutdown():
-		s.p.Log("Shutting down")
+	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
+	for {
+		select {
+		case sig := <-interrupt:
+			s.p.Logf("Received signal %s", sig)
+			if sig == syscall.SIGHUP {
+				if bridge := s.bridge; bridge != nil {
+					bridge.Restart()
+				}
+				continue
+			}
+			cancel()
+		case <-s.p.Shutdown():
+			s.p.Log("Shutting down")
+		}
+		break
 	}
 
 	cluster := s.cluster
@@ -293,4 +308,5 @@ func (s *service) handleSignalsAndShutdown() {
 	if trafficMgr != nil {
 		_ = trafficMgr.Close()
 	}
+	s.bridge = nil
 }

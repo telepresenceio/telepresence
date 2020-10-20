@@ -8,11 +8,8 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
-	"os/signal"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/datawire/ambassador/pkg/k8s"
@@ -318,7 +315,7 @@ func (t *config) Check(p *supervisor.Process) bool {
 
 	msg, _, err := bufio.NewReader(conn).ReadLine()
 	if err != nil {
-		p.Logf("tcp read: %s", err)
+		p.Logf("tcp read: %s", err.Error())
 		return false
 	}
 	if !strings.Contains(string(msg), "SSH") {
@@ -333,19 +330,7 @@ func (t *config) Start(p *supervisor.Process) error {
 	if err != nil {
 		return err
 	}
-
-	// do this up front so we don't miss out on cleanup if someone
-	// Control-C's just after starting us
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-
-	p.Supervisor().Supervise(&supervisor.Worker{
-		Name: BridgeWorker,
-		Work: func(p *supervisor.Process) error {
-			t.bridges(p)
-			return nil
-		},
-	})
+	t.bridges(p)
 	return nil
 }
 
