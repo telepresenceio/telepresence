@@ -43,30 +43,49 @@ type RunInfo struct {
 // and the arguments starting at args[1:].
 func (ri *RunInfo) RunCommand(cmd *cobra.Command, args []string) error {
 	// Fail early if intercept args are inconsistent
+	ri.InterceptRequest.Namespace = ri.ConnectRequest.Namespace // resolve struct ambiguity
 	if err := prepareIntercept(cmd, &ri.InterceptRequest); err != nil {
 		return err
 	}
 
-	ri.ConnectRequest.Namespace = ri.InterceptRequest.Namespace // resolve struct ambiguity
+	out := cmd.OutOrStdout()
+	return ri.runWithIntercept(out, func(is *interceptState) error {
+		return start(args[0], args[1:], true, cmd.InOrStdin(), out, cmd.OutOrStderr())
+	})
+}
 
-	ds, err := newDaemonState(cmd.OutOrStdout(), ri.DNS, ri.Fallback)
+// RunShell will ensure that a daemon and a connector is started and then start a shell.
+func (ri *RunInfo) RunShell(cmd *cobra.Command, _ []string) error {
+	out := cmd.OutOrStdout()
+	exe := os.Getenv("SHELL")
+	return ri.runWithConnector(out, func(cs *connectorState) error {
+		return start(exe, nil, true, cmd.InOrStdin(), out, cmd.OutOrStderr())
+	})
+}
+
+func (ri *RunInfo) runWithDaemon(out io.Writer, f func(ds *daemonState) error) error {
+	ds, err := newDaemonState(out, ri.DNS, ri.Fallback)
 	if err != nil && err != daemonIsNotRunning {
 		return err
 	}
+	return common.WithEnsuredState(ds, func() error { return f(ds) })
+}
 
-	out := cmd.OutOrStdout()
-	return common.WithEnsuredState(ds, func() error {
+func (ri *RunInfo) runWithConnector(out io.Writer, f func(cs *connectorState) error) error {
+	return ri.runWithDaemon(out, func(ds *daemonState) error {
 		ri.InterceptEnabled = true
 		cs, err := newConnectorState(ds.grpc, &ri.ConnectRequest, out)
 		if err != nil && err != connectorIsNotRunning {
 			return err
 		}
-		return common.WithEnsuredState(cs, func() error {
-			is := newInterceptState(cs.grpc, &ri.InterceptRequest, out)
-			return common.WithEnsuredState(is, func() error {
-				return start(args[0], args[1:], true, cmd.InOrStdin(), out, cmd.OutOrStderr())
-			})
-		})
+		return common.WithEnsuredState(cs, func() error { return f(cs) })
+	})
+}
+
+func (ri *RunInfo) runWithIntercept(out io.Writer, f func(is *interceptState) error) error {
+	return ri.runWithConnector(out, func(cs *connectorState) error {
+		is := newInterceptState(cs.grpc, &ri.InterceptRequest, out)
+		return common.WithEnsuredState(is, func() error { return f(is) })
 	})
 }
 

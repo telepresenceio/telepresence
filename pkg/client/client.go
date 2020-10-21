@@ -38,13 +38,8 @@ func Version(cmd *cobra.Command, _ []string) error {
 	return err
 }
 
-// A ConnectInfo contains all information needed to connect to a cluster.
-type ConnectInfo struct {
-	rpc.ConnectRequest
-}
-
 // Connect asks the daemon to connect to a cluster
-func (ci *ConnectInfo) Connect(cmd *cobra.Command, args []string) error {
+func (ri *RunInfo) Connect(cmd *cobra.Command, args []string) error {
 	ds, err := newDaemonState(cmd.OutOrStdout(), "", "")
 	if err != nil {
 		return err
@@ -52,9 +47,9 @@ func (ci *ConnectInfo) Connect(cmd *cobra.Command, args []string) error {
 	defer ds.disconnect()
 
 	// When set, require a traffic manager and wait until it is connected
-	ci.InterceptEnabled = false
+	ri.InterceptEnabled = false
 
-	cs, err := newConnectorState(ds.grpc, &ci.ConnectRequest, cmd.OutOrStdout())
+	cs, err := newConnectorState(ds.grpc, &ri.ConnectRequest, cmd.OutOrStdout())
 	defer cs.disconnect()
 	if err == nil {
 		return errors.New("Already connected")

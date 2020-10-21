@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/pflag"
+
 	"github.com/datawire/telepresence2/pkg/connector"
 
 	"github.com/spf13/cobra"
@@ -93,6 +95,26 @@ func getRootCommand() *cobra.Command {
 	// Client commands. These are never sent to the daemon.
 
 	if client.DaemonWorks() {
+		runInfo := &client.RunInfo{}
+		addConnectFlags := func(connectFlags *pflag.FlagSet) {
+			connectFlags.StringVarP(&runInfo.Context,
+				"context", "c", "",
+				"The Kubernetes context to use. Defaults to the current kubectl context.",
+			)
+			connectFlags.StringVarP(&runInfo.ConnectRequest.Namespace,
+				"namespace", "n", "",
+				"The Kubernetes namespace to use. Defaults to kubectl's default for the context.",
+			)
+			connectFlags.StringVarP(&runInfo.ManagerNS,
+				"manager-namespace", "m", "ambassador",
+				"The Kubernetes namespace in which the Traffic Manager is running.",
+			)
+			connectFlags.BoolVar(&runInfo.IsCI, "ci", false, "This session is a CI run.")
+		}
+
+		rootCmd.RunE = runInfo.RunShell
+		addConnectFlags(rootCmd.Flags())
+
 		daemonCmd := &cobra.Command{
 			Use:   "daemon",
 			Short: "Launch Telepresence Daemon in the background (sudo)",
@@ -117,26 +139,12 @@ func getRootCommand() *cobra.Command {
 			RunE:  client.Status,
 		})
 
-		cr := &client.ConnectInfo{}
 		connectCmd := &cobra.Command{
 			Use:   "connect [flags] [-- additional kubectl arguments...]",
 			Short: "Connect to a cluster",
-			RunE:  cr.Connect,
+			RunE:  runInfo.Connect,
 		}
-		connectFlags := connectCmd.Flags()
-		connectFlags.StringVarP(&cr.Context,
-			"context", "c", "",
-			"The Kubernetes context to use. Defaults to the current kubectl context.",
-		)
-		connectFlags.StringVarP(&cr.Namespace,
-			"namespace", "n", "",
-			"The Kubernetes namespace to use. Defaults to kubectl's default for the context.",
-		)
-		connectFlags.StringVarP(&cr.ManagerNS,
-			"manager-namespace", "m", "ambassador",
-			"The Kubernetes namespace in which the Traffic Manager is running.",
-		)
-		connectFlags.BoolVar(&cr.IsCI, "ci", false, "This session is a CI run.")
+		addConnectFlags(connectCmd.Flags())
 		rootCmd.AddCommand(connectCmd)
 
 		rootCmd.AddCommand(&cobra.Command{
@@ -222,7 +230,6 @@ func getRootCommand() *cobra.Command {
 		interceptCmd.SetUsageFunc(client.NewCmdUsage(interceptCmd, interceptCG))
 		rootCmd.AddCommand(interceptCmd)
 
-		runInfo := &client.RunInfo{}
 		runCmd := &cobra.Command{
 			Use:   "run",
 			Short: "Launch Daemon, connect to traffic manager, intercept a deployment, and run a command",
@@ -239,7 +246,7 @@ func getRootCommand() *cobra.Command {
 		runFlags.StringVarP(&runInfo.TargetHost, "target", "t", "", "the [HOST:]PORT to forward to")
 		_ = runCmd.MarkFlagRequired("target")
 		runFlags.StringToStringVarP(&runInfo.Patterns, "match", "m", nil, "match expression (HEADER=REGEX)")
-		runFlags.StringVarP(&runInfo.InterceptRequest.Namespace, "namespace", "", "", "Kubernetes namespace in which to create mapping for intercept")
+		runFlags.StringVarP(&runInfo.ConnectRequest.Namespace, "namespace", "", "", "Kubernetes namespace in which to create mapping for intercept")
 		runFlags.StringVarP(&runInfo.ManagerNS,
 			"manager-namespace", "", "ambassador",
 			"The Kubernetes namespace in which the Traffic Manager is running.",
