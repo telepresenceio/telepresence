@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+option go_package = "pkg/rpc";
+option java_multiple_files = true;
+option java_package = "io.datawire.telepresence.rpc";
+option java_outer_classname = "DaemonProto";
+
+import "rpc/daemon.proto";
+
+package telepresence;
+
+message ClientInfo {
+  string name = 1;  // user@hostname
+  string install_id = 2;
+  string product = 3;  // "telepresence"
+  string version = 4;
+  string license_key = 5;
+}
+
+message AgentInfo {
+  string name = 1; // namespace/name of the Deployment
+  string hostname = 2;
+  string product = 3; // distinguish open source, our closed source, someone else's thing
+  string version = 4;
+
+  message Mechanism {
+    string name = 1; // "tcp" or "http" or "grpc" or ...
+    string product = 2; // distinguish open source, our closed source, someone else's thing
+    string version = 3;
+  }
+
+  repeated Mechanism mechanisms = 5;
+}
+
+message InterceptSpec {
+  string name = 1;
+  string client = 2;
+
+  string agent = 3;
+  string mechanism = 4;
+
+  /*
+     additional mechanism-specific info
+     - header match patterns would go here
+     - perhaps a JSON blob for the Agent's mechanism implementation to parse
+     - how does the client decide to create this blob?
+     - perhaps just pass all the unrecognized CLI arguments? or all of them?
+     - maybe always pass client's install id to use for x-service-preview matches?
+   */
+  string additional = 5;
+
+  string target_host = 6;
+  int32 target_port = 7;
+}
+
+message InterceptInfo {
+    enum DisType {
+      UNSPECIFIED = 0;
+
+      ACTIVE = 1;
+      WAITING = 2;
+
+      // Failure states
+
+      NO_CLIENT = 3;
+      NO_AGENT = 4;
+      NO_MECHANISM = 5;
+      NO_PORTS = 6;
+    }
+
+  InterceptSpec spec = 1;
+  int32 manager_port = 2;
+    DisType disposition = 3;
+}
+
+message SessionInfo {
+  string session_id = 1;
+}
+
+message AgentInfoSnapshot {
+  repeated AgentInfo agents = 1;
+}
+
+message InterceptInfoSnapshot {
+  repeated InterceptInfo intercepts = 1;
+}
+
+message CreateInterceptRequest {
+  SessionInfo session = 1;
+  InterceptSpec intercept_spec = 2;
+}
+
+message RemoveInterceptRequest2 {
+  SessionInfo session = 1;
+  string name = 2;
+}
+
+service Manager {
+  // Presence
+
+  rpc ArriveAsClient(ClientInfo) returns (SessionInfo);
+  rpc ArriveAsAgent(AgentInfo) returns (SessionInfo);
+  rpc Remain(SessionInfo) returns (Empty);
+  rpc Depart(SessionInfo) returns (Empty);
+
+  // Watches
+
+  rpc WatchAgents(SessionInfo) returns (stream AgentInfoSnapshot);
+  rpc WatchIntercepts(SessionInfo) returns (stream InterceptInfoSnapshot);
+
+  // CRUD
+
+  rpc CreateIntercept(CreateInterceptRequest) returns (InterceptInfo);
+  rpc RemoveIntercept(RemoveInterceptRequest2) returns (Empty);
+}
