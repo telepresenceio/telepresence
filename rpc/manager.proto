@@ -7,7 +7,7 @@ import "google/protobuf/empty.proto";
 option go_package = "pkg/rpc";
 option java_multiple_files = true;
 option java_package = "io.datawire.telepresence.rpc";
-option java_outer_classname = "DaemonProto";
+option java_outer_classname = "ManagerProto";
 
 
 message ClientInfo {

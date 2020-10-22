@@ -6,7 +6,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
@@ -21,11 +20,11 @@ func IsServerRunning() bool {
 	return assertDaemonStarted() == nil
 }
 
-var daemonIsNotRunning = errors.New("The telepresence daemon has not been started.\nUse 'sudo telepresence daemon' to start it.")
-var connectorIsNotRunning = errors.New("Not connected (use 'telepresence connect' to connect to your cluster)")
+var daemonIsNotRunning = errors.New("The telepresence daemon has not been started.\nUse 'telepresence [--no-wait]' to start it.")
+var connectorIsNotRunning = errors.New("Not connected (use 'telepresence [--no-wait]' to connect to your cluster)")
 
-// Version requests version info from the daemon and prints both client and daemon version.
-func Version(cmd *cobra.Command, _ []string) error {
+// version requests version info from the daemon and prints both client and daemon version.
+func version(cmd *cobra.Command, _ []string) error {
 	av, dv, err := daemonVersion(cmd.OutOrStdout())
 	if err == nil {
 		fmt.Fprintf(cmd.OutOrStdout(), "Client %s\nDaemon v%s (api v%d)\n", common.DisplayVersion(), dv, av)
@@ -40,24 +39,46 @@ func Version(cmd *cobra.Command, _ []string) error {
 }
 
 // Connect asks the daemon to connect to a cluster
-func (ri *RunInfo) Connect(cmd *cobra.Command, args []string) error {
-	ds, err := newDaemonState(cmd.OutOrStdout(), "", "")
+func (p *runner) connect(cmd *cobra.Command, args []string) error {
+	ds, cs, err := p.ensureConnected(cmd.OutOrStdout())
 	if err != nil {
 		return err
 	}
-	defer ds.disconnect()
+	cs.disconnect()
+	ds.disconnect()
+	return nil
+}
 
-	// When set, require a traffic manager and wait until it is connected
-	ri.InterceptEnabled = false
-
-	cs, err := newConnectorState(ds.grpc, &ri.ConnectRequest, cmd.OutOrStdout())
-	defer cs.disconnect()
-	if err == nil {
-		return errors.New("Already connected")
+func (p *runner) ensureConnected(out io.Writer) (*daemonState, *connectorState, error) {
+	ds, err := newDaemonState(out, "", "")
+	if err != nil && err != daemonIsNotRunning {
+		return nil, nil, err
 	}
 
-	_, err = cs.EnsureState()
-	return err
+	if err == daemonIsNotRunning {
+		if _, err = ds.EnsureState(); err != nil {
+			ds.disconnect()
+			return nil, nil, err
+		}
+	}
+
+	// When set, require a traffic manager and wait until it is connected
+	p.InterceptEnabled = false
+
+	cs, err := newConnectorState(ds.grpc, &p.ConnectRequest, out)
+	if err != nil && err != connectorIsNotRunning {
+		ds.disconnect()
+		return nil, nil, err
+	}
+
+	if err == connectorIsNotRunning {
+		if _, err = cs.EnsureState(); err != nil {
+			ds.disconnect()
+			cs.disconnect()
+			return nil, nil, err
+		}
+	}
+	return ds, cs, nil
 }
 
 // Disconnect asks the daemon to disconnect from the connected cluster
@@ -69,8 +90,8 @@ func Disconnect(cmd *cobra.Command, _ []string) error {
 	return cs.DeactivateState()
 }
 
-// Status will retrieve connectivity status from the daemon and print it on stdout.
-func Status(cmd *cobra.Command, _ []string) error {
+// status will retrieve connectivity status from the daemon and print it on stdout.
+func status(cmd *cobra.Command, _ []string) error {
 	var ds *rpc.DaemonStatus
 	var err error
 	if ds, err = daemonStatus(cmd.OutOrStdout()); err != nil {
@@ -221,28 +242,27 @@ func Quit(cmd *cobra.Command, _ []string) error {
 	return ds.DeactivateState()
 }
 
-// An InterceptInfo contains all information needed to add a deployment intercept.
-type InterceptInfo struct {
-	rpc.InterceptRequest
-}
-
-// AddIntercept tells the daemon to add a deployment intercept.
-func (ii *InterceptInfo) AddIntercept(cmd *cobra.Command, args []string) error {
-	ii.Deployment = args[0]
-	err := prepareIntercept(cmd, &ii.InterceptRequest)
+// addIntercept tells the daemon to add a deployment intercept.
+func (p *runner) addIntercept(cmd *cobra.Command, _ []string) error {
+	err := prepareIntercept(cmd, &p.InterceptRequest)
 	if err != nil {
 		return err
 	}
-	return withConnector(cmd.OutOrStdout(), func(c rpc.ConnectorClient) error {
-		is := newInterceptState(c, &ii.InterceptRequest, cmd.OutOrStdout())
-		_, err = is.EnsureState()
+	ds, cs, err := p.ensureConnected(cmd.OutOrStdout())
+	if err != nil {
 		return err
-	})
+	}
+	defer ds.disconnect()
+	defer cs.disconnect()
+
+	is := newInterceptState(cs.grpc, &p.InterceptRequest, cmd.OutOrStdout())
+	_, err = is.EnsureState()
+	return err
 }
 
 func prepareIntercept(cmd *cobra.Command, ii *rpc.InterceptRequest) error {
 	if ii.Name == "" {
-		ii.Name = fmt.Sprintf("cept-%d", time.Now().Unix())
+		ii.Name = ii.Deployment
 	}
 
 	// if intercept.Namespace == "" {

@@ -15,66 +15,78 @@ import (
 	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
-var RunHelp = `telepresence run is a shorthand command for starting the daemon, connecting to the traffic
-manager, adding an intercept, running a command, and then removing the intercept,
-disconnecting, and quitting the daemon.
-
-The command ensures that only those resources that were acquired are cleaned up. This
-means that the daemon will not quit if it was already started, no disconnect will take
-place if the connection was already established, and the intercept will not be removed
-if it was already added.
-
-Unless the daemon is already started, an attempt will be made to start it. This will
-involve a call to sudo unless this command is run as root (not recommended).
-
-Run a command:
-    telepresence run -d hello -n example-url -t 9000 -- <command> arguments...
-`
-
-// RunInfo contains all parameters needed in order to run an intercepted command.
-type RunInfo struct {
+// runner contains all parameters needed in order to run an intercepted command.
+type runner struct {
 	rpc.ConnectRequest
 	rpc.InterceptRequest
 	DNS      string
 	Fallback string
+	NoWait   bool
+	Quit     bool
+	Status   bool
+	Version  bool
 }
 
-// RunCommand will ensure that an intercept is in place and then execute the command given by args[0]
+// run will ensure that an intercept is in place and then execute the command given by args[0]
 // and the arguments starting at args[1:].
-func (ri *RunInfo) RunCommand(cmd *cobra.Command, args []string) error {
-	// Fail early if intercept args are inconsistent
-	ri.InterceptRequest.Namespace = ri.ConnectRequest.Namespace // resolve struct ambiguity
-	if err := prepareIntercept(cmd, &ri.InterceptRequest); err != nil {
-		return err
+func (p *runner) run(cmd *cobra.Command, args []string) error {
+	switch {
+	case p.Quit:
+		return Quit(cmd, args)
+	case p.Status:
+		return status(cmd, args)
+	case p.Version:
+		return version(cmd, args)
+	case p.NoWait:
+		if p.InterceptRequest.Deployment != "" {
+			return p.addIntercept(cmd, args)
+		}
+		return p.connect(cmd, args)
 	}
 
 	out := cmd.OutOrStdout()
-	return ri.runWithIntercept(out, func(is *interceptState) error {
-		return start(args[0], args[1:], true, cmd.InOrStdin(), out, cmd.OutOrStderr())
+	var exe string
+	subShellMsg := ""
+	if len(args) == 0 {
+		exe = os.Getenv("SHELL")
+		subShellMsg = fmt.Sprintf("Starting a %s subshell", exe)
+	} else {
+		exe = args[0]
+		args = args[1:]
+	}
+
+	if p.InterceptRequest.Deployment != "" {
+		err := prepareIntercept(cmd, &p.InterceptRequest)
+		if err != nil {
+			return err
+		}
+		return p.runWithIntercept(out, func(_ *interceptState) error {
+			if subShellMsg != "" {
+				fmt.Fprintln(out, subShellMsg)
+			}
+			return start(exe, args, true, cmd.InOrStdin(), out, cmd.OutOrStderr())
+		})
+	}
+	return p.runWithConnector(out, func(cs *connectorState) error {
+		if subShellMsg != "" {
+			fmt.Fprintln(out, subShellMsg)
+		}
+		return start(exe, args, true, cmd.InOrStdin(), out, cmd.OutOrStderr())
 	})
 }
 
-// RunShell will ensure that a daemon and a connector is started and then start a shell.
-func (ri *RunInfo) RunShell(cmd *cobra.Command, _ []string) error {
-	out := cmd.OutOrStdout()
-	exe := os.Getenv("SHELL")
-	return ri.runWithConnector(out, func(cs *connectorState) error {
-		return start(exe, nil, true, cmd.InOrStdin(), out, cmd.OutOrStderr())
-	})
-}
-
-func (ri *RunInfo) runWithDaemon(out io.Writer, f func(ds *daemonState) error) error {
-	ds, err := newDaemonState(out, ri.DNS, ri.Fallback)
+func (p *runner) runWithDaemon(out io.Writer, f func(ds *daemonState) error) error {
+	ds, err := newDaemonState(out, p.DNS, p.Fallback)
 	if err != nil && err != daemonIsNotRunning {
 		return err
 	}
 	return common.WithEnsuredState(ds, func() error { return f(ds) })
 }
 
-func (ri *RunInfo) runWithConnector(out io.Writer, f func(cs *connectorState) error) error {
-	return ri.runWithDaemon(out, func(ds *daemonState) error {
-		ri.InterceptEnabled = true
-		cs, err := newConnectorState(ds.grpc, &ri.ConnectRequest, out)
+func (p *runner) runWithConnector(out io.Writer, f func(cs *connectorState) error) error {
+	return p.runWithDaemon(out, func(ds *daemonState) error {
+		p.InterceptEnabled = true
+		cs, err := newConnectorState(ds.grpc, &p.ConnectRequest, out)
 		if err != nil && err != connectorIsNotRunning {
 			return err
 		}
@@ -82,9 +94,9 @@ func (ri *RunInfo) runWithConnector(out io.Writer, f func(cs *connectorState) er
 	})
 }
 
-func (ri *RunInfo) runWithIntercept(out io.Writer, f func(is *interceptState) error) error {
-	return ri.runWithConnector(out, func(cs *connectorState) error {
-		is := newInterceptState(cs.grpc, &ri.InterceptRequest, out)
+func (p *runner) runWithIntercept(out io.Writer, f func(is *interceptState) error) error {
+	return p.runWithConnector(out, func(cs *connectorState) error {
+		is := newInterceptState(cs.grpc, &p.InterceptRequest, out)
 		return common.WithEnsuredState(is, func() error { return f(is) })
 	})
 }
