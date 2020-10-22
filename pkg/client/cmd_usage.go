@@ -26,7 +26,7 @@ func NewCmdUsage(cmd *cobra.Command, groups []CmdGroup) func(*cobra.Command) err
 			cmdMap[subCmd.Name()] = subCmd
 		}
 	}
-	var lines []string
+	lines := make([]string, 0, 1+len(groups))
 	for _, cmdGroup := range groups {
 		lines = append(lines, fmt.Sprintf("%s:", cmdGroup.GroupName))
 		for _, cmdName := range cmdGroup.CmdNames {

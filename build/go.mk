@@ -66,9 +66,17 @@ clean: ## (Build) cleans built artefacts
 $(BINDIR)/golangci-lint: ## (Lint) install golangci-lint
 	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(BINDIR) latest
 
+PROTOLINT_VERSION=0.26.0
+PROTOLINT_TGZ=protolint_$(PROTOLINT_VERSION)_$(shell uname -s)_$(shell uname -m).tar.gz
+$(BINDIR)/protolint: ## (Lint) install protolint
+	mkdir -p $(BINDIR)
+	curl -sfL https://github.com/yoheimuta/protolint/releases/download/v$(PROTOLINT_VERSION)/$(PROTOLINT_TGZ) -o $(BUILDDIR)/$(PROTOLINT_TGZ)
+	tar -C $(BINDIR) -zxf $(BUILDDIR)/$(PROTOLINT_TGZ)
+
 .phony: lint
-lint: $(BINDIR)/golangci-lint ## (Lint) runs golangci-lint
+lint: $(BINDIR)/golangci-lint $(BINDIR)/protolint ## (Lint) runs golangci-lint and protolint
 	$(BINDIR)/golangci-lint run ./...
+	$(BINDIR)/protolint lint $(shell find rpc -type f -name '*.proto')
 
 .phony: test
 test: build $(TP_TEST_SOURCES) ## (Test) runs go test
