@@ -103,7 +103,7 @@ func (t *Translator) Enable(p *supervisor.Process) {
 		}
 	}
 
-	pf(p, []string{"-a", t.Name, "-F", "all"}, "")
+	_ = pf(p, []string{"-a", t.Name, "-F", "all"}, "")
 
 	// XXX: blah, this generates a syntax error, but also appears
 	// necessary to make anything work. I'm guessing there is some
@@ -111,8 +111,8 @@ func (t *Translator) Enable(p *supervisor.Process) {
 	// something, although notably loading an empty ruleset
 	// doesn't seem to work, it has to be a syntax error of some
 	// kind.
-	pf(p, []string{"-f", "/dev/stdin"}, "pass on lo0")
-	pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	_ = pf(p, []string{"-f", "/dev/stdin"}, "pass on lo0")
+	_ = pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 
 	output := p.Command("pfctl", "-E").MustCaptureErr(nil)
 	for _, line := range strings.Split(output, "\n") {
@@ -155,7 +155,7 @@ func (t *Translator) Disable(p *supervisor.Process) {
 		}
 	}
 
-	pf(p, []string{"-a", t.Name, "-F", "all"}, "")
+	_ = pf(p, []string{"-a", t.Name, "-F", "all"}, "")
 }
 
 func (t *Translator) ForwardTCP(p *supervisor.Process, ip, port, toPort string) {
@@ -169,17 +169,17 @@ func (t *Translator) ForwardUDP(p *supervisor.Process, ip, port, toPort string) 
 func (t *Translator) forward(p *supervisor.Process, protocol, ip, port, toPort string) {
 	t.clear(protocol, ip, port)
 	t.Mappings[Address{protocol, ip, port}] = toPort
-	pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	_ = pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
 func (t *Translator) ClearTCP(p *supervisor.Process, ip, port string) {
 	t.clear("tcp", ip, port)
-	pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	_ = pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
 func (t *Translator) ClearUDP(p *supervisor.Process, ip, port string) {
 	t.clear("udp", ip, port)
-	pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	_ = pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
 func (t *Translator) clear(protocol, ip, port string) {

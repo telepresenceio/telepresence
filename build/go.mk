@@ -33,7 +33,7 @@ $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc: go.mod
 pkg/%.pb.go pkg/%_grpc.pb.go: %.proto $(PROTOC) $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc
 	$(PROTOC) --proto_path=. --go_out=. --go-grpc_out=. $<
 
-TP_RPC_FILES = pkg/rpc/daemon.pb.go pkg/rpc/daemon_grpc.pb.go
+TP_RPC_FILES = pkg/rpc/daemon.pb.go pkg/rpc/daemon_grpc.pb.go pkg/rpc/manager.pb.go pkg/rpc/manager_grpc.pb.go
 
 .PHONY: generate
 generate: $(TP_RPC_FILES) ## (Generate) update generated files that get checked in to Git.
