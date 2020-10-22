@@ -16,19 +16,19 @@ import (
 )
 
 func (s *service) interceptStatus() (rpc.InterceptError, string) {
-	ie := rpc.InterceptError_InterceptOk
+	ie := rpc.InterceptError_UNSPECIFIED
 	msg := ""
 	switch {
 	case s.cluster == nil:
-		ie = rpc.InterceptError_NoConnection
+		ie = rpc.InterceptError_NO_CONNECTION
 	case s.trafficMgr == nil:
-		ie = rpc.InterceptError_NoTrafficManager
+		ie = rpc.InterceptError_NO_TRAFFIC_MANAGER
 	case !s.trafficMgr.IsOkay():
 		if s.trafficMgr.apiErr != nil {
-			ie = rpc.InterceptError_TrafficManagerError
+			ie = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
 			msg = s.trafficMgr.apiErr.Error()
 		} else {
-			ie = rpc.InterceptError_TrafficManagerConnecting
+			ie = rpc.InterceptError_TRAFFIC_MANAGER_CONNECTING
 		}
 	}
 	return ie, msg
@@ -122,20 +122,20 @@ func (ii *InterceptInfo) release(_ *supervisor.Process, tm *trafficManager, port
 }
 
 // listIntercepts lists active intercepts
-func (s *service) listIntercepts(_ *supervisor.Process) *rpc.ListInterceptsResponse {
-	r := &rpc.ListInterceptsResponse{}
+func (s *service) listIntercepts(_ *supervisor.Process) *rpc.InterceptList {
+	r := &rpc.InterceptList{}
 	r.Error, r.Text = s.interceptStatus()
-	if r.Error != rpc.InterceptError_InterceptOk {
+	if r.Error != rpc.InterceptError_UNSPECIFIED {
 		return r
 	}
-	r.Intercepts = make([]*rpc.ListInterceptsResponse_ListEntry, len(s.intercepts))
+	r.Intercepts = make([]*rpc.InterceptList_ListEntry, len(s.intercepts))
 	for idx, cept := range s.intercepts {
 		ii := cept.ii
-		r.Intercepts[idx] = &rpc.ListInterceptsResponse_ListEntry{
+		r.Intercepts[idx] = &rpc.InterceptList_ListEntry{
 			Name:       ii.Name,
 			Namespace:  ii.Namespace,
 			Deployment: ii.Deployment,
-			PreviewURL: ii.previewURL(s.trafficMgr.previewHost),
+			PreviewUrl: ii.previewURL(s.trafficMgr.previewHost),
 			Patterns:   ii.Patterns,
 			TargetHost: ii.TargetHost,
 			TargetPort: ii.TargetPort,
@@ -144,24 +144,24 @@ func (s *service) listIntercepts(_ *supervisor.Process) *rpc.ListInterceptsRespo
 	return r
 }
 
-func (s *service) availableIntercepts(_ *supervisor.Process) *rpc.AvailableInterceptsResponse {
-	r := &rpc.AvailableInterceptsResponse{}
+func (s *service) availableIntercepts(_ *supervisor.Process) *rpc.AvailableInterceptList {
+	r := &rpc.AvailableInterceptList{}
 	r.Error, r.Text = s.interceptStatus()
-	if r.Error != rpc.InterceptError_InterceptOk {
+	if r.Error != rpc.InterceptError_UNSPECIFIED {
 		return r
 	}
 	is := s.trafficMgr.interceptables
-	r.Intercepts = make([]*rpc.AvailableInterceptsResponse_ListEntry, len(is))
+	r.Intercepts = make([]*rpc.AvailableInterceptList_ListEntry, len(is))
 	for idx, deployment := range is {
 		fields := strings.SplitN(deployment, "/", 2)
-		var av *rpc.AvailableInterceptsResponse_ListEntry
+		var av *rpc.AvailableInterceptList_ListEntry
 		if len(fields) != 2 {
-			av = &rpc.AvailableInterceptsResponse_ListEntry{
+			av = &rpc.AvailableInterceptList_ListEntry{
 				Namespace:  s.cluster.namespace,
 				Deployment: deployment,
 			}
 		} else {
-			av = &rpc.AvailableInterceptsResponse_ListEntry{
+			av = &rpc.AvailableInterceptList_ListEntry{
 				Namespace:  fields[0],
 				Deployment: fields[1],
 			}
@@ -172,21 +172,21 @@ func (s *service) availableIntercepts(_ *supervisor.Process) *rpc.AvailableInter
 }
 
 // addIntercept adds one intercept
-func (s *service) addIntercept(p *supervisor.Process, ir *rpc.InterceptRequest) *rpc.InterceptResponse {
-	r := &rpc.InterceptResponse{}
+func (s *service) addIntercept(p *supervisor.Process, ir *rpc.InterceptRequest) *rpc.Intercept {
+	r := &rpc.Intercept{}
 	if ir.Preview && s.trafficMgr.previewHost == "" {
-		r.Error = rpc.InterceptError_NoPreviewHost
+		r.Error = rpc.InterceptError_NO_PREVIEW_HOST
 		return r
 	}
 
 	r.Error, r.Text = s.interceptStatus()
-	if r.Error != rpc.InterceptError_InterceptOk {
+	if r.Error != rpc.InterceptError_UNSPECIFIED {
 		return r
 	}
 
 	for _, ic := range s.intercepts {
 		if ic.ii.Name == ir.Name {
-			r.Error = rpc.InterceptError_AlreadyExists
+			r.Error = rpc.InterceptError_ALREADY_EXISTS
 			r.Text = ir.Name
 			return r
 		}
@@ -210,7 +210,7 @@ func (s *service) addIntercept(p *supervisor.Process, ir *rpc.InterceptRequest) 
 
 		switch len(matches) {
 		case 0:
-			r.Error = rpc.InterceptError_NoAcceptableDeployment
+			r.Error = rpc.InterceptError_NO_ACCEPTABLE_DEPLOYMENT
 			r.Text = ir.Deployment
 			return r
 
@@ -220,7 +220,7 @@ func (s *service) addIntercept(p *supervisor.Process, ir *rpc.InterceptRequest) 
 
 		default:
 			txt, _ := json.Marshal(matches)
-			r.Error = rpc.InterceptError_AmbiguousMatch
+			r.Error = rpc.InterceptError_AMBIGUOUS_MATCH
 			r.Text = string(txt)
 			return r
 		}
@@ -229,13 +229,13 @@ func (s *service) addIntercept(p *supervisor.Process, ir *rpc.InterceptRequest) 
 	ii := &InterceptInfo{ir}
 	ic, err := makeIntercept(p, s.trafficMgr, s.cluster, ii)
 	if err != nil {
-		r.Error = rpc.InterceptError_FailedToEstablish
+		r.Error = rpc.InterceptError_FAILED_TO_ESTABLISH
 		r.Text = err.Error()
 		return r
 	}
 
 	if s.trafficMgr.previewHost != "" {
-		r.PreviewURL = ii.previewURL(s.trafficMgr.previewHost)
+		r.PreviewUrl = ii.previewURL(s.trafficMgr.previewHost)
 	}
 
 	s.intercepts = append(s.intercepts, ic)
@@ -246,21 +246,21 @@ func (s *service) addIntercept(p *supervisor.Process, ir *rpc.InterceptRequest) 
 }
 
 // removeIntercept removes one intercept by name
-func (s *service) removeIntercept(_ *supervisor.Process, name string) *rpc.InterceptResponse {
-	r := &rpc.InterceptResponse{}
+func (s *service) removeIntercept(_ *supervisor.Process, name string) *rpc.Intercept {
+	r := &rpc.Intercept{}
 	for idx, cept := range s.intercepts {
 		if cept.ii.Name == name {
 			s.intercepts = append(s.intercepts[:idx], s.intercepts[idx+1:]...)
 			if err := cept.Close(); err != nil {
-				r.Error = rpc.InterceptError_FailedToRemove
+				r.Error = rpc.InterceptError_FAILED_TO_REMOVE
 				r.Text = err.Error()
 			}
 			return r
 		}
 	}
 	r.Error, r.Text = s.interceptStatus()
-	if r.Error == rpc.InterceptError_InterceptOk {
-		r.Error = rpc.InterceptError_NotFound
+	if r.Error == rpc.InterceptError_UNSPECIFIED {
+		r.Error = rpc.InterceptError_NOT_FOUND
 		r.Text = name
 	}
 	return r
@@ -341,7 +341,7 @@ func makeIntercept(p *supervisor.Process, tm *trafficManager, cluster *k8sCluste
 	cept.mappingExists = false
 	cept.Setup(p.Supervisor(), ii.Name, cept.check, cept.quit)
 
-	p.Logf("%s: Intercepting via port %v, grpc %v, using namespace %v", ii.Name, port, ii.GRPC, ii.Namespace)
+	p.Logf("%s: Intercepting via port %v, grpc %v, using namespace %v", ii.Name, port, ii.Grpc, ii.Namespace)
 
 	mapping := interceptMapping{
 		APIVersion: "getambassador.io/v2",
@@ -356,7 +356,7 @@ func makeIntercept(p *supervisor.Process, tm *trafficManager, cluster *k8sCluste
 			Rewrite:       ii.Prefix,
 			Service:       fmt.Sprintf("telepresence-proxy.%s:%d", tm.namespace, port),
 			RegexHeaders:  ii.Patterns,
-			GRPC:          ii.GRPC, // Set the grpc flag on the intercept mapping
+			GRPC:          ii.Grpc, // Set the grpc flag on the intercept mapping
 			TimeoutMs:     60000,   // Making sure we don't have shorter timeouts on intercepts than the original Mapping
 			IdleTimeoutMs: 60000,
 		},

@@ -1,13 +1,14 @@
 syntax = "proto3";
 
+package telepresence;
+
+import "google/protobuf/empty.proto";
+
 option go_package = "pkg/rpc";
 option java_multiple_files = true;
 option java_package = "io.datawire.telepresence.rpc";
 option java_outer_classname = "DaemonProto";
 
-import "rpc/daemon.proto";
-
-package telepresence;
 
 message ClientInfo {
   string name = 1;  // user@hostname
@@ -54,23 +55,23 @@ message InterceptSpec {
 }
 
 message InterceptInfo {
-    enum DisType {
-      UNSPECIFIED = 0;
+  enum DisType {
+    UNSPECIFIED = 0;
 
-      ACTIVE = 1;
-      WAITING = 2;
+    ACTIVE = 1;
+    WAITING = 2;
 
-      // Failure states
+    // Failure states
 
-      NO_CLIENT = 3;
-      NO_AGENT = 4;
-      NO_MECHANISM = 5;
-      NO_PORTS = 6;
-    }
+    NO_CLIENT = 3;
+    NO_AGENT = 4;
+    NO_MECHANISM = 5;
+    NO_PORTS = 6;
+  }
 
   InterceptSpec spec = 1;
   int32 manager_port = 2;
-    DisType disposition = 3;
+  DisType disposition = 3;
 }
 
 message SessionInfo {
@@ -100,8 +101,8 @@ service Manager {
 
   rpc ArriveAsClient(ClientInfo) returns (SessionInfo);
   rpc ArriveAsAgent(AgentInfo) returns (SessionInfo);
-  rpc Remain(SessionInfo) returns (Empty);
-  rpc Depart(SessionInfo) returns (Empty);
+  rpc Remain(SessionInfo) returns (google.protobuf.Empty);
+  rpc Depart(SessionInfo) returns (google.protobuf.Empty);
 
   // Watches
 
@@ -111,5 +112,5 @@ service Manager {
   // CRUD
 
   rpc CreateIntercept(CreateInterceptRequest) returns (InterceptInfo);
-  rpc RemoveIntercept(RemoveInterceptRequest2) returns (Empty);
+  rpc RemoveIntercept(RemoveInterceptRequest2) returns (google.protobuf.Empty);
 }

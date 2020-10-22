@@ -105,11 +105,11 @@ func getRootCommand() *cobra.Command {
 				"namespace", "n", "",
 				"The Kubernetes namespace to use. Defaults to kubectl's default for the context.",
 			)
-			connectFlags.StringVarP(&runInfo.ManagerNS,
+			connectFlags.StringVarP(&runInfo.ManagerNs,
 				"manager-namespace", "m", "ambassador",
 				"The Kubernetes namespace in which the Traffic Manager is running.",
 			)
-			connectFlags.BoolVar(&runInfo.IsCI, "ci", false, "This session is a CI run.")
+			connectFlags.BoolVar(&runInfo.IsCi, "ci", false, "This session is a CI run.")
 		}
 
 		rootCmd.RunE = runInfo.RunShell
@@ -214,7 +214,7 @@ func getRootCommand() *cobra.Command {
 		interceptAddCmd.Flags().StringVarP(&intercept.Name, "name", "n", "", "a name for this intercept")
 		interceptAddCmd.Flags().StringVar(&intercept.Prefix, "prefix", "/", "prefix to intercept")
 		interceptAddCmd.Flags().BoolVarP(&intercept.Preview, "preview", "p", true, "use a preview URL") // this default is unused
-		interceptAddCmd.Flags().BoolVarP(&intercept.GRPC, "grpc", "", false, "intercept GRPC traffic")
+		interceptAddCmd.Flags().BoolVarP(&intercept.Grpc, "grpc", "", false, "intercept GRPC traffic")
 		interceptAddCmd.Flags().StringVarP(&intercept.TargetHost, "target", "t", "", "the [HOST:]PORT to forward to")
 		_ = interceptAddCmd.MarkFlagRequired("target")
 		interceptAddCmd.Flags().StringToStringVarP(&intercept.Patterns, "match", "m", nil, "match expression (HEADER=REGEX)")
@@ -242,12 +242,12 @@ func getRootCommand() *cobra.Command {
 		runFlags.StringVarP(&runInfo.Name, "name", "n", "", "a name for this intercept")
 		runFlags.StringVar(&runInfo.Prefix, "prefix", "/", "prefix to intercept")
 		runFlags.BoolVarP(&runInfo.Preview, "preview", "p", true, "use a preview URL") // this default is unused
-		runFlags.BoolVarP(&runInfo.GRPC, "grpc", "", false, "intercept GRPC traffic")
+		runFlags.BoolVarP(&runInfo.Grpc, "grpc", "", false, "intercept GRPC traffic")
 		runFlags.StringVarP(&runInfo.TargetHost, "target", "t", "", "the [HOST:]PORT to forward to")
 		_ = runCmd.MarkFlagRequired("target")
 		runFlags.StringToStringVarP(&runInfo.Patterns, "match", "m", nil, "match expression (HEADER=REGEX)")
 		runFlags.StringVarP(&runInfo.ConnectRequest.Namespace, "namespace", "", "", "Kubernetes namespace in which to create mapping for intercept")
-		runFlags.StringVarP(&runInfo.ManagerNS,
+		runFlags.StringVarP(&runInfo.ManagerNs,
 			"manager-namespace", "", "ambassador",
 			"The Kubernetes namespace in which the Traffic Manager is running.",
 		)

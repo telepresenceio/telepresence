@@ -8,6 +8,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
@@ -59,7 +60,7 @@ func (ds *daemonState) DeactivateState() error {
 	fmt.Fprint(ds.out, "Telepresence Daemon quitting...")
 	var err error
 	if common.SocketExists(common.DaemonSocketName) {
-		_, err = ds.grpc.Quit(context.Background(), &rpc.Empty{})
+		_, err = ds.grpc.Quit(context.Background(), &empty.Empty{})
 	}
 	ds.disconnect()
 	if err == nil {

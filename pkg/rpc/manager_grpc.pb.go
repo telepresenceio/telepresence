@@ -4,6 +4,7 @@ package rpc
 
 import (
 	context "context"
+	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -19,12 +20,12 @@ const _ = grpc.SupportPackageIsVersion7
 type ManagerClient interface {
 	ArriveAsClient(ctx context.Context, in *ClientInfo, opts ...grpc.CallOption) (*SessionInfo, error)
 	ArriveAsAgent(ctx context.Context, in *AgentInfo, opts ...grpc.CallOption) (*SessionInfo, error)
-	Remain(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*Empty, error)
-	Depart(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*Empty, error)
+	Remain(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error)
+	Depart(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error)
 	WatchAgents(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchAgentsClient, error)
 	WatchIntercepts(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchInterceptsClient, error)
 	CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error)
-	RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest2, opts ...grpc.CallOption) (*Empty, error)
+	RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest2, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type managerClient struct {
@@ -53,8 +54,8 @@ func (c *managerClient) ArriveAsAgent(ctx context.Context, in *AgentInfo, opts .
 	return out, nil
 }
 
-func (c *managerClient) Remain(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*Empty, error) {
-	out := new(Empty)
+func (c *managerClient) Remain(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.Manager/Remain", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -62,8 +63,8 @@ func (c *managerClient) Remain(ctx context.Context, in *SessionInfo, opts ...grp
 	return out, nil
 }
 
-func (c *managerClient) Depart(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*Empty, error) {
-	out := new(Empty)
+func (c *managerClient) Depart(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.Manager/Depart", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -144,8 +145,8 @@ func (c *managerClient) CreateIntercept(ctx context.Context, in *CreateIntercept
 	return out, nil
 }
 
-func (c *managerClient) RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest2, opts ...grpc.CallOption) (*Empty, error) {
-	out := new(Empty)
+func (c *managerClient) RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest2, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.Manager/RemoveIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -159,12 +160,12 @@ func (c *managerClient) RemoveIntercept(ctx context.Context, in *RemoveIntercept
 type ManagerServer interface {
 	ArriveAsClient(context.Context, *ClientInfo) (*SessionInfo, error)
 	ArriveAsAgent(context.Context, *AgentInfo) (*SessionInfo, error)
-	Remain(context.Context, *SessionInfo) (*Empty, error)
-	Depart(context.Context, *SessionInfo) (*Empty, error)
+	Remain(context.Context, *SessionInfo) (*empty.Empty, error)
+	Depart(context.Context, *SessionInfo) (*empty.Empty, error)
 	WatchAgents(*SessionInfo, Manager_WatchAgentsServer) error
 	WatchIntercepts(*SessionInfo, Manager_WatchInterceptsServer) error
 	CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptInfo, error)
-	RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*Empty, error)
+	RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*empty.Empty, error)
 	mustEmbedUnimplementedManagerServer()
 }
 
@@ -178,10 +179,10 @@ func (UnimplementedManagerServer) ArriveAsClient(context.Context, *ClientInfo) (
 func (UnimplementedManagerServer) ArriveAsAgent(context.Context, *AgentInfo) (*SessionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ArriveAsAgent not implemented")
 }
-func (UnimplementedManagerServer) Remain(context.Context, *SessionInfo) (*Empty, error) {
+func (UnimplementedManagerServer) Remain(context.Context, *SessionInfo) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Remain not implemented")
 }
-func (UnimplementedManagerServer) Depart(context.Context, *SessionInfo) (*Empty, error) {
+func (UnimplementedManagerServer) Depart(context.Context, *SessionInfo) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Depart not implemented")
 }
 func (UnimplementedManagerServer) WatchAgents(*SessionInfo, Manager_WatchAgentsServer) error {
@@ -193,7 +194,7 @@ func (UnimplementedManagerServer) WatchIntercepts(*SessionInfo, Manager_WatchInt
 func (UnimplementedManagerServer) CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateIntercept not implemented")
 }
-func (UnimplementedManagerServer) RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*Empty, error) {
+func (UnimplementedManagerServer) RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
 func (UnimplementedManagerServer) mustEmbedUnimplementedManagerServer() {}

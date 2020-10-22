@@ -1,243 +1,245 @@
 syntax = "proto3";
+package telepresence;
+import "google/protobuf/empty.proto";
 
 option go_package = "pkg/rpc";
 option java_multiple_files = true;
 option java_package = "io.datawire.telepresence.rpc";
 option java_outer_classname = "DaemonProto";
 
-package telepresence;
-
-// The Daemon service is responsible for managing network overrides and also acts as the
-// central point for logging.
+// The Daemon service is responsible for managing network overrides and also
+// acts as the central point for logging.
 service Daemon {
-    // Returns version information from the Daemon
-    rpc Version(Empty) returns (VersionResponse);
+  // Returns version information from the Daemon
+  rpc Version(google.protobuf.Empty) returns (VersionInfo);
 
-    // Returns the current connectivity status
-    rpc Status(Empty) returns (DaemonStatusResponse);
+  // Returns the current connectivity status
+  rpc Status(google.protobuf.Empty) returns (DaemonStatus);
 
-    // Turns network overrides off.
-    rpc Pause(Empty) returns (PauseResponse);
+  // Turns network overrides off.
+  rpc Pause(google.protobuf.Empty) returns (PauseInfo);
 
-    // Turns network overrides back on (after using Pause)
-    rpc Resume(Empty) returns (ResumeResponse);
+  // Turns network overrides back on (after using Pause)
+  rpc Resume(google.protobuf.Empty) returns (ResumeInfo);
 
-    // Logger accepts a stream that can be used for posting messages to the daemon logger.
-    rpc Logger(stream LogMessage) returns (Empty);
+  // Logger accepts a stream that can be used for posting messages to
+  // the daemon logger.
+  rpc Logger(stream LogMessage) returns (google.protobuf.Empty);
 
-    // Quits (terminates) the service.
-    rpc Quit(Empty) returns (Empty);
+  // Quits (terminates) the service.
+  rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
-// The Connector service is responsible for connecting to the traffic manager and manage
-// intercepts. It can only run when a Daemon is running.
+// The Connector service is responsible for connecting to the traffic manager
+// and manage intercepts. It can only run when a Daemon is running.
 service Connector {
-    // Returns version information from the Connector
-    rpc Version(Empty) returns (VersionResponse);
+  // Returns version information from the Connector
+  rpc Version(google.protobuf.Empty) returns (VersionInfo);
 
-    // Returns the current connectivity status
-    rpc Status(Empty) returns (ConnectorStatusResponse);
+  // Returns the current connectivity status
+  rpc Status(google.protobuf.Empty) returns (ConnectorStatus);
 
-    // Connects the daemon to a cluster
-    rpc Connect(ConnectRequest) returns (ConnectResponse);
+  // Connects the daemon to a cluster
+  rpc Connect(ConnectRequest) returns (ConnectInfo);
 
-    // Adds a deployment intercept
-    rpc AddIntercept(InterceptRequest) returns (InterceptResponse);
+  // Adds a deployment intercept
+  rpc AddIntercept(InterceptRequest) returns (Intercept);
 
-    // Deactivates and removes an existent deployment intercept.
-    rpc RemoveIntercept(RemoveInterceptRequest) returns (InterceptResponse);
+  // Deactivates and removes an existent deployment intercept.
+  rpc RemoveIntercept(RemoveInterceptRequest) returns (Intercept);
 
-    // Returns a list of deployments available for intercept.
-    rpc AvailableIntercepts(Empty) returns (AvailableInterceptsResponse);
+  // Returns a list of deployments available for intercept.
+  rpc AvailableIntercepts(google.protobuf.Empty) returns (AvailableInterceptList);
 
-    // Returns a list of currently active intercepts.
-    rpc ListIntercepts(Empty) returns (ListInterceptsResponse);
+  // Returns a list of currently active intercepts.
+  rpc ListIntercepts(google.protobuf.Empty) returns (InterceptList);
 
-    // Quits (terminates) the service.
-    rpc Quit(Empty) returns (Empty);
+  // Quits (terminates) the service.
+  rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
-// LogMessage carries a message and a flag telling the service if the message is intended for
-// debugging or more general info.
+// LogMessage carries a message and a flag telling the service if the message
+// is intended for debugging or more general info.
 message LogMessage {
-    bool IsDebug = 1;
-    string text = 2;
+  bool is_debug = 1;
+  string text = 2;
 }
 
 // ConnectRequest contains the information needed to connect ot a cluster.
 message ConnectRequest {
-    string Context = 1;
-    string Namespace = 2;
-    string ManagerNS = 3;
-    string InstallID = 4;
-    repeated string Args = 5;
+  string context = 1;
+  string namespace = 2;
+  string manager_ns = 3;
+  string install_id = 4;
+  repeated string args = 5;
 
-    // true if this is part of a CI run
-    bool IsCI = 6;
+  // true if this is part of a CI run
+  bool is_ci = 6;
 
-    // true if the call must wait for a running traffic manager before returning
-    bool InterceptEnabled = 7;
+  // true if the call must wait for a running traffic manager before returning
+  bool intercept_enabled = 7;
 }
 
-message ConnectResponse {
-    enum ErrType {
-        Ok = 0;
-        AlreadyConnected = 1;
-        Disconnecting = 2;
-        ClusterFailed = 3;
-        BridgeFailed = 4;
-        TrafficManagerFailed = 5;
-    }
-    ErrType Error = 1;
-    string ErrorText = 2;
-    string ClusterContext = 3;
-    string ClusterServer = 4;
+message ConnectInfo {
+  enum ErrType {
+    UNSPECIFIED = 0;
+    ALREADY_CONNECTED = 1;
+    DISCONNECTING = 2;
+    CLUSTER_FAILED = 3;
+    BRIDGE_FAILED = 4;
+    TRAFFIC_MANAGER_FAILED = 5;
+  }
+  ErrType error = 1;
+  string error_text = 2;
+  string cluster_context = 3;
+  string cluster_server = 4;
 }
 
-message PauseResponse {
-    enum ErrType {
-        Ok = 0;
-        AlreadyPaused = 1;
-        ConnectedToCluster = 2;
-        UnexpectedPauseError = 3;
-    }
-    ErrType Error = 1;
-    string ErrorText= 2;
+message PauseInfo {
+  enum ErrType {
+    UNSPECIFIED = 0;
+    ALREADY_PAUSED = 1;
+    CONNECTED_TO_CLUSTER = 2;
+    UNEXPECTED_PAUSE_ERROR = 3;
+  }
+  ErrType error = 1;
+  string error_text = 2;
 }
 
-message ResumeResponse {
-    enum ErrType {
-        Ok = 0;
-        NotPaused = 1;
-        ReEstablishing = 2;
-        UnexpectedResumeError = 3;
-    }
-    ErrType Error = 1;
-    string ErrorText= 2;
+message ResumeInfo {
+  enum ErrType {
+    UNSPECIFIED = 0;
+    NOT_PAUSED = 1;
+    REESTABLISHING = 2;
+    UNEXPECTED_RESUME_ERROR = 3;
+  }
+  ErrType error = 1;
+  string error_text = 2;
 }
 
-message Empty {}
-
-message VersionResponse {
-    int32 APIVersion = 1;
-    string Version = 2;
+message VersionInfo {
+  int32 api_version = 1;
+  string version = 2;
 }
 
 
-message DaemonStatusResponse {
-    enum ErrType {
-        Ok = 0;
-        NotStarted = 1;
-        Paused = 2;
-        NoNetwork = 3;
-     }
-    ErrType Error = 1;
+message DaemonStatus {
+  enum ErrType {
+    UNSPECIFIED = 0;
+    NOT_STARTED = 1;
+    PAUSED = 2;
+    NO_NETWORK = 3;
+  }
+  ErrType error = 1;
 }
 
-message ConnectorStatusResponse {
-    enum ErrType {
-        Ok = 0;
-        NotStarted = 1;
-        Disconnected = 2;
-    }
-    ErrType Error = 1;
-    string ErrorText = 2;
-    bool Bridge = 3;
+message ConnectorStatus {
+  enum ErrType {
+    UNSPECIFIED = 0;
+    NOT_STARTED = 1;
+    DISCONNECTED = 2;
+  }
+  ErrType error = 1;
+  string error_text = 2;
+  bool bridge = 3;
 
-    message ClusterInfo {
-        bool Connected = 1;
-        string Server = 2;
-        string Context = 3;
-    }
-    ClusterInfo Cluster = 4;
+  message ClusterInfo {
+    bool connected = 1;
+    string server = 2;
+    string context = 3;
+  }
+  ClusterInfo cluster = 4;
 
-    message InterceptsInfo {
-        bool Connected = 1;
-        int32 InterceptableCount = 2;
-        int32 ClusterIntercepts = 3;
-        int32 LocalIntercepts = 4;
-        string LicenseInfo = 5;
-    }
-    InterceptsInfo Intercepts = 5;
+  message InterceptsInfo {
+    bool connected = 1;
+    int32 interceptable_count = 2;
+    int32 cluster_intercepts = 3;
+    int32 local_intercepts = 4;
+    string license_info = 5;
+  }
+  InterceptsInfo intercepts = 5;
 }
 
-// InterceptRequest contains the information needed to add a deployment intercept.
+// InterceptRequest contains the information needed to add a deployment
+// intercept.
 message InterceptRequest {
-    // Name of the intercept
-    string Name = 1;
+  // Name of the intercept
+  string name = 1;
 
-    // Namespace in which to create the Intercept mapping
-    string Namespace = 2;
+  // Namespace in which to create the Intercept mapping
+  string namespace = 2;
 
-    // Name of the deployment being intercepted
-    string Deployment = 3;
+  // Name of the deployment being intercepted
+  string deployment = 3;
 
-    // Prefix to intercept (default /)
-    string Prefix = 4;
+  // Prefix to intercept (default /)
+  string prefix = 4;
 
-    string TargetHost = 5;
+  string target_host = 5;
 
-    int32 TargetPort = 6;
+  int32 target_port = 6;
 
-    // GRPC flag to set on the Intercept mapping. Ideally we'd get this from the
-    // Traffic-Manager interceptables instead of having to pass it as a CLI argument.
-    bool GRPC = 7;
+  // GRPC flag to set on the Intercept mapping. Ideally we'd get this from the
+  // Traffic-Manager interceptables instead of having to pass it as a CLI
+  // argument.
+  bool grpc = 7;
 
-    bool Preview = 8;
+  bool preview = 8;
 
-    map<string,string> Patterns = 9;
+  map<string, string> patterns = 9;
 }
 
 message RemoveInterceptRequest {
-    // Name of the intercept
-    string Name = 1;
+  // Name of the intercept
+  string name = 1;
 }
 
-// InterceptError is a common error type used by the intercept call family (add, remove, list, available).
+// InterceptError is a common error type used by the intercept call family (add,
+// remove, list, available).
 enum InterceptError {
-    InterceptOk = 0;
-    NoPreviewHost = 1;
-    NoConnection = 2;
-    NoTrafficManager = 3;
-    TrafficManagerConnecting = 4;
-    TrafficManagerError = 5;
-    AlreadyExists = 6;
-    NoAcceptableDeployment = 7;
-    AmbiguousMatch = 8;
-    FailedToEstablish = 9;
-    FailedToRemove = 10;
-    NotFound = 11;
+  UNSPECIFIED = 0;
+  NO_PREVIEW_HOST = 1;
+  NO_CONNECTION = 2;
+  NO_TRAFFIC_MANAGER = 3;
+  TRAFFIC_MANAGER_CONNECTING = 4;
+  TRAFFIC_MANAGER_ERROR = 5;
+  ALREADY_EXISTS = 6;
+  NO_ACCEPTABLE_DEPLOYMENT = 7;
+  AMBIGUOUS_MATCH = 8;
+  FAILED_TO_ESTABLISH = 9;
+  FAILED_TO_REMOVE = 10;
+  NOT_FOUND = 11;
 }
 
-message InterceptResponse {
-    InterceptError Error = 1;
-    string PreviewURL = 2;
-    string Text = 3;
+message Intercept {
+  InterceptError error = 1;
+  string preview_url = 2;
+  string text = 3;
 }
 
-message ListInterceptsResponse {
-    InterceptError Error = 1;
-    string Text = 2;
+message InterceptList {
+  InterceptError error = 1;
+  string text = 2;
 
-    message ListEntry {
-        string Name = 1;
-        string Namespace = 2;
-        string Deployment = 3;
-        string PreviewURL = 4;
-        map<string,string> Patterns = 5;
-        string TargetHost = 6;
-        int32 TargetPort = 7;
-    }
-    repeated ListEntry Intercepts = 3;
+  message ListEntry {
+    string name = 1;
+    string namespace = 2;
+    string deployment = 3;
+    string preview_url = 4;
+    map<string, string> patterns = 5;
+    string target_host = 6;
+    int32 target_port = 7;
+  }
+  repeated ListEntry intercepts = 3;
 }
 
-message AvailableInterceptsResponse {
-    InterceptError Error = 1;
-    string Text = 2;
+message AvailableInterceptList {
+  InterceptError error = 1;
+  string text = 2;
 
-    message ListEntry {
-        string Namespace = 1;
-        string Deployment = 2;
-    }
-    repeated ListEntry Intercepts = 3;
+  message ListEntry {
+    string namespace = 1;
+    string deployment = 2;
+  }
+  repeated ListEntry intercepts = 3;
 }

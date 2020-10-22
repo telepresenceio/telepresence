@@ -26,7 +26,7 @@ func NewCmdUsage(cmd *cobra.Command, groups []CmdGroup) func(*cobra.Command) err
 			cmdMap[subCmd.Name()] = subCmd
 		}
 	}
-	lines := []string{}
+	var lines []string
 	for _, cmdGroup := range groups {
 		lines = append(lines, fmt.Sprintf("%s:", cmdGroup.GroupName))
 		for _, cmdName := range cmdGroup.CmdNames {
@@ -49,7 +49,7 @@ func NewCmdUsage(cmd *cobra.Command, groups []CmdGroup) func(*cobra.Command) err
 	return func(cmd *cobra.Command) error {
 		origOutput := cmd.OutOrStderr()
 		var buf bytes.Buffer
-		cmd.SetOutput(&buf)
+		cmd.SetOut(&buf)
 		if err := origUF(cmd); err != nil {
 			return err
 		}

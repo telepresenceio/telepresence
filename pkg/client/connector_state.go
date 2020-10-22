@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
@@ -29,27 +30,27 @@ func (cs *connectorState) EnsureState() (bool, error) {
 	}
 
 	for attempt := 0; ; attempt++ {
-		dr, err := cs.daemon.Status(context.Background(), &rpc.Empty{})
+		dr, err := cs.daemon.Status(context.Background(), &empty.Empty{})
 		if err != nil {
 			return false, err
 		}
 		switch dr.Error {
-		case rpc.DaemonStatusResponse_Ok:
-		case rpc.DaemonStatusResponse_NotStarted:
+		case rpc.DaemonStatus_UNSPECIFIED:
+		case rpc.DaemonStatus_NOT_STARTED:
 			return false, daemonIsNotRunning
-		case rpc.DaemonStatusResponse_NoNetwork:
+		case rpc.DaemonStatus_NO_NETWORK:
 			if attempt >= 40 {
 				return false, errors.New("Unable to connect: Network overrides are not established")
 			}
 			time.Sleep(250 * time.Millisecond)
 			continue
-		case rpc.DaemonStatusResponse_Paused:
+		case rpc.DaemonStatus_PAUSED:
 			return false, errors.New("Unable to connect: Network overrides are paused (use 'telepresence resume')")
 		}
 		break
 	}
 
-	cs.cr.InstallID = NewScout("unused").Reporter.InstallID()
+	cs.cr.InstallId = NewScout("unused").Reporter.InstallID()
 
 	err := start(common.GetExe(), []string{"connector-foreground"}, false, nil, nil, nil)
 	if err != nil {
@@ -58,8 +59,8 @@ func (cs *connectorState) EnsureState() (bool, error) {
 
 	// TODO: Progress reporting during connect. Either divide into several calls and report completion
 	//  of each, or use a stream. Can be made as part of ticket #1334.
-	var r *rpc.ConnectResponse
-	fmt.Fprintf(cs.out, "Connecting to traffic manager in namespace %s...\n", cs.cr.ManagerNS)
+	var r *rpc.ConnectInfo
+	fmt.Fprintf(cs.out, "Connecting to traffic manager in namespace %s...\n", cs.cr.ManagerNs)
 
 	if err = common.WaitUntilSocketAppears("connector", common.ConnectorSocketName, 10*time.Second); err != nil {
 		return false, fmt.Errorf("Connector service did not come up!\nTake a look at %s for more information.", common.Logfile)
@@ -76,13 +77,13 @@ func (cs *connectorState) EnsureState() (bool, error) {
 
 	var msg string
 	switch r.Error {
-	case rpc.ConnectResponse_Ok:
+	case rpc.ConnectInfo_UNSPECIFIED:
 		fmt.Fprintf(cs.out, "Connected to context %s (%s)\n", r.ClusterContext, r.ClusterServer)
 		return true, nil
-	case rpc.ConnectResponse_AlreadyConnected:
+	case rpc.ConnectInfo_ALREADY_CONNECTED:
 		fmt.Fprintln(cs.out, "Already connected")
 		return false, nil
-	case rpc.ConnectResponse_TrafficManagerFailed:
+	case rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED:
 		fmt.Fprintf(cs.out, `Connected to context %s (%s)
 
 Unable to connect to the traffic manager.
@@ -93,9 +94,9 @@ Error was: %s
 		// The connect is considered a success. There's still a cluster connection and bridge.
 		// TODO: This is obviously not true for the run subcommand.
 		return true, nil
-	case rpc.ConnectResponse_Disconnecting:
+	case rpc.ConnectInfo_DISCONNECTING:
 		msg = "Unable to connect while disconnecting"
-	case rpc.ConnectResponse_ClusterFailed, rpc.ConnectResponse_BridgeFailed:
+	case rpc.ConnectInfo_CLUSTER_FAILED, rpc.ConnectInfo_BRIDGE_FAILED:
 		msg = r.ErrorText
 	}
 	return false, errors.New(msg)
@@ -108,7 +109,7 @@ func (cs *connectorState) DeactivateState() error {
 	fmt.Fprint(cs.out, "Disconnecting...")
 	var err error
 	if common.SocketExists(common.ConnectorSocketName) {
-		_, err = cs.grpc.Quit(context.Background(), &rpc.Empty{})
+		_, err = cs.grpc.Quit(context.Background(), &empty.Empty{})
 	}
 	cs.disconnect()
 	if err == nil {

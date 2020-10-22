@@ -11,6 +11,7 @@ import (
 
 	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
@@ -90,40 +91,40 @@ func run() error {
 	return nil
 }
 
-func (s *service) Version(_ context.Context, _ *rpc.Empty) (*rpc.VersionResponse, error) {
-	return &rpc.VersionResponse{
-		APIVersion: common.ApiVersion,
+func (s *service) Version(_ context.Context, _ *empty.Empty) (*rpc.VersionInfo, error) {
+	return &rpc.VersionInfo{
+		ApiVersion: common.ApiVersion,
 		Version:    common.Version,
 	}, nil
 }
 
-func (s *service) Status(_ context.Context, _ *rpc.Empty) (*rpc.ConnectorStatusResponse, error) {
+func (s *service) Status(_ context.Context, _ *empty.Empty) (*rpc.ConnectorStatus, error) {
 	return s.status(s.p), nil
 }
 
-func (s *service) Connect(_ context.Context, cr *rpc.ConnectRequest) (*rpc.ConnectResponse, error) {
+func (s *service) Connect(_ context.Context, cr *rpc.ConnectRequest) (*rpc.ConnectInfo, error) {
 	return s.connect(s.p, cr), nil
 }
 
-func (s *service) AddIntercept(_ context.Context, ir *rpc.InterceptRequest) (*rpc.InterceptResponse, error) {
+func (s *service) AddIntercept(_ context.Context, ir *rpc.InterceptRequest) (*rpc.Intercept, error) {
 	return s.addIntercept(s.p, ir), nil
 }
 
-func (s *service) RemoveIntercept(_ context.Context, rr *rpc.RemoveInterceptRequest) (*rpc.InterceptResponse, error) {
+func (s *service) RemoveIntercept(_ context.Context, rr *rpc.RemoveInterceptRequest) (*rpc.Intercept, error) {
 	return s.removeIntercept(s.p, rr.Name), nil
 }
 
-func (s *service) AvailableIntercepts(_ context.Context, _ *rpc.Empty) (*rpc.AvailableInterceptsResponse, error) {
+func (s *service) AvailableIntercepts(_ context.Context, _ *empty.Empty) (*rpc.AvailableInterceptList, error) {
 	return s.availableIntercepts(s.p), nil
 }
 
-func (s *service) ListIntercepts(_ context.Context, _ *rpc.Empty) (*rpc.ListInterceptsResponse, error) {
+func (s *service) ListIntercepts(_ context.Context, _ *empty.Empty) (*rpc.InterceptList, error) {
 	return s.listIntercepts(s.p), nil
 }
 
-func (s *service) Quit(_ context.Context, _ *rpc.Empty) (*rpc.Empty, error) {
+func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	s.p.Supervisor().Shutdown()
-	return &rpc.Empty{}, nil
+	return &empty.Empty{}, nil
 }
 
 // setUpLogging connects to the daemon logger and assigns a wrapper for it to the
@@ -159,11 +160,11 @@ func (s *service) runGRPCService(p *supervisor.Process, cancel func()) error {
 }
 
 // connect the daemon to a cluster
-func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.ConnectResponse {
+func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
 	reporter := &metriton.Reporter{
 		Application:  "telepresence",
 		Version:      common.Version,
-		GetInstallID: func(_ *metriton.Reporter) (string, error) { return cr.InstallID, nil },
+		GetInstallID: func(_ *metriton.Reporter) (string, error) { return cr.InstallId, nil },
 		BaseMetadata: map[string]interface{}{"mode": "daemon"},
 	}
 
@@ -172,20 +173,20 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 	}
 
 	// Sanity checks
-	r := &rpc.ConnectResponse{}
+	r := &rpc.ConnectInfo{}
 	if s.cluster != nil {
-		r.Error = rpc.ConnectResponse_AlreadyConnected
+		r.Error = rpc.ConnectInfo_ALREADY_CONNECTED
 		return r
 	}
 	if s.bridge != nil {
-		r.Error = rpc.ConnectResponse_Disconnecting
+		r.Error = rpc.ConnectInfo_DISCONNECTING
 		return r
 	}
 
-	p.Logf("Connecting to traffic manager in namespace %s...", cr.ManagerNS)
+	p.Logf("Connecting to traffic manager in namespace %s...", cr.ManagerNs)
 	cluster, err := trackKCluster(p, cr.Context, cr.Namespace, cr.Args)
 	if err != nil {
-		r.Error = rpc.ConnectResponse_ClusterFailed
+		r.Error = rpc.ConnectInfo_CLUSTER_FAILED
 		r.ErrorText = err.Error()
 		return r
 	}
@@ -199,7 +200,7 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 
 	br := bridges.NewService("", cluster.ctx, cluster.namespace)
 	if err = br.Start(p); err != nil {
-		r.Error = rpc.ConnectResponse_BridgeFailed
+		r.Error = rpc.ConnectInfo_BRIDGE_FAILED
 		r.ErrorText = err.Error()
 		// No point in continuing without a bridge
 		s.p.Supervisor().Shutdown()
@@ -215,10 +216,10 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 	r.ClusterContext = s.cluster.context()
 	r.ClusterServer = s.cluster.server()
 
-	tmgr, err := newTrafficManager(p, s.cluster, cr.ManagerNS, cr.InstallID, cr.IsCI)
+	tmgr, err := newTrafficManager(p, s.cluster, cr.ManagerNs, cr.InstallId, cr.IsCi)
 	if err != nil {
 		p.Logf("Unable to connect to TrafficManager: %s", err)
-		r.Error = rpc.ConnectResponse_TrafficManagerFailed
+		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
 		r.ErrorText = err.Error()
 		if cr.InterceptEnabled {
 			// No point in continuing without a traffic manager
@@ -239,7 +240,7 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 	p.Log("Waiting for TrafficManager to connect")
 	for ; !tmgr.IsOkay() && attempts < maxAttempts; attempts++ {
 		if s.trafficMgr.apiErr != nil {
-			r.Error = rpc.ConnectResponse_TrafficManagerFailed
+			r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
 			r.ErrorText = s.trafficMgr.apiErr.Error()
 			// No point in continuing without a traffic manager
 			s.p.Supervisor().Shutdown()
@@ -248,7 +249,7 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 		time.Sleep(time.Second / 4)
 	}
 	if attempts == maxAttempts {
-		r.Error = rpc.ConnectResponse_TrafficManagerFailed
+		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
 		r.ErrorText = "Timeout waiting for traffic manager"
 		p.Log(r.ErrorText)
 		s.p.Supervisor().Shutdown()

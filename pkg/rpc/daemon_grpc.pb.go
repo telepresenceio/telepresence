@@ -4,6 +4,7 @@ package rpc
 
 import (
 	context "context"
+	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -18,17 +19,18 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type DaemonClient interface {
 	// Returns version information from the Daemon
-	Version(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*VersionResponse, error)
+	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*VersionInfo, error)
 	// Returns the current connectivity status
-	Status(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*DaemonStatusResponse, error)
+	Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*DaemonStatus, error)
 	// Turns network overrides off.
-	Pause(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*PauseResponse, error)
+	Pause(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*PauseInfo, error)
 	// Turns network overrides back on (after using Pause)
-	Resume(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ResumeResponse, error)
-	// Logger accepts a stream that can be used for posting messages to the daemon logger.
+	Resume(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ResumeInfo, error)
+	// Logger accepts a stream that can be used for posting messages to
+	// the daemon logger.
 	Logger(ctx context.Context, opts ...grpc.CallOption) (Daemon_LoggerClient, error)
 	// Quits (terminates) the service.
-	Quit(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
+	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type daemonClient struct {
@@ -39,8 +41,8 @@ func NewDaemonClient(cc grpc.ClientConnInterface) DaemonClient {
 	return &daemonClient{cc}
 }
 
-func (c *daemonClient) Version(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*VersionResponse, error) {
-	out := new(VersionResponse)
+func (c *daemonClient) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*VersionInfo, error) {
+	out := new(VersionInfo)
 	err := c.cc.Invoke(ctx, "/telepresence.Daemon/Version", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -48,8 +50,8 @@ func (c *daemonClient) Version(ctx context.Context, in *Empty, opts ...grpc.Call
 	return out, nil
 }
 
-func (c *daemonClient) Status(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*DaemonStatusResponse, error) {
-	out := new(DaemonStatusResponse)
+func (c *daemonClient) Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*DaemonStatus, error) {
+	out := new(DaemonStatus)
 	err := c.cc.Invoke(ctx, "/telepresence.Daemon/Status", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -57,8 +59,8 @@ func (c *daemonClient) Status(ctx context.Context, in *Empty, opts ...grpc.CallO
 	return out, nil
 }
 
-func (c *daemonClient) Pause(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*PauseResponse, error) {
-	out := new(PauseResponse)
+func (c *daemonClient) Pause(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*PauseInfo, error) {
+	out := new(PauseInfo)
 	err := c.cc.Invoke(ctx, "/telepresence.Daemon/Pause", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -66,8 +68,8 @@ func (c *daemonClient) Pause(ctx context.Context, in *Empty, opts ...grpc.CallOp
 	return out, nil
 }
 
-func (c *daemonClient) Resume(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ResumeResponse, error) {
-	out := new(ResumeResponse)
+func (c *daemonClient) Resume(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ResumeInfo, error) {
+	out := new(ResumeInfo)
 	err := c.cc.Invoke(ctx, "/telepresence.Daemon/Resume", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -86,7 +88,7 @@ func (c *daemonClient) Logger(ctx context.Context, opts ...grpc.CallOption) (Dae
 
 type Daemon_LoggerClient interface {
 	Send(*LogMessage) error
-	CloseAndRecv() (*Empty, error)
+	CloseAndRecv() (*empty.Empty, error)
 	grpc.ClientStream
 }
 
@@ -98,19 +100,19 @@ func (x *daemonLoggerClient) Send(m *LogMessage) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *daemonLoggerClient) CloseAndRecv() (*Empty, error) {
+func (x *daemonLoggerClient) CloseAndRecv() (*empty.Empty, error) {
 	if err := x.ClientStream.CloseSend(); err != nil {
 		return nil, err
 	}
-	m := new(Empty)
+	m := new(empty.Empty)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func (c *daemonClient) Quit(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error) {
-	out := new(Empty)
+func (c *daemonClient) Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.Daemon/Quit", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -123,17 +125,18 @@ func (c *daemonClient) Quit(ctx context.Context, in *Empty, opts ...grpc.CallOpt
 // for forward compatibility
 type DaemonServer interface {
 	// Returns version information from the Daemon
-	Version(context.Context, *Empty) (*VersionResponse, error)
+	Version(context.Context, *empty.Empty) (*VersionInfo, error)
 	// Returns the current connectivity status
-	Status(context.Context, *Empty) (*DaemonStatusResponse, error)
+	Status(context.Context, *empty.Empty) (*DaemonStatus, error)
 	// Turns network overrides off.
-	Pause(context.Context, *Empty) (*PauseResponse, error)
+	Pause(context.Context, *empty.Empty) (*PauseInfo, error)
 	// Turns network overrides back on (after using Pause)
-	Resume(context.Context, *Empty) (*ResumeResponse, error)
-	// Logger accepts a stream that can be used for posting messages to the daemon logger.
+	Resume(context.Context, *empty.Empty) (*ResumeInfo, error)
+	// Logger accepts a stream that can be used for posting messages to
+	// the daemon logger.
 	Logger(Daemon_LoggerServer) error
 	// Quits (terminates) the service.
-	Quit(context.Context, *Empty) (*Empty, error)
+	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	mustEmbedUnimplementedDaemonServer()
 }
 
@@ -141,22 +144,22 @@ type DaemonServer interface {
 type UnimplementedDaemonServer struct {
 }
 
-func (UnimplementedDaemonServer) Version(context.Context, *Empty) (*VersionResponse, error) {
+func (UnimplementedDaemonServer) Version(context.Context, *empty.Empty) (*VersionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
-func (UnimplementedDaemonServer) Status(context.Context, *Empty) (*DaemonStatusResponse, error) {
+func (UnimplementedDaemonServer) Status(context.Context, *empty.Empty) (*DaemonStatus, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Status not implemented")
 }
-func (UnimplementedDaemonServer) Pause(context.Context, *Empty) (*PauseResponse, error) {
+func (UnimplementedDaemonServer) Pause(context.Context, *empty.Empty) (*PauseInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Pause not implemented")
 }
-func (UnimplementedDaemonServer) Resume(context.Context, *Empty) (*ResumeResponse, error) {
+func (UnimplementedDaemonServer) Resume(context.Context, *empty.Empty) (*ResumeInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Resume not implemented")
 }
 func (UnimplementedDaemonServer) Logger(Daemon_LoggerServer) error {
 	return status.Errorf(codes.Unimplemented, "method Logger not implemented")
 }
-func (UnimplementedDaemonServer) Quit(context.Context, *Empty) (*Empty, error) {
+func (UnimplementedDaemonServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
 }
 func (UnimplementedDaemonServer) mustEmbedUnimplementedDaemonServer() {}
@@ -173,7 +176,7 @@ func RegisterDaemonServer(s *grpc.Server, srv DaemonServer) {
 }
 
 func _Daemon_Version_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Empty)
+	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -185,13 +188,13 @@ func _Daemon_Version_Handler(srv interface{}, ctx context.Context, dec func(inte
 		FullMethod: "/telepresence.Daemon/Version",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).Version(ctx, req.(*Empty))
+		return srv.(DaemonServer).Version(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _Daemon_Status_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Empty)
+	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -203,13 +206,13 @@ func _Daemon_Status_Handler(srv interface{}, ctx context.Context, dec func(inter
 		FullMethod: "/telepresence.Daemon/Status",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).Status(ctx, req.(*Empty))
+		return srv.(DaemonServer).Status(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _Daemon_Pause_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Empty)
+	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -221,13 +224,13 @@ func _Daemon_Pause_Handler(srv interface{}, ctx context.Context, dec func(interf
 		FullMethod: "/telepresence.Daemon/Pause",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).Pause(ctx, req.(*Empty))
+		return srv.(DaemonServer).Pause(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _Daemon_Resume_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Empty)
+	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -239,7 +242,7 @@ func _Daemon_Resume_Handler(srv interface{}, ctx context.Context, dec func(inter
 		FullMethod: "/telepresence.Daemon/Resume",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).Resume(ctx, req.(*Empty))
+		return srv.(DaemonServer).Resume(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -249,7 +252,7 @@ func _Daemon_Logger_Handler(srv interface{}, stream grpc.ServerStream) error {
 }
 
 type Daemon_LoggerServer interface {
-	SendAndClose(*Empty) error
+	SendAndClose(*empty.Empty) error
 	Recv() (*LogMessage, error)
 	grpc.ServerStream
 }
@@ -258,7 +261,7 @@ type daemonLoggerServer struct {
 	grpc.ServerStream
 }
 
-func (x *daemonLoggerServer) SendAndClose(m *Empty) error {
+func (x *daemonLoggerServer) SendAndClose(m *empty.Empty) error {
 	return x.ServerStream.SendMsg(m)
 }
 
@@ -271,7 +274,7 @@ func (x *daemonLoggerServer) Recv() (*LogMessage, error) {
 }
 
 func _Daemon_Quit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Empty)
+	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -283,7 +286,7 @@ func _Daemon_Quit_Handler(srv interface{}, ctx context.Context, dec func(interfa
 		FullMethod: "/telepresence.Daemon/Quit",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).Quit(ctx, req.(*Empty))
+		return srv.(DaemonServer).Quit(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -328,21 +331,21 @@ var _Daemon_serviceDesc = grpc.ServiceDesc{
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ConnectorClient interface {
 	// Returns version information from the Connector
-	Version(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*VersionResponse, error)
+	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*VersionInfo, error)
 	// Returns the current connectivity status
-	Status(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ConnectorStatusResponse, error)
+	Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ConnectorStatus, error)
 	// Connects the daemon to a cluster
-	Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectResponse, error)
+	Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error)
 	// Adds a deployment intercept
-	AddIntercept(ctx context.Context, in *InterceptRequest, opts ...grpc.CallOption) (*InterceptResponse, error)
+	AddIntercept(ctx context.Context, in *InterceptRequest, opts ...grpc.CallOption) (*Intercept, error)
 	// Deactivates and removes an existent deployment intercept.
-	RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest, opts ...grpc.CallOption) (*InterceptResponse, error)
+	RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest, opts ...grpc.CallOption) (*Intercept, error)
 	// Returns a list of deployments available for intercept.
-	AvailableIntercepts(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*AvailableInterceptsResponse, error)
+	AvailableIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AvailableInterceptList, error)
 	// Returns a list of currently active intercepts.
-	ListIntercepts(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ListInterceptsResponse, error)
+	ListIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*InterceptList, error)
 	// Quits (terminates) the service.
-	Quit(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
+	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type connectorClient struct {
@@ -353,8 +356,8 @@ func NewConnectorClient(cc grpc.ClientConnInterface) ConnectorClient {
 	return &connectorClient{cc}
 }
 
-func (c *connectorClient) Version(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*VersionResponse, error) {
-	out := new(VersionResponse)
+func (c *connectorClient) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*VersionInfo, error) {
+	out := new(VersionInfo)
 	err := c.cc.Invoke(ctx, "/telepresence.Connector/Version", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -362,8 +365,8 @@ func (c *connectorClient) Version(ctx context.Context, in *Empty, opts ...grpc.C
 	return out, nil
 }
 
-func (c *connectorClient) Status(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ConnectorStatusResponse, error) {
-	out := new(ConnectorStatusResponse)
+func (c *connectorClient) Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ConnectorStatus, error) {
+	out := new(ConnectorStatus)
 	err := c.cc.Invoke(ctx, "/telepresence.Connector/Status", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -371,8 +374,8 @@ func (c *connectorClient) Status(ctx context.Context, in *Empty, opts ...grpc.Ca
 	return out, nil
 }
 
-func (c *connectorClient) Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectResponse, error) {
-	out := new(ConnectResponse)
+func (c *connectorClient) Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error) {
+	out := new(ConnectInfo)
 	err := c.cc.Invoke(ctx, "/telepresence.Connector/Connect", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -380,8 +383,8 @@ func (c *connectorClient) Connect(ctx context.Context, in *ConnectRequest, opts 
 	return out, nil
 }
 
-func (c *connectorClient) AddIntercept(ctx context.Context, in *InterceptRequest, opts ...grpc.CallOption) (*InterceptResponse, error) {
-	out := new(InterceptResponse)
+func (c *connectorClient) AddIntercept(ctx context.Context, in *InterceptRequest, opts ...grpc.CallOption) (*Intercept, error) {
+	out := new(Intercept)
 	err := c.cc.Invoke(ctx, "/telepresence.Connector/AddIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -389,8 +392,8 @@ func (c *connectorClient) AddIntercept(ctx context.Context, in *InterceptRequest
 	return out, nil
 }
 
-func (c *connectorClient) RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest, opts ...grpc.CallOption) (*InterceptResponse, error) {
-	out := new(InterceptResponse)
+func (c *connectorClient) RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest, opts ...grpc.CallOption) (*Intercept, error) {
+	out := new(Intercept)
 	err := c.cc.Invoke(ctx, "/telepresence.Connector/RemoveIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -398,8 +401,8 @@ func (c *connectorClient) RemoveIntercept(ctx context.Context, in *RemoveInterce
 	return out, nil
 }
 
-func (c *connectorClient) AvailableIntercepts(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*AvailableInterceptsResponse, error) {
-	out := new(AvailableInterceptsResponse)
+func (c *connectorClient) AvailableIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AvailableInterceptList, error) {
+	out := new(AvailableInterceptList)
 	err := c.cc.Invoke(ctx, "/telepresence.Connector/AvailableIntercepts", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -407,8 +410,8 @@ func (c *connectorClient) AvailableIntercepts(ctx context.Context, in *Empty, op
 	return out, nil
 }
 
-func (c *connectorClient) ListIntercepts(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*ListInterceptsResponse, error) {
-	out := new(ListInterceptsResponse)
+func (c *connectorClient) ListIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*InterceptList, error) {
+	out := new(InterceptList)
 	err := c.cc.Invoke(ctx, "/telepresence.Connector/ListIntercepts", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -416,8 +419,8 @@ func (c *connectorClient) ListIntercepts(ctx context.Context, in *Empty, opts ..
 	return out, nil
 }
 
-func (c *connectorClient) Quit(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error) {
-	out := new(Empty)
+func (c *connectorClient) Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.Connector/Quit", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -430,21 +433,21 @@ func (c *connectorClient) Quit(ctx context.Context, in *Empty, opts ...grpc.Call
 // for forward compatibility
 type ConnectorServer interface {
 	// Returns version information from the Connector
-	Version(context.Context, *Empty) (*VersionResponse, error)
+	Version(context.Context, *empty.Empty) (*VersionInfo, error)
 	// Returns the current connectivity status
-	Status(context.Context, *Empty) (*ConnectorStatusResponse, error)
+	Status(context.Context, *empty.Empty) (*ConnectorStatus, error)
 	// Connects the daemon to a cluster
-	Connect(context.Context, *ConnectRequest) (*ConnectResponse, error)
+	Connect(context.Context, *ConnectRequest) (*ConnectInfo, error)
 	// Adds a deployment intercept
-	AddIntercept(context.Context, *InterceptRequest) (*InterceptResponse, error)
+	AddIntercept(context.Context, *InterceptRequest) (*Intercept, error)
 	// Deactivates and removes an existent deployment intercept.
-	RemoveIntercept(context.Context, *RemoveInterceptRequest) (*InterceptResponse, error)
+	RemoveIntercept(context.Context, *RemoveInterceptRequest) (*Intercept, error)
 	// Returns a list of deployments available for intercept.
-	AvailableIntercepts(context.Context, *Empty) (*AvailableInterceptsResponse, error)
+	AvailableIntercepts(context.Context, *empty.Empty) (*AvailableInterceptList, error)
 	// Returns a list of currently active intercepts.
-	ListIntercepts(context.Context, *Empty) (*ListInterceptsResponse, error)
+	ListIntercepts(context.Context, *empty.Empty) (*InterceptList, error)
 	// Quits (terminates) the service.
-	Quit(context.Context, *Empty) (*Empty, error)
+	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	mustEmbedUnimplementedConnectorServer()
 }
 
@@ -452,28 +455,28 @@ type ConnectorServer interface {
 type UnimplementedConnectorServer struct {
 }
 
-func (UnimplementedConnectorServer) Version(context.Context, *Empty) (*VersionResponse, error) {
+func (UnimplementedConnectorServer) Version(context.Context, *empty.Empty) (*VersionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
-func (UnimplementedConnectorServer) Status(context.Context, *Empty) (*ConnectorStatusResponse, error) {
+func (UnimplementedConnectorServer) Status(context.Context, *empty.Empty) (*ConnectorStatus, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Status not implemented")
 }
-func (UnimplementedConnectorServer) Connect(context.Context, *ConnectRequest) (*ConnectResponse, error) {
+func (UnimplementedConnectorServer) Connect(context.Context, *ConnectRequest) (*ConnectInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Connect not implemented")
 }
-func (UnimplementedConnectorServer) AddIntercept(context.Context, *InterceptRequest) (*InterceptResponse, error) {
+func (UnimplementedConnectorServer) AddIntercept(context.Context, *InterceptRequest) (*Intercept, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddIntercept not implemented")
 }
-func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *RemoveInterceptRequest) (*InterceptResponse, error) {
+func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *RemoveInterceptRequest) (*Intercept, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
-func (UnimplementedConnectorServer) AvailableIntercepts(context.Context, *Empty) (*AvailableInterceptsResponse, error) {
+func (UnimplementedConnectorServer) AvailableIntercepts(context.Context, *empty.Empty) (*AvailableInterceptList, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AvailableIntercepts not implemented")
 }
-func (UnimplementedConnectorServer) ListIntercepts(context.Context, *Empty) (*ListInterceptsResponse, error) {
+func (UnimplementedConnectorServer) ListIntercepts(context.Context, *empty.Empty) (*InterceptList, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListIntercepts not implemented")
 }
-func (UnimplementedConnectorServer) Quit(context.Context, *Empty) (*Empty, error) {
+func (UnimplementedConnectorServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
 }
 func (UnimplementedConnectorServer) mustEmbedUnimplementedConnectorServer() {}
@@ -490,7 +493,7 @@ func RegisterConnectorServer(s *grpc.Server, srv ConnectorServer) {
 }
 
 func _Connector_Version_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Empty)
+	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -502,13 +505,13 @@ func _Connector_Version_Handler(srv interface{}, ctx context.Context, dec func(i
 		FullMethod: "/telepresence.Connector/Version",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).Version(ctx, req.(*Empty))
+		return srv.(ConnectorServer).Version(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _Connector_Status_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Empty)
+	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -520,7 +523,7 @@ func _Connector_Status_Handler(srv interface{}, ctx context.Context, dec func(in
 		FullMethod: "/telepresence.Connector/Status",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).Status(ctx, req.(*Empty))
+		return srv.(ConnectorServer).Status(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -580,7 +583,7 @@ func _Connector_RemoveIntercept_Handler(srv interface{}, ctx context.Context, de
 }
 
 func _Connector_AvailableIntercepts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Empty)
+	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -592,13 +595,13 @@ func _Connector_AvailableIntercepts_Handler(srv interface{}, ctx context.Context
 		FullMethod: "/telepresence.Connector/AvailableIntercepts",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).AvailableIntercepts(ctx, req.(*Empty))
+		return srv.(ConnectorServer).AvailableIntercepts(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _Connector_ListIntercepts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Empty)
+	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -610,13 +613,13 @@ func _Connector_ListIntercepts_Handler(srv interface{}, ctx context.Context, dec
 		FullMethod: "/telepresence.Connector/ListIntercepts",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).ListIntercepts(ctx, req.(*Empty))
+		return srv.(ConnectorServer).ListIntercepts(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _Connector_Quit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Empty)
+	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -628,7 +631,7 @@ func _Connector_Quit_Handler(srv interface{}, ctx context.Context, dec func(inte
 		FullMethod: "/telepresence.Connector/Quit",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).Quit(ctx, req.(*Empty))
+		return srv.(ConnectorServer).Quit(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }

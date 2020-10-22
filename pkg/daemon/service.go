@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/spf13/cobra"
-
 	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/common"
@@ -113,7 +113,7 @@ func (d *service) Logger(server rpc.Daemon_LoggerServer) error {
 	for {
 		msg, err := server.Recv()
 		if err == io.EOF {
-			return server.SendAndClose(&rpc.Empty{})
+			return server.SendAndClose(&empty.Empty{})
 		}
 		if err != nil {
 			return err
@@ -122,36 +122,36 @@ func (d *service) Logger(server rpc.Daemon_LoggerServer) error {
 	}
 }
 
-func (d *service) Version(_ context.Context, _ *rpc.Empty) (*rpc.VersionResponse, error) {
-	return &rpc.VersionResponse{
-		APIVersion: common.ApiVersion,
+func (d *service) Version(_ context.Context, _ *empty.Empty) (*rpc.VersionInfo, error) {
+	return &rpc.VersionInfo{
+		ApiVersion: common.ApiVersion,
 		Version:    common.Version,
 	}, nil
 }
 
-func (d *service) Status(_ context.Context, _ *rpc.Empty) (*rpc.DaemonStatusResponse, error) {
-	r := &rpc.DaemonStatusResponse{}
+func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
+	r := &rpc.DaemonStatus{}
 	if d.network == nil {
-		r.Error = rpc.DaemonStatusResponse_Paused
+		r.Error = rpc.DaemonStatus_PAUSED
 		return r, nil
 	}
 	if !d.network.IsOkay() {
-		r.Error = rpc.DaemonStatusResponse_NoNetwork
+		r.Error = rpc.DaemonStatus_NO_NETWORK
 		return r, nil
 	}
 	return r, nil
 }
 
-func (d *service) Pause(_ context.Context, _ *rpc.Empty) (*rpc.PauseResponse, error) {
-	r := rpc.PauseResponse{}
+func (d *service) Pause(_ context.Context, _ *empty.Empty) (*rpc.PauseInfo, error) {
+	r := rpc.PauseInfo{}
 	switch {
 	case d.network == nil:
-		r.Error = rpc.PauseResponse_AlreadyPaused
+		r.Error = rpc.PauseInfo_ALREADY_PAUSED
 	case common.SocketExists(common.ConnectorSocketName):
-		r.Error = rpc.PauseResponse_ConnectedToCluster
+		r.Error = rpc.PauseInfo_CONNECTED_TO_CLUSTER
 	default:
 		if err := d.network.Close(); err != nil {
-			r.Error = rpc.PauseResponse_UnexpectedPauseError
+			r.Error = rpc.PauseInfo_UNEXPECTED_PAUSE_ERROR
 			r.ErrorText = err.Error()
 			d.p.Logf("pause: %v", err)
 		}
@@ -160,25 +160,25 @@ func (d *service) Pause(_ context.Context, _ *rpc.Empty) (*rpc.PauseResponse, er
 	return &r, nil
 }
 
-func (d *service) Resume(_ context.Context, _ *rpc.Empty) (*rpc.ResumeResponse, error) {
-	r := rpc.ResumeResponse{}
+func (d *service) Resume(_ context.Context, _ *empty.Empty) (*rpc.ResumeInfo, error) {
+	r := rpc.ResumeInfo{}
 	if d.network != nil {
 		if d.network.IsOkay() {
-			r.Error = rpc.ResumeResponse_NotPaused
+			r.Error = rpc.ResumeInfo_NOT_PAUSED
 		} else {
-			r.Error = rpc.ResumeResponse_ReEstablishing
+			r.Error = rpc.ResumeInfo_REESTABLISHING
 		}
 	} else if err := d.makeNetOverride(d.p); err != nil {
-		r.Error = rpc.ResumeResponse_UnexpectedResumeError
+		r.Error = rpc.ResumeInfo_UNEXPECTED_RESUME_ERROR
 		r.ErrorText = err.Error()
 		d.p.Logf("resume: %v", err)
 	}
 	return &r, nil
 }
 
-func (d *service) Quit(_ context.Context, _ *rpc.Empty) (*rpc.Empty, error) {
+func (d *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	d.p.Supervisor().Shutdown()
-	return &rpc.Empty{}, nil
+	return &empty.Empty{}, nil
 }
 
 func (d *service) runGRPCService(p *supervisor.Process) error {
@@ -226,5 +226,5 @@ func (d *service) handleSignalsAndShutdown() {
 		return
 	}
 	defer conn.Close()
-	_, _ = rpc.NewConnectorClient(conn).Quit(d.p.Context(), &rpc.Empty{})
+	_, _ = rpc.NewConnectorClient(conn).Quit(d.p.Context(), &empty.Empty{})
 }
