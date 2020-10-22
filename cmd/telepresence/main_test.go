@@ -128,19 +128,23 @@ func TestSmokeOutbound(t *testing.T) {
 	}()
 
 	t.Run("pre-daemon", func(t *testing.T) {
-		require.NoError(t, run(executable, "status"), "status with no daemon")
-		require.Error(t, run(executable, "daemon"), "daemon without sudo")
+		require.NoError(t, run(executable, "--status"), "status with no daemon")
 
-		fmt.Println("launch daemon")
-		require.NoError(t, run("sudo", executable, "daemon"), "launch daemon")
-		require.NoError(t, run(executable, "version"), "version with daemon")
-		require.NoError(t, run(executable, "status"), "status with daemon")
+		fmt.Println("connect")
+		require.NoError(t, run(executable, "--no-wait"), "launch daemon and connector")
+		require.NoError(t, run(executable, "--version"), "version with daemon")
+		require.NoError(t, run(executable, "--status"), "status with daemon")
 	})
-	defer func() { require.NoError(t, run(executable, "quit"), "quit daemon") }()
+	windDownOk := false
+	defer func() {
+		if !windDownOk {
+			require.NoError(t, run(executable, "--quit"), "quit daemon")
+		}
+	}()
 
 	t.Run("await net overrides", func(t *testing.T) {
 		for i := 0; i < 120; i++ {
-			out, _ := capture(executable, "status")
+			out, _ := capture(executable, "--status")
 			if !strings.Contains(out, "Network overrides NOT established") {
 				return
 			}
@@ -149,9 +153,8 @@ func TestSmokeOutbound(t *testing.T) {
 		t.Fatal("timed out waiting for net overrides")
 	})
 
-	t.Run("connect", func(t *testing.T) {
-		require.NoError(t, run(executable, "connect", "-n", namespace), "connect")
-		out, err = capture(executable, "status")
+	t.Run("check connect", func(t *testing.T) {
+		out, err = capture(executable, "--status")
 		require.NoError(t, err, "status connected")
 		if !strings.Contains(out, "Context") {
 			t.Fatal("Expected Context in connected status output")
@@ -166,7 +169,7 @@ func TestSmokeOutbound(t *testing.T) {
 
 	t.Run("await bridge", func(t *testing.T) {
 		for i := 0; i < 120; i++ {
-			out, _ := capture(executable, "status")
+			out, _ := capture(executable, "--status")
 			if strings.Contains(out, "Proxy:         ON") {
 				return
 			}
@@ -197,16 +200,17 @@ func TestSmokeOutbound(t *testing.T) {
 	})
 
 	t.Run("wind down", func(t *testing.T) {
-		out, err = capture(executable, "status")
+		out, err = capture(executable, "--status")
 		require.NoError(t, err, "status connected")
 		if !strings.Contains(out, "Context") {
 			t.Fatal("Expected Context in connected status output")
 		}
-		require.NoError(t, run(executable, "disconnect"), "disconnect")
-		out, err = capture(executable, "status")
-		require.NoError(t, err, "status disconnected")
-		if !strings.Contains(out, "Not connected") {
-			t.Fatal("Expected Not connected in status output")
+		require.NoError(t, run(executable, "--quit"), "quit")
+		windDownOk = true
+		out, err = capture(executable, "--status")
+		require.NoError(t, err, "status after quit")
+		if !strings.Contains(out, "daemon has not been started") {
+			t.Fatal("Expected 'daemon has not been started' in status output")
 		}
 		require.Error(t, run("curl", "-sv", "hello-world."+namespace), "check disconnected")
 	})

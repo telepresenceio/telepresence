@@ -44,20 +44,18 @@ generate-clean: ## (Generate) delete generated files that get checked in to Git.
 
 # pkg sources excluding rpc
 TP_PKG_SOURCES = $(shell find pkg -type f -name '*.go' | grep -v '_test.go' | grep -v '/rpc/')
-TP_TEST_SOURCES = telepresence_test.go $(shell find pkg -type f -name '*_test.go')
+TP_TEST_SOURCES = $(shell find cmd pkg -type f -name '*_test.go')
 
 .PHONY: build
 build: $(BINDIR)/telepresence  ## (Build) runs go build
-$(BINDIR)/telepresence: main.go $(TP_PKG_SOURCES) $(TP_RPC_FILES)
+$(BINDIR)/%: cmd/%/main.go $(TP_PKG_SOURCES) $(TP_RPC_FILES)
 	mkdir -p $(BINDIR)
-	go build -o $(BINDIR)/telepresence .
+	go build -o $@ $<
 
-# install will not currently run `go install` because it names the binary "telepresence2". This will
-# change when the git repository is renamed.
 .PHONY: install
 install: $(GOBIN)/telepresence  ## (Install) runs go install
-$(GOBIN)/telepresence: main.go $(TP_PKG_SOURCES) $(TP_RPC_FILES)
-	go build -o $(GOBIN)/telepresence .
+$(GOBIN)/%: cmd/%/main.go $(TP_PKG_SOURCES) $(TP_RPC_FILES)
+	cd $(<D) && go install
 
 .phony: clean
 clean: ## (Build) cleans built artefacts
@@ -80,7 +78,7 @@ lint: $(BINDIR)/golangci-lint $(BINDIR)/protolint ## (Lint) runs golangci-lint a
 
 .phony: test
 test: build $(TP_TEST_SOURCES) ## (Test) runs go test
-	go test -v .
+	go test -v ./...
 
 .PHONY: all
 all: test
