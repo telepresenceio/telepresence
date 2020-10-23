@@ -27,7 +27,7 @@ This method does have some limitations of its own, however:
   instances with other proxying methods concurrently is possible.
 * VPNs may interfere with `telepresence`, and vice-versa: don't use both at once.
 * Cloud resources like AWS RDS will not be routed automatically via cluster.
-  You'll need to specify the hosts manually using `--also-proxy`, e.g. `--also-proxy mydatabase.somewhere.vpc.aws.amazon.com` to route traffic to that host via the Kubernetes cluster..
+  You'll need to specify the hosts manually using `--also-proxy`, e.g. `--also-proxy mydatabase.somewhere.vpc.aws.amazon.com` to route traffic to that host via the Kubernetes cluster. Specify multiple hosts to `--also-proxy` like `--also-proxy example1.com --also-proxy example2.com --also-proxy example3.com`. 
 
 ### Limitations: `--method inject-tcp`
 
