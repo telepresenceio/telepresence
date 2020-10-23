@@ -16,7 +16,6 @@ import (
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
 
-	"github.com/datawire/telepresence2/pkg/docker"
 	"github.com/datawire/telepresence2/pkg/interceptor"
 	"github.com/datawire/telepresence2/pkg/route"
 )
@@ -167,8 +166,6 @@ func startWatches(p *supervisor.Process, kubeInfo *k8s.KubeInfo, namespace strin
 }
 
 func (t *config) bridges(p *supervisor.Process) {
-	sup := p.Supervisor()
-
 	t.connect(p)
 
 	t.addWorker(p, &supervisor.Worker{
@@ -240,25 +237,6 @@ func (t *config) bridges(p *supervisor.Process) {
 			<-p.Shutdown()
 			w.Stop()
 
-			return nil
-		},
-	})
-
-	sup.Supervise(&supervisor.Worker{
-		Name: DkrBridgeWorker,
-		Work: func(p *supervisor.Process) error {
-			// setup docker bridge
-			dw := docker.NewWatcher()
-			dw.Start(func(w *docker.Watcher) {
-				table := route.Table{Name: "docker"}
-				for name, ip := range w.Containers {
-					table.Add(route.Route{Name: name, Ip: ip, Proto: "tcp"})
-				}
-				post(table)
-			})
-			p.Ready()
-			<-p.Shutdown()
-			dw.Stop()
 			return nil
 		},
 	})
