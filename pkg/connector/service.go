@@ -138,7 +138,7 @@ func (s *service) setUpLogging(sup *supervisor.Supervisor) error {
 }
 
 // runGRPCService is the main gRPC server loop.
-func (s *service) runGRPCService(p *supervisor.Process, cancel func()) error {
+func (s *service) runGRPCService(p *supervisor.Process, cancel context.CancelFunc) error {
 	p.Log("---")
 	p.Logf("Telepresence Connector %s starting...", common.DisplayVersion())
 	p.Logf("PID is %d", os.Getpid())
@@ -273,7 +273,7 @@ func (d *daemonLogger) Printf(format string, v ...interface{}) {
 
 // handleSignalsAndShutdown ensures that the connector quits gracefully when receiving a signal
 // or when the supervisor wants to shutdown.
-func (s *service) handleSignalsAndShutdown(cancel func()) {
+func (s *service) handleSignalsAndShutdown(cancel context.CancelFunc) {
 	defer s.grpc.GracefulStop()
 
 	interrupt := make(chan os.Signal, 1)

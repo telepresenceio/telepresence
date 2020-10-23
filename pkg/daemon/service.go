@@ -74,11 +74,12 @@ func run(dns, fallback string) error {
 			DisableKeepAlives: true,
 		}}}
 
-	sup := supervisor.WithContext(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	sup := supervisor.WithContext(ctx)
 	sup.Logger = setUpLogging()
 	sup.Supervise(&supervisor.Worker{
 		Name: "daemon",
-		Work: d.runGRPCService,
+		Work: func(p *supervisor.Process) error { return d.runGRPCService(p, cancel) },
 	})
 	sup.Supervise(&supervisor.Worker{
 		Name:     "setup",
@@ -181,7 +182,7 @@ func (d *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) 
 	return &empty.Empty{}, nil
 }
 
-func (d *service) runGRPCService(p *supervisor.Process) error {
+func (d *service) runGRPCService(p *supervisor.Process, cancel context.CancelFunc) error {
 	// Listen on unix domain socket
 	unixListener, err := net.Listen("unix", common.DaemonSocketName)
 	if err != nil {
@@ -197,7 +198,7 @@ func (d *service) runGRPCService(p *supervisor.Process) error {
 	d.p = p
 	rpc.RegisterDaemonServer(grpcServer, d)
 
-	go d.handleSignalsAndShutdown()
+	go d.handleSignalsAndShutdown(cancel)
 
 	p.Ready()
 	return errors.Wrap(grpcServer.Serve(unixListener), "daemon gRCP server")
@@ -205,7 +206,7 @@ func (d *service) runGRPCService(p *supervisor.Process) error {
 
 // handleSignalsAndShutdown ensures that the daemon quits gracefully when receiving a signal
 // or when the supervisor wants to shutdown.
-func (d *service) handleSignalsAndShutdown() {
+func (d *service) handleSignalsAndShutdown(cancel context.CancelFunc) {
 	defer d.grpc.GracefulStop()
 
 	interrupt := make(chan os.Signal, 1)
@@ -213,7 +214,7 @@ func (d *service) handleSignalsAndShutdown() {
 	select {
 	case sig := <-interrupt:
 		d.p.Logf("Received signal %s", sig)
-		d.p.Supervisor().Shutdown()
+		cancel()
 	case <-d.p.Shutdown():
 		d.p.Log("Shutting down")
 	}
