@@ -12,9 +12,6 @@ GOBIN=$(word 1, $(subst :, ,$(GOPATH)))/bin
 
 export PATH := $(BUILDDIR)/bin:$(PATH)
 
-env:
-	@echo $(GOBIN)
-
 # Install protoc under $BUILDDIR. A protoc that is already installed locally cannot be trusted since this must be the exact
 # same version as used when running CI. If it isn't, the generate-check will fail.
 PROTOC_VERSION=3.13.0
@@ -46,18 +43,28 @@ generate-clean: ## (Generate) delete generated files that get checked in to Git.
 TP_PKG_SOURCES = $(shell find pkg -type f -name '*.go' | grep -v '_test.go' | grep -v '/rpc/')
 TP_TEST_SOURCES = $(shell find cmd pkg -type f -name '*_test.go')
 
+EXECUTABLES=$(shell ls cmd)
+
 .PHONY: build
-build: $(BINDIR)/telepresence  ## (Build) runs go build
+build: $(foreach exe, $(EXECUTABLES), $(BINDIR)/$(exe)) ## (Build) runs go build
+
 $(BINDIR)/%: cmd/%/main.go $(TP_PKG_SOURCES) $(TP_RPC_FILES)
 	mkdir -p $(BINDIR)
 	go build -o $@ $<
 
 .PHONY: install
-install: $(GOBIN)/telepresence  ## (Install) runs go install
+install: $(foreach exe, $(EXECUTABLES), $(GOBIN)/$(exe))  ## (Install) runs go install
+
 $(GOBIN)/%: cmd/%/main.go $(TP_PKG_SOURCES) $(TP_RPC_FILES)
 	cd $(<D) && go install
 
-.phony: clean
+.PHONY: docker-build
+docker-build: ## (Install) runs docker build for all executables
+	for exe in $(EXECUTABLES) ; do \
+		docker build --target $$exe --tag datawire/$$exe .; \
+	done
+
+.PHONY: clean
 clean: ## (Build) cleans built artefacts
 	rm -rf $(BUILDDIR)
 
@@ -71,12 +78,12 @@ $(BINDIR)/protolint: ## (Lint) install protolint
 	curl -sfL https://github.com/yoheimuta/protolint/releases/download/v$(PROTOLINT_VERSION)/$(PROTOLINT_TGZ) -o $(BUILDDIR)/$(PROTOLINT_TGZ)
 	tar -C $(BINDIR) -zxf $(BUILDDIR)/$(PROTOLINT_TGZ)
 
-.phony: lint
+.PHONY: lint
 lint: $(BINDIR)/golangci-lint $(BINDIR)/protolint ## (Lint) runs golangci-lint and protolint
 	$(BINDIR)/golangci-lint run ./...
 	$(BINDIR)/protolint lint $(shell find rpc -type f -name '*.proto')
 
-.phony: test
+.PHONY: test
 test: build $(TP_TEST_SOURCES) ## (Test) runs go test
 	go test -v ./...
 
