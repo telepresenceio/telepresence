@@ -7,8 +7,6 @@ import (
 	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-
-	"github.com/datawire/telepresence2/pkg/common"
 )
 
 type Scout struct {
@@ -25,7 +23,7 @@ func NewScout(mode string) (s *Scout) {
 	return &Scout{
 		Reporter: &metriton.Reporter{
 			Application: "telepresence",
-			Version:     common.Version,
+			Version:     Version,
 			GetInstallID: func(r *metriton.Reporter) (string, error) {
 				id, err := metriton.InstallIDFromFilesystem(r)
 				if err != nil {

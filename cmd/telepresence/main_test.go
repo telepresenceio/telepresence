@@ -12,7 +12,6 @@ import (
 
 	"github.com/datawire/ambassador/pkg/dtest"
 	"github.com/datawire/ambassador/pkg/dtest/testprocess"
-
 	"github.com/stretchr/testify/require"
 )
 
