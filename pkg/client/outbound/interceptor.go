@@ -1,4 +1,4 @@
-package interceptor
+package outbound
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 
 	"github.com/datawire/ambassador/pkg/supervisor"
 
-	"github.com/datawire/telepresence2/pkg/client/interceptor/nat"
+	"github.com/datawire/telepresence2/pkg/client/outbound/nat"
 	rt "github.com/datawire/telepresence2/pkg/client/route"
 )
 

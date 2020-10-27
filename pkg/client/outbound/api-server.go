@@ -1,4 +1,4 @@
-package interceptor
+package outbound
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/datawire/telepresence2/pkg/client/interceptor/dns"
+	"github.com/datawire/telepresence2/pkg/client/outbound/dns"
 	"github.com/datawire/telepresence2/pkg/client/route"
 )
 

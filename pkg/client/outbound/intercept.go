@@ -1,4 +1,4 @@
-package interceptor
+package outbound
 
 import (
 	"fmt"
@@ -14,8 +14,8 @@ import (
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
 
-	"github.com/datawire/telepresence2/pkg/client/interceptor/dns"
-	"github.com/datawire/telepresence2/pkg/client/interceptor/proxy"
+	"github.com/datawire/telepresence2/pkg/client/outbound/dns"
+	"github.com/datawire/telepresence2/pkg/client/outbound/proxy"
 	"github.com/datawire/telepresence2/pkg/client/route"
 )
 

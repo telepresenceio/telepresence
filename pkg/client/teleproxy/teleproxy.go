@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/datawire/telepresence2/pkg/client/bridges"
-	"github.com/datawire/telepresence2/pkg/client/interceptor"
+	"github.com/datawire/telepresence2/pkg/client/outbound"
 )
 
 const (
@@ -39,12 +39,12 @@ var logLegend = []struct {
 	{bridges.K8sSSHWorker, "The SSH port forward used on top of the kubernetes port forward."},
 	{bridges.K8sApplyWorker, "The kubernetes apply used to setup the in-cluster pod we talk with."},
 	{bridges.DkrBridgeWorker, "The docker bridge."},
-	{interceptor.CheckReadyWorker, "The worker teleproxy uses to do a self check and signal the system it is ready."},
-	{interceptor.DNSServerWorker, "The DNS server teleproxy runs to intercept dns requests."},
-	{interceptor.TranslatorWorker, "The network address translator controls the system firewall settings used to " +
+	{outbound.CheckReadyWorker, "The worker teleproxy uses to do a self check and signal the system it is ready."},
+	{outbound.DNSServerWorker, "The DNS server teleproxy runs to intercept dns requests."},
+	{outbound.TranslatorWorker, "The network address translator controls the system firewall settings used to " +
 		"intercept ip addresses."},
-	{interceptor.ProxyWorker, "The proxy forwards connections to intercepted addresses to the configured destinations."},
-	{interceptor.APIWorker, "The API handles requests that allow viewing and updating the routing table that maintains " +
+	{outbound.ProxyWorker, "The proxy forwards connections to intercepted addresses to the configured destinations."},
+	{outbound.APIWorker, "The API handles requests that allow viewing and updating the routing table that maintains " +
 		"the set of dns names and ip addresses that should be intercepted."},
 }
 
@@ -110,7 +110,7 @@ func (t *config) run(version string) error {
 		Work: func(p *supervisor.Process) error {
 			switch t.Mode {
 			case interceptMode:
-				return interceptor.Start(p, t.DNSIP, t.FallbackIP, t.NoCheck, t.NoSearch)
+				return outbound.Start(p, t.DNSIP, t.FallbackIP, t.NoCheck, t.NoSearch)
 			case bridgeMode:
 				bs = bridges.NewService(t.KubeConfig, t.Context, t.Namespace)
 				return bs.Start(p)

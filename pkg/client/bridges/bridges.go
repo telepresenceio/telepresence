@@ -16,7 +16,7 @@ import (
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
 
-	"github.com/datawire/telepresence2/pkg/client/interceptor"
+	"github.com/datawire/telepresence2/pkg/client/outbound"
 	"github.com/datawire/telepresence2/pkg/client/route"
 )
 
@@ -77,7 +77,7 @@ func updateTable(p *supervisor.Process, w *k8s.Watcher) {
 						Ip:     ip,
 						Port:   ports,
 						Proto:  strings.ToLower(port.Protocol),
-						Target: interceptor.ProxyRedirPort,
+						Target: outbound.ProxyRedirPort,
 					})
 				}
 			}
@@ -87,7 +87,7 @@ func updateTable(p *supervisor.Process, w *k8s.Watcher) {
 				Ip:     ip,
 				Port:   ports,
 				Proto:  "tcp",
-				Target: interceptor.ProxyRedirPort,
+				Target: outbound.ProxyRedirPort,
 			})
 		}
 	}
@@ -119,7 +119,7 @@ func updateTable(p *supervisor.Process, w *k8s.Watcher) {
 				Name:   qname,
 				Ip:     ip.(string),
 				Proto:  "tcp",
-				Target: interceptor.ProxyRedirPort,
+				Target: outbound.ProxyRedirPort,
 			})
 		}
 	}
