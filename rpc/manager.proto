@@ -67,11 +67,13 @@ message InterceptInfo {
     NO_AGENT = 4;
     NO_MECHANISM = 5;
     NO_PORTS = 6;
+    AGENT_ERROR = 7;
   }
 
   InterceptSpec spec = 1;
   int32 manager_port = 2;
   DisType disposition = 3;
+  string message = 4;
 }
 
 message SessionInfo {
@@ -96,7 +98,14 @@ message RemoveInterceptRequest2 {
   string name = 2;
 }
 
+message VersionInfo2 {
+  string version = 2;
+}
+
+
 service Manager {
+  rpc Version(google.protobuf.Empty) returns (VersionInfo2);
+
   // Presence
 
   rpc ArriveAsClient(ClientInfo) returns (SessionInfo);

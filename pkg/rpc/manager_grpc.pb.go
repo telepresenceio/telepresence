@@ -18,6 +18,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ManagerClient interface {
+	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*VersionInfo2, error)
 	ArriveAsClient(ctx context.Context, in *ClientInfo, opts ...grpc.CallOption) (*SessionInfo, error)
 	ArriveAsAgent(ctx context.Context, in *AgentInfo, opts ...grpc.CallOption) (*SessionInfo, error)
 	Remain(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error)
@@ -34,6 +35,15 @@ type managerClient struct {
 
 func NewManagerClient(cc grpc.ClientConnInterface) ManagerClient {
 	return &managerClient{cc}
+}
+
+func (c *managerClient) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*VersionInfo2, error) {
+	out := new(VersionInfo2)
+	err := c.cc.Invoke(ctx, "/telepresence.Manager/Version", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *managerClient) ArriveAsClient(ctx context.Context, in *ClientInfo, opts ...grpc.CallOption) (*SessionInfo, error) {
@@ -158,6 +168,7 @@ func (c *managerClient) RemoveIntercept(ctx context.Context, in *RemoveIntercept
 // All implementations must embed UnimplementedManagerServer
 // for forward compatibility
 type ManagerServer interface {
+	Version(context.Context, *empty.Empty) (*VersionInfo2, error)
 	ArriveAsClient(context.Context, *ClientInfo) (*SessionInfo, error)
 	ArriveAsAgent(context.Context, *AgentInfo) (*SessionInfo, error)
 	Remain(context.Context, *SessionInfo) (*empty.Empty, error)
@@ -173,6 +184,9 @@ type ManagerServer interface {
 type UnimplementedManagerServer struct {
 }
 
+func (UnimplementedManagerServer) Version(context.Context, *empty.Empty) (*VersionInfo2, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
+}
 func (UnimplementedManagerServer) ArriveAsClient(context.Context, *ClientInfo) (*SessionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ArriveAsClient not implemented")
 }
@@ -206,8 +220,26 @@ type UnsafeManagerServer interface {
 	mustEmbedUnimplementedManagerServer()
 }
 
-func RegisterManagerServer(s *grpc.Server, srv ManagerServer) {
+func RegisterManagerServer(s grpc.ServiceRegistrar, srv ManagerServer) {
 	s.RegisterService(&_Manager_serviceDesc, srv)
+}
+
+func _Manager_Version_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(empty.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).Version(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.Manager/Version",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).Version(ctx, req.(*empty.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _Manager_ArriveAsClient_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -364,6 +396,10 @@ var _Manager_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.Manager",
 	HandlerType: (*ManagerServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Version",
+			Handler:    _Manager_Version_Handler,
+		},
 		{
 			MethodName: "ArriveAsClient",
 			Handler:    _Manager_ArriveAsClient_Handler,
