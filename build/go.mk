@@ -16,7 +16,11 @@ BINDIR=$(BUILDDIR)/bin
 GOPATH=$(shell go env GOPATH)
 GOHOSTOS=$(shell go env GOHOSTOS)
 GOHOSTARCH=$(shell go env GOHOSTARCH)
-GOBIN=$(word 1, $(subst :, ,$(GOPATH)))/bin
+
+# assume first directory in path is the local go directory
+GOLOCAL=$(word 1, $(subst :, ,$(GOPATH)))
+GOSRC=$(GOLOCAL)/src
+GOBIN=$(GOLOCAL)/bin
 
 export PATH := $(BUILDDIR)/bin:$(PATH)
 
@@ -36,7 +40,7 @@ $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc: go.mod
 
 # proto/gRPC generation using protoc
 pkg/%.pb.go pkg/%_grpc.pb.go: %.proto $(PROTOC) $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc
-	$(PROTOC) --proto_path=$(GOPATH)/src:. --go_out=$(GOPATH)/src --go-grpc_out=$(GOPATH)/src $<
+	$(PROTOC) --proto_path=$(GOSRC):. --go_out=$(GOSRC) --go-grpc_out=$(GOSRC) $<
 
 GRPC_NAMES = connector daemon manager
 GRPC_PB_GO_FILES = $(foreach proto, $(GRPC_NAMES), pkg/rpc/$(proto)/$(proto)_grpc.pb.go)
