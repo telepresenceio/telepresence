@@ -12,7 +12,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/rpc"
+	"github.com/datawire/telepresence2/pkg/rpc/connector"
+	"github.com/datawire/telepresence2/pkg/rpc/daemon"
 )
 
 // IsServerRunning reports whether or not the daemon server is running.
@@ -92,7 +93,7 @@ func Disconnect(cmd *cobra.Command, _ []string) error {
 
 // status will retrieve connectivity status from the daemon and print it on stdout.
 func status(cmd *cobra.Command, _ []string) error {
-	var ds *rpc.DaemonStatus
+	var ds *daemon.DaemonStatus
 	var err error
 	if ds, err = daemonStatus(cmd.OutOrStdout()); err != nil {
 		return err
@@ -100,23 +101,23 @@ func status(cmd *cobra.Command, _ []string) error {
 
 	out := cmd.OutOrStdout()
 	switch ds.Error {
-	case rpc.DaemonStatus_NOT_STARTED:
+	case daemon.DaemonStatus_NOT_STARTED:
 		fmt.Fprintln(out, daemonIsNotRunning)
 		return nil
-	case rpc.DaemonStatus_PAUSED:
+	case daemon.DaemonStatus_PAUSED:
 		fmt.Fprintln(out, "Network overrides are paused")
 		return nil
-	case rpc.DaemonStatus_NO_NETWORK:
+	case daemon.DaemonStatus_NO_NETWORK:
 		fmt.Fprintln(out, "Network overrides NOT established")
 		return nil
 	}
 
-	var cs *rpc.ConnectorStatus
+	var cs *connector.ConnectorStatus
 	if cs, err = connectorStatus(cmd.OutOrStdout()); err != nil {
 		return err
 	}
 	switch cs.Error {
-	case rpc.ConnectorStatus_UNSPECIFIED:
+	case connector.ConnectorStatus_UNSPECIFIED:
 		cl := cs.Cluster
 		if cl.Connected {
 			fmt.Fprintln(out, "Connected")
@@ -147,30 +148,30 @@ func status(cmd *cobra.Command, _ []string) error {
 		} else {
 			fmt.Fprintln(out, "  Intercepts:    (connecting to traffic manager...)")
 		}
-	case rpc.ConnectorStatus_NOT_STARTED:
+	case connector.ConnectorStatus_NOT_STARTED:
 		fmt.Fprintln(out, connectorIsNotRunning)
-	case rpc.ConnectorStatus_DISCONNECTED:
+	case connector.ConnectorStatus_DISCONNECTED:
 		fmt.Fprintln(out, "Disconnecting")
 	}
 	return nil
 }
 
-func daemonStatus(out io.Writer) (status *rpc.DaemonStatus, err error) {
+func daemonStatus(out io.Writer) (status *daemon.DaemonStatus, err error) {
 	if assertDaemonStarted() != nil {
-		return &rpc.DaemonStatus{Error: rpc.DaemonStatus_NOT_STARTED}, nil
+		return &daemon.DaemonStatus{Error: daemon.DaemonStatus_NOT_STARTED}, nil
 	}
-	err = withDaemon(out, func(d rpc.DaemonClient) error {
+	err = withDaemon(out, func(d daemon.DaemonClient) error {
 		status, err = d.Status(context.Background(), &empty.Empty{})
 		return err
 	})
 	return
 }
 
-func connectorStatus(out io.Writer) (status *rpc.ConnectorStatus, err error) {
+func connectorStatus(out io.Writer) (status *connector.ConnectorStatus, err error) {
 	if assertConnectorStarted() != nil {
-		return &rpc.ConnectorStatus{Error: rpc.ConnectorStatus_NOT_STARTED}, nil
+		return &connector.ConnectorStatus{Error: connector.ConnectorStatus_NOT_STARTED}, nil
 	}
-	err = withConnector(out, func(d rpc.ConnectorClient) error {
+	err = withConnector(out, func(d connector.ConnectorClient) error {
 		status, err = d.Status(context.Background(), &empty.Empty{})
 		return err
 	})
@@ -179,9 +180,9 @@ func connectorStatus(out io.Writer) (status *rpc.ConnectorStatus, err error) {
 
 // Pause requests that the network overrides are turned off
 func Pause(cmd *cobra.Command, _ []string) error {
-	var r *rpc.PauseInfo
+	var r *daemon.PauseInfo
 	var err error
-	err = withDaemon(cmd.OutOrStdout(), func(d rpc.DaemonClient) error {
+	err = withDaemon(cmd.OutOrStdout(), func(d daemon.DaemonClient) error {
 		r, err = d.Pause(context.Background(), &empty.Empty{})
 		return err
 	})
@@ -190,14 +191,14 @@ func Pause(cmd *cobra.Command, _ []string) error {
 	}
 	var msg string
 	switch r.Error {
-	case rpc.PauseInfo_UNSPECIFIED:
+	case daemon.PauseInfo_UNSPECIFIED:
 		stdout := cmd.OutOrStdout()
 		fmt.Fprintln(stdout, "Network overrides paused.")
 		fmt.Fprintln(stdout, `Use "telepresence resume" to reestablish network overrides.`)
 		return nil
-	case rpc.PauseInfo_ALREADY_PAUSED:
+	case daemon.PauseInfo_ALREADY_PAUSED:
 		msg = "Network overrides are already paused"
-	case rpc.PauseInfo_CONNECTED_TO_CLUSTER:
+	case daemon.PauseInfo_CONNECTED_TO_CLUSTER:
 		msg = `Telepresence is connected to a cluster.
 See "telepresence status" for details.
 Please disconnect before pausing.`
@@ -209,9 +210,9 @@ Please disconnect before pausing.`
 
 // Resume requests that the network overrides are turned back on (after using Pause)
 func Resume(cmd *cobra.Command, _ []string) error {
-	var r *rpc.ResumeInfo
+	var r *daemon.ResumeInfo
 	var err error
-	err = withDaemon(cmd.OutOrStdout(), func(d rpc.DaemonClient) error {
+	err = withDaemon(cmd.OutOrStdout(), func(d daemon.DaemonClient) error {
 		r, err = d.Resume(context.Background(), &empty.Empty{})
 		return err
 	})
@@ -220,12 +221,12 @@ func Resume(cmd *cobra.Command, _ []string) error {
 	}
 	var msg string
 	switch r.Error {
-	case rpc.ResumeInfo_UNSPECIFIED:
+	case daemon.ResumeInfo_UNSPECIFIED:
 		fmt.Fprintln(cmd.OutOrStdout(), "Network overrides reestablished.")
 		return nil
-	case rpc.ResumeInfo_NOT_PAUSED:
+	case daemon.ResumeInfo_NOT_PAUSED:
 		msg = "Network overrides are established (not paused)"
-	case rpc.ResumeInfo_REESTABLISHING:
+	case daemon.ResumeInfo_REESTABLISHING:
 		msg = "Network overrides are being reestablished..."
 	default:
 		msg = fmt.Sprintf("Unexpected error establishing network overrides: %v", err)
@@ -260,7 +261,7 @@ func (p *runner) addIntercept(cmd *cobra.Command, _ []string) error {
 	return err
 }
 
-func prepareIntercept(cmd *cobra.Command, ii *rpc.InterceptRequest) error {
+func prepareIntercept(cmd *cobra.Command, ii *connector.InterceptRequest) error {
 	if ii.Name == "" {
 		ii.Name = ii.Deployment
 	}
@@ -332,16 +333,16 @@ func prepareIntercept(cmd *cobra.Command, ii *rpc.InterceptRequest) error {
 
 // AvailableIntercepts requests a list of deployments available for intercept from the daemon
 func AvailableIntercepts(cmd *cobra.Command, _ []string) error {
-	var r *rpc.AvailableInterceptList
+	var r *connector.AvailableInterceptList
 	var err error
-	err = withConnector(cmd.OutOrStdout(), func(c rpc.ConnectorClient) error {
+	err = withConnector(cmd.OutOrStdout(), func(c connector.ConnectorClient) error {
 		r, err = c.AvailableIntercepts(context.Background(), &empty.Empty{})
 		return err
 	})
 	if err != nil {
 		return err
 	}
-	if r.Error != rpc.InterceptError_UNSPECIFIED {
+	if r.Error != connector.InterceptError_UNSPECIFIED {
 		return errors.New(interceptMessage(r.Error, r.Text))
 	}
 	stdout := cmd.OutOrStdout()
@@ -358,16 +359,16 @@ func AvailableIntercepts(cmd *cobra.Command, _ []string) error {
 
 // ListIntercepts requests a list current intercepts from the daemon
 func ListIntercepts(cmd *cobra.Command, _ []string) error {
-	var r *rpc.InterceptList
+	var r *connector.InterceptList
 	var err error
-	err = withConnector(cmd.OutOrStdout(), func(c rpc.ConnectorClient) error {
+	err = withConnector(cmd.OutOrStdout(), func(c connector.ConnectorClient) error {
 		r, err = c.ListIntercepts(context.Background(), &empty.Empty{})
 		return err
 	})
 	if err != nil {
 		return err
 	}
-	if r.Error != rpc.InterceptError_UNSPECIFIED {
+	if r.Error != connector.InterceptError_UNSPECIFIED {
 		return errors.New(interceptMessage(r.Error, r.Text))
 	}
 	stdout := cmd.OutOrStdout()
@@ -396,14 +397,14 @@ func ListIntercepts(cmd *cobra.Command, _ []string) error {
 
 // RemoveIntercept tells the daemon to deactivate and remove an existent intercept
 func RemoveIntercept(cmd *cobra.Command, args []string) error {
-	return withConnector(cmd.OutOrStdout(), func(c rpc.ConnectorClient) error {
-		is := newInterceptState(c, &rpc.InterceptRequest{Name: strings.TrimSpace(args[0])}, cmd.OutOrStdout())
+	return withConnector(cmd.OutOrStdout(), func(c connector.ConnectorClient) error {
+		is := newInterceptState(c, &connector.InterceptRequest{Name: strings.TrimSpace(args[0])}, cmd.OutOrStdout())
 		return is.DeactivateState()
 	})
 }
 
 func daemonVersion(out io.Writer) (apiVersion int, version string, err error) {
-	err = withDaemon(out, func(d rpc.DaemonClient) error {
+	err = withDaemon(out, func(d daemon.DaemonClient) error {
 		vi, err := d.Version(context.Background(), &empty.Empty{})
 		if err == nil {
 			apiVersion = int(vi.ApiVersion)
@@ -430,7 +431,7 @@ func assertDaemonStarted() error {
 
 // withDaemon establishes a connection, calls the function with the gRPC client, and ensures
 // that the connection is closed.
-func withConnector(out io.Writer, f func(rpc.ConnectorClient) error) error {
+func withConnector(out io.Writer, f func(connector.ConnectorClient) error) error {
 	ds, err := newDaemonState(out, "", "")
 	if err != nil {
 		return err
@@ -446,7 +447,7 @@ func withConnector(out io.Writer, f func(rpc.ConnectorClient) error) error {
 
 // withDaemon establishes a connection, calls the function with the gRPC client, and ensures
 // that the connection is closed.
-func withDaemon(out io.Writer, f func(rpc.DaemonClient) error) error {
+func withDaemon(out io.Writer, f func(daemon.DaemonClient) error) error {
 	// OK with dns and fallback empty. Daemon must be up and running
 	ds, err := newDaemonState(out, "", "")
 	if err != nil {
@@ -456,27 +457,27 @@ func withDaemon(out io.Writer, f func(rpc.DaemonClient) error) error {
 	return f(ds.grpc)
 }
 
-func interceptMessage(ie rpc.InterceptError, txt string) string {
+func interceptMessage(ie connector.InterceptError, txt string) string {
 	msg := ""
 	switch ie {
-	case rpc.InterceptError_UNSPECIFIED:
-	case rpc.InterceptError_NO_PREVIEW_HOST:
+	case connector.InterceptError_UNSPECIFIED:
+	case connector.InterceptError_NO_PREVIEW_HOST:
 		msg = `Your cluster is not configured for Preview URLs.
 (Could not find a Host resource that enables Path-type Preview URLs.)
 Please specify one or more header matches using --match.`
-	case rpc.InterceptError_NO_CONNECTION:
+	case connector.InterceptError_NO_CONNECTION:
 		msg = connectorIsNotRunning.Error()
-	case rpc.InterceptError_NO_TRAFFIC_MANAGER:
+	case connector.InterceptError_NO_TRAFFIC_MANAGER:
 		msg = "Intercept unavailable: no traffic manager"
-	case rpc.InterceptError_TRAFFIC_MANAGER_CONNECTING:
+	case connector.InterceptError_TRAFFIC_MANAGER_CONNECTING:
 		msg = "Connecting to traffic manager..."
-	case rpc.InterceptError_ALREADY_EXISTS:
+	case connector.InterceptError_ALREADY_EXISTS:
 		msg = fmt.Sprintf("Intercept with name %q already exists", txt)
-	case rpc.InterceptError_NO_ACCEPTABLE_DEPLOYMENT:
+	case connector.InterceptError_NO_ACCEPTABLE_DEPLOYMENT:
 		msg = fmt.Sprintf("No interceptable deployment matching %s found", txt)
-	case rpc.InterceptError_TRAFFIC_MANAGER_ERROR:
+	case connector.InterceptError_TRAFFIC_MANAGER_ERROR:
 		msg = txt
-	case rpc.InterceptError_AMBIGUOUS_MATCH:
+	case connector.InterceptError_AMBIGUOUS_MATCH:
 		st := &strings.Builder{}
 		fmt.Fprintf(st, "Found more than one possible match:")
 		for idx, match := range strings.Split(txt, "\n") {
@@ -484,11 +485,11 @@ Please specify one or more header matches using --match.`
 			fmt.Fprintf(st, "\n%4d: %s in namespace %s", idx+1, dn[1], dn[0])
 		}
 		msg = st.String()
-	case rpc.InterceptError_FAILED_TO_ESTABLISH:
+	case connector.InterceptError_FAILED_TO_ESTABLISH:
 		msg = fmt.Sprintf("Failed to establish intercept: %s", txt)
-	case rpc.InterceptError_FAILED_TO_REMOVE:
+	case connector.InterceptError_FAILED_TO_REMOVE:
 		msg = fmt.Sprintf("Error while removing intercept: %v", txt)
-	case rpc.InterceptError_NOT_FOUND:
+	case connector.InterceptError_NOT_FOUND:
 		msg = fmt.Sprintf("Intercept named %q not found", txt)
 	}
 	return msg

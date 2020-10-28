@@ -18,7 +18,9 @@ import (
 
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/client/bridges"
-	"github.com/datawire/telepresence2/pkg/rpc"
+	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
+	"github.com/datawire/telepresence2/pkg/rpc/daemon"
+	"github.com/datawire/telepresence2/pkg/rpc/version"
 )
 
 var Help = `The Telepresence Connect is a background component that manages a connection. It
@@ -35,7 +37,7 @@ to troubleshoot problems.
 // service represents the state of the Telepresence Connector
 type service struct {
 	rpc.UnimplementedConnectorServer
-	daemon     rpc.DaemonClient
+	daemon     daemon.DaemonClient
 	cluster    *k8sCluster
 	bridge     bridges.Service
 	trafficMgr *trafficManager
@@ -65,7 +67,7 @@ func run() error {
 	}
 	defer conn.Close()
 
-	d := &service{daemon: rpc.NewDaemonClient(conn)}
+	d := &service{daemon: daemon.NewDaemonClient(conn)}
 	ctx, cancel := context.WithCancel(context.Background())
 	sup := supervisor.WithContext(ctx)
 	if err = d.setUpLogging(sup); err != nil {
@@ -91,8 +93,8 @@ func run() error {
 	return nil
 }
 
-func (s *service) Version(_ context.Context, _ *empty.Empty) (*rpc.VersionInfo, error) {
-	return &rpc.VersionInfo{
+func (s *service) Version(_ context.Context, _ *empty.Empty) (*version.VersionInfo, error) {
+	return &version.VersionInfo{
 		ApiVersion: client.ApiVersion,
 		Version:    client.Version,
 	}, nil
@@ -259,13 +261,13 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 
 // daemonLogger is a supervisor.Logger implementation that sends log messages to the daemon
 type daemonLogger struct {
-	stream rpc.Daemon_LoggerClient
+	stream daemon.Daemon_LoggerClient
 }
 
 // Printf implements the supervisor.Logger interface
 func (d *daemonLogger) Printf(format string, v ...interface{}) {
 	txt := fmt.Sprintf(format, v...)
-	err := d.stream.Send(&rpc.LogMessage{Text: txt})
+	err := d.stream.Send(&daemon.LogMessage{Text: txt})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error while sending log message to daemon: %s\nOriginal message was %q\n", err.Error(), txt)
 	}

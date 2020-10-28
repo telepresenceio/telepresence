@@ -1,0 +1,21 @@
+syntax = "proto3";
+package iptables;
+
+option go_package = "github.com/datawire/telepresence2/pkg/rpc/iptables";
+option java_multiple_files = true;
+option java_package = "io.datawire.telepresence.rpc";
+option java_outer_classname = "IPTables";
+
+message Route {
+  string name = 1;
+  string ip = 2;
+  string proto = 3;
+  string port = 4;
+  string target = 5;
+  string action = 6;
+}
+
+message Table {
+  string name = 1;
+  repeated Route routes = 2;
+}

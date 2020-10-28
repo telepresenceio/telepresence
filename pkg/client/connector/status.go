@@ -3,7 +3,7 @@ package connector
 import (
 	"github.com/datawire/ambassador/pkg/supervisor"
 
-	"github.com/datawire/telepresence2/pkg/rpc"
+	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
 )
 
 // status reports the current status of the daemon

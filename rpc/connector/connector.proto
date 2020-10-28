@@ -1,40 +1,18 @@
 syntax = "proto3";
 package telepresence;
+import "github.com/datawire/telepresence2/rpc/version/version.proto";
 import "google/protobuf/empty.proto";
 
-option go_package = "pkg/rpc";
+option go_package = "github.com/datawire/telepresence2/pkg/rpc/connector";
 option java_multiple_files = true;
 option java_package = "io.datawire.telepresence.rpc";
-option java_outer_classname = "DaemonProto";
-
-// The Daemon service is responsible for managing network overrides and also
-// acts as the central point for logging.
-service Daemon {
-  // Returns version information from the Daemon
-  rpc Version(google.protobuf.Empty) returns (VersionInfo);
-
-  // Returns the current connectivity status
-  rpc Status(google.protobuf.Empty) returns (DaemonStatus);
-
-  // Turns network overrides off.
-  rpc Pause(google.protobuf.Empty) returns (PauseInfo);
-
-  // Turns network overrides back on (after using Pause)
-  rpc Resume(google.protobuf.Empty) returns (ResumeInfo);
-
-  // Logger accepts a stream that can be used for posting messages to
-  // the daemon logger.
-  rpc Logger(stream LogMessage) returns (google.protobuf.Empty);
-
-  // Quits (terminates) the service.
-  rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
-}
+option java_outer_classname = "Connector";
 
 // The Connector service is responsible for connecting to the traffic manager
 // and manage intercepts. It can only run when a Daemon is running.
 service Connector {
   // Returns version information from the Connector
-  rpc Version(google.protobuf.Empty) returns (VersionInfo);
+  rpc Version(google.protobuf.Empty) returns (version.VersionInfo);
 
   // Returns the current connectivity status
   rpc Status(google.protobuf.Empty) returns (ConnectorStatus);
@@ -56,13 +34,6 @@ service Connector {
 
   // Quits (terminates) the service.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
-}
-
-// LogMessage carries a message and a flag telling the service if the message
-// is intended for debugging or more general info.
-message LogMessage {
-  bool is_debug = 1;
-  string text = 2;
 }
 
 // ConnectRequest contains the information needed to connect ot a cluster.
@@ -93,44 +64,6 @@ message ConnectInfo {
   string error_text = 2;
   string cluster_context = 3;
   string cluster_server = 4;
-}
-
-message PauseInfo {
-  enum ErrType {
-    UNSPECIFIED = 0;
-    ALREADY_PAUSED = 1;
-    CONNECTED_TO_CLUSTER = 2;
-    UNEXPECTED_PAUSE_ERROR = 3;
-  }
-  ErrType error = 1;
-  string error_text = 2;
-}
-
-message ResumeInfo {
-  enum ErrType {
-    UNSPECIFIED = 0;
-    NOT_PAUSED = 1;
-    REESTABLISHING = 2;
-    UNEXPECTED_RESUME_ERROR = 3;
-  }
-  ErrType error = 1;
-  string error_text = 2;
-}
-
-message VersionInfo {
-  int32 api_version = 1;
-  string version = 2;
-}
-
-
-message DaemonStatus {
-  enum ErrType {
-    UNSPECIFIED = 0;
-    NOT_STARTED = 1;
-    PAUSED = 2;
-    NO_NETWORK = 3;
-  }
-  ErrType error = 1;
 }
 
 message ConnectorStatus {

@@ -11,15 +11,16 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/rpc"
+	"github.com/datawire/telepresence2/pkg/rpc/connector"
+	"github.com/datawire/telepresence2/pkg/rpc/daemon"
 )
 
 type connectorState struct {
 	out    io.Writer
-	cr     *rpc.ConnectRequest
+	cr     *connector.ConnectRequest
 	conn   *grpc.ClientConn
-	daemon rpc.DaemonClient
-	grpc   rpc.ConnectorClient
+	daemon daemon.DaemonClient
+	grpc   connector.ConnectorClient
 }
 
 // Connect asks the daemon to connect to a cluster
@@ -35,16 +36,16 @@ func (cs *connectorState) EnsureState() (bool, error) {
 			return false, err
 		}
 		switch dr.Error {
-		case rpc.DaemonStatus_UNSPECIFIED:
-		case rpc.DaemonStatus_NOT_STARTED:
+		case daemon.DaemonStatus_UNSPECIFIED:
+		case daemon.DaemonStatus_NOT_STARTED:
 			return false, daemonIsNotRunning
-		case rpc.DaemonStatus_NO_NETWORK:
+		case daemon.DaemonStatus_NO_NETWORK:
 			if attempt >= 40 {
 				return false, errors.New("Unable to connect: Network overrides are not established")
 			}
 			time.Sleep(250 * time.Millisecond)
 			continue
-		case rpc.DaemonStatus_PAUSED:
+		case daemon.DaemonStatus_PAUSED:
 			return false, errors.New("Unable to connect: Network overrides are paused (use 'telepresence resume')")
 		}
 		break
@@ -59,7 +60,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 
 	// TODO: Progress reporting during connect. Either divide into several calls and report completion
 	//  of each, or use a stream. Can be made as part of ticket #1334.
-	var r *rpc.ConnectInfo
+	var r *connector.ConnectInfo
 	fmt.Fprintf(cs.out, "Connecting to traffic manager in namespace %s...\n", cs.cr.ManagerNs)
 
 	if err = client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
@@ -77,13 +78,13 @@ func (cs *connectorState) EnsureState() (bool, error) {
 
 	var msg string
 	switch r.Error {
-	case rpc.ConnectInfo_UNSPECIFIED:
+	case connector.ConnectInfo_UNSPECIFIED:
 		fmt.Fprintf(cs.out, "Connected to context %s (%s)\n", r.ClusterContext, r.ClusterServer)
 		return true, nil
-	case rpc.ConnectInfo_ALREADY_CONNECTED:
+	case connector.ConnectInfo_ALREADY_CONNECTED:
 		fmt.Fprintln(cs.out, "Already connected")
 		return false, nil
-	case rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED:
+	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED:
 		fmt.Fprintf(cs.out, `Connected to context %s (%s)
 
 Unable to connect to the traffic manager.
@@ -94,9 +95,9 @@ Error was: %s
 		// The connect is considered a success. There's still a cluster connection and bridge.
 		// TODO: This is obviously not true for the run subcommand.
 		return true, nil
-	case rpc.ConnectInfo_DISCONNECTING:
+	case connector.ConnectInfo_DISCONNECTING:
 		msg = "Unable to connect while disconnecting"
-	case rpc.ConnectInfo_CLUSTER_FAILED, rpc.ConnectInfo_BRIDGE_FAILED:
+	case connector.ConnectInfo_CLUSTER_FAILED, connector.ConnectInfo_BRIDGE_FAILED:
 		msg = r.ErrorText
 	}
 	return false, errors.New(msg)
@@ -123,7 +124,7 @@ func (cs *connectorState) DeactivateState() error {
 	return err
 }
 
-func newConnectorState(daemon rpc.DaemonClient, cr *rpc.ConnectRequest, out io.Writer) (*connectorState, error) {
+func newConnectorState(daemon daemon.DaemonClient, cr *connector.ConnectRequest, out io.Writer) (*connectorState, error) {
 	cs := &connectorState{daemon: daemon, out: out, cr: cr}
 	err := assertConnectorStarted()
 	if err == nil {
@@ -140,7 +141,7 @@ func (cs *connectorState) isConnected() bool {
 // connect opens the client connection to the daemon.
 func (cs *connectorState) connect() (err error) {
 	if cs.conn, err = grpc.Dial(client.SocketURL(client.ConnectorSocketName), grpc.WithInsecure()); err == nil {
-		cs.grpc = rpc.NewConnectorClient(cs.conn)
+		cs.grpc = connector.NewConnectorClient(cs.conn)
 	}
 	return
 }

@@ -1,5 +1,13 @@
 .DEFAULT_GOAL = all
 
+# Delete implicit rules not used here (clutters debug output)
+.SUFFIXES:
+%:: RCS/%,v
+%:: RCS/%
+%:: s.%
+%:: %,v
+%:: SCCS/s.%
+
 # All build artifacts end up here except go packages. Their destination is controlled by the go environment
 BUILDDIR=build-output
 BINDIR=$(BUILDDIR)/bin
@@ -28,12 +36,18 @@ $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc: go.mod
 
 # proto/gRPC generation using protoc
 pkg/%.pb.go pkg/%_grpc.pb.go: %.proto $(PROTOC) $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc
-	$(PROTOC) --proto_path=. --go_out=. --go-grpc_out=. $<
+	$(PROTOC) --proto_path=$(GOPATH)/src:. --go_out=$(GOPATH)/src --go-grpc_out=$(GOPATH)/src $<
 
-TP_RPC_FILES = pkg/rpc/daemon.pb.go pkg/rpc/daemon_grpc.pb.go pkg/rpc/manager.pb.go pkg/rpc/manager_grpc.pb.go
+GRPC_NAMES = connector daemon manager
+GRPC_PB_GO_FILES = $(foreach proto, $(GRPC_NAMES), pkg/rpc/$(proto)/$(proto)_grpc.pb.go)
+
+PROTO_NAMES = iptables version $(GRPC_NAMES)
+PB_GO_FILES = $(foreach proto, $(PROTO_NAMES), pkg/rpc/$(proto)/$(proto).pb.go)
+
+RPC_FILES=$(PB_GO_FILES) $(GRPC_PB_GO_FILES)
 
 .PHONY: generate
-generate: $(TP_RPC_FILES) ## (Generate) update generated files that get checked in to Git.
+generate: $(PB_GO_FILES) $(GRPC_PB_GO_FILES) ## (Generate) update generated files that get checked in to Git.
 
 .PHONY: generate-clean
 generate-clean: ## (Generate) delete generated files that get checked in to Git.
@@ -48,7 +62,7 @@ EXECUTABLES=$(shell ls cmd)
 .PHONY: build
 build: $(foreach exe, $(EXECUTABLES), $(BINDIR)/$(exe)) ## (Build) runs go build
 
-$(BINDIR)/%: cmd/%/main.go $(TP_PKG_SOURCES) $(TP_RPC_FILES)
+$(BINDIR)/%: cmd/%/main.go $(TP_PKG_SOURCES) $(RPC_FILES)
 	mkdir -p $(BINDIR)
 	go build -o $@ $<
 

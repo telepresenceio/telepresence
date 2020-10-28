@@ -9,16 +9,17 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/datawire/telepresence2/pkg/rpc/connector"
+
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
 // runner contains all parameters needed in order to run an intercepted command.
 type runner struct {
-	rpc.ConnectRequest
-	rpc.InterceptRequest
+	connector.ConnectRequest
+	connector.InterceptRequest
 	DNS      string
 	Fallback string
 	NoWait   bool

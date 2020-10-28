@@ -18,7 +18,10 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/rpc"
+	"github.com/datawire/telepresence2/pkg/rpc/connector"
+	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
+	"github.com/datawire/telepresence2/pkg/rpc/iptables"
+	"github.com/datawire/telepresence2/pkg/rpc/version"
 )
 
 var Help = `The Telepresence Daemon is a long-lived background component that manages
@@ -40,7 +43,35 @@ type service struct {
 	fallback string
 	grpc     *grpc.Server
 	hClient  *http.Client
+	ipTables *ipTables
 	p        *supervisor.Process
+}
+
+func (d *service) AllIPTables(_ context.Context, _ *empty.Empty) (*rpc.Tables, error) {
+	return d.ipTables.getAll(), nil
+}
+
+func (d *service) DeleteIPTable(_ context.Context, name *rpc.TableName) (*empty.Empty, error) {
+	d.ipTables.delete(name.Name)
+	return &empty.Empty{}, nil
+}
+
+func (d *service) IPTable(_ context.Context, name *rpc.TableName) (*iptables.Table, error) {
+	return d.ipTables.get(name.Name), nil
+}
+
+func (d *service) Update(_ context.Context, table *iptables.Table) (*empty.Empty, error) {
+	d.ipTables.update(table)
+	return &empty.Empty{}, nil
+}
+
+func (d *service) DnsSearchPath(_ context.Context, _ *empty.Empty) (*rpc.Paths, error) {
+	return &rpc.Paths{Paths: d.ipTables.searchPath()}, nil
+}
+
+func (d *service) SetDnsSearchPath(_ context.Context, paths *rpc.Paths) (*empty.Empty, error) {
+	d.ipTables.setSearchPath(paths.Paths)
+	return &empty.Empty{}, nil
 }
 
 func Command() *cobra.Command {
@@ -61,7 +92,7 @@ func run(dns, fallback string) error {
 		return errors.New("telepresence daemon must run as root")
 	}
 
-	d := &service{dns: dns, fallback: fallback, hClient: &http.Client{
+	d := &service{ipTables: newIpTables("teleproxy"), dns: dns, fallback: fallback, hClient: &http.Client{
 		Timeout: 15 * time.Second,
 		Transport: &http.Transport{
 			// #nosec G402
@@ -123,8 +154,8 @@ func (d *service) Logger(server rpc.Daemon_LoggerServer) error {
 	}
 }
 
-func (d *service) Version(_ context.Context, _ *empty.Empty) (*rpc.VersionInfo, error) {
-	return &rpc.VersionInfo{
+func (d *service) Version(_ context.Context, _ *empty.Empty) (*version.VersionInfo, error) {
+	return &version.VersionInfo{
 		ApiVersion: client.ApiVersion,
 		Version:    client.Version,
 	}, nil
@@ -227,5 +258,5 @@ func (d *service) handleSignalsAndShutdown(cancel context.CancelFunc) {
 		return
 	}
 	defer conn.Close()
-	_, _ = rpc.NewConnectorClient(conn).Quit(d.p.Context(), &empty.Empty{})
+	_, _ = connector.NewConnectorClient(conn).Quit(d.p.Context(), &empty.Empty{})
 }

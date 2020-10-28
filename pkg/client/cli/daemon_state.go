@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/rpc"
+	"github.com/datawire/telepresence2/pkg/rpc/daemon"
 )
 
 type daemonState struct {
@@ -21,7 +21,7 @@ type daemonState struct {
 	dns      string
 	fallback string
 	conn     *grpc.ClientConn
-	grpc     rpc.DaemonClient
+	grpc     daemon.DaemonClient
 }
 
 func newDaemonState(out io.Writer, dns, fallback string) (*daemonState, error) {
@@ -82,7 +82,7 @@ func (ds *daemonState) isConnected() bool {
 // connect opens the client connection to the daemon.
 func (ds *daemonState) connect() (err error) {
 	if ds.conn, err = grpc.Dial(client.SocketURL(client.DaemonSocketName), grpc.WithInsecure()); err == nil {
-		ds.grpc = rpc.NewDaemonClient(ds.conn)
+		ds.grpc = daemon.NewDaemonClient(ds.conn)
 	}
 	return
 }
