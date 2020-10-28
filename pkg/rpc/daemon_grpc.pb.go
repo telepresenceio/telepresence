@@ -171,7 +171,7 @@ type UnsafeDaemonServer interface {
 	mustEmbedUnimplementedDaemonServer()
 }
 
-func RegisterDaemonServer(s *grpc.Server, srv DaemonServer) {
+func RegisterDaemonServer(s grpc.ServiceRegistrar, srv DaemonServer) {
 	s.RegisterService(&_Daemon_serviceDesc, srv)
 }
 
@@ -488,7 +488,7 @@ type UnsafeConnectorServer interface {
 	mustEmbedUnimplementedConnectorServer()
 }
 
-func RegisterConnectorServer(s *grpc.Server, srv ConnectorServer) {
+func RegisterConnectorServer(s grpc.ServiceRegistrar, srv ConnectorServer) {
 	s.RegisterService(&_Connector_serviceDesc, srv)
 }
 
