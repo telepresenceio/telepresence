@@ -38,40 +38,13 @@ to troubleshoot problems.
 // daemon represents the state of the Telepresence Daemon
 type service struct {
 	rpc.UnimplementedDaemonServer
-	network  client.Resource
-	dns      string
-	fallback string
-	grpc     *grpc.Server
-	hClient  *http.Client
-	ipTables *ipTables
-	p        *supervisor.Process
-}
-
-func (d *service) AllIPTables(_ context.Context, _ *empty.Empty) (*rpc.Tables, error) {
-	return d.ipTables.getAll(), nil
-}
-
-func (d *service) DeleteIPTable(_ context.Context, name *rpc.TableName) (*empty.Empty, error) {
-	d.ipTables.delete(name.Name)
-	return &empty.Empty{}, nil
-}
-
-func (d *service) IPTable(_ context.Context, name *rpc.TableName) (*iptables.Table, error) {
-	return d.ipTables.get(name.Name), nil
-}
-
-func (d *service) Update(_ context.Context, table *iptables.Table) (*empty.Empty, error) {
-	d.ipTables.update(table)
-	return &empty.Empty{}, nil
-}
-
-func (d *service) DnsSearchPath(_ context.Context, _ *empty.Empty) (*rpc.Paths, error) {
-	return &rpc.Paths{Paths: d.ipTables.searchPath()}, nil
-}
-
-func (d *service) SetDnsSearchPath(_ context.Context, paths *rpc.Paths) (*empty.Empty, error) {
-	d.ipTables.setSearchPath(paths.Paths)
-	return &empty.Empty{}, nil
+	networkShutdown func()
+	dns             string
+	fallback        string
+	grpc            *grpc.Server
+	hClient         *http.Client
+	ipTables        *ipTables
+	p               *supervisor.Process
 }
 
 func Command() *cobra.Command {
@@ -92,7 +65,7 @@ func run(dns, fallback string) error {
 		return errors.New("telepresence daemon must run as root")
 	}
 
-	d := &service{ipTables: newIpTables("teleproxy"), dns: dns, fallback: fallback, hClient: &http.Client{
+	d := &service{dns: dns, fallback: fallback, hClient: &http.Client{
 		Timeout: 15 * time.Second,
 		Transport: &http.Transport{
 			// #nosec G402
@@ -116,9 +89,12 @@ func run(dns, fallback string) error {
 		Name:     "setup",
 		Requires: []string{"daemon"},
 		Work: func(p *supervisor.Process) error {
-			if err := d.makeNetOverride(p); err != nil {
+			ipTables, shutdown, err := start(p, dns, fallback, false)
+			if err != nil {
 				return err
 			}
+			d.ipTables = ipTables
+			d.networkShutdown = shutdown
 			p.Ready()
 			return nil
 		},
@@ -163,12 +139,8 @@ func (d *service) Version(_ context.Context, _ *empty.Empty) (*version.VersionIn
 
 func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
 	r := &rpc.DaemonStatus{}
-	if d.network == nil {
+	if d.networkShutdown == nil {
 		r.Error = rpc.DaemonStatus_PAUSED
-		return r, nil
-	}
-	if !d.network.IsOkay() {
-		r.Error = rpc.DaemonStatus_NO_NETWORK
 		return r, nil
 	}
 	return r, nil
@@ -177,39 +149,63 @@ func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, 
 func (d *service) Pause(_ context.Context, _ *empty.Empty) (*rpc.PauseInfo, error) {
 	r := rpc.PauseInfo{}
 	switch {
-	case d.network == nil:
+	case d.networkShutdown == nil:
 		r.Error = rpc.PauseInfo_ALREADY_PAUSED
 	case client.SocketExists(client.ConnectorSocketName):
 		r.Error = rpc.PauseInfo_CONNECTED_TO_CLUSTER
 	default:
-		if err := d.network.Close(); err != nil {
-			r.Error = rpc.PauseInfo_UNEXPECTED_PAUSE_ERROR
-			r.ErrorText = err.Error()
-			d.p.Logf("pause: %v", err)
-		}
-		d.network = nil
+		d.networkShutdown()
+		d.networkShutdown = nil
 	}
 	return &r, nil
 }
 
 func (d *service) Resume(_ context.Context, _ *empty.Empty) (*rpc.ResumeInfo, error) {
 	r := rpc.ResumeInfo{}
-	if d.network != nil {
-		if d.network.IsOkay() {
-			r.Error = rpc.ResumeInfo_NOT_PAUSED
-		} else {
-			r.Error = rpc.ResumeInfo_REESTABLISHING
+	if d.networkShutdown != nil {
+		r.Error = rpc.ResumeInfo_NOT_PAUSED
+	} else {
+		ipTables, shutdown, err := start(d.p, d.dns, d.fallback, false)
+		if err != nil {
+			r.Error = rpc.ResumeInfo_UNEXPECTED_RESUME_ERROR
+			r.ErrorText = err.Error()
+			d.p.Logf("resume: %v", err)
 		}
-	} else if err := d.makeNetOverride(d.p); err != nil {
-		r.Error = rpc.ResumeInfo_UNEXPECTED_RESUME_ERROR
-		r.ErrorText = err.Error()
-		d.p.Logf("resume: %v", err)
+		d.ipTables = ipTables
+		d.networkShutdown = shutdown
 	}
 	return &r, nil
 }
 
 func (d *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	d.p.Supervisor().Shutdown()
+	return &empty.Empty{}, nil
+}
+
+func (d *service) AllIPTables(_ context.Context, _ *empty.Empty) (*rpc.Tables, error) {
+	return d.ipTables.getAll(), nil
+}
+
+func (d *service) DeleteIPTable(_ context.Context, name *rpc.TableName) (*empty.Empty, error) {
+	d.ipTables.delete(name.Name)
+	return &empty.Empty{}, nil
+}
+
+func (d *service) IPTable(_ context.Context, name *rpc.TableName) (*iptables.Table, error) {
+	return d.ipTables.get(name.Name), nil
+}
+
+func (d *service) Update(_ context.Context, table *iptables.Table) (*empty.Empty, error) {
+	d.ipTables.update(table)
+	return &empty.Empty{}, nil
+}
+
+func (d *service) DnsSearchPath(_ context.Context, _ *empty.Empty) (*rpc.Paths, error) {
+	return &rpc.Paths{Paths: d.ipTables.searchPath()}, nil
+}
+
+func (d *service) SetDnsSearchPath(_ context.Context, paths *rpc.Paths) (*empty.Empty, error) {
+	d.ipTables.setSearchPath(paths.Paths)
 	return &empty.Empty{}, nil
 }
 

@@ -2,12 +2,13 @@ package daemon
 
 import (
 	"log"
+	"net"
 	"strings"
 	"sync"
 
 	"github.com/datawire/ambassador/pkg/supervisor"
 
-	"github.com/datawire/telepresence2/pkg/client/outbound/nat"
+	"github.com/datawire/telepresence2/pkg/client/daemon/nat"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
 	"github.com/datawire/telepresence2/pkg/rpc/iptables"
 )
@@ -38,7 +39,7 @@ func newIpTables(name string) *ipTables {
 	return ret
 }
 
-func (i *ipTables) Run(p *supervisor.Process) error {
+func (i *ipTables) run(p *supervisor.Process) error {
 	i.translator.Enable(p)
 	i.tablesLock.Unlock()
 
@@ -60,20 +61,13 @@ func (i *ipTables) Run(p *supervisor.Process) error {
 	}
 }
 
-// resolve looks up the given query in the (FIXME: somewhere), trying
+// Resolve looks up the given query in the (FIXME: somewhere), trying
 // all the suffixes in the search path, and returns a Route on success
 // or nil on failure. This implementation does not count the number of
 // dots in the query.
 func (i *ipTables) Resolve(query string) *iptables.Route {
 	if !strings.HasSuffix(query, ".") {
 		query += "."
-	}
-
-	const prefix = "teleproxy"
-	const suffix = ".cachebust.telepresence.io." // must end with .
-	const replacement = "teleproxy."             // must end with .
-	if strings.HasPrefix(query, prefix) && strings.HasSuffix(query, suffix) {
-		query = replacement
 	}
 
 	var route *iptables.Route
@@ -105,6 +99,11 @@ func (i *ipTables) getAll() *rpc.Tables {
 	}
 	i.tablesLock.RUnlock()
 	return tables
+}
+
+func (i *ipTables) destination(conn *net.TCPConn) (string, error) {
+	_, host, err := i.translator.GetOriginalDst(conn)
+	return host, err
 }
 
 func (i *ipTables) delete(table string) bool {

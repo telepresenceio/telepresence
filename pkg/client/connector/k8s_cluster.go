@@ -185,7 +185,7 @@ func (c *k8sCluster) getClusterPreviewHostname(p *supervisor.Process) (string, e
 
 		previewUrlSpec := host.Spec().GetMap("previewUrl")
 		if len(previewUrlSpec) == 0 {
-			p.Logf(logEntry, "no preview URL config")
+			p.Logf(logEntry, "no preview URL teleproxy")
 			continue
 		}
 

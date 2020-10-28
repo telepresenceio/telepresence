@@ -17,7 +17,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/client/bridges"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
 	"github.com/datawire/telepresence2/pkg/rpc/version"
@@ -39,7 +38,7 @@ type service struct {
 	rpc.UnimplementedConnectorServer
 	daemon     daemon.DaemonClient
 	cluster    *k8sCluster
-	bridge     bridges.Service
+	bridge     *bridge
 	trafficMgr *trafficManager
 	intercepts []*intercept
 	grpc       *grpc.Server
@@ -47,19 +46,23 @@ type service struct {
 }
 
 func Command() *cobra.Command {
-	return &cobra.Command{
+	var init bool
+	c := &cobra.Command{
 		Use:    "connector-foreground",
 		Short:  "Launch Telepresence Connector in the foreground (debug)",
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return run()
+			return run(init)
 		},
 	}
+	flags := c.Flags()
+	flags.BoolVar(&init, "init", false, "initialize running connector (for debugging)")
+	return c
 }
 
 // run is the main function when executing as the connector
-func run() error {
+func run(init bool) error {
 	// establish a connection to the daemon gRPC service
 	conn, err := grpc.Dial(client.SocketURL(client.DaemonSocketName), grpc.WithInsecure())
 	if err != nil {
@@ -81,6 +84,16 @@ func run() error {
 			return d.runGRPCService(p, cancel)
 		},
 	})
+	if init {
+		sup.Supervise(&supervisor.Worker{
+			Name:     "init",
+			Requires: []string{"connector"},
+			Work: func(p *supervisor.Process) error {
+				_, err := d.Connect(p.Context(), &rpc.ConnectRequest{ManagerNs: "ambassador"})
+				return err
+			},
+		})
+	}
 	runErrors := sup.Run()
 
 	if len(runErrors) > 0 {
@@ -188,6 +201,7 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 	p.Logf("Connecting to traffic manager in namespace %s...", cr.ManagerNs)
 	cluster, err := trackKCluster(p, cr.Context, cr.Namespace, cr.Args)
 	if err != nil {
+		p.Logf("unable to track k8s cluster: %+v", err)
 		r.Error = rpc.ConnectInfo_CLUSTER_FAILED
 		r.ErrorText = err.Error()
 		return r
@@ -200,8 +214,10 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 		previewHost = ""
 	}
 
-	br := bridges.NewService("", cluster.ctx, cluster.namespace)
-	if err = br.Start(p); err != nil {
+	p.Logf("Starting teleproxy bridge in context %s, namespace %s", cluster.ctx, cluster.namespace)
+	br := newBridge("", cluster.ctx, cluster.namespace, s.daemon)
+	if err = br.start(p); err != nil {
+		p.Logf("Failed to start teleproxy bridge: %s", err.Error())
 		r.Error = rpc.ConnectInfo_BRIDGE_FAILED
 		r.ErrorText = err.Error()
 		// No point in continuing without a bridge
@@ -210,7 +226,7 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 	}
 	s.bridge = br
 	s.cluster.setBridgeCheck(func() bool {
-		return br.Check(p)
+		return br.check(p)
 	})
 
 	p.Logf("Connected to context %s (%s)", s.cluster.context(), s.cluster.server())
@@ -286,7 +302,7 @@ func (s *service) handleSignalsAndShutdown(cancel context.CancelFunc) {
 			s.p.Logf("Received signal %s", sig)
 			if sig == syscall.SIGHUP {
 				if bridge := s.bridge; bridge != nil {
-					bridge.Restart()
+					bridge.restart()
 				}
 				continue
 			}

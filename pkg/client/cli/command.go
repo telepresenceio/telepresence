@@ -9,7 +9,6 @@ import (
 
 	"github.com/datawire/telepresence2/pkg/client/connector"
 	"github.com/datawire/telepresence2/pkg/client/daemon"
-	"github.com/datawire/telepresence2/pkg/client/teleproxy"
 )
 
 var Help = `telepresence can run a command in a sub shell after ensuring that a connection
@@ -56,7 +55,6 @@ func Command() *cobra.Command {
 	// the correct context and execute in-place immediately.
 	rootCmd.AddCommand(daemon.Command())
 	rootCmd.AddCommand(connector.Command())
-	rootCmd.AddCommand(teleproxy.Command())
 
 	// Client commands. These are never sent to the daemon.
 	flags := rootCmd.Flags()
