@@ -124,4 +124,4 @@ executors:
   oss-linux:
     machine:
       image: "ubuntu-2004:202008-01"
-    working_directory: ~/project
+    working_directory: ~/.go_workspace/src/github.com/datawire/telepresence2
