@@ -32,7 +32,6 @@ type trafficManager struct {
 	licenseInfo    string // license information from traffic-manager
 	previewHost    string // hostname to use for preview URLs, if enabled
 	hClient        *http.Client
-	snapshotSent   bool
 	connectCI      bool // whether --ci was passed to connect
 }
 
@@ -123,25 +122,6 @@ func (tm *trafficManager) check(p *supervisor.Process) error {
 			tm.totalClusCepts += len(cepts)
 		}
 	}
-
-	if !tm.snapshotSent {
-		p.Log("trying to send snapshot")
-		tm.snapshotSent = true // don't try again, even if this fails
-		body, code, err := tm.request("GET", "snapshot", []byte{})
-		if err != nil || code != 200 {
-			p.Logf("snapshot request failed: %v", err)
-			return nil
-		}
-		resp, err := tm.hClient.Post("http://teleproxy/api/tables/", "application/json", strings.NewReader(body))
-		if err != nil {
-			p.Logf("snapshot post failed: %v", err)
-			return nil
-		}
-		_, _ = ioutil.ReadAll(resp.Body)
-		resp.Body.Close()
-		p.Log("snapshot sent!")
-	}
-
 	return nil
 }
 
