@@ -19,7 +19,7 @@ from typing import Dict, List
 from telepresence.connect import SSH
 from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
-from telepresence.utilities import kill_process
+from telepresence.utilities import kill_process, get_cluster_domain
 
 from .vpn import connect_sshuttle
 from .workarounds import apply_workarounds
@@ -34,7 +34,8 @@ TorPort {}
 """
 
 
-def set_up_torsocks(runner: Runner, socks_port: int) -> Dict[str, str]:
+def set_up_torsocks(runner: Runner, socks_port: int,
+                    cluster_domain: str) -> Dict[str, str]:
     """
     Set up environment variables and configuration to make torsocks work
     correctly. Wait for connectivity.
@@ -54,7 +55,8 @@ def set_up_torsocks(runner: Runner, socks_port: int) -> Dict[str, str]:
     # FIXME: Make this lookup externally configurable
     # https://github.com/telepresenceio/telepresence/issues/389
     # https://github.com/telepresenceio/telepresence/issues/985
-    test_hostname = "kubernetes.default"
+    test_hostname = "kubernetes.default.{}".format(cluster_domain)
+
     test_proxying_cmd = [
         "torsocks", "python3", "-c",
         "import socket; socket.socket().connect(('%s', 443))" % test_hostname
@@ -93,15 +95,14 @@ def get_local_env(runner, env_overrides, replace_dns_tools):
 
 
 def launch_inject(
-    runner: Runner,
-    command: List[str],
-    socks_port: int,
-    env_overrides: Dict[str, str],
+    runner: Runner, command: List[str], socks_port: int,
+    env_overrides: Dict[str, str], pod_info: Dict[str, str]
 ) -> Popen:
     """
     Launch the user's command under torsocks
     """
-    torsocks_env = set_up_torsocks(runner, socks_port)
+    cluster_domain = get_cluster_domain(pod_info['resolv'])
+    torsocks_env = set_up_torsocks(runner, socks_port, cluster_domain)
     env_overrides.update(torsocks_env)
     env = get_local_env(runner, env_overrides, True)
     runner.show("Setup complete. Launching your command.")

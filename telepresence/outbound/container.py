@@ -25,6 +25,7 @@ from telepresence.connect import SSH
 from telepresence.proxy import RemoteInfo
 from telepresence.runner import Runner
 from telepresence.utilities import find_free_port, random_name
+from telepresence.utilities import get_cluster_domain
 
 
 def make_docker_kill(runner: Runner, name: str) -> Callable[[], None]:
@@ -156,6 +157,7 @@ def run_docker_command(
     if "resolv" in pod_info:
         dns_args.extend(parse_resolv_conf(pod_info["resolv"]))
 
+    cluster_domain = get_cluster_domain(pod_info['resolv'])
     # Image already has tini init so doesn't need --init option:
     span = runner.span()
     runner.launch(
@@ -195,7 +197,8 @@ def run_docker_command(
             runner.check_call(
                 runner.docker(
                     "run", "--network=container:" + name, "--rm",
-                    TELEPRESENCE_LOCAL_IMAGE, "wait"
+                    TELEPRESENCE_LOCAL_IMAGE, "wait",
+                    "kubernetes.default.{}".format(cluster_domain)
                 )
             )
         except subprocess.CalledProcessError as e:

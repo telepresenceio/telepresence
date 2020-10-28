@@ -1,0 +1,1 @@
+Getting cluster domain from pod's /etc/resolv.conf to construct FQDN and use it for connectivity test (--method inject-tcp).

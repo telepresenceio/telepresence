@@ -96,3 +96,15 @@ def kill_process(process: "Popen[str]") -> None:
     except TimeoutExpired:
         process.kill()
         process.wait()
+
+
+def get_cluster_domain(resolv_info: str) -> str:
+    """
+    :param pod_info:
+    :return: String Cluster domain
+    """
+    # pod_info['resolv'] just a raw content of /etc/resolv.conf:
+    # assuming second value is a cluster domain:
+    #   search ns.svc.cluster.local svc.cluster.local cluster.local ...
+    cluster_domain = resolv_info.split("search ")[1].split()[1]
+    return cluster_domain

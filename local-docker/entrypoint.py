@@ -65,7 +65,7 @@ def main() -> None:
     if command == "proxy":
         proxy(loads(sys.argv[2]))
     elif command == "wait":
-        wait()
+        wait(sys.argv[2])
 
 
 def proxy(config: typing.Dict[str, typing.Any]) -> None:
@@ -113,13 +113,13 @@ def proxy(config: typing.Dict[str, typing.Any]) -> None:
     runner.wait_for_exit(main_process)
 
 
-def wait() -> None:
+def wait(hostname) -> None:
     """Wait for proxying to be live."""
     start = time()
     while time() - start < 30:
         try:
-            gethostbyname("kubernetes.default")
             sleep(1)  # just in case there's more to startup
+            gethostbyname(hostname)
             sys.exit(100)
         except gaierror:
             sleep(0.1)

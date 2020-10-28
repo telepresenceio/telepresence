@@ -61,7 +61,7 @@ def setup_inject(runner: Runner, args: Namespace) -> LaunchType:
     def launch(
         runner_, _remote_info, env, socks_port, _ssh, _mount_dir, _pod_info
     ):
-        return launch_inject(runner_, command, socks_port, env)
+        return launch_inject(runner_, command, socks_port, env, _pod_info)
 
     return launch
 
