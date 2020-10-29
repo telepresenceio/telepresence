@@ -28,19 +28,19 @@ func (entry *PresenceEntry) Item() Entity {
 	return entry.item
 }
 
-type PresenceRemoveFunc func(context.Context, string, Entity)
+type PresenceItemFunc func(context.Context, string, Entity)
 
 // Presence keeps a mapping of string IDs to arbitrary entities, tracking when
 // they were last marked as being present.
 type Presence struct {
 	entries  map[string]*PresenceEntry
 	ctx      context.Context
-	onRemove PresenceRemoveFunc
+	onRemove PresenceItemFunc
 }
 
 // NewPresence takes the base context for the tracked entities and a function
 // that gets called when an entity is removed.
-func NewPresence(ctx context.Context, onRemove PresenceRemoveFunc) *Presence {
+func NewPresence(ctx context.Context, onRemove PresenceItemFunc) *Presence {
 	if onRemove == nil {
 		onRemove = func(context.Context, string, Entity) {}
 	}
@@ -105,5 +105,12 @@ func (p Presence) Expire(moment time.Time) {
 		if entry.presence.Before(moment) {
 			_ = p.Remove(id)
 		}
+	}
+}
+
+// ForEach calls the given function on each item in the set.
+func (p Presence) ForEach(f PresenceItemFunc) {
+	for id, entry := range p.entries {
+		f(entry.ctx, id, entry.item)
 	}
 }

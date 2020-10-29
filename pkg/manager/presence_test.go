@@ -52,6 +52,14 @@ func TestPresence(t *testing.T) {
 	a.False(p.IsPresent("d"))
 	a.Equal([]string{}, removed)
 
+	collected := []string{}
+	p.ForEach(func(_ context.Context, id string, item manager.Entity) {
+		collected = append(collected, fmt.Sprintf("%s/%v", id, item))
+	})
+	a.Contains(collected, "a/item-a")
+	a.Contains(collected, "b/item-b")
+	a.Contains(collected, "c/item-c")
+
 	p.Expire(now)
 
 	// B@1 C@1
