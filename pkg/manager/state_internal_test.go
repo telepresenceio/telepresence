@@ -112,6 +112,44 @@ func TestStateInternal(topT *testing.T) {
 		a.True(agentsAreCompatible([]*rpc.AgentInfo{helloProAgent}))
 		a.False(agentsAreCompatible([]*rpc.AgentInfo{}))
 		a.False(agentsAreCompatible([]*rpc.AgentInfo{helloAgent, helloProAgent}))
+
+		clock := &FakeClock{}
+		state := NewState(ctx, clock)
+
+		h := state.AddAgent(helloAgent)
+		hp := state.AddAgent(helloProAgent)
+		d1 := state.AddAgent(demoAgent1)
+		d2 := state.AddAgent(demoAgent2)
+
+		a.Equal(helloAgent, state.GetAgent(h))
+		a.Equal(helloProAgent, state.GetAgent(hp))
+		a.Equal(demoAgent1, state.GetAgent(d1))
+		a.Equal(demoAgent2, state.GetAgent(d2))
+
+		var agents []*rpc.AgentInfo
+
+		agents = state.GetAgents()
+		a.Len(agents, 4)
+		a.Contains(agents, helloAgent)
+		a.Contains(agents, helloProAgent)
+		a.Contains(agents, demoAgent1)
+		a.Contains(agents, demoAgent2)
+
+		agents = state.GetAgentsByName("hello")
+		a.Len(agents, 1)
+		a.Contains(agents, helloAgent)
+
+		agents = state.GetAgentsByName("hello-pro")
+		a.Len(agents, 1)
+		a.Contains(agents, helloProAgent)
+
+		agents = state.GetAgentsByName("demo")
+		a.Len(agents, 2)
+		a.Contains(agents, demoAgent1)
+		a.Contains(agents, demoAgent2)
+
+		agents = state.GetAgentsByName("does-not-exist")
+		a.Len(agents, 0)
 	})
 
 	makeClient := func(name string) *rpc.ClientInfo {
@@ -123,7 +161,7 @@ func TestStateInternal(topT *testing.T) {
 		}
 	}
 
-	topT.Run("state", func(t *testing.T) {
+	topT.Run("presence-redundant", func(t *testing.T) {
 		a := assert.New(t)
 
 		clock := &FakeClock{}

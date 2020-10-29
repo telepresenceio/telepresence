@@ -229,3 +229,25 @@ func (s *State) GetAgent(sessionID string) *rpc.AgentInfo {
 
 	return nil
 }
+
+func (s *State) GetAgents() []*rpc.AgentInfo {
+	agents := []*rpc.AgentInfo{}
+	s.sessions.ForEach(func(_ context.Context, id string, item Entity) {
+		if agent, ok := item.(*rpc.AgentInfo); ok {
+			agents = append(agents, agent)
+		}
+	})
+	return agents
+}
+
+func (s *State) GetAgentsByName(name string) []*rpc.AgentInfo {
+	agents := []*rpc.AgentInfo{}
+	s.sessions.ForEach(func(_ context.Context, id string, item Entity) {
+		if agent, ok := item.(*rpc.AgentInfo); ok {
+			if agent.Name == name {
+				agents = append(agents, agent)
+			}
+		}
+	})
+	return agents
+}
