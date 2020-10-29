@@ -81,26 +81,18 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 
 	dlog.Debug(ctx, "WatchAgents called", sessionID)
 
-	var answerFunc func() []*rpc.AgentInfo
-
-	entry := m.state.Get(sessionID)
-
-	switch /* item := */ entry.Item().(type) {
-	case *rpc.ClientInfo:
-		// FIXME implement this
-		// client := item
-		answerFunc = func() []*rpc.AgentInfo {
-			return []*rpc.AgentInfo{}
-		}
-	default:
+	if !m.state.HasClient(sessionID) {
 		return status.Errorf(codes.NotFound, "Client session %q not found", session.SessionId)
 	}
 
+	entry := m.state.Get(sessionID)
 	sessionCtx := entry.Context()
 	changed := m.state.agentWatches.Subscribe(sessionID)
 
 	for {
-		res := &rpc.AgentInfoSnapshot{Agents: answerFunc()}
+		// FIXME This will loop over the presence list looking for agents for
+		// every single watcher. How inefficient!
+		res := &rpc.AgentInfoSnapshot{Agents: m.state.GetAgents()}
 
 		if err := stream.Send(res); err != nil {
 			return err
@@ -108,10 +100,12 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 
 		select {
 		case <-changed:
-			// It's time to send another message
+			// It's time to send another message. Loop.
 		case <-ctx.Done():
+			// Manager is shutting down.
 			return nil
 		case <-sessionCtx.Done():
+			// Manager believes this session has ended.
 			return nil
 		}
 	}
@@ -157,10 +151,12 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 
 		select {
 		case <-changed:
-			// It's time to send another message
+			// It's time to send another message. Loop.
 		case <-ctx.Done():
+			// Manager is shutting down.
 			return nil
 		case <-sessionCtx.Done():
+			// Manager believes this session has ended.
 			return nil
 		}
 	}
