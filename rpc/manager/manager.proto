@@ -4,7 +4,7 @@ package manager;
 
 import "google/protobuf/empty.proto";
 
-option go_package = "github.com/datawire/telepresence2/pkg/rpc/manager";
+option go_package = "github.com/datawire/telepresence2/pkg/rpc";
 option java_multiple_files = true;
 option java_package = "io.datawire.telepresence.rpc";
 option java_outer_classname = "Manager";

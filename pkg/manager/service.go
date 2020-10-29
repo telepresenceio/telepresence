@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/datawire/ambassador/pkg/dlog"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
+	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
 type Manager struct {

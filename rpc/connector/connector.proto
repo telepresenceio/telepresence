@@ -1,6 +1,6 @@
 syntax = "proto3";
 package telepresence;
-import "github.com/datawire/telepresence2/rpc/version/version.proto";
+import "rpc/version/version.proto";
 import "google/protobuf/empty.proto";
 
 option go_package = "github.com/datawire/telepresence2/pkg/rpc/connector";

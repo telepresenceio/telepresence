@@ -40,7 +40,7 @@ $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc: go.mod
 
 # proto/gRPC generation using protoc
 pkg/%.pb.go pkg/%_grpc.pb.go: %.proto $(PROTOC) $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc
-	$(PROTOC) --proto_path=$(GOSRC):. --go_out=$(GOSRC) --go-grpc_out=$(GOSRC) $<
+	$(PROTOC) --proto_path=. --go_out=. --go-grpc_out=. --go_opt=module=github.com/datawire/telepresence2 --go-grpc_opt=module=github.com/datawire/telepresence2 $<
 
 GRPC_NAMES = connector daemon manager
 GRPC_PB_GO_FILES = $(foreach proto, $(GRPC_NAMES), pkg/rpc/$(proto)/$(proto)_grpc.pb.go)

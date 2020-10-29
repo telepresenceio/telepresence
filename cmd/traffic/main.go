@@ -18,7 +18,7 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/datawire/telepresence2/pkg/manager"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
+	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
 // Version is inserted at build using --ldflags -X
