@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"time"
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc/codes"
@@ -13,29 +14,22 @@ import (
 
 type Manager struct {
 	rpc.UnimplementedManagerServer
+
+	state *State
 }
 
-func NewManager(context.Context) *Manager {
-	return &Manager{}
+type wall struct{}
+
+func (wall) Now() time.Time {
+	return time.Now()
+}
+
+func NewManager(ctx context.Context) *Manager {
+	return &Manager{state: NewState(ctx, wall{})}
 }
 
 func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error) {
 	return &rpc.VersionInfo2{Version: "VERSION"}, nil
-}
-
-func validateClient(client *rpc.ClientInfo) string {
-	switch {
-	case client.Name == "":
-		return "name must not be empty"
-	case client.InstallId == "":
-		return "install ID must not be empty"
-	case client.Product == "":
-		return "product must not be empty"
-	case client.Version == "":
-		return "version must not be empty"
-	}
-
-	return ""
 }
 
 func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*rpc.SessionInfo, error) {
@@ -45,17 +39,29 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	sessionID := "client-session-id"
+	sessionID := m.state.AddClient(client)
 
 	return &rpc.SessionInfo{SessionId: sessionID}, nil
 }
 
-func (m *Manager) ArriveAsAgent(ctx context.Context, _ *rpc.AgentInfo) (*rpc.SessionInfo, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ArriveAsAgent not implemented")
+func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc.SessionInfo, error) {
+	dlog.Debug(ctx, "ArriveAsAgent called")
+
+	if val := validateAgent(agent); val != "" {
+		return nil, status.Errorf(codes.InvalidArgument, val)
+	}
+
+	sessionID := m.state.AddAgent(agent)
+
+	return &rpc.SessionInfo{SessionId: sessionID}, nil
 }
 
 func (m *Manager) Remain(ctx context.Context, session *rpc.SessionInfo) (*empty.Empty, error) {
 	dlog.Debug(ctx, "Remain called")
+
+	if ok := m.state.Mark(session.SessionId); !ok {
+		return nil, status.Errorf(codes.NotFound, "Session %q not found", session.SessionId)
+	}
 
 	return &empty.Empty{}, nil
 }
@@ -63,37 +69,101 @@ func (m *Manager) Remain(ctx context.Context, session *rpc.SessionInfo) (*empty.
 func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.Empty, error) {
 	dlog.Debug(ctx, "Depart called")
 
+	m.state.Remove(session.SessionId)
+
 	return &empty.Empty{}, nil
 }
 
 // FIXME Unimplemented
 func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_WatchAgentsServer) error {
 	ctx := stream.Context()
-	dlog.Debug(ctx, "WatchAgents called")
+	sessionID := session.SessionId
 
-	res := &rpc.AgentInfoSnapshot{Agents: []*rpc.AgentInfo{}}
+	dlog.Debug(ctx, "WatchAgents called", sessionID)
 
-	if err := stream.Send(res); err != nil {
-		return err
+	var answerFunc func() []*rpc.AgentInfo
+
+	entry := m.state.Get(sessionID)
+
+	switch /* item := */ entry.Item().(type) {
+	case *rpc.ClientInfo:
+		// FIXME implement this
+		// client := item
+		answerFunc = func() []*rpc.AgentInfo {
+			return []*rpc.AgentInfo{}
+		}
+	default:
+		return status.Errorf(codes.NotFound, "Client session %q not found", session.SessionId)
 	}
 
-	<-stream.Context().Done()
-	return nil
+	sessionCtx := entry.Context()
+	changed := m.state.agentWatches.Subscribe(sessionID)
+
+	for {
+		res := &rpc.AgentInfoSnapshot{Agents: answerFunc()}
+
+		if err := stream.Send(res); err != nil {
+			return err
+		}
+
+		select {
+		case <-changed:
+			// It's time to send another message
+		case <-ctx.Done():
+			return nil
+		case <-sessionCtx.Done():
+			return nil
+		}
+	}
 }
 
 // FIXME Unimplemented
-func (m *Manager) WatchIntercepts(_ *rpc.SessionInfo, stream rpc.Manager_WatchInterceptsServer) error {
+func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_WatchInterceptsServer) error {
 	ctx := stream.Context()
-	dlog.Debug(ctx, "WatchIntercepts called")
+	sessionID := session.SessionId
 
-	res := &rpc.InterceptInfoSnapshot{Intercepts: []*rpc.InterceptInfo{}}
+	dlog.Debug(ctx, "WatchIntercepts called", sessionID)
 
-	if err := stream.Send(res); err != nil {
-		return err
+	var answerFunc func() []*rpc.InterceptInfo
+
+	entry := m.state.Get(sessionID)
+
+	switch /* item := */ entry.Item().(type) {
+	case *rpc.ClientInfo:
+		// FIXME implement this
+		// client := item
+		answerFunc = func() []*rpc.InterceptInfo {
+			return []*rpc.InterceptInfo{}
+		}
+	case *rpc.AgentInfo:
+		// FIXME implement this
+		// agent := item
+		answerFunc = func() []*rpc.InterceptInfo {
+			return []*rpc.InterceptInfo{}
+		}
+	default:
+		return status.Errorf(codes.NotFound, "Session %q not found", session.SessionId)
 	}
 
-	<-stream.Context().Done()
-	return nil
+	sessionCtx := entry.Context()
+	changed := m.state.interceptWatches.Subscribe(sessionID)
+
+	for {
+		res := &rpc.InterceptInfoSnapshot{Intercepts: answerFunc()}
+
+		if err := stream.Send(res); err != nil {
+			return err
+		}
+
+		select {
+		case <-changed:
+			// It's time to send another message
+		case <-ctx.Done():
+			return nil
+		case <-sessionCtx.Done():
+			return nil
+		}
+	}
 }
 
 func (m *Manager) CreateIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error) {
