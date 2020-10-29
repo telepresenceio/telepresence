@@ -358,6 +358,18 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
         )
     )
     parser.add_argument(
+        "--no-global-proxy",
+        dest="no_global_proxy",
+        action='store_true',
+        help=(
+            "By default, container method proxies all traffic through the "
+            "remote Kubernetes cluster. This option disable the default "
+            "behavior by only proxying the remote Kubernetes cluster CIDR. "
+            "It is possible to use --also-proxy with --no-global-proxy "
+            "to specify additionnal CIDRs to proxy through the clusters."
+        )
+    )
+    parser.add_argument(
         "--local-cluster",
         action='store_true',
         help=(

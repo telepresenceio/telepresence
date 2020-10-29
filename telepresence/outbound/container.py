@@ -23,6 +23,7 @@ from telepresence import TELEPRESENCE_LOCAL_IMAGE
 from telepresence.cli import PortMapping
 from telepresence.connect import SSH
 from telepresence.proxy import RemoteInfo
+from telepresence.outbound.cidr import get_proxy_cidrs
 from telepresence.runner import Runner
 from telepresence.utilities import find_free_port, random_name
 
@@ -110,6 +111,7 @@ def run_docker_command(
     to_pod: List[int],
     from_pod: List[int],
     container_to_host: PortMapping,
+    no_global_proxy: bool,
     remote_env: Dict[str, str],
     ssh: SSH,
     mount_dir: Optional[str],
@@ -148,6 +150,10 @@ def run_docker_command(
         "to_pod": to_pod,
         "from_pod": from_pod,
     }
+
+    if no_global_proxy:
+        config["cidrs"] = get_proxy_cidrs(runner, remote_info)
+
     dns_args = []
     if "hostname" in pod_info:
         dns_args.append("--hostname={}".format(pod_info["hostname"].strip()))
