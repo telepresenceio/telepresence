@@ -68,7 +68,7 @@ build: $(foreach exe, $(EXECUTABLES), $(BINDIR)/$(exe)) ## (Build) runs go build
 
 $(BINDIR)/%: cmd/%/main.go $(TP_PKG_SOURCES) $(RPC_FILES)
 	mkdir -p $(BINDIR)
-	go build -o $@ $<
+	go build -o $@ ./$(<D)
 
 .PHONY: install
 install: $(foreach exe, $(EXECUTABLES), $(GOBIN)/$(exe))  ## (Install) runs go install
