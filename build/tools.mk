@@ -13,6 +13,13 @@ GOBIN=$(GOLOCAL)/bin
 
 export PATH := $(TOOLSDIR)/bin:$(GOBIN):$(PATH)
 
+clobber: clobber-tools
+
+.PHONY: clobber-tools
+
+clobber-tools:
+	rm -rf $(TOOLSDIR)
+
 # Protobuf compiler
 # =================
 

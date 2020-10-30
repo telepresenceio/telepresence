@@ -12,35 +12,17 @@
 BUILDDIR=build-output
 BINDIR=$(BUILDDIR)/bin
 
-# Ensure that go environment prerequisites are met
-GOPATH=$(shell go env GOPATH)
-GOHOSTOS=$(shell go env GOHOSTOS)
-GOHOSTARCH=$(shell go env GOHOSTARCH)
-
-# assume first directory in path is the local go directory
-GOLOCAL=$(word 1, $(subst :, ,$(GOPATH)))
-GOSRC=$(GOLOCAL)/src
-GOBIN=$(GOLOCAL)/bin
-
-export PATH := $(BUILDDIR)/bin:$(PATH)
-
 # proto/gRPC generation using protoc
-pkg/%.pb.go pkg/%_grpc.pb.go: %.proto $(PROTOC) $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc
-	$(PROTOC) --proto_path=. --go_out=. --go-grpc_out=. --go_opt=module=github.com/datawire/telepresence2 --go-grpc_opt=module=github.com/datawire/telepresence2 $<
 
-GRPC_NAMES = connector daemon manager
-GRPC_PB_GO_FILES = $(foreach proto, $(GRPC_NAMES), pkg/rpc/$(proto)/$(proto)_grpc.pb.go)
-
-PROTO_NAMES = iptables version $(GRPC_NAMES)
-PB_GO_FILES = $(foreach proto, $(PROTO_NAMES), pkg/rpc/$(proto)/$(proto).pb.go)
-
-RPC_FILES=$(PB_GO_FILES) $(GRPC_PB_GO_FILES)
+PROTO_SRCS = $(shell echo rpc/*/*.proto)
 
 .PHONY: generate
-generate: $(PB_GO_FILES) $(GRPC_PB_GO_FILES) ## (Generate) update generated files that get checked in to Git.
+generate: ## (Generate) Update generated files that get checked in to Git
+generate: $(PROTOC) $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc
+	$(PROTOC) --proto_path=. --go_out=. --go-grpc_out=. --go_opt=module=github.com/datawire/telepresence2 --go-grpc_opt=module=github.com/datawire/telepresence2 $(PROTO_SRCS)
 
 .PHONY: generate-clean
-generate-clean: ## (Generate) delete generated files that get checked in to Git.
+generate-clean: ## (Generate) Delete generated files that get checked in to Git
 	rm -rf pkg/rpc/*
 
 # pkg sources excluding rpc
@@ -50,17 +32,13 @@ TP_TEST_SOURCES = $(shell find cmd pkg -type f -name '*_test.go')
 EXECUTABLES=$(shell ls cmd)
 
 .PHONY: build
-build: $(foreach exe, $(EXECUTABLES), $(BINDIR)/$(exe)) ## (Build) runs go build
-
-$(BINDIR)/%: cmd/%/main.go $(TP_PKG_SOURCES) $(RPC_FILES)
+build: ## (Build) Build all the source code
 	mkdir -p $(BINDIR)
-	go build -o $@ ./$(<D)
+	go build -o $(BINDIR) ./cmd/...
 
 .PHONY: install
-install: $(foreach exe, $(EXECUTABLES), $(GOBIN)/$(exe))  ## (Install) runs go install
-
-$(GOBIN)/%: cmd/%/main.go $(TP_PKG_SOURCES) $(TP_RPC_FILES)
-	cd $(<D) && go install
+install:  ## (Install) runs go install -- what is this for
+	go install ./cmd/...
 
 .PHONY: docker-build
 docker-build: ## (Install) runs docker build for all executables
@@ -69,17 +47,24 @@ docker-build: ## (Install) runs docker build for all executables
 	done
 
 .PHONY: clean
-clean: ## (Build) cleans built artefacts
+clean: ## (Build) Remove all build artifacts
+	rm -rf $(BUILDDIR)
+
+.PHONY: clobber
+clobber: clean ## (Build) Remove all build artifacts and tools
 	rm -rf $(BUILDDIR)
 
 .PHONY: lint
-lint: $(GOLANGCI_LINT) $(PROTOLINT) ## (Lint) runs golangci-lint and protolint
+lint: $(GOLANGCI_LINT) $(PROTOLINT) ## (Lint) Run the linters (golangci-lint and protolint)
 	$(GOLANGCI_LINT) run ./...
 	$(PROTOLINT) lint $(shell find rpc -type f -name '*.proto')
 
 .PHONY: test
-test: build $(TP_TEST_SOURCES) ## (Test) runs go test
+test: build ## (Test) Run the Go tests
 	go test -v ./...
+
+.PHONY: check
+check: test ## (Test) Run the full test suite
 
 .PHONY: all
 all: test
