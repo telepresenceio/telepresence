@@ -10,7 +10,7 @@ import (
 
 // getFreePort asks the kernel for a free open port that is ready to use.
 // Similar to telepresence.utilities.find_free_port()
-func getFreePort() (int, error) {
+func getFreePort() (int32, error) {
 	lc := net.ListenConfig{
 		Control: func(network, address string, c syscall.RawConn) error {
 			var operr error
@@ -28,5 +28,5 @@ func getFreePort() (int, error) {
 		return 0, err
 	}
 	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
+	return int32(l.Addr().(*net.TCPAddr).Port), nil
 }

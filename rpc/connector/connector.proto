@@ -40,15 +40,14 @@ service Connector {
 message ConnectRequest {
   string context = 1;
   string namespace = 2;
-  string manager_ns = 3;
-  string install_id = 4;
-  repeated string args = 5;
+  string install_id = 3;
+  repeated string args = 4;
 
   // true if this is part of a CI run
-  bool is_ci = 6;
+  bool is_ci = 5;
 
   // true if the call must wait for a running traffic manager before returning
-  bool intercept_enabled = 7;
+  bool intercept_enabled = 6;
 }
 
 message ConnectInfo {

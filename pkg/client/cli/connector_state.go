@@ -61,7 +61,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 	// TODO: Progress reporting during connect. Either divide into several calls and report completion
 	//  of each, or use a stream. Can be made as part of ticket #1334.
 	var r *connector.ConnectInfo
-	fmt.Fprintf(cs.out, "Connecting to traffic manager in namespace %s...\n", cs.cr.ManagerNs)
+	fmt.Fprintln(cs.out, "Connecting to traffic manager...")
 
 	if err = client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
 		return false, fmt.Errorf("Connector service did not come up!\nTake a look at %s for more information.", client.Logfile)

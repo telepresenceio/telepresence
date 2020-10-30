@@ -89,7 +89,7 @@ func run(init bool) error {
 			Name:     "init",
 			Requires: []string{"connector"},
 			Work: func(p *supervisor.Process) error {
-				_, err := d.Connect(p.Context(), &rpc.ConnectRequest{ManagerNs: "ambassador"})
+				_, err := d.Connect(p.Context(), &rpc.ConnectRequest{InstallId: "dummy-id"})
 				return err
 			},
 		})
@@ -198,7 +198,7 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 		return r
 	}
 
-	p.Logf("Connecting to traffic manager in namespace %s...", cr.ManagerNs)
+	p.Log("Connecting to traffic manager...")
 	cluster, err := trackKCluster(p, cr.Context, cr.Namespace, cr.Args)
 	if err != nil {
 		p.Logf("unable to track k8s cluster: %+v", err)
@@ -214,27 +214,12 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 		previewHost = ""
 	}
 
-	p.Logf("Starting teleproxy bridge in context %s, namespace %s", cluster.ctx, cluster.namespace)
-	br := newBridge("", cluster.ctx, cluster.namespace, s.daemon)
-	if err = br.start(p); err != nil {
-		p.Logf("Failed to start teleproxy bridge: %s", err.Error())
-		r.Error = rpc.ConnectInfo_BRIDGE_FAILED
-		r.ErrorText = err.Error()
-		// No point in continuing without a bridge
-		s.p.Supervisor().Shutdown()
-		return r
-	}
-	s.bridge = br
-	s.cluster.setBridgeCheck(func() bool {
-		return br.check(p)
-	})
-
 	p.Logf("Connected to context %s (%s)", s.cluster.context(), s.cluster.server())
 
 	r.ClusterContext = s.cluster.context()
 	r.ClusterServer = s.cluster.server()
 
-	tmgr, err := newTrafficManager(p, s.cluster, cr.ManagerNs, cr.InstallId, cr.IsCi)
+	tmgr, err := newTrafficManager(p, s.cluster, cr.InstallId, cr.IsCi)
 	if err != nil {
 		p.Logf("Unable to connect to TrafficManager: %s", err)
 		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
@@ -247,6 +232,20 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 	}
 	tmgr.previewHost = previewHost
 	s.trafficMgr = tmgr
+	p.Logf("Starting teleproxy bridge in context %s, namespace %s", cluster.ctx, cluster.namespace)
+	br := newBridge("", cluster.ctx, cluster.namespace, s.daemon, tmgr.sshPort)
+	if err = br.start(p); err != nil {
+		p.Logf("Failed to start teleproxy bridge: %s", err.Error())
+		r.Error = rpc.ConnectInfo_BRIDGE_FAILED
+		r.ErrorText = err.Error()
+		// No point in continuing without a bridge
+		s.p.Supervisor().Shutdown()
+		return r
+	}
+	s.bridge = br
+	s.cluster.setBridgeCheck(func() bool {
+		return br.check(p)
+	})
 
 	if !cr.InterceptEnabled {
 		return r

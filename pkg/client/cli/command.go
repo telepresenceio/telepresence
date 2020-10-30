@@ -90,10 +90,6 @@ func Command() *cobra.Command {
 		"namespace", "n", "",
 		"The Kubernetes namespace to use. Defaults to kubectl's default for the context.",
 	)
-	flags.StringVarP(&r.ManagerNs,
-		"manager-namespace", "", "ambassador",
-		"The Kubernetes namespace in which the Traffic Manager is running.",
-	)
 	flags.BoolVar(&r.IsCi, "ci", false, "This session is a CI run.")
 	flags.StringVarP(&r.Deployment, "intercept", "i", "", "Name of deployment to intercept")
 	flags.StringVarP(&r.Name, "name", "", "", "Name of the intercept")

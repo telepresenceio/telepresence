@@ -354,7 +354,7 @@ func makeIntercept(p *supervisor.Process, tm *trafficManager, cluster *k8sCluste
 			AmbassadorID:  []string{fmt.Sprintf("intercept-%s", ii.Deployment)},
 			Prefix:        ii.Prefix,
 			Rewrite:       ii.Prefix,
-			Service:       fmt.Sprintf("telepresence-proxy.%s:%d", tm.namespace, port),
+			Service:       fmt.Sprintf("traffic-manager:%d", port),
 			RegexHeaders:  ii.Patterns,
 			GRPC:          ii.Grpc, // Set the grpc flag on the intercept mapping
 			TimeoutMs:     60000,   // Making sure we don't have shorter timeouts on intercepts than the original Mapping
@@ -384,7 +384,7 @@ func makeIntercept(p *supervisor.Process, tm *trafficManager, cluster *k8sCluste
 		"-C", "-N", "telepresence@localhost",
 		"-oConnectTimeout=10", "-oExitOnForwardFailure=yes",
 		"-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null",
-		"-p", strconv.Itoa(tm.sshPort),
+		"-p", strconv.Itoa(int(tm.sshPort)),
 		"-R", fmt.Sprintf("%d:%s:%d", cept.port, ii.TargetHost, ii.TargetPort),
 	}
 

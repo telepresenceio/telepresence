@@ -4,29 +4,25 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"strconv"
 	"strings"
 	"time"
-
-	route "github.com/datawire/telepresence2/pkg/rpc/iptables"
 
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
 	"github.com/pkg/errors"
 
 	"github.com/datawire/ambassador/pkg/k8s"
 	"github.com/datawire/ambassador/pkg/supervisor"
+	route "github.com/datawire/telepresence2/pkg/rpc/iptables"
 )
 
 // worker names
 const (
-	BridgeWorker         = "BRG"
 	K8sBridgeWorker      = "K8S"
 	K8sPortForwardWorker = "KPF"
 	K8sSSHWorker         = "SSH"
 	K8sApplyWorker       = "KAP"
-	DkrBridgeWorker      = "DKR"
 )
 
 // ProxyRedirPort is the port to which we redirect proxied IPs. It
@@ -61,6 +57,7 @@ type bridge struct {
 	kubeConfig string
 	context    string
 	namespace  string
+	sshPort    int32
 	daemon     daemon.DaemonClient
 	workers    []*supervisor.Worker
 }
@@ -92,12 +89,13 @@ func (t *bridge) restart() {
 	}
 }
 
-func newBridge(kubeConfig, context, namespace string, daemon daemon.DaemonClient) *bridge {
+func newBridge(kubeConfig, context, namespace string, daemon daemon.DaemonClient, sshPort int32) *bridge {
 	return &bridge{
 		kubeConfig: kubeConfig,
 		context:    context,
 		namespace:  namespace,
 		daemon:     daemon,
+		sshPort:    sshPort,
 	}
 }
 
@@ -274,7 +272,7 @@ func (t *bridge) updateTable(p *supervisor.Process, w *k8s.Watcher) {
 
 	// Send updated table to daemon
 	if _, err := t.daemon.Update(p.Context(), &table); err != nil {
-		log.Printf("BRG: error posting update to %s: %v", table.Name, err)
+		p.Logf("error posting update to %s: %v", table.Name, err)
 	}
 }
 
@@ -332,10 +330,10 @@ func (t *bridge) bridgeWorker(p *supervisor.Process) error {
 		"cluster.local.",
 		"",
 	}
-	log.Println("BRG: Setting DNS search path:", paths[0])
+	p.Logf("Setting DNS search path: %s", paths[0])
 	_, err = t.daemon.SetDnsSearchPath(p.Context(), &daemon.Paths{Paths: paths})
 	if err != nil {
-		log.Printf("BRG: error setting up search path: %v", err)
+		p.Logf("error setting up search path: %v", err)
 		panic(err) // Because this will fail if we win the startup race
 	}
 
@@ -429,7 +427,7 @@ func checkKubectl(p *supervisor.Process) error {
 // Note there is no namespace specified, as we are checking for bridge status in the
 // current namespace.
 func (t *bridge) check(p *supervisor.Process) bool {
-	address := "traffic-proxy.svc:8022"
+	address := fmt.Sprintf("localhost:%d", t.sshPort)
 	conn, err := net.DialTimeout("tcp", address, 15*time.Second)
 	if err != nil {
 		p.Logf("fail to establish tcp connection to %s: %s", address, err.Error())
