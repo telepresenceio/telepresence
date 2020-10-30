@@ -1,4 +1,4 @@
-.DEFAULT_GOAL = all
+# .DEFAULT_GOAL = all
 
 # Delete implicit rules not used here (clutters debug output)
 .SUFFIXES:
@@ -23,20 +23,6 @@ GOSRC=$(GOLOCAL)/src
 GOBIN=$(GOLOCAL)/bin
 
 export PATH := $(BUILDDIR)/bin:$(PATH)
-
-# Install protoc under $BUILDDIR. A protoc that is already installed locally cannot be trusted since this must be the exact
-# same version as used when running CI. If it isn't, the generate-check will fail.
-PROTOC_VERSION=3.13.0
-PROTOC=$(BINDIR)/protoc
-PROTOC_ZIP=protoc-$(PROTOC_VERSION)-$(subst darwin,osx,$(GOHOSTOS))-$(shell uname -m).zip
-$(PROTOC):
-	mkdir -p $(BINDIR)
-	curl -sfL https://github.com/protocolbuffers/protobuf/releases/download/v$(PROTOC_VERSION)/$(PROTOC_ZIP) -o $(BUILDDIR)/$(PROTOC_ZIP)
-	cd $(BUILDDIR) && unzip $(PROTOC_ZIP)
-
-# Install protoc-gen and protoc-gen-go-grpc
-$(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc: go.mod
-	go get github.com/golang/protobuf/protoc-gen-go google.golang.org/grpc/cmd/protoc-gen-go-grpc
 
 # proto/gRPC generation using protoc
 pkg/%.pb.go pkg/%_grpc.pb.go: %.proto $(PROTOC) $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc
