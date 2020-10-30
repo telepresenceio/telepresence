@@ -43,5 +43,5 @@ PROTOLINT_TGZ=protolint_$(PROTOLINT_VERSION)_$(shell uname -s)_$(shell uname -m)
 PROTOLINT=$(TOOLSBINDIR)/protolint
 $(PROTOLINT):
 	mkdir -p $(TOOLSBINDIR)
-	curl -sfL https://github.com/yoheimuta/protolint/releases/download/v$(PROTOLINT_VERSION)/$(PROTOLINT_TGZ) -o $(BUILDDIR)/$(PROTOLINT_TGZ)
-	tar -C $(TOOLSBINDIR) -zxf $(BUILDDIR)/$(PROTOLINT_TGZ)
+	curl -sfL https://github.com/yoheimuta/protolint/releases/download/v$(PROTOLINT_VERSION)/$(PROTOLINT_TGZ) -o $(TOOLSDIR)/$(PROTOLINT_TGZ)
+	tar -C $(TOOLSBINDIR) -zxf $(TOOLSDIR)/$(PROTOLINT_TGZ)

@@ -72,20 +72,10 @@ docker-build: ## (Install) runs docker build for all executables
 clean: ## (Build) cleans built artefacts
 	rm -rf $(BUILDDIR)
 
-$(BINDIR)/golangci-lint: ## (Lint) install golangci-lint
-	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(BINDIR) latest
-
-PROTOLINT_VERSION=0.26.0
-PROTOLINT_TGZ=protolint_$(PROTOLINT_VERSION)_$(shell uname -s)_$(shell uname -m).tar.gz
-$(BINDIR)/protolint: ## (Lint) install protolint
-	mkdir -p $(BINDIR)
-	curl -sfL https://github.com/yoheimuta/protolint/releases/download/v$(PROTOLINT_VERSION)/$(PROTOLINT_TGZ) -o $(BUILDDIR)/$(PROTOLINT_TGZ)
-	tar -C $(BINDIR) -zxf $(BUILDDIR)/$(PROTOLINT_TGZ)
-
 .PHONY: lint
-lint: $(BINDIR)/golangci-lint $(BINDIR)/protolint ## (Lint) runs golangci-lint and protolint
-	$(BINDIR)/golangci-lint run ./...
-	$(BINDIR)/protolint lint $(shell find rpc -type f -name '*.proto')
+lint: $(GOLANGCI_LINT) $(PROTOLINT) ## (Lint) runs golangci-lint and protolint
+	$(GOLANGCI_LINT) run ./...
+	$(PROTOLINT) lint $(shell find rpc -type f -name '*.proto')
 
 .PHONY: test
 test: build $(TP_TEST_SOURCES) ## (Test) runs go test
