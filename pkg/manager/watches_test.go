@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/datawire/telepresence2/pkg/manager"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/datawire/telepresence2/pkg/manager"
 )
 
 func receiver(ch <-chan struct{}) *bool {

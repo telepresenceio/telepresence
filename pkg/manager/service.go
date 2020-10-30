@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/datawire/ambassador/pkg/dlog"
+
 	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
@@ -74,7 +75,6 @@ func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	return &empty.Empty{}, nil
 }
 
-// FIXME Unimplemented
 func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_WatchAgentsServer) error {
 	ctx := stream.Context()
 	sessionID := session.SessionId
