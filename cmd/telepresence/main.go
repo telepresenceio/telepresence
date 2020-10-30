@@ -7,12 +7,11 @@ import (
 	"github.com/datawire/telepresence2/pkg/client/cli"
 )
 
-// Version is inserted at build using --ldflags -X
-var Version = "(unknown version)"
-
 func main() {
-	client.SetVersion(Version)
-	err := cli.Command().Execute()
+	client.SetVersion(Version())
+	cmd := cli.Command()
+	AddVersionCommand(cmd)
+	err := cmd.Execute()
 	if err != nil {
 		os.Exit(1)
 	}
