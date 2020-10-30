@@ -1,0 +1,51 @@
+---
+hello:
+  name: hello
+  hostname: hello-abcdef-123
+  version: "1"
+  mechanisms:
+    - name: tcp
+      product: oss
+      version: "1"
+helloPro:
+  name: hello-pro
+  hostname: hello-pro-abcdef-123
+  version: "1"
+  mechanisms:
+    - name: tcp
+      product: oss
+      version: "1"
+    - name: http
+      product: plus
+      version: "1"
+    - name: grpc
+      product: plus
+      version: "1"
+demo1:
+  name: demo
+  hostname: demo-abcdef-123
+  version: "1"
+  mechanisms:
+    - name: tcp
+      product: oss
+      version: "1"
+    - name: http
+      product: plus
+      version: "1"
+    - name: grpc
+      product: plus
+      version: "1"
+demo2:
+  name: demo
+  hostname: demo-abcdef-456
+  version: "1"
+  mechanisms:
+    - name: grpc
+      product: plus
+      version: "1"
+    - name: tcp
+      product: oss
+      version: "1"
+    - name: http
+      product: plus
+      version: "1"

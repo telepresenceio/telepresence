@@ -1,0 +1,17 @@
+---
+tcp:
+  name: tcp
+  product: oss
+  version: "1"
+http:
+  name: http
+  product: plus
+  version: "1"
+httpv2:
+  name: http
+  product: plus
+  version: "2"
+grpc:
+  name: grpc
+  product: plus
+  version: "1"

@@ -1,0 +1,22 @@
+---
+alice:
+  name: alice@squirtle.bigcorp.com
+  install_id: install_id_for_alice
+  product: telepresence
+  version: "1"
+bob:
+  name: bob@bulbasaur.bigcorp.com
+  install_id: install_id_for_bob
+  product: telepresence
+  version: "1"
+cameron:
+  name: cameron@charmander.bigcorp.com
+  install_id: install_id_for_cameron
+  product: telepresence
+  version: "1"
+pat:
+  name: pat@pikachu.bigcorp.com
+  install_id: install_id_for_pat
+  product: telepresence
+  version: "1"
+  license_key: license_key_for_pat
