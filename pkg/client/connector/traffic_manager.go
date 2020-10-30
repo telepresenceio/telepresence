@@ -90,7 +90,7 @@ func (tm *trafficManager) initGrpc(p *supervisor.Process) error {
 		state := conn.GetState()
 		switch state {
 		case connectivity.Idle, connectivity.Ready:
-			break
+			// Do nothing. We'll break out of the loop after the switch.
 		case connectivity.Connecting:
 			time.Sleep(10 * time.Millisecond)
 			continue
@@ -164,8 +164,9 @@ func (tm *trafficManager) check(p *supervisor.Process) error {
 			if ok {
 				tm.totalClusCepts += len(cepts)
 			}
-		}*/
-	return nil
+		}
+		return nil
+	*/
 }
 
 // Name implements Resource
