@@ -163,13 +163,13 @@ func start(p *supervisor.Process, dnsIP, fallbackIP string, noSearch bool) (*ipT
 		Name:     DNSConfigWorker,
 		Requires: []string{TranslatorWorker},
 		Work: func(p *supervisor.Process) error {
-			bootstrap := route.Table{Name: "bootstrap"}
-			bootstrap.Routes = append(bootstrap.Routes, &route.Route{
+			bootstrap := route.Table{Name: "bootstrap", Routes: []*route.Route{{
 				Ip:     dnsIP,
 				Target: DNSRedirPort,
 				Proto:  "udp",
-			})
+			}}}
 			ic.update(&bootstrap)
+			dns.Flush()
 
 			if noSearch {
 				p.Ready()

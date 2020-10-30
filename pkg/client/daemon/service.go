@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
 	"github.com/datawire/telepresence2/pkg/rpc/iptables"
@@ -197,6 +198,7 @@ func (d *service) IPTable(_ context.Context, name *rpc.TableName) (*iptables.Tab
 
 func (d *service) Update(_ context.Context, table *iptables.Table) (*empty.Empty, error) {
 	d.ipTables.update(table)
+	dns.Flush()
 	return &empty.Empty{}, nil
 }
 
