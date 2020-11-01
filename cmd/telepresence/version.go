@@ -5,6 +5,8 @@ import (
 	"runtime/debug"
 
 	"github.com/spf13/cobra"
+
+	"github.com/datawire/telepresence2/pkg/version"
 )
 
 // AddVersionCommand adds the version sub-command.
@@ -18,15 +20,17 @@ func AddVersionCommand(topLevel *cobra.Command) {
 		}})
 }
 
-var version string
-
 func Version() string {
-	if version == "" {
-		if i, ok := debug.ReadBuildInfo(); ok {
-			version = i.Main.Version
-		} else {
-			version = "(unknown version)"
-		}
+	// Prefer version number inserted at build
+	if version.Version != "" {
+		return version.Version
 	}
-	return version
+
+	// Fall back to version info from "go get"
+	if i, ok := debug.ReadBuildInfo(); ok {
+		return i.Main.Version
+	}
+
+	// Ultimate fallback version
+	return "(unknown version)"
 }

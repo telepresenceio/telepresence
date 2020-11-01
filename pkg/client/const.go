@@ -19,7 +19,7 @@ func SetVersion(v string) {
 
 // DisplayVersion returns a printable version for `telepresence`
 func DisplayVersion() string {
-	return fmt.Sprintf("v%s (api v%d)", Version, ApiVersion)
+	return fmt.Sprintf("%s (api v%d)", Version, ApiVersion)
 }
 
 // GetExe returns the name of the running executable
