@@ -28,3 +28,18 @@ deployment.apps/traffic-manager configured
 
 Now you can run Telepresence against this cluster and try out `curl echo-easy` to see outbound at work.
 
+## Build an image
+
+```console
+$ make image
+2020/11/01 16:41:29 Using base docker.io/datawire/telepresence-k8s:0.101 for github.com/datawire/telepresence2/cmd/traffic
+2020/11/01 16:41:30 Building github.com/datawire/telepresence2/cmd/traffic for linux/amd64
+2020/11/01 16:41:31 Loading ko.local/traffic-6c3ca0a9c236a15e275ec10cceb31334:de195d725fc4f2018208fa5f9a2154af805e3fa6b17be2276e8bba3638f0dfe9
+2020/11/01 16:41:34 Loaded ko.local/traffic-6c3ca0a9c236a15e275ec10cceb31334:de195d725fc4f2018208fa5f9a2154af805e3fa6b17be2276e8bba3638f0dfe9
+2020/11/01 16:41:34 Adding tag latest
+2020/11/01 16:41:34 Added tag latest
+docker tag ko.local/traffic-6c3ca0a9c236a15e275ec10cceb31334:de195d725fc4f2018208fa5f9a2154af805e3fa6b17be2276e8bba3638f0dfe9 docker.io/datawire/tel2:v0.1.0-7-g2c1ce37-1604266889
+```
+
+The image is now in your machine's Docker daemon and tagged as `docker.io/datawire/tel2:v0.1.0-7-g2c1ce37-1604266889` in this example. You can `docker push` it manually if you'd like. You can override `TELEPRESENCE_REGISTRY` and `VERSION_SUFFIX` as needed; see `make help` for the defaults.
+
