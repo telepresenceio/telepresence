@@ -19,17 +19,19 @@ import (
 
 	"github.com/datawire/telepresence2/pkg/manager"
 	"github.com/datawire/telepresence2/pkg/rpc"
+	"github.com/datawire/telepresence2/pkg/version"
 )
-
-// Version is inserted at build using --ldflags -X
-var Version = "(unknown version)"
 
 func main() {
 	// Set up context with logger
 	dlog.SetFallbackLogger(makeBaseLogger())
 	g, ctx := errgroup.WithContext(dlog.WithField(context.Background(), "MAIN", "main"))
 
-	dlog.Infof(ctx, "Traffic Manager %s [pid:%d]", Version, os.Getpid())
+	if version.Version == "" {
+		version.Version = "(devel)"
+	}
+
+	dlog.Infof(ctx, "Traffic Manager %s [pid:%d]", version.Version, os.Getpid())
 
 	// Handle shutdown
 	g.Go(func() error {

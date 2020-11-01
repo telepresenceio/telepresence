@@ -25,26 +25,16 @@ generate: $(PROTOC) $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc
 generate-clean: ## (Generate) Delete generated files that get checked in to Git
 	rm -rf pkg/rpc/*
 
-# pkg sources excluding rpc
-TP_PKG_SOURCES = $(shell find pkg -type f -name '*.go' | grep -v '_test.go' | grep -v '/rpc/')
-TP_TEST_SOURCES = $(shell find cmd pkg -type f -name '*_test.go')
-
-EXECUTABLES=$(shell ls cmd)
+PKG_VERSION = $(shell go list ./pkg/version)
 
 .PHONY: build
 build: ## (Build) Build all the source code
 	mkdir -p $(BINDIR)
-	go build -o $(BINDIR) ./cmd/...
+	go build -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/...
 
 .PHONY: install
 install:  ## (Install) runs go install -- what is this for
 	go install ./cmd/...
-
-.PHONY: docker-build
-docker-build: ## (Install) runs docker build for all executables
-	for exe in $(EXECUTABLES) ; do \
-		docker build --target $$exe --tag datawire/$$exe .; \
-	done
 
 .PHONY: clean
 clean: ## (Build) Remove all build artifacts
@@ -59,19 +49,23 @@ lint: $(GOLANGCI_LINT) $(PROTOLINT) ## (Lint) Run the linters (golangci-lint and
 	$(GOLANGCI_LINT) run ./...
 	$(PROTOLINT) lint $(shell find rpc -type f -name '*.proto')
 
-.PHONY: test
-test: build ## (Test) Run the Go tests
+.PHONY: test check
+test check: build ## (Test) Run the test suite
 	go test -v ./...
-
-.PHONY: check
-check: test ## (Test) Run the full test suite
 
 .PHONY: all
 all: test
 
 .PHONY: help
 help:  ## (Common) Show this message
-	@echo 'Usage: make [TARGETS...]'
+	@echo 'usage: make [TARGETS...] [VARIABLES...]'
+	@echo
+	@echo VARIABLES:
+	@sed -n '/[?]=/s/^/  /p' ${MAKEFILE_LIST}
+	@echo
+	@echo "TELEPRESENCE_VERSION is $(TELEPRESENCE_VERSION)"
 	@echo
 	@echo TARGETS:
 	@sed -En 's/^([^:]*):[^#]*## *(\([^)]*\))? */\2	\1	/p' $(sort $(abspath $(MAKEFILE_LIST))) | sed 's/^	/($(or $(NAME),this project))&/' | column -t -s '	' | sed 's/^/  /' | sort
+	@echo
+	@echo "See DEVELOPING.md for more information"
