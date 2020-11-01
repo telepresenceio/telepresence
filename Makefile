@@ -17,6 +17,7 @@ VERSION_SUFFIX        ?= -$(TIME)
 DOCKER_PUSH           ?= docker-push
 
 _TIME := $(shell date +%s)
+TELEPRESENCE_VERSION_BIN := $(shell git describe --tags)$(foreach TIME,DEVEL,$(VERSION_SUFFIX))
 TELEPRESENCE_VERSION := $(shell git describe --tags)$(foreach TIME,$(_TIME),$(VERSION_SUFFIX))
 
 default: help

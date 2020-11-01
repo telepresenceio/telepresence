@@ -30,7 +30,7 @@ PKG_VERSION = $(shell go list ./pkg/version)
 .PHONY: build
 build: ## (Build) Build all the source code
 	mkdir -p $(BINDIR)
-	go build -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/...
+	go build -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION_BIN) -o $(BINDIR) ./cmd/...
 
 .PHONY: install
 install:  ## (Install) runs go install -- what is this for
