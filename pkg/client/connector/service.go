@@ -232,10 +232,10 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 	}
 	tmgr.previewHost = previewHost
 	s.trafficMgr = tmgr
-	p.Logf("Starting teleproxy bridge in context %s, namespace %s", cluster.ctx, cluster.namespace)
+	p.Logf("Starting traffic-manager bridge in context %s, namespace %s", cluster.ctx, cluster.namespace)
 	br := newBridge("", cluster.ctx, cluster.namespace, s.daemon, tmgr.sshPort)
 	if err = br.start(p); err != nil {
-		p.Logf("Failed to start teleproxy bridge: %s", err.Error())
+		p.Logf("Failed to start traffic-manager bridge: %s", err.Error())
 		r.Error = rpc.ConnectInfo_BRIDGE_FAILED
 		r.ErrorText = err.Error()
 		// No point in continuing without a bridge

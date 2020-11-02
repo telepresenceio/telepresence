@@ -6,7 +6,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func findTrafficManager(p *supervisor.Process) (*kates.Service, error) {
+func findTrafficManager(p *supervisor.Process, namespace string) (*kates.Service, error) {
 	client, err := kates.NewClient(kates.ClientOptions{})
 	if err != nil {
 		return nil, err
@@ -16,7 +16,8 @@ func findTrafficManager(p *supervisor.Process) (*kates.Service, error) {
 			Kind: "Service",
 		},
 		ObjectMeta: kates.ObjectMeta{
-			Name: "traffic-manager"},
+			Namespace: namespace,
+			Name:      "traffic-manager"},
 	}
 	if err = client.Get(p.Context(), service, service); err != nil {
 		return nil, err
@@ -24,17 +25,17 @@ func findTrafficManager(p *supervisor.Process) (*kates.Service, error) {
 	return service, nil
 }
 
-func installTrafficManager(p *supervisor.Process) (*kates.Service, error) {
+func installTrafficManager(p *supervisor.Process, namespace string) (*kates.Service, error) {
 	return nil, errors.New("install of traffic-manager is not yet implemented")
 }
 
-func ensureTrafficManager(p *supervisor.Process) (int32, int32, error) {
-	svc, err := findTrafficManager(p)
+func ensureTrafficManager(p *supervisor.Process, namespace string) (int32, int32, error) {
+	svc, err := findTrafficManager(p, namespace)
 	if err != nil {
 		if !kates.IsNotFound(err) {
 			return 0, 0, err
 		}
-		if svc, err = installTrafficManager(p); err != nil {
+		if svc, err = installTrafficManager(p, namespace); err != nil {
 			return 0, 0, err
 		}
 	}

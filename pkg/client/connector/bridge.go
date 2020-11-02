@@ -30,6 +30,7 @@ const (
 // chosen.
 const ProxyRedirPort = "1234"
 
+/*
 const podManifest = `
 ---
 apiVersion: v1
@@ -47,6 +48,7 @@ spec:
     - protocol: TCP
       containerPort: 8022
 `
+*/
 
 var (
 	errAborted = errors.New("aborted")
@@ -105,39 +107,53 @@ func (t *bridge) addWorker(p *supervisor.Process, worker *supervisor.Worker) {
 }
 
 func (t *bridge) connect(p *supervisor.Process) {
+	/*
+		t.addWorker(p, &supervisor.Worker{
+			Name: K8sApplyWorker,
+			Work: func(p *supervisor.Process) (err error) {
+				kubeInfo := k8s.NewKubeInfo(t.kubeConfig, t.context, t.namespace)
+				// setup remote teleproxy pod
+				args, err := kubeInfo.GetKubectlArray("apply", "-f", "-")
+				if err != nil {
+					return err
+				}
+				apply := p.Command("kubectl", args...)
+				apply.Stdin = strings.NewReader(podManifest)
+				err = apply.Start()
+				if err != nil {
+					return
+				}
+				err = p.DoClean(apply.Wait, apply.Process.Kill)
+				if err != nil {
+					return
+				}
+				p.Ready()
+				// we need to stay alive so that our dependencies can start
+				<-p.Shutdown()
+				return
+			},
+		})
+	*/
+
 	t.addWorker(p, &supervisor.Worker{
-		Name: K8sApplyWorker,
+		Name: K8sPortForwardWorker,
+		// Requires: []string{K8sApplyWorker},
+		Retry: true,
 		Work: func(p *supervisor.Process) (err error) {
 			kubeInfo := k8s.NewKubeInfo(t.kubeConfig, t.context, t.namespace)
-			// setup remote teleproxy pod
-			args, err := kubeInfo.GetKubectlArray("apply", "-f", "-")
+			args, err := kubeInfo.GetKubectlArray("get", "pod", "--selector", "app=traffic-manager", "-o", "jsonpath={range .items[*]}{.metadata.name}")
 			if err != nil {
 				return err
 			}
-			apply := p.Command("kubectl", args...)
-			apply.Stdin = strings.NewReader(podManifest)
-			err = apply.Start()
+			cmd := p.Command("kubectl", args...)
+			p.Logf("%s %v", cmd.Path, cmd.Args[1:])
+			output, err := cmd.CombinedOutput()
 			if err != nil {
-				return
+				return err
 			}
-			err = p.DoClean(apply.Wait, apply.Process.Kill)
-			if err != nil {
-				return
-			}
-			p.Ready()
-			// we need to stay alive so that our dependencies can start
-			<-p.Shutdown()
-			return
-		},
-	})
+			podName := strings.TrimSpace(string(output))
 
-	t.addWorker(p, &supervisor.Worker{
-		Name:     K8sPortForwardWorker,
-		Requires: []string{K8sApplyWorker},
-		Retry:    true,
-		Work: func(p *supervisor.Process) (err error) {
-			kubeInfo := k8s.NewKubeInfo(t.kubeConfig, t.context, t.namespace)
-			args, err := kubeInfo.GetKubectlArray("port-forward", "pod/teleproxy", "8022")
+			args, err = kubeInfo.GetKubectlArray("port-forward", fmt.Sprintf("pod/%s", podName), "8022")
 			if err != nil {
 				return err
 			}
@@ -150,7 +166,7 @@ func (t *bridge) connect(p *supervisor.Process) {
 			err = p.DoClean(func() error {
 				err := pf.Wait()
 				if err != nil {
-					args, err := kubeInfo.GetKubectlArray("get", "pod/teleproxy")
+					args, err := kubeInfo.GetKubectlArray("get", "pod", podName)
 					if err != nil {
 						return err
 					}
@@ -444,5 +460,6 @@ func (t *bridge) check(p *supervisor.Process) bool {
 		p.Logf("expected SSH prompt, got: %v", string(msg))
 		return false
 	}
+	p.Log("traffic-manager SSH check passed")
 	return true
 }

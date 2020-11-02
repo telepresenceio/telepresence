@@ -13,7 +13,7 @@ func Test_findTrafficManager(t *testing.T) {
 	sup.Supervise(&supervisor.Worker{
 		Name: "find-traffic-manager",
 		Work: func(p *supervisor.Process) error {
-			got, err := findTrafficManager(p)
+			got, err := findTrafficManager(p, "default")
 			if err != nil {
 				t.Error(err)
 				return err
@@ -35,7 +35,7 @@ func Test_ensureTrafficManager(t *testing.T) {
 	sup.Supervise(&supervisor.Worker{
 		Name: "ensure-traffic-manager",
 		Work: func(p *supervisor.Process) error {
-			sshd, api, err := ensureTrafficManager(p)
+			sshd, api, err := ensureTrafficManager(p, "default")
 			if err != nil {
 				t.Error(err)
 				return err

@@ -40,10 +40,6 @@ image images: $(GOBIN)/ko ## (Build) Build/tag the manager/agent container image
 install:  ## (Install) runs go install -- what is this for
 	go install ./cmd/...
 
-.PHONY: dev-apply
-dev-apply: $(GOBIN)/ko ## (Test) apply manifests to install traffic-manager)
-	$(GOBIN)/ko apply --local -f k8s
-
 .PHONY: clean
 clean: ## (Build) Remove all build artifacts
 	rm -rf $(BUILDDIR)
@@ -58,7 +54,7 @@ lint: $(GOLANGCI_LINT) $(PROTOLINT) ## (Lint) Run the linters (golangci-lint and
 	$(PROTOLINT) lint $(shell find rpc -type f -name '*.proto')
 
 .PHONY: test check
-test check: build ## (Test) Run the test suite
+test check: build $(GOBIN)/ko ## (Test) Run the test suite
 	go test -v ./...
 
 .PHONY: all

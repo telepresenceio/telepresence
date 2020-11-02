@@ -21,6 +21,7 @@ func TestMain(m *testing.M) {
 	testprocess.Dispatch()
 	kubeconfig = dtest.Kubeconfig()
 	os.Setenv("DTEST_KUBECONFIG", kubeconfig)
+	os.Chdir("../..") // relative to cmd/telepresence package
 	dtest.WithMachineLock(func() {
 		os.Exit(m.Run())
 	})
@@ -80,7 +81,7 @@ var executable = filepath.Join("build-output", "bin", "/telepresence")
 
 // doBuildExecutable calls go build
 func doBuildExecutable() {
-	err := run("go", "build", "-o", executable, ".")
+	err := run("go", "build", "-o", executable, "./cmd/telepresence")
 	if err != nil {
 		log.Fatalf("build executable: %v", err)
 	}
@@ -98,25 +99,16 @@ func TestSmokeOutbound(t *testing.T) {
 	t.Run("setup", func(t *testing.T) {
 		require.NoError(t, run("sudo", "true"), "setup: acquire privileges")
 		require.NoError(t, run("printenv", "KUBECONFIG"), "setup: ensure cluster is set")
+		run("telepresence", "--quit")
+		require.Error(t, run("pgrep", "-x", "telepresence"), "setup: ensure that telepresence is not running")
+		require.NoError(t, run("rm", "-f", "/tmp/telepresence-connector.socket"), "setup: remove old connector socket")
 		require.NoError(t, run("sudo", "rm", "-f", "/tmp/telepresence.log"), "setup: remove old log")
 		require.NoError(t,
-			run("kubectl", "delete", "pod", "teleproxy", "--ignore-not-found", "--wait=true"),
+			run("kubectl", "delete", "pod", "--selector", "app=traffic-manager", "--ignore-not-found", "--wait=true"),
 			"setup: check cluster connectivity",
 		)
 		require.NoError(t, runCmd(buildExecutable), "setup: build executable")
 		require.NoError(t, run("kubectl", "create", "namespace", namespace), "setup: create test namespace")
-		require.NoError(t,
-			run("kubectl", nsArg, "create", "deploy", "hello-world", "--image=ark3/hello-world"),
-			"setup: create deployment",
-		)
-		require.NoError(t,
-			run("kubectl", nsArg, "expose", "deploy", "hello-world", "--port=80", "--target-port=8000"),
-			"setup: create service",
-		)
-		require.NoError(t,
-			run("kubectl", nsArg, "get", "svc,deploy", "hello-world"),
-			"setup: check svc/deploy",
-		)
 	})
 
 	defer func() {
@@ -126,11 +118,24 @@ func TestSmokeOutbound(t *testing.T) {
 		)
 	}()
 
+	t.Run("deploy", func(t *testing.T) {
+		require.NoError(t,
+			run("ko", "apply", "-n", namespace, "-f", "k8s/manager.yaml"), "setup: create traffic-manager",
+		)
+		require.NoError(t,
+			run("ko", "apply", "-n", namespace, "-f", "k8s/echo-easy.yaml"), "setup: create deployment",
+		)
+		require.NoError(t,
+			run("kubectl", nsArg, "get", "svc,deploy", "echo-easy"),
+			"setup: check svc/deploy",
+		)
+	})
+
 	t.Run("pre-daemon", func(t *testing.T) {
 		require.NoError(t, run(executable, "--status"), "status with no daemon")
 
 		fmt.Println("connect")
-		require.NoError(t, run(executable, "--no-wait"), "launch daemon and connector")
+		require.NoError(t, run(executable, nsArg, "--no-wait"), "launch daemon and connector")
 		require.NoError(t, run(executable, "--version"), "version with daemon")
 		require.NoError(t, run(executable, "--status"), "status with daemon")
 	})
@@ -161,7 +166,7 @@ func TestSmokeOutbound(t *testing.T) {
 	})
 	defer func() {
 		require.NoError(t,
-			run("kubectl", "delete", "pod", "teleproxy", "--ignore-not-found", "--wait=false"),
+			run("kubectl", nsArg, "delete", "pod", "--selector", "app=traffic-manager", "--ignore-not-found", "--wait=false"),
 			"make next time quicker",
 		)
 	}()
@@ -174,7 +179,7 @@ func TestSmokeOutbound(t *testing.T) {
 			}
 			time.Sleep(500 * time.Millisecond)
 		}
-		_ = run("kubectl", "get", "pod", "teleproxy")
+		_ = run("kubectl", nsArg, "get", "pod", "--selector", "app=traffic-manager")
 		t.Fatal("timed out waiting for bridge")
 	})
 
@@ -184,18 +189,18 @@ func TestSmokeOutbound(t *testing.T) {
 				"kubectl", nsArg, "run", "curl-from-cluster", "--rm", "-it",
 				"--image=pstauffer/curl", "--restart=Never", "--",
 				"curl", "--silent", "--output", "/dev/null",
-				"http://hello-world."+namespace,
+				"http://echo-easy."+namespace,
 			)
 			if err == nil {
 				return
 			}
 			time.Sleep(500 * time.Millisecond)
 		}
-		t.Fatal("timed out waiting for hello-world service")
+		t.Fatal("timed out waiting for echo-easy service")
 	})
 
 	t.Run("check bridge", func(t *testing.T) {
-		require.NoError(t, run("curl", "-sv", "hello-world."+namespace), "check bridge")
+		require.NoError(t, run("curl", "-sv", "echo-easy."+namespace), "check bridge")
 	})
 
 	t.Run("wind down", func(t *testing.T) {
@@ -211,6 +216,6 @@ func TestSmokeOutbound(t *testing.T) {
 		if !strings.Contains(out, "daemon has not been started") {
 			t.Fatal("Expected 'daemon has not been started' in status output")
 		}
-		require.Error(t, run("curl", "-sv", "hello-world."+namespace), "check disconnected")
+		require.Error(t, run("curl", "-sv", "echo-easy."+namespace), "check disconnected")
 	})
 }

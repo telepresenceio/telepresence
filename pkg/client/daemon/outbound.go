@@ -106,7 +106,7 @@ func start(p *supervisor.Process, dnsIP, fallbackIP string, noSearch bool) (*ipT
 		return nil, nil, errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
 	}
 
-	ic := newIpTables("teleproxy")
+	ic := newIpTables("traffic-manager")
 	sup.Supervise(&supervisor.Worker{
 		Name: TranslatorWorker,
 		// XXX: Requires will need to include the api server once it is changed to not bind early
