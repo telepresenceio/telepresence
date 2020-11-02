@@ -37,8 +37,8 @@ image images: $(GOBIN)/ko ## (Build) Build/tag the manager/agent container image
 	docker tag $(shell env GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION_BIN)" ko publish --local ./cmd/traffic) $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
 
 .PHONY: install
-install:  ## (Install) runs go install -- what is this for
-	go install ./cmd/...
+install:  ## (Install) installs the telepresence binary under ~/go/bin
+	go install -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) ./cmd/telepresence
 
 .PHONY: clean
 clean: ## (Build) Remove all build artifacts
