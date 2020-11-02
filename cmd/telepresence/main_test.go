@@ -21,6 +21,7 @@ func TestMain(m *testing.M) {
 	testprocess.Dispatch()
 	kubeconfig = dtest.Kubeconfig()
 	os.Setenv("DTEST_KUBECONFIG", kubeconfig)
+	os.Setenv("KO_DOCKER_REPO", dtest.DockerRegistry())
 	dtest.WithMachineLock(func() {
 		os.Exit(m.Run())
 	})

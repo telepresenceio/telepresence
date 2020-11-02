@@ -111,10 +111,10 @@ jobs:
       - go-check-generate
       - go-build
       - install-kubectl
-      - config-cluster-and-registry
+#      - config-cluster-and-registry
       - go-test
       - save-logs
-      - teardown-cluster
+#      - teardown-cluster
       - go-lint
 
 workflows:
