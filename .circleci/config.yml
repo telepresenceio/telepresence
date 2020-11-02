@@ -70,6 +70,9 @@ commands:
             if [[ -z "$DEV_REGISTRY" ]]; then
               echo >>"$BASH_ENV" 'export DEV_REGISTRY=127.0.0.1:31000'
             fi
+            if [[ -z "$KO_DOCKER_REPO" ]]; then
+              echo >>"$BASH_ENV" 'export KO_DOCKER_REPO=$DEV_REGISTRY'
+            fi
             if [[ -n "$DOCKER_BUILD_USERNAME" && -n "DOCKER_BUILD_PASSWORD" ]]; then
               docker login -u="${DOCKER_BUILD_USERNAME}" -p="${DOCKER_BUILD_PASSWORD}" "${DEV_REGISTRY%%/*}"
             fi
