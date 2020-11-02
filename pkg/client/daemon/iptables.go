@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"log"
 	"net"
 	"strings"
 	"sync"
@@ -194,7 +193,7 @@ func (i *ipTables) doUpdate(p *supervisor.Process, table *iptables.Table) error 
 				case "udp":
 					i.translator.ClearUDP(p, oldRoute.Ip, oldRoute.Port)
 				default:
-					log.Printf("INT: unrecognized protocol: %v", newRoute)
+					p.Logf("unrecognized protocol: %v", newRoute)
 				}
 			}
 			// and add the new version
@@ -205,13 +204,13 @@ func (i *ipTables) doUpdate(p *supervisor.Process, table *iptables.Table) error 
 				case "udp":
 					i.translator.ForwardUDP(p, newRoute.Ip, newRoute.Port, newRoute.Target)
 				default:
-					log.Printf("INT: unrecognized protocol: %v", newRoute)
+					p.Logf("unrecognized protocol: %v", newRoute)
 				}
 			}
 
 			if newRoute.Name != "" {
 				domain := domain(newRoute)
-				log.Printf("INT: STORE %v->%v", domain, newRoute)
+				p.Logf("STORE %v->%v", domain, newRoute)
 				i.domains[domain] = newRoute
 			}
 
@@ -227,7 +226,7 @@ func (i *ipTables) doUpdate(p *supervisor.Process, table *iptables.Table) error 
 	i.domainsLock.Lock()
 	for _, route := range oldRoutes {
 		domain := domain(route)
-		log.Printf("INT: CLEAR %v->%v", domain, route)
+		p.Logf("CLEAR %v->%v", domain, route)
 		delete(i.domains, domain)
 
 		switch route.Proto {
@@ -236,7 +235,7 @@ func (i *ipTables) doUpdate(p *supervisor.Process, table *iptables.Table) error 
 		case "udp":
 			i.translator.ClearUDP(p, route.Ip, route.Port)
 		default:
-			log.Printf("INT: unrecognized protocol: %v", route)
+			p.Logf("INT: unrecognized protocol: %v", route)
 		}
 	}
 	i.domainsLock.Unlock()

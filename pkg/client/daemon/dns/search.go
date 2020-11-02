@@ -27,7 +27,7 @@ func OverrideSearchDomains(p *supervisor.Process, domains string) func() {
 		// setup dns search path
 		domain, err := getSearchDomains(p, iface)
 		if err != nil {
-			log("DNS: error getting search domain for interface %v: %v", iface, err)
+			p.Logf("DNS: error getting search domain for interface %v: %v", iface, err)
 		} else {
 			_ = setSearchDomains(p, iface, domains)
 			previous = append(previous, searchDomains{iface, domain})

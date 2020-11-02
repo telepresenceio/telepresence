@@ -1,7 +1,6 @@
 package dns
 
 import (
-	_log "log"
 	"net"
 	"strings"
 
@@ -11,15 +10,20 @@ import (
 )
 
 type Server struct {
-	Listeners []string
-	Fallback  string
-	Resolve   func(string) string
+	p         *supervisor.Process
+	listeners []string
+	fallback  string
+	resolve   func(string) string
 }
 
-func log(line string, args ...interface{}) {
-	_log.Printf("DNS: "+line, args...)
+func NewServer(p *supervisor.Process, listeners []string, fallback string, resolve func(string) string) *Server {
+	return &Server{
+		p:         p,
+		listeners: listeners,
+		fallback:  fallback,
+		resolve:   resolve,
+	}
 }
-
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	domain := strings.ToLower(r.Question[0].Name)
 	switch r.Question[0].Qtype {
@@ -35,10 +39,10 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			// root-cause this, because it's weird.
 			ip = "127.0.0.1"
 		} else {
-			ip = s.Resolve(domain)
+			ip = s.resolve(domain)
 		}
 		if ip != "" {
-			log("QUERY %s -> %s", domain, ip)
+			s.p.Logf("QUERY %s -> %s", domain, ip)
 			msg := dns.Msg{}
 			msg.SetReply(r)
 			msg.Authoritative = true
@@ -58,9 +62,9 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			return
 		}
 	default:
-		ip := s.Resolve(domain)
+		ip := s.resolve(domain)
 		if ip != "" {
-			log("QTYPE[%v] %s -> EMPTY", r.Question[0].Qtype, domain)
+			s.p.Logf("QTYPE[%v] %s -> EMPTY", r.Question[0].Qtype, domain)
 			msg := dns.Msg{}
 			msg.SetReply(r)
 			msg.Authoritative = true
@@ -69,31 +73,31 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			return
 		}
 	}
-	log("QTYPE[%v] %s -> FALLBACK", r.Question[0].Qtype, domain)
-	in, err := dns.Exchange(r, s.Fallback)
+	s.p.Logf("QTYPE[%v] %s -> FALLBACK", r.Question[0].Qtype, domain)
+	in, err := dns.Exchange(r, s.fallback)
 	if err != nil {
-		log(err.Error())
+		s.p.Log(err.Error())
 		return
 	}
 	_ = w.WriteMsg(in)
 }
 
-func (s *Server) Start(p *supervisor.Process) error {
-	listeners := make([]net.PacketConn, len(s.Listeners))
-	for i, addr := range s.Listeners {
+func (s *Server) Start() error {
+	listeners := make([]net.PacketConn, len(s.listeners))
+	for i, addr := range s.listeners {
 		var err error
 		listeners[i], err = net.ListenPacket("udp", addr)
 		if err != nil {
 			return errors.Wrap(err, "failed to set up udp listener")
 		}
-		log("listening on %s", addr)
+		s.p.Logf("listening on %s", addr)
 	}
 	for _, listener := range listeners {
 		go func(listener net.PacketConn) {
 			srv := &dns.Server{PacketConn: listener, Handler: s}
 			if err := srv.ActivateAndServe(); err != nil {
-				log("failed to active udp server: %v", err)
-				p.Supervisor().Shutdown()
+				s.p.Logf("failed to active udp server: %v", err)
+				s.p.Supervisor().Shutdown()
 			}
 		}(listener)
 	}

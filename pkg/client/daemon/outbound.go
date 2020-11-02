@@ -3,7 +3,6 @@ package daemon
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"runtime"
 	"strings"
@@ -85,7 +84,7 @@ func start(p *supervisor.Process, dnsIP, fallbackIP string, noSearch bool) (*ipT
 			if strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
 				fields := strings.Fields(line)
 				dnsIP = fields[1]
-				log.Printf("TPY: Automatically set -dns=%v", dnsIP)
+				p.Logf("Automatically set -dns=%v", dnsIP)
 				break
 			}
 		}
@@ -100,7 +99,7 @@ func start(p *supervisor.Process, dnsIP, fallbackIP string, noSearch bool) (*ipT
 		} else {
 			fallbackIP = "8.8.8.8"
 		}
-		log.Printf("TPY: Automatically set -fallback=%v", fallbackIP)
+		p.Logf("Automatically set -fallback=%v", fallbackIP)
 	}
 	if fallbackIP == dnsIP {
 		return nil, nil, errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
@@ -118,17 +117,13 @@ func start(p *supervisor.Process, dnsIP, fallbackIP string, noSearch bool) (*ipT
 		Name:     DNSServerWorker,
 		Requires: []string{},
 		Work: func(p *supervisor.Process) error {
-			srv := dns.Server{
-				Listeners: dnsListeners(p, DNSRedirPort),
-				Fallback:  fallbackIP + ":53",
-				Resolve: func(domain string) string {
-					if r := ic.Resolve(domain); r != nil {
-						return r.Ip
-					}
-					return ""
-				},
-			}
-			err := srv.Start(p)
+			srv := dns.NewServer(p, dnsListeners(p, DNSRedirPort), fallbackIP+":53", func(domain string) string {
+				if r := ic.Resolve(domain); r != nil {
+					return r.Ip
+				}
+				return ""
+			})
+			err := srv.Start()
 			if err != nil {
 				return err
 			}
@@ -151,7 +146,7 @@ func start(p *supervisor.Process, dnsIP, fallbackIP string, noSearch bool) (*ipT
 				return errors.Wrap(err, "Proxy")
 			}
 
-			pr.Start(10000)
+			pr.Start(p, 10000)
 			p.Ready()
 			<-p.Shutdown()
 			// there is no proxy.Stop()
