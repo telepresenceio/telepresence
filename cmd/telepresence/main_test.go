@@ -99,8 +99,9 @@ func TestSmokeOutbound(t *testing.T) {
 	t.Run("setup", func(t *testing.T) {
 		require.NoError(t, run("sudo", "true"), "setup: acquire privileges")
 		require.NoError(t, run("printenv", "KUBECONFIG"), "setup: ensure cluster is set")
-		os.Chdir("../..") // relative to cmd/telepresence package
-		run(executable, "--quit")
+		_ = os.Chdir("../..") // relative to cmd/telepresence package
+		require.NoError(t, runCmd(buildExecutable), "setup: build executable")
+		_ = run(executable, "--quit")
 		require.Error(t, run("pgrep", "-x", "telepresence"), "setup: ensure that telepresence is not running")
 		require.NoError(t, run("rm", "-f", "/tmp/telepresence-connector.socket"), "setup: remove old connector socket")
 		require.NoError(t, run("sudo", "rm", "-f", "/tmp/telepresence.log"), "setup: remove old log")
