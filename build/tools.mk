@@ -38,6 +38,10 @@ $(PROTOC):
 $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc: go.mod
 	go get github.com/golang/protobuf/protoc-gen-go google.golang.org/grpc/cmd/protoc-gen-go-grpc
 
+# Install ko (needs to be done in /tmp to avoid conflicting updates of go.mod)
+$(GOBIN)/ko: go.mod
+	cd /tmp && go get github.com/google/ko/cmd/ko
+
 # Linters
 # =======
 

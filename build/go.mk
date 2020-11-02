@@ -33,12 +33,16 @@ build: ## (Build) Build all the source code
 	go build -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION_BIN) -o $(BINDIR) ./cmd/...
 
 .PHONY: image images
-image images: ## (Build) Build/tag the manager/agent container image
+image images: $(GOBIN)/ko ## (Build) Build/tag the manager/agent container image
 	docker tag $(shell env GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION)" ko publish --local ./cmd/traffic) $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
 
 .PHONY: install
 install:  ## (Install) runs go install -- what is this for
 	go install ./cmd/...
+
+.PHONY: dev-apply
+dev-apply: $(GOBIN)/ko ## (Test) apply manifests to install traffic-manager)
+	$(GOBIN)/ko apply --local -f k8s
 
 .PHONY: clean
 clean: ## (Build) Remove all build artifacts
