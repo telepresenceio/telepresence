@@ -21,7 +21,6 @@ func TestMain(m *testing.M) {
 	testprocess.Dispatch()
 	kubeconfig = dtest.Kubeconfig()
 	os.Setenv("DTEST_KUBECONFIG", kubeconfig)
-	os.Chdir("../..") // relative to cmd/telepresence package
 	dtest.WithMachineLock(func() {
 		os.Exit(m.Run())
 	})
