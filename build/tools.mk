@@ -7,6 +7,7 @@ GOHOSTOS=$(shell go env GOHOSTOS)
 GOHOSTARCH=$(shell go env GOHOSTARCH)
 
 # assume first directory in path is the local go directory
+GOPATH=$(shell go env GOPATH)
 GOLOCAL=$(word 1, $(subst :, ,$(GOPATH)))
 GOSRC=$(GOLOCAL)/src
 GOBIN=$(GOLOCAL)/bin

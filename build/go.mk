@@ -34,7 +34,7 @@ build: ## (Build) Build all the source code
 
 .PHONY: image images
 image images: $(GOBIN)/ko ## (Build) Build/tag the manager/agent container image
-	docker tag $(shell env GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION)" ko publish --local ./cmd/traffic) $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
+	docker tag $(shell env GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION_BIN)" ko publish --local ./cmd/traffic) $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
 
 .PHONY: install
 install:  ## (Install) runs go install -- what is this for
@@ -46,7 +46,6 @@ clean: ## (Build) Remove all build artifacts
 
 .PHONY: clobber
 clobber: clean ## (Build) Remove all build artifacts and tools
-	rm -rf $(BUILDDIR)
 
 .PHONY: lint
 lint: $(GOLANGCI_LINT) $(PROTOLINT) ## (Lint) Run the linters (golangci-lint and protolint)
@@ -54,7 +53,7 @@ lint: $(GOLANGCI_LINT) $(PROTOLINT) ## (Lint) Run the linters (golangci-lint and
 	$(PROTOLINT) lint $(shell find rpc -type f -name '*.proto')
 
 .PHONY: test check
-test check: build $(GOBIN)/ko ## (Test) Run the test suite
+test check: $(GOBIN)/ko ## (Test) Run the test suite
 	go test -v ./...
 
 .PHONY: all
