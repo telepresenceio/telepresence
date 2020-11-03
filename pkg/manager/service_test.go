@@ -43,51 +43,75 @@ func TestConnect(t *testing.T) {
 	_, err = client.Depart(ctx, aliceDeparts)
 	a.NoError(err)
 
-	// Alice arrives and sees no agents
+	// Alice arrives and sees no agents or intercepts
 
 	alice, err := client.ArriveAsClient(ctx, testClients["alice"])
 	a.NoError(err)
 
-	aliceW, err := client.WatchAgents(ctx, alice)
+	aliceWA, err := client.WatchAgents(ctx, alice)
 	a.NoError(err)
 
-	aSnap, err := aliceW.Recv()
+	aSnapA, err := aliceWA.Recv()
 	a.NoError(err)
-	a.Len(aSnap.Agents, 0)
+	a.Len(aSnapA.Agents, 0)
+
+	aliceWI, err := client.WatchIntercepts(ctx, alice)
+	a.NoError(err)
+
+	aSnapI, err := aliceWI.Recv()
+	a.NoError(err)
+	a.Len(aSnapI.Intercepts, 0)
 
 	// Hello's agent arrives
 
 	hello, err := client.ArriveAsAgent(ctx, testAgents["hello"])
 	a.NoError(err)
 
-	_ = hello
+	helloWI, err := client.WatchIntercepts(ctx, hello)
+	a.NoError(err)
+
+	hSnapI, err := helloWI.Recv()
+	a.NoError(err)
+	a.Len(hSnapI.Intercepts, 0)
 
 	// Alice sees an agent
 
-	aSnap, err = aliceW.Recv()
+	aSnapA, err = aliceWA.Recv()
 	a.NoError(err)
-	a.Len(aSnap.Agents, 1)
-	a.True(proto.Equal(testAgents["hello"], aSnap.Agents[0]))
+	a.Len(aSnapA.Agents, 1)
+	a.True(proto.Equal(testAgents["hello"], aSnapA.Agents[0]))
 
 	// Demo Deployment comes up with two Pods
 
 	demo1, err := client.ArriveAsAgent(ctx, testAgents["demo1"])
 	a.NoError(err)
+
+	demo1WI, err := client.WatchIntercepts(ctx, demo1)
+	a.NoError(err)
+
+	d1SnapI, err := demo1WI.Recv()
+	a.NoError(err)
+	a.Len(d1SnapI.Intercepts, 0)
+
 	demo2, err := client.ArriveAsAgent(ctx, testAgents["demo2"])
 	a.NoError(err)
 
-	_ = demo1
-	_ = demo2
+	demo2WI, err := client.WatchIntercepts(ctx, demo2)
+	a.NoError(err)
+
+	d2SnapI, err := demo2WI.Recv()
+	a.NoError(err)
+	a.Len(d2SnapI.Intercepts, 0)
 
 	// Alice sees all the agents
 
-	aSnap, err = aliceW.Recv()
+	aSnapA, err = aliceWA.Recv()
 	a.NoError(err)
-	a.Len(aSnap.Agents, 2)
+	a.Len(aSnapA.Agents, 2)
 
-	aSnap, err = aliceW.Recv()
+	aSnapA, err = aliceWA.Recv()
 	a.NoError(err)
-	a.Len(aSnap.Agents, 3)
+	a.Len(aSnapA.Agents, 3)
 
 	// Alice remains
 
@@ -113,6 +137,14 @@ func TestConnect(t *testing.T) {
 	a.NoError(err)
 	a.True(proto.Equal(spec, first.Spec))
 
+	aSnapI, err = aliceWI.Recv()
+	a.NoError(err)
+	a.Len(aSnapI.Intercepts, 1)
+
+	hSnapI, err = helloWI.Recv()
+	a.NoError(err)
+	a.Len(hSnapI.Intercepts, 1)
+
 	// Duplicate should error
 	_, err = client.CreateIntercept(ctx, &rpc.CreateInterceptRequest{
 		Session:       alice,
@@ -125,6 +157,14 @@ func TestConnect(t *testing.T) {
 		Name:    spec.Name,
 	})
 	a.NoError(err)
+
+	aSnapI, err = aliceWI.Recv()
+	a.NoError(err)
+	a.Len(aSnapI.Intercepts, 0)
+
+	hSnapI, err = helloWI.Recv()
+	a.NoError(err)
+	a.Len(hSnapI.Intercepts, 0)
 
 	t.Log("removed")
 
@@ -141,7 +181,6 @@ func TestConnect(t *testing.T) {
 		Name:    spec.Name,    // doesn't matter...
 	})
 	a.Error(err)
-
 }
 
 func getTestClientConn(t *testing.T) *grpc.ClientConn {

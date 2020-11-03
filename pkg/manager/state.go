@@ -304,11 +304,12 @@ func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) *rpc.Int
 		Disposition: rpc.InterceptInfo_AGENT_ERROR,
 		Message:     "No proper error yet",
 	}
-
-	s.intercepts[ceptID] = &interceptEntry{
+	entry := &interceptEntry{
 		clientSessionID: sessionID,
 		intercept:       cept,
 	}
+	s.intercepts[ceptID] = entry
+	s.notifyForIntercept(entry)
 
 	return cept
 }
@@ -322,6 +323,7 @@ func (s *State) RemoveIntercept(sessionID string, name string) bool {
 		correctName := entry.intercept.Spec.Name == name
 		if correctSession && correctName {
 			delete(s.intercepts, ceptID)
+			s.notifyForIntercept(entry)
 			return true
 		}
 	}
@@ -343,4 +345,15 @@ func (s *State) WatchIntercepts(sessionID string) <-chan struct{} {
 	defer s.mu.Unlock()
 
 	return s.interceptWatches.Subscribe(sessionID)
+}
+
+func (s *State) notifyForIntercept(entry *interceptEntry) {
+	s.interceptWatches.Notify(entry.clientSessionID)
+	s.sessions.ForEach(func(_ context.Context, id string, item Entity) {
+		if agent, ok := item.(*rpc.AgentInfo); ok {
+			if agent.Name == entry.intercept.Spec.Agent {
+				s.interceptWatches.Notify(id)
+			}
+		}
+	})
 }

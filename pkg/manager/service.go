@@ -112,40 +112,24 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 	}
 }
 
-// FIXME Unimplemented
 func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_WatchInterceptsServer) error {
 	ctx := stream.Context()
 	sessionID := session.SessionId
 
 	dlog.Debug(ctx, "WatchIntercepts called", sessionID)
 
-	var answerFunc func() []*rpc.InterceptInfo
-
 	entry := m.state.Get(sessionID)
-
-	switch /* item := */ entry.Item().(type) {
-	case *rpc.ClientInfo:
-		// FIXME implement this
-		// client := item
-		answerFunc = func() []*rpc.InterceptInfo {
-			return []*rpc.InterceptInfo{}
-		}
-	case *rpc.AgentInfo:
-		// FIXME implement this
-		// agent := item
-		answerFunc = func() []*rpc.InterceptInfo {
-			return []*rpc.InterceptInfo{}
-		}
-	default:
-		return status.Errorf(codes.NotFound, "Session %q not found", session.SessionId)
+	if entry == nil {
+		return status.Errorf(codes.NotFound, "Session %q not found", sessionID)
 	}
 
 	sessionCtx := entry.Context()
 	changed := m.state.WatchIntercepts(sessionID)
 
 	for {
-		res := &rpc.InterceptInfoSnapshot{Intercepts: answerFunc()}
-
+		res := &rpc.InterceptInfoSnapshot{
+			Intercepts: m.state.GetIntercepts(sessionID),
+		}
 		if err := stream.Send(res); err != nil {
 			return err
 		}
