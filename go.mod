@@ -21,18 +21,12 @@ require (
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/grpc v1.33.1
-	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.0.1 // indirect
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/yaml.v2 v2.3.0
-	k8s.io/apimachinery v0.18.4
-	k8s.io/client-go v0.18.4
+	k8s.io/api v0.18.8
+	k8s.io/apimachinery v0.18.8
+	k8s.io/client-go v0.18.8
 )
 
 replace github.com/Azure/go-autorest v10.8.1+incompatible => github.com/Azure/go-autorest v13.3.2+incompatible
-
-// This is a workaround for a Go backwards incompatibility problem introduced in 1.15.2 which breaks
-// github/docker/docker/pkg/term on darwin because unix.SYS_IOCTL no longer exists. Having ambassador use
-// a more recent version of k8s.io/kubectl/pkg/util/term in (this is where the dependency is introduced) will
-// likely also solve the problem. The github.com/docker/docker is deprecated.
-replace github.com/docker/docker v1.4.2-0.20200203170920-46ec8731fbce => github.com/moby/moby v1.13.1
