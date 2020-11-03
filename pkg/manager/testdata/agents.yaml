@@ -2,6 +2,7 @@
 hello:
   name: hello
   hostname: hello-abcdef-123
+  product: telepresence-agent
   version: "1"
   mechanisms:
     - name: tcp
@@ -10,6 +11,7 @@ hello:
 helloPro:
   name: hello-pro
   hostname: hello-pro-abcdef-123
+  product: telepresence-agent
   version: "1"
   mechanisms:
     - name: tcp
@@ -24,6 +26,7 @@ helloPro:
 demo1:
   name: demo
   hostname: demo-abcdef-123
+  product: telepresence-agent
   version: "1"
   mechanisms:
     - name: tcp
@@ -38,6 +41,7 @@ demo1:
 demo2:
   name: demo
   hostname: demo-abcdef-456
+  product: telepresence-agent
   version: "1"
   mechanisms:
     - name: grpc
