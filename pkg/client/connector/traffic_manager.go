@@ -47,7 +47,11 @@ func newTrafficManager(p *supervisor.Process, cluster *k8sCluster, installID str
 	}
 
 	// Ensure that we have a traffic-manager to talk to.
-	remoteSshPort, remoteApiPort, err := ensureTrafficManager(p, cluster.namespace)
+	ti, err := newTrafficManagerInstaller("", cluster.ctx)
+	if err != nil {
+		return nil, err
+	}
+	remoteSshPort, remoteApiPort, err := ti.ensure(p, cluster.namespace)
 	if err != nil {
 		return nil, err
 	}
