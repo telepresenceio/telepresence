@@ -11,6 +11,7 @@ import (
 	"github.com/datawire/ambassador/pkg/dlog"
 
 	"github.com/datawire/telepresence2/pkg/rpc"
+	"github.com/datawire/telepresence2/pkg/version"
 )
 
 type Manager struct {
@@ -30,7 +31,7 @@ func NewManager(ctx context.Context) *Manager {
 }
 
 func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error) {
-	return &rpc.VersionInfo2{Version: "VERSION"}, nil
+	return &rpc.VersionInfo2{Version: version.Version}, nil
 }
 
 func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*rpc.SessionInfo, error) {
