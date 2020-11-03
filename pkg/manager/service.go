@@ -88,7 +88,7 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 
 	entry := m.state.Get(sessionID)
 	sessionCtx := entry.Context()
-	changed := m.state.agentWatches.Subscribe(sessionID)
+	changed := m.state.WatchAgents(sessionID)
 
 	for {
 		// FIXME This will loop over the presence list looking for agents for
@@ -141,7 +141,7 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	}
 
 	sessionCtx := entry.Context()
-	changed := m.state.interceptWatches.Subscribe(sessionID)
+	changed := m.state.WatchIntercepts(sessionID)
 
 	for {
 		res := &rpc.InterceptInfoSnapshot{Intercepts: answerFunc()}

@@ -162,6 +162,8 @@ func (s *State) Remove(sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.agentWatches.Unsubscribe(sessionID)
+	s.interceptWatches.Unsubscribe(sessionID)
 	_ = s.sessions.Remove(sessionID)
 }
 
@@ -209,6 +211,7 @@ func (s *State) AddAgent(agent *rpc.AgentInfo) string {
 
 	sessionID := fmt.Sprintf("A%03d", s.next())
 	s.sessions.Add(sessionID, agent, s.clock.Now())
+	s.agentWatches.NotifyAll()
 
 	return sessionID
 }
@@ -250,4 +253,20 @@ func (s *State) GetAgentsByName(name string) []*rpc.AgentInfo {
 		}
 	})
 	return agents
+}
+
+// Watches
+
+func (s *State) WatchAgents(sessionID string) <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.agentWatches.Subscribe(sessionID)
+}
+
+func (s *State) WatchIntercepts(sessionID string) <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.interceptWatches.Subscribe(sessionID)
 }

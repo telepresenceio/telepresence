@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/datawire/telepresence2/pkg/manager"
 	"github.com/datawire/telepresence2/pkg/rpc"
@@ -60,6 +61,38 @@ func TestConnect(t *testing.T) {
 	a.NoError(err)
 
 	_ = hello
+
+	// Alice sees an agent
+
+	aSnap, err = aliceW.Recv()
+	a.NoError(err)
+	a.Len(aSnap.Agents, 1)
+	a.True(proto.Equal(testAgents["hello"], aSnap.Agents[0]))
+
+	// Demo Deployment comes up with two Pods
+
+	demo1, err := client.ArriveAsAgent(ctx, testAgents["demo1"])
+	a.NoError(err)
+	demo2, err := client.ArriveAsAgent(ctx, testAgents["demo2"])
+	a.NoError(err)
+
+	_ = demo1
+	_ = demo2
+
+	// Alice sees all the agents
+
+	aSnap, err = aliceW.Recv()
+	a.NoError(err)
+	a.Len(aSnap.Agents, 2)
+
+	aSnap, err = aliceW.Recv()
+	a.NoError(err)
+	a.Len(aSnap.Agents, 3)
+
+	// Alice remains
+
+	_, err = client.Remain(ctx, alice)
+	a.NoError(err)
 }
 
 func getTestClientConn(t *testing.T) *grpc.ClientConn {
