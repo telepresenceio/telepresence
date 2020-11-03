@@ -72,7 +72,5 @@ func Flush() {
 	case haveVer(10, 10):
 		_ = exec.Command("discoveryutil", "mdnsflushcache").Run()
 		_ = exec.Command("discoveryutil", "udnsflushcache").Run()
-	default:
-		log("How are we even running?  Go 1.11 requires at least macOS 10.10, but we're on %q", verStr)
 	}
 }
