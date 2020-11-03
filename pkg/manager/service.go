@@ -177,6 +177,12 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
+	for _, cept := range m.state.GetIntercepts(sessionID) {
+		if cept.Spec.Name == spec.Name {
+			return nil, status.Errorf(codes.AlreadyExists, "Intercept named %q already exists", spec.Name)
+		}
+	}
+
 	return m.state.AddIntercept(sessionID, spec), nil
 }
 
@@ -191,7 +197,7 @@ func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	}
 
 	if !m.state.RemoveIntercept(sessionID, name) {
-		return nil, status.Errorf(codes.NotFound, "Intercept named  %q not found", name)
+		return nil, status.Errorf(codes.NotFound, "Intercept named %q not found", name)
 	}
 
 	return &empty.Empty{}, nil

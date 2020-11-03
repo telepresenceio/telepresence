@@ -113,11 +113,35 @@ func TestConnect(t *testing.T) {
 	a.NoError(err)
 	a.True(proto.Equal(spec, first.Spec))
 
+	// Duplicate should error
+	_, err = client.CreateIntercept(ctx, &rpc.CreateInterceptRequest{
+		Session:       alice,
+		InterceptSpec: spec,
+	})
+	a.Error(err)
+
 	_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
 		Session: alice,
 		Name:    spec.Name,
 	})
 	a.NoError(err)
+
+	t.Log("removed")
+
+	// Removing a bogus intercept yields an error
+
+	_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
+		Session: alice,
+		Name:    spec.Name, // no longer present, right?
+	})
+	a.Error(err)
+
+	_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
+		Session: aliceDeparts, // no longer a valid session, right?
+		Name:    spec.Name,    // doesn't matter...
+	})
+	a.Error(err)
+
 }
 
 func getTestClientConn(t *testing.T) *grpc.ClientConn {

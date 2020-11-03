@@ -15,10 +15,8 @@ type Clock interface {
 }
 
 type interceptEntry struct {
-	/*
-		clientSessionID string
-		intercept       *rpc.InterceptInfo
-	*/
+	clientSessionID string
+	intercept       *rpc.InterceptInfo
 }
 
 // State is the total state of the Traffic Manager.
@@ -234,6 +232,9 @@ func (s *State) GetAgent(sessionID string) *rpc.AgentInfo {
 }
 
 func (s *State) GetAgents() []*rpc.AgentInfo {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	agents := []*rpc.AgentInfo{}
 	s.sessions.ForEach(func(_ context.Context, id string, item Entity) {
 		if agent, ok := item.(*rpc.AgentInfo); ok {
@@ -244,6 +245,9 @@ func (s *State) GetAgents() []*rpc.AgentInfo {
 }
 
 func (s *State) GetAgentsByName(name string) []*rpc.AgentInfo {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	agents := []*rpc.AgentInfo{}
 	s.sessions.ForEach(func(_ context.Context, id string, item Entity) {
 		if agent, ok := item.(*rpc.AgentInfo); ok {
@@ -257,17 +261,72 @@ func (s *State) GetAgentsByName(name string) []*rpc.AgentInfo {
 
 // Intercepts
 
+func (s *State) GetIntercepts(sessionID string) []*rpc.InterceptInfo {
+	entry := s.Get(sessionID)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cepts := []*rpc.InterceptInfo{}
+
+	var filter func(*interceptEntry) bool
+
+	switch item := entry.Item().(type) {
+	case *rpc.ClientInfo:
+		filter = func(entry *interceptEntry) bool {
+			return entry.clientSessionID == sessionID
+		}
+	case *rpc.AgentInfo:
+		filter = func(entry *interceptEntry) bool {
+			return entry.intercept.Spec.Agent == item.Name
+		}
+	default:
+		return cepts
+	}
+
+	for _, entry := range s.intercepts {
+		if filter(entry) {
+			cepts = append(cepts, entry.intercept)
+		}
+	}
+
+	return cepts
+}
+
 func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) *rpc.InterceptInfo {
-	return &rpc.InterceptInfo{
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ceptID := fmt.Sprintf("I%03d", s.next())
+	cept := &rpc.InterceptInfo{
 		Spec:        spec,
 		ManagerPort: 0,
 		Disposition: rpc.InterceptInfo_AGENT_ERROR,
 		Message:     "No proper error yet",
 	}
+
+	s.intercepts[ceptID] = &interceptEntry{
+		clientSessionID: sessionID,
+		intercept:       cept,
+	}
+
+	return cept
 }
 
 func (s *State) RemoveIntercept(sessionID string, name string) bool {
-	return true
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for ceptID, entry := range s.intercepts {
+		correctSession := entry.clientSessionID == sessionID
+		correctName := entry.intercept.Spec.Name == name
+		if correctSession && correctName {
+			delete(s.intercepts, ceptID)
+			return true
+		}
+	}
+
+	return false
 }
 
 // Watches
