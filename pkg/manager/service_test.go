@@ -93,6 +93,31 @@ func TestConnect(t *testing.T) {
 
 	_, err = client.Remain(ctx, alice)
 	a.NoError(err)
+
+	// Alice creates an intercept and then removes it
+
+	spec := &rpc.InterceptSpec{
+		Name:       "first",
+		Client:     testClients["alice"].Name,
+		Agent:      testAgents["hello"].Name,
+		Mechanism:  "tcp",
+		Additional: "",
+		TargetHost: "asdf",
+		TargetPort: 9876,
+	}
+
+	first, err := client.CreateIntercept(ctx, &rpc.CreateInterceptRequest{
+		Session:       alice,
+		InterceptSpec: spec,
+	})
+	a.NoError(err)
+	a.True(proto.Equal(spec, first.Spec))
+
+	_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
+		Session: alice,
+		Name:    spec.Name,
+	})
+	a.NoError(err)
 }
 
 func getTestClientConn(t *testing.T) *grpc.ClientConn {

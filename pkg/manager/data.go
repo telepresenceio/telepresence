@@ -115,3 +115,18 @@ func validateAgent(agent *rpc.AgentInfo) string {
 
 	return ""
 }
+
+func validateIntercept(spec *rpc.InterceptSpec) string {
+	switch {
+	case spec.Name == "":
+		return "name must not be empty"
+	case spec.Client == "":
+		return "client must not be empty"
+	case spec.Agent == "":
+		return "agent must not be empty"
+	case spec.Mechanism == "":
+		return "mechanism must not be empty"
+	}
+
+	return ""
+}

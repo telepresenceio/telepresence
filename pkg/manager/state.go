@@ -255,6 +255,21 @@ func (s *State) GetAgentsByName(name string) []*rpc.AgentInfo {
 	return agents
 }
 
+// Intercepts
+
+func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) *rpc.InterceptInfo {
+	return &rpc.InterceptInfo{
+		Spec:        spec,
+		ManagerPort: 0,
+		Disposition: rpc.InterceptInfo_AGENT_ERROR,
+		Message:     "No proper error yet",
+	}
+}
+
+func (s *State) RemoveIntercept(sessionID string, name string) bool {
+	return true
+}
+
 // Watches
 
 func (s *State) WatchAgents(sessionID string) <-chan struct{} {

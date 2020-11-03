@@ -163,10 +163,36 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	}
 }
 
-func (m *Manager) CreateIntercept(context.Context, *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CreateIntercept not implemented")
+func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error) {
+	sessionID := ciReq.Session.SessionId
+	spec := ciReq.InterceptSpec
+
+	dlog.Debug(ctx, "CreateIntercept called", sessionID)
+
+	if !m.state.HasClient(sessionID) {
+		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+	}
+
+	if val := validateIntercept(spec); val != "" {
+		return nil, status.Errorf(codes.InvalidArgument, val)
+	}
+
+	return m.state.AddIntercept(sessionID, spec), nil
 }
 
-func (m *Manager) RemoveIntercept(context.Context, *rpc.RemoveInterceptRequest2) (*empty.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
+func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveInterceptRequest2) (*empty.Empty, error) {
+	sessionID := riReq.Session.SessionId
+	name := riReq.Name
+
+	dlog.Debug(ctx, "RemoveIntercept called", sessionID, name)
+
+	if !m.state.HasClient(sessionID) {
+		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+	}
+
+	if !m.state.RemoveIntercept(sessionID, name) {
+		return nil, status.Errorf(codes.NotFound, "Intercept named  %q not found", name)
+	}
+
+	return &empty.Empty{}, nil
 }
