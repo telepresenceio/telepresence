@@ -10,16 +10,9 @@ const (
 	ApiVersion = 3
 )
 
-var Version = "(unknown version)"
-
-// SetVersion sets the current version for the executable
-func SetVersion(v string) {
-	Version = v
-}
-
 // DisplayVersion returns a printable version for `telepresence`
 func DisplayVersion() string {
-	return fmt.Sprintf("%s (api v%d)", Version, ApiVersion)
+	return fmt.Sprintf("%s (api v%d)", Version(), ApiVersion)
 }
 
 // GetExe returns the name of the running executable

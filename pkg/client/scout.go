@@ -23,7 +23,7 @@ func NewScout(mode string) (s *Scout) {
 	return &Scout{
 		Reporter: &metriton.Reporter{
 			Application: "telepresence",
-			Version:     Version,
+			Version:     Version(),
 			GetInstallID: func(r *metriton.Reporter) (string, error) {
 				id, err := metriton.InstallIDFromFilesystem(r)
 				if err != nil {

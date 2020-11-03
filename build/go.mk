@@ -26,32 +26,19 @@ generate-clean: ## (Generate) Delete generated files that get checked in to Git
 	rm -rf pkg/rpc/*
 
 PKG_VERSION = $(shell go list ./pkg/version)
-PKG_CONNECTOR = $(shell go list ./pkg/client/connector)
-
-# Stores the name of the last published manager image. Also serves as a non .PHONY
-# target dependency that will force image push if not yet pushed.
-TEL2_IMAGE_NAME_FILE = $(BUILDDIR)/tel2-image-name.txt
 
 .PHONY: build
-build: $(TEL2_IMAGE_NAME_FILE) ## (Build) Build all the source code
+build: ## (Build) Build all the source code
 	mkdir -p $(BINDIR)
-	go build -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION_BIN) -o $(BINDIR) ./cmd/traffic
-	go build -ldflags="-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -X=$(PKG_CONNECTOR).ManagerImage=$(shell cat $(TEL2_IMAGE_NAME_FILE))" ./cmd/telepresence
+	go build -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/...
 
-.PHONY: image images ## (Build) Build images
-image images: $(GOBIN)/ko image-clean $(TEL2_IMAGE_NAME_FILE) ## (Build) Build/tag the manager/agent container image
-
-.PHOMY: image-clean
-image-clean:
-	rm $(TEL2_IMAGE_NAME_FILE)
-
-$(TEL2_IMAGE_NAME_FILE):
-	@echo -n $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION) > $(TEL2_IMAGE_NAME_FILE)
-	docker tag $(shell env GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION_BIN)" ko publish --local ./cmd/traffic) $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
+.PHONY: image images
+image images: $(GOBIN)/ko ## (Build) Build/tag the manager/agent container image
+	docker tag $(shell env GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION)" ko publish --local ./cmd/traffic) $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
 
 .PHONY: install
-install: $(TEL2_IMAGE_NAME_FILE) ## (Install) installs the telepresence binary under ~/go/bin
-	go install -ldflags="-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -X=$(PKG_CONNECTOR).ManagerImage=$(shell cat $(TEL2_IMAGE_NAME_FILE))" ./cmd/telepresence
+install:  ## (Install) installs the telepresence binary under ~/go/bin
+	go install -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) ./cmd/telepresence
 
 .PHONY: clean
 clean: ## (Build) Remove all build artifacts

@@ -1,29 +1,33 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/datawire/ambassador/pkg/dtest"
 	"github.com/datawire/ambassador/pkg/dtest/testprocess"
+	"github.com/datawire/telepresence2/pkg/version"
 	"github.com/stretchr/testify/require"
 )
 
 var kubeconfig string
+var testVersion = "v0.1.2-test"
+var registry string
 
 func TestMain(m *testing.M) {
 	testprocess.Dispatch()
 	kubeconfig = dtest.Kubeconfig()
+	registry = dtest.DockerRegistry()
+	version.Version = testVersion
 	os.Setenv("DTEST_KUBECONFIG", kubeconfig)
-	os.Setenv("KO_DOCKER_REPO", dtest.DockerRegistry())
+	os.Setenv("KO_DOCKER_REPO", registry)
+	os.Setenv("TELEPRESENCE_REGISTRY", registry)
 	os.Setenv("KUBECONFIG", kubeconfig)
 	dtest.WithMachineLock(func() {
 		os.Exit(m.Run())
@@ -76,28 +80,30 @@ func captureCmd(cmd *exec.Cmd) (string, error) {
 	return out, err
 }
 
-var imageRx = regexp.MustCompile(`(?m)\s+Published\s+(.+)$`)
-
-func publishManager() (string, error) {
-	out, err := capture("ko", "publish", "./cmd/traffic")
+func publishManager() error {
+	cmd := exec.Command("ko", "publish", "--local", "./cmd/traffic")
+	out, err := cmd.Output()
 	if err != nil {
-		return "", err
+		return err
 	}
-	if match := imageRx.FindStringSubmatch(out); match != nil {
-		return match[1], nil
+	imageName := strings.TrimSpace(string(out))
+	tag := fmt.Sprintf("%s/tel2:%s", dtest.DockerRegistry(), testVersion)
+	if err = run("docker", "tag", imageName, tag); err != nil {
+		return err
 	}
-	return "", errors.New("unable to extract image name ko publish output")
+	return run("docker", "push", tag)
 }
 
 var executable = filepath.Join("build-output", "bin", "/telepresence")
 
 // doBuildExecutable calls go build
 func doBuildExecutable() {
-	imageName, err := publishManager()
+	err := publishManager()
 	if err != nil {
 		log.Fatalf("publish manager: %v", err)
 	}
-	err = run("go", "build", "-ldflags", fmt.Sprintf("-X=github.com/datawire/telepresence2/pkg/client/connector.ManagerImage=%s", imageName), "-o", executable, "./cmd/telepresence")
+	err = run("go", "build", "-ldflags", fmt.Sprintf("-X=github.com/datawire/telepresence2/pkg/version.Version=%s", testVersion),
+		"-o", executable, "./cmd/telepresence")
 	if err != nil {
 		log.Fatalf("build executable: %v", err)
 	}
@@ -217,5 +223,5 @@ func TestSmokeOutbound(t *testing.T) {
 		t.Fatal("timed out waiting for echo-easy service")
 	}
 
-	require.NoError(t, run("curl", "-sv", "echo-easy."+namespace), "check bridge")
+	require.NoError(t, run("curl", "-sv", "echo-easy"), "check bridge")
 }

@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"fmt"
@@ -28,9 +28,8 @@ func Version() string {
 
 	// Fall back to version info from "go get"
 	if i, ok := debug.ReadBuildInfo(); ok {
-		return i.Main.Version
+		version.Version = i.Main.Version
+		return version.Version
 	}
-
-	// Ultimate fallback version
 	return "(unknown version)"
 }

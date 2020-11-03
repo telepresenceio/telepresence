@@ -109,7 +109,7 @@ func (tm *trafficManager) initGrpc(p *supervisor.Process) error {
 		Name:      tm.userAndHost,
 		InstallId: tm.installID,
 		Product:   "telepresence",
-		Version:   client.Version,
+		Version:   client.Version(),
 	})
 
 	if err == nil {

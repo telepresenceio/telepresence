@@ -134,7 +134,7 @@ func (d *service) Logger(server rpc.Daemon_LoggerServer) error {
 func (d *service) Version(_ context.Context, _ *empty.Empty) (*version.VersionInfo, error) {
 	return &version.VersionInfo{
 		ApiVersion: client.ApiVersion,
-		Version:    client.Version,
+		Version:    client.Version(),
 	}, nil
 }
 

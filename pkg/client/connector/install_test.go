@@ -6,8 +6,12 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"regexp"
+	"strings"
 	"testing"
+
+	"github.com/datawire/telepresence2/pkg/client"
+
+	"github.com/datawire/telepresence2/pkg/version"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/pkg/errors"
@@ -19,16 +23,21 @@ import (
 
 var kubeconfig string
 var namespace string
+var registry string
+var testVersion = "v0.1.2-test"
 
 func TestMain(m *testing.M) {
 	kubeconfig = dtest.Kubeconfig()
 	namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
+	registry = dtest.DockerRegistry()
+	version.Version = testVersion
 
 	os.Setenv("DTEST_KUBECONFIG", kubeconfig)
-	os.Setenv("KO_DOCKER_REPO", dtest.DockerRegistry())
+	os.Setenv("KO_DOCKER_REPO", registry)
+	os.Setenv("TELEPRESENCE_REGISTRY", registry)
 	dtest.WithMachineLock(func() {
-		runCmd(nil, "kubectl", "--kubeconfig", kubeconfig, "create", "namespace", namespace)
-		defer runCmd(nil, "kubectl", "--kubeconfig", kubeconfig, "delete", "namespace", namespace, "--wait=false")
+		capture(nil, "kubectl", "--kubeconfig", kubeconfig, "create", "namespace", namespace)
+		defer capture(nil, "kubectl", "--kubeconfig", kubeconfig, "delete", "namespace", namespace, "--wait=false")
 		os.Exit(m.Run())
 	})
 }
@@ -42,7 +51,7 @@ func showArgs(exe string, args []string) {
 	fmt.Println()
 }
 
-func runCmd(t *testing.T, exe string, args ...string) string {
+func capture(t *testing.T, exe string, args ...string) string {
 	showArgs(exe, args)
 	cmd := exec.Command(exe, args...)
 	out, err := cmd.CombinedOutput()
@@ -57,20 +66,30 @@ func runCmd(t *testing.T, exe string, args ...string) string {
 	return sout
 }
 
-var imageRx = regexp.MustCompile(`(?m)\s+Published\s+(.+)$`)
-
-func publishManager(t *testing.T) string {
-	t.Helper()
-	out := runCmd(t, "ko", "publish", "../../../cmd/traffic")
-	if match := imageRx.FindStringSubmatch(out); match != nil {
-		return match[1]
+func captureOut(t *testing.T, exe string, args ...string) string {
+	showArgs(exe, args)
+	cmd := exec.Command(exe, args...)
+	out, err := cmd.Output()
+	sout := string(out)
+	if err != nil {
+		if t != nil {
+			t.Fatalf("%s\n%s", sout, err.Error())
+		} else {
+			log.Fatalf("%s\n%s", sout, err.Error())
+		}
 	}
-	t.Fatal("unable to extract image name ko publish output")
-	return ""
+	return sout
+}
+
+func publishManager(t *testing.T) {
+	t.Helper()
+	imageName := strings.TrimSpace(captureOut(t, "ko", "publish", "--local", "../../../cmd/traffic"))
+	tag := fmt.Sprintf("%s/tel2:%s", registry, client.Version())
+	capture(t, "docker", "tag", imageName, tag)
+	capture(t, "docker", "push", tag)
 }
 
 func Test_findTrafficManager_notPresent(t *testing.T) {
-	ManagerImage = "bogus-image-name"
 	sup := supervisor.WithContext(context.Background())
 	sup.Supervise(&supervisor.Worker{
 		Name: "find-traffic-manager",
@@ -79,6 +98,9 @@ func Test_findTrafficManager_notPresent(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			version.Version = "v0.0.0-bogus"
+			defer func() { version.Version = testVersion }()
+
 			if _, err = ti.findDeployment(p, namespace); err != nil {
 				if kates.IsNotFound(err) {
 					return nil
@@ -94,7 +116,7 @@ func Test_findTrafficManager_notPresent(t *testing.T) {
 }
 
 func Test_findTrafficManager_present(t *testing.T) {
-	ManagerImage = publishManager(t)
+	publishManager(t)
 	sup := supervisor.WithContext(context.Background())
 	sup.Supervise(&supervisor.Worker{
 		Name: "install-then-find",
@@ -117,7 +139,7 @@ func Test_findTrafficManager_present(t *testing.T) {
 }
 
 func Test_ensureTrafficManager_notPresent(t *testing.T) {
-	ManagerImage = publishManager(t)
+	publishManager(t)
 	sup := supervisor.WithContext(context.Background())
 	sup.Supervise(&supervisor.Worker{
 		Name: "ensure-traffic-manager",

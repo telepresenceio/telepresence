@@ -8,9 +8,8 @@ import (
 )
 
 func main() {
-	client.SetVersion(Version())
 	cmd := cli.Command()
-	AddVersionCommand(cmd)
+	client.AddVersionCommand(cmd)
 	err := cmd.Execute()
 	if err != nil {
 		os.Exit(1)

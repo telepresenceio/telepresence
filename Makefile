@@ -13,11 +13,13 @@
 # limitations under the License.
 
 TELEPRESENCE_REGISTRY ?= docker.io/datawire
-VERSION_SUFFIX        ?= -$(TIME)
 DOCKER_PUSH           ?= docker-push
 
+# When building a release, or if you don't want constant rebuilds, use
+#   export VERSION_SUFFIX=
+VERSION_SUFFIX        ?= -$(TIME)
+
 _TIME := $(shell date +%s)
-TELEPRESENCE_VERSION_BIN := $(shell git describe --tags)$(foreach TIME,DEVEL,$(VERSION_SUFFIX))
 TELEPRESENCE_VERSION := $(shell git describe --tags)$(foreach TIME,$(_TIME),$(VERSION_SUFFIX))
 
 default: help

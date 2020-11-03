@@ -109,7 +109,7 @@ func run(init bool) error {
 func (s *service) Version(_ context.Context, _ *empty.Empty) (*version.VersionInfo, error) {
 	return &version.VersionInfo{
 		ApiVersion: client.ApiVersion,
-		Version:    client.Version,
+		Version:    client.Version(),
 	}, nil
 }
 
@@ -178,7 +178,7 @@ func (s *service) runGRPCService(p *supervisor.Process, cancel context.CancelFun
 func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
 	reporter := &metriton.Reporter{
 		Application:  "telepresence",
-		Version:      client.Version,
+		Version:      client.Version(),
 		GetInstallID: func(_ *metriton.Reporter) (string, error) { return cr.InstallId, nil },
 		BaseMetadata: map[string]interface{}{"mode": "daemon"},
 	}

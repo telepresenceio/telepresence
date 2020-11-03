@@ -1,6 +1,12 @@
 package connector
 
 import (
+	"fmt"
+	"os"
+	"sync"
+
+	"github.com/datawire/telepresence2/pkg/client"
+
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
@@ -35,7 +41,20 @@ var labelMap = map[string]string{
 }
 
 // ManagerImage is inserted at build using --ldflags -X
-var ManagerImage string
+var managerImage string
+
+var resolveManagerName = sync.Once{}
+
+func managerImageName() string {
+	resolveManagerName.Do(func() {
+		dockerReg := os.Getenv("TELEPRESENCE_REGISTRY")
+		if dockerReg == "" {
+			dockerReg = "docker.io/datawire"
+		}
+		managerImage = fmt.Sprintf("%s/tel2:%s", dockerReg, client.Version())
+	})
+	return managerImage
+}
 
 func (ki *tmInstaller) findDeployment(p *supervisor.Process, namespace string) (*kates.Deployment, error) {
 	dep := &kates.Deployment{
@@ -153,7 +172,7 @@ func (ki *tmInstaller) depManifest(namespace string) *kates.Deployment {
 					Containers: []corev1.Container{
 						{
 							Name:  appName,
-							Image: ManagerImage,
+							Image: managerImageName(),
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "sshd",
