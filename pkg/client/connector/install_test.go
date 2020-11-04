@@ -89,7 +89,7 @@ func publishManager(t *testing.T) {
 		return
 	}
 	t.Helper()
-	os.Chdir("../../..") // ko must be executed from root to find the .ko.yaml config
+	_ = os.Chdir("../../..") // ko must be executed from root to find the .ko.yaml config
 	imageName = strings.TrimSpace(captureOut(t, "ko", "publish", "--local", "./cmd/traffic"))
 	tag := fmt.Sprintf("%s/tel2:%s", registry, client.Version())
 	capture(t, "docker", "tag", imageName, tag)
