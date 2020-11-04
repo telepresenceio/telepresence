@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/datawire/telepresence2/pkg/client"
 
@@ -81,13 +82,50 @@ func captureOut(t *testing.T, exe string, args ...string) string {
 	return sout
 }
 
+var imageName string
+
 func publishManager(t *testing.T) {
+	if imageName != "" {
+		return
+	}
 	t.Helper()
-	os.Chdir("../../..") // ko must be executed from root to find the .ko.yaml config
-	imageName := strings.TrimSpace(captureOut(t, "ko", "publish", "--local", "./cmd/traffic"))
+	_ = os.Chdir("../../..") // ko must be executed from root to find the .ko.yaml config
+	imageName = strings.TrimSpace(captureOut(t, "ko", "publish", "--local", "./cmd/traffic"))
 	tag := fmt.Sprintf("%s/tel2:%s", registry, client.Version())
 	capture(t, "docker", "tag", imageName, tag)
 	capture(t, "docker", "push", tag)
+}
+
+func removeManager(t *testing.T) {
+	// Remove service and deployment
+	cmd := exec.Command("kubectl", "--kubeconfig", kubeconfig, "--namespace", namespace, "delete", "svc,deployment", "traffic-manager")
+	_, _ = cmd.Output()
+
+	// Wait until getting them fails
+	gone := false
+	for cnt := 0; cnt < 10; cnt++ {
+		cmd = exec.Command("kubectl", "--kubeconfig", kubeconfig, "--namespace", namespace, "get", "deployment", "traffic-manager")
+		if err := cmd.Run(); err != nil {
+			gone = true
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if !gone {
+		t.Fatal("timeout waiting for deployment to vanish")
+	}
+	gone = false
+	for cnt := 0; cnt < 10; cnt++ {
+		cmd = exec.Command("kubectl", "--kubeconfig", kubeconfig, "--namespace", namespace, "get", "svc", "traffic-manager")
+		if err := cmd.Run(); err != nil {
+			gone = true
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if !gone {
+		t.Fatal("timeout waiting for service to vanish")
+	}
 }
 
 func Test_findTrafficManager_notPresent(t *testing.T) {
@@ -122,6 +160,7 @@ func Test_findTrafficManager_present(t *testing.T) {
 	sup.Supervise(&supervisor.Worker{
 		Name: "install-then-find",
 		Work: func(p *supervisor.Process) error {
+			defer removeManager(t)
 			ti, err := newTrafficManagerInstaller(kubeconfig, "")
 			if err != nil {
 				return err
@@ -145,6 +184,7 @@ func Test_ensureTrafficManager_notPresent(t *testing.T) {
 	sup.Supervise(&supervisor.Worker{
 		Name: "ensure-traffic-manager",
 		Work: func(p *supervisor.Process) error {
+			defer removeManager(t)
 			ti, err := newTrafficManagerInstaller(kubeconfig, "")
 			if err != nil {
 				return err
