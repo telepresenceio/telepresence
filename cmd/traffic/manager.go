@@ -22,7 +22,7 @@ import (
 	"github.com/datawire/telepresence2/pkg/version"
 )
 
-func main() {
+func manager_main() {
 	// Set up context with logger
 	dlog.SetFallbackLogger(makeBaseLogger())
 	g, ctx := errgroup.WithContext(dlog.WithField(context.Background(), "MAIN", "main"))
