@@ -146,7 +146,7 @@ func TestSmokeOutbound(t *testing.T) {
 
 	defer func() {
 		require.NoError(t, run(executable, "--quit"), "quit daemon")
-		require.Error(t, run("curl", "-sv", "echo-easy."+namespace), "check disconnected")
+		require.Error(t, run("curl", "-sv", "echo-easy"), "check disconnected")
 	}()
 
 	require.NoError(t, run(executable, "--version"), "version with daemon")
@@ -205,6 +205,19 @@ func TestSmokeOutbound(t *testing.T) {
 		t.Fatal("timed out waiting for bridge")
 	}
 
+	managerOk := false
+	for i := 0; i < 120; i++ {
+		out, _ := capture(executable, "--status")
+		if strings.Contains(out, "0 total") {
+			managerOk = true
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if !managerOk {
+		t.Fatal("timed out waiting for bridge")
+	}
+
 	serviceOk := false
 	for i := 0; i < 120; i++ {
 		err := run(
@@ -223,5 +236,5 @@ func TestSmokeOutbound(t *testing.T) {
 		t.Fatal("timed out waiting for echo-easy service")
 	}
 
-	require.NoError(t, run("curl", "-sv", "echo-easy"), "check bridge")
+	require.NoError(t, run("curl", "-s", "echo-easy"), "check bridge")
 }
