@@ -12,7 +12,6 @@ import (
 	"github.com/datawire/ambassador/pkg/dexec"
 	"github.com/datawire/ambassador/pkg/dlog"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -145,54 +144,4 @@ func manager_main() {
 		dlog.Errorf(ctx, "quit: %v", err)
 		os.Exit(1)
 	}
-}
-
-func makeBaseLogger() dlog.Logger {
-	logrusLogger := logrus.New()
-	logrusFormatter := &logrus.TextFormatter{
-		TimestampFormat: "2006-01-02 15:04:05",
-		FullTimestamp:   true,
-	}
-	logrusLogger.SetFormatter(logrusFormatter)
-	logrusLogger.SetReportCaller(false)
-
-	const defaultLogLevel = logrus.InfoLevel
-
-	logLevelMessage := "Logging at this level"
-	logLevelStr := os.Getenv("LOG_LEVEL")
-	logLevel, err := logrus.ParseLevel(logLevelStr)
-
-	switch {
-	case logLevelStr == "": // not specified -> use default
-		logLevel = defaultLogLevel
-		logLevelMessage += " (default)"
-	case err != nil: // Didn't parse -> use default and show error
-		logLevel = defaultLogLevel
-		logLevelMessage += fmt.Sprintf(" (LOG_LEVEL=%q -> %s)", logLevelStr, err.Error())
-	default: // parsed successfully -> use that level
-		logLevelMessage += fmt.Sprintf(" (LOG_LEVEL=%q)", logLevelStr)
-	}
-
-	logrusLogger.SetLevel(logLevel)
-	logrusLogger.Log(logLevel, logLevelMessage)
-
-	return dlog.WrapLogrus(logrusLogger)
-}
-
-// Perhaps replace this health check stuff with something more normal, i.e.
-// based on HTTP, since we'll likely be running the Injector as an HTTP service
-// from this same executable anyhow.
-
-type HealthChecker struct{}
-
-func (s *HealthChecker) Check(ctx context.Context, _ *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
-	return &grpc_health_v1.HealthCheckResponse{
-		Status: grpc_health_v1.HealthCheckResponse_SERVING,
-	}, nil
-}
-
-func (s *HealthChecker) Watch(_ *grpc_health_v1.HealthCheckRequest, stream grpc_health_v1.Health_WatchServer) error {
-	return stream.Send(&grpc_health_v1.HealthCheckResponse{
-		Status: grpc_health_v1.HealthCheckResponse_SERVING,
-	})
 }
