@@ -22,7 +22,7 @@ type ScoutMeta struct {
 func NewScout(mode string) (s *Scout) {
 	return &Scout{
 		Reporter: &metriton.Reporter{
-			Application: "telepresence",
+			Application: "telepresence2",
 			Version:     Version(),
 			GetInstallID: func(r *metriton.Reporter) (string, error) {
 				id, err := metriton.InstallIDFromFilesystem(r)

@@ -174,10 +174,10 @@ func (s *service) runGRPCService(p *supervisor.Process, cancel context.CancelFun
 	return errors.Wrap(s.grpc.Serve(unixListener), "connector gRCP server")
 }
 
-// connect the daemon to a cluster
+// connect the connector to a cluster
 func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
 	reporter := &metriton.Reporter{
-		Application:  "telepresence",
+		Application:  "telepresence2",
 		Version:      client.Version(),
 		GetInstallID: func(_ *metriton.Reporter) (string, error) { return cr.InstallId, nil },
 		BaseMetadata: map[string]interface{}{"mode": "daemon"},
