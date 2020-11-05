@@ -129,7 +129,7 @@ func (ki *tmInstaller) installSvc(p *supervisor.Process, namespace string) (*kat
 
 func (ki *tmInstaller) createDeployment(p *supervisor.Process, namespace string) (*kates.Deployment, error) {
 	dep := ki.depManifest(namespace)
-	p.Logf("Installing traffic-manager deployment in namespace %s", namespace)
+	p.Logf("Installing traffic-manager deployment in namespace %s. Image: %s", namespace, managerImageName())
 	err := ki.client.Create(p.Context(), dep, dep)
 	if err != nil {
 		return nil, err
@@ -140,7 +140,7 @@ func (ki *tmInstaller) createDeployment(p *supervisor.Process, namespace string)
 func (ki *tmInstaller) updateDeployment(p *supervisor.Process, namespace string, currentDep *kates.Deployment) (*kates.Deployment, error) {
 	dep := ki.depManifest(namespace)
 	dep.ResourceVersion = currentDep.ResourceVersion
-	p.Logf("Updating traffic-manager deployment in namespace %s", namespace)
+	p.Logf("Updating traffic-manager deployment in namespace %s. Image: %s", namespace, managerImageName())
 	err := ki.client.Update(p.Context(), dep, dep)
 	if err != nil {
 		return nil, err
