@@ -11,8 +11,7 @@ In this HOWTO, we'll walk through how to use Telepresence with a containerized D
 
 ## Quick example
 
-We'll start with a quick example. Apply the following 
-[manifest](https://github.com/telepresenceio/telepresence/blob/master/docs/tutorials/hello-world.yaml)
+We'll start with a quick example. Apply [this manifest](https://github.com/telepresenceio/telepresence/blob/master/docs/tutorials/hello-world.yaml)
 to create a deployment and service both named hello-world, exposed on port 8000.
 Then confirm that the deployment becomes ready:
 
