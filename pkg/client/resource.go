@@ -92,12 +92,9 @@ func (rb *ResourceBase) quit(p *supervisor.Process) error {
 
 func (rb *ResourceBase) monitor(p *supervisor.Process) error {
 	old := rb.okay
-	p.Log("monitor: checking...")
 	if err := rb.doCheck(p); err != nil {
 		rb.okay = false // Check failed is not okay
-		p.Logf("monitor: check failed: %v", err)
 	} else {
-		p.Log("monitor: check passed")
 		rb.okay = true
 	}
 	if old != rb.okay {

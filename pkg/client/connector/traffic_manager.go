@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -28,6 +29,7 @@ type trafficManager struct {
 	installID      string // telepresence's install ID
 	sessionID      string // sessionID returned by the traffic-manager
 	tmClient       manager.ManagerClient
+	k8sClient      *kates.Client
 	apiErr         error  // holds the latest traffic-manager API error
 	licenseInfo    string // license information from traffic-manager
 	previewHost    string // hostname to use for preview URLs, if enabled

@@ -22,7 +22,6 @@ const (
 	K8sBridgeWorker      = "K8S"
 	K8sPortForwardWorker = "KPF"
 	K8sSSHWorker         = "SSH"
-	K8sApplyWorker       = "KAP"
 )
 
 // ProxyRedirPort is the port to which we redirect proxied IPs. It
@@ -107,34 +106,6 @@ func (t *bridge) addWorker(p *supervisor.Process, worker *supervisor.Worker) {
 }
 
 func (t *bridge) connect(p *supervisor.Process) {
-	/*
-		t.addWorker(p, &supervisor.Worker{
-			Name: K8sApplyWorker,
-			Work: func(p *supervisor.Process) (err error) {
-				kubeInfo := k8s.NewKubeInfo(t.kubeConfig, t.context, t.namespace)
-				// setup remote teleproxy pod
-				args, err := kubeInfo.GetKubectlArray("apply", "-f", "-")
-				if err != nil {
-					return err
-				}
-				apply := p.Command("kubectl", args...)
-				apply.Stdin = strings.NewReader(podManifest)
-				err = apply.Start()
-				if err != nil {
-					return
-				}
-				err = p.DoClean(apply.Wait, apply.Process.Kill)
-				if err != nil {
-					return
-				}
-				p.Ready()
-				// we need to stay alive so that our dependencies can start
-				<-p.Shutdown()
-				return
-			},
-		})
-	*/
-
 	t.addWorker(p, &supervisor.Worker{
 		Name: K8sPortForwardWorker,
 		// Requires: []string{K8sApplyWorker},
@@ -460,6 +431,5 @@ func (t *bridge) check(p *supervisor.Process) bool {
 		p.Logf("expected SSH prompt, got: %v", string(msg))
 		return false
 	}
-	p.Log("traffic-manager SSH check passed")
 	return true
 }
