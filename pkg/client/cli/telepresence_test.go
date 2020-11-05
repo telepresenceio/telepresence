@@ -6,8 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/datawire/ambassador/pkg/dtest"
 	. "github.com/onsi/ginkgo"
@@ -20,8 +22,8 @@ import (
 )
 
 var testVersion = "v0.1.2-test"
-var kubeconfig string
-var registry string
+var namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
+var proxyOnMatch = regexp.MustCompile(`Proxy:\s+ON`)
 
 var _ = Describe("Telepresence", func() {
 	Context("With no daemon running", func() {
@@ -50,12 +52,12 @@ var _ = Describe("Telepresence", func() {
 
 	Context("When started with a command", func() {
 		It("Connects, executes the command, and then exits", func() {
-			stdout, stderr := execute("--", client.GetExe(), "--status")
+			stdout, stderr := execute("--namespace", namespace, "--", client.GetExe(), "--status")
 			Expect(stderr).To(BeEmpty())
 			Expect(stdout).To(ContainSubstring("Launching Telepresence Daemon"))
 			Expect(stdout).To(ContainSubstring("Connected to context"))
 			Expect(stdout).To(ContainSubstring("Context:"))
-			Expect(stdout).To(MatchRegexp(`Proxy:\s+ON`))
+			Expect(stdout).To(MatchRegexp(proxyOnMatch.String()))
 			Expect(stdout).To(ContainSubstring("Daemon quitting"))
 		})
 	})
@@ -63,8 +65,9 @@ var _ = Describe("Telepresence", func() {
 	Context("When started in the background", func() {
 		once := sync.Once{}
 		BeforeEach(func() {
+			// This is a bit annoying, but ginkgo does not provide a context scoped "BeforeAll"
 			once.Do(func() {
-				stdout, stderr := execute("--no-wait")
+				stdout, stderr := execute("--namespace", namespace, "--no-wait")
 				Expect(stderr).To(BeEmpty())
 				Expect(stdout).To(ContainSubstring("Connected to context"))
 			})
@@ -83,12 +86,30 @@ var _ = Describe("Telepresence", func() {
 			Expect(stderr).To(BeEmpty())
 			Expect(stdout).To(ContainSubstring("Context:"))
 		})
+
+		It("Proxies outbound traffic", func() {
+			// Give outbound interceptor 15 seconds to kick in.
+			proxy := false
+			for i := 0; i < 30; i++ {
+				stdout, stderr := execute("--status")
+				Expect(stderr).To(BeEmpty())
+				if proxy = proxyOnMatch.MatchString(stdout); proxy {
+					break
+				}
+				time.Sleep(500 * time.Millisecond)
+			}
+			Expect(proxy).To(BeTrue(), "Timeout waiting for network overrides to establish")
+
+			out, err := exec.Command("curl", "-s", "echo-easy").Output()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(out)).To(ContainSubstring("Request served by echo-easy-"))
+		})
 	})
 })
 
 var _ = BeforeSuite(func() {
-	kubeconfig = dtest.Kubeconfig()
-	registry = dtest.DockerRegistry()
+	registry := dtest.DockerRegistry()
+	kubeconfig := dtest.Kubeconfig()
 
 	os.Setenv("DTEST_KUBECONFIG", kubeconfig)
 	os.Setenv("KO_DOCKER_REPO", registry)
@@ -97,7 +118,14 @@ var _ = BeforeSuite(func() {
 
 	executable, err := buildExecutable(testVersion)
 	Expect(err).NotTo(HaveOccurred())
+
 	err = publishManager(testVersion)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = exec.Command("kubectl", "create", "namespace", namespace).Run()
+	Expect(err).NotTo(HaveOccurred())
+
+	err = applyEchoService()
 	Expect(err).NotTo(HaveOccurred())
 
 	version.Version = testVersion
@@ -106,7 +134,12 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	_, _ = execute("--quit")
+	_ = exec.Command("kubectl", "delete", "namespace", namespace).Run()
 })
+
+func applyEchoService() error {
+	return exec.Command("ko", "apply", "--namespace", namespace, "-f", "k8s/echo-easy.yaml").Run()
+}
 
 func publishManager(testVersion string) error {
 	out, err := exec.Command("ko", "publish", "--local", "./cmd/traffic").Output()
