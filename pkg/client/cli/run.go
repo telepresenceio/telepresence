@@ -9,11 +9,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/datawire/telepresence2/pkg/rpc/connector"
-
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/rpc/connector"
 )
 
 // runner contains all parameters needed in order to run an intercepted command.
@@ -37,7 +36,7 @@ func (p *runner) run(cmd *cobra.Command, args []string) error {
 	case p.Status:
 		return status(cmd, args)
 	case p.Version:
-		return version(cmd, args)
+		return printVersion(cmd, args)
 	case p.NoWait:
 		if p.InterceptRequest.Deployment != "" {
 			return p.addIntercept(cmd, args)
@@ -61,14 +60,14 @@ func (p *runner) run(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		return p.runWithIntercept(out, func(_ *interceptState) error {
+		return p.runWithIntercept(cmd, func(_ *interceptState) error {
 			if subShellMsg != "" {
 				fmt.Fprintln(out, subShellMsg)
 			}
 			return start(exe, args, true, cmd.InOrStdin(), out, cmd.OutOrStderr())
 		})
 	}
-	return p.runWithConnector(out, func(cs *connectorState) error {
+	return p.runWithConnector(cmd, func(cs *connectorState) error {
 		if subShellMsg != "" {
 			fmt.Fprintln(out, subShellMsg)
 		}
@@ -76,18 +75,18 @@ func (p *runner) run(cmd *cobra.Command, args []string) error {
 	})
 }
 
-func (p *runner) runWithDaemon(out io.Writer, f func(ds *daemonState) error) error {
-	ds, err := newDaemonState(out, p.DNS, p.Fallback)
+func (p *runner) runWithDaemon(cmd *cobra.Command, f func(ds *daemonState) error) error {
+	ds, err := newDaemonState(cmd, p.DNS, p.Fallback)
 	if err != nil && err != daemonIsNotRunning {
 		return err
 	}
 	return client.WithEnsuredState(ds, func() error { return f(ds) })
 }
 
-func (p *runner) runWithConnector(out io.Writer, f func(cs *connectorState) error) error {
-	return p.runWithDaemon(out, func(ds *daemonState) error {
+func (p *runner) runWithConnector(cmd *cobra.Command, f func(cs *connectorState) error) error {
+	return p.runWithDaemon(cmd, func(ds *daemonState) error {
 		p.InterceptEnabled = true
-		cs, err := newConnectorState(ds.grpc, &p.ConnectRequest, out)
+		cs, err := newConnectorState(ds.grpc, &p.ConnectRequest, cmd)
 		if err != nil && err != connectorIsNotRunning {
 			return err
 		}
@@ -95,19 +94,19 @@ func (p *runner) runWithConnector(out io.Writer, f func(cs *connectorState) erro
 	})
 }
 
-func (p *runner) runWithIntercept(out io.Writer, f func(is *interceptState) error) error {
-	return p.runWithConnector(out, func(cs *connectorState) error {
-		is := newInterceptState(cs.grpc, &p.InterceptRequest, out)
+func (p *runner) runWithIntercept(cmd *cobra.Command, f func(is *interceptState) error) error {
+	return p.runWithConnector(cmd, func(cs *connectorState) error {
+		is := newInterceptState(cs.grpc, &p.InterceptRequest, cmd.OutOrStdout())
 		return client.WithEnsuredState(is, func() error { return f(is) })
 	})
 }
 
-func runAsRoot(exe string, args []string) error {
+func runAsRoot(exe string, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if os.Geteuid() != 0 {
 		args = append([]string{"-n", "-E", exe}, args...)
 		exe = "sudo"
 	}
-	return start(exe, args, false, nil, nil, nil)
+	return start(exe, args, false, stdin, stdout, stderr)
 }
 
 func start(exe string, args []string, wait bool, stdin io.Reader, stdout, stderr io.Writer) error {

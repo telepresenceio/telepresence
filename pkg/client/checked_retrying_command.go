@@ -134,6 +134,5 @@ func (crc *crCmd) doCheck(p *supervisor.Process) error {
 		}
 		return err // from crc.check() above
 	}
-	p.Log("check: passed")
 	return nil
 }

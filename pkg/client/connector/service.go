@@ -204,6 +204,7 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 		p.Logf("unable to track k8s cluster: %+v", err)
 		r.Error = rpc.ConnectInfo_CLUSTER_FAILED
 		r.ErrorText = err.Error()
+		s.p.Supervisor().Shutdown()
 		return r
 	}
 	s.cluster = cluster
