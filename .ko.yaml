@@ -1,2 +1,2 @@
 baseImageOverrides:
-  github.com/datawire/telepresence2/cmd/traffic: docker.io/datawire/telepresence-k8s:0.101
+  github.com/datawire/telepresence2/cmd/traffic: docker.io/datawire/tel2-base:20201105

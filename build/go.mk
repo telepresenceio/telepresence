@@ -58,17 +58,3 @@ test check: $(GOBIN)/ko ## (Test) Run the test suite
 
 .PHONY: all
 all: test
-
-.PHONY: help
-help:  ## (Common) Show this message
-	@echo 'usage: make [TARGETS...] [VARIABLES...]'
-	@echo
-	@echo VARIABLES:
-	@sed -n '/[?]=/s/^/  /p' ${MAKEFILE_LIST}
-	@echo
-	@echo "TELEPRESENCE_VERSION is $(TELEPRESENCE_VERSION)"
-	@echo
-	@echo TARGETS:
-	@sed -En 's/^([^:]*):[^#]*## *(\([^)]*\))? */\2	\1	/p' $(sort $(abspath $(MAKEFILE_LIST))) | sed 's/^	/($(or $(NAME),this project))&/' | column -t -s '	' | sed 's/^/  /' | sort
-	@echo
-	@echo "See DEVELOPING.md for more information"

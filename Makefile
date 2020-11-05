@@ -27,3 +27,4 @@ default: help
 
 include build/tools.mk
 include build/go.mk
+include build/support.mk
