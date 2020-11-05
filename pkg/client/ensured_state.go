@@ -17,9 +17,6 @@ type EnsuredState interface {
 func WithEnsuredState(r EnsuredState, f func() error) (err error) {
 	var wasAcquired bool
 	wasAcquired, err = r.EnsureState()
-	if err != nil {
-		return err
-	}
 	if wasAcquired {
 		defer func() {
 			if cerr := r.DeactivateState(); cerr != nil {
@@ -30,6 +27,9 @@ func WithEnsuredState(r EnsuredState, f func() error) (err error) {
 				}
 			}
 		}()
+	}
+	if err != nil {
+		return err
 	}
 	err = f()
 	return

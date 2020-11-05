@@ -100,7 +100,7 @@ Error was: %s
 	case connector.ConnectInfo_CLUSTER_FAILED, connector.ConnectInfo_BRIDGE_FAILED:
 		msg = r.ErrorText
 	}
-	return false, errors.New(msg)
+	return true, errors.New(msg) // Return true to ensure disconnect
 }
 
 func (cs *connectorState) DeactivateState() error {
