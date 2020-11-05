@@ -22,7 +22,7 @@ func LaunchDaemon(cmd *cobra.Command, args []string) error {
 	}
 	dns, _ := cmd.Flags().GetString("dns")
 	fallback, _ := cmd.Flags().GetString("fallback")
-	ds, err := newDaemonState(cmd.OutOrStdout(), dns, fallback)
+	ds, err := newDaemonState(cmd, dns, fallback)
 	defer ds.disconnect()
 	if err == nil {
 		return errors.New("Daemon already started")

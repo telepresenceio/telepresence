@@ -3,11 +3,11 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/client"
@@ -16,7 +16,7 @@ import (
 )
 
 type connectorState struct {
-	out    io.Writer
+	cmd    *cobra.Command
 	cr     *connector.ConnectRequest
 	conn   *grpc.ClientConn
 	daemon daemon.DaemonClient
@@ -25,8 +25,9 @@ type connectorState struct {
 
 // Connect asks the daemon to connect to a cluster
 func (cs *connectorState) EnsureState() (bool, error) {
+	out := cs.cmd.OutOrStdout()
 	if cs.isConnected() {
-		fmt.Fprintln(cs.out, "Already connected")
+		fmt.Fprintln(out, "Already connected")
 		return false, nil
 	}
 
@@ -61,7 +62,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 	// TODO: Progress reporting during connect. Either divide into several calls and report completion
 	//  of each, or use a stream. Can be made as part of ticket #1334.
 	var r *connector.ConnectInfo
-	fmt.Fprintln(cs.out, "Connecting to traffic manager...")
+	fmt.Fprintln(out, "Connecting to traffic manager...")
 
 	if err = client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
 		return false, fmt.Errorf("Connector service did not come up!\nTake a look at %s for more information.", client.Logfile)
@@ -79,13 +80,13 @@ func (cs *connectorState) EnsureState() (bool, error) {
 	var msg string
 	switch r.Error {
 	case connector.ConnectInfo_UNSPECIFIED:
-		fmt.Fprintf(cs.out, "Connected to context %s (%s)\n", r.ClusterContext, r.ClusterServer)
+		fmt.Fprintf(out, "Connected to context %s (%s)\n", r.ClusterContext, r.ClusterServer)
 		return true, nil
 	case connector.ConnectInfo_ALREADY_CONNECTED:
-		fmt.Fprintln(cs.out, "Already connected")
+		fmt.Fprintln(out, "Already connected")
 		return false, nil
 	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED:
-		fmt.Fprintf(cs.out, `Connected to context %s (%s)
+		fmt.Fprintf(out, `Connected to context %s (%s)
 
 Unable to connect to the traffic manager.
 The intercept feature will not be available.
@@ -107,7 +108,8 @@ func (cs *connectorState) DeactivateState() error {
 	if !cs.isConnected() {
 		return nil
 	}
-	fmt.Fprint(cs.out, "Disconnecting...")
+	out := cs.cmd.OutOrStdout()
+	fmt.Fprint(out, "Disconnecting...")
 	var err error
 	if client.SocketExists(client.ConnectorSocketName) {
 		_, err = cs.grpc.Quit(context.Background(), &empty.Empty{})
@@ -117,15 +119,15 @@ func (cs *connectorState) DeactivateState() error {
 		err = client.WaitUntilSocketVanishes("connector", client.ConnectorSocketName, 5*time.Second)
 	}
 	if err == nil {
-		fmt.Fprintln(cs.out, "done")
+		fmt.Fprintln(out, "done")
 	} else {
-		fmt.Fprintln(cs.out, "failed")
+		fmt.Fprintln(out, "failed")
 	}
 	return err
 }
 
-func newConnectorState(daemon daemon.DaemonClient, cr *connector.ConnectRequest, out io.Writer) (*connectorState, error) {
-	cs := &connectorState{daemon: daemon, out: out, cr: cr}
+func newConnectorState(daemon daemon.DaemonClient, cr *connector.ConnectRequest, cmd *cobra.Command) (*connectorState, error) {
+	cs := &connectorState{daemon: daemon, cmd: cmd, cr: cr}
 	err := assertConnectorStarted()
 	if err == nil {
 		err = cs.connect()

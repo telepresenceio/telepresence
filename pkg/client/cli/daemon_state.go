@@ -10,6 +10,7 @@ import (
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/client"
@@ -17,15 +18,15 @@ import (
 )
 
 type daemonState struct {
-	out      io.Writer
+	cmd      *cobra.Command
 	dns      string
 	fallback string
 	conn     *grpc.ClientConn
 	grpc     daemon.DaemonClient
 }
 
-func newDaemonState(out io.Writer, dns, fallback string) (*daemonState, error) {
-	ds := &daemonState{out: out, dns: dns, fallback: fallback}
+func newDaemonState(cmd *cobra.Command, dns, fallback string) (*daemonState, error) {
+	ds := &daemonState{cmd: cmd, dns: dns, fallback: fallback}
 	err := assertDaemonStarted()
 	if err == nil {
 		err = ds.connect()
@@ -37,11 +38,12 @@ func (ds *daemonState) EnsureState() (bool, error) {
 	if ds.isConnected() {
 		return false, nil
 	}
-	quitLegacyDaemon(ds.out)
+	quitLegacyDaemon(ds.cmd.OutOrStdout())
 
-	fmt.Fprintln(ds.out, "Launching Telepresence Daemon", client.DisplayVersion())
+	fmt.Fprintln(ds.cmd.OutOrStdout(), "Launching Telepresence Daemon", client.DisplayVersion())
 
-	err := runAsRoot(client.GetExe(), []string{"daemon-foreground", ds.dns, ds.fallback})
+	err := runAsRoot(client.GetExe(), []string{"daemon-foreground", ds.dns, ds.fallback},
+		ds.cmd.InOrStdin(), ds.cmd.OutOrStdout(), ds.cmd.ErrOrStderr())
 	if err != nil {
 		return false, errors.Wrap(err, "failed to launch the server")
 	}
@@ -57,7 +59,7 @@ func (ds *daemonState) DeactivateState() error {
 	if !ds.isConnected() {
 		return nil
 	}
-	fmt.Fprint(ds.out, "Telepresence Daemon quitting...")
+	fmt.Fprint(ds.cmd.OutOrStdout(), "Telepresence Daemon quitting...")
 	var err error
 	if client.SocketExists(client.DaemonSocketName) {
 		_, err = ds.grpc.Quit(context.Background(), &empty.Empty{})
@@ -67,9 +69,9 @@ func (ds *daemonState) DeactivateState() error {
 		err = client.WaitUntilSocketVanishes("daemon", client.DaemonSocketName, 5*time.Second)
 	}
 	if err == nil {
-		fmt.Fprintln(ds.out, "done")
+		fmt.Fprintln(ds.cmd.OutOrStdout(), "done")
 	} else {
-		fmt.Fprintln(ds.out)
+		fmt.Fprintln(ds.cmd.OutOrStdout())
 	}
 	return err
 }
@@ -99,7 +101,7 @@ func (ds *daemonState) disconnect() {
 
 const legacySocketName = "/var/run/edgectl.socket"
 
-// quitLegacyDaemon ensures that an older version of the daemon quits and removes the old socket.
+// quitLegacyDaemon ensures that an older printVersion of the daemon quits and removes the old socket.
 func quitLegacyDaemon(out io.Writer) {
 	if !client.SocketExists(legacySocketName) {
 		return // no legacy daemon is running

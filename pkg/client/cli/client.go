@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 
@@ -26,7 +25,7 @@ var connectorIsNotRunning = errors.New("Not connected (use 'telepresence [--no-w
 
 // printVersion requests version info from the daemon and prints both client and daemon version.
 func printVersion(cmd *cobra.Command, _ []string) error {
-	av, dv, err := daemonVersion(cmd.OutOrStdout())
+	av, dv, err := daemonVersion(cmd)
 	if err == nil {
 		fmt.Fprintf(cmd.OutOrStdout(), "Client %s\nDaemon %s (api v%d)\n", client.DisplayVersion(), dv, av)
 		return nil
@@ -41,7 +40,7 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 
 // Connect asks the daemon to connect to a cluster
 func (p *runner) connect(cmd *cobra.Command, args []string) error {
-	ds, cs, err := p.ensureConnected(cmd.OutOrStdout())
+	ds, cs, err := p.ensureConnected(cmd)
 	if err != nil {
 		return err
 	}
@@ -50,8 +49,8 @@ func (p *runner) connect(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func (p *runner) ensureConnected(out io.Writer) (*daemonState, *connectorState, error) {
-	ds, err := newDaemonState(out, "", "")
+func (p *runner) ensureConnected(cmd *cobra.Command) (*daemonState, *connectorState, error) {
+	ds, err := newDaemonState(cmd, "", "")
 	if err != nil && err != daemonIsNotRunning {
 		return nil, nil, err
 	}
@@ -66,7 +65,7 @@ func (p *runner) ensureConnected(out io.Writer) (*daemonState, *connectorState, 
 	// When set, require a traffic manager and wait until it is connected
 	p.InterceptEnabled = false
 
-	cs, err := newConnectorState(ds.grpc, &p.ConnectRequest, out)
+	cs, err := newConnectorState(ds.grpc, &p.ConnectRequest, cmd)
 	if err != nil && err != connectorIsNotRunning {
 		ds.disconnect()
 		return nil, nil, err
@@ -84,7 +83,7 @@ func (p *runner) ensureConnected(out io.Writer) (*daemonState, *connectorState, 
 
 // Disconnect asks the daemon to disconnect from the connected cluster
 func Disconnect(cmd *cobra.Command, _ []string) error {
-	cs, err := newConnectorState(nil, nil, cmd.OutOrStdout())
+	cs, err := newConnectorState(nil, nil, cmd)
 	if err != nil {
 		return err
 	}
@@ -95,7 +94,7 @@ func Disconnect(cmd *cobra.Command, _ []string) error {
 func status(cmd *cobra.Command, _ []string) error {
 	var ds *daemon.DaemonStatus
 	var err error
-	if ds, err = daemonStatus(cmd.OutOrStdout()); err != nil {
+	if ds, err = daemonStatus(cmd); err != nil {
 		return err
 	}
 
@@ -113,7 +112,7 @@ func status(cmd *cobra.Command, _ []string) error {
 	}
 
 	var cs *connector.ConnectorStatus
-	if cs, err = connectorStatus(cmd.OutOrStdout()); err != nil {
+	if cs, err = connectorStatus(cmd); err != nil {
 		return err
 	}
 	switch cs.Error {
@@ -156,22 +155,22 @@ func status(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func daemonStatus(out io.Writer) (status *daemon.DaemonStatus, err error) {
+func daemonStatus(cmd *cobra.Command) (status *daemon.DaemonStatus, err error) {
 	if assertDaemonStarted() != nil {
 		return &daemon.DaemonStatus{Error: daemon.DaemonStatus_NOT_STARTED}, nil
 	}
-	err = withDaemon(out, func(d daemon.DaemonClient) error {
+	err = withDaemon(cmd, func(d daemon.DaemonClient) error {
 		status, err = d.Status(context.Background(), &empty.Empty{})
 		return err
 	})
 	return
 }
 
-func connectorStatus(out io.Writer) (status *connector.ConnectorStatus, err error) {
+func connectorStatus(cmd *cobra.Command) (status *connector.ConnectorStatus, err error) {
 	if assertConnectorStarted() != nil {
 		return &connector.ConnectorStatus{Error: connector.ConnectorStatus_NOT_STARTED}, nil
 	}
-	err = withConnector(out, func(d connector.ConnectorClient) error {
+	err = withConnector(cmd, func(d connector.ConnectorClient) error {
 		status, err = d.Status(context.Background(), &empty.Empty{})
 		return err
 	})
@@ -182,7 +181,7 @@ func connectorStatus(out io.Writer) (status *connector.ConnectorStatus, err erro
 func Pause(cmd *cobra.Command, _ []string) error {
 	var r *daemon.PauseInfo
 	var err error
-	err = withDaemon(cmd.OutOrStdout(), func(d daemon.DaemonClient) error {
+	err = withDaemon(cmd, func(d daemon.DaemonClient) error {
 		r, err = d.Pause(context.Background(), &empty.Empty{})
 		return err
 	})
@@ -212,7 +211,7 @@ Please disconnect before pausing.`
 func Resume(cmd *cobra.Command, _ []string) error {
 	var r *daemon.ResumeInfo
 	var err error
-	err = withDaemon(cmd.OutOrStdout(), func(d daemon.DaemonClient) error {
+	err = withDaemon(cmd, func(d daemon.DaemonClient) error {
 		r, err = d.Resume(context.Background(), &empty.Empty{})
 		return err
 	})
@@ -236,7 +235,7 @@ func Resume(cmd *cobra.Command, _ []string) error {
 
 // Quit sends the quit message to the daemon and waits for it to exit.
 func Quit(cmd *cobra.Command, _ []string) error {
-	ds, err := newDaemonState(cmd.OutOrStdout(), "", "")
+	ds, err := newDaemonState(cmd, "", "")
 	if err != nil {
 		return err
 	}
@@ -249,7 +248,7 @@ func (p *runner) addIntercept(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	ds, cs, err := p.ensureConnected(cmd.OutOrStdout())
+	ds, cs, err := p.ensureConnected(cmd)
 	if err != nil {
 		return err
 	}
@@ -335,7 +334,7 @@ func prepareIntercept(cmd *cobra.Command, ii *connector.InterceptRequest) error 
 func AvailableIntercepts(cmd *cobra.Command, _ []string) error {
 	var r *connector.AvailableInterceptList
 	var err error
-	err = withConnector(cmd.OutOrStdout(), func(c connector.ConnectorClient) error {
+	err = withConnector(cmd, func(c connector.ConnectorClient) error {
 		r, err = c.AvailableIntercepts(context.Background(), &empty.Empty{})
 		return err
 	})
@@ -361,7 +360,7 @@ func AvailableIntercepts(cmd *cobra.Command, _ []string) error {
 func ListIntercepts(cmd *cobra.Command, _ []string) error {
 	var r *connector.InterceptList
 	var err error
-	err = withConnector(cmd.OutOrStdout(), func(c connector.ConnectorClient) error {
+	err = withConnector(cmd, func(c connector.ConnectorClient) error {
 		r, err = c.ListIntercepts(context.Background(), &empty.Empty{})
 		return err
 	})
@@ -397,14 +396,14 @@ func ListIntercepts(cmd *cobra.Command, _ []string) error {
 
 // RemoveIntercept tells the daemon to deactivate and remove an existent intercept
 func RemoveIntercept(cmd *cobra.Command, args []string) error {
-	return withConnector(cmd.OutOrStdout(), func(c connector.ConnectorClient) error {
+	return withConnector(cmd, func(c connector.ConnectorClient) error {
 		is := newInterceptState(c, &connector.InterceptRequest{Name: strings.TrimSpace(args[0])}, cmd.OutOrStdout())
 		return is.DeactivateState()
 	})
 }
 
-func daemonVersion(out io.Writer) (apiVersion int, version string, err error) {
-	err = withDaemon(out, func(d daemon.DaemonClient) error {
+func daemonVersion(cmd *cobra.Command) (apiVersion int, version string, err error) {
+	err = withDaemon(cmd, func(d daemon.DaemonClient) error {
 		vi, err := d.Version(context.Background(), &empty.Empty{})
 		if err == nil {
 			apiVersion = int(vi.ApiVersion)
@@ -431,13 +430,13 @@ func assertDaemonStarted() error {
 
 // withDaemon establishes a connection, calls the function with the gRPC client, and ensures
 // that the connection is closed.
-func withConnector(out io.Writer, f func(connector.ConnectorClient) error) error {
-	ds, err := newDaemonState(out, "", "")
+func withConnector(cmd *cobra.Command, f func(connector.ConnectorClient) error) error {
+	ds, err := newDaemonState(cmd, "", "")
 	if err != nil {
 		return err
 	}
 	defer ds.disconnect()
-	cs, err := newConnectorState(ds.grpc, nil, out)
+	cs, err := newConnectorState(ds.grpc, nil, cmd)
 	if err != nil {
 		return err
 	}
@@ -447,9 +446,9 @@ func withConnector(out io.Writer, f func(connector.ConnectorClient) error) error
 
 // withDaemon establishes a connection, calls the function with the gRPC client, and ensures
 // that the connection is closed.
-func withDaemon(out io.Writer, f func(daemon.DaemonClient) error) error {
+func withDaemon(cmd *cobra.Command, f func(daemon.DaemonClient) error) error {
 	// OK with dns and fallback empty. Daemon must be up and running
-	ds, err := newDaemonState(out, "", "")
+	ds, err := newDaemonState(cmd, "", "")
 	if err != nil {
 		return err
 	}
