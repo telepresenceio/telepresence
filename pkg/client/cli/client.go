@@ -28,7 +28,7 @@ var connectorIsNotRunning = errors.New("Not connected (use 'telepresence [--no-w
 func printVersion(cmd *cobra.Command, _ []string) error {
 	av, dv, err := daemonVersion(cmd.OutOrStdout())
 	if err == nil {
-		fmt.Fprintf(cmd.OutOrStdout(), "Client %s\nDaemon v%s (api v%d)\n", client.DisplayVersion(), dv, av)
+		fmt.Fprintf(cmd.OutOrStdout(), "Client %s\nDaemon %s (api v%d)\n", client.DisplayVersion(), dv, av)
 		return nil
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "Client %s\n", client.DisplayVersion())
