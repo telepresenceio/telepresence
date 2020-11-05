@@ -24,8 +24,8 @@ func IsServerRunning() bool {
 var daemonIsNotRunning = errors.New("The telepresence daemon has not been started.\nUse 'telepresence [--no-wait]' to start it.")
 var connectorIsNotRunning = errors.New("Not connected (use 'telepresence [--no-wait]' to connect to your cluster)")
 
-// version requests version info from the daemon and prints both client and daemon version.
-func version(cmd *cobra.Command, _ []string) error {
+// printVersion requests version info from the daemon and prints both client and daemon version.
+func printVersion(cmd *cobra.Command, _ []string) error {
 	av, dv, err := daemonVersion(cmd.OutOrStdout())
 	if err == nil {
 		fmt.Fprintf(cmd.OutOrStdout(), "Client %s\nDaemon v%s (api v%d)\n", client.DisplayVersion(), dv, av)

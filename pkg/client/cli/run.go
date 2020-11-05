@@ -37,7 +37,7 @@ func (p *runner) run(cmd *cobra.Command, args []string) error {
 	case p.Status:
 		return status(cmd, args)
 	case p.Version:
-		return version(cmd, args)
+		return printVersion(cmd, args)
 	case p.NoWait:
 		if p.InterceptRequest.Deployment != "" {
 			return p.addIntercept(cmd, args)
