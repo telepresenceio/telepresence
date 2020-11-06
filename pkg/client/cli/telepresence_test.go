@@ -223,6 +223,12 @@ func getCommand(args ...string) *cobra.Command {
 	cmd := cli.Command()
 	client.AddVersionCommand(cmd)
 	cmd.SetArgs(args)
+	flags := cmd.Flags()
+
+	// Circumvent test flag conflict explained here https://golang.org/doc/go1.13#testing
+	flag.Visit(func(f *flag.Flag) {
+		flags.AddGoFlag(f)
+	})
 	cmd.SetOut(new(strings.Builder))
 	cmd.SetErr(new(strings.Builder))
 	cmd.SilenceErrors = true
