@@ -6,11 +6,15 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/datawire/ambassador/pkg/dexec"
 	"github.com/datawire/ambassador/pkg/dlog"
 	"github.com/sethvargo/go-envconfig"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/datawire/telepresence2/pkg/agent"
+	"github.com/datawire/telepresence2/pkg/rpc"
 	"github.com/datawire/telepresence2/pkg/version"
 )
 
@@ -18,11 +22,10 @@ type Config struct {
 	Name    string `env:"AGENT_NAME,required"`
 	AppPort int    `env:"APP_PORT,required"`
 
-	ManagerAddress   string `env:"MANAGER_ADDRESS,default=traffic-manager:8081"`
-	SshHost          string `env:"SSH_HOST,default=traffic-manager"`
-	SshPort          int    `env:"SSH_PORT,default=8022"`
 	AgentPort        int    `env:"AGENT_PORT,default=9900"`
 	DefaultMechanism string `env:"DEFAULT_MECHANISM,default=tcp"`
+	ManagerHost      string `env:"MANAGER_HOST,default=traffic-manager"`
+	ManagerPort      int    `env:"MANAGER_PORT,default=8081"`
 }
 
 func agent_main() {
@@ -54,6 +57,78 @@ func agent_main() {
 		os.Exit(1)
 	}
 	dlog.Infof(ctx, "%+v", config)
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		dlog.Infof(ctx, "hostname: %+v", err)
+		hostname = fmt.Sprintf("unknown: %+v", err)
+	}
+
+	info := &rpc.AgentInfo{
+		Name:     config.Name,
+		Hostname: hostname,
+		Product:  "telepresence",
+		Version:  version.Version,
+	}
+
+	// Select initial mechanism
+	mechanisms := []*rpc.AgentInfo_Mechanism{
+		{
+			Name:    "tcp",
+			Product: "telepresence",
+			Version: version.Version,
+		},
+	}
+	info.Mechanisms = mechanisms
+
+	// Manage the mechanism
+	g.Go(func() error {
+		ctx := dlog.WithField(ctx, "MAIN", "mech")
+		for {
+			// Launch/start the mechanism
+			cmd := dexec.CommandContext(ctx, "sleep", "1000000") // FIXME
+
+			if err := cmd.Start(); err != nil {
+				return err
+			}
+
+			mechQuit := make(chan error)
+			go func() { mechQuit <- cmd.Wait() }()
+
+			select {
+			case err := <-mechQuit:
+				dlog.Infof(ctx, "wait on mech: %+v", err)
+				continue // launch new mechanism
+			case <-ctx.Done():
+				if err := cmd.Process.Kill(); err != nil {
+					dlog.Debugf(ctx, "kill mech: %+v", err)
+				}
+				return nil
+			}
+		}
+	})
+
+	// Talk to the Traffic Manager
+	g.Go(func() error {
+		ctx := dlog.WithField(ctx, "MAIN", "client")
+		address := fmt.Sprintf("%s:%v", config.ManagerHost, config.ManagerPort)
+
+		// Don't reconnect more than once every five seconds
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			if err := agent.TalkToManager(ctx, address, info); err != nil {
+				dlog.Info(ctx, err)
+			}
+
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-ticker.C:
+			}
+		}
+	})
 
 	// Handle shutdown
 	g.Go(func() error {
