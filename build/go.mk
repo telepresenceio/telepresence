@@ -49,7 +49,7 @@ clobber: clean ## (Build) Remove all build artifacts and tools
 
 .PHONY: lint
 lint: $(GOLANGCI_LINT) $(PROTOLINT) ## (Lint) Run the linters (golangci-lint and protolint)
-	$(GOLANGCI_LINT) run ./...
+	$(GOLANGCI_LINT) run --timeout 2m ./...
 	$(PROTOLINT) lint $(shell find rpc -type f -name '*.proto')
 
 .PHONY: test check
