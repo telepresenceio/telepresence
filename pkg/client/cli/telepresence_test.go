@@ -140,6 +140,9 @@ var _ = BeforeSuite(func() {
 	err = run("kubectl", "create", "namespace", namespace)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = run("sudo", "true")
+	Expect(err).ToNot(HaveOccurred(), "acquire privileges")
+
 	version.Version = testVersion
 	client.SetExe(executable)
 })

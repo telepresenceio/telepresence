@@ -102,12 +102,16 @@ func (p *runner) runWithIntercept(cmd *cobra.Command, f func(is *interceptState)
 	})
 }
 
-func runAsRoot(exe string, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
+func runAsRoot(exe string, args []string) error {
 	if os.Geteuid() != 0 {
+		err := exec.Command("sudo", "true").Run()
+		if err != nil {
+			return err
+		}
 		args = append([]string{"-n", "-E", exe}, args...)
 		exe = "sudo"
 	}
-	return start(exe, args, false, stdin, stdout, stderr)
+	return start(exe, args, false, nil, nil, nil)
 }
 
 func start(exe string, args []string, wait bool, stdin io.Reader, stdout, stderr io.Writer) error {

@@ -42,8 +42,7 @@ func (ds *daemonState) EnsureState() (bool, error) {
 
 	fmt.Fprintln(ds.cmd.OutOrStdout(), "Launching Telepresence Daemon", client.DisplayVersion())
 
-	err := runAsRoot(client.GetExe(), []string{"daemon-foreground", ds.dns, ds.fallback},
-		ds.cmd.InOrStdin(), ds.cmd.OutOrStdout(), ds.cmd.ErrOrStderr())
+	err := runAsRoot(client.GetExe(), []string{"daemon-foreground", ds.dns, ds.fallback})
 	if err != nil {
 		return false, errors.Wrap(err, "failed to launch the server")
 	}
