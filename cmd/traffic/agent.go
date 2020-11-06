@@ -84,9 +84,18 @@ func agent_main() {
 	// Manage the mechanism
 	g.Go(func() error {
 		ctx := dlog.WithField(ctx, "MAIN", "mech")
+
+		envAdd := []string{
+			fmt.Sprintf("AGENT_PORT=%v", config.AgentPort),
+			fmt.Sprintf("APP_PORT=%v", config.AppPort),
+			fmt.Sprintf("MECHANISM=%s", "tcp"), // FIXME
+			fmt.Sprintf("MANAGER_HOST=%s", config.ManagerHost),
+		}
+
 		for {
 			// Launch/start the mechanism
-			cmd := dexec.CommandContext(ctx, "sleep", "1000000") // FIXME
+			cmd := dexec.CommandContext(ctx, os.Args[0], "mech-tcp") // FIXME
+			cmd.Env = append(os.Environ(), envAdd...)
 
 			if err := cmd.Start(); err != nil {
 				return err
