@@ -3,6 +3,7 @@ package daemon
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 
@@ -54,6 +55,7 @@ func setUpLogging() supervisor.Logger {
 	if loggingToTerminal {
 		formatter.timestampFormat = "15:04:05"
 	} else {
+		log.SetOutput(logger.Writer())
 		formatter.timestampFormat = "2006/01/02 15:04:05"
 		logger.SetOutput(&lumberjack.Logger{
 			Filename:   client.Logfile,

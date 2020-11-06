@@ -25,7 +25,7 @@ import (
 	"github.com/datawire/telepresence2/pkg/rpc/version"
 )
 
-var Help = `The Telepresence Daemon is a long-lived background component that manages
+var help = `The Telepresence Daemon is a long-lived background component that manages
 connections and network state.
 
 Launch the Telepresence Daemon:
@@ -54,6 +54,7 @@ func Command() *cobra.Command {
 		Short:  "Launch Telepresence Daemon in the foreground (debug)",
 		Args:   cobra.ExactArgs(2),
 		Hidden: true,
+		Long:   help,
 		RunE: func(_ *cobra.Command, args []string) error {
 			return run(args[0], args[1])
 		},
@@ -112,9 +113,10 @@ func run(dns, fallback string) error {
 		for _, err := range runErrors {
 			sup.Logger.Printf("- %v", err)
 		}
+		return errors.New("telepresence daemon exited with errors")
 	}
 	sup.Logger.Printf("Telepresence daemon %s is done.", client.DisplayVersion())
-	return errors.New("telepresence daemon has exited")
+	return nil
 }
 
 func (d *service) Logger(server rpc.Daemon_LoggerServer) error {

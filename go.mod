@@ -10,6 +10,8 @@ require (
 	github.com/google/uuid v1.1.2
 	github.com/gookit/color v1.3.1
 	github.com/miekg/dns v1.1.35
+	github.com/onsi/ginkgo v1.14.2
+	github.com/onsi/gomega v1.10.1
 	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4
 	github.com/pkg/errors v0.9.1
 	github.com/sethvargo/go-envconfig v0.3.2
