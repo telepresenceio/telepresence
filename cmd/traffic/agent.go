@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -120,6 +121,24 @@ func agent_main() {
 				return nil
 			}
 		}
+	})
+
+	// Manager the forwarder
+	g.Go(func() error {
+		ctx := dlog.WithField(ctx, "MAIN", "forward")
+
+		lisAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", config.AgentPort))
+		if err != nil {
+			return err
+		}
+
+		appAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", config.AppPort))
+		if err != nil {
+			return err
+		}
+
+		f := agent.NewForwarder(ctx, lisAddr, appAddr)
+		return f.Start()
 	})
 
 	// Talk to the Traffic Manager
