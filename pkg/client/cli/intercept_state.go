@@ -22,7 +22,7 @@ func newInterceptState(cs connector.ConnectorClient, ir *manager.CreateIntercept
 }
 
 func (is *interceptState) EnsureState() (bool, error) {
-	r, err := is.cc.AddIntercept(context.Background(), is.ir)
+	r, err := is.cc.CreateIntercept(is.cmd.Context(), is.ir)
 	if err != nil {
 		return false, err
 	}
@@ -44,7 +44,7 @@ func (is *interceptState) DeactivateState() error {
 	name := strings.TrimSpace(is.ir.InterceptSpec.Name)
 	var r *connector.InterceptResult
 	var err error
-	r, err = is.cc.RemoveIntercept(context.Background(), &connector.RemoveInterceptRequest{Name: name})
+	r, err = is.cc.RemoveIntercept(is.cmd.Context(), &manager.RemoveInterceptRequest2{Name: name})
 	if err != nil {
 		return err
 	}

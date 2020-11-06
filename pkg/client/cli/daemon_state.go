@@ -62,6 +62,8 @@ func (ds *daemonState) DeactivateState() error {
 	fmt.Fprint(ds.cmd.OutOrStdout(), "Telepresence Daemon quitting...")
 	var err error
 	if client.SocketExists(client.DaemonSocketName) {
+		// using context.Background() here since it's likely that the
+		// command context has been cancelled.
 		_, err = ds.grpc.Quit(context.Background(), &empty.Empty{})
 	}
 	ds.disconnect()

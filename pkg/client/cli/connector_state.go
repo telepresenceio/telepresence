@@ -32,7 +32,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 	}
 
 	for attempt := 0; ; attempt++ {
-		dr, err := cs.daemon.Status(context.Background(), &empty.Empty{})
+		dr, err := cs.daemon.Status(cs.cmd.Context(), &empty.Empty{})
 		if err != nil {
 			return false, err
 		}
@@ -72,7 +72,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 		return false, err
 	}
 
-	r, err = cs.grpc.Connect(context.Background(), cs.cr)
+	r, err = cs.grpc.Connect(cs.cmd.Context(), cs.cr)
 	if err != nil {
 		return false, err
 	}
@@ -101,6 +101,8 @@ func (cs *connectorState) DeactivateState() error {
 	fmt.Fprint(out, "Disconnecting...")
 	var err error
 	if client.SocketExists(client.ConnectorSocketName) {
+		// using context.Background() here since it's likely that the
+		// command context has been cancelled.
 		_, err = cs.grpc.Quit(context.Background(), &empty.Empty{})
 	}
 	cs.disconnect()

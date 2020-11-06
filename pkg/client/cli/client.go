@@ -152,7 +152,7 @@ func daemonStatus(cmd *cobra.Command) (status *daemon.DaemonStatus, err error) {
 		return &daemon.DaemonStatus{Error: daemon.DaemonStatus_NOT_STARTED}, nil
 	}
 	err = withDaemon(cmd, func(d daemon.DaemonClient) error {
-		status, err = d.Status(context.Background(), &empty.Empty{})
+		status, err = d.Status(cmd.Context(), &empty.Empty{})
 		return err
 	})
 	return
@@ -163,7 +163,7 @@ func connectorStatus(cmd *cobra.Command) (status *connector.ConnectorStatus, err
 		return &connector.ConnectorStatus{Error: connector.ConnectorStatus_NOT_STARTED}, nil
 	}
 	err = withConnector(cmd, func(d connector.ConnectorClient) error {
-		status, err = d.Status(context.Background(), &empty.Empty{})
+		status, err = d.Status(cmd.Context(), &empty.Empty{})
 		return err
 	})
 	return
@@ -174,7 +174,7 @@ func Pause(cmd *cobra.Command, _ []string) error {
 	var r *daemon.PauseInfo
 	var err error
 	err = withDaemon(cmd, func(d daemon.DaemonClient) error {
-		r, err = d.Pause(context.Background(), &empty.Empty{})
+		r, err = d.Pause(cmd.Context(), &empty.Empty{})
 		return err
 	})
 	if err != nil {
@@ -204,7 +204,7 @@ func Resume(cmd *cobra.Command, _ []string) error {
 	var r *daemon.ResumeInfo
 	var err error
 	err = withDaemon(cmd, func(d daemon.DaemonClient) error {
-		r, err = d.Resume(context.Background(), &empty.Empty{})
+		r, err = d.Resume(cmd.Context(), &empty.Empty{})
 		return err
 	})
 	if err != nil {
@@ -280,7 +280,7 @@ func AvailableIntercepts(cmd *cobra.Command, _ []string) error {
 	var r *manager.AgentInfoSnapshot
 	var err error
 	err = withConnector(cmd, func(c connector.ConnectorClient) error {
-		r, err = c.AvailableIntercepts(context.Background(), &empty.Empty{})
+		r, err = c.AvailableIntercepts(cmd.Context(), &empty.Empty{})
 		return err
 	})
 	if err != nil {
@@ -303,7 +303,7 @@ func ListIntercepts(cmd *cobra.Command, _ []string) error {
 	var r *manager.InterceptInfoSnapshot
 	var err error
 	err = withConnector(cmd, func(c connector.ConnectorClient) error {
-		r, err = c.ListIntercepts(context.Background(), &empty.Empty{})
+		r, err = c.ListIntercepts(cmd.Context(), &empty.Empty{})
 		return err
 	})
 	if err != nil {
@@ -338,7 +338,7 @@ func RemoveIntercept(cmd *cobra.Command, args []string) error {
 
 func daemonVersion(cmd *cobra.Command) (apiVersion int, version string, err error) {
 	err = withDaemon(cmd, func(d daemon.DaemonClient) error {
-		vi, err := d.Version(context.Background(), &empty.Empty{})
+		vi, err := d.Version(cmd.Context(), &empty.Empty{})
 		if err == nil {
 			apiVersion = int(vi.ApiVersion)
 			version = vi.Version
