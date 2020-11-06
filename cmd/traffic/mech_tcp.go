@@ -11,9 +11,10 @@ import (
 	"syscall"
 
 	"github.com/datawire/ambassador/pkg/dlog"
-	"github.com/datawire/telepresence2/pkg/version"
 	"github.com/sethvargo/go-envconfig"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/datawire/telepresence2/pkg/version"
 )
 
 type MechConfig struct {
@@ -47,19 +48,29 @@ func mech_tcp_main() {
 
 	// Perform dumb forwarding AgentPort -> AppPort
 	g.Go(func() error {
-		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", config.AgentPort))
+		lisAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", config.AgentPort))
+		if err != nil {
+			return err
+		}
+
+		appAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", config.AppPort))
+		if err != nil {
+			return err
+		}
+
+		listener, err := net.ListenTCP("tcp", lisAddr)
 		if err != nil {
 			return err
 		}
 		defer listener.Close()
 
 		for {
-			conn, err := listener.Accept()
+			conn, err := listener.AcceptTCP()
 			if err != nil {
 				log.Printf("Error on accept: %+v", err)
 				continue
 			}
-			go forwardConn(ctx, "", config.AppPort, conn)
+			go forwardConn(ctx, appAddr, conn)
 		}
 	})
 
@@ -84,15 +95,15 @@ func mech_tcp_main() {
 	}
 }
 
-func forwardConn(ctx context.Context, host string, port int, src net.Conn) {
-	log.Printf("Forwarding to %s:%d", host, port)
-	defer log.Printf("Done forwarding to %s:%d", host, port)
+func forwardConn(ctx context.Context, addr *net.TCPAddr, src *net.TCPConn) {
+	log.Printf("Forwarding for %s to %s", src.RemoteAddr(), addr)
+	defer log.Printf("Done forwarding for %s to %s", src.RemoteAddr(), addr)
 
 	defer src.Close()
 
-	dst, err := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
+	dst, err := net.DialTCP("tcp", nil, addr)
 	if err != nil {
-		log.Printf("Error on dial(%s:%d): %+v", host, port, err)
+		log.Printf("Error on dial(%s): %+v", addr, err)
 		return
 	}
 	defer dst.Close()
@@ -101,14 +112,16 @@ func forwardConn(ctx context.Context, host string, port int, src net.Conn) {
 
 	go func() {
 		if _, err := io.Copy(dst, src); err != nil {
-			log.Printf("Error src->dst (%s:%d): %+v", host, port, err)
+			log.Printf("Error src->dst (%s): %+v", addr, err)
 		}
+		_ = dst.CloseWrite()
 		done <- struct{}{}
 	}()
 	go func() {
 		if _, err := io.Copy(src, dst); err != nil {
-			log.Printf("Error dst->src (%s:%d): %+v", host, port, err)
+			log.Printf("Error dst->src (%s): %+v", addr, err)
 		}
+		_ = src.CloseWrite()
 		done <- struct{}{}
 	}()
 

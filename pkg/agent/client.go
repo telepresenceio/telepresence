@@ -5,9 +5,10 @@ import (
 	"time"
 
 	"github.com/datawire/ambassador/pkg/dlog"
-	"github.com/datawire/telepresence2/pkg/rpc"
 	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc"
+
+	"github.com/datawire/telepresence2/pkg/rpc"
 )
 
 func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo) error {
