@@ -82,6 +82,7 @@ func agent_main() {
 	info.Mechanisms = mechanisms
 
 	// Manage the mechanism
+	mechSubprocessDisabled := true
 	g.Go(func() error {
 		ctx := dlog.WithField(ctx, "MAIN", "mech")
 
@@ -90,6 +91,10 @@ func agent_main() {
 			fmt.Sprintf("APP_PORT=%v", config.AppPort),
 			fmt.Sprintf("MECHANISM=%s", "tcp"), // FIXME
 			fmt.Sprintf("MANAGER_HOST=%s", config.ManagerHost),
+		}
+
+		if mechSubprocessDisabled {
+			return nil
 		}
 
 		for {
