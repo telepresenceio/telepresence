@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/client/cli"

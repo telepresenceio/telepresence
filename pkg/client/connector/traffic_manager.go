@@ -2,10 +2,14 @@ package connector
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/user"
 	"strings"
+	"sync/atomic"
 	"time"
+
+	"github.com/golang/protobuf/ptypes/empty"
 
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
@@ -14,24 +18,24 @@ import (
 
 	"github.com/datawire/telepresence2/pkg/client"
 	manager "github.com/datawire/telepresence2/pkg/rpc"
+	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
 )
 
 // trafficManager is a handle to access the Traffic Manager in a
 // cluster.
 type trafficManager struct {
-	crc            client.Resource
-	apiPort        int32
-	sshPort        int32
-	userAndHost    string
-	interceptables []string
-	totalClusCepts int
-	installID      string // telepresence's install ID
-	sessionID      string // sessionID returned by the traffic-manager
-	tmClient       manager.ManagerClient
-	apiErr         error  // holds the latest traffic-manager API error
-	licenseInfo    string // license information from traffic-manager
-	previewHost    string // hostname to use for preview URLs, if enabled
-	connectCI      bool   // whether --ci was passed to connect
+	crc         client.Resource
+	apiPort     int32
+	sshPort     int32
+	userAndHost string
+	iiSnapshot  atomic.Value
+	aiSnapshot  atomic.Value
+	installID   string // telepresence's install ID
+	sessionID   string // sessionID returned by the traffic-manager
+	tmClient    manager.ManagerClient
+	apiErr      error  // holds the latest traffic-manager API error
+	previewHost string // hostname to use for preview URLs, if enabled
+	connectCI   bool   // whether --ci was passed to connect
 }
 
 // newTrafficManager returns a TrafficManager resource for the given
@@ -112,13 +116,127 @@ func (tm *trafficManager) initGrpc(p *supervisor.Process) error {
 		Version:   client.Version(),
 	})
 
-	if err == nil {
-		tm.sessionID = si.SessionId
-	} else {
+	if err != nil {
 		conn.Close()
 		tm.tmClient = nil
+		return err
 	}
+
+	tm.sessionID = si.SessionId
+	p.Supervisor().Supervise(&supervisor.Worker{
+		Name: "watch-agents",
+		Work: tm.watchAgents})
+
+	p.Supervisor().Supervise(&supervisor.Worker{
+		Name: "watch-intercepts",
+		Work: tm.watchIntercepts})
 	return err
+}
+
+type watchEntry struct {
+	data interface{}
+	err  error
+}
+
+func (tm *trafficManager) watchAgents(p *supervisor.Process) error {
+	ac, err := tm.tmClient.WatchAgents(p.Context(), &manager.SessionInfo{SessionId: tm.sessionID})
+	if err != nil {
+		return err
+	}
+	p.Ready()
+	return watchRecv(p, func() *watchEntry {
+		we := new(watchEntry)
+		we.data, we.err = ac.Recv()
+		return we
+	}, &tm.aiSnapshot)
+}
+
+func (tm *trafficManager) watchIntercepts(p *supervisor.Process) error {
+	ic, err := tm.tmClient.WatchIntercepts(p.Context(), &manager.SessionInfo{SessionId: tm.sessionID})
+	if err != nil {
+		return err
+	}
+	p.Ready()
+	return watchRecv(p, func() *watchEntry {
+		we := new(watchEntry)
+		we.data, we.err = ic.Recv()
+		return we
+	}, &tm.iiSnapshot)
+}
+
+func watchRecv(p *supervisor.Process, recv func() *watchEntry, value *atomic.Value) error {
+	wc := make(chan *watchEntry)
+	closing := false
+	go func() {
+		// Feed entries into the iic channel
+		for {
+			we := recv()
+			wc <- we
+			if we.err != nil || closing {
+				break
+			}
+		}
+	}()
+
+	for {
+		select {
+		case we := <-wc:
+			if we.err != nil {
+				if we.err == io.EOF {
+					return nil
+				}
+				return we.err
+			}
+			value.Store(we.data)
+		case <-p.Shutdown():
+			closing = true
+			return nil
+		}
+	}
+}
+
+// addIntercept adds one intercept
+func (tm *trafficManager) addIntercept(p *supervisor.Process, ir *manager.CreateInterceptRequest) (*rpc.InterceptResult, error) {
+	result := &rpc.InterceptResult{}
+	ii, err := tm.tmClient.CreateIntercept(p.Context(), ir)
+	if err != nil {
+		result.Error = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
+		result.ErrorText = err.Error()
+		return result, nil
+	}
+	result.InterceptInfo = ii
+	return result, nil
+}
+
+// removeIntercept removes one intercept by name
+func (tm *trafficManager) removeIntercept(p *supervisor.Process, name string) (*empty.Empty, error) {
+	return tm.tmClient.RemoveIntercept(p.Context(), &manager.RemoveInterceptRequest2{
+		Session: &manager.SessionInfo{SessionId: tm.sessionID},
+		Name:    name,
+	})
+}
+
+// clearIntercepts removes all intercepts
+func (tm *trafficManager) clearIntercepts(p *supervisor.Process) error {
+	is := tm.interceptInfoSnapshot()
+	if is == nil {
+		return nil
+	}
+	for _, cept := range is.Intercepts {
+		_, err := tm.removeIntercept(p, cept.Spec.Name)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (tm *trafficManager) agentInfoSnapshot() *manager.AgentInfoSnapshot {
+	return tm.aiSnapshot.Load().(*manager.AgentInfoSnapshot)
+}
+
+func (tm *trafficManager) interceptInfoSnapshot() *manager.InterceptInfoSnapshot {
+	return tm.iiSnapshot.Load().(*manager.InterceptInfoSnapshot)
 }
 
 func (tm *trafficManager) check(p *supervisor.Process) error {
@@ -128,49 +246,6 @@ func (tm *trafficManager) check(p *supervisor.Process) error {
 	}
 	_, err := tm.tmClient.Remain(p.Context(), &manager.SessionInfo{SessionId: tm.sessionID})
 	return err
-	/*
-		body, code, err := tm.request("GET", "state", []byte{})
-		if err != nil {
-			return err
-		}
-
-		if code != http.StatusOK {
-			tm.apiErr = fmt.Errorf("%v: %v", code, body)
-			return tm.apiErr
-		}
-		tm.apiErr = nil
-
-		var state map[string]interface{}
-		if err := json.Unmarshal([]byte(body), &state); err != nil {
-			p.Logf("check: bad JSON from tm: %v", err)
-			p.Logf("check: JSON data is: %q", body)
-			return err
-		}
-		if licenseInfo, ok := state["LicenseInfo"]; ok {
-			tm.licenseInfo = licenseInfo.(string)
-		}
-		deployments, ok := state["Deployments"].(map[string]interface{})
-		if !ok {
-			p.Log("check: failed to get deployment info")
-			p.Logf("check: JSON data is: %q", body)
-		}
-		tm.interceptables = make([]string, len(deployments))
-		tm.totalClusCepts = 0
-		idx := 0
-		for deployment := range deployments {
-			tm.interceptables[idx] = deployment
-			idx++
-			info, ok := deployments[deployment].(map[string]interface{})
-			if !ok {
-				continue
-			}
-			cepts, ok := info["Intercepts"].([]interface{})
-			if ok {
-				tm.totalClusCepts += len(cepts)
-			}
-		}
-		return nil
-	*/
 }
 
 // Name implements Resource
@@ -186,9 +261,4 @@ func (tm *trafficManager) IsOkay() bool {
 // Close implements Resource
 func (tm *trafficManager) Close() error {
 	return tm.crc.Close()
-}
-
-// request part of old REST API, about to be removed
-func (_ *trafficManager) request(_ string, _ string, _ []byte) (string, int, error) {
-	return "", 404, nil
 }

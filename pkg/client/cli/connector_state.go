@@ -85,20 +85,9 @@ func (cs *connectorState) EnsureState() (bool, error) {
 	case connector.ConnectInfo_ALREADY_CONNECTED:
 		fmt.Fprintln(out, "Already connected")
 		return false, nil
-	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED:
-		fmt.Fprintf(out, `Connected to context %s (%s)
-
-Unable to connect to the traffic manager.
-The intercept feature will not be available.
-Error was: %s
-`, r.ClusterContext, r.ClusterServer, r.ErrorText)
-
-		// The connect is considered a success. There's still a cluster connection and bridge.
-		// TODO: This is obviously not true for the run subcommand.
-		return true, nil
 	case connector.ConnectInfo_DISCONNECTING:
 		msg = "Unable to connect while disconnecting"
-	case connector.ConnectInfo_CLUSTER_FAILED, connector.ConnectInfo_BRIDGE_FAILED:
+	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_CLUSTER_FAILED, connector.ConnectInfo_BRIDGE_FAILED:
 		msg = r.ErrorText
 	}
 	return true, errors.New(msg) // Return true to ensure disconnect

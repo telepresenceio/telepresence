@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/client"
+	manager "github.com/datawire/telepresence2/pkg/rpc"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
 )
@@ -129,23 +129,15 @@ func status(cmd *cobra.Command, _ []string) error {
 		} else {
 			fmt.Fprintln(out, "  Proxy:         OFF (attempting to connect...)")
 		}
-		ic := cs.Intercepts
-		if ic == nil {
-			fmt.Fprintln(out, "  Intercepts:    Unavailable: no traffic manager")
-			break
-		}
-		if ic.Connected {
-			fmt.Fprintf(out, "  Interceptable: %d deployments\n", ic.InterceptableCount)
-			fmt.Fprintf(out, "  Intercepts:    %d total, %d local\n", ic.ClusterIntercepts, ic.LocalIntercepts)
-			if ic.LicenseInfo != "" {
-				fmt.Fprintln(out, ic.LicenseInfo)
-			}
-			break
-		}
 		if cs.ErrorText != "" {
 			fmt.Fprintf(out, "  Intercepts:    %s\n", cs.ErrorText)
 		} else {
-			fmt.Fprintln(out, "  Intercepts:    (connecting to traffic manager...)")
+			ic := cs.Intercepts
+			if ic == nil {
+				fmt.Fprintln(out, "  Intercepts:    Unavailable: no traffic manager")
+			} else {
+				fmt.Fprintf(out, "  Intercepts:    %d total\n", len(ic.Intercepts))
+			}
 		}
 	case connector.ConnectorStatus_NOT_STARTED:
 		fmt.Fprintln(out, connectorIsNotRunning)
@@ -244,7 +236,7 @@ func Quit(cmd *cobra.Command, _ []string) error {
 
 // addIntercept tells the daemon to add a deployment intercept.
 func (p *runner) addIntercept(cmd *cobra.Command, _ []string) error {
-	err := prepareIntercept(cmd, &p.InterceptRequest)
+	err := prepareIntercept(cmd, &p.CreateInterceptRequest)
 	if err != nil {
 		return err
 	}
@@ -255,25 +247,15 @@ func (p *runner) addIntercept(cmd *cobra.Command, _ []string) error {
 	defer ds.disconnect()
 	defer cs.disconnect()
 
-	is := newInterceptState(cs.grpc, &p.InterceptRequest, cmd.OutOrStdout())
+	is := newInterceptState(cs.grpc, &p.CreateInterceptRequest, cmd)
 	_, err = is.EnsureState()
 	return err
 }
 
-func prepareIntercept(cmd *cobra.Command, ii *connector.InterceptRequest) error {
-	if ii.Name == "" {
-		ii.Name = ii.Deployment
-	}
-
-	// if intercept.Namespace == "" {
-	// 	intercept.Namespace = "default"
-	// }
-
-	if ii.Prefix == "" {
-		ii.Prefix = "/"
-	}
+func prepareIntercept(_ *cobra.Command, ii *manager.CreateInterceptRequest) error {
 	var host, portStr string
-	hp := strings.SplitN(ii.TargetHost, ":", 2)
+	spec := ii.InterceptSpec
+	hp := strings.SplitN(spec.TargetHost, ":", 2)
 	if len(hp) < 2 {
 		portStr = hp[0]
 	} else {
@@ -286,53 +268,16 @@ func prepareIntercept(cmd *cobra.Command, ii *connector.InterceptRequest) error 
 	port, err := strconv.Atoi(portStr)
 
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("Failed to parse %q as HOST:PORT: %v\n", ii.TargetHost, err))
+		return errors.Wrap(err, fmt.Sprintf("Failed to parse %q as HOST:PORT: %v\n", spec.TargetHost, err))
 	}
-	ii.TargetHost = host
-	ii.TargetPort = int32(port)
-
-	// If the user specifies --preview on the command line, then use its
-	// value (--preview is the same as --preview=true, or it could be
-	// --preview=false). But if the user does not specify --preview on
-	// the command line, compute its value from the presence or absence
-	// of --match, since they are mutually exclusive.
-	userSetPreviewFlag := cmd.Flags().Changed("preview")
-	userSetMatchFlag := len(ii.Patterns) > 0
-
-	switch {
-	case userSetPreviewFlag && ii.Preview:
-		// User specified --preview (or --preview=true) at the command line
-		if userSetMatchFlag {
-			return errors.New("Error: Cannot use --match and --preview at the same time")
-		}
-		// ok: --preview=true and no --match
-	case userSetPreviewFlag && !ii.Preview:
-		// User specified --preview=false at the command line
-		if !userSetMatchFlag {
-			return errors.New("Error: Must specify --match when using --preview=false")
-		}
-		// ok: --preview=false and at least one --match
-	default:
-		// User did not specify --preview at the command line
-		if userSetMatchFlag {
-			// ok: at least one --match
-			ii.Preview = false
-		} else {
-			// ok: neither --match nor --preview, fall back to preview
-			ii.Preview = true
-		}
-	}
-
-	if ii.Preview {
-		ii.Patterns = make(map[string]string)
-		ii.Patterns["x-service-preview"] = client.NewScout("unused").Reporter.InstallID()
-	}
+	spec.TargetHost = host
+	spec.TargetPort = int32(port)
 	return nil
 }
 
 // AvailableIntercepts requests a list of deployments available for intercept from the daemon
 func AvailableIntercepts(cmd *cobra.Command, _ []string) error {
-	var r *connector.AvailableInterceptList
+	var r *manager.AgentInfoSnapshot
 	var err error
 	err = withConnector(cmd, func(c connector.ConnectorClient) error {
 		r, err = c.AvailableIntercepts(context.Background(), &empty.Empty{})
@@ -341,24 +286,21 @@ func AvailableIntercepts(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	if r.Error != connector.InterceptError_UNSPECIFIED {
-		return errors.New(interceptMessage(r.Error, r.Text))
-	}
 	stdout := cmd.OutOrStdout()
-	if len(r.Intercepts) == 0 {
+	if len(r.Agents) == 0 {
 		fmt.Fprintln(stdout, "No interceptable deployments")
 		return nil
 	}
-	fmt.Fprintf(stdout, "Found %d interceptable deployment(s):\n", len(r.Intercepts))
-	for idx, cept := range r.Intercepts {
-		fmt.Fprintf(stdout, "%4d. %s in namespace %s\n", idx+1, cept.Deployment, cept.Namespace)
+	fmt.Fprintf(stdout, "Found %d interceptable deployment(s):\n", len(r.Agents))
+	for idx, cept := range r.Agents {
+		fmt.Fprintf(stdout, "%4d. %s\n", idx+1, cept.Name)
 	}
 	return nil
 }
 
 // ListIntercepts requests a list current intercepts from the daemon
 func ListIntercepts(cmd *cobra.Command, _ []string) error {
-	var r *connector.InterceptList
+	var r *manager.InterceptInfoSnapshot
 	var err error
 	err = withConnector(cmd, func(c connector.ConnectorClient) error {
 		r, err = c.ListIntercepts(context.Background(), &empty.Empty{})
@@ -367,9 +309,6 @@ func ListIntercepts(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	if r.Error != connector.InterceptError_UNSPECIFIED {
-		return errors.New(interceptMessage(r.Error, r.Text))
-	}
 	stdout := cmd.OutOrStdout()
 	if len(r.Intercepts) == 0 {
 		fmt.Fprintln(stdout, "No intercepts")
@@ -377,16 +316,9 @@ func ListIntercepts(cmd *cobra.Command, _ []string) error {
 	}
 	var previewURL string
 	for idx, cept := range r.Intercepts {
-		fmt.Fprintf(stdout, "%4d. %s\n", idx+1, cept.Name)
-		if cept.PreviewUrl != "" {
-			previewURL = cept.PreviewUrl
-			fmt.Fprintln(stdout, "      (preview URL available)")
-		}
-		fmt.Fprintf(stdout, "      Intercepting requests to %s when\n", cept.Deployment)
-		for k, v := range cept.Patterns {
-			fmt.Fprintf(stdout, "      - %s: %s\n", k, v)
-		}
-		fmt.Fprintf(stdout, "      and redirecting them to %s:%d\n", cept.TargetHost, cept.TargetPort)
+		spec := cept.Spec
+		fmt.Fprintf(stdout, "%4d. %s\n", idx+1, spec.Name)
+		fmt.Fprintf(stdout, "      Intercepting requests and redirecting them to %s:%d\n", spec.TargetHost, spec.TargetPort)
 	}
 	if previewURL != "" {
 		fmt.Fprintln(stdout, "Share a preview of your changes with anyone by visiting\n  ", previewURL)
@@ -397,7 +329,9 @@ func ListIntercepts(cmd *cobra.Command, _ []string) error {
 // RemoveIntercept tells the daemon to deactivate and remove an existent intercept
 func RemoveIntercept(cmd *cobra.Command, args []string) error {
 	return withConnector(cmd, func(c connector.ConnectorClient) error {
-		is := newInterceptState(c, &connector.InterceptRequest{Name: strings.TrimSpace(args[0])}, cmd.OutOrStdout())
+		is := newInterceptState(c,
+			&manager.CreateInterceptRequest{InterceptSpec: &manager.InterceptSpec{Name: strings.TrimSpace(args[0])}},
+			cmd)
 		return is.DeactivateState()
 	})
 }
