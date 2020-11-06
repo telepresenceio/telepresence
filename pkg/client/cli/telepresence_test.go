@@ -14,6 +14,7 @@ import (
 	"github.com/datawire/ambassador/pkg/dtest"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/client"
@@ -88,6 +89,11 @@ var _ = Describe("Telepresence", func() {
 		})
 
 		It("Proxies outbound traffic", func() {
+			echoReady := make(chan error)
+			go func() {
+				echoReady <- applyEchoService()
+			}()
+
 			// Give outbound interceptor 15 seconds to kick in.
 			proxy := false
 			for i := 0; i < 30; i++ {
@@ -100,9 +106,12 @@ var _ = Describe("Telepresence", func() {
 			}
 			Expect(proxy).To(BeTrue(), "Timeout waiting for network overrides to establish")
 
-			out, err := exec.Command("curl", "-s", "echo-easy").Output()
+			err := <-echoReady
 			Expect(err).NotTo(HaveOccurred())
-			Expect(string(out)).To(ContainSubstring("Request served by echo-easy-"))
+
+			out, err := output("curl", "-s", "echo-easy")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(out).To(ContainSubstring("Request served by echo-easy-"))
 		})
 	})
 })
@@ -120,12 +129,14 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = publishManager(testVersion)
+	if ee, ok := err.(*exec.ExitError); ok {
+		if len(ee.Stderr) > 0 {
+			err = errors.New(string(ee.Stderr))
+		}
+	}
 	Expect(err).NotTo(HaveOccurred())
 
-	err = exec.Command("kubectl", "create", "namespace", namespace).Run()
-	Expect(err).NotTo(HaveOccurred())
-
-	err = applyEchoService()
+	err = run("kubectl", "create", "namespace", namespace)
 	Expect(err).NotTo(HaveOccurred())
 
 	version.Version = testVersion
@@ -134,33 +145,74 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	_, _ = execute("--quit")
-	_ = exec.Command("kubectl", "delete", "namespace", namespace).Run()
+	_ = run("kubectl", "delete", "namespace", namespace)
 })
 
 func applyEchoService() error {
-	return exec.Command("ko", "apply", "--namespace", namespace, "-f", "k8s/echo-easy.yaml").Run()
+	err := run("ko", "apply", "--namespace", namespace, "-f", "k8s/echo-easy.yaml")
+	if err != nil {
+		return err
+	}
+	for i := 0; i < 120; i++ {
+		err = run(
+			"kubectl", "--namespace", namespace, "run", "curl-from-cluster", "--rm", "-it",
+			"--image=pstauffer/curl", "--restart=Never", "--",
+			"curl", "--silent", "--output", "/dev/null",
+			"http://echo-easy."+namespace,
+		)
+		if err == nil {
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return errors.New("timed out waiting for echo-easy service")
+}
+
+// runError checks if the given err is a *exit.ExitError, and if so, extracts
+// Stderr and the ExitCode from it.
+func runError(err error) error {
+	if ee, ok := err.(*exec.ExitError); ok {
+		if len(ee.Stderr) > 0 {
+			err = fmt.Errorf("%s, exit code %d", string(ee.Stderr), ee.ExitCode())
+		} else {
+			err = fmt.Errorf("exit code %d", ee.ExitCode())
+		}
+	}
+	return err
+}
+
+func run(args ...string) error {
+	return runError(exec.Command(args[0], args[1:]...).Run())
+}
+
+func output(args ...string) (string, error) {
+	out, err := exec.Command(args[0], args[1:]...).Output()
+	return string(out), runError(err)
 }
 
 func publishManager(testVersion string) error {
-	out, err := exec.Command("ko", "publish", "--local", "./cmd/traffic").Output()
+	cmd := exec.Command("ko", "publish", "--local", "./cmd/traffic")
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf(`GOFLAGS=-ldflags=-X=github.com/datawire/telepresence2/pkg/version.Version=%s`,
+			testVersion))
+	out, err := cmd.Output()
 	if err != nil {
-		return err
+		return runError(err)
 	}
 	imageName := strings.TrimSpace(string(out))
 	tag := fmt.Sprintf("%s/tel2:%s", dtest.DockerRegistry(), testVersion)
-	err = exec.Command("docker", "tag", imageName, tag).Run()
+	err = run("docker", "tag", imageName, tag)
 	if err != nil {
 		return err
 	}
-	return exec.Command("docker", "push", tag).Run()
+	return run("docker", "push", tag)
 }
 
 func buildExecutable(testVersion string) (string, error) {
 	executable := filepath.Join("build-output", "bin", "/telepresence")
-	cmd := exec.Command("go", "build", "-ldflags",
+	return executable, run("go", "build", "-ldflags",
 		fmt.Sprintf("-X=github.com/datawire/telepresence2/pkg/version.Version=%s", testVersion),
 		"-o", executable, "./cmd/telepresence")
-	return executable, cmd.Run()
 }
 
 func getCommand(args ...string) *cobra.Command {
@@ -169,6 +221,7 @@ func getCommand(args ...string) *cobra.Command {
 	cmd.SetArgs(args)
 	cmd.SetOut(new(strings.Builder))
 	cmd.SetErr(new(strings.Builder))
+	cmd.SilenceErrors = true
 	return cmd
 }
 
@@ -179,11 +232,12 @@ func trimmed(f func() io.Writer) string {
 	return ""
 }
 
+// execute the CLI command in-process
 func execute(args ...string) (string, string) {
 	cmd := getCommand(args...)
 	err := cmd.Execute()
 	if err != nil {
-		fmt.Println(cmd.ErrOrStderr(), err.Error())
+		fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
 	}
 	return trimmed(cmd.OutOrStdout), trimmed(cmd.ErrOrStderr)
 }
