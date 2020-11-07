@@ -253,7 +253,7 @@ func (d *service) handleSignalsAndShutdown(cancel context.CancelFunc) {
 	if !client.SocketExists(client.ConnectorSocketName) {
 		return
 	}
-	conn, err := grpc.Dial(client.SocketURL(client.ConnectorSocketName), grpc.WithInsecure())
+	conn, err := client.DialSocket(client.ConnectorSocketName)
 	if err != nil {
 		return
 	}

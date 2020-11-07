@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"google.golang.org/grpc"
 )
 
 const (
@@ -58,4 +60,8 @@ func SocketURL(socket string) string {
 	//  see: https://github.com/grpc/grpc-go/issues/1741
 	//  and https://github.com/grpc/grpc-go/issues/1911
 	return "passthrough:///unix://" + socket
+}
+
+func DialSocket(socketName string) (*grpc.ClientConn, error) {
+	return grpc.Dial(SocketURL(socketName), grpc.WithInsecure(), grpc.WithNoProxy())
 }
