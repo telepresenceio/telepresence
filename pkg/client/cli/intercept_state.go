@@ -13,16 +13,16 @@ import (
 
 type interceptState struct {
 	cmd *cobra.Command
-	cc  connector.ConnectorClient
+	cs  *connectorState
 	ir  *manager.CreateInterceptRequest
 }
 
-func newInterceptState(cs connector.ConnectorClient, ir *manager.CreateInterceptRequest, cmd *cobra.Command) *interceptState {
-	return &interceptState{cc: cs, ir: ir, cmd: cmd}
+func newInterceptState(cs *connectorState, ir *manager.CreateInterceptRequest, cmd *cobra.Command) *interceptState {
+	return &interceptState{cs: cs, ir: ir, cmd: cmd}
 }
 
 func (is *interceptState) EnsureState() (bool, error) {
-	r, err := is.cc.CreateIntercept(is.cmd.Context(), is.ir)
+	r, err := is.cs.grpc.CreateIntercept(is.cmd.Context(), is.ir)
 	if err != nil {
 		return false, err
 	}
@@ -44,7 +44,7 @@ func (is *interceptState) DeactivateState() error {
 	name := strings.TrimSpace(is.ir.InterceptSpec.Name)
 	var r *connector.InterceptResult
 	var err error
-	r, err = is.cc.RemoveIntercept(is.cmd.Context(), &manager.RemoveInterceptRequest2{Name: name})
+	r, err = is.cs.grpc.RemoveIntercept(is.cmd.Context(), &manager.RemoveInterceptRequest2{Name: name})
 	if err != nil {
 		return err
 	}

@@ -46,35 +46,43 @@ func (p *runner) run(cmd *cobra.Command, args []string) error {
 		return p.connect(cmd, args)
 	}
 
-	out := cmd.OutOrStdout()
-	var exe string
-	subShellMsg := ""
-	if len(args) == 0 {
-		exe = os.Getenv("SHELL")
-		subShellMsg = fmt.Sprintf("Starting a %s subshell", exe)
-	} else {
-		exe = args[0]
-		args = args[1:]
-	}
-
 	if p.CreateInterceptRequest.InterceptSpec.Name != "" {
 		err := prepareIntercept(cmd, &p.CreateInterceptRequest)
 		if err != nil {
 			return err
 		}
-		return p.runWithIntercept(cmd, func(_ *interceptState) error {
-			if subShellMsg != "" {
-				fmt.Fprintln(out, subShellMsg)
+		return p.runWithIntercept(cmd, func(is *interceptState) error {
+			if len(args) == 0 {
+				return p.startSubshell(cmd, is.cs.info.ClusterContext)
 			}
-			return start(exe, args, true, cmd.InOrStdin(), out, cmd.OutOrStderr())
+			return start(args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	}
 	return p.runWithConnector(cmd, func(cs *connectorState) error {
-		if subShellMsg != "" {
-			fmt.Fprintln(out, subShellMsg)
+		if len(args) == 0 {
+			return p.startSubshell(cmd, cs.info.ClusterContext)
 		}
-		return start(exe, args, true, cmd.InOrStdin(), out, cmd.OutOrStderr())
+		return start(args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 	})
+}
+
+func (p *runner) startSubshell(cmd *cobra.Command, ctx string) error {
+	exe := os.Getenv("SHELL")
+	var envArg string
+	var args []string
+	if strings.HasSuffix(exe, "/zsh") {
+		// TODO: Find a way to alter zsh prompt. Not sure it's possible since the option
+		//  prompt_subst must be set for prompt substitution to take place. The only way
+		//  to set it is from files being sourced when the command starts. If that is
+		//  enabled (and it really should be, it's very common), then the PS1 passed from
+		//  here is overwritten.
+		exe = "/bin/bash"
+	}
+	envArg = fmt.Sprintf(`PROMPT_COMMAND=export PS1="@%s $PS1";unset PROMPT_COMMAND`, ctx)
+	args = []string{"-i"}
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "Starting a %s subshell\n", exe)
+	return start(exe, args, true, cmd.InOrStdin(), out, cmd.ErrOrStderr(), envArg)
 }
 
 func (p *runner) runWithDaemon(cmd *cobra.Command, f func(ds *daemonState) error) error {
@@ -98,7 +106,7 @@ func (p *runner) runWithConnector(cmd *cobra.Command, f func(cs *connectorState)
 
 func (p *runner) runWithIntercept(cmd *cobra.Command, f func(is *interceptState) error) error {
 	return p.runWithConnector(cmd, func(cs *connectorState) error {
-		is := newInterceptState(cs.grpc, &p.CreateInterceptRequest, cmd)
+		is := newInterceptState(cs, &p.CreateInterceptRequest, cmd)
 		return client.WithEnsuredState(is, func() error { return f(is) })
 	})
 }
@@ -117,11 +125,14 @@ func runAsRoot(exe string, args []string) error {
 	return start(exe, args, false, nil, nil, nil)
 }
 
-func start(exe string, args []string, wait bool, stdin io.Reader, stdout, stderr io.Writer) error {
+func start(exe string, args []string, wait bool, stdin io.Reader, stdout, stderr io.Writer, env ...string) error {
 	cmd := exec.Command(exe, args...)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	cmd.Stdin = stdin
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	if !wait {
 		// Process must live in a process group of its own to prevent
 		// getting affected by <ctrl-c> in the terminal
@@ -155,7 +166,7 @@ func start(exe string, args []string, wait bool, stdin io.Reader, stdout, stderr
 	sigCh <- nil
 	exitCode := s.ExitCode()
 	if exitCode != 0 {
-		return fmt.Errorf("%s %s: exited with %d\n", exe, strings.Join(args, " "), exitCode)
+		return fmt.Errorf("%s %s: exited with %d", exe, strings.Join(args, " "), exitCode)
 	}
 	return nil
 }
