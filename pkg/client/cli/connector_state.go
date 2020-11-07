@@ -135,7 +135,7 @@ func (cs *connectorState) isConnected() bool {
 
 // connect opens the client connection to the daemon.
 func (cs *connectorState) connect() (err error) {
-	if cs.conn, err = grpc.Dial(client.SocketURL(client.ConnectorSocketName), grpc.WithInsecure()); err == nil {
+	if cs.conn, err = client.DialSocket(client.ConnectorSocketName); err == nil {
 		cs.grpc = connector.NewConnectorClient(cs.conn)
 	}
 	return

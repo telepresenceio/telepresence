@@ -65,7 +65,7 @@ func Command() *cobra.Command {
 // run is the main function when executing as the connector
 func run(init bool) error {
 	// establish a connection to the daemon gRPC service
-	conn, err := grpc.Dial(client.SocketURL(client.DaemonSocketName), grpc.WithInsecure())
+	conn, err := client.DialSocket(client.DaemonSocketName)
 	if err != nil {
 		return err
 	}
