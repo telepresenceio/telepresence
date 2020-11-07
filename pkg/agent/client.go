@@ -87,7 +87,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo) err
 // zero if no intercepts are in play.
 func HandleIntercepts(cepts []*rpc.InterceptInfo) int {
 	for _, cept := range cepts {
-		if cept.Disposition == rpc.InterceptInfo_ACTIVE {
+		if cept.Disposition == rpc.InterceptDispositionType_ACTIVE {
 			return int(cept.ManagerPort)
 		}
 	}

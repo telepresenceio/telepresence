@@ -18,15 +18,27 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ManagerClient interface {
+	// Version returns the version information of the Manager.
 	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*VersionInfo2, error)
+	// ArriveAsClient establishes a session between a client and the Manager.
 	ArriveAsClient(ctx context.Context, in *ClientInfo, opts ...grpc.CallOption) (*SessionInfo, error)
+	// ArriveAsAgent establishes a session between an agent and the Manager.
 	ArriveAsAgent(ctx context.Context, in *AgentInfo, opts ...grpc.CallOption) (*SessionInfo, error)
+	// Remain indicates that the session is still valid.
 	Remain(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error)
+	// Depart terminates a session.
 	Depart(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error)
+	// WatchAgents notifies a client of the set of known Agents.
 	WatchAgents(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchAgentsClient, error)
+	// WatchIntercepts notifies a client or agent of the set of intercepts
+	// relevant to that client or agent.
 	WatchIntercepts(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchInterceptsClient, error)
+	// CreateIntercept lets a client create an intercept.
 	CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error)
+	// RemoveIntercept lets a client remove an intercept.
 	RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest2, opts ...grpc.CallOption) (*empty.Empty, error)
+	// ReviewIntercept lets an agent approve or reject an intercept.
+	ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type managerClient struct {
@@ -164,19 +176,40 @@ func (c *managerClient) RemoveIntercept(ctx context.Context, in *RemoveIntercept
 	return out, nil
 }
 
+func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/manager.Manager/ReviewIntercept", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ManagerServer is the server API for Manager service.
 // All implementations must embed UnimplementedManagerServer
 // for forward compatibility
 type ManagerServer interface {
+	// Version returns the version information of the Manager.
 	Version(context.Context, *empty.Empty) (*VersionInfo2, error)
+	// ArriveAsClient establishes a session between a client and the Manager.
 	ArriveAsClient(context.Context, *ClientInfo) (*SessionInfo, error)
+	// ArriveAsAgent establishes a session between an agent and the Manager.
 	ArriveAsAgent(context.Context, *AgentInfo) (*SessionInfo, error)
+	// Remain indicates that the session is still valid.
 	Remain(context.Context, *SessionInfo) (*empty.Empty, error)
+	// Depart terminates a session.
 	Depart(context.Context, *SessionInfo) (*empty.Empty, error)
+	// WatchAgents notifies a client of the set of known Agents.
 	WatchAgents(*SessionInfo, Manager_WatchAgentsServer) error
+	// WatchIntercepts notifies a client or agent of the set of intercepts
+	// relevant to that client or agent.
 	WatchIntercepts(*SessionInfo, Manager_WatchInterceptsServer) error
+	// CreateIntercept lets a client create an intercept.
 	CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptInfo, error)
+	// RemoveIntercept lets a client remove an intercept.
 	RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*empty.Empty, error)
+	// ReviewIntercept lets an agent approve or reject an intercept.
+	ReviewIntercept(context.Context, *ReviewInterceptRequest) (*empty.Empty, error)
 	mustEmbedUnimplementedManagerServer()
 }
 
@@ -210,6 +243,9 @@ func (UnimplementedManagerServer) CreateIntercept(context.Context, *CreateInterc
 }
 func (UnimplementedManagerServer) RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
+}
+func (UnimplementedManagerServer) ReviewIntercept(context.Context, *ReviewInterceptRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReviewIntercept not implemented")
 }
 func (UnimplementedManagerServer) mustEmbedUnimplementedManagerServer() {}
 
@@ -392,6 +428,24 @@ func _Manager_RemoveIntercept_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Manager_ReviewIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReviewInterceptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).ReviewIntercept(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/manager.Manager/ReviewIntercept",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).ReviewIntercept(ctx, req.(*ReviewInterceptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Manager_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "manager.Manager",
 	HandlerType: (*ManagerServer)(nil),
@@ -423,6 +477,10 @@ var _Manager_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveIntercept",
 			Handler:    _Manager_RemoveIntercept_Handler,
+		},
+		{
+			MethodName: "ReviewIntercept",
+			Handler:    _Manager_ReviewIntercept_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

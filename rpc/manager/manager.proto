@@ -53,26 +53,28 @@ message InterceptSpec {
   int32 target_port = 7;
 }
 
+enum InterceptDispositionType {
+  UNSPECIFIED = 0;
+
+  ACTIVE = 1;
+  WAITING = 2;
+
+  // Failure states
+
+  NO_CLIENT = 3;
+  NO_AGENT = 4;
+  NO_MECHANISM = 5;
+  NO_PORTS = 6;
+  AGENT_ERROR = 7;
+}
+
+
 message InterceptInfo {
-  enum DisType {
-    UNSPECIFIED = 0;
-
-    ACTIVE = 1;
-    WAITING = 2;
-
-    // Failure states
-
-    NO_CLIENT = 3;
-    NO_AGENT = 4;
-    NO_MECHANISM = 5;
-    NO_PORTS = 6;
-    AGENT_ERROR = 7;
-  }
-
   InterceptSpec spec = 1;
   int32 manager_port = 2;
-  DisType disposition = 3;
+  InterceptDispositionType disposition = 3;
   string message = 4;
+  string id = 5;
 }
 
 message SessionInfo {
@@ -97,28 +99,53 @@ message RemoveInterceptRequest2 {
   string name = 2;
 }
 
+message ReviewInterceptRequest {
+  SessionInfo session = 1;
+  string id = 2;
+  InterceptDispositionType disposition = 3;
+  string message = 4;
+}
+
 message VersionInfo2 {
   string version = 2;
 }
 
 
 service Manager {
+  // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
 
   // Presence
 
+  // ArriveAsClient establishes a session between a client and the Manager.
   rpc ArriveAsClient(ClientInfo) returns (SessionInfo);
+
+  // ArriveAsAgent establishes a session between an agent and the Manager.
   rpc ArriveAsAgent(AgentInfo) returns (SessionInfo);
+
+  // Remain indicates that the session is still valid.
   rpc Remain(SessionInfo) returns (google.protobuf.Empty);
+
+  // Depart terminates a session.
   rpc Depart(SessionInfo) returns (google.protobuf.Empty);
 
   // Watches
 
+  // WatchAgents notifies a client of the set of known Agents.
   rpc WatchAgents(SessionInfo) returns (stream AgentInfoSnapshot);
+
+  // WatchIntercepts notifies a client or agent of the set of intercepts
+  // relevant to that client or agent.
   rpc WatchIntercepts(SessionInfo) returns (stream InterceptInfoSnapshot);
 
   // CRUD
 
+  // CreateIntercept lets a client create an intercept.
   rpc CreateIntercept(CreateInterceptRequest) returns (InterceptInfo);
+
+  // RemoveIntercept lets a client remove an intercept.
   rpc RemoveIntercept(RemoveInterceptRequest2) returns (google.protobuf.Empty);
+
+  // ReviewIntercept lets an agent approve or reject an intercept.
+  rpc ReviewIntercept(ReviewInterceptRequest) returns (google.protobuf.Empty);
 }

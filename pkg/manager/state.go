@@ -301,7 +301,7 @@ func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) *rpc.Int
 	cept := &rpc.InterceptInfo{
 		Spec:        spec,
 		ManagerPort: 0,
-		Disposition: rpc.InterceptInfo_AGENT_ERROR,
+		Disposition: rpc.InterceptDispositionType_WAITING,
 		Message:     "No proper error yet",
 	}
 	entry := &interceptEntry{
