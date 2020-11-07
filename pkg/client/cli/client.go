@@ -162,8 +162,8 @@ func connectorStatus(cmd *cobra.Command) (status *connector.ConnectorStatus, err
 	if assertConnectorStarted() != nil {
 		return &connector.ConnectorStatus{Error: connector.ConnectorStatus_NOT_STARTED}, nil
 	}
-	err = withConnector(cmd, func(d connector.ConnectorClient) error {
-		status, err = d.Status(cmd.Context(), &empty.Empty{})
+	err = withConnector(cmd, func(cs *connectorState) error {
+		status, err = cs.grpc.Status(cmd.Context(), &empty.Empty{})
 		return err
 	})
 	return
@@ -247,7 +247,7 @@ func (p *runner) addIntercept(cmd *cobra.Command, _ []string) error {
 	defer ds.disconnect()
 	defer cs.disconnect()
 
-	is := newInterceptState(cs.grpc, &p.CreateInterceptRequest, cmd)
+	is := newInterceptState(cs, &p.CreateInterceptRequest, cmd)
 	_, err = is.EnsureState()
 	return err
 }
@@ -279,8 +279,8 @@ func prepareIntercept(_ *cobra.Command, ii *manager.CreateInterceptRequest) erro
 func AvailableIntercepts(cmd *cobra.Command, _ []string) error {
 	var r *manager.AgentInfoSnapshot
 	var err error
-	err = withConnector(cmd, func(c connector.ConnectorClient) error {
-		r, err = c.AvailableIntercepts(cmd.Context(), &empty.Empty{})
+	err = withConnector(cmd, func(cs *connectorState) error {
+		r, err = cs.grpc.AvailableIntercepts(cmd.Context(), &empty.Empty{})
 		return err
 	})
 	if err != nil {
@@ -302,8 +302,8 @@ func AvailableIntercepts(cmd *cobra.Command, _ []string) error {
 func ListIntercepts(cmd *cobra.Command, _ []string) error {
 	var r *manager.InterceptInfoSnapshot
 	var err error
-	err = withConnector(cmd, func(c connector.ConnectorClient) error {
-		r, err = c.ListIntercepts(cmd.Context(), &empty.Empty{})
+	err = withConnector(cmd, func(cs *connectorState) error {
+		r, err = cs.grpc.ListIntercepts(cmd.Context(), &empty.Empty{})
 		return err
 	})
 	if err != nil {
@@ -328,8 +328,8 @@ func ListIntercepts(cmd *cobra.Command, _ []string) error {
 
 // RemoveIntercept tells the daemon to deactivate and remove an existent intercept
 func RemoveIntercept(cmd *cobra.Command, args []string) error {
-	return withConnector(cmd, func(c connector.ConnectorClient) error {
-		is := newInterceptState(c,
+	return withConnector(cmd, func(cs *connectorState) error {
+		is := newInterceptState(cs,
 			&manager.CreateInterceptRequest{InterceptSpec: &manager.InterceptSpec{Name: strings.TrimSpace(args[0])}},
 			cmd)
 		return is.DeactivateState()
@@ -364,7 +364,7 @@ func assertDaemonStarted() error {
 
 // withDaemon establishes a connection, calls the function with the gRPC client, and ensures
 // that the connection is closed.
-func withConnector(cmd *cobra.Command, f func(connector.ConnectorClient) error) error {
+func withConnector(cmd *cobra.Command, f func(state *connectorState) error) error {
 	ds, err := newDaemonState(cmd, "", "")
 	if err != nil {
 		return err
@@ -375,7 +375,7 @@ func withConnector(cmd *cobra.Command, f func(connector.ConnectorClient) error) 
 		return err
 	}
 	defer cs.disconnect()
-	return f(cs.grpc)
+	return f(cs)
 }
 
 // withDaemon establishes a connection, calls the function with the gRPC client, and ensures

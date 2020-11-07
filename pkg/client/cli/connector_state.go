@@ -21,6 +21,7 @@ type connectorState struct {
 	conn   *grpc.ClientConn
 	daemon daemon.DaemonClient
 	grpc   connector.ConnectorClient
+	info   *connector.ConnectInfo
 }
 
 // Connect asks the daemon to connect to a cluster
@@ -76,6 +77,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	cs.info = r
 
 	var msg string
 	switch r.Error {

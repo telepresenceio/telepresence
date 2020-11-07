@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"os"
 	"runtime/debug"
 
 	"github.com/spf13/cobra"
@@ -24,6 +25,12 @@ func Version() string {
 	// Prefer version number inserted at build
 	if version.Version != "" {
 		return version.Version
+	}
+
+	v := os.Getenv("TELEPRESENCE_VERSION")
+	if v != "" {
+		version.Version = v
+		return v
 	}
 
 	// Fall back to version info from "go get"
