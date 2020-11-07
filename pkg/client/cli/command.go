@@ -9,6 +9,7 @@ import (
 
 	"github.com/datawire/telepresence2/pkg/client/connector"
 	"github.com/datawire/telepresence2/pkg/client/daemon"
+	manager "github.com/datawire/telepresence2/pkg/rpc"
 )
 
 var Help = `telepresence can run a command in a sub shell after ensuring that a connection
@@ -37,7 +38,7 @@ func Command() *cobra.Command {
   https://www.getambassador.io/docs/latest/topics/install/
 `
 
-	r := &runner{}
+	r := &runner{CreateInterceptRequest: manager.CreateInterceptRequest{InterceptSpec: new(manager.InterceptSpec)}}
 	rootCmd := &cobra.Command{
 		Use:          "telepresence",
 		Short:        myName,
@@ -90,14 +91,10 @@ func Command() *cobra.Command {
 		"namespace", "n", "",
 		"The Kubernetes namespace to use. Defaults to kubectl's default for the context.",
 	)
+	spec := r.CreateInterceptRequest.InterceptSpec
 	flags.BoolVar(&r.IsCi, "ci", false, "This session is a CI run.")
-	flags.StringVarP(&r.Deployment, "intercept", "i", "", "Name of deployment to intercept")
-	flags.StringVarP(&r.Name, "name", "", "", "Name of the intercept")
-	flags.StringVar(&r.Prefix, "prefix", "/", "prefix to intercept")
-	flags.BoolVarP(&r.Preview, "preview", "p", true, "use a preview URL") // this default is unused
-	flags.BoolVarP(&r.Grpc, "grpc", "", false, "intercept GRPC traffic")
-	flags.StringVarP(&r.TargetHost, "port", "", "", "the local port to forward to")
-	flags.StringToStringVarP(&r.Patterns, "match", "m", nil, "match expression (HEADER=REGEX)")
+	flags.StringVarP(&spec.Name, "name", "", "", "Name of the intercept")
+	flags.StringVarP(&spec.TargetHost, "port", "", "", "the local port to forward to")
 	rootCmd.InitDefaultHelpCmd()
 	return rootCmd
 }

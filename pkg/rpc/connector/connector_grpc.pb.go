@@ -4,6 +4,7 @@ package connector
 
 import (
 	context "context"
+	rpc "github.com/datawire/telepresence2/pkg/rpc"
 	version "github.com/datawire/telepresence2/pkg/rpc/version"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
@@ -26,13 +27,13 @@ type ConnectorClient interface {
 	// Connects the daemon to a cluster
 	Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error)
 	// Adds a deployment intercept
-	AddIntercept(ctx context.Context, in *InterceptRequest, opts ...grpc.CallOption) (*Intercept, error)
+	CreateIntercept(ctx context.Context, in *rpc.CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error)
 	// Deactivates and removes an existent deployment intercept.
-	RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest, opts ...grpc.CallOption) (*Intercept, error)
+	RemoveIntercept(ctx context.Context, in *rpc.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error)
 	// Returns a list of deployments available for intercept.
-	AvailableIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AvailableInterceptList, error)
+	AvailableIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*rpc.AgentInfoSnapshot, error)
 	// Returns a list of currently active intercepts.
-	ListIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*InterceptList, error)
+	ListIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*rpc.InterceptInfoSnapshot, error)
 	// Quits (terminates) the service.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 }
@@ -72,17 +73,17 @@ func (c *connectorClient) Connect(ctx context.Context, in *ConnectRequest, opts 
 	return out, nil
 }
 
-func (c *connectorClient) AddIntercept(ctx context.Context, in *InterceptRequest, opts ...grpc.CallOption) (*Intercept, error) {
-	out := new(Intercept)
-	err := c.cc.Invoke(ctx, "/telepresence.Connector/AddIntercept", in, out, opts...)
+func (c *connectorClient) CreateIntercept(ctx context.Context, in *rpc.CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error) {
+	out := new(InterceptResult)
+	err := c.cc.Invoke(ctx, "/telepresence.Connector/CreateIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *connectorClient) RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest, opts ...grpc.CallOption) (*Intercept, error) {
-	out := new(Intercept)
+func (c *connectorClient) RemoveIntercept(ctx context.Context, in *rpc.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error) {
+	out := new(InterceptResult)
 	err := c.cc.Invoke(ctx, "/telepresence.Connector/RemoveIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -90,8 +91,8 @@ func (c *connectorClient) RemoveIntercept(ctx context.Context, in *RemoveInterce
 	return out, nil
 }
 
-func (c *connectorClient) AvailableIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*AvailableInterceptList, error) {
-	out := new(AvailableInterceptList)
+func (c *connectorClient) AvailableIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*rpc.AgentInfoSnapshot, error) {
+	out := new(rpc.AgentInfoSnapshot)
 	err := c.cc.Invoke(ctx, "/telepresence.Connector/AvailableIntercepts", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -99,8 +100,8 @@ func (c *connectorClient) AvailableIntercepts(ctx context.Context, in *empty.Emp
 	return out, nil
 }
 
-func (c *connectorClient) ListIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*InterceptList, error) {
-	out := new(InterceptList)
+func (c *connectorClient) ListIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*rpc.InterceptInfoSnapshot, error) {
+	out := new(rpc.InterceptInfoSnapshot)
 	err := c.cc.Invoke(ctx, "/telepresence.Connector/ListIntercepts", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -128,13 +129,13 @@ type ConnectorServer interface {
 	// Connects the daemon to a cluster
 	Connect(context.Context, *ConnectRequest) (*ConnectInfo, error)
 	// Adds a deployment intercept
-	AddIntercept(context.Context, *InterceptRequest) (*Intercept, error)
+	CreateIntercept(context.Context, *rpc.CreateInterceptRequest) (*InterceptResult, error)
 	// Deactivates and removes an existent deployment intercept.
-	RemoveIntercept(context.Context, *RemoveInterceptRequest) (*Intercept, error)
+	RemoveIntercept(context.Context, *rpc.RemoveInterceptRequest2) (*InterceptResult, error)
 	// Returns a list of deployments available for intercept.
-	AvailableIntercepts(context.Context, *empty.Empty) (*AvailableInterceptList, error)
+	AvailableIntercepts(context.Context, *empty.Empty) (*rpc.AgentInfoSnapshot, error)
 	// Returns a list of currently active intercepts.
-	ListIntercepts(context.Context, *empty.Empty) (*InterceptList, error)
+	ListIntercepts(context.Context, *empty.Empty) (*rpc.InterceptInfoSnapshot, error)
 	// Quits (terminates) the service.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	mustEmbedUnimplementedConnectorServer()
@@ -153,16 +154,16 @@ func (UnimplementedConnectorServer) Status(context.Context, *empty.Empty) (*Conn
 func (UnimplementedConnectorServer) Connect(context.Context, *ConnectRequest) (*ConnectInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Connect not implemented")
 }
-func (UnimplementedConnectorServer) AddIntercept(context.Context, *InterceptRequest) (*Intercept, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AddIntercept not implemented")
+func (UnimplementedConnectorServer) CreateIntercept(context.Context, *rpc.CreateInterceptRequest) (*InterceptResult, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateIntercept not implemented")
 }
-func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *RemoveInterceptRequest) (*Intercept, error) {
+func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *rpc.RemoveInterceptRequest2) (*InterceptResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
-func (UnimplementedConnectorServer) AvailableIntercepts(context.Context, *empty.Empty) (*AvailableInterceptList, error) {
+func (UnimplementedConnectorServer) AvailableIntercepts(context.Context, *empty.Empty) (*rpc.AgentInfoSnapshot, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AvailableIntercepts not implemented")
 }
-func (UnimplementedConnectorServer) ListIntercepts(context.Context, *empty.Empty) (*InterceptList, error) {
+func (UnimplementedConnectorServer) ListIntercepts(context.Context, *empty.Empty) (*rpc.InterceptInfoSnapshot, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListIntercepts not implemented")
 }
 func (UnimplementedConnectorServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
@@ -235,26 +236,26 @@ func _Connector_Connect_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Connector_AddIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(InterceptRequest)
+func _Connector_CreateIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(rpc.CreateInterceptRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ConnectorServer).AddIntercept(ctx, in)
+		return srv.(ConnectorServer).CreateIntercept(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Connector/AddIntercept",
+		FullMethod: "/telepresence.Connector/CreateIntercept",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).AddIntercept(ctx, req.(*InterceptRequest))
+		return srv.(ConnectorServer).CreateIntercept(ctx, req.(*rpc.CreateInterceptRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _Connector_RemoveIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RemoveInterceptRequest)
+	in := new(rpc.RemoveInterceptRequest2)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -266,7 +267,7 @@ func _Connector_RemoveIntercept_Handler(srv interface{}, ctx context.Context, de
 		FullMethod: "/telepresence.Connector/RemoveIntercept",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).RemoveIntercept(ctx, req.(*RemoveInterceptRequest))
+		return srv.(ConnectorServer).RemoveIntercept(ctx, req.(*rpc.RemoveInterceptRequest2))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -342,8 +343,8 @@ var _Connector_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Connector_Connect_Handler,
 		},
 		{
-			MethodName: "AddIntercept",
-			Handler:    _Connector_AddIntercept_Handler,
+			MethodName: "CreateIntercept",
+			Handler:    _Connector_CreateIntercept_Handler,
 		},
 		{
 			MethodName: "RemoveIntercept",

@@ -1,6 +1,7 @@
 package cli_test
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -45,9 +46,9 @@ var _ = Describe("Telepresence", func() {
 			defer os.Setenv("KUBECONFIG", kubeConfig)
 			os.Setenv("KUBECONFIG", "/dev/null")
 			stdout, stderr := execute()
+			Expect(stderr).To(ContainSubstring("initial cluster check"))
 			Expect(stdout).To(ContainSubstring("Launching Telepresence Daemon"))
 			Expect(stdout).To(ContainSubstring("Daemon quitting"))
-			Expect(stderr).To(ContainSubstring("initial cluster check"))
 		})
 	})
 
@@ -139,6 +140,9 @@ var _ = BeforeSuite(func() {
 	err = run("kubectl", "create", "namespace", namespace)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = run("sudo", "true")
+	Expect(err).ToNot(HaveOccurred(), "acquire privileges")
+
 	version.Version = testVersion
 	client.SetExe(executable)
 })
@@ -153,7 +157,8 @@ func applyEchoService() error {
 	if err != nil {
 		return err
 	}
-	for i := 0; i < 120; i++ {
+	for i := 0; i < 30; i++ {
+		time.Sleep(time.Second)
 		err = run(
 			"kubectl", "--namespace", namespace, "run", "curl-from-cluster", "--rm", "-it",
 			"--image=pstauffer/curl", "--restart=Never", "--",
@@ -163,7 +168,6 @@ func applyEchoService() error {
 		if err == nil {
 			return nil
 		}
-		time.Sleep(500 * time.Millisecond)
 	}
 	return errors.New("timed out waiting for echo-easy service")
 }
@@ -219,6 +223,12 @@ func getCommand(args ...string) *cobra.Command {
 	cmd := cli.Command()
 	client.AddVersionCommand(cmd)
 	cmd.SetArgs(args)
+	flags := cmd.Flags()
+
+	// Circumvent test flag conflict explained here https://golang.org/doc/go1.13#testing
+	flag.Visit(func(f *flag.Flag) {
+		flags.AddGoFlag(f)
+	})
 	cmd.SetOut(new(strings.Builder))
 	cmd.SetErr(new(strings.Builder))
 	cmd.SilenceErrors = true

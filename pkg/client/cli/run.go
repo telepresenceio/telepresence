@@ -12,13 +12,14 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/client"
+	manager "github.com/datawire/telepresence2/pkg/rpc"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
 )
 
 // runner contains all parameters needed in order to run an intercepted command.
 type runner struct {
 	connector.ConnectRequest
-	connector.InterceptRequest
+	manager.CreateInterceptRequest
 	DNS      string
 	Fallback string
 	NoWait   bool
@@ -38,7 +39,7 @@ func (p *runner) run(cmd *cobra.Command, args []string) error {
 	case p.Version:
 		return printVersion(cmd, args)
 	case p.NoWait:
-		if p.InterceptRequest.Deployment != "" {
+		if p.CreateInterceptRequest.InterceptSpec.Name != "" {
 			return p.addIntercept(cmd, args)
 		}
 		return p.connect(cmd, args)
@@ -55,8 +56,8 @@ func (p *runner) run(cmd *cobra.Command, args []string) error {
 		args = args[1:]
 	}
 
-	if p.InterceptRequest.Deployment != "" {
-		err := prepareIntercept(cmd, &p.InterceptRequest)
+	if p.CreateInterceptRequest.InterceptSpec.Name != "" {
+		err := prepareIntercept(cmd, &p.CreateInterceptRequest)
 		if err != nil {
 			return err
 		}
@@ -96,17 +97,21 @@ func (p *runner) runWithConnector(cmd *cobra.Command, f func(cs *connectorState)
 
 func (p *runner) runWithIntercept(cmd *cobra.Command, f func(is *interceptState) error) error {
 	return p.runWithConnector(cmd, func(cs *connectorState) error {
-		is := newInterceptState(cs.grpc, &p.InterceptRequest, cmd.OutOrStdout())
+		is := newInterceptState(cs.grpc, &p.CreateInterceptRequest, cmd)
 		return client.WithEnsuredState(is, func() error { return f(is) })
 	})
 }
 
-func runAsRoot(exe string, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
+func runAsRoot(exe string, args []string) error {
 	if os.Geteuid() != 0 {
+		err := exec.Command("sudo", "true").Run()
+		if err != nil {
+			return err
+		}
 		args = append([]string{"-n", "-E", exe}, args...)
 		exe = "sudo"
 	}
-	return start(exe, args, false, stdin, stdout, stderr)
+	return start(exe, args, false, nil, nil, nil)
 }
 
 func start(exe string, args []string, wait bool, stdin io.Reader, stdout, stderr io.Writer) error {

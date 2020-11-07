@@ -17,12 +17,13 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/client"
+	manager "github.com/datawire/telepresence2/pkg/rpc"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
 	"github.com/datawire/telepresence2/pkg/rpc/version"
 )
 
-var Help = `The Telepresence Connect is a background component that manages a connection. It
+var help = `The Telepresence Connect is a background component that manages a connection. It
 requires that a daemon is already running.
 
 Launch the Telepresence Connector:
@@ -40,7 +41,6 @@ type service struct {
 	cluster    *k8sCluster
 	bridge     *bridge
 	trafficMgr *trafficManager
-	intercepts []*intercept
 	grpc       *grpc.Server
 	p          *supervisor.Process
 }
@@ -52,6 +52,7 @@ func Command() *cobra.Command {
 		Short:  "Launch Telepresence Connector in the foreground (debug)",
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
+		Long:   help,
 		RunE: func(_ *cobra.Command, args []string) error {
 			return run(init)
 		},
@@ -121,20 +122,38 @@ func (s *service) Connect(_ context.Context, cr *rpc.ConnectRequest) (*rpc.Conne
 	return s.connect(s.p, cr), nil
 }
 
-func (s *service) AddIntercept(_ context.Context, ir *rpc.InterceptRequest) (*rpc.Intercept, error) {
-	return s.addIntercept(s.p, ir), nil
+func (s *service) CreateIntercept(_ context.Context, ir *manager.CreateInterceptRequest) (*rpc.InterceptResult, error) {
+	ie, is := s.interceptStatus()
+	if ie != rpc.InterceptError_UNSPECIFIED {
+		return &rpc.InterceptResult{Error: ie, ErrorText: is}, nil
+	}
+	return s.trafficMgr.addIntercept(s.p, ir)
 }
 
-func (s *service) RemoveIntercept(_ context.Context, rr *rpc.RemoveInterceptRequest) (*rpc.Intercept, error) {
-	return s.removeIntercept(s.p, rr.Name), nil
+func (s *service) RemoveIntercept(_ context.Context, rr *manager.RemoveInterceptRequest2) (*rpc.InterceptResult, error) {
+	ie, is := s.interceptStatus()
+	if ie != rpc.InterceptError_UNSPECIFIED {
+		return &rpc.InterceptResult{Error: ie, ErrorText: is}, nil
+	}
+	_, err := s.trafficMgr.removeIntercept(s.p, rr.Name)
+	if err != nil {
+		return nil, err
+	}
+	return &rpc.InterceptResult{}, nil
 }
 
-func (s *service) AvailableIntercepts(_ context.Context, _ *empty.Empty) (*rpc.AvailableInterceptList, error) {
-	return s.availableIntercepts(s.p), nil
+func (s *service) AvailableIntercepts(_ context.Context, _ *empty.Empty) (*manager.AgentInfoSnapshot, error) {
+	if !s.trafficMgr.IsOkay() {
+		return &manager.AgentInfoSnapshot{}, nil
+	}
+	return s.trafficMgr.agentInfoSnapshot(), nil
 }
 
-func (s *service) ListIntercepts(_ context.Context, _ *empty.Empty) (*rpc.InterceptList, error) {
-	return s.listIntercepts(s.p), nil
+func (s *service) ListIntercepts(_ context.Context, _ *empty.Empty) (*manager.InterceptInfoSnapshot, error) {
+	if !s.trafficMgr.IsOkay() {
+		return &manager.InterceptInfoSnapshot{}, nil
+	}
+	return s.trafficMgr.interceptInfoSnapshot(), nil
 }
 
 func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
@@ -324,8 +343,8 @@ func (s *service) handleSignalsAndShutdown(cancel context.CancelFunc) {
 
 	defer cluster.Close()
 
-	s.clearIntercepts(s.p)
 	if trafficMgr != nil {
+		_ = trafficMgr.clearIntercepts(s.p)
 		_ = trafficMgr.Close()
 	}
 	s.bridge = nil
