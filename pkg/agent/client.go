@@ -39,7 +39,28 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo) err
 	}()
 
 	// Call WatchIntercepts
-	// FIXME
+	stream, err := manager.WatchIntercepts(ctx, session)
+	if err != nil {
+		return err
+	}
+
+	snapshots := make(chan *rpc.InterceptInfoSnapshot)
+	go func() {
+		for {
+			snapshot, err := stream.Recv()
+			if err != nil {
+				dlog.Debugf(ctx, "stream recv: %+v", err)
+				// Assume we'll error out elsewhere too
+				return
+			}
+
+			select {
+			case <-stream.Context().Done():
+				return
+			case snapshots <- snapshot:
+			}
+		}
+	}()
 
 	// Loop calling Remain
 	for {
@@ -49,6 +70,10 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo) err
 		select {
 		case <-ctx.Done():
 			return nil
+		case snapshot := <-snapshots:
+			newPort := HandleIntercepts(snapshot.Intercepts)
+			// FIXME actually do something...
+			dlog.Infof(ctx, "Target port is now %d", newPort)
 		case <-ticker.C:
 		}
 
@@ -56,4 +81,16 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo) err
 			return err
 		}
 	}
+}
+
+// HandleIntercepts returns the Manager port to which to forward connections, or
+// zero if no intercepts are in play.
+func HandleIntercepts(cepts []*rpc.InterceptInfo) int {
+	for _, cept := range cepts {
+		if cept.Disposition == rpc.InterceptInfo_ACTIVE {
+			return int(cept.ManagerPort)
+		}
+	}
+
+	return 0
 }

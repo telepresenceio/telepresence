@@ -30,6 +30,13 @@ func NewForwarder(ctx context.Context, listen, target *net.TCPAddr) *Forwarder {
 	}
 }
 
+func (f *Forwarder) Target() *net.TCPAddr {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.targetAddr
+}
+
 func (f *Forwarder) SetTarget(target *net.TCPAddr) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
