@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"regexp"
 	"strings"
 	"syscall"
 
@@ -104,9 +105,11 @@ func (p *runner) runWithIntercept(cmd *cobra.Command, f func(is *interceptState)
 
 func runAsRoot(exe string, args []string) error {
 	if os.Geteuid() != 0 {
-		err := exec.Command("sudo", "true").Run()
-		if err != nil {
-			return err
+		if err := exec.Command("sudo", "-n", "true").Run(); err != nil {
+			fmt.Printf("Need root privileges to run %q\n", shellString(exe, args))
+			if err = exec.Command("sudo", "true").Run(); err != nil {
+				return err
+			}
 		}
 		args = append([]string{"-n", "-E", exe}, args...)
 		exe = "sudo"
@@ -127,7 +130,7 @@ func start(exe string, args []string, wait bool, stdin io.Reader, stdout, stderr
 
 	var err error
 	if err = cmd.Start(); err != nil {
-		return fmt.Errorf("%s %s: %v\n", exe, strings.Join(args, " "), err)
+		return fmt.Errorf("%s: %v", shellString(exe, args), err)
 	}
 	if !wait {
 		_ = cmd.Process.Release()
@@ -146,7 +149,7 @@ func start(exe string, args []string, wait bool, stdin io.Reader, stdout, stderr
 	}()
 	s, err := cmd.Process.Wait()
 	if err != nil {
-		return fmt.Errorf("%s %s: %v\n", exe, strings.Join(args, " "), err)
+		return fmt.Errorf("%s: %v", shellString(exe, args), err)
 	}
 
 	sigCh <- nil
@@ -155,4 +158,57 @@ func start(exe string, args []string, wait bool, stdin io.Reader, stdout, stderr
 		return fmt.Errorf("%s %s: exited with %d\n", exe, strings.Join(args, " "), exitCode)
 	}
 	return nil
+}
+
+func shellString(exe string, args []string) string {
+	b := strings.Builder{}
+	b.WriteString(quoteArg(exe))
+	for _, a := range args {
+		b.WriteByte(' ')
+		b.WriteString(quoteArg(a))
+	}
+	return b.String()
+}
+
+var escape = regexp.MustCompile(`[^\w!%+,\-./:=@^]`)
+
+// quoteArg checks if the give string contains characters that have special meaning for a
+// shell. If it does, it will be quoted using single quotes. If the string itself contains
+// single quotes, then the string is split on single quotes, each single quote is escaped
+// and each segment between the escaped single quotes is quoted separately.
+func quoteArg(arg string) string {
+	if arg == "" {
+		return `''`
+	}
+	if !escape.MatchString(arg) {
+		return arg
+	}
+
+	b := strings.Builder{}
+	qp := strings.IndexByte(arg, '\'')
+	if qp < 0 {
+		b.WriteByte('\'')
+		b.WriteString(arg)
+		b.WriteByte('\'')
+	} else {
+		for {
+			if qp > 0 {
+				// Write quoted string up to qp
+				b.WriteString(quoteArg(arg[:qp]))
+			}
+			b.WriteString(`\'`)
+			qp++
+			if qp >= len(arg) {
+				break
+			}
+			arg = arg[qp:]
+			if qp = strings.IndexByte(arg, '\''); qp < 0 {
+				if len(arg) > 0 {
+					b.WriteString(quoteArg(arg))
+				}
+				break
+			}
+		}
+	}
+	return b.String()
 }
