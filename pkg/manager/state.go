@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -16,6 +17,7 @@ type Clock interface {
 
 type interceptEntry struct {
 	clientSessionID string
+	index           int
 	intercept       *rpc.InterceptInfo
 }
 
@@ -267,8 +269,7 @@ func (s *State) GetIntercepts(sessionID string) []*rpc.InterceptInfo {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	cepts := []*rpc.InterceptInfo{}
-
+	// Choose intercepts based on session type: agent or client
 	var filter func(*interceptEntry) bool
 
 	switch item := entry.Item().(type) {
@@ -281,13 +282,25 @@ func (s *State) GetIntercepts(sessionID string) []*rpc.InterceptInfo {
 			return entry.intercept.Spec.Agent == item.Name
 		}
 	default:
-		return cepts
+		return []*rpc.InterceptInfo{}
 	}
 
+	// Select the relevant subset of intercepts
+	entries := []*interceptEntry{}
 	for _, entry := range s.intercepts {
 		if filter(entry) {
-			cepts = append(cepts, entry.intercept)
+			entries = append(entries, entry)
 		}
+	}
+
+	// Always return intercepts in the same order
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].index < entries[j].index
+	})
+
+	cepts := make([]*rpc.InterceptInfo, len(entries))
+	for i := 0; i < len(entries); i++ {
+		cepts[i] = entries[i].intercept
 	}
 
 	return cepts
@@ -297,15 +310,18 @@ func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) *rpc.Int
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	ceptID := fmt.Sprintf("I%03d", s.next())
+	ceptIndex := s.next()
+	ceptID := fmt.Sprintf("I%03d", ceptIndex)
 	cept := &rpc.InterceptInfo{
 		Spec:        spec,
 		ManagerPort: 0,
 		Disposition: rpc.InterceptDispositionType_WAITING,
-		Message:     "No proper error yet",
+		Message:     "Waiting for Agent approval",
+		Id:          ceptID,
 	}
 	entry := &interceptEntry{
 		clientSessionID: sessionID,
+		index:           ceptIndex,
 		intercept:       cept,
 	}
 	s.intercepts[ceptID] = entry
