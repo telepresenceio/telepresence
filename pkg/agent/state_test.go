@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	appHost = "appHost"
-	appPort = 5000
-	mgrHost = "managerHost"
+	appHost       = "appHost"
+	appPort int32 = 5000
+	mgrHost       = "managerHost"
 )
 
 func makeFS(t *testing.T) (*agent.Forwarder, *agent.State) {
@@ -54,7 +54,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	host, port = f.Target()
 	a.Equal(appHost, host)
-	a.True(appPort == port)
+	a.Equal(appPort, port)
 
 	// Handle resets state on an empty intercept list
 
@@ -62,7 +62,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 	a.Len(reviews, 0)
 	host, port = f.Target()
 	a.Equal(appHost, host)
-	a.True(appPort == port)
+	a.Equal(appPort, port)
 
 	// Prepare some intercepts..
 
@@ -96,7 +96,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 	a.Len(reviews, 0)
 	host, port = f.Target()
 	a.Equal(appHost, host)
-	a.True(appPort == port)
+	a.Equal(appPort, port)
 
 	// Handle reviews waiting intercepts
 
@@ -107,7 +107,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 	a.Len(reviews, 2)
 	host, port = f.Target()
 	a.Equal(appHost, host)
-	a.True(appPort == port)
+	a.Equal(appPort, port)
 
 	// Reviews are in the correct order
 
@@ -130,7 +130,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 	a.Len(reviews, 1)
 	host, port = f.Target()
 	a.Equal(mgrHost, host)
-	a.True(1138 == port)
+	a.Equal(int32(1138), port)
 
 	a.Equal(rpc.InterceptDispositionType_AGENT_ERROR, reviews[0].Disposition)
 	a.Equal("Serving intercept cept1Name from user@host1 (intercept-01)", reviews[0].Message)
@@ -141,5 +141,5 @@ func TestState_HandleIntercepts(t *testing.T) {
 	a.Len(reviews, 0)
 	host, port = f.Target()
 	a.Equal(appHost, host)
-	a.True(appPort == port)
+	a.Equal(appPort, port)
 }
