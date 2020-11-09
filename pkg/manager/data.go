@@ -65,6 +65,16 @@ func mechanismsAreTheSame(a, b []*rpc.AgentInfo_Mechanism) bool {
 	return true
 }
 
+func agentHasMechanism(agent *rpc.AgentInfo, mechName string) bool {
+	for _, mechanism := range agent.Mechanisms {
+		if mechanism.Name == mechName {
+			return true
+		}
+	}
+
+	return false
+}
+
 func validateClient(client *rpc.ClientInfo) string {
 	switch {
 	case client.Name == "":

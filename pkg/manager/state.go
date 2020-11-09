@@ -92,89 +92,6 @@ func (s *State) nextUnusedPort() int32 {
 	return 0
 }
 
-/*
-// reconcile updates the state of the Manager based on the absence or
-// presence/status of clients and agents in the system. After removing clients
-// and agents that are no longer present, Reconcile updates the disposition of
-// affected intercepts. It returns the set of intercepts that have changed so
-// that intercept watch events can be fired for the associated clients and
-// agents. It also returns a boolean to indicate whether the set of Agents has
-// changed so that agent watch events can be fired for all clients.
-func (s *State) reconcile() ([]*rpc.InterceptInfo, bool) {
-	// Remove clients that are no longer present. Removing clients can trigger
-	// an intercept watch event below.
-	for sessionID := range s.clients {
-		if !s.presence.IsPresent(sessionID) {
-			delete(s.clients, sessionID)
-		}
-	}
-
-	// Remove agents that are no longer present. Removing agents can trigger an
-	// agent watch event here and can trigger an intercept watch event below.
-	agentsUpdated := false
-	agentsByName := make(map[string][]*rpc.AgentInfo)
-	for sessionID, agent := range s.agents {
-		if s.presence.IsPresent(sessionID) {
-			agentsByName[agent.Name] = append(agentsByName[agent.Name], agent)
-			continue
-		}
-
-		delete(s.agents, sessionID)
-		agentsUpdated = true
-	}
-
-	// Reconcile Intercepts
-	interceptsUpdated := make([]*rpc.InterceptInfo, 0, 10)
-	for key, iEntry := range s.intercepts {
-		// Make sure the client is present. Otherwise remove the intercept and
-		// update the associated agents.
-		if _, ok := s.clients[iEntry.clientSessionID]; !ok {
-			iEntry.intercept.Disposition = rpc.InterceptInfo_NO_CLIENT
-			interceptsUpdated = append(interceptsUpdated, iEntry.intercept)
-			delete(s.intercepts, key)
-			continue
-		}
-
-		// Make sure at least one agent is present and the agents are compatible
-		// with one another (avoid e.g., misconfigured agents or agents going
-		// through a rolling update). Otherwise mark the intercept as failed and
-		// update the associated client. Let the client remove the intercept.
-		agents := agentsByName[iEntry.intercept.Spec.Agent]
-		if len(agents) == 0 || !agentsAreCompatible(agents) {
-			iEntry.intercept.Disposition = rpc.InterceptInfo_NO_AGENT
-			interceptsUpdated = append(interceptsUpdated, iEntry.intercept)
-			continue
-		}
-
-		// Make sure the agents offer the specified intercept mechanism.
-		// Otherwise mark the intercept as failed and update the associated
-		// client. Let the client figure out what to do about it.
-		mechanismMatched := false
-		for _, mechanism := range agents[0].Mechanisms {
-			if mechanism.Name == iEntry.intercept.Spec.Mechanism {
-				mechanismMatched = true
-				break
-			}
-		}
-		if !mechanismMatched {
-			iEntry.intercept.Disposition = rpc.InterceptInfo_NO_MECHANISM
-			interceptsUpdated = append(interceptsUpdated, iEntry.intercept)
-			continue
-		}
-
-		// This intercept looks good. Let's make sure it's marked as active.
-		// Update the associated client if we change the disposition here.
-		if iEntry.intercept.Disposition != rpc.InterceptInfo_ACTIVE {
-			iEntry.intercept.Disposition = rpc.InterceptInfo_ACTIVE
-			interceptsUpdated = append(interceptsUpdated, iEntry.intercept)
-			continue // for symmetry
-		}
-	}
-
-	return interceptsUpdated, agentsUpdated
-}
-*/
-
 // Presence
 
 func (s *State) Has(sessionID string) bool {
@@ -202,7 +119,7 @@ func (s *State) presenceRemove(_ context.Context, sessionID string, item Entity)
 	s.agentWatches.Unsubscribe(sessionID)
 	s.interceptWatches.Unsubscribe(sessionID)
 
-	switch item.(type) {
+	switch info := item.(type) {
 	case *rpc.ClientInfo:
 		// Removing a client must remove all of its intercept
 		for ceptID, entry := range s.intercepts {
@@ -212,8 +129,28 @@ func (s *State) presenceRemove(_ context.Context, sessionID string, item Entity)
 			}
 		}
 	case *rpc.AgentInfo:
-		// FIXME: Removing an agent may cause intercepts to become invalid
 		s.agentWatches.NotifyAll()
+
+		// Removing the last agent associated with an intercept invalidates the
+		// intercept.
+		anyMoreAgents := false
+		s.sessions.ForEach(func(_ context.Context, id string, item Entity) {
+			if agent, ok := item.(*rpc.AgentInfo); ok {
+				if agent.Name == info.Name {
+					anyMoreAgents = true
+				}
+			}
+		})
+		if !anyMoreAgents {
+			message := fmt.Sprintf("No more agents for %q exist", info.Name)
+			for _, entry := range s.intercepts {
+				if entry.intercept.Spec.Agent == info.Name {
+					entry.intercept.Disposition = rpc.InterceptDispositionType_NO_AGENT
+					entry.intercept.Message = message
+					s.notifyForIntercept(entry)
+				}
+			}
+		}
 	}
 }
 
@@ -263,12 +200,25 @@ func (s *State) GetClient(sessionID string) *rpc.ClientInfo {
 // Agents
 
 func (s *State) AddAgent(agent *rpc.AgentInfo) string {
+	agents := append(s.GetAgentsByName(agent.Name), agent)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// FIXME Adding an agent can invalidate existing intercepts because the set
-	// of agents may no longer be self-consistent, e.g., during a rolling update
-	// of a deployment.
+	// Adding an agent can invalidate existing intercepts because the set of
+	// agents may no longer be self-consistent, e.g., during a rolling update of
+	// a deployment. Validate the relevant intercepts if the set of agents has
+	// more than one agent.
+	if len(agents) > 1 && !agentsAreCompatible(agents) {
+		message := fmt.Sprintf("Agents for %q are not consistent", agent.Name)
+		for _, entry := range s.intercepts {
+			if entry.intercept.Spec.Agent == agent.Name {
+				entry.intercept.Disposition = rpc.InterceptDispositionType_NO_AGENT
+				entry.intercept.Message = message
+				s.notifyForIntercept(entry)
+			}
+		}
+	}
 
 	sessionID := fmt.Sprintf("A%03d", s.next())
 	s.sessions.Add(sessionID, agent, s.clock.Now())
@@ -371,6 +321,8 @@ func (s *State) GetIntercepts(sessionID string) []*rpc.InterceptInfo {
 }
 
 func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) *rpc.InterceptInfo {
+	agents := s.GetAgentsByName(spec.Agent)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -388,13 +340,21 @@ func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) *rpc.Int
 		index:           ceptIndex,
 		intercept:       cept,
 	}
+
+	switch {
+	case len(agents) == 0:
+		cept.Disposition = rpc.InterceptDispositionType_NO_AGENT
+		cept.Message = fmt.Sprintf("No agent found for %q", spec.Agent)
+	case !agentsAreCompatible(agents):
+		cept.Disposition = rpc.InterceptDispositionType_NO_AGENT
+		cept.Message = fmt.Sprintf("Agents for %q are not consistent", spec.Agent)
+	case !agentHasMechanism(agents[0], spec.Mechanism):
+		cept.Disposition = rpc.InterceptDispositionType_NO_MECHANISM
+		cept.Message = fmt.Sprintf("Agents for %q do not have mechanism %q", spec.Agent, spec.Mechanism)
+	}
+
 	s.intercepts[ceptID] = entry
 	s.notifyForIntercept(entry)
-
-	// FIXME
-	// - At least one agent must exist
-	// - Agents must be self-consistent
-	// - The requested mechanism must be supported by the agents
 
 	return cept
 }
