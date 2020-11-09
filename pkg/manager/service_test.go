@@ -118,7 +118,7 @@ func TestConnect(t *testing.T) {
 	_, err = client.Remain(ctx, alice)
 	a.NoError(err)
 
-	// Alice creates an intercept and then removes it
+	// Alice creates an intercept
 
 	spec := &rpc.InterceptSpec{
 		Name:       "first",
@@ -140,17 +140,44 @@ func TestConnect(t *testing.T) {
 	aSnapI, err = aliceWI.Recv()
 	a.NoError(err)
 	a.Len(aSnapI.Intercepts, 1)
+	a.Equal(rpc.InterceptDispositionType_WAITING, aSnapI.Intercepts[0].Disposition)
 
 	hSnapI, err = helloWI.Recv()
 	a.NoError(err)
 	a.Len(hSnapI.Intercepts, 1)
+	a.Equal(rpc.InterceptDispositionType_WAITING, hSnapI.Intercepts[0].Disposition)
 
-	// Duplicate should error
+	// Hello's agent reviews the intercept
+
+	_, err = client.ReviewIntercept(ctx, &rpc.ReviewInterceptRequest{
+		Session:     hello,
+		Id:          hSnapI.Intercepts[0].Id,
+		Disposition: rpc.InterceptDispositionType_ACTIVE,
+		Message:     "okay!",
+	})
+	a.NoError(err)
+
+	aSnapI, err = aliceWI.Recv()
+	a.NoError(err)
+	a.Len(aSnapI.Intercepts, 1)
+	a.Equal(rpc.InterceptDispositionType_ACTIVE, aSnapI.Intercepts[0].Disposition)
+	a.NotEqual(0, aSnapI.Intercepts[0].ManagerPort)
+
+	hSnapI, err = helloWI.Recv()
+	a.NoError(err)
+	a.Len(hSnapI.Intercepts, 1)
+	a.Equal(rpc.InterceptDispositionType_ACTIVE, hSnapI.Intercepts[0].Disposition)
+	a.NotEqual(0, hSnapI.Intercepts[0].ManagerPort)
+
+	// Creating a duplicate intercept yields an error
+
 	_, err = client.CreateIntercept(ctx, &rpc.CreateInterceptRequest{
 		Session:       alice,
 		InterceptSpec: spec,
 	})
 	a.Error(err)
+
+	// Alice removes the intercept
 
 	_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
 		Session: alice,
@@ -165,8 +192,6 @@ func TestConnect(t *testing.T) {
 	hSnapI, err = helloWI.Recv()
 	a.NoError(err)
 	a.Len(hSnapI.Intercepts, 0)
-
-	t.Log("removed")
 
 	// Removing a bogus intercept yields an error
 

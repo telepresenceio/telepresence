@@ -21,10 +21,14 @@ type interceptEntry struct {
 	intercept       *rpc.InterceptInfo
 }
 
+const loPort = 6000
+const hiPort = 8000
+
 // State is the total state of the Traffic Manager.
 type State struct {
 	mu      sync.Mutex
 	counter int
+	port    int32
 	clock   Clock
 
 	agentWatches     *Watches
@@ -37,6 +41,7 @@ type State struct {
 
 func NewState(ctx context.Context, clock Clock) *State {
 	return &State{
+		port:             loPort - 1,
 		clock:            clock,
 		agentWatches:     NewWatches(),
 		interceptWatches: NewWatches(),
@@ -50,6 +55,37 @@ func NewState(ctx context.Context, clock Clock) *State {
 func (s *State) next() int {
 	s.counter++
 	return s.counter
+}
+
+func (s *State) nextUnusedPort() int32 {
+	for attempts := 0; attempts < hiPort-loPort; attempts++ {
+		// Bump the port number
+
+		s.port++
+
+		if s.port == hiPort {
+			s.port = loPort
+		}
+
+		// Check whether the new port number is available
+
+		used := false
+		for _, entry := range s.intercepts {
+			if entry.intercept.ManagerPort == s.port {
+				used = true
+				break
+			}
+		}
+
+		if !used {
+			return s.port
+		}
+	}
+
+	// Hmm. We've checked every possible port and they're all in use. This is
+	// unlikely. Return 0 to indicate an error...
+
+	return 0
 }
 
 /*
@@ -345,6 +381,44 @@ func (s *State) RemoveIntercept(sessionID string, name string) bool {
 	}
 
 	return false
+}
+
+func (s *State) ReviewIntercept(sessionID string, ceptID string, disposition rpc.InterceptDispositionType, message string) bool {
+	agent := s.GetAgent(sessionID)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry, ok := s.intercepts[ceptID]
+	if !ok {
+		return false
+	}
+
+	// Sanity check: The reviewing agent must be an agent for the intercept.
+	if entry.intercept.Spec.Agent != agent.Name {
+		return false
+	}
+
+	// Only update intercepts in the waiting state. Agents race to review an
+	// intercept, but we expect they will always compatible answers.
+	if entry.intercept.Disposition == rpc.InterceptDispositionType_WAITING {
+		entry.intercept.Disposition = disposition
+		entry.intercept.Message = message
+
+		// An intercept going active needs to be allocated a free port
+		if disposition == rpc.InterceptDispositionType_ACTIVE {
+			entry.intercept.ManagerPort = s.nextUnusedPort()
+			if entry.intercept.ManagerPort == 0 {
+				// Wow, there are no ports left! That is ... unlikely!
+				entry.intercept.Disposition = rpc.InterceptDispositionType_NO_PORTS
+			}
+		}
+
+		// We've updated an intercept. Notify all interested parties.
+		s.notifyForIntercept(entry)
+	}
+
+	return true
 }
 
 // Watches

@@ -30,10 +30,12 @@ func NewManager(ctx context.Context) *Manager {
 	return &Manager{state: NewState(ctx, wall{})}
 }
 
+// Version returns the version information of the Manager.
 func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error) {
 	return &rpc.VersionInfo2{Version: version.Version}, nil
 }
 
+// ArriveAsClient establishes a session between a client and the Manager.
 func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*rpc.SessionInfo, error) {
 	dlog.Debug(ctx, "ArriveAsClient called")
 
@@ -46,6 +48,7 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 	return &rpc.SessionInfo{SessionId: sessionID}, nil
 }
 
+// ArriveAsAgent establishes a session between an agent and the Manager.
 func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc.SessionInfo, error) {
 	dlog.Debug(ctx, "ArriveAsAgent called")
 
@@ -58,6 +61,7 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 	return &rpc.SessionInfo{SessionId: sessionID}, nil
 }
 
+// Remain indicates that the session is still valid.
 func (m *Manager) Remain(ctx context.Context, session *rpc.SessionInfo) (*empty.Empty, error) {
 	dlog.Debug(ctx, "Remain called")
 
@@ -68,6 +72,7 @@ func (m *Manager) Remain(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	return &empty.Empty{}, nil
 }
 
+// Depart terminates a session.
 func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.Empty, error) {
 	dlog.Debug(ctx, "Depart called")
 
@@ -76,6 +81,7 @@ func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	return &empty.Empty{}, nil
 }
 
+// WatchAgents notifies a client of the set of known Agents.
 func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_WatchAgentsServer) error {
 	ctx := stream.Context()
 	sessionID := session.SessionId
@@ -112,6 +118,8 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 	}
 }
 
+// WatchIntercepts notifies a client or agent of the set of intercepts
+// relevant to that client or agent.
 func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_WatchInterceptsServer) error {
 	ctx := stream.Context()
 	sessionID := session.SessionId
@@ -147,6 +155,7 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	}
 }
 
+// CreateIntercept lets a client create an intercept.
 func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error) {
 	sessionID := ciReq.Session.SessionId
 	spec := ciReq.InterceptSpec
@@ -170,6 +179,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	return m.state.AddIntercept(sessionID, spec), nil
 }
 
+// RemoveIntercept lets a client remove an intercept.
 func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveInterceptRequest2) (*empty.Empty, error) {
 	sessionID := riReq.Session.SessionId
 	name := riReq.Name
@@ -182,6 +192,24 @@ func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 
 	if !m.state.RemoveIntercept(sessionID, name) {
 		return nil, status.Errorf(codes.NotFound, "Intercept named %q not found", name)
+	}
+
+	return &empty.Empty{}, nil
+}
+
+// ReviewIntercept lets an agent approve or reject an intercept.
+func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewInterceptRequest) (*empty.Empty, error) {
+	sessionID := rIReq.Session.SessionId
+	ceptID := rIReq.Id
+
+	dlog.Debug(ctx, "RemoveIntercept called", sessionID, ceptID)
+
+	if !m.state.HasAgent(sessionID) {
+		return nil, status.Errorf(codes.NotFound, "Agent session %q not found", sessionID)
+	}
+
+	if !m.state.ReviewIntercept(sessionID, ceptID, rIReq.Disposition, rIReq.Message) {
+		return nil, status.Errorf(codes.NotFound, "Intercept with ID %q not found for this session", ceptID)
 	}
 
 	return &empty.Empty{}, nil
