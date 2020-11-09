@@ -198,21 +198,30 @@ func (s *State) Mark(sessionID string) bool {
 	return s.sessions.Mark(sessionID, s.clock.Now()) == nil
 }
 
-func (s *State) presenceRemove(_ context.Context, id string, item Entity) {
+func (s *State) presenceRemove(_ context.Context, sessionID string, item Entity) {
+	s.agentWatches.Unsubscribe(sessionID)
+	s.interceptWatches.Unsubscribe(sessionID)
+
+	switch item.(type) {
+	case *rpc.ClientInfo:
+		// Removing a client must remove all of its intercept
+		for ceptID, entry := range s.intercepts {
+			if entry.clientSessionID == sessionID {
+				delete(s.intercepts, ceptID)
+				s.notifyForIntercept(entry)
+			}
+		}
+	case *rpc.AgentInfo:
+		// FIXME: Removing an agent may cause intercepts to become invalid
+		s.agentWatches.NotifyAll()
+	}
 }
 
 func (s *State) Remove(sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// FIXME
-	// Removing a client must remove all of its intercept
-	// Removing an agent may cause intercepts to become invalid
-	// Removing an agent must fire all agent watches
-
-	s.agentWatches.Unsubscribe(sessionID)
-	s.interceptWatches.Unsubscribe(sessionID)
-	_ = s.sessions.Remove(sessionID)
+	_ = s.sessions.Remove(sessionID) // Calls presenceRemove above
 }
 
 func (s *State) Expire(age time.Duration) {
@@ -317,6 +326,9 @@ func (s *State) GetAgentsByName(name string) []*rpc.AgentInfo {
 
 func (s *State) GetIntercepts(sessionID string) []*rpc.InterceptInfo {
 	entry := s.Get(sessionID)
+	if entry == nil {
+		return []*rpc.InterceptInfo{}
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
