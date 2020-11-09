@@ -200,16 +200,21 @@ func (s *State) Remove(sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// FIXME
+	// Removing a client must remove all of its intercept
+	// Removing an agent may cause intercepts to become invalid
+	// Removing an agent must fire all agent watches
+
 	s.agentWatches.Unsubscribe(sessionID)
 	s.interceptWatches.Unsubscribe(sessionID)
 	_ = s.sessions.Remove(sessionID)
 }
 
-func (s *State) Expire(moment time.Time) {
+func (s *State) Expire(age time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.sessions.Expire(moment)
+	s.sessions.Expire(s.clock.Now().Add(-age))
 }
 
 // Clients
@@ -246,6 +251,10 @@ func (s *State) GetClient(sessionID string) *rpc.ClientInfo {
 func (s *State) AddAgent(agent *rpc.AgentInfo) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// FIXME Adding an agent can invalidate existing intercepts because the set
+	// of agents may no longer be self-consistent, e.g., during a rolling update
+	// of a deployment.
 
 	sessionID := fmt.Sprintf("A%03d", s.next())
 	s.sessions.Add(sessionID, agent, s.clock.Now())
@@ -364,6 +373,11 @@ func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) *rpc.Int
 	}
 	s.intercepts[ceptID] = entry
 	s.notifyForIntercept(entry)
+
+	// FIXME
+	// - At least one agent must exist
+	// - Agents must be self-consistent
+	// - The requested mechanism must be supported by the agents
 
 	return cept
 }

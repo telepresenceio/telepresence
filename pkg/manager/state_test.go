@@ -97,7 +97,7 @@ func TestStateInternal(topT *testing.T) {
 		a.True(state.Mark(c2))
 		a.False(state.Mark("asdf"))
 
-		state.Expire(clock.Now())
+		state.Expire(5)
 
 		a.True(state.HasClient(c1))
 		a.True(state.HasClient(c2))
@@ -109,7 +109,7 @@ func TestStateInternal(topT *testing.T) {
 		a.True(state.Mark(c2))
 		a.False(state.Mark(c3))
 
-		state.Expire(clock.Now())
+		state.Expire(5)
 
 		a.True(state.HasClient(c1))
 		a.True(state.HasClient(c2))

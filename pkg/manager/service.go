@@ -214,3 +214,8 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 
 	return &empty.Empty{}, nil
 }
+
+// Expire removes stale sessions.
+func (m *Manager) Expire() {
+	m.state.Expire(15 * time.Second)
+}

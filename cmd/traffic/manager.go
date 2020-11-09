@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/datawire/ambassador/pkg/dexec"
 	"github.com/datawire/ambassador/pkg/dlog"
@@ -102,14 +103,28 @@ func manager_main() {
 		dlog.Infof(ctx, "Traffic Manager listening on %q", address)
 
 		server := grpc.NewServer()
-		rpc.RegisterManagerServer(server, manager.NewManager(ctx))
+		mgr := manager.NewManager(ctx)
+		rpc.RegisterManagerServer(server, mgr)
 		grpc_health_v1.RegisterHealthServer(server, &HealthChecker{})
 
 		g.Go(func() error {
 			return server.Serve(lis)
 		})
 
-		<-ctx.Done()
+		// Loop calling Expire
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				mgr.Expire()
+				continue
+			case <-ctx.Done():
+				// break the for loop below
+			}
+			break
+		}
 
 		dlog.Debug(ctx, "Traffic Manager stopping...")
 		server.Stop()

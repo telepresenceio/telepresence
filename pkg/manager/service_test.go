@@ -157,6 +157,8 @@ func TestConnect(t *testing.T) {
 	})
 	a.NoError(err)
 
+	// Causing the intercept to go active with a port assigned
+
 	aSnapI, err = aliceWI.Recv()
 	a.NoError(err)
 	a.Len(aSnapI.Intercepts, 1)
