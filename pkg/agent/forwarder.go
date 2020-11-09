@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -10,53 +11,39 @@ import (
 )
 
 type Forwarder struct {
-	mu     sync.Mutex
-	ctx    context.Context
-	cancel context.CancelFunc
+	mu sync.Mutex
 
+	lCtx       context.Context
+	lCancel    context.CancelFunc
 	listenAddr *net.TCPAddr
-	targetAddr *net.TCPAddr
+
+	tCtx       context.Context
+	tCancel    context.CancelFunc
+	targetHost string
+	targetPort int32
 }
 
-func NewForwarder(ctx context.Context, listen, target *net.TCPAddr) *Forwarder {
-	ctx, cancel := context.WithCancel(ctx)
-	ctx = dlog.WithField(ctx, "lis", listen.String())
-
+func NewForwarder(listen *net.TCPAddr) *Forwarder {
 	return &Forwarder{
-		ctx:        ctx,
-		cancel:     cancel,
 		listenAddr: listen,
-		targetAddr: target,
 	}
 }
 
-func (f *Forwarder) Target() *net.TCPAddr {
+func (f *Forwarder) Serve(ctx context.Context, targetHost string, targetPort int32) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 
-	return f.targetAddr
-}
+	// Set up listener lifetime (same as the overall forwarder lifetime)
+	f.lCtx, f.lCancel = context.WithCancel(ctx)
+	f.lCtx = dlog.WithField(f.lCtx, "lis", f.listenAddr.String())
 
-func (f *Forwarder) SetTarget(target *net.TCPAddr) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	// Set up target lifetime
+	f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
+	f.targetHost = targetHost
+	f.targetPort = targetPort
 
-	dlog.Debugf(f.ctx, "Forward target changed from %s to %s", f.targetAddr, target)
-	f.targetAddr = target
-}
-
-func (f *Forwarder) Close() error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	f.cancel()
-	return nil
-}
-
-func (f *Forwarder) Start() error {
-	f.mu.Lock()
-	ctx := f.ctx
+	ctx = f.lCtx
 	listenAddr := f.listenAddr
+
 	f.mu.Unlock()
 
 	listener, err := net.ListenTCP("tcp", listenAddr)
@@ -89,11 +76,50 @@ func (f *Forwarder) Start() error {
 	}
 }
 
+func (f *Forwarder) Close() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.lCancel()
+	return nil
+}
+
+func (f *Forwarder) Target() (string, int32) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.targetHost, f.targetPort
+}
+
+func (f *Forwarder) SetTarget(targetHost string, targetPort int32) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if targetHost != f.targetHost || targetPort != f.targetPort {
+		dlog.Debugf(f.lCtx, "Forward target changed from %s:%d to %s:%d", f.targetHost, f.targetPort, targetHost, targetPort)
+
+		// Drop existing connections
+		f.tCancel()
+
+		// Set up new target and lifetime
+		f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
+		f.targetHost = targetHost
+		f.targetPort = targetPort
+	}
+}
+
 func (f *Forwarder) ForwardConn(src *net.TCPConn) {
 	f.mu.Lock()
-	ctx := f.ctx
-	targetAddr := f.targetAddr
+	ctx := f.tCtx
+	targetHost := f.targetHost
+	targetPort := f.targetPort
 	f.mu.Unlock()
+
+	targetAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", targetHost, targetPort))
+	if err != nil {
+		dlog.Infof(ctx, "Error on resolve(%s:%d): %+v", targetHost, targetPort, err)
+		return
+	}
 
 	ctx = dlog.WithField(ctx, "src", src.RemoteAddr().String())
 	ctx = dlog.WithField(ctx, "dst", targetAddr.String())

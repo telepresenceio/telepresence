@@ -21,12 +21,12 @@ import (
 
 type Config struct {
 	Name    string `env:"AGENT_NAME,required"`
-	AppPort int    `env:"APP_PORT,required"`
+	AppPort int32  `env:"APP_PORT,required"`
 
-	AgentPort        int    `env:"AGENT_PORT,default=9900"`
+	AgentPort        int32  `env:"AGENT_PORT,default=9900"`
 	DefaultMechanism string `env:"DEFAULT_MECHANISM,default=tcp"`
 	ManagerHost      string `env:"MANAGER_HOST,default=traffic-manager"`
-	ManagerPort      int    `env:"MANAGER_PORT,default=8081"`
+	ManagerPort      int32  `env:"MANAGER_PORT,default=8081"`
 }
 
 func agent_main() {
@@ -123,7 +123,9 @@ func agent_main() {
 		}
 	})
 
-	// Manager the forwarder
+	var forwarder *agent.Forwarder
+
+	// Manage the forwarder
 	g.Go(func() error {
 		ctx := dlog.WithField(ctx, "MAIN", "forward")
 
@@ -132,26 +134,24 @@ func agent_main() {
 			return err
 		}
 
-		appAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", config.AppPort))
-		if err != nil {
-			return err
-		}
+		forwarder = agent.NewForwarder(lisAddr)
 
-		f := agent.NewForwarder(ctx, lisAddr, appAddr)
-		return f.Start()
+		return forwarder.Serve(ctx, "", config.AppPort)
 	})
 
 	// Talk to the Traffic Manager
 	g.Go(func() error {
 		ctx := dlog.WithField(ctx, "MAIN", "client")
-		address := fmt.Sprintf("%s:%v", config.ManagerHost, config.ManagerPort)
+		gRPCAddress := fmt.Sprintf("%s:%v", config.ManagerHost, config.ManagerPort)
 
 		// Don't reconnect more than once every five seconds
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
+		state := agent.NewState(forwarder, config.ManagerHost)
+
 		for {
-			if err := agent.TalkToManager(ctx, address, info); err != nil {
+			if err := agent.TalkToManager(ctx, gRPCAddress, info, state); err != nil {
 				dlog.Info(ctx, err)
 			}
 

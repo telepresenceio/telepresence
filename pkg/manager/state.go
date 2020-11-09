@@ -21,8 +21,10 @@ type interceptEntry struct {
 	intercept       *rpc.InterceptInfo
 }
 
-const loPort = 6000
-const hiPort = 8000
+const (
+	loPort = 6000
+	hiPort = 8000
+)
 
 // State is the total state of the Traffic Manager.
 type State struct {
