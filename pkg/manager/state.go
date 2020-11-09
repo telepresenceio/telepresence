@@ -42,14 +42,16 @@ type State struct {
 }
 
 func NewState(ctx context.Context, clock Clock) *State {
-	return &State{
+	s := &State{
 		port:             loPort - 1,
 		clock:            clock,
 		agentWatches:     NewWatches(),
 		interceptWatches: NewWatches(),
 		intercepts:       make(map[string]*interceptEntry),
-		sessions:         NewPresence(ctx, nil),
 	}
+	s.sessions = NewPresence(ctx, s.presenceRemove)
+
+	return s
 }
 
 // Internal
@@ -194,6 +196,9 @@ func (s *State) Mark(sessionID string) bool {
 	defer s.mu.Unlock()
 
 	return s.sessions.Mark(sessionID, s.clock.Now()) == nil
+}
+
+func (s *State) presenceRemove(_ context.Context, id string, item Entity) {
 }
 
 func (s *State) Remove(sessionID string) {

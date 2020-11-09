@@ -118,6 +118,29 @@ func TestConnect(t *testing.T) {
 	_, err = client.Remain(ctx, alice)
 	a.NoError(err)
 
+	// Hello Pro's agent arrives and departs
+
+	helloPro, err := client.ArriveAsAgent(ctx, testAgents["helloPro"])
+	a.NoError(err)
+
+	helloProWI, err := client.WatchIntercepts(ctx, helloPro)
+	a.NoError(err)
+
+	hPSnapI, err := helloProWI.Recv()
+	a.NoError(err)
+	a.Len(hPSnapI.Intercepts, 0)
+
+	aSnapA, err = aliceWA.Recv()
+	a.NoError(err)
+	a.Len(aSnapA.Agents, 4)
+
+	_, err = client.Depart(ctx, helloPro)
+	a.NoError(err)
+
+	aSnapA, err = aliceWA.Recv()
+	a.NoError(err)
+	a.Len(aSnapA.Agents, 3)
+
 	// Alice creates an intercept
 
 	spec := &rpc.InterceptSpec{
