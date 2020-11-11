@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -137,6 +138,9 @@ func status(cmd *cobra.Command, _ []string) error {
 				fmt.Fprintln(out, "  Intercepts:    Unavailable: no traffic manager")
 			} else {
 				fmt.Fprintf(out, "  Intercepts:    %d total\n", len(ic.Intercepts))
+				for _, ic := range ic.Intercepts {
+					fmt.Fprintf(out, "    %s: %s\n", ic.Spec.Name, ic.Spec.Client)
+				}
 			}
 		}
 	case connector.ConnectorStatus_NOT_STARTED:
@@ -411,11 +415,16 @@ Please specify one or more header matches using --match.`
 	case connector.InterceptError_TRAFFIC_MANAGER_ERROR:
 		msg = txt
 	case connector.InterceptError_AMBIGUOUS_MATCH:
+		var matches []manager.AgentInfo
+		err := json.Unmarshal([]byte(txt), &matches)
+		if err != nil {
+			msg = fmt.Sprintf("Unable to unmarshal JSON: %s", err.Error())
+			break
+		}
 		st := &strings.Builder{}
 		fmt.Fprintf(st, "Found more than one possible match:")
-		for idx, match := range strings.Split(txt, "\n") {
-			dn := strings.Split(match, "\t")
-			fmt.Fprintf(st, "\n%4d: %s in namespace %s", idx+1, dn[1], dn[0])
+		for idx, match := range matches {
+			fmt.Fprintf(st, "\n%4d: %s on host %s", idx+1, match.Name, match.Hostname)
 		}
 		msg = st.String()
 	case connector.InterceptError_FAILED_TO_ESTABLISH:
