@@ -133,14 +133,14 @@ func Test_findTrafficManager_notPresent(t *testing.T) {
 	sup.Supervise(&supervisor.Worker{
 		Name: "find-traffic-manager",
 		Work: func(p *supervisor.Process) error {
-			ti, err := newTrafficManagerInstaller(kubeconfig, "")
+			ti, err := newTrafficManagerInstaller(kubeconfig, "", namespace)
 			if err != nil {
 				return err
 			}
 			version.Version = "v0.0.0-bogus"
 			defer func() { version.Version = testVersion }()
 
-			if _, err = ti.findDeployment(p, namespace); err != nil {
+			if _, err = ti.findDeployment(p, appName); err != nil {
 				if kates.IsNotFound(err) {
 					return nil
 				}
@@ -161,15 +161,15 @@ func Test_findTrafficManager_present(t *testing.T) {
 		Name: "install-then-find",
 		Work: func(p *supervisor.Process) error {
 			defer removeManager(t)
-			ti, err := newTrafficManagerInstaller(kubeconfig, "")
+			ti, err := newTrafficManagerInstaller(kubeconfig, "", namespace)
 			if err != nil {
 				return err
 			}
-			_, err = ti.createDeployment(p, namespace)
+			_, err = ti.createManagerDeployment(p)
 			if err != nil {
 				return err
 			}
-			_, err = ti.findDeployment(p, namespace)
+			_, err = ti.findDeployment(p, appName)
 			return err
 		},
 	})
@@ -185,11 +185,11 @@ func Test_ensureTrafficManager_notPresent(t *testing.T) {
 		Name: "ensure-traffic-manager",
 		Work: func(p *supervisor.Process) error {
 			defer removeManager(t)
-			ti, err := newTrafficManagerInstaller(kubeconfig, "")
+			ti, err := newTrafficManagerInstaller(kubeconfig, "", namespace)
 			if err != nil {
 				return err
 			}
-			sshd, api, err := ti.ensure(p, namespace)
+			sshd, api, err := ti.ensureManager(p)
 			if err != nil {
 				return err
 			}

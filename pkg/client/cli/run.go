@@ -21,12 +21,13 @@ import (
 type runner struct {
 	connector.ConnectRequest
 	manager.CreateInterceptRequest
-	DNS      string
-	Fallback string
-	NoWait   bool
-	Quit     bool
-	Status   bool
-	Version  bool
+	DNS             string
+	Fallback        string
+	RemoveIntercept string
+	NoWait          bool
+	Quit            bool
+	Status          bool
+	Version         bool
 }
 
 // run will ensure that an intercept is in place and then execute the command given by args[0]
@@ -34,11 +35,13 @@ type runner struct {
 func (p *runner) run(cmd *cobra.Command, args []string) error {
 	switch {
 	case p.Quit:
-		return Quit(cmd, args)
+		return Quit(cmd, []string{})
 	case p.Status:
-		return status(cmd, args)
+		return status(cmd, []string{})
+	case p.RemoveIntercept != "":
+		return removeIntercept(cmd, []string{p.RemoveIntercept})
 	case p.Version:
-		return printVersion(cmd, args)
+		return printVersion(cmd, []string{})
 	case p.NoWait:
 		if p.CreateInterceptRequest.InterceptSpec.Name != "" {
 			return p.addIntercept(cmd, args)
