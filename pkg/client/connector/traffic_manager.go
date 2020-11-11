@@ -247,7 +247,7 @@ type listener interface {
 }
 
 // An aiListener keeps track of the latest received AgentInfoSnapshot and provides the
-//// watcher needed to register other listeners.
+// watcher needed to register other listeners.
 type aiListener struct {
 	watcher
 	data atomic.Value

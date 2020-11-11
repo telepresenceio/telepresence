@@ -423,7 +423,8 @@ Please specify one or more header matches using --match.`
 		}
 		st := &strings.Builder{}
 		fmt.Fprintf(st, "Found more than one possible match:")
-		for idx, match := range matches {
+		for idx := range matches {
+			match := &matches[idx]
 			fmt.Fprintf(st, "\n%4d: %s on host %s", idx+1, match.Name, match.Hostname)
 		}
 		msg = st.String()

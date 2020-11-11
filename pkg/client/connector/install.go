@@ -190,7 +190,7 @@ func findMatchingPort(p *supervisor.Process, svcs []*kates.Service, cns []corev1
 		ports := svc.Spec.Ports
 		if len(ports) != 1 {
 			// TODO: Propagate warning about this to the user
-			p.Logf("discarding service %s because it has %d number of ports", len(ports))
+			p.Logf("discarding service %s because it has %d number of ports", svc.Name, len(ports))
 			continue
 		}
 		port := &ports[0]
