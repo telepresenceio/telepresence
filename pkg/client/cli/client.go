@@ -330,8 +330,8 @@ func ListIntercepts(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// RemoveIntercept tells the daemon to deactivate and remove an existent intercept
-func RemoveIntercept(cmd *cobra.Command, args []string) error {
+// removeIntercept tells the daemon to deactivate and remove an existent intercept
+func removeIntercept(cmd *cobra.Command, args []string) error {
 	return withConnector(cmd, func(cs *connectorState) error {
 		is := newInterceptState(cs,
 			&manager.CreateInterceptRequest{InterceptSpec: &manager.InterceptSpec{Name: strings.TrimSpace(args[0])}},

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -28,8 +29,7 @@ func (is *interceptState) EnsureState() (bool, error) {
 	}
 	switch r.Error {
 	case connector.InterceptError_UNSPECIFIED:
-		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s in namespace %s\n", is.ir.InterceptSpec.Name, r.ErrorText)
-
+		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", is.ir.InterceptSpec.Name)
 		return true, nil
 	case connector.InterceptError_ALREADY_EXISTS:
 		fmt.Fprintln(is.cmd.OutOrStdout(), interceptMessage(r.Error, r.ErrorText))
@@ -44,7 +44,7 @@ func (is *interceptState) DeactivateState() error {
 	name := strings.TrimSpace(is.ir.InterceptSpec.Name)
 	var r *connector.InterceptResult
 	var err error
-	r, err = is.cs.grpc.RemoveIntercept(is.cmd.Context(), &manager.RemoveInterceptRequest2{Name: name})
+	r, err = is.cs.grpc.RemoveIntercept(context.Background(), &manager.RemoveInterceptRequest2{Name: name})
 	if err != nil {
 		return err
 	}

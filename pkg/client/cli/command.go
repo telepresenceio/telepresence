@@ -57,7 +57,6 @@ func Command() *cobra.Command {
 	rootCmd.AddCommand(daemon.Command())
 	rootCmd.AddCommand(connector.Command())
 
-	// Client commands. These are never sent to the daemon.
 	flags := rootCmd.Flags()
 	flags.BoolVarP(&r.NoWait,
 		"no-wait", "", false,
@@ -91,10 +90,14 @@ func Command() *cobra.Command {
 		"namespace", "n", "",
 		"The Kubernetes namespace to use. Defaults to kubectl's default for the context.",
 	)
+	flags.StringVarP(&r.RemoveIntercept,
+		"remove", "", "",
+		"Name of deployment to remove intercept for",
+	)
 	spec := r.CreateInterceptRequest.InterceptSpec
 	flags.BoolVar(&r.IsCi, "ci", false, "This session is a CI run.")
-	flags.StringVarP(&spec.Name, "name", "", "", "Name of the intercept")
-	flags.StringVarP(&spec.TargetHost, "port", "", "", "the local port to forward to")
+	flags.StringVarP(&spec.Name, "intercept", "", "", "Name of deployment to intercept")
+	flags.StringVarP(&spec.TargetHost, "port", "", "", "Local port to forward to")
 	rootCmd.InitDefaultHelpCmd()
 	return rootCmd
 }
@@ -102,6 +105,7 @@ func Command() *cobra.Command {
 var flagRules = map[string][]string{
 	"version":   nil,                       // cannot be combined with other flags
 	"quit":      nil,                       // cannot be combined with other flags
+	"remove":    nil,                       // cannot be combined with other flags
 	"status":    nil,                       // cannot be combined with other flags
 	"intercept": {"port"},                  // intercept requires port
 	"grpc":      {"intercept"},             // grpc requires intercept
