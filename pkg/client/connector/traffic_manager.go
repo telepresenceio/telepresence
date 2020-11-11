@@ -51,7 +51,7 @@ func newTrafficManager(p *supervisor.Process, cluster *k8sCluster, installID str
 	}
 
 	// Ensure that we have a traffic-manager to talk to.
-	ti, err := newTrafficManagerInstaller("", cluster.ctx)
+	ti, err := newTrafficManagerInstaller("", cluster.ctx, cluster.namespace)
 	if err != nil {
 		return nil, err
 	}
