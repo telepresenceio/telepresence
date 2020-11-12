@@ -1,9 +1,11 @@
 package cli_test
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -114,6 +116,41 @@ var _ = Describe("Telepresence", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(out).To(ContainSubstring("Request served by echo-easy-"))
 		})
+
+		It("Proxies inbound traffic with --intercept", func() {
+			stdout, stderr := execute("--intercept", "echo-easy", "--port", "9000", "--no-wait")
+			Expect(stderr).To(BeEmpty())
+			Expect(stdout).To(ContainSubstring("Using deployment echo-easy"))
+			srv := &http.Server{Addr: ":9000"}
+
+			defer func() {
+				err := srv.Shutdown(context.Background())
+				Expect(err).ToNot(HaveOccurred())
+				stdout, stderr = execute("--remove", "echo-easy")
+				Expect(stderr).To(BeEmpty())
+				Expect(stdout).To(BeEmpty())
+			}()
+
+			go func() {
+				http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+					fmt.Fprintf(w, "hello from intercept at %s", r.URL.Path)
+				})
+				err := srv.ListenAndServe()
+				Expect(err).To(Equal(http.ErrServerClosed))
+			}()
+
+			var err error
+			for retry := 0; retry < 50; retry++ {
+				stdout, err = output("curl", "-s", "echo-easy")
+				Expect(err).ToNot(HaveOccurred())
+				if !strings.Contains(stdout, "served by echo-easy-") {
+					break
+				}
+				// Inbound proxy hasn't kicked in yet
+				time.Sleep(20 * time.Millisecond)
+			}
+			Expect(stdout).To(Equal("hello from intercept at /"))
+		})
 	})
 })
 
@@ -130,11 +167,6 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	err = publishManager(testVersion)
-	if ee, ok := err.(*exec.ExitError); ok {
-		if len(ee.Stderr) > 0 {
-			err = errors.New(string(ee.Stderr))
-		}
-	}
 	Expect(err).NotTo(HaveOccurred())
 
 	err = run("kubectl", "create", "namespace", namespace)

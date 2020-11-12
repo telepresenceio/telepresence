@@ -5,14 +5,11 @@ go 1.15
 require (
 	github.com/datawire/ambassador v1.8.1
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/golang/protobuf v1.4.3
 	github.com/google/uuid v1.1.2
-	github.com/gookit/color v1.3.1
 	github.com/miekg/dns v1.1.35
 	github.com/onsi/ginkgo v1.14.2
 	github.com/onsi/gomega v1.10.1
-	github.com/pkg/browser v0.0.0-20180916011732-0a3d74bf9ce4
 	github.com/pkg/errors v0.9.1
 	github.com/sethvargo/go-envconfig v0.3.2
 	github.com/sirupsen/logrus v1.7.0
@@ -29,7 +26,7 @@ require (
 	gopkg.in/yaml.v2 v2.3.0
 	k8s.io/api v0.18.8
 	k8s.io/apimachinery v0.18.8
-	k8s.io/client-go v0.18.8
+	k8s.io/client-go v0.18.8 // indirect
 )
 
 replace github.com/Azure/go-autorest v10.8.1+incompatible => github.com/Azure/go-autorest v13.3.2+incompatible
