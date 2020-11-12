@@ -24,6 +24,7 @@ type runner struct {
 	DNS             string
 	Fallback        string
 	RemoveIntercept string
+	List            bool
 	NoWait          bool
 	Quit            bool
 	Status          bool
@@ -34,8 +35,10 @@ type runner struct {
 // and the arguments starting at args[1:].
 func (p *runner) run(cmd *cobra.Command, args []string) error {
 	switch {
+	case p.List:
+		return listIntercepts(cmd, []string{})
 	case p.Quit:
-		return Quit(cmd, []string{})
+		return quit(cmd, []string{})
 	case p.Status:
 		return status(cmd, []string{})
 	case p.RemoveIntercept != "":
@@ -50,8 +53,7 @@ func (p *runner) run(cmd *cobra.Command, args []string) error {
 	}
 
 	if p.CreateInterceptRequest.InterceptSpec.Name != "" {
-		err := prepareIntercept(cmd, &p.CreateInterceptRequest)
-		if err != nil {
+		if err := prepareIntercept(&p.CreateInterceptRequest); err != nil {
 			return err
 		}
 		return p.runWithIntercept(cmd, func(is *interceptState) error {
@@ -90,7 +92,7 @@ func (p *runner) startSubshell(cmd *cobra.Command, ctx string) error {
 
 func (p *runner) runWithDaemon(cmd *cobra.Command, f func(ds *daemonState) error) error {
 	ds, err := newDaemonState(cmd, p.DNS, p.Fallback)
-	if err != nil && err != daemonIsNotRunning {
+	if err != nil && err != errDaemonIsNotRunning {
 		return err
 	}
 	return client.WithEnsuredState(ds, func() error { return f(ds) })
@@ -100,7 +102,7 @@ func (p *runner) runWithConnector(cmd *cobra.Command, f func(cs *connectorState)
 	return p.runWithDaemon(cmd, func(ds *daemonState) error {
 		p.InterceptEnabled = true
 		cs, err := newConnectorState(ds.grpc, &p.ConnectRequest, cmd)
-		if err != nil && err != connectorIsNotRunning {
+		if err != nil && err != errConnectorIsNotRunning {
 			return err
 		}
 		return client.WithEnsuredState(cs, func() error { return f(cs) })

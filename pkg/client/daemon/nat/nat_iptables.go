@@ -98,7 +98,7 @@ const (
 	IP6T_SO_ORIGINAL_DST = 80
 )
 
-// get the original destination for the socket when redirect by linux iptables
+// GetOriginalDst gets the original destination for the socket when redirect by linux iptables
 // refer to https://raw.githubusercontent.com/missdeer/avege/master/src/inbound/redir/redir_iptables.go
 //
 func (t *Translator) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host string, err error) {

@@ -45,6 +45,7 @@ type service struct {
 	p          *supervisor.Process
 }
 
+// Command returns the CLI sub-command for "connector-foreground"
 func Command() *cobra.Command {
 	var init bool
 	c := &cobra.Command{
@@ -109,7 +110,7 @@ func run(init bool) error {
 
 func (s *service) Version(_ context.Context, _ *empty.Empty) (*version.VersionInfo, error) {
 	return &version.VersionInfo{
-		ApiVersion: client.ApiVersion,
+		ApiVersion: client.APIVersion,
 		Version:    client.Version(),
 	}, nil
 }

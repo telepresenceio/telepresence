@@ -38,10 +38,10 @@ func fmtDest(a Address) (result []string) {
 	ports := splitPorts(a.Port)
 
 	if len(ports) == 0 {
-		result = append(result, fmt.Sprintf("proto %s to %s", a.Proto, a.Ip))
+		result = append(result, fmt.Sprintf("proto %s to %s", a.Proto, a.IP))
 	} else {
 		for _, port := range ports {
-			addr := fmt.Sprintf("proto %s to %s", a.Proto, a.Ip)
+			addr := fmt.Sprintf("proto %s to %s", a.Proto, a.IP)
 			if port != "" {
 				addr += fmt.Sprintf(" port %s", port)
 			}

@@ -12,6 +12,9 @@ type searchDomains struct {
 	Domains   string
 }
 
+// OverrideSearchDomains establishes overrides for the given search domains and
+// returns a function that removes the overrides. This function does nothing unless
+// the host OS is "darwin".
 func OverrideSearchDomains(p *supervisor.Process, domains string) func() {
 	if runtime.GOOS != "darwin" {
 		return func() {}
@@ -21,7 +24,7 @@ func OverrideSearchDomains(p *supervisor.Process, domains string) func() {
 	if err != nil {
 		panic(err)
 	}
-	previous := []searchDomains{}
+	var previous []searchDomains
 
 	for _, iface := range ifaces {
 		// setup dns search path

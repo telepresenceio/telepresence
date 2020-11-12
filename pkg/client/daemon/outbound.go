@@ -105,7 +105,7 @@ func start(p *supervisor.Process, dnsIP, fallbackIP string, noSearch bool) (*ipT
 		return nil, nil, errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
 	}
 
-	ic := newIpTables("traffic-manager")
+	ic := newIPTables("traffic-manager")
 	sup.Supervise(&supervisor.Worker{
 		Name: TranslatorWorker,
 		// XXX: Requires will need to include the api server once it is changed to not bind early
@@ -141,7 +141,7 @@ func start(p *supervisor.Process, dnsIP, fallbackIP string, noSearch bool) (*ipT
 			// hmm, we may not actually need to get the original
 			// destination, we could just forward each ip to a unique port
 			// and either listen on that port or run port-forward
-			pr, err := proxy.NewProxy(fmt.Sprintf(":%s", ProxyRedirPort), ic.destination)
+			pr, err := proxy.NewProxy(":"+ProxyRedirPort, ic.destination)
 			if err != nil {
 				return errors.Wrap(err, "Proxy")
 			}

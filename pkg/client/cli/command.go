@@ -12,7 +12,7 @@ import (
 	manager "github.com/datawire/telepresence2/pkg/rpc"
 )
 
-var Help = `telepresence can run a command in a sub shell after ensuring that a connection
+var help = `telepresence can run a command in a sub shell after ensuring that a connection
 has been established with a Traffic Manager and optionally also that an intercept has
 been added.
 
@@ -28,21 +28,18 @@ run a command with an intercept in place:
     telepresence --intercept hello -port 9000 -- <command> arguments...
 `
 
+// Command returns the top level "telepresence" CLI command
 func Command() *cobra.Command {
 	myName := "Telepresence"
 	if !IsServerRunning() {
 		myName = "Telepresence (daemon unavailable)"
 	}
 
-	myHelp := myName + `
-  https://www.getambassador.io/docs/latest/topics/install/
-`
-
 	r := &runner{CreateInterceptRequest: manager.CreateInterceptRequest{InterceptSpec: new(manager.InterceptSpec)}}
 	rootCmd := &cobra.Command{
 		Use:          "telepresence",
 		Short:        myName,
-		Long:         myHelp,
+		Long:         help,
 		Args:         cobra.ArbitraryArgs,
 		RunE:         r.run,
 		PreRunE:      checkFlags,
@@ -95,7 +92,6 @@ func Command() *cobra.Command {
 		"Name of deployment to remove intercept for",
 	)
 	spec := r.CreateInterceptRequest.InterceptSpec
-	flags.BoolVar(&r.IsCi, "ci", false, "This session is a CI run.")
 	flags.StringVarP(&spec.Name, "intercept", "", "", "Name of deployment to intercept")
 	flags.StringVarP(&spec.TargetHost, "port", "", "", "Local port to forward to")
 	rootCmd.InitDefaultHelpCmd()
@@ -107,6 +103,7 @@ var flagRules = map[string][]string{
 	"quit":      nil,                       // cannot be combined with other flags
 	"remove":    nil,                       // cannot be combined with other flags
 	"status":    nil,                       // cannot be combined with other flags
+	"list":      nil,                       // cannot be combined with other flags
 	"intercept": {"port"},                  // intercept requires port
 	"grpc":      {"intercept"},             // grpc requires intercept
 	"match":     {"intercept", "!preview"}, // match requires intercept and can not be combined with preview

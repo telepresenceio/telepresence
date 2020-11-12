@@ -3,6 +3,7 @@ package connector
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -28,6 +29,7 @@ var registry string
 var testVersion = "v0.1.2-test"
 
 func TestMain(m *testing.M) {
+	log.SetOutput(ioutil.Discard) // We want success or failure, not an abundance of output
 	kubeconfig = dtest.Kubeconfig()
 	namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
 	registry = dtest.DockerRegistry()
@@ -165,7 +167,7 @@ func Test_findTrafficManager_present(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			_, err = ti.createManagerDeployment(p)
+			err = ti.createManagerDeployment(p)
 			if err != nil {
 				return err
 			}

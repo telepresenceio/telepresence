@@ -7,6 +7,7 @@ issues:
   exclude:
     - Error return value of `(\w+\.)+(Close|Flush|Remove|(Un)?Setenv|(Fp|P)rint(f|ln))\` is not checked
     - 'structtag: struct field \w+ repeats json tag'
+    - 'Subprocess launched with function call as argument or cmd arguments'
   exclude-rules:
     - path: _test\.go
       linters:

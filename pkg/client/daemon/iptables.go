@@ -26,7 +26,7 @@ type ipTables struct {
 	work chan func(*supervisor.Process) error
 }
 
-func newIpTables(name string) *ipTables {
+func newIPTables(name string) *ipTables {
 	ret := &ipTables{
 		tables:     make(map[string]*iptables.Table),
 		translator: nat.NewTranslator(name),

@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Server is a DNS server which implements the github.com/miekg/dns Handler interface
 type Server struct {
 	p         *supervisor.Process
 	listeners []string
@@ -16,6 +17,7 @@ type Server struct {
 	resolve   func(string) string
 }
 
+// NewServer returns a new dns.Server
 func NewServer(p *supervisor.Process, listeners []string, fallback string, resolve func(string) string) *Server {
 	return &Server{
 		p:         p,
@@ -24,6 +26,8 @@ func NewServer(p *supervisor.Process, listeners []string, fallback string, resol
 		resolve:   resolve,
 	}
 }
+
+// ServeDNS is an implementation of github.com/miekg/dns Handler.ServeDNS.
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	domain := strings.ToLower(r.Question[0].Name)
 	switch r.Question[0].Qtype {
@@ -82,6 +86,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	_ = w.WriteMsg(in)
 }
 
+// Start starts the DNS server
 func (s *Server) Start() error {
 	listeners := make([]net.PacketConn, len(s.listeners))
 	for i, addr := range s.listeners {

@@ -38,7 +38,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 		switch dr.Error {
 		case daemon.DaemonStatus_UNSPECIFIED:
 		case daemon.DaemonStatus_NOT_STARTED:
-			return false, daemonIsNotRunning
+			return false, errDaemonIsNotRunning
 		case daemon.DaemonStatus_NO_NETWORK:
 			if attempt >= 40 {
 				return false, errors.New("Unable to connect: Network overrides are not established")
@@ -60,7 +60,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 	fmt.Fprintln(cs.cmd.OutOrStdout(), "Connecting to traffic manager...")
 
 	if err = client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
-		return false, fmt.Errorf("Connector service did not come up!\nTake a look at %s for more information.", client.Logfile)
+		return false, fmt.Errorf("connector service did not start (see %s for more info)", client.Logfile)
 	}
 	err = cs.connect()
 	if err != nil {
@@ -123,6 +123,29 @@ func newConnectorState(daemon daemon.DaemonClient, cr *connector.ConnectRequest,
 		err = cs.connect()
 	}
 	return cs, err
+}
+
+func assertConnectorStarted() error {
+	if client.SocketExists(client.ConnectorSocketName) {
+		return nil
+	}
+	return errConnectorIsNotRunning
+}
+
+// withDaemon establishes a connection, calls the function with the gRPC client, and ensures
+// that the connection is closed.
+func withConnector(cmd *cobra.Command, f func(state *connectorState) error) error {
+	ds, err := newDaemonState(cmd, "", "")
+	if err != nil {
+		return err
+	}
+	defer ds.disconnect()
+	cs, err := newConnectorState(ds.grpc, nil, cmd)
+	if err != nil {
+		return err
+	}
+	defer cs.disconnect()
+	return f(cs)
 }
 
 // isConnected returns true if a connection has been established to the daemon

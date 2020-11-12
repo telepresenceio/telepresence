@@ -55,26 +55,26 @@ func newTrafficManager(p *supervisor.Process, cluster *k8sCluster, installID str
 	if err != nil {
 		return nil, err
 	}
-	remoteSshPort, remoteApiPort, err := ti.ensureManager(p)
+	remoteSSHPort, remoteAPIPort, err := ti.ensureManager(p)
 	if err != nil {
 		return nil, err
 	}
 
-	localApiPort, err := getFreePort()
+	localAPIPort, err := getFreePort()
 	if err != nil {
 		return nil, errors.Wrap(err, "get free port for API")
 	}
-	localSshPort, err := getFreePort()
+	localSSHPort, err := getFreePort()
 	if err != nil {
 		return nil, errors.Wrap(err, "get free port for ssh")
 	}
 
-	kpfArgStr := fmt.Sprintf("port-forward svc/traffic-manager %d:%d %d:%d", localSshPort, remoteSshPort, localApiPort, remoteApiPort)
+	kpfArgStr := fmt.Sprintf("port-forward svc/traffic-manager %d:%d %d:%d", localSSHPort, remoteSSHPort, localAPIPort, remoteAPIPort)
 	kpfArgs := cluster.getKubectlArgs(strings.Fields(kpfArgStr)...)
 	tm := &trafficManager{
 		installer:   ti,
-		apiPort:     localApiPort,
-		sshPort:     localSshPort,
+		apiPort:     localAPIPort,
+		sshPort:     localSSHPort,
 		installID:   installID,
 		connectCI:   isCI,
 		userAndHost: fmt.Sprintf("%s@%s", name, host)}
@@ -265,7 +265,7 @@ func (al *aiListener) onData(d interface{}) {
 	al.data.Store(d)
 }
 
-func (al *aiListener) start(stream manager.Manager_WatchAgentsClient) error {
+func (al *aiListener) start(stream grpc.ClientStream) error {
 	al.stream = stream
 	al.listeners = []listener{al}
 	al.entryMaker = func() interface{} { return new(manager.AgentInfoSnapshot) }
@@ -276,7 +276,7 @@ func (il *iiListener) onData(d interface{}) {
 	il.data.Store(d)
 }
 
-func (il *iiListener) start(stream manager.Manager_WatchInterceptsClient) error {
+func (il *iiListener) start(stream grpc.ClientStream) error {
 	il.stream = stream
 	il.listeners = []listener{il}
 	il.entryMaker = func() interface{} { return new(manager.InterceptInfoSnapshot) }
