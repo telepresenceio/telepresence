@@ -32,12 +32,12 @@ var proxyOnMatch = regexp.MustCompile(`Proxy:\s+ON`)
 var _ = Describe("Telepresence", func() {
 	Context("With no daemon running", func() {
 		It("Returns version", func() {
-			stdout, stderr := execute("--version")
+			stdout, stderr := telepresence("--version")
 			Expect(stderr).To(BeEmpty())
 			Expect(stdout).To(Equal(fmt.Sprintf("Client %s", client.DisplayVersion())))
 		})
 		It("Returns valid status", func() {
-			out, _ := execute("--status")
+			out, _ := telepresence("--status")
 			Expect(out).To(ContainSubstring("the telepresence daemon has not been started"))
 		})
 	})
@@ -47,7 +47,7 @@ var _ = Describe("Telepresence", func() {
 			kubeConfig := os.Getenv("KUBECONFIG")
 			defer os.Setenv("KUBECONFIG", kubeConfig)
 			os.Setenv("KUBECONFIG", "/dev/null")
-			stdout, stderr := execute()
+			stdout, stderr := telepresence()
 			Expect(stderr).To(ContainSubstring("initial cluster check"))
 			Expect(stdout).To(ContainSubstring("Launching Telepresence Daemon"))
 			Expect(stdout).To(ContainSubstring("Daemon quitting"))
@@ -56,7 +56,7 @@ var _ = Describe("Telepresence", func() {
 
 	Context("When started with a command", func() {
 		It("Connects, executes the command, and then exits", func() {
-			stdout, stderr := execute("--namespace", namespace, "--", client.GetExe(), "--status")
+			stdout, stderr := telepresence("--namespace", namespace, "--", client.GetExe(), "--status")
 			Expect(stderr).To(BeEmpty())
 			Expect(stdout).To(ContainSubstring("Launching Telepresence Daemon"))
 			Expect(stdout).To(ContainSubstring("Connected to context"))
@@ -71,14 +71,14 @@ var _ = Describe("Telepresence", func() {
 		BeforeEach(func() {
 			// This is a bit annoying, but ginkgo does not provide a context scoped "BeforeAll"
 			once.Do(func() {
-				stdout, stderr := execute("--namespace", namespace, "--no-wait")
+				stdout, stderr := telepresence("--namespace", namespace, "--no-wait")
 				Expect(stderr).To(BeEmpty())
 				Expect(stdout).To(ContainSubstring("Connected to context"))
 			})
 		})
 
 		It("Reports version from daemon", func() {
-			stdout, stderr := execute("--version")
+			stdout, stderr := telepresence("--version")
 			Expect(stderr).To(BeEmpty())
 			vs := client.DisplayVersion()
 			Expect(stdout).To(ContainSubstring(fmt.Sprintf("Client %s", vs)))
@@ -86,7 +86,7 @@ var _ = Describe("Telepresence", func() {
 		})
 
 		It("Reports status as connected", func() {
-			stdout, stderr := execute("--status")
+			stdout, stderr := telepresence("--status")
 			Expect(stderr).To(BeEmpty())
 			Expect(stdout).To(ContainSubstring("Context:"))
 		})
@@ -100,7 +100,7 @@ var _ = Describe("Telepresence", func() {
 			// Give outbound interceptor 15 seconds to kick in.
 			proxy := false
 			for i := 0; i < 30; i++ {
-				stdout, stderr := execute("--status")
+				stdout, stderr := telepresence("--status")
 				Expect(stderr).To(BeEmpty())
 				if proxy = proxyOnMatch.MatchString(stdout); proxy {
 					break
@@ -118,7 +118,7 @@ var _ = Describe("Telepresence", func() {
 		})
 
 		It("Proxies inbound traffic with --intercept", func() {
-			stdout, stderr := execute("--intercept", "echo-easy", "--port", "9000", "--no-wait")
+			stdout, stderr := telepresence("--intercept", "echo-easy", "--port", "9000", "--no-wait")
 			Expect(stderr).To(BeEmpty())
 			Expect(stdout).To(ContainSubstring("Using deployment echo-easy"))
 			srv := &http.Server{Addr: ":9000"}
@@ -126,7 +126,7 @@ var _ = Describe("Telepresence", func() {
 			defer func() {
 				err := srv.Shutdown(context.Background())
 				Expect(err).ToNot(HaveOccurred())
-				stdout, stderr = execute("--remove", "echo-easy")
+				stdout, stderr = telepresence("--remove", "echo-easy")
 				Expect(stderr).To(BeEmpty())
 				Expect(stdout).To(BeEmpty())
 			}()
@@ -180,7 +180,7 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
-	_, _ = execute("--quit")
+	_, _ = telepresence("--quit")
 	_ = run("kubectl", "delete", "namespace", namespace)
 })
 
@@ -273,8 +273,8 @@ func trimmed(f func() io.Writer) string {
 	return ""
 }
 
-// execute the CLI command in-process
-func execute(args ...string) (string, string) {
+// telepresence executes the CLI command in-process
+func telepresence(args ...string) (string, string) {
 	cmd := getCommand(args...)
 	err := cmd.Execute()
 	if err != nil {
