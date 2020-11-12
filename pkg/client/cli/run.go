@@ -45,30 +45,26 @@ func (p *runner) run(cmd *cobra.Command, args []string) error {
 		return removeIntercept(cmd, []string{p.RemoveIntercept})
 	case p.Version:
 		return printVersion(cmd, []string{})
-	case p.NoWait:
-		if p.CreateInterceptRequest.InterceptSpec.Name != "" {
-			return p.addIntercept(cmd, args)
+	}
+
+	doWithResource := func(context string) error {
+		switch {
+		case p.NoWait:
+			return nil
+		case len(args) == 0:
+			return p.startSubshell(cmd, context)
+		default:
+			return start(args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		}
-		return p.connect(cmd, args)
 	}
 
 	if p.CreateInterceptRequest.InterceptSpec.Name != "" {
 		if err := prepareIntercept(&p.CreateInterceptRequest); err != nil {
 			return err
 		}
-		return p.runWithIntercept(cmd, func(is *interceptState) error {
-			if len(args) == 0 {
-				return p.startSubshell(cmd, is.cs.info.ClusterContext)
-			}
-			return start(args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
-		})
+		return p.runWithIntercept(cmd, func(is *interceptState) error { return doWithResource(is.cs.info.ClusterContext) })
 	}
-	return p.runWithConnector(cmd, func(cs *connectorState) error {
-		if len(args) == 0 {
-			return p.startSubshell(cmd, cs.info.ClusterContext)
-		}
-		return start(args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
-	})
+	return p.runWithConnector(cmd, func(cs *connectorState) error { return doWithResource(cs.info.ClusterContext) })
 }
 
 func (p *runner) startSubshell(cmd *cobra.Command, ctx string) error {
@@ -95,7 +91,7 @@ func (p *runner) runWithDaemon(cmd *cobra.Command, f func(ds *daemonState) error
 	if err != nil && err != errDaemonIsNotRunning {
 		return err
 	}
-	return client.WithEnsuredState(ds, func() error { return f(ds) })
+	return client.WithEnsuredState(ds, p.NoWait, func() error { return f(ds) })
 }
 
 func (p *runner) runWithConnector(cmd *cobra.Command, f func(cs *connectorState) error) error {
@@ -105,14 +101,14 @@ func (p *runner) runWithConnector(cmd *cobra.Command, f func(cs *connectorState)
 		if err != nil && err != errConnectorIsNotRunning {
 			return err
 		}
-		return client.WithEnsuredState(cs, func() error { return f(cs) })
+		return client.WithEnsuredState(cs, p.NoWait, func() error { return f(cs) })
 	})
 }
 
 func (p *runner) runWithIntercept(cmd *cobra.Command, f func(is *interceptState) error) error {
 	return p.runWithConnector(cmd, func(cs *connectorState) error {
 		is := newInterceptState(cs, &p.CreateInterceptRequest, cmd)
-		return client.WithEnsuredState(is, func() error { return f(is) })
+		return client.WithEnsuredState(is, p.NoWait, func() error { return f(is) })
 	})
 }
 

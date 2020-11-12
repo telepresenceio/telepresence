@@ -140,15 +140,15 @@ var _ = Describe("Telepresence", func() {
 			}()
 
 			var err error
-			for retry := 0; retry < 50; retry++ {
+			for retry := 0; retry < 100; retry++ {
 				stdout, err = output("curl", "-s", "echo-easy")
-				Expect(err).ToNot(HaveOccurred())
-				if !strings.Contains(stdout, "served by echo-easy-") {
+				if err == nil && !strings.Contains(stdout, "served by echo-easy-") {
 					break
 				}
 				// Inbound proxy hasn't kicked in yet
-				time.Sleep(20 * time.Millisecond)
+				time.Sleep(50 * time.Millisecond)
 			}
+			Expect(err).ToNot(HaveOccurred())
 			Expect(stdout).To(Equal("hello from intercept at /"))
 		})
 	})

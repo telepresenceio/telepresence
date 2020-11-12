@@ -109,7 +109,7 @@ func (tm *trafficManager) addIntercept(p *supervisor.Process, ir *manager.Create
 }
 
 func (tm *trafficManager) waitForActiveIntercept(id string) (*manager.InterceptInfo, error) {
-	timeout := time.After(10 * time.Second)
+	timeout := time.After(60 * time.Second)
 	done := make(chan *manager.InterceptInfo)
 
 	il := &iiActive{id: id, done: done}
@@ -128,7 +128,7 @@ func (tm *trafficManager) waitForActiveIntercept(id string) (*manager.InterceptI
 }
 
 func (tm *trafficManager) waitForAgent(name string) (*manager.AgentInfo, error) {
-	timeout := time.After(10 * time.Second)
+	timeout := time.After(60 * time.Second)
 	done := make(chan *manager.AgentInfo)
 
 	al := &aiPresent{name: name, done: done}

@@ -13,11 +13,11 @@ type EnsuredState interface {
 }
 
 // WithEnsuredState ensures the given state, calls the function, and then, if the state
-// was activated, it is deactivated.
-func WithEnsuredState(r EnsuredState, f func() error) (err error) {
+// was activated, it is deactivated unless the retain flag is true.
+func WithEnsuredState(r EnsuredState, retain bool, f func() error) (err error) {
 	var wasAcquired bool
 	wasAcquired, err = r.EnsureState()
-	if wasAcquired {
+	if wasAcquired && !retain {
 		defer func() {
 			if cerr := r.DeactivateState(); cerr != nil {
 				if err == nil {

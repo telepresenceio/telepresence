@@ -36,49 +36,6 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	return err
 }
 
-// Connect asks the daemon to connect to a cluster
-func (p *runner) connect(cmd *cobra.Command, _ []string) error {
-	ds, cs, err := p.ensureConnected(cmd)
-	if err != nil {
-		return err
-	}
-	cs.disconnect()
-	ds.disconnect()
-	return nil
-}
-
-func (p *runner) ensureConnected(cmd *cobra.Command) (*daemonState, *connectorState, error) {
-	ds, err := newDaemonState(cmd, "", "")
-	if err != nil && err != errDaemonIsNotRunning {
-		return nil, nil, err
-	}
-
-	if err == errDaemonIsNotRunning {
-		if _, err = ds.EnsureState(); err != nil {
-			ds.disconnect()
-			return nil, nil, err
-		}
-	}
-
-	// When set, require a traffic manager and wait until it is connected
-	p.InterceptEnabled = false
-
-	cs, err := newConnectorState(ds.grpc, &p.ConnectRequest, cmd)
-	if err != nil && err != errConnectorIsNotRunning {
-		ds.disconnect()
-		return nil, nil, err
-	}
-
-	if err == errConnectorIsNotRunning {
-		if _, err = cs.EnsureState(); err != nil {
-			ds.disconnect()
-			cs.disconnect()
-			return nil, nil, err
-		}
-	}
-	return ds, cs, nil
-}
-
 // Disconnect asks the daemon to disconnect from the connected cluster
 func Disconnect(cmd *cobra.Command, _ []string) error {
 	cs, err := newConnectorState(nil, nil, cmd)
@@ -177,24 +134,6 @@ func quit(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	return ds.DeactivateState()
-}
-
-// addIntercept tells the daemon to add a deployment intercept.
-func (p *runner) addIntercept(cmd *cobra.Command, _ []string) error {
-	err := prepareIntercept(&p.CreateInterceptRequest)
-	if err != nil {
-		return err
-	}
-	ds, cs, err := p.ensureConnected(cmd)
-	if err != nil {
-		return err
-	}
-	defer ds.disconnect()
-	defer cs.disconnect()
-
-	is := newInterceptState(cs, &p.CreateInterceptRequest, cmd)
-	_, err = is.EnsureState()
-	return err
 }
 
 // listIntercepts requests a list current intercepts from the daemon
