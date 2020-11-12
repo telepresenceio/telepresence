@@ -9,11 +9,14 @@ import (
 )
 
 const (
+	// ConnectorSocketName is the path used when communicating to the connector process
 	ConnectorSocketName = "/tmp/telepresence-connector.socket"
-	DaemonSocketName    = "/var/run/telepresence-daemon.socket"
+
+	// DaemonSocketName is the path used when communicating to the daemon process
+	DaemonSocketName = "/var/run/telepresence-daemon.socket"
 )
 
-// FileExists returns true if a socket is found at the given path
+// SocketExists returns true if a socket is found at the given path
 func SocketExists(path string) bool {
 	s, err := os.Stat(path)
 	return err == nil && s.Mode()&os.ModeSocket != 0
@@ -55,6 +58,7 @@ func WaitUntilSocketAppears(name, path string, ttw time.Duration) (err error) {
 	return fmt.Errorf("timeout while waiting for %s to exit", name)
 }
 
+// SocketURL returns the URL that corresponds to the given unix socket filesystem path.
 func SocketURL(socket string) string {
 	// TODO: Revise use of passthrough once this is fixed in grpc-go.
 	//  see: https://github.com/grpc/grpc-go/issues/1741
@@ -62,6 +66,7 @@ func SocketURL(socket string) string {
 	return "passthrough:///unix://" + socket
 }
 
+// DialSocket dials the given unix socket and returns the resulting connection
 func DialSocket(socketName string) (*grpc.ClientConn, error) {
 	return grpc.Dial(SocketURL(socketName), grpc.WithInsecure(), grpc.WithNoProxy())
 }

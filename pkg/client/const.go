@@ -6,13 +6,16 @@ import (
 )
 
 const (
-	Logfile    = "/tmp/telepresence.log"
-	ApiVersion = 3
+	// Logfile is the full path of the file used for all log output
+	Logfile = "/tmp/telepresence.log"
+
+	// APIVersion is the API version of the daemon and connector API
+	APIVersion = 3
 )
 
 // DisplayVersion returns a printable version for `telepresence`
 func DisplayVersion() string {
-	return fmt.Sprintf("%s (api v%d)", Version(), ApiVersion)
+	return fmt.Sprintf("%s (api v%d)", Version(), APIVersion)
 }
 
 var exeName string

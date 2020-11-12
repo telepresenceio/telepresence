@@ -30,13 +30,13 @@ var proxyOnMatch = regexp.MustCompile(`Proxy:\s+ON`)
 var _ = Describe("Telepresence", func() {
 	Context("With no daemon running", func() {
 		It("Returns version", func() {
-			stdout, stderr := execute("version")
+			stdout, stderr := execute("--version")
 			Expect(stderr).To(BeEmpty())
-			Expect(stdout).To(Equal(testVersion))
+			Expect(stdout).To(Equal(fmt.Sprintf("Client %s", client.DisplayVersion())))
 		})
 		It("Returns valid status", func() {
 			out, _ := execute("--status")
-			Expect(out).To(ContainSubstring("The telepresence daemon has not been started"))
+			Expect(out).To(ContainSubstring("the telepresence daemon has not been started"))
 		})
 	})
 
@@ -221,7 +221,6 @@ func buildExecutable(testVersion string) (string, error) {
 
 func getCommand(args ...string) *cobra.Command {
 	cmd := cli.Command()
-	client.AddVersionCommand(cmd)
 	cmd.SetArgs(args)
 	flags := cmd.Flags()
 

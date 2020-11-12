@@ -48,7 +48,7 @@ func (ds *daemonState) EnsureState() (bool, error) {
 	}
 
 	if err = client.WaitUntilSocketAppears("daemon", client.DaemonSocketName, 10*time.Second); err != nil {
-		return false, fmt.Errorf("Daemon service did not come up!\nTake a look at %s for more information.", client.Logfile)
+		return false, fmt.Errorf("daemon service did not start (see %s for more info)", client.Logfile)
 	}
 	err = ds.connect()
 	return err == nil, err
@@ -75,6 +75,25 @@ func (ds *daemonState) DeactivateState() error {
 		fmt.Fprintln(ds.cmd.OutOrStdout())
 	}
 	return err
+}
+
+func assertDaemonStarted() error {
+	if client.SocketExists(client.DaemonSocketName) {
+		return nil
+	}
+	return errDaemonIsNotRunning
+}
+
+// withDaemon establishes a connection, calls the function with the gRPC client, and ensures
+// that the connection is closed.
+func withDaemon(cmd *cobra.Command, f func(daemon.DaemonClient) error) error {
+	// OK with dns and fallback empty. Daemon must be up and running
+	ds, err := newDaemonState(cmd, "", "")
+	if err != nil {
+		return err
+	}
+	defer ds.disconnect()
+	return f(ds.grpc)
 }
 
 // isConnected returns true if a connection has been established to the daemon

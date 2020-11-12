@@ -130,14 +130,10 @@ func (ki *installer) createManagerSvc(p *supervisor.Process) (*kates.Service, er
 	return svc, nil
 }
 
-func (ki *installer) createManagerDeployment(p *supervisor.Process) (*kates.Deployment, error) {
+func (ki *installer) createManagerDeployment(p *supervisor.Process) error {
 	dep := ki.depManifest()
 	p.Logf("Installing traffic-manager deployment in namespace %s. Image: %s", ki.namespace, managerImageName())
-	err := ki.client.Create(p.Context(), dep, dep)
-	if err != nil {
-		return nil, err
-	}
-	return dep, err
+	return ki.client.Create(p.Context(), dep, dep)
 }
 
 func (ki *installer) updateDeployment(p *supervisor.Process, currentDep *kates.Deployment) (*kates.Deployment, error) {
@@ -394,7 +390,7 @@ func (ki *installer) ensureManager(p *supervisor.Process) (int32, int32, error) 
 		if !kates.IsNotFound(err) {
 			return 0, 0, err
 		}
-		_, err = ki.createManagerDeployment(p)
+		err = ki.createManagerDeployment(p)
 	} else {
 		_, err = ki.updateDeployment(p, dep)
 	}

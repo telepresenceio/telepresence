@@ -26,10 +26,12 @@ type ResourceBase struct {
 	done    bool          // (Close) to get everything to quit
 }
 
+// AddTask adds a taskt to be performed by the resource to its task queue.
 func (rb *ResourceBase) AddTask(task func(*supervisor.Process) error) {
 	rb.tasks <- task
 }
 
+// SetDone declares this resource as done. This will end the loop.
 func (rb *ResourceBase) SetDone() {
 	rb.done = true
 }
@@ -59,6 +61,7 @@ func (rb *ResourceBase) Close() error {
 	return nil
 }
 
+// Setup initializes this resource
 func (rb *ResourceBase) Setup(sup *supervisor.Supervisor, name string, check, quit func(*supervisor.Process) error) {
 	rb.name = name
 	rb.doCheck = check

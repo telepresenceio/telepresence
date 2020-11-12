@@ -153,13 +153,7 @@ func (c *k8sCluster) getClusterPreviewHostname(p *supervisor.Process) (string, e
 		if outBytes, err := clusterCmd.CombinedOutput(); err == nil {
 			return outBytes, nil
 		}
-
-		nsCmd := c.getKubectlCmd(p, "get", "host", "-o", "yaml")
-		if outBytes, err := nsCmd.CombinedOutput(); err == nil {
-			return outBytes, nil
-		} else {
-			return nil, err
-		}
+		return c.getKubectlCmd(p, "get", "host", "-o", "yaml").CombinedOutput()
 	}()
 	if err != nil {
 		return "", err
@@ -183,13 +177,13 @@ func (c *k8sCluster) getClusterPreviewHostname(p *supervisor.Process) (string, e
 		host := k8s.Resource(hostItem)
 		logEntry := fmt.Sprintf("- Host %s / %s: %%s", host.Namespace(), host.Name())
 
-		previewUrlSpec := host.Spec().GetMap("previewUrl")
-		if len(previewUrlSpec) == 0 {
+		previewURLSpec := host.Spec().GetMap("previewUrl")
+		if len(previewURLSpec) == 0 {
 			p.Logf(logEntry, "no preview URL teleproxy")
 			continue
 		}
 
-		if enabled, ok := previewUrlSpec["enabled"].(bool); !ok || !enabled {
+		if enabled, ok := previewURLSpec["enabled"].(bool); !ok || !enabled {
 			p.Logf(logEntry, "preview URL not enabled")
 			continue
 		}
@@ -197,8 +191,8 @@ func (c *k8sCluster) getClusterPreviewHostname(p *supervisor.Process) (string, e
 		// missing type, default is "Path" --> success
 		// type is present, set to "Path" --> success
 		// otherwise --> failure
-		if pType, ok := previewUrlSpec["type"].(string); ok && pType != "Path" {
-			p.Logf(logEntry+": %#v", "unsupported preview URL type", previewUrlSpec["type"])
+		if pType, ok := previewURLSpec["type"].(string); ok && pType != "Path" {
+			p.Logf(logEntry+": %#v", "unsupported preview URL type", previewURLSpec["type"])
 			continue
 		}
 

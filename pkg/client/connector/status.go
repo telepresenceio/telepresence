@@ -8,7 +8,7 @@ import (
 )
 
 // status reports the current status of the daemon
-func (s *service) status(p *supervisor.Process) *rpc.ConnectorStatus {
+func (s *service) status(_ *supervisor.Process) *rpc.ConnectorStatus {
 	r := &rpc.ConnectorStatus{}
 	if s.cluster == nil {
 		r.Error = rpc.ConnectorStatus_DISCONNECTED

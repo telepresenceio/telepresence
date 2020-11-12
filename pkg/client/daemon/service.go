@@ -48,6 +48,7 @@ type service struct {
 	p               *supervisor.Process
 }
 
+// Command returns the telepresence sub-command "daemon-foreground"
 func Command() *cobra.Command {
 	return &cobra.Command{
 		Use:    "daemon-foreground",
@@ -135,7 +136,7 @@ func (d *service) Logger(server rpc.Daemon_LoggerServer) error {
 
 func (d *service) Version(_ context.Context, _ *empty.Empty) (*version.VersionInfo, error) {
 	return &version.VersionInfo{
-		ApiVersion: client.ApiVersion,
+		ApiVersion: client.APIVersion,
 		Version:    client.Version(),
 	}, nil
 }

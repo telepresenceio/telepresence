@@ -3,6 +3,8 @@ package nat
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net"
 	"os"
 	"reflect"
@@ -20,7 +22,7 @@ func TestMain(m *testing.M) {
 	})
 }
 
-func udp_listener(p *supervisor.Process, port int) error {
+func udpListener(p *supervisor.Process, port int) error {
 	bindaddr := fmt.Sprintf(":%d", port)
 	pc, err := net.ListenPacket("udp", bindaddr)
 	if err != nil {
@@ -47,7 +49,7 @@ func udp_listener(p *supervisor.Process, port int) error {
 	})
 }
 
-func tcp_listener(p *supervisor.Process, port int) error {
+func tcpListener(p *supervisor.Process, port int) error {
 	bindaddr := fmt.Sprintf(":%d", port)
 	ln, err := net.Listen("tcp", bindaddr)
 	if err != nil {
@@ -76,8 +78,8 @@ func tcp_listener(p *supervisor.Process, port int) error {
 
 func listeners(p *supervisor.Process, ports []int) error {
 	for _, port := range ports {
-		_ = p.GoName(fmt.Sprintf("UDP-%d", port), supervisor.WorkFunc(udp_listener, port))
-		_ = p.GoName(fmt.Sprintf("TCP-%d", port), supervisor.WorkFunc(tcp_listener, port))
+		_ = p.GoName(fmt.Sprintf("UDP-%d", port), supervisor.WorkFunc(udpListener, port))
+		_ = p.GoName(fmt.Sprintf("TCP-%d", port), supervisor.WorkFunc(tcpListener, port))
 	}
 	p.Ready()
 	<-p.Shutdown()
@@ -151,6 +153,8 @@ var mappings = []struct {
 }
 
 func TestTranslator(t *testing.T) {
+	log.SetOutput(ioutil.Discard) // We want success or failure, not an abundance of output
+
 	sup := supervisor.WithContext(context.Background())
 	sup.Supervise(&supervisor.Worker{
 		Name: "listeners",

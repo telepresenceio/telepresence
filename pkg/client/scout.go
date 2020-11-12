@@ -9,16 +9,20 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Scout is a Metriton reported
 type Scout struct {
 	index    int
 	Reporter *metriton.Reporter
 }
 
+// ScoutMeta is a key/value association used when reporting
 type ScoutMeta struct {
 	Key   string
 	Value interface{}
 }
 
+// NewScout creates a new initialized Scout instance that can be used to
+// send telepresence reports to Metriton
 func NewScout(mode string) (s *Scout) {
 	return &Scout{
 		Reporter: &metriton.Reporter{
@@ -42,6 +46,8 @@ func NewScout(mode string) (s *Scout) {
 	}
 }
 
+// SetMetadatum associates the given key with the given value in the metadata
+// of this instance. It's an error if the key already exists.
 func (s *Scout) SetMetadatum(key string, value interface{}) {
 	oldValue, ok := s.Reporter.BaseMetadata[key]
 	if ok {
@@ -50,12 +56,12 @@ func (s *Scout) SetMetadatum(key string, value interface{}) {
 	s.Reporter.BaseMetadata[key] = value
 }
 
+// Report constructs and sends a report. It includes the fixed (growing) set of
+// metadata in the Scout structure and the pairs passed as arguments to this
+// call. It also includes and increments the index, which can be used to
+// determine the correct order of reported events for this installation
+// attempt (correlated by the trace_id set at the start).
 func (s *Scout) Report(action string, meta ...ScoutMeta) error {
-	// Construct the report's metadata. Include the fixed (growing) set of
-	// metadata in the Scout structure and the pairs passed as arguments to this
-	// call. Also include and increment the index, which can be used to
-	// determine the correct order of reported events for this installation
-	// attempt (correlated by the trace_id set at the start).
 	s.index++
 	metadata := map[string]interface{}{
 		"action": action,

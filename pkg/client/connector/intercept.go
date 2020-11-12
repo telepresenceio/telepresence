@@ -61,14 +61,13 @@ func (tm *trafficManager) addIntercept(p *supervisor.Process, ir *manager.Create
 			return result, nil
 		}
 		p.Logf("waiting for new agent for deployment %q", name)
-		ag, err := tm.waitForAgent(name)
+		_, err := tm.waitForAgent(name)
 		if err != nil {
 			result.Error = rpc.InterceptError_NOT_FOUND
 			result.ErrorText = err.Error()
 			return result, nil
 		}
 		p.Logf("agent created for deployment %q", name)
-		found = []*manager.AgentInfo{ag}
 	case 1:
 		p.Logf("found agent for deployment %q", name)
 	default:
@@ -97,7 +96,7 @@ func (tm *trafficManager) addIntercept(p *supervisor.Process, ir *manager.Create
 		return result, nil
 	}
 
-	err = tm.makeIntercept(p, found[0], ii)
+	err = tm.makeIntercept(p, ii)
 	if err != nil {
 		_, _ = tm.removeIntercept(p, name)
 		result.Error = rpc.InterceptError_FAILED_TO_ESTABLISH
@@ -146,7 +145,7 @@ func (tm *trafficManager) waitForAgent(name string) (*manager.AgentInfo, error) 
 
 // makeIntercept acquires an intercept and returns a Resource handle
 // for it
-func (tm *trafficManager) makeIntercept(p *supervisor.Process, agent *manager.AgentInfo, ii *manager.InterceptInfo) error {
+func (tm *trafficManager) makeIntercept(p *supervisor.Process, ii *manager.InterceptInfo) error {
 	is := ii.Spec
 	p.Logf("%s: Intercepting via port %v", is.Name, ii.ManagerPort)
 

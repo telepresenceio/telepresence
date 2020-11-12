@@ -10,20 +10,23 @@ import (
 	"golang.org/x/net/proxy"
 )
 
+// A Proxy listens to a port and forwards incoming connections to a router
 type Proxy struct {
 	listener net.Listener
 	router   func(*net.TCPConn) (string, error)
 }
 
+// NewProxy returns a new Proxy instance that is listening to the given tcp address
 func NewProxy(address string, router func(*net.TCPConn) (string, error)) (proxy *Proxy, err error) {
 	tpu.Rlimit()
-	ln, err := net.Listen("tcp", ":1234")
+	ln, err := net.Listen("tcp", address)
 	if err == nil {
 		proxy = &Proxy{ln, router}
 	}
 	return
 }
 
+// Start starts the proxy accept loop in a separate go routine. It returns immediately
 func (pxy *Proxy) Start(p *supervisor.Process, limit int) {
 	p.Logf("listening limit=%v", limit)
 	go func() {
