@@ -71,6 +71,9 @@ func Command() *cobra.Command {
 		"version", "", false,
 		"Show program's version number and exit",
 	)
+	flags.BoolVarP(&r.List,
+		"list", "", false,
+		"List current intercepts")
 	flags.StringVarP(&r.DNS,
 		"dns", "", "",
 		"DNS IP address to intercept. Defaults to the first nameserver listed in /etc/resolv.conf.",
