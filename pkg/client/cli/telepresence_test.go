@@ -170,12 +170,8 @@ var _ = BeforeSuite(func() {
 	Expect(err).ToNot(HaveOccurred(), "acquire privileges")
 
 	registry := dtest.DockerRegistry()
-	kubeconfig := dtest.Kubeconfig()
-
-	os.Setenv("DTEST_KUBECONFIG", kubeconfig)
 	os.Setenv("KO_DOCKER_REPO", registry)
 	os.Setenv("TELEPRESENCE_REGISTRY", registry)
-	os.Setenv("KUBECONFIG", kubeconfig)
 
 	wg.Add(1)
 	go func() {
@@ -188,6 +184,9 @@ var _ = BeforeSuite(func() {
 	go func() {
 		defer wg.Done()
 
+		kubeconfig := dtest.Kubeconfig()
+		os.Setenv("DTEST_KUBECONFIG", kubeconfig)
+		os.Setenv("KUBECONFIG", kubeconfig)
 		err = run("kubectl", "create", "namespace", namespace)
 		Expect(err).NotTo(HaveOccurred())
 	}()
