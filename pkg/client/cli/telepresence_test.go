@@ -155,28 +155,42 @@ var _ = Describe("Telepresence", func() {
 })
 
 var _ = BeforeSuite(func() {
-	registry := dtest.DockerRegistry()
-	kubeconfig := dtest.Kubeconfig()
+	version.Version = testVersion
 
-	os.Setenv("DTEST_KUBECONFIG", kubeconfig)
-	os.Setenv("KO_DOCKER_REPO", registry)
-	os.Setenv("TELEPRESENCE_REGISTRY", registry)
-	os.Setenv("KUBECONFIG", kubeconfig)
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		executable, err := buildExecutable(testVersion)
+		Expect(err).NotTo(HaveOccurred())
+		client.SetExe(executable)
+	}()
 
-	executable, err := buildExecutable(testVersion)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = publishManager(testVersion)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = run("kubectl", "create", "namespace", namespace)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = run("sudo", "true")
+	err := run("sudo", "true")
 	Expect(err).ToNot(HaveOccurred(), "acquire privileges")
 
-	version.Version = testVersion
-	client.SetExe(executable)
+	registry := dtest.DockerRegistry()
+	os.Setenv("KO_DOCKER_REPO", registry)
+	os.Setenv("TELEPRESENCE_REGISTRY", registry)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := publishManager(testVersion)
+		Expect(err).NotTo(HaveOccurred())
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		kubeconfig := dtest.Kubeconfig()
+		os.Setenv("DTEST_KUBECONFIG", kubeconfig)
+		os.Setenv("KUBECONFIG", kubeconfig)
+		err = run("kubectl", "create", "namespace", namespace)
+		Expect(err).NotTo(HaveOccurred())
+	}()
+	wg.Wait()
 })
 
 var _ = AfterSuite(func() {
