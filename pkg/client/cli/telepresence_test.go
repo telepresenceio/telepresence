@@ -155,6 +155,20 @@ var _ = Describe("Telepresence", func() {
 })
 
 var _ = BeforeSuite(func() {
+	version.Version = testVersion
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		executable, err := buildExecutable(testVersion)
+		Expect(err).NotTo(HaveOccurred())
+		client.SetExe(executable)
+	}()
+
+	err := run("sudo", "true")
+	Expect(err).ToNot(HaveOccurred(), "acquire privileges")
+
 	registry := dtest.DockerRegistry()
 	kubeconfig := dtest.Kubeconfig()
 
@@ -163,20 +177,21 @@ var _ = BeforeSuite(func() {
 	os.Setenv("TELEPRESENCE_REGISTRY", registry)
 	os.Setenv("KUBECONFIG", kubeconfig)
 
-	executable, err := buildExecutable(testVersion)
-	Expect(err).NotTo(HaveOccurred())
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := publishManager(testVersion)
+		Expect(err).NotTo(HaveOccurred())
+	}()
 
-	err = publishManager(testVersion)
-	Expect(err).NotTo(HaveOccurred())
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-	err = run("kubectl", "create", "namespace", namespace)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = run("sudo", "true")
-	Expect(err).ToNot(HaveOccurred(), "acquire privileges")
-
-	version.Version = testVersion
-	client.SetExe(executable)
+		err = run("kubectl", "create", "namespace", namespace)
+		Expect(err).NotTo(HaveOccurred())
+	}()
+	wg.Wait()
 })
 
 var _ = AfterSuite(func() {
