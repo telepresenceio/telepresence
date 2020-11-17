@@ -38,7 +38,7 @@ var _ = Describe("Telepresence", func() {
 		})
 		It("Returns valid status", func() {
 			out, _ := telepresence("--status")
-			Expect(out).To(ContainSubstring("the telepresence daemon has not been started"))
+			Expect(out).To(ContainSubstring("The telepresence daemon has not been started"))
 		})
 	})
 
