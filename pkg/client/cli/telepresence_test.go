@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/datawire/ambassador/pkg/dtest"
@@ -67,14 +68,28 @@ var _ = Describe("Telepresence", func() {
 	})
 
 	Context("When started in the background", func() {
-		once := sync.Once{}
+		itCount := int32(0)
+		itTotal := int32(0) // To simulate AfterAll. Add one for each added It() test
 		BeforeEach(func() {
 			// This is a bit annoying, but ginkgo does not provide a context scoped "BeforeAll"
-			once.Do(func() {
+			// Will be fixed in ginkgo 2.0
+			if atomic.CompareAndSwapInt32(&itCount, 0, 1) {
 				stdout, stderr := telepresence("--namespace", namespace, "--no-wait")
 				Expect(stderr).To(BeEmpty())
 				Expect(stdout).To(ContainSubstring("Connected to context"))
-			})
+			} else {
+				atomic.AddInt32(&itCount, 1)
+			}
+		})
+
+		AfterEach(func() {
+			// This is a bit annoying, but ginkgo does not provide a context scoped "AfterAll"
+			// Will be fixed in ginkgo 2.0
+			if atomic.CompareAndSwapInt32(&itCount, itTotal, 0) {
+				stdout, stderr := telepresence("--quit")
+				Expect(stderr).To(BeEmpty())
+				Expect(stdout).To(ContainSubstring("quitting"))
+			}
 		})
 
 		It("Reports version from daemon", func() {
@@ -84,12 +99,14 @@ var _ = Describe("Telepresence", func() {
 			Expect(stdout).To(ContainSubstring(fmt.Sprintf("Client %s", vs)))
 			Expect(stdout).To(ContainSubstring(fmt.Sprintf("Daemon %s", vs)))
 		})
+		itTotal++
 
 		It("Reports status as connected", func() {
 			stdout, stderr := telepresence("--status")
 			Expect(stderr).To(BeEmpty())
 			Expect(stdout).To(ContainSubstring("Context:"))
 		})
+		itTotal++
 
 		It("Proxies outbound traffic", func() {
 			echoReady := make(chan error)
@@ -116,6 +133,7 @@ var _ = Describe("Telepresence", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(out).To(ContainSubstring("Request served by echo-easy-"))
 		})
+		itTotal++
 
 		It("Proxies inbound traffic with --intercept", func() {
 			stdout, stderr := telepresence("--intercept", "echo-easy", "--port", "9000", "--no-wait")
@@ -151,6 +169,7 @@ var _ = Describe("Telepresence", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(stdout).To(Equal("hello from intercept at /"))
 		})
+		itTotal++
 	})
 })
 
@@ -194,7 +213,6 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
-	_, _ = telepresence("--quit")
 	_ = run("kubectl", "delete", "namespace", namespace)
 })
 
