@@ -185,6 +185,7 @@ var _ = BeforeSuite(func() {
 		client.SetExe(executable)
 	}()
 
+	_ = os.Remove(client.ConnectorSocketName)
 	err := run("sudo", "true")
 	Expect(err).ToNot(HaveOccurred(), "acquire privileges")
 
