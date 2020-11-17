@@ -229,15 +229,17 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 	}
 	s.cluster = cluster
 
-	previewHost, err := cluster.getClusterPreviewHostname(p)
-	if err != nil {
-		p.Logf("get preview URL hostname: %+v", err)
-		previewHost = ""
-	}
+	/*
+		previewHost, err := cluster.getClusterPreviewHostname(p)
+		if err != nil {
+			p.Logf("get preview URL hostname: %+v", err)
+			previewHost = ""
+		}
+	*/
 
-	p.Logf("Connected to context %s (%s)", s.cluster.context(), s.cluster.server())
+	p.Logf("Connected to context %s (%s)", s.cluster.Context, s.cluster.server())
 
-	r.ClusterContext = s.cluster.context()
+	r.ClusterContext = s.cluster.Context
 	r.ClusterServer = s.cluster.server()
 
 	tmgr, err := newTrafficManager(p, s.cluster, cr.InstallId, cr.IsCi)
@@ -251,11 +253,12 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 		}
 		return r
 	}
-	tmgr.previewHost = previewHost
+	// tmgr.previewHost = previewHost
 	s.trafficMgr = tmgr
-	p.Logf("Starting traffic-manager bridge in context %s, namespace %s", cluster.ctx, cluster.namespace)
-	br := newBridge("", cluster.ctx, cluster.namespace, s.daemon, tmgr.sshPort)
-	if err = br.start(p); err != nil {
+	p.Logf("Starting traffic-manager bridge in context %s, namespace %s", cluster.Context, cluster.Namespace)
+	br := newBridge(cluster, s.daemon, tmgr.sshPort)
+	err = br.start(p)
+	if err != nil {
 		p.Logf("Failed to start traffic-manager bridge: %s", err.Error())
 		r.Error = rpc.ConnectInfo_BRIDGE_FAILED
 		r.ErrorText = err.Error()

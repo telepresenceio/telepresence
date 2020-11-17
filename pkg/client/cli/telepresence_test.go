@@ -44,12 +44,21 @@ var _ = Describe("Telepresence", func() {
 	})
 
 	Context("With bad KUBECONFIG", func() {
-		It("Reports connect error and exits", func() {
+		It("Reports config error and exits", func() {
 			kubeConfig := os.Getenv("KUBECONFIG")
 			defer os.Setenv("KUBECONFIG", kubeConfig)
 			os.Setenv("KUBECONFIG", "/dev/null")
 			stdout, stderr := telepresence()
-			Expect(stderr).To(ContainSubstring("initial cluster check"))
+			Expect(stderr).To(ContainSubstring("kubectl config current-context"))
+			Expect(stdout).To(ContainSubstring("Launching Telepresence Daemon"))
+			Expect(stdout).To(ContainSubstring("Daemon quitting"))
+		})
+	})
+
+	Context("With bad context", func() {
+		It("Reports connect error and exits", func() {
+			stdout, stderr := telepresence("--context", "not-likely-to-exist")
+			Expect(stderr).To(ContainSubstring(`"not-likely-to-exist" does not exist`))
 			Expect(stdout).To(ContainSubstring("Launching Telepresence Daemon"))
 			Expect(stdout).To(ContainSubstring("Daemon quitting"))
 		})

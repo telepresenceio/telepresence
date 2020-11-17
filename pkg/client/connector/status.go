@@ -17,7 +17,7 @@ func (s *service) status(_ *supervisor.Process) *rpc.ConnectorStatus {
 	r.Cluster = &rpc.ConnectorStatus_ClusterInfo{
 		Connected: s.cluster.IsOkay(),
 		Server:    s.cluster.server(),
-		Context:   s.cluster.context(),
+		Context:   s.cluster.Context,
 	}
 	r.Bridge = s.cluster.isBridgeOkay()
 

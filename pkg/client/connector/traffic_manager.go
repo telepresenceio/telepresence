@@ -32,10 +32,10 @@ type trafficManager struct {
 	installID   string // telepresence's install ID
 	sessionID   string // sessionID returned by the traffic-manager
 	apiErr      error  // holds the latest traffic-manager API error
-	previewHost string // hostname to use for preview URLs, if enabled
-	connectCI   bool   // whether --ci was passed to connect
-	installer   *installer
-	cept        *intercept
+	// previewHost string // hostname to use for preview URLs, if enabled
+	connectCI bool // whether --ci was passed to connect
+	installer *installer
+	cept      *intercept
 }
 
 // newTrafficManager returns a TrafficManager resource for the given
@@ -51,7 +51,7 @@ func newTrafficManager(p *supervisor.Process, cluster *k8sCluster, installID str
 	}
 
 	// Ensure that we have a traffic-manager to talk to.
-	ti, err := newTrafficManagerInstaller("", cluster.ctx, cluster.namespace)
+	ti, err := newTrafficManagerInstaller(cluster)
 	if err != nil {
 		return nil, err
 	}
