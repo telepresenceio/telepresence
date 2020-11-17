@@ -18,19 +18,11 @@ import (
 )
 
 type installer struct {
-	client    *kates.Client
-	namespace string
+	*k8sCluster
 }
 
-func newTrafficManagerInstaller(kubeconfig, context, namespace string) (*installer, error) {
-	client, err := kates.NewClient(kates.ClientOptions{
-		Kubeconfig: kubeconfig,
-		Context:    context,
-		Namespace:  namespace})
-	if err != nil {
-		return nil, err
-	}
-	return &installer{client: client, namespace: namespace}, nil
+func newTrafficManagerInstaller(kc *k8sCluster) (*installer, error) {
+	return &installer{k8sCluster: kc}, nil
 }
 
 const sshdPort = 8022
@@ -65,7 +57,7 @@ func (ki *installer) findDeployment(p *supervisor.Process, name string) (*kates.
 			Kind: "Deployment",
 		},
 		ObjectMeta: kates.ObjectMeta{
-			Namespace: ki.namespace,
+			Namespace: ki.Namespace,
 			Name:      name},
 	}
 	if err := ki.client.Get(p.Context(), dep, dep); err != nil {
@@ -80,13 +72,13 @@ func (ki *installer) findSvc(p *supervisor.Process, name string) (*kates.Service
 			Kind: "Service",
 		},
 		ObjectMeta: kates.ObjectMeta{
-			Namespace: ki.namespace,
+			Namespace: ki.Namespace,
 			Name:      name},
 	}
 	if err := ki.client.Get(p.Context(), svc, svc); err != nil {
 		return nil, err
 	}
-	p.Logf("Found existing traffic-manager service in namespace %s", ki.namespace)
+	p.Logf("Found existing traffic-manager service in namespace %s", ki.Namespace)
 	return svc, nil
 }
 
@@ -96,7 +88,7 @@ func (ki *installer) createManagerSvc(p *supervisor.Process) (*kates.Service, er
 			Kind: "Service",
 		},
 		ObjectMeta: kates.ObjectMeta{
-			Namespace: ki.namespace,
+			Namespace: ki.Namespace,
 			Name:      appName},
 		Spec: kates.ServiceSpec{
 			Type:      "ClusterIP",
@@ -123,7 +115,7 @@ func (ki *installer) createManagerSvc(p *supervisor.Process) (*kates.Service, er
 		},
 	}
 
-	p.Logf("Installing traffic-manager service in namespace %s", ki.namespace)
+	p.Logf("Installing traffic-manager service in namespace %s", ki.Namespace)
 	if err := ki.client.Create(p.Context(), svc, svc); err != nil {
 		return nil, err
 	}
@@ -132,14 +124,14 @@ func (ki *installer) createManagerSvc(p *supervisor.Process) (*kates.Service, er
 
 func (ki *installer) createManagerDeployment(p *supervisor.Process) error {
 	dep := ki.depManifest()
-	p.Logf("Installing traffic-manager deployment in namespace %s. Image: %s", ki.namespace, managerImageName())
+	p.Logf("Installing traffic-manager deployment in namespace %s. Image: %s", ki.Namespace, managerImageName())
 	return ki.client.Create(p.Context(), dep, dep)
 }
 
 func (ki *installer) updateDeployment(p *supervisor.Process, currentDep *kates.Deployment) (*kates.Deployment, error) {
 	dep := ki.depManifest()
 	dep.ResourceVersion = currentDep.ResourceVersion
-	p.Logf("Updating traffic-manager deployment in namespace %s. Image: %s", ki.namespace, managerImageName())
+	p.Logf("Updating traffic-manager deployment in namespace %s. Image: %s", ki.Namespace, managerImageName())
 	err := ki.client.Update(p.Context(), dep, dep)
 	if err != nil {
 		return nil, err
@@ -153,7 +145,7 @@ func (ki *installer) portToIntercept(p *supervisor.Process, name string, labels 
 	err = ki.client.List(p.Context(), kates.Query{
 		Name:      name,
 		Kind:      "svc",
-		Namespace: ki.namespace,
+		Namespace: ki.Namespace,
 	}, &svcs)
 	if err != nil {
 		return nil, nil, nil, 0, err
@@ -316,7 +308,7 @@ func (ki *installer) addAgentToDeployment(p *supervisor.Process, svcName string,
 			Value: strconv.Itoa(int(icp.ContainerPort)),
 		}}}}
 
-	p.Logf("Adding agent to deployment %s in namespace %s. Image: %s", dep.Name, ki.namespace, managerImageName())
+	p.Logf("Adding agent to deployment %s in namespace %s. Image: %s", dep.Name, ki.Namespace, managerImageName())
 	if err = ki.client.Update(p.Context(), dep, dep); err != nil {
 		return err
 	}
@@ -335,7 +327,7 @@ func (ki *installer) depManifest() *kates.Deployment {
 			Kind: "Deployment",
 		},
 		ObjectMeta: kates.ObjectMeta{
-			Namespace: ki.namespace,
+			Namespace: ki.Namespace,
 			Name:      appName,
 			Labels:    labelMap,
 		},

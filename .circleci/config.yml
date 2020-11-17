@@ -42,7 +42,8 @@ commands:
     steps:
       - run:
           name: Test
-          command: make test
+          command: |
+            make test
 
   go-lint:
     steps:
@@ -97,6 +98,9 @@ commands:
           when: always
           command: |
             rsync -ma --include='*/' --include='*.tap' --include='*.log' --include='Test*.webm' --exclude='*' . /tmp/test-logs
+            if [ -s /tmp/telepresence.log ]; then
+              cp /tmp/telepresence.log /tmp/test-logs
+            fi
       - store_artifacts:
           name: "Store logs"
           path: /tmp/test-logs

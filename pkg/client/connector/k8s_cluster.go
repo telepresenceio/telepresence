@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/datawire/ambassador/pkg/k8s"
+	"github.com/datawire/ambassador/pkg/kates"
+
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
 
@@ -13,8 +14,8 @@ import (
 
 // k8sCluster is a Kubernetes cluster reference
 type k8sCluster struct {
-	ctx          string
-	namespace    string
+	kates.ClientOptions
+	client       *kates.Client
 	srv          string
 	kargs        []string
 	isBridgeOkay func() bool
@@ -22,50 +23,24 @@ type k8sCluster struct {
 }
 
 // getKubectlArgs returns the kubectl command arguments to run a
-// kubectl command with this cluster, including the namespace argument.
+// kubectl command with this cluster.
 func (c *k8sCluster) getKubectlArgs(args ...string) []string {
-	return c.kubectlArgs(true, args...)
-}
-
-// getKubectlArgsNoNamespace returns the kubectl command arguments to run a
-// kubectl command with this cluster, but without the namespace argument.
-func (c *k8sCluster) getKubectlArgsNoNamespace(args ...string) []string {
-	return c.kubectlArgs(false, args...)
-}
-
-func (c *k8sCluster) kubectlArgs(includeNamespace bool, args ...string) []string {
-	cmdArgs := make([]string, 0, len(c.kargs)+len(args))
-	if c.ctx != "" {
-		cmdArgs = append(cmdArgs, "--context", c.ctx)
+	if c.Kubeconfig != "" {
+		args = append(args, "--kubeconfig", c.Kubeconfig)
 	}
-
-	if includeNamespace {
-		if c.namespace != "" {
-			cmdArgs = append(cmdArgs, "--namespace", c.namespace)
-		}
+	if c.Context != "" {
+		args = append(args, "--context", c.Context)
 	}
-
-	cmdArgs = append(cmdArgs, c.kargs...)
-	cmdArgs = append(cmdArgs, args...)
-	return cmdArgs
+	if c.Namespace != "" {
+		args = append(args, "--namespace", c.Namespace)
+	}
+	return append(args, c.kargs...)
 }
 
 // getKubectlCmd returns a Cmd that runs kubectl with the given arguments and
 // the appropriate environment to talk to the cluster
 func (c *k8sCluster) getKubectlCmd(p *supervisor.Process, args ...string) *supervisor.Cmd {
 	return p.Command("kubectl", c.getKubectlArgs(args...)...)
-}
-
-// getKubectlCmdNoNamespace returns a Cmd that runs kubectl with the given arguments and
-// the appropriate environment to talk to the cluster, but it doesn't supply a namespace
-// arg.
-func (c *k8sCluster) getKubectlCmdNoNamespace(p *supervisor.Process, args ...string) *supervisor.Cmd {
-	return p.Command("kubectl", c.getKubectlArgsNoNamespace(args...)...)
-}
-
-// context returns the cluster's context name
-func (c *k8sCluster) context() string {
-	return c.ctx
 }
 
 // server returns the cluster's server configuration
@@ -90,44 +65,55 @@ func (c *k8sCluster) check(p *supervisor.Process) error {
 	return cmd.Run()
 }
 
-// trackKCluster tracks connectivity to a cluster
-func trackKCluster(
-	p *supervisor.Process, context, namespace string, kargs []string,
-) (*k8sCluster, error) {
-	c := &k8sCluster{
-		kargs:     kargs,
-		ctx:       context,
-		namespace: namespace,
-	}
-	if err := c.check(p); err != nil {
-		return nil, errors.Wrap(err, "initial cluster check")
-	}
+func newKCluster(kubeConfig, context, namespace string, kargs ...string) (*k8sCluster, error) {
+	opts := kates.ClientOptions{
+		Kubeconfig: kubeConfig,
+		Context:    context,
+		Namespace:  namespace}
 
-	if c.ctx == "" {
-		cmd := c.getKubectlCmd(p, "config", "current-context")
+	kc, err := kates.NewClient(opts)
+	if err != nil {
+		return nil, err
+	}
+	return &k8sCluster{ClientOptions: opts, client: kc, kargs: kargs}, nil
+}
+
+// trackKCluster tracks connectivity to a cluster
+func trackKCluster(p *supervisor.Process, context, namespace string, kargs []string) (*k8sCluster, error) {
+	// TODO: All shell-outs to kubectl here should go through the kates client.
+	if context == "" {
+		cmd := p.Command("kubectl", "config", "current-context")
 		p.Logf("%s %v", cmd.Path, cmd.Args[1:])
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return nil, errors.Wrap(err, "kubectl config current-context")
 		}
-		c.ctx = strings.TrimSpace(string(output))
+		context = strings.TrimSpace(string(output))
 	}
-	p.Logf("Context: %s", c.ctx)
 
-	if c.namespace == "" {
-		nsQuery := fmt.Sprintf("jsonpath={.contexts[?(@.name==\"%s\")].context.namespace}", c.ctx)
-		cmd := c.getKubectlCmd(p, "config", "view", "-o", nsQuery)
+	if namespace == "" {
+		nsQuery := fmt.Sprintf("jsonpath={.contexts[?(@.name==\"%s\")].context.namespace}", context)
+		cmd := p.Command("kubectl", "--context", context, "config", "view", "-o", nsQuery)
 		p.Logf("%s %v", cmd.Path, cmd.Args[1:])
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return nil, errors.Wrap(err, "kubectl config view ns")
 		}
-		c.namespace = strings.TrimSpace(string(output))
-		if c.namespace == "" { // This is what kubens does
-			c.namespace = "default"
+		namespace = strings.TrimSpace(string(output))
+		if namespace == "" { // This is what kubens does
+			namespace = "default"
 		}
 	}
-	p.Logf("Namespace: %s", c.namespace)
+
+	c, err := newKCluster("", context, namespace, kargs...)
+	if err != nil {
+		return nil, errors.Wrap(err, "k8s client create")
+	}
+
+	if err := c.check(p); err != nil {
+		return nil, errors.Wrap(err, "initial cluster check")
+	}
+	p.Logf("Context: %s", c.Context)
 
 	cmd := c.getKubectlCmd(p, "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
 	p.Logf("%s %v", cmd.Path, cmd.Args[1:])
@@ -142,6 +128,7 @@ func trackKCluster(
 	return c, nil
 }
 
+/*
 // getClusterPreviewHostname returns the hostname of the first Host resource it
 // finds that has Preview URLs enabled with a supported URL type.
 func (c *k8sCluster) getClusterPreviewHostname(p *supervisor.Process) (string, error) {
@@ -209,3 +196,4 @@ func (c *k8sCluster) getClusterPreviewHostname(p *supervisor.Process) (string, e
 	p.Logf("No appropriate Host resource found.")
 	return "", nil
 }
+*/

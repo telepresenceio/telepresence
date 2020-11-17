@@ -36,15 +36,6 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	return err
 }
 
-// Disconnect asks the daemon to disconnect from the connected cluster
-func Disconnect(cmd *cobra.Command, _ []string) error {
-	cs, err := newConnectorState(nil, nil, cmd)
-	if err != nil {
-		return err
-	}
-	return cs.DeactivateState()
-}
-
 // status will retrieve connectivity status from the daemon and print it on stdout.
 func status(cmd *cobra.Command, _ []string) error {
 	var ds *daemon.DaemonStatus
@@ -56,7 +47,7 @@ func status(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
 	switch ds.Error {
 	case daemon.DaemonStatus_NOT_STARTED:
-		fmt.Fprintln(out, errDaemonIsNotRunning)
+		fmt.Fprintln(out, "The telepresence daemon has not been started")
 		return nil
 	case daemon.DaemonStatus_PAUSED:
 		fmt.Fprintln(out, "Network overrides are paused")

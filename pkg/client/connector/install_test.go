@@ -135,7 +135,11 @@ func Test_findTrafficManager_notPresent(t *testing.T) {
 	sup.Supervise(&supervisor.Worker{
 		Name: "find-traffic-manager",
 		Work: func(p *supervisor.Process) error {
-			ti, err := newTrafficManagerInstaller(kubeconfig, "", namespace)
+			kc, err := newKCluster(kubeconfig, "", namespace)
+			if err != nil {
+				return err
+			}
+			ti, err := newTrafficManagerInstaller(kc)
 			if err != nil {
 				return err
 			}
@@ -163,7 +167,11 @@ func Test_findTrafficManager_present(t *testing.T) {
 		Name: "install-then-find",
 		Work: func(p *supervisor.Process) error {
 			defer removeManager(t)
-			ti, err := newTrafficManagerInstaller(kubeconfig, "", namespace)
+			kc, err := newKCluster(kubeconfig, "", namespace)
+			if err != nil {
+				return err
+			}
+			ti, err := newTrafficManagerInstaller(kc)
 			if err != nil {
 				return err
 			}
@@ -187,7 +195,11 @@ func Test_ensureTrafficManager_notPresent(t *testing.T) {
 		Name: "ensure-traffic-manager",
 		Work: func(p *supervisor.Process) error {
 			defer removeManager(t)
-			ti, err := newTrafficManagerInstaller(kubeconfig, "", namespace)
+			kc, err := newKCluster(kubeconfig, "", namespace)
+			if err != nil {
+				return err
+			}
+			ti, err := newTrafficManagerInstaller(kc)
 			if err != nil {
 				return err
 			}
