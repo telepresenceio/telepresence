@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/datawire/ambassador/pkg/dlog"
-
 	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/golang/protobuf/ptypes/empty"
@@ -324,7 +323,7 @@ type daemonLogger struct {
 
 func (d *daemonLogger) Write(data []byte) (n int, err error) {
 	err = d.stream.Send(&daemon.LogMessage{Text: data})
-	return len(data), nil
+	return len(data), err
 }
 
 // handleSignalsAndShutdown ensures that the connector quits gracefully when receiving a signal

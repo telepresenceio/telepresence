@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/datawire/ambassador/pkg/dlog"
-
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
