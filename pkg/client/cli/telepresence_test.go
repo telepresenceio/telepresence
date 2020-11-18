@@ -188,6 +188,7 @@ var _ = BeforeSuite(func() {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
+		defer GinkgoRecover()
 		defer wg.Done()
 		executable, err := buildExecutable(testVersion)
 		Expect(err).NotTo(HaveOccurred())
@@ -204,6 +205,7 @@ var _ = BeforeSuite(func() {
 
 	wg.Add(1)
 	go func() {
+		defer GinkgoRecover()
 		defer wg.Done()
 		err := publishManager(testVersion)
 		Expect(err).NotTo(HaveOccurred())
@@ -211,6 +213,7 @@ var _ = BeforeSuite(func() {
 
 	wg.Add(1)
 	go func() {
+		defer GinkgoRecover()
 		defer wg.Done()
 
 		kubeconfig := dtest.Kubeconfig()
