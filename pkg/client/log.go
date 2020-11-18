@@ -2,9 +2,12 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"sort"
 
+	"github.com/datawire/ambassador/pkg/dlog"
+	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/sirupsen/logrus"
 )
 
@@ -15,6 +18,20 @@ type LogFormatter struct {
 
 func NewFormatter(timestampFormat string) *LogFormatter {
 	return &LogFormatter{timestampFormat: timestampFormat}
+}
+
+// spLogger is an implementation of supervisor.Logger that uses dlog.
+// It will be removed when supervisor is replaced with dgroup.
+type spLogger struct {
+	ctx context.Context
+}
+
+func (sl *spLogger) Printf(format string, v ...interface{}) {
+	dlog.Printf(sl.ctx, format, v...)
+}
+
+func SupervisorLogger(ctx context.Context) supervisor.Logger {
+	return &spLogger{ctx: ctx}
 }
 
 // Format implements logrus.Formatter

@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/datawire/ambassador/pkg/dlog"
+
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
@@ -67,7 +69,7 @@ func Command() *cobra.Command {
 }
 
 // setUpLogging sets up standard Telepresence Daemon logging
-func setUpLogging() supervisor.Logger {
+func setUpLogging(ctx context.Context) context.Context {
 	loggingToTerminal := terminal.IsTerminal(int(os.Stdout.Fd()))
 	logger := logrus.StandardLogger()
 	if loggingToTerminal {
@@ -83,7 +85,7 @@ func setUpLogging() supervisor.Logger {
 			LocalTime:  true, // rotated logfiles use local time names
 		})
 	}
-	return logger
+	return dlog.WithLogger(ctx, dlog.WrapLogrus(logger))
 }
 
 // run is the main function when executing as the daemon
@@ -106,8 +108,9 @@ func run(dns, fallback string) error {
 		}}}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	ctx = setUpLogging(ctx)
 	sup := supervisor.WithContext(ctx)
-	sup.Logger = setUpLogging()
+	sup.Logger = client.SupervisorLogger(ctx)
 	sup.Supervise(&supervisor.Worker{
 		Name: "daemon",
 		Work: func(p *supervisor.Process) error { return d.runGRPCService(p, cancel) },
@@ -145,7 +148,6 @@ func run(dns, fallback string) error {
 }
 
 func (d *service) Logger(server rpc.Daemon_LoggerServer) error {
-	lg := d.p.Supervisor().Logger
 	for {
 		msg, err := server.Recv()
 		if err == io.EOF {
@@ -154,7 +156,7 @@ func (d *service) Logger(server rpc.Daemon_LoggerServer) error {
 		if err != nil {
 			return err
 		}
-		_, _ = lg.(*logrus.Logger).Out.Write(msg.Text)
+		_, _ = logrus.StandardLogger().Out.Write(msg.Text)
 	}
 }
 

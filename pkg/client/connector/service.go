@@ -8,6 +8,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/datawire/ambassador/pkg/dlog"
+
 	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/golang/protobuf/ptypes/empty"
@@ -75,11 +77,13 @@ func run(init bool) error {
 
 	d := &service{daemon: daemon.NewDaemonClient(conn)}
 	ctx, cancel := context.WithCancel(context.Background())
-	sup := supervisor.WithContext(ctx)
-	if err = d.setUpLogging(sup); err != nil {
+	ctx, err = d.setUpLogging(ctx)
+	if err != nil {
 		cancel()
 		return err
 	}
+	sup := supervisor.WithContext(ctx)
+	sup.Logger = client.SupervisorLogger(ctx)
 
 	sup.Supervise(&supervisor.Worker{
 		Name: "connector",
@@ -165,24 +169,25 @@ func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) 
 
 // setUpLogging connects to the daemon logger and assigns a wrapper for it to the
 // supervisors logger.
-func (s *service) setUpLogging(sup *supervisor.Supervisor) error {
+func (s *service) setUpLogging(ctx context.Context) (context.Context, error) {
 	logStream, err := s.daemon.Logger(context.Background())
-	if err == nil {
-		ll := logrus.New()
-		dl := &daemonLogger{
-			Logger: ll,
-			stream: logStream,
-		}
-		ll.Out = dl
-		loggingToTerminal := terminal.IsTerminal(int(os.Stdout.Fd()))
-		if loggingToTerminal {
-			ll.Formatter = client.NewFormatter("15:04:05")
-		} else {
-			ll.Formatter = client.NewFormatter("2006/01/02 15:04:05")
-		}
-		sup.Logger = dl
+	if err != nil {
+		return nil, err
 	}
-	return err
+
+	ll := logrus.StandardLogger()
+	dl := &daemonLogger{
+		Logger: ll,
+		stream: logStream,
+	}
+	ll.Out = dl
+	loggingToTerminal := terminal.IsTerminal(int(os.Stdout.Fd()))
+	if loggingToTerminal {
+		ll.Formatter = client.NewFormatter("15:04:05")
+	} else {
+		ll.Formatter = client.NewFormatter("2006/01/02 15:04:05")
+	}
+	return dlog.WithLogger(ctx, dlog.WrapLogrus(ll)), nil
 }
 
 // runGRPCService is the main gRPC server loop.
