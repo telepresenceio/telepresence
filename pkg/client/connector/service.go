@@ -2,7 +2,6 @@ package connector
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"os"
 	"os/signal"
@@ -13,7 +12,9 @@ import (
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh/terminal"
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/client"
@@ -167,7 +168,19 @@ func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) 
 func (s *service) setUpLogging(sup *supervisor.Supervisor) error {
 	logStream, err := s.daemon.Logger(context.Background())
 	if err == nil {
-		sup.Logger = &daemonLogger{stream: logStream}
+		ll := logrus.New()
+		dl := &daemonLogger{
+			Logger: ll,
+			stream: logStream,
+		}
+		ll.Out = dl
+		loggingToTerminal := terminal.IsTerminal(int(os.Stdout.Fd()))
+		if loggingToTerminal {
+			ll.Formatter = client.NewFormatter("15:04:05")
+		} else {
+			ll.Formatter = client.NewFormatter("2006/01/02 15:04:05")
+		}
+		sup.Logger = dl
 	}
 	return err
 }
@@ -298,18 +311,15 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 	return r
 }
 
-// daemonLogger is a supervisor.Logger implementation that sends log messages to the daemon
+// daemonLogger is a logrus.Logger implementation that sends log messages to the daemon
 type daemonLogger struct {
+	*logrus.Logger
 	stream daemon.Daemon_LoggerClient
 }
 
-// Printf implements the supervisor.Logger interface
-func (d *daemonLogger) Printf(format string, v ...interface{}) {
-	txt := fmt.Sprintf(format, v...)
-	err := d.stream.Send(&daemon.LogMessage{Text: txt})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error while sending log message to daemon: %s\nOriginal message was %q\n", err.Error(), txt)
-	}
+func (d *daemonLogger) Write(data []byte) (n int, err error) {
+	err = d.stream.Send(&daemon.LogMessage{Text: data})
+	return len(data), nil
 }
 
 // handleSignalsAndShutdown ensures that the connector quits gracefully when receiving a signal

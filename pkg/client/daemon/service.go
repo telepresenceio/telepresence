@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -14,8 +15,11 @@ import (
 	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh/terminal"
 	"google.golang.org/grpc"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
@@ -60,6 +64,26 @@ func Command() *cobra.Command {
 			return run(args[0], args[1])
 		},
 	}
+}
+
+// setUpLogging sets up standard Telepresence Daemon logging
+func setUpLogging() supervisor.Logger {
+	loggingToTerminal := terminal.IsTerminal(int(os.Stdout.Fd()))
+	logger := logrus.StandardLogger()
+	if loggingToTerminal {
+		logger.Formatter = client.NewFormatter("15:04:05")
+	} else {
+		logger.Formatter = client.NewFormatter("2006/01/02 15:04:05")
+		log.SetOutput(logger.Writer())
+		logger.SetOutput(&lumberjack.Logger{
+			Filename:   client.Logfile,
+			MaxSize:    10,   // megabytes
+			MaxBackups: 3,    // in the same directory
+			MaxAge:     60,   // days
+			LocalTime:  true, // rotated logfiles use local time names
+		})
+	}
+	return logger
 }
 
 // run is the main function when executing as the daemon
@@ -130,7 +154,7 @@ func (d *service) Logger(server rpc.Daemon_LoggerServer) error {
 		if err != nil {
 			return err
 		}
-		lg.Printf(msg.Text)
+		_, _ = lg.(*logrus.Logger).Out.Write(msg.Text)
 	}
 }
 

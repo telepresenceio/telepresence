@@ -50,11 +50,9 @@ service Daemon {
   rpc SetDnsSearchPath(Paths) returns (google.protobuf.Empty);
 }
 
-// LogMessage carries a message and a flag telling the service if the message
-// is intended for debugging or more general info.
+// LogMessage carries a preformatted log message.
 message LogMessage {
-  bool is_debug = 1;
-  string text = 2;
+  bytes text = 1;
 }
 
 message PauseInfo {
