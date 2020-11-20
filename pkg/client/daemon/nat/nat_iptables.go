@@ -3,20 +3,21 @@
 package nat
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
 	"syscall"
 
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/ambassador/pkg/dexec"
 )
 
 type Translator struct {
 	commonTranslator
 }
 
-func (t *Translator) ipt(p *supervisor.Process, args ...string) {
-	cmd := p.Command("iptables", append([]string{"-t", "nat"}, args...)...)
+func (t *Translator) ipt(c context.Context, args ...string) {
+	cmd := dexec.CommandContext(c, "iptables", append([]string{"-t", "nat"}, args...)...)
 	err := cmd.Start()
 	if err != nil {
 		panic(err)
@@ -24,38 +25,38 @@ func (t *Translator) ipt(p *supervisor.Process, args ...string) {
 	_ = cmd.Wait()
 }
 
-func (t *Translator) Enable(p *supervisor.Process) {
+func (t *Translator) Enable(c context.Context) {
 	// XXX: -D only removes one copy of the rule, need to figure out how to remove all copies just in case
-	t.ipt(p, "-D", "OUTPUT", "-j", t.Name)
+	t.ipt(c, "-D", "OUTPUT", "-j", t.Name)
 	// we need to be in the PREROUTING chain in order to get traffic
 	// from docker containers, not sure you would *always* want this,
 	// but probably makes sense as a default
-	t.ipt(p, "-D", "PREROUTING", "-j", t.Name)
-	t.ipt(p, "-N", t.Name)
-	t.ipt(p, "-F", t.Name)
-	t.ipt(p, "-I", "OUTPUT", "1", "-j", t.Name)
-	t.ipt(p, "-I", "PREROUTING", "1", "-j", t.Name)
-	t.ipt(p, "-A", t.Name, "-j", "RETURN", "--dest", "127.0.0.1/32", "-p", "tcp")
+	t.ipt(c, "-D", "PREROUTING", "-j", t.Name)
+	t.ipt(c, "-N", t.Name)
+	t.ipt(c, "-F", t.Name)
+	t.ipt(c, "-I", "OUTPUT", "1", "-j", t.Name)
+	t.ipt(c, "-I", "PREROUTING", "1", "-j", t.Name)
+	t.ipt(c, "-A", t.Name, "-j", "RETURN", "--dest", "127.0.0.1/32", "-p", "tcp")
 }
 
-func (t *Translator) Disable(p *supervisor.Process) {
+func (t *Translator) Disable(c context.Context) {
 	// XXX: -D only removes one copy of the rule, need to figure out how to remove all copies just in case
-	t.ipt(p, "-D", "OUTPUT", "-j", t.Name)
-	t.ipt(p, "-D", "PREROUTING", "-j", t.Name)
-	t.ipt(p, "-F", t.Name)
-	t.ipt(p, "-X", t.Name)
+	t.ipt(c, "-D", "OUTPUT", "-j", t.Name)
+	t.ipt(c, "-D", "PREROUTING", "-j", t.Name)
+	t.ipt(c, "-F", t.Name)
+	t.ipt(c, "-X", t.Name)
 }
 
-func (t *Translator) ForwardTCP(p *supervisor.Process, ip, port, toPort string) {
-	t.forward(p, "tcp", ip, port, toPort)
+func (t *Translator) ForwardTCP(c context.Context, ip, port, toPort string) {
+	t.forward(c, "tcp", ip, port, toPort)
 }
 
-func (t *Translator) ForwardUDP(p *supervisor.Process, ip, port, toPort string) {
-	t.forward(p, "udp", ip, port, toPort)
+func (t *Translator) ForwardUDP(c context.Context, ip, port, toPort string) {
+	t.forward(c, "udp", ip, port, toPort)
 }
 
-func (t *Translator) forward(p *supervisor.Process, protocol, ip, port, toPort string) {
-	t.clear(p, protocol, ip, port)
+func (t *Translator) forward(c context.Context, protocol, ip, port, toPort string) {
+	t.clear(c, protocol, ip, port)
 	args := []string{"-A", t.Name, "-j", "REDIRECT", "-p", protocol, "--dest", ip + "/32"}
 	if port != "" {
 		if strings.Contains(port, ",") {
@@ -65,19 +66,19 @@ func (t *Translator) forward(p *supervisor.Process, protocol, ip, port, toPort s
 		}
 	}
 	args = append(args, "--to-ports", toPort)
-	t.ipt(p, args...)
+	t.ipt(c, args...)
 	t.Mappings[Address{protocol, ip, port}] = toPort
 }
 
-func (t *Translator) ClearTCP(p *supervisor.Process, ip, port string) {
-	t.clear(p, "tcp", ip, port)
+func (t *Translator) ClearTCP(c context.Context, ip, port string) {
+	t.clear(c, "tcp", ip, port)
 }
 
-func (t *Translator) ClearUDP(p *supervisor.Process, ip, port string) {
-	t.clear(p, "udp", ip, port)
+func (t *Translator) ClearUDP(c context.Context, ip, port string) {
+	t.clear(c, "udp", ip, port)
 }
 
-func (t *Translator) clear(p *supervisor.Process, protocol, ip, port string) {
+func (t *Translator) clear(c context.Context, protocol, ip, port string) {
 	if previous, exists := t.Mappings[Address{protocol, ip, port}]; exists {
 		args := []string{"-D", t.Name, "-j", "REDIRECT", "-p", protocol, "--dest", ip + "/32"}
 		if port != "" {
@@ -88,7 +89,7 @@ func (t *Translator) clear(p *supervisor.Process, protocol, ip, port string) {
 			}
 		}
 		args = append(args, "--to-ports", previous)
-		t.ipt(p, args...)
+		t.ipt(c, args...)
 		delete(t.Mappings, Address{protocol, ip, port})
 	}
 }

@@ -1,35 +1,42 @@
 package dns
 
 import (
+	"context"
 	"net"
 	"strings"
 
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/ambassador/pkg/dcontext"
+
+	"github.com/datawire/ambassador/pkg/dgroup"
+
+	"github.com/datawire/ambassador/pkg/dlog"
+
 	"github.com/miekg/dns"
 	"github.com/pkg/errors"
 )
 
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface
 type Server struct {
-	p         *supervisor.Process
-	listeners []string
-	fallback  string
-	resolve   func(string) string
+	logContext context.Context // necessary to make logging work in ServeDNS function
+	listeners  []string
+	fallback   string
+	resolve    func(string) string
 }
 
 // NewServer returns a new dns.Server
-func NewServer(p *supervisor.Process, listeners []string, fallback string, resolve func(string) string) *Server {
+func NewServer(c context.Context, listeners []string, fallback string, resolve func(string) string) *Server {
 	return &Server{
-		p:         p,
-		listeners: listeners,
-		fallback:  fallback,
-		resolve:   resolve,
+		logContext: c,
+		listeners:  listeners,
+		fallback:   fallback,
+		resolve:    resolve,
 	}
 }
 
 // ServeDNS is an implementation of github.com/miekg/dns Handler.ServeDNS.
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	domain := strings.ToLower(r.Question[0].Name)
+	c := s.logContext
 	switch r.Question[0].Qtype {
 	case dns.TypeA:
 		var ip string
@@ -46,7 +53,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			ip = s.resolve(domain)
 		}
 		if ip != "" {
-			s.p.Logf("QUERY %s -> %s", domain, ip)
+			dlog.Debugf(c, "QUERY %s -> %s", domain, ip)
 			msg := dns.Msg{}
 			msg.SetReply(r)
 			msg.Authoritative = true
@@ -68,7 +75,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	default:
 		ip := s.resolve(domain)
 		if ip != "" {
-			s.p.Logf("QTYPE[%v] %s -> EMPTY", r.Question[0].Qtype, domain)
+			dlog.Debugf(c, "QTYPE[%v] %s -> EMPTY", r.Question[0].Qtype, domain)
 			msg := dns.Msg{}
 			msg.SetReply(r)
 			msg.Authoritative = true
@@ -77,34 +84,40 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			return
 		}
 	}
-	s.p.Logf("QTYPE[%v] %s -> FALLBACK", r.Question[0].Qtype, domain)
+	dlog.Debugf(c, "QTYPE[%v] %s -> FALLBACK", r.Question[0].Qtype, domain)
 	in, err := dns.Exchange(r, s.fallback)
 	if err != nil {
-		s.p.Log(err.Error())
+		dlog.Error(c, err.Error())
 		return
 	}
 	_ = w.WriteMsg(in)
 }
 
 // Start starts the DNS server
-func (s *Server) Start() error {
-	listeners := make([]net.PacketConn, len(s.listeners))
+func (s *Server) Run(c context.Context) error {
+	type lwa struct {
+		addr     string
+		listener net.PacketConn
+	}
+	listeners := make([]*lwa, len(s.listeners))
 	for i, addr := range s.listeners {
-		var err error
-		listeners[i], err = net.ListenPacket("udp", addr)
+		listener, err := net.ListenPacket("udp", addr)
 		if err != nil {
 			return errors.Wrap(err, "failed to set up udp listener")
 		}
-		s.p.Logf("listening on %s", addr)
+		listeners[i] = &lwa{addr: addr, listener: listener}
 	}
-	for _, listener := range listeners {
-		go func(listener net.PacketConn) {
-			srv := &dns.Server{PacketConn: listener, Handler: s}
-			if err := srv.ActivateAndServe(); err != nil {
-				s.p.Logf("failed to active udp server: %v", err)
-				s.p.Supervisor().Shutdown()
-			}
-		}(listener)
+
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	for _, lwa := range listeners {
+		srv := &dns.Server{PacketConn: lwa.listener, Handler: s}
+		g.Go(lwa.addr, func(c context.Context) error {
+			go func() {
+				<-c.Done()
+				_ = srv.ShutdownContext(dcontext.HardContext(c))
+			}()
+			return srv.ActivateAndServe()
+		})
 	}
-	return nil
+	return g.Wait()
 }

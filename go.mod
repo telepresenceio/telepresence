@@ -3,7 +3,7 @@ module github.com/datawire/telepresence2
 go 1.15
 
 require (
-	github.com/datawire/ambassador v1.8.1
+	github.com/datawire/ambassador v1.9.0
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
 	github.com/golang/protobuf v1.4.3
 	github.com/google/uuid v1.1.2
@@ -18,9 +18,11 @@ require (
 	github.com/stretchr/testify v1.6.1
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
 	golang.org/x/net v0.0.0-20201029055024-942e2f445f3c
+	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/grpc v1.33.1
+	google.golang.org/genproto v0.0.0-20200806141610-86f49bd18e98 // indirect
+	google.golang.org/grpc v1.33.2
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/yaml.v2 v2.3.0
@@ -33,3 +35,5 @@ replace github.com/Azure/go-autorest v10.8.1+incompatible => github.com/Azure/go
 
 // Pin down golang.org/x/sys to a version that contains unix.SYS_IOCTL on darwin
 replace golang.org/x/sys => golang.org/x/sys v0.0.0-20200826173525-f9321e4c35a6
+
+replace github.com/datawire/ambassador => github.com/datawire/apro/ambassador v0.0.0-20201118180139-16915e009687

@@ -121,10 +121,19 @@ func connectorStatus(cmd *cobra.Command) (status *connector.ConnectorStatus, err
 // quit sends the quit message to the daemon and waits for it to exit.
 func quit(cmd *cobra.Command, _ []string) error {
 	ds, err := newDaemonState(cmd, "", "")
-	if err != nil {
-		return err
+	if err == nil {
+		// Let daemon kill the connector
+		defer ds.disconnect()
+		return ds.DeactivateState()
 	}
-	return ds.DeactivateState()
+
+	// Ensure the connector is killed even if daemon isn't running
+	cs, err := newConnectorState(nil, nil, cmd)
+	if err != nil {
+		return nil
+	}
+	defer cs.disconnect()
+	return cs.DeactivateState()
 }
 
 // listIntercepts requests a list current intercepts from the daemon

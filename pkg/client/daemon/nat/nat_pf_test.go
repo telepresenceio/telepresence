@@ -3,9 +3,10 @@
 package nat
 
 import (
+	"context"
 	"strings"
 
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/ambassador/pkg/dexec"
 )
 
 type env struct {
@@ -26,36 +27,39 @@ var environments = []env{
 	{pfconf: "anchor {\n    block return quick proto tcp from any to 192.0.2.0/24\n}\n"},
 }
 
-func (e *env) setup() {
-	supervisor.MustRun("setup", func(p *supervisor.Process) error {
-		output := p.Command("pfctl", "-sr").MustCapture(nil)
-		output += p.Command("pfctl", "-sn").MustCapture(nil)
-		lines := strings.Split(output, "\n")
+func (e *env) setup(c context.Context) error {
+	o1, err := dexec.CommandContext(c, "pfctl", "-sr").CombinedOutput()
+	if err != nil {
+		return err
+	}
+	o2, err := dexec.CommandContext(c, "pfctl", "-sn").CombinedOutput()
+	if err != nil {
+		return err
+	}
+	output := string(o1) + string(o2)
+	lines := strings.Split(output, "\n")
 
-		for _, kw := range []string{"scrub-anchor", "nat-anchor", "rdr-anchor", "anchor"} {
-			for _, line := range lines {
-				fields := strings.Fields(line)
-				if len(fields) > 0 && fields[0] == kw {
-					e.before += line + "\n"
-				}
+	for _, kw := range []string{"scrub-anchor", "nat-anchor", "rdr-anchor", "anchor"} {
+		for _, line := range lines {
+			fields := strings.Fields(line)
+			if len(fields) > 0 && fields[0] == kw {
+				e.before += line + "\n"
 			}
 		}
+	}
 
-		err := pf(p, []string{"-F", "all"}, "")
-		if err != nil {
-			return err
-		}
-		err = pf(p, []string{"-f", "/dev/stdin"}, e.pfconf)
-		if err != nil {
-			return err
-		}
-		return nil
-	})
+	err = pf(c, []string{"-F", "all"}, "")
+	if err != nil {
+		return err
+	}
+	err = pf(c, []string{"-f", "/dev/stdin"}, e.pfconf)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (e *env) teardown() {
-	supervisor.MustRun("teardown", func(p *supervisor.Process) error {
-		_ = pf(p, []string{"-F", "all"}, "")
-		return pf(p, []string{"-f", "/dev/stdin"}, e.before)
-	})
+func (e *env) teardown(c context.Context) error {
+	_ = pf(c, []string{"-F", "all"}, "")
+	return pf(c, []string{"-f", "/dev/stdin"}, e.before)
 }

@@ -8,12 +8,11 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
+	"github.com/datawire/ambassador/pkg/dgroup"
+
 	"github.com/datawire/ambassador/pkg/dlog"
-	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -50,7 +49,8 @@ type service struct {
 	grpc            *grpc.Server
 	hClient         *http.Client
 	ipTables        *ipTables
-	p               *supervisor.Process
+	callCtx         context.Context
+	cancel          context.CancelFunc
 }
 
 // Command returns the telepresence sub-command "daemon-foreground"
@@ -68,7 +68,7 @@ func Command() *cobra.Command {
 }
 
 // setUpLogging sets up standard Telepresence Daemon logging
-func setUpLogging(ctx context.Context) context.Context {
+func setUpLogging(c context.Context) context.Context {
 	loggingToTerminal := terminal.IsTerminal(int(os.Stdout.Fd()))
 	logger := logrus.StandardLogger()
 	if loggingToTerminal {
@@ -84,66 +84,8 @@ func setUpLogging(ctx context.Context) context.Context {
 			LocalTime:  true, // rotated logfiles use local time names
 		})
 	}
-	return dlog.WithLogger(ctx, dlog.WrapLogrus(logger))
-}
-
-// run is the main function when executing as the daemon
-func run(dns, fallback string) error {
-	if os.Geteuid() != 0 {
-		return errors.New("telepresence daemon must run as root")
-	}
-
-	d := &service{dns: dns, fallback: fallback, hClient: &http.Client{
-		Timeout: 15 * time.Second,
-		Transport: &http.Transport{
-			// #nosec G402
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			Proxy:           nil,
-			DialContext: (&net.Dialer{
-				Timeout:   10 * time.Second,
-				KeepAlive: 1 * time.Second,
-			}).DialContext,
-			DisableKeepAlives: true,
-		}}}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	ctx = setUpLogging(ctx)
-	sup := supervisor.WithContext(ctx)
-	sup.Logger = client.SupervisorLogger(ctx)
-	sup.Supervise(&supervisor.Worker{
-		Name: "daemon",
-		Work: func(p *supervisor.Process) error { return d.runGRPCService(p, cancel) },
-	})
-	sup.Supervise(&supervisor.Worker{
-		Name:     "setup",
-		Requires: []string{"daemon"},
-		Work: func(p *supervisor.Process) error {
-			ipTables, shutdown, err := start(p, dns, fallback, false)
-			if err != nil {
-				return err
-			}
-			d.ipTables = ipTables
-			d.networkShutdown = shutdown
-			p.Ready()
-			return nil
-		},
-	})
-
-	sup.Logger.Printf("---")
-	sup.Logger.Printf("Telepresence daemon %s starting...", client.DisplayVersion())
-	sup.Logger.Printf("PID is %d", os.Getpid())
-	runErrors := sup.Run()
-
-	sup.Logger.Printf("")
-	if len(runErrors) > 0 {
-		sup.Logger.Printf("daemon has exited with %d error(s):", len(runErrors))
-		for _, err := range runErrors {
-			sup.Logger.Printf("- %v", err)
-		}
-		return errors.New("telepresence daemon exited with errors")
-	}
-	sup.Logger.Printf("Telepresence daemon %s is done.", client.DisplayVersion())
-	return nil
+	logger.Level = logrus.DebugLevel
+	return dlog.WithLogger(c, dlog.WrapLogrus(logger))
 }
 
 func (d *service) Logger(server rpc.Daemon_LoggerServer) error {
@@ -164,6 +106,10 @@ func (d *service) Version(_ context.Context, _ *empty.Empty) (*version.VersionIn
 		ApiVersion: client.APIVersion,
 		Version:    client.Version(),
 	}, nil
+}
+
+func (s *service) callContext(_ context.Context) context.Context {
+	return s.callCtx
 }
 
 func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
@@ -189,16 +135,17 @@ func (d *service) Pause(_ context.Context, _ *empty.Empty) (*rpc.PauseInfo, erro
 	return &r, nil
 }
 
-func (d *service) Resume(_ context.Context, _ *empty.Empty) (*rpc.ResumeInfo, error) {
+func (d *service) Resume(c context.Context, _ *empty.Empty) (*rpc.ResumeInfo, error) {
 	r := rpc.ResumeInfo{}
 	if d.networkShutdown != nil {
 		r.Error = rpc.ResumeInfo_NOT_PAUSED
 	} else {
-		ipTables, shutdown, err := start(d.p, d.dns, d.fallback, false)
+		c := d.callContext(c)
+		ipTables, shutdown, err := start(c, d.dns, d.fallback, false)
 		if err != nil {
 			r.Error = rpc.ResumeInfo_UNEXPECTED_RESUME_ERROR
 			r.ErrorText = err.Error()
-			d.p.Logf("resume: %v", err)
+			dlog.Infof(c, "resume: %v", err)
 		}
 		d.ipTables = ipTables
 		d.networkShutdown = shutdown
@@ -207,7 +154,7 @@ func (d *service) Resume(_ context.Context, _ *empty.Empty) (*rpc.ResumeInfo, er
 }
 
 func (d *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
-	d.p.Supervisor().Shutdown()
+	d.cancel()
 	return &empty.Empty{}, nil
 }
 
@@ -239,9 +186,22 @@ func (d *service) SetDnsSearchPath(_ context.Context, paths *rpc.Paths) (*empty.
 	return &empty.Empty{}, nil
 }
 
-func (d *service) runGRPCService(p *supervisor.Process, cancel context.CancelFunc) error {
+// run is the main function when executing as the daemon
+func run(dns, fallback string) error {
+	if os.Geteuid() != 0 {
+		return errors.New("telepresence daemon must run as root")
+	}
+
+	var listener net.Listener
+	defer func() {
+		if listener != nil {
+			_ = listener.Close()
+		}
+		_ = os.Remove(client.DaemonSocketName)
+	}()
+
 	// Listen on unix domain socket
-	unixListener, err := net.Listen("unix", client.DaemonSocketName)
+	listener, err := net.Listen("unix", client.DaemonSocketName)
 	if err != nil {
 		return errors.Wrap(err, "listen")
 	}
@@ -250,39 +210,73 @@ func (d *service) runGRPCService(p *supervisor.Process, cancel context.CancelFun
 		return errors.Wrap(err, "chmod")
 	}
 
-	grpcServer := grpc.NewServer()
-	d.grpc = grpcServer
-	d.p = p
-	rpc.RegisterDaemonServer(grpcServer, d)
+	d := &service{dns: dns, fallback: fallback, hClient: &http.Client{
+		Timeout: 15 * time.Second,
+		Transport: &http.Transport{
+			// #nosec G402
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			Proxy:           nil,
+			DialContext: (&net.Dialer{
+				Timeout:   10 * time.Second,
+				KeepAlive: 1 * time.Second,
+			}).DialContext,
+			DisableKeepAlives: true,
+		}},
+		grpc: grpc.NewServer()}
 
-	go d.handleSignalsAndShutdown(cancel)
+	rpc.RegisterDaemonServer(d.grpc, d)
 
-	p.Ready()
-	return errors.Wrap(grpcServer.Serve(unixListener), "daemon gRCP server")
+	g := dgroup.NewGroup(context.Background(), dgroup.GroupConfig{
+		SoftShutdownTimeout:  2 * time.Second,
+		EnableSignalHandling: true})
+
+	g.Go("daemon", func(c context.Context) error {
+		c = setUpLogging(c)
+		hc := c
+
+		dlog.Info(c, "---")
+		dlog.Infof(c, "Telepresence daemon %s starting...", client.DisplayVersion())
+		dlog.Infof(c, "PID is %d", os.Getpid())
+		dlog.Info(c, "")
+
+		c, d.cancel = context.WithCancel(c)
+		d.callCtx = c
+		sg := dgroup.NewGroup(c, dgroup.GroupConfig{})
+		sg.Go("outbound", func(c context.Context) error {
+			d.ipTables, d.networkShutdown, err = start(c, dns, fallback, false)
+			return err
+		})
+		sg.Go("teardown", func(c context.Context) error {
+			return d.handleShutdown(c, hc)
+		})
+		err := d.grpc.Serve(listener)
+		listener = nil
+		if err != nil {
+			dlog.Error(c, err.Error())
+		} else {
+			dlog.Infof(c, "Telepresence daemon %s is done.", client.DisplayVersion())
+		}
+		return err
+	})
+	return g.Wait()
 }
 
-// handleSignalsAndShutdown ensures that the daemon quits gracefully when receiving a signal
-// or when the supervisor wants to shutdown.
-func (d *service) handleSignalsAndShutdown(cancel context.CancelFunc) {
+// handleShutdown ensures that the daemon quits gracefully when the context is cancelled.
+func (d *service) handleShutdown(c, hc context.Context) error {
 	defer d.grpc.GracefulStop()
 
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
-	select {
-	case sig := <-interrupt:
-		d.p.Logf("Received signal %s", sig)
-		cancel()
-	case <-d.p.Shutdown():
-		d.p.Log("Shutting down")
-	}
+	<-c.Done()
+	c = hc
+	dlog.Info(c, "Shutting down")
 
 	if !client.SocketExists(client.ConnectorSocketName) {
-		return
+		return nil
 	}
 	conn, err := client.DialSocket(client.ConnectorSocketName)
 	if err != nil {
-		return
+		return err
 	}
 	defer conn.Close()
-	_, _ = connector.NewConnectorClient(conn).Quit(d.p.Context(), &empty.Empty{})
+	_, err = connector.NewConnectorClient(conn).Quit(c, &empty.Empty{})
+	return err
 }

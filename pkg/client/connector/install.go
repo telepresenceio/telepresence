@@ -1,20 +1,21 @@
 package connector
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 	"sync"
 
-	"github.com/datawire/telepresence2/pkg/client"
-
+	"github.com/datawire/ambassador/pkg/dlog"
 	"github.com/datawire/ambassador/pkg/kates"
-	"github.com/datawire/ambassador/pkg/supervisor"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"github.com/datawire/telepresence2/pkg/client"
 )
 
 type installer struct {
@@ -51,7 +52,7 @@ func managerImageName() string {
 	return managerImage
 }
 
-func (ki *installer) findDeployment(p *supervisor.Process, name string) (*kates.Deployment, error) {
+func (ki *installer) findDeployment(c context.Context, name string) (*kates.Deployment, error) {
 	dep := &kates.Deployment{
 		TypeMeta: kates.TypeMeta{
 			Kind: "Deployment",
@@ -60,13 +61,13 @@ func (ki *installer) findDeployment(p *supervisor.Process, name string) (*kates.
 			Namespace: ki.Namespace,
 			Name:      name},
 	}
-	if err := ki.client.Get(p.Context(), dep, dep); err != nil {
+	if err := ki.client.Get(c, dep, dep); err != nil {
 		return nil, err
 	}
 	return dep, nil
 }
 
-func (ki *installer) findSvc(p *supervisor.Process, name string) (*kates.Service, error) {
+func (ki *installer) findSvc(c context.Context, name string) (*kates.Service, error) {
 	svc := &kates.Service{
 		TypeMeta: kates.TypeMeta{
 			Kind: "Service",
@@ -75,14 +76,14 @@ func (ki *installer) findSvc(p *supervisor.Process, name string) (*kates.Service
 			Namespace: ki.Namespace,
 			Name:      name},
 	}
-	if err := ki.client.Get(p.Context(), svc, svc); err != nil {
+	if err := ki.client.Get(c, svc, svc); err != nil {
 		return nil, err
 	}
-	p.Logf("Found existing traffic-manager service in namespace %s", ki.Namespace)
+	dlog.Infof(c, "Found existing traffic-manager service in namespace %s", ki.Namespace)
 	return svc, nil
 }
 
-func (ki *installer) createManagerSvc(p *supervisor.Process) (*kates.Service, error) {
+func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error) {
 	svc := &kates.Service{
 		TypeMeta: kates.TypeMeta{
 			Kind: "Service",
@@ -115,34 +116,34 @@ func (ki *installer) createManagerSvc(p *supervisor.Process) (*kates.Service, er
 		},
 	}
 
-	p.Logf("Installing traffic-manager service in namespace %s", ki.Namespace)
-	if err := ki.client.Create(p.Context(), svc, svc); err != nil {
+	dlog.Infof(c, "Installing traffic-manager service in namespace %s", ki.Namespace)
+	if err := ki.client.Create(c, svc, svc); err != nil {
 		return nil, err
 	}
 	return svc, nil
 }
 
-func (ki *installer) createManagerDeployment(p *supervisor.Process) error {
+func (ki *installer) createManagerDeployment(c context.Context) error {
 	dep := ki.depManifest()
-	p.Logf("Installing traffic-manager deployment in namespace %s. Image: %s", ki.Namespace, managerImageName())
-	return ki.client.Create(p.Context(), dep, dep)
+	dlog.Infof(c, "Installing traffic-manager deployment in namespace %s. Image: %s", ki.Namespace, managerImageName())
+	return ki.client.Create(c, dep, dep)
 }
 
-func (ki *installer) updateDeployment(p *supervisor.Process, currentDep *kates.Deployment) (*kates.Deployment, error) {
+func (ki *installer) updateDeployment(c context.Context, currentDep *kates.Deployment) (*kates.Deployment, error) {
 	dep := ki.depManifest()
 	dep.ResourceVersion = currentDep.ResourceVersion
-	p.Logf("Updating traffic-manager deployment in namespace %s. Image: %s", ki.Namespace, managerImageName())
-	err := ki.client.Update(p.Context(), dep, dep)
+	dlog.Infof(c, "Updating traffic-manager deployment in namespace %s. Image: %s", ki.Namespace, managerImageName())
+	err := ki.client.Update(c, dep, dep)
 	if err != nil {
 		return nil, err
 	}
 	return dep, err
 }
 
-func (ki *installer) portToIntercept(p *supervisor.Process, name string, labels map[string]string, cns []corev1.Container) (
+func (ki *installer) portToIntercept(c context.Context, name string, labels map[string]string, cns []corev1.Container) (
 	service *corev1.Service, sPort *corev1.ServicePort, cn *corev1.Container, cPortIndex int, err error) {
 	svcs := make([]*kates.Service, 0)
-	err = ki.client.List(p.Context(), kates.Query{
+	err = ki.client.List(c, kates.Query{
 		Name:      name,
 		Kind:      "svc",
 		Namespace: ki.Namespace,
@@ -169,16 +170,16 @@ func (ki *installer) portToIntercept(p *supervisor.Process, name string, labels 
 	if len(matching) == 0 {
 		return nil, nil, nil, 0, fmt.Errorf("found no services with a selector matching labels %v", labels)
 	}
-	return findMatchingPort(p, matching, cns)
+	return findMatchingPort(c, matching, cns)
 }
 
-func findMatchingPort(p *supervisor.Process, svcs []*kates.Service, cns []corev1.Container) (
+func findMatchingPort(c context.Context, svcs []*kates.Service, cns []corev1.Container) (
 	service *corev1.Service, sPort *corev1.ServicePort, cn *corev1.Container, cPortIndex int, err error) {
 	for _, svc := range svcs {
 		ports := svc.Spec.Ports
 		if len(ports) != 1 {
 			// TODO: Propagate warning about this to the user
-			p.Logf("discarding service %s because it has %d number of ports", svc.Name, len(ports))
+			dlog.Warnf(c, "discarding service %s because it has %d number of ports", svc.Name, len(ports))
 			continue
 		}
 		port := &ports[0]
@@ -247,8 +248,8 @@ func findMatchingPort(p *supervisor.Process, svcs []*kates.Service, cns []corev1
 	return service, sPort, cn, cPortIndex, nil
 }
 
-func (ki *installer) ensureAgent(p *supervisor.Process, name, svcName string) error {
-	dep, err := ki.findDeployment(p, name)
+func (ki *installer) ensureAgent(c context.Context, name, svcName string) error {
+	dep, err := ki.findDeployment(c, name)
 	if err != nil {
 		if kates.IsNotFound(err) {
 			err = fmt.Errorf("no such deployment %q", name)
@@ -258,25 +259,25 @@ func (ki *installer) ensureAgent(p *supervisor.Process, name, svcName string) er
 	cns := dep.Spec.Template.Spec.Containers
 	for i := len(cns) - 1; i >= 0; i-- {
 		if cns[i].Name == "traffic-agent" {
-			p.Logf("deployment %q already has an agent", name)
+			dlog.Debugf(c, "deployment %q already has an agent", name)
 			return nil
 		}
 	}
-	return ki.addAgentToDeployment(p, svcName, dep)
+	return ki.addAgentToDeployment(c, svcName, dep)
 }
 
-func (ki *installer) addAgentToDeployment(p *supervisor.Process, svcName string, dep *kates.Deployment) error {
+func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep *kates.Deployment) error {
 	tplSpec := &dep.Spec.Template.Spec
 	containers := tplSpec.Containers
 	if len(containers) != 1 {
 		// TODO: How do we handle multiple containers?
 		return fmt.Errorf("unable to add agent to deployment %s. It doesn't have one container", dep.Name)
 	}
-	svc, sPort, icn, cPortIndex, err := ki.portToIntercept(p, svcName, dep.Spec.Template.Labels, containers)
+	svc, sPort, icn, cPortIndex, err := ki.portToIntercept(c, svcName, dep.Spec.Template.Labels, containers)
 	if err != nil {
 		return err
 	}
-	p.Logf("using service %s port %s when intercepting deployment %q", svc.Name, sPort.Name, dep.Name)
+	dlog.Debugf(c, "using service %s port %s when intercepting deployment %q", svc.Name, sPort.Name, dep.Name)
 
 	svcNeedsUpdate := false
 	if sPort.TargetPort.Type == intstr.Int {
@@ -308,12 +309,12 @@ func (ki *installer) addAgentToDeployment(p *supervisor.Process, svcName string,
 			Value: strconv.Itoa(int(icp.ContainerPort)),
 		}}}}
 
-	p.Logf("Adding agent to deployment %s in namespace %s. Image: %s", dep.Name, ki.Namespace, managerImageName())
-	if err = ki.client.Update(p.Context(), dep, dep); err != nil {
+	dlog.Infof(c, "Adding agent to deployment %s in namespace %s. Image: %s", dep.Name, ki.Namespace, managerImageName())
+	if err = ki.client.Update(c, dep, dep); err != nil {
 		return err
 	}
 	if svcNeedsUpdate {
-		if err = ki.client.Update(p.Context(), svc, svc); err != nil {
+		if err = ki.client.Update(c, svc, svc); err != nil {
 			return err
 		}
 	}
@@ -366,25 +367,25 @@ func (ki *installer) depManifest() *kates.Deployment {
 	}
 }
 
-func (ki *installer) ensureManager(p *supervisor.Process) (int32, int32, error) {
-	svc, err := ki.findSvc(p, appName)
+func (ki *installer) ensureManager(c context.Context) (int32, int32, error) {
+	svc, err := ki.findSvc(c, appName)
 	if err != nil {
 		if !kates.IsNotFound(err) {
 			return 0, 0, err
 		}
-		svc, err = ki.createManagerSvc(p)
+		svc, err = ki.createManagerSvc(c)
 		if err != nil {
 			return 0, 0, err
 		}
 	}
-	dep, err := ki.findDeployment(p, appName)
+	dep, err := ki.findDeployment(c, appName)
 	if err != nil {
 		if !kates.IsNotFound(err) {
 			return 0, 0, err
 		}
-		err = ki.createManagerDeployment(p)
+		err = ki.createManagerDeployment(c)
 	} else {
-		_, err = ki.updateDeployment(p, dep)
+		_, err = ki.updateDeployment(c, dep)
 	}
 	if err != nil {
 		return 0, 0, err

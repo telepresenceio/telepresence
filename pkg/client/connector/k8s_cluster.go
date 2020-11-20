@@ -1,20 +1,19 @@
 package connector
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
+	"github.com/datawire/ambassador/pkg/dexec"
+	"github.com/datawire/ambassador/pkg/dlog"
 	"github.com/datawire/ambassador/pkg/kates"
-
-	"github.com/datawire/ambassador/pkg/supervisor"
-	"github.com/pkg/errors"
-
 	"github.com/datawire/telepresence2/pkg/client"
 )
 
 // k8sCluster is a Kubernetes cluster reference
 type k8sCluster struct {
-	kates.ClientOptions
+	kates.ClientConfig
 	client       *kates.Client
 	srv          string
 	kargs        []string
@@ -24,80 +23,78 @@ type k8sCluster struct {
 
 // getKubectlArgs returns the kubectl command arguments to run a
 // kubectl command with this cluster.
-func (c *k8sCluster) getKubectlArgs(args ...string) []string {
-	if c.Kubeconfig != "" {
-		args = append(args, "--kubeconfig", c.Kubeconfig)
+func (kc *k8sCluster) getKubectlArgs(args ...string) []string {
+	if kc.Kubeconfig != "" {
+		args = append(args, "--kubeconfig", kc.Kubeconfig)
 	}
-	if c.Context != "" {
-		args = append(args, "--context", c.Context)
+	if kc.Context != "" {
+		args = append(args, "--context", kc.Context)
 	}
-	if c.Namespace != "" {
-		args = append(args, "--namespace", c.Namespace)
+	if kc.Namespace != "" {
+		args = append(args, "--namespace", kc.Namespace)
 	}
-	return append(args, c.kargs...)
+	return append(args, kc.kargs...)
 }
 
 // getKubectlCmd returns a Cmd that runs kubectl with the given arguments and
 // the appropriate environment to talk to the cluster
-func (c *k8sCluster) getKubectlCmd(p *supervisor.Process, args ...string) *supervisor.Cmd {
-	return p.Command("kubectl", c.getKubectlArgs(args...)...)
+func (kc *k8sCluster) getKubectlCmd(c context.Context, args ...string) *dexec.Cmd {
+	return dexec.CommandContext(c, "kubectl", kc.getKubectlArgs(args...)...)
 }
 
 // server returns the cluster's server configuration
-func (c *k8sCluster) server() string {
-	return c.srv
+func (kc *k8sCluster) server() string {
+	return kc.srv
 }
 
 // setBridgeCheck sets the callable used to check whether the Teleproxy bridge
 // is functioning. If this is nil/unset, cluster monitoring checks the cluster
 // directly (via kubectl)
-func (c *k8sCluster) setBridgeCheck(isBridgeOkay func() bool) {
-	c.isBridgeOkay = isBridgeOkay
+func (kc *k8sCluster) setBridgeCheck(isBridgeOkay func() bool) {
+	kc.isBridgeOkay = isBridgeOkay
 }
 
 // check for cluster connectivity
-func (c *k8sCluster) check(p *supervisor.Process) error {
+func (kc *k8sCluster) check(c context.Context) error {
 	// If the bridge is okay then the cluster is okay
-	if c.isBridgeOkay != nil && c.isBridgeOkay() {
+	if kc.isBridgeOkay != nil && kc.isBridgeOkay() {
 		return nil
 	}
-	cmd := c.getKubectlCmd(p, "get", "po", "ohai", "--ignore-not-found")
+	cmd := kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found")
 	return cmd.Run()
 }
 
-func newKCluster(kubeConfig, context, namespace string, kargs ...string) (*k8sCluster, error) {
-	opts := kates.ClientOptions{
+func newKCluster(kubeConfig, ctxName, namespace string, kargs ...string) (*k8sCluster, error) {
+	opts := kates.ClientConfig{
 		Kubeconfig: kubeConfig,
-		Context:    context,
+		Context:    ctxName,
 		Namespace:  namespace}
 
 	kc, err := kates.NewClient(opts)
 	if err != nil {
 		return nil, err
 	}
-	return &k8sCluster{ClientOptions: opts, client: kc, kargs: kargs}, nil
+	return &k8sCluster{ClientConfig: opts, client: kc, kargs: kargs}, nil
 }
 
 // trackKCluster tracks connectivity to a cluster
-func trackKCluster(p *supervisor.Process, context, namespace string, kargs []string) (*k8sCluster, error) {
+func trackKCluster(c context.Context, ctxName, namespace string, kargs []string) (*k8sCluster, error) {
 	// TODO: All shell-outs to kubectl here should go through the kates client.
-	if context == "" {
-		cmd := p.Command("kubectl", "config", "current-context")
-		p.Logf("%s %v", cmd.Path, cmd.Args[1:])
+	if ctxName == "" {
+		cmd := dexec.CommandContext(c, "kubectl", "config", "current-context")
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			return nil, errors.Wrap(err, "kubectl config current-context")
+			return nil, fmt.Errorf("kubectl config current-context: %s", client.RunError(err).Error())
 		}
-		context = strings.TrimSpace(string(output))
+		ctxName = strings.TrimSpace(string(output))
 	}
 
 	if namespace == "" {
-		nsQuery := fmt.Sprintf("jsonpath={.contexts[?(@.name==\"%s\")].context.namespace}", context)
-		cmd := p.Command("kubectl", "--context", context, "config", "view", "-o", nsQuery)
-		p.Logf("%s %v", cmd.Path, cmd.Args[1:])
+		nsQuery := fmt.Sprintf("jsonpath={.contexts[?(@.name==\"%s\")].context.namespace}", ctxName)
+		cmd := dexec.CommandContext(c, "kubectl", "--context", ctxName, "config", "view", "-o", nsQuery)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			return nil, errors.Wrap(err, "kubectl config view ns")
+			return nil, fmt.Errorf("kubectl config view ns failed: %s", client.RunError(err).Error())
 		}
 		namespace = strings.TrimSpace(string(output))
 		if namespace == "" { // This is what kubens does
@@ -105,33 +102,33 @@ func trackKCluster(p *supervisor.Process, context, namespace string, kargs []str
 		}
 	}
 
-	c, err := newKCluster("", context, namespace, kargs...)
+	kc, err := newKCluster("", ctxName, namespace, kargs...)
 	if err != nil {
-		return nil, errors.Wrap(err, "k8s client create")
+		return nil, fmt.Errorf("k8s client create failed. %s", client.RunError(err).Error())
 	}
 
-	if err := c.check(p); err != nil {
-		return nil, errors.Wrap(err, "initial cluster check")
+	if err := kc.check(c); err != nil {
+		return nil, fmt.Errorf("initial cluster check failed: %s", client.RunError(err).Error())
 	}
-	p.Logf("Context: %s", c.Context)
+	dlog.Infof(c, "Context: %s", kc.Context)
 
-	cmd := c.getKubectlCmd(p, "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
-	p.Logf("%s %v", cmd.Path, cmd.Args[1:])
+	cmd := kc.getKubectlCmd(c, "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
+	dlog.Infof(c, "%s %v", cmd.Path, cmd.Args[1:])
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, errors.Wrap(err, "kubectl config view server")
+		return nil, fmt.Errorf("kubectl config view server: %s", client.RunError(err).Error())
 	}
-	c.srv = strings.TrimSpace(string(output))
-	p.Logf("Server: %s", c.srv)
+	kc.srv = strings.TrimSpace(string(output))
+	dlog.Infof(c, "Server: %s", kc.srv)
 
-	c.Setup(p.Supervisor(), "cluster", c.check, func(p *supervisor.Process) error { c.SetDone(); return nil })
-	return c, nil
+	kc.Setup(c, "cluster", kc.check, func(context.Context) error { kc.SetDone(); return nil })
+	return kc, nil
 }
 
 /*
 // getClusterPreviewHostname returns the hostname of the first Host resource it
 // finds that has Preview URLs enabled with a supported URL type.
-func (c *k8sCluster) getClusterPreviewHostname(p *supervisor.Process) (string, error) {
+func (c *k8sCluster) getClusterPreviewHostname(ctx context.Context) (string, error) {
 	p.Log("Looking for a Host with Preview URLs enabled")
 
 	// kubectl get hosts, in all namespaces or in this namespace
