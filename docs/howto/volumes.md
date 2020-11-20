@@ -106,3 +106,14 @@ As a side benefit, `sudo` is no longer required for the container method (unless
 One downside is that it is not possible to mount a subdirectory of the remote volumes at another location in your container.
 This means that the `/var/run/secrets` workaround described above cannot be done with `--docker-mount`.
 Using `$TELEPRESENCE_ROOT` is required.
+
+
+## Ensuring write permissions
+
+If you are experiencing errors such as `Operation not permitted` or `permission denied` your processes might lack write permissions.
+This happens because the volume mounted by Telepresence is owner by the privileged user (root, admin, etc), whereas the image might not have the same privileges.
+
+Since Telepresence doesn't allow to you specify using a privileged image explicitly, as a workaround, you can expose a low port, i.e. less than 1024: `--expose 9999:81`
+This works because a low port requires privileged network access, Telepresence detects this and chooses the privileged image, causing all the proxy pod processes to run as root.
+
+
