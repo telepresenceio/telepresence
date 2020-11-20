@@ -35,9 +35,7 @@ func (f *LogFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		for k, v := range entry.Data {
 			if k == "THREAD" {
 				tn := v.(string)
-				if strings.HasPrefix(tn, "/") {
-					tn = tn[1:]
-				}
+				tn = strings.TrimPrefix(tn, "/")
 				b.WriteString(tn)
 				b.WriteByte(' ')
 			} else {

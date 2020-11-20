@@ -51,6 +51,7 @@ func newBridge(kc *k8sCluster, daemon daemon.DaemonClient, sshPort int32) *bridg
 	}
 }
 
+/*
 func (t *bridge) restart(c context.Context) error {
 	if cancel := t.cancel; cancel != nil {
 		t.cancel = nil
@@ -58,6 +59,7 @@ func (t *bridge) restart(c context.Context) error {
 	}
 	return t.start(c)
 }
+*/
 
 type bridgeData struct {
 	Pods     []*kates.Pod

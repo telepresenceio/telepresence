@@ -144,7 +144,7 @@ func (tm *trafficManager) watchAgents(c context.Context) error {
 func (tm *trafficManager) watchIntercepts(c context.Context) error {
 	ic, err := tm.grpc.WatchIntercepts(c, tm.session())
 	if err != nil {
-		err = nil
+		return err
 	}
 	return tm.iiListener.start(ic)
 }
