@@ -147,8 +147,9 @@ func Test_findTrafficManager_notPresent(t *testing.T) {
 		if !kates.IsNotFound(err) {
 			t.Fatal(err)
 		}
+	} else {
+		t.Fatal("expected find to return not-found error")
 	}
-	t.Fatal("expected find to return not-found error")
 }
 
 func Test_findTrafficManager_present(t *testing.T) {
