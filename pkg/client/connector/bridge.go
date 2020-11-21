@@ -144,6 +144,7 @@ func (t *bridge) updateTable(c context.Context, snapshot *bridgeData) {
 	}
 
 	// Send updated table to daemon
+	dlog.Debugf(c, "sending table update for table iptables %s", table.Name)
 	if _, err := t.daemon.Update(c, &table); err != nil {
 		dlog.Errorf(c, "error posting update to %s: %v", table.Name, err)
 	}

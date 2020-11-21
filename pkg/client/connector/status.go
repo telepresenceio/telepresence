@@ -8,7 +8,7 @@ import (
 )
 
 // status reports the current status of the daemon
-func (s *service) status(_ context.Context) *rpc.ConnectorStatus {
+func (s *service) status(c context.Context) *rpc.ConnectorStatus {
 	r := &rpc.ConnectorStatus{}
 	if s.cluster == nil {
 		r.Error = rpc.ConnectorStatus_DISCONNECTED
@@ -19,7 +19,7 @@ func (s *service) status(_ context.Context) *rpc.ConnectorStatus {
 		Server:    s.cluster.server(),
 		Context:   s.cluster.Context,
 	}
-	r.Bridge = s.cluster.isBridgeOkay()
+	r.Bridge = s.cluster.isBridgeOkay(c)
 
 	if s.trafficMgr == nil {
 		return r

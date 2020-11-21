@@ -221,7 +221,10 @@ func TestTranslator(t *testing.T) {
 					checkNoForwardTCP(t, fmt.Sprintf("%s.%s", network, mapping.from), mapping.forwarded)
 				}
 
-				tr.Enable(c)
+				err = tr.Enable(c)
+				if err != nil {
+					t.Fatal(err)
+				}
 
 				for _, mapping := range mappings {
 					from := fmt.Sprintf("%s.%s", network, mapping.from)
@@ -238,7 +241,9 @@ func TestTranslator(t *testing.T) {
 					checkNoForwardTCP(t, from, mapping.forwarded)
 				}
 
-				tr.Disable(c)
+				if err = tr.Disable(c); err != nil {
+					t.Fatal(err)
+				}
 			}
 			err = env.teardown(c)
 			if err != nil {
@@ -255,9 +260,11 @@ func TestTranslator(t *testing.T) {
 
 func TestSorted(t *testing.T) {
 	g, _ := testGroup()
-	g.Go("sorted-test", func(c context.Context) error {
+	g.Go("sorted-test", func(c context.Context) (err error) {
 		tr := NewTranslator("test-table")
-		defer tr.Disable(c)
+		defer func() {
+			err = tr.Disable(c)
+		}()
 		tr.ForwardTCP(c, "192.0.2.1", "", "4321")
 		tr.ForwardTCP(c, "192.0.2.3", "", "4323")
 		tr.ForwardTCP(c, "192.0.2.2", "", "4322")

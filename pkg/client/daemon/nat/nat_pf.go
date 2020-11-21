@@ -4,6 +4,7 @@ package nat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -24,7 +25,7 @@ func pf(c context.Context, args []string, stdin string) error {
 	cmd.Stdin = strings.NewReader(stdin)
 	err := cmd.Start()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	return cmd.Wait()
 }
@@ -66,7 +67,7 @@ func (t *Translator) rules() string {
 	for _, entry := range entries {
 		dst := entry.Destination
 		for _, addr := range fmtDest(dst) {
-			result += ("rdr pass on lo0 inet " + addr + " -> 127.0.0.1 port " + entry.Port + "\n")
+			result += "rdr pass on lo0 inet " + addr + " -> 127.0.0.1 port " + entry.Port + "\n"
 		}
 	}
 
@@ -84,24 +85,24 @@ func (t *Translator) rules() string {
 
 var actions = []ppf.Action{ppf.ActionPass, ppf.ActionRDR}
 
-func (t *Translator) Enable(c context.Context) {
+func (t *Translator) Enable(c context.Context) error {
 	var err error
 	t.dev, err = ppf.Open()
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	for _, action := range actions {
 		var rule ppf.Rule
 		err = rule.SetAnchorCall(t.Name)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		rule.SetAction(action)
 		rule.SetQuick(true)
 		err = t.dev.PrependRule(rule)
 		if err != nil {
-			panic(err)
+			return err
 		}
 	}
 
@@ -116,9 +117,9 @@ func (t *Translator) Enable(c context.Context) {
 	_ = pf(c, []string{"-f", "/dev/stdin"}, "pass on lo0")
 	_ = pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 
-	output, err := dexec.CommandContext(c, "pfctl", "-E").Output()
+	output, err := dexec.CommandContext(c, "pfctl", "-E").CombinedOutput()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	for _, line := range strings.Split(string(output), "\n") {
 		parts := strings.Split(line, ":")
@@ -129,11 +130,12 @@ func (t *Translator) Enable(c context.Context) {
 	}
 
 	if t.token == "" {
-		panic("unable to parse token")
+		return errors.New("unable to parse token")
 	}
+	return nil
 }
 
-func (t *Translator) Disable(c context.Context) {
+func (t *Translator) Disable(c context.Context) error {
 	_ = dexec.CommandContext(c, "pfctl", "-X", t.token).Run()
 
 	if t.dev != nil {
@@ -142,15 +144,15 @@ func (t *Translator) Disable(c context.Context) {
 			for {
 				rules, err := t.dev.Rules(action)
 				if err != nil {
-					panic(err)
+					return err
 				}
 
 				for _, rule := range rules {
 					if rule.AnchorCall() == t.Name {
-						dlog.Debugf(c, "removing rule: %v\n", rule)
+						dlog.Debugf(c, "removing rule: %v", rule)
 						err = t.dev.RemoveRule(rule)
 						if err != nil {
-							panic(err)
+							return err
 						}
 						continue OUTER
 					}
@@ -161,6 +163,7 @@ func (t *Translator) Disable(c context.Context) {
 	}
 
 	_ = pf(c, []string{"-a", t.Name, "-F", "all"}, "")
+	return nil
 }
 
 func (t *Translator) ForwardTCP(c context.Context, ip, port, toPort string) {

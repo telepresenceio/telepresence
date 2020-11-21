@@ -25,7 +25,7 @@ func (t *Translator) ipt(c context.Context, args ...string) {
 	_ = cmd.Wait()
 }
 
-func (t *Translator) Enable(c context.Context) {
+func (t *Translator) Enable(c context.Context) error {
 	// XXX: -D only removes one copy of the rule, need to figure out how to remove all copies just in case
 	t.ipt(c, "-D", "OUTPUT", "-j", t.Name)
 	// we need to be in the PREROUTING chain in order to get traffic
@@ -37,14 +37,16 @@ func (t *Translator) Enable(c context.Context) {
 	t.ipt(c, "-I", "OUTPUT", "1", "-j", t.Name)
 	t.ipt(c, "-I", "PREROUTING", "1", "-j", t.Name)
 	t.ipt(c, "-A", t.Name, "-j", "RETURN", "--dest", "127.0.0.1/32", "-p", "tcp")
+	return nil
 }
 
-func (t *Translator) Disable(c context.Context) {
+func (t *Translator) Disable(c context.Context) error {
 	// XXX: -D only removes one copy of the rule, need to figure out how to remove all copies just in case
 	t.ipt(c, "-D", "OUTPUT", "-j", t.Name)
 	t.ipt(c, "-D", "PREROUTING", "-j", t.Name)
 	t.ipt(c, "-F", t.Name)
 	t.ipt(c, "-X", t.Name)
+	return nil
 }
 
 func (t *Translator) ForwardTCP(c context.Context, ip, port, toPort string) {

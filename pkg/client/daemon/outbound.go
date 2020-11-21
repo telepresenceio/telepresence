@@ -7,21 +7,15 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"sync"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/pkg/errors"
-
-	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
-	"github.com/datawire/telepresence2/pkg/client/daemon/proxy"
-	route "github.com/datawire/telepresence2/pkg/rpc/iptables"
 )
 
 // worker names
 const (
-	CheckReadyWorker = "RDY"
 	TranslatorWorker = "NAT"
 	ProxyWorker      = "PXY"
 	DNSServerWorker  = "DNS"
@@ -107,62 +101,11 @@ func start(c context.Context, dnsIP, fallbackIP string, noSearch bool) (*ipTable
 		return nil, nil, errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
 	}
 
-	ic := newIPTables("traffic-manager")
+	ic := newIPTables("traffic-manager", dnsIP, fallbackIP, noSearch)
 
 	var shutdown context.CancelFunc
 	c, shutdown = context.WithCancel(c)
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-
-	ready := sync.WaitGroup{}
-	ready.Add(2)
-
-	g.Go(DNSServerWorker, func(c context.Context) error {
-		srv := dns.NewServer(c, dnsListeners(c, DNSRedirPort), fallbackIP+":53", func(domain string) string {
-			if r := ic.Resolve(domain); r != nil {
-				return r.Ip
-			}
-			return ""
-		})
-		ready.Done()
-		return srv.Run(c)
-	})
-
-	g.Go(ProxyWorker, func(c context.Context) error {
-		// hmm, we may not actually need to get the original
-		// destination, we could just forward each ip to a unique port
-		// and either listen on that port or run port-forward
-		pr, err := proxy.NewProxy(c, ":"+ProxyRedirPort, ic.destination)
-		if err != nil {
-			ready.Done()
-			return errors.Wrap(err, "Proxy")
-		}
-
-		ready.Done()
-		pr.Run(c, 10000)
-		return nil
-	})
-
-	g.Go(TranslatorWorker, func(c context.Context) error {
-		ready.Wait()
-		return ic.run(c, DNSConfigWorker, func(c context.Context) error {
-			bootstrap := route.Table{Name: "bootstrap", Routes: []*route.Route{{
-				Ip:     dnsIP,
-				Target: DNSRedirPort,
-				Proto:  "udp",
-			}}}
-			ic.update(&bootstrap)
-			dns.Flush()
-
-			if noSearch {
-				<-c.Done()
-			} else {
-				restore := dns.OverrideSearchDomains(c, ".")
-				<-c.Done()
-				restore()
-			}
-			dns.Flush()
-			return nil
-		})
-	})
+	g.Go(DNSServerWorker, ic.dnsServerWorker)
 	return ic, shutdown, nil
 }

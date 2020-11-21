@@ -18,7 +18,7 @@ type k8sCluster struct {
 	client       *kates.Client
 	srv          string
 	kargs        []string
-	isBridgeOkay func() bool
+	isBridgeOkay func(c context.Context) bool
 	client.ResourceBase
 }
 
@@ -51,14 +51,14 @@ func (kc *k8sCluster) server() string {
 // setBridgeCheck sets the callable used to check whether the Teleproxy bridge
 // is functioning. If this is nil/unset, cluster monitoring checks the cluster
 // directly (via kubectl)
-func (kc *k8sCluster) setBridgeCheck(isBridgeOkay func() bool) {
+func (kc *k8sCluster) setBridgeCheck(isBridgeOkay func(c context.Context) bool) {
 	kc.isBridgeOkay = isBridgeOkay
 }
 
 // check for cluster connectivity
 func (kc *k8sCluster) check(c context.Context) error {
 	// If the bridge is okay then the cluster is okay
-	if kc.isBridgeOkay != nil && kc.isBridgeOkay() {
+	if kc.isBridgeOkay != nil && kc.isBridgeOkay(c) {
 		return nil
 	}
 	cmd := kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found")

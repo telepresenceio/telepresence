@@ -206,9 +206,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		return r
 	}
 	s.bridge = br
-	s.cluster.setBridgeCheck(func() bool {
-		return br.check(c)
-	})
+	s.cluster.setBridgeCheck(br.check)
 
 	if !cr.InterceptEnabled {
 		return r

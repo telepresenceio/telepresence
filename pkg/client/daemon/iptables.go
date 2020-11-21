@@ -9,13 +9,19 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/pkg/errors"
 
+	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/pkg/client/daemon/nat"
+	"github.com/datawire/telepresence2/pkg/client/daemon/proxy"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
 	"github.com/datawire/telepresence2/pkg/rpc/iptables"
 )
 
 type ipTables struct {
+	dnsIP      string
+	fallbackIP string
+	noSearch   bool
 	translator *nat.Translator
 	tables     map[string]*iptables.Table
 	tablesLock sync.RWMutex
@@ -29,38 +35,101 @@ type ipTables struct {
 	work chan func(context.Context) error
 }
 
-func newIPTables(name string) *ipTables {
+func newIPTables(name string, dnsIP, fallbackIP string, noSearch bool) *ipTables {
 	ret := &ipTables{
+		dnsIP:      dnsIP,
+		fallbackIP: fallbackIP,
+		noSearch:   noSearch,
 		tables:     make(map[string]*iptables.Table),
 		translator: nat.NewTranslator(name),
 		domains:    make(map[string]*iptables.Route),
 		search:     []string{""},
 		work:       make(chan func(context.Context) error),
 	}
-	ret.tablesLock.Lock() // leave it locked until .Start() unlocks it
+	ret.tablesLock.Lock() // leave it locked until translatorWorker unlocks it
 	return ret
 }
 
-func (i *ipTables) run(c context.Context, nextName string, next func(c context.Context) error) error {
+func (i *ipTables) dnsServerWorker(c context.Context) error {
+	srv := dns.NewServer(c, dnsListeners(c, DNSRedirPort), i.fallbackIP+":53", func(domain string) string {
+		if r := i.Resolve(domain); r != nil {
+			return r.Ip
+		}
+		return ""
+	})
+	dgroup.ParentGroup(c).Go(ProxyWorker, i.proxyWorker)
+	dlog.Debug(c, "Starting server")
+	err := srv.Run(c)
+	dlog.Debug(c, "Server done")
+	return err
+}
+
+func (i *ipTables) proxyWorker(c context.Context) error {
+	// hmm, we may not actually need to get the original
+	// destination, we could just forward each ip to a unique port
+	// and either listen on that port or run port-forward
+	pr, err := proxy.NewProxy(c, ":"+ProxyRedirPort, i.destination)
+	if err != nil {
+		return errors.Wrap(err, "Proxy")
+	}
+	dgroup.ParentGroup(c).Go(TranslatorWorker, i.translatorWorker)
+	dlog.Debug(c, "Starting server")
+	pr.Run(c, 10000)
+	dlog.Debug(c, "Server done")
+	return nil
+}
+
+func (i *ipTables) dnsConfigWorker(c context.Context) error {
+	dlog.Debug(c, "Starting server")
+	bootstrap := iptables.Table{Name: "bootstrap", Routes: []*iptables.Route{{
+		Ip:     i.dnsIP,
+		Target: DNSRedirPort,
+		Proto:  "udp",
+	}}}
+	i.update(&bootstrap)
+	dns.Flush()
+
+	if i.noSearch {
+		<-c.Done()
+	} else {
+		restore := dns.OverrideSearchDomains(c, ".")
+		<-c.Done()
+		restore()
+	}
+	dns.Flush()
+	dlog.Debug(c, "Server done")
+	return nil
+}
+
+func (i *ipTables) translatorWorker(c context.Context) (err error) {
 	defer func() {
 		i.tablesLock.Lock()
-		i.translator.Disable(dcontext.HardContext(c))
+		if err2 := i.translator.Disable(dcontext.HardContext(c)); err2 != nil {
+			if err == nil {
+				err = err2
+			}
+		}
 		// leave it locked
 	}()
 
-	i.translator.Enable(c)
+	dlog.Debug(c, "Enabling")
+	err = i.translator.Enable(c)
+	if err != nil {
+		return err
+	}
 	i.tablesLock.Unlock()
 
-	dgroup.ParentGroup(c).Go(nextName, next)
+	dgroup.ParentGroup(c).Go(DNSConfigWorker, i.dnsConfigWorker)
 
+	dlog.Debug(c, "Starting server")
 	for {
 		select {
 		case <-c.Done():
+			dlog.Debug(c, "Server done")
 			return nil
 		case f := <-i.work:
-			err := f(c)
-			if err != nil {
-				return err
+			if err = f(c); err != nil {
+				dlog.Error(c, err.Error())
 			}
 		}
 	}
@@ -147,7 +216,7 @@ func (i *ipTables) delete(table string) bool {
 }
 
 func (i *ipTables) update(table *iptables.Table) {
-	result := make(chan struct{})
+	result := make(chan error)
 	i.work <- func(c context.Context) error {
 		defer close(result)
 		return i.doUpdate(c, table)
@@ -241,7 +310,7 @@ func (i *ipTables) doUpdate(c context.Context, table *iptables.Table) error {
 		case "udp":
 			i.translator.ClearUDP(c, route.Ip, route.Port)
 		default:
-			dlog.Warnf(c, "INT: unrecognized protocol: %v", route)
+			dlog.Warnf(c, "unrecognized protocol: %v", route)
 		}
 	}
 	i.domainsLock.Unlock()
