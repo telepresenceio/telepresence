@@ -5,9 +5,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/datawire/ambassador/pkg/dlog"
-
-	"github.com/datawire/ambassador/pkg/dexec"
+	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 )
 
 type searchDomains struct {

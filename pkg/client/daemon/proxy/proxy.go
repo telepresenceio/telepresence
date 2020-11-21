@@ -8,8 +8,7 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/datawire/ambassador/pkg/dlog"
-
+	"github.com/datawire/dlib/dlog"
 	"golang.org/x/net/proxy"
 )
 

@@ -9,12 +9,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/datawire/ambassador/pkg/dgroup"
-
-	"github.com/datawire/ambassador/pkg/dlog"
-
-	"github.com/datawire/ambassador/pkg/dexec"
-
+	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dlog"
 	"github.com/pkg/errors"
 
 	"github.com/datawire/telepresence2/pkg/client/daemon/dns"

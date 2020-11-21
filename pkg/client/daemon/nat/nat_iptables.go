@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/datawire/ambassador/pkg/dexec"
+	"github.com/datawire/dlib/dexec"
 )
 
 type Translator struct {

@@ -11,12 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/datawire/ambassador/pkg/dgroup"
-	"github.com/sirupsen/logrus"
-
-	"github.com/datawire/ambassador/pkg/dlog"
-
 	"github.com/datawire/ambassador/pkg/dtest"
+	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dlog"
+	"github.com/sirupsen/logrus"
 )
 
 func TestMain(m *testing.M) {
@@ -212,7 +210,10 @@ func TestTranslator(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, env := range environments {
-			env.setup()
+			err = env.setup(c)
+			if err != nil {
+				t.Fatal(err)
+			}
 			for _, network := range networks {
 				tr := NewTranslator("test-table")
 
@@ -239,7 +240,10 @@ func TestTranslator(t *testing.T) {
 
 				tr.Disable(c)
 			}
-			env.teardown()
+			err = env.teardown(c)
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 		cancel()
 		return nil

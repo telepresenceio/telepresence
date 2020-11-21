@@ -5,15 +5,16 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/datawire/ambassador/pkg/dexec"
-	"github.com/datawire/ambassador/pkg/dlog"
 	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
+
 	"github.com/datawire/telepresence2/pkg/client"
 )
 
 // k8sCluster is a Kubernetes cluster reference
 type k8sCluster struct {
-	kates.ClientConfig
+	kates.ClientOptions
 	client       *kates.Client
 	srv          string
 	kargs        []string
@@ -65,7 +66,7 @@ func (kc *k8sCluster) check(c context.Context) error {
 }
 
 func newKCluster(kubeConfig, ctxName, namespace string, kargs ...string) (*k8sCluster, error) {
-	opts := kates.ClientConfig{
+	opts := kates.ClientOptions{
 		Kubeconfig: kubeConfig,
 		Context:    ctxName,
 		Namespace:  namespace}
@@ -74,7 +75,7 @@ func newKCluster(kubeConfig, ctxName, namespace string, kargs ...string) (*k8sCl
 	if err != nil {
 		return nil, err
 	}
-	return &k8sCluster{ClientConfig: opts, client: kc, kargs: kargs}, nil
+	return &k8sCluster{ClientOptions: opts, client: kc, kargs: kargs}, nil
 }
 
 // trackKCluster tracks connectivity to a cluster

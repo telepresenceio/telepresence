@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/datawire/ambassador/pkg/dgroup"
-	"github.com/datawire/ambassador/pkg/dlog"
 	"github.com/datawire/ambassador/pkg/metriton"
+	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dlog"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"

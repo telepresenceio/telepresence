@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/datawire/ambassador/pkg/dexec"
-
-	"github.com/datawire/ambassador/pkg/dlog"
+	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 )
 
 var (

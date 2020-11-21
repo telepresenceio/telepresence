@@ -6,10 +6,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/datawire/ambassador/pkg/dexec"
-
-	"github.com/datawire/ambassador/pkg/dlog"
-
+	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 	"github.com/pkg/errors"
 )
 
@@ -129,7 +127,7 @@ func (crc *crCmd) doCheck(c context.Context) error {
 			dlog.Debug(c, "check: killing...")
 			_ = crc.kill(c)
 		} else {
-			dlog.Debug(c, "check: not killing yet (%v < %v)", runTime, crc.startGrace)
+			dlog.Debugf(c, "check: not killing yet (%v < %v)", runTime, crc.startGrace)
 		}
 		return err // from crc.check() above
 	}

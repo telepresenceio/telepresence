@@ -153,8 +153,10 @@ github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d/go.mod h1:ma
 github.com/cpuguy83/go-md2man/v2 v2.0.0/go.mod h1:maD7wRr/U5Z6m/iR4s+kqSMx2CaBsrgA7czyZG/E6dU=
 github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7DoTY=
 github.com/cyphar/filepath-securejoin v0.2.2/go.mod h1:FpkQEhXnPnOthhzymB7CGsFk2G9VLXONKD9G7QGMM+4=
-github.com/datawire/apro/ambassador v0.0.0-20201118180139-16915e009687 h1:9bhUDvZUzLEXFP/j2LLBKlY9/L30ST4wHw+8lpIGglM=
-github.com/datawire/apro/ambassador v0.0.0-20201118180139-16915e009687/go.mod h1:79741ZAcj2veyySjYrX9mCfBuoZqqscOQluwCIHnQvg=
+github.com/datawire/ambassador v1.9.1 h1:7AqecpB7NQBI97T0RphO03GWb4dXXKzdr+mWM0AufuQ=
+github.com/datawire/ambassador v1.9.1/go.mod h1:79741ZAcj2veyySjYrX9mCfBuoZqqscOQluwCIHnQvg=
+github.com/datawire/dlib v0.0.0-20201121071656-6047eebdf853 h1:fTezELpTBrluOW9n1Jmlfgklzr5IjQMfRXi1z2yIYqg=
+github.com/datawire/dlib v0.0.0-20201121071656-6047eebdf853/go.mod h1:aCzh74rJ3kOireYbg4gH0CuD48/xA4G+LuHhkpcqo1s=
 github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a h1:VHPuM0sSTEHfjtSX86XQqZKJNUWTWVu2BuV6X8SdGUk=
 github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a/go.mod h1:H8uUmE8qqo7z9u30MYB9riLyRckPHOPBk9ZdCuH+dQQ=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

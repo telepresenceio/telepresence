@@ -3,7 +3,8 @@ module github.com/datawire/telepresence2
 go 1.15
 
 require (
-	github.com/datawire/ambassador v1.9.0
+	github.com/datawire/ambassador v1.9.1
+	github.com/datawire/dlib v0.0.0-20201121071656-6047eebdf853
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
 	github.com/golang/protobuf v1.4.3
 	github.com/google/uuid v1.1.2
@@ -35,5 +36,3 @@ replace github.com/Azure/go-autorest v10.8.1+incompatible => github.com/Azure/go
 
 // Pin down golang.org/x/sys to a version that contains unix.SYS_IOCTL on darwin
 replace golang.org/x/sys => golang.org/x/sys v0.0.0-20200826173525-f9321e4c35a6
-
-replace github.com/datawire/ambassador => github.com/datawire/apro/ambassador v0.0.0-20201118180139-16915e009687

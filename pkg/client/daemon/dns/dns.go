@@ -5,12 +5,9 @@ import (
 	"net"
 	"strings"
 
-	"github.com/datawire/ambassador/pkg/dcontext"
-
-	"github.com/datawire/ambassador/pkg/dgroup"
-
-	"github.com/datawire/ambassador/pkg/dlog"
-
+	"github.com/datawire/dlib/dcontext"
+	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dlog"
 	"github.com/miekg/dns"
 	"github.com/pkg/errors"
 )

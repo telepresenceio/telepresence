@@ -10,17 +10,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/datawire/telepresence2/pkg/client"
-
-	"github.com/datawire/ambassador/pkg/dutil"
-
-	"github.com/datawire/ambassador/pkg/dexec"
-	"github.com/datawire/ambassador/pkg/dgroup"
-	"github.com/datawire/ambassador/pkg/dlog"
 	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dutil"
+	"github.com/pkg/errors"
+
+	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
 	"github.com/datawire/telepresence2/pkg/rpc/iptables"
-	"github.com/pkg/errors"
 )
 
 // worker names

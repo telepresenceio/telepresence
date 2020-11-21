@@ -11,16 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/datawire/ambassador/pkg/dlog"
+	"github.com/datawire/ambassador/pkg/dtest"
+	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/dlib/dlog"
 	"github.com/sirupsen/logrus"
 
 	"github.com/datawire/telepresence2/pkg/client"
-
 	"github.com/datawire/telepresence2/pkg/version"
-
-	"github.com/datawire/ambassador/pkg/kates"
-
-	"github.com/datawire/ambassador/pkg/dtest"
 )
 
 var kubeconfig string

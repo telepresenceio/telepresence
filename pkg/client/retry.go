@@ -4,9 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/datawire/ambassador/pkg/dutil"
-
-	"github.com/datawire/ambassador/pkg/dlog"
+	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dutil"
 	"github.com/pkg/errors"
 )
 

@@ -6,7 +6,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/datawire/ambassador/pkg/dexec"
+	"github.com/datawire/dlib/dexec"
 )
 
 type env struct {

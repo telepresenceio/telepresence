@@ -6,11 +6,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/datawire/ambassador/pkg/dgroup"
-
-	"github.com/datawire/ambassador/pkg/dcontext"
-
-	"github.com/datawire/ambassador/pkg/dlog"
+	"github.com/datawire/dlib/dcontext"
+	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dlog"
 
 	"github.com/datawire/telepresence2/pkg/client/daemon/nat"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
