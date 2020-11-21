@@ -1,18 +1,27 @@
 package daemon
 
 import (
+	"context"
 	"net"
 	"strings"
 	"sync"
 
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/dlib/dcontext"
+	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dlog"
+	"github.com/pkg/errors"
 
+	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/pkg/client/daemon/nat"
+	"github.com/datawire/telepresence2/pkg/client/daemon/proxy"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
 	"github.com/datawire/telepresence2/pkg/rpc/iptables"
 )
 
 type ipTables struct {
+	dnsIP      string
+	fallbackIP string
+	noSearch   bool
 	translator *nat.Translator
 	tables     map[string]*iptables.Table
 	tablesLock sync.RWMutex
@@ -23,38 +32,104 @@ type ipTables struct {
 	search     []string
 	searchLock sync.RWMutex
 
-	work chan func(*supervisor.Process) error
+	work chan func(context.Context) error
 }
 
-func newIPTables(name string) *ipTables {
+func newIPTables(name string, dnsIP, fallbackIP string, noSearch bool) *ipTables {
 	ret := &ipTables{
+		dnsIP:      dnsIP,
+		fallbackIP: fallbackIP,
+		noSearch:   noSearch,
 		tables:     make(map[string]*iptables.Table),
 		translator: nat.NewTranslator(name),
 		domains:    make(map[string]*iptables.Route),
 		search:     []string{""},
-		work:       make(chan func(*supervisor.Process) error),
+		work:       make(chan func(context.Context) error),
 	}
-	ret.tablesLock.Lock() // leave it locked until .Start() unlocks it
+	ret.tablesLock.Lock() // leave it locked until translatorWorker unlocks it
 	return ret
 }
 
-func (i *ipTables) run(p *supervisor.Process) error {
-	i.translator.Enable(p)
+func (i *ipTables) dnsServerWorker(c context.Context) error {
+	srv := dns.NewServer(c, dnsListeners(c, DNSRedirPort), i.fallbackIP+":53", func(domain string) string {
+		if r := i.Resolve(domain); r != nil {
+			return r.Ip
+		}
+		return ""
+	})
+	dgroup.ParentGroup(c).Go(ProxyWorker, i.proxyWorker)
+	dlog.Debug(c, "Starting server")
+	err := srv.Run(c)
+	dlog.Debug(c, "Server done")
+	return err
+}
+
+func (i *ipTables) proxyWorker(c context.Context) error {
+	// hmm, we may not actually need to get the original
+	// destination, we could just forward each ip to a unique port
+	// and either listen on that port or run port-forward
+	pr, err := proxy.NewProxy(c, ":"+ProxyRedirPort, i.destination)
+	if err != nil {
+		return errors.Wrap(err, "Proxy")
+	}
+	dgroup.ParentGroup(c).Go(TranslatorWorker, i.translatorWorker)
+	dlog.Debug(c, "Starting server")
+	pr.Run(c, 10000)
+	dlog.Debug(c, "Server done")
+	return nil
+}
+
+func (i *ipTables) dnsConfigWorker(c context.Context) error {
+	dlog.Debug(c, "Starting server")
+	bootstrap := iptables.Table{Name: "bootstrap", Routes: []*iptables.Route{{
+		Ip:     i.dnsIP,
+		Target: DNSRedirPort,
+		Proto:  "udp",
+	}}}
+	i.update(&bootstrap)
+	dns.Flush()
+
+	if i.noSearch {
+		<-c.Done()
+	} else {
+		restore := dns.OverrideSearchDomains(c, ".")
+		<-c.Done()
+		restore()
+	}
+	dns.Flush()
+	dlog.Debug(c, "Server done")
+	return nil
+}
+
+func (i *ipTables) translatorWorker(c context.Context) (err error) {
+	defer func() {
+		i.tablesLock.Lock()
+		if err2 := i.translator.Disable(dcontext.HardContext(c)); err2 != nil {
+			if err == nil {
+				err = err2
+			}
+		}
+		// leave it locked
+	}()
+
+	dlog.Debug(c, "Enabling")
+	err = i.translator.Enable(c)
+	if err != nil {
+		return err
+	}
 	i.tablesLock.Unlock()
 
-	p.Ready()
+	dgroup.ParentGroup(c).Go(DNSConfigWorker, i.dnsConfigWorker)
 
+	dlog.Debug(c, "Starting server")
 	for {
 		select {
-		case <-p.Shutdown():
-			i.tablesLock.Lock()
-			i.translator.Disable(p)
-			// leave it locked
+		case <-c.Done():
+			dlog.Debug(c, "Server done")
 			return nil
 		case f := <-i.work:
-			err := f(p)
-			if err != nil {
-				return err
+			if err = f(c); err != nil {
+				dlog.Error(c, err.Error())
 			}
 		}
 	}
@@ -107,7 +182,7 @@ func (i *ipTables) destination(conn *net.TCPConn) (string, error) {
 
 func (i *ipTables) delete(table string) bool {
 	result := make(chan bool)
-	i.work <- func(p *supervisor.Process) error {
+	i.work <- func(c context.Context) error {
 		i.tablesLock.Lock()
 		defer i.tablesLock.Unlock()
 		i.domainsLock.Lock()
@@ -127,7 +202,7 @@ func (i *ipTables) delete(table string) bool {
 
 		for _, name := range names {
 			if name != "bootstrap" {
-				err := i.doUpdate(p, &iptables.Table{Name: name})
+				err := i.doUpdate(c, &iptables.Table{Name: name})
 				if err != nil {
 					return err
 				}
@@ -141,10 +216,10 @@ func (i *ipTables) delete(table string) bool {
 }
 
 func (i *ipTables) update(table *iptables.Table) {
-	result := make(chan struct{})
-	i.work <- func(p *supervisor.Process) error {
+	result := make(chan error)
+	i.work <- func(c context.Context) error {
 		defer close(result)
-		return i.doUpdate(p, table)
+		return i.doUpdate(c, table)
 	}
 	<-result
 }
@@ -163,7 +238,7 @@ func domain(r *iptables.Route) string {
 	return strings.ToLower(r.Name + ".")
 }
 
-func (i *ipTables) doUpdate(p *supervisor.Process, table *iptables.Table) error {
+func (i *ipTables) doUpdate(c context.Context, table *iptables.Table) error {
 	// Make a copy of the current table
 	i.tablesLock.RLock()
 	oldTable, ok := i.tables[table.Name]
@@ -189,28 +264,28 @@ func (i *ipTables) doUpdate(p *supervisor.Process, table *iptables.Table) error 
 			if oldRouteOk {
 				switch newRoute.Proto {
 				case "tcp":
-					i.translator.ClearTCP(p, oldRoute.Ip, oldRoute.Port)
+					i.translator.ClearTCP(c, oldRoute.Ip, oldRoute.Port)
 				case "udp":
-					i.translator.ClearUDP(p, oldRoute.Ip, oldRoute.Port)
+					i.translator.ClearUDP(c, oldRoute.Ip, oldRoute.Port)
 				default:
-					p.Logf("unrecognized protocol: %v", newRoute)
+					dlog.Warnf(c, "unrecognized protocol: %v", newRoute)
 				}
 			}
 			// and add the new version
 			if newRoute.Target != "" {
 				switch newRoute.Proto {
 				case "tcp":
-					i.translator.ForwardTCP(p, newRoute.Ip, newRoute.Port, newRoute.Target)
+					i.translator.ForwardTCP(c, newRoute.Ip, newRoute.Port, newRoute.Target)
 				case "udp":
-					i.translator.ForwardUDP(p, newRoute.Ip, newRoute.Port, newRoute.Target)
+					i.translator.ForwardUDP(c, newRoute.Ip, newRoute.Port, newRoute.Target)
 				default:
-					p.Logf("unrecognized protocol: %v", newRoute)
+					dlog.Warnf(c, "unrecognized protocol: %v", newRoute)
 				}
 			}
 
 			if newRoute.Name != "" {
 				domain := domain(newRoute)
-				p.Logf("STORE %v->%v", domain, newRoute)
+				dlog.Debugf(c, "STORE %v->%v", domain, newRoute)
 				i.domains[domain] = newRoute
 			}
 
@@ -226,16 +301,16 @@ func (i *ipTables) doUpdate(p *supervisor.Process, table *iptables.Table) error 
 	i.domainsLock.Lock()
 	for _, route := range oldRoutes {
 		domain := domain(route)
-		p.Logf("CLEAR %v->%v", domain, route)
+		dlog.Debugf(c, "CLEAR %v->%v", domain, route)
 		delete(i.domains, domain)
 
 		switch route.Proto {
 		case "tcp":
-			i.translator.ClearTCP(p, route.Ip, route.Port)
+			i.translator.ClearTCP(c, route.Ip, route.Port)
 		case "udp":
-			i.translator.ClearUDP(p, route.Ip, route.Port)
+			i.translator.ClearUDP(c, route.Ip, route.Port)
 		default:
-			p.Logf("INT: unrecognized protocol: %v", route)
+			dlog.Warnf(c, "unrecognized protocol: %v", route)
 		}
 	}
 	i.domainsLock.Unlock()

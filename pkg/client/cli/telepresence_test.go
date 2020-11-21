@@ -188,6 +188,7 @@ var _ = BeforeSuite(func() {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
+		defer GinkgoRecover()
 		defer wg.Done()
 		executable, err := buildExecutable(testVersion)
 		Expect(err).NotTo(HaveOccurred())
@@ -204,6 +205,7 @@ var _ = BeforeSuite(func() {
 
 	wg.Add(1)
 	go func() {
+		defer GinkgoRecover()
 		defer wg.Done()
 		err := publishManager(testVersion)
 		Expect(err).NotTo(HaveOccurred())
@@ -211,6 +213,7 @@ var _ = BeforeSuite(func() {
 
 	wg.Add(1)
 	go func() {
+		defer GinkgoRecover()
 		defer wg.Done()
 
 		kubeconfig := dtest.Kubeconfig()
@@ -246,26 +249,13 @@ func applyEchoService() error {
 	return errors.New("timed out waiting for echo-easy service")
 }
 
-// runError checks if the given err is a *exit.ExitError, and if so, extracts
-// Stderr and the ExitCode from it.
-func runError(err error) error {
-	if ee, ok := err.(*exec.ExitError); ok {
-		if len(ee.Stderr) > 0 {
-			err = fmt.Errorf("%s, exit code %d", string(ee.Stderr), ee.ExitCode())
-		} else {
-			err = fmt.Errorf("exit code %d", ee.ExitCode())
-		}
-	}
-	return err
-}
-
 func run(args ...string) error {
-	return runError(exec.Command(args[0], args[1:]...).Run())
+	return client.RunError(exec.Command(args[0], args[1:]...).Run())
 }
 
 func output(args ...string) (string, error) {
 	out, err := exec.Command(args[0], args[1:]...).Output()
-	return string(out), runError(err)
+	return string(out), client.RunError(err)
 }
 
 func publishManager(testVersion string) error {
@@ -275,7 +265,7 @@ func publishManager(testVersion string) error {
 			testVersion))
 	out, err := cmd.Output()
 	if err != nil {
-		return runError(err)
+		return client.RunError(err)
 	}
 	imageName := strings.TrimSpace(string(out))
 	tag := fmt.Sprintf("%s/tel2:%s", dtest.DockerRegistry(), testVersion)

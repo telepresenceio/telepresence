@@ -1,6 +1,7 @@
 package connector
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -10,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/dlib/dgroup"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -25,6 +26,7 @@ type trafficManager struct {
 	crc         client.Resource
 	aiListener  aiListener
 	iiListener  iiListener
+	conn        *grpc.ClientConn
 	grpc        manager.ManagerClient
 	apiPort     int32
 	sshPort     int32
@@ -40,7 +42,7 @@ type trafficManager struct {
 
 // newTrafficManager returns a TrafficManager resource for the given
 // cluster if it has a Traffic Manager service.
-func newTrafficManager(p *supervisor.Process, cluster *k8sCluster, installID string, isCI bool) (*trafficManager, error) {
+func newTrafficManager(c context.Context, cluster *k8sCluster, installID string, isCI bool) (*trafficManager, error) {
 	name, err := user.Current()
 	if err != nil {
 		return nil, errors.Wrap(err, "user.Current()")
@@ -55,7 +57,7 @@ func newTrafficManager(p *supervisor.Process, cluster *k8sCluster, installID str
 	if err != nil {
 		return nil, err
 	}
-	remoteSSHPort, remoteAPIPort, err := ti.ensureManager(p)
+	remoteSSHPort, remoteAPIPort, err := ti.ensureManager(c)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +81,7 @@ func newTrafficManager(p *supervisor.Process, cluster *k8sCluster, installID str
 		connectCI:   isCI,
 		userAndHost: fmt.Sprintf("%s@%s", name, host)}
 
-	pf, err := client.CheckedRetryingCommand(p, "traffic-kpf", "kubectl", kpfArgs, tm.check, 15*time.Second)
+	pf, err := client.CheckedRetryingCommand(c, "traffic-kpf", "kubectl", kpfArgs, tm.check, 15*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -87,9 +89,9 @@ func newTrafficManager(p *supervisor.Process, cluster *k8sCluster, installID str
 	return tm, nil
 }
 
-func (tm *trafficManager) initGrpc(p *supervisor.Process) error {
+func (tm *trafficManager) initGrpc(c context.Context) error {
 	// First check. Establish connection
-	conn, err := grpc.Dial(fmt.Sprintf("127.0.0.1:%d", tm.apiPort), grpc.WithInsecure())
+	var conn, err = grpc.Dial(fmt.Sprintf("127.0.0.1:%d", tm.apiPort), grpc.WithInsecure(), grpc.WithNoProxy())
 	if err != nil {
 		return err
 	}
@@ -109,8 +111,9 @@ func (tm *trafficManager) initGrpc(p *supervisor.Process) error {
 		break
 	}
 
+	tm.conn = conn
 	tm.grpc = manager.NewManagerClient(conn)
-	si, err := tm.grpc.ArriveAsClient(p.Context(), &manager.ClientInfo{
+	si, err := tm.grpc.ArriveAsClient(c, &manager.ClientInfo{
 		Name:      tm.userAndHost,
 		InstallId: tm.installID,
 		Product:   "telepresence",
@@ -124,33 +127,25 @@ func (tm *trafficManager) initGrpc(p *supervisor.Process) error {
 	}
 
 	tm.sessionID = si.SessionId
-	p.Supervisor().Supervise(&supervisor.Worker{
-		Name: "watch-agents",
-		Work: tm.watchAgents})
-
-	p.Supervisor().Supervise(&supervisor.Worker{
-		Name: "watch-intercepts",
-		Work: tm.watchIntercepts})
-	return err
+	pg := dgroup.ParentGroup(c)
+	pg.Go("watch-agents", tm.watchAgents)
+	pg.Go("watch-intercepts", tm.watchIntercepts)
+	return nil
 }
 
-func (tm *trafficManager) watchAgents(p *supervisor.Process) error {
-	ac, err := tm.grpc.WatchAgents(p.Context(), tm.session())
+func (tm *trafficManager) watchAgents(c context.Context) error {
+	ac, err := tm.grpc.WatchAgents(c, tm.session())
 	if err != nil {
 		return err
 	}
-
-	p.Ready()
 	return tm.aiListener.start(ac)
 }
 
-func (tm *trafficManager) watchIntercepts(p *supervisor.Process) error {
-	ic, err := tm.grpc.WatchIntercepts(p.Context(), tm.session())
+func (tm *trafficManager) watchIntercepts(c context.Context) error {
+	ic, err := tm.grpc.WatchIntercepts(c, tm.session())
 	if err != nil {
 		return err
 	}
-
-	p.Ready()
 	return tm.iiListener.start(ic)
 }
 
@@ -166,12 +161,12 @@ func (tm *trafficManager) interceptInfoSnapshot() *manager.InterceptInfoSnapshot
 	return tm.iiListener.getData()
 }
 
-func (tm *trafficManager) check(p *supervisor.Process) error {
+func (tm *trafficManager) check(c context.Context) error {
 	if tm.grpc == nil {
 		// First check. Establish connection
-		return tm.initGrpc(p)
+		return tm.initGrpc(c)
 	}
-	_, err := tm.grpc.Remain(p.Context(), tm.session())
+	_, err := tm.grpc.Remain(c, tm.session())
 	return err
 }
 
@@ -187,6 +182,9 @@ func (tm *trafficManager) IsOkay() bool {
 
 // Close implements Resource
 func (tm *trafficManager) Close() error {
+	if tm.conn != nil {
+		_ = tm.conn.Close()
+	}
 	return tm.crc.Close()
 }
 
@@ -206,7 +204,7 @@ func (r *watcher) watch() error {
 	for {
 		data := r.entryMaker()
 		if err := r.stream.RecvMsg(data); err != nil {
-			if err == io.EOF {
+			if err == io.EOF || strings.HasSuffix(err.Error(), " is closing") {
 				err = nil
 			}
 			return err

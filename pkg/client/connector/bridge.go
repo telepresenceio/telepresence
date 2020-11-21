@@ -2,6 +2,7 @@ package connector
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -10,10 +11,13 @@ import (
 	"time"
 
 	"github.com/datawire/ambassador/pkg/kates"
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dutil"
 	"github.com/pkg/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
 	"github.com/datawire/telepresence2/pkg/rpc/iptables"
 )
@@ -35,19 +39,7 @@ type bridge struct {
 	*k8sCluster
 	sshPort int32
 	daemon  daemon.DaemonClient
-	workers []*supervisor.Worker
-}
-
-func (t *bridge) restart() {
-	for _, w := range t.workers {
-		w.Shutdown()
-	}
-	for _, w := range t.workers {
-		w.Wait()
-	}
-	for _, w := range t.workers {
-		w.Restart()
-	}
+	cancel  context.CancelFunc
 }
 
 func newBridge(kc *k8sCluster, daemon daemon.DaemonClient, sshPort int32) *bridge {
@@ -58,69 +50,22 @@ func newBridge(kc *k8sCluster, daemon daemon.DaemonClient, sshPort int32) *bridg
 	}
 }
 
-func (t *bridge) addWorker(p *supervisor.Process, worker *supervisor.Worker) {
-	p.Supervisor().Supervise(worker)
-	t.workers = append(t.workers, worker)
+/*
+func (t *bridge) restart(c context.Context) error {
+	if cancel := t.cancel; cancel != nil {
+		t.cancel = nil
+		cancel()
+	}
+	return t.start(c)
 }
-
-func (t *bridge) connect(p *supervisor.Process) {
-	t.addWorker(p, &supervisor.Worker{
-		Name: K8sPortForwardWorker,
-		// Requires: []string{K8sApplyWorker},
-		Retry: true,
-		Work: func(p *supervisor.Process) (err error) {
-			// t.kubeConfig, t.context, t.namespace)
-			var pods []*kates.Pod
-			err = t.client.List(p.Context(), kates.Query{
-				Kind:          "pod",
-				Namespace:     t.Namespace,
-				LabelSelector: "app=traffic-manager",
-			}, &pods)
-			if err != nil {
-				return err
-			}
-			if len(pods) == 0 {
-				return fmt.Errorf("found no pod with label app=traffic-manager in namespace %s", t.Namespace)
-			}
-			podName := strings.TrimSpace(pods[0].Name)
-
-			pf := p.Command("kubectl", append(t.getKubectlArgs(), "port-forward", fmt.Sprintf("pod/%s", podName), "8022")...)
-			err = pf.Start()
-			if err != nil {
-				return
-			}
-			p.Ready()
-			err = p.DoClean(pf.Wait, pf.Process.Kill)
-			return
-		},
-	})
-
-	t.addWorker(p, &supervisor.Worker{
-		Name:     K8sSSHWorker,
-		Requires: []string{K8sPortForwardWorker},
-		Retry:    true,
-		Work: func(p *supervisor.Process) (err error) {
-			// XXX: probably need some kind of keepalive check for ssh, first
-			// curl after wakeup seems to trigger detection of death
-			ssh := p.Command("ssh", "-D", "localhost:1080", "-C", "-N", "-oConnectTimeout=5",
-				"-oExitOnForwardFailure=yes", "-oStrictHostKeyChecking=no",
-				"-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", "8022")
-			err = ssh.Start()
-			if err != nil {
-				return
-			}
-			p.Ready()
-			return p.DoClean(ssh.Wait, ssh.Process.Kill)
-		},
-	})
-}
+*/
 
 type bridgeData struct {
 	Pods     []*kates.Pod
 	Services []*kates.Service
 }
 
-func (t *bridge) updateTable(p *supervisor.Process, snapshot *bridgeData) {
+func (t *bridge) updateTable(c context.Context, snapshot *bridgeData) {
 	table := iptables.Table{Name: "kubernetes"}
 	for _, svc := range snapshot.Services {
 		spec := svc.Spec
@@ -199,26 +144,20 @@ func (t *bridge) updateTable(p *supervisor.Process, snapshot *bridgeData) {
 	}
 
 	// Send updated table to daemon
-	if _, err := t.daemon.Update(p.Context(), &table); err != nil {
-		p.Logf("error posting update to %s: %v", table.Name, err)
+	dlog.Debugf(c, "sending table update for table iptables %s", table.Name)
+	if _, err := t.daemon.Update(c, &table); err != nil {
+		dlog.Errorf(c, "error posting update to %s: %v", table.Name, err)
 	}
 }
 
-func (t *bridge) createWatch(p *supervisor.Process, namespace string) (acc *kates.Accumulator, err error) {
+func (t *bridge) createWatch(c context.Context, namespace string) (acc *kates.Accumulator, err error) {
 	defer func() {
-		if r := recover(); r != nil {
-			switch r := r.(type) {
-			case error:
-				err = r
-			case string:
-				err = errors.New(r)
-			default:
-				panic(r)
-			}
+		if r := dutil.PanicToError(recover()); r != nil {
+			err = r
 		}
 	}()
 
-	return t.client.Watch(p.Context(),
+	return t.client.Watch(c,
 		kates.Query{
 			Name:      "Services",
 			Namespace: namespace,
@@ -231,8 +170,8 @@ func (t *bridge) createWatch(p *supervisor.Process, namespace string) (acc *kate
 		}), nil
 }
 
-func (t *bridge) startWatches(p *supervisor.Process, namespace string) error {
-	acc, err := t.createWatch(p, namespace)
+func (t *bridge) startWatches(c context.Context, namespace string) error {
+	acc, err := t.createWatch(c, namespace)
 	if err != nil {
 		return err
 	}
@@ -241,11 +180,11 @@ func (t *bridge) startWatches(p *supervisor.Process, namespace string) error {
 	go func() {
 		for {
 			select {
-			case <-p.Shutdown():
+			case <-c.Done():
 				return
 			case <-acc.Changed():
 				if acc.Update(&snapshot) {
-					t.updateTable(p, &snapshot)
+					t.updateTable(c, &snapshot)
 				}
 			}
 		}
@@ -253,56 +192,89 @@ func (t *bridge) startWatches(p *supervisor.Process, namespace string) error {
 	return nil
 }
 
-func (t *bridge) bridgeWorker(p *supervisor.Process) error {
+func (t *bridge) bridgeWorker(c context.Context) error {
 	// setup kubernetes bridge
-	p.Logf("kubernetes namespace=%s", t.Namespace)
+	dlog.Infof(c, "kubernetes namespace=%s", t.Namespace)
 	paths := []string{
 		t.Namespace + ".svc.cluster.local.",
 		"svc.cluster.local.",
 		"cluster.local.",
 		"",
 	}
-	p.Logf("Setting DNS search path: %s", paths[0])
-	_, err := t.daemon.SetDnsSearchPath(p.Context(), &daemon.Paths{Paths: paths})
+	dlog.Infof(c, "Setting DNS search path: %s", paths[0])
+	_, err := t.daemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths})
 	if err != nil {
-		p.Logf("error setting up search path: %v", err)
+		dlog.Errorf(c, "error setting up search path: %v", err)
 		panic(err) // Because this will fail if we win the startup race
 	}
 
 	// start watcher using DoClean so that the user can interrupt it --
 	// it can take a while depending on the cluster and on connectivity.
-	if err = t.startWatches(p, metav1.NamespaceAll); err == nil {
+	if err = t.startWatches(c, kates.NamespaceAll); err == nil {
 		return nil
 	}
-	p.Logf("watch all namespaces: %+v", err)
-
-	p.Logf("falling back to watching only %q", t.Namespace)
-	err = t.startWatches(p, t.Namespace)
-
-	if err != nil {
-		return err
-	}
-
-	p.Ready()
-	<-p.Shutdown()
-	return nil
+	dlog.Errorf(c, "watch all namespaces: %+v", err)
+	dlog.Errorf(c, "falling back to watching only %q", t.Namespace)
+	return t.startWatches(c, t.Namespace)
 }
 
-func (t *bridge) start(p *supervisor.Process) error {
-	if err := checkKubectl(p); err != nil {
+func (t *bridge) start(c context.Context) error {
+	if err := checkKubectl(c); err != nil {
 		return err
 	}
-	t.connect(p)
-	t.addWorker(p, &supervisor.Worker{
-		Name: K8sBridgeWorker,
-		Work: t.bridgeWorker})
+	c, t.cancel = context.WithCancel(c)
+
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g.Go(K8sPortForwardWorker, func(c context.Context) error {
+		return client.Retry(c, func(c context.Context) error {
+			var pods []*kates.Pod
+			err := t.client.List(c, kates.Query{
+				Kind:          "pod",
+				Namespace:     t.Namespace,
+				LabelSelector: "app=traffic-manager",
+			}, &pods)
+			if err != nil {
+				return err
+			}
+			if len(pods) == 0 {
+				return fmt.Errorf("found no pod with label app=traffic-manager in namespace %s", t.Namespace)
+			}
+			podName := strings.TrimSpace(pods[0].Name)
+
+			pf := dexec.CommandContext(c, "kubectl", append(t.getKubectlArgs(), "port-forward", fmt.Sprintf("pod/%s", podName), "8022")...)
+
+			// We want this command to keep on running. If it returns an error, then it was unsuccessful.
+			errCh := make(chan error)
+			go func() {
+				errCh <- pf.Run()
+			}()
+
+			select {
+			case err = <-errCh:
+				return err
+			case <-time.After(3 * time.Second):
+				g.Go(K8sSSHWorker, func(c context.Context) error {
+					return client.Retry(c, func(c context.Context) error {
+						// XXX: probably need some kind of keepalive check for ssh, first
+						// curl after wakeup seems to trigger detection of death
+						ssh := dexec.CommandContext(c, "ssh", "-D", "localhost:1080", "-C", "-N", "-oConnectTimeout=5",
+							"-oExitOnForwardFailure=yes", "-oStrictHostKeyChecking=no",
+							"-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", "8022")
+						return ssh.Run()
+					})
+				})
+				return nil
+			}
+		})
+	})
+	g.Go(K8sBridgeWorker, t.bridgeWorker)
 	return nil
 }
 
 const kubectlErr = "kubectl version 1.10 or greater is required"
 
-func checkKubectl(p *supervisor.Process) error {
-	output, err := p.Command("kubectl", "version", "--client", "-o", "json").Capture(nil)
+func checkKubectl(c context.Context) error {
+	output, err := dexec.CommandContext(c, "kubectl", "version", "--client", "-o", "json").Output()
 	if err != nil {
 		return errors.Wrap(err, kubectlErr)
 	}
@@ -314,7 +286,7 @@ func checkKubectl(p *supervisor.Process) error {
 		}
 	}
 
-	if err = json.Unmarshal([]byte(output), &info); err != nil {
+	if err = json.Unmarshal(output, &info); err != nil {
 		return errors.Wrap(err, kubectlErr)
 	}
 
@@ -337,22 +309,22 @@ func checkKubectl(p *supervisor.Process) error {
 //  curl http://traffic-proxy.svc:8022.
 // Note there is no namespace specified, as we are checking for bridge status in the
 // current namespace.
-func (t *bridge) check(p *supervisor.Process) bool {
+func (t *bridge) check(c context.Context) bool {
 	address := fmt.Sprintf("localhost:%d", t.sshPort)
 	conn, err := net.DialTimeout("tcp", address, 15*time.Second)
 	if err != nil {
-		p.Logf("fail to establish tcp connection to %s: %s", address, err.Error())
+		dlog.Errorf(c, "fail to establish tcp connection to %s: %s", address, err.Error())
 		return false
 	}
 	defer conn.Close()
 
 	msg, _, err := bufio.NewReader(conn).ReadLine()
 	if err != nil {
-		p.Logf("tcp read: %s", err.Error())
+		dlog.Errorf(c, "tcp read: %s", err.Error())
 		return false
 	}
 	if !strings.Contains(string(msg), "SSH") {
-		p.Logf("expected SSH prompt, got: %v", string(msg))
+		dlog.Errorf(c, "expected SSH prompt, got: %v", string(msg))
 		return false
 	}
 	return true

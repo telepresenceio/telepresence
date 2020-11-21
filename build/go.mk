@@ -20,6 +20,7 @@ PROTO_SRCS = $(shell echo rpc/*/*.proto)
 generate: ## (Generate) Update generated files that get checked in to Git
 generate: $(PROTOC) $(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc
 	$(PROTOC) --proto_path=. --go_out=. --go-grpc_out=. --go_opt=module=github.com/datawire/telepresence2 --go-grpc_opt=module=github.com/datawire/telepresence2 $(PROTO_SRCS)
+	go mod tidy
 
 .PHONY: generate-clean
 generate-clean: ## (Generate) Delete generated files that get checked in to Git

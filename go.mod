@@ -3,7 +3,8 @@ module github.com/datawire/telepresence2
 go 1.15
 
 require (
-	github.com/datawire/ambassador v1.8.1
+	github.com/datawire/ambassador v1.9.1
+	github.com/datawire/dlib v0.0.0-20201121071656-6047eebdf853
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
 	github.com/golang/protobuf v1.4.3
 	github.com/google/uuid v1.1.2
@@ -18,9 +19,11 @@ require (
 	github.com/stretchr/testify v1.6.1
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
 	golang.org/x/net v0.0.0-20201029055024-942e2f445f3c
+	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d // indirect
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/grpc v1.33.1
+	google.golang.org/genproto v0.0.0-20200806141610-86f49bd18e98 // indirect
+	google.golang.org/grpc v1.33.2
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/yaml.v2 v2.3.0

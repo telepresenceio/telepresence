@@ -3,11 +3,14 @@
 package nat
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
 
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 	ppf "github.com/datawire/pf"
 )
 
@@ -17,12 +20,12 @@ type Translator struct {
 	token string
 }
 
-func pf(p *supervisor.Process, args []string, stdin string) error {
-	cmd := p.Command("pfctl", args...)
+func pf(c context.Context, args []string, stdin string) error {
+	cmd := dexec.CommandContext(c, "pfctl", args...)
 	cmd.Stdin = strings.NewReader(stdin)
 	err := cmd.Start()
 	if err != nil {
-		panic(err)
+		return err
 	}
 	return cmd.Wait()
 }
@@ -64,7 +67,7 @@ func (t *Translator) rules() string {
 	for _, entry := range entries {
 		dst := entry.Destination
 		for _, addr := range fmtDest(dst) {
-			result += ("rdr pass on lo0 inet " + addr + " -> 127.0.0.1 port " + entry.Port + "\n")
+			result += "rdr pass on lo0 inet " + addr + " -> 127.0.0.1 port " + entry.Port + "\n"
 		}
 	}
 
@@ -82,28 +85,28 @@ func (t *Translator) rules() string {
 
 var actions = []ppf.Action{ppf.ActionPass, ppf.ActionRDR}
 
-func (t *Translator) Enable(p *supervisor.Process) {
+func (t *Translator) Enable(c context.Context) error {
 	var err error
 	t.dev, err = ppf.Open()
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	for _, action := range actions {
 		var rule ppf.Rule
 		err = rule.SetAnchorCall(t.Name)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		rule.SetAction(action)
 		rule.SetQuick(true)
 		err = t.dev.PrependRule(rule)
 		if err != nil {
-			panic(err)
+			return err
 		}
 	}
 
-	_ = pf(p, []string{"-a", t.Name, "-F", "all"}, "")
+	_ = pf(c, []string{"-a", t.Name, "-F", "all"}, "")
 
 	// XXX: blah, this generates a syntax error, but also appears
 	// necessary to make anything work. I'm guessing there is some
@@ -111,11 +114,14 @@ func (t *Translator) Enable(p *supervisor.Process) {
 	// something, although notably loading an empty ruleset
 	// doesn't seem to work, it has to be a syntax error of some
 	// kind.
-	_ = pf(p, []string{"-f", "/dev/stdin"}, "pass on lo0")
-	_ = pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	_ = pf(c, []string{"-f", "/dev/stdin"}, "pass on lo0")
+	_ = pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 
-	output := p.Command("pfctl", "-E").MustCaptureErr(nil)
-	for _, line := range strings.Split(output, "\n") {
+	output, err := dexec.CommandContext(c, "pfctl", "-E").CombinedOutput()
+	if err != nil {
+		return err
+	}
+	for _, line := range strings.Split(string(output), "\n") {
 		parts := strings.Split(line, ":")
 		if len(parts) == 2 && strings.TrimSpace(parts[0]) == "Token" {
 			t.token = strings.TrimSpace(parts[1])
@@ -124,12 +130,13 @@ func (t *Translator) Enable(p *supervisor.Process) {
 	}
 
 	if t.token == "" {
-		panic("unable to parse token")
+		return errors.New("unable to parse token")
 	}
+	return nil
 }
 
-func (t *Translator) Disable(p *supervisor.Process) {
-	_ = p.Command("pfctl", "-X", t.token).Run()
+func (t *Translator) Disable(c context.Context) error {
+	_ = dexec.CommandContext(c, "pfctl", "-X", t.token).Run()
 
 	if t.dev != nil {
 		for _, action := range actions {
@@ -137,15 +144,15 @@ func (t *Translator) Disable(p *supervisor.Process) {
 			for {
 				rules, err := t.dev.Rules(action)
 				if err != nil {
-					panic(err)
+					return err
 				}
 
 				for _, rule := range rules {
 					if rule.AnchorCall() == t.Name {
-						p.Logf("removing rule: %v\n", rule)
+						dlog.Debugf(c, "removing rule: %v", rule)
 						err = t.dev.RemoveRule(rule)
 						if err != nil {
-							panic(err)
+							return err
 						}
 						continue OUTER
 					}
@@ -155,31 +162,32 @@ func (t *Translator) Disable(p *supervisor.Process) {
 		}
 	}
 
-	_ = pf(p, []string{"-a", t.Name, "-F", "all"}, "")
+	_ = pf(c, []string{"-a", t.Name, "-F", "all"}, "")
+	return nil
 }
 
-func (t *Translator) ForwardTCP(p *supervisor.Process, ip, port, toPort string) {
-	t.forward(p, "tcp", ip, port, toPort)
+func (t *Translator) ForwardTCP(c context.Context, ip, port, toPort string) {
+	t.forward(c, "tcp", ip, port, toPort)
 }
 
-func (t *Translator) ForwardUDP(p *supervisor.Process, ip, port, toPort string) {
-	t.forward(p, "udp", ip, port, toPort)
+func (t *Translator) ForwardUDP(c context.Context, ip, port, toPort string) {
+	t.forward(c, "udp", ip, port, toPort)
 }
 
-func (t *Translator) forward(p *supervisor.Process, protocol, ip, port, toPort string) {
+func (t *Translator) forward(c context.Context, protocol, ip, port, toPort string) {
 	t.clear(protocol, ip, port)
 	t.Mappings[Address{protocol, ip, port}] = toPort
-	_ = pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	_ = pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
-func (t *Translator) ClearTCP(p *supervisor.Process, ip, port string) {
+func (t *Translator) ClearTCP(c context.Context, ip, port string) {
 	t.clear("tcp", ip, port)
-	_ = pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	_ = pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
-func (t *Translator) ClearUDP(p *supervisor.Process, ip, port string) {
+func (t *Translator) ClearUDP(c context.Context, ip, port string) {
 	t.clear("udp", ip, port)
-	_ = pf(p, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	_ = pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
 func (t *Translator) clear(protocol, ip, port string) {

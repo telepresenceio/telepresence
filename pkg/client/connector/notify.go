@@ -1,10 +1,12 @@
 package connector
 
 import (
+	"context"
 	"fmt"
 	"runtime"
 
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 )
 
 var (
@@ -12,10 +14,10 @@ var (
 )
 
 // Notify displays a desktop banner notification to the user
-func Notify(p *supervisor.Process, message string) {
-	p.Logf("----------------------------------------------------------------------")
-	p.Logf("NOTIFY: %s", message)
-	p.Logf("----------------------------------------------------------------------")
+func Notify(c context.Context, message string) {
+	dlog.Info(c, "----------------------------------------------------------------------")
+	dlog.Infof(c, "NOTIFY: %s", message)
+	dlog.Info(c, "----------------------------------------------------------------------")
 
 	if !notifyEnabled {
 		return
@@ -35,8 +37,8 @@ func Notify(p *supervisor.Process, message string) {
 		return
 	}
 
-	cmd := p.Command(exe, args...)
+	cmd := dexec.CommandContext(c, exe, args...)
 	if err := cmd.Run(); err != nil {
-		p.Logf("ERROR while notifying: %v", err)
+		dlog.Errorf(c, "ERROR while notifying: %v", err)
 	}
 }

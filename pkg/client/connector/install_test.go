@@ -11,16 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/datawire/telepresence2/pkg/client"
-
-	"github.com/datawire/telepresence2/pkg/version"
-
-	"github.com/datawire/ambassador/pkg/kates"
-	"github.com/pkg/errors"
-
 	"github.com/datawire/ambassador/pkg/dtest"
+	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/dlib/dlog"
+	"github.com/sirupsen/logrus"
 
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/version"
 )
 
 var kubeconfig string
@@ -130,93 +127,73 @@ func removeManager(t *testing.T) {
 	}
 }
 
+func testContext() context.Context {
+	return dlog.WithLogger(context.Background(), dlog.WrapLogrus(logrus.StandardLogger()))
+}
 func Test_findTrafficManager_notPresent(t *testing.T) {
-	sup := supervisor.WithContext(context.Background())
-	sup.Supervise(&supervisor.Worker{
-		Name: "find-traffic-manager",
-		Work: func(p *supervisor.Process) error {
-			kc, err := newKCluster(kubeconfig, "", namespace)
-			if err != nil {
-				return err
-			}
-			ti, err := newTrafficManagerInstaller(kc)
-			if err != nil {
-				return err
-			}
-			version.Version = "v0.0.0-bogus"
-			defer func() { version.Version = testVersion }()
+	c := testContext()
+	kc, err := newKCluster(kubeconfig, "", namespace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ti, err := newTrafficManagerInstaller(kc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	version.Version = "v0.0.0-bogus"
+	defer func() { version.Version = testVersion }()
 
-			if _, err = ti.findDeployment(p, appName); err != nil {
-				if kates.IsNotFound(err) {
-					return nil
-				}
-				return err
-			}
-			return errors.New("expected find to return not-found error")
-		},
-	})
-	for _, err := range sup.Run() {
-		t.Error(err)
+	if _, err = ti.findDeployment(c, appName); err != nil {
+		if !kates.IsNotFound(err) {
+			t.Fatal(err)
+		}
+	} else {
+		t.Fatal("expected find to return not-found error")
 	}
 }
 
 func Test_findTrafficManager_present(t *testing.T) {
+	c := testContext()
 	publishManager(t)
-	sup := supervisor.WithContext(context.Background())
-	sup.Supervise(&supervisor.Worker{
-		Name: "install-then-find",
-		Work: func(p *supervisor.Process) error {
-			defer removeManager(t)
-			kc, err := newKCluster(kubeconfig, "", namespace)
-			if err != nil {
-				return err
-			}
-			ti, err := newTrafficManagerInstaller(kc)
-			if err != nil {
-				return err
-			}
-			err = ti.createManagerDeployment(p)
-			if err != nil {
-				return err
-			}
-			_, err = ti.findDeployment(p, appName)
-			return err
-		},
-	})
-	for _, err := range sup.Run() {
-		t.Error(err)
+	defer removeManager(t)
+	kc, err := newKCluster(kubeconfig, "", namespace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ti, err := newTrafficManagerInstaller(kc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = ti.createManagerDeployment(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = ti.findDeployment(c, appName)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
 func Test_ensureTrafficManager_notPresent(t *testing.T) {
+	c := testContext()
 	publishManager(t)
-	sup := supervisor.WithContext(context.Background())
-	sup.Supervise(&supervisor.Worker{
-		Name: "ensure-traffic-manager",
-		Work: func(p *supervisor.Process) error {
-			defer removeManager(t)
-			kc, err := newKCluster(kubeconfig, "", namespace)
-			if err != nil {
-				return err
-			}
-			ti, err := newTrafficManagerInstaller(kc)
-			if err != nil {
-				return err
-			}
-			sshd, api, err := ti.ensureManager(p)
-			if err != nil {
-				return err
-			}
-			if sshd != 8022 {
-				return errors.New("expected sshd port to be 8082")
-			}
-			if api != 8081 {
-				return errors.New("expected api port to be 8081")
-			}
-			return nil
-		},
-	})
-	for _, err := range sup.Run() {
-		t.Error(err)
+	defer removeManager(t)
+	kc, err := newKCluster(kubeconfig, "", namespace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ti, err := newTrafficManagerInstaller(kc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sshd, api, err := ti.ensureManager(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sshd != 8022 {
+		t.Fatal("expected sshd port to be 8082")
+	}
+	if api != 8081 {
+		t.Fatal("expected api port to be 8081")
 	}
 }

@@ -1,11 +1,13 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"syscall"
 	"time"
 
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 	"github.com/pkg/errors"
 )
 
@@ -13,10 +15,10 @@ import (
 type crCmd struct {
 	exe        string
 	args       []string
-	check      func(p *supervisor.Process) error
+	check      func(c context.Context) error
 	startGrace time.Duration
-	cmd        *supervisor.Cmd // (run loop) tracks the cmd for killing it
-	quitting   bool            // (run loop) enables Close()
+	cmd        *dexec.Cmd // (run loop) tracks the cmd for killing it
+	quitting   bool       // (run loop) enables Close()
 	startedAt  time.Time
 	ResourceBase
 }
@@ -24,11 +26,11 @@ type crCmd struct {
 // CheckedRetryingCommand launches a command, restarting it repeatedly if it
 // quits, and killing and restarting it if it fails the given check.
 func CheckedRetryingCommand(
-	p *supervisor.Process, name string, exe string, args []string,
-	check func(*supervisor.Process) error, startGrace time.Duration,
+	c context.Context, name string, exe string, args []string,
+	check func(context.Context) error, startGrace time.Duration,
 ) (Resource, error) {
 	if check == nil {
-		check = func(*supervisor.Process) error { return nil }
+		check = func(context.Context) error { return nil }
 	}
 	crc := &crCmd{
 		exe:        exe,
@@ -36,47 +38,42 @@ func CheckedRetryingCommand(
 		check:      check,
 		startGrace: startGrace,
 	}
-	crc.Setup(p.Supervisor(), name, crc.doCheck, crc.doQuit)
+	crc.Setup(c, name, crc.doCheck, crc.doQuit)
 
-	if err := crc.launch(p); err != nil {
+	if err := crc.launch(c); err != nil {
 		return nil, errors.Wrapf(err, "initial launch of %s", name)
 	}
 	return crc, nil
 }
 
-func (crc *crCmd) subprocessEnded(p *supervisor.Process) error {
-	p.Log("end: subprocess ended")
+func (crc *crCmd) subprocessEnded(c context.Context) error {
+	dlog.Debug(c, "end: subprocess ended")
 	crc.cmd = nil
 	if crc.quitting {
-		p.Log("end: marking as done")
+		dlog.Debug(c, "end: marking as done")
 		crc.SetDone()
 	}
 	return nil
 }
 
-func (crc *crCmd) launch(p *supervisor.Process) error {
+func (crc *crCmd) launch(c context.Context) error {
 	if crc.cmd != nil {
 		panic(fmt.Errorf("launching %s: already launched", crc.Name()))
 	}
 
-	// Launch the subprocess (set up logging using a worker)
-	p.Logf("Launching %s...", crc.Name())
+	dlog.Infof(c, "Launching %s...", crc.Name())
 	launchErr := make(chan error)
-	p.Supervisor().Supervise(&supervisor.Worker{
-		Name: crc.Name() + "/out",
-		Work: func(p *supervisor.Process) error {
-			crc.cmd = p.Command(crc.exe, crc.args...)
-			launchErr <- crc.cmd.Start()
-			// Wait for the subprocess to end. Another worker will
-			// call kill() on shutdown (via quit()) so we don't need
-			// to worry about supervisor shutdown ourselves.
-			if err := crc.cmd.Wait(); err != nil {
-				p.Log(err)
-			}
-			crc.AddTask(crc.subprocessEnded)
-			return nil
-		},
-	})
+	go func() {
+		crc.cmd = dexec.CommandContext(c, crc.exe, crc.args...)
+		launchErr <- crc.cmd.Start()
+		// Wait for the subprocess to end. Another worker will
+		// call kill() on shutdown (via quit()) so we don't need
+		// to worry about shutdown ourselves.
+		if err := crc.cmd.Wait(); err != nil {
+			dlog.Error(c, err)
+		}
+		crc.AddTask(crc.subprocessEnded)
+	}()
 
 	// Wait for it to start
 	select {
@@ -84,53 +81,53 @@ func (crc *crCmd) launch(p *supervisor.Process) error {
 		if err != nil {
 			return err
 		}
-	case <-p.Shutdown():
+	case <-c.Done():
 		return nil
 	}
 	crc.startedAt = time.Now()
-	p.Logf("Launched %s", crc.Name())
+	dlog.Infof(c, "Launched %s", crc.Name())
 
 	return nil
 }
 
-func (crc *crCmd) kill(p *supervisor.Process) error {
+func (crc *crCmd) kill(c context.Context) error {
 	if crc.cmd != nil {
-		p.Log("kill: sending signal")
+		dlog.Debug(c, "kill: sending signal")
 		if err := crc.cmd.Process.Signal(syscall.SIGTERM); err != nil {
-			p.Logf("kill: failed (ignoring): %v", err)
+			dlog.Debugf(c, "kill: failed (ignoring): %v", err)
 		}
 	} else {
-		p.Log("kill: no subprocess to kill")
+		dlog.Debug(c, "kill: no subprocess to kill")
 	}
 	return nil
 }
 
-func (crc *crCmd) doQuit(p *supervisor.Process) error {
+func (crc *crCmd) doQuit(c context.Context) error {
 	crc.quitting = true
-	return crc.kill(p)
+	return crc.kill(c)
 }
 
 // doCheck determines whether the subprocess is running and healthy
-func (crc *crCmd) doCheck(p *supervisor.Process) error {
+func (crc *crCmd) doCheck(c context.Context) error {
 	if crc.cmd == nil {
 		if crc.quitting {
-			p.Log("check: no subprocess + quitting -> done")
+			dlog.Debug(c, "check: no subprocess + quitting -> done")
 			crc.SetDone()
 			return nil
 		}
-		p.Log("check: no subprocess -> launch")
+		dlog.Debug(c, "check: no subprocess -> launch")
 		crc.AddTask(crc.launch)
 		return errors.New("not running")
 	}
-	if err := crc.check(p); err != nil {
-		p.Logf("check: failed: %v", err)
+	if err := crc.check(c); err != nil {
+		dlog.Debugf(c, "check: failed: %v", err)
 		runTime := time.Since(crc.startedAt)
 		if runTime > crc.startGrace {
 			// Kill the process because it's in a bad state
-			p.Log("check: killing...")
-			_ = crc.kill(p)
+			dlog.Debug(c, "check: killing...")
+			_ = crc.kill(c)
 		} else {
-			p.Logf("check: not killing yet (%v < %v)", runTime, crc.startGrace)
+			dlog.Debugf(c, "check: not killing yet (%v < %v)", runTime, crc.startGrace)
 		}
 		return err // from crc.check() above
 	}

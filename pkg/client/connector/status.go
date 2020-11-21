@@ -1,14 +1,14 @@
 package connector
 
 import (
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"context"
 
 	manager "github.com/datawire/telepresence2/pkg/rpc"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
 )
 
 // status reports the current status of the daemon
-func (s *service) status(_ *supervisor.Process) *rpc.ConnectorStatus {
+func (s *service) status(c context.Context) *rpc.ConnectorStatus {
 	r := &rpc.ConnectorStatus{}
 	if s.cluster == nil {
 		r.Error = rpc.ConnectorStatus_DISCONNECTED
@@ -19,7 +19,7 @@ func (s *service) status(_ *supervisor.Process) *rpc.ConnectorStatus {
 		Server:    s.cluster.server(),
 		Context:   s.cluster.Context,
 	}
-	r.Bridge = s.cluster.isBridgeOkay()
+	r.Bridge = s.cluster.isBridgeOkay(c)
 
 	if s.trafficMgr == nil {
 		return r

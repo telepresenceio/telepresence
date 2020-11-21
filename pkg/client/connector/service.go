@@ -2,18 +2,18 @@ package connector
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/datawire/ambassador/pkg/metriton"
-	"github.com/datawire/ambassador/pkg/supervisor"
+	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dlog"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh/terminal"
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/client"
@@ -37,12 +37,14 @@ to troubleshoot problems.
 // service represents the state of the Telepresence Connector
 type service struct {
 	rpc.UnimplementedConnectorServer
-	daemon     daemon.DaemonClient
-	cluster    *k8sCluster
-	bridge     *bridge
-	trafficMgr *trafficManager
-	grpc       *grpc.Server
-	p          *supervisor.Process
+	daemon       daemon.DaemonClient
+	daemonLogger daemonLogger
+	cluster      *k8sCluster
+	bridge       *bridge
+	trafficMgr   *trafficManager
+	grpc         *grpc.Server
+	callCtx      context.Context
+	cancel       func()
 }
 
 // Command returns the CLI sub-command for "connector-foreground"
@@ -63,49 +65,8 @@ func Command() *cobra.Command {
 	return c
 }
 
-// run is the main function when executing as the connector
-func run(init bool) error {
-	// establish a connection to the daemon gRPC service
-	conn, err := client.DialSocket(client.DaemonSocketName)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	d := &service{daemon: daemon.NewDaemonClient(conn)}
-	ctx, cancel := context.WithCancel(context.Background())
-	sup := supervisor.WithContext(ctx)
-	if err = d.setUpLogging(sup); err != nil {
-		cancel()
-		return err
-	}
-
-	sup.Supervise(&supervisor.Worker{
-		Name: "connector",
-		Work: func(p *supervisor.Process) error {
-			return d.runGRPCService(p, cancel)
-		},
-	})
-	if init {
-		sup.Supervise(&supervisor.Worker{
-			Name:     "init",
-			Requires: []string{"connector"},
-			Work: func(p *supervisor.Process) error {
-				_, err := d.Connect(p.Context(), &rpc.ConnectRequest{InstallId: "dummy-id"})
-				return err
-			},
-		})
-	}
-	runErrors := sup.Run()
-
-	if len(runErrors) > 0 {
-		sup.Logger.Printf("collector has exited with %d error(s):", len(runErrors))
-		for _, err := range runErrors {
-			sup.Logger.Printf("- %v", err)
-		}
-	}
-	sup.Logger.Printf("Telepresence connector %s is done.", client.DisplayVersion())
-	return nil
+func (s *service) callContext(_ context.Context) context.Context {
+	return s.callCtx
 }
 
 func (s *service) Version(_ context.Context, _ *empty.Empty) (*version.VersionInfo, error) {
@@ -115,28 +76,28 @@ func (s *service) Version(_ context.Context, _ *empty.Empty) (*version.VersionIn
 	}, nil
 }
 
-func (s *service) Status(_ context.Context, _ *empty.Empty) (*rpc.ConnectorStatus, error) {
-	return s.status(s.p), nil
+func (s *service) Status(c context.Context, _ *empty.Empty) (*rpc.ConnectorStatus, error) {
+	return s.status(s.callContext(c)), nil
 }
 
-func (s *service) Connect(_ context.Context, cr *rpc.ConnectRequest) (*rpc.ConnectInfo, error) {
-	return s.connect(s.p, cr), nil
+func (s *service) Connect(c context.Context, cr *rpc.ConnectRequest) (*rpc.ConnectInfo, error) {
+	return s.connect(s.callContext(c), cr), nil
 }
 
-func (s *service) CreateIntercept(_ context.Context, ir *manager.CreateInterceptRequest) (*rpc.InterceptResult, error) {
+func (s *service) CreateIntercept(c context.Context, ir *manager.CreateInterceptRequest) (*rpc.InterceptResult, error) {
 	ie, is := s.interceptStatus()
 	if ie != rpc.InterceptError_UNSPECIFIED {
 		return &rpc.InterceptResult{Error: ie, ErrorText: is}, nil
 	}
-	return s.trafficMgr.addIntercept(s.p, ir)
+	return s.trafficMgr.addIntercept(s.callContext(c), ir)
 }
 
-func (s *service) RemoveIntercept(_ context.Context, rr *manager.RemoveInterceptRequest2) (*rpc.InterceptResult, error) {
+func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (*rpc.InterceptResult, error) {
 	ie, is := s.interceptStatus()
 	if ie != rpc.InterceptError_UNSPECIFIED {
 		return &rpc.InterceptResult{Error: ie, ErrorText: is}, nil
 	}
-	_, err := s.trafficMgr.removeIntercept(s.p, rr.Name)
+	_, err := s.trafficMgr.removeIntercept(s.callContext(c), rr.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -158,44 +119,22 @@ func (s *service) ListIntercepts(_ context.Context, _ *empty.Empty) (*manager.In
 }
 
 func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
-	s.p.Supervisor().Shutdown()
+	s.cancel()
 	return &empty.Empty{}, nil
 }
 
-// setUpLogging connects to the daemon logger and assigns a wrapper for it to the
-// supervisors logger.
-func (s *service) setUpLogging(sup *supervisor.Supervisor) error {
-	logStream, err := s.daemon.Logger(context.Background())
-	if err == nil {
-		sup.Logger = &daemonLogger{stream: logStream}
-	}
-	return err
+// daemonLogger is an io.Writer implementation that sends data to the daemon logger
+type daemonLogger struct {
+	stream daemon.Daemon_LoggerClient
 }
 
-// runGRPCService is the main gRPC server loop.
-func (s *service) runGRPCService(p *supervisor.Process, cancel context.CancelFunc) error {
-	p.Log("---")
-	p.Logf("Telepresence Connector %s starting...", client.DisplayVersion())
-	p.Logf("PID is %d", os.Getpid())
-	p.Log("")
-
-	// Listen on unix domain socket
-	unixListener, err := net.Listen("unix", client.ConnectorSocketName)
-	if err != nil {
-		return errors.Wrap(err, "listen")
-	}
-	s.grpc = grpc.NewServer()
-	s.p = p
-	rpc.RegisterConnectorServer(s.grpc, s)
-
-	go s.handleSignalsAndShutdown(cancel)
-
-	p.Ready()
-	return errors.Wrap(s.grpc.Serve(unixListener), "connector gRCP server")
+func (d *daemonLogger) Write(data []byte) (n int, err error) {
+	err = d.stream.Send(&daemon.LogMessage{Text: data})
+	return len(data), err
 }
 
 // connect the connector to a cluster
-func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
+func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
 	reporter := &metriton.Reporter{
 		Application:  "telepresence2",
 		Version:      client.Version(),
@@ -203,8 +142,8 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 		BaseMetadata: map[string]interface{}{"mode": "daemon"},
 	}
 
-	if _, err := reporter.Report(p.Context(), map[string]interface{}{"action": "connect"}); err != nil {
-		p.Logf("report failed: %+v", err)
+	if _, err := reporter.Report(c, map[string]interface{}{"action": "connect"}); err != nil {
+		dlog.Errorf(c, "report failed: %+v", err)
 	}
 
 	// Sanity checks
@@ -218,13 +157,13 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 		return r
 	}
 
-	p.Log("Connecting to traffic manager...")
-	cluster, err := trackKCluster(p, cr.Context, cr.Namespace, cr.Args)
+	dlog.Info(c, "Connecting to traffic manager...")
+	cluster, err := trackKCluster(c, cr.Context, cr.Namespace, cr.Args)
 	if err != nil {
-		p.Logf("unable to track k8s cluster: %+v", err)
+		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
 		r.Error = rpc.ConnectInfo_CLUSTER_FAILED
 		r.ErrorText = err.Error()
-		s.p.Supervisor().Shutdown()
+		s.cancel()
 		return r
 	}
 	s.cluster = cluster
@@ -237,39 +176,37 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 		}
 	*/
 
-	p.Logf("Connected to context %s (%s)", s.cluster.Context, s.cluster.server())
+	dlog.Infof(c, "Connected to context %s (%s)", s.cluster.Context, s.cluster.server())
 
 	r.ClusterContext = s.cluster.Context
 	r.ClusterServer = s.cluster.server()
 
-	tmgr, err := newTrafficManager(p, s.cluster, cr.InstallId, cr.IsCi)
+	tmgr, err := newTrafficManager(c, s.cluster, cr.InstallId, cr.IsCi)
 	if err != nil {
-		p.Logf("Unable to connect to TrafficManager: %s", err)
+		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
 		r.ErrorText = err.Error()
 		if cr.InterceptEnabled {
 			// No point in continuing without a traffic manager
-			s.p.Supervisor().Shutdown()
+			s.cancel()
 		}
 		return r
 	}
 	// tmgr.previewHost = previewHost
 	s.trafficMgr = tmgr
-	p.Logf("Starting traffic-manager bridge in context %s, namespace %s", cluster.Context, cluster.Namespace)
+	dlog.Infof(c, "Starting traffic-manager bridge in context %s, namespace %s", cluster.Context, cluster.Namespace)
 	br := newBridge(cluster, s.daemon, tmgr.sshPort)
-	err = br.start(p)
+	err = br.start(c)
 	if err != nil {
-		p.Logf("Failed to start traffic-manager bridge: %s", err.Error())
+		dlog.Errorf(c, "Failed to start traffic-manager bridge: %s", err.Error())
 		r.Error = rpc.ConnectInfo_BRIDGE_FAILED
 		r.ErrorText = err.Error()
 		// No point in continuing without a bridge
-		s.p.Supervisor().Shutdown()
+		s.cancel()
 		return r
 	}
 	s.bridge = br
-	s.cluster.setBridgeCheck(func() bool {
-		return br.check(p)
-	})
+	s.cluster.setBridgeCheck(br.check)
 
 	if !cr.InterceptEnabled {
 		return r
@@ -278,13 +215,13 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 	// Wait for traffic manager to connect
 	maxAttempts := 30 * 4 // 30 seconds max wait
 	attempts := 0
-	p.Log("Waiting for TrafficManager to connect")
+	dlog.Info(c, "Waiting for TrafficManager to connect")
 	for ; !tmgr.IsOkay() && attempts < maxAttempts; attempts++ {
 		if s.trafficMgr.apiErr != nil {
 			r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
 			r.ErrorText = s.trafficMgr.apiErr.Error()
 			// No point in continuing without a traffic manager
-			s.p.Supervisor().Shutdown()
+			s.cancel()
 			break
 		}
 		time.Sleep(time.Second / 4)
@@ -292,53 +229,104 @@ func (s *service) connect(p *supervisor.Process, cr *rpc.ConnectRequest) *rpc.Co
 	if attempts == maxAttempts {
 		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
 		r.ErrorText = "Timeout waiting for traffic manager"
-		p.Log(r.ErrorText)
-		s.p.Supervisor().Shutdown()
+		dlog.Error(c, r.ErrorText)
+		s.cancel()
 	}
 	return r
 }
 
-// daemonLogger is a supervisor.Logger implementation that sends log messages to the daemon
-type daemonLogger struct {
-	stream daemon.Daemon_LoggerClient
-}
-
-// Printf implements the supervisor.Logger interface
-func (d *daemonLogger) Printf(format string, v ...interface{}) {
-	txt := fmt.Sprintf(format, v...)
-	err := d.stream.Send(&daemon.LogMessage{Text: txt})
+// setUpLogging connects to the daemon logger
+func (s *service) setUpLogging(c context.Context) (context.Context, error) {
+	var err error
+	s.daemonLogger.stream, err = s.daemon.Logger(c)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error while sending log message to daemon: %s\nOriginal message was %q\n", err.Error(), txt)
+		return nil, err
 	}
+
+	logger := logrus.StandardLogger()
+	logger.Out = &s.daemonLogger
+	loggingToTerminal := terminal.IsTerminal(int(os.Stdout.Fd()))
+	if loggingToTerminal {
+		logger.Formatter = client.NewFormatter("15:04:05")
+	} else {
+		logger.Formatter = client.NewFormatter("2006/01/02 15:04:05")
+	}
+	logger.Level = logrus.DebugLevel
+	return dlog.WithLogger(c, dlog.WrapLogrus(logger)), nil
 }
 
-// handleSignalsAndShutdown ensures that the connector quits gracefully when receiving a signal
-// or when the supervisor wants to shutdown.
-func (s *service) handleSignalsAndShutdown(cancel context.CancelFunc) {
+// run is the main function when executing as the connector
+func run(init bool) (err error) {
+	var listener net.Listener
+	defer func() {
+		if listener != nil {
+			_ = listener.Close()
+		}
+		_ = os.Remove(client.ConnectorSocketName)
+	}()
+
+	// Listen on unix domain socket
+	listener, err = net.Listen("unix", client.ConnectorSocketName)
+	if err != nil {
+		return errors.Wrap(err, "listen")
+	}
+
+	g := dgroup.NewGroup(context.Background(), dgroup.GroupConfig{
+		SoftShutdownTimeout:  2 * time.Second,
+		EnableSignalHandling: true})
+
+	g.Go("connector", func(c context.Context) error {
+		// establish a connection to the daemon gRPC service
+		conn, err := client.DialSocket(client.DaemonSocketName)
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		s := &service{daemon: daemon.NewDaemonClient(conn), grpc: grpc.NewServer()}
+		rpc.RegisterConnectorServer(s.grpc, s)
+
+		c, err = s.setUpLogging(c)
+		if err != nil {
+			return err
+		}
+
+		dlog.Info(c, "---")
+		dlog.Infof(c, "Telepresence Connector %s starting...", client.DisplayVersion())
+		dlog.Infof(c, "PID is %d", os.Getpid())
+		dlog.Info(c, "")
+
+		c, s.cancel = context.WithCancel(c)
+		s.callCtx = c
+		sg := dgroup.NewGroup(c, dgroup.GroupConfig{})
+		sg.Go("teardown", s.handleShutdown)
+		if init {
+			sg.Go("debug-init", func(c context.Context) error {
+				_, err = s.Connect(c, &rpc.ConnectRequest{InstallId: "dummy-id"})
+				return err
+			})
+		}
+
+		err = s.grpc.Serve(listener)
+		listener = nil
+		if err != nil {
+			dlog.Error(c, err.Error())
+		}
+		return err
+	})
+	return g.Wait()
+}
+
+// handleShutdown ensures that the connector quits gracefully when receiving a signal
+// or when the context is cancelled.
+func (s *service) handleShutdown(c context.Context) error {
 	defer s.grpc.GracefulStop()
 
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
-	for {
-		select {
-		case sig := <-interrupt:
-			s.p.Logf("Received signal %s", sig)
-			if sig == syscall.SIGHUP {
-				if bridge := s.bridge; bridge != nil {
-					bridge.restart()
-				}
-				continue
-			}
-			cancel()
-		case <-s.p.Shutdown():
-			s.p.Log("Shutting down")
-		}
-		break
-	}
+	<-c.Done()
+	dlog.Info(c, "Shutting down")
 
 	cluster := s.cluster
 	if cluster == nil {
-		return
+		return nil
 	}
 	s.cluster = nil
 	trafficMgr := s.trafficMgr
@@ -348,8 +336,9 @@ func (s *service) handleSignalsAndShutdown(cancel context.CancelFunc) {
 	defer cluster.Close()
 
 	if trafficMgr != nil {
-		_ = trafficMgr.clearIntercepts(s.p)
+		_ = trafficMgr.clearIntercepts(context.Background())
 		_ = trafficMgr.Close()
 	}
 	s.bridge = nil
+	return nil
 }
