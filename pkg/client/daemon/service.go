@@ -42,14 +42,13 @@ to troubleshoot problems.
 // daemon represents the state of the Telepresence Daemon
 type service struct {
 	rpc.UnimplementedDaemonServer
-	networkShutdown func()
-	dns             string
-	fallback        string
-	grpc            *grpc.Server
-	hClient         *http.Client
-	ipTables        *ipTables
-	callCtx         context.Context
-	cancel          context.CancelFunc
+	dns      string
+	fallback string
+	grpc     *grpc.Server
+	hClient  *http.Client
+	outbound *outbound
+	callCtx  context.Context
+	cancel   context.CancelFunc
 }
 
 // Command returns the telepresence sub-command "daemon-foreground"
@@ -107,13 +106,13 @@ func (d *service) Version(_ context.Context, _ *empty.Empty) (*version.VersionIn
 	}, nil
 }
 
-func (s *service) callContext(_ context.Context) context.Context {
-	return s.callCtx
+func (d *service) callContext(_ context.Context) context.Context {
+	return d.callCtx
 }
 
 func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
 	r := &rpc.DaemonStatus{}
-	if d.networkShutdown == nil {
+	if d.outbound == nil {
 		r.Error = rpc.DaemonStatus_PAUSED
 		return r, nil
 	}
@@ -123,31 +122,30 @@ func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, 
 func (d *service) Pause(_ context.Context, _ *empty.Empty) (*rpc.PauseInfo, error) {
 	r := rpc.PauseInfo{}
 	switch {
-	case d.networkShutdown == nil:
+	case d.outbound == nil:
 		r.Error = rpc.PauseInfo_ALREADY_PAUSED
 	case client.SocketExists(client.ConnectorSocketName):
 		r.Error = rpc.PauseInfo_CONNECTED_TO_CLUSTER
 	default:
-		d.networkShutdown()
-		d.networkShutdown = nil
+		d.outbound.shutdown()
+		d.outbound = nil
 	}
 	return &r, nil
 }
 
 func (d *service) Resume(c context.Context, _ *empty.Empty) (*rpc.ResumeInfo, error) {
 	r := rpc.ResumeInfo{}
-	if d.networkShutdown != nil {
+	if d.outbound != nil {
 		r.Error = rpc.ResumeInfo_NOT_PAUSED
 	} else {
 		c := d.callContext(c)
-		ipTables, shutdown, err := start(c, d.dns, d.fallback, false)
+		outbound, err := start(c, d.dns, d.fallback, false)
 		if err != nil {
 			r.Error = rpc.ResumeInfo_UNEXPECTED_RESUME_ERROR
 			r.ErrorText = err.Error()
 			dlog.Infof(c, "resume: %v", err)
 		}
-		d.ipTables = ipTables
-		d.networkShutdown = shutdown
+		d.outbound = outbound
 	}
 	return &r, nil
 }
@@ -157,31 +155,14 @@ func (d *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) 
 	return &empty.Empty{}, nil
 }
 
-func (d *service) AllIPTables(_ context.Context, _ *empty.Empty) (*rpc.Tables, error) {
-	return d.ipTables.getAll(), nil
-}
-
-func (d *service) DeleteIPTable(_ context.Context, name *rpc.TableName) (*empty.Empty, error) {
-	d.ipTables.delete(name.Name)
-	return &empty.Empty{}, nil
-}
-
-func (d *service) IPTable(_ context.Context, name *rpc.TableName) (*iptables.Table, error) {
-	return d.ipTables.get(name.Name), nil
-}
-
 func (d *service) Update(_ context.Context, table *iptables.Table) (*empty.Empty, error) {
-	d.ipTables.update(table)
+	d.outbound.update(table)
 	dns.Flush()
 	return &empty.Empty{}, nil
 }
 
-func (d *service) DnsSearchPath(_ context.Context, _ *empty.Empty) (*rpc.Paths, error) {
-	return &rpc.Paths{Paths: d.ipTables.searchPath()}, nil
-}
-
 func (d *service) SetDnsSearchPath(_ context.Context, paths *rpc.Paths) (*empty.Empty, error) {
-	d.ipTables.setSearchPath(paths.Paths)
+	d.outbound.setSearchPath(paths.Paths)
 	return &empty.Empty{}, nil
 }
 
@@ -242,7 +223,7 @@ func run(dns, fallback string) error {
 		d.callCtx = c
 		sg := dgroup.NewGroup(c, dgroup.GroupConfig{})
 		sg.Go("outbound", func(c context.Context) error {
-			d.ipTables, d.networkShutdown, err = start(c, dns, fallback, false)
+			d.outbound, err = start(c, dns, fallback, false)
 			return err
 		})
 		sg.Go("teardown", func(c context.Context) error {

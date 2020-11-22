@@ -31,20 +31,8 @@ service Daemon {
   // Quits (terminates) the service.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 
-  // DeleteIPTable deletes the IP-table for the given name
-  rpc DeleteIPTable(TableName) returns (google.protobuf.Empty);
-
-  // IPTable returns the IP-table for the given name
-  rpc IPTable(TableName) returns (iptables.Table);
-
-  // IPTable returns all IP-tables
-  rpc AllIPTables(google.protobuf.Empty) returns (Tables);
-
   // Update assigns adds or updates an IP-table.
   rpc Update(iptables.Table) returns (google.protobuf.Empty);
-
-  // DnsSearchPath returns the DNS search path
-  rpc DnsSearchPath(google.protobuf.Empty) returns (Paths);
 
   // SetSearch sets a new search path.
   rpc SetDnsSearchPath(Paths) returns (google.protobuf.Empty);
