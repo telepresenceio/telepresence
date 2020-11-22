@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/datawire/ambassador/pkg/dlog"
+	"github.com/datawire/dlib/dlog"
 	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc"
 

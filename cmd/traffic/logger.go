@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/datawire/ambassador/pkg/dlog"
+	"github.com/datawire/dlib/dlog"
 	"github.com/sirupsen/logrus"
 )
 

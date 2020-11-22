@@ -7,7 +7,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/datawire/ambassador/pkg/dlog"
+	"github.com/datawire/dlib/dlog"
 )
 
 type Forwarder struct {
