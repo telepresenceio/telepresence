@@ -313,9 +313,13 @@ func (o *outbound) doUpdate(c context.Context, table *iptables.Table) error {
 			if oldRouteOk {
 				switch newRoute.Proto {
 				case "tcp":
-					o.translator.ClearTCP(c, oldRoute.Ip, oldRoute.Port)
+					if err := o.translator.ClearTCP(c, oldRoute.Ip, oldRoute.Port); err != nil {
+						dlog.Errorf(c, "clear tpc: %s", err.Error())
+					}
 				case "udp":
-					o.translator.ClearUDP(c, oldRoute.Ip, oldRoute.Port)
+					if err := o.translator.ClearUDP(c, oldRoute.Ip, oldRoute.Port); err != nil {
+						dlog.Errorf(c, "clear udp: %s", err.Error())
+					}
 				default:
 					dlog.Warnf(c, "unrecognized protocol: %v", newRoute)
 				}
@@ -324,9 +328,13 @@ func (o *outbound) doUpdate(c context.Context, table *iptables.Table) error {
 			if newRoute.Target != "" {
 				switch newRoute.Proto {
 				case "tcp":
-					o.translator.ForwardTCP(c, newRoute.Ip, newRoute.Port, newRoute.Target)
+					if err := o.translator.ForwardTCP(c, newRoute.Ip, newRoute.Port, newRoute.Target); err != nil {
+						dlog.Errorf(c, "forward tcp: %s", err.Error())
+					}
 				case "udp":
-					o.translator.ForwardUDP(c, newRoute.Ip, newRoute.Port, newRoute.Target)
+					if err := o.translator.ForwardUDP(c, newRoute.Ip, newRoute.Port, newRoute.Target); err != nil {
+						dlog.Errorf(c, "forward udp: %s", err.Error())
+					}
 				default:
 					dlog.Warnf(c, "unrecognized protocol: %v", newRoute)
 				}
@@ -355,9 +363,13 @@ func (o *outbound) doUpdate(c context.Context, table *iptables.Table) error {
 
 		switch route.Proto {
 		case "tcp":
-			o.translator.ClearTCP(c, route.Ip, route.Port)
+			if err := o.translator.ClearTCP(c, route.Ip, route.Port); err != nil {
+				dlog.Errorf(c, "clear tpc: %s", err.Error())
+			}
 		case "udp":
-			o.translator.ClearUDP(c, route.Ip, route.Port)
+			if err := o.translator.ClearUDP(c, route.Ip, route.Port); err != nil {
+				dlog.Errorf(c, "clear udp: %s", err.Error())
+			}
 		default:
 			dlog.Warnf(c, "unrecognized protocol: %v", route)
 		}

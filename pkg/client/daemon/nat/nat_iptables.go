@@ -16,48 +16,58 @@ type Translator struct {
 	commonTranslator
 }
 
-func (t *Translator) ipt(c context.Context, args ...string) {
-	cmd := dexec.CommandContext(c, "iptables", append([]string{"-t", "nat"}, args...)...)
-	err := cmd.Start()
-	if err != nil {
-		panic(err)
-	}
-	_ = cmd.Wait()
+func (t *Translator) ipt(c context.Context, args ...string) error {
+	return dexec.CommandContext(c, "iptables", append([]string{"-t", "nat"}, args...)...).Run()
 }
 
-func (t *Translator) Enable(c context.Context) error {
+func (t *Translator) Enable(c context.Context) (err error) {
 	// XXX: -D only removes one copy of the rule, need to figure out how to remove all copies just in case
-	t.ipt(c, "-D", "OUTPUT", "-j", t.Name)
+	_ = t.ipt(c, "-D", "OUTPUT", "-j", t.Name)
 	// we need to be in the PREROUTING chain in order to get traffic
 	// from docker containers, not sure you would *always* want this,
 	// but probably makes sense as a default
-	t.ipt(c, "-D", "PREROUTING", "-j", t.Name)
-	t.ipt(c, "-N", t.Name)
-	t.ipt(c, "-F", t.Name)
-	t.ipt(c, "-I", "OUTPUT", "1", "-j", t.Name)
-	t.ipt(c, "-I", "PREROUTING", "1", "-j", t.Name)
-	t.ipt(c, "-A", t.Name, "-j", "RETURN", "--dest", "127.0.0.1/32", "-p", "tcp")
-	return nil
+	_ = t.ipt(c, "-D", "PREROUTING", "-j", t.Name)
+
+	// ensure that the chain exists
+	_ = t.ipt(c, "-N", t.Name)
+
+	// Flush the chain
+	if err = t.ipt(c, "-F", t.Name); err != nil {
+		return err
+	}
+
+	if err = t.ipt(c, "-I", "OUTPUT", "1", "-j", t.Name); err != nil {
+		return err
+	}
+	if err = t.ipt(c, "-I", "PREROUTING", "1", "-j", t.Name); err != nil {
+		return err
+	}
+	return t.ipt(c, "-A", t.Name, "-j", "RETURN", "--dest", "127.0.0.1/32", "-p", "tcp")
 }
 
-func (t *Translator) Disable(c context.Context) error {
+func (t *Translator) Disable(c context.Context) (err error) {
 	// XXX: -D only removes one copy of the rule, need to figure out how to remove all copies just in case
-	t.ipt(c, "-D", "OUTPUT", "-j", t.Name)
-	t.ipt(c, "-D", "PREROUTING", "-j", t.Name)
-	t.ipt(c, "-F", t.Name)
-	t.ipt(c, "-X", t.Name)
-	return nil
+	if err = t.ipt(c, "-D", "OUTPUT", "-j", t.Name); err != nil {
+		return err
+	}
+	if err = t.ipt(c, "-D", "PREROUTING", "-j", t.Name); err != nil {
+		return err
+	}
+	if err = t.ipt(c, "-F", t.Name); err != nil {
+		return err
+	}
+	return t.ipt(c, "-X", t.Name)
 }
 
-func (t *Translator) ForwardTCP(c context.Context, ip, port, toPort string) {
-	t.forward(c, "tcp", ip, port, toPort)
+func (t *Translator) ForwardTCP(c context.Context, ip, port, toPort string) error {
+	return t.forward(c, "tcp", ip, port, toPort)
 }
 
-func (t *Translator) ForwardUDP(c context.Context, ip, port, toPort string) {
-	t.forward(c, "udp", ip, port, toPort)
+func (t *Translator) ForwardUDP(c context.Context, ip, port, toPort string) error {
+	return t.forward(c, "udp", ip, port, toPort)
 }
 
-func (t *Translator) forward(c context.Context, protocol, ip, port, toPort string) {
+func (t *Translator) forward(c context.Context, protocol, ip, port, toPort string) error {
 	t.clear(c, protocol, ip, port)
 	args := []string{"-A", t.Name, "-j", "REDIRECT", "-p", protocol, "--dest", ip + "/32"}
 	if port != "" {
@@ -68,19 +78,22 @@ func (t *Translator) forward(c context.Context, protocol, ip, port, toPort strin
 		}
 	}
 	args = append(args, "--to-ports", toPort)
-	t.ipt(c, args...)
+	if err := t.ipt(c, args...); err != nil {
+		return err
+	}
 	t.Mappings[Address{protocol, ip, port}] = toPort
+	return nil
 }
 
-func (t *Translator) ClearTCP(c context.Context, ip, port string) {
-	t.clear(c, "tcp", ip, port)
+func (t *Translator) ClearTCP(c context.Context, ip, port string) error {
+	return t.clear(c, "tcp", ip, port)
 }
 
-func (t *Translator) ClearUDP(c context.Context, ip, port string) {
-	t.clear(c, "udp", ip, port)
+func (t *Translator) ClearUDP(c context.Context, ip, port string) error {
+	return t.clear(c, "udp", ip, port)
 }
 
-func (t *Translator) clear(c context.Context, protocol, ip, port string) {
+func (t *Translator) clear(c context.Context, protocol, ip, port string) error {
 	if previous, exists := t.Mappings[Address{protocol, ip, port}]; exists {
 		args := []string{"-D", t.Name, "-j", "REDIRECT", "-p", protocol, "--dest", ip + "/32"}
 		if port != "" {
@@ -91,9 +104,12 @@ func (t *Translator) clear(c context.Context, protocol, ip, port string) {
 			}
 		}
 		args = append(args, "--to-ports", previous)
-		t.ipt(c, args...)
+		if err := t.ipt(c, args...); err != nil {
+			return err
+		}
 		delete(t.Mappings, Address{protocol, ip, port})
 	}
+	return nil
 }
 
 const (
