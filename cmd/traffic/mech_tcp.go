@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/datawire/ambassador/pkg/dlog"
+	"github.com/datawire/dlib/dlog"
 	"github.com/sethvargo/go-envconfig"
 	"golang.org/x/sync/errgroup"
 

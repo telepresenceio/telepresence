@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/datawire/ambassador/pkg/dexec"
-	"github.com/datawire/ambassador/pkg/dlog"
+	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
