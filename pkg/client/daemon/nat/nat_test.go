@@ -230,14 +230,18 @@ func TestTranslator(t *testing.T) {
 					from := fmt.Sprintf("%s.%s", network, mapping.from)
 
 					checkNoForwardTCP(t, from, mapping.forwarded)
-					tr.ForwardTCP(c, from, mapping.port, mapping.to)
+					if err = tr.ForwardTCP(c, from, mapping.port, mapping.to); err != nil {
+						t.Fatal(err)
+					}
 					checkForwardTCP(t, from, mapping.forwarded, mapping.to)
 					checkNoForwardTCP(t, from, mapping.notForwarded)
 				}
 
 				for _, mapping := range mappings {
 					from := fmt.Sprintf("%s.%s", network, mapping.from)
-					tr.ClearTCP(c, from, mapping.port)
+					if err = tr.ClearTCP(c, from, mapping.port); err != nil {
+						t.Fatal(err)
+					}
 					checkNoForwardTCP(t, from, mapping.forwarded)
 				}
 
@@ -265,10 +269,10 @@ func TestSorted(t *testing.T) {
 		defer func() {
 			err = tr.Disable(c)
 		}()
-		tr.ForwardTCP(c, "192.0.2.1", "", "4321")
-		tr.ForwardTCP(c, "192.0.2.3", "", "4323")
-		tr.ForwardTCP(c, "192.0.2.2", "", "4322")
-		tr.ForwardUDP(c, "192.0.2.4", "", "2134")
+		_ = tr.ForwardTCP(c, "192.0.2.1", "", "4321")
+		_ = tr.ForwardTCP(c, "192.0.2.3", "", "4323")
+		_ = tr.ForwardTCP(c, "192.0.2.2", "", "4322")
+		_ = tr.ForwardUDP(c, "192.0.2.4", "", "2134")
 		entries := tr.sorted()
 		if !reflect.DeepEqual(entries, []Entry{
 			{Address{"tcp", "192.0.2.1", ""}, "4321"},
