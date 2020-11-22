@@ -3,8 +3,6 @@ package nat
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"net"
 	"os"
 	"reflect"
@@ -202,7 +200,6 @@ func testGroup() (*dgroup.Group, func()) {
 }
 
 func TestTranslator(t *testing.T) {
-	log.SetOutput(ioutil.Discard) // We want success or failure, not an abundance of output
 	g, cancel := testGroup()
 	g.Go("translator-test", func(c context.Context) error {
 		err := listeners(c, []int{2134, 4321})
@@ -266,13 +263,24 @@ func TestSorted(t *testing.T) {
 	g, _ := testGroup()
 	g.Go("sorted-test", func(c context.Context) (err error) {
 		tr := NewTranslator("test-table")
+		if err = tr.Enable(c); err != nil {
+			return err
+		}
 		defer func() {
-			err = tr.Disable(c)
+			_ = tr.Disable(c)
 		}()
-		_ = tr.ForwardTCP(c, "192.0.2.1", "", "4321")
-		_ = tr.ForwardTCP(c, "192.0.2.3", "", "4323")
-		_ = tr.ForwardTCP(c, "192.0.2.2", "", "4322")
-		_ = tr.ForwardUDP(c, "192.0.2.4", "", "2134")
+		if err = tr.ForwardTCP(c, "192.0.2.1", "", "4321"); err != nil {
+			return err
+		}
+		if err = tr.ForwardTCP(c, "192.0.2.3", "", "4323"); err != nil {
+			return err
+		}
+		if err = tr.ForwardTCP(c, "192.0.2.2", "", "4322"); err != nil {
+			return err
+		}
+		if err = tr.ForwardUDP(c, "192.0.2.4", "", "2134"); err != nil {
+			return err
+		}
 		entries := tr.sorted()
 		if !reflect.DeepEqual(entries, []Entry{
 			{Address{"tcp", "192.0.2.1", ""}, "4321"},
@@ -280,7 +288,7 @@ func TestSorted(t *testing.T) {
 			{Address{"tcp", "192.0.2.3", ""}, "4323"},
 			{Address{"udp", "192.0.2.4", ""}, "2134"},
 		}) {
-			t.Errorf("not sorted: %s", entries)
+			return fmt.Errorf("not sorted: %s", entries)
 		}
 		return nil
 	})

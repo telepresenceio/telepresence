@@ -68,7 +68,7 @@ func (t *Translator) ForwardUDP(c context.Context, ip, port, toPort string) erro
 }
 
 func (t *Translator) forward(c context.Context, protocol, ip, port, toPort string) error {
-	t.clear(c, protocol, ip, port)
+	_ = t.clear(c, protocol, ip, port)
 	args := []string{"-A", t.Name, "-j", "REDIRECT", "-p", protocol, "--dest", ip + "/32"}
 	if port != "" {
 		if strings.Contains(port, ",") {
