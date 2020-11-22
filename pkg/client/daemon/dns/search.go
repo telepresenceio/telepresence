@@ -10,21 +10,21 @@ import (
 )
 
 type searchDomains struct {
-	Interface string
-	Domains   string
+	interfaces string
+	domains    string
 }
 
 // OverrideSearchDomains establishes overrides for the given search domains and
 // returns a function that removes the overrides. This function does nothing unless
 // the host OS is "darwin".
-func OverrideSearchDomains(c context.Context, domains string) func() {
+func OverrideSearchDomains(c context.Context, domains string) (func(context.Context), error) {
 	if runtime.GOOS != "darwin" {
-		return func() {}
+		return func(_ context.Context) {}, nil
 	}
 
 	ifaces, err := getIfaces(c)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	var previous []searchDomains
 
@@ -32,19 +32,25 @@ func OverrideSearchDomains(c context.Context, domains string) func() {
 		// setup dns search path
 		domain, err := getSearchDomains(c, iface)
 		if err != nil {
-			dlog.Errorf(c, "DNS: error getting search domain for interface %v: %v", iface, err)
+			dlog.Errorf(c, "error getting search domain for interface %v: %v", iface, err)
 		} else {
-			_ = setSearchDomains(c, iface, domains)
-			previous = append(previous, searchDomains{iface, domain})
+			err = setSearchDomains(c, iface, domains)
+			if err != nil {
+				dlog.Errorf(c, "error setting search domain for interface %v: %v", iface, err)
+			} else {
+				previous = append(previous, searchDomains{iface, domain})
+			}
 		}
 	}
 
 	// return function to restore dns search paths
-	return func() {
+	return func(c context.Context) {
 		for _, prev := range previous {
-			_ = setSearchDomains(c, prev.Interface, prev.Domains)
+			if err := setSearchDomains(c, prev.interfaces, prev.domains); err != nil {
+				dlog.Errorf(c, "error setting search domain for interface %v: %v", prev.interfaces, err)
+			}
 		}
-	}
+	}, nil
 }
 
 func getIfaces(c context.Context) (ifaces []string, err error) {

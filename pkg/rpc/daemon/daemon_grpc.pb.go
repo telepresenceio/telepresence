@@ -33,16 +33,8 @@ type DaemonClient interface {
 	Logger(ctx context.Context, opts ...grpc.CallOption) (Daemon_LoggerClient, error)
 	// Quits (terminates) the service.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
-	// DeleteIPTable deletes the IP-table for the given name
-	DeleteIPTable(ctx context.Context, in *TableName, opts ...grpc.CallOption) (*empty.Empty, error)
-	// IPTable returns the IP-table for the given name
-	IPTable(ctx context.Context, in *TableName, opts ...grpc.CallOption) (*iptables.Table, error)
-	// IPTable returns all IP-tables
-	AllIPTables(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*Tables, error)
 	// Update assigns adds or updates an IP-table.
 	Update(ctx context.Context, in *iptables.Table, opts ...grpc.CallOption) (*empty.Empty, error)
-	// DnsSearchPath returns the DNS search path
-	DnsSearchPath(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*Paths, error)
 	// SetSearch sets a new search path.
 	SetDnsSearchPath(ctx context.Context, in *Paths, opts ...grpc.CallOption) (*empty.Empty, error)
 }
@@ -134,45 +126,9 @@ func (c *daemonClient) Quit(ctx context.Context, in *empty.Empty, opts ...grpc.C
 	return out, nil
 }
 
-func (c *daemonClient) DeleteIPTable(ctx context.Context, in *TableName, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
-	err := c.cc.Invoke(ctx, "/telepresence.Daemon/DeleteIPTable", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *daemonClient) IPTable(ctx context.Context, in *TableName, opts ...grpc.CallOption) (*iptables.Table, error) {
-	out := new(iptables.Table)
-	err := c.cc.Invoke(ctx, "/telepresence.Daemon/IPTable", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *daemonClient) AllIPTables(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*Tables, error) {
-	out := new(Tables)
-	err := c.cc.Invoke(ctx, "/telepresence.Daemon/AllIPTables", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *daemonClient) Update(ctx context.Context, in *iptables.Table, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.Daemon/Update", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *daemonClient) DnsSearchPath(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*Paths, error) {
-	out := new(Paths)
-	err := c.cc.Invoke(ctx, "/telepresence.Daemon/DnsSearchPath", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -205,16 +161,8 @@ type DaemonServer interface {
 	Logger(Daemon_LoggerServer) error
 	// Quits (terminates) the service.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
-	// DeleteIPTable deletes the IP-table for the given name
-	DeleteIPTable(context.Context, *TableName) (*empty.Empty, error)
-	// IPTable returns the IP-table for the given name
-	IPTable(context.Context, *TableName) (*iptables.Table, error)
-	// IPTable returns all IP-tables
-	AllIPTables(context.Context, *empty.Empty) (*Tables, error)
 	// Update assigns adds or updates an IP-table.
 	Update(context.Context, *iptables.Table) (*empty.Empty, error)
-	// DnsSearchPath returns the DNS search path
-	DnsSearchPath(context.Context, *empty.Empty) (*Paths, error)
 	// SetSearch sets a new search path.
 	SetDnsSearchPath(context.Context, *Paths) (*empty.Empty, error)
 	mustEmbedUnimplementedDaemonServer()
@@ -242,20 +190,8 @@ func (UnimplementedDaemonServer) Logger(Daemon_LoggerServer) error {
 func (UnimplementedDaemonServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
 }
-func (UnimplementedDaemonServer) DeleteIPTable(context.Context, *TableName) (*empty.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DeleteIPTable not implemented")
-}
-func (UnimplementedDaemonServer) IPTable(context.Context, *TableName) (*iptables.Table, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method IPTable not implemented")
-}
-func (UnimplementedDaemonServer) AllIPTables(context.Context, *empty.Empty) (*Tables, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AllIPTables not implemented")
-}
 func (UnimplementedDaemonServer) Update(context.Context, *iptables.Table) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Update not implemented")
-}
-func (UnimplementedDaemonServer) DnsSearchPath(context.Context, *empty.Empty) (*Paths, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DnsSearchPath not implemented")
 }
 func (UnimplementedDaemonServer) SetDnsSearchPath(context.Context, *Paths) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetDnsSearchPath not implemented")
@@ -389,60 +325,6 @@ func _Daemon_Quit_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Daemon_DeleteIPTable_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TableName)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaemonServer).DeleteIPTable(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.Daemon/DeleteIPTable",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).DeleteIPTable(ctx, req.(*TableName))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Daemon_IPTable_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TableName)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaemonServer).IPTable(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.Daemon/IPTable",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).IPTable(ctx, req.(*TableName))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Daemon_AllIPTables_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaemonServer).AllIPTables(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.Daemon/AllIPTables",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).AllIPTables(ctx, req.(*empty.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Daemon_Update_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(iptables.Table)
 	if err := dec(in); err != nil {
@@ -457,24 +339,6 @@ func _Daemon_Update_Handler(srv interface{}, ctx context.Context, dec func(inter
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServer).Update(ctx, req.(*iptables.Table))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Daemon_DnsSearchPath_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaemonServer).DnsSearchPath(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.Daemon/DnsSearchPath",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).DnsSearchPath(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -522,24 +386,8 @@ var _Daemon_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Daemon_Quit_Handler,
 		},
 		{
-			MethodName: "DeleteIPTable",
-			Handler:    _Daemon_DeleteIPTable_Handler,
-		},
-		{
-			MethodName: "IPTable",
-			Handler:    _Daemon_IPTable_Handler,
-		},
-		{
-			MethodName: "AllIPTables",
-			Handler:    _Daemon_AllIPTables_Handler,
-		},
-		{
 			MethodName: "Update",
 			Handler:    _Daemon_Update_Handler,
-		},
-		{
-			MethodName: "DnsSearchPath",
-			Handler:    _Daemon_DnsSearchPath_Handler,
 		},
 		{
 			MethodName: "SetDnsSearchPath",

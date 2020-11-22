@@ -166,28 +166,28 @@ func (t *Translator) Disable(c context.Context) error {
 	return nil
 }
 
-func (t *Translator) ForwardTCP(c context.Context, ip, port, toPort string) {
-	t.forward(c, "tcp", ip, port, toPort)
+func (t *Translator) ForwardTCP(c context.Context, ip, port, toPort string) error {
+	return t.forward(c, "tcp", ip, port, toPort)
 }
 
-func (t *Translator) ForwardUDP(c context.Context, ip, port, toPort string) {
-	t.forward(c, "udp", ip, port, toPort)
+func (t *Translator) ForwardUDP(c context.Context, ip, port, toPort string) error {
+	return t.forward(c, "udp", ip, port, toPort)
 }
 
-func (t *Translator) forward(c context.Context, protocol, ip, port, toPort string) {
+func (t *Translator) forward(c context.Context, protocol, ip, port, toPort string) error {
 	t.clear(protocol, ip, port)
 	t.Mappings[Address{protocol, ip, port}] = toPort
-	_ = pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	return pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
-func (t *Translator) ClearTCP(c context.Context, ip, port string) {
+func (t *Translator) ClearTCP(c context.Context, ip, port string) error {
 	t.clear("tcp", ip, port)
-	_ = pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	return pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
-func (t *Translator) ClearUDP(c context.Context, ip, port string) {
+func (t *Translator) ClearUDP(c context.Context, ip, port string) error {
 	t.clear("udp", ip, port)
-	_ = pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	return pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
 func (t *Translator) clear(protocol, ip, port string) {
