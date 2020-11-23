@@ -11,7 +11,7 @@ $ kubectl create deploy hello --image=ark3/hello-world >& /dev/null
 
 $ kubectl expose deploy hello --port 80 --target-port 8000 >& /dev/null
 
-$ k get ns,svc,deploy,po
+$ kubectl get ns,svc,deploy,po
 NAME                        STATUS   AGE
 namespace/default           Active   24h
 namespace/kube-system       Active   24h
@@ -28,10 +28,10 @@ deployment.apps/hello   1/1     1            1           10s
 NAME                         READY   STATUS    RESTARTS   AGE
 pod/hello-84bcfd479f-8pkfc   1/1     Running   0          10s
 
-$ tel2 --version
+$ telepresence --version
 Client v0.2.0 (api v3)
 
-$ tel2
+$ telepresence
 Launching Telepresence Daemon v0.2.0 (api v3)
 Connecting to traffic manager...
 Connected to context default (https://35.232.104.64)
@@ -62,7 +62,7 @@ $ # Add an intercept-friendly service
 
 $ # We will support intercepting hello soon
 
-$ k apply -f k8s/echo-easy.yaml 
+$ kubectl apply -f k8s/echo-easy.yaml 
 service/echo-easy created
 deployment.apps/echo-easy created
 
@@ -77,7 +77,7 @@ Accept: */*
 
 $ # Intercept it
 
-$ tel2 --intercept echo-easy --port 9000
+$ telepresence --intercept echo-easy --port 9000
 
 FIXME
 
@@ -130,5 +130,5 @@ Telepresence installs the Traffic Manager in your cluster if it is not already p
 
 Telepresence installs the Traffic Agent as an additional container in any deployment you intercept, and modifies any associated services it finds to route traffic through the agent. This modification persists, i.e. does not get cleaned up.
 
-You can launch another Telepresence session to the same cluster while an existing session is running, letting you intercept another deployment. Cleanup occurs when the last session exits.
+You can launch other Telepresence sessions to the same cluster while an existing session is running, letting you intercept other deployments. When doing so, it is important to end the first session last because it established the traffic-manager connection and will close it when it ends, rendering the other services disconnected.
 
