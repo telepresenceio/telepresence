@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/pkg/errors"
 )
@@ -63,30 +64,23 @@ func (crc *crCmd) launch(c context.Context) error {
 
 	dlog.Infof(c, "Launching %s...", crc.Name())
 	launchErr := make(chan error)
-	go func() {
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g.Go(crc.Name(), func(c context.Context) error {
 		crc.cmd = dexec.CommandContext(c, crc.exe, crc.args...)
-		launchErr <- crc.cmd.Start()
+		err := crc.cmd.Start()
+		launchErr <- err
 		// Wait for the subprocess to end. Another worker will
 		// call kill() on shutdown (via quit()) so we don't need
 		// to worry about shutdown ourselves.
-		if err := crc.cmd.Wait(); err != nil {
-			dlog.Error(c, err)
-		}
+		err = crc.cmd.Wait()
 		crc.AddTask(crc.subprocessEnded)
-	}()
-
-	// Wait for it to start
-	select {
-	case err := <-launchErr:
-		if err != nil {
-			return err
-		}
-	case <-c.Done():
-		return nil
+		return err
+	})
+	if err := <-launchErr; err != nil {
+		return err
 	}
 	crc.startedAt = time.Now()
 	dlog.Infof(c, "Launched %s", crc.Name())
-
 	return nil
 }
 
