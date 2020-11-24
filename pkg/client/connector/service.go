@@ -213,7 +213,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	}
 
 	// Wait for traffic manager to connect
-	maxAttempts := 30 * 4 // 30 seconds max wait
+	maxAttempts := 60 * 4 // One minute max wait
 	attempts := 0
 	dlog.Info(c, "Waiting for TrafficManager to connect")
 	for ; !tmgr.IsOkay() && attempts < maxAttempts; attempts++ {
@@ -228,7 +228,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	}
 	if attempts == maxAttempts {
 		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
-		r.ErrorText = "Timeout waiting for traffic manager"
+		r.ErrorText = "timeout waiting for traffic manager"
 		dlog.Error(c, r.ErrorText)
 		s.cancel()
 	}
