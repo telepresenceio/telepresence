@@ -205,10 +205,17 @@ func (o *outbound) dnsConfigWorker(c context.Context) error {
 func (o *outbound) translatorWorker(c context.Context) (err error) {
 	defer func() {
 		o.tablesLock.Lock()
-		if err2 := o.translator.Disable(dcontext.HardContext(c)); err2 != nil {
+		if err2 := o.translator.Disable(c); err2 != nil {
 			if err == nil {
 				err = err2
+			} else {
+				dlog.Error(c, err2.Error())
 			}
+		}
+		if err != nil {
+			dlog.Errorf(c, "Server exited with error %s", err.Error())
+		} else {
+			dlog.Debug(c, "Server done")
 		}
 		// leave it locked
 	}()
@@ -226,7 +233,6 @@ func (o *outbound) translatorWorker(c context.Context) (err error) {
 	for {
 		select {
 		case <-c.Done():
-			dlog.Debug(c, "Server done")
 			return nil
 		case f := <-o.work:
 			if err = f(c); err != nil {

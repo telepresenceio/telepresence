@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os/exec"
 	"strings"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	ppf "github.com/datawire/pf"
+	"github.com/datawire/telepresence2/pkg/client"
 )
 
 type Translator struct {
@@ -21,7 +23,8 @@ type Translator struct {
 }
 
 func pf(c context.Context, args []string, stdin string) error {
-	cmd := dexec.CommandContext(c, "pfctl", args...)
+	dlog.Debugf(c, "running %s", client.ShellString("pfctl", args))
+	cmd := exec.Command("pfctl", args...)
 	cmd.Stdin = strings.NewReader(stdin)
 	err := cmd.Start()
 	if err != nil {
@@ -136,7 +139,7 @@ func (t *Translator) Enable(c context.Context) error {
 }
 
 func (t *Translator) Disable(c context.Context) error {
-	_ = dexec.CommandContext(c, "pfctl", "-X", t.token).Run()
+	_ = _pf("-X", t.token)
 
 	if t.dev != nil {
 		for _, action := range actions {
