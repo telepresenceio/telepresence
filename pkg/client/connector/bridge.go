@@ -241,7 +241,7 @@ func (t *bridge) start(c context.Context) error {
 			}
 			podName := strings.TrimSpace(pods[0].Name)
 
-			pf := dexec.CommandContext(c, "kubectl", append(t.getKubectlArgs(), "port-forward", fmt.Sprintf("pod/%s", podName), "8022")...)
+			pf := dexec.CommandContext(dgroup.WithGoroutineName(c, "/kubectl"), "kubectl", append(t.getKubectlArgs(), "port-forward", fmt.Sprintf("pod/%s", podName), "8022")...)
 
 			// We want this command to keep on running. If it returns an error, then it was unsuccessful.
 			errCh := make(chan error)
