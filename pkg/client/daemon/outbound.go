@@ -106,10 +106,8 @@ func start(c context.Context, dnsIP, fallbackIP string, noSearch bool) (*outboun
 		return nil, errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
 	}
 
-	var cancel context.CancelFunc
-	c, cancel = context.WithCancel(c)
-	ic := newOutbound("traffic-manager", dnsIP, fallbackIP, noSearch, cancel)
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	ic := newOutbound("traffic-manager", dnsIP, fallbackIP, noSearch, nil)
+	g := dgroup.ParentGroup(c)
 	g.Go(dnsServerWorker, ic.dnsServerWorker)
 	return ic, nil
 }
@@ -233,6 +231,8 @@ func (o *outbound) translatorWorker(c context.Context) (err error) {
 	for {
 		select {
 		case <-c.Done():
+			c = dcontext.HardContext(c)
+			dlog.Debug(c, "context cancelled, shutting down")
 			return nil
 		case f := <-o.work:
 			if err = f(c); err != nil {
