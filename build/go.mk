@@ -21,10 +21,11 @@ generate: ## (Generate) Update generated files that get checked in to Git
 generate: $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
 	protoc --proto_path=. --go_out=. --go-grpc_out=. --go_opt=module=github.com/datawire/telepresence2 --go-grpc_opt=module=github.com/datawire/telepresence2 $(PROTO_SRCS)
 	go mod tidy
+	go mod vendor
 
 .PHONY: generate-clean
 generate-clean: ## (Generate) Delete generated files that get checked in to Git
-	rm -rf pkg/rpc/*
+	rm -rf pkg/rpc
 
 PKG_VERSION = $(shell go list ./pkg/version)
 
@@ -51,7 +52,7 @@ clobber: clean ## (Build) Remove all build artifacts and tools
 .PHONY: lint
 lint: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Run the linters (golangci-lint and protolint)
 	golangci-lint run --timeout 2m ./...
-	protolint lint $(shell find rpc -type f -name '*.proto')
+	protolint lint rpc
 
 .PHONY: test check
 test check: $(tools/ko) ## (Test) Run the test suite
