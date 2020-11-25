@@ -150,7 +150,6 @@ func (pxy *Proxy) pipe(c context.Context, from, to *net.TCPConn, done *sync.Wait
 			// close the pipe
 			closePipe()
 		}
-		return
 	}()
 
 	const size = 64 * 1024
