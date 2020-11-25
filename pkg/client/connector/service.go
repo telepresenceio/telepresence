@@ -9,8 +9,8 @@ import (
 	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dutil"
 	"github.com/golang/protobuf/ptypes/empty"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
@@ -43,7 +43,7 @@ type service struct {
 	bridge       *bridge
 	trafficMgr   *trafficManager
 	grpc         *grpc.Server
-	callCtx      context.Context
+	ctx          context.Context
 	cancel       func()
 }
 
@@ -65,8 +65,60 @@ func Command() *cobra.Command {
 	return c
 }
 
-func (s *service) callContext(_ context.Context) context.Context {
-	return s.callCtx
+type callCtx struct {
+	context.Context
+	caller context.Context
+}
+
+func (c callCtx) Deadline() (deadline time.Time, ok bool) {
+	if dl, ok := c.Context.Deadline(); ok {
+		return dl, true
+	}
+	return c.caller.Deadline()
+}
+
+func (c callCtx) Done() <-chan struct{} {
+	ch := make(chan struct{})
+	go func() {
+		select {
+		case <-c.Context.Done():
+			close(ch)
+		case <-c.caller.Done():
+			close(ch)
+		}
+	}()
+	return ch
+}
+
+func (c callCtx) Err() error {
+	err := c.Context.Err()
+	if err == nil {
+		err = c.caller.Err()
+	}
+	return err
+}
+
+func (c callCtx) Value(key interface{}) interface{} {
+	return c.Context.Value(key)
+}
+
+func (s *service) callGroup(c context.Context) *dgroup.Group {
+	return dgroup.NewGroup(&callCtx{Context: s.ctx, caller: c}, dgroup.GroupConfig{})
+}
+
+func callRecovery(c context.Context, r interface{}, err error) error {
+	perr := dutil.PanicToError(r)
+	if perr != nil {
+		if err == nil {
+			err = perr
+		} else {
+			dlog.Errorf(c, "%+v", perr)
+		}
+	}
+	if err != nil {
+		dlog.Errorf(c, "%+v", err)
+	}
+	return err
 }
 
 func (s *service) Version(_ context.Context, _ *empty.Empty) (*version.VersionInfo, error) {
@@ -76,43 +128,67 @@ func (s *service) Version(_ context.Context, _ *empty.Empty) (*version.VersionIn
 	}, nil
 }
 
-func (s *service) Status(c context.Context, _ *empty.Empty) (*rpc.ConnectorStatus, error) {
-	return s.status(s.callContext(c)), nil
+func (s *service) Status(c context.Context, _ *empty.Empty) (result *rpc.ConnectorStatus, err error) {
+	g := s.callGroup(c)
+	g.Go("Status", func(c context.Context) (err error) {
+		defer func() { err = callRecovery(c, recover(), err) }()
+		result = s.status(c)
+		return
+	})
+	err = g.Wait()
+	return
 }
 
-func (s *service) Connect(c context.Context, cr *rpc.ConnectRequest) (*rpc.ConnectInfo, error) {
-	return s.connect(s.callContext(c), cr), nil
+func (s *service) Connect(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
+	g := s.callGroup(c)
+	g.Go("Connect", func(c context.Context) (err error) {
+		defer func() { err = callRecovery(c, recover(), err) }()
+		ci = s.connect(c, cr)
+		return
+	})
+	err = g.Wait()
+	return
 }
 
-func (s *service) CreateIntercept(c context.Context, ir *manager.CreateInterceptRequest) (*rpc.InterceptResult, error) {
+func (s *service) CreateIntercept(c context.Context, ir *manager.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	ie, is := s.interceptStatus()
 	if ie != rpc.InterceptError_UNSPECIFIED {
 		return &rpc.InterceptResult{Error: ie, ErrorText: is}, nil
 	}
-	return s.trafficMgr.addIntercept(s.callContext(c), ir)
+	g := s.callGroup(c)
+	g.Go("CreateIntercept", func(c context.Context) (err error) {
+		defer func() { err = callRecovery(c, recover(), err) }()
+		result, err = s.trafficMgr.addIntercept(c, s.ctx, ir)
+		return
+	})
+	err = g.Wait()
+	return
 }
 
-func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (*rpc.InterceptResult, error) {
+func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
 	ie, is := s.interceptStatus()
 	if ie != rpc.InterceptError_UNSPECIFIED {
 		return &rpc.InterceptResult{Error: ie, ErrorText: is}, nil
 	}
-	_, err := s.trafficMgr.removeIntercept(s.callContext(c), rr.Name)
-	if err != nil {
-		return nil, err
-	}
-	return &rpc.InterceptResult{}, nil
+	g := s.callGroup(c)
+	g.Go("RemoveIntercept", func(c context.Context) (err error) {
+		defer func() { err = callRecovery(c, recover(), err) }()
+		err = s.trafficMgr.removeIntercept(c, rr.Name)
+		return
+	})
+	err = g.Wait()
+	return &rpc.InterceptResult{}, err
 }
 
 func (s *service) AvailableIntercepts(_ context.Context, _ *empty.Empty) (*manager.AgentInfoSnapshot, error) {
-	if !s.trafficMgr.IsOkay() {
+	if s.trafficMgr.grpc == nil {
 		return &manager.AgentInfoSnapshot{}, nil
 	}
 	return s.trafficMgr.agentInfoSnapshot(), nil
 }
 
 func (s *service) ListIntercepts(_ context.Context, _ *empty.Empty) (*manager.InterceptInfoSnapshot, error) {
-	if !s.trafficMgr.IsOkay() {
+	if s.trafficMgr.grpc == nil {
 		return &manager.InterceptInfoSnapshot{}, nil
 	}
 	return s.trafficMgr.interceptInfoSnapshot(), nil
@@ -149,6 +225,8 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	// Sanity checks
 	r := &rpc.ConnectInfo{}
 	if s.cluster != nil {
+		r.ClusterContext = s.cluster.Context
+		r.ClusterServer = s.cluster.server()
 		r.Error = rpc.ConnectInfo_ALREADY_CONNECTED
 		return r
 	}
@@ -158,7 +236,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	}
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	cluster, err := trackKCluster(c, cr.Context, cr.Namespace, cr.Args)
+	cluster, err := trackKCluster(s.ctx, cr.Context, cr.Namespace, cr.Args)
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
 		r.Error = rpc.ConnectInfo_CLUSTER_FAILED
@@ -181,7 +259,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	r.ClusterContext = s.cluster.Context
 	r.ClusterServer = s.cluster.server()
 
-	tmgr, err := newTrafficManager(c, s.cluster, cr.InstallId, cr.IsCi)
+	tmgr, err := newTrafficManager(s.ctx, s.cluster, cr.InstallId, cr.IsCi)
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
@@ -192,11 +270,12 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		}
 		return r
 	}
+
 	// tmgr.previewHost = previewHost
 	s.trafficMgr = tmgr
 	dlog.Infof(c, "Starting traffic-manager bridge in context %s, namespace %s", cluster.Context, cluster.Namespace)
 	br := newBridge(cluster, s.daemon, tmgr.sshPort)
-	err = br.start(c)
+	err = br.start(s.ctx)
 	if err != nil {
 		dlog.Errorf(c, "Failed to start traffic-manager bridge: %s", err.Error())
 		r.Error = rpc.ConnectInfo_BRIDGE_FAILED
@@ -206,30 +285,18 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		return r
 	}
 	s.bridge = br
-	s.cluster.setBridgeCheck(br.check)
 
 	if !cr.InterceptEnabled {
 		return r
 	}
 
 	// Wait for traffic manager to connect
-	maxAttempts := 60 * 4 // One minute max wait
-	attempts := 0
 	dlog.Info(c, "Waiting for TrafficManager to connect")
-	for ; !tmgr.IsOkay() && attempts < maxAttempts; attempts++ {
-		if s.trafficMgr.apiErr != nil {
-			r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
-			r.ErrorText = s.trafficMgr.apiErr.Error()
-			// No point in continuing without a traffic manager
-			s.cancel()
-			break
-		}
-		time.Sleep(time.Second / 4)
-	}
-	if attempts == maxAttempts {
+	if err := tmgr.waitUntilStarted(); err != nil {
+		dlog.Errorf(c, "Failed to start traffic-manager: %s", err.Error())
 		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
-		r.ErrorText = "timeout waiting for traffic manager"
-		dlog.Error(c, r.ErrorText)
+		r.ErrorText = err.Error()
+		// No point in continuing without a traffic manager
 		s.cancel()
 	}
 	return r
@@ -256,64 +323,85 @@ func (s *service) setUpLogging(c context.Context) (context.Context, error) {
 }
 
 // run is the main function when executing as the connector
-func run(init bool) (err error) {
-	var listener net.Listener
-	defer func() {
-		if listener != nil {
-			_ = listener.Close()
-		}
-		_ = os.Remove(client.ConnectorSocketName)
-	}()
-
-	// Listen on unix domain socket
-	listener, err = net.Listen("unix", client.ConnectorSocketName)
+func run(init bool) error {
+	// establish a connection to the daemon gRPC service
+	conn, err := client.DialSocket(client.DaemonSocketName)
 	if err != nil {
-		return errors.Wrap(err, "listen")
+		return err
+	}
+	defer conn.Close()
+	s := &service{daemon: daemon.NewDaemonClient(conn), grpc: grpc.NewServer()}
+	rpc.RegisterConnectorServer(s.grpc, s)
+
+	c, err := s.setUpLogging(context.Background())
+	if err != nil {
+		return err
 	}
 
-	g := dgroup.NewGroup(context.Background(), dgroup.GroupConfig{
+	c = dgroup.WithGoroutineName(c, "connector")
+
+	var cancel context.CancelFunc
+	c, cancel = context.WithCancel(c)
+	s.cancel = func() {
+		dlog.Debug(s.ctx, "cancelling connector context")
+		cancel()
+	}
+
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true})
 
-	g.Go("connector", func(c context.Context) error {
-		// establish a connection to the daemon gRPC service
-		conn, err := client.DialSocket(client.DaemonSocketName)
+	dlog.Info(c, "---")
+	dlog.Infof(c, "Telepresence Connector %s starting...", client.DisplayVersion())
+	dlog.Infof(c, "PID is %d", os.Getpid())
+	dlog.Info(c, "")
+
+	svcStarted := make(chan bool)
+	if init {
+		g.Go("debug-init", func(c context.Context) error {
+			<-svcStarted
+			_, _ = s.Connect(c, &rpc.ConnectRequest{InstallId: "dummy-id"})
+			return nil
+		})
+	}
+
+	g.Go("service", func(c context.Context) (err error) {
+		var listener net.Listener
+		defer func() {
+			if perr := dutil.PanicToError(recover()); perr != nil {
+				if err == nil {
+					err = perr
+				}
+				if listener != nil {
+					_ = listener.Close()
+				}
+				_ = os.Remove(client.ConnectorSocketName)
+			}
+			if err != nil {
+				dlog.Errorf(c, "Server ended with: %s", err.Error())
+			} else {
+				dlog.Debug(c, "Server ended")
+			}
+		}()
+
+		// Listen on unix domain socket
+		dlog.Debug(c, "Server starting")
+		s.ctx = c
+		listener, err = net.Listen("unix", client.ConnectorSocketName)
 		if err != nil {
 			return err
 		}
-		defer conn.Close()
-		s := &service{daemon: daemon.NewDaemonClient(conn), grpc: grpc.NewServer()}
-		rpc.RegisterConnectorServer(s.grpc, s)
-
-		c, err = s.setUpLogging(c)
-		if err != nil {
-			return err
-		}
-
-		dlog.Info(c, "---")
-		dlog.Infof(c, "Telepresence Connector %s starting...", client.DisplayVersion())
-		dlog.Infof(c, "PID is %d", os.Getpid())
-		dlog.Info(c, "")
-
-		c, s.cancel = context.WithCancel(c)
-		s.callCtx = c
-		sg := dgroup.NewGroup(c, dgroup.GroupConfig{})
-		sg.Go("teardown", s.handleShutdown)
-		if init {
-			sg.Go("debug-init", func(c context.Context) error {
-				_, err = s.Connect(c, &rpc.ConnectRequest{InstallId: "dummy-id"})
-				return err
-			})
-		}
-
-		err = s.grpc.Serve(listener)
-		listener = nil
-		if err != nil {
-			dlog.Error(c, err.Error())
-		}
-		return err
+		close(svcStarted)
+		return s.grpc.Serve(listener)
 	})
-	return g.Wait()
+
+	g.Go("teardown", s.handleShutdown)
+
+	err = g.Wait()
+	if err != nil {
+		dlog.Error(c, err.Error())
+	}
+	return err
 }
 
 // handleShutdown ensures that the connector quits gracefully when receiving a signal
@@ -332,9 +420,6 @@ func (s *service) handleShutdown(c context.Context) error {
 	trafficMgr := s.trafficMgr
 
 	s.trafficMgr = nil
-
-	defer cluster.Close()
-
 	if trafficMgr != nil {
 		_ = trafficMgr.clearIntercepts(context.Background())
 		_ = trafficMgr.Close()
