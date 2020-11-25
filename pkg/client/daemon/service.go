@@ -89,7 +89,7 @@ func setUpLogging(c context.Context) context.Context {
 func (d *service) Logger(server rpc.Daemon_LoggerServer) error {
 	for {
 		msg, err := server.Recv()
-		if err == io.EOF {
+		if err == io.EOF || d.callCtx.Err() != nil {
 			return server.SendAndClose(&empty.Empty{})
 		}
 		if err != nil {
@@ -151,6 +151,7 @@ func (d *service) Resume(c context.Context, _ *empty.Empty) (*rpc.ResumeInfo, er
 }
 
 func (d *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
+	dlog.Debug(d.callCtx, "Received gRPC Quit")
 	d.cancel()
 	return &empty.Empty{}, nil
 }
@@ -206,39 +207,45 @@ func run(dns, fallback string) error {
 
 	rpc.RegisterDaemonServer(d.grpc, d)
 
-	g := dgroup.NewGroup(context.Background(), dgroup.GroupConfig{
+	c := setUpLogging(context.Background())
+	hc := c
+
+	c, d.cancel = context.WithCancel(c)
+	d.callCtx = c
+
+	c = dgroup.WithGoroutineName(c, "daemon")
+
+	dlog.Info(c, "---")
+	dlog.Infof(c, "Telepresence daemon %s starting...", client.DisplayVersion())
+	dlog.Infof(c, "PID is %d", os.Getpid())
+	dlog.Info(c, "")
+
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true})
 
-	g.Go("daemon", func(c context.Context) error {
-		c = setUpLogging(c)
-		hc := c
-
-		dlog.Info(c, "---")
-		dlog.Infof(c, "Telepresence daemon %s starting...", client.DisplayVersion())
-		dlog.Infof(c, "PID is %d", os.Getpid())
-		dlog.Info(c, "")
-
-		c, d.cancel = context.WithCancel(c)
-		d.callCtx = c
-		sg := dgroup.NewGroup(c, dgroup.GroupConfig{})
-		sg.Go("outbound", func(c context.Context) error {
-			d.outbound, err = start(c, dns, fallback, false)
-			return err
-		})
-		sg.Go("teardown", func(c context.Context) error {
-			return d.handleShutdown(c, hc)
-		})
-		err := d.grpc.Serve(listener)
-		listener = nil
-		if err != nil {
-			dlog.Error(c, err.Error())
-		} else {
-			dlog.Infof(c, "Telepresence daemon %s is done.", client.DisplayVersion())
-		}
+	g.Go("outbound", func(c context.Context) error {
+		d.outbound, err = start(c, dns, fallback, false)
 		return err
 	})
-	return g.Wait()
+
+	g.Go("teardown", func(c context.Context) error {
+		return d.handleShutdown(c, hc)
+	})
+
+	g.Go("service", func(c context.Context) error {
+		err := d.grpc.Serve(listener)
+		listener = nil
+		return err
+	})
+
+	err = g.Wait()
+	if err != nil {
+		dlog.Error(c, err.Error())
+	} else {
+		dlog.Infof(c, "Telepresence daemon %s is done.", client.DisplayVersion())
+	}
+	return err
 }
 
 // handleShutdown ensures that the daemon quits gracefully when the context is cancelled.
@@ -247,7 +254,6 @@ func (d *service) handleShutdown(c, hc context.Context) error {
 
 	<-c.Done()
 	c = hc
-	dlog.Info(c, "Shutting down")
 
 	if !client.SocketExists(client.ConnectorSocketName) {
 		return nil

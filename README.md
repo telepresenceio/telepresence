@@ -7,26 +7,26 @@ This is internal to Ambassador Labs.
 ```console
 $ # Start with an empty cluster
 
-$ kubectl create deploy hello --image=ark3/hello-world >& /dev/null
+$ kubectl create deploy echo-easy --image=jmalloc/echo-server >& /dev/null
 
-$ kubectl expose deploy hello --port 80 --target-port 8000 >& /dev/null
+$ kubectl expose deploy echo-easy --port 80 --target-port 8000 >& /dev/null
 
 $ kubectl get ns,svc,deploy,po
 NAME                        STATUS   AGE
-namespace/default           Active   24h
-namespace/kube-system       Active   24h
-namespace/kube-public       Active   24h
-namespace/kube-node-lease   Active   24h
+namespace/default           Active   4d5h
+namespace/kube-node-lease   Active   4d5h
+namespace/kube-public       Active   4d5h
+namespace/kube-system       Active   4d5h
 
-NAME                 TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
-service/kubernetes   ClusterIP   10.43.0.1      <none>        443/TCP   24h
-service/hello        ClusterIP   10.43.10.250   <none>        80/TCP    4s
+NAME                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)   AGE
+service/echo-easy    ClusterIP   10.43.187.241   <none>        80/TCP    8s
+service/kubernetes   ClusterIP   10.43.0.1       <none>        443/TCP   4d5h
 
-NAME                    READY   UP-TO-DATE   AVAILABLE   AGE
-deployment.apps/hello   1/1     1            1           10s
+NAME                              READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.extensions/echo-easy   1/1     1            1           18s
 
-NAME                         READY   STATUS    RESTARTS   AGE
-pod/hello-84bcfd479f-8pkfc   1/1     Running   0          10s
+NAME                             READY   STATUS    RESTARTS   AGE
+pod/echo-easy-86d647c5cf-wpjb7   1/1     Running   0          18s
 
 $ telepresence --version
 Client v0.2.0 (api v3)

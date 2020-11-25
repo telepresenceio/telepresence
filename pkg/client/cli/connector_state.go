@@ -64,9 +64,9 @@ func (cs *connectorState) EnsureState() (bool, error) {
 	}
 	err = cs.connect()
 	if err != nil {
-		return false, err
+		return true, err
 	}
-	return false, cs.setConnectInfo()
+	return true, cs.setConnectInfo()
 }
 
 func (cs *connectorState) setConnectInfo() error {

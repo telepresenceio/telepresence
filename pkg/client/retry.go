@@ -6,13 +6,18 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dutil"
-	"github.com/pkg/errors"
 )
 
 const defaultRetryDelay = 100 * time.Millisecond
 const defaultMaxDelay = 3 * time.Second
 
-func Retry(c context.Context, f func(context.Context) error, durations ...time.Duration) error {
+// Retry will run the given function repeatedly with an increasing delay until it returns without error.
+//
+// The function takes 0 to 3 durations with the following meaning
+//  Delay - initial delay, i.e. the delay between the first and the second call.
+//  MaxDelay - maximum delay between calling the functions (delay will never grow beyond this value)
+//  MaxTime - maximum time before giving up.
+func Retry(c context.Context, f func(context.Context) error, durations ...time.Duration) (err error) {
 	delay := defaultRetryDelay
 	maxDelay := defaultMaxDelay
 	maxTime := time.Duration(0)
@@ -37,38 +42,41 @@ func Retry(c context.Context, f func(context.Context) error, durations ...time.D
 	if maxDelay < delay {
 		maxDelay = delay
 	}
-	var endTime <-chan time.Time
+
+	done := make(chan bool)
 	if maxTime > 0 {
-		endTime = time.After(maxTime)
-	} else {
-		endTime = make(chan time.Time)
+		var cancel context.CancelFunc
+		c, cancel = context.WithCancel(c)
+		go func() {
+			select {
+			case <-done:
+			case <-c.Done():
+			case <-time.After(maxTime):
+				cancel()
+			}
+		}()
 	}
 
-	r := make(chan error)
-	for {
-		fatal := false
-		go func() {
-			defer func() {
-				if err := dutil.PanicToError(recover()); err != nil {
-					fatal = true
-					r <- err
-				}
-			}()
-			r <- f(c)
-		}()
+	defer func() {
+		err = dutil.PanicToError(recover())
+		close(done)
+	}()
+
+	for retry := 0; ; retry++ {
+		funcErr := f(c)
+		if funcErr == nil {
+			// success
+			return nil
+		}
+
+		// Logging at higher log levels should be done in the called function
+		dlog.Debugf(c, "waiting %s before retrying after error: %s", delay.String(), funcErr.Error())
+
 		select {
-		case err := <-r:
-			if fatal || err == nil {
-				return err
-			}
-			// Logging at higher log levels should be done in the called function
-			dlog.Trace(c, err.Error())
 		case <-c.Done():
 			return nil
-		case <-endTime:
-			return errors.New("retry timed out")
+		case <-time.After(delay):
 		}
-		time.Sleep(delay)
 		delay *= 2
 		if delay > maxDelay {
 			delay = maxDelay

@@ -106,10 +106,8 @@ func start(c context.Context, dnsIP, fallbackIP string, noSearch bool) (*outboun
 		return nil, errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
 	}
 
-	var cancel context.CancelFunc
-	c, cancel = context.WithCancel(c)
-	ic := newOutbound("traffic-manager", dnsIP, fallbackIP, noSearch, cancel)
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	ic := newOutbound("traffic-manager", dnsIP, fallbackIP, noSearch, nil)
+	g := dgroup.ParentGroup(c)
 	g.Go(dnsServerWorker, ic.dnsServerWorker)
 	return ic, nil
 }
@@ -205,10 +203,17 @@ func (o *outbound) dnsConfigWorker(c context.Context) error {
 func (o *outbound) translatorWorker(c context.Context) (err error) {
 	defer func() {
 		o.tablesLock.Lock()
-		if err2 := o.translator.Disable(dcontext.HardContext(c)); err2 != nil {
+		if err2 := o.translator.Disable(c); err2 != nil {
 			if err == nil {
 				err = err2
+			} else {
+				dlog.Error(c, err2.Error())
 			}
+		}
+		if err != nil {
+			dlog.Errorf(c, "Server exited with error %s", err.Error())
+		} else {
+			dlog.Debug(c, "Server done")
 		}
 		// leave it locked
 	}()
@@ -226,7 +231,8 @@ func (o *outbound) translatorWorker(c context.Context) (err error) {
 	for {
 		select {
 		case <-c.Done():
-			dlog.Debug(c, "Server done")
+			c = dcontext.HardContext(c)
+			dlog.Debug(c, "context cancelled, shutting down")
 			return nil
 		case f := <-o.work:
 			if err = f(c); err != nil {

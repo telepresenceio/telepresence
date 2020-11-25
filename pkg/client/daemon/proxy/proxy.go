@@ -128,13 +128,28 @@ func (pxy *Proxy) handleConnection(c context.Context, conn *net.TCPConn) {
 
 func (pxy *Proxy) pipe(c context.Context, from, to *net.TCPConn, done *sync.WaitGroup) {
 	defer done.Done()
-	defer func() {
-		dlog.Debugf(c, "CLOSED WRITE %v", to.RemoteAddr())
-		_ = to.CloseWrite()
-	}()
-	defer func() {
-		dlog.Debugf(c, "CLOSED READ %v", from.RemoteAddr())
-		_ = from.CloseRead()
+
+	closed := int32(0)
+	closePipe := func() {
+		if atomic.CompareAndSwapInt32(&closed, 0, 1) {
+			dlog.Debugf(c, "CLOSED WRITE %v", to.RemoteAddr())
+			_ = to.CloseWrite()
+			dlog.Debugf(c, "CLOSED READ %v", from.RemoteAddr())
+			_ = from.CloseRead()
+		}
+	}
+	defer closePipe()
+
+	// Close pipes when context is done
+	eop := make(chan bool)
+	go func() {
+		select {
+		case <-eop:
+			// just end this goroutine
+		case <-c.Done():
+			// close the pipe
+			closePipe()
+		}
 	}()
 
 	const size = 64 * 1024
@@ -146,13 +161,12 @@ func (pxy *Proxy) pipe(c context.Context, from, to *net.TCPConn, done *sync.Wait
 				dlog.Error(c, err.Error())
 			}
 			break
-		} else {
-			_, err := to.Write(buf[0:n])
-
-			if err != nil {
-				dlog.Error(c, err.Error())
-				break
-			}
+		}
+		_, err = to.Write(buf[0:n])
+		if err != nil {
+			dlog.Error(c, err.Error())
+			break
 		}
 	}
+	close(eop)
 }
