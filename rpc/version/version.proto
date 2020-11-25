@@ -2,9 +2,6 @@ syntax = "proto3";
 package version;
 
 option go_package = "github.com/datawire/telepresence2/pkg/rpc/version";
-option java_multiple_files = true;
-option java_package = "io.datawire.telepresence.rpc";
-option java_outer_classname = "Version";
 
 message VersionInfo {
   int32 api_version = 1;

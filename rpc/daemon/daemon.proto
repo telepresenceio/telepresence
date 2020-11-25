@@ -1,13 +1,11 @@
 syntax = "proto3";
 package telepresence;
+
 import "google/protobuf/empty.proto";
 import "rpc/iptables/iptables.proto";
 import "rpc/version/version.proto";
 
 option go_package = "github.com/datawire/telepresence2/pkg/rpc/daemon";
-option java_multiple_files = true;
-option java_package = "io.datawire.telepresence.rpc";
-option java_outer_classname = "Daemon";
 
 // The Daemon service is responsible for managing network overrides and also
 // acts as the central point for logging.
