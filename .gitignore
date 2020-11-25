@@ -21,4 +21,5 @@ vendor/
 *.swp
 
 build-output
-tools
+/tools/*
+!/tools/src/
