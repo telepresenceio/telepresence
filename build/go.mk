@@ -18,8 +18,8 @@ PROTO_SRCS = $(shell echo rpc/*/*.proto)
 
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
-generate: $(PROTOC) $(TOOLSBINDIR)/protoc-gengo $(TOOLSBINDIR)/protoc-gen-go-grpc
-	$(PROTOC) --proto_path=. --go_out=. --go-grpc_out=. --go_opt=module=github.com/datawire/telepresence2 --go-grpc_opt=module=github.com/datawire/telepresence2 $(PROTO_SRCS)
+generate: $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
+	protoc --proto_path=. --go_out=. --go-grpc_out=. --go_opt=module=github.com/datawire/telepresence2 --go-grpc_opt=module=github.com/datawire/telepresence2 $(PROTO_SRCS)
 	go mod tidy
 
 .PHONY: generate-clean
@@ -34,7 +34,7 @@ build: ## (Build) Build all the source code
 	go build -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/...
 
 .PHONY: image images
-image images: $(TOOLSBINDIR)/ko ## (Build) Build/tag the manager/agent container image
+image images: $(tools/ko) ## (Build) Build/tag the manager/agent container image
 	docker tag $(shell env GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION)" ko publish --local ./cmd/traffic) $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
 
 .PHONY: install
@@ -49,12 +49,12 @@ clean: ## (Build) Remove all build artifacts
 clobber: clean ## (Build) Remove all build artifacts and tools
 
 .PHONY: lint
-lint: $(GOLANGCI_LINT) $(PROTOLINT) ## (Lint) Run the linters (golangci-lint and protolint)
-	$(GOLANGCI_LINT) run --timeout 2m ./...
-	$(PROTOLINT) lint $(shell find rpc -type f -name '*.proto')
+lint: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Run the linters (golangci-lint and protolint)
+	golangci-lint run --timeout 2m ./...
+	protolint lint $(shell find rpc -type f -name '*.proto')
 
 .PHONY: test check
-test check: $(TOOLSBINDIR)/ko ## (Test) Run the test suite
+test check: $(tools/ko) ## (Test) Run the test suite
 	go test -v ./...
 
 .PHONY: all
