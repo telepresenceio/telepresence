@@ -25,10 +25,11 @@ clobber-tools:
 PROTOC_VERSION=3.13.0
 PROTOC=$(TOOLSBINDIR)/protoc
 PROTOC_ZIP=protoc-$(PROTOC_VERSION)-$(subst darwin,osx,$(GOHOSTOS))-$(shell uname -m).zip
-$(PROTOC):
-	mkdir -p $(TOOLSBINDIR)
-	curl -sfL https://github.com/protocolbuffers/protobuf/releases/download/v$(PROTOC_VERSION)/$(PROTOC_ZIP) -o $(TOOLSDIR)/$(PROTOC_ZIP)
-	cd $(TOOLSDIR) && unzip -q $(PROTOC_ZIP)
+$(TOOLSDIR)/$(PROTOC_ZIP):
+	mkdir -p $(@D)
+	curl -sfL https://github.com/protocolbuffers/protobuf/releases/download/v$(PROTOC_VERSION)/$(PROTOC_ZIP) -o $@
+%/bin/protoc %/include %/readme.txt: %/$(PROTOC_ZIP)
+	cd $* && unzip -q -o -DD $(<F)
 
 # `go get`-able things (protoc-gen-go, protoc-gen-go-grpc, ko, and golangci-lint)
 # ====================
@@ -51,7 +52,8 @@ $(TOOLSBINDIR)/%: $(TOOLSSRCDIR)/%/go.mod $(TOOLSSRCDIR)/%/pin.go
 PROTOLINT_VERSION=0.26.0
 PROTOLINT_TGZ=protolint_$(PROTOLINT_VERSION)_$(shell uname -s)_$(shell uname -m).tar.gz
 PROTOLINT=$(TOOLSBINDIR)/protolint
-$(PROTOLINT):
-	mkdir -p $(TOOLSBINDIR)
-	curl -sfL https://github.com/yoheimuta/protolint/releases/download/v$(PROTOLINT_VERSION)/$(PROTOLINT_TGZ) -o $(TOOLSDIR)/$(PROTOLINT_TGZ)
-	tar -C $(TOOLSBINDIR) -zxf $(TOOLSDIR)/$(PROTOLINT_TGZ)
+$(TOOLSDIR)/$(PROTOLINT_TGZ):
+	mkdir -p $(@D)
+	curl -sfL https://github.com/yoheimuta/protolint/releases/download/v$(PROTOLINT_VERSION)/$(PROTOLINT_TGZ) -o $@
+%/bin/protolint %/bin/protoc-gen-protolint: %/$(PROTOLINT_TGZ)
+	tar -C $(@D) -zxf $< protolint protoc-gen-protolint
