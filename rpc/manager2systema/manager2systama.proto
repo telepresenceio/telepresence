@@ -6,8 +6,10 @@ package telepresence.manager2systema;
 
 import "google/protobuf/empty.proto";
 
+option go_package = "github.com/datawire/telepresence2/pkg/rpc/manager2systema";
+
 message Chunk {
-  bytes Content = 1;
+  bytes content = 1;
 }
 
 // Calls from the manager to System A are authenticated via RFC 6750
@@ -26,10 +28,10 @@ service SystemA {
   rpc RemoveDomain(RemoveDomainRequest) returns (google.protobuf.Empty);
 
   // ReverseConnection establishes a stream that is used for System A
-	// to send gRPC requests back to the manager.  This requires that
-	// the manager authenticate itself, but does not require an
-	// end-user's token.
-	rpc ReverseConnection(stream Chunk) returns (stream Chunk);
+  // to send gRPC requests back to the manager.  This requires that
+  // the manager authenticate itself, but does not require an
+  // end-user's token.
+  rpc ReverseConnection(stream Chunk) returns (stream Chunk);
 }
 
 message CreateDomainRequest {

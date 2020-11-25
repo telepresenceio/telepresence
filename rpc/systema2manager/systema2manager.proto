@@ -6,6 +6,8 @@ package telepresence.systema2manager;
 
 import "google/protobuf/empty.proto";
 
+option go_package = "github.com/datawire/telepresence2/pkg/rpc/systema2manager";
+
 // I went ahead and duplicated things from other protobuf files here, so that
 // the two teams can heckle over it without us worrying about the rest
 // of Telepresence.
@@ -16,7 +18,7 @@ import "google/protobuf/empty.proto";
 // the manager authenticating to System A.
 service Manager {
   // Returns a list of currently active intercepts.
-  rpc ListIntercepts(google.protobuf.Empty) returns (manager.InterceptInfoSnapshot);
+  rpc ListIntercepts(google.protobuf.Empty) returns (InterceptInfoSnapshot);
 
   // RemoveIntercept lets a client remove an intercept.
   rpc RemoveIntercept(RemoveInterceptRequest) returns (google.protobuf.Empty);
@@ -29,9 +31,9 @@ service Manager {
 }
 
 message ConnectionChunk {
-  oneOf {
+  oneof value {
     string intercept_id = 1;
-    Chunk  chunk = 2;
+    bytes  data = 2;
     string error = 3; // TODO: Probably have a better error type
   }
 }
@@ -39,6 +41,10 @@ message ConnectionChunk {
 message RemoveInterceptRequest {
   SessionInfo session = 1;
   string name = 2;
+}
+
+message SessionInfo {
+  string session_id = 1;
 }
 
 message InterceptInfoSnapshot {
