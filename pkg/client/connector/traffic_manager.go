@@ -132,6 +132,7 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 
 	if err != nil {
 		dlog.Errorf(c, "ArriveAsClient: %s", err.Error())
+		conn.Close()
 		return err
 	}
 	tm.conn = conn
@@ -188,12 +189,7 @@ func (tm *trafficManager) remain(c context.Context) error {
 	}
 }
 
-// Name implements Resource
-func (tm *trafficManager) Name() string {
-	return "trafficMgr"
-}
-
-// Close implements Resource
+// Close implements io.Closer
 func (tm *trafficManager) Close() error {
 	if tm.conn != nil {
 		_ = tm.conn.Close()
