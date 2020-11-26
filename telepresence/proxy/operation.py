@@ -227,7 +227,7 @@ class Swap(ProxyOperation):
         })
 
         for unneeded in [
-            "args", "livenessProbe", "readinessProbe", "workingDir",
+            "args", "livenessProbe", "startupProbe", "readinessProbe", "workingDir",
             "lifecycle"
         ]:
             try:

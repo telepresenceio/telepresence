@@ -69,6 +69,12 @@ spec:
         ports:
         - containerPort: 443
         - containerPort: 80
+        startupProbe:
+          httpGet:
+            path: /index.html
+            port: 80
+          initialDelaySeconds: 30
+          timeoutSeconds: 1
         livenessProbe:
           httpGet:
             path: /index.html
@@ -97,6 +103,12 @@ spec:
         - containerPort: 80
           name: http-api
           protocol: TCP
+        startupProbe:
+          httpGet:
+            path: /index.html
+            port: 80
+          initialDelaySeconds: 30
+          timeoutSeconds: 1
         livenessProbe:
           httpGet:
             path: /index.html
@@ -158,6 +170,12 @@ spec:
         ports:
         - containerPort: 443
         - containerPort: 80
+        startupProbe:
+          httpGet:
+            path: /index.html
+            port: 80
+          initialDelaySeconds: 30
+          timeoutSeconds: 1
         livenessProbe:
           httpGet:
             path: /index.html
