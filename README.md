@@ -81,7 +81,7 @@ Using deployment hello
 Serving HTTP on 0.0.0.0 port 9000 (http://0.0.0.0:9000/) ...
 ```
 
-The `python -m httpserver` is now started on port 9000 and will run until terminated by <ctrl>-C. Access it from a browser using `http://hello/` or use curl from another terminal. With curl, it presents a html listing from the directory where the server was started. Something like:
+The `python -m httpserver` is now started on port 9000 and will run until terminated by `<ctrl>-C`. Access it from a browser using `http://hello/` or use curl from another terminal. With curl, it presents a html listing from the directory where the server was started. Something like:
 ```console
 $ curl hello
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
@@ -110,7 +110,7 @@ Observe that the python service reports that it's being accessed:
 
 ### Clean-up and close daemon processes
 
-End the service with <ctrl>-C and then try `curl hello` or `http://hello` again. The intercept is gone, and the echo service responds as normal.
+End the service with `<ctrl>-C` and then try `curl hello` or `http://hello` again. The intercept is gone, and the echo service responds as normal.
 
 Now end the subshell too with `exit` or `<ctrl>-D`. Telepresence now ends the session. Your laptop no longer has access to the cluster internals.
 ```console
@@ -213,8 +213,8 @@ Containers:
       /var/run/secrets/kubernetes.io/serviceaccount from default-token-blr2m (ro)
   traffic-agent:
     Container ID:  containerd://4fddaef430252449a445c6f140736a22c00389ccc81840cc4cc15b69bb449688
-    Image:         docker.io/thallgren/tel2:v0.3.0
-    Image ID:      docker.io/thallgren/tel2@sha256:2f91295b0e4de5956f9e1c771da9d06a399ba88cb4392cf7af677bd20f685f36
+    Image:         docker.io/datawire/tel2:v0.3.0
+    Image ID:      docker.io/datawire/tel2@sha256:2f91295b0e4de5956f9e1c771da9d06a399ba88cb4392cf7af677bd20f685f36
     Port:          9900/TCP
     Host Port:     0/TCP
     Args:
@@ -251,7 +251,7 @@ Events:
   Normal  Pulled     3m20s  kubelet            Container image "k8s.gcr.io/echoserver:1.4" already present on machine
   Normal  Created    3m20s  kubelet            Created container echoserver
   Normal  Started    3m20s  kubelet            Started container echoserver
-  Normal  Pulled     3m20s  kubelet            Container image "docker.io/thallgren/tel2:v0.3.0" already present on machine
+  Normal  Pulled     3m20s  kubelet            Container image "docker.io/datawire/tel2:v0.3.0" already present on machine
   Normal  Created    3m20s  kubelet            Created container traffic-agent
   Normal  Started    3m20s  kubelet            Started container traffic-agent
 ```
