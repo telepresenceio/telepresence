@@ -102,7 +102,13 @@ spec:
         ports:
         - containerPort: 80
           name: http-api
-          protocol: TCP      
+          protocol: TCP
+        startupProbe:
+          httpGet:
+            path: /index.html
+            port: 80
+          initialDelaySeconds: 30
+          timeoutSeconds: 1
         livenessProbe:
           httpGet:
             path: /index.html
@@ -163,7 +169,19 @@ spec:
         workingDir: "/somewhere/over/the/rainbow"
         ports:
         - containerPort: 443
-        - containerPort: 80               
+        - containerPort: 80
+        startupProbe:
+          httpGet:
+            path: /index.html
+            port: 80
+          initialDelaySeconds: 30
+          timeoutSeconds: 1
+        livenessProbe:
+          httpGet:
+            path: /index.html
+            port: 80
+          initialDelaySeconds: 30
+          timeoutSeconds: 1
         readinessProbe:
           httpGet:
             path: /index.html
