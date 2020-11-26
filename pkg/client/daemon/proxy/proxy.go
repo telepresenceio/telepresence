@@ -111,6 +111,7 @@ func (pxy *Proxy) handleConnection(c context.Context, conn *net.TCPConn) {
 		return
 	}
 
+	dlog.Debugf(c, "SOCKS5 DialContext %s -> %s", "localhost:1080", host)
 	tc, cancel := context.WithTimeout(c, 5*time.Second)
 	defer cancel()
 	px, err := dialer.(proxy.ContextDialer).DialContext(tc, "tcp", host)
@@ -142,6 +143,8 @@ func (pxy *Proxy) pipe(c context.Context, from, to net.Conn, done *sync.WaitGrou
 
 	// Close pipes when context is done
 	eop := make(chan bool)
+	defer close(eop)
+
 	go func() {
 		select {
 		case <-eop:
@@ -168,5 +171,4 @@ func (pxy *Proxy) pipe(c context.Context, from, to net.Conn, done *sync.WaitGrou
 			break
 		}
 	}
-	close(eop)
 }
