@@ -110,7 +110,9 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 	}()
 
 	// First check. Establish connection
-	tc, _ := context.WithTimeout(c, connectTimeout)
+	tc, cancel := context.WithTimeout(c, connectTimeout)
+	defer cancel()
+
 	var conn *grpc.ClientConn
 	conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", tm.apiPort), grpc.WithInsecure(), grpc.WithNoProxy())
 	if err != nil {

@@ -111,7 +111,8 @@ func (pxy *Proxy) handleConnection(c context.Context, conn *net.TCPConn) {
 		return
 	}
 
-	tc, _ := context.WithTimeout(c, 5*time.Second)
+	tc, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
 	px, err := dialer.(proxy.ContextDialer).DialContext(tc, "tcp", host)
 	if err != nil {
 		dlog.Error(c, err.Error())

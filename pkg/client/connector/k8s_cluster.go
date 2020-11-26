@@ -89,7 +89,8 @@ func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, th
 
 // check for cluster connectivity
 func (kc *k8sCluster) check(c context.Context) error {
-	c, _ = context.WithTimeout(c, connectTimeout)
+	c, cancel := context.WithTimeout(c, connectTimeout)
+	defer cancel()
 	return kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found").Run()
 }
 
