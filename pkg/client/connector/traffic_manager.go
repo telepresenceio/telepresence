@@ -15,7 +15,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
 
 	"github.com/datawire/telepresence2/pkg/client"
 	manager "github.com/datawire/telepresence2/pkg/rpc"
@@ -114,26 +113,13 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 	defer cancel()
 
 	var conn *grpc.ClientConn
-	conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", tm.apiPort), grpc.WithInsecure(), grpc.WithNoProxy())
+	conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", tm.apiPort),
+		grpc.WithInsecure(),
+		grpc.WithNoProxy(),
+		grpc.WithBlock())
 	if err != nil {
 		dlog.Errorf(c, "error when dialing traffic-manager: %s", err.Error())
 		return err
-	}
-
-	for {
-		state := conn.GetState()
-		switch state {
-		case connectivity.Idle, connectivity.Ready:
-			// Do nothing. We'll break out of the loop after the switch.
-		case connectivity.Connecting:
-			time.Sleep(10 * time.Millisecond)
-			continue
-		default:
-			err := fmt.Errorf("connection state: %s", state.String())
-			dlog.Errorf(c, "error when connecting traffic-manager: %s", err.Error())
-			return err
-		}
-		break
 	}
 
 	mClient := manager.NewManagerClient(conn)

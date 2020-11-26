@@ -61,7 +61,7 @@ func (pxy *Proxy) Run(c context.Context, limit int32) {
 	closing := false
 	go func() {
 		for {
-			dlog.Debug(c, "Listening to %s", pxy.listener.Addr())
+			dlog.Debugf(c, "Listening to %s", pxy.listener.Addr())
 			conn, err := pxy.listener.Accept()
 			if err != nil {
 				if closing {
@@ -78,7 +78,7 @@ func (pxy *Proxy) Run(c context.Context, limit int32) {
 		select {
 		case <-c.Done():
 			closing = true
-			dlog.Debug(c, "Context cancelled. Closing listener to %s", pxy.listener.Addr())
+			dlog.Debugf(c, "Context cancelled. Closing listener to %s", pxy.listener.Addr())
 			_ = pxy.listener.Close()
 			return
 		case conn := <-connQueue:
@@ -86,7 +86,7 @@ func (pxy *Proxy) Run(c context.Context, limit int32) {
 			switch conn := conn.(type) {
 			case *net.TCPConn:
 				dlog.Debugf(c, "CAPACITY: %v", cpy)
-				dlog.Debug(c, "Handling connection from %s", conn.RemoteAddr())
+				dlog.Debugf(c, "Handling connection from %s", conn.RemoteAddr())
 				pxy.handleConnection(c, conn)
 			default:
 				dlog.Errorf(c, "unknown connection type: %v", conn)
