@@ -14,71 +14,172 @@ import (
 // is compatible with the grpc package it is being compiled against.
 const _ = grpc.SupportPackageIsVersion7
 
-// ManagerClient is the client API for Manager service.
+// ManagerCRUDClient is the client API for ManagerCRUD service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type ManagerClient interface {
+type ManagerCRUDClient interface {
 	// Returns a list of currently active intercepts.
 	ListIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*InterceptInfoSnapshot, error)
 	// RemoveIntercept lets a client remove an intercept.
 	RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+}
+
+type managerCRUDClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewManagerCRUDClient(cc grpc.ClientConnInterface) ManagerCRUDClient {
+	return &managerCRUDClient{cc}
+}
+
+func (c *managerCRUDClient) ListIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*InterceptInfoSnapshot, error) {
+	out := new(InterceptInfoSnapshot)
+	err := c.cc.Invoke(ctx, "/telepresence.systema2manager.ManagerCRUD/ListIntercepts", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *managerCRUDClient) RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, "/telepresence.systema2manager.ManagerCRUD/RemoveIntercept", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ManagerCRUDServer is the server API for ManagerCRUD service.
+// All implementations must embed UnimplementedManagerCRUDServer
+// for forward compatibility
+type ManagerCRUDServer interface {
+	// Returns a list of currently active intercepts.
+	ListIntercepts(context.Context, *empty.Empty) (*InterceptInfoSnapshot, error)
+	// RemoveIntercept lets a client remove an intercept.
+	RemoveIntercept(context.Context, *RemoveInterceptRequest) (*empty.Empty, error)
+	mustEmbedUnimplementedManagerCRUDServer()
+}
+
+// UnimplementedManagerCRUDServer must be embedded to have forward compatible implementations.
+type UnimplementedManagerCRUDServer struct {
+}
+
+func (UnimplementedManagerCRUDServer) ListIntercepts(context.Context, *empty.Empty) (*InterceptInfoSnapshot, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListIntercepts not implemented")
+}
+func (UnimplementedManagerCRUDServer) RemoveIntercept(context.Context, *RemoveInterceptRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
+}
+func (UnimplementedManagerCRUDServer) mustEmbedUnimplementedManagerCRUDServer() {}
+
+// UnsafeManagerCRUDServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ManagerCRUDServer will
+// result in compilation errors.
+type UnsafeManagerCRUDServer interface {
+	mustEmbedUnimplementedManagerCRUDServer()
+}
+
+func RegisterManagerCRUDServer(s grpc.ServiceRegistrar, srv ManagerCRUDServer) {
+	s.RegisterService(&_ManagerCRUD_serviceDesc, srv)
+}
+
+func _ManagerCRUD_ListIntercepts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(empty.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerCRUDServer).ListIntercepts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.systema2manager.ManagerCRUD/ListIntercepts",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerCRUDServer).ListIntercepts(ctx, req.(*empty.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ManagerCRUD_RemoveIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveInterceptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerCRUDServer).RemoveIntercept(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.systema2manager.ManagerCRUD/RemoveIntercept",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerCRUDServer).RemoveIntercept(ctx, req.(*RemoveInterceptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _ManagerCRUD_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "telepresence.systema2manager.ManagerCRUD",
+	HandlerType: (*ManagerCRUDServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ListIntercepts",
+			Handler:    _ManagerCRUD_ListIntercepts_Handler,
+		},
+		{
+			MethodName: "RemoveIntercept",
+			Handler:    _ManagerCRUD_RemoveIntercept_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "rpc/systema2manager/systema2manager.proto",
+}
+
+// ManagerProxyClient is the client API for ManagerProxy service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type ManagerProxyClient interface {
 	// The first argument chunk must be an "intercept_id"; after that no
 	// chunk may be an intercept_id.  System A calls this when it
 	// recieves a connection to "XYZ.preview.edgestack.me", and that
 	// domain belongs to an intercept that belongs to this manager.
-	HandleConnection(ctx context.Context, opts ...grpc.CallOption) (Manager_HandleConnectionClient, error)
+	HandleConnection(ctx context.Context, opts ...grpc.CallOption) (ManagerProxy_HandleConnectionClient, error)
 }
 
-type managerClient struct {
+type managerProxyClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewManagerClient(cc grpc.ClientConnInterface) ManagerClient {
-	return &managerClient{cc}
+func NewManagerProxyClient(cc grpc.ClientConnInterface) ManagerProxyClient {
+	return &managerProxyClient{cc}
 }
 
-func (c *managerClient) ListIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*InterceptInfoSnapshot, error) {
-	out := new(InterceptInfoSnapshot)
-	err := c.cc.Invoke(ctx, "/telepresence.systema2manager.Manager/ListIntercepts", in, out, opts...)
+func (c *managerProxyClient) HandleConnection(ctx context.Context, opts ...grpc.CallOption) (ManagerProxy_HandleConnectionClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_ManagerProxy_serviceDesc.Streams[0], "/telepresence.systema2manager.ManagerProxy/HandleConnection", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
-}
-
-func (c *managerClient) RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
-	out := new(empty.Empty)
-	err := c.cc.Invoke(ctx, "/telepresence.systema2manager.Manager/RemoveIntercept", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *managerClient) HandleConnection(ctx context.Context, opts ...grpc.CallOption) (Manager_HandleConnectionClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[0], "/telepresence.systema2manager.Manager/HandleConnection", opts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &managerHandleConnectionClient{stream}
+	x := &managerProxyHandleConnectionClient{stream}
 	return x, nil
 }
 
-type Manager_HandleConnectionClient interface {
+type ManagerProxy_HandleConnectionClient interface {
 	Send(*ConnectionChunk) error
 	Recv() (*ConnectionChunk, error)
 	grpc.ClientStream
 }
 
-type managerHandleConnectionClient struct {
+type managerProxyHandleConnectionClient struct {
 	grpc.ClientStream
 }
 
-func (x *managerHandleConnectionClient) Send(m *ConnectionChunk) error {
+func (x *managerProxyHandleConnectionClient) Send(m *ConnectionChunk) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *managerHandleConnectionClient) Recv() (*ConnectionChunk, error) {
+func (x *managerProxyHandleConnectionClient) Recv() (*ConnectionChunk, error) {
 	m := new(ConnectionChunk)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
@@ -86,103 +187,57 @@ func (x *managerHandleConnectionClient) Recv() (*ConnectionChunk, error) {
 	return m, nil
 }
 
-// ManagerServer is the server API for Manager service.
-// All implementations must embed UnimplementedManagerServer
+// ManagerProxyServer is the server API for ManagerProxy service.
+// All implementations must embed UnimplementedManagerProxyServer
 // for forward compatibility
-type ManagerServer interface {
-	// Returns a list of currently active intercepts.
-	ListIntercepts(context.Context, *empty.Empty) (*InterceptInfoSnapshot, error)
-	// RemoveIntercept lets a client remove an intercept.
-	RemoveIntercept(context.Context, *RemoveInterceptRequest) (*empty.Empty, error)
+type ManagerProxyServer interface {
 	// The first argument chunk must be an "intercept_id"; after that no
 	// chunk may be an intercept_id.  System A calls this when it
 	// recieves a connection to "XYZ.preview.edgestack.me", and that
 	// domain belongs to an intercept that belongs to this manager.
-	HandleConnection(Manager_HandleConnectionServer) error
-	mustEmbedUnimplementedManagerServer()
+	HandleConnection(ManagerProxy_HandleConnectionServer) error
+	mustEmbedUnimplementedManagerProxyServer()
 }
 
-// UnimplementedManagerServer must be embedded to have forward compatible implementations.
-type UnimplementedManagerServer struct {
+// UnimplementedManagerProxyServer must be embedded to have forward compatible implementations.
+type UnimplementedManagerProxyServer struct {
 }
 
-func (UnimplementedManagerServer) ListIntercepts(context.Context, *empty.Empty) (*InterceptInfoSnapshot, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListIntercepts not implemented")
-}
-func (UnimplementedManagerServer) RemoveIntercept(context.Context, *RemoveInterceptRequest) (*empty.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
-}
-func (UnimplementedManagerServer) HandleConnection(Manager_HandleConnectionServer) error {
+func (UnimplementedManagerProxyServer) HandleConnection(ManagerProxy_HandleConnectionServer) error {
 	return status.Errorf(codes.Unimplemented, "method HandleConnection not implemented")
 }
-func (UnimplementedManagerServer) mustEmbedUnimplementedManagerServer() {}
+func (UnimplementedManagerProxyServer) mustEmbedUnimplementedManagerProxyServer() {}
 
-// UnsafeManagerServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to ManagerServer will
+// UnsafeManagerProxyServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ManagerProxyServer will
 // result in compilation errors.
-type UnsafeManagerServer interface {
-	mustEmbedUnimplementedManagerServer()
+type UnsafeManagerProxyServer interface {
+	mustEmbedUnimplementedManagerProxyServer()
 }
 
-func RegisterManagerServer(s grpc.ServiceRegistrar, srv ManagerServer) {
-	s.RegisterService(&_Manager_serviceDesc, srv)
+func RegisterManagerProxyServer(s grpc.ServiceRegistrar, srv ManagerProxyServer) {
+	s.RegisterService(&_ManagerProxy_serviceDesc, srv)
 }
 
-func _Manager_ListIntercepts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerServer).ListIntercepts(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.systema2manager.Manager/ListIntercepts",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).ListIntercepts(ctx, req.(*empty.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
+func _ManagerProxy_HandleConnection_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ManagerProxyServer).HandleConnection(&managerProxyHandleConnectionServer{stream})
 }
 
-func _Manager_RemoveIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RemoveInterceptRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerServer).RemoveIntercept(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.systema2manager.Manager/RemoveIntercept",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).RemoveIntercept(ctx, req.(*RemoveInterceptRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Manager_HandleConnection_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(ManagerServer).HandleConnection(&managerHandleConnectionServer{stream})
-}
-
-type Manager_HandleConnectionServer interface {
+type ManagerProxy_HandleConnectionServer interface {
 	Send(*ConnectionChunk) error
 	Recv() (*ConnectionChunk, error)
 	grpc.ServerStream
 }
 
-type managerHandleConnectionServer struct {
+type managerProxyHandleConnectionServer struct {
 	grpc.ServerStream
 }
 
-func (x *managerHandleConnectionServer) Send(m *ConnectionChunk) error {
+func (x *managerProxyHandleConnectionServer) Send(m *ConnectionChunk) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *managerHandleConnectionServer) Recv() (*ConnectionChunk, error) {
+func (x *managerProxyHandleConnectionServer) Recv() (*ConnectionChunk, error) {
 	m := new(ConnectionChunk)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
@@ -190,23 +245,14 @@ func (x *managerHandleConnectionServer) Recv() (*ConnectionChunk, error) {
 	return m, nil
 }
 
-var _Manager_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "telepresence.systema2manager.Manager",
-	HandlerType: (*ManagerServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "ListIntercepts",
-			Handler:    _Manager_ListIntercepts_Handler,
-		},
-		{
-			MethodName: "RemoveIntercept",
-			Handler:    _Manager_RemoveIntercept_Handler,
-		},
-	},
+var _ManagerProxy_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "telepresence.systema2manager.ManagerProxy",
+	HandlerType: (*ManagerProxyServer)(nil),
+	Methods:     []grpc.MethodDesc{},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "HandleConnection",
-			Handler:       _Manager_HandleConnection_Handler,
+			Handler:       _ManagerProxy_HandleConnection_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

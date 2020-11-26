@@ -14,7 +14,7 @@ message Chunk {
 
 // Calls from the manager to System A are authenticated via RFC 6750
 // Bearer tokens.
-service SystemA {
+service SystemACRUD {
   // CreateDomain requires that the manager authenticate using an
   // end-user's access token, to perform the action on behalf of that
   // user.
@@ -27,6 +27,11 @@ service SystemA {
   // not require an end-user's token.
   rpc RemoveDomain(RemoveDomainRequest) returns (google.protobuf.Empty);
 
+}
+
+// Calls from the manager to System A are authenticated via RFC 6750
+// Bearer tokens.
+service SystemAProxy {
   // ReverseConnection establishes a stream that is used for System A
   // to send gRPC requests back to the manager.  This requires that
   // the manager authenticate itself, but does not require an

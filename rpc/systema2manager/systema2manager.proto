@@ -16,13 +16,19 @@ option go_package = "github.com/datawire/telepresence2/pkg/rpc/systema2manager";
 // because they are happening over a connection created by the manager
 // calling "SystemA.ReverseConnection"; all authentication happened by
 // the manager authenticating to System A.
-service Manager {
+service ManagerCRUD {
   // Returns a list of currently active intercepts.
   rpc ListIntercepts(google.protobuf.Empty) returns (InterceptInfoSnapshot);
 
   // RemoveIntercept lets a client remove an intercept.
   rpc RemoveIntercept(RemoveInterceptRequest) returns (google.protobuf.Empty);
+}
 
+// Calls from System A to the manager need not be authenticated
+// because they are happening over a connection created by the manager
+// calling "SystemA.ReverseConnection"; all authentication happened by
+// the manager authenticating to System A.
+service ManagerProxy {
   // The first argument chunk must be an "intercept_id"; after that no
   // chunk may be an intercept_id.  System A calls this when it
   // recieves a connection to "XYZ.preview.edgestack.me", and that
