@@ -110,14 +110,14 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 	}()
 
 	// First check. Establish connection
+	tc, _ := context.WithTimeout(c, connectTimeout)
 	var conn *grpc.ClientConn
-	conn, err = grpc.Dial(fmt.Sprintf("127.0.0.1:%d", tm.apiPort), grpc.WithInsecure(), grpc.WithNoProxy())
+	conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", tm.apiPort), grpc.WithInsecure(), grpc.WithNoProxy())
 	if err != nil {
 		dlog.Errorf(c, "error when dialing traffic-manager: %s", err.Error())
 		return err
 	}
 
-	// Wait until connection is ready
 	for {
 		state := conn.GetState()
 		switch state {
@@ -134,8 +134,8 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 		break
 	}
 
-	grpc := manager.NewManagerClient(conn)
-	si, err := grpc.ArriveAsClient(c, &manager.ClientInfo{
+	mClient := manager.NewManagerClient(conn)
+	si, err := mClient.ArriveAsClient(c, &manager.ClientInfo{
 		Name:      tm.userAndHost,
 		InstallId: tm.installID,
 		Product:   "telepresence",
@@ -144,11 +144,10 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 
 	if err != nil {
 		dlog.Errorf(c, "ArriveAsClient: %s", err.Error())
-		conn.Close()
 		return err
 	}
 	tm.conn = conn
-	tm.grpc = grpc
+	tm.grpc = mClient
 	tm.sessionID = si.SessionId
 
 	g := dgroup.ParentGroup(c)

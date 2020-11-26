@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/datawire/dlib/dlog"
 	"golang.org/x/net/proxy"
@@ -110,7 +111,8 @@ func (pxy *Proxy) handleConnection(c context.Context, conn *net.TCPConn) {
 		return
 	}
 
-	_proxy, err := dialer.Dial("tcp", host)
+	tc, _ := context.WithTimeout(c, 5*time.Second)
+	_proxy, err := dialer.(proxy.ContextDialer).DialContext(tc, "tcp", host)
 	if err != nil {
 		dlog.Error(c, err.Error())
 		conn.Close()

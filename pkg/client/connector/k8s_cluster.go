@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dexec"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/datawire/telepresence2/pkg/client"
 )
+
+const connectTimeout = 5 * time.Second
 
 // k8sCluster is a Kubernetes cluster reference
 type k8sCluster struct {
@@ -86,8 +89,8 @@ func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, th
 
 // check for cluster connectivity
 func (kc *k8sCluster) check(c context.Context) error {
-	cmd := kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found")
-	return cmd.Run()
+	c, _ = context.WithTimeout(c, connectTimeout)
+	return kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found").Run()
 }
 
 func newKCluster(kubeConfig, ctxName, namespace string, kargs ...string) (*k8sCluster, error) {
