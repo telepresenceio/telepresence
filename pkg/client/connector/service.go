@@ -211,7 +211,7 @@ func (d *daemonLogger) Write(data []byte) (n int, err error) {
 
 // connect the connector to a cluster
 func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
-	go func() {
+	dgroup.ParentGroup(c).Go("metriton", func(c context.Context) error {
 		reporter := &metriton.Reporter{
 			Application:  "telepresence2",
 			Version:      client.Version(),
@@ -219,10 +219,11 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 			BaseMetadata: map[string]interface{}{"mode": "daemon"},
 		}
 
-		if _, err := reporter.Report(c, map[string]interface{}{"action": "connect"}); err != nil {
-			dlog.Errorf(c, "report failed: %+v", err)
+		if _, err := reporter.Report(s.ctx, map[string]interface{}{"action": "connect"}); err != nil {
+			dlog.Errorf(s.ctx, "report failed: %+v", err)
 		}
-	}()
+		return nil // error is logged and is not fatal
+	})
 
 	// Sanity checks
 	r := &rpc.ConnectInfo{}
