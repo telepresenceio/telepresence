@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/datawire/telepresence2/pkg/client/auth"
 	"github.com/datawire/telepresence2/pkg/client/connector"
 	"github.com/datawire/telepresence2/pkg/client/daemon"
 	manager "github.com/datawire/telepresence2/pkg/rpc"
@@ -53,6 +54,8 @@ func Command() *cobra.Command {
 	// the correct context and execute in-place immediately.
 	rootCmd.AddCommand(daemon.Command())
 	rootCmd.AddCommand(connector.Command())
+
+	rootCmd.AddCommand(auth.LoginCommand())
 
 	flags := rootCmd.Flags()
 	flags.BoolVarP(&r.NoWait,
