@@ -58,8 +58,12 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	name := ir.InterceptSpec.Name
 	switch len(found) {
 	case 0:
-		dlog.Infof(c, "no agent found for deployment %q", name)
 		if err := tm.installer.ensureAgent(c, name, ""); err != nil {
+			if err == agentExists {
+				// the agent exists although it has not been reported yet
+				break
+			}
+			dlog.Error(c, err.Error())
 			result.Error = rpc.InterceptError_NOT_FOUND
 			result.ErrorText = err.Error()
 			return result, nil
@@ -67,6 +71,7 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 		dlog.Infof(c, "waiting for new agent for deployment %q", name)
 		_, err := tm.waitForAgent(name)
 		if err != nil {
+			dlog.Error(c, err.Error())
 			result.Error = rpc.InterceptError_NOT_FOUND
 			result.ErrorText = err.Error()
 			return result, nil
