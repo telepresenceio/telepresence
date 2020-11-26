@@ -112,13 +112,12 @@ func (pxy *Proxy) handleConnection(c context.Context, conn *net.TCPConn) {
 	}
 
 	tc, _ := context.WithTimeout(c, 5*time.Second)
-	_proxy, err := dialer.(proxy.ContextDialer).DialContext(tc, "tcp", host)
+	px, err := dialer.(proxy.ContextDialer).DialContext(tc, "tcp", host)
 	if err != nil {
 		dlog.Error(c, err.Error())
 		conn.Close()
 		return
 	}
-	px := _proxy.(*net.TCPConn)
 
 	done := sync.WaitGroup{}
 	done.Add(2)
@@ -128,16 +127,14 @@ func (pxy *Proxy) handleConnection(c context.Context, conn *net.TCPConn) {
 	done.Wait()
 }
 
-func (pxy *Proxy) pipe(c context.Context, from, to *net.TCPConn, done *sync.WaitGroup) {
+func (pxy *Proxy) pipe(c context.Context, from, to net.Conn, done *sync.WaitGroup) {
 	defer done.Done()
 
 	closed := int32(0)
 	closePipe := func() {
 		if atomic.CompareAndSwapInt32(&closed, 0, 1) {
-			dlog.Debugf(c, "CLOSED WRITE %v", to.RemoteAddr())
-			_ = to.CloseWrite()
-			dlog.Debugf(c, "CLOSED READ %v", from.RemoteAddr())
-			_ = from.CloseRead()
+			dlog.Debugf(c, "CLOSED %v -> %v", from.LocalAddr(), from.RemoteAddr())
+			_ = from.Close()
 		}
 	}
 	defer closePipe()
