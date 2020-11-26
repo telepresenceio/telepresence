@@ -58,6 +58,7 @@ func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, th
 
 	// We want this command to keep on running. If it returns an error, then it was unsuccessful.
 	if err = pf.Start(); err != nil {
+		dlog.Errorf(c, "port-forward failed to start: %s", client.RunError(err).Error())
 		return err
 	}
 
@@ -77,6 +78,8 @@ func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, th
 	err = pf.Wait()
 	if ok {
 		err = nil
+	} else {
+		dlog.Errorf(c, "port-forward failed: %s", client.RunError(err).Error())
 	}
 	return err
 }
