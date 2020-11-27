@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dexec"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/datawire/telepresence2/pkg/client"
 )
+
+const connectTimeout = 5 * time.Second
 
 // k8sCluster is a Kubernetes cluster reference
 type k8sCluster struct {
@@ -58,6 +61,7 @@ func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, th
 
 	// We want this command to keep on running. If it returns an error, then it was unsuccessful.
 	if err = pf.Start(); err != nil {
+		dlog.Errorf(c, "port-forward failed to start: %s", client.RunError(err).Error())
 		return err
 	}
 
@@ -77,14 +81,17 @@ func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, th
 	err = pf.Wait()
 	if ok {
 		err = nil
+	} else {
+		dlog.Errorf(c, "port-forward failed: %s", client.RunError(err).Error())
 	}
 	return err
 }
 
 // check for cluster connectivity
 func (kc *k8sCluster) check(c context.Context) error {
-	cmd := kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found")
-	return cmd.Run()
+	c, cancel := context.WithTimeout(c, connectTimeout)
+	defer cancel()
+	return kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found").Run()
 }
 
 func newKCluster(kubeConfig, ctxName, namespace string, kargs ...string) (*k8sCluster, error) {

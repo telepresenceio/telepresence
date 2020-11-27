@@ -15,7 +15,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
 
 	"github.com/datawire/telepresence2/pkg/client"
 	manager "github.com/datawire/telepresence2/pkg/rpc"
@@ -110,32 +109,21 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 	}()
 
 	// First check. Establish connection
+	tc, cancel := context.WithTimeout(c, connectTimeout)
+	defer cancel()
+
 	var conn *grpc.ClientConn
-	conn, err = grpc.Dial(fmt.Sprintf("127.0.0.1:%d", tm.apiPort), grpc.WithInsecure(), grpc.WithNoProxy())
+	conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", tm.apiPort),
+		grpc.WithInsecure(),
+		grpc.WithNoProxy(),
+		grpc.WithBlock())
 	if err != nil {
 		dlog.Errorf(c, "error when dialing traffic-manager: %s", err.Error())
 		return err
 	}
 
-	// Wait until connection is ready
-	for {
-		state := conn.GetState()
-		switch state {
-		case connectivity.Idle, connectivity.Ready:
-			// Do nothing. We'll break out of the loop after the switch.
-		case connectivity.Connecting:
-			time.Sleep(10 * time.Millisecond)
-			continue
-		default:
-			err := fmt.Errorf("connection state: %s", state.String())
-			dlog.Errorf(c, "error when connecting traffic-manager: %s", err.Error())
-			return err
-		}
-		break
-	}
-
-	grpc := manager.NewManagerClient(conn)
-	si, err := grpc.ArriveAsClient(c, &manager.ClientInfo{
+	mClient := manager.NewManagerClient(conn)
+	si, err := mClient.ArriveAsClient(c, &manager.ClientInfo{
 		Name:      tm.userAndHost,
 		InstallId: tm.installID,
 		Product:   "telepresence",
@@ -148,7 +136,7 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 		return err
 	}
 	tm.conn = conn
-	tm.grpc = grpc
+	tm.grpc = mClient
 	tm.sessionID = si.SessionId
 
 	g := dgroup.ParentGroup(c)
@@ -201,12 +189,7 @@ func (tm *trafficManager) remain(c context.Context) error {
 	}
 }
 
-// Name implements Resource
-func (tm *trafficManager) Name() string {
-	return "trafficMgr"
-}
-
-// Close implements Resource
+// Close implements io.Closer
 func (tm *trafficManager) Close() error {
 	if tm.conn != nil {
 		_ = tm.conn.Close()

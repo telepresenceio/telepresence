@@ -25,7 +25,7 @@ Unless the daemon is already started, an attempt will be made to start it. This 
 involve a call to sudo unless this command is run as root (not recommended).
 
 run a command with an intercept in place:
-    telepresence --intercept hello -port 9000 -- <command> arguments...
+    telepresence --intercept hello --port 9000 -- <command> arguments...
 `
 
 // Command returns the top level "telepresence" CLI command
@@ -60,7 +60,7 @@ func Command() *cobra.Command {
 		"Give back the original prompt instead of running a subshell",
 	)
 	flags.BoolVarP(&r.Status,
-		"status", "", false,
+		"status", "s", false,
 		"Show connectivity status",
 	)
 	flags.BoolVarP(&r.Quit,
@@ -68,11 +68,11 @@ func Command() *cobra.Command {
 		"Tell daemon to quit. Only meaningful after using --no-wait",
 	)
 	flags.BoolVarP(&r.Version,
-		"version", "", false,
+		"version", "v", false,
 		"Show program's version number and exit",
 	)
 	flags.BoolVarP(&r.List,
-		"list", "", false,
+		"list", "l", false,
 		"List current intercepts")
 	flags.StringVarP(&r.DNS,
 		"dns", "", "",
@@ -91,12 +91,12 @@ func Command() *cobra.Command {
 		"The Kubernetes namespace to use. Defaults to kubectl's default for the context.",
 	)
 	flags.StringVarP(&r.RemoveIntercept,
-		"remove", "", "",
+		"remove", "r", "",
 		"Name of deployment to remove intercept for",
 	)
 	spec := r.CreateInterceptRequest.InterceptSpec
-	flags.StringVarP(&spec.Name, "intercept", "", "", "Name of deployment to intercept")
-	flags.StringVarP(&spec.TargetHost, "port", "", "", "Local port to forward to")
+	flags.StringVarP(&spec.Name, "intercept", "i", "", "Name of deployment to intercept")
+	flags.StringVarP(&spec.TargetHost, "port", "p", "", "Local port to forward to")
 	rootCmd.InitDefaultHelpCmd()
 	return rootCmd
 }

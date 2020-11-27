@@ -7,6 +7,7 @@ import (
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
+	"github.com/sirupsen/logrus"
 )
 
 type searchDomains struct {
@@ -17,9 +18,9 @@ type searchDomains struct {
 // OverrideSearchDomains establishes overrides for the given search domains and
 // returns a function that removes the overrides. This function does nothing unless
 // the host OS is "darwin".
-func OverrideSearchDomains(c context.Context, domains string) (func(context.Context), error) {
+func OverrideSearchDomains(c context.Context, domains string) (func(), error) {
 	if runtime.GOOS != "darwin" {
-		return func(_ context.Context) {}, nil
+		return func() {}, nil
 	}
 
 	ifaces, err := getIfaces(c)
@@ -44,7 +45,8 @@ func OverrideSearchDomains(c context.Context, domains string) (func(context.Cont
 	}
 
 	// return function to restore dns search paths
-	return func(c context.Context) {
+	return func() {
+		c = dlog.WithLogger(context.Background(), dlog.WrapLogrus(logrus.StandardLogger()))
 		for _, prev := range previous {
 			if err := setSearchDomains(c, prev.interfaces, prev.domains); err != nil {
 				dlog.Errorf(c, "error setting search domain for interface %v: %v", prev.interfaces, err)

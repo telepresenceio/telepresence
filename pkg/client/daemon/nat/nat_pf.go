@@ -139,7 +139,10 @@ func (t *Translator) Enable(c context.Context) error {
 }
 
 func (t *Translator) Disable(c context.Context) error {
-	_ = _pf("-X", t.token)
+	defer func() {
+		_ = pf(c, []string{"-a", t.Name, "-F", "all"}, "")
+	}()
+	_ = pf(c, []string{"-X", t.token}, "")
 
 	if t.dev != nil {
 		for _, action := range actions {
@@ -164,8 +167,6 @@ func (t *Translator) Disable(c context.Context) error {
 			}
 		}
 	}
-
-	_ = pf(c, []string{"-a", t.Name, "-F", "all"}, "")
 	return nil
 }
 

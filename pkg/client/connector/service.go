@@ -42,7 +42,6 @@ type service struct {
 	cluster      *k8sCluster
 	bridge       *bridge
 	trafficMgr   *trafficManager
-	grpc         *grpc.Server
 	ctx          context.Context
 	cancel       func()
 }
@@ -211,16 +210,19 @@ func (d *daemonLogger) Write(data []byte) (n int, err error) {
 
 // connect the connector to a cluster
 func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
-	reporter := &metriton.Reporter{
-		Application:  "telepresence2",
-		Version:      client.Version(),
-		GetInstallID: func(_ *metriton.Reporter) (string, error) { return cr.InstallId, nil },
-		BaseMetadata: map[string]interface{}{"mode": "daemon"},
-	}
+	dgroup.ParentGroup(c).Go("metriton", func(c context.Context) error {
+		reporter := &metriton.Reporter{
+			Application:  "telepresence2",
+			Version:      client.Version(),
+			GetInstallID: func(_ *metriton.Reporter) (string, error) { return cr.InstallId, nil },
+			BaseMetadata: map[string]interface{}{"mode": "daemon"},
+		}
 
-	if _, err := reporter.Report(c, map[string]interface{}{"action": "connect"}); err != nil {
-		dlog.Errorf(c, "report failed: %+v", err)
-	}
+		if _, err := reporter.Report(s.ctx, map[string]interface{}{"action": "connect"}); err != nil {
+			dlog.Errorf(s.ctx, "report failed: %+v", err)
+		}
+		return nil // error is logged and is not fatal
+	})
 
 	// Sanity checks
 	r := &rpc.ConnectInfo{}
@@ -330,8 +332,7 @@ func run(init bool) error {
 		return err
 	}
 	defer conn.Close()
-	s := &service{daemon: daemon.NewDaemonClient(conn), grpc: grpc.NewServer()}
-	rpc.RegisterConnectorServer(s.grpc, s)
+	s := &service{daemon: daemon.NewDaemonClient(conn)}
 
 	c, err := s.setUpLogging(context.Background())
 	if err != nil {
@@ -369,9 +370,7 @@ func run(init bool) error {
 		var listener net.Listener
 		defer func() {
 			if perr := dutil.PanicToError(recover()); perr != nil {
-				if err == nil {
-					err = perr
-				}
+				dlog.Error(c, perr)
 				if listener != nil {
 					_ = listener.Close()
 				}
@@ -391,8 +390,17 @@ func run(init bool) error {
 		if err != nil {
 			return err
 		}
+
+		svc := grpc.NewServer()
+		rpc.RegisterConnectorServer(svc, s)
+
+		go func() {
+			<-c.Done()
+			svc.GracefulStop()
+		}()
+
 		close(svcStarted)
-		return s.grpc.Serve(listener)
+		return svc.Serve(listener)
 	})
 
 	g.Go("teardown", s.handleShutdown)
@@ -407,8 +415,6 @@ func run(init bool) error {
 // handleShutdown ensures that the connector quits gracefully when receiving a signal
 // or when the context is cancelled.
 func (s *service) handleShutdown(c context.Context) error {
-	defer s.grpc.GracefulStop()
-
 	<-c.Done()
 	dlog.Info(c, "Shutting down")
 
@@ -417,8 +423,8 @@ func (s *service) handleShutdown(c context.Context) error {
 		return nil
 	}
 	s.cluster = nil
-	trafficMgr := s.trafficMgr
 
+	trafficMgr := s.trafficMgr
 	s.trafficMgr = nil
 	if trafficMgr != nil {
 		_ = trafficMgr.clearIntercepts(context.Background())

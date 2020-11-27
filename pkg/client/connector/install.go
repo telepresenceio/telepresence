@@ -191,7 +191,7 @@ func findMatchingPort(c context.Context, svcs []*kates.Service, cns []corev1.Con
 			portName := port.TargetPort.StrVal
 			for ci := 0; ci < len(cns) && ccn == nil; ci++ {
 				cn := &cns[ci]
-				for pi := range cns[ci].Ports {
+				for pi := range cn.Ports {
 					if cn.Ports[pi].Name == portName {
 						msp = port
 						ccn = cn
@@ -204,7 +204,13 @@ func findMatchingPort(c context.Context, svcs []*kates.Service, cns []corev1.Con
 			portNum := port.TargetPort.IntVal
 			for ci := 0; ci < len(cns) && ccn == nil; ci++ {
 				cn := &cns[ci]
-				for pi := range cns[ci].Ports {
+				if len(cn.Ports) == 0 {
+					msp = port
+					ccn = cn
+					cpi = -1
+					break
+				}
+				for pi := range cn.Ports {
 					if cn.Ports[pi].ContainerPort == portNum {
 						msp = port
 						ccn = cn
@@ -243,10 +249,10 @@ func findMatchingPort(c context.Context, svcs []*kates.Service, cns []corev1.Con
 	if sPort == nil {
 		return nil, nil, nil, 0, fmt.Errorf("found no services with a port that matches container %s", cn.Name)
 	}
-	// TODO: if sPort.TargetType.Type == intstr.Int, then the svc must be updated to use a named port
-
 	return service, sPort, cn, cPortIndex, nil
 }
+
+var agentExists = errors.New("agent exists")
 
 func (ki *installer) ensureAgent(c context.Context, name, svcName string) error {
 	dep, err := ki.findDeployment(c, name)
@@ -260,9 +266,10 @@ func (ki *installer) ensureAgent(c context.Context, name, svcName string) error 
 	for i := len(cns) - 1; i >= 0; i-- {
 		if cns[i].Name == "traffic-agent" {
 			dlog.Debugf(c, "deployment %q already has an agent", name)
-			return nil
+			return agentExists
 		}
 	}
+	dlog.Infof(c, "no agent found for deployment %q", name)
 	return ki.addAgentToDeployment(c, svcName, dep)
 }
 
@@ -277,18 +284,32 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 	if err != nil {
 		return err
 	}
-	dlog.Debugf(c, "using service %s port %s when intercepting deployment %q", svc.Name, sPort.Name, dep.Name)
+	name := sPort.Name
+	if name == "" {
+		name = strconv.Itoa(int(sPort.Port))
+	}
+	dlog.Debugf(c, "using service %s port %s when intercepting deployment %q", svc.Name, name, dep.Name)
 
 	svcNeedsUpdate := false
+	containerPort := int32(-1)
+
 	if sPort.TargetPort.Type == intstr.Int {
 		// Service needs to use a named port
+		containerPort = sPort.TargetPort.IntVal
 		sPort.TargetPort = intstr.FromString("tele-proxied")
 		svcNeedsUpdate = true
 	}
 
-	// Remove name and change container port of the port appointed by the service
-	icp := &icn.Ports[cPortIndex]
-	icp.Name = ""
+	if cPortIndex >= 0 {
+		// Remove name and change container port of the port appointed by the service
+		icp := &icn.Ports[cPortIndex]
+		icp.Name = ""
+		containerPort = icp.ContainerPort
+	}
+
+	if containerPort < 0 {
+		return fmt.Errorf("unable to add agent to deployment %s. The container port cannot be determined", dep.Name)
+	}
 
 	tplSpec.Containers = []corev1.Container{*icn, {
 		Name:  "traffic-agent",
@@ -296,6 +317,7 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 		Args:  []string{"agent"},
 		Ports: []corev1.ContainerPort{{
 			Name:          sPort.TargetPort.StrVal,
+			Protocol:      sPort.Protocol,
 			ContainerPort: 9900,
 		}},
 		Env: []corev1.EnvVar{{
@@ -306,7 +328,7 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 			Value: dep.Name,
 		}, {
 			Name:  "APP_PORT",
-			Value: strconv.Itoa(int(icp.ContainerPort)),
+			Value: strconv.Itoa(int(containerPort)),
 		}}}}
 
 	dlog.Infof(c, "Adding agent to deployment %s in namespace %s. Image: %s", dep.Name, ki.Namespace, managerImageName())
