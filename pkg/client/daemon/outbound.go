@@ -186,15 +186,16 @@ func (o *outbound) dnsConfigWorker(c context.Context) error {
 	dns.Flush()
 
 	if o.noSearch {
-		<-c.Done()
-	} else {
-		restore, err := dns.OverrideSearchDomains(c, ".")
-		if err != nil {
-			return err
-		}
-		<-c.Done()
-		restore(dcontext.HardContext(c))
+		dlog.Debug(c, "Server done")
+		return nil
 	}
+
+	restore, err := dns.OverrideSearchDomains(c, ".")
+	if err != nil {
+		return err
+	}
+	<-c.Done()
+	restore()
 	dns.Flush()
 	dlog.Debug(c, "Server done")
 	return nil
