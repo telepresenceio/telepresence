@@ -68,21 +68,9 @@ func (p *runner) run(cmd *cobra.Command, args []string) error {
 
 func (p *runner) startSubshell(cmd *cobra.Command, ctx string) error {
 	exe := os.Getenv("SHELL")
-	var envArg string
-	var args []string
-	if strings.HasSuffix(exe, "/zsh") {
-		// TODO: Find a way to alter zsh prompt. Not sure it's possible since the option
-		//  prompt_subst must be set for prompt substitution to take place. The only way
-		//  to set it is from files being sourced when the command starts. If that is
-		//  enabled (and it really should be, it's very common), then the PS1 passed from
-		//  here is overwritten.
-		exe = "/bin/bash"
-	}
-	envArg = fmt.Sprintf(`PROMPT_COMMAND=export PS1="@%s $PS1";unset PROMPT_COMMAND`, ctx)
-	args = []string{"-i"}
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "Starting a %s subshell\n", exe)
-	return start(exe, args, true, cmd.InOrStdin(), out, cmd.ErrOrStderr(), envArg)
+	return start(exe, []string{"i"}, true, cmd.InOrStdin(), out, cmd.ErrOrStderr())
 }
 
 func (p *runner) runWithDaemon(cmd *cobra.Command, f func(ds *daemonState) error) error {
