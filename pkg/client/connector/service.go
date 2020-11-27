@@ -42,7 +42,6 @@ type service struct {
 	cluster      *k8sCluster
 	bridge       *bridge
 	trafficMgr   *trafficManager
-	grpc         *grpc.Server
 	ctx          context.Context
 	cancel       func()
 }
@@ -333,8 +332,7 @@ func run(init bool) error {
 		return err
 	}
 	defer conn.Close()
-	s := &service{daemon: daemon.NewDaemonClient(conn), grpc: grpc.NewServer()}
-	rpc.RegisterConnectorServer(s.grpc, s)
+	s := &service{daemon: daemon.NewDaemonClient(conn)}
 
 	c, err := s.setUpLogging(context.Background())
 	if err != nil {
@@ -372,9 +370,7 @@ func run(init bool) error {
 		var listener net.Listener
 		defer func() {
 			if perr := dutil.PanicToError(recover()); perr != nil {
-				if err == nil {
-					err = perr
-				}
+				dlog.Error(c, perr)
 				if listener != nil {
 					_ = listener.Close()
 				}
@@ -394,8 +390,17 @@ func run(init bool) error {
 		if err != nil {
 			return err
 		}
+
+		svc := grpc.NewServer()
+		rpc.RegisterConnectorServer(svc, s)
+
+		go func() {
+			<-c.Done()
+			svc.GracefulStop()
+		}()
+
 		close(svcStarted)
-		return s.grpc.Serve(listener)
+		return svc.Serve(listener)
 	})
 
 	g.Go("teardown", s.handleShutdown)
@@ -410,8 +415,6 @@ func run(init bool) error {
 // handleShutdown ensures that the connector quits gracefully when receiving a signal
 // or when the context is cancelled.
 func (s *service) handleShutdown(c context.Context) error {
-	defer s.grpc.GracefulStop()
-
 	<-c.Done()
 	dlog.Info(c, "Shutting down")
 
@@ -420,8 +423,8 @@ func (s *service) handleShutdown(c context.Context) error {
 		return nil
 	}
 	s.cluster = nil
-	trafficMgr := s.trafficMgr
 
+	trafficMgr := s.trafficMgr
 	s.trafficMgr = nil
 	if trafficMgr != nil {
 		_ = trafficMgr.clearIntercepts(context.Background())
