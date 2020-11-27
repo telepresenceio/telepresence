@@ -25,6 +25,7 @@ generate: $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
 	cd ./pkg/rpc && go mod vendor
 	go mod tidy
 	go mod vendor
+	rm -rf ./pkg/rpc/vendor ./vendor
 
 .PHONY: generate-clean
 generate-clean: ## (Generate) Delete generated files that get checked in to Git
