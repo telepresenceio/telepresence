@@ -14,7 +14,7 @@ clobber: clobber-tools
 .PHONY: clobber-tools
 
 clobber-tools:
-	rm -rf $(TOOLSDIR)
+	rm -rf $(TOOLSBINDIR) $(TOOLSDIR)/include $(TOOLSDIR)/*.*
 
 # Protobuf compiler
 # =================
