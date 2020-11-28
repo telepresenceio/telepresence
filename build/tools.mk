@@ -2,17 +2,12 @@
 
 TOOLSDIR=tools
 TOOLSBINDIR=$(TOOLSDIR)/bin
+TOOLSSRCDIR=$(TOOLSDIR)/src
 
 GOHOSTOS=$(shell go env GOHOSTOS)
 GOHOSTARCH=$(shell go env GOHOSTARCH)
 
-# assume first directory in path is the local go directory
-GOPATH=$(shell go env GOPATH)
-GOLOCAL=$(word 1, $(subst :, ,$(GOPATH)))
-GOSRC=$(GOLOCAL)/src
-GOBIN=$(GOLOCAL)/bin
-
-export PATH := $(TOOLSDIR)/bin:$(GOBIN):$(PATH)
+export PATH := $(TOOLSDIR)/bin:$(PATH)
 
 clobber: clobber-tools
 
@@ -23,37 +18,45 @@ clobber-tools:
 
 # Protobuf compiler
 # =================
-
+#
 # Install protoc under $TOOLSDIR. A protoc that is already installed locally
 # cannot be trusted since this must be the exact same version as used when
 # running CI. If it isn't, the generate-check will fail.
+tools/protoc = $(TOOLSBINDIR)/protoc
 PROTOC_VERSION=3.13.0
-PROTOC=$(TOOLSBINDIR)/protoc
 PROTOC_ZIP=protoc-$(PROTOC_VERSION)-$(subst darwin,osx,$(GOHOSTOS))-$(shell uname -m).zip
-$(PROTOC):
-	mkdir -p $(TOOLSBINDIR)
-	curl -sfL https://github.com/protocolbuffers/protobuf/releases/download/v$(PROTOC_VERSION)/$(PROTOC_ZIP) -o $(TOOLSDIR)/$(PROTOC_ZIP)
-	cd $(TOOLSDIR) && unzip -q $(PROTOC_ZIP)
+$(TOOLSDIR)/$(PROTOC_ZIP):
+	mkdir -p $(@D)
+	curl -sfL https://github.com/protocolbuffers/protobuf/releases/download/v$(PROTOC_VERSION)/$(PROTOC_ZIP) -o $@
+%/bin/protoc %/include %/readme.txt: %/$(PROTOC_ZIP)
+	cd $* && unzip -q -o -DD $(<F)
 
-# Install protoc-gen and protoc-gen-go-grpc
-$(GOBIN)/protoc-gen-go $(GOBIN)/protoc-gen-go-grpc: go.mod
-	go get github.com/golang/protobuf/protoc-gen-go google.golang.org/grpc/cmd/protoc-gen-go-grpc
+# `go get`-able things
+# ====================
+#
+# Install the all under $TOOLSDIR. Versions that are already in $GOBIN
+# cannot be trusted since this must be the exact same version as used
+# when running CI. If it isn't the generate-check will fail.
+#
+# Instead of having "VERSION" variables here, the versions are
+# controlled by `tools/src/${thing}/go.mod` files.  Having those in
+# separate per-tool go.mod files avoids conflicts between tools and
+# avoid them poluting our main go.mod file.
+tools/protoc-gen-go      = $(TOOLSBINDIR)/protoc-gen-go
+tools/protoc-gen-go-grpc = $(TOOLSBINDIR)/protoc-gen-go-grpc
+tools/ko                 = $(TOOLSBINDIR)/ko
+tools/golangci-lint      = $(TOOLSBINDIR)/golangci-lint
+$(TOOLSBINDIR)/%: $(TOOLSSRCDIR)/%/go.mod $(TOOLSSRCDIR)/%/pin.go
+	cd $(<D) && go build -o $(abspath $@) $$(sed -En 's,^import "(.*)"$$,\1,p' pin.go)
 
-# Install ko (needs to be done in /tmp to avoid conflicting updates of go.mod)
-$(GOBIN)/ko: go.mod
-	cd /tmp && go get github.com/google/ko/cmd/ko
-
-# Linters
-# =======
-
-GOLANGCI_LINT=$(TOOLSBINDIR)/golangci-lint
-$(GOLANGCI_LINT):
-	curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(TOOLSBINDIR) latest
-
+# Protobuf linter
+# ===============
+#
+tools/protolint = $(TOOLSBINDIR)/protolint
 PROTOLINT_VERSION=0.26.0
 PROTOLINT_TGZ=protolint_$(PROTOLINT_VERSION)_$(shell uname -s)_$(shell uname -m).tar.gz
-PROTOLINT=$(TOOLSBINDIR)/protolint
-$(PROTOLINT):
-	mkdir -p $(TOOLSBINDIR)
-	curl -sfL https://github.com/yoheimuta/protolint/releases/download/v$(PROTOLINT_VERSION)/$(PROTOLINT_TGZ) -o $(TOOLSDIR)/$(PROTOLINT_TGZ)
-	tar -C $(TOOLSBINDIR) -zxf $(TOOLSDIR)/$(PROTOLINT_TGZ)
+$(TOOLSDIR)/$(PROTOLINT_TGZ):
+	mkdir -p $(@D)
+	curl -sfL https://github.com/yoheimuta/protolint/releases/download/v$(PROTOLINT_VERSION)/$(PROTOLINT_TGZ) -o $@
+%/bin/protolint %/bin/protoc-gen-protolint: %/$(PROTOLINT_TGZ)
+	tar -C $(@D) -zxf $< protolint protoc-gen-protolint

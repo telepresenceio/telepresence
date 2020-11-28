@@ -1,0 +1,21 @@
+root = true
+
+[*]
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.go]
+indent_style = tab
+; mimic gofmt's go/printer.printer.funcBody().maxSize
+max_line_length = 100
+; mimic gofmt's cmd/gofmt.tabWidth
+tab_width = 8
+
+[{go.mod,go.sum}]
+indent_style = tab
+
+[*.proto]
+indent_style = space
+indent_size = 2
