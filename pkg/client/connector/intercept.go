@@ -8,8 +8,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 
 	"github.com/datawire/telepresence2/pkg/client"
@@ -25,7 +26,7 @@ func (s *service) interceptStatus() (rpc.InterceptError, string) {
 		ie = rpc.InterceptError_NO_CONNECTION
 	case s.trafficMgr == nil:
 		ie = rpc.InterceptError_NO_TRAFFIC_MANAGER
-	case !s.trafficMgr.IsOkay():
+	case s.trafficMgr.grpc == nil:
 		if s.trafficMgr.apiErr != nil {
 			ie = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
 			msg = s.trafficMgr.apiErr.Error()
@@ -37,26 +38,32 @@ func (s *service) interceptStatus() (rpc.InterceptError, string) {
 }
 
 // addIntercept adds one intercept
-func (tm *trafficManager) addIntercept(c context.Context, ir *manager.CreateInterceptRequest) (*rpc.InterceptResult, error) {
+func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager.CreateInterceptRequest) (*rpc.InterceptResult, error) {
 	result := &rpc.InterceptResult{}
 	mechanism := "tcp"
 
 	ags := tm.agentInfoSnapshot()
-	name := ir.InterceptSpec.Name
 	var found []*manager.AgentInfo
-	for _, ag := range ags.Agents {
-		for _, m := range ag.Mechanisms {
-			if mechanism == m.Name {
-				found = append(found, ag)
-				break
+	if ags != nil {
+		for _, ag := range ags.Agents {
+			for _, m := range ag.Mechanisms {
+				if mechanism == m.Name {
+					found = append(found, ag)
+					break
+				}
 			}
 		}
 	}
 
+	name := ir.InterceptSpec.Name
 	switch len(found) {
 	case 0:
-		dlog.Infof(c, "no agent found for deployment %q", name)
 		if err := tm.installer.ensureAgent(c, name, ""); err != nil {
+			if err == agentExists {
+				// the agent exists although it has not been reported yet
+				break
+			}
+			dlog.Error(c, err.Error())
 			result.Error = rpc.InterceptError_NOT_FOUND
 			result.ErrorText = err.Error()
 			return result, nil
@@ -64,6 +71,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *manager.CreateInte
 		dlog.Infof(c, "waiting for new agent for deployment %q", name)
 		_, err := tm.waitForAgent(name)
 		if err != nil {
+			dlog.Error(c, err.Error())
 			result.Error = rpc.InterceptError_NOT_FOUND
 			result.ErrorText = err.Error()
 			return result, nil
@@ -91,15 +99,15 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *manager.CreateInte
 
 	ii, err = tm.waitForActiveIntercept(ii.Id)
 	if err != nil {
-		_, _ = tm.removeIntercept(c, name)
+		_ = tm.removeIntercept(c, name)
 		result.Error = rpc.InterceptError_FAILED_TO_ESTABLISH
 		result.ErrorText = err.Error()
 		return result, nil
 	}
 
-	err = tm.makeIntercept(c, ii)
+	err = tm.makeIntercept(c, longLived, ii)
 	if err != nil {
-		_, _ = tm.removeIntercept(c, name)
+		_ = tm.removeIntercept(c, name)
 		result.Error = rpc.InterceptError_FAILED_TO_ESTABLISH
 		result.ErrorText = err.Error()
 		return result, nil
@@ -146,7 +154,7 @@ func (tm *trafficManager) waitForAgent(name string) (*manager.AgentInfo, error) 
 
 // makeIntercept acquires an intercept and returns a Resource handle
 // for it
-func (tm *trafficManager) makeIntercept(c context.Context, ii *manager.InterceptInfo) error {
+func (tm *trafficManager) makeIntercept(c, longLived context.Context, ii *manager.InterceptInfo) error {
 	is := ii.Spec
 	dlog.Infof(c, "%s: Intercepting via port %v", is.Name, ii.ManagerPort)
 
@@ -159,29 +167,27 @@ func (tm *trafficManager) makeIntercept(c context.Context, ii *manager.Intercept
 	}
 
 	dlog.Infof(c, "%s: starting SSH tunnel", is.Name)
-
-	cept := &intercept{ii: ii, tm: tm}
-	cept.Setup(c, is.Name, cept.check, cept.quit)
-	ssh, err := client.CheckedRetryingCommand(c, is.Name+"-ssh", "ssh", sshArgs, nil, 5*time.Second)
-	if err != nil {
-		_ = cept.Close()
-		return err
-	}
-	cept.crc = ssh
-	tm.cept = cept
-	return nil
+	tm.myIntercept = is.Name
+	c, tm.cancelIntercept = context.WithCancel(longLived)
+	c = dgroup.WithGoroutineName(c, ii.Id)
+	return client.Retry(c, func(c context.Context) error {
+		return dexec.CommandContext(c, "ssh", sshArgs...).Start()
+	})
 }
 
 // removeIntercept removes one intercept by name
-func (tm *trafficManager) removeIntercept(c context.Context, name string) (*empty.Empty, error) {
-	if cept := tm.cept; cept != nil {
-		tm.cept = nil
-		_ = cept.Close()
+func (tm *trafficManager) removeIntercept(c context.Context, name string) error {
+	if name == tm.myIntercept {
+		dlog.Debugf(c, "cancelling intercept %s", name)
+		tm.myIntercept = ""
+		tm.cancelIntercept()
 	}
-	return tm.grpc.RemoveIntercept(c, &manager.RemoveInterceptRequest2{
+	dlog.Debugf(c, "telling manager to remove intercept %s", name)
+	_, err := tm.grpc.RemoveIntercept(c, &manager.RemoveInterceptRequest2{
 		Session: tm.session(),
 		Name:    name,
 	})
+	return err
 }
 
 // clearIntercepts removes all intercepts
@@ -191,33 +197,10 @@ func (tm *trafficManager) clearIntercepts(c context.Context) error {
 		return nil
 	}
 	for _, cept := range is.Intercepts {
-		_, err := tm.removeIntercept(c, cept.Spec.Name)
+		err := tm.removeIntercept(c, cept.Spec.Name)
 		if err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func (cept *intercept) check(_ context.Context) error {
-	// Traffic Manager check should be enough
-	return nil
-}
-
-// intercept is a Resource handle that represents a live intercept
-type intercept struct {
-	client.ResourceBase
-	ii  *manager.InterceptInfo
-	tm  *trafficManager
-	crc client.Resource
-}
-
-func (cept *intercept) quit(c context.Context) error {
-	cept.SetDone()
-
-	dlog.Infof(c, "cept.Quit removing %v", cept.ii.Spec.Name)
-	if cept.crc != nil {
-		_ = cept.crc.Close()
 	}
 	return nil
 }

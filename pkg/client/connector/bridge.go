@@ -65,7 +65,7 @@ type bridgeData struct {
 	Services []*kates.Service
 }
 
-func (t *bridge) updateTable(c context.Context, snapshot *bridgeData) {
+func (br *bridge) updateTable(c context.Context, snapshot *bridgeData) {
 	table := iptables.Table{Name: "kubernetes"}
 	for _, svc := range snapshot.Services {
 		spec := svc.Spec
@@ -145,19 +145,19 @@ func (t *bridge) updateTable(c context.Context, snapshot *bridgeData) {
 
 	// Send updated table to daemon
 	dlog.Debugf(c, "sending table update for table iptables %s", table.Name)
-	if _, err := t.daemon.Update(c, &table); err != nil {
+	if _, err := br.daemon.Update(c, &table); err != nil {
 		dlog.Errorf(c, "error posting update to %s: %v", table.Name, err)
 	}
 }
 
-func (t *bridge) createWatch(c context.Context, namespace string) (acc *kates.Accumulator, err error) {
+func (br *bridge) createWatch(c context.Context, namespace string) (acc *kates.Accumulator, err error) {
 	defer func() {
 		if r := dutil.PanicToError(recover()); r != nil {
 			err = r
 		}
 	}()
 
-	return t.client.Watch(c,
+	return br.client.Watch(c,
 		kates.Query{
 			Name:      "Services",
 			Namespace: namespace,
@@ -170,39 +170,31 @@ func (t *bridge) createWatch(c context.Context, namespace string) (acc *kates.Ac
 		}), nil
 }
 
-func (t *bridge) startWatches(c context.Context, namespace string) error {
-	acc, err := t.createWatch(c, namespace)
-	if err != nil {
+func (br *bridge) start(c context.Context) error {
+	if err := checkKubectl(c); err != nil {
 		return err
 	}
-	snapshot := bridgeData{}
+	c, br.cancel = context.WithCancel(c)
 
-	go func() {
-		for {
-			select {
-			case <-c.Done():
-				return
-			case <-acc.Changed():
-				if acc.Update(&snapshot) {
-					t.updateTable(c, &snapshot)
-				}
-			}
-		}
-	}()
+	g := dgroup.ParentGroup(c)
+	g.Go(K8sPortForwardWorker, func(c context.Context) error {
+		return client.Retry(c, br.portForwardWorker)
+	})
+	g.Go(K8sBridgeWorker, br.bridgeWorker)
 	return nil
 }
 
-func (t *bridge) bridgeWorker(c context.Context) error {
+func (br *bridge) bridgeWorker(c context.Context) error {
 	// setup kubernetes bridge
-	dlog.Infof(c, "kubernetes namespace=%s", t.Namespace)
+	dlog.Infof(c, "kubernetes namespace=%s", br.Namespace)
 	paths := []string{
-		t.Namespace + ".svc.cluster.local.",
+		br.Namespace + ".svc.cluster.local.",
 		"svc.cluster.local.",
 		"cluster.local.",
 		"",
 	}
 	dlog.Infof(c, "Setting DNS search path: %s", paths[0])
-	_, err := t.daemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths})
+	_, err := br.daemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths})
 	if err != nil {
 		dlog.Errorf(c, "error setting up search path: %v", err)
 		panic(err) // Because this will fail if we win the startup race
@@ -210,65 +202,61 @@ func (t *bridge) bridgeWorker(c context.Context) error {
 
 	// start watcher using DoClean so that the user can interrupt it --
 	// it can take a while depending on the cluster and on connectivity.
-	if err = t.startWatches(c, kates.NamespaceAll); err == nil {
+	if err = br.startWatches(c, kates.NamespaceAll); err == nil {
 		return nil
 	}
 	dlog.Errorf(c, "watch all namespaces: %+v", err)
-	dlog.Errorf(c, "falling back to watching only %q", t.Namespace)
-	return t.startWatches(c, t.Namespace)
+	dlog.Errorf(c, "falling back to watching only %q", br.Namespace)
+	return br.startWatches(c, br.Namespace)
 }
 
-func (t *bridge) start(c context.Context) error {
-	if err := checkKubectl(c); err != nil {
+func (br *bridge) portForwardWorker(c context.Context) error {
+	var pods []*kates.Pod
+	err := br.client.List(c, kates.Query{
+		Kind:          "pod",
+		Namespace:     br.Namespace,
+		LabelSelector: "app=traffic-manager",
+	}, &pods)
+	if err != nil {
 		return err
 	}
-	c, t.cancel = context.WithCancel(c)
+	if len(pods) == 0 {
+		return fmt.Errorf("found no pod with label app=traffic-manager in namespace %s", br.Namespace)
+	}
+	podName := strings.TrimSpace(pods[0].Name)
+	kpfArgs := []string{"port-forward", fmt.Sprintf("pod/%s", podName), "8022"}
+	return br.portForwardAndThen(c, kpfArgs, K8sSSHWorker, br.sshWorker)
+}
 
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-	g.Go(K8sPortForwardWorker, func(c context.Context) error {
-		return client.Retry(c, func(c context.Context) error {
-			var pods []*kates.Pod
-			err := t.client.List(c, kates.Query{
-				Kind:          "pod",
-				Namespace:     t.Namespace,
-				LabelSelector: "app=traffic-manager",
-			}, &pods)
-			if err != nil {
-				return err
-			}
-			if len(pods) == 0 {
-				return fmt.Errorf("found no pod with label app=traffic-manager in namespace %s", t.Namespace)
-			}
-			podName := strings.TrimSpace(pods[0].Name)
+func (br *bridge) startWatches(c context.Context, namespace string) error {
+	acc, err := br.createWatch(c, namespace)
+	if err != nil {
+		return err
+	}
+	snapshot := bridgeData{}
 
-			pf := dexec.CommandContext(c, "kubectl", append(t.getKubectlArgs(), "port-forward", fmt.Sprintf("pod/%s", podName), "8022")...)
-
-			// We want this command to keep on running. If it returns an error, then it was unsuccessful.
-			errCh := make(chan error)
-			go func() {
-				errCh <- pf.Run()
-			}()
-
+	dgroup.ParentGroup(c).Go("watch-k8s", func(c context.Context) error {
+		for {
 			select {
-			case err = <-errCh:
-				return err
-			case <-time.After(3 * time.Second):
-				g.Go(K8sSSHWorker, func(c context.Context) error {
-					return client.Retry(c, func(c context.Context) error {
-						// XXX: probably need some kind of keepalive check for ssh, first
-						// curl after wakeup seems to trigger detection of death
-						ssh := dexec.CommandContext(c, "ssh", "-D", "localhost:1080", "-C", "-N", "-oConnectTimeout=5",
-							"-oExitOnForwardFailure=yes", "-oStrictHostKeyChecking=no",
-							"-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", "8022")
-						return ssh.Run()
-					})
-				})
+			case <-c.Done():
 				return nil
+			case <-acc.Changed():
+				if acc.Update(&snapshot) {
+					br.updateTable(c, &snapshot)
+				}
 			}
-		})
+		}
 	})
-	g.Go(K8sBridgeWorker, t.bridgeWorker)
 	return nil
+}
+
+func (br *bridge) sshWorker(c context.Context) error {
+	// XXX: probably need some kind of keepalive check for ssh, first
+	// curl after wakeup seems to trigger detection of death
+	ssh := dexec.CommandContext(c, "ssh", "-D", "localhost:1080", "-C", "-N", "-oConnectTimeout=5",
+		"-oExitOnForwardFailure=yes", "-oStrictHostKeyChecking=no",
+		"-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", "8022")
+	return ssh.Run()
 }
 
 const kubectlErr = "kubectl version 1.10 or greater is required"
@@ -306,11 +294,11 @@ func checkKubectl(c context.Context) error {
 }
 
 // check checks the status of teleproxy bridge by doing the equivalent of
-//  curl http://traffic-proxy.svc:8022.
+//  curl http://traffic-manager.svc:8022.
 // Note there is no namespace specified, as we are checking for bridge status in the
 // current namespace.
-func (t *bridge) check(c context.Context) bool {
-	address := fmt.Sprintf("localhost:%d", t.sshPort)
+func (br *bridge) check(c context.Context) bool {
+	address := fmt.Sprintf("localhost:%d", br.sshPort)
 	conn, err := net.DialTimeout("tcp", address, 15*time.Second)
 	if err != nil {
 		dlog.Errorf(c, "fail to establish tcp connection to %s: %s", address, err.Error())

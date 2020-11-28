@@ -1,25 +1,28 @@
 package connector
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 
 	"github.com/datawire/telepresence2/pkg/client"
 )
 
+const connectTimeout = 5 * time.Second
+
 // k8sCluster is a Kubernetes cluster reference
 type k8sCluster struct {
 	kates.ClientOptions
-	client       *kates.Client
-	srv          string
-	kargs        []string
-	isBridgeOkay func(c context.Context) bool
-	client.ResourceBase
+	client *kates.Client
+	srv    string
+	kargs  []string
 }
 
 // getKubectlArgs returns the kubectl command arguments to run a
@@ -48,21 +51,47 @@ func (kc *k8sCluster) server() string {
 	return kc.srv
 }
 
-// setBridgeCheck sets the callable used to check whether the Teleproxy bridge
-// is functioning. If this is nil/unset, cluster monitoring checks the cluster
-// directly (via kubectl)
-func (kc *k8sCluster) setBridgeCheck(isBridgeOkay func(c context.Context) bool) {
-	kc.isBridgeOkay = isBridgeOkay
+func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, thenName string, then func(context.Context) error) error {
+	pf := dexec.CommandContext(c, "kubectl", kc.getKubectlArgs(kpfArgs...)...)
+	out, err := pf.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	// We want this command to keep on running. If it returns an error, then it was unsuccessful.
+	if err = pf.Start(); err != nil {
+		dlog.Errorf(c, "port-forward failed to start: %s", client.RunError(err).Error())
+		return err
+	}
+
+	sc := bufio.NewScanner(out)
+
+	// TODO: Need timeout
+	ok := false
+	for sc.Scan() {
+		txt := sc.Text()
+		if !ok && strings.HasPrefix(txt, "Forwarding from") {
+			// Forwarding is running. This is what we waited for
+			ok = true
+			dlog.Debug(c, txt)
+			dgroup.ParentGroup(c).Go(thenName, then)
+		}
+	}
+	err = pf.Wait()
+	if ok {
+		err = nil
+	} else {
+		dlog.Errorf(c, "port-forward failed: %s", client.RunError(err).Error())
+	}
+	return err
 }
 
 // check for cluster connectivity
 func (kc *k8sCluster) check(c context.Context) error {
-	// If the bridge is okay then the cluster is okay
-	if kc.isBridgeOkay != nil && kc.isBridgeOkay(c) {
-		return nil
-	}
-	cmd := kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found")
-	return cmd.Run()
+	c, cancel := context.WithTimeout(c, connectTimeout)
+	defer cancel()
+	return kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found").Run()
 }
 
 func newKCluster(kubeConfig, ctxName, namespace string, kargs ...string) (*k8sCluster, error) {
@@ -114,15 +143,12 @@ func trackKCluster(c context.Context, ctxName, namespace string, kargs []string)
 	dlog.Infof(c, "Context: %s", kc.Context)
 
 	cmd := kc.getKubectlCmd(c, "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
-	dlog.Infof(c, "%s %v", cmd.Path, cmd.Args[1:])
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("kubectl config view server: %s", client.RunError(err).Error())
 	}
 	kc.srv = strings.TrimSpace(string(output))
 	dlog.Infof(c, "Server: %s", kc.srv)
-
-	kc.Setup(c, "cluster", kc.check, func(context.Context) error { kc.SetDone(); return nil })
 	return kc, nil
 }
 

@@ -24,6 +24,8 @@ TELEPRESENCE_VERSION ?= $(shell git describe --tags)$(foreach TIME,$(_TIME),$(VE
 
 default: help
 .PHONY: default
+.SECONDARY:
+.DELETE_ON_ERROR:
 
 include build/tools.mk
 include build/go.mk

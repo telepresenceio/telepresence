@@ -6,10 +6,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os/exec"
 	"strings"
 	"syscall"
 
-	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/telepresence2/pkg/client"
+
+	"github.com/datawire/dlib/dlog"
 )
 
 type Translator struct {
@@ -17,7 +20,9 @@ type Translator struct {
 }
 
 func (t *Translator) ipt(c context.Context, args ...string) error {
-	return dexec.CommandContext(c, "iptables", append([]string{"-t", "nat"}, args...)...).Run()
+	// Deliberately avoiding dexec here as this cannot be interrupted when cleaning up
+	dlog.Debugf(c, "running %s", client.ShellString("iptables", args))
+	return exec.Command("iptables", append([]string{"-t", "nat"}, args...)...).Run()
 }
 
 func (t *Translator) Enable(c context.Context) (err error) {
