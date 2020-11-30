@@ -80,6 +80,7 @@ func wrap(impl handledConnectionImpl) Conn {
 	return &handledConn{
 		conn: impl,
 
+		wait:          make(chan struct{}),
 		closed:        make(chan struct{}),
 		readDeadline:  makePipeDeadline(),
 		writeDeadline: makePipeDeadline(),
@@ -104,19 +105,21 @@ func (c *handledConn) Read(b []byte) (int, error) {
 		}
 
 		chunk, err := c.conn.Recv()
-		switch chunk := chunk.Value.(type) {
-		case *systema2manager.ConnectionChunk_InterceptId:
-			c.readErr = errors.New("HandleConnection: unexpected intercept_id chunk")
-			c.Close()
-			continue
-		case *systema2manager.ConnectionChunk_Data:
-			if chunk != nil && len(chunk.Data) > 0 {
-				c.readBuff.Write(chunk.Data)
+		if chunk != nil && chunk.Value != nil {
+			switch chunk := chunk.Value.(type) {
+			case *systema2manager.ConnectionChunk_InterceptId:
+				c.readErr = errors.New("HandleConnection: unexpected intercept_id chunk")
+				c.Close()
+				continue
+			case *systema2manager.ConnectionChunk_Data:
+				if chunk != nil && len(chunk.Data) > 0 {
+					c.readBuff.Write(chunk.Data)
+				}
+			case *systema2manager.ConnectionChunk_Error:
+				c.readErr = fmt.Errorf("HandleConnection: remote error: %s", chunk.Error)
+				c.Close()
+				continue
 			}
-		case *systema2manager.ConnectionChunk_Error:
-			c.readErr = fmt.Errorf("HandleConnection: remote error: %s", chunk.Error)
-			c.Close()
-			continue
 		}
 		if err != nil && c.readErr == nil {
 			c.waitOnce.Do(func() { c.waitErr = err; close(c.wait) })
