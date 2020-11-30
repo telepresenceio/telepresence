@@ -93,21 +93,10 @@ func Main(ctx context.Context, args ...string) error {
 			cmd := dexec.CommandContext(ctx, os.Args[0], "mech-tcp") // FIXME
 			cmd.Env = append(os.Environ(), envAdd...)
 
-			if err := cmd.Start(); err != nil {
-				return err
-			}
+			err := cmd.Run()
+			dlog.Infof(ctx, "mechanism terminated: %+v", err)
 
-			mechQuit := make(chan error)
-			go func() { mechQuit <- cmd.Wait() }()
-
-			select {
-			case err := <-mechQuit:
-				dlog.Infof(ctx, "wait on mech: %+v", err)
-				continue // launch new mechanism
-			case <-ctx.Done():
-				if err := cmd.Process.Kill(); err != nil {
-					dlog.Debugf(ctx, "kill mech: %+v", err)
-				}
+			if ctx.Err() != nil {
 				return nil
 			}
 		}
