@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/sethvargo/go-envconfig"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/version"
@@ -29,8 +27,6 @@ type Config struct {
 }
 
 func Main(ctx context.Context, args ...string) error {
-	g, ctx := errgroup.WithContext(dlog.WithField(ctx, "MAIN", "main"))
-
 	dlog.Infof(ctx, "Traffic Agent %s [pid:%d]", version.Version, os.Getpid())
 
 	// Add defaults for development work
@@ -47,8 +43,7 @@ func Main(ctx context.Context, args ...string) error {
 	// Handle configuration
 	config := Config{}
 	if err := envconfig.Process(ctx, &config); err != nil {
-		dlog.Error(ctx, err)
-		os.Exit(1)
+		return err
 	}
 	dlog.Infof(ctx, "%+v", config)
 
@@ -75,11 +70,13 @@ func Main(ctx context.Context, args ...string) error {
 	}
 	info.Mechanisms = mechanisms
 
+	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
+		EnableSignalHandling: true,
+	})
+
 	// Manage the mechanism
 	mechSubprocessDisabled := true
-	g.Go(func() error {
-		ctx := dlog.WithField(ctx, "MAIN", "mech")
-
+	g.Go("mech", func(ctx context.Context) error {
 		envAdd := []string{
 			fmt.Sprintf("AGENT_PORT=%v", config.AgentPort),
 			fmt.Sprintf("APP_PORT=%v", config.AppPort),
@@ -119,9 +116,7 @@ func Main(ctx context.Context, args ...string) error {
 	var forwarder *Forwarder
 
 	// Manage the forwarder
-	g.Go(func() error {
-		ctx := dlog.WithField(ctx, "MAIN", "forward")
-
+	g.Go("forward", func(ctx context.Context) error {
 		lisAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", config.AgentPort))
 		if err != nil {
 			return err
@@ -133,8 +128,7 @@ func Main(ctx context.Context, args ...string) error {
 	})
 
 	// Talk to the Traffic Manager
-	g.Go(func() error {
-		ctx := dlog.WithField(ctx, "MAIN", "client")
+	g.Go("client", func(ctx context.Context) error {
 		gRPCAddress := fmt.Sprintf("%s:%v", config.ManagerHost, config.ManagerPort)
 
 		// Don't reconnect more than once every five seconds
@@ -153,20 +147,6 @@ func Main(ctx context.Context, args ...string) error {
 				return nil
 			case <-ticker.C:
 			}
-		}
-	})
-
-	// Handle shutdown
-	g.Go(func() error {
-		sigs := make(chan os.Signal, 1)
-		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-
-		select {
-		case sig := <-sigs:
-			dlog.Errorf(ctx, "Shutting down due to signal %v", sig)
-			return fmt.Errorf("received signal %v", sig)
-		case <-ctx.Done():
-			return nil
 		}
 	})
 
