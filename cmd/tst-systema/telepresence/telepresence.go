@@ -207,7 +207,6 @@ func (srv *Server) Serve(ctx context.Context) error {
 							// pass us a valid host:port pair.
 							panic("should not happen")
 						}
-						dlog.Infof(ctx, "DialContext(ctx, network=%q, addr=(host=%q)", network, host)
 						mipair, err := base64.RawURLEncoding.DecodeString(host)
 						if err != nil {
 							// This had to have been set by r.URL.Host
