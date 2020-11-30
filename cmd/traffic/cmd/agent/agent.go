@@ -1,4 +1,4 @@
-package main
+package agent
 
 import (
 	"context"
@@ -14,7 +14,6 @@ import (
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/pkg/agent"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/version"
 )
@@ -29,14 +28,8 @@ type Config struct {
 	ManagerPort      int32  `env:"MANAGER_PORT,default=8081"`
 }
 
-func agent_main() {
-	// Set up context with logger
-	dlog.SetFallbackLogger(makeBaseLogger())
-	g, ctx := errgroup.WithContext(dlog.WithField(context.Background(), "MAIN", "main"))
-
-	if version.Version == "" {
-		version.Version = "(devel)"
-	}
+func Main(ctx context.Context, args ...string) error {
+	g, ctx := errgroup.WithContext(dlog.WithField(ctx, "MAIN", "main"))
 
 	dlog.Infof(ctx, "Traffic Agent %s [pid:%d]", version.Version, os.Getpid())
 
@@ -123,7 +116,7 @@ func agent_main() {
 		}
 	})
 
-	var forwarder *agent.Forwarder
+	var forwarder *Forwarder
 
 	// Manage the forwarder
 	g.Go(func() error {
@@ -134,7 +127,7 @@ func agent_main() {
 			return err
 		}
 
-		forwarder = agent.NewForwarder(lisAddr)
+		forwarder = NewForwarder(lisAddr)
 
 		return forwarder.Serve(ctx, "", config.AppPort)
 	})
@@ -148,10 +141,10 @@ func agent_main() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 
-		state := agent.NewState(forwarder, config.ManagerHost)
+		state := NewState(forwarder, config.ManagerHost)
 
 		for {
-			if err := agent.TalkToManager(ctx, gRPCAddress, info, state); err != nil {
+			if err := TalkToManager(ctx, gRPCAddress, info, state); err != nil {
 				dlog.Info(ctx, err)
 			}
 
@@ -178,8 +171,5 @@ func agent_main() {
 	})
 
 	// Wait for exit
-	if err := g.Wait(); err != nil {
-		dlog.Errorf(ctx, "quit: %v", err)
-		os.Exit(1)
-	}
+	return g.Wait()
 }
