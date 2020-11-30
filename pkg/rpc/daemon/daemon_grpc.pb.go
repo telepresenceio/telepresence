@@ -4,8 +4,7 @@ package daemon
 
 import (
 	context "context"
-	iptables "github.com/datawire/telepresence2/pkg/rpc/iptables"
-	version "github.com/datawire/telepresence2/pkg/rpc/version"
+	common "github.com/datawire/telepresence2/pkg/rpc/common"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
@@ -21,7 +20,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type DaemonClient interface {
 	// Returns version information from the Daemon
-	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*version.VersionInfo, error)
+	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
 	// Returns the current connectivity status
 	Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*DaemonStatus, error)
 	// Turns network overrides off.
@@ -34,7 +33,7 @@ type DaemonClient interface {
 	// Quits (terminates) the service.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Update assigns adds or updates an IP-table.
-	Update(ctx context.Context, in *iptables.Table, opts ...grpc.CallOption) (*empty.Empty, error)
+	Update(ctx context.Context, in *Table, opts ...grpc.CallOption) (*empty.Empty, error)
 	// SetSearch sets a new search path.
 	SetDnsSearchPath(ctx context.Context, in *Paths, opts ...grpc.CallOption) (*empty.Empty, error)
 }
@@ -47,8 +46,8 @@ func NewDaemonClient(cc grpc.ClientConnInterface) DaemonClient {
 	return &daemonClient{cc}
 }
 
-func (c *daemonClient) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*version.VersionInfo, error) {
-	out := new(version.VersionInfo)
+func (c *daemonClient) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error) {
+	out := new(common.VersionInfo)
 	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Version", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -126,7 +125,7 @@ func (c *daemonClient) Quit(ctx context.Context, in *empty.Empty, opts ...grpc.C
 	return out, nil
 }
 
-func (c *daemonClient) Update(ctx context.Context, in *iptables.Table, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (c *daemonClient) Update(ctx context.Context, in *Table, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Update", in, out, opts...)
 	if err != nil {
@@ -149,7 +148,7 @@ func (c *daemonClient) SetDnsSearchPath(ctx context.Context, in *Paths, opts ...
 // for forward compatibility
 type DaemonServer interface {
 	// Returns version information from the Daemon
-	Version(context.Context, *empty.Empty) (*version.VersionInfo, error)
+	Version(context.Context, *empty.Empty) (*common.VersionInfo, error)
 	// Returns the current connectivity status
 	Status(context.Context, *empty.Empty) (*DaemonStatus, error)
 	// Turns network overrides off.
@@ -162,7 +161,7 @@ type DaemonServer interface {
 	// Quits (terminates) the service.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	// Update assigns adds or updates an IP-table.
-	Update(context.Context, *iptables.Table) (*empty.Empty, error)
+	Update(context.Context, *Table) (*empty.Empty, error)
 	// SetSearch sets a new search path.
 	SetDnsSearchPath(context.Context, *Paths) (*empty.Empty, error)
 	mustEmbedUnimplementedDaemonServer()
@@ -172,7 +171,7 @@ type DaemonServer interface {
 type UnimplementedDaemonServer struct {
 }
 
-func (UnimplementedDaemonServer) Version(context.Context, *empty.Empty) (*version.VersionInfo, error) {
+func (UnimplementedDaemonServer) Version(context.Context, *empty.Empty) (*common.VersionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
 func (UnimplementedDaemonServer) Status(context.Context, *empty.Empty) (*DaemonStatus, error) {
@@ -190,7 +189,7 @@ func (UnimplementedDaemonServer) Logger(Daemon_LoggerServer) error {
 func (UnimplementedDaemonServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
 }
-func (UnimplementedDaemonServer) Update(context.Context, *iptables.Table) (*empty.Empty, error) {
+func (UnimplementedDaemonServer) Update(context.Context, *Table) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Update not implemented")
 }
 func (UnimplementedDaemonServer) SetDnsSearchPath(context.Context, *Paths) (*empty.Empty, error) {
@@ -326,7 +325,7 @@ func _Daemon_Quit_Handler(srv interface{}, ctx context.Context, dec func(interfa
 }
 
 func _Daemon_Update_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(iptables.Table)
+	in := new(Table)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -338,7 +337,7 @@ func _Daemon_Update_Handler(srv interface{}, ctx context.Context, dec func(inter
 		FullMethod: "/telepresence.daemon.Daemon/Update",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).Update(ctx, req.(*iptables.Table))
+		return srv.(DaemonServer).Update(ctx, req.(*Table))
 	}
 	return interceptor(ctx, in, info, handler)
 }

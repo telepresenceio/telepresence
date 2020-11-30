@@ -4,8 +4,8 @@ package connector
 
 import (
 	context "context"
+	common "github.com/datawire/telepresence2/pkg/rpc/common"
 	manager "github.com/datawire/telepresence2/pkg/rpc/manager"
-	version "github.com/datawire/telepresence2/pkg/rpc/version"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
@@ -21,7 +21,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ConnectorClient interface {
 	// Returns version information from the Connector
-	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*version.VersionInfo, error)
+	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
 	// Returns the current connectivity status
 	Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ConnectorStatus, error)
 	// Connects the daemon to a cluster
@@ -46,8 +46,8 @@ func NewConnectorClient(cc grpc.ClientConnInterface) ConnectorClient {
 	return &connectorClient{cc}
 }
 
-func (c *connectorClient) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*version.VersionInfo, error) {
-	out := new(version.VersionInfo)
+func (c *connectorClient) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error) {
+	out := new(common.VersionInfo)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Version", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -123,7 +123,7 @@ func (c *connectorClient) Quit(ctx context.Context, in *empty.Empty, opts ...grp
 // for forward compatibility
 type ConnectorServer interface {
 	// Returns version information from the Connector
-	Version(context.Context, *empty.Empty) (*version.VersionInfo, error)
+	Version(context.Context, *empty.Empty) (*common.VersionInfo, error)
 	// Returns the current connectivity status
 	Status(context.Context, *empty.Empty) (*ConnectorStatus, error)
 	// Connects the daemon to a cluster
@@ -145,7 +145,7 @@ type ConnectorServer interface {
 type UnimplementedConnectorServer struct {
 }
 
-func (UnimplementedConnectorServer) Version(context.Context, *empty.Empty) (*version.VersionInfo, error) {
+func (UnimplementedConnectorServer) Version(context.Context, *empty.Empty) (*common.VersionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
 func (UnimplementedConnectorServer) Status(context.Context, *empty.Empty) (*ConnectorStatus, error) {

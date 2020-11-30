@@ -17,10 +17,10 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/rpc/common"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
-	"github.com/datawire/telepresence2/pkg/rpc/version"
 )
 
 var help = `The Telepresence Connect is a background component that manages a connection. It
@@ -120,8 +120,8 @@ func callRecovery(c context.Context, r interface{}, err error) error {
 	return err
 }
 
-func (s *service) Version(_ context.Context, _ *empty.Empty) (*version.VersionInfo, error) {
-	return &version.VersionInfo{
+func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
+	return &common.VersionInfo{
 		ApiVersion: client.APIVersion,
 		Version:    client.Version(),
 	}, nil

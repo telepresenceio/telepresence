@@ -3,7 +3,7 @@ package telepresence.connector;
 
 import "google/protobuf/empty.proto";
 import "rpc/manager/manager.proto";
-import "rpc/version/version.proto";
+import "rpc/common/version.proto";
 
 option go_package = "github.com/datawire/telepresence2/pkg/rpc/connector";
 
@@ -11,7 +11,7 @@ option go_package = "github.com/datawire/telepresence2/pkg/rpc/connector";
 // and manage intercepts. It can only run when a Daemon is running.
 service Connector {
   // Returns version information from the Connector
-  rpc Version(google.protobuf.Empty) returns (telepresence.version.VersionInfo);
+  rpc Version(google.protobuf.Empty) returns (telepresence.common.VersionInfo);
 
   // Returns the current connectivity status
   rpc Status(google.protobuf.Empty) returns (ConnectorStatus);
