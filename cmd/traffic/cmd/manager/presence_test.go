@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/datawire/telepresence2/pkg/manager"
+	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager"
 )
 
 func TestPresence(t *testing.T) {

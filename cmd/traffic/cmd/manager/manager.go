@@ -1,4 +1,4 @@
-package main
+package manager
 
 import (
 	"context"
@@ -17,19 +17,12 @@ import (
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/pkg/manager"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/version"
 )
 
-func manager_main() {
-	// Set up context with logger
-	dlog.SetFallbackLogger(makeBaseLogger())
-	g, ctx := errgroup.WithContext(dlog.WithField(context.Background(), "MAIN", "main"))
-
-	if version.Version == "" {
-		version.Version = "(devel)"
-	}
+func Main(ctx context.Context, args ...string) error {
+	g, ctx := errgroup.WithContext(dlog.WithField(ctx, "MAIN", "main"))
 
 	dlog.Infof(ctx, "Traffic Manager %s [pid:%d]", version.Version, os.Getpid())
 
@@ -103,7 +96,7 @@ func manager_main() {
 		dlog.Infof(ctx, "Traffic Manager listening on %q", address)
 
 		server := grpc.NewServer()
-		mgr := manager.NewManager(ctx)
+		mgr := NewManager(ctx)
 		rpc.RegisterManagerServer(server, mgr)
 		grpc_health_v1.RegisterHealthServer(server, &HealthChecker{})
 
@@ -155,8 +148,5 @@ func manager_main() {
 	})
 
 	// Wait for exit
-	if err := g.Wait(); err != nil {
-		dlog.Errorf(ctx, "quit: %v", err)
-		os.Exit(1)
-	}
+	return g.Wait()
 }

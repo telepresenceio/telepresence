@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/datawire/telepresence2/pkg/manager"
+	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/version"
 )
