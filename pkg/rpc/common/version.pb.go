@@ -25,6 +25,9 @@ const (
 // of the legacy proto package is being used.
 const _ = proto.ProtoPackageIsVersion4
 
+// VersionInfo is the type that both `telepresence daemon` (the super-user
+// daemon) and `telepresence conector` (the normal-user daemon) use
+// when reporting their version to the user-facing CLI.
 type VersionInfo struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

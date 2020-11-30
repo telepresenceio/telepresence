@@ -1,11 +1,17 @@
 syntax = "proto3";
 
+// Manager describes the server implemented by the in-cluster Manager,
+// which both the Agent (app-sidecar) and the on-laptop Connector
+// (user-daemon) and on-laptop CLI are clients to.
 package telepresence.manager;
 
 import "google/protobuf/empty.proto";
 
 option go_package = "github.com/datawire/telepresence2/pkg/rpc/manager";
 
+// ClientInfo is the self-reported metadata that the on-laptop
+// Telepresence client reports whenever it connects to the in-cluster
+// Manager.
 message ClientInfo {
   string name = 1;  // user@hostname
   string install_id = 2;
@@ -14,18 +20,33 @@ message ClientInfo {
   string license_key = 5;
 }
 
+// AgentInfo is the self-reported metadata that an Agent (app-sidecar)
+// reports at boot-up when it connects to the Telepresence Manager.
 message AgentInfo {
   string name = 1; // namespace/name of the Deployment
   string hostname = 2;
   string product = 3; // distinguish open source, our closed source, someone else's thing
   string version = 4;
 
+  // "Mechanisms" are the ways that an Agent can decide handle
+  // incoming requests, and decide whether to send them to the
+  // in-cluster service, or whether to intercept them.  The "tcp"
+  // mechanism is the only one in Telepresence open source, and
+  // handles things at the TCP-level and either intercepts all TCP
+  // streams or doesn't intercept anything.  Other Agents than the
+  // Telepresence one may implement more mechanisms, such as
+  // Ambassador Labs' "Service Preview" Agent which implements the
+  // "http" mechanism which handles th "http" mechanism, which handles
+  // things at the HTTP-request-level and can decide to intercept
+  // individual HTTP requests based on the request headers.
   message Mechanism {
     string name = 1; // "tcp" or "http" or "grpc" or ...
     string product = 2; // distinguish open source, our closed source, someone else's thing
     string version = 3;
   }
 
+  // This is a list of the mechanisms that the Agent advertises that
+  // it supports.
   repeated Mechanism mechanisms = 5;
 }
 
@@ -103,6 +124,8 @@ message ReviewInterceptRequest {
   string message = 4;
 }
 
+// VersionInfo2 is different than telepresence.common.VersionInfo in
+// that it does not contain an 'api_version' integer.
 message VersionInfo2 {
   string version = 2;
 }
@@ -137,12 +160,18 @@ service Manager {
 
   // CRUD
 
-  // CreateIntercept lets a client create an intercept.
+  // CreateIntercept lets a client create an intercept.  It will be
+  // created in the "WATING" disposition, and it will remain in that
+  // state until until the Agent (the app-sidecar) calls
+  // ReviewIntercept() to transition it to the "ACTIVE" disposition
+  // (or one of the error dispositions).
   rpc CreateIntercept(CreateInterceptRequest) returns (InterceptInfo);
 
   // RemoveIntercept lets a client remove an intercept.
   rpc RemoveIntercept(RemoveInterceptRequest2) returns (google.protobuf.Empty);
 
-  // ReviewIntercept lets an agent approve or reject an intercept.
+  // ReviewIntercept lets an agent approve or reject an intercept by
+  // changing the disposition from "WATING" to "ACTIVE" or to an
+  // error, and setting a human-readable status message.
   rpc ReviewIntercept(ReviewInterceptRequest) returns (google.protobuf.Empty);
 }

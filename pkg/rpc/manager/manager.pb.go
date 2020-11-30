@@ -4,6 +4,10 @@
 // 	protoc        v3.13.0
 // source: rpc/manager/manager.proto
 
+// Manager describes the server implemented by the in-cluster Manager,
+// which both the Agent (app-sidecar) and the on-laptop Connector
+// (user-daemon) and on-laptop CLI are clients to.
+
 package manager
 
 import (
@@ -90,6 +94,9 @@ func (InterceptDispositionType) EnumDescriptor() ([]byte, []int) {
 	return file_rpc_manager_manager_proto_rawDescGZIP(), []int{0}
 }
 
+// ClientInfo is the self-reported metadata that the on-laptop
+// Telepresence client reports whenever it connects to the in-cluster
+// Manager.
 type ClientInfo struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -169,15 +176,19 @@ func (x *ClientInfo) GetLicenseKey() string {
 	return ""
 }
 
+// AgentInfo is the self-reported metadata that an Agent (app-sidecar)
+// reports at boot-up when it connects to the Telepresence Manager.
 type AgentInfo struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Name       string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // namespace/name of the Deployment
-	Hostname   string                 `protobuf:"bytes,2,opt,name=hostname,proto3" json:"hostname,omitempty"`
-	Product    string                 `protobuf:"bytes,3,opt,name=product,proto3" json:"product,omitempty"` // distinguish open source, our closed source, someone else's thing
-	Version    string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
+	Name     string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // namespace/name of the Deployment
+	Hostname string `protobuf:"bytes,2,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Product  string `protobuf:"bytes,3,opt,name=product,proto3" json:"product,omitempty"` // distinguish open source, our closed source, someone else's thing
+	Version  string `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
+	// This is a list of the mechanisms that the Agent advertises that
+	// it supports.
 	Mechanisms []*AgentInfo_Mechanism `protobuf:"bytes,5,rep,name=mechanisms,proto3" json:"mechanisms,omitempty"`
 }
 
@@ -751,6 +762,8 @@ func (x *ReviewInterceptRequest) GetMessage() string {
 	return ""
 }
 
+// VersionInfo2 is different than telepresence.common.VersionInfo in
+// that it does not contain an 'api_version' integer.
 type VersionInfo2 struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -798,6 +811,17 @@ func (x *VersionInfo2) GetVersion() string {
 	return ""
 }
 
+// "Mechanisms" are the ways that an Agent can decide handle
+// incoming requests, and decide whether to send them to the
+// in-cluster service, or whether to intercept them.  The "tcp"
+// mechanism is the only one in Telepresence open source, and
+// handles things at the TCP-level and either intercepts all TCP
+// streams or doesn't intercept anything.  Other Agents than the
+// Telepresence one may implement more mechanisms, such as
+// Ambassador Labs' "Service Preview" Agent which implements the
+// "http" mechanism which handles th "http" mechanism, which handles
+// things at the HTTP-request-level and can decide to intercept
+// individual HTTP requests based on the request headers.
 type AgentInfo_Mechanism struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

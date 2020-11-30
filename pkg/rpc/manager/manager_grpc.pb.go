@@ -33,11 +33,17 @@ type ManagerClient interface {
 	// WatchIntercepts notifies a client or agent of the set of intercepts
 	// relevant to that client or agent.
 	WatchIntercepts(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchInterceptsClient, error)
-	// CreateIntercept lets a client create an intercept.
+	// CreateIntercept lets a client create an intercept.  It will be
+	// created in the "WATING" disposition, and it will remain in that
+	// state until until the Agent (the app-sidecar) calls
+	// ReviewIntercept() to transition it to the "ACTIVE" disposition
+	// (or one of the error dispositions).
 	CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error)
 	// RemoveIntercept lets a client remove an intercept.
 	RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest2, opts ...grpc.CallOption) (*empty.Empty, error)
-	// ReviewIntercept lets an agent approve or reject an intercept.
+	// ReviewIntercept lets an agent approve or reject an intercept by
+	// changing the disposition from "WATING" to "ACTIVE" or to an
+	// error, and setting a human-readable status message.
 	ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
@@ -204,11 +210,17 @@ type ManagerServer interface {
 	// WatchIntercepts notifies a client or agent of the set of intercepts
 	// relevant to that client or agent.
 	WatchIntercepts(*SessionInfo, Manager_WatchInterceptsServer) error
-	// CreateIntercept lets a client create an intercept.
+	// CreateIntercept lets a client create an intercept.  It will be
+	// created in the "WATING" disposition, and it will remain in that
+	// state until until the Agent (the app-sidecar) calls
+	// ReviewIntercept() to transition it to the "ACTIVE" disposition
+	// (or one of the error dispositions).
 	CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptInfo, error)
 	// RemoveIntercept lets a client remove an intercept.
 	RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*empty.Empty, error)
-	// ReviewIntercept lets an agent approve or reject an intercept.
+	// ReviewIntercept lets an agent approve or reject an intercept by
+	// changing the disposition from "WATING" to "ACTIVE" or to an
+	// error, and setting a human-readable status message.
 	ReviewIntercept(context.Context, *ReviewInterceptRequest) (*empty.Empty, error)
 	mustEmbedUnimplementedManagerServer()
 }
