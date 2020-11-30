@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/datawire/telepresence2/pkg/rpc"
+	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 // Clock is the mechanism used by the Manager state to get the current time.

@@ -14,8 +14,8 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/datawire/telepresence2/pkg/client"
-	manager "github.com/datawire/telepresence2/pkg/rpc"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 func (s *service) interceptStatus() (rpc.InterceptError, string) {

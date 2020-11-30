@@ -18,7 +18,7 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/datawire/telepresence2/pkg/manager"
-	"github.com/datawire/telepresence2/pkg/rpc"
+	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/version"
 )
 

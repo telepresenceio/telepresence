@@ -7,7 +7,7 @@
 package connector
 
 import (
-	rpc "github.com/datawire/telepresence2/pkg/rpc"
+	manager "github.com/datawire/telepresence2/pkg/rpc/manager"
 	version "github.com/datawire/telepresence2/pkg/rpc/version"
 	proto "github.com/golang/protobuf/proto"
 	empty "github.com/golang/protobuf/ptypes/empty"
@@ -379,12 +379,12 @@ type ConnectorStatus struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Error      ConnectorStatus_ErrType      `protobuf:"varint,1,opt,name=error,proto3,enum=telepresence.ConnectorStatus_ErrType" json:"error,omitempty"`
-	ErrorText  string                       `protobuf:"bytes,2,opt,name=error_text,json=errorText,proto3" json:"error_text,omitempty"`
-	Bridge     bool                         `protobuf:"varint,3,opt,name=bridge,proto3" json:"bridge,omitempty"`
-	Cluster    *ConnectorStatus_ClusterInfo `protobuf:"bytes,4,opt,name=cluster,proto3" json:"cluster,omitempty"`
-	Agents     *rpc.AgentInfoSnapshot       `protobuf:"bytes,5,opt,name=agents,proto3" json:"agents,omitempty"`
-	Intercepts *rpc.InterceptInfoSnapshot   `protobuf:"bytes,6,opt,name=intercepts,proto3" json:"intercepts,omitempty"`
+	Error      ConnectorStatus_ErrType        `protobuf:"varint,1,opt,name=error,proto3,enum=telepresence.ConnectorStatus_ErrType" json:"error,omitempty"`
+	ErrorText  string                         `protobuf:"bytes,2,opt,name=error_text,json=errorText,proto3" json:"error_text,omitempty"`
+	Bridge     bool                           `protobuf:"varint,3,opt,name=bridge,proto3" json:"bridge,omitempty"`
+	Cluster    *ConnectorStatus_ClusterInfo   `protobuf:"bytes,4,opt,name=cluster,proto3" json:"cluster,omitempty"`
+	Agents     *manager.AgentInfoSnapshot     `protobuf:"bytes,5,opt,name=agents,proto3" json:"agents,omitempty"`
+	Intercepts *manager.InterceptInfoSnapshot `protobuf:"bytes,6,opt,name=intercepts,proto3" json:"intercepts,omitempty"`
 }
 
 func (x *ConnectorStatus) Reset() {
@@ -447,14 +447,14 @@ func (x *ConnectorStatus) GetCluster() *ConnectorStatus_ClusterInfo {
 	return nil
 }
 
-func (x *ConnectorStatus) GetAgents() *rpc.AgentInfoSnapshot {
+func (x *ConnectorStatus) GetAgents() *manager.AgentInfoSnapshot {
 	if x != nil {
 		return x.Agents
 	}
 	return nil
 }
 
-func (x *ConnectorStatus) GetIntercepts() *rpc.InterceptInfoSnapshot {
+func (x *ConnectorStatus) GetIntercepts() *manager.InterceptInfoSnapshot {
 	if x != nil {
 		return x.Intercepts
 	}
@@ -466,9 +466,9 @@ type InterceptResult struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	InterceptInfo *rpc.InterceptInfo `protobuf:"bytes,1,opt,name=intercept_info,json=interceptInfo,proto3" json:"intercept_info,omitempty"`
-	Error         InterceptError     `protobuf:"varint,2,opt,name=error,proto3,enum=telepresence.InterceptError" json:"error,omitempty"`
-	ErrorText     string             `protobuf:"bytes,3,opt,name=error_text,json=errorText,proto3" json:"error_text,omitempty"`
+	InterceptInfo *manager.InterceptInfo `protobuf:"bytes,1,opt,name=intercept_info,json=interceptInfo,proto3" json:"intercept_info,omitempty"`
+	Error         InterceptError         `protobuf:"varint,2,opt,name=error,proto3,enum=telepresence.InterceptError" json:"error,omitempty"`
+	ErrorText     string                 `protobuf:"bytes,3,opt,name=error_text,json=errorText,proto3" json:"error_text,omitempty"`
 }
 
 func (x *InterceptResult) Reset() {
@@ -503,7 +503,7 @@ func (*InterceptResult) Descriptor() ([]byte, []int) {
 	return file_rpc_connector_connector_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *InterceptResult) GetInterceptInfo() *rpc.InterceptInfo {
+func (x *InterceptResult) GetInterceptInfo() *manager.InterceptInfo {
 	if x != nil {
 		return x.InterceptInfo
 	}
@@ -746,21 +746,21 @@ func file_rpc_connector_connector_proto_rawDescGZIP() []byte {
 var file_rpc_connector_connector_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_rpc_connector_connector_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_rpc_connector_connector_proto_goTypes = []interface{}{
-	(InterceptError)(0),                 // 0: telepresence.InterceptError
-	(ConnectInfo_ErrType)(0),            // 1: telepresence.ConnectInfo.ErrType
-	(ConnectorStatus_ErrType)(0),        // 2: telepresence.ConnectorStatus.ErrType
-	(*ConnectRequest)(nil),              // 3: telepresence.ConnectRequest
-	(*ConnectInfo)(nil),                 // 4: telepresence.ConnectInfo
-	(*ConnectorStatus)(nil),             // 5: telepresence.ConnectorStatus
-	(*InterceptResult)(nil),             // 6: telepresence.InterceptResult
-	(*ConnectorStatus_ClusterInfo)(nil), // 7: telepresence.ConnectorStatus.ClusterInfo
-	(*rpc.AgentInfoSnapshot)(nil),       // 8: manager.AgentInfoSnapshot
-	(*rpc.InterceptInfoSnapshot)(nil),   // 9: manager.InterceptInfoSnapshot
-	(*rpc.InterceptInfo)(nil),           // 10: manager.InterceptInfo
-	(*empty.Empty)(nil),                 // 11: google.protobuf.Empty
-	(*rpc.CreateInterceptRequest)(nil),  // 12: manager.CreateInterceptRequest
-	(*rpc.RemoveInterceptRequest2)(nil), // 13: manager.RemoveInterceptRequest2
-	(*version.VersionInfo)(nil),         // 14: version.VersionInfo
+	(InterceptError)(0),                     // 0: telepresence.InterceptError
+	(ConnectInfo_ErrType)(0),                // 1: telepresence.ConnectInfo.ErrType
+	(ConnectorStatus_ErrType)(0),            // 2: telepresence.ConnectorStatus.ErrType
+	(*ConnectRequest)(nil),                  // 3: telepresence.ConnectRequest
+	(*ConnectInfo)(nil),                     // 4: telepresence.ConnectInfo
+	(*ConnectorStatus)(nil),                 // 5: telepresence.ConnectorStatus
+	(*InterceptResult)(nil),                 // 6: telepresence.InterceptResult
+	(*ConnectorStatus_ClusterInfo)(nil),     // 7: telepresence.ConnectorStatus.ClusterInfo
+	(*manager.AgentInfoSnapshot)(nil),       // 8: manager.AgentInfoSnapshot
+	(*manager.InterceptInfoSnapshot)(nil),   // 9: manager.InterceptInfoSnapshot
+	(*manager.InterceptInfo)(nil),           // 10: manager.InterceptInfo
+	(*empty.Empty)(nil),                     // 11: google.protobuf.Empty
+	(*manager.CreateInterceptRequest)(nil),  // 12: manager.CreateInterceptRequest
+	(*manager.RemoveInterceptRequest2)(nil), // 13: manager.RemoveInterceptRequest2
+	(*version.VersionInfo)(nil),             // 14: version.VersionInfo
 }
 var file_rpc_connector_connector_proto_depIdxs = []int32{
 	1,  // 0: telepresence.ConnectInfo.error:type_name -> telepresence.ConnectInfo.ErrType

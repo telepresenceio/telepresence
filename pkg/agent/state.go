@@ -3,7 +3,7 @@ package agent
 import (
 	"fmt"
 
-	"github.com/datawire/telepresence2/pkg/rpc"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 // State of the Traffic Agent.
@@ -25,8 +25,8 @@ func NewState(forwarder *Forwarder, managerHost string) *State {
 	}
 }
 
-func (s *State) HandleIntercepts(cepts []*rpc.InterceptInfo) []*rpc.ReviewInterceptRequest {
-	var chosenIntercept, activeIntercept *rpc.InterceptInfo
+func (s *State) HandleIntercepts(cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
+	var chosenIntercept, activeIntercept *manager.InterceptInfo
 
 	// Find the chosen intercept if it still exists
 	if s.chosenID != "" {
@@ -40,7 +40,7 @@ func (s *State) HandleIntercepts(cepts []*rpc.InterceptInfo) []*rpc.ReviewInterc
 
 	if chosenIntercept != nil {
 		// The chosen intercept still exists
-		if chosenIntercept.Disposition == rpc.InterceptDispositionType_ACTIVE {
+		if chosenIntercept.Disposition == manager.InterceptDispositionType_ACTIVE {
 			// and is active
 			activeIntercept = chosenIntercept
 		}
@@ -57,9 +57,9 @@ func (s *State) HandleIntercepts(cepts []*rpc.InterceptInfo) []*rpc.ReviewInterc
 	}
 
 	// Review waiting intercepts
-	reviews := []*rpc.ReviewInterceptRequest{}
+	reviews := []*manager.ReviewInterceptRequest{}
 	for _, cept := range cepts {
-		if cept.Disposition == rpc.InterceptDispositionType_WAITING {
+		if cept.Disposition == manager.InterceptDispositionType_WAITING {
 			// This intercept is ready to be active
 			if s.chosenID == "" {
 				// We don't have an intercept in play, so choose this one. All
@@ -68,9 +68,9 @@ func (s *State) HandleIntercepts(cepts []*rpc.InterceptInfo) []*rpc.ReviewInterc
 				// will not become active at this time. That will happen later,
 				// once the manager assigns a port.
 				s.chosenID = cept.Id
-				reviews = append(reviews, &rpc.ReviewInterceptRequest{
+				reviews = append(reviews, &manager.ReviewInterceptRequest{
 					Id:          cept.Id,
-					Disposition: rpc.InterceptDispositionType_ACTIVE,
+					Disposition: manager.InterceptDispositionType_ACTIVE,
 				})
 			} else {
 				// We already have an intercept in play, so reject this one.
@@ -83,9 +83,9 @@ func (s *State) HandleIntercepts(cepts []*rpc.InterceptInfo) []*rpc.ReviewInterc
 						s.chosenID,
 					)
 				}
-				reviews = append(reviews, &rpc.ReviewInterceptRequest{
+				reviews = append(reviews, &manager.ReviewInterceptRequest{
 					Id:          cept.Id,
-					Disposition: rpc.InterceptDispositionType_AGENT_ERROR,
+					Disposition: manager.InterceptDispositionType_AGENT_ERROR,
 					Message:     msg,
 				})
 			}

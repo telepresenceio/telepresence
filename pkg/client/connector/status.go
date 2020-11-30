@@ -3,8 +3,8 @@ package connector
 import (
 	"context"
 
-	manager "github.com/datawire/telepresence2/pkg/rpc"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 // status reports the current status of the daemon

@@ -10,7 +10,7 @@ import (
 	"github.com/datawire/telepresence2/pkg/client/auth"
 	"github.com/datawire/telepresence2/pkg/client/connector"
 	"github.com/datawire/telepresence2/pkg/client/daemon"
-	manager "github.com/datawire/telepresence2/pkg/rpc"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 var help = `telepresence can run a command in a sub shell after ensuring that a connection
