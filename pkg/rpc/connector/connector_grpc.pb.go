@@ -48,7 +48,7 @@ func NewConnectorClient(cc grpc.ClientConnInterface) ConnectorClient {
 
 func (c *connectorClient) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*version.VersionInfo, error) {
 	out := new(version.VersionInfo)
-	err := c.cc.Invoke(ctx, "/telepresence.Connector/Version", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Version", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func (c *connectorClient) Version(ctx context.Context, in *empty.Empty, opts ...
 
 func (c *connectorClient) Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ConnectorStatus, error) {
 	out := new(ConnectorStatus)
-	err := c.cc.Invoke(ctx, "/telepresence.Connector/Status", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Status", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func (c *connectorClient) Status(ctx context.Context, in *empty.Empty, opts ...g
 
 func (c *connectorClient) Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error) {
 	out := new(ConnectInfo)
-	err := c.cc.Invoke(ctx, "/telepresence.Connector/Connect", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Connect", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (c *connectorClient) Connect(ctx context.Context, in *ConnectRequest, opts 
 
 func (c *connectorClient) CreateIntercept(ctx context.Context, in *manager.CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error) {
 	out := new(InterceptResult)
-	err := c.cc.Invoke(ctx, "/telepresence.Connector/CreateIntercept", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/CreateIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (c *connectorClient) CreateIntercept(ctx context.Context, in *manager.Creat
 
 func (c *connectorClient) RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error) {
 	out := new(InterceptResult)
-	err := c.cc.Invoke(ctx, "/telepresence.Connector/RemoveIntercept", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/RemoveIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (c *connectorClient) RemoveIntercept(ctx context.Context, in *manager.Remov
 
 func (c *connectorClient) AvailableIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*manager.AgentInfoSnapshot, error) {
 	out := new(manager.AgentInfoSnapshot)
-	err := c.cc.Invoke(ctx, "/telepresence.Connector/AvailableIntercepts", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/AvailableIntercepts", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func (c *connectorClient) AvailableIntercepts(ctx context.Context, in *empty.Emp
 
 func (c *connectorClient) ListIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*manager.InterceptInfoSnapshot, error) {
 	out := new(manager.InterceptInfoSnapshot)
-	err := c.cc.Invoke(ctx, "/telepresence.Connector/ListIntercepts", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/ListIntercepts", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func (c *connectorClient) ListIntercepts(ctx context.Context, in *empty.Empty, o
 
 func (c *connectorClient) Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
-	err := c.cc.Invoke(ctx, "/telepresence.Connector/Quit", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Quit", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +192,7 @@ func _Connector_Version_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Connector/Version",
+		FullMethod: "/telepresence.connector.Connector/Version",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).Version(ctx, req.(*empty.Empty))
@@ -210,7 +210,7 @@ func _Connector_Status_Handler(srv interface{}, ctx context.Context, dec func(in
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Connector/Status",
+		FullMethod: "/telepresence.connector.Connector/Status",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).Status(ctx, req.(*empty.Empty))
@@ -228,7 +228,7 @@ func _Connector_Connect_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Connector/Connect",
+		FullMethod: "/telepresence.connector.Connector/Connect",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).Connect(ctx, req.(*ConnectRequest))
@@ -246,7 +246,7 @@ func _Connector_CreateIntercept_Handler(srv interface{}, ctx context.Context, de
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Connector/CreateIntercept",
+		FullMethod: "/telepresence.connector.Connector/CreateIntercept",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).CreateIntercept(ctx, req.(*manager.CreateInterceptRequest))
@@ -264,7 +264,7 @@ func _Connector_RemoveIntercept_Handler(srv interface{}, ctx context.Context, de
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Connector/RemoveIntercept",
+		FullMethod: "/telepresence.connector.Connector/RemoveIntercept",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).RemoveIntercept(ctx, req.(*manager.RemoveInterceptRequest2))
@@ -282,7 +282,7 @@ func _Connector_AvailableIntercepts_Handler(srv interface{}, ctx context.Context
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Connector/AvailableIntercepts",
+		FullMethod: "/telepresence.connector.Connector/AvailableIntercepts",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).AvailableIntercepts(ctx, req.(*empty.Empty))
@@ -300,7 +300,7 @@ func _Connector_ListIntercepts_Handler(srv interface{}, ctx context.Context, dec
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Connector/ListIntercepts",
+		FullMethod: "/telepresence.connector.Connector/ListIntercepts",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).ListIntercepts(ctx, req.(*empty.Empty))
@@ -318,7 +318,7 @@ func _Connector_Quit_Handler(srv interface{}, ctx context.Context, dec func(inte
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Connector/Quit",
+		FullMethod: "/telepresence.connector.Connector/Quit",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).Quit(ctx, req.(*empty.Empty))
@@ -327,7 +327,7 @@ func _Connector_Quit_Handler(srv interface{}, ctx context.Context, dec func(inte
 }
 
 var _Connector_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "telepresence.Connector",
+	ServiceName: "telepresence.connector.Connector",
 	HandlerType: (*ConnectorServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

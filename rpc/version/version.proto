@@ -1,5 +1,5 @@
 syntax = "proto3";
-package version;
+package telepresence.version;
 
 option go_package = "github.com/datawire/telepresence2/pkg/rpc/version";
 

@@ -1,5 +1,5 @@
 syntax = "proto3";
-package telepresence;
+package telepresence.daemon;
 
 import "google/protobuf/empty.proto";
 import "rpc/iptables/iptables.proto";
@@ -11,7 +11,7 @@ option go_package = "github.com/datawire/telepresence2/pkg/rpc/daemon";
 // acts as the central point for logging.
 service Daemon {
   // Returns version information from the Daemon
-  rpc Version(google.protobuf.Empty) returns (version.VersionInfo);
+  rpc Version(google.protobuf.Empty) returns (telepresence.version.VersionInfo);
 
   // Returns the current connectivity status
   rpc Status(google.protobuf.Empty) returns (DaemonStatus);
@@ -30,7 +30,7 @@ service Daemon {
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 
   // Update assigns adds or updates an IP-table.
-  rpc Update(iptables.Table) returns (google.protobuf.Empty);
+  rpc Update(telepresence.iptables.Table) returns (google.protobuf.Empty);
 
   // SetSearch sets a new search path.
   rpc SetDnsSearchPath(Paths) returns (google.protobuf.Empty);
@@ -78,7 +78,7 @@ message Paths {
 }
 
 message Tables {
-  repeated iptables.Table tables = 1;
+  repeated telepresence.iptables.Table tables = 1;
 }
 
 message TableName {

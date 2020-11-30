@@ -51,7 +51,7 @@ func NewManagerClient(cc grpc.ClientConnInterface) ManagerClient {
 
 func (c *managerClient) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*VersionInfo2, error) {
 	out := new(VersionInfo2)
-	err := c.cc.Invoke(ctx, "/manager.Manager/Version", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/Version", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (c *managerClient) Version(ctx context.Context, in *empty.Empty, opts ...gr
 
 func (c *managerClient) ArriveAsClient(ctx context.Context, in *ClientInfo, opts ...grpc.CallOption) (*SessionInfo, error) {
 	out := new(SessionInfo)
-	err := c.cc.Invoke(ctx, "/manager.Manager/ArriveAsClient", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/ArriveAsClient", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (c *managerClient) ArriveAsClient(ctx context.Context, in *ClientInfo, opts
 
 func (c *managerClient) ArriveAsAgent(ctx context.Context, in *AgentInfo, opts ...grpc.CallOption) (*SessionInfo, error) {
 	out := new(SessionInfo)
-	err := c.cc.Invoke(ctx, "/manager.Manager/ArriveAsAgent", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/ArriveAsAgent", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (c *managerClient) ArriveAsAgent(ctx context.Context, in *AgentInfo, opts .
 
 func (c *managerClient) Remain(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
-	err := c.cc.Invoke(ctx, "/manager.Manager/Remain", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/Remain", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (c *managerClient) Remain(ctx context.Context, in *SessionInfo, opts ...grp
 
 func (c *managerClient) Depart(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
-	err := c.cc.Invoke(ctx, "/manager.Manager/Depart", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/Depart", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func (c *managerClient) Depart(ctx context.Context, in *SessionInfo, opts ...grp
 }
 
 func (c *managerClient) WatchAgents(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchAgentsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[0], "/manager.Manager/WatchAgents", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[0], "/telepresence.manager.Manager/WatchAgents", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +127,7 @@ func (x *managerWatchAgentsClient) Recv() (*AgentInfoSnapshot, error) {
 }
 
 func (c *managerClient) WatchIntercepts(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchInterceptsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[1], "/manager.Manager/WatchIntercepts", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Manager_serviceDesc.Streams[1], "/telepresence.manager.Manager/WatchIntercepts", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func (x *managerWatchInterceptsClient) Recv() (*InterceptInfoSnapshot, error) {
 
 func (c *managerClient) CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error) {
 	out := new(InterceptInfo)
-	err := c.cc.Invoke(ctx, "/manager.Manager/CreateIntercept", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/CreateIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (c *managerClient) CreateIntercept(ctx context.Context, in *CreateIntercept
 
 func (c *managerClient) RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest2, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
-	err := c.cc.Invoke(ctx, "/manager.Manager/RemoveIntercept", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/RemoveIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +178,7 @@ func (c *managerClient) RemoveIntercept(ctx context.Context, in *RemoveIntercept
 
 func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
-	err := c.cc.Invoke(ctx, "/manager.Manager/ReviewIntercept", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/ReviewIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +270,7 @@ func _Manager_Version_Handler(srv interface{}, ctx context.Context, dec func(int
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/manager.Manager/Version",
+		FullMethod: "/telepresence.manager.Manager/Version",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).Version(ctx, req.(*empty.Empty))
@@ -288,7 +288,7 @@ func _Manager_ArriveAsClient_Handler(srv interface{}, ctx context.Context, dec f
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/manager.Manager/ArriveAsClient",
+		FullMethod: "/telepresence.manager.Manager/ArriveAsClient",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).ArriveAsClient(ctx, req.(*ClientInfo))
@@ -306,7 +306,7 @@ func _Manager_ArriveAsAgent_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/manager.Manager/ArriveAsAgent",
+		FullMethod: "/telepresence.manager.Manager/ArriveAsAgent",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).ArriveAsAgent(ctx, req.(*AgentInfo))
@@ -324,7 +324,7 @@ func _Manager_Remain_Handler(srv interface{}, ctx context.Context, dec func(inte
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/manager.Manager/Remain",
+		FullMethod: "/telepresence.manager.Manager/Remain",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).Remain(ctx, req.(*SessionInfo))
@@ -342,7 +342,7 @@ func _Manager_Depart_Handler(srv interface{}, ctx context.Context, dec func(inte
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/manager.Manager/Depart",
+		FullMethod: "/telepresence.manager.Manager/Depart",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).Depart(ctx, req.(*SessionInfo))
@@ -402,7 +402,7 @@ func _Manager_CreateIntercept_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/manager.Manager/CreateIntercept",
+		FullMethod: "/telepresence.manager.Manager/CreateIntercept",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).CreateIntercept(ctx, req.(*CreateInterceptRequest))
@@ -420,7 +420,7 @@ func _Manager_RemoveIntercept_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/manager.Manager/RemoveIntercept",
+		FullMethod: "/telepresence.manager.Manager/RemoveIntercept",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).RemoveIntercept(ctx, req.(*RemoveInterceptRequest2))
@@ -438,7 +438,7 @@ func _Manager_ReviewIntercept_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/manager.Manager/ReviewIntercept",
+		FullMethod: "/telepresence.manager.Manager/ReviewIntercept",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ManagerServer).ReviewIntercept(ctx, req.(*ReviewInterceptRequest))
@@ -447,7 +447,7 @@ func _Manager_ReviewIntercept_Handler(srv interface{}, ctx context.Context, dec 
 }
 
 var _Manager_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "manager.Manager",
+	ServiceName: "telepresence.manager.Manager",
 	HandlerType: (*ManagerServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

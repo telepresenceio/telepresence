@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package manager;
+package telepresence.manager;
 
 import "google/protobuf/empty.proto";
 

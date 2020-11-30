@@ -1,5 +1,5 @@
 syntax = "proto3";
-package iptables;
+package telepresence.iptables;
 
 option go_package = "github.com/datawire/telepresence2/pkg/rpc/iptables";
 
