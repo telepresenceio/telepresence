@@ -11,6 +11,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"golang.org/x/net/proxy"
+	"golang.org/x/sync/semaphore"
 )
 
 // A Proxy listens to a port and forwards incoming connections to a router
@@ -53,11 +54,18 @@ func setRlimit(c context.Context) {
 	}
 }
 
-// Run starts the proxy accept loop and runs it until the context is cancelled
-func (pxy *Proxy) Run(c context.Context, limit int32) {
-	dlog.Debugf(c, "listening limit=%v", limit)
-	connQueue := make(chan net.Conn, limit)
-	capacity := limit
+// Run starts the proxy accept loop and runs it until the context is cancelled. The limit argument
+// limits the maximum number of connections that can be concurrently proxied. This limit prevents
+// exhausting all available file descriptors when clients are greedy about opening connections. This
+// was originally encountered with load testing clients. You might argue this is a bug in those
+// clients, and you might be right, but without this limit it manifests in a far more confusing way
+// as a bug in telepresence.
+func (pxy *Proxy) Run(c context.Context, limit int64) {
+	dlog.Debugf(c, "proxy limit=%v", limit)
+	connQueue := make(chan net.Conn)
+	// This semaphore tracks how many more connections we can proxy without exceeding the concurrent
+	// connection limit.
+	capacity := semaphore.NewWeighted(limit)
 	closing := false
 	go func() {
 		for {
@@ -69,7 +77,6 @@ func (pxy *Proxy) Run(c context.Context, limit int32) {
 				}
 				dlog.Error(c, err.Error())
 			} else {
-				atomic.AddInt32(&capacity, -1)
 				connQueue <- conn
 			}
 		}
@@ -82,12 +89,14 @@ func (pxy *Proxy) Run(c context.Context, limit int32) {
 			_ = pxy.listener.Close()
 			return
 		case conn := <-connQueue:
-			cpy := atomic.AddInt32(&capacity, 1)
 			switch conn := conn.(type) {
 			case *net.TCPConn:
-				dlog.Debugf(c, "CAPACITY: %v", cpy)
 				dlog.Debugf(c, "Handling connection from %s", conn.RemoteAddr())
-				pxy.handleConnection(c, conn)
+				capacity.Acquire(c, 1)
+				go func() {
+					capacity.Release(1)
+					pxy.handleConnection(c, conn)
+				}()
 			default:
 				dlog.Errorf(c, "unknown connection type: %v", conn)
 			}
