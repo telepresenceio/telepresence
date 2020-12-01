@@ -96,6 +96,7 @@ func (pxy *Proxy) Run(c context.Context, limit int64) {
 				go func() {
 					capacity.Release(1)
 					pxy.handleConnection(c, conn)
+					dlog.Debugf(c, "Done handling connection from %s", conn.RemoteAddr())
 				}()
 			default:
 				dlog.Errorf(c, "unknown connection type: %v", conn)
