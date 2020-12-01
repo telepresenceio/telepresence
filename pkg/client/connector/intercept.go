@@ -125,6 +125,11 @@ func (tm *trafficManager) waitForActiveIntercept(id string) (*manager.InterceptI
 	tm.iiListener.addListener(il)
 	defer tm.iiListener.removeListener(il)
 
+	if cis := tm.iiListener.getData(); cis != nil {
+		// Send initial snapshot to listener
+		il.onData(cis)
+	}
+
 	select {
 	case ii := <-done:
 		if ii.Disposition == manager.InterceptDispositionType_ACTIVE {
@@ -143,6 +148,11 @@ func (tm *trafficManager) waitForAgent(name string) (*manager.AgentInfo, error) 
 	al := &aiPresent{name: name, done: done}
 	tm.aiListener.addListener(al)
 	defer tm.aiListener.removeListener(al)
+
+	if cas := tm.aiListener.getData(); cas != nil {
+		// Send initial snapshot to listener
+		al.onData(cas)
+	}
 
 	select {
 	case ai := <-done:
