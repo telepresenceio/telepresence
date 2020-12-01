@@ -4,9 +4,10 @@
 // 	protoc        v3.13.0
 // source: rpc/manager/manager.proto
 
-// Manager describes the server implemented by the in-cluster Manager,
-// which both the Agent (app-sidecar) and the on-laptop Connector
-// (user-daemon) and on-laptop CLI are clients to.
+// The "manager" package describes the server implemented by the
+// in-cluster Manager, which is spoken to by the Agent (app-sidecar),
+// the on-laptop Connector (user-daemon), the on-laptop CLI. and the
+// SystemA cloud service.
 
 package manager
 
