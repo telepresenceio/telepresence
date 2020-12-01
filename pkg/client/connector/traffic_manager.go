@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/client"
-	manager "github.com/datawire/telepresence2/pkg/rpc"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 // trafficManager is a handle to access the Traffic Manager in a

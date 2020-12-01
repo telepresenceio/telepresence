@@ -9,16 +9,16 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/datawire/telepresence2/pkg/rpc/manager2systema"
+	"github.com/datawire/telepresence2/pkg/rpc/systema"
 )
 
 // ReverseConnectionImpl is the intersection of these two interfaces:
 //
-//   manager2systema.SystemAProxy_ReverseConnectionClient
-//   manager2systema.SystemAProxy_ReverseConnectionServer
+//   systema.SystemAProxy_ReverseConnectionClient
+//   systema.SystemAProxy_ReverseConnectionServer
 type ReverseConnectionImpl interface {
-	Send(*manager2systema.Chunk) error
-	Recv() (*manager2systema.Chunk, error)
+	Send(*systema.Chunk) error
+	Recv() (*systema.Chunk, error)
 }
 
 type reverseConn struct {
@@ -41,9 +41,8 @@ type reverseConn struct {
 	writeErr      error
 }
 
-// Wrap takes a manager2systema.SystemAProxy_ReverseConnectionClient or
-// manager2systema.SystemAProxy_ReverseConnectionServer and wraps it so that it can be used as a
-// net.Conn.
+// Wrap takes a systema.SystemAProxy_ReverseConnectionClient or
+// systema.SystemAProxy_ReverseConnectionServer and wraps it so that it can be used as a net.Conn.
 func Wrap(impl ReverseConnectionImpl) Conn {
 	return &reverseConn{
 		conn: impl,
@@ -101,7 +100,7 @@ func (c *reverseConn) Write(b []byte) (int, error) {
 		return 0, c.writeErr
 	}
 
-	err := c.conn.Send(&manager2systema.Chunk{
+	err := c.conn.Send(&systema.Chunk{
 		Content: b,
 	})
 	if err != nil {

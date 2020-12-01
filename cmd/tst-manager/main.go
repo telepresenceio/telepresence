@@ -12,17 +12,17 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/telepresence2/cmd/tst-manager/systema"
-	"github.com/datawire/telepresence2/pkg/rpc/systema2manager"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 type server struct {
-	systema2manager.UnimplementedManagerCRUDServer
+	manager.UnimplementedManagerServer
 }
 
-func (s server) ListIntercepts(ctx context.Context, _ *empty.Empty) (*systema2manager.InterceptInfoSnapshot, error) {
+func (s server) ListIntercepts(ctx context.Context, _ *empty.Empty) (*manager.InterceptInfoSnapshot, error) {
 	return nil, nil
 }
-func (s server) RemoveIntercept(context.Context, *systema2manager.RemoveInterceptRequest) (*empty.Empty, error) {
+func (s server) RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*empty.Empty, error) {
 	return nil, nil
 }
 func (s server) DialIntercept(ctx context.Context, interceptID string) (net.Conn, error) {

@@ -21,19 +21,19 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dutil"
-	"github.com/datawire/telepresence2/pkg/rpc/manager2systema"
-	"github.com/datawire/telepresence2/pkg/rpc/systema2manager"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
+	"github.com/datawire/telepresence2/pkg/rpc/systema"
 	"github.com/datawire/telepresence2/pkg/systemaconn"
 )
 
 type ManagerClient interface {
-	systema2manager.ManagerCRUDClient
-	systema2manager.ManagerProxyClient
+	manager.ManagerClient
+	manager.ManagerProxyClient
 }
 
 type managerClient struct {
-	systema2manager.ManagerCRUDClient
-	systema2manager.ManagerProxyClient
+	manager.ManagerClient
+	manager.ManagerProxyClient
 }
 
 type ManagerPool interface {
@@ -69,24 +69,25 @@ type Server struct {
 
 	// CRUDServer is the implementation for when a Telepresence manager makes calls to this
 	// System A instance.
-	CRUDServer manager2systema.SystemACRUDServer
+	CRUDServer systema.SystemACRUDServer
 
 	// ManagerPool is the implementation for managing the pool of connections from/to
 	// Telepresence managers.
 	ManagerPool ManagerPool
 
-	manager2systema.UnimplementedSystemAProxyServer
-	systema2manager.UnimplementedManagerCRUDServer
+	systema.UnimplementedSystemAProxyServer
+	manager.UnimplementedManagerServer
 }
 
 type serverHandler struct {
 	*Server
 }
 
-// ListIntercepts recieves a ListIntercepts request, uses your RouteSystemARequest function to
+// WatchIntercepts recieves a WatchIntercepts request, uses your RouteSystemARequest function to
 // inspect the HTTP headers to decide which Telepresence manager to route that to, then proxies it
 // to that manager.
-func (srv serverHandler) ListIntercepts(ctx context.Context, req *empty.Empty) (*systema2manager.InterceptInfoSnapshot, error) {
+func (srv serverHandler) WatchIntercepts(sess *manager.SessionInfo, sender manager.Manager_WatchInterceptsServer) error {
+	ctx := sender.Context()
 	md, haveMD := metadata.FromIncomingContext(ctx)
 	if !haveMD {
 		// The gRPC server 100% should have handed us a Context that has metadata attached
@@ -96,15 +97,28 @@ func (srv serverHandler) ListIntercepts(ctx context.Context, req *empty.Empty) (
 	managerID := srv.ManagerPool.RouteSystemARequest(md)
 	manager := srv.ManagerPool.GetManager(managerID)
 	if manager == nil {
-		return nil, fmt.Errorf("manager ID %q is not connected", managerID)
+		return fmt.Errorf("manager ID %q is not connected", managerID)
 	}
-	return manager.ListIntercepts(ctx, req)
+	recver, err := manager.WatchIntercepts(ctx, sess)
+	if err != nil {
+		return err
+	}
+	for {
+		snapshot, err := recver.Recv()
+		if err != nil {
+			return err
+		}
+		err = sender.Send(snapshot)
+		if err != nil {
+			return err
+		}
+	}
 }
 
 // RemoveIntercept recieves a RemoveIntercept request, uses your RouteSystemARequest function to
 // inspect the HTTP headers to decide which Telepresence manager to route that to, then proxies it
 // to that manager.
-func (srv serverHandler) RemoveIntercept(ctx context.Context, req *systema2manager.RemoveInterceptRequest) (*empty.Empty, error) {
+func (srv serverHandler) RemoveIntercept(ctx context.Context, req *manager.RemoveInterceptRequest2) (*empty.Empty, error) {
 	md, haveMD := metadata.FromIncomingContext(ctx)
 	if !haveMD {
 		// The gRPC server 100% should have handed us a Context that has metadata attached
@@ -120,7 +134,7 @@ func (srv serverHandler) RemoveIntercept(ctx context.Context, req *systema2manag
 }
 
 // ReverseConnection handles a ReverseConnection reequest from a Telepresence manager.
-func (srv serverHandler) ReverseConnection(rawConn manager2systema.SystemAProxy_ReverseConnectionServer) error {
+func (srv serverHandler) ReverseConnection(rawConn systema.SystemAProxy_ReverseConnectionServer) error {
 	ctx := rawConn.Context()
 	md, haveMD := metadata.FromIncomingContext(ctx)
 	if !haveMD {
@@ -142,8 +156,8 @@ func (srv serverHandler) ReverseConnection(rawConn manager2systema.SystemAProxy_
 	}
 
 	srv.ManagerPool.PutManager(managerID, managerClient{
-		ManagerCRUDClient:  systema2manager.NewManagerCRUDClient(grpcConn),
-		ManagerProxyClient: systema2manager.NewManagerProxyClient(grpcConn),
+		ManagerClient:      manager.NewManagerClient(grpcConn),
+		ManagerProxyClient: manager.NewManagerProxyClient(grpcConn),
 	})
 	err = netConn.Wait()
 	srv.ManagerPool.DelManager(managerID)
@@ -181,9 +195,9 @@ func (srv *Server) Serve(ctx context.Context) error {
 			}), &http2.Server{}),
 		}
 
-		systema2manager.RegisterManagerCRUDServer(grpcHandler, serverHandler{srv})
-		manager2systema.RegisterSystemACRUDServer(grpcHandler, srv.CRUDServer)
-		manager2systema.RegisterSystemAProxyServer(grpcHandler, serverHandler{srv})
+		manager.RegisterManagerServer(grpcHandler, serverHandler{srv})
+		systema.RegisterSystemACRUDServer(grpcHandler, srv.CRUDServer)
+		systema.RegisterSystemAProxyServer(grpcHandler, serverHandler{srv})
 
 		return dutil.ServeHTTPWithContext(ctx, server, srv.GRPCListener)
 	})

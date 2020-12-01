@@ -12,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/client"
-	manager "github.com/datawire/telepresence2/pkg/rpc"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 // runner contains all parameters needed in order to run an intercepted command.
@@ -70,7 +70,7 @@ func (p *runner) startSubshell(cmd *cobra.Command, ctx string) error {
 	exe := os.Getenv("SHELL")
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "Starting a %s subshell\n", exe)
-	return start(exe, []string{"i"}, true, cmd.InOrStdin(), out, cmd.ErrOrStderr())
+	return start(exe, []string{"-i"}, true, cmd.InOrStdin(), out, cmd.ErrOrStderr())
 }
 
 func (p *runner) runWithDaemon(cmd *cobra.Command, f func(ds *daemonState) error) error {

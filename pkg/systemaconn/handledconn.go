@@ -12,22 +12,22 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/datawire/telepresence2/pkg/rpc/systema2manager"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 type handledConnectionImpl interface {
-	Send(*systema2manager.ConnectionChunk) error
-	Recv() (*systema2manager.ConnectionChunk, error)
+	Send(*manager.ConnectionChunk) error
+	Recv() (*manager.ConnectionChunk, error)
 }
 
 // DialToManager uses a ReverseConnection to dial from SystemA to a Telepresence manager.
-func DialToManager(ctx context.Context, manager systema2manager.ManagerProxyClient, interceptID string, opts ...grpc.CallOption) (Conn, error) {
-	impl, err := manager.HandleConnection(ctx, opts...)
+func DialToManager(ctx context.Context, managerClient manager.ManagerProxyClient, interceptID string, opts ...grpc.CallOption) (Conn, error) {
+	impl, err := managerClient.HandleConnection(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
-	err = impl.Send(&systema2manager.ConnectionChunk{
-		Value: &systema2manager.ConnectionChunk_InterceptId{
+	err = impl.Send(&manager.ConnectionChunk{
+		Value: &manager.ConnectionChunk_InterceptId{
 			InterceptId: interceptID,
 		},
 	})
@@ -39,12 +39,12 @@ func DialToManager(ctx context.Context, manager systema2manager.ManagerProxyClie
 }
 
 // AcceptFromSystemA is used by a Telepresence manger to accept a connection from SystemA.
-func AcceptFromSystemA(systema systema2manager.ManagerProxy_HandleConnectionServer) (interceptID string, conn Conn, err error) {
+func AcceptFromSystemA(systema manager.ManagerProxy_HandleConnectionServer) (interceptID string, conn Conn, err error) {
 	chunk, err := systema.Recv()
 	if err != nil {
 		return "", nil, err
 	}
-	chunkValue, ok := chunk.Value.(*systema2manager.ConnectionChunk_InterceptId)
+	chunkValue, ok := chunk.Value.(*manager.ConnectionChunk_InterceptId)
 	if !ok {
 		return "", nil, fmt.Errorf("HandleConnection: first chunk must be an intercept_id")
 	}
@@ -73,9 +73,8 @@ type handledConn struct {
 	writeErr      error
 }
 
-// Wrap takes a systema2manager.ManagerProxy_HandleConnectionClient or
-// systema2manager.ManagerProxy_HandleConnectionServer and wraps it so that it can be used as a
-// net.Conn.
+// Wrap takes a manager.ManagerProxy_HandleConnectionClient or
+// manager.ManagerProxy_HandleConnectionServer and wraps it so that it can be used as a net.Conn.
 func wrap(impl handledConnectionImpl) Conn {
 	return &handledConn{
 		conn: impl,
@@ -107,15 +106,15 @@ func (c *handledConn) Read(b []byte) (int, error) {
 		chunk, err := c.conn.Recv()
 		if chunk != nil && chunk.Value != nil {
 			switch chunk := chunk.Value.(type) {
-			case *systema2manager.ConnectionChunk_InterceptId:
+			case *manager.ConnectionChunk_InterceptId:
 				c.readErr = errors.New("HandleConnection: unexpected intercept_id chunk")
 				c.Close()
 				continue
-			case *systema2manager.ConnectionChunk_Data:
+			case *manager.ConnectionChunk_Data:
 				if chunk != nil && len(chunk.Data) > 0 {
 					c.readBuff.Write(chunk.Data)
 				}
-			case *systema2manager.ConnectionChunk_Error:
+			case *manager.ConnectionChunk_Error:
 				c.readErr = fmt.Errorf("HandleConnection: remote error: %s", chunk.Error)
 				c.Close()
 				continue
@@ -146,8 +145,8 @@ func (c *handledConn) Write(b []byte) (int, error) {
 		return 0, c.writeErr
 	}
 
-	err := c.conn.Send(&systema2manager.ConnectionChunk{
-		Value: &systema2manager.ConnectionChunk_Data{
+	err := c.conn.Send(&manager.ConnectionChunk{
+		Value: &manager.ConnectionChunk_Data{
 			Data: b,
 		},
 	})

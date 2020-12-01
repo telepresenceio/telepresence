@@ -19,7 +19,6 @@ import (
 
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
-	"github.com/datawire/telepresence2/pkg/rpc/iptables"
 )
 
 // worker names
@@ -66,7 +65,7 @@ type bridgeData struct {
 }
 
 func (br *bridge) updateTable(c context.Context, snapshot *bridgeData) {
-	table := iptables.Table{Name: "kubernetes"}
+	table := daemon.Table{Name: "kubernetes"}
 	for _, svc := range snapshot.Services {
 		spec := svc.Spec
 
@@ -93,7 +92,7 @@ func (br *bridge) updateTable(c context.Context, snapshot *bridgeData) {
 			// https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#srv-records
 			if port.Name != "" {
 				proto := strings.ToLower(string(port.Protocol))
-				table.Routes = append(table.Routes, &iptables.Route{
+				table.Routes = append(table.Routes, &daemon.Route{
 					Name:   fmt.Sprintf("_%v._%v.%v", port.Name, proto, qName),
 					Ip:     ip,
 					Port:   ports,
@@ -103,7 +102,7 @@ func (br *bridge) updateTable(c context.Context, snapshot *bridgeData) {
 			}
 		}
 
-		table.Routes = append(table.Routes, &iptables.Route{
+		table.Routes = append(table.Routes, &daemon.Route{
 			Name:   qName,
 			Ip:     ip,
 			Port:   ports,
@@ -134,7 +133,7 @@ func (br *bridge) updateTable(c context.Context, snapshot *bridgeData) {
 
 		ip := pod.Status.PodIP
 		if ip != "" {
-			table.Routes = append(table.Routes, &iptables.Route{
+			table.Routes = append(table.Routes, &daemon.Route{
 				Name:   qname,
 				Ip:     ip,
 				Proto:  "tcp",

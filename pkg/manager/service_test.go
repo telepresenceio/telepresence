@@ -13,7 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/datawire/telepresence2/pkg/manager"
-	"github.com/datawire/telepresence2/pkg/rpc"
+	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/version"
 )
 

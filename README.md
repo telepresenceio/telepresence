@@ -75,7 +75,7 @@ BODY:
 In the subshell that telepresence started, add an intercept for the hello deployment on port 9000. Here, we also start a service listening on that port:
 
 ```console
-$ telepresence --intercept hello --port 9000 -- python3 -m http.server 9000  
+$ telepresence --intercept hello --port 9000 -- python3 -m http.server 9000
 Already connected
 Using deployment hello
 Serving HTTP on 0.0.0.0 port 9000 (http://0.0.0.0:9000/) ...
@@ -151,7 +151,7 @@ $ telepresence --no-wait
   Launching Telepresence Daemon v0.3.0 (api v3)
   Connecting to traffic manager...
   Connected to context default (https://34.123.86.205)
-$ telepresence --status 
+$ telepresence --status
   Connected
     Context:       default (https://34.123.86.205)
     Proxy:         ON (networking to the cluster is enabled)
@@ -231,10 +231,10 @@ Containers:
       /var/run/secrets/kubernetes.io/serviceaccount from default-token-blr2m (ro)
 Conditions:
   Type              Status
-  Initialized       True 
-  Ready             True 
-  ContainersReady   True 
-  PodScheduled      True 
+  Initialized       True
+  Ready             True
+  ContainersReady   True
+  PodScheduled      True
 Volumes:
   default-token-blr2m:
     Type:        Secret (a volume populated by a Secret)
@@ -279,4 +279,3 @@ Telepresence installs the Traffic Manager in your cluster if it is not already p
 Telepresence installs the Traffic Agent as an additional container in any deployment you intercept, and modifies any associated services it finds to route traffic through the agent. This modification persists, i.e. does not get cleaned up.
 
 You can launch other Telepresence sessions to the same cluster while an existing session is running, letting you intercept other deployments. When doing so, it is important to end the first session last because it established the traffic-manager connection and will close it when it ends, rendering the other services disconnected.
-

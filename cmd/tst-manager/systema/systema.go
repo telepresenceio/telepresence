@@ -18,24 +18,24 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/cmd/tst-manager/systema/internal/loopback"
-	"github.com/datawire/telepresence2/pkg/rpc/manager2systema"
-	"github.com/datawire/telepresence2/pkg/rpc/systema2manager"
+	"github.com/datawire/telepresence2/pkg/rpc/systema"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/systemaconn"
 )
 
 // ManagerServer is the interface that you must implement for when System A talks to the Manager.
 type ManagerServer interface {
-	systema2manager.ManagerCRUDServer
+	manager.ManagerServer
 	DialIntercept(ctx context.Context, interceptID string) (net.Conn, error)
 }
 
 type server struct {
 	ManagerServer
-	systema2manager.UnimplementedManagerProxyServer
+	manager.UnimplementedManagerProxyServer
 }
 
-// HandleConnection implements systema2manager.ManagerProxyServer
-func (s server) HandleConnection(rawconn systema2manager.ManagerProxy_HandleConnectionServer) error {
+// HandleConnection implements manager.ManagerProxyServer
+func (s server) HandleConnection(rawconn manager.ManagerProxy_HandleConnectionServer) error {
 	ctx := rawconn.Context()
 
 	interceptID, systemaConn, err := systemaconn.AcceptFromSystemA(rawconn)
@@ -75,12 +75,12 @@ func (s server) HandleConnection(rawconn systema2manager.ManagerProxy_HandleConn
 func ConnectToSystemA(ctx context.Context,
 	self ManagerServer,
 	systemaAddr string, systemaDialOpts ...grpc.DialOption,
-) (client manager2systema.SystemACRUDClient, wait func() error, err error) {
+) (client systema.SystemACRUDClient, wait func() error, err error) {
 	conn, err := grpc.DialContext(ctx, systemaAddr, systemaDialOpts...)
 	if err != nil {
 		return nil, nil, err
 	}
-	systemaCRUD := manager2systema.NewSystemACRUDClient(conn)
+	systemaCRUD := systema.NewSystemACRUDClient(conn)
 
 	listener, addConn := loopback.NewLoopbackListener()
 
@@ -94,12 +94,12 @@ func ConnectToSystemA(ctx context.Context,
 	grp.Go("server", func(_ context.Context) error {
 		grpcServer := grpc.NewServer()
 		serverImpl := server{ManagerServer: self}
-		systema2manager.RegisterManagerCRUDServer(grpcServer, serverImpl)
-		systema2manager.RegisterManagerProxyServer(grpcServer, serverImpl)
+		manager.RegisterManagerServer(grpcServer, serverImpl)
+		manager.RegisterManagerProxyServer(grpcServer, serverImpl)
 		return grpcServer.Serve(listener)
 	})
 	grp.Go("client", func(ctx context.Context) error {
-		systemaProxy := manager2systema.NewSystemAProxyClient(conn)
+		systemaProxy := systema.NewSystemAProxyClient(conn)
 		var tempDelay time.Duration
 		for ctx.Err() == nil {
 			err := func() error {
