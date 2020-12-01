@@ -427,8 +427,8 @@ def new_swapped_deployment(
             container["imagePullPolicy"] = "IfNotPresent"
             # Drop unneeded fields:
             for unneeded in [
-                "args", "livenessProbe", "readinessProbe", "workingDir",
-                "lifecycle"
+                "args", "startupProbe", "livenessProbe", "readinessProbe",
+                "workingDir", "lifecycle"
             ]:
                 try:
                     container.pop(unneeded)
