@@ -3,7 +3,6 @@ package manager
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -43,8 +42,8 @@ func Main(ctx context.Context, args ...string) error {
 		return cmd.Run()
 	})
 
-	// Serve gRPC
-	g.Go("grpcd", func(ctx context.Context) error {
+	// Serve HTTP (including gRPC)
+	g.Go("httpd", func(ctx context.Context) error {
 		host := os.Getenv("SERVER_HOST")
 		port := os.Getenv("SERVER_PORT")
 		if port == "" {
@@ -52,8 +51,8 @@ func Main(ctx context.Context, args ...string) error {
 		}
 
 		grpcHandler := grpc.NewServer()
-		httpHandler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "this socket only supports gRPC, not plain HTTP", http.StatusBadRequest)
+		httpHandler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "Hello World from: %s\n", r.URL.Path)
 		}))
 		server := &http.Server{
 			Addr:     host + ":" + port,
@@ -85,20 +84,6 @@ func Main(ctx context.Context, args ...string) error {
 				}
 			}
 		})
-
-		return dutil.ListenAndServeHTTPWithContext(ctx, server)
-	})
-
-	// Serve HTTP
-	g.Go("httpd", func(ctx context.Context) error {
-		server := &http.Server{
-			Addr:        ":8000", // FIXME configurable?
-			ErrorLog:    dlog.StdLogger(ctx, dlog.LogLevelError),
-			BaseContext: func(_ net.Listener) context.Context { return ctx },
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprintf(w, "Hello World from: %s\n", r.URL.Path)
-			}),
-		}
 
 		return dutil.ListenAndServeHTTPWithContext(ctx, server)
 	})
