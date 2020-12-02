@@ -15,7 +15,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/datawire/telepresence2/pkg/agent"
-	"github.com/datawire/telepresence2/pkg/rpc"
+	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/version"
 )
 

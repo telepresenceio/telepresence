@@ -24,10 +24,9 @@ import (
 
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
+	"github.com/datawire/telepresence2/pkg/rpc/common"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
-	"github.com/datawire/telepresence2/pkg/rpc/iptables"
-	"github.com/datawire/telepresence2/pkg/rpc/version"
 )
 
 var help = `The Telepresence Daemon is a long-lived background component that manages
@@ -100,8 +99,8 @@ func (d *service) Logger(server rpc.Daemon_LoggerServer) error {
 	}
 }
 
-func (d *service) Version(_ context.Context, _ *empty.Empty) (*version.VersionInfo, error) {
-	return &version.VersionInfo{
+func (d *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
+	return &common.VersionInfo{
 		ApiVersion: client.APIVersion,
 		Version:    client.Version(),
 	}, nil
@@ -157,7 +156,7 @@ func (d *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) 
 	return &empty.Empty{}, nil
 }
 
-func (d *service) Update(_ context.Context, table *iptables.Table) (*empty.Empty, error) {
+func (d *service) Update(_ context.Context, table *rpc.Table) (*empty.Empty, error) {
 	d.outbound.update(table)
 	dns.Flush()
 	return &empty.Empty{}, nil

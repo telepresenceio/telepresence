@@ -3,7 +3,7 @@ package manager
 import (
 	"fmt"
 
-	"github.com/datawire/telepresence2/pkg/rpc"
+	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 // agentsAreCompatible returns whether all the specified agents have the same

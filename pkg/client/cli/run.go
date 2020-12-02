@@ -12,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/client"
-	manager "github.com/datawire/telepresence2/pkg/rpc"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 // runner contains all parameters needed in order to run an intercepted command.

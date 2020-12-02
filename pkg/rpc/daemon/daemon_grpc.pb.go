@@ -4,8 +4,7 @@ package daemon
 
 import (
 	context "context"
-	iptables "github.com/datawire/telepresence2/pkg/rpc/iptables"
-	version "github.com/datawire/telepresence2/pkg/rpc/version"
+	common "github.com/datawire/telepresence2/pkg/rpc/common"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
@@ -21,7 +20,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type DaemonClient interface {
 	// Returns version information from the Daemon
-	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*version.VersionInfo, error)
+	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
 	// Returns the current connectivity status
 	Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*DaemonStatus, error)
 	// Turns network overrides off.
@@ -34,7 +33,7 @@ type DaemonClient interface {
 	// Quits (terminates) the service.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Update assigns adds or updates an IP-table.
-	Update(ctx context.Context, in *iptables.Table, opts ...grpc.CallOption) (*empty.Empty, error)
+	Update(ctx context.Context, in *Table, opts ...grpc.CallOption) (*empty.Empty, error)
 	// SetSearch sets a new search path.
 	SetDnsSearchPath(ctx context.Context, in *Paths, opts ...grpc.CallOption) (*empty.Empty, error)
 }
@@ -47,9 +46,9 @@ func NewDaemonClient(cc grpc.ClientConnInterface) DaemonClient {
 	return &daemonClient{cc}
 }
 
-func (c *daemonClient) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*version.VersionInfo, error) {
-	out := new(version.VersionInfo)
-	err := c.cc.Invoke(ctx, "/telepresence.Daemon/Version", in, out, opts...)
+func (c *daemonClient) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error) {
+	out := new(common.VersionInfo)
+	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Version", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +57,7 @@ func (c *daemonClient) Version(ctx context.Context, in *empty.Empty, opts ...grp
 
 func (c *daemonClient) Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*DaemonStatus, error) {
 	out := new(DaemonStatus)
-	err := c.cc.Invoke(ctx, "/telepresence.Daemon/Status", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Status", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +66,7 @@ func (c *daemonClient) Status(ctx context.Context, in *empty.Empty, opts ...grpc
 
 func (c *daemonClient) Pause(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*PauseInfo, error) {
 	out := new(PauseInfo)
-	err := c.cc.Invoke(ctx, "/telepresence.Daemon/Pause", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Pause", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +75,7 @@ func (c *daemonClient) Pause(ctx context.Context, in *empty.Empty, opts ...grpc.
 
 func (c *daemonClient) Resume(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ResumeInfo, error) {
 	out := new(ResumeInfo)
-	err := c.cc.Invoke(ctx, "/telepresence.Daemon/Resume", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Resume", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +83,7 @@ func (c *daemonClient) Resume(ctx context.Context, in *empty.Empty, opts ...grpc
 }
 
 func (c *daemonClient) Logger(ctx context.Context, opts ...grpc.CallOption) (Daemon_LoggerClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Daemon_serviceDesc.Streams[0], "/telepresence.Daemon/Logger", opts...)
+	stream, err := c.cc.NewStream(ctx, &_Daemon_serviceDesc.Streams[0], "/telepresence.daemon.Daemon/Logger", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -119,16 +118,16 @@ func (x *daemonLoggerClient) CloseAndRecv() (*empty.Empty, error) {
 
 func (c *daemonClient) Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
-	err := c.cc.Invoke(ctx, "/telepresence.Daemon/Quit", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Quit", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *daemonClient) Update(ctx context.Context, in *iptables.Table, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (c *daemonClient) Update(ctx context.Context, in *Table, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
-	err := c.cc.Invoke(ctx, "/telepresence.Daemon/Update", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Update", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +136,7 @@ func (c *daemonClient) Update(ctx context.Context, in *iptables.Table, opts ...g
 
 func (c *daemonClient) SetDnsSearchPath(ctx context.Context, in *Paths, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
-	err := c.cc.Invoke(ctx, "/telepresence.Daemon/SetDnsSearchPath", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/SetDnsSearchPath", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +148,7 @@ func (c *daemonClient) SetDnsSearchPath(ctx context.Context, in *Paths, opts ...
 // for forward compatibility
 type DaemonServer interface {
 	// Returns version information from the Daemon
-	Version(context.Context, *empty.Empty) (*version.VersionInfo, error)
+	Version(context.Context, *empty.Empty) (*common.VersionInfo, error)
 	// Returns the current connectivity status
 	Status(context.Context, *empty.Empty) (*DaemonStatus, error)
 	// Turns network overrides off.
@@ -162,7 +161,7 @@ type DaemonServer interface {
 	// Quits (terminates) the service.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	// Update assigns adds or updates an IP-table.
-	Update(context.Context, *iptables.Table) (*empty.Empty, error)
+	Update(context.Context, *Table) (*empty.Empty, error)
 	// SetSearch sets a new search path.
 	SetDnsSearchPath(context.Context, *Paths) (*empty.Empty, error)
 	mustEmbedUnimplementedDaemonServer()
@@ -172,7 +171,7 @@ type DaemonServer interface {
 type UnimplementedDaemonServer struct {
 }
 
-func (UnimplementedDaemonServer) Version(context.Context, *empty.Empty) (*version.VersionInfo, error) {
+func (UnimplementedDaemonServer) Version(context.Context, *empty.Empty) (*common.VersionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
 func (UnimplementedDaemonServer) Status(context.Context, *empty.Empty) (*DaemonStatus, error) {
@@ -190,7 +189,7 @@ func (UnimplementedDaemonServer) Logger(Daemon_LoggerServer) error {
 func (UnimplementedDaemonServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
 }
-func (UnimplementedDaemonServer) Update(context.Context, *iptables.Table) (*empty.Empty, error) {
+func (UnimplementedDaemonServer) Update(context.Context, *Table) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Update not implemented")
 }
 func (UnimplementedDaemonServer) SetDnsSearchPath(context.Context, *Paths) (*empty.Empty, error) {
@@ -219,7 +218,7 @@ func _Daemon_Version_Handler(srv interface{}, ctx context.Context, dec func(inte
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Daemon/Version",
+		FullMethod: "/telepresence.daemon.Daemon/Version",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServer).Version(ctx, req.(*empty.Empty))
@@ -237,7 +236,7 @@ func _Daemon_Status_Handler(srv interface{}, ctx context.Context, dec func(inter
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Daemon/Status",
+		FullMethod: "/telepresence.daemon.Daemon/Status",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServer).Status(ctx, req.(*empty.Empty))
@@ -255,7 +254,7 @@ func _Daemon_Pause_Handler(srv interface{}, ctx context.Context, dec func(interf
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Daemon/Pause",
+		FullMethod: "/telepresence.daemon.Daemon/Pause",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServer).Pause(ctx, req.(*empty.Empty))
@@ -273,7 +272,7 @@ func _Daemon_Resume_Handler(srv interface{}, ctx context.Context, dec func(inter
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Daemon/Resume",
+		FullMethod: "/telepresence.daemon.Daemon/Resume",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServer).Resume(ctx, req.(*empty.Empty))
@@ -317,7 +316,7 @@ func _Daemon_Quit_Handler(srv interface{}, ctx context.Context, dec func(interfa
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Daemon/Quit",
+		FullMethod: "/telepresence.daemon.Daemon/Quit",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServer).Quit(ctx, req.(*empty.Empty))
@@ -326,7 +325,7 @@ func _Daemon_Quit_Handler(srv interface{}, ctx context.Context, dec func(interfa
 }
 
 func _Daemon_Update_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(iptables.Table)
+	in := new(Table)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -335,10 +334,10 @@ func _Daemon_Update_Handler(srv interface{}, ctx context.Context, dec func(inter
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Daemon/Update",
+		FullMethod: "/telepresence.daemon.Daemon/Update",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).Update(ctx, req.(*iptables.Table))
+		return srv.(DaemonServer).Update(ctx, req.(*Table))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -353,7 +352,7 @@ func _Daemon_SetDnsSearchPath_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.Daemon/SetDnsSearchPath",
+		FullMethod: "/telepresence.daemon.Daemon/SetDnsSearchPath",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServer).SetDnsSearchPath(ctx, req.(*Paths))
@@ -362,7 +361,7 @@ func _Daemon_SetDnsSearchPath_Handler(srv interface{}, ctx context.Context, dec 
 }
 
 var _Daemon_serviceDesc = grpc.ServiceDesc{
-	ServiceName: "telepresence.Daemon",
+	ServiceName: "telepresence.daemon.Daemon",
 	HandlerType: (*DaemonServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

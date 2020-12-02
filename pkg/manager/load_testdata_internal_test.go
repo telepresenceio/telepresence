@@ -7,7 +7,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	"github.com/datawire/telepresence2/pkg/rpc"
+	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 func GetTestMechanisms(t *testing.T) map[string]*rpc.AgentInfo_Mechanism {

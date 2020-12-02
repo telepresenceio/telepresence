@@ -9,9 +9,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/client"
-	manager "github.com/datawire/telepresence2/pkg/rpc"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 // IsServerRunning reports whether or not the daemon server is running.

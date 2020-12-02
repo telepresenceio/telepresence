@@ -10,8 +10,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	manager "github.com/datawire/telepresence2/pkg/rpc"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 type interceptState struct {

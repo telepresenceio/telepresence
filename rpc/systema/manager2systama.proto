@@ -1,12 +1,13 @@
 syntax = "proto3";
 
-// manager2systema deals with the calls that the in-cluster
-// Telepsresence manager makes to the System A cloud service.
-package telepresence.manager2systema;
+// The "systema" package describes the servier implemented by the
+// SystemA cloud service, which is called to by in-cluster
+// Telepsresence manager.
+package telepresence.systema;
 
 import "google/protobuf/empty.proto";
 
-option go_package = "github.com/datawire/telepresence2/pkg/rpc/manager2systema";
+option go_package = "github.com/datawire/telepresence2/pkg/rpc/systema";
 
 message Chunk {
   bytes content = 1;

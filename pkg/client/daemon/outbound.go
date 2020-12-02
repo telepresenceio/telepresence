@@ -19,7 +19,7 @@ import (
 	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/pkg/client/daemon/nat"
 	"github.com/datawire/telepresence2/pkg/client/daemon/proxy"
-	"github.com/datawire/telepresence2/pkg/rpc/iptables"
+	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
 )
 
 const (
@@ -117,10 +117,10 @@ type outbound struct {
 	fallbackIP string
 	noSearch   bool
 	translator *nat.Translator
-	tables     map[string]*iptables.Table
+	tables     map[string]*rpc.Table
 	tablesLock sync.RWMutex
 
-	domains     map[string]*iptables.Route
+	domains     map[string]*rpc.Route
 	domainsLock sync.RWMutex
 
 	search     []string
@@ -135,9 +135,9 @@ func newOutbound(name string, dnsIP, fallbackIP string, noSearch bool, cancel co
 		dnsIP:      dnsIP,
 		fallbackIP: fallbackIP,
 		noSearch:   noSearch,
-		tables:     make(map[string]*iptables.Table),
+		tables:     make(map[string]*rpc.Table),
 		translator: nat.NewTranslator(name),
-		domains:    make(map[string]*iptables.Route),
+		domains:    make(map[string]*rpc.Route),
 		search:     []string{""},
 		work:       make(chan func(context.Context) error),
 		cancel:     cancel,
@@ -177,7 +177,7 @@ func (o *outbound) proxyWorker(c context.Context) error {
 
 func (o *outbound) dnsConfigWorker(c context.Context) error {
 	dlog.Debug(c, "Starting server")
-	bootstrap := iptables.Table{Name: "bootstrap", Routes: []*iptables.Route{{
+	bootstrap := rpc.Table{Name: "bootstrap", Routes: []*rpc.Route{{
 		Ip:     o.dnsIP,
 		Target: dnsRedirPort,
 		Proto:  "udp",
@@ -247,12 +247,12 @@ func (o *outbound) translatorWorker(c context.Context) (err error) {
 // all the suffixes in the search path, and returns a Route on success
 // or nil on failure. This implementation does not count the number of
 // dots in the query.
-func (o *outbound) resolve(query string) *iptables.Route {
+func (o *outbound) resolve(query string) *rpc.Route {
 	if !strings.HasSuffix(query, ".") {
 		query += "."
 	}
 
-	var route *iptables.Route
+	var route *rpc.Route
 	o.searchLock.RLock()
 	o.domainsLock.RLock()
 	for _, suffix := range o.search {
@@ -271,7 +271,7 @@ func (o *outbound) destination(conn *net.TCPConn) (string, error) {
 	return host, err
 }
 
-func (o *outbound) update(table *iptables.Table) {
+func (o *outbound) update(table *rpc.Table) {
 	result := make(chan error)
 	o.work <- func(c context.Context) error {
 		defer close(result)
@@ -280,7 +280,7 @@ func (o *outbound) update(table *iptables.Table) {
 	<-result
 }
 
-func routesEqual(a, b *iptables.Route) bool {
+func routesEqual(a, b *rpc.Route) bool {
 	if a == b {
 		return true
 	}
@@ -290,15 +290,15 @@ func routesEqual(a, b *iptables.Route) bool {
 	return a.Name == b.Name && a.Action == b.Action && a.Ip == b.Ip && a.Port == b.Port && a.Target == b.Target
 }
 
-func domain(r *iptables.Route) string {
+func domain(r *rpc.Route) string {
 	return strings.ToLower(r.Name + ".")
 }
 
-func (o *outbound) doUpdate(c context.Context, table *iptables.Table) error {
+func (o *outbound) doUpdate(c context.Context, table *rpc.Table) error {
 	// Make a copy of the current table
 	o.tablesLock.RLock()
 	oldTable, ok := o.tables[table.Name]
-	oldRoutes := make(map[string]*iptables.Route)
+	oldRoutes := make(map[string]*rpc.Route)
 	if ok {
 		for _, route := range oldTable.Routes {
 			oldRoutes[route.Name] = route
