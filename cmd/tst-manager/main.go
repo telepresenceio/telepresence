@@ -11,8 +11,8 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/telepresence2/cmd/tst-manager/systema"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
+	"github.com/datawire/telepresence2/pkg/systema"
 )
 
 type server struct {

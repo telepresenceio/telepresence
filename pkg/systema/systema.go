@@ -17,10 +17,10 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/cmd/tst-manager/systema/internal/loopback"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/rpc/systema"
-	"github.com/datawire/telepresence2/pkg/systemaconn"
+	"github.com/datawire/telepresence2/pkg/systema/grpctun"
+	"github.com/datawire/telepresence2/pkg/systema/internal/loopback"
 )
 
 // ManagerServer is the interface that you must implement for when System A talks to the Manager.
@@ -38,7 +38,7 @@ type server struct {
 func (s server) HandleConnection(rawconn manager.ManagerProxy_HandleConnectionServer) error {
 	ctx := rawconn.Context()
 
-	interceptID, systemaConn, err := systemaconn.AcceptFromSystemA(rawconn)
+	interceptID, systemaConn, err := grpctun.AcceptFromSystemA(rawconn)
 	if err != nil {
 		return fmt.Errorf("HandleConnection: accept: %w", err)
 	}
@@ -108,7 +108,7 @@ func ConnectToSystemA(ctx context.Context,
 					return err
 				}
 				dlog.Info(ctx, "connection to System A established")
-				rconn := systemaconn.Wrap(rconnInner)
+				rconn := grpctun.Wrap(rconnInner)
 				if err := addConn(rconn); err != nil {
 					return err
 				}

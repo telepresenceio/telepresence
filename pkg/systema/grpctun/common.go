@@ -1,4 +1,4 @@
-package systemaconn
+package grpctun
 
 import (
 	"net"

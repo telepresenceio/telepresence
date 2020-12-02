@@ -23,7 +23,7 @@ import (
 	"github.com/datawire/dlib/dutil"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/rpc/systema"
-	"github.com/datawire/telepresence2/pkg/systemaconn"
+	"github.com/datawire/telepresence2/pkg/systema/grpctun"
 )
 
 type ManagerClient interface {
@@ -144,7 +144,7 @@ func (srv serverHandler) ReverseConnection(rawConn systema.SystemAProxy_ReverseC
 	}
 	managerID := srv.ManagerPool.ManagerRequestAuthentication(md)
 
-	netConn := systemaconn.Wrap(rawConn)
+	netConn := grpctun.Wrap(rawConn)
 
 	grpcConn, err := grpc.DialContext(rawConn.Context(), managerID,
 		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
@@ -240,7 +240,7 @@ func (srv *Server) Serve(ctx context.Context) error {
 						if manager == nil {
 							return nil, fmt.Errorf("HandleConnection: dial: manager ID %q is not connected", managerID)
 						}
-						conn, err := systemaconn.DialToManager(ctx, manager, interceptID)
+						conn, err := grpctun.DialToManager(ctx, manager, interceptID)
 						if err != nil {
 							return nil, fmt.Errorf("HandleConnection: dial: %w", err)
 						}
