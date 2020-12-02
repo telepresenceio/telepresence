@@ -51,7 +51,6 @@ linters:
     - govet
     - ineffassign
     - lll
-    - maligned
     - misspell
     - nakedret
     - prealloc
@@ -74,5 +73,6 @@ linters:
   # - golint
   # - gosec
   # - interfacer
+  # - maligned # is premature-optimization
   # - stylecheck
   # - unparam

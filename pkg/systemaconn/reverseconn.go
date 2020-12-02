@@ -117,7 +117,7 @@ func (c *reverseConn) Close() error {
 		if client, isClient := c.conn.(grpc.ClientStream); isClient {
 			c.writeMu.Lock()
 			defer c.writeMu.Unlock()
-			client.CloseSend()
+			_ = client.CloseSend()
 		}
 		c.waitOnce.Do(func() { close(c.wait) })
 	})
@@ -158,8 +158,8 @@ func (c *reverseConn) RemoteAddr() net.Addr {
 
 // SetDeadline implements net.Conn.
 func (c *reverseConn) SetDeadline(t time.Time) error {
-	c.SetReadDeadline(t)
-	c.SetWriteDeadline(t)
+	_ = c.SetReadDeadline(t)
+	_ = c.SetWriteDeadline(t)
 	return nil
 }
 

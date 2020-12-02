@@ -83,7 +83,7 @@ type serverHandler struct {
 	*Server
 }
 
-// WatchIntercepts recieves a WatchIntercepts request, uses your RouteSystemARequest function to
+// WatchIntercepts receives a WatchIntercepts request, uses your RouteSystemARequest function to
 // inspect the HTTP headers to decide which Telepresence manager to route that to, then proxies it
 // to that manager.
 func (srv serverHandler) WatchIntercepts(sess *manager.SessionInfo, sender manager.Manager_WatchInterceptsServer) error {
@@ -115,7 +115,7 @@ func (srv serverHandler) WatchIntercepts(sess *manager.SessionInfo, sender manag
 	}
 }
 
-// RemoveIntercept recieves a RemoveIntercept request, uses your RouteSystemARequest function to
+// RemoveIntercept receives a RemoveIntercept request, uses your RouteSystemARequest function to
 // inspect the HTTP headers to decide which Telepresence manager to route that to, then proxies it
 // to that manager.
 func (srv serverHandler) RemoveIntercept(ctx context.Context, req *manager.RemoveInterceptRequest2) (*empty.Empty, error) {
@@ -147,7 +147,7 @@ func (srv serverHandler) ReverseConnection(rawConn systema.SystemAProxy_ReverseC
 	netConn := systemaconn.Wrap(rawConn)
 
 	grpcConn, err := grpc.DialContext(rawConn.Context(), managerID,
-		grpc.WithDialer(func(string, time.Duration) (net.Conn, error) {
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 			return netConn, nil
 		}),
 		grpc.WithInsecure())

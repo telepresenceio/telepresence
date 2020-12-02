@@ -23,7 +23,7 @@ type loopbackListener struct {
 	conns  chan net.Conn
 }
 
-func (l loopbackListener) AddConn(conn net.Conn) error {
+func (l *loopbackListener) AddConn(conn net.Conn) error {
 	l.mu.RLock()
 	if l.closed {
 		l.mu.RUnlock()
@@ -36,7 +36,7 @@ func (l loopbackListener) AddConn(conn net.Conn) error {
 }
 
 // Accept implements net.Listner
-func (l loopbackListener) Accept() (net.Conn, error) {
+func (l *loopbackListener) Accept() (net.Conn, error) {
 	conn, ok := <-l.conns
 	if !ok {
 		return nil, errors.New("listener closed")
@@ -45,7 +45,7 @@ func (l loopbackListener) Accept() (net.Conn, error) {
 }
 
 // Close implements net.Listner
-func (l loopbackListener) Close() error {
+func (l *loopbackListener) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if !l.closed {
@@ -56,7 +56,7 @@ func (l loopbackListener) Close() error {
 }
 
 // Addr implements net.Listner
-func (l loopbackListener) Addr() net.Addr {
+func (l *loopbackListener) Addr() net.Addr {
 	return loopbackAddr{}
 }
 

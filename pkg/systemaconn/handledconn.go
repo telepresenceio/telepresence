@@ -32,7 +32,7 @@ func DialToManager(ctx context.Context, managerClient manager.ManagerProxyClient
 		},
 	})
 	if err != nil {
-		impl.CloseSend()
+		_ = impl.CloseSend()
 		return nil, err
 	}
 	return wrap(impl), nil
@@ -164,7 +164,7 @@ func (c *handledConn) Close() error {
 		if client, isClient := c.conn.(grpc.ClientStream); isClient {
 			c.writeMu.Lock()
 			defer c.writeMu.Unlock()
-			client.CloseSend()
+			_ = client.CloseSend()
 		}
 		c.waitOnce.Do(func() { close(c.wait) })
 	})
@@ -205,8 +205,8 @@ func (c *handledConn) RemoteAddr() net.Addr {
 
 // SetDeadline implements net.Conn.
 func (c *handledConn) SetDeadline(t time.Time) error {
-	c.SetReadDeadline(t)
-	c.SetWriteDeadline(t)
+	_ = c.SetReadDeadline(t)
+	_ = c.SetWriteDeadline(t)
 	return nil
 }
 

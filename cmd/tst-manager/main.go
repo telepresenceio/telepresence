@@ -51,10 +51,10 @@ func main() {
 		EnableSignalHandling: true,
 	})
 	grp.Go("main", func(ctx context.Context) error {
-		//credBundle := TODO
+		// credBundle := TODO
 		_, wait, err := systema.ConnectToSystemA(ctx, server{}, "localhost:8000",
 			grpc.WithInsecure(),
-			//grpc.WithCredentialsBundle(credBundle),
+			// grpc.WithCredentialsBundle(credBundle),
 		)
 		if err != nil {
 			return err
