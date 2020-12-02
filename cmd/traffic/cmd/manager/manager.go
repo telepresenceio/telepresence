@@ -6,43 +6,31 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
+	"strings"
 	"time"
 
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dutil"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/version"
 )
 
 func Main(ctx context.Context, args ...string) error {
-	g, ctx := errgroup.WithContext(dlog.WithField(ctx, "MAIN", "main"))
-
 	dlog.Infof(ctx, "Traffic Manager %s [pid:%d]", version.Version, os.Getpid())
 
-	// Handle shutdown
-	g.Go(func() error {
-		sigs := make(chan os.Signal, 1)
-		signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-
-		select {
-		case sig := <-sigs:
-			dlog.Errorf(ctx, "Shutting down due to signal %v", sig)
-			return fmt.Errorf("received signal %v", sig)
-		case <-ctx.Done():
-			return nil
-		}
+	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
+		EnableSignalHandling: true,
 	})
 
 	// Run sshd
-	g.Go(func() error {
-		ctx := dlog.WithField(ctx, "MAIN", "sshd")
+	g.Go("sshd", func(ctx context.Context) error {
 		cmd := dexec.CommandContext(ctx, "/usr/sbin/sshd", "-De", "-p", "8022")
 
 		// Avoid starting sshd while running locally for debugging. Launch sleep
@@ -52,83 +40,57 @@ func Main(ctx context.Context, args ...string) error {
 			cmd = dexec.CommandContext(ctx, "sleep", "1000000")
 		}
 
-		if err := cmd.Start(); err != nil {
-			return err
-		}
-
-		// If sshd quits, all port forwarding will cease to function. Call
-		// Wait() and treat any exit as fatal.
-		g.Go(func() error {
-			err := cmd.Wait()
-			if err != nil {
-				return errors.Wrap(err, "sshd failed")
-			}
-			return errors.New("sshd finished: exit status 0")
-		})
-
-		<-ctx.Done()
-
-		dlog.Debug(ctx, "sshd stopping...")
-
-		if err := cmd.Process.Kill(); err != nil {
-			dlog.Debugf(ctx, "kill sshd: %+v", err)
-		}
-
-		return nil
+		return cmd.Run()
 	})
 
 	// Serve gRPC
-	g.Go(func() error {
-		ctx := dlog.WithField(ctx, "MAIN", "server")
-
+	g.Go("grpcd", func(ctx context.Context) error {
 		host := os.Getenv("SERVER_HOST")
 		port := os.Getenv("SERVER_PORT")
 		if port == "" {
 			port = "8081"
 		}
-		address := host + ":" + port
 
-		lis, err := net.Listen("tcp", address)
-		if err != nil {
-			return err
+		grpcHandler := grpc.NewServer()
+		httpHandler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "this socket only supports gRPC, not plain HTTP", http.StatusBadRequest)
+		}))
+		server := &http.Server{
+			Addr:     host + ":" + port,
+			ErrorLog: dlog.StdLogger(ctx, dlog.LogLevelError),
+			Handler: h2c.NewHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+					grpcHandler.ServeHTTP(w, r)
+				} else {
+					httpHandler.ServeHTTP(w, r)
+				}
+			}), &http2.Server{}),
 		}
 
-		dlog.Infof(ctx, "Traffic Manager listening on %q", address)
-
-		server := grpc.NewServer()
 		mgr := NewManager(ctx)
-		rpc.RegisterManagerServer(server, mgr)
-		grpc_health_v1.RegisterHealthServer(server, &HealthChecker{})
+		rpc.RegisterManagerServer(grpcHandler, mgr)
+		grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
 
-		g.Go(func() error {
-			return server.Serve(lis)
+		g.Go("gc", func(ctx context.Context) error {
+			// Loop calling Expire
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ticker.C:
+					mgr.Expire()
+				case <-ctx.Done():
+					return nil
+				}
+			}
 		})
 
-		// Loop calling Expire
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				mgr.Expire()
-				continue
-			case <-ctx.Done():
-				// break the for loop below
-			}
-			break
-		}
-
-		dlog.Debug(ctx, "Traffic Manager stopping...")
-		server.Stop()
-		lis.Close()
-
-		return nil
+		return dutil.ListenAndServeHTTPWithContext(ctx, server)
 	})
 
 	// Serve HTTP
-	g.Go(func() error {
-		ctx := dlog.WithField(ctx, "MAIN", "httpd")
+	g.Go("httpd", func(ctx context.Context) error {
 		server := &http.Server{
 			Addr:        ":8000", // FIXME configurable?
 			ErrorLog:    dlog.StdLogger(ctx, dlog.LogLevelError),
@@ -138,13 +100,7 @@ func Main(ctx context.Context, args ...string) error {
 			}),
 		}
 
-		g.Go(server.ListenAndServe)
-
-		<-ctx.Done()
-
-		dlog.Debug(ctx, "Web server stopping...")
-		server.Close()
-		return nil
+		return dutil.ListenAndServeHTTPWithContext(ctx, server)
 	})
 
 	// Wait for exit
