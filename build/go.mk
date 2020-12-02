@@ -58,6 +58,11 @@ lint: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Run the linters (golan
 	golangci-lint run --timeout 2m ./...
 	protolint lint rpc
 
+.PHONY: format
+format: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Automatically fix linter complaints
+	golangci-lint run --fix --timeout 2m ./... || true
+	protolint lint --fix rpc || true
+
 .PHONY: test check
 test check: $(tools/ko) ## (Test) Run the test suite
 	go test -v ./...
