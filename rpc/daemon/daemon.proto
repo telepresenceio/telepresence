@@ -2,8 +2,8 @@ syntax = "proto3";
 package telepresence.daemon;
 
 import "google/protobuf/empty.proto";
-import "rpc/daemon/iptables.proto";
 import "rpc/common/version.proto";
+import "rpc/daemon/iptables.proto";
 
 option go_package = "github.com/datawire/telepresence2/pkg/rpc/daemon";
 
