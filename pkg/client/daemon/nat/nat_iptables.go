@@ -10,9 +10,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/datawire/telepresence2/pkg/client"
-
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/telepresence2/pkg/client"
 )
 
 type Translator struct {

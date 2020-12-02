@@ -6,10 +6,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/datawire/ambassador/pkg/dtest"
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/config"
 	. "github.com/onsi/gomega"
+
+	"github.com/datawire/ambassador/pkg/dtest"
 )
 
 func TestTelepresence(t *testing.T) {

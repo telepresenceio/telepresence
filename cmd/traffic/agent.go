@@ -9,11 +9,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/datawire/dlib/dexec"
-	"github.com/datawire/dlib/dlog"
 	"github.com/sethvargo/go-envconfig"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/pkg/agent"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/version"

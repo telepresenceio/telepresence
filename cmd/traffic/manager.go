@@ -10,13 +10,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/datawire/dlib/dexec"
-	"github.com/datawire/dlib/dlog"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
+	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/pkg/manager"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/version"

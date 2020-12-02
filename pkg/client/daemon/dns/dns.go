@@ -5,11 +5,12 @@ import (
 	"net"
 	"strings"
 
+	"github.com/miekg/dns"
+	"github.com/pkg/errors"
+
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/miekg/dns"
-	"github.com/pkg/errors"
 )
 
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface

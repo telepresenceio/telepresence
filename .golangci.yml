@@ -26,6 +26,10 @@ linters-settings:
   gocognit:
     min-complexity: 60
 
+  goimports:
+    # A comma-separated list
+    local-prefixes: github.com/datawire
+
   lll:
     line-length: 180
     tab-width: 2
@@ -42,11 +46,11 @@ linters:
     - depguard
     - dogsled
     - errcheck
+    - gci
     - gocognit
     - gocritic
     - gocyclo
     - gofmt
-    - goimports
     - gosimple
     - govet
     - ineffassign
@@ -70,6 +74,7 @@ linters:
   # - gochecknoinits
   # - goconst
   # - godox
+  # - goimports # use gci instead
   # - golint
   # - gosec
   # - interfacer

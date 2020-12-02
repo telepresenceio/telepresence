@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/datawire/dlib/dlog"
 	"github.com/sirupsen/logrus"
+
+	"github.com/datawire/dlib/dlog"
 )
 
 func makeBaseLogger() dlog.Logger {
