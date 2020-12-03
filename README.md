@@ -10,7 +10,7 @@ Start with an empty cluster:
 ```console
 $ kubectl create deploy hello --image=k8s.gcr.io/echoserver:1.4
 deployment.apps/hello created
-$ kubectl kubectl expose deploy hello --port 80 --target-port 8080
+$ kubectl expose deploy hello --port 80 --target-port 8080
 service/hello exposed
 $ kubectl get ns,svc,deploy,po
 NAME                        STATUS   AGE
