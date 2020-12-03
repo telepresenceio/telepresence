@@ -20,7 +20,6 @@ PROTO_SRCS = $(shell echo rpc/*/*.proto)
 generate: ## (Generate) Update generated files that get checked in to Git
 generate: generate-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
 	$(TOOLSBINDIR)/protoc --proto_path=. --go_out=. --go-grpc_out=. --go_opt=module=github.com/datawire/telepresence2 --go-grpc_opt=module=github.com/datawire/telepresence2 $(PROTO_SRCS)
-	cd ./pkg/rpc && go mod init github.com/datawire/telepresence2/pkg/rpc
 	cd ./pkg/rpc && go mod tidy
 	cd ./pkg/rpc && go mod vendor
 	go mod tidy
@@ -29,7 +28,7 @@ generate: generate-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-g
 
 .PHONY: generate-clean
 generate-clean: ## (Generate) Delete generated files that get checked in to Git
-	rm -rf pkg/rpc
+	rm -rf pkg/rpc/*/
 
 PKG_VERSION = $(shell go list ./pkg/version)
 
