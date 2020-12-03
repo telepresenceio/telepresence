@@ -85,7 +85,7 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 	ctx := stream.Context()
 	sessionID := session.SessionId
 
-	dlog.Debug(ctx, "WatchAgents called", sessionID)
+	dlog.Debugf(ctx, "WatchAgents called (sessionID=%q)", sessionID)
 
 	if !m.state.HasClient(sessionID) {
 		return status.Errorf(codes.NotFound, "Client session %q not found", session.SessionId)
@@ -123,7 +123,7 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	ctx := stream.Context()
 	sessionID := session.SessionId
 
-	dlog.Debug(ctx, "WatchIntercepts called", sessionID)
+	dlog.Debugf(ctx, "WatchIntercepts called (sessionID=%q)", sessionID)
 
 	entry := m.state.Get(sessionID)
 	if entry == nil {
@@ -159,7 +159,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	sessionID := ciReq.Session.SessionId
 	spec := ciReq.InterceptSpec
 
-	dlog.Debug(ctx, "CreateIntercept called", sessionID)
+	dlog.Debugf(ctx, "CreateIntercept called (sessionID=%q)", sessionID)
 
 	if !m.state.HasClient(sessionID) {
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
@@ -183,7 +183,7 @@ func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	sessionID := riReq.Session.SessionId
 	name := riReq.Name
 
-	dlog.Debug(ctx, "RemoveIntercept called", sessionID, name)
+	dlog.Debugf(ctx, "RemoveIntercept called (sessionID=%q, name=%q)", sessionID, name)
 
 	if !m.state.HasClient(sessionID) {
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
@@ -201,7 +201,7 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 	sessionID := rIReq.Session.SessionId
 	ceptID := rIReq.Id
 
-	dlog.Debug(ctx, "RemoveIntercept called", sessionID, ceptID)
+	dlog.Debugf(ctx, "RemoveIntercept called (sessionID=%q, interceptID=%q)", sessionID, ceptID)
 
 	if !m.state.HasAgent(sessionID) {
 		return nil, status.Errorf(codes.NotFound, "Agent session %q not found", sessionID)
