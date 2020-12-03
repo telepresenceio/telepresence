@@ -39,7 +39,7 @@ build: ## (Build) Build all the source code
 
 .PHONY: image images
 image images: $(tools/ko) ## (Build) Build/tag the manager/agent container image
-	docker tag $(shell env GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION)" ko publish --local ./cmd/traffic) $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
+	docker tag $$(GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION)" ko publish --local ./cmd/traffic) $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
 
 .PHONY: install
 install:  ## (Install) installs the telepresence binary under ~/go/bin

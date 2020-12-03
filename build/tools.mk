@@ -7,7 +7,7 @@ TOOLSSRCDIR=$(TOOLSDIR)/src
 GOHOSTOS=$(shell go env GOHOSTOS)
 GOHOSTARCH=$(shell go env GOHOSTARCH)
 
-export PATH := $(TOOLSDIR)/bin:$(PATH)
+export PATH := $(abspath $(TOOLSBINDIR)):$(PATH)
 
 clobber: clobber-tools
 
