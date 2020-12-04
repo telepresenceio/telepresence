@@ -3,17 +3,20 @@ package manager_test
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net"
+	"net/http"
 	"testing"
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dutil"
 	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager"
 	testdata "github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/test"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
@@ -26,7 +29,7 @@ func dumps(o interface{}) string {
 }
 
 func TestConnect(t *testing.T) {
-	dlog.SetFallbackLogger(dlog.WrapTB(t, true))
+	dlog.SetFallbackLogger(dlog.WrapTB(t, false))
 	ctx := dlog.NewTestContext(t, true)
 	a := assert.New(t)
 
@@ -275,13 +278,12 @@ func TestConnect(t *testing.T) {
 
 func getTestClientConn(t *testing.T) *grpc.ClientConn {
 	const bufsize = 64 * 1024
+	ctx, cancel := context.WithCancel(dlog.NewTestContext(t, true))
 
 	lis := bufconn.Listen(bufsize)
 	bufDialer := func(context.Context, string) (net.Conn, error) {
 		return lis.Dial()
 	}
-
-	ctx := context.Background()
 
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
 	if err != nil {
@@ -290,11 +292,23 @@ func getTestClientConn(t *testing.T) *grpc.ClientConn {
 
 	s := grpc.NewServer()
 	rpc.RegisterManagerServer(s, manager.NewManager(ctx))
+
+	errCh := make(chan error)
 	go func() {
-		if err := s.Serve(lis); err != nil {
-			log.Fatalf("Server exited with error: %v", err)
-		}
+		errCh <- dutil.ServeHTTPWithContext(ctx, &http.Server{
+			ErrorLog: dlog.StdLogger(ctx, dlog.LogLevelError),
+			Handler: h2c.NewHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				s.ServeHTTP(w, r)
+			}), &http2.Server{}),
+		}, lis)
+		close(errCh)
 	}()
+	t.Cleanup(func() {
+		cancel()
+		if err := <-errCh; err != nil && err != ctx.Err() {
+			t.Error(err)
+		}
+	})
 
 	return conn
 }

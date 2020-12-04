@@ -42,6 +42,8 @@ func Main(ctx context.Context, args ...string) error {
 		return cmd.Run()
 	})
 
+	mgr := NewManager(ctx)
+
 	// Serve HTTP (including gRPC)
 	g.Go("httpd", func(ctx context.Context) error {
 		host := os.Getenv("SERVER_HOST")
@@ -66,27 +68,36 @@ func Main(ctx context.Context, args ...string) error {
 			}), &http2.Server{}),
 		}
 
-		mgr := NewManager(ctx)
 		rpc.RegisterManagerServer(grpcHandler, mgr)
 		grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
 
-		g.Go("gc", func(ctx context.Context) error {
-			// Loop calling Expire
-			ticker := time.NewTicker(5 * time.Second)
-			defer ticker.Stop()
-
-			for {
-				select {
-				case <-ticker.C:
-					mgr.Expire()
-				case <-ctx.Done():
-					return nil
-				}
-			}
-		})
-
 		return dutil.ListenAndServeHTTPWithContext(ctx, server)
 	})
+
+	g.Go("gc", func(ctx context.Context) error {
+		// Loop calling Expire
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				mgr.expire()
+			case <-ctx.Done():
+				return nil
+			}
+		}
+	})
+
+	if _, err := mgr.systema.Get(); err != nil {
+		dlog.Errorln(ctx, "systema:", err)
+	} else {
+		defer func() {
+			if err := mgr.systema.Done(); err != nil {
+				dlog.Errorln(ctx, "systema:", err)
+			}
+		}()
+	}
 
 	// Wait for exit
 	return g.Wait()

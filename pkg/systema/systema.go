@@ -43,6 +43,8 @@ func (s server) HandleConnection(rawconn manager.ManagerProxy_HandleConnectionSe
 		return fmt.Errorf("HandleConnection: accept: %w", err)
 	}
 
+	dlog.Infof(ctx, "HandleConnection: handling connection for intercept %q", interceptID)
+
 	interceptConn, err := s.DialIntercept(ctx, interceptID)
 	if err != nil {
 		return fmt.Errorf("HandleConnection: accept: %w", err)

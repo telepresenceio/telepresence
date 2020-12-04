@@ -12,6 +12,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/state"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
+	"github.com/datawire/telepresence2/pkg/rpc/systema"
 	"github.com/datawire/telepresence2/pkg/version"
 )
 
@@ -21,8 +22,10 @@ type Clock interface {
 }
 
 type Manager struct {
-	clock Clock
-	state *state.State
+	ctx     context.Context
+	clock   Clock
+	state   *state.State
+	systema *systemaPool
 
 	rpc.UnimplementedManagerServer
 }
@@ -34,10 +37,13 @@ func (wall) Now() time.Time {
 }
 
 func NewManager(ctx context.Context) *Manager {
-	return &Manager{
-		state: state.NewState(ctx),
+	ret := &Manager{
+		ctx:   ctx,
 		clock: wall{},
+		state: state.NewState(ctx),
 	}
+	ret.systema = NewSystemAPool(ret)
+	return ret
 }
 
 // Version returns the version information of the Manager.
@@ -187,7 +193,31 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	return m.state.AddIntercept(sessionID, spec)
+	intercept, err := m.state.AddIntercept(sessionID, spec)
+	if err != nil {
+		return nil, err
+	}
+
+	if sa, err := m.systema.Get(); err != nil {
+		dlog.Errorln(ctx, "systema:", err)
+	} else {
+		defer func() {
+			if err := m.systema.Done(); err != nil {
+				dlog.Errorln(ctx, "systema:", err)
+			}
+		}()
+		resp, err := sa.CreateDomain(ctx, &systema.CreateDomainRequest{
+			InterceptId: intercept.Id,
+		})
+		if err != nil {
+			dlog.Errorln(ctx, "systema:", err)
+		} else {
+			intercept.PreviewDomain = resp.Domain
+			m.state.UpdateIntercept(intercept)
+		}
+	}
+
+	return intercept, nil
 }
 
 // RemoveIntercept lets a client remove an intercept.
@@ -226,7 +256,7 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 	return &empty.Empty{}, nil
 }
 
-// Expire removes stale sessions.
-func (m *Manager) Expire() {
+// expire removes stale sessions.
+func (m *Manager) expire() {
 	m.state.ExpireSessions(m.clock.Now().Add(-15 * time.Second))
 }

@@ -340,6 +340,10 @@ func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) (*rpc.In
 	return cept, nil
 }
 
+func (s *State) UpdateIntercept(intercept *rpc.InterceptInfo) {
+	s.intercepts.Store(intercept.Id, intercept)
+}
+
 func (s *State) RemoveIntercept(sessionID string, name string) bool {
 	_, didDelete := s.intercepts.LoadAndDelete(sessionID + ":" + name)
 	return didDelete
