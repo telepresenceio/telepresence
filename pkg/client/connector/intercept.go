@@ -93,14 +93,18 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	ir.InterceptSpec.Client = tm.userAndHost
 	ir.InterceptSpec.Agent = name
 	ir.InterceptSpec.Mechanism = mechanism
+	js, _ := json.Marshal(ir)
+	dlog.Debugf(c, "CreateIntercept request: %s", string(js))
 	ii, err := tm.grpc.CreateIntercept(c, ir)
 	if err != nil {
+		dlog.Debugf(c, "manager responded to CreateIntercept with error %s", err.Error())
 		result.Error = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
 		result.ErrorText = err.Error()
 		return result, nil
 	}
-
-	ii, err = tm.waitForActiveIntercept(ii.Id)
+	js, _ = json.Marshal(ii)
+	dlog.Debugf(c, "CreateIntercept response: %s", string(js))
+	ii, err = tm.waitForActiveIntercept(c, ii.Id)
 	if err != nil {
 		_ = tm.removeIntercept(c, name)
 		result.Error = rpc.InterceptError_FAILED_TO_ESTABLISH
@@ -120,7 +124,7 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	return result, nil
 }
 
-func (tm *trafficManager) waitForActiveIntercept(id string) (*manager.InterceptInfo, error) {
+func (tm *trafficManager) waitForActiveIntercept(c context.Context, id string) (*manager.InterceptInfo, error) {
 	timeout := time.After(60 * time.Second)
 	done := make(chan *manager.InterceptInfo)
 
@@ -133,14 +137,21 @@ func (tm *trafficManager) waitForActiveIntercept(id string) (*manager.InterceptI
 		il.onData(cis)
 	}
 
+	dlog.Debugf(c, "waiting for intercept with id %s to become active", id)
 	select {
 	case ii := <-done:
 		if ii.Disposition == manager.InterceptDispositionType_ACTIVE {
 			return ii, nil
 		}
+		dlog.Errorf(c, "interecept id: %s, state: %s, message: %s", id, ii.Disposition, ii.Message)
 		return nil, errors.New(ii.Message)
+	case <-c.Done():
+		dlog.Debugf(c, "context cancelled while waiting for intercept with id %s to become active", id)
+		return nil, c.Err()
 	case <-timeout:
-		return nil, errors.New("timeout waiting for intercept to become active")
+		err := fmt.Errorf("timeout while waiting for intercept with id %s to become active", id)
+		dlog.Error(c, err.Error())
+		return nil, err
 	}
 }
 

@@ -32,7 +32,7 @@ var proxyOnMatch = regexp.MustCompile(`Proxy:\s+ON`)
 
 // serviceCount is the number of interceptable services that gets installed
 // in the cluster and later intercepted
-const serviceCount = 8
+const serviceCount = 12
 
 var _ = Describe("Telepresence", func() {
 	Context("With no daemon running", func() {
@@ -135,8 +135,16 @@ var _ = Describe("Telepresence", func() {
 			Expect(proxy).To(BeTrue(), "Timeout waiting for network overrides to establish")
 
 			for i := 0; i < serviceCount; i++ {
+				var out string
+				var err error
 				svc := fmt.Sprintf("hello-%d", i)
-				out, err := output("curl", "-s", svc)
+				for retry := 0; ; retry++ {
+					out, err = output("curl", "-s", svc)
+					if err == nil || retry == 9 {
+						break
+					}
+					time.Sleep(500 * time.Millisecond)
+				}
 				Expect(err).NotTo(HaveOccurred())
 				Expect(out).To(ContainSubstring(fmt.Sprintf("Request served by %s-", svc)))
 			}
@@ -257,7 +265,7 @@ func applyEchoService(name string) error {
 	if err != nil {
 		return fmt.Errorf("failed to expose deployment %s: %s", name, err)
 	}
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 60; i++ {
 		time.Sleep(time.Second)
 		err = run(
 			"kubectl", "--namespace", namespace, "run", "curl-from-cluster", "--rm", "-it",
