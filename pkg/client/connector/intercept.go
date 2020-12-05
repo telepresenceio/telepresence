@@ -42,10 +42,14 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	result := &rpc.InterceptResult{}
 	mechanism := "tcp"
 
+	name := ir.InterceptSpec.Name
 	ags := tm.agentInfoSnapshot()
 	var found []*manager.AgentInfo
 	if ags != nil {
 		for _, ag := range ags.Agents {
+			if ag.Name != name {
+				continue
+			}
 			for _, m := range ag.Mechanisms {
 				if mechanism == m.Name {
 					found = append(found, ag)
@@ -55,7 +59,6 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 		}
 	}
 
-	name := ir.InterceptSpec.Name
 	switch len(found) {
 	case 0:
 		if err := tm.installer.ensureAgent(c, name, ""); err != nil {
