@@ -16,8 +16,9 @@ import (
 
 // A Proxy listens to a port and forwards incoming connections to a router
 type Proxy struct {
-	listener net.Listener
-	router   func(*net.TCPConn) (string, error)
+	listener    net.Listener
+	connHandler func(*Proxy, context.Context, *net.TCPConn)
+	router      func(*net.TCPConn) (string, error)
 }
 
 // NewProxy returns a new Proxy instance that is listening to the given tcp address
@@ -25,7 +26,7 @@ func NewProxy(c context.Context, address string, router func(*net.TCPConn) (stri
 	setRlimit(c)
 	ln, err := net.Listen("tcp", address)
 	if err == nil {
-		proxy = &Proxy{ln, router}
+		proxy = &Proxy{listener: ln, connHandler: (*Proxy).handleConnection, router: router}
 	}
 	return
 }
@@ -92,8 +93,8 @@ func (pxy *Proxy) Run(c context.Context, limit int64) {
 				return
 			}
 			go func() {
-				capacity.Release(1)
-				pxy.handleConnection(c, conn)
+				defer capacity.Release(1)
+				pxy.connHandler(pxy, c, conn)
 				dlog.Debugf(c, "Done handling connection from %s", conn.RemoteAddr())
 			}()
 		default:
