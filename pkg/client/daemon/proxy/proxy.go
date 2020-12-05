@@ -62,45 +62,42 @@ func setRlimit(c context.Context) {
 // as a bug in telepresence.
 func (pxy *Proxy) Run(c context.Context, limit int64) {
 	dlog.Debugf(c, "proxy limit=%v", limit)
-	connQueue := make(chan net.Conn)
 	// This semaphore tracks how many more connections we can proxy without exceeding the concurrent
 	// connection limit.
 	capacity := semaphore.NewWeighted(limit)
-	closing := false
+	dlog.Debugf(c, "Listening to %s", pxy.listener.Addr())
+
+	// Ensure that listener is closed when context is done
 	go func() {
-		for {
-			dlog.Debugf(c, "Listening to %s", pxy.listener.Addr())
-			conn, err := pxy.listener.Accept()
-			if err != nil {
-				if closing {
-					return
-				}
-				dlog.Error(c, err.Error())
-			} else {
-				connQueue <- conn
-			}
-		}
+		<-c.Done()
+		_ = pxy.listener.Close()
 	}()
+
 	for {
-		select {
-		case <-c.Done():
-			closing = true
-			dlog.Debugf(c, "Context cancelled. Closing listener to %s", pxy.listener.Addr())
-			_ = pxy.listener.Close()
-			return
-		case conn := <-connQueue:
-			switch conn := conn.(type) {
-			case *net.TCPConn:
-				dlog.Debugf(c, "Handling connection from %s", conn.RemoteAddr())
-				capacity.Acquire(c, 1)
-				go func() {
-					capacity.Release(1)
-					pxy.handleConnection(c, conn)
-					dlog.Debugf(c, "Done handling connection from %s", conn.RemoteAddr())
-				}()
-			default:
-				dlog.Errorf(c, "unknown connection type: %v", conn)
+		conn, err := pxy.listener.Accept()
+		if err != nil {
+			if c.Err() != nil {
+				// Context done or cancelled, so error is very likely
+				// caused by a listener close
+				return
 			}
+			dlog.Error(c, err.Error())
+			continue
+		}
+		switch conn := conn.(type) {
+		case *net.TCPConn:
+			dlog.Debugf(c, "Handling connection from %s", conn.RemoteAddr())
+			if err = capacity.Acquire(c, 1); err != nil {
+				dlog.Errorf(c, "proxy failed to acquire semaphore: %s", err.Error())
+				return
+			}
+			go func() {
+				capacity.Release(1)
+				pxy.handleConnection(c, conn)
+				dlog.Debugf(c, "Done handling connection from %s", conn.RemoteAddr())
+			}()
+		default:
+			dlog.Errorf(c, "unknown connection type: %v", conn)
 		}
 	}
 }
