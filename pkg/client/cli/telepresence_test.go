@@ -265,7 +265,7 @@ func applyEchoService(name string) error {
 	if err != nil {
 		return fmt.Errorf("failed to expose deployment %s: %s", name, err)
 	}
-	for i := 0; i < 60; i++ {
+	for i := 0; i < 120; i++ {
 		time.Sleep(time.Second)
 		err = run(
 			"kubectl", "--namespace", namespace, "run", "curl-from-cluster", "--rm", "-it",
