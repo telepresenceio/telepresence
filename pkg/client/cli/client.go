@@ -57,20 +57,19 @@ func status(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	var cs *connector.ConnectorStatus
+	var cs *connector.ConnectInfo
 	if cs, err = connectorStatus(cmd); err != nil {
 		return err
 	}
 	switch cs.Error {
-	case connector.ConnectorStatus_UNSPECIFIED:
-		cl := cs.Cluster
-		if cl.Connected {
+	case connector.ConnectInfo_UNSPECIFIED, connector.ConnectInfo_ALREADY_CONNECTED:
+		if cs.ClusterOk {
 			fmt.Fprintln(out, "Connected")
 		} else {
 			fmt.Fprintln(out, "Attempting to reconnect...")
 		}
-		fmt.Fprintf(out, "  Context:       %s (%s)\n", cl.Context, cl.Server)
-		if cs.Bridge {
+		fmt.Fprintf(out, "  Context:       %s (%s)\n", cs.ClusterContext, cs.ClusterServer)
+		if cs.BridgeOk {
 			fmt.Fprintln(out, "  Proxy:         ON (networking to the cluster is enabled)")
 		} else {
 			fmt.Fprintln(out, "  Proxy:         OFF (attempting to connect...)")
@@ -88,9 +87,9 @@ func status(cmd *cobra.Command, _ []string) error {
 				}
 			}
 		}
-	case connector.ConnectorStatus_NOT_STARTED:
+	case connector.ConnectInfo_NOT_STARTED:
 		fmt.Fprintln(out, errConnectorIsNotRunning)
-	case connector.ConnectorStatus_DISCONNECTED:
+	case connector.ConnectInfo_DISCONNECTING:
 		fmt.Fprintln(out, "Disconnecting")
 	}
 	return nil
@@ -107,13 +106,13 @@ func daemonStatus(cmd *cobra.Command) (status *daemon.DaemonStatus, err error) {
 	return
 }
 
-func connectorStatus(cmd *cobra.Command) (status *connector.ConnectorStatus, err error) {
+func connectorStatus(cmd *cobra.Command) (status *connector.ConnectInfo, err error) {
 	if assertConnectorStarted() != nil {
-		return &connector.ConnectorStatus{Error: connector.ConnectorStatus_NOT_STARTED}, nil
+		return &connector.ConnectInfo{Error: connector.ConnectInfo_NOT_STARTED}, nil
 	}
 	err = withConnector(cmd, func(cs *connectorState) error {
-		status, err = cs.grpc.Status(cmd.Context(), &empty.Empty{})
-		return err
+		status = cs.info
+		return nil
 	})
 	return
 }

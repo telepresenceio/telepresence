@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
+
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/pkg/errors"
@@ -202,6 +204,19 @@ func (tm *trafficManager) Close() error {
 		tm.grpc = nil
 	}
 	return nil
+}
+
+func (tm *trafficManager) setStatus(r *rpc.ConnectInfo) {
+	if tm.grpc == nil {
+		r.Intercepts = &manager.InterceptInfoSnapshot{}
+		r.Agents = &manager.AgentInfoSnapshot{}
+		if err := tm.apiErr; err != nil {
+			r.ErrorText = err.Error()
+		}
+	} else {
+		r.Agents = tm.agentInfoSnapshot()
+		r.Intercepts = tm.interceptInfoSnapshot()
+	}
 }
 
 // A watcher listens on a grpc.ClientStream and notifies listeners when

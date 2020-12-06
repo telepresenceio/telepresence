@@ -82,7 +82,6 @@ func (cs *connectorState) setConnectInfo() error {
 		fmt.Fprintf(cs.cmd.OutOrStdout(), "Connected to context %s (%s)\n", r.ClusterContext, r.ClusterServer)
 		return nil
 	case connector.ConnectInfo_ALREADY_CONNECTED:
-		fmt.Fprintln(cs.cmd.OutOrStdout(), "Already connected")
 		return nil
 	case connector.ConnectInfo_DISCONNECTING:
 		msg = "Unable to connect while disconnecting"
@@ -132,7 +131,7 @@ func assertConnectorStarted() error {
 	return errConnectorIsNotRunning
 }
 
-// withDaemon establishes a connection, calls the function with the gRPC client, and ensures
+// withConnector establishes a connection, calls the function with the gRPC client, and ensures
 // that the connection is closed.
 func withConnector(cmd *cobra.Command, f func(state *connectorState) error) error {
 	ds, err := newDaemonState(cmd, "", "")
@@ -140,11 +139,14 @@ func withConnector(cmd *cobra.Command, f func(state *connectorState) error) erro
 		return err
 	}
 	defer ds.disconnect()
-	cs, err := newConnectorState(ds.grpc, nil, cmd)
+	cs, err := newConnectorState(ds.grpc, &connector.ConnectRequest{}, cmd)
 	if err != nil {
 		return err
 	}
 	defer cs.disconnect()
+	if err = cs.setConnectInfo(); err != nil {
+		return err
+	}
 	return f(cs)
 }
 
