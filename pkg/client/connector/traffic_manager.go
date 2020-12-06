@@ -97,9 +97,14 @@ func (tm *trafficManager) start(c context.Context) error {
 		fmt.Sprintf("%d:%d", tm.sshPort, remoteSSHPort),
 		fmt.Sprintf("%d:%d", tm.apiPort, remoteAPIPort)}
 
-	return client.Retry(c, func(c context.Context) error {
+	err = client.Retry(c, func(c context.Context) error {
 		return tm.installer.portForwardAndThen(c, kpfArgs, "init-grpc", tm.initGrpc)
-	}, time.Second, 15*time.Second)
+	}, 2*time.Second, 15*time.Second, time.Minute)
+	if err != nil && tm.apiErr == nil {
+		tm.apiErr = err
+		close(tm.startup)
+	}
+	return err
 }
 
 func (tm *trafficManager) initGrpc(c context.Context) (err error) {

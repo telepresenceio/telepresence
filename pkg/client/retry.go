@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
@@ -52,13 +53,16 @@ func Retry(c context.Context, f func(context.Context) error, durations ...time.D
 			case <-done:
 			case <-c.Done():
 			case <-time.After(maxTime):
+				err = fmt.Errorf("retry timed out after: %s", maxTime.String())
 				cancel()
 			}
 		}()
 	}
 
 	defer func() {
-		err = dutil.PanicToError(recover())
+		if pe := dutil.PanicToError(recover()); pe != nil {
+			err = pe
+		}
 		close(done)
 	}()
 
@@ -74,7 +78,7 @@ func Retry(c context.Context, f func(context.Context) error, durations ...time.D
 
 		select {
 		case <-c.Done():
-			return nil
+			return err
 		case <-time.After(delay):
 		}
 		delay *= 2
