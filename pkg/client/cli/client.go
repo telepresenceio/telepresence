@@ -57,6 +57,12 @@ func status(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
+	if ds.Dns != "" {
+		fmt.Fprintf(out, "DNS = %s\n", ds.Dns)
+	}
+	if ds.Fallback != "" {
+		fmt.Fprintf(out, "Fallback = %s\n", ds.Fallback)
+	}
 	var cs *connector.ConnectInfo
 	if cs, err = connectorStatus(cmd); err != nil {
 		return err
