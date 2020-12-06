@@ -321,7 +321,12 @@ func (ia *iiActive) onData(d interface{}) {
 	if iis, ok := d.(*manager.InterceptInfoSnapshot); ok {
 		for _, ii := range iis.Intercepts {
 			if ii.Id == ia.id && ii.Disposition != manager.InterceptDispositionType_WAITING {
-				ia.done <- ii
+				done := ia.done
+				ia.done = nil
+				if done != nil {
+					done <- ii
+					close(done)
+				}
 				break
 			}
 		}
@@ -338,7 +343,12 @@ func (ap *aiPresent) onData(d interface{}) {
 	if ais, ok := d.(*manager.AgentInfoSnapshot); ok {
 		for _, ai := range ais.Agents {
 			if ai.Name == ap.name {
-				ap.done <- ai
+				done := ap.done
+				ap.done = nil
+				if done != nil {
+					done <- ai
+					close(done)
+				}
 				break
 			}
 		}
