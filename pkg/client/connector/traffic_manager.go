@@ -151,7 +151,7 @@ func (tm *trafficManager) watchAgents(c context.Context) error {
 	if err != nil {
 		return err
 	}
-	return tm.aiListener.start(ac)
+	return tm.aiListener.start(c, ac)
 }
 
 func (tm *trafficManager) watchIntercepts(c context.Context) error {
@@ -159,7 +159,7 @@ func (tm *trafficManager) watchIntercepts(c context.Context) error {
 	if err != nil {
 		return err
 	}
-	return tm.iiListener.start(ic)
+	return tm.iiListener.start(c, ic)
 }
 
 func (tm *trafficManager) session() *manager.SessionInfo {
@@ -211,21 +211,40 @@ type watcher struct {
 // watch reads messages from the stream and passes them onto registered listeners. The
 // function terminates when the context used when the stream was acquired is cancelled,
 // when io.EOF is encountered, or an error occurs during read.
-func (r *watcher) watch() error {
+func (r *watcher) watch(c context.Context) error {
+	dataChan := make(chan interface{}, 1000)
+	go func() {
+		for {
+			select {
+			case <-c.Done():
+				return
+			case data := <-dataChan:
+				if data == nil {
+					return
+				}
+
+				r.listenersLock.RLock()
+				lc := make([]listener, len(r.listeners))
+				copy(lc, r.listeners)
+				r.listenersLock.RUnlock()
+
+				for _, l := range lc {
+					l.onData(data)
+				}
+			}
+		}
+	}()
+
 	for {
 		data := r.entryMaker()
 		if err := r.stream.RecvMsg(data); err != nil {
 			if err == io.EOF || strings.HasSuffix(err.Error(), " is closing") {
 				err = nil
 			}
+			close(dataChan)
 			return err
 		}
-
-		r.listenersLock.RLock()
-		for _, l := range r.listeners {
-			go l.onData(data)
-		}
-		r.listenersLock.RUnlock()
+		dataChan <- data
 	}
 }
 
@@ -274,22 +293,22 @@ func (al *aiListener) onData(d interface{}) {
 	al.data.Store(d)
 }
 
-func (al *aiListener) start(stream grpc.ClientStream) error {
+func (al *aiListener) start(c context.Context, stream grpc.ClientStream) error {
 	al.stream = stream
 	al.listeners = []listener{al}
 	al.entryMaker = func() interface{} { return new(manager.AgentInfoSnapshot) }
-	return al.watch()
+	return al.watch(c)
 }
 
 func (il *iiListener) onData(d interface{}) {
 	il.data.Store(d)
 }
 
-func (il *iiListener) start(stream grpc.ClientStream) error {
+func (il *iiListener) start(c context.Context, stream grpc.ClientStream) error {
 	il.stream = stream
 	il.listeners = []listener{il}
 	il.entryMaker = func() interface{} { return new(manager.InterceptInfoSnapshot) }
-	return il.watch()
+	return il.watch(c)
 }
 
 // iiActive is a listener that waits for an intercept with a given id to become active
