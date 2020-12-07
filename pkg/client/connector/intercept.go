@@ -193,7 +193,7 @@ func (tm *trafficManager) makeIntercept(c, longLived context.Context, ii *manage
 	tm.myIntercept = is.Name
 	c, tm.cancelIntercept = context.WithCancel(longLived)
 	c = dgroup.WithGoroutineName(c, ii.Id)
-	return client.Retry(c, func(c context.Context) error {
+	return client.Retry(c, "ssh reverse tunnelling", func(c context.Context) error {
 		return dexec.CommandContext(c, "ssh", sshArgs...).Start()
 	})
 }
