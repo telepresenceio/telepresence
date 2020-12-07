@@ -2,8 +2,10 @@ package connector
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/datawire/ambassador/pkg/metriton"
@@ -101,10 +103,6 @@ func (c callCtx) Value(key interface{}) interface{} {
 	return c.Context.Value(key)
 }
 
-func (s *service) callGroup(c context.Context) *dgroup.Group {
-	return dgroup.NewGroup(&callCtx{Context: s.ctx, caller: c}, dgroup.GroupConfig{})
-}
-
 func callRecovery(c context.Context, r interface{}, err error) error {
 	perr := dutil.PanicToError(r)
 	if perr != nil {
@@ -120,6 +118,20 @@ func callRecovery(c context.Context, r interface{}, err error) error {
 	return err
 }
 
+var ucn int64 = 0
+
+func nextUcn() int {
+	return int(atomic.AddInt64(&ucn, 1))
+}
+
+func callName(s string) string {
+	return fmt.Sprintf("%s-%d", s, nextUcn())
+}
+
+func (s *service) callCtx(c context.Context, name string) context.Context {
+	return dgroup.WithGoroutineName(&callCtx{Context: s.ctx, caller: c}, callName(name))
+}
+
 func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
 	return &common.VersionInfo{
 		ApiVersion: client.APIVersion,
@@ -128,25 +140,15 @@ func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 }
 
 func (s *service) Status(c context.Context, _ *empty.Empty) (result *rpc.ConnectorStatus, err error) {
-	g := s.callGroup(c)
-	g.Go("Status", func(c context.Context) (err error) {
-		defer func() { err = callRecovery(c, recover(), err) }()
-		result = s.status(c)
-		return
-	})
-	err = g.Wait()
-	return
+	c = s.callCtx(c, "Status")
+	defer func() { err = callRecovery(c, recover(), err) }()
+	return s.status(c), nil
 }
 
 func (s *service) Connect(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
-	g := s.callGroup(c)
-	g.Go("Connect", func(c context.Context) (err error) {
-		defer func() { err = callRecovery(c, recover(), err) }()
-		ci = s.connect(c, cr)
-		return
-	})
-	err = g.Wait()
-	return
+	c = s.callCtx(c, "Connect")
+	defer func() { err = callRecovery(c, recover(), err) }()
+	return s.connect(c, cr), nil
 }
 
 func (s *service) CreateIntercept(c context.Context, ir *manager.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
@@ -154,14 +156,9 @@ func (s *service) CreateIntercept(c context.Context, ir *manager.CreateIntercept
 	if ie != rpc.InterceptError_UNSPECIFIED {
 		return &rpc.InterceptResult{Error: ie, ErrorText: is}, nil
 	}
-	g := s.callGroup(c)
-	g.Go("CreateIntercept", func(c context.Context) (err error) {
-		defer func() { err = callRecovery(c, recover(), err) }()
-		result, err = s.trafficMgr.addIntercept(c, s.ctx, ir)
-		return
-	})
-	err = g.Wait()
-	return
+	c = s.callCtx(c, "CreateIntercept")
+	defer func() { err = callRecovery(c, recover(), err) }()
+	return s.trafficMgr.addIntercept(c, s.ctx, ir)
 }
 
 func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
@@ -169,13 +166,9 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 	if ie != rpc.InterceptError_UNSPECIFIED {
 		return &rpc.InterceptResult{Error: ie, ErrorText: is}, nil
 	}
-	g := s.callGroup(c)
-	g.Go("RemoveIntercept", func(c context.Context) (err error) {
-		defer func() { err = callRecovery(c, recover(), err) }()
-		err = s.trafficMgr.removeIntercept(c, rr.Name)
-		return
-	})
-	err = g.Wait()
+	c = s.callCtx(c, "RemoveIntercept")
+	defer func() { err = callRecovery(c, recover(), err) }()
+	err = s.trafficMgr.removeIntercept(c, rr.Name)
 	return &rpc.InterceptResult{}, err
 }
 
@@ -210,7 +203,7 @@ func (d *daemonLogger) Write(data []byte) (n int, err error) {
 
 // connect the connector to a cluster
 func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
-	dgroup.ParentGroup(c).Go("metriton", func(c context.Context) error {
+	dgroup.ParentGroup(c).Go(callName("metriton"), func(c context.Context) error {
 		reporter := &metriton.Reporter{
 			Application:  "telepresence2",
 			Version:      client.Version(),

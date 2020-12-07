@@ -14,26 +14,33 @@ import (
 
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface
 type Server struct {
-	logContext context.Context // necessary to make logging work in ServeDNS function
-	listeners  []string
-	fallback   string
-	resolve    func(string) string
+	ctx       context.Context // necessary to make logging work in ServeDNS function
+	listeners []string
+	fallback  string
+	resolve   func(string) string
 }
 
 // NewServer returns a new dns.Server
 func NewServer(c context.Context, listeners []string, fallback string, resolve func(string) string) *Server {
 	return &Server{
-		logContext: c,
-		listeners:  listeners,
-		fallback:   fallback,
-		resolve:    resolve,
+		ctx:       c,
+		listeners: listeners,
+		fallback:  fallback,
+		resolve:   resolve,
 	}
 }
 
 // ServeDNS is an implementation of github.com/miekg/dns Handler.ServeDNS.
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
+	c := s.ctx
+	defer func() {
+		// Closing the response tells the DNS service to terminate
+		if c.Err() != nil {
+			_ = w.Close()
+		}
+	}()
+
 	domain := strings.ToLower(r.Question[0].Name)
-	c := s.logContext
 	switch r.Question[0].Qtype {
 	case dns.TypeA:
 		var ip string

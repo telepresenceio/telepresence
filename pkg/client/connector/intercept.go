@@ -42,10 +42,14 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	result := &rpc.InterceptResult{}
 	mechanism := "tcp"
 
+	name := ir.InterceptSpec.Name
 	ags := tm.agentInfoSnapshot()
 	var found []*manager.AgentInfo
 	if ags != nil {
 		for _, ag := range ags.Agents {
+			if ag.Name != name {
+				continue
+			}
 			for _, m := range ag.Mechanisms {
 				if mechanism == m.Name {
 					found = append(found, ag)
@@ -55,7 +59,6 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 		}
 	}
 
-	name := ir.InterceptSpec.Name
 	switch len(found) {
 	case 0:
 		if err := tm.installer.ensureAgent(c, name, ""); err != nil {
@@ -69,7 +72,7 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 			return result, nil
 		}
 		dlog.Infof(c, "waiting for new agent for deployment %q", name)
-		_, err := tm.waitForAgent(name)
+		_, err := tm.waitForAgent(c, name)
 		if err != nil {
 			dlog.Error(c, err.Error())
 			result.Error = rpc.InterceptError_NOT_FOUND
@@ -90,14 +93,18 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	ir.InterceptSpec.Client = tm.userAndHost
 	ir.InterceptSpec.Agent = name
 	ir.InterceptSpec.Mechanism = mechanism
+	js, _ := json.Marshal(ir)
+	dlog.Debugf(c, "CreateIntercept request: %s", string(js))
 	ii, err := tm.grpc.CreateIntercept(c, ir)
 	if err != nil {
+		dlog.Debugf(c, "manager responded to CreateIntercept with error %s", err.Error())
 		result.Error = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
 		result.ErrorText = err.Error()
 		return result, nil
 	}
-
-	ii, err = tm.waitForActiveIntercept(ii.Id)
+	js, _ = json.Marshal(ii)
+	dlog.Debugf(c, "CreateIntercept response: %s", string(js))
+	ii, err = tm.waitForActiveIntercept(c, ii.Id)
 	if err != nil {
 		_ = tm.removeIntercept(c, name)
 		result.Error = rpc.InterceptError_FAILED_TO_ESTABLISH
@@ -117,48 +124,54 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	return result, nil
 }
 
-func (tm *trafficManager) waitForActiveIntercept(id string) (*manager.InterceptInfo, error) {
-	timeout := time.After(60 * time.Second)
+func (tm *trafficManager) waitForActiveIntercept(c context.Context, id string) (*manager.InterceptInfo, error) {
 	done := make(chan *manager.InterceptInfo)
 
 	il := &iiActive{id: id, done: done}
-	tm.iiListener.addListener(il)
+	go func() {
+		if cis := tm.iiListener.getData(); cis != nil {
+			// Send initial snapshot to listener
+			il.onData(cis)
+		}
+		tm.iiListener.addListener(il)
+	}()
 	defer tm.iiListener.removeListener(il)
 
-	if cis := tm.iiListener.getData(); cis != nil {
-		// Send initial snapshot to listener
-		il.onData(cis)
-	}
-
+	dlog.Debugf(c, "waiting for intercept with id %s to become active", id)
+	c, cancel := context.WithTimeout(c, 30*time.Second)
+	defer cancel()
 	select {
 	case ii := <-done:
 		if ii.Disposition == manager.InterceptDispositionType_ACTIVE {
 			return ii, nil
 		}
+		dlog.Errorf(c, "intercept id: %s, state: %s, message: %s", id, ii.Disposition, ii.Message)
 		return nil, errors.New(ii.Message)
-	case <-timeout:
-		return nil, errors.New("timeout waiting for intercept to become active")
+	case <-c.Done():
+		return nil, fmt.Errorf("%s while waiting for intercept with id %s to become active", c.Err().Error(), id)
 	}
 }
 
-func (tm *trafficManager) waitForAgent(name string) (*manager.AgentInfo, error) {
-	timeout := time.After(60 * time.Second)
+func (tm *trafficManager) waitForAgent(c context.Context, name string) (*manager.AgentInfo, error) {
 	done := make(chan *manager.AgentInfo)
 
 	al := &aiPresent{name: name, done: done}
-	tm.aiListener.addListener(al)
+	go func() {
+		if cas := tm.aiListener.getData(); cas != nil {
+			// Send initial snapshot to listener
+			al.onData(cas)
+		}
+		tm.aiListener.addListener(al)
+	}()
 	defer tm.aiListener.removeListener(al)
 
-	if cas := tm.aiListener.getData(); cas != nil {
-		// Send initial snapshot to listener
-		al.onData(cas)
-	}
-
+	c, cancel := context.WithTimeout(c, 120*time.Second) // installing a new agent can take some time
+	defer cancel()
 	select {
 	case ai := <-done:
 		return ai, nil
-	case <-timeout:
-		return nil, errors.New("timeout waiting for agent to be present")
+	case <-c.Done():
+		return nil, fmt.Errorf("%s while waiting for agent %s to be present", c.Err().Error(), name)
 	}
 }
 

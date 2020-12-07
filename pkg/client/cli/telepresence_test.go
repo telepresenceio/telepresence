@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,7 +19,6 @@ import (
 	"github.com/datawire/ambassador/pkg/dtest"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/client"
@@ -29,6 +29,10 @@ import (
 var testVersion = "v0.1.2-test"
 var namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
 var proxyOnMatch = regexp.MustCompile(`Proxy:\s+ON`)
+
+// serviceCount is the number of interceptable services that gets installed
+// in the cluster and later intercepted
+const serviceCount = 12
 
 var _ = Describe("Telepresence", func() {
 	Context("With no daemon running", func() {
@@ -118,11 +122,6 @@ var _ = Describe("Telepresence", func() {
 		itTotal++
 
 		It("Proxies outbound traffic", func() {
-			echoReady := make(chan error)
-			go func() {
-				echoReady <- applyEchoService()
-			}()
-
 			// Give outbound interceptor 15 seconds to kick in.
 			proxy := false
 			for i := 0; i < 30; i++ {
@@ -135,48 +134,64 @@ var _ = Describe("Telepresence", func() {
 			}
 			Expect(proxy).To(BeTrue(), "Timeout waiting for network overrides to establish")
 
-			err := <-echoReady
-			Expect(err).NotTo(HaveOccurred())
-
-			out, err := output("curl", "-s", "echo-easy")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(out).To(ContainSubstring("Request served by echo-easy-"))
+			for i := 0; i < serviceCount; i++ {
+				var out string
+				var err error
+				svc := fmt.Sprintf("hello-%d", i)
+				for retry := 0; ; retry++ {
+					out, err = output("curl", "-s", svc)
+					if err == nil || retry == 9 {
+						break
+					}
+					time.Sleep(500 * time.Millisecond)
+				}
+				Expect(err).NotTo(HaveOccurred())
+				Expect(out).To(ContainSubstring(fmt.Sprintf("Request served by %s-", svc)))
+			}
 		})
 		itTotal++
 
 		It("Proxies inbound traffic with --intercept", func() {
-			stdout, stderr := telepresence("--intercept", "echo-easy", "--port", "9000", "--no-wait")
-			Expect(stderr).To(BeEmpty())
-			Expect(stdout).To(ContainSubstring("Using deployment echo-easy"))
-			srv := &http.Server{Addr: ":9000"}
-
-			defer func() {
-				err := srv.Shutdown(context.Background())
-				Expect(err).ToNot(HaveOccurred())
-				stdout, stderr = telepresence("--remove", "echo-easy")
+			for i := 0; i < serviceCount; i++ {
+				svc := fmt.Sprintf("hello-%d", i)
+				port := strconv.Itoa(9000 + i)
+				stdout, stderr := telepresence("--intercept", svc, "--port", port, "--no-wait")
 				Expect(stderr).To(BeEmpty())
-				Expect(stdout).To(BeEmpty())
-			}()
+				Expect(stdout).To(ContainSubstring("Using deployment " + svc))
+				srv := &http.Server{Addr: ":" + port, Handler: http.NewServeMux()}
 
-			go func() {
-				http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-					fmt.Fprintf(w, "hello from intercept at %s", r.URL.Path)
-				})
-				err := srv.ListenAndServe()
-				Expect(err).To(Equal(http.ErrServerClosed))
-			}()
+				defer func() {
+					err := srv.Shutdown(context.Background())
+					Expect(err).ToNot(HaveOccurred())
+					stdout, stderr = telepresence("--remove", svc)
+					Expect(stderr).To(BeEmpty())
+					Expect(stdout).To(BeEmpty())
+				}()
 
-			var err error
-			for retry := 0; retry < 100; retry++ {
-				stdout, err = output("curl", "-s", "echo-easy")
-				if err == nil && !strings.Contains(stdout, "served by echo-easy-") {
-					break
-				}
-				// Inbound proxy hasn't kicked in yet
-				time.Sleep(50 * time.Millisecond)
+				go func() {
+					srv.Handler.(*http.ServeMux).HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+						fmt.Fprintf(w, "%s from intercept at %s", svc, r.URL.Path)
+					})
+					err := srv.ListenAndServe()
+					Expect(err).To(Equal(http.ErrServerClosed))
+				}()
 			}
-			Expect(err).ToNot(HaveOccurred())
-			Expect(stdout).To(Equal("hello from intercept at /"))
+
+			for i := 0; i < serviceCount; i++ {
+				svc := fmt.Sprintf("hello-%d", i)
+				var err error
+				var stdout string
+				for retry := 0; retry < 100; retry++ {
+					stdout, err = output("curl", "-s", svc)
+					if err == nil && !strings.Contains(stdout, fmt.Sprintf("served by %s-", svc)) {
+						break
+					}
+					// Inbound proxy hasn't kicked in yet
+					time.Sleep(50 * time.Millisecond)
+				}
+				Expect(err).ToNot(HaveOccurred())
+				Expect(stdout).To(Equal(fmt.Sprintf("%s from intercept at /", svc)))
+			}
 		})
 		itTotal++
 	})
@@ -223,30 +238,46 @@ var _ = BeforeSuite(func() {
 		Expect(err).NotTo(HaveOccurred())
 	}()
 	wg.Wait()
+
+	wg.Add(serviceCount)
+	for i := 0; i < serviceCount; i++ {
+		i := i
+		go func() {
+			defer GinkgoRecover()
+			defer wg.Done()
+			err = applyEchoService(fmt.Sprintf("hello-%d", i))
+			Expect(err).NotTo(HaveOccurred())
+		}()
+	}
+	wg.Wait()
 })
 
 var _ = AfterSuite(func() {
 	_ = run("kubectl", "delete", "namespace", namespace)
 })
 
-func applyEchoService() error {
-	err := run("ko", "apply", "--namespace", namespace, "-f", "k8s/echo-easy.yaml")
+func applyEchoService(name string) error {
+	err := run("kubectl", "--namespace", namespace, "create", "deploy", name, "--image", "jmalloc/echo-server:0.1.0")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create deployment %s: %s", name, err)
 	}
-	for i := 0; i < 30; i++ {
+	err = run("kubectl", "--namespace", namespace, "expose", "deploy", name, "--port", "80", "--target-port", "8080")
+	if err != nil {
+		return fmt.Errorf("failed to expose deployment %s: %s", name, err)
+	}
+	for i := 0; i < 120; i++ {
 		time.Sleep(time.Second)
 		err = run(
 			"kubectl", "--namespace", namespace, "run", "curl-from-cluster", "--rm", "-it",
 			"--image=pstauffer/curl", "--restart=Never", "--",
 			"curl", "--silent", "--output", "/dev/null",
-			"http://echo-easy."+namespace,
+			fmt.Sprintf("http://%s.%s", name, namespace),
 		)
 		if err == nil {
 			return nil
 		}
 	}
-	return errors.New("timed out waiting for echo-easy service")
+	return fmt.Errorf("timed out waiting for %s service", name)
 }
 
 func run(args ...string) error {

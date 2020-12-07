@@ -11,12 +11,14 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"golang.org/x/net/proxy"
+	"golang.org/x/sync/semaphore"
 )
 
 // A Proxy listens to a port and forwards incoming connections to a router
 type Proxy struct {
-	listener net.Listener
-	router   func(*net.TCPConn) (string, error)
+	listener    net.Listener
+	connHandler func(*Proxy, context.Context, *net.TCPConn)
+	router      func(*net.TCPConn) (string, error)
 }
 
 // NewProxy returns a new Proxy instance that is listening to the given tcp address
@@ -24,7 +26,7 @@ func NewProxy(c context.Context, address string, router func(*net.TCPConn) (stri
 	setRlimit(c)
 	ln, err := net.Listen("tcp", address)
 	if err == nil {
-		proxy = &Proxy{ln, router}
+		proxy = &Proxy{listener: ln, connHandler: (*Proxy).handleConnection, router: router}
 	}
 	return
 }
@@ -53,44 +55,50 @@ func setRlimit(c context.Context) {
 	}
 }
 
-// Run starts the proxy accept loop and runs it until the context is cancelled
-func (pxy *Proxy) Run(c context.Context, limit int32) {
-	dlog.Debugf(c, "listening limit=%v", limit)
-	connQueue := make(chan net.Conn, limit)
-	capacity := limit
-	closing := false
+// Run starts the proxy accept loop and runs it until the context is cancelled. The limit argument
+// limits the maximum number of connections that can be concurrently proxied. This limit prevents
+// exhausting all available file descriptors when clients are greedy about opening connections. This
+// was originally encountered with load testing clients. You might argue this is a bug in those
+// clients, and you might be right, but without this limit it manifests in a far more confusing way
+// as a bug in telepresence.
+func (pxy *Proxy) Run(c context.Context, limit int64) {
+	dlog.Debugf(c, "proxy limit=%v", limit)
+	// This semaphore tracks how many more connections we can proxy without exceeding the concurrent
+	// connection limit.
+	capacity := semaphore.NewWeighted(limit)
+	dlog.Debugf(c, "Listening to %s", pxy.listener.Addr())
+
+	// Ensure that listener is closed when context is done
 	go func() {
-		for {
-			dlog.Debugf(c, "Listening to %s", pxy.listener.Addr())
-			conn, err := pxy.listener.Accept()
-			if err != nil {
-				if closing {
-					return
-				}
-				dlog.Error(c, err.Error())
-			} else {
-				atomic.AddInt32(&capacity, -1)
-				connQueue <- conn
-			}
-		}
+		<-c.Done()
+		_ = pxy.listener.Close()
 	}()
+
 	for {
-		select {
-		case <-c.Done():
-			closing = true
-			dlog.Debugf(c, "Context cancelled. Closing listener to %s", pxy.listener.Addr())
-			_ = pxy.listener.Close()
-			return
-		case conn := <-connQueue:
-			cpy := atomic.AddInt32(&capacity, 1)
-			switch conn := conn.(type) {
-			case *net.TCPConn:
-				dlog.Debugf(c, "CAPACITY: %v", cpy)
-				dlog.Debugf(c, "Handling connection from %s", conn.RemoteAddr())
-				pxy.handleConnection(c, conn)
-			default:
-				dlog.Errorf(c, "unknown connection type: %v", conn)
+		conn, err := pxy.listener.Accept()
+		if err != nil {
+			if c.Err() != nil {
+				// Context done or cancelled, so error is very likely
+				// caused by a listener close
+				return
 			}
+			dlog.Error(c, err.Error())
+			continue
+		}
+		switch conn := conn.(type) {
+		case *net.TCPConn:
+			dlog.Debugf(c, "Handling connection from %s", conn.RemoteAddr())
+			if err = capacity.Acquire(c, 1); err != nil {
+				dlog.Errorf(c, "proxy failed to acquire semaphore: %s", err.Error())
+				return
+			}
+			go func() {
+				defer capacity.Release(1)
+				pxy.connHandler(pxy, c, conn)
+				dlog.Debugf(c, "Done handling connection from %s", conn.RemoteAddr())
+			}()
+		default:
+			dlog.Errorf(c, "unknown connection type: %v", conn)
 		}
 	}
 }
