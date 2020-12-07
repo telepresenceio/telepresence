@@ -125,7 +125,6 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 }
 
 func (tm *trafficManager) waitForActiveIntercept(c context.Context, id string) (*manager.InterceptInfo, error) {
-	timeout := time.After(30 * time.Second)
 	done := make(chan *manager.InterceptInfo)
 
 	il := &iiActive{id: id, done: done}
@@ -139,6 +138,8 @@ func (tm *trafficManager) waitForActiveIntercept(c context.Context, id string) (
 	defer tm.iiListener.removeListener(il)
 
 	dlog.Debugf(c, "waiting for intercept with id %s to become active", id)
+	c, cancel := context.WithTimeout(c, 30*time.Second)
+	defer cancel()
 	select {
 	case ii := <-done:
 		if ii.Disposition == manager.InterceptDispositionType_ACTIVE {
@@ -147,15 +148,11 @@ func (tm *trafficManager) waitForActiveIntercept(c context.Context, id string) (
 		dlog.Errorf(c, "intercept id: %s, state: %s, message: %s", id, ii.Disposition, ii.Message)
 		return nil, errors.New(ii.Message)
 	case <-c.Done():
-		dlog.Debugf(c, "context cancelled while waiting for intercept with id %s to become active", id)
-		return nil, c.Err()
-	case <-timeout:
-		return nil, fmt.Errorf("timeout while waiting for intercept with id %s to become active", id)
+		return nil, fmt.Errorf("%s while waiting for intercept with id %s to become active", c.Err().Error(), id)
 	}
 }
 
 func (tm *trafficManager) waitForAgent(c context.Context, name string) (*manager.AgentInfo, error) {
-	timeout := time.After(120 * time.Second) // installing a new agent can take some time
 	done := make(chan *manager.AgentInfo)
 
 	al := &aiPresent{name: name, done: done}
@@ -168,13 +165,13 @@ func (tm *trafficManager) waitForAgent(c context.Context, name string) (*manager
 	}()
 	defer tm.aiListener.removeListener(al)
 
+	c, cancel := context.WithTimeout(c, 120*time.Second) // installing a new agent can take some time
+	defer cancel()
 	select {
-	case <-c.Done():
-		return nil, c.Err()
 	case ai := <-done:
 		return ai, nil
-	case <-timeout:
-		return nil, fmt.Errorf("timout waiting for agent %q to be present", name)
+	case <-c.Done():
+		return nil, fmt.Errorf("%s while waiting for agent %s to be present", c.Err().Error(), name)
 	}
 }
 
