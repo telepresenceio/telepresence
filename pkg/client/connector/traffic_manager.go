@@ -218,10 +218,17 @@ type watcher struct {
 // when io.EOF is encountered, or an error occurs during read.
 func (r *watcher) watch(c context.Context) error {
 	dataChan := make(chan interface{}, 1000)
+	defer close(dataChan)
+
+	done := int32(0)
 	go func() {
 		for {
 			select {
 			case <-c.Done():
+				// ensure no more writes and drain channel to unblock writer
+				atomic.StoreInt32(&done, 1)
+				for range dataChan {
+				}
 				return
 			case data := <-dataChan:
 				if data == nil {
@@ -240,17 +247,24 @@ func (r *watcher) watch(c context.Context) error {
 		}
 	}()
 
+	var err error
 	for {
 		data := r.entryMaker()
-		if err := r.stream.RecvMsg(data); err != nil {
+		if err = r.stream.RecvMsg(data); err != nil {
 			if err == io.EOF || strings.HasSuffix(err.Error(), " is closing") {
 				err = nil
 			}
-			close(dataChan)
-			return err
+			break
+		}
+		if atomic.LoadInt32(&done) != 0 {
+			break
 		}
 		dataChan <- data
+		if atomic.LoadInt32(&done) != 0 {
+			break
+		}
 	}
+	return err
 }
 
 func (r *watcher) addListener(l listener) {
