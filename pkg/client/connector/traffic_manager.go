@@ -125,7 +125,9 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 		grpc.WithNoProxy(),
 		grpc.WithBlock())
 	if err != nil {
-		dlog.Errorf(c, "error when dialing traffic-manager: %s", err.Error())
+		if tc.Err() == context.DeadlineExceeded {
+			err = errors.New("timeout when connecting to traffic-manager")
+		}
 		return err
 	}
 
