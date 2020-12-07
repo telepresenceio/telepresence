@@ -7,7 +7,6 @@ import (
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/client"
@@ -16,8 +15,7 @@ import (
 )
 
 type connectorState struct {
-	cmd    *cobra.Command
-	cr     *connector.ConnectRequest
+	*sessionInfo
 	conn   *grpc.ClientConn
 	daemon daemon.DaemonClient
 	grpc   connector.ConnectorClient
@@ -51,8 +49,6 @@ func (cs *connectorState) EnsureState() (bool, error) {
 		break
 	}
 
-	cs.cr.InstallId = client.NewScout("unused").Reporter.InstallID()
-
 	err := start(client.GetExe(), []string{"connector-foreground"}, false, nil, nil, nil)
 	if err != nil {
 		return false, errors.Wrap(err, "failed to launch the connector service")
@@ -70,7 +66,13 @@ func (cs *connectorState) EnsureState() (bool, error) {
 }
 
 func (cs *connectorState) setConnectInfo() error {
-	r, err := cs.grpc.Connect(cs.cmd.Context(), cs.cr)
+	r, err := cs.grpc.Connect(cs.cmd.Context(), &connector.ConnectRequest{
+		Context:          cs.context,
+		Namespace:        cs.namespace,
+		InstallId:        client.NewScout("unused").Reporter.InstallID(),
+		IsCi:             cs.isCI,
+		InterceptEnabled: true,
+	})
 	if err != nil {
 		return err
 	}
@@ -115,39 +117,11 @@ func (cs *connectorState) DeactivateState() error {
 	return err
 }
 
-func newConnectorState(daemon daemon.DaemonClient, cr *connector.ConnectRequest, cmd *cobra.Command) (*connectorState, error) {
-	cs := &connectorState{daemon: daemon, cmd: cmd, cr: cr}
-	err := assertConnectorStarted()
-	if err == nil {
-		err = cs.connect()
-	}
-	return cs, err
-}
-
 func assertConnectorStarted() error {
 	if client.SocketExists(client.ConnectorSocketName) {
 		return nil
 	}
 	return errConnectorIsNotRunning
-}
-
-// withConnector establishes a connection, calls the function with the gRPC client, and ensures
-// that the connection is closed.
-func withConnector(cmd *cobra.Command, f func(state *connectorState) error) error {
-	ds, err := newDaemonState(cmd, "", "")
-	if err != nil {
-		return err
-	}
-	defer ds.disconnect()
-	cs, err := newConnectorState(ds.grpc, &connector.ConnectRequest{}, cmd)
-	if err != nil {
-		return err
-	}
-	defer cs.disconnect()
-	if err = cs.setConnectInfo(); err != nil {
-		return err
-	}
-	return f(cs)
 }
 
 // isConnected returns true if a connection has been established to the daemon
