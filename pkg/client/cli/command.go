@@ -74,14 +74,20 @@ func Command() *cobra.Command {
 	rootCmd.AddCommand(daemon.Command())
 	rootCmd.AddCommand(connector.Command())
 
-	rootCmd.AddCommand(auth.LoginCommand())
-	rootCmd.AddCommand(connectCommand())
-	rootCmd.AddCommand(interceptCommand())
-	rootCmd.AddCommand(leaveCommand())
-	rootCmd.AddCommand(listCommand())
-	rootCmd.AddCommand(statusCommand())
-	rootCmd.AddCommand(quitCommand())
-	rootCmd.AddCommand(versionCommand())
 	rootCmd.InitDefaultHelpCmd()
+	AddCommandGroups(rootCmd, []CommandGroup{
+		{
+			Name:     "Session Commands",
+			Commands: []*cobra.Command{connectCommand(), auth.LoginCommand(), statusCommand(), quitCommand()},
+		},
+		{
+			Name:     "Traffic Commands",
+			Commands: []*cobra.Command{listCommand(), interceptCommand(), leaveCommand() /*, "preview" */},
+		},
+		{
+			Name:     "Other Commands",
+			Commands: []*cobra.Command{versionCommand() /*, "uninstall" */},
+		},
+	})
 	return rootCmd
 }
