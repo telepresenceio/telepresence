@@ -8,21 +8,25 @@ import (
 	"github.com/datawire/telepresence2/pkg/client/daemon"
 )
 
-var help = `telepresence can run a command in a sub shell after ensuring that a connection
-has been established with a Traffic Manager and optionally also that an intercept has
-been added.
+var help = `Telepresence can connect to a cluster and route all outbound traffic from your
+workstation to that cluster so that software running locally can communicate
+as if it executed remotely, inside the cluster. This is achieved using the
+command:
 
-The command ensures that only those resources that were acquired are cleaned up. This
-means that the telepresence daemon will not quit if it was already started, no disconnect
-will take place if the connection was already established, and the intercept will not be
-removed if it was already added.
+telepresence connect
 
-Unless the daemon is already started, an attempt will be made to start it. This will
-involve a call to sudo unless this command is run as root (not recommended).
+Telepresence can also intercept traffic intended for a specific service in a
+cluster and redirect it to your local workstation:
 
-run a command with an intercept in place:
-    telepresence --intercept hello --port 9000 -- <command> arguments...
-`
+telepresence intercept <name of service>
+
+Telepresence uses background processes to manage the cluster session. One of
+the processes runs with superuser privileges because it modifies the network.
+Unless the daemons are already started, an attempt will be made to start them.
+This will involve a call to sudo unless this command is run as root (not
+recommended) which in turn may result in a password prompt.`
+
+// TODO: Provide a link in the help text to more info about telepresence
 
 func statusCommand() *cobra.Command {
 	return &cobra.Command{
