@@ -22,9 +22,7 @@ const _ = grpc.SupportPackageIsVersion7
 type ConnectorClient interface {
 	// Returns version information from the Connector
 	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
-	// Returns the current connectivity status
-	Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ConnectorStatus, error)
-	// Connects the daemon to a cluster
+	// Connects the daemon to a cluster and returns status
 	Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error)
 	// Adds a deployment intercept
 	CreateIntercept(ctx context.Context, in *manager.CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error)
@@ -49,15 +47,6 @@ func NewConnectorClient(cc grpc.ClientConnInterface) ConnectorClient {
 func (c *connectorClient) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error) {
 	out := new(common.VersionInfo)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Version", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectorClient) Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ConnectorStatus, error) {
-	out := new(ConnectorStatus)
-	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Status", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -124,9 +113,7 @@ func (c *connectorClient) Quit(ctx context.Context, in *empty.Empty, opts ...grp
 type ConnectorServer interface {
 	// Returns version information from the Connector
 	Version(context.Context, *empty.Empty) (*common.VersionInfo, error)
-	// Returns the current connectivity status
-	Status(context.Context, *empty.Empty) (*ConnectorStatus, error)
-	// Connects the daemon to a cluster
+	// Connects the daemon to a cluster and returns status
 	Connect(context.Context, *ConnectRequest) (*ConnectInfo, error)
 	// Adds a deployment intercept
 	CreateIntercept(context.Context, *manager.CreateInterceptRequest) (*InterceptResult, error)
@@ -147,9 +134,6 @@ type UnimplementedConnectorServer struct {
 
 func (UnimplementedConnectorServer) Version(context.Context, *empty.Empty) (*common.VersionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
-}
-func (UnimplementedConnectorServer) Status(context.Context, *empty.Empty) (*ConnectorStatus, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Status not implemented")
 }
 func (UnimplementedConnectorServer) Connect(context.Context, *ConnectRequest) (*ConnectInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Connect not implemented")
@@ -196,24 +180,6 @@ func _Connector_Version_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).Version(ctx, req.(*empty.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Connector_Status_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).Status(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.connector.Connector/Status",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).Status(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -333,10 +299,6 @@ var _Connector_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Version",
 			Handler:    _Connector_Version_Handler,
-		},
-		{
-			MethodName: "Status",
-			Handler:    _Connector_Status_Handler,
 		},
 		{
 			MethodName: "Connect",

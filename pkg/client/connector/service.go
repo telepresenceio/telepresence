@@ -139,12 +139,6 @@ func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 	}, nil
 }
 
-func (s *service) Status(c context.Context, _ *empty.Empty) (result *rpc.ConnectorStatus, err error) {
-	c = s.callCtx(c, "Status")
-	defer func() { err = callRecovery(c, recover(), err) }()
-	return s.status(c), nil
-}
-
 func (s *service) Connect(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
 	c = s.callCtx(c, "Connect")
 	defer func() { err = callRecovery(c, recover(), err) }()
@@ -203,7 +197,32 @@ func (d *daemonLogger) Write(data []byte) (n int, err error) {
 
 // connect the connector to a cluster
 func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
-	dgroup.ParentGroup(c).Go(callName("metriton"), func(c context.Context) error {
+	r := &rpc.ConnectInfo{}
+	setStatus := func() {
+		r.ClusterOk = true
+		r.ClusterContext = s.cluster.Context
+		r.ClusterServer = s.cluster.server()
+		if s.bridge != nil {
+			r.BridgeOk = s.bridge.check(c)
+		}
+		if s.trafficMgr != nil {
+			s.trafficMgr.setStatus(r)
+		}
+	}
+
+	// Sanity checks
+	if s.cluster != nil {
+		setStatus()
+		r.Error = rpc.ConnectInfo_ALREADY_CONNECTED
+		return r
+	}
+
+	if s.bridge != nil {
+		r.Error = rpc.ConnectInfo_DISCONNECTING
+		return r
+	}
+
+	dgroup.ParentGroup(s.ctx).Go(callName("metriton"), func(c context.Context) error {
 		reporter := &metriton.Reporter{
 			Application:  "telepresence2",
 			Version:      client.Version(),
@@ -211,24 +230,11 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 			BaseMetadata: map[string]interface{}{"mode": "daemon"},
 		}
 
-		if _, err := reporter.Report(s.ctx, map[string]interface{}{"action": "connect"}); err != nil {
-			dlog.Errorf(s.ctx, "report failed: %+v", err)
+		if _, err := reporter.Report(c, map[string]interface{}{"action": "connect"}); err != nil {
+			dlog.Errorf(c, "report failed: %+v", err)
 		}
 		return nil // error is logged and is not fatal
 	})
-
-	// Sanity checks
-	r := &rpc.ConnectInfo{}
-	if s.cluster != nil {
-		r.ClusterContext = s.cluster.Context
-		r.ClusterServer = s.cluster.server()
-		r.Error = rpc.ConnectInfo_ALREADY_CONNECTED
-		return r
-	}
-	if s.bridge != nil {
-		r.Error = rpc.ConnectInfo_DISCONNECTING
-		return r
-	}
 
 	dlog.Info(c, "Connecting to traffic manager...")
 	cluster, err := trackKCluster(s.ctx, cr.Context, cr.Namespace, cr.Args)
@@ -250,9 +256,6 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	*/
 
 	dlog.Infof(c, "Connected to context %s (%s)", s.cluster.Context, s.cluster.server())
-
-	r.ClusterContext = s.cluster.Context
-	r.ClusterServer = s.cluster.server()
 
 	tmgr, err := newTrafficManager(s.ctx, s.cluster, cr.InstallId, cr.IsCi)
 	if err != nil {
@@ -282,6 +285,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	s.bridge = br
 
 	if !cr.InterceptEnabled {
+		setStatus()
 		return r
 	}
 
@@ -293,6 +297,8 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		r.ErrorText = err.Error()
 		// No point in continuing without a traffic manager
 		s.cancel()
+	} else {
+		setStatus()
 	}
 	return r
 }

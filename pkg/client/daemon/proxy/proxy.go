@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -127,6 +128,9 @@ func (pxy *Proxy) handleConnection(c context.Context, conn *net.TCPConn) {
 	defer cancel()
 	px, err := dialer.(proxy.ContextDialer).DialContext(tc, "tcp", host)
 	if err != nil {
+		if tc.Err() == context.DeadlineExceeded {
+			err = fmt.Errorf("timeout when dialing tcp %s", host)
+		}
 		dlog.Error(c, err.Error())
 		conn.Close()
 		return

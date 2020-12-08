@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
@@ -11,7 +10,6 @@ import (
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
-	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 // IsServerRunning reports whether or not the daemon server is running.
@@ -57,20 +55,25 @@ func status(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	var cs *connector.ConnectorStatus
+	if ds.Dns != "" {
+		fmt.Fprintf(out, "DNS = %s\n", ds.Dns)
+	}
+	if ds.Fallback != "" {
+		fmt.Fprintf(out, "Fallback = %s\n", ds.Fallback)
+	}
+	var cs *connector.ConnectInfo
 	if cs, err = connectorStatus(cmd); err != nil {
 		return err
 	}
 	switch cs.Error {
-	case connector.ConnectorStatus_UNSPECIFIED:
-		cl := cs.Cluster
-		if cl.Connected {
+	case connector.ConnectInfo_UNSPECIFIED, connector.ConnectInfo_ALREADY_CONNECTED:
+		if cs.ClusterOk {
 			fmt.Fprintln(out, "Connected")
 		} else {
 			fmt.Fprintln(out, "Attempting to reconnect...")
 		}
-		fmt.Fprintf(out, "  Context:       %s (%s)\n", cl.Context, cl.Server)
-		if cs.Bridge {
+		fmt.Fprintf(out, "  Context:       %s (%s)\n", cs.ClusterContext, cs.ClusterServer)
+		if cs.BridgeOk {
 			fmt.Fprintln(out, "  Proxy:         ON (networking to the cluster is enabled)")
 		} else {
 			fmt.Fprintln(out, "  Proxy:         OFF (attempting to connect...)")
@@ -88,39 +91,42 @@ func status(cmd *cobra.Command, _ []string) error {
 				}
 			}
 		}
-	case connector.ConnectorStatus_NOT_STARTED:
+	case connector.ConnectInfo_NOT_STARTED:
 		fmt.Fprintln(out, errConnectorIsNotRunning)
-	case connector.ConnectorStatus_DISCONNECTED:
+	case connector.ConnectInfo_DISCONNECTING:
 		fmt.Fprintln(out, "Disconnecting")
 	}
 	return nil
 }
 
 func daemonStatus(cmd *cobra.Command) (status *daemon.DaemonStatus, err error) {
-	if assertDaemonStarted() != nil {
-		return &daemon.DaemonStatus{Error: daemon.DaemonStatus_NOT_STARTED}, nil
-	}
-	err = withDaemon(cmd, func(d daemon.DaemonClient) error {
-		status, err = d.Status(cmd.Context(), &empty.Empty{})
+	err = withStartedDaemon(cmd, func(ds *daemonState) error {
+		status, err = ds.grpc.Status(cmd.Context(), &empty.Empty{})
 		return err
 	})
+	if err == errDaemonIsNotRunning {
+		err = nil
+		status = &daemon.DaemonStatus{Error: daemon.DaemonStatus_NOT_STARTED}
+	}
 	return
 }
 
-func connectorStatus(cmd *cobra.Command) (status *connector.ConnectorStatus, err error) {
-	if assertConnectorStarted() != nil {
-		return &connector.ConnectorStatus{Error: connector.ConnectorStatus_NOT_STARTED}, nil
-	}
-	err = withConnector(cmd, func(cs *connectorState) error {
-		status, err = cs.grpc.Status(cmd.Context(), &empty.Empty{})
-		return err
+func connectorStatus(cmd *cobra.Command) (status *connector.ConnectInfo, err error) {
+	err = withStartedConnector(cmd, func(cs *connectorState) error {
+		status = cs.info
+		return nil
 	})
+	if err == errConnectorIsNotRunning {
+		err = nil
+		status = &connector.ConnectInfo{Error: connector.ConnectInfo_NOT_STARTED}
+	}
 	return
 }
 
 // quit sends the quit message to the daemon and waits for it to exit.
 func quit(cmd *cobra.Command, _ []string) error {
-	ds, err := newDaemonState(cmd, "", "")
+	si := &sessionInfo{cmd: cmd}
+	ds, err := si.newDaemonState()
 	if err == nil {
 		// Let daemon kill the connector
 		defer ds.disconnect()
@@ -128,55 +134,19 @@ func quit(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Ensure the connector is killed even if daemon isn't running
-	cs, err := newConnectorState(nil, nil, cmd)
+	err = assertConnectorStarted()
 	if err != nil {
 		return nil
 	}
-	defer cs.disconnect()
-	return cs.DeactivateState()
-}
-
-// listIntercepts requests a list current intercepts from the daemon
-func listIntercepts(cmd *cobra.Command, _ []string) error {
-	var r *manager.InterceptInfoSnapshot
-	var err error
-	err = withConnector(cmd, func(cs *connectorState) error {
-		r, err = cs.grpc.ListIntercepts(cmd.Context(), &empty.Empty{})
-		return err
-	})
-	if err != nil {
-		return err
-	}
-	stdout := cmd.OutOrStdout()
-	if len(r.Intercepts) == 0 {
-		fmt.Fprintln(stdout, "No intercepts")
-		return nil
-	}
-	var previewURL string
-	for idx, cept := range r.Intercepts {
-		spec := cept.Spec
-		fmt.Fprintf(stdout, "%4d. %s\n", idx+1, spec.Name)
-		fmt.Fprintf(stdout, "      Intercepting requests and redirecting them to %s:%d\n", spec.TargetHost, spec.TargetPort)
-	}
-	if previewURL != "" {
-		fmt.Fprintln(stdout, "Share a preview of your changes with anyone by visiting\n  ", previewURL)
-	}
-	return nil
-}
-
-// removeIntercept tells the daemon to deactivate and remove an existent intercept
-func removeIntercept(cmd *cobra.Command, args []string) error {
-	return withConnector(cmd, func(cs *connectorState) error {
-		is := newInterceptState(cs,
-			&manager.CreateInterceptRequest{InterceptSpec: &manager.InterceptSpec{Name: strings.TrimSpace(args[0])}},
-			cmd)
-		return is.DeactivateState()
+	return si.withConnector(true, func(cs *connectorState) error {
+		defer cs.disconnect()
+		return cs.DeactivateState()
 	})
 }
 
 func daemonVersion(cmd *cobra.Command) (apiVersion int, version string, err error) {
-	err = withDaemon(cmd, func(d daemon.DaemonClient) error {
-		vi, err := d.Version(cmd.Context(), &empty.Empty{})
+	err = withStartedDaemon(cmd, func(d *daemonState) error {
+		vi, err := d.grpc.Version(cmd.Context(), &empty.Empty{})
 		if err == nil {
 			apiVersion = int(vi.ApiVersion)
 			version = vi.Version

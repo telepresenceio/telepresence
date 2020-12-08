@@ -9,12 +9,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/onsi/gomega/types"
 
 	"github.com/datawire/ambassador/pkg/dtest"
 	. "github.com/onsi/ginkgo"
@@ -28,7 +29,6 @@ import (
 
 var testVersion = "v0.1.2-test"
 var namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
-var proxyOnMatch = regexp.MustCompile(`Proxy:\s+ON`)
 
 // serviceCount is the number of interceptable services that gets installed
 // in the cluster and later intercepted
@@ -37,57 +37,59 @@ const serviceCount = 12
 var _ = Describe("Telepresence", func() {
 	Context("With no daemon running", func() {
 		It("Returns version", func() {
-			stdout, stderr := telepresence("--version")
+			stdout, stderr := telepresence("version")
 			Expect(stderr).To(BeEmpty())
 			Expect(stdout).To(Equal(fmt.Sprintf("Client %s", client.DisplayVersion())))
 		})
 		It("Returns valid status", func() {
-			out, _ := telepresence("--status")
+			out, _ := telepresence("status")
 			Expect(out).To(ContainSubstring("The telepresence daemon has not been started"))
 		})
 	})
 
-	Context("With bad KUBECONFIG", func() {
-		It("Reports config error and exits", func() {
-			kubeConfig := os.Getenv("KUBECONFIG")
-			defer os.Setenv("KUBECONFIG", kubeConfig)
-			os.Setenv("KUBECONFIG", "/dev/null")
-			stdout, stderr := telepresence()
-			Expect(stderr).To(ContainSubstring("kubectl config current-context"))
-			Expect(stdout).To(ContainSubstring("Launching Telepresence Daemon"))
-			Expect(stdout).To(ContainSubstring("Daemon quitting"))
+	Context("When attempting to connect", func() {
+		Context("Using an invalid KUBECONFIG", func() {
+			It("Reports config error and exits", func() {
+				kubeConfig := os.Getenv("KUBECONFIG")
+				defer os.Setenv("KUBECONFIG", kubeConfig)
+				os.Setenv("KUBECONFIG", "/dev/null")
+				stdout, stderr := telepresence("connect")
+				Expect(stderr).To(ContainSubstring("kubectl config current-context"))
+				Expect(stdout).To(ContainSubstring("Launching Telepresence Daemon"))
+				Expect(stdout).To(ContainSubstring("Daemon quitting"))
+			})
+		})
+
+		Context("With non existing context", func() {
+			It("Reports connect error and exits", func() {
+				stdout, stderr := telepresence("connect", "--context", "not-likely-to-exist")
+				Expect(stderr).To(ContainSubstring(`"not-likely-to-exist" does not exist`))
+				Expect(stdout).To(ContainSubstring("Launching Telepresence Daemon"))
+				Expect(stdout).To(ContainSubstring("Daemon quitting"))
+			})
 		})
 	})
 
-	Context("With bad context", func() {
-		It("Reports connect error and exits", func() {
-			stdout, stderr := telepresence("--context", "not-likely-to-exist")
-			Expect(stderr).To(ContainSubstring(`"not-likely-to-exist" does not exist`))
-			Expect(stdout).To(ContainSubstring("Launching Telepresence Daemon"))
-			Expect(stdout).To(ContainSubstring("Daemon quitting"))
-		})
-	})
-
-	Context("When started with a command", func() {
+	Context("When connecting with a command", func() {
 		It("Connects, executes the command, and then exits", func() {
-			stdout, stderr := telepresence("--namespace", namespace, "--", client.GetExe(), "--status")
+			stdout, stderr := telepresence("--namespace", namespace, "connect", "--", client.GetExe(), "status")
 			Expect(stderr).To(BeEmpty())
 			Expect(stdout).To(ContainSubstring("Launching Telepresence Daemon"))
 			Expect(stdout).To(ContainSubstring("Connected to context"))
 			Expect(stdout).To(ContainSubstring("Context:"))
-			Expect(stdout).To(MatchRegexp(proxyOnMatch.String()))
+			Expect(stdout).To(MatchRegexp(`Proxy:\s+ON`))
 			Expect(stdout).To(ContainSubstring("Daemon quitting"))
 		})
 	})
 
-	Context("When started in the background", func() {
+	Context("When connected", func() {
 		itCount := int32(0)
 		itTotal := int32(0) // To simulate AfterAll. Add one for each added It() test
 		BeforeEach(func() {
 			// This is a bit annoying, but ginkgo does not provide a context scoped "BeforeAll"
 			// Will be fixed in ginkgo 2.0
 			if atomic.CompareAndSwapInt32(&itCount, 0, 1) {
-				stdout, stderr := telepresence("--namespace", namespace, "--no-wait")
+				stdout, stderr := telepresence("--namespace", namespace, "connect")
 				Expect(stderr).To(BeEmpty())
 				Expect(stdout).To(ContainSubstring("Connected to context"))
 			} else {
@@ -99,14 +101,14 @@ var _ = Describe("Telepresence", func() {
 			// This is a bit annoying, but ginkgo does not provide a context scoped "AfterAll"
 			// Will be fixed in ginkgo 2.0
 			if atomic.CompareAndSwapInt32(&itCount, itTotal, 0) {
-				stdout, stderr := telepresence("--quit")
+				stdout, stderr := telepresence("quit")
 				Expect(stderr).To(BeEmpty())
 				Expect(stdout).To(ContainSubstring("quitting"))
 			}
 		})
 
 		It("Reports version from daemon", func() {
-			stdout, stderr := telepresence("--version")
+			stdout, stderr := telepresence("version")
 			Expect(stderr).To(BeEmpty())
 			vs := client.DisplayVersion()
 			Expect(stdout).To(ContainSubstring(fmt.Sprintf("Client %s", vs)))
@@ -115,7 +117,7 @@ var _ = Describe("Telepresence", func() {
 		itTotal++
 
 		It("Reports status as connected", func() {
-			stdout, stderr := telepresence("--status")
+			stdout, stderr := telepresence("status")
 			Expect(stderr).To(BeEmpty())
 			Expect(stdout).To(ContainSubstring("Context:"))
 		})
@@ -123,75 +125,79 @@ var _ = Describe("Telepresence", func() {
 
 		It("Proxies outbound traffic", func() {
 			// Give outbound interceptor 15 seconds to kick in.
-			proxy := false
-			for i := 0; i < 30; i++ {
-				stdout, stderr := telepresence("--status")
-				Expect(stderr).To(BeEmpty())
-				if proxy = proxyOnMatch.MatchString(stdout); proxy {
-					break
-				}
-				time.Sleep(500 * time.Millisecond)
-			}
-			Expect(proxy).To(BeTrue(), "Timeout waiting for network overrides to establish")
+			Eventually(func() (string, string) {
+				return telepresence("status")
+			}, 15*time.Second, time.Second).Should(MatchRegexp(`Proxy:\s+ON`), "Timeout waiting for network overrides to establish")
 
 			for i := 0; i < serviceCount; i++ {
-				var out string
-				var err error
 				svc := fmt.Sprintf("hello-%d", i)
-				for retry := 0; ; retry++ {
-					out, err = output("curl", "-s", svc)
-					if err == nil || retry == 9 {
-						break
-					}
-					time.Sleep(500 * time.Millisecond)
-				}
-				Expect(err).NotTo(HaveOccurred())
-				Expect(out).To(ContainSubstring(fmt.Sprintf("Request served by %s-", svc)))
+				Eventually(func() (string, error) {
+					return output("curl", "-s", svc)
+				}, 5*time.Second, 500*time.Millisecond).Should(ContainSubstring(fmt.Sprintf("Request served by %s-", svc)))
 			}
 		})
 		itTotal++
 
-		It("Proxies inbound traffic with --intercept", func() {
-			for i := 0; i < serviceCount; i++ {
-				svc := fmt.Sprintf("hello-%d", i)
-				port := strconv.Itoa(9000 + i)
-				stdout, stderr := telepresence("--intercept", svc, "--port", port, "--no-wait")
-				Expect(stderr).To(BeEmpty())
-				Expect(stdout).To(ContainSubstring("Using deployment " + svc))
-				srv := &http.Server{Addr: ":" + port, Handler: http.NewServeMux()}
+		It("Proxies inbound traffic with intercept", func() {
+			intercepts := make([]string, 0, serviceCount)
+			services := make([]*http.Server, 0, serviceCount)
 
-				defer func() {
-					err := srv.Shutdown(context.Background())
-					Expect(err).ToNot(HaveOccurred())
-					stdout, stderr = telepresence("--remove", svc)
+			defer func() {
+				for _, svc := range intercepts {
+					stdout, stderr := telepresence("leave", svc)
 					Expect(stderr).To(BeEmpty())
 					Expect(stdout).To(BeEmpty())
-				}()
-
-				go func() {
-					srv.Handler.(*http.ServeMux).HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-						fmt.Fprintf(w, "%s from intercept at %s", svc, r.URL.Path)
-					})
-					err := srv.ListenAndServe()
-					Expect(err).To(Equal(http.ErrServerClosed))
-				}()
-			}
-
-			for i := 0; i < serviceCount; i++ {
-				svc := fmt.Sprintf("hello-%d", i)
-				var err error
-				var stdout string
-				for retry := 0; retry < 100; retry++ {
-					stdout, err = output("curl", "-s", svc)
-					if err == nil && !strings.Contains(stdout, fmt.Sprintf("served by %s-", svc)) {
-						break
-					}
-					// Inbound proxy hasn't kicked in yet
-					time.Sleep(50 * time.Millisecond)
 				}
-				Expect(err).ToNot(HaveOccurred())
-				Expect(stdout).To(Equal(fmt.Sprintf("%s from intercept at /", svc)))
-			}
+				for _, srv := range services {
+					_ = srv.Shutdown(context.Background())
+				}
+			}()
+
+			By("adding intercepts", func() {
+				for i := 0; i < serviceCount; i++ {
+					svc := fmt.Sprintf("hello-%d", i)
+					port := strconv.Itoa(9000 + i)
+					stdout, stderr := telepresence("intercept", svc, "--port", port)
+					Expect(stderr).To(BeEmpty())
+					intercepts = append(intercepts, svc)
+					Expect(stdout).To(ContainSubstring("Using deployment " + svc))
+				}
+			})
+
+			By("starting http servers", func() {
+				for i := 0; i < serviceCount; i++ {
+					svc := fmt.Sprintf("hello-%d", i)
+					port := strconv.Itoa(9000 + i)
+					srv := &http.Server{Addr: ":" + port, Handler: http.NewServeMux()}
+					go func() {
+						srv.Handler.(*http.ServeMux).HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+							fmt.Fprintf(w, "%s from intercept at %s", svc, r.URL.Path)
+						})
+						services = append(services, srv)
+						err := srv.ListenAndServe()
+						Expect(err).To(Equal(http.ErrServerClosed))
+					}()
+				}
+			})
+
+			By("verifying responses from interceptor", func() {
+				for i := 0; i < serviceCount; i++ {
+					svc := fmt.Sprintf("hello-%d", i)
+					Eventually(func() (string, error) {
+						return output("curl", "-s", svc)
+					}, 5*time.Second, 50*time.Millisecond).Should(Equal(fmt.Sprintf("%s from intercept at /", svc)))
+				}
+			})
+
+			By("listing active intercepts", func() {
+				stdout, stderr := telepresence("list")
+				Expect(stderr).To(BeEmpty())
+				matches := make([]types.GomegaMatcher, serviceCount)
+				for i := 0; i < serviceCount; i++ {
+					matches[i] = ContainSubstring(" hello-%d\n", i)
+				}
+				Expect(stdout).To(And(matches...))
+			})
 		})
 		itTotal++
 	})

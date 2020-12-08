@@ -18,7 +18,7 @@ const defaultMaxDelay = 3 * time.Second
 //  Delay - initial delay, i.e. the delay between the first and the second call.
 //  MaxDelay - maximum delay between calling the functions (delay will never grow beyond this value)
 //  MaxTime - maximum time before giving up.
-func Retry(c context.Context, f func(context.Context) error, durations ...time.Duration) (err error) {
+func Retry(c context.Context, text string, f func(context.Context) error, durations ...time.Duration) (err error) {
 	delay := defaultRetryDelay
 	maxDelay := defaultMaxDelay
 	maxTime := time.Duration(0)
@@ -74,11 +74,11 @@ func Retry(c context.Context, f func(context.Context) error, durations ...time.D
 		}
 
 		// Logging at higher log levels should be done in the called function
-		dlog.Debugf(c, "waiting %s before retrying after error: %s", delay.String(), funcErr.Error())
+		dlog.Debugf(c, "%s waiting %s before retrying after error: %s", text, delay.String(), funcErr.Error())
 
 		select {
 		case <-c.Done():
-			return err
+			return fmt.Errorf("%s was unable to succeed", text)
 		case <-time.After(delay):
 		}
 		delay *= 2

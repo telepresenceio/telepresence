@@ -16,9 +16,10 @@ type EnsuredState interface {
 // was activated, it is deactivated unless the retain flag is true.
 func WithEnsuredState(r EnsuredState, retain bool, f func() error) (err error) {
 	var wasAcquired bool
-	wasAcquired, err = r.EnsureState()
-	if wasAcquired && !retain {
-		defer func() {
+	defer func() {
+		// Always deactivate an acquired state unless there's no error
+		// and a desire to retain it.
+		if wasAcquired && !(err == nil && retain) {
 			if cerr := r.DeactivateState(); cerr != nil {
 				if err == nil {
 					err = cerr
@@ -26,11 +27,11 @@ func WithEnsuredState(r EnsuredState, retain bool, f func() error) (err error) {
 					err = fmt.Errorf("%s\n%s", err.Error(), cerr.Error())
 				}
 			}
-		}()
-	}
-	if err != nil {
+		}
+	}()
+
+	if wasAcquired, err = r.EnsureState(); err != nil {
 		return err
 	}
-	err = f()
-	return
+	return f()
 }

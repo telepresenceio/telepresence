@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
+
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/pkg/errors"
@@ -97,7 +99,7 @@ func (tm *trafficManager) start(c context.Context) error {
 		fmt.Sprintf("%d:%d", tm.sshPort, remoteSSHPort),
 		fmt.Sprintf("%d:%d", tm.apiPort, remoteAPIPort)}
 
-	err = client.Retry(c, func(c context.Context) error {
+	err = client.Retry(c, "svc/traffic-manager port-forward", func(c context.Context) error {
 		return tm.installer.portForwardAndThen(c, kpfArgs, "init-grpc", tm.initGrpc)
 	}, 2*time.Second, 15*time.Second, time.Minute)
 	if err != nil && tm.apiErr == nil {
@@ -123,7 +125,9 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 		grpc.WithNoProxy(),
 		grpc.WithBlock())
 	if err != nil {
-		dlog.Errorf(c, "error when dialing traffic-manager: %s", err.Error())
+		if tc.Err() == context.DeadlineExceeded {
+			err = errors.New("timeout when connecting to traffic-manager")
+		}
 		return err
 	}
 
@@ -202,6 +206,19 @@ func (tm *trafficManager) Close() error {
 		tm.grpc = nil
 	}
 	return nil
+}
+
+func (tm *trafficManager) setStatus(r *rpc.ConnectInfo) {
+	if tm.grpc == nil {
+		r.Intercepts = &manager.InterceptInfoSnapshot{}
+		r.Agents = &manager.AgentInfoSnapshot{}
+		if err := tm.apiErr; err != nil {
+			r.ErrorText = err.Error()
+		}
+	} else {
+		r.Agents = tm.agentInfoSnapshot()
+		r.Intercepts = tm.interceptInfoSnapshot()
+	}
 }
 
 // A watcher listens on a grpc.ClientStream and notifies listeners when

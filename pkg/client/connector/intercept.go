@@ -39,19 +39,26 @@ func (s *service) interceptStatus() (rpc.InterceptError, string) {
 
 // addIntercept adds one intercept
 func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager.CreateInterceptRequest) (*rpc.InterceptResult, error) {
-	result := &rpc.InterceptResult{}
-	mechanism := "tcp"
+	spec := ir.InterceptSpec
+	spec.Client = tm.userAndHost
+	if spec.Mechanism == "" {
+		spec.Mechanism = "tcp"
+	}
 
-	name := ir.InterceptSpec.Name
+	agentName := spec.Agent
+	if spec.Name == "" {
+		spec.Name = agentName
+	}
+
 	ags := tm.agentInfoSnapshot()
 	var found []*manager.AgentInfo
 	if ags != nil {
 		for _, ag := range ags.Agents {
-			if ag.Name != name {
+			if ag.Name != spec.Agent {
 				continue
 			}
 			for _, m := range ag.Mechanisms {
-				if mechanism == m.Name {
+				if spec.Mechanism == m.Name {
 					found = append(found, ag)
 					break
 				}
@@ -59,9 +66,10 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 		}
 	}
 
+	result := &rpc.InterceptResult{}
 	switch len(found) {
 	case 0:
-		if err := tm.installer.ensureAgent(c, name, ""); err != nil {
+		if err := tm.installer.ensureAgent(c, agentName, ""); err != nil {
 			if err == agentExists {
 				// the agent exists although it has not been reported yet
 				break
@@ -71,17 +79,17 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 			result.ErrorText = err.Error()
 			return result, nil
 		}
-		dlog.Infof(c, "waiting for new agent for deployment %q", name)
-		_, err := tm.waitForAgent(c, name)
+		dlog.Infof(c, "waiting for new agent for deployment %q", agentName)
+		_, err := tm.waitForAgent(c, agentName)
 		if err != nil {
 			dlog.Error(c, err.Error())
 			result.Error = rpc.InterceptError_NOT_FOUND
 			result.ErrorText = err.Error()
 			return result, nil
 		}
-		dlog.Infof(c, "agent created for deployment %q", name)
+		dlog.Infof(c, "agent created for deployment %q", agentName)
 	case 1:
-		dlog.Infof(c, "found agent for deployment %q", name)
+		dlog.Infof(c, "found agent for deployment %q", agentName)
 	default:
 		txt, _ := json.Marshal(found)
 		result.ErrorText = string(txt)
@@ -90,9 +98,6 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	}
 
 	ir.Session = tm.session()
-	ir.InterceptSpec.Client = tm.userAndHost
-	ir.InterceptSpec.Agent = name
-	ir.InterceptSpec.Mechanism = mechanism
 	js, _ := json.Marshal(ir)
 	dlog.Debugf(c, "CreateIntercept request: %s", string(js))
 	ii, err := tm.grpc.CreateIntercept(c, ir)
@@ -106,7 +111,7 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	dlog.Debugf(c, "CreateIntercept response: %s", string(js))
 	ii, err = tm.waitForActiveIntercept(c, ii.Id)
 	if err != nil {
-		_ = tm.removeIntercept(c, name)
+		_ = tm.removeIntercept(c, spec.Name)
 		result.Error = rpc.InterceptError_FAILED_TO_ESTABLISH
 		result.ErrorText = err.Error()
 		return result, nil
@@ -114,7 +119,7 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 
 	err = tm.makeIntercept(c, longLived, ii)
 	if err != nil {
-		_ = tm.removeIntercept(c, name)
+		_ = tm.removeIntercept(c, spec.Name)
 		result.Error = rpc.InterceptError_FAILED_TO_ESTABLISH
 		result.ErrorText = err.Error()
 		return result, nil
@@ -193,7 +198,7 @@ func (tm *trafficManager) makeIntercept(c, longLived context.Context, ii *manage
 	tm.myIntercept = is.Name
 	c, tm.cancelIntercept = context.WithCancel(longLived)
 	c = dgroup.WithGoroutineName(c, ii.Id)
-	return client.Retry(c, func(c context.Context) error {
+	return client.Retry(c, "ssh reverse tunnelling", func(c context.Context) error {
 		return dexec.CommandContext(c, "ssh", sshArgs...).Start()
 	})
 }

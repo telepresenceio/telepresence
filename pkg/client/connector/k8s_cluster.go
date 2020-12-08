@@ -12,6 +12,7 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/pkg/errors"
 
 	"github.com/datawire/telepresence2/pkg/client"
 )
@@ -117,7 +118,13 @@ func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, th
 func (kc *k8sCluster) check(c context.Context) error {
 	c, cancel := context.WithTimeout(c, connectTimeout)
 	defer cancel()
-	return kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found").Run()
+	err := kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found").Run()
+	if err != nil {
+		if c.Err() == context.DeadlineExceeded {
+			err = errors.New("timeout when testing cluster connectivity")
+		}
+	}
+	return err
 }
 
 func newKCluster(kubeConfig, ctxName, namespace string, kargs ...string) (*k8sCluster, error) {
