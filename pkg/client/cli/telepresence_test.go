@@ -202,12 +202,12 @@ var _ = Describe("Telepresence", func() {
 		itTotal++
 
 		It("Successfully intercepts deployment with probes", func() {
-			stdout, stderr := telepresence("intercept", "sample-app", "--port", "9090")
+			stdout, stderr := telepresence("intercept", "with-probes", "--port", "9090")
 			Expect(stderr).To(BeEmpty())
-			Expect(stdout).To(ContainSubstring("Using deployment sample-app"))
+			Expect(stdout).To(ContainSubstring("Using deployment with-probes"))
 			stdout, stderr = telepresence("list")
 			Expect(stderr).To(BeEmpty())
-			Expect(stdout).To(ContainSubstring(" sample-app\n"))
+			Expect(stdout).To(ContainSubstring(" with-probes\n"))
 		})
 		itTotal++
 	})
@@ -270,7 +270,7 @@ var _ = BeforeSuite(func() {
 	go func() {
 		defer GinkgoRecover()
 		defer wg.Done()
-		err = applyApp("sample-app")
+		err = applyApp("with-probes")
 		Expect(err).NotTo(HaveOccurred())
 	}()
 	wg.Wait()

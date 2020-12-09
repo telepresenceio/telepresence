@@ -2,19 +2,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sample-app
+  name: with-probes
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: sample-app
+      service: with-probes
   template:
     metadata:
       annotations:
         consul.hashicorp.com/connect-inject: 'false'
         sidecar.istio.io/inject: 'false'
       labels:
-        service: sample-app
+        service: with-probes
     spec:
       containers:
         - name: sample-app
@@ -36,20 +36,17 @@ spec:
           ports:
             - containerPort: 3000
               name: http
-      restartPolicy: Always
-      securityContext:
-        runAsUser: 8888
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: sample-app
+  name: with-probes
   labels:
-    service: sample-app
+    service: with-probes
 spec:
   ports:
     - port: 80
       name: http
       targetPort: http
   selector:
-    service: sample-app
+    service: with-probes
