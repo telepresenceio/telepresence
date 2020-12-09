@@ -138,7 +138,7 @@ var _ = Describe("Telepresence", func() {
 		})
 		itTotal++
 
-		It("Proxies inbound traffic with intercept", func() {
+		It("Proxies concurrent inbound traffic with intercept", func() {
 			intercepts := make([]string, 0, serviceCount)
 			services := make([]*http.Server, 0, serviceCount)
 
@@ -200,6 +200,16 @@ var _ = Describe("Telepresence", func() {
 			})
 		})
 		itTotal++
+
+		It("Successfully intercepts deployment with probes", func() {
+			stdout, stderr := telepresence("intercept", "sample-app", "--port", "9090")
+			Expect(stderr).To(BeEmpty())
+			Expect(stdout).To(ContainSubstring("Using deployment sample-app"))
+			stdout, stderr = telepresence("list")
+			Expect(stderr).To(BeEmpty())
+			Expect(stdout).To(ContainSubstring(" sample-app\n"))
+		})
+		itTotal++
 	})
 })
 
@@ -255,6 +265,14 @@ var _ = BeforeSuite(func() {
 			Expect(err).NotTo(HaveOccurred())
 		}()
 	}
+
+	wg.Add(1)
+	go func() {
+		defer GinkgoRecover()
+		defer wg.Done()
+		err = applyApp("sample-app")
+		Expect(err).NotTo(HaveOccurred())
+	}()
 	wg.Wait()
 })
 
@@ -262,19 +280,30 @@ var _ = AfterSuite(func() {
 	_ = run("kubectl", "delete", "namespace", namespace)
 })
 
+func applyApp(name string) error {
+	err := kubectl("apply", "-f", fmt.Sprintf("k8s/%s.yaml", name))
+	if err != nil {
+		return fmt.Errorf("failed to deploy %s: %s", name, err.Error())
+	}
+	return waitForService(name)
+}
+
 func applyEchoService(name string) error {
-	err := run("kubectl", "--namespace", namespace, "create", "deploy", name, "--image", "jmalloc/echo-server:0.1.0")
+	err := kubectl("create", "deploy", name, "--image", "jmalloc/echo-server:0.1.0")
 	if err != nil {
 		return fmt.Errorf("failed to create deployment %s: %s", name, err)
 	}
-	err = run("kubectl", "--namespace", namespace, "expose", "deploy", name, "--port", "80", "--target-port", "8080")
+	err = kubectl("expose", "deploy", name, "--port", "80", "--target-port", "8080")
 	if err != nil {
 		return fmt.Errorf("failed to expose deployment %s: %s", name, err)
 	}
+	return waitForService(name)
+}
+
+func waitForService(name string) error {
 	for i := 0; i < 120; i++ {
 		time.Sleep(time.Second)
-		err = run(
-			"kubectl", "--namespace", namespace, "run", "curl-from-cluster", "--rm", "-it",
+		err := kubectl("run", "curl-from-cluster", "--rm", "-it",
 			"--image=pstauffer/curl", "--restart=Never", "--",
 			"curl", "--silent", "--output", "/dev/null",
 			fmt.Sprintf("http://%s.%s", name, namespace),
@@ -284,6 +313,10 @@ func applyEchoService(name string) error {
 		}
 	}
 	return fmt.Errorf("timed out waiting for %s service", name)
+}
+
+func kubectl(args ...string) error {
+	return run(append([]string{"kubectl", "--namespace", namespace}, args...)...)
 }
 
 func run(args ...string) error {

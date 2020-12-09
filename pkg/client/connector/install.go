@@ -290,21 +290,48 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 	}
 	dlog.Debugf(c, "using service %s port %s when intercepting deployment %q", svc.Name, name, dep.Name)
 
-	svcNeedsUpdate := false
+	targetPortSymbolic := true
 	containerPort := int32(-1)
 
 	if sPort.TargetPort.Type == intstr.Int {
 		// Service needs to use a named port
+		targetPortSymbolic = false
 		containerPort = sPort.TargetPort.IntVal
-		sPort.TargetPort = intstr.FromString("tele-proxied")
-		svcNeedsUpdate = true
+		sPort.TargetPort = intstr.FromString(fmt.Sprintf("tel2px-%d", containerPort))
+		if svc.Annotations == nil {
+			svc.Annotations = make(map[string]string)
+		}
+		svc.Annotations["tel2_version"] = client.Version()
 	}
+
+	if dep.Annotations == nil {
+		dep.Annotations = make(map[string]string)
+	}
+	dep.Annotations["tel2_version"] = client.Version()
 
 	if cPortIndex >= 0 {
 		// Remove name and change container port of the port appointed by the service
 		icp := &icn.Ports[cPortIndex]
-		icp.Name = ""
 		containerPort = icp.ContainerPort
+		if targetPortSymbolic {
+			// Save the original name so that it can be restored when doing uninstall
+			dep.Annotations[fmt.Sprintf("tel2_port_%s_%d", icn.Name, cPortIndex)] = sPort.TargetPort.StrVal
+
+			// New name must be max 15 characters long
+			portCloak := fmt.Sprintf("tel2mv-%d", containerPort)
+			for _, probe := range []*corev1.Probe{icn.LivenessProbe, icn.ReadinessProbe, icn.StartupProbe} {
+				if probe == nil {
+					continue
+				}
+				if h := probe.HTTPGet; h != nil && h.Port.StrVal == icp.Name {
+					h.Port.StrVal = portCloak
+				}
+				if t := probe.TCPSocket; t != nil && t.Port.StrVal == icp.Name {
+					t.Port.StrVal = portCloak
+				}
+			}
+			icp.Name = portCloak
+		}
 	}
 
 	if containerPort < 0 {
@@ -335,7 +362,8 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 	if err = ki.client.Update(c, dep, dep); err != nil {
 		return err
 	}
-	if svcNeedsUpdate {
+	if !targetPortSymbolic {
+		// service must be updated to use generated port name
 		if err = ki.client.Update(c, svc, svc); err != nil {
 			return err
 		}
