@@ -301,13 +301,13 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 		if svc.Annotations == nil {
 			svc.Annotations = make(map[string]string)
 		}
-		svc.Annotations["tel2_version"] = client.Version()
+		svc.Annotations["telepresence.datawire.com/version"] = client.Version()
 	}
 
 	if dep.Annotations == nil {
 		dep.Annotations = make(map[string]string)
 	}
-	dep.Annotations["tel2_version"] = client.Version()
+	dep.Annotations["telepresence.datawire.com/version"] = client.Version()
 
 	if cPortIndex >= 0 {
 		// Remove name and change container port of the port appointed by the service
@@ -315,7 +315,7 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 		containerPort = icp.ContainerPort
 		if targetPortSymbolic {
 			// Save the original name so that it can be restored when doing uninstall
-			dep.Annotations[fmt.Sprintf("tel2_port_%s_%d", icn.Name, cPortIndex)] = sPort.TargetPort.StrVal
+			dep.Annotations[fmt.Sprintf("telepresence.datawire.com/cloaked_port_%s_%d", icn.Name, cPortIndex)] = sPort.TargetPort.StrVal
 
 			// New name must be max 15 characters long
 			portCloak := fmt.Sprintf("tel2mv-%d", containerPort)
