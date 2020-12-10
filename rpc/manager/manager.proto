@@ -52,10 +52,20 @@ message AgentInfo {
 }
 
 message InterceptSpec {
+  // A human-friendly name for this intercept.  This is usally the
+  // same as the agent name below; the name/namespace of the
+  // Deployment, but it could be something else.  It is invalid for
+  // the same client to attempt to create multiple intercepts with the
+  // same name.
   string name = 1;
+
+  // Same as ClientInfo.Name; "user@hostname".
   string client = 2;
 
+  // Same as AgentInfo.Name; "name/namespace" of the Deployment.
   string agent = 3;
+
+  // How to decide which subset of requests to that agent to intercept.
   string mechanism = 4;
 
   /*

@@ -265,9 +265,17 @@ type InterceptSpec struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Name      string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Client    string `protobuf:"bytes,2,opt,name=client,proto3" json:"client,omitempty"`
-	Agent     string `protobuf:"bytes,3,opt,name=agent,proto3" json:"agent,omitempty"`
+	// A human-friendly name for this intercept.  This is usally the
+	// same as the agent name below; the name/namespace of the
+	// Deployment, but it could be something else.  It is invalid for
+	// the same client to attempt to create multiple intercepts with the
+	// same name.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Same as ClientInfo.Name; "user@hostname".
+	Client string `protobuf:"bytes,2,opt,name=client,proto3" json:"client,omitempty"`
+	// Same as AgentInfo.Name; "name/namespace" of the Deployment.
+	Agent string `protobuf:"bytes,3,opt,name=agent,proto3" json:"agent,omitempty"`
+	// How to decide which subset of requests to that agent to intercept.
 	Mechanism string `protobuf:"bytes,4,opt,name=mechanism,proto3" json:"mechanism,omitempty"`
 	//
 	//additional mechanism-specific info
