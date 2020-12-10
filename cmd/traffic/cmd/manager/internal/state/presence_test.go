@@ -1,23 +1,19 @@
 package state_test
 
 import (
-	"context"
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
-	manager "github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/state"
+	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/state"
 )
 
 func TestPresence(t *testing.T) {
-	a := assert.New(t)
+	ctx := dlog.NewTestContext(t, false)
+	a := assertNew(t)
 
-	removed := []string{}
-	p := manager.NewPresence(context.Background(), func(_ context.Context, id string, item manager.Entity) {
-		removed = append(removed, fmt.Sprintf("%s/%v", id, item))
-	})
+	p := state.NewState(ctx)
 
 	now := time.Now()
 
@@ -30,7 +26,6 @@ func TestPresence(t *testing.T) {
 	a.True(p.IsPresent("b"))
 	a.False(p.IsPresent("c"))
 	a.False(p.IsPresent("d"))
-	a.Equal([]string{}, removed)
 
 	a.NotNil(p.Get("a"))
 	a.Equal("item-a", p.Get("a").Item())
@@ -51,17 +46,16 @@ func TestPresence(t *testing.T) {
 	a.True(p.IsPresent("b"))
 	a.True(p.IsPresent("c"))
 	a.False(p.IsPresent("d"))
-	a.Equal([]string{}, removed)
 
 	collected := []string{}
-	p.ForEach(func(_ context.Context, id string, item manager.Entity) {
-		collected = append(collected, fmt.Sprintf("%s/%v", id, item))
-	})
+	for id, item := range p.GetAllClients() {
+		collected = append(collected, fmt.Sprintf("%s/%v", id, item.Name))
+	}
 	a.Contains(collected, "a/item-a")
 	a.Contains(collected, "b/item-b")
 	a.Contains(collected, "c/item-c")
 
-	p.Expire(now)
+	p.ExpireSessions(now)
 
 	// B@1 C@1
 
@@ -69,10 +63,9 @@ func TestPresence(t *testing.T) {
 	a.True(p.IsPresent("b"))
 	a.True(p.IsPresent("c"))
 	a.False(p.IsPresent("d"))
-	a.Equal([]string{"a/item-a"}, removed)
 
-	a.Nil(p.Remove("a"))
-	a.NotNil(p.Remove("c"))
+	p.RemoveSession("a")
+	p.RemoveSession("c")
 
 	// B@1
 
@@ -80,7 +73,6 @@ func TestPresence(t *testing.T) {
 	a.True(p.IsPresent("b"))
 	a.False(p.IsPresent("c"))
 	a.False(p.IsPresent("d"))
-	a.Equal([]string{"a/item-a", "c/item-c"}, removed)
 
 	a.Panics(func() { p.Add("b", "duplicate-item", now) })
 }

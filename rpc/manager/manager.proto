@@ -104,6 +104,7 @@ message InterceptInfo {
   InterceptDispositionType disposition = 3;
   string message = 4;
   string id = 5;
+  SessionInfo client_session = 6;
 }
 
 message SessionInfo {

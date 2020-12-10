@@ -3,65 +3,73 @@ package state
 import (
 	"context"
 	"fmt"
-	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	grpcCodes "google.golang.org/grpc/codes"
+	grpcStatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+
+	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/watchable"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 )
-
-// Clock is the mechanism used by the Manager state to get the current time.
-type Clock interface {
-	Now() time.Time
-}
-
-type interceptEntry struct {
-	clientSessionID string
-	index           int
-	intercept       *rpc.InterceptInfo
-}
 
 const (
 	loPort = 6000
 	hiPort = 8000
 )
 
-// State is the total state of the Traffic Manager.
+type SessionState struct {
+	Done       <-chan struct{}
+	Cancel     context.CancelFunc
+	LastMarked time.Time
+}
+
+// State is the total state of the Traffic Manager.  A zero State is invalid; you must call
+// NewState.
 type State struct {
-	mu      sync.Mutex
-	counter int
-	port    int32
-	clock   Clock
+	ctx context.Context
 
-	agentWatches     *Watches
-	interceptWatches *Watches
+	counter int64
 
-	intercepts map[string]*interceptEntry
-
-	sessions *Presence
+	mu sync.Mutex
+	// Things protected by 'mu': While the watchable.WhateverMaps have their own locking to
+	// protect against memory corruption and ensure serialization for watches, we need to do our
+	// own locking here to ensure consistency between the various maps:
+	//
+	//  1. `agents` needs to stay in-sync with `sessions`
+	//  2. `clients` needs to stay in-sync with `sessions`
+	//  3. `port` needs to be updated in-sync with `intercepts`
+	//  4. `agentsByName` needs stay in-sync with `agents`
+	//  5. `intercepts` needs to be pruned in-sync with `clients` (based on
+	//     `intercept.ClientSession.SessionId`)
+	//  6. `intercepts` needs to be pruned in-sync with `agents` (based on
+	//     `agent.Name == intercept.Spec.Agent`)
+	port         uint16
+	intercepts   watchable.InterceptMap
+	agents       watchable.AgentMap                   // info for agent sessions
+	clients      watchable.ClientMap                  // info for client sessions
+	sessions     map[string]*SessionState             // info for all sessions
+	agentsByName map[string]map[string]*rpc.AgentInfo // indexed copy of `agents`
 }
 
-func NewState(ctx context.Context, clock Clock) *State {
-	s := &State{
-		port:             loPort - 1,
-		clock:            clock,
-		agentWatches:     NewWatches(),
-		interceptWatches: NewWatches(),
-		intercepts:       make(map[string]*interceptEntry),
+func NewState(ctx context.Context) *State {
+	return &State{
+		ctx:          ctx,
+		port:         loPort - 1,
+		sessions:     make(map[string]*SessionState),
+		agentsByName: make(map[string]map[string]*rpc.AgentInfo),
 	}
-	s.sessions = NewPresence(ctx, s.presenceRemove)
-
-	return s
 }
 
-// Internal
+// Internal ////////////////////////////////////////////////////////////////////////////////////////
 
-func (s *State) next() int {
-	s.counter++
-	return s.counter
+func (s *State) next() int64 {
+	return atomic.AddInt64(&s.counter, 1)
 }
 
-func (s *State) nextUnusedPort() int32 {
+func (s *State) unlockedNextPort() uint16 {
 	for attempts := 0; attempts < hiPort-loPort; attempts++ {
 		// Bump the port number
 
@@ -74,8 +82,8 @@ func (s *State) nextUnusedPort() int32 {
 		// Check whether the new port number is available
 
 		used := false
-		for _, entry := range s.intercepts {
-			if entry.intercept.ManagerPort == s.port {
+		for _, intercept := range s.intercepts.LoadAll() {
+			if intercept.ManagerPort == int32(s.port) {
 				used = true
 				break
 			}
@@ -88,355 +96,303 @@ func (s *State) nextUnusedPort() int32 {
 
 	// Hmm. We've checked every possible port and they're all in use. This is
 	// unlikely. Return 0 to indicate an error...
-
 	return 0
 }
 
-// Presence
+// Sessions: common ////////////////////////////////////////////////////////////////////////////////
 
-func (s *State) Has(sessionID string) bool {
+// Mark a session as being present at the indicated time.  Returns true if everything goes OK,
+// returns false if the given session ID does not exist.
+func (s *State) MarkSession(sessionID string, now time.Time) (ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.sessions.IsPresent(sessionID)
-}
-
-func (s *State) Get(sessionID string) *PresenceEntry {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.sessions.Get(sessionID)
-}
-
-func (s *State) Mark(sessionID string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.sessions.Mark(sessionID, s.clock.Now()) == nil
-}
-
-func (s *State) presenceRemove(_ context.Context, sessionID string, item Entity) {
-	s.agentWatches.Unsubscribe(sessionID)
-	s.interceptWatches.Unsubscribe(sessionID)
-
-	switch info := item.(type) {
-	case *rpc.ClientInfo:
-		// Removing a client must remove all of its intercept
-		for ceptID, entry := range s.intercepts {
-			if entry.clientSessionID == sessionID {
-				delete(s.intercepts, ceptID)
-				s.notifyForIntercept(entry)
-			}
-		}
-	case *rpc.AgentInfo:
-		s.agentWatches.NotifyAll()
-
-		// Removing the last agent associated with an intercept invalidates the
-		// intercept.
-		anyMoreAgents := false
-		s.sessions.ForEach(func(_ context.Context, id string, item Entity) {
-			if agent, ok := item.(*rpc.AgentInfo); ok {
-				if agent.Name == info.Name {
-					anyMoreAgents = true
-				}
-			}
-		})
-		if !anyMoreAgents {
-			message := fmt.Sprintf("No more agents for %q exist", info.Name)
-			for _, entry := range s.intercepts {
-				if entry.intercept.Spec.Agent == info.Name {
-					entry.intercept.Disposition = rpc.InterceptDispositionType_NO_AGENT
-					entry.intercept.Message = message
-					s.notifyForIntercept(entry)
-				}
-			}
-		}
-	}
-}
-
-func (s *State) Remove(sessionID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	_ = s.sessions.Remove(sessionID) // Calls presenceRemove above
-}
-
-func (s *State) Expire(age time.Duration) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.sessions.Expire(s.clock.Now().Add(-age))
-}
-
-// Clients
-
-func (s *State) AddClient(client *rpc.ClientInfo) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	sessionID := fmt.Sprintf("C%03d", s.next())
-	s.sessions.Add(sessionID, client, s.clock.Now())
-
-	return sessionID
-}
-
-func (s *State) HasClient(sessionID string) bool {
-	return s.GetClient(sessionID) != nil
-}
-
-func (s *State) GetClient(sessionID string) *rpc.ClientInfo {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if entry := s.sessions.Get(sessionID); entry != nil {
-		if res, ok := entry.Item().(*rpc.ClientInfo); ok {
-			return res
-		}
-	}
-
-	return nil
-}
-
-// Agents
-
-func (s *State) AddAgent(agent *rpc.AgentInfo) string {
-	agents := append(s.GetAgentsByName(agent.Name), agent)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Adding an agent can invalidate existing intercepts because the set of
-	// agents may no longer be self-consistent, e.g., during a rolling update of
-	// a deployment. Validate the relevant intercepts if the set of agents has
-	// more than one agent.
-	if len(agents) > 1 && !agentsAreCompatible(agents) {
-		message := fmt.Sprintf("Agents for %q are not consistent", agent.Name)
-		for _, entry := range s.intercepts {
-			if entry.intercept.Spec.Agent == agent.Name {
-				entry.intercept.Disposition = rpc.InterceptDispositionType_NO_AGENT
-				entry.intercept.Message = message
-				s.notifyForIntercept(entry)
-			}
-		}
-	}
-
-	sessionID := fmt.Sprintf("A%03d", s.next())
-	s.sessions.Add(sessionID, agent, s.clock.Now())
-	s.agentWatches.NotifyAll()
-
-	return sessionID
-}
-
-func (s *State) HasAgent(sessionID string) bool {
-	return s.GetAgent(sessionID) != nil
-}
-
-func (s *State) GetAgent(sessionID string) *rpc.AgentInfo {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if entry := s.sessions.Get(sessionID); entry != nil {
-		if res, ok := entry.Item().(*rpc.AgentInfo); ok {
-			return res
-		}
-	}
-
-	return nil
-}
-
-func (s *State) GetAgents() []*rpc.AgentInfo {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	agents := []*rpc.AgentInfo{}
-	s.sessions.ForEach(func(_ context.Context, id string, item Entity) {
-		if agent, ok := item.(*rpc.AgentInfo); ok {
-			agents = append(agents, agent)
-		}
-	})
-	return agents
-}
-
-func (s *State) GetAgentsByName(name string) []*rpc.AgentInfo {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	agents := []*rpc.AgentInfo{}
-	s.sessions.ForEach(func(_ context.Context, id string, item Entity) {
-		if agent, ok := item.(*rpc.AgentInfo); ok {
-			if agent.Name == name {
-				agents = append(agents, agent)
-			}
-		}
-	})
-	return agents
-}
-
-// Intercepts
-
-func (s *State) GetIntercepts(sessionID string) []*rpc.InterceptInfo {
-	entry := s.Get(sessionID)
-	if entry == nil {
-		return []*rpc.InterceptInfo{}
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Choose intercepts based on session type: agent or client
-	var filter func(*interceptEntry) bool
-
-	switch item := entry.Item().(type) {
-	case *rpc.ClientInfo:
-		filter = func(entry *interceptEntry) bool {
-			return entry.clientSessionID == sessionID
-		}
-	case *rpc.AgentInfo:
-		filter = func(entry *interceptEntry) bool {
-			return entry.intercept.Spec.Agent == item.Name
-		}
-	default:
-		return []*rpc.InterceptInfo{}
-	}
-
-	// Select the relevant subset of intercepts
-	entries := []*interceptEntry{}
-	for _, entry := range s.intercepts {
-		if filter(entry) {
-			entries = append(entries, entry)
-		}
-	}
-
-	// Always return intercepts in the same order
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].index < entries[j].index
-	})
-
-	cepts := make([]*rpc.InterceptInfo, len(entries))
-	for i := 0; i < len(entries); i++ {
-		cepts[i] = entries[i].intercept
-	}
-
-	return cepts
-}
-
-func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) *rpc.InterceptInfo {
-	agents := s.GetAgentsByName(spec.Agent)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	ceptIndex := s.next()
-	ceptID := fmt.Sprintf("I%03d", ceptIndex)
-	cept := &rpc.InterceptInfo{
-		Spec:        spec,
-		ManagerPort: 0,
-		Disposition: rpc.InterceptDispositionType_WAITING,
-		Message:     "Waiting for Agent approval",
-		Id:          ceptID,
-	}
-	entry := &interceptEntry{
-		clientSessionID: sessionID,
-		index:           ceptIndex,
-		intercept:       cept,
-	}
-
-	switch {
-	case len(agents) == 0:
-		cept.Disposition = rpc.InterceptDispositionType_NO_AGENT
-		cept.Message = fmt.Sprintf("No agent found for %q", spec.Agent)
-	case !agentsAreCompatible(agents):
-		cept.Disposition = rpc.InterceptDispositionType_NO_AGENT
-		cept.Message = fmt.Sprintf("Agents for %q are not consistent", spec.Agent)
-	case !agentHasMechanism(agents[0], spec.Mechanism):
-		cept.Disposition = rpc.InterceptDispositionType_NO_MECHANISM
-		cept.Message = fmt.Sprintf("Agents for %q do not have mechanism %q", spec.Agent, spec.Mechanism)
-	}
-
-	s.intercepts[ceptID] = entry
-	s.notifyForIntercept(entry)
-
-	return cept
-}
-
-func (s *State) RemoveIntercept(sessionID string, name string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for ceptID, entry := range s.intercepts {
-		correctSession := entry.clientSessionID == sessionID
-		correctName := entry.intercept.Spec.Name == name
-		if correctSession && correctName {
-			delete(s.intercepts, ceptID)
-			s.notifyForIntercept(entry)
-			return true
-		}
+	if sess, ok := s.sessions[sessionID]; ok {
+		sess.LastMarked = now
+		return true
 	}
 
 	return false
 }
 
-func (s *State) ReviewIntercept(sessionID string, ceptID string, disposition rpc.InterceptDispositionType, message string) bool {
-	agent := s.GetAgent(sessionID)
-
+// Remove a session from the set of present session IDs.
+func (s *State) RemoveSession(sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	entry, ok := s.intercepts[ceptID]
+	s.unlockedRemoveSession(sessionID)
+}
+
+func (s *State) unlockedRemoveSession(sessionID string) {
+	if sess, ok := s.sessions[sessionID]; ok {
+		// kill the session
+		sess.Cancel()
+
+		// remove it from the agentsByName index (if nescessary)
+		if agent, isAgent := s.agents.Load(sessionID); isAgent {
+			delete(s.agentsByName[agent.Name], sessionID)
+			if len(s.agentsByName[agent.Name]) == 0 {
+				delete(s.agentsByName, agent.Name)
+			}
+		}
+
+		// remove the session
+		s.agents.Delete(sessionID)
+		s.clients.Delete(sessionID)
+		delete(s.sessions, sessionID)
+
+		// GC any intercepts that relied on this session; prune any intercepts that
+		//  1. Don't have a client session (intercept.ClientSession.SessionId)
+		//  2. Don't have any agents (agent.Name == intercept.Spec.Agent)
+		for interceptID, intercept := range s.intercepts.LoadAll() {
+			if intercept.ClientSession.SessionId == sessionID {
+				// owner went away
+				s.intercepts.Delete(interceptID)
+			} else if len(s.agentsByName[intercept.Spec.Agent]) == 0 {
+				// refcount went to 0
+				s.intercepts.Delete(interceptID)
+			}
+		}
+	}
+}
+
+// ExpireSessions prunes any sessions that haven't had a MarkSession heartbeat since the given
+// 'moment'.
+func (s *State) ExpireSessions(moment time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for id, sess := range s.sessions {
+		if sess.LastMarked.Before(moment) {
+			s.unlockedRemoveSession(id)
+		}
+	}
+}
+
+// SessionDone returns a channel that is closed when the session with the given ID terminates.  If
+// there is no such currently-live session, then an already-closed channel is returned.
+func (s *State) SessionDone(id string) <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	sess, ok := s.sessions[id]
+	if !ok {
+		ret := make(chan struct{})
+		close(ret)
+		return ret
+	}
+	return sess.Done
+}
+
+// Sessions: Clients ///////////////////////////////////////////////////////////////////////////////
+
+func (s *State) AddClient(client *rpc.ClientInfo, now time.Time) string {
+	sessionID := fmt.Sprintf("C%03d", s.next())
+	return s.addClient(sessionID, client, now)
+}
+
+// addClient is like AddClient, but takes a sessionID, for testing purposes
+func (s *State) addClient(sessionID string, client *rpc.ClientInfo, now time.Time) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if oldClient, hasConflict := s.clients.LoadOrStore(sessionID, client); hasConflict {
+		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldClient, client))
+	}
+	ctx, cancel := context.WithCancel(s.ctx)
+	s.sessions[sessionID] = &SessionState{
+		Done:       ctx.Done(),
+		Cancel:     cancel,
+		LastMarked: now,
+	}
+	return sessionID
+}
+
+func (s *State) GetClient(sessionID string) *rpc.ClientInfo {
+	ret, _ := s.clients.Load(sessionID)
+	return ret
+}
+
+func (s *State) GetAllClients() map[string]*rpc.ClientInfo {
+	return s.clients.LoadAll()
+}
+
+func (s *State) WatchClients(
+	ctx context.Context,
+	filter func(sessionID string, client *rpc.ClientInfo) bool,
+) <-chan map[string]*rpc.ClientInfo {
+	if filter == nil {
+		return s.clients.Subscribe(ctx)
+	} else {
+		return s.clients.SubscribeSubset(ctx, filter)
+	}
+}
+
+// Sessions: Agents ////////////////////////////////////////////////////////////////////////////////
+
+func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	agents := make([]*rpc.AgentInfo, 0, len(s.agentsByName[agent.Name]))
+	for _, agent := range s.agentsByName[agent.Name] {
+		agents = append(agents, agent)
+	}
+	agents = append(agents, agent)
+	if len(agents) > 1 && !agentsAreCompatible(agents) {
+		message := fmt.Sprintf("Agents for %q are not consistent", agent.Name)
+		for interceptID, intercept := range s.intercepts.LoadAll() {
+			if intercept.Spec.Agent == agent.Name {
+				intercept.Disposition = rpc.InterceptDispositionType_NO_AGENT
+				intercept.Message = message
+				s.intercepts.Store(interceptID, intercept)
+			}
+		}
+	}
+	if len(agents) == 1 {
+		s.agentsByName[agent.Name] = make(map[string]*rpc.AgentInfo)
+	}
+
+	sessionID := fmt.Sprintf("A%03d", s.next())
+	if oldAgent, hasConflict := s.agents.LoadOrStore(sessionID, agent); hasConflict {
+		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldAgent, agent))
+	}
+	s.agentsByName[agent.Name][sessionID] = agent
+	ctx, cancel := context.WithCancel(s.ctx)
+	s.sessions[sessionID] = &SessionState{
+		Done:       ctx.Done(),
+		Cancel:     cancel,
+		LastMarked: now,
+	}
+	return sessionID
+}
+
+func (s *State) GetAgent(sessionID string) *rpc.AgentInfo {
+	ret, _ := s.agents.Load(sessionID)
+	return ret
+}
+
+func (s *State) GetAllAgents() map[string]*rpc.AgentInfo {
+	return s.agents.LoadAll()
+}
+
+func (s *State) GetAgentsByName(name string) map[string]*rpc.AgentInfo {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	ret := make(map[string]*rpc.AgentInfo, len(s.agentsByName[name]))
+	for k, v := range s.agentsByName[name] {
+		ret[k] = proto.Clone(v).(*rpc.AgentInfo)
+	}
+
+	return ret
+}
+
+func (s *State) WatchAgents(
+	ctx context.Context,
+	filter func(sessionID string, agent *rpc.AgentInfo) bool,
+) <-chan map[string]*rpc.AgentInfo {
+	if filter == nil {
+		return s.agents.Subscribe(ctx)
+	} else {
+		return s.agents.SubscribeSubset(ctx, filter)
+	}
+}
+
+// Intercepts //////////////////////////////////////////////////////////////////////////////////////
+
+func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) (*rpc.InterceptInfo, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cept := &rpc.InterceptInfo{
+		Spec:        spec,
+		ManagerPort: 0,
+		Disposition: rpc.InterceptDispositionType_WAITING,
+		Message:     "Waiting for Agent approval",
+		Id:          sessionID + ":" + spec.Name,
+		ClientSession: &rpc.SessionInfo{
+			SessionId: sessionID,
+		},
+	}
+
+	if len(s.agentsByName[cept.Spec.Agent]) == 0 {
+		cept.Disposition = rpc.InterceptDispositionType_NO_AGENT
+		cept.Message = fmt.Sprintf("No agent found for %q", spec.Agent)
+	} else {
+		agents := make([]*rpc.AgentInfo, 0, len(s.agentsByName[cept.Spec.Agent]))
+		for _, agent := range s.agentsByName[cept.Spec.Agent] {
+			agents = append(agents, agent)
+		}
+		if !agentsAreCompatible(agents) {
+			cept.Disposition = rpc.InterceptDispositionType_NO_AGENT
+			cept.Message = fmt.Sprintf("Agents for %q are not consistent", spec.Agent)
+		} else if !agentHasMechanism(agents[0], spec.Mechanism) {
+			cept.Disposition = rpc.InterceptDispositionType_NO_MECHANISM
+			cept.Message = fmt.Sprintf("Agents for %q do not have mechanism %q", spec.Agent, spec.Mechanism)
+		}
+	}
+
+	if _, hasConflict := s.intercepts.LoadOrStore(cept.Id, cept); hasConflict {
+		return nil, grpcStatus.Errorf(grpcCodes.AlreadyExists, "Intercept named %q already exists", spec.Name)
+	}
+
+	return cept, nil
+}
+
+func (s *State) RemoveIntercept(sessionID string, name string) bool {
+	_, didDelete := s.intercepts.LoadAndDelete(sessionID + ":" + name)
+	return didDelete
+}
+
+func (s *State) WatchIntercepts(
+	ctx context.Context,
+	filter func(sessionID string, intercept *rpc.InterceptInfo) bool,
+) <-chan map[string]*rpc.InterceptInfo {
+	if filter == nil {
+		return s.intercepts.Subscribe(ctx)
+	} else {
+		return s.intercepts.SubscribeSubset(ctx, filter)
+	}
+}
+
+func (s *State) ReviewIntercept(sessionID string, ceptID string, disposition rpc.InterceptDispositionType, message string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	agent, ok := s.agents.Load(sessionID)
+	if !ok {
+		return false
+	}
+
+	intercept, ok := s.intercepts.Load(ceptID)
 	if !ok {
 		return false
 	}
 
 	// Sanity check: The reviewing agent must be an agent for the intercept.
-	if entry.intercept.Spec.Agent != agent.Name {
+	if intercept.Spec.Agent != agent.Name {
 		return false
 	}
 
-	// Only update intercepts in the waiting state. Agents race to review an
-	// intercept, but we expect they will always compatible answers.
-	if entry.intercept.Disposition == rpc.InterceptDispositionType_WAITING {
-		entry.intercept.Disposition = disposition
-		entry.intercept.Message = message
+	// Only update intercepts in the waiting state.  Agents race to review an intercept, but we
+	// expect they will always compatible answers.
+	if intercept.Disposition == rpc.InterceptDispositionType_WAITING {
+		intercept.Disposition = disposition
+		intercept.Message = message
 
 		// An intercept going active needs to be allocated a free port
 		if disposition == rpc.InterceptDispositionType_ACTIVE {
-			entry.intercept.ManagerPort = s.nextUnusedPort()
-			if entry.intercept.ManagerPort == 0 {
-				// Wow, there are no ports left! That is ... unlikely!
-				entry.intercept.Disposition = rpc.InterceptDispositionType_NO_PORTS
+			intercept.ManagerPort = int32(s.unlockedNextPort())
+			if intercept.ManagerPort == 0 {
+				// Wow, there are no ports left!  That is... unlikely!
+				intercept.Disposition = rpc.InterceptDispositionType_NO_PORTS
 			}
 		}
 
-		// We've updated an intercept. Notify all interested parties.
-		s.notifyForIntercept(entry)
+		// Save the result.
+		s.intercepts.Store(ceptID, intercept)
 	}
 
 	return true
-}
-
-// Watches
-
-func (s *State) WatchAgents(sessionID string) <-chan struct{} {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.agentWatches.Subscribe(sessionID)
-}
-
-func (s *State) WatchIntercepts(sessionID string) <-chan struct{} {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.interceptWatches.Subscribe(sessionID)
-}
-
-func (s *State) notifyForIntercept(entry *interceptEntry) {
-	s.interceptWatches.Notify(entry.clientSessionID)
-	s.sessions.ForEach(func(_ context.Context, id string, item Entity) {
-		if agent, ok := item.(*rpc.AgentInfo); ok {
-			if agent.Name == entry.intercept.Spec.Agent {
-				s.interceptWatches.Notify(id)
-			}
-		}
-	})
 }

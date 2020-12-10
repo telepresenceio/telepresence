@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/golang/protobuf/ptypes/empty"
@@ -14,10 +15,16 @@ import (
 	"github.com/datawire/telepresence2/pkg/version"
 )
 
-type Manager struct {
-	rpc.UnimplementedManagerServer
+// Clock is the mechanism used by the Manager state to get the current time.
+type Clock interface {
+	Now() time.Time
+}
 
+type Manager struct {
+	clock Clock
 	state *state.State
+
+	rpc.UnimplementedManagerServer
 }
 
 type wall struct{}
@@ -27,7 +34,10 @@ func (wall) Now() time.Time {
 }
 
 func NewManager(ctx context.Context) *Manager {
-	return &Manager{state: state.NewState(ctx, wall{})}
+	return &Manager{
+		state: state.NewState(ctx),
+		clock: wall{},
+	}
 }
 
 // Version returns the version information of the Manager.
@@ -43,7 +53,7 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	sessionID := m.state.AddClient(client)
+	sessionID := m.state.AddClient(client, m.clock.Now())
 
 	return &rpc.SessionInfo{SessionId: sessionID}, nil
 }
@@ -56,7 +66,7 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	sessionID := m.state.AddAgent(agent)
+	sessionID := m.state.AddAgent(agent, m.clock.Now())
 
 	return &rpc.SessionInfo{SessionId: sessionID}, nil
 }
@@ -65,7 +75,7 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 func (m *Manager) Remain(ctx context.Context, session *rpc.SessionInfo) (*empty.Empty, error) {
 	dlog.Debugf(ctx, "Remain called: %s", session.SessionId)
 
-	if ok := m.state.Mark(session.SessionId); !ok {
+	if ok := m.state.MarkSession(session.SessionId, m.clock.Now()); !ok {
 		return nil, status.Errorf(codes.NotFound, "Session %q not found", session.SessionId)
 	}
 
@@ -76,7 +86,7 @@ func (m *Manager) Remain(ctx context.Context, session *rpc.SessionInfo) (*empty.
 func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.Empty, error) {
 	dlog.Debugf(ctx, "Depart called: %s", session.SessionId)
 
-	m.state.Remove(session.SessionId)
+	m.state.RemoveSession(session.SessionId)
 
 	return &empty.Empty{}, nil
 }
@@ -88,30 +98,24 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 
 	dlog.Debugf(ctx, "WatchAgents called: %s", sessionID)
 
-	if !m.state.HasClient(sessionID) {
-		return status.Errorf(codes.NotFound, "Client session %q not found", session.SessionId)
-	}
-
-	entry := m.state.Get(sessionID)
-	sessionCtx := entry.Context()
-	changed := m.state.WatchAgents(sessionID)
-
+	snapshotCh := m.state.WatchAgents(ctx, nil)
 	for {
-		// FIXME This will loop over the presence list looking for agents for
-		// every single watcher. How inefficient!
-		res := &rpc.AgentInfoSnapshot{Agents: m.state.GetAgents()}
-
-		if err := stream.Send(res); err != nil {
-			return err
-		}
-
 		select {
-		case <-changed:
-			// It's time to send another message. Loop.
+		case snapshot := <-snapshotCh:
+			agents := make([]*rpc.AgentInfo, 0, len(snapshot))
+			for _, agent := range snapshot {
+				agents = append(agents, agent)
+			}
+			resp := &rpc.AgentInfoSnapshot{
+				Agents: agents,
+			}
+			if err := stream.Send(resp); err != nil {
+				return err
+			}
 		case <-ctx.Done():
-			// Manager is shutting down.
+			// The request has been canceled.
 			return nil
-		case <-sessionCtx.Done():
+		case <-m.state.SessionDone(sessionID):
 			// Manager believes this session has ended.
 			return nil
 		}
@@ -126,32 +130,42 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 
 	dlog.Debugf(ctx, "WatchIntercepts called: %s", sessionID)
 
-	entry := m.state.Get(sessionID)
-	if entry == nil {
-		return status.Errorf(codes.NotFound, "Session %q not found", sessionID)
+	var filter func(id string, info *rpc.InterceptInfo) bool
+	if agent := m.state.GetAgent(sessionID); agent != nil {
+		// sessionID refers to an agent session
+		filter = func(id string, info *rpc.InterceptInfo) bool {
+			return info.Spec.Agent == agent.Name
+		}
+	} else {
+		// sessionID refers to a client session
+		filter = func(id string, info *rpc.InterceptInfo) bool {
+			return info.ClientSession.SessionId == sessionID
+		}
 	}
 
-	sessionCtx := entry.Context()
-	changed := m.state.WatchIntercepts(sessionID)
-
+	snapshotCh := m.state.WatchIntercepts(ctx, filter)
 	for {
-		res := &rpc.InterceptInfoSnapshot{
-			Intercepts: m.state.GetIntercepts(sessionID),
-		}
-		dlog.Debugf(ctx, "WatchIntercepts sending update: %s", sessionID)
-		if err := stream.Send(res); err != nil {
-			return err
-		}
-
 		select {
-		case <-changed:
-			// It's time to send another message. Loop.
+		case snapshot := <-snapshotCh:
+			dlog.Debugf(ctx, "WatchIntercepts sending update: %s", sessionID)
+			intercepts := make([]*rpc.InterceptInfo, 0, len(snapshot))
+			for _, intercept := range snapshot {
+				intercepts = append(intercepts, intercept)
+			}
+			resp := &rpc.InterceptInfoSnapshot{
+				Intercepts: intercepts,
+			}
+			sort.Slice(intercepts, func(i, j int) bool {
+				return intercepts[i].Id < intercepts[j].Id
+			})
+			if err := stream.Send(resp); err != nil {
+				dlog.Debugf(ctx, "WatchIntercepts encountered a write error: %v", err)
+				return err
+			}
 		case <-ctx.Done():
-			// Manager is shutting down.
-			dlog.Debugf(ctx, "WatchIntercepts shutting down: %s", sessionID)
+			dlog.Debugf(ctx, "WatchIntercepts request cancelled: %s", sessionID)
 			return nil
-		case <-sessionCtx.Done():
-			// Manager believes this session has ended.
+		case <-m.state.SessionDone(sessionID):
 			dlog.Debugf(ctx, "WatchIntercepts session cancelled: %s", sessionID)
 			return nil
 		}
@@ -165,7 +179,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 
 	dlog.Debugf(ctx, "CreateIntercept called: %s", sessionID)
 
-	if !m.state.HasClient(sessionID) {
+	if m.state.GetClient(sessionID) == nil {
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 	}
 
@@ -173,13 +187,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		return nil, status.Errorf(codes.InvalidArgument, val)
 	}
 
-	for _, cept := range m.state.GetIntercepts(sessionID) {
-		if cept.Spec.Name == spec.Name {
-			return nil, status.Errorf(codes.AlreadyExists, "Intercept named %q already exists", spec.Name)
-		}
-	}
-
-	return m.state.AddIntercept(sessionID, spec), nil
+	return m.state.AddIntercept(sessionID, spec)
 }
 
 // RemoveIntercept lets a client remove an intercept.
@@ -189,7 +197,7 @@ func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 
 	dlog.Debugf(ctx, "RemoveIntercept called: %s %s", sessionID, name)
 
-	if !m.state.HasClient(sessionID) {
+	if m.state.GetClient(sessionID) == nil {
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 	}
 
@@ -207,7 +215,7 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 
 	dlog.Debugf(ctx, "ReviewIntercept called: %s %s - %s", sessionID, ceptID, rIReq.Disposition)
 
-	if !m.state.HasAgent(sessionID) {
+	if m.state.GetAgent(sessionID) == nil {
 		return nil, status.Errorf(codes.NotFound, "Agent session %q not found", sessionID)
 	}
 
@@ -220,5 +228,5 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 
 // Expire removes stale sessions.
 func (m *Manager) Expire() {
-	m.state.Expire(15 * time.Second)
+	m.state.ExpireSessions(m.clock.Now().Add(-15 * time.Second))
 }
