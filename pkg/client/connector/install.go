@@ -142,8 +142,8 @@ func (ki *installer) updateDeployment(c context.Context, currentDep *kates.Deplo
 	return dep, err
 }
 
-func (ki *installer) portToIntercept(c context.Context, name string, labels map[string]string, cns []corev1.Container) (
-	service *corev1.Service, sPort *corev1.ServicePort, cn *corev1.Container, cPortIndex int, err error) {
+func (ki *installer) portToIntercept(c context.Context, name string, labels map[string]string, dep *kates.Deployment) (
+	service *kates.Service, sPort *kates.ServicePort, cn *kates.Container, cPortIndex int, err error) {
 	svcs := make([]*kates.Service, 0)
 	err = ki.client.List(c, kates.Query{
 		Name:      name,
@@ -172,11 +172,12 @@ func (ki *installer) portToIntercept(c context.Context, name string, labels map[
 	if len(matching) == 0 {
 		return nil, nil, nil, 0, fmt.Errorf("found no services with a selector matching labels %v", labels)
 	}
-	return findMatchingPort(c, matching, cns)
+	return findMatchingPort(c, dep, matching)
 }
 
-func findMatchingPort(c context.Context, svcs []*kates.Service, cns []corev1.Container) (
-	service *corev1.Service, sPort *corev1.ServicePort, cn *corev1.Container, cPortIndex int, err error) {
+func findMatchingPort(c context.Context, dep *kates.Deployment, svcs []*kates.Service) (
+	service *kates.Service, sPort *kates.ServicePort, cn *kates.Container, cPortIndex int, err error) {
+	cns := dep.Spec.Template.Spec.Containers
 	for _, svc := range svcs {
 		ports := svc.Spec.Ports
 		if len(ports) != 1 {
@@ -244,12 +245,12 @@ func findMatchingPort(c context.Context, svcs []*kates.Service, cns []corev1.Con
 		default:
 			// Conflict
 			return nil, nil, nil, 0, fmt.Errorf(
-				"found services with conflicting port mappings to container %s. Please use --service to specify", cn.Name)
+				"found services with conflicting port mappings to deployment %s. Please use --service to specify", dep.Name)
 		}
 	}
 
 	if sPort == nil {
-		return nil, nil, nil, 0, fmt.Errorf("found no services with a port that matches container %s", cn.Name)
+		return nil, nil, nil, 0, fmt.Errorf("found no services with a port that matches a container in deployment %s", dep.Name)
 	}
 	return service, sPort, cn, cPortIndex, nil
 }
@@ -283,7 +284,7 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 		// TODO: How do we handle multiple containers?
 		return fmt.Errorf("unable to add agent to deployment %s. It doesn't have one container", dep.Name)
 	}
-	svc, sPort, icn, cPortIndex, err := ki.portToIntercept(c, svcName, dep.Spec.Template.Labels, containers)
+	svc, sPort, icn, cPortIndex, err := ki.portToIntercept(c, svcName, dep.Spec.Template.Labels, dep)
 	if err != nil {
 		return err
 	}
