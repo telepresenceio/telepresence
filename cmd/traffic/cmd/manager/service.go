@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/state"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/version"
 )
@@ -16,7 +17,7 @@ import (
 type Manager struct {
 	rpc.UnimplementedManagerServer
 
-	state *State
+	state *state.State
 }
 
 type wall struct{}
@@ -26,7 +27,7 @@ func (wall) Now() time.Time {
 }
 
 func NewManager(ctx context.Context) *Manager {
-	return &Manager{state: NewState(ctx, wall{})}
+	return &Manager{state: state.NewState(ctx, wall{})}
 }
 
 // Version returns the version information of the Manager.

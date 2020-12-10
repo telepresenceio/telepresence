@@ -13,13 +13,14 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager"
+	testdata "github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/test"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/version"
 )
 
 func TestConnect(t *testing.T) {
-	testClients := manager.GetTestClients(t)
-	testAgents := manager.GetTestAgents(t)
+	testClients := testdata.GetTestClients(t)
+	testAgents := testdata.GetTestAgents(t)
 
 	version.Version = "testing"
 

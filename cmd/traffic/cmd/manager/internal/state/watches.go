@@ -1,4 +1,4 @@
-package manager
+package state
 
 type Watches map[string]chan<- struct{}
 

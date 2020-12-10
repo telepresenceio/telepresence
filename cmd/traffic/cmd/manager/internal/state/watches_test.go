@@ -1,4 +1,4 @@
-package manager_test
+package state_test
 
 import (
 	"os"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager"
+	manager "github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/state"
 )
 
 func receiver(ch <-chan struct{}) *bool {

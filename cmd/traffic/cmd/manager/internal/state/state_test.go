@@ -1,4 +1,4 @@
-package manager_test
+package state_test
 
 import (
 	"context"
@@ -7,7 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager"
+	manager "github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/state"
+	testdata "github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/test"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
@@ -24,8 +25,8 @@ func (fc *FakeClock) Now() time.Time {
 func TestStateInternal(topT *testing.T) {
 	ctx := context.Background()
 
-	testAgents := manager.GetTestAgents(topT)
-	testClients := manager.GetTestClients(topT)
+	testAgents := testdata.GetTestAgents(topT)
+	testClients := testdata.GetTestClients(topT)
 
 	topT.Run("agents", func(t *testing.T) {
 		a := assert.New(t)

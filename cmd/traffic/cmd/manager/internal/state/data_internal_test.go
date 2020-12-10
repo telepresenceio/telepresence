@@ -1,18 +1,19 @@
-package manager
+package state
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	testdata "github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/test"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 func TestMechanismHelpers(t *testing.T) {
 	a := assert.New(t)
 
-	testMechs := GetTestMechanisms(t)
-	testAgents := GetTestAgents(t)
+	testMechs := testdata.GetTestMechanisms(t)
+	testAgents := testdata.GetTestAgents(t)
 
 	empty := []*rpc.AgentInfo_Mechanism{}
 	oss := testAgents["hello"].Mechanisms
@@ -33,7 +34,7 @@ func TestMechanismHelpers(t *testing.T) {
 func TestAgentHelpers(t *testing.T) {
 	a := assert.New(t)
 
-	testAgents := GetTestAgents(t)
+	testAgents := testdata.GetTestAgents(t)
 	helloAgent := testAgents["hello"]
 	helloProAgent := testAgents["helloPro"]
 	demoAgent1 := testAgents["demo1"]
