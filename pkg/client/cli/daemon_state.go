@@ -10,7 +10,6 @@ import (
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/client"
@@ -18,15 +17,13 @@ import (
 )
 
 type daemonState struct {
-	cmd      *cobra.Command
-	dns      string
-	fallback string
-	conn     *grpc.ClientConn
-	grpc     daemon.DaemonClient
+	*sessionInfo
+	conn *grpc.ClientConn
+	grpc daemon.DaemonClient
 }
 
-func newDaemonState(cmd *cobra.Command, dns, fallback string) (*daemonState, error) {
-	ds := &daemonState{cmd: cmd, dns: dns, fallback: fallback}
+func (si *sessionInfo) newDaemonState() (*daemonState, error) {
+	ds := &daemonState{sessionInfo: si}
 	err := assertDaemonStarted()
 	if err == nil {
 		err = ds.connect()
@@ -82,18 +79,6 @@ func assertDaemonStarted() error {
 		return nil
 	}
 	return errDaemonIsNotRunning
-}
-
-// withDaemon establishes a connection, calls the function with the gRPC client, and ensures
-// that the connection is closed.
-func withDaemon(cmd *cobra.Command, f func(daemon.DaemonClient) error) error {
-	// OK with dns and fallback empty. Daemon must be up and running
-	ds, err := newDaemonState(cmd, "", "")
-	if err != nil {
-		return err
-	}
-	defer ds.disconnect()
-	return f(ds.grpc)
 }
 
 // isConnected returns true if a connection has been established to the daemon

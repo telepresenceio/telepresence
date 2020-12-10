@@ -62,7 +62,7 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 
 // Remain indicates that the session is still valid.
 func (m *Manager) Remain(ctx context.Context, session *rpc.SessionInfo) (*empty.Empty, error) {
-	dlog.Debug(ctx, "Remain called")
+	dlog.Debugf(ctx, "Remain called: %s", session.SessionId)
 
 	if ok := m.state.Mark(session.SessionId); !ok {
 		return nil, status.Errorf(codes.NotFound, "Session %q not found", session.SessionId)
@@ -73,7 +73,7 @@ func (m *Manager) Remain(ctx context.Context, session *rpc.SessionInfo) (*empty.
 
 // Depart terminates a session.
 func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.Empty, error) {
-	dlog.Debug(ctx, "Depart called")
+	dlog.Debugf(ctx, "Depart called: %s", session.SessionId)
 
 	m.state.Remove(session.SessionId)
 
@@ -85,7 +85,7 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 	ctx := stream.Context()
 	sessionID := session.SessionId
 
-	dlog.Debugf(ctx, "WatchAgents called (sessionID=%q)", sessionID)
+	dlog.Debugf(ctx, "WatchAgents called: %s", sessionID)
 
 	if !m.state.HasClient(sessionID) {
 		return status.Errorf(codes.NotFound, "Client session %q not found", session.SessionId)
@@ -123,7 +123,7 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	ctx := stream.Context()
 	sessionID := session.SessionId
 
-	dlog.Debugf(ctx, "WatchIntercepts called (sessionID=%q)", sessionID)
+	dlog.Debugf(ctx, "WatchIntercepts called: %s", sessionID)
 
 	entry := m.state.Get(sessionID)
 	if entry == nil {
@@ -137,6 +137,7 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 		res := &rpc.InterceptInfoSnapshot{
 			Intercepts: m.state.GetIntercepts(sessionID),
 		}
+		dlog.Debugf(ctx, "WatchIntercepts sending update: %s", sessionID)
 		if err := stream.Send(res); err != nil {
 			return err
 		}
@@ -146,9 +147,11 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 			// It's time to send another message. Loop.
 		case <-ctx.Done():
 			// Manager is shutting down.
+			dlog.Debugf(ctx, "WatchIntercepts shutting down: %s", sessionID)
 			return nil
 		case <-sessionCtx.Done():
 			// Manager believes this session has ended.
+			dlog.Debugf(ctx, "WatchIntercepts session cancelled: %s", sessionID)
 			return nil
 		}
 	}
@@ -159,7 +162,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	sessionID := ciReq.Session.SessionId
 	spec := ciReq.InterceptSpec
 
-	dlog.Debugf(ctx, "CreateIntercept called (sessionID=%q)", sessionID)
+	dlog.Debugf(ctx, "CreateIntercept called: %s", sessionID)
 
 	if !m.state.HasClient(sessionID) {
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
@@ -183,7 +186,7 @@ func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	sessionID := riReq.Session.SessionId
 	name := riReq.Name
 
-	dlog.Debugf(ctx, "RemoveIntercept called (sessionID=%q, name=%q)", sessionID, name)
+	dlog.Debugf(ctx, "RemoveIntercept called: %s %s", sessionID, name)
 
 	if !m.state.HasClient(sessionID) {
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
@@ -201,7 +204,7 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 	sessionID := rIReq.Session.SessionId
 	ceptID := rIReq.Id
 
-	dlog.Debugf(ctx, "RemoveIntercept called (sessionID=%q, interceptID=%q)", sessionID, ceptID)
+	dlog.Debugf(ctx, "ReviewIntercept called: %s %s - %s", sessionID, ceptID, rIReq.Disposition)
 
 	if !m.state.HasAgent(sessionID) {
 		return nil, status.Errorf(codes.NotFound, "Agent session %q not found", sessionID)

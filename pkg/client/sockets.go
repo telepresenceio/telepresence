@@ -60,10 +60,8 @@ func WaitUntilSocketAppears(name, path string, ttw time.Duration) (err error) {
 
 // SocketURL returns the URL that corresponds to the given unix socket filesystem path.
 func SocketURL(socket string) string {
-	// TODO: Revise use of passthrough once this is fixed in grpc-go.
-	//  see: https://github.com/grpc/grpc-go/issues/1741
-	//  and https://github.com/grpc/grpc-go/issues/1911
-	return "passthrough:///unix://" + socket
+	// The unix URL scheme was implemented in google.golang.org/grpc v1.34.0
+	return "unix:" + socket
 }
 
 // DialSocket dials the given unix socket and returns the resulting connection

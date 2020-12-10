@@ -7,7 +7,10 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -38,11 +41,14 @@ type LoginExecutor struct {
 func (l *LoginExecutor) LoginFlow(cmd *cobra.Command, args []string) error {
 	// oauth2Callback chan that will receive the callback info
 	callbacks := make(chan oauth2Callback)
+	// also listen for interruption to cancel the flow
+	interrupts := make(chan os.Signal, 1)
+	signal.Notify(interrupts, syscall.SIGINT, syscall.SIGTERM)
 
 	// start the background server on which we'll be listening for the OAuth2 callback
 	backgroundServer, err := startBackgroundServer(callbacks, cmd.ErrOrStderr())
 	defer func() {
-		err := backgroundServer.Shutdown(safeContext(cmd))
+		err := backgroundServer.Shutdown(context.Background())
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "error shutting down callback server: %v", err)
 		}
@@ -74,9 +80,17 @@ func (l *LoginExecutor) LoginFlow(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "Could not open browser, please access this URL: %v\n", url)
 	}
 
-	// wait for callback completion before closing the background server
-	callback := <-callbacks
+	// wait for callback completion or interruption
+	select {
+	case callback := <-callbacks:
+		return l.handleCallback(cmd, callback, oauth2Config, pkceVerifier)
+	case <-interrupts:
+		fmt.Fprintln(cmd.OutOrStdout(), "Login aborted.")
+		return nil
+	}
+}
 
+func (l *LoginExecutor) handleCallback(cmd *cobra.Command, callback oauth2Callback, oauth2Config oauth2.Config, pkceVerifier *CodeVerifier) error {
 	if callback.Error != "" {
 		return fmt.Errorf("%v error returned on OAuth2 callback: %v", callback.Error, callback.ErrorDescription)
 	}

@@ -71,6 +71,8 @@ message DaemonStatus {
     NO_NETWORK = 3;
   }
   ErrType error = 1;
+  string dns = 2;
+  string fallback = 3;
 }
 
 message Paths {

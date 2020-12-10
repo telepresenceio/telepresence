@@ -177,7 +177,7 @@ func (br *bridge) start(c context.Context) error {
 
 	g := dgroup.ParentGroup(c)
 	g.Go(K8sPortForwardWorker, func(c context.Context) error {
-		return client.Retry(c, br.portForwardWorker)
+		return client.Retry(c, "port-forward to traffic-manager", br.portForwardWorker, 2*time.Second, 15*time.Second, time.Minute)
 	})
 	g.Go(K8sBridgeWorker, br.bridgeWorker)
 	return nil

@@ -32,19 +32,18 @@ pod/hello-9954f98bf-rbwmz   1/1     Running   0          18s
 
 Check telepresence version
 ```console
-$ telepresence --version
+$ telepresence version
 Client v0.3.0 (api v3)
 ```
 
-### Use a subshell with access to the cluster (outbound traffic)
+### Establish a connection to  the cluster (outbound traffic)
 
-Start telepresence without arguments:
+Let telepresence connect:
 ```console
-$ telepresence
-Launching Telepresence Daemon v0.3.0 (api v3)
+$ telepresence connect
+Launching Telepresence Daemon v0.4.0 (api v3)
 Connecting to traffic manager...
 Connected to context default (https://35.232.104.64)
-Starting a /bin/bash subshell
 ```
 
 A session is now active and outbound connections will be routed to the cluster. I.e. your laptop is "inside" the cluster.
@@ -72,10 +71,10 @@ BODY:
 
 ### Intercept the service. I.e. redirect traffic to it to our laptop (inbound traffic)
 
-In the subshell that telepresence started, add an intercept for the hello deployment on port 9000. Here, we also start a service listening on that port:
+Add an intercept for the hello deployment on port 9000. Here, we also start a service listening on that port:
 
 ```console
-$ telepresence --intercept hello --port 9000 -- python3 -m http.server 9000
+$ telepresence intercept hello --port 9000 -- python3 -m http.server 9000
 Already connected
 Using deployment hello
 Serving HTTP on 0.0.0.0 port 9000 (http://0.0.0.0:9000/) ...
@@ -112,10 +111,9 @@ Observe that the python service reports that it's being accessed:
 
 End the service with `<ctrl>-C` and then try `curl hello` or `http://hello` again. The intercept is gone, and the echo service responds as normal.
 
-Now end the subshell too with `exit` or `<ctrl>-D`. Telepresence now ends the session. Your laptop no longer has access to the cluster internals.
+Now end the session too. Your laptop no longer has access to the cluster internals.
 ```console
-$ exit
-Disconnecting...done
+$ telepresence quit
 Telepresence Daemon quitting...done
 $ curl hello
 curl: (6) Could not resolve host: hello
@@ -125,8 +123,8 @@ curl: (6) Could not resolve host: hello
 
 There is no need to start a telepresence subshell when doing an intercept. Telepresence will automatically detect that a session is active, and if not, start one. The session then ends when the command exits, as shown in this example:
 
-```concole
-telepresence --intercept hello --port 9000 -- python3 -m http.server 9000
+```console
+telepresence intercept hello --port 9000 -- python3 -m http.server 9000
 
 Launching Telepresence Daemon v0.3.0 (api v3)
 Connecting to traffic manager...
@@ -139,27 +137,6 @@ Keyboard interrupt received, exiting.
 Disconnecting...done
 Telepresence Daemon quitting...done
 ```
-
-### Use the --no-wait flag
-
-In the above examples, telepresence will either start a subshell or a command so that the sessopm is autmatically cleaned up when it exits. This can be avoided by using the `--no-wait` flag. When used, the session starts in the background, and it is then the user's responsibility to end it with `telepresence --quit`.
-
-```console
-$ telepresence --status
-The telepresence daemon has not been started
-$ telepresence --no-wait
-  Launching Telepresence Daemon v0.3.0 (api v3)
-  Connecting to traffic manager...
-  Connected to context default (https://34.123.86.205)
-$ telepresence --status
-  Connected
-    Context:       default (https://34.123.86.205)
-    Proxy:         ON (networking to the cluster is enabled)
-    Intercepts:    0 total
-```
-
-Henceforth, any telepresence command (besides `telepresence --quit`) will now detect that a session is present, use it, and
-refrain from ending it.
 
 ### What got installed in the cluster?
 
@@ -278,4 +255,4 @@ Telepresence installs the Traffic Manager in your cluster if it is not already p
 
 Telepresence installs the Traffic Agent as an additional container in any deployment you intercept, and modifies any associated services it finds to route traffic through the agent. This modification persists, i.e. does not get cleaned up.
 
-You can launch other Telepresence sessions to the same cluster while an existing session is running, letting you intercept other deployments. When doing so, it is important to end the first session last because it established the traffic-manager connection and will close it when it ends, rendering the other services disconnected.
+You can launch other Telepresence sessions to the same cluster while an existing session is running, letting you intercept other deployments.

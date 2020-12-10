@@ -17,6 +17,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/pkg/client"
+	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
@@ -97,9 +98,14 @@ func (tm *trafficManager) start(c context.Context) error {
 		fmt.Sprintf("%d:%d", tm.sshPort, remoteSSHPort),
 		fmt.Sprintf("%d:%d", tm.apiPort, remoteAPIPort)}
 
-	return client.Retry(c, func(c context.Context) error {
+	err = client.Retry(c, "svc/traffic-manager port-forward", func(c context.Context) error {
 		return tm.installer.portForwardAndThen(c, kpfArgs, "init-grpc", tm.initGrpc)
-	}, time.Second, 15*time.Second)
+	}, 2*time.Second, 15*time.Second, time.Minute)
+	if err != nil && tm.apiErr == nil {
+		tm.apiErr = err
+		close(tm.startup)
+	}
+	return err
 }
 
 func (tm *trafficManager) initGrpc(c context.Context) (err error) {
@@ -118,7 +124,9 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 		grpc.WithNoProxy(),
 		grpc.WithBlock())
 	if err != nil {
-		dlog.Errorf(c, "error when dialing traffic-manager: %s", err.Error())
+		if tc.Err() == context.DeadlineExceeded {
+			err = errors.New("timeout when connecting to traffic-manager")
+		}
 		return err
 	}
 
@@ -151,7 +159,7 @@ func (tm *trafficManager) watchAgents(c context.Context) error {
 	if err != nil {
 		return err
 	}
-	return tm.aiListener.start(ac)
+	return tm.aiListener.start(c, ac)
 }
 
 func (tm *trafficManager) watchIntercepts(c context.Context) error {
@@ -159,7 +167,7 @@ func (tm *trafficManager) watchIntercepts(c context.Context) error {
 	if err != nil {
 		return err
 	}
-	return tm.iiListener.start(ic)
+	return tm.iiListener.start(c, ic)
 }
 
 func (tm *trafficManager) session() *manager.SessionInfo {
@@ -199,6 +207,19 @@ func (tm *trafficManager) Close() error {
 	return nil
 }
 
+func (tm *trafficManager) setStatus(r *rpc.ConnectInfo) {
+	if tm.grpc == nil {
+		r.Intercepts = &manager.InterceptInfoSnapshot{}
+		r.Agents = &manager.AgentInfoSnapshot{}
+		if err := tm.apiErr; err != nil {
+			r.ErrorText = err.Error()
+		}
+	} else {
+		r.Agents = tm.agentInfoSnapshot()
+		r.Intercepts = tm.interceptInfoSnapshot()
+	}
+}
+
 // A watcher listens on a grpc.ClientStream and notifies listeners when
 // something arrives.
 type watcher struct {
@@ -211,22 +232,55 @@ type watcher struct {
 // watch reads messages from the stream and passes them onto registered listeners. The
 // function terminates when the context used when the stream was acquired is cancelled,
 // when io.EOF is encountered, or an error occurs during read.
-func (r *watcher) watch() error {
+func (r *watcher) watch(c context.Context) error {
+	dataChan := make(chan interface{}, 1000)
+	defer close(dataChan)
+
+	done := int32(0)
+	go func() {
+		for {
+			select {
+			case <-c.Done():
+				// ensure no more writes and drain channel to unblock writer
+				atomic.StoreInt32(&done, 1)
+				for range dataChan {
+				}
+				return
+			case data := <-dataChan:
+				if data == nil {
+					return
+				}
+
+				r.listenersLock.RLock()
+				lc := make([]listener, len(r.listeners))
+				copy(lc, r.listeners)
+				r.listenersLock.RUnlock()
+
+				for _, l := range lc {
+					l.onData(data)
+				}
+			}
+		}
+	}()
+
+	var err error
 	for {
 		data := r.entryMaker()
-		if err := r.stream.RecvMsg(data); err != nil {
+		if err = r.stream.RecvMsg(data); err != nil {
 			if err == io.EOF || strings.HasSuffix(err.Error(), " is closing") {
 				err = nil
 			}
-			return err
+			break
 		}
-
-		r.listenersLock.RLock()
-		for _, l := range r.listeners {
-			go l.onData(data)
+		if atomic.LoadInt32(&done) != 0 {
+			break
 		}
-		r.listenersLock.RUnlock()
+		dataChan <- data
+		if atomic.LoadInt32(&done) != 0 {
+			break
+		}
 	}
+	return err
 }
 
 func (r *watcher) addListener(l listener) {
@@ -274,22 +328,22 @@ func (al *aiListener) onData(d interface{}) {
 	al.data.Store(d)
 }
 
-func (al *aiListener) start(stream grpc.ClientStream) error {
+func (al *aiListener) start(c context.Context, stream grpc.ClientStream) error {
 	al.stream = stream
 	al.listeners = []listener{al}
 	al.entryMaker = func() interface{} { return new(manager.AgentInfoSnapshot) }
-	return al.watch()
+	return al.watch(c)
 }
 
 func (il *iiListener) onData(d interface{}) {
 	il.data.Store(d)
 }
 
-func (il *iiListener) start(stream grpc.ClientStream) error {
+func (il *iiListener) start(c context.Context, stream grpc.ClientStream) error {
 	il.stream = stream
 	il.listeners = []listener{il}
 	il.entryMaker = func() interface{} { return new(manager.InterceptInfoSnapshot) }
-	return il.watch()
+	return il.watch(c)
 }
 
 // iiActive is a listener that waits for an intercept with a given id to become active
@@ -302,7 +356,12 @@ func (ia *iiActive) onData(d interface{}) {
 	if iis, ok := d.(*manager.InterceptInfoSnapshot); ok {
 		for _, ii := range iis.Intercepts {
 			if ii.Id == ia.id && ii.Disposition != manager.InterceptDispositionType_WAITING {
-				ia.done <- ii
+				done := ia.done
+				ia.done = nil
+				if done != nil {
+					done <- ii
+					close(done)
+				}
 				break
 			}
 		}
@@ -319,7 +378,12 @@ func (ap *aiPresent) onData(d interface{}) {
 	if ais, ok := d.(*manager.AgentInfoSnapshot); ok {
 		for _, ai := range ais.Agents {
 			if ai.Name == ap.name {
-				ap.done <- ai
+				done := ap.done
+				ap.done = nil
+				if done != nil {
+					done <- ai
+					close(done)
+				}
 				break
 			}
 		}

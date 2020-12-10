@@ -115,6 +115,8 @@ func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, 
 		r.Error = rpc.DaemonStatus_PAUSED
 		return r, nil
 	}
+	r.Dns = d.dns
+	r.Fallback = d.fallback
 	return r, nil
 }
 

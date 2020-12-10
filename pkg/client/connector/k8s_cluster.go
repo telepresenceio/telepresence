@@ -5,7 +5,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dexec"
@@ -56,33 +59,58 @@ func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, th
 	if err != nil {
 		return err
 	}
-	defer out.Close()
 
 	// We want this command to keep on running. If it returns an error, then it was unsuccessful.
 	if err = pf.Start(); err != nil {
+		out.Close()
 		dlog.Errorf(c, "port-forward failed to start: %s", client.RunError(err).Error())
 		return err
 	}
 
 	sc := bufio.NewScanner(out)
 
-	// TODO: Need timeout
-	ok := false
-	for sc.Scan() {
-		txt := sc.Text()
-		if !ok && strings.HasPrefix(txt, "Forwarding from") {
-			// Forwarding is running. This is what we waited for
-			ok = true
-			dlog.Debug(c, txt)
-			dgroup.ParentGroup(c).Go(thenName, then)
+	// Give port-forward 10 seconds to produce the correct output and spawn the next process
+	timer := time.AfterFunc(10*time.Second, func() {
+		_ = pf.Process.Kill()
+	})
+
+	// wait group is done when next process starts.
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer out.Close()
+		ok := false
+		for sc.Scan() {
+			txt := sc.Text()
+			if !ok && strings.HasPrefix(txt, "Forwarding from") {
+				// Forwarding is running. This is what we waited for
+				dlog.Debug(c, txt)
+				ok = true
+				timer.Stop()
+				wg.Done()
+				dgroup.ParentGroup(c).Go(thenName, then)
+			}
 		}
-	}
-	err = pf.Wait()
-	if ok {
-		err = nil
-	} else {
-		dlog.Errorf(c, "port-forward failed: %s", client.RunError(err).Error())
-	}
+
+		// let the port forward continue running. It will either be killed by the
+		// timer (if it didn't produce the expected output) or by a context cancel.
+		if err = pf.Wait(); err != nil {
+			if c.Err() != nil {
+				// Context cancelled
+				err = nil
+			} else {
+				err = client.RunError(err)
+				dlog.Errorf(c, "port-forward failed: %s", err.Error())
+			}
+		}
+		if !ok {
+			timer.Stop()
+			wg.Done()
+		}
+	}()
+
+	// Wait for successful start of next process or failure to do port-forward
+	wg.Wait()
 	return err
 }
 
@@ -90,7 +118,13 @@ func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, th
 func (kc *k8sCluster) check(c context.Context) error {
 	c, cancel := context.WithTimeout(c, connectTimeout)
 	defer cancel()
-	return kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found").Run()
+	err := kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found").Run()
+	if err != nil {
+		if c.Err() == context.DeadlineExceeded {
+			err = errors.New("timeout when testing cluster connectivity")
+		}
+	}
+	return err
 }
 
 func newKCluster(kubeConfig, ctxName, namespace string, kargs ...string) (*k8sCluster, error) {

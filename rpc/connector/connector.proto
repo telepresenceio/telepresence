@@ -13,10 +13,7 @@ service Connector {
   // Returns version information from the Connector
   rpc Version(google.protobuf.Empty) returns (telepresence.common.VersionInfo);
 
-  // Returns the current connectivity status
-  rpc Status(google.protobuf.Empty) returns (ConnectorStatus);
-
-  // Connects the daemon to a cluster
+  // Connects the daemon to a cluster and returns status
   rpc Connect(ConnectRequest) returns (ConnectInfo);
 
   // Adds a deployment intercept
@@ -52,37 +49,22 @@ message ConnectRequest {
 message ConnectInfo {
   enum ErrType {
     UNSPECIFIED = 0;
-    ALREADY_CONNECTED = 1;
-    DISCONNECTING = 2;
-    CLUSTER_FAILED = 3;
-    BRIDGE_FAILED = 4;
-    TRAFFIC_MANAGER_FAILED = 5;
-  }
-  ErrType error = 1;
-  string error_text = 2;
-  string cluster_context = 3;
-  string cluster_server = 4;
-}
-
-message ConnectorStatus {
-  enum ErrType {
-    UNSPECIFIED = 0;
     NOT_STARTED = 1;
-    DISCONNECTED = 2;
+    ALREADY_CONNECTED = 2;
+    DISCONNECTING = 3;
+    CLUSTER_FAILED = 4;
+    BRIDGE_FAILED = 5;
+    TRAFFIC_MANAGER_FAILED = 6;
   }
   ErrType error = 1;
   string error_text = 2;
-  bool bridge = 3;
+  string cluster_server = 3;
+  string cluster_context = 4;
+  bool bridge_ok = 5;
+  bool cluster_ok = 6;
 
-  message ClusterInfo {
-    bool connected = 1;
-    string server = 2;
-    string context = 3;
-  }
-  ClusterInfo cluster = 4;
-
-  telepresence.manager.AgentInfoSnapshot agents = 5;
-  telepresence.manager.InterceptInfoSnapshot intercepts = 6;
+  telepresence.manager.AgentInfoSnapshot agents = 7;
+  telepresence.manager.InterceptInfoSnapshot intercepts = 8;
 }
 
 // InterceptError is a common error type used by the intercept call family (add,
