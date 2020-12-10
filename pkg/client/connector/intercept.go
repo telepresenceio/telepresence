@@ -75,15 +75,20 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 				break
 			}
 			dlog.Error(c, err.Error())
-			result.Error = rpc.InterceptError_NOT_FOUND
-			result.ErrorText = err.Error()
+			if err == agentNotFound {
+				result.Error = rpc.InterceptError_NOT_FOUND
+				result.ErrorText = agentName
+			} else {
+				result.Error = rpc.InterceptError_FAILED_TO_ESTABLISH
+				result.ErrorText = err.Error()
+			}
 			return result, nil
 		}
 		dlog.Infof(c, "waiting for new agent for deployment %q", agentName)
 		_, err := tm.waitForAgent(c, agentName)
 		if err != nil {
 			dlog.Error(c, err.Error())
-			result.Error = rpc.InterceptError_NOT_FOUND
+			result.Error = rpc.InterceptError_FAILED_TO_ESTABLISH
 			result.ErrorText = err.Error()
 			return result, nil
 		}

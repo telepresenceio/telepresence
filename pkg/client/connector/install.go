@@ -255,12 +255,13 @@ func findMatchingPort(c context.Context, svcs []*kates.Service, cns []corev1.Con
 }
 
 var agentExists = errors.New("agent exists")
+var agentNotFound = errors.New("no such agent")
 
 func (ki *installer) ensureAgent(c context.Context, name, svcName string) error {
 	dep, err := ki.findDeployment(c, name)
 	if err != nil {
 		if kates.IsNotFound(err) {
-			err = fmt.Errorf("no such deployment %q", name)
+			err = agentNotFound
 		}
 		return err
 	}
