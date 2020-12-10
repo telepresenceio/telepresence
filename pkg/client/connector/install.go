@@ -31,7 +31,7 @@ const apiPort = 8081
 const appName = "traffic-manager"
 const telName = "manager"
 const domainPrefix = "telepresence.datawire.io/"
-const annTelepresenceVersion = domainPrefix + "version"
+const annTelepresenceActions = domainPrefix + "actions"
 
 var labelMap = map[string]string{
 	"app":          appName,
@@ -295,46 +295,42 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 	dlog.Debugf(c, "using service %s port %s when intercepting deployment %q", svc.Name, name, dep.Name)
 
 	targetPortSymbolic := true
-	containerPort := int32(-1)
+	containerPort := -1
 
 	if sPort.TargetPort.Type == intstr.Int {
 		// Service needs to use a named port
 		targetPortSymbolic = false
-		containerPort = sPort.TargetPort.IntVal
-		sPort.TargetPort = intstr.FromString(fmt.Sprintf("tel2px-%d", containerPort))
+		containerPort = int(sPort.TargetPort.IntVal)
+		svcActions := &svcActions{
+			Version: client.Version(),
+			MakePortSymbolic: &makePortSymbolicAction{
+				PortName:   sPort.Name,
+				TargetPort: containerPort,
+			},
+		}
+		// apply the actions on the Service
+		if err = svcActions.do(svc); err != nil {
+			return err
+		}
+
+		// save the actions so that they can be undone.
 		if svc.Annotations == nil {
 			svc.Annotations = make(map[string]string)
 		}
-		svc.Annotations[annTelepresenceVersion] = client.Version()
+		svc.Annotations[annTelepresenceActions] = svcActions.String()
 	}
 
-	if dep.Annotations == nil {
-		dep.Annotations = make(map[string]string)
-	}
-	dep.Annotations[annTelepresenceVersion] = client.Version()
+	depActions := &deploymentActions{}
 
 	if cPortIndex >= 0 {
 		// Remove name and change container port of the port appointed by the service
 		icp := &icn.Ports[cPortIndex]
-		containerPort = icp.ContainerPort
+		containerPort = int(icp.ContainerPort)
 		if targetPortSymbolic {
-			// Save the original name so that it can be restored when doing uninstall
-			dep.Annotations[fmt.Sprintf(domainPrefix+"cloaked_port_%s_%d", icn.Name, cPortIndex)] = sPort.TargetPort.StrVal
-
-			// New name must be max 15 characters long
-			portCloak := fmt.Sprintf("tel2mv-%d", containerPort)
-			for _, probe := range []*corev1.Probe{icn.LivenessProbe, icn.ReadinessProbe, icn.StartupProbe} {
-				if probe == nil {
-					continue
-				}
-				if h := probe.HTTPGet; h != nil && h.Port.StrVal == icp.Name {
-					h.Port.StrVal = portCloak
-				}
-				if t := probe.TCPSocket; t != nil && t.Port.StrVal == icp.Name {
-					t.Port.StrVal = portCloak
-				}
+			depActions.HideContainerPort = &hideContainerPortAction{
+				ContainerName: icn.Name,
+				PortName:      sPort.TargetPort.StrVal,
 			}
-			icp.Name = portCloak
 		}
 	}
 
@@ -342,25 +338,22 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 		return fmt.Errorf("unable to add agent to deployment %s. The container port cannot be determined", dep.Name)
 	}
 
-	tplSpec.Containers = []corev1.Container{*icn, {
-		Name:  "traffic-agent",
-		Image: managerImageName(),
-		Args:  []string{"agent"},
-		Ports: []corev1.ContainerPort{{
-			Name:          sPort.TargetPort.StrVal,
-			Protocol:      sPort.Protocol,
-			ContainerPort: 9900,
-		}},
-		Env: []corev1.EnvVar{{
-			Name:  "LOG_LEVEL",
-			Value: "debug",
-		}, {
-			Name:  "AGENT_NAME",
-			Value: dep.Name,
-		}, {
-			Name:  "APP_PORT",
-			Value: strconv.Itoa(int(containerPort)),
-		}}}}
+	depActions.AddTrafficAgent = &addTrafficAgentAction{
+		ContainerPortName:  sPort.TargetPort.StrVal,
+		ContainerPortProto: string(sPort.Protocol),
+		AppPort:            containerPort,
+	}
+
+	// apply the actions on the Deployment
+	if err = depActions.do(dep); err != nil {
+		return err
+	}
+
+	// save the actions so that they can be undone.
+	if dep.Annotations == nil {
+		dep.Annotations = make(map[string]string)
+	}
+	dep.Annotations[annTelepresenceActions] = depActions.String()
 
 	dlog.Infof(c, "Adding agent to deployment %s in namespace %s. Image: %s", dep.Name, ki.Namespace, managerImageName())
 	if err = ki.client.Update(c, dep, dep); err != nil {
