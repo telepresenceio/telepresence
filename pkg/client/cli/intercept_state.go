@@ -102,14 +102,22 @@ func listIntercepts(cmd *cobra.Command, _ []string) error {
 		fmt.Fprintln(stdout, "No intercepts")
 		return nil
 	}
-	var previewURL string
 	for idx, cept := range r.Intercepts {
 		spec := cept.Spec
 		fmt.Fprintf(stdout, "%4d. %s\n", idx+1, spec.Name)
 		fmt.Fprintf(stdout, "      Intercepting requests and redirecting them to %s:%d\n", spec.TargetHost, spec.TargetPort)
-	}
-	if previewURL != "" {
-		fmt.Fprintln(stdout, "Share a preview of your changes with anyone by visiting\n  ", previewURL)
+		var previewURL string
+		if cept.PreviewDomain != "" {
+			previewURL = cept.PreviewDomain
+			// Right now SystemA gives back domains with the leading "https://", but
+			// let's not rely on that.
+			if !strings.HasPrefix(previewURL, "https://") && !strings.HasPrefix(previewURL, "http://") {
+				previewURL = "https://" + previewURL
+			}
+		}
+		if previewURL != "" {
+			fmt.Fprintln(stdout, "Share a preview of your changes with anyone by visiting\n  ", previewURL)
+		}
 	}
 	return nil
 }
