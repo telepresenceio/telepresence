@@ -10,13 +10,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-type deploymentAction interface {
+type DeploymentAction interface {
 	do(dep *kates.Deployment) error
 	isDone(dep *kates.Deployment) bool
 	undo(dep *kates.Deployment) error
 }
 
-type serviceAction interface {
+type ServiceAction interface {
 	do(dep *kates.Service) error
 	isDone(dep *kates.Service) bool
 	undo(dep *kates.Service) error
