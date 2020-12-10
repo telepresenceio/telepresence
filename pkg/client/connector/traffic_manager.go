@@ -17,6 +17,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/client/auth"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
@@ -108,6 +109,14 @@ func (tm *trafficManager) start(c context.Context) error {
 	return err
 }
 
+func (tm *trafficManager) bearerToken() string {
+	token, err := auth.LoadTokenFromUserCache()
+	if err != nil {
+		return ""
+	}
+	return token.AccessToken
+}
+
 func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 	defer func() {
 		tm.apiErr = err
@@ -132,10 +141,11 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 
 	mClient := manager.NewManagerClient(conn)
 	si, err := mClient.ArriveAsClient(c, &manager.ClientInfo{
-		Name:      tm.userAndHost,
-		InstallId: tm.installID,
-		Product:   "telepresence",
-		Version:   client.Version(),
+		Name:        tm.userAndHost,
+		InstallId:   tm.installID,
+		Product:     "telepresence",
+		Version:     client.Version(),
+		BearerToken: tm.bearerToken(),
 	})
 
 	if err != nil {
@@ -189,7 +199,10 @@ func (tm *trafficManager) remain(c context.Context) error {
 		case <-c.Done():
 			return nil
 		case <-ticker.C:
-			_, err := tm.grpc.Remain(c, tm.session())
+			_, err := tm.grpc.Remain(c, &manager.RemainRequest{
+				Session:     tm.session(),
+				BearerToken: tm.bearerToken(),
+			})
 			if err != nil {
 				return err
 			}

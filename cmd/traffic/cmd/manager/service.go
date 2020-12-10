@@ -78,11 +78,12 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 }
 
 // Remain indicates that the session is still valid.
-func (m *Manager) Remain(ctx context.Context, session *rpc.SessionInfo) (*empty.Empty, error) {
-	dlog.Debugf(ctx, "Remain called: %s", session.SessionId)
+func (m *Manager) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
+	sessionID := req.Session.SessionId
+	dlog.Debugf(ctx, "Remain called: %s", sessionID)
 
-	if ok := m.state.MarkSession(session.SessionId, m.clock.Now()); !ok {
-		return nil, status.Errorf(codes.NotFound, "Session %q not found", session.SessionId)
+	if ok := m.state.MarkSession(req, m.clock.Now()); !ok {
+		return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
 	}
 
 	return &empty.Empty{}, nil

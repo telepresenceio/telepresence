@@ -144,7 +144,7 @@ func TestConnect(t *testing.T) {
 
 	// Alice remains
 
-	_, err = client.Remain(ctx, aliceSess2)
+	_, err = client.Remain(ctx, &rpc.RemainRequest{Session: aliceSess2})
 	a.NoError(err)
 
 	// Hello Pro's agent arrives and departs

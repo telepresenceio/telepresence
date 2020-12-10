@@ -24,8 +24,9 @@ type ManagerClient interface {
 	ArriveAsClient(ctx context.Context, in *ClientInfo, opts ...grpc.CallOption) (*SessionInfo, error)
 	// ArriveAsAgent establishes a session between an agent and the Manager.
 	ArriveAsAgent(ctx context.Context, in *AgentInfo, opts ...grpc.CallOption) (*SessionInfo, error)
-	// Remain indicates that the session is still valid.
-	Remain(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error)
+	// Remain indicates that the session is still valid, and potentially
+	// updates the auth token for the session.
+	Remain(ctx context.Context, in *RemainRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Depart terminates a session.
 	Depart(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error)
 	// WatchAgents notifies a client of the set of known Agents.
@@ -82,7 +83,7 @@ func (c *managerClient) ArriveAsAgent(ctx context.Context, in *AgentInfo, opts .
 	return out, nil
 }
 
-func (c *managerClient) Remain(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (c *managerClient) Remain(ctx context.Context, in *RemainRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/Remain", in, out, opts...)
 	if err != nil {
@@ -201,8 +202,9 @@ type ManagerServer interface {
 	ArriveAsClient(context.Context, *ClientInfo) (*SessionInfo, error)
 	// ArriveAsAgent establishes a session between an agent and the Manager.
 	ArriveAsAgent(context.Context, *AgentInfo) (*SessionInfo, error)
-	// Remain indicates that the session is still valid.
-	Remain(context.Context, *SessionInfo) (*empty.Empty, error)
+	// Remain indicates that the session is still valid, and potentially
+	// updates the auth token for the session.
+	Remain(context.Context, *RemainRequest) (*empty.Empty, error)
 	// Depart terminates a session.
 	Depart(context.Context, *SessionInfo) (*empty.Empty, error)
 	// WatchAgents notifies a client of the set of known Agents.
@@ -238,7 +240,7 @@ func (UnimplementedManagerServer) ArriveAsClient(context.Context, *ClientInfo) (
 func (UnimplementedManagerServer) ArriveAsAgent(context.Context, *AgentInfo) (*SessionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ArriveAsAgent not implemented")
 }
-func (UnimplementedManagerServer) Remain(context.Context, *SessionInfo) (*empty.Empty, error) {
+func (UnimplementedManagerServer) Remain(context.Context, *RemainRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Remain not implemented")
 }
 func (UnimplementedManagerServer) Depart(context.Context, *SessionInfo) (*empty.Empty, error) {
@@ -327,7 +329,7 @@ func _Manager_ArriveAsAgent_Handler(srv interface{}, ctx context.Context, dec fu
 }
 
 func _Manager_Remain_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SessionInfo)
+	in := new(RemainRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -339,7 +341,7 @@ func _Manager_Remain_Handler(srv interface{}, ctx context.Context, dec func(inte
 		FullMethod: "/telepresence.manager.Manager/Remain",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerServer).Remain(ctx, req.(*SessionInfo))
+		return srv.(ManagerServer).Remain(ctx, req.(*RemainRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

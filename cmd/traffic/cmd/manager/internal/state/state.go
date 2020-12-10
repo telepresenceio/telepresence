@@ -103,12 +103,19 @@ func (s *State) unlockedNextPort() uint16 {
 
 // Mark a session as being present at the indicated time.  Returns true if everything goes OK,
 // returns false if the given session ID does not exist.
-func (s *State) MarkSession(sessionID string, now time.Time) (ok bool) {
+func (s *State) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	sessionID := req.Session.SessionId
 
 	if sess, ok := s.sessions[sessionID]; ok {
 		sess.LastMarked = now
+		if req.BearerToken != "" {
+			if client, ok := s.clients.Load(sessionID); ok {
+				client.BearerToken = req.BearerToken
+				s.clients.Store(sessionID, client)
+			}
+		}
 		return true
 	}
 

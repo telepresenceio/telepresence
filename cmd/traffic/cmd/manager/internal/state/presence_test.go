@@ -31,13 +31,13 @@ func TestPresence(t *testing.T) {
 	a.Equal("item-a", p.Get("a").Item())
 	a.Nil(p.Get("c"))
 
-	a.NoError(p.Mark("a", now))
-	a.NoError(p.Mark("b", now))
-	a.Error(p.Mark("c", now))
-	a.Error(p.Mark("d", now))
+	a.True(p.Mark("a", now))
+	a.True(p.Mark("b", now))
+	a.False(p.Mark("c", now))
+	a.False(p.Mark("d", now))
 
 	now = now.Add(time.Second)
-	a.NoError(p.Mark("b", now))
+	a.True(p.Mark("b", now))
 	p.Add("c", "item-c", now)
 
 	// A@0 B@1 C@1

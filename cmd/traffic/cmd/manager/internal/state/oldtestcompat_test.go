@@ -1,7 +1,6 @@
 package state
 
 import (
-	"fmt"
 	"time"
 
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
@@ -35,9 +34,11 @@ func (s *State) Get(sessionID string) *ClientInfo {
 	return (*ClientInfo)(s.GetClient(sessionID))
 }
 
-func (s *State) Mark(sessionID string, now time.Time) error {
-	if !s.MarkSession(sessionID, now) {
-		return fmt.Errorf("session %q doesn't exist", sessionID)
+func (s *State) Mark(sessionID string, now time.Time) bool {
+	req := &rpc.RemainRequest{
+		Session: &rpc.SessionInfo{
+			SessionId: sessionID,
+		},
 	}
-	return nil
+	return s.MarkSession(req, now)
 }

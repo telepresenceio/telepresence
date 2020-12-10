@@ -87,7 +87,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		case <-ticker.C:
 		}
 
-		if _, err := manager.Remain(ctx, session); err != nil {
+		if _, err := manager.Remain(ctx, &rpc.RemainRequest{Session: session}); err != nil {
 			return err
 		}
 	}

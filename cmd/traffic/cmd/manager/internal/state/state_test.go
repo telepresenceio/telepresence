@@ -90,9 +90,9 @@ func TestStateInternal(topT *testing.T) {
 
 		clock.When = 10
 
-		a.True(state.MarkSession(c1, clock.Now()))
-		a.True(state.MarkSession(c2, clock.Now()))
-		a.False(state.MarkSession("asdf", clock.Now()))
+		a.True(state.Mark(c1, clock.Now()))
+		a.True(state.Mark(c2, clock.Now()))
+		a.False(state.Mark("asdf", clock.Now()))
 
 		state.ExpireSessions(epoch.Add(5 * time.Second))
 
@@ -102,9 +102,9 @@ func TestStateInternal(topT *testing.T) {
 
 		clock.When = 20
 
-		a.True(state.MarkSession(c1, clock.Now()))
-		a.True(state.MarkSession(c2, clock.Now()))
-		a.False(state.MarkSession(c3, clock.Now()))
+		a.True(state.Mark(c1, clock.Now()))
+		a.True(state.Mark(c2, clock.Now()))
+		a.False(state.Mark(c3, clock.Now()))
 
 		state.ExpireSessions(epoch.Add(5 * time.Second))
 
@@ -118,8 +118,8 @@ func TestStateInternal(topT *testing.T) {
 		a.False(state.HasClient(c2))
 		a.False(state.HasClient(c3))
 
-		a.True(state.MarkSession(c1, clock.Now()))
-		a.False(state.MarkSession(c2, clock.Now()))
-		a.False(state.MarkSession(c3, clock.Now()))
+		a.True(state.Mark(c1, clock.Now()))
+		a.False(state.Mark(c2, clock.Now()))
+		a.False(state.Mark(c3, clock.Now()))
 	})
 }

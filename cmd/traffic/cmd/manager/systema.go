@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"net"
 	"os"
 	"sync"
@@ -15,12 +16,26 @@ import (
 	"github.com/datawire/telepresence2/pkg/systema"
 )
 
-type systemaCredentials struct{}
+type systemaCredentials struct {
+	mgr *Manager
+}
 
 // GetRequestMetadata implements credentials.PerRPCCredentials.
 func (c *systemaCredentials) GetRequestMetadata(_ context.Context, _ ...string) (map[string]string, error) {
+	// FIXME: This is just picking a token arbitrarily right now.
+	var token string
+	for _, client := range c.mgr.state.GetAllClients() {
+		if client.BearerToken != "" {
+			token = client.BearerToken
+			break
+		}
+	}
+	if token == "" {
+		return nil, errors.New("no token has been provided by a client")
+	}
 	md := map[string]string{
 		"X-Telepresence-ManagerID": "TODO",
+		"Authorization":            "Bearer " + token,
 	}
 	return md, nil
 }
@@ -75,7 +90,7 @@ func (p *systemaPool) Get() (systemarpc.SystemACRUDClient, error) {
 		client, wait, err := systema.ConnectToSystemA(
 			ctx, p.mgr, net.JoinHostPort(host, port),
 			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{ServerName: host})),
-			grpc.WithPerRPCCredentials(&systemaCredentials{}))
+			grpc.WithPerRPCCredentials(&systemaCredentials{p.mgr}))
 		if err != nil {
 			cancel()
 			return nil, err

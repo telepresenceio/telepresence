@@ -19,6 +19,7 @@ message ClientInfo {
   string product = 3;  // "telepresence"
   string version = 4;
   string license_key = 5;
+  string bearer_token = 6;
 }
 
 // AgentInfo is the self-reported metadata that an Agent (app-sidecar)
@@ -148,12 +149,16 @@ message ReviewInterceptRequest {
   string message = 4;
 }
 
+message RemainRequest {
+  SessionInfo session = 1;
+  string bearer_token = 2;
+}
+
 // VersionInfo2 is different than telepresence.common.VersionInfo in
 // that it does not contain an 'api_version' integer.
 message VersionInfo2 {
   string version = 2;
 }
-
 
 service Manager {
   // Version returns the version information of the Manager.
@@ -167,8 +172,9 @@ service Manager {
   // ArriveAsAgent establishes a session between an agent and the Manager.
   rpc ArriveAsAgent(AgentInfo) returns (SessionInfo);
 
-  // Remain indicates that the session is still valid.
-  rpc Remain(SessionInfo) returns (google.protobuf.Empty);
+  // Remain indicates that the session is still valid, and potentially
+  // updates the auth token for the session.
+  rpc Remain(RemainRequest) returns (google.protobuf.Empty);
 
   // Depart terminates a session.
   rpc Depart(SessionInfo) returns (google.protobuf.Empty);
