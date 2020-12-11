@@ -74,7 +74,7 @@ func Retry(c context.Context, text string, f func(context.Context) error, durati
 		}
 
 		// Logging at higher log levels should be done in the called function
-		dlog.Debugf(c, "%s waiting %s before retrying after error: %s", text, delay.String(), funcErr.Error())
+		dlog.Debugf(c, "%s waiting %s before retrying after error: %v", text, delay.String(), funcErr)
 
 		select {
 		case <-c.Done():

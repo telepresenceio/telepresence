@@ -150,7 +150,7 @@ Please specify one or more header matches using --match.`
 		var matches []manager.AgentInfo
 		err := json.Unmarshal([]byte(txt), &matches)
 		if err != nil {
-			msg = fmt.Sprintf("Unable to unmarshal JSON: %s", err.Error())
+			msg = fmt.Sprintf("Unable to unmarshal JSON: %v", err)
 			break
 		}
 		st := &strings.Builder{}
