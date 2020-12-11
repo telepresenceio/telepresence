@@ -262,15 +262,23 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
 		r.ErrorText = err.Error()
-		if cr.InterceptEnabled {
-			// No point in continuing without a traffic manager
-			s.cancel()
-		}
+		// No point in continuing without a traffic manager
+		s.cancel()
 		return r
 	}
 
-	// tmgr.previewHost = previewHost
 	s.trafficMgr = tmgr
+	// Wait for traffic manager to connect
+	dlog.Info(c, "Waiting for TrafficManager to connect")
+	if err := tmgr.waitUntilStarted(); err != nil {
+		dlog.Errorf(c, "Failed to start traffic-manager: %v", err)
+		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
+		r.ErrorText = err.Error()
+		// No point in continuing without a traffic manager
+		s.cancel()
+		return r
+	}
+
 	dlog.Infof(c, "Starting traffic-manager bridge in context %s, namespace %s", cluster.Context, cluster.Namespace)
 	br := newBridge(cluster, s.daemon, tmgr.sshPort)
 	err = br.start(s.ctx)
@@ -282,24 +290,9 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		s.cancel()
 		return r
 	}
+
 	s.bridge = br
-
-	if !cr.InterceptEnabled {
-		setStatus()
-		return r
-	}
-
-	// Wait for traffic manager to connect
-	dlog.Info(c, "Waiting for TrafficManager to connect")
-	if err := tmgr.waitUntilStarted(); err != nil {
-		dlog.Errorf(c, "Failed to start traffic-manager: %v", err)
-		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
-		r.ErrorText = err.Error()
-		// No point in continuing without a traffic manager
-		s.cancel()
-	} else {
-		setStatus()
-	}
+	setStatus()
 	return r
 }
 
