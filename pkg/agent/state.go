@@ -66,7 +66,20 @@ func (s *State) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 	for i, cept := range cepts {
 		if cept.Disposition == manager.InterceptDispositionType_WAITING {
 			// This intercept is ready to be active
-			if chosenIntercept == nil {
+			switch {
+			case chosenIntercept != nil && cept.Id == chosenIntercept.Id:
+				// We've already chosen this one and marked it active, but it's not
+				// active yet in this snapshot.  We could probably just do nothing
+				// and it would probably change to ACTIVE in the very next snapshot
+				// because we already marked it active from a previous snapshot and
+				// that just hasn't propagated yet.  But let's go ahead and tell the
+				// manager to mark it ACTIVE again anyway, just to be safe.
+				dlog.Infof(ctx, "Setting intercept %q as ACTIVE (again?)", cept.Id)
+				reviews = append(reviews, &manager.ReviewInterceptRequest{
+					Id:          cept.Id,
+					Disposition: manager.InterceptDispositionType_ACTIVE,
+				})
+			case chosenIntercept == nil:
 				// We don't have an intercept in play, so choose this one. All
 				// agents will get intercepts in the same order every time, so
 				// this will yield a consistent result. Note that the intercept
@@ -79,7 +92,7 @@ func (s *State) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 					Id:          cept.Id,
 					Disposition: manager.InterceptDispositionType_ACTIVE,
 				})
-			} else {
+			default:
 				// We already have an intercept in play, so reject this one.
 				dlog.Infof(ctx, "Setting intercept %q as AGENT_ERROR; as it conflicts with %q as the current chosen-to-be-ACTIVE intercept", cept.Id, s.chosenID)
 				var msg string
