@@ -296,13 +296,14 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 
 	targetPortSymbolic := true
 	containerPort := -1
+	version := client.Semver().String()
 
 	if sPort.TargetPort.Type == intstr.Int {
 		// Service needs to use a named port
 		targetPortSymbolic = false
 		containerPort = int(sPort.TargetPort.IntVal)
 		svcActions := &svcActions{
-			Version: client.Version(),
+			Version: version,
 			MakePortSymbolic: &makePortSymbolicAction{
 				PortName:   sPort.Name,
 				TargetPort: containerPort,
@@ -320,7 +321,15 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 		svc.Annotations[annTelepresenceActions] = svcActions.String()
 	}
 
-	depActions := &deploymentActions{}
+	depActions := &deploymentActions{
+		Version:           version,
+		ReferencedService: svc.Name,
+		AddTrafficAgent: &addTrafficAgentAction{
+			ContainerPortName:  sPort.TargetPort.StrVal,
+			ContainerPortProto: string(sPort.Protocol),
+			AppPort:            containerPort,
+		},
+	}
 
 	if cPortIndex >= 0 {
 		// Remove name and change container port of the port appointed by the service
@@ -336,12 +345,6 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 
 	if containerPort < 0 {
 		return fmt.Errorf("unable to add agent to deployment %s. The container port cannot be determined", dep.Name)
-	}
-
-	depActions.AddTrafficAgent = &addTrafficAgentAction{
-		ContainerPortName:  sPort.TargetPort.StrVal,
-		ContainerPortProto: string(sPort.Protocol),
-		AppPort:            containerPort,
 	}
 
 	// apply the actions on the Deployment

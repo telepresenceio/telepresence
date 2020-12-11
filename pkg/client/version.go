@@ -1,8 +1,11 @@
 package client
 
 import (
+	"fmt"
 	"os"
 	"runtime/debug"
+
+	"github.com/blang/semver"
 
 	"github.com/datawire/telepresence2/pkg/version"
 )
@@ -26,4 +29,13 @@ func Version() string {
 		return version.Version
 	}
 	return "(unknown version)"
+}
+
+func Semver() semver.Version {
+	v := Version()
+	sv, err := semver.ParseTolerant(v)
+	if err != nil {
+		panic(fmt.Sprintf("this binary's version is unparsable: %v", err))
+	}
+	return sv
 }
