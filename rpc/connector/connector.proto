@@ -22,6 +22,9 @@ service Connector {
   // Deactivates and removes an existent deployment intercept.
   rpc RemoveIntercept(telepresence.manager.RemoveInterceptRequest2) returns (InterceptResult);
 
+  // Uninstalls traffic-agents and traffic-manager from the cluster.
+  rpc Uninstall(UninstallRequest) returns (UninstallResult);
+
   // Returns a list of deployments available for intercept.
   rpc AvailableIntercepts(google.protobuf.Empty) returns (telepresence.manager.AgentInfoSnapshot);
 
@@ -62,6 +65,28 @@ message ConnectInfo {
 
   telepresence.manager.AgentInfoSnapshot agents = 7;
   telepresence.manager.InterceptInfoSnapshot intercepts = 8;
+}
+
+message UninstallRequest {
+  enum UninstallType {
+    UNSPECIFIED = 0;
+
+    // Uninstalls an agent from the named deployments
+    NAMED_AGENTS = 1;
+
+    // Uninstalls all agents
+    ALL_AGENTS = 2;
+
+    // Uninstalls all agents and the traffic-manager
+    EVERYTHING = 3;
+  }
+
+  UninstallType uninstall_type = 1;
+  repeated string agents = 2;
+}
+
+message UninstallResult {
+  string error_text = 1;
 }
 
 // InterceptError is a common error type used by the intercept call family (add,

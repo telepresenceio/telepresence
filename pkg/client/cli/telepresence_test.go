@@ -210,6 +210,44 @@ var _ = Describe("Telepresence", func() {
 		})
 		itTotal++
 	})
+
+	Context("when uninstalling", func() {
+		It("Uninstalls agent on given deployment", func() {
+			stdout, err := output("kubectl", "--namespace", namespace, "get", "deploy", "with-probes", "-o", "jsonpath={.spec.template.spec.containers[*].name}")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(stdout).To(ContainSubstring("traffic-agent"))
+			stdout, stderr := telepresence("--namespace", namespace, "uninstall", "--agent", "with-probes")
+			Expect(stderr).To(BeEmpty())
+			defer telepresence("quit")
+			Eventually(func() (string, error) {
+				return output("kubectl", "--namespace", namespace, "get", "deploy", "with-probes", "-o", "jsonpath={.spec.template.spec.containers[*].name}")
+			}, 5*time.Second, 500*time.Millisecond).ShouldNot(ContainSubstring("traffic-agent"))
+		})
+
+		It("Uninstalls all agents", func() {
+			stdout, err := output("kubectl", "--namespace", namespace, "get", "deploy", "-o", "jsonpath={.items[*].spec.template.spec.containers[*].name}")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(stdout).To(ContainSubstring("traffic-agent"))
+			stdout, stderr := telepresence("--namespace", namespace, "uninstall", "--all-agents")
+			Expect(stderr).To(BeEmpty())
+			defer telepresence("quit")
+			Eventually(func() (string, error) {
+				return output("kubectl", "--namespace", namespace, "get", "deploy", "-o", "jsonpath={.items[*].spec.template.spec.containers[*].name}")
+			}, 5*time.Second, 500*time.Millisecond).ShouldNot(ContainSubstring("traffic-agent"))
+		})
+
+		It("Uninstalls the traffic manager and quits", func() {
+			stdout, err := output("kubectl", "--namespace", namespace, "get", "deploy", "-o", "jsonpath={.items[*].metadata.name}")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(stdout).To(ContainSubstring("traffic-manager"))
+			stdout, stderr := telepresence("--namespace", namespace, "uninstall", "--everything")
+			Expect(stderr).To(BeEmpty())
+			Expect(stdout).To(ContainSubstring("Daemon quitting"))
+			Eventually(func() (string, error) {
+				return output("kubectl", "--namespace", namespace, "get", "deploy", "-o", "jsonpath={.items[*].metadata.name}")
+			}, 5*time.Second, 500*time.Millisecond).ShouldNot(ContainSubstring("traffic-manager"))
+		})
+	})
 })
 
 var _ = BeforeSuite(func() {

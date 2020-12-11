@@ -90,7 +90,7 @@ func Command() *cobra.Command {
 		},
 		{
 			Name:     "Other Commands",
-			Commands: []*cobra.Command{versionCommand() /*, "uninstall" */},
+			Commands: []*cobra.Command{versionCommand(), uninstallCommand()},
 		},
 	})
 	return rootCmd

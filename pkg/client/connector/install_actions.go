@@ -11,13 +11,17 @@ import (
 	"github.com/datawire/ambassador/pkg/kates"
 )
 
-type DeploymentAction interface {
+type actions interface {
+	version() string
+}
+
+type deploymentAction interface {
 	do(dep *kates.Deployment) error
 	isDone(dep *kates.Deployment) bool
 	undo(dep *kates.Deployment) error
 }
 
-type ServiceAction interface {
+type serviceAction interface {
 	do(dep *kates.Service) error
 	isDone(dep *kates.Service) bool
 	undo(dep *kates.Service) error
@@ -80,29 +84,46 @@ type svcActions struct {
 	MakePortSymbolic *makePortSymbolicAction `json:"make_port_symbolic,omitempty"`
 }
 
-func (s *svcActions) do(svc *kates.Service) error {
+func (s *svcActions) actions() (actions []serviceAction) {
 	if s.MakePortSymbolic != nil {
-		return s.MakePortSymbolic.do(svc)
+		actions = append(actions, s.MakePortSymbolic)
+	}
+	return actions
+}
+func (s *svcActions) do(dep *kates.Service) (err error) {
+	for _, action := range s.actions() {
+		if err = action.do(dep); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (s *svcActions) isDone(svc *kates.Service) bool {
-	if s.MakePortSymbolic != nil {
-		return s.MakePortSymbolic.isDone(svc)
+func (s *svcActions) isDone(dep *kates.Service) bool {
+	for _, action := range s.actions() {
+		if !action.isDone(dep) {
+			return false
+		}
 	}
-	return false
+	return true
 }
 
-func (s *svcActions) undo(svc *kates.Service) error {
-	if s.MakePortSymbolic != nil {
-		return s.MakePortSymbolic.undo(svc)
+func (s *svcActions) undo(dep *kates.Service) (err error) {
+	actions := s.actions()
+	for i := len(actions) - 1; i >= 0; i-- {
+		if err = actions[i].undo(dep); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (s *svcActions) String() string {
 	return mustMarshal(s)
+}
+
+func (s *svcActions) version() string {
+	return s.Version
 }
 
 // addTrafficAgentAction is an action that adds a traffic-agent to the set of
@@ -152,13 +173,16 @@ func (ata *addTrafficAgentAction) undo(dep *kates.Deployment) error {
 	cns := dep.Spec.Template.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
-		if cn.Name == "traffic-agent" {
-			// remove and keep order
-			copy(cns[i:], cns[i+1:])
-			last := len(cns) - 1
-			cns[last] = kates.Container{}
-			cns = cns[:last]
+		if cn.Name != "traffic-agent" {
+			continue
 		}
+
+		// remove and keep order
+		copy(cns[i:], cns[i+1:])
+		last := len(cns) - 1
+		cns[last] = kates.Container{}
+		dep.Spec.Template.Spec.Containers = cns[:last]
+		break
 	}
 	return nil
 }
@@ -231,19 +255,25 @@ func (hcp *hideContainerPortAction) undo(dep *kates.Deployment) error {
 }
 
 type deploymentActions struct {
-	Version           string                   `json:"version"`
+	Version           string `json:"version"`
+	ReferencedService string
 	HideContainerPort *hideContainerPortAction `json:"hide_container_port,omitempty"`
 	AddTrafficAgent   *addTrafficAgentAction   `json:"add_traffic_agent,omitempty"`
 }
 
-func (d *deploymentActions) do(dep *kates.Deployment) (err error) {
+func (d *deploymentActions) actions() (actions []deploymentAction) {
 	if d.HideContainerPort != nil {
-		if err = d.HideContainerPort.do(dep); err != nil {
-			return err
-		}
+		actions = append(actions, d.HideContainerPort)
 	}
 	if d.AddTrafficAgent != nil {
-		if err = d.AddTrafficAgent.do(dep); err != nil {
+		actions = append(actions, d.AddTrafficAgent)
+	}
+	return actions
+}
+
+func (d *deploymentActions) do(dep *kates.Deployment) (err error) {
+	for _, action := range d.actions() {
+		if err = action.do(dep); err != nil {
 			return err
 		}
 	}
@@ -251,18 +281,18 @@ func (d *deploymentActions) do(dep *kates.Deployment) (err error) {
 }
 
 func (d *deploymentActions) isDone(dep *kates.Deployment) bool {
-	return (d.HideContainerPort == nil || d.HideContainerPort.isDone(dep)) &&
-		(d.AddTrafficAgent == nil || d.AddTrafficAgent.isDone(dep))
+	for _, action := range d.actions() {
+		if !action.isDone(dep) {
+			return false
+		}
+	}
+	return true
 }
 
 func (d *deploymentActions) undo(dep *kates.Deployment) (err error) {
-	if d.AddTrafficAgent != nil {
-		if err = d.AddTrafficAgent.undo(dep); err != nil {
-			return err
-		}
-	}
-	if d.HideContainerPort != nil {
-		if err = d.HideContainerPort.undo(dep); err != nil {
+	actions := d.actions()
+	for i := len(actions) - 1; i >= 0; i-- {
+		if err = actions[i].undo(dep); err != nil {
 			return err
 		}
 	}
@@ -271,4 +301,8 @@ func (d *deploymentActions) undo(dep *kates.Deployment) (err error) {
 
 func (d *deploymentActions) String() string {
 	return mustMarshal(d)
+}
+
+func (d *deploymentActions) version() string {
+	return d.Version
 }

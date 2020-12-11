@@ -180,6 +180,12 @@ func (s *service) ListIntercepts(_ context.Context, _ *empty.Empty) (*manager.In
 	return s.trafficMgr.interceptInfoSnapshot(), nil
 }
 
+func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
+	c = s.callCtx(c, "Uninstall")
+	defer func() { err = callRecovery(c, recover(), err) }()
+	return s.trafficMgr.uninstall(c, ur)
+}
+
 func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	s.cancel()
 	return &empty.Empty{}, nil
