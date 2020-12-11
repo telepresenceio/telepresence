@@ -1,0 +1,52 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: with-probes
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: with-probes
+  template:
+    metadata:
+      annotations:
+        consul.hashicorp.com/connect-inject: 'false'
+        sidecar.istio.io/inject: 'false'
+      labels:
+        service: with-probes
+    spec:
+      containers:
+        - name: sample-app
+          image: gcr.io/datawire/k8s-initializer-sample-app:latest
+          imagePullPolicy: Always
+          env:
+            - name: LISTEN_PORT
+              value: '3000'
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          ports:
+            - containerPort: 3000
+              name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: with-probes
+  labels:
+    service: with-probes
+spec:
+  ports:
+    - port: 80
+      name: http
+      targetPort: http
+  selector:
+    service: with-probes

@@ -30,6 +30,8 @@ const sshdPort = 8022
 const apiPort = 8081
 const appName = "traffic-manager"
 const telName = "manager"
+const domainPrefix = "telepresence.datawire.io/"
+const annTelepresenceActions = domainPrefix + "actions"
 
 var labelMap = map[string]string{
 	"app":          appName,
@@ -140,8 +142,8 @@ func (ki *installer) updateDeployment(c context.Context, currentDep *kates.Deplo
 	return dep, err
 }
 
-func (ki *installer) portToIntercept(c context.Context, name string, labels map[string]string, cns []corev1.Container) (
-	service *corev1.Service, sPort *corev1.ServicePort, cn *corev1.Container, cPortIndex int, err error) {
+func (ki *installer) portToIntercept(c context.Context, name string, labels map[string]string, dep *kates.Deployment) (
+	service *kates.Service, sPort *kates.ServicePort, cn *kates.Container, cPortIndex int, err error) {
 	svcs := make([]*kates.Service, 0)
 	err = ki.client.List(c, kates.Query{
 		Name:      name,
@@ -170,11 +172,12 @@ func (ki *installer) portToIntercept(c context.Context, name string, labels map[
 	if len(matching) == 0 {
 		return nil, nil, nil, 0, fmt.Errorf("found no services with a selector matching labels %v", labels)
 	}
-	return findMatchingPort(c, matching, cns)
+	return findMatchingPort(c, dep, matching)
 }
 
-func findMatchingPort(c context.Context, svcs []*kates.Service, cns []corev1.Container) (
-	service *corev1.Service, sPort *corev1.ServicePort, cn *corev1.Container, cPortIndex int, err error) {
+func findMatchingPort(c context.Context, dep *kates.Deployment, svcs []*kates.Service) (
+	service *kates.Service, sPort *kates.ServicePort, cn *kates.Container, cPortIndex int, err error) {
+	cns := dep.Spec.Template.Spec.Containers
 	for _, svc := range svcs {
 		ports := svc.Spec.Ports
 		if len(ports) != 1 {
@@ -242,23 +245,24 @@ func findMatchingPort(c context.Context, svcs []*kates.Service, cns []corev1.Con
 		default:
 			// Conflict
 			return nil, nil, nil, 0, fmt.Errorf(
-				"found services with conflicting port mappings to container %s. Please use --service to specify", cn.Name)
+				"found services with conflicting port mappings to deployment %s. Please use --service to specify", dep.Name)
 		}
 	}
 
 	if sPort == nil {
-		return nil, nil, nil, 0, fmt.Errorf("found no services with a port that matches container %s", cn.Name)
+		return nil, nil, nil, 0, fmt.Errorf("found no services with a port that matches a container in deployment %s", dep.Name)
 	}
 	return service, sPort, cn, cPortIndex, nil
 }
 
 var agentExists = errors.New("agent exists")
+var agentNotFound = errors.New("no such agent")
 
 func (ki *installer) ensureAgent(c context.Context, name, svcName string) error {
 	dep, err := ki.findDeployment(c, name)
 	if err != nil {
 		if kates.IsNotFound(err) {
-			err = fmt.Errorf("no such deployment %q", name)
+			err = agentNotFound
 		}
 		return err
 	}
@@ -280,7 +284,7 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 		// TODO: How do we handle multiple containers?
 		return fmt.Errorf("unable to add agent to deployment %s. It doesn't have one container", dep.Name)
 	}
-	svc, sPort, icn, cPortIndex, err := ki.portToIntercept(c, svcName, dep.Spec.Template.Labels, containers)
+	svc, sPort, icn, cPortIndex, err := ki.portToIntercept(c, svcName, dep.Spec.Template.Labels, dep)
 	if err != nil {
 		return err
 	}
@@ -290,52 +294,73 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 	}
 	dlog.Debugf(c, "using service %s port %s when intercepting deployment %q", svc.Name, name, dep.Name)
 
-	svcNeedsUpdate := false
-	containerPort := int32(-1)
+	targetPortSymbolic := true
+	containerPort := -1
 
 	if sPort.TargetPort.Type == intstr.Int {
 		// Service needs to use a named port
-		containerPort = sPort.TargetPort.IntVal
-		sPort.TargetPort = intstr.FromString("tele-proxied")
-		svcNeedsUpdate = true
+		targetPortSymbolic = false
+		containerPort = int(sPort.TargetPort.IntVal)
+		svcActions := &svcActions{
+			Version: client.Version(),
+			MakePortSymbolic: &makePortSymbolicAction{
+				PortName:   sPort.Name,
+				TargetPort: containerPort,
+			},
+		}
+		// apply the actions on the Service
+		if err = svcActions.do(svc); err != nil {
+			return err
+		}
+
+		// save the actions so that they can be undone.
+		if svc.Annotations == nil {
+			svc.Annotations = make(map[string]string)
+		}
+		svc.Annotations[annTelepresenceActions] = svcActions.String()
 	}
+
+	depActions := &deploymentActions{}
 
 	if cPortIndex >= 0 {
 		// Remove name and change container port of the port appointed by the service
 		icp := &icn.Ports[cPortIndex]
-		icp.Name = ""
-		containerPort = icp.ContainerPort
+		containerPort = int(icp.ContainerPort)
+		if targetPortSymbolic {
+			depActions.HideContainerPort = &hideContainerPortAction{
+				ContainerName: icn.Name,
+				PortName:      sPort.TargetPort.StrVal,
+			}
+		}
 	}
 
 	if containerPort < 0 {
 		return fmt.Errorf("unable to add agent to deployment %s. The container port cannot be determined", dep.Name)
 	}
 
-	tplSpec.Containers = []corev1.Container{*icn, {
-		Name:  "traffic-agent",
-		Image: managerImageName(),
-		Args:  []string{"agent"},
-		Ports: []corev1.ContainerPort{{
-			Name:          sPort.TargetPort.StrVal,
-			Protocol:      sPort.Protocol,
-			ContainerPort: 9900,
-		}},
-		Env: []corev1.EnvVar{{
-			Name:  "LOG_LEVEL",
-			Value: "debug",
-		}, {
-			Name:  "AGENT_NAME",
-			Value: dep.Name,
-		}, {
-			Name:  "APP_PORT",
-			Value: strconv.Itoa(int(containerPort)),
-		}}}}
+	depActions.AddTrafficAgent = &addTrafficAgentAction{
+		ContainerPortName:  sPort.TargetPort.StrVal,
+		ContainerPortProto: string(sPort.Protocol),
+		AppPort:            containerPort,
+	}
+
+	// apply the actions on the Deployment
+	if err = depActions.do(dep); err != nil {
+		return err
+	}
+
+	// save the actions so that they can be undone.
+	if dep.Annotations == nil {
+		dep.Annotations = make(map[string]string)
+	}
+	dep.Annotations[annTelepresenceActions] = depActions.String()
 
 	dlog.Infof(c, "Adding agent to deployment %s in namespace %s. Image: %s", dep.Name, ki.Namespace, managerImageName())
 	if err = ki.client.Update(c, dep, dep); err != nil {
 		return err
 	}
-	if svcNeedsUpdate {
+	if !targetPortSymbolic {
+		// service must be updated to use generated port name
 		if err = ki.client.Update(c, svc, svc); err != nil {
 			return err
 		}

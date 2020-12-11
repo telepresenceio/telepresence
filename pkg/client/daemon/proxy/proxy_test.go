@@ -55,7 +55,7 @@ func TestProxy_Run(t *testing.T) {
 
 	// Release latch (close currently proxied connections)
 	latch.Done()
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	// Check that the rest got proxied
 	if count != connLimit*2 {

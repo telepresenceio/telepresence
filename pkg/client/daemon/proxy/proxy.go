@@ -37,7 +37,7 @@ func setRlimit(c context.Context) {
 	var rLimit syscall.Rlimit
 	err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
 	if err != nil {
-		dlog.Errorf(c, "error getting rlimit: %s", err.Error())
+		dlog.Errorf(c, "error getting rlimit: %v", err)
 	} else {
 		dlog.Debugf(c, "initial rlimit: %d", rLimit)
 	}
@@ -46,12 +46,12 @@ func setRlimit(c context.Context) {
 	rLimit.Cur = 999999
 	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit)
 	if err != nil {
-		dlog.Errorf(c, "Error setting rlimit: %s", err.Error())
+		dlog.Errorf(c, "Error setting rlimit: %v", err)
 	}
 
 	err = syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
 	if err != nil {
-		dlog.Errorf(c, "Error getting rlimit: %s", err.Error())
+		dlog.Errorf(c, "Error getting rlimit: %v", err)
 	} else {
 		dlog.Debugf(c, "Final rlimit: %d", rLimit)
 	}
@@ -84,14 +84,14 @@ func (pxy *Proxy) Run(c context.Context, limit int64) {
 				// caused by a listener close
 				return
 			}
-			dlog.Error(c, err.Error())
+			dlog.Error(c, err)
 			continue
 		}
 		switch conn := conn.(type) {
 		case *net.TCPConn:
 			dlog.Debugf(c, "Handling connection from %s", conn.RemoteAddr())
 			if err = capacity.Acquire(c, 1); err != nil {
-				dlog.Errorf(c, "proxy failed to acquire semaphore: %s", err.Error())
+				dlog.Errorf(c, "proxy failed to acquire semaphore: %v", err)
 				return
 			}
 			go func() {
@@ -119,7 +119,7 @@ func (pxy *Proxy) handleConnection(c context.Context, conn *net.TCPConn) {
 	dialer, err := proxy.SOCKS5("tcp", "localhost:1080", nil, proxy.Direct)
 	//	dialer, err := proxy.SOCKS5("tcp", "localhost:9050", nil, proxy.Direct)
 	if err != nil {
-		dlog.Error(c, err.Error())
+		dlog.Error(c, err)
 		conn.Close()
 		return
 	}
@@ -132,7 +132,7 @@ func (pxy *Proxy) handleConnection(c context.Context, conn *net.TCPConn) {
 		if tc.Err() == context.DeadlineExceeded {
 			err = fmt.Errorf("timeout when dialing tcp %s", host)
 		}
-		dlog.Error(c, err.Error())
+		dlog.Error(c, err)
 		conn.Close()
 		return
 	}
@@ -177,13 +177,13 @@ func (pxy *Proxy) pipe(c context.Context, from, to net.Conn, done *sync.WaitGrou
 		n, err := from.Read(buf[0:size])
 		if err != nil {
 			if err != io.EOF {
-				dlog.Error(c, err.Error())
+				dlog.Error(c, err)
 			}
 			break
 		}
 		_, err = to.Write(buf[0:n])
 		if err != nil {
-			dlog.Error(c, err.Error())
+			dlog.Error(c, err)
 			break
 		}
 	}

@@ -216,7 +216,7 @@ func run(dns, fallback string) error {
 				_ = os.Remove(client.DaemonSocketName)
 			}
 			if err != nil {
-				dlog.Errorf(c, "Server ended with: %s", err.Error())
+				dlog.Errorf(c, "Server ended with: %v", err)
 			} else {
 				dlog.Debug(c, "Server ended")
 			}
@@ -248,7 +248,7 @@ func run(dns, fallback string) error {
 
 	err := g.Wait()
 	if err != nil {
-		dlog.Error(c, err.Error())
+		dlog.Error(c, err)
 	}
 	return err
 }

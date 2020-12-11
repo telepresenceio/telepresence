@@ -92,7 +92,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	dlog.Debugf(c, "QTYPE[%v] %s -> FALLBACK", r.Question[0].Qtype, domain)
 	in, err := dns.Exchange(r, s.fallback)
 	if err != nil {
-		dlog.Error(c, err.Error())
+		dlog.Error(c, err)
 		return
 	}
 	_ = w.WriteMsg(in)

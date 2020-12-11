@@ -149,7 +149,7 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 	})
 
 	if err != nil {
-		dlog.Errorf(c, "ArriveAsClient: %s", err.Error())
+		dlog.Errorf(c, "ArriveAsClient: %v", err)
 		conn.Close()
 		return err
 	}

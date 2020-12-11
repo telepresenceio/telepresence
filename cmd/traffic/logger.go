@@ -30,7 +30,7 @@ func makeBaseLogger() dlog.Logger {
 		logLevelMessage += " (default)"
 	case err != nil: // Didn't parse -> use default and show error
 		logLevel = defaultLogLevel
-		logLevelMessage += fmt.Sprintf(" (LOG_LEVEL=%q -> %s)", logLevelStr, err.Error())
+		logLevelMessage += fmt.Sprintf(" (LOG_LEVEL=%q -> %v)", logLevelStr, err)
 	default: // parsed successfully -> use that level
 		logLevelMessage += fmt.Sprintf(" (LOG_LEVEL=%q)", logLevelStr)
 	}

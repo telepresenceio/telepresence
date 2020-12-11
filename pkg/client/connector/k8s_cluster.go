@@ -63,7 +63,7 @@ func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, th
 	// We want this command to keep on running. If it returns an error, then it was unsuccessful.
 	if err = pf.Start(); err != nil {
 		out.Close()
-		dlog.Errorf(c, "port-forward failed to start: %s", client.RunError(err).Error())
+		dlog.Errorf(c, "port-forward failed to start: %v", client.RunError(err))
 		return err
 	}
 
@@ -100,7 +100,7 @@ func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, th
 				err = nil
 			} else {
 				err = client.RunError(err)
-				dlog.Errorf(c, "port-forward failed: %s", err.Error())
+				dlog.Errorf(c, "port-forward failed: %v", err)
 			}
 		}
 		if !ok {
@@ -147,7 +147,7 @@ func trackKCluster(c context.Context, ctxName, namespace string, kargs []string)
 		cmd := dexec.CommandContext(c, "kubectl", "config", "current-context")
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			return nil, fmt.Errorf("kubectl config current-context: %s", client.RunError(err).Error())
+			return nil, fmt.Errorf("kubectl config current-context: %v", client.RunError(err))
 		}
 		ctxName = strings.TrimSpace(string(output))
 	}
@@ -157,7 +157,7 @@ func trackKCluster(c context.Context, ctxName, namespace string, kargs []string)
 		cmd := dexec.CommandContext(c, "kubectl", "--context", ctxName, "config", "view", "-o", nsQuery)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			return nil, fmt.Errorf("kubectl config view ns failed: %s", client.RunError(err).Error())
+			return nil, fmt.Errorf("kubectl config view ns failed: %v", client.RunError(err))
 		}
 		namespace = strings.TrimSpace(string(output))
 		if namespace == "" { // This is what kubens does
@@ -167,18 +167,18 @@ func trackKCluster(c context.Context, ctxName, namespace string, kargs []string)
 
 	kc, err := newKCluster("", ctxName, namespace, kargs...)
 	if err != nil {
-		return nil, fmt.Errorf("k8s client create failed. %s", client.RunError(err).Error())
+		return nil, fmt.Errorf("k8s client create failed. %v", client.RunError(err))
 	}
 
 	if err := kc.check(c); err != nil {
-		return nil, fmt.Errorf("initial cluster check failed: %s", client.RunError(err).Error())
+		return nil, fmt.Errorf("initial cluster check failed: %v", client.RunError(err))
 	}
 	dlog.Infof(c, "Context: %s", kc.Context)
 
 	cmd := kc.getKubectlCmd(c, "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("kubectl config view server: %s", client.RunError(err).Error())
+		return nil, fmt.Errorf("kubectl config view server: %v", client.RunError(err))
 	}
 	kc.srv = strings.TrimSpace(string(output))
 	dlog.Infof(c, "Server: %s", kc.srv)

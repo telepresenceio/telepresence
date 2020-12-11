@@ -58,9 +58,9 @@ func capture(t *testing.T, exe string, args ...string) string {
 	sout := string(out)
 	if err != nil {
 		if t != nil {
-			t.Fatalf("%s\n%s", sout, err.Error())
+			t.Fatalf("%s\n%v", sout, err)
 		} else {
-			log.Fatalf("%s\n%s", sout, err.Error())
+			log.Fatalf("%s\n%v", sout, err)
 		}
 	}
 	return sout
@@ -73,9 +73,9 @@ func captureOut(t *testing.T, exe string, args ...string) string {
 	sout := string(out)
 	if err != nil {
 		if t != nil {
-			t.Fatalf("%s\n%s", sout, err.Error())
+			t.Fatalf("%s\n%v", sout, err)
 		} else {
-			log.Fatalf("%s\n%s", sout, err.Error())
+			log.Fatalf("%s\n%v", sout, err)
 		}
 	}
 	return sout
