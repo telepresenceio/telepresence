@@ -208,11 +208,11 @@ func (o *outbound) translatorWorker(c context.Context) (err error) {
 			if err == nil {
 				err = err2
 			} else {
-				dlog.Error(c, err2.Error())
+				dlog.Error(c, err2)
 			}
 		}
 		if err != nil {
-			dlog.Errorf(c, "Server exited with error %s", err.Error())
+			dlog.Errorf(c, "Server exited with error %v", err)
 		} else {
 			dlog.Debug(c, "Server done")
 		}
@@ -237,7 +237,7 @@ func (o *outbound) translatorWorker(c context.Context) (err error) {
 			return nil
 		case f := <-o.work:
 			if err = f(c); err != nil {
-				dlog.Error(c, err.Error())
+				dlog.Error(c, err)
 			}
 		}
 	}
@@ -321,11 +321,11 @@ func (o *outbound) doUpdate(c context.Context, table *rpc.Table) error {
 				switch newRoute.Proto {
 				case "tcp":
 					if err := o.translator.ClearTCP(c, oldRoute.Ip, oldRoute.Port); err != nil {
-						dlog.Errorf(c, "clear tpc: %s", err.Error())
+						dlog.Errorf(c, "clear tpc: %v", err)
 					}
 				case "udp":
 					if err := o.translator.ClearUDP(c, oldRoute.Ip, oldRoute.Port); err != nil {
-						dlog.Errorf(c, "clear udp: %s", err.Error())
+						dlog.Errorf(c, "clear udp: %v", err)
 					}
 				default:
 					dlog.Warnf(c, "unrecognized protocol: %v", newRoute)
@@ -336,11 +336,11 @@ func (o *outbound) doUpdate(c context.Context, table *rpc.Table) error {
 				switch newRoute.Proto {
 				case "tcp":
 					if err := o.translator.ForwardTCP(c, newRoute.Ip, newRoute.Port, newRoute.Target); err != nil {
-						dlog.Errorf(c, "forward tcp: %s", err.Error())
+						dlog.Errorf(c, "forward tcp: %v", err)
 					}
 				case "udp":
 					if err := o.translator.ForwardUDP(c, newRoute.Ip, newRoute.Port, newRoute.Target); err != nil {
-						dlog.Errorf(c, "forward udp: %s", err.Error())
+						dlog.Errorf(c, "forward udp: %v", err)
 					}
 				default:
 					dlog.Warnf(c, "unrecognized protocol: %v", newRoute)
@@ -371,11 +371,11 @@ func (o *outbound) doUpdate(c context.Context, table *rpc.Table) error {
 		switch route.Proto {
 		case "tcp":
 			if err := o.translator.ClearTCP(c, route.Ip, route.Port); err != nil {
-				dlog.Errorf(c, "clear tpc: %s", err.Error())
+				dlog.Errorf(c, "clear tpc: %v", err)
 			}
 		case "udp":
 			if err := o.translator.ClearUDP(c, route.Ip, route.Port); err != nil {
-				dlog.Errorf(c, "clear udp: %s", err.Error())
+				dlog.Errorf(c, "clear udp: %v", err)
 			}
 		default:
 			dlog.Warnf(c, "unrecognized protocol: %v", route)

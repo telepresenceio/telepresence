@@ -300,14 +300,14 @@ func (br *bridge) check(c context.Context) bool {
 	address := fmt.Sprintf("localhost:%d", br.sshPort)
 	conn, err := net.DialTimeout("tcp", address, 15*time.Second)
 	if err != nil {
-		dlog.Errorf(c, "fail to establish tcp connection to %s: %s", address, err.Error())
+		dlog.Errorf(c, "fail to establish tcp connection to %s: %v", address, err)
 		return false
 	}
 	defer conn.Close()
 
 	msg, _, err := bufio.NewReader(conn).ReadLine()
 	if err != nil {
-		dlog.Errorf(c, "tcp read: %s", err.Error())
+		dlog.Errorf(c, "tcp read: %v", err)
 		return false
 	}
 	if !strings.Contains(string(msg), "SSH") {

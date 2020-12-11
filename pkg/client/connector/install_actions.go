@@ -25,7 +25,7 @@ type ServiceAction interface {
 func mustMarshal(data interface{}) string {
 	js, err := json.Marshal(data)
 	if err != nil {
-		panic(fmt.Sprintf("internal error, unable to json.Marshal %T: %s", data, err.Error()))
+		panic(fmt.Sprintf("internal error, unable to json.Marshal %T: %v", data, err))
 	}
 	return string(js)
 }

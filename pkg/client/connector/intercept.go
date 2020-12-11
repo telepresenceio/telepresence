@@ -74,7 +74,7 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 				// the agent exists although it has not been reported yet
 				break
 			}
-			dlog.Error(c, err.Error())
+			dlog.Error(c, err)
 			if err == agentNotFound {
 				result.Error = rpc.InterceptError_NOT_FOUND
 				result.ErrorText = agentName
@@ -87,7 +87,7 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 		dlog.Infof(c, "waiting for new agent for deployment %q", agentName)
 		_, err := tm.waitForAgent(c, agentName)
 		if err != nil {
-			dlog.Error(c, err.Error())
+			dlog.Error(c, err)
 			result.Error = rpc.InterceptError_FAILED_TO_ESTABLISH
 			result.ErrorText = err.Error()
 			return result, nil
@@ -107,7 +107,7 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	dlog.Debugf(c, "CreateIntercept request: %s", string(js))
 	ii, err := tm.grpc.CreateIntercept(c, ir)
 	if err != nil {
-		dlog.Debugf(c, "manager responded to CreateIntercept with error %s", err.Error())
+		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
 		result.Error = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
 		result.ErrorText = err.Error()
 		return result, nil
@@ -158,7 +158,7 @@ func (tm *trafficManager) waitForActiveIntercept(c context.Context, id string) (
 		dlog.Errorf(c, "intercept id: %s, state: %s, message: %s", id, ii.Disposition, ii.Message)
 		return nil, errors.New(ii.Message)
 	case <-c.Done():
-		return nil, fmt.Errorf("%s while waiting for intercept with id %s to become active", c.Err().Error(), id)
+		return nil, fmt.Errorf("%v while waiting for intercept with id %s to become active", c.Err(), id)
 	}
 }
 
@@ -181,7 +181,7 @@ func (tm *trafficManager) waitForAgent(c context.Context, name string) (*manager
 	case ai := <-done:
 		return ai, nil
 	case <-c.Done():
-		return nil, fmt.Errorf("%s while waiting for agent %s to be present", c.Err().Error(), name)
+		return nil, fmt.Errorf("%v while waiting for agent %s to be present", c.Err(), name)
 	}
 }
 

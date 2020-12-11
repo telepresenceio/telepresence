@@ -275,7 +275,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	br := newBridge(cluster, s.daemon, tmgr.sshPort)
 	err = br.start(s.ctx)
 	if err != nil {
-		dlog.Errorf(c, "Failed to start traffic-manager bridge: %s", err.Error())
+		dlog.Errorf(c, "Failed to start traffic-manager bridge: %v", err)
 		r.Error = rpc.ConnectInfo_BRIDGE_FAILED
 		r.ErrorText = err.Error()
 		// No point in continuing without a bridge
@@ -292,7 +292,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	// Wait for traffic manager to connect
 	dlog.Info(c, "Waiting for TrafficManager to connect")
 	if err := tmgr.waitUntilStarted(); err != nil {
-		dlog.Errorf(c, "Failed to start traffic-manager: %s", err.Error())
+		dlog.Errorf(c, "Failed to start traffic-manager: %v", err)
 		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
 		r.ErrorText = err.Error()
 		// No point in continuing without a traffic manager
@@ -376,7 +376,7 @@ func run(init bool) error {
 				_ = os.Remove(client.ConnectorSocketName)
 			}
 			if err != nil {
-				dlog.Errorf(c, "Server ended with: %s", err.Error())
+				dlog.Errorf(c, "Server ended with: %v", err)
 			} else {
 				dlog.Debug(c, "Server ended")
 			}
@@ -406,7 +406,7 @@ func run(init bool) error {
 
 	err = g.Wait()
 	if err != nil {
-		dlog.Error(c, err.Error())
+		dlog.Error(c, err)
 	}
 	return err
 }

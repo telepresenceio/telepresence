@@ -283,7 +283,7 @@ var _ = AfterSuite(func() {
 func applyApp(name string) error {
 	err := kubectl("apply", "-f", fmt.Sprintf("k8s/%s.yaml", name))
 	if err != nil {
-		return fmt.Errorf("failed to deploy %s: %s", name, err.Error())
+		return fmt.Errorf("failed to deploy %s: %v", name, err)
 	}
 	return waitForService(name)
 }
@@ -291,11 +291,11 @@ func applyApp(name string) error {
 func applyEchoService(name string) error {
 	err := kubectl("create", "deploy", name, "--image", "jmalloc/echo-server:0.1.0")
 	if err != nil {
-		return fmt.Errorf("failed to create deployment %s: %s", name, err)
+		return fmt.Errorf("failed to create deployment %s: %v", name, err)
 	}
 	err = kubectl("expose", "deploy", name, "--port", "80", "--target-port", "8080")
 	if err != nil {
-		return fmt.Errorf("failed to expose deployment %s: %s", name, err)
+		return fmt.Errorf("failed to expose deployment %s: %v", name, err)
 	}
 	return waitForService(name)
 }
@@ -380,7 +380,7 @@ func telepresence(args ...string) (string, string) {
 	cmd := getCommand(args...)
 	err := cmd.Execute()
 	if err != nil {
-		fmt.Fprintln(cmd.ErrOrStderr(), err.Error())
+		fmt.Fprintln(cmd.ErrOrStderr(), err)
 	}
 	return trimmed(cmd.OutOrStdout), trimmed(cmd.ErrOrStderr)
 }
