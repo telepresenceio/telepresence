@@ -46,7 +46,7 @@ type trafficManager struct {
 // newTrafficManager returns a TrafficManager resource for the given
 // cluster if it has a Traffic Manager service.
 func newTrafficManager(c context.Context, cluster *k8sCluster, installID string, isCI bool) (*trafficManager, error) {
-	name, err := user.Current()
+	userinfo, err := user.Current()
 	if err != nil {
 		return nil, errors.Wrap(err, "user.Current()")
 	}
@@ -75,7 +75,7 @@ func newTrafficManager(c context.Context, cluster *k8sCluster, installID string,
 		installID:   installID,
 		connectCI:   isCI,
 		startup:     make(chan bool),
-		userAndHost: fmt.Sprintf("%s@%s", name, host)}
+		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host)}
 
 	dgroup.ParentGroup(c).Go("traffic-manager", tm.start)
 	return tm, nil
