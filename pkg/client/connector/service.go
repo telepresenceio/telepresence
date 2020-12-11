@@ -262,10 +262,8 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
 		r.ErrorText = err.Error()
-		if cr.InterceptEnabled {
-			// No point in continuing without a traffic manager
-			s.cancel()
-		}
+		// No point in continuing without a traffic manager
+		s.cancel()
 		return r
 	}
 

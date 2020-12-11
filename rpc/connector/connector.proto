@@ -41,9 +41,6 @@ message ConnectRequest {
 
   // true if this is part of a CI run
   bool is_ci = 5;
-
-  // true if the call must wait for a running traffic manager before returning
-  bool intercept_enabled = 6;
 }
 
 message ConnectInfo {
