@@ -42,6 +42,7 @@ service SystemAProxy {
 
 message CreateDomainRequest {
   string intercept_id = 1;
+  bool display_banner = 2;
 }
 
 message CreateDomainResponse {
