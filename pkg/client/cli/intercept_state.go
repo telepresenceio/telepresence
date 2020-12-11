@@ -134,9 +134,9 @@ func (ii *interceptInfo) newInterceptState(cs *connectorState) *interceptState {
 	return &interceptState{interceptInfo: ii, cs: cs}
 }
 
-func interceptMessage(ie connector.InterceptError, txt string) string {
+func interceptMessage(r *connector.InterceptResult) string {
 	msg := ""
-	switch ie {
+	switch r.Error {
 	case connector.InterceptError_UNSPECIFIED:
 	case connector.InterceptError_NO_PREVIEW_HOST:
 		msg = `Your cluster is not configured for Preview URLs.
@@ -149,14 +149,14 @@ Please specify one or more header matches using --match.`
 	case connector.InterceptError_TRAFFIC_MANAGER_CONNECTING:
 		msg = "Connecting to traffic manager..."
 	case connector.InterceptError_ALREADY_EXISTS:
-		msg = fmt.Sprintf("Intercept with name %q already exists", txt)
+		msg = fmt.Sprintf("Intercept with name %q already exists", r.ErrorText)
 	case connector.InterceptError_NO_ACCEPTABLE_DEPLOYMENT:
-		msg = fmt.Sprintf("No interceptable deployment matching %s found", txt)
+		msg = fmt.Sprintf("No interceptable deployment matching %s found", r.ErrorText)
 	case connector.InterceptError_TRAFFIC_MANAGER_ERROR:
-		msg = txt
+		msg = r.ErrorText
 	case connector.InterceptError_AMBIGUOUS_MATCH:
 		var matches []manager.AgentInfo
-		err := json.Unmarshal([]byte(txt), &matches)
+		err := json.Unmarshal([]byte(r.ErrorText), &matches)
 		if err != nil {
 			msg = fmt.Sprintf("Unable to unmarshal JSON: %s", err.Error())
 			break
@@ -169,13 +169,17 @@ Please specify one or more header matches using --match.`
 		}
 		msg = st.String()
 	case connector.InterceptError_FAILED_TO_ESTABLISH:
-		msg = fmt.Sprintf("Failed to establish intercept: %s", txt)
+		msg = fmt.Sprintf("Failed to establish intercept: %s", r.ErrorText)
 	case connector.InterceptError_FAILED_TO_REMOVE:
-		msg = fmt.Sprintf("Error while removing intercept: %v", txt)
+		msg = fmt.Sprintf("Error while removing intercept: %v", r.ErrorText)
 	case connector.InterceptError_NOT_FOUND:
-		msg = fmt.Sprintf("Intercept named %q not found", txt)
+		msg = fmt.Sprintf("Intercept named %q not found", r.ErrorText)
 	}
-	return msg
+	if id := r.GetInterceptInfo().GetId(); id != "" {
+		return fmt.Sprintf("Intercept %q: %s", id, msg)
+	} else {
+		return fmt.Sprintf("Intercept: %s", msg)
+	}
 }
 
 func (is *interceptState) EnsureState() (bool, error) {
@@ -199,12 +203,13 @@ func (is *interceptState) EnsureState() (bool, error) {
 		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", is.agentName)
 		return true, nil
 	case connector.InterceptError_ALREADY_EXISTS:
-		fmt.Fprintln(is.cmd.OutOrStdout(), interceptMessage(r.Error, r.ErrorText))
+		fmt.Fprintln(is.cmd.OutOrStdout(), interceptMessage(r))
 		return false, nil
 	case connector.InterceptError_NO_CONNECTION:
 		return false, errConnectorIsNotRunning
+	default:
+		return false, errors.New(interceptMessage(r))
 	}
-	return false, errors.New(interceptMessage(r.Error, r.ErrorText))
 }
 
 func (is *interceptState) DeactivateState() error {
@@ -216,7 +221,7 @@ func (is *interceptState) DeactivateState() error {
 		return err
 	}
 	if r.Error != connector.InterceptError_UNSPECIFIED {
-		return errors.New(interceptMessage(r.Error, r.ErrorText))
+		return errors.New(interceptMessage(r))
 	}
 	return nil
 }

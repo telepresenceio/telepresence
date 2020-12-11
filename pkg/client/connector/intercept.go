@@ -101,6 +101,7 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	js, _ := json.Marshal(ir)
 	dlog.Debugf(c, "CreateIntercept request: %s", string(js))
 	ii, err := tm.grpc.CreateIntercept(c, ir)
+	result.InterceptInfo = ii
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %s", err.Error())
 		result.Error = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
@@ -125,7 +126,6 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 		return result, nil
 	}
 
-	result.InterceptInfo = ii
 	return result, nil
 }
 

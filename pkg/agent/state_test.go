@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/pkg/agent"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 )
@@ -40,6 +41,7 @@ func makeFS(t *testing.T) (*agent.Forwarder, *agent.State) {
 }
 
 func TestState_HandleIntercepts(t *testing.T) {
+	ctx := dlog.NewTestContext(t, false)
 	a := assert.New(t)
 	f, s := makeFS(t)
 
@@ -58,7 +60,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	// Handle resets state on an empty intercept list
 
-	reviews = s.HandleIntercepts(cepts)
+	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 0)
 	host, port = f.Target()
 	a.Equal(appHost, host)
@@ -92,7 +94,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 	cepts[0].Disposition = rpc.InterceptDispositionType_NO_PORTS
 	cepts[1].Disposition = rpc.InterceptDispositionType_NO_CLIENT
 
-	reviews = s.HandleIntercepts(cepts)
+	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 0)
 	host, port = f.Target()
 	a.Equal(appHost, host)
@@ -103,7 +105,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 	cepts[0].Disposition = rpc.InterceptDispositionType_WAITING
 	cepts[1].Disposition = rpc.InterceptDispositionType_WAITING
 
-	reviews = s.HandleIntercepts(cepts)
+	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 2)
 	host, port = f.Target()
 	a.Equal(appHost, host)
@@ -118,7 +120,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	a.Equal(rpc.InterceptDispositionType_ACTIVE, reviews[0].Disposition)
 	a.Equal(rpc.InterceptDispositionType_AGENT_ERROR, reviews[1].Disposition)
-	a.Equal("Waiting to serve intercept intercept-01", reviews[1].Message)
+	a.Equal("Conflicts with the currently-waiting-to-be-served intercept \"intercept-01\"", reviews[1].Message)
 
 	// Handle updates forwarding
 
@@ -126,18 +128,18 @@ func TestState_HandleIntercepts(t *testing.T) {
 	cepts[0].ManagerPort = 1138
 	cepts[1].Disposition = rpc.InterceptDispositionType_WAITING
 
-	reviews = s.HandleIntercepts(cepts)
+	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 1)
 	host, port = f.Target()
 	a.Equal(mgrHost, host)
 	a.Equal(int32(1138), port)
 
 	a.Equal(rpc.InterceptDispositionType_AGENT_ERROR, reviews[0].Disposition)
-	a.Equal("Serving intercept cept1Name from user@host1 (intercept-01)", reviews[0].Message)
+	a.Equal("Conflicts with the currently-served intercept \"intercept-01\"", reviews[0].Message)
 
 	// Handle resets state on an empty intercept list again
 
-	reviews = s.HandleIntercepts(nil)
+	reviews = s.HandleIntercepts(ctx, nil)
 	a.Len(reviews, 0)
 	host, port = f.Target()
 	a.Equal(appHost, host)

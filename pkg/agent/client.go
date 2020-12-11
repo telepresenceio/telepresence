@@ -65,7 +65,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		// Reset state by processing an empty snapshot
 		// - clear out any intercepts
 		// - set forwarding to the app
-		state.HandleIntercepts(nil)
+		state.HandleIntercepts(ctx, nil)
 	}()
 
 	// Loop calling Remain
@@ -77,7 +77,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		case <-ctx.Done():
 			return nil
 		case snapshot := <-snapshots:
-			reviews := state.HandleIntercepts(snapshot.Intercepts)
+			reviews := state.HandleIntercepts(ctx, snapshot.Intercepts)
 			for _, review := range reviews {
 				review.Session = session
 				if _, err := manager.ReviewIntercept(ctx, review); err != nil {
