@@ -17,7 +17,6 @@ import (
 	"github.com/datawire/dlib/dutil"
 	"github.com/pkg/errors"
 
-	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
 )
 
@@ -176,9 +175,7 @@ func (br *bridge) start(c context.Context) error {
 	c, br.cancel = context.WithCancel(c)
 
 	g := dgroup.ParentGroup(c)
-	g.Go(K8sPortForwardWorker, func(c context.Context) error {
-		return client.Retry(c, "port-forward to traffic-manager", br.portForwardWorker, 2*time.Second, 15*time.Second, time.Minute)
-	})
+	g.Go(K8sSSHWorker, br.sshWorker)
 	g.Go(K8sBridgeWorker, br.bridgeWorker)
 	return nil
 }
@@ -209,24 +206,6 @@ func (br *bridge) bridgeWorker(c context.Context) error {
 	return br.startWatches(c, br.Namespace)
 }
 
-func (br *bridge) portForwardWorker(c context.Context) error {
-	var pods []*kates.Pod
-	err := br.client.List(c, kates.Query{
-		Kind:          "pod",
-		Namespace:     br.Namespace,
-		LabelSelector: "app=traffic-manager",
-	}, &pods)
-	if err != nil {
-		return err
-	}
-	if len(pods) == 0 {
-		return fmt.Errorf("found no pod with label app=traffic-manager in namespace %s", br.Namespace)
-	}
-	podName := strings.TrimSpace(pods[0].Name)
-	kpfArgs := []string{"port-forward", fmt.Sprintf("pod/%s", podName), "8022"}
-	return br.portForwardAndThen(c, kpfArgs, K8sSSHWorker, br.sshWorker)
-}
-
 func (br *bridge) startWatches(c context.Context, namespace string) error {
 	acc, err := br.createWatch(c, namespace)
 	if err != nil {
@@ -254,7 +233,7 @@ func (br *bridge) sshWorker(c context.Context) error {
 	// curl after wakeup seems to trigger detection of death
 	ssh := dexec.CommandContext(c, "ssh", "-D", "localhost:1080", "-C", "-N", "-oConnectTimeout=5",
 		"-oExitOnForwardFailure=yes", "-oStrictHostKeyChecking=no",
-		"-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", "8022")
+		"-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", strconv.Itoa(int(br.sshPort)))
 	return ssh.Run()
 }
 
