@@ -411,12 +411,10 @@ func (ki *installer) undoDeploymentMods(c context.Context, dep *kates.Deployment
 			return fmt.Errorf("unable to get service %s when uninstalling agent in deployment %s: %v",
 				actions.ReferencedService, dep.Name, err)
 		}
-		err = nil
-	} else {
-		if err = ki.undoServiceMods(c, svc); err != nil {
-			return err
-		}
+	} else if err = ki.undoServiceMods(c, svc); err != nil {
+		return err
 	}
+
 	if err = actions.undo(dep); err != nil {
 		return err
 	}

@@ -216,7 +216,7 @@ var _ = Describe("Telepresence", func() {
 			stdout, err := output("kubectl", "--namespace", namespace, "get", "deploy", "with-probes", "-o", "jsonpath={.spec.template.spec.containers[*].name}")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(stdout).To(ContainSubstring("traffic-agent"))
-			stdout, stderr := telepresence("--namespace", namespace, "uninstall", "--agent", "with-probes")
+			_, stderr := telepresence("--namespace", namespace, "uninstall", "--agent", "with-probes")
 			Expect(stderr).To(BeEmpty())
 			defer telepresence("quit")
 			Eventually(func() (string, error) {
@@ -228,7 +228,7 @@ var _ = Describe("Telepresence", func() {
 			stdout, err := output("kubectl", "--namespace", namespace, "get", "deploy", "-o", "jsonpath={.items[*].spec.template.spec.containers[*].name}")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(stdout).To(ContainSubstring("traffic-agent"))
-			stdout, stderr := telepresence("--namespace", namespace, "uninstall", "--all-agents")
+			_, stderr := telepresence("--namespace", namespace, "uninstall", "--all-agents")
 			Expect(stderr).To(BeEmpty())
 			defer telepresence("quit")
 			Eventually(func() (string, error) {
