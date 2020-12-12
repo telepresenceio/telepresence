@@ -246,7 +246,7 @@ var _ = Describe("Telepresence", func() {
 
 			By("Uninstalling the traffic manager and quitting", func() {
 				names := func() (string, error) {
-					return kubectlOut("get", "svc,deploy", "traffic-manager", "-o", "jsonpath={.items[*].metadata.name}")
+					return kubectlOut("get", "svc,deploy", "traffic-manager", "--ignore-not-found", "-o", "jsonpath={.items[*].metadata.name}")
 				}
 				stdout, err := names()
 				Expect(err).ToNot(HaveOccurred())
