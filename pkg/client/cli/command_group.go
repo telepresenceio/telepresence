@@ -40,11 +40,11 @@ Aliases:
   {{.NameAndAliases}}{{end}}{{if .HasExample}}
 
 Examples:
-{{.Example}}{{end}}{{if .HasAvailableSubCommands}}
-{{range commandGroups .}}
+{{.Example}}{{end}}{{range commandGroups .}}
+
 {{.Name}}:{{range .Commands}}
-  {{rpad .Name .NamePadding }} {{.Short}}{{end}}
-{{end}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
+
 Flags:
 {{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
 

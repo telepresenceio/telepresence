@@ -103,7 +103,7 @@ func connectCommand() *cobra.Command {
 func (si *sessionInfo) addConnectFlags(flags *pflag.FlagSet) {
 	flags.StringVarP(&si.dns,
 		"dns", "", "",
-		"DNS IP address to intercept. Defaults to the first nameserver listed in /etc/resolv.conf.",
+		"DNS IP address to intercept locally. Defaults to the first nameserver listed in /etc/resolv.conf.",
 	)
 	flags.StringVarP(&si.fallback,
 		"fallback", "", "",
