@@ -36,7 +36,6 @@ func interceptCommand() *cobra.Command {
 		RunE:  ii.intercept,
 	}
 	flags := cmd.Flags()
-	ii.addConnectFlags(flags)
 
 	flags.StringVarP(&ii.agentName, "deployment", "s", "", "Name of deployment to intercept, if different from <name>")
 	flags.IntVarP(&ii.port, "port", "p", 8080, "Local port to forward to")

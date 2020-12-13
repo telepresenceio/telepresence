@@ -22,7 +22,6 @@ func uninstallCommand() *cobra.Command {
 		RunE:  ui.uninstall,
 	}
 	flags := cmd.Flags()
-	ui.addConnectFlags(flags)
 
 	flags.BoolVarP(&ui.agent, "agent", "d", false, "uninstall intercept agent on specific deployments")
 	flags.BoolVarP(&ui.allAgents, "all-agents", "a", false, "uninstall intercept agent on all deployments")

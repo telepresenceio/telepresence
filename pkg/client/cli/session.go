@@ -2,19 +2,14 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
 )
 
 type sessionInfo struct {
-	cmd       *cobra.Command
-	dns       string
-	fallback  string
-	context   string
-	namespace string
-	isCI      bool
+	cmd  *cobra.Command
+	isCI bool
 }
 
 // withDaemon establishes a daemon session and calls the function with the gRPC client. If
@@ -96,26 +91,5 @@ func connectCommand() *cobra.Command {
 		Short: "Connect to a cluster",
 		RunE:  si.connect,
 	}
-	si.addConnectFlags(cmd.Flags())
 	return cmd
-}
-
-func (si *sessionInfo) addConnectFlags(flags *pflag.FlagSet) {
-	flags.StringVarP(&si.dns,
-		"dns", "", "",
-		"DNS IP address to intercept locally. Defaults to the first nameserver listed in /etc/resolv.conf.",
-	)
-	flags.StringVarP(&si.fallback,
-		"fallback", "", "",
-		"DNS fallback, how non-cluster DNS queries are resolved. Defaults to Google DNS (8.8.8.8).",
-	)
-	flags.StringVarP(&si.context,
-		"context", "c", "",
-		"The Kubernetes context to use. Defaults to the current kubectl context.",
-	)
-	flags.StringVarP(&si.namespace,
-		"namespace", "n", "",
-		"The Kubernetes namespace to use. Defaults to kubectl's default for the context.",
-	)
-	flags.BoolVar(&si.isCI, "ci", false, "This session is a CI run.")
 }
