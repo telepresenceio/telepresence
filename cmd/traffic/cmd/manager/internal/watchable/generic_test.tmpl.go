@@ -239,7 +239,7 @@ func TestMAPTYPE_Subscribe(t *testing.T) {
 				"f": VALCTOR{TESTFIELD: "F"},
 			},
 			Updates: []watchable.MAPTYPEUpdate{
-				{Key: "a", Delete: true},
+				{Key: "a", Delete: true, Value: VALCTOR{TESTFIELD: "A"}},
 			},
 		},
 		snapshot)
@@ -257,7 +257,7 @@ func TestMAPTYPE_Subscribe(t *testing.T) {
 				"f": VALCTOR{TESTFIELD: "F"},
 			},
 			Updates: []watchable.MAPTYPEUpdate{
-				{Key: "b", Delete: true},
+				{Key: "b", Delete: true, Value: VALCTOR{TESTFIELD: "B"}},
 			},
 		},
 		snapshot)
@@ -276,7 +276,7 @@ func TestMAPTYPE_Subscribe(t *testing.T) {
 			},
 			Updates: []watchable.MAPTYPEUpdate{
 				{Key: "c", Value: VALCTOR{TESTFIELD: "c"}},
-				{Key: "c", Delete: true},
+				{Key: "c", Delete: true, Value: VALCTOR{TESTFIELD: "c"}},
 			},
 		},
 		snapshot)
@@ -364,7 +364,7 @@ func TestMAPTYPE_SubscribeSubset(t *testing.T) {
 				"c": VALCTOR{TESTFIELD: "C"},
 			},
 			Updates: []watchable.MAPTYPEUpdate{
-				{Key: "a", Delete: true},
+				{Key: "a", Delete: true, Value: VALCTOR{TESTFIELD: "a"}},
 			},
 		},
 		snapshot)

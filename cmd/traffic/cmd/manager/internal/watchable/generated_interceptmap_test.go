@@ -239,7 +239,7 @@ func TestInterceptMap_Subscribe(t *testing.T) {
 				"f": &manager.InterceptInfo{Id: "F"},
 			},
 			Updates: []watchable.InterceptMapUpdate{
-				{Key: "a", Delete: true},
+				{Key: "a", Delete: true, Value: &manager.InterceptInfo{Id: "A"}},
 			},
 		},
 		snapshot)
@@ -257,7 +257,7 @@ func TestInterceptMap_Subscribe(t *testing.T) {
 				"f": &manager.InterceptInfo{Id: "F"},
 			},
 			Updates: []watchable.InterceptMapUpdate{
-				{Key: "b", Delete: true},
+				{Key: "b", Delete: true, Value: &manager.InterceptInfo{Id: "B"}},
 			},
 		},
 		snapshot)
@@ -276,7 +276,7 @@ func TestInterceptMap_Subscribe(t *testing.T) {
 			},
 			Updates: []watchable.InterceptMapUpdate{
 				{Key: "c", Value: &manager.InterceptInfo{Id: "c"}},
-				{Key: "c", Delete: true},
+				{Key: "c", Delete: true, Value: &manager.InterceptInfo{Id: "c"}},
 			},
 		},
 		snapshot)
@@ -364,7 +364,7 @@ func TestInterceptMap_SubscribeSubset(t *testing.T) {
 				"c": &manager.InterceptInfo{Id: "C"},
 			},
 			Updates: []watchable.InterceptMapUpdate{
-				{Key: "a", Delete: true},
+				{Key: "a", Delete: true, Value: &manager.InterceptInfo{Id: "a"}},
 			},
 		},
 		snapshot)

@@ -239,7 +239,7 @@ func TestClientMap_Subscribe(t *testing.T) {
 				"f": &manager.ClientInfo{Name: "F"},
 			},
 			Updates: []watchable.ClientMapUpdate{
-				{Key: "a", Delete: true},
+				{Key: "a", Delete: true, Value: &manager.ClientInfo{Name: "A"}},
 			},
 		},
 		snapshot)
@@ -257,7 +257,7 @@ func TestClientMap_Subscribe(t *testing.T) {
 				"f": &manager.ClientInfo{Name: "F"},
 			},
 			Updates: []watchable.ClientMapUpdate{
-				{Key: "b", Delete: true},
+				{Key: "b", Delete: true, Value: &manager.ClientInfo{Name: "B"}},
 			},
 		},
 		snapshot)
@@ -276,7 +276,7 @@ func TestClientMap_Subscribe(t *testing.T) {
 			},
 			Updates: []watchable.ClientMapUpdate{
 				{Key: "c", Value: &manager.ClientInfo{Name: "c"}},
-				{Key: "c", Delete: true},
+				{Key: "c", Delete: true, Value: &manager.ClientInfo{Name: "c"}},
 			},
 		},
 		snapshot)
@@ -364,7 +364,7 @@ func TestClientMap_SubscribeSubset(t *testing.T) {
 				"c": &manager.ClientInfo{Name: "C"},
 			},
 			Updates: []watchable.ClientMapUpdate{
-				{Key: "a", Delete: true},
+				{Key: "a", Delete: true, Value: &manager.ClientInfo{Name: "a"}},
 			},
 		},
 		snapshot)

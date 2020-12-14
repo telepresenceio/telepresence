@@ -13,10 +13,9 @@ import (
 
 // MAPTYPEUpdate describes a mutation made to a MAPTYPE.
 type MAPTYPEUpdate struct {
-	Key string
-	// Exactly one of either 'Value' or 'Delete' will be set.
+	Key    string
+	Delete bool // Whether this is deleting the entry for .Key, or setting it to .Value.
 	Value  VALTYPE
-	Delete bool
 }
 
 // MAPTYPESnapshot contains a snapshot of the current state of a MAPTYPE, as well as a list of
@@ -25,6 +24,9 @@ type MAPTYPESnapshot struct {
 	// State is the current state of the snapshot.
 	State map[string]VALTYPE
 	// Updates is the list of mutations that have happened since the previous snapshot.
+	// Mutations that delete a value have .Delete=true, and .Value set to the value that was
+	// deleted.  No-op updates are not included (i.e., setting something to its current value,
+	// or deleting something that does not exist).
 	Updates []MAPTYPEUpdate
 }
 
@@ -299,11 +301,9 @@ func (tm *MAPTYPE) coalesce(
 	// applyUpdate applies an update to 'cur', and updates 'snapshot.State' as nescessary.
 	applyUpdate := func(update MAPTYPEUpdate) {
 		if update.Delete || !includep(update.Key, update.Value) {
-			if _, haveOld := cur[update.Key]; haveOld {
-				if !update.Delete {
-					update.Delete = true
-					update.Value = nil
-				}
+			if old, haveOld := cur[update.Key]; haveOld {
+				update.Delete = true
+				update.Value = old
 				snapshot.Updates = append(snapshot.Updates, update)
 				delete(cur, update.Key)
 				if snapshot.State != nil {

@@ -239,7 +239,7 @@ func TestAgentMap_Subscribe(t *testing.T) {
 				"f": &manager.AgentInfo{Name: "F"},
 			},
 			Updates: []watchable.AgentMapUpdate{
-				{Key: "a", Delete: true},
+				{Key: "a", Delete: true, Value: &manager.AgentInfo{Name: "A"}},
 			},
 		},
 		snapshot)
@@ -257,7 +257,7 @@ func TestAgentMap_Subscribe(t *testing.T) {
 				"f": &manager.AgentInfo{Name: "F"},
 			},
 			Updates: []watchable.AgentMapUpdate{
-				{Key: "b", Delete: true},
+				{Key: "b", Delete: true, Value: &manager.AgentInfo{Name: "B"}},
 			},
 		},
 		snapshot)
@@ -276,7 +276,7 @@ func TestAgentMap_Subscribe(t *testing.T) {
 			},
 			Updates: []watchable.AgentMapUpdate{
 				{Key: "c", Value: &manager.AgentInfo{Name: "c"}},
-				{Key: "c", Delete: true},
+				{Key: "c", Delete: true, Value: &manager.AgentInfo{Name: "c"}},
 			},
 		},
 		snapshot)
@@ -364,7 +364,7 @@ func TestAgentMap_SubscribeSubset(t *testing.T) {
 				"c": &manager.AgentInfo{Name: "C"},
 			},
 			Updates: []watchable.AgentMapUpdate{
-				{Key: "a", Delete: true},
+				{Key: "a", Delete: true, Value: &manager.AgentInfo{Name: "a"}},
 			},
 		},
 		snapshot)
