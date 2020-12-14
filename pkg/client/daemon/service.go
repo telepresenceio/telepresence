@@ -10,10 +10,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/datawire/dlib/dutil"
-
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dlog"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -22,6 +18,9 @@ import (
 	"google.golang.org/grpc"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dutil"
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/pkg/rpc/common"

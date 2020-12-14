@@ -10,10 +10,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/datawire/dlib/dlog"
 	"github.com/sethvargo/go-envconfig"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/pkg/version"
 )
 

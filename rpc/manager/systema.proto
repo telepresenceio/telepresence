@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package telepresence.manager;
 
-import "google/protobuf/empty.proto";
-
 option go_package = "github.com/datawire/telepresence2/pkg/rpc/manager";
 
 // I went ahead and duplicated things from other protobuf files here, so that

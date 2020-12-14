@@ -15,13 +15,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/onsi/gomega/types"
-
-	"github.com/datawire/ambassador/pkg/dtest"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/types"
 	"github.com/spf13/cobra"
 
+	"github.com/datawire/ambassador/pkg/dtest"
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/client/cli"
 	"github.com/datawire/telepresence2/pkg/version"

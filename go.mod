@@ -8,6 +8,7 @@ require (
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
 	github.com/datawire/telepresence2/pkg/rpc v0.0.0-00010101000000-000000000000
 	github.com/golang/protobuf v1.4.3
+	github.com/google/go-cmp v0.5.0
 	github.com/google/uuid v1.1.2
 	github.com/miekg/dns v1.1.35
 	github.com/onsi/ginkgo v1.14.2

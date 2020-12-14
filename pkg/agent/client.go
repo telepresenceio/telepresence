@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/datawire/dlib/dlog"
 	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc"
 
+	"github.com/datawire/dlib/dlog"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
@@ -65,7 +65,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		// Reset state by processing an empty snapshot
 		// - clear out any intercepts
 		// - set forwarding to the app
-		state.HandleIntercepts(nil)
+		state.HandleIntercepts(ctx, nil)
 	}()
 
 	// Loop calling Remain
@@ -77,7 +77,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		case <-ctx.Done():
 			return nil
 		case snapshot := <-snapshots:
-			reviews := state.HandleIntercepts(snapshot.Intercepts)
+			reviews := state.HandleIntercepts(ctx, snapshot.Intercepts)
 			for _, review := range reviews {
 				review.Session = session
 				if _, err := manager.ReviewIntercept(ctx, review); err != nil {
@@ -87,7 +87,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		case <-ticker.C:
 		}
 
-		if _, err := manager.Remain(ctx, session); err != nil {
+		if _, err := manager.Remain(ctx, &rpc.RemainRequest{Session: session}); err != nil {
 			return err
 		}
 	}

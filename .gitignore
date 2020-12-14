@@ -23,3 +23,10 @@ vendor/
 build-output
 /tools/*
 !/tools/src/
+
+# Don't accidentally add files from `go build`
+telepresence
+traffic
+tst-manager
+tst-systema
+!/cmd/*/

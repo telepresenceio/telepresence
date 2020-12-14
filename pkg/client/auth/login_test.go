@@ -10,11 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/datawire/telepresence2/pkg/client/auth"
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
 	"gotest.tools/assert"
 	is "gotest.tools/assert/cmp"
+
+	"github.com/datawire/telepresence2/pkg/client/auth"
 )
 
 type MockSaveTokenWrapper struct {

@@ -9,10 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/datawire/ambassador/pkg/dtest"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/sirupsen/logrus"
 )
 
 func TestMain(m *testing.M) {

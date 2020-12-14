@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+
+	"github.com/datawire/ambassador/pkg/metriton"
 )
 
 // Scout is a Metriton reported

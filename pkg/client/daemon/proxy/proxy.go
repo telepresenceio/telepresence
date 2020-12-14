@@ -10,9 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/datawire/dlib/dlog"
 	"golang.org/x/net/proxy"
 	"golang.org/x/sync/semaphore"
+
+	"github.com/datawire/dlib/dlog"
 )
 
 // A Proxy listens to a port and forwards incoming connections to a router

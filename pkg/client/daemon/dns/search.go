@@ -5,9 +5,10 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
-	"github.com/sirupsen/logrus"
 )
 
 type searchDomains struct {

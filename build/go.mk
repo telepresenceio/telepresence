@@ -20,7 +20,7 @@ PROTO_SRCS = $(shell echo rpc/*/*.proto)
 generate: ## (Generate) Update generated files that get checked in to Git
 generate: generate-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
 	$(TOOLSBINDIR)/protoc --proto_path=. --go_out=. --go-grpc_out=. --go_opt=module=github.com/datawire/telepresence2 --go-grpc_opt=module=github.com/datawire/telepresence2 $(PROTO_SRCS)
-	cd ./pkg/rpc && go mod init github.com/datawire/telepresence2/pkg/rpc
+	go generate ./...
 	cd ./pkg/rpc && go mod tidy
 	cd ./pkg/rpc && go mod vendor
 	go mod tidy
@@ -29,7 +29,8 @@ generate: generate-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-g
 
 .PHONY: generate-clean
 generate-clean: ## (Generate) Delete generated files that get checked in to Git
-	rm -rf pkg/rpc
+	find pkg cmd -name 'generated_*.go' -delete
+	rm -rf pkg/rpc/*/
 
 PKG_VERSION = $(shell go list ./pkg/version)
 
@@ -40,7 +41,11 @@ build: ## (Build) Build all the source code
 
 .PHONY: image images
 image images: $(tools/ko) ## (Build) Build/tag the manager/agent container image
-	docker tag $(shell env GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION)" ko publish --local ./cmd/traffic) $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
+	localname=$$(GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION)" ko publish --local ./cmd/traffic) && \
+	docker tag "$$localname" $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
+.PHONY: push-images
+push-images: images
+	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
 
 .PHONY: install
 install:  ## (Install) installs the telepresence binary under ~/go/bin
@@ -57,6 +62,11 @@ clobber: clean ## (Build) Remove all build artifacts and tools
 lint: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Run the linters (golangci-lint and protolint)
 	golangci-lint run --timeout 2m ./...
 	protolint lint rpc
+
+.PHONY: format
+format: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Automatically fix linter complaints
+	golangci-lint run --fix --timeout 2m ./... || true
+	protolint lint --fix rpc || true
 
 .PHONY: test check
 test check: $(tools/ko) ## (Test) Run the test suite

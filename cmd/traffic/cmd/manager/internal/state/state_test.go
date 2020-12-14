@@ -1,14 +1,12 @@
-package manager_test
+package state_test
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
-	"github.com/datawire/telepresence2/pkg/manager"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
+	manager "github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/state"
+	testdata "github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/test"
 )
 
 type FakeClock struct {
@@ -24,11 +22,11 @@ func (fc *FakeClock) Now() time.Time {
 func TestStateInternal(topT *testing.T) {
 	ctx := context.Background()
 
-	testAgents := manager.GetTestAgents(topT)
-	testClients := manager.GetTestClients(topT)
+	testAgents := testdata.GetTestAgents(topT)
+	testClients := testdata.GetTestClients(topT)
 
 	topT.Run("agents", func(t *testing.T) {
-		a := assert.New(t)
+		a := assertNew(t)
 
 		helloAgent := testAgents["hello"]
 		helloProAgent := testAgents["helloPro"]
@@ -36,21 +34,19 @@ func TestStateInternal(topT *testing.T) {
 		demoAgent2 := testAgents["demo2"]
 
 		clock := &FakeClock{}
-		state := manager.NewState(ctx, clock)
+		state := manager.NewState(ctx)
 
-		h := state.AddAgent(helloAgent)
-		hp := state.AddAgent(helloProAgent)
-		d1 := state.AddAgent(demoAgent1)
-		d2 := state.AddAgent(demoAgent2)
+		h := state.AddAgent(helloAgent, clock.Now())
+		hp := state.AddAgent(helloProAgent, clock.Now())
+		d1 := state.AddAgent(demoAgent1, clock.Now())
+		d2 := state.AddAgent(demoAgent2, clock.Now())
 
 		a.Equal(helloAgent, state.GetAgent(h))
 		a.Equal(helloProAgent, state.GetAgent(hp))
 		a.Equal(demoAgent1, state.GetAgent(d1))
 		a.Equal(demoAgent2, state.GetAgent(d2))
 
-		var agents []*rpc.AgentInfo
-
-		agents = state.GetAgents()
+		agents := state.GetAllAgents()
 		a.Len(agents, 4)
 		a.Contains(agents, helloAgent)
 		a.Contains(agents, helloProAgent)
@@ -75,14 +71,15 @@ func TestStateInternal(topT *testing.T) {
 	})
 
 	topT.Run("presence-redundant", func(t *testing.T) {
-		a := assert.New(t)
+		a := assertNew(t)
 
 		clock := &FakeClock{}
-		state := manager.NewState(ctx, clock)
+		epoch := clock.Now()
+		state := manager.NewState(ctx)
 
-		c1 := state.AddClient(testClients["alice"])
-		c2 := state.AddClient(testClients["bob"])
-		c3 := state.AddClient(testClients["cameron"])
+		c1 := state.AddClient(testClients["alice"], clock.Now())
+		c2 := state.AddClient(testClients["bob"], clock.Now())
+		c3 := state.AddClient(testClients["cameron"], clock.Now())
 
 		a.True(state.HasClient(c1))
 		a.True(state.HasClient(c2))
@@ -93,11 +90,11 @@ func TestStateInternal(topT *testing.T) {
 
 		clock.When = 10
 
-		a.True(state.Mark(c1))
-		a.True(state.Mark(c2))
-		a.False(state.Mark("asdf"))
+		a.True(state.Mark(c1, clock.Now()))
+		a.True(state.Mark(c2, clock.Now()))
+		a.False(state.Mark("asdf", clock.Now()))
 
-		state.Expire(5)
+		state.ExpireSessions(epoch.Add(5 * time.Second))
 
 		a.True(state.HasClient(c1))
 		a.True(state.HasClient(c2))
@@ -105,24 +102,24 @@ func TestStateInternal(topT *testing.T) {
 
 		clock.When = 20
 
-		a.True(state.Mark(c1))
-		a.True(state.Mark(c2))
-		a.False(state.Mark(c3))
+		a.True(state.Mark(c1, clock.Now()))
+		a.True(state.Mark(c2, clock.Now()))
+		a.False(state.Mark(c3, clock.Now()))
 
-		state.Expire(5)
+		state.ExpireSessions(epoch.Add(5 * time.Second))
 
 		a.True(state.HasClient(c1))
 		a.True(state.HasClient(c2))
 		a.False(state.HasClient(c3))
 
-		state.Remove(c2)
+		state.RemoveSession(c2)
 
 		a.True(state.HasClient(c1))
 		a.False(state.HasClient(c2))
 		a.False(state.HasClient(c3))
 
-		a.True(state.Mark(c1))
-		a.False(state.Mark(c2))
-		a.False(state.Mark(c3))
+		a.True(state.Mark(c1, clock.Now()))
+		a.False(state.Mark(c2, clock.Now()))
+		a.False(state.Mark(c3, clock.Now()))
 	})
 }

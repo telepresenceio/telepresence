@@ -8,11 +8,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/pkg/errors"
-
 	"github.com/datawire/telepresence2/pkg/client"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
@@ -106,6 +106,7 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	js, _ := json.Marshal(ir)
 	dlog.Debugf(c, "CreateIntercept request: %s", string(js))
 	ii, err := tm.grpc.CreateIntercept(c, ir)
+	result.InterceptInfo = ii
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
 		result.Error = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
@@ -130,7 +131,6 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 		return result, nil
 	}
 
-	result.InterceptInfo = ii
 	return result, nil
 }
 

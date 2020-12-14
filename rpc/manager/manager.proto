@@ -19,6 +19,7 @@ message ClientInfo {
   string product = 3;  // "telepresence"
   string version = 4;
   string license_key = 5;
+  string bearer_token = 6;
 }
 
 // AgentInfo is the self-reported metadata that an Agent (app-sidecar)
@@ -52,10 +53,20 @@ message AgentInfo {
 }
 
 message InterceptSpec {
+  // A human-friendly name for this intercept.  This is usally the
+  // same as the agent name below; the name/namespace of the
+  // Deployment, but it could be something else.  It is invalid for
+  // the same client to attempt to create multiple intercepts with the
+  // same name.
   string name = 1;
+
+  // Same as ClientInfo.Name; "user@hostname".
   string client = 2;
 
+  // Same as AgentInfo.Name; "name/namespace" of the Deployment.
   string agent = 3;
+
+  // How to decide which subset of requests to that agent to intercept.
   string mechanism = 4;
 
   /*
@@ -90,10 +101,23 @@ enum InterceptDispositionType {
 
 message InterceptInfo {
   InterceptSpec spec = 1;
+
+  // manager_port is the port on the manager that the agent should
+  // send intercepted traffic to.  This gets set by the manager when
+  // the agent calls ReviewIntercept setting the disposition to
+  // ACTIVE.
   int32 manager_port = 2;
+
+  // preview_domain is the SystemA domain that will proxy in traffic
+  // to this intercept.  This gets set by the manager at some
+  // likely-to-change point in the process of setting up the
+  // intercept.
+  string preview_domain = 7;
+
   InterceptDispositionType disposition = 3;
   string message = 4;
   string id = 5;
+  SessionInfo client_session = 6;
 }
 
 message SessionInfo {
@@ -125,12 +149,16 @@ message ReviewInterceptRequest {
   string message = 4;
 }
 
+message RemainRequest {
+  SessionInfo session = 1;
+  string bearer_token = 2;
+}
+
 // VersionInfo2 is different than telepresence.common.VersionInfo in
 // that it does not contain an 'api_version' integer.
 message VersionInfo2 {
   string version = 2;
 }
-
 
 service Manager {
   // Version returns the version information of the Manager.
@@ -144,8 +172,9 @@ service Manager {
   // ArriveAsAgent establishes a session between an agent and the Manager.
   rpc ArriveAsAgent(AgentInfo) returns (SessionInfo);
 
-  // Remain indicates that the session is still valid.
-  rpc Remain(SessionInfo) returns (google.protobuf.Empty);
+  // Remain indicates that the session is still valid, and potentially
+  // updates the auth token for the session.
+  rpc Remain(RemainRequest) returns (google.protobuf.Empty);
 
   // Depart terminates a session.
   rpc Depart(SessionInfo) returns (google.protobuf.Empty);
