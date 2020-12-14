@@ -1,7 +1,14 @@
 version: 2.1
 
+executors:
+
+  "vm-linux":
+    machine:
+      image: "ubuntu-2004:202008-01"
+
 commands:
-  install-go:
+
+  "install-go":
     parameters:
       version:
         type: string
@@ -26,32 +33,7 @@ commands:
             fi
             go version
 
-  go-check-generate:
-    steps:
-      - run:
-          name: Check Generate
-          command: make generate-clean generate && git diff --quiet HEAD pkg/rpc
-
-  go-build:
-    steps:
-      - run:
-          name: Build
-          command: make build
-
-  go-test:
-    steps:
-      - run:
-          name: Test
-          command: |
-            make test
-
-  go-lint:
-    steps:
-      - run:
-          name: Lint
-          command: make lint
-
-  install-kubectl:
+  "install-kubectl":
     parameters:
       version:
         type: string
@@ -63,33 +45,24 @@ commands:
             curl -L --fail -o /tmp/kubectl https://storage.googleapis.com/kubernetes-release/release/v<< parameters.version >>/bin/$(uname -s | tr A-Z a-z)/amd64/kubectl
             sudo install /tmp/kubectl /usr/local/bin/kubectl
 
-  "config-cluster-and-registry":
+  "dirty-check":
     steps:
       - run:
-          name: "Configure Kubernetes cluster and Docker registry"
+          name: "Dirty check"
           command: |
-            if [[ -z "$DEV_REGISTRY" ]]; then
-              echo >>"$BASH_ENV" 'export DEV_REGISTRY=127.0.0.1:31000'
+            # On Windows, `git status` doesn't record no-op
+            # line-ending changes in to the index, so things show as
+            # dirty even if they aren't.  Trying to `add` them does
+            # trigger the appropriate index update.  So do a `git add`
+            # *before* the `git status --porcelain` to work around
+            # Windows being terrible; we'd otherwise put the `git add`
+            # inside of the `if` block to help generate better output
+            # for `git diff`.
+            git add .
+            if [[ -n "$(git status --porcelain)" ]]; then
+               PAGER= git diff --cached
+               exit 1
             fi
-            if [[ -z "$KO_DOCKER_REPO" ]]; then
-              echo >>"$BASH_ENV" 'export KO_DOCKER_REPO=$DEV_REGISTRY'
-            fi
-            if [[ -n "$DOCKER_BUILD_USERNAME" && -n "DOCKER_BUILD_PASSWORD" ]]; then
-              docker login -u="${DOCKER_BUILD_USERNAME}" -p="${DOCKER_BUILD_PASSWORD}" "${DEV_REGISTRY%%/*}"
-            fi
-
-            build/kubeception-claim
-            echo >>"$BASH_ENV" 'if test -e ~/kubeception-claim.txt; then'
-            echo >>"$BASH_ENV" '  export DEV_KUBECONFIG=~/.kube/$(cat ~/kubeception-claim.txt).yaml'
-            echo >>"$BASH_ENV" 'fi'
-
-            echo >>"$BASH_ENV" 'unset BASH_ENV'
-
-  "teardown-cluster":
-    steps:
-      - run:
-          command: "build/kubeception-unclaim"
-          when: "always"
 
   "save-logs":
     steps:
@@ -107,28 +80,42 @@ commands:
           destination: test-logs
 
 jobs:
-  test:
-    executor: oss-linux
+
+  "build-and-test":
+    executor: vm-linux
     steps:
       - checkout
       - install-go
-      - go-check-generate
-      - go-build
+      - run: make build
       - install-kubectl
-#      - config-cluster-and-registry
-      - go-test
+      - run: make test
       - save-logs
-#      - teardown-cluster
-      - go-lint
+
+  "lint":
+    executor: vm-linux
+    steps:
+      - checkout
+      # Split prep out to reduce noise in the output, and help with
+      # timeouts.
+      - run: make lint-deps
+      - run:
+          # Don't hold the Go compiler against golangci-lint's
+          # timeout.
+          name: "Pre-load Go build cache"
+          command: go test -run=donotrun ./...
+      - run: make lint
+
+  "generate":
+    executor: vm-linux
+    steps:
+      - checkout
+      - run: make generate
+      - dirty-check
 
 workflows:
-  'OSS: Dev':
-    jobs:
-      - test:
-          name: "test"
 
-executors:
-  oss-linux:
-    machine:
-      image: "ubuntu-2004:202008-01"
-    working_directory: ~/.go_workspace/src/github.com/datawire/telepresence2
+  'Dev':
+    jobs:
+      - build-and-test
+      - lint
+      - generate
