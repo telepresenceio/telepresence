@@ -8,8 +8,7 @@ import (
 )
 
 type sessionInfo struct {
-	cmd  *cobra.Command
-	isCI bool
+	cmd *cobra.Command
 }
 
 // withDaemon establishes a daemon session and calls the function with the gRPC client. If
