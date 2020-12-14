@@ -4,6 +4,7 @@ package watchable_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -13,6 +14,41 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/watchable"
 )
+
+func assertMAPTYPESnapshotEqual(t *testing.T, expected, actual watchable.MAPTYPESnapshot, msgAndArgs ...interface{}) bool {
+	t.Helper()
+
+	expectedBytes, err := json.MarshalIndent(expected, "", "    ")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	actualBytes, err := json.MarshalIndent(actual, "", "    ")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !assert.Equal(t, string(expectedBytes), string(actualBytes)) {
+		return false
+	}
+
+	for k := range actual.State {
+		if !assertDeepCopies(t, expected.State[k], actual.State[k], msgAndArgs...) {
+			return false
+		}
+	}
+
+	for i := range actual.Updates {
+		if expected.Updates[i].Value == nil {
+			continue
+		}
+		if !assertDeepCopies(t, expected.Updates[i].Value, actual.Updates[i].Value, msgAndArgs...) {
+			return false
+		}
+	}
+
+	return true
+}
 
 func TestMAPTYPE_Close(t *testing.T) {
 	// TODO
@@ -24,26 +60,32 @@ func TestMAPTYPE_Delete(t *testing.T) {
 	// Check that a delete on a zero map works
 	m.Delete("a")
 	assertMAPTYPESnapshotEqual(t,
-		map[string]VALTYPE{},
-		m.LoadAll())
+		watchable.MAPTYPESnapshot{State: map[string]VALTYPE{}},
+		watchable.MAPTYPESnapshot{State: m.LoadAll()})
 
 	// Check that a normal delete works
 	m.Store("a", VALCTOR{TESTFIELD: "a"})
 	assertMAPTYPESnapshotEqual(t,
-		map[string]VALTYPE{
-			"a": VALCTOR{TESTFIELD: "a"},
+		watchable.MAPTYPESnapshot{
+			State: map[string]VALTYPE{
+				"a": VALCTOR{TESTFIELD: "a"},
+			},
 		},
-		m.LoadAll())
+		watchable.MAPTYPESnapshot{State: m.LoadAll()})
 	m.Delete("a")
 	assertMAPTYPESnapshotEqual(t,
-		map[string]VALTYPE{},
-		m.LoadAll())
+		watchable.MAPTYPESnapshot{
+			State: map[string]VALTYPE{},
+		},
+		watchable.MAPTYPESnapshot{State: m.LoadAll()})
 
 	// Check that a repeated delete works
 	m.Delete("a")
 	assertMAPTYPESnapshotEqual(t,
-		map[string]VALTYPE{},
-		m.LoadAll())
+		watchable.MAPTYPESnapshot{
+			State: map[string]VALTYPE{},
+		},
+		watchable.MAPTYPESnapshot{State: m.LoadAll()})
 }
 
 func TestMAPTYPE_Load(t *testing.T) {
@@ -132,30 +174,6 @@ func TestMAPTYPE_Store(t *testing.T) {
 	// TODO
 }
 
-func assertMAPTYPESnapshotEqual(t *testing.T, expected, actual map[string]VALTYPE, msgAndArgs ...interface{}) bool {
-	t.Helper()
-
-	expectedKeys := make([]string, 0, len(expected))
-	for k := range expected {
-		expectedKeys = append(expectedKeys, k)
-	}
-	actualKeys := make([]string, 0, len(actual))
-	for k := range actual {
-		actualKeys = append(actualKeys, k)
-	}
-	if !assert.ElementsMatch(t, expectedKeys, actualKeys, msgAndArgs...) {
-		return false
-	}
-
-	for k := range actual {
-		if !assertDeepCopies(t, expected[k], actual[k], msgAndArgs...) {
-			return false
-		}
-	}
-
-	return true
-}
-
 func TestMAPTYPE_Subscribe(t *testing.T) {
 	ctx := dlog.NewTestContext(t, true)
 	ctx, cancelCtx := context.WithCancel(ctx)
@@ -171,10 +189,13 @@ func TestMAPTYPE_Subscribe(t *testing.T) {
 	snapshot, ok := <-ch
 	assert.True(t, ok)
 	assertMAPTYPESnapshotEqual(t,
-		map[string]VALTYPE{
-			"a": VALCTOR{TESTFIELD: "A"},
-			"b": VALCTOR{TESTFIELD: "B"},
-			"c": VALCTOR{TESTFIELD: "C"},
+		watchable.MAPTYPESnapshot{
+			State: map[string]VALTYPE{
+				"a": VALCTOR{TESTFIELD: "A"},
+				"b": VALCTOR{TESTFIELD: "B"},
+				"c": VALCTOR{TESTFIELD: "C"},
+			},
+			Updates: nil,
 		},
 		snapshot)
 
@@ -187,13 +208,20 @@ func TestMAPTYPE_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertMAPTYPESnapshotEqual(t,
-		map[string]VALTYPE{
-			"a": VALCTOR{TESTFIELD: "A"},
-			"b": VALCTOR{TESTFIELD: "B"},
-			"c": VALCTOR{TESTFIELD: "C"},
-			"d": VALCTOR{TESTFIELD: "D"},
-			"e": VALCTOR{TESTFIELD: "E"},
-			"f": VALCTOR{TESTFIELD: "F"},
+		watchable.MAPTYPESnapshot{
+			State: map[string]VALTYPE{
+				"a": VALCTOR{TESTFIELD: "A"},
+				"b": VALCTOR{TESTFIELD: "B"},
+				"c": VALCTOR{TESTFIELD: "C"},
+				"d": VALCTOR{TESTFIELD: "D"},
+				"e": VALCTOR{TESTFIELD: "E"},
+				"f": VALCTOR{TESTFIELD: "F"},
+			},
+			Updates: []watchable.MAPTYPEUpdate{
+				{Key: "d", Value: VALCTOR{TESTFIELD: "D"}},
+				{Key: "e", Value: VALCTOR{TESTFIELD: "E"}},
+				{Key: "f", Value: VALCTOR{TESTFIELD: "F"}},
+			},
 		},
 		snapshot)
 
@@ -202,12 +230,17 @@ func TestMAPTYPE_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertMAPTYPESnapshotEqual(t,
-		map[string]VALTYPE{
-			"b": VALCTOR{TESTFIELD: "B"},
-			"c": VALCTOR{TESTFIELD: "C"},
-			"d": VALCTOR{TESTFIELD: "D"},
-			"e": VALCTOR{TESTFIELD: "E"},
-			"f": VALCTOR{TESTFIELD: "F"},
+		watchable.MAPTYPESnapshot{
+			State: map[string]VALTYPE{
+				"b": VALCTOR{TESTFIELD: "B"},
+				"c": VALCTOR{TESTFIELD: "C"},
+				"d": VALCTOR{TESTFIELD: "D"},
+				"e": VALCTOR{TESTFIELD: "E"},
+				"f": VALCTOR{TESTFIELD: "F"},
+			},
+			Updates: []watchable.MAPTYPEUpdate{
+				{Key: "a", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -216,11 +249,16 @@ func TestMAPTYPE_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertMAPTYPESnapshotEqual(t,
-		map[string]VALTYPE{
-			"c": VALCTOR{TESTFIELD: "C"},
-			"d": VALCTOR{TESTFIELD: "D"},
-			"e": VALCTOR{TESTFIELD: "E"},
-			"f": VALCTOR{TESTFIELD: "F"},
+		watchable.MAPTYPESnapshot{
+			State: map[string]VALTYPE{
+				"c": VALCTOR{TESTFIELD: "C"},
+				"d": VALCTOR{TESTFIELD: "D"},
+				"e": VALCTOR{TESTFIELD: "E"},
+				"f": VALCTOR{TESTFIELD: "F"},
+			},
+			Updates: []watchable.MAPTYPEUpdate{
+				{Key: "b", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -230,10 +268,16 @@ func TestMAPTYPE_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertMAPTYPESnapshotEqual(t,
-		map[string]VALTYPE{
-			"d": VALCTOR{TESTFIELD: "D"},
-			"e": VALCTOR{TESTFIELD: "E"},
-			"f": VALCTOR{TESTFIELD: "F"},
+		watchable.MAPTYPESnapshot{
+			State: map[string]VALTYPE{
+				"d": VALCTOR{TESTFIELD: "D"},
+				"e": VALCTOR{TESTFIELD: "E"},
+				"f": VALCTOR{TESTFIELD: "F"},
+			},
+			Updates: []watchable.MAPTYPEUpdate{
+				{Key: "c", Value: VALCTOR{TESTFIELD: "c"}},
+				{Key: "c", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -249,15 +293,15 @@ func TestMAPTYPE_Subscribe(t *testing.T) {
 	// Check that the writes get coalesced in to a "close".
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 }
 
 func TestMAPTYPE_SubscribeSubset(t *testing.T) {
@@ -276,10 +320,12 @@ func TestMAPTYPE_SubscribeSubset(t *testing.T) {
 	snapshot, ok := <-ch
 	assert.True(t, ok)
 	assertMAPTYPESnapshotEqual(t,
-		map[string]VALTYPE{
-			"a": VALCTOR{TESTFIELD: "A"},
-			"b": VALCTOR{TESTFIELD: "B"},
-			"c": VALCTOR{TESTFIELD: "C"},
+		watchable.MAPTYPESnapshot{
+			State: map[string]VALTYPE{
+				"a": VALCTOR{TESTFIELD: "A"},
+				"b": VALCTOR{TESTFIELD: "B"},
+				"c": VALCTOR{TESTFIELD: "C"},
+			},
 		},
 		snapshot)
 
@@ -295,10 +341,15 @@ func TestMAPTYPE_SubscribeSubset(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertMAPTYPESnapshotEqual(t,
-		map[string]VALTYPE{
-			"a": VALCTOR{TESTFIELD: "a"},
-			"b": VALCTOR{TESTFIELD: "B"},
-			"c": VALCTOR{TESTFIELD: "C"},
+		watchable.MAPTYPESnapshot{
+			State: map[string]VALTYPE{
+				"a": VALCTOR{TESTFIELD: "a"},
+				"b": VALCTOR{TESTFIELD: "B"},
+				"c": VALCTOR{TESTFIELD: "C"},
+			},
+			Updates: []watchable.MAPTYPEUpdate{
+				{Key: "a", Value: VALCTOR{TESTFIELD: "a"}},
+			},
 		},
 		snapshot)
 
@@ -307,9 +358,14 @@ func TestMAPTYPE_SubscribeSubset(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertMAPTYPESnapshotEqual(t,
-		map[string]VALTYPE{
-			"b": VALCTOR{TESTFIELD: "B"},
-			"c": VALCTOR{TESTFIELD: "C"},
+		watchable.MAPTYPESnapshot{
+			State: map[string]VALTYPE{
+				"b": VALCTOR{TESTFIELD: "B"},
+				"c": VALCTOR{TESTFIELD: "C"},
+			},
+			Updates: []watchable.MAPTYPEUpdate{
+				{Key: "a", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -321,7 +377,7 @@ func TestMAPTYPE_SubscribeSubset(t *testing.T) {
 	m.Close()
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 
 	// Now, since we've called m.Close(), let's check that subscriptions get already-closed
 	// channels.
@@ -330,5 +386,5 @@ func TestMAPTYPE_SubscribeSubset(t *testing.T) {
 	})
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 }

@@ -4,6 +4,7 @@ package watchable_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -13,6 +14,41 @@ import (
 	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
+
+func assertAgentMapSnapshotEqual(t *testing.T, expected, actual watchable.AgentMapSnapshot, msgAndArgs ...interface{}) bool {
+	t.Helper()
+
+	expectedBytes, err := json.MarshalIndent(expected, "", "    ")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	actualBytes, err := json.MarshalIndent(actual, "", "    ")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !assert.Equal(t, string(expectedBytes), string(actualBytes)) {
+		return false
+	}
+
+	for k := range actual.State {
+		if !assertDeepCopies(t, expected.State[k], actual.State[k], msgAndArgs...) {
+			return false
+		}
+	}
+
+	for i := range actual.Updates {
+		if expected.Updates[i].Value == nil {
+			continue
+		}
+		if !assertDeepCopies(t, expected.Updates[i].Value, actual.Updates[i].Value, msgAndArgs...) {
+			return false
+		}
+	}
+
+	return true
+}
 
 func TestAgentMap_Close(t *testing.T) {
 	// TODO
@@ -24,26 +60,32 @@ func TestAgentMap_Delete(t *testing.T) {
 	// Check that a delete on a zero map works
 	m.Delete("a")
 	assertAgentMapSnapshotEqual(t,
-		map[string]*manager.AgentInfo{},
-		m.LoadAll())
+		watchable.AgentMapSnapshot{State: map[string]*manager.AgentInfo{}},
+		watchable.AgentMapSnapshot{State: m.LoadAll()})
 
 	// Check that a normal delete works
 	m.Store("a", &manager.AgentInfo{Name: "a"})
 	assertAgentMapSnapshotEqual(t,
-		map[string]*manager.AgentInfo{
-			"a": &manager.AgentInfo{Name: "a"},
+		watchable.AgentMapSnapshot{
+			State: map[string]*manager.AgentInfo{
+				"a": &manager.AgentInfo{Name: "a"},
+			},
 		},
-		m.LoadAll())
+		watchable.AgentMapSnapshot{State: m.LoadAll()})
 	m.Delete("a")
 	assertAgentMapSnapshotEqual(t,
-		map[string]*manager.AgentInfo{},
-		m.LoadAll())
+		watchable.AgentMapSnapshot{
+			State: map[string]*manager.AgentInfo{},
+		},
+		watchable.AgentMapSnapshot{State: m.LoadAll()})
 
 	// Check that a repeated delete works
 	m.Delete("a")
 	assertAgentMapSnapshotEqual(t,
-		map[string]*manager.AgentInfo{},
-		m.LoadAll())
+		watchable.AgentMapSnapshot{
+			State: map[string]*manager.AgentInfo{},
+		},
+		watchable.AgentMapSnapshot{State: m.LoadAll()})
 }
 
 func TestAgentMap_Load(t *testing.T) {
@@ -132,30 +174,6 @@ func TestAgentMap_Store(t *testing.T) {
 	// TODO
 }
 
-func assertAgentMapSnapshotEqual(t *testing.T, expected, actual map[string]*manager.AgentInfo, msgAndArgs ...interface{}) bool {
-	t.Helper()
-
-	expectedKeys := make([]string, 0, len(expected))
-	for k := range expected {
-		expectedKeys = append(expectedKeys, k)
-	}
-	actualKeys := make([]string, 0, len(actual))
-	for k := range actual {
-		actualKeys = append(actualKeys, k)
-	}
-	if !assert.ElementsMatch(t, expectedKeys, actualKeys, msgAndArgs...) {
-		return false
-	}
-
-	for k := range actual {
-		if !assertDeepCopies(t, expected[k], actual[k], msgAndArgs...) {
-			return false
-		}
-	}
-
-	return true
-}
-
 func TestAgentMap_Subscribe(t *testing.T) {
 	ctx := dlog.NewTestContext(t, true)
 	ctx, cancelCtx := context.WithCancel(ctx)
@@ -171,10 +189,13 @@ func TestAgentMap_Subscribe(t *testing.T) {
 	snapshot, ok := <-ch
 	assert.True(t, ok)
 	assertAgentMapSnapshotEqual(t,
-		map[string]*manager.AgentInfo{
-			"a": &manager.AgentInfo{Name: "A"},
-			"b": &manager.AgentInfo{Name: "B"},
-			"c": &manager.AgentInfo{Name: "C"},
+		watchable.AgentMapSnapshot{
+			State: map[string]*manager.AgentInfo{
+				"a": &manager.AgentInfo{Name: "A"},
+				"b": &manager.AgentInfo{Name: "B"},
+				"c": &manager.AgentInfo{Name: "C"},
+			},
+			Updates: nil,
 		},
 		snapshot)
 
@@ -187,13 +208,20 @@ func TestAgentMap_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertAgentMapSnapshotEqual(t,
-		map[string]*manager.AgentInfo{
-			"a": &manager.AgentInfo{Name: "A"},
-			"b": &manager.AgentInfo{Name: "B"},
-			"c": &manager.AgentInfo{Name: "C"},
-			"d": &manager.AgentInfo{Name: "D"},
-			"e": &manager.AgentInfo{Name: "E"},
-			"f": &manager.AgentInfo{Name: "F"},
+		watchable.AgentMapSnapshot{
+			State: map[string]*manager.AgentInfo{
+				"a": &manager.AgentInfo{Name: "A"},
+				"b": &manager.AgentInfo{Name: "B"},
+				"c": &manager.AgentInfo{Name: "C"},
+				"d": &manager.AgentInfo{Name: "D"},
+				"e": &manager.AgentInfo{Name: "E"},
+				"f": &manager.AgentInfo{Name: "F"},
+			},
+			Updates: []watchable.AgentMapUpdate{
+				{Key: "d", Value: &manager.AgentInfo{Name: "D"}},
+				{Key: "e", Value: &manager.AgentInfo{Name: "E"}},
+				{Key: "f", Value: &manager.AgentInfo{Name: "F"}},
+			},
 		},
 		snapshot)
 
@@ -202,12 +230,17 @@ func TestAgentMap_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertAgentMapSnapshotEqual(t,
-		map[string]*manager.AgentInfo{
-			"b": &manager.AgentInfo{Name: "B"},
-			"c": &manager.AgentInfo{Name: "C"},
-			"d": &manager.AgentInfo{Name: "D"},
-			"e": &manager.AgentInfo{Name: "E"},
-			"f": &manager.AgentInfo{Name: "F"},
+		watchable.AgentMapSnapshot{
+			State: map[string]*manager.AgentInfo{
+				"b": &manager.AgentInfo{Name: "B"},
+				"c": &manager.AgentInfo{Name: "C"},
+				"d": &manager.AgentInfo{Name: "D"},
+				"e": &manager.AgentInfo{Name: "E"},
+				"f": &manager.AgentInfo{Name: "F"},
+			},
+			Updates: []watchable.AgentMapUpdate{
+				{Key: "a", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -216,11 +249,16 @@ func TestAgentMap_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertAgentMapSnapshotEqual(t,
-		map[string]*manager.AgentInfo{
-			"c": &manager.AgentInfo{Name: "C"},
-			"d": &manager.AgentInfo{Name: "D"},
-			"e": &manager.AgentInfo{Name: "E"},
-			"f": &manager.AgentInfo{Name: "F"},
+		watchable.AgentMapSnapshot{
+			State: map[string]*manager.AgentInfo{
+				"c": &manager.AgentInfo{Name: "C"},
+				"d": &manager.AgentInfo{Name: "D"},
+				"e": &manager.AgentInfo{Name: "E"},
+				"f": &manager.AgentInfo{Name: "F"},
+			},
+			Updates: []watchable.AgentMapUpdate{
+				{Key: "b", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -230,10 +268,16 @@ func TestAgentMap_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertAgentMapSnapshotEqual(t,
-		map[string]*manager.AgentInfo{
-			"d": &manager.AgentInfo{Name: "D"},
-			"e": &manager.AgentInfo{Name: "E"},
-			"f": &manager.AgentInfo{Name: "F"},
+		watchable.AgentMapSnapshot{
+			State: map[string]*manager.AgentInfo{
+				"d": &manager.AgentInfo{Name: "D"},
+				"e": &manager.AgentInfo{Name: "E"},
+				"f": &manager.AgentInfo{Name: "F"},
+			},
+			Updates: []watchable.AgentMapUpdate{
+				{Key: "c", Value: &manager.AgentInfo{Name: "c"}},
+				{Key: "c", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -249,15 +293,15 @@ func TestAgentMap_Subscribe(t *testing.T) {
 	// Check that the writes get coalesced in to a "close".
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 }
 
 func TestAgentMap_SubscribeSubset(t *testing.T) {
@@ -276,10 +320,12 @@ func TestAgentMap_SubscribeSubset(t *testing.T) {
 	snapshot, ok := <-ch
 	assert.True(t, ok)
 	assertAgentMapSnapshotEqual(t,
-		map[string]*manager.AgentInfo{
-			"a": &manager.AgentInfo{Name: "A"},
-			"b": &manager.AgentInfo{Name: "B"},
-			"c": &manager.AgentInfo{Name: "C"},
+		watchable.AgentMapSnapshot{
+			State: map[string]*manager.AgentInfo{
+				"a": &manager.AgentInfo{Name: "A"},
+				"b": &manager.AgentInfo{Name: "B"},
+				"c": &manager.AgentInfo{Name: "C"},
+			},
 		},
 		snapshot)
 
@@ -295,10 +341,15 @@ func TestAgentMap_SubscribeSubset(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertAgentMapSnapshotEqual(t,
-		map[string]*manager.AgentInfo{
-			"a": &manager.AgentInfo{Name: "a"},
-			"b": &manager.AgentInfo{Name: "B"},
-			"c": &manager.AgentInfo{Name: "C"},
+		watchable.AgentMapSnapshot{
+			State: map[string]*manager.AgentInfo{
+				"a": &manager.AgentInfo{Name: "a"},
+				"b": &manager.AgentInfo{Name: "B"},
+				"c": &manager.AgentInfo{Name: "C"},
+			},
+			Updates: []watchable.AgentMapUpdate{
+				{Key: "a", Value: &manager.AgentInfo{Name: "a"}},
+			},
 		},
 		snapshot)
 
@@ -307,9 +358,14 @@ func TestAgentMap_SubscribeSubset(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertAgentMapSnapshotEqual(t,
-		map[string]*manager.AgentInfo{
-			"b": &manager.AgentInfo{Name: "B"},
-			"c": &manager.AgentInfo{Name: "C"},
+		watchable.AgentMapSnapshot{
+			State: map[string]*manager.AgentInfo{
+				"b": &manager.AgentInfo{Name: "B"},
+				"c": &manager.AgentInfo{Name: "C"},
+			},
+			Updates: []watchable.AgentMapUpdate{
+				{Key: "a", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -321,7 +377,7 @@ func TestAgentMap_SubscribeSubset(t *testing.T) {
 	m.Close()
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 
 	// Now, since we've called m.Close(), let's check that subscriptions get already-closed
 	// channels.
@@ -330,5 +386,5 @@ func TestAgentMap_SubscribeSubset(t *testing.T) {
 	})
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 }

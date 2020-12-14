@@ -4,6 +4,7 @@ package watchable_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -13,6 +14,41 @@ import (
 	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
+
+func assertInterceptMapSnapshotEqual(t *testing.T, expected, actual watchable.InterceptMapSnapshot, msgAndArgs ...interface{}) bool {
+	t.Helper()
+
+	expectedBytes, err := json.MarshalIndent(expected, "", "    ")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	actualBytes, err := json.MarshalIndent(actual, "", "    ")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !assert.Equal(t, string(expectedBytes), string(actualBytes)) {
+		return false
+	}
+
+	for k := range actual.State {
+		if !assertDeepCopies(t, expected.State[k], actual.State[k], msgAndArgs...) {
+			return false
+		}
+	}
+
+	for i := range actual.Updates {
+		if expected.Updates[i].Value == nil {
+			continue
+		}
+		if !assertDeepCopies(t, expected.Updates[i].Value, actual.Updates[i].Value, msgAndArgs...) {
+			return false
+		}
+	}
+
+	return true
+}
 
 func TestInterceptMap_Close(t *testing.T) {
 	// TODO
@@ -24,26 +60,32 @@ func TestInterceptMap_Delete(t *testing.T) {
 	// Check that a delete on a zero map works
 	m.Delete("a")
 	assertInterceptMapSnapshotEqual(t,
-		map[string]*manager.InterceptInfo{},
-		m.LoadAll())
+		watchable.InterceptMapSnapshot{State: map[string]*manager.InterceptInfo{}},
+		watchable.InterceptMapSnapshot{State: m.LoadAll()})
 
 	// Check that a normal delete works
 	m.Store("a", &manager.InterceptInfo{Id: "a"})
 	assertInterceptMapSnapshotEqual(t,
-		map[string]*manager.InterceptInfo{
-			"a": &manager.InterceptInfo{Id: "a"},
+		watchable.InterceptMapSnapshot{
+			State: map[string]*manager.InterceptInfo{
+				"a": &manager.InterceptInfo{Id: "a"},
+			},
 		},
-		m.LoadAll())
+		watchable.InterceptMapSnapshot{State: m.LoadAll()})
 	m.Delete("a")
 	assertInterceptMapSnapshotEqual(t,
-		map[string]*manager.InterceptInfo{},
-		m.LoadAll())
+		watchable.InterceptMapSnapshot{
+			State: map[string]*manager.InterceptInfo{},
+		},
+		watchable.InterceptMapSnapshot{State: m.LoadAll()})
 
 	// Check that a repeated delete works
 	m.Delete("a")
 	assertInterceptMapSnapshotEqual(t,
-		map[string]*manager.InterceptInfo{},
-		m.LoadAll())
+		watchable.InterceptMapSnapshot{
+			State: map[string]*manager.InterceptInfo{},
+		},
+		watchable.InterceptMapSnapshot{State: m.LoadAll()})
 }
 
 func TestInterceptMap_Load(t *testing.T) {
@@ -132,30 +174,6 @@ func TestInterceptMap_Store(t *testing.T) {
 	// TODO
 }
 
-func assertInterceptMapSnapshotEqual(t *testing.T, expected, actual map[string]*manager.InterceptInfo, msgAndArgs ...interface{}) bool {
-	t.Helper()
-
-	expectedKeys := make([]string, 0, len(expected))
-	for k := range expected {
-		expectedKeys = append(expectedKeys, k)
-	}
-	actualKeys := make([]string, 0, len(actual))
-	for k := range actual {
-		actualKeys = append(actualKeys, k)
-	}
-	if !assert.ElementsMatch(t, expectedKeys, actualKeys, msgAndArgs...) {
-		return false
-	}
-
-	for k := range actual {
-		if !assertDeepCopies(t, expected[k], actual[k], msgAndArgs...) {
-			return false
-		}
-	}
-
-	return true
-}
-
 func TestInterceptMap_Subscribe(t *testing.T) {
 	ctx := dlog.NewTestContext(t, true)
 	ctx, cancelCtx := context.WithCancel(ctx)
@@ -171,10 +189,13 @@ func TestInterceptMap_Subscribe(t *testing.T) {
 	snapshot, ok := <-ch
 	assert.True(t, ok)
 	assertInterceptMapSnapshotEqual(t,
-		map[string]*manager.InterceptInfo{
-			"a": &manager.InterceptInfo{Id: "A"},
-			"b": &manager.InterceptInfo{Id: "B"},
-			"c": &manager.InterceptInfo{Id: "C"},
+		watchable.InterceptMapSnapshot{
+			State: map[string]*manager.InterceptInfo{
+				"a": &manager.InterceptInfo{Id: "A"},
+				"b": &manager.InterceptInfo{Id: "B"},
+				"c": &manager.InterceptInfo{Id: "C"},
+			},
+			Updates: nil,
 		},
 		snapshot)
 
@@ -187,13 +208,20 @@ func TestInterceptMap_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertInterceptMapSnapshotEqual(t,
-		map[string]*manager.InterceptInfo{
-			"a": &manager.InterceptInfo{Id: "A"},
-			"b": &manager.InterceptInfo{Id: "B"},
-			"c": &manager.InterceptInfo{Id: "C"},
-			"d": &manager.InterceptInfo{Id: "D"},
-			"e": &manager.InterceptInfo{Id: "E"},
-			"f": &manager.InterceptInfo{Id: "F"},
+		watchable.InterceptMapSnapshot{
+			State: map[string]*manager.InterceptInfo{
+				"a": &manager.InterceptInfo{Id: "A"},
+				"b": &manager.InterceptInfo{Id: "B"},
+				"c": &manager.InterceptInfo{Id: "C"},
+				"d": &manager.InterceptInfo{Id: "D"},
+				"e": &manager.InterceptInfo{Id: "E"},
+				"f": &manager.InterceptInfo{Id: "F"},
+			},
+			Updates: []watchable.InterceptMapUpdate{
+				{Key: "d", Value: &manager.InterceptInfo{Id: "D"}},
+				{Key: "e", Value: &manager.InterceptInfo{Id: "E"}},
+				{Key: "f", Value: &manager.InterceptInfo{Id: "F"}},
+			},
 		},
 		snapshot)
 
@@ -202,12 +230,17 @@ func TestInterceptMap_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertInterceptMapSnapshotEqual(t,
-		map[string]*manager.InterceptInfo{
-			"b": &manager.InterceptInfo{Id: "B"},
-			"c": &manager.InterceptInfo{Id: "C"},
-			"d": &manager.InterceptInfo{Id: "D"},
-			"e": &manager.InterceptInfo{Id: "E"},
-			"f": &manager.InterceptInfo{Id: "F"},
+		watchable.InterceptMapSnapshot{
+			State: map[string]*manager.InterceptInfo{
+				"b": &manager.InterceptInfo{Id: "B"},
+				"c": &manager.InterceptInfo{Id: "C"},
+				"d": &manager.InterceptInfo{Id: "D"},
+				"e": &manager.InterceptInfo{Id: "E"},
+				"f": &manager.InterceptInfo{Id: "F"},
+			},
+			Updates: []watchable.InterceptMapUpdate{
+				{Key: "a", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -216,11 +249,16 @@ func TestInterceptMap_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertInterceptMapSnapshotEqual(t,
-		map[string]*manager.InterceptInfo{
-			"c": &manager.InterceptInfo{Id: "C"},
-			"d": &manager.InterceptInfo{Id: "D"},
-			"e": &manager.InterceptInfo{Id: "E"},
-			"f": &manager.InterceptInfo{Id: "F"},
+		watchable.InterceptMapSnapshot{
+			State: map[string]*manager.InterceptInfo{
+				"c": &manager.InterceptInfo{Id: "C"},
+				"d": &manager.InterceptInfo{Id: "D"},
+				"e": &manager.InterceptInfo{Id: "E"},
+				"f": &manager.InterceptInfo{Id: "F"},
+			},
+			Updates: []watchable.InterceptMapUpdate{
+				{Key: "b", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -230,10 +268,16 @@ func TestInterceptMap_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertInterceptMapSnapshotEqual(t,
-		map[string]*manager.InterceptInfo{
-			"d": &manager.InterceptInfo{Id: "D"},
-			"e": &manager.InterceptInfo{Id: "E"},
-			"f": &manager.InterceptInfo{Id: "F"},
+		watchable.InterceptMapSnapshot{
+			State: map[string]*manager.InterceptInfo{
+				"d": &manager.InterceptInfo{Id: "D"},
+				"e": &manager.InterceptInfo{Id: "E"},
+				"f": &manager.InterceptInfo{Id: "F"},
+			},
+			Updates: []watchable.InterceptMapUpdate{
+				{Key: "c", Value: &manager.InterceptInfo{Id: "c"}},
+				{Key: "c", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -249,15 +293,15 @@ func TestInterceptMap_Subscribe(t *testing.T) {
 	// Check that the writes get coalesced in to a "close".
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 }
 
 func TestInterceptMap_SubscribeSubset(t *testing.T) {
@@ -276,10 +320,12 @@ func TestInterceptMap_SubscribeSubset(t *testing.T) {
 	snapshot, ok := <-ch
 	assert.True(t, ok)
 	assertInterceptMapSnapshotEqual(t,
-		map[string]*manager.InterceptInfo{
-			"a": &manager.InterceptInfo{Id: "A"},
-			"b": &manager.InterceptInfo{Id: "B"},
-			"c": &manager.InterceptInfo{Id: "C"},
+		watchable.InterceptMapSnapshot{
+			State: map[string]*manager.InterceptInfo{
+				"a": &manager.InterceptInfo{Id: "A"},
+				"b": &manager.InterceptInfo{Id: "B"},
+				"c": &manager.InterceptInfo{Id: "C"},
+			},
 		},
 		snapshot)
 
@@ -295,10 +341,15 @@ func TestInterceptMap_SubscribeSubset(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertInterceptMapSnapshotEqual(t,
-		map[string]*manager.InterceptInfo{
-			"a": &manager.InterceptInfo{Id: "a"},
-			"b": &manager.InterceptInfo{Id: "B"},
-			"c": &manager.InterceptInfo{Id: "C"},
+		watchable.InterceptMapSnapshot{
+			State: map[string]*manager.InterceptInfo{
+				"a": &manager.InterceptInfo{Id: "a"},
+				"b": &manager.InterceptInfo{Id: "B"},
+				"c": &manager.InterceptInfo{Id: "C"},
+			},
+			Updates: []watchable.InterceptMapUpdate{
+				{Key: "a", Value: &manager.InterceptInfo{Id: "a"}},
+			},
 		},
 		snapshot)
 
@@ -307,9 +358,14 @@ func TestInterceptMap_SubscribeSubset(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertInterceptMapSnapshotEqual(t,
-		map[string]*manager.InterceptInfo{
-			"b": &manager.InterceptInfo{Id: "B"},
-			"c": &manager.InterceptInfo{Id: "C"},
+		watchable.InterceptMapSnapshot{
+			State: map[string]*manager.InterceptInfo{
+				"b": &manager.InterceptInfo{Id: "B"},
+				"c": &manager.InterceptInfo{Id: "C"},
+			},
+			Updates: []watchable.InterceptMapUpdate{
+				{Key: "a", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -321,7 +377,7 @@ func TestInterceptMap_SubscribeSubset(t *testing.T) {
 	m.Close()
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 
 	// Now, since we've called m.Close(), let's check that subscriptions get already-closed
 	// channels.
@@ -330,5 +386,5 @@ func TestInterceptMap_SubscribeSubset(t *testing.T) {
 	})
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 }

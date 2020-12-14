@@ -4,6 +4,7 @@ package watchable_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -13,6 +14,41 @@ import (
 	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/watchable"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
+
+func assertClientMapSnapshotEqual(t *testing.T, expected, actual watchable.ClientMapSnapshot, msgAndArgs ...interface{}) bool {
+	t.Helper()
+
+	expectedBytes, err := json.MarshalIndent(expected, "", "    ")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	actualBytes, err := json.MarshalIndent(actual, "", "    ")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !assert.Equal(t, string(expectedBytes), string(actualBytes)) {
+		return false
+	}
+
+	for k := range actual.State {
+		if !assertDeepCopies(t, expected.State[k], actual.State[k], msgAndArgs...) {
+			return false
+		}
+	}
+
+	for i := range actual.Updates {
+		if expected.Updates[i].Value == nil {
+			continue
+		}
+		if !assertDeepCopies(t, expected.Updates[i].Value, actual.Updates[i].Value, msgAndArgs...) {
+			return false
+		}
+	}
+
+	return true
+}
 
 func TestClientMap_Close(t *testing.T) {
 	// TODO
@@ -24,26 +60,32 @@ func TestClientMap_Delete(t *testing.T) {
 	// Check that a delete on a zero map works
 	m.Delete("a")
 	assertClientMapSnapshotEqual(t,
-		map[string]*manager.ClientInfo{},
-		m.LoadAll())
+		watchable.ClientMapSnapshot{State: map[string]*manager.ClientInfo{}},
+		watchable.ClientMapSnapshot{State: m.LoadAll()})
 
 	// Check that a normal delete works
 	m.Store("a", &manager.ClientInfo{Name: "a"})
 	assertClientMapSnapshotEqual(t,
-		map[string]*manager.ClientInfo{
-			"a": &manager.ClientInfo{Name: "a"},
+		watchable.ClientMapSnapshot{
+			State: map[string]*manager.ClientInfo{
+				"a": &manager.ClientInfo{Name: "a"},
+			},
 		},
-		m.LoadAll())
+		watchable.ClientMapSnapshot{State: m.LoadAll()})
 	m.Delete("a")
 	assertClientMapSnapshotEqual(t,
-		map[string]*manager.ClientInfo{},
-		m.LoadAll())
+		watchable.ClientMapSnapshot{
+			State: map[string]*manager.ClientInfo{},
+		},
+		watchable.ClientMapSnapshot{State: m.LoadAll()})
 
 	// Check that a repeated delete works
 	m.Delete("a")
 	assertClientMapSnapshotEqual(t,
-		map[string]*manager.ClientInfo{},
-		m.LoadAll())
+		watchable.ClientMapSnapshot{
+			State: map[string]*manager.ClientInfo{},
+		},
+		watchable.ClientMapSnapshot{State: m.LoadAll()})
 }
 
 func TestClientMap_Load(t *testing.T) {
@@ -132,30 +174,6 @@ func TestClientMap_Store(t *testing.T) {
 	// TODO
 }
 
-func assertClientMapSnapshotEqual(t *testing.T, expected, actual map[string]*manager.ClientInfo, msgAndArgs ...interface{}) bool {
-	t.Helper()
-
-	expectedKeys := make([]string, 0, len(expected))
-	for k := range expected {
-		expectedKeys = append(expectedKeys, k)
-	}
-	actualKeys := make([]string, 0, len(actual))
-	for k := range actual {
-		actualKeys = append(actualKeys, k)
-	}
-	if !assert.ElementsMatch(t, expectedKeys, actualKeys, msgAndArgs...) {
-		return false
-	}
-
-	for k := range actual {
-		if !assertDeepCopies(t, expected[k], actual[k], msgAndArgs...) {
-			return false
-		}
-	}
-
-	return true
-}
-
 func TestClientMap_Subscribe(t *testing.T) {
 	ctx := dlog.NewTestContext(t, true)
 	ctx, cancelCtx := context.WithCancel(ctx)
@@ -171,10 +189,13 @@ func TestClientMap_Subscribe(t *testing.T) {
 	snapshot, ok := <-ch
 	assert.True(t, ok)
 	assertClientMapSnapshotEqual(t,
-		map[string]*manager.ClientInfo{
-			"a": &manager.ClientInfo{Name: "A"},
-			"b": &manager.ClientInfo{Name: "B"},
-			"c": &manager.ClientInfo{Name: "C"},
+		watchable.ClientMapSnapshot{
+			State: map[string]*manager.ClientInfo{
+				"a": &manager.ClientInfo{Name: "A"},
+				"b": &manager.ClientInfo{Name: "B"},
+				"c": &manager.ClientInfo{Name: "C"},
+			},
+			Updates: nil,
 		},
 		snapshot)
 
@@ -187,13 +208,20 @@ func TestClientMap_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertClientMapSnapshotEqual(t,
-		map[string]*manager.ClientInfo{
-			"a": &manager.ClientInfo{Name: "A"},
-			"b": &manager.ClientInfo{Name: "B"},
-			"c": &manager.ClientInfo{Name: "C"},
-			"d": &manager.ClientInfo{Name: "D"},
-			"e": &manager.ClientInfo{Name: "E"},
-			"f": &manager.ClientInfo{Name: "F"},
+		watchable.ClientMapSnapshot{
+			State: map[string]*manager.ClientInfo{
+				"a": &manager.ClientInfo{Name: "A"},
+				"b": &manager.ClientInfo{Name: "B"},
+				"c": &manager.ClientInfo{Name: "C"},
+				"d": &manager.ClientInfo{Name: "D"},
+				"e": &manager.ClientInfo{Name: "E"},
+				"f": &manager.ClientInfo{Name: "F"},
+			},
+			Updates: []watchable.ClientMapUpdate{
+				{Key: "d", Value: &manager.ClientInfo{Name: "D"}},
+				{Key: "e", Value: &manager.ClientInfo{Name: "E"}},
+				{Key: "f", Value: &manager.ClientInfo{Name: "F"}},
+			},
 		},
 		snapshot)
 
@@ -202,12 +230,17 @@ func TestClientMap_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertClientMapSnapshotEqual(t,
-		map[string]*manager.ClientInfo{
-			"b": &manager.ClientInfo{Name: "B"},
-			"c": &manager.ClientInfo{Name: "C"},
-			"d": &manager.ClientInfo{Name: "D"},
-			"e": &manager.ClientInfo{Name: "E"},
-			"f": &manager.ClientInfo{Name: "F"},
+		watchable.ClientMapSnapshot{
+			State: map[string]*manager.ClientInfo{
+				"b": &manager.ClientInfo{Name: "B"},
+				"c": &manager.ClientInfo{Name: "C"},
+				"d": &manager.ClientInfo{Name: "D"},
+				"e": &manager.ClientInfo{Name: "E"},
+				"f": &manager.ClientInfo{Name: "F"},
+			},
+			Updates: []watchable.ClientMapUpdate{
+				{Key: "a", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -216,11 +249,16 @@ func TestClientMap_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertClientMapSnapshotEqual(t,
-		map[string]*manager.ClientInfo{
-			"c": &manager.ClientInfo{Name: "C"},
-			"d": &manager.ClientInfo{Name: "D"},
-			"e": &manager.ClientInfo{Name: "E"},
-			"f": &manager.ClientInfo{Name: "F"},
+		watchable.ClientMapSnapshot{
+			State: map[string]*manager.ClientInfo{
+				"c": &manager.ClientInfo{Name: "C"},
+				"d": &manager.ClientInfo{Name: "D"},
+				"e": &manager.ClientInfo{Name: "E"},
+				"f": &manager.ClientInfo{Name: "F"},
+			},
+			Updates: []watchable.ClientMapUpdate{
+				{Key: "b", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -230,10 +268,16 @@ func TestClientMap_Subscribe(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertClientMapSnapshotEqual(t,
-		map[string]*manager.ClientInfo{
-			"d": &manager.ClientInfo{Name: "D"},
-			"e": &manager.ClientInfo{Name: "E"},
-			"f": &manager.ClientInfo{Name: "F"},
+		watchable.ClientMapSnapshot{
+			State: map[string]*manager.ClientInfo{
+				"d": &manager.ClientInfo{Name: "D"},
+				"e": &manager.ClientInfo{Name: "E"},
+				"f": &manager.ClientInfo{Name: "F"},
+			},
+			Updates: []watchable.ClientMapUpdate{
+				{Key: "c", Value: &manager.ClientInfo{Name: "c"}},
+				{Key: "c", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -249,15 +293,15 @@ func TestClientMap_Subscribe(t *testing.T) {
 	// Check that the writes get coalesced in to a "close".
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 }
 
 func TestClientMap_SubscribeSubset(t *testing.T) {
@@ -276,10 +320,12 @@ func TestClientMap_SubscribeSubset(t *testing.T) {
 	snapshot, ok := <-ch
 	assert.True(t, ok)
 	assertClientMapSnapshotEqual(t,
-		map[string]*manager.ClientInfo{
-			"a": &manager.ClientInfo{Name: "A"},
-			"b": &manager.ClientInfo{Name: "B"},
-			"c": &manager.ClientInfo{Name: "C"},
+		watchable.ClientMapSnapshot{
+			State: map[string]*manager.ClientInfo{
+				"a": &manager.ClientInfo{Name: "A"},
+				"b": &manager.ClientInfo{Name: "B"},
+				"c": &manager.ClientInfo{Name: "C"},
+			},
 		},
 		snapshot)
 
@@ -295,10 +341,15 @@ func TestClientMap_SubscribeSubset(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertClientMapSnapshotEqual(t,
-		map[string]*manager.ClientInfo{
-			"a": &manager.ClientInfo{Name: "a"},
-			"b": &manager.ClientInfo{Name: "B"},
-			"c": &manager.ClientInfo{Name: "C"},
+		watchable.ClientMapSnapshot{
+			State: map[string]*manager.ClientInfo{
+				"a": &manager.ClientInfo{Name: "a"},
+				"b": &manager.ClientInfo{Name: "B"},
+				"c": &manager.ClientInfo{Name: "C"},
+			},
+			Updates: []watchable.ClientMapUpdate{
+				{Key: "a", Value: &manager.ClientInfo{Name: "a"}},
+			},
 		},
 		snapshot)
 
@@ -307,9 +358,14 @@ func TestClientMap_SubscribeSubset(t *testing.T) {
 	snapshot, ok = <-ch
 	assert.True(t, ok)
 	assertClientMapSnapshotEqual(t,
-		map[string]*manager.ClientInfo{
-			"b": &manager.ClientInfo{Name: "B"},
-			"c": &manager.ClientInfo{Name: "C"},
+		watchable.ClientMapSnapshot{
+			State: map[string]*manager.ClientInfo{
+				"b": &manager.ClientInfo{Name: "B"},
+				"c": &manager.ClientInfo{Name: "C"},
+			},
+			Updates: []watchable.ClientMapUpdate{
+				{Key: "a", Delete: true},
+			},
 		},
 		snapshot)
 
@@ -321,7 +377,7 @@ func TestClientMap_SubscribeSubset(t *testing.T) {
 	m.Close()
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 
 	// Now, since we've called m.Close(), let's check that subscriptions get already-closed
 	// channels.
@@ -330,5 +386,5 @@ func TestClientMap_SubscribeSubset(t *testing.T) {
 	})
 	snapshot, ok = <-ch
 	assert.False(t, ok)
-	assert.Nil(t, snapshot)
+	assert.Zero(t, snapshot)
 }

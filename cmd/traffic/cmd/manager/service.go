@@ -111,8 +111,8 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 	for {
 		select {
 		case snapshot := <-snapshotCh:
-			agents := make([]*rpc.AgentInfo, 0, len(snapshot))
-			for _, agent := range snapshot {
+			agents := make([]*rpc.AgentInfo, 0, len(snapshot.State))
+			for _, agent := range snapshot.State {
 				agents = append(agents, agent)
 			}
 			resp := &rpc.AgentInfoSnapshot{
@@ -157,8 +157,8 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 		select {
 		case snapshot := <-snapshotCh:
 			dlog.Debugf(ctx, "WatchIntercepts sending update: %s", sessionID)
-			intercepts := make([]*rpc.InterceptInfo, 0, len(snapshot))
-			for _, intercept := range snapshot {
+			intercepts := make([]*rpc.InterceptInfo, 0, len(snapshot.State))
+			for _, intercept := range snapshot.State {
 				intercepts = append(intercepts, intercept)
 			}
 			resp := &rpc.InterceptInfoSnapshot{

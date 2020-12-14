@@ -11,12 +11,21 @@ import (
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
-// _AgentMapUpdate describes a mutation made to a AgentMap.
-type _AgentMapUpdate struct {
+// AgentMapUpdate describes a mutation made to a AgentMap.
+type AgentMapUpdate struct {
 	Key string
 	// Exactly one of either 'Value' or 'Delete' will be set.
 	Value  *manager.AgentInfo
 	Delete bool
+}
+
+// AgentMapSnapshot contains a snapshot of the current state of a AgentMap, as well as a list of
+// changes that have happened since the last snapshot.
+type AgentMapSnapshot struct {
+	// State is the current state of the snapshot.
+	State map[string]*manager.AgentInfo
+	// Updates is the list of mutations that have happened since the previous snapshot.
+	Updates []AgentMapUpdate
 }
 
 // AgentMap is a wrapper around map[string]*manager.AgentInfo (and around WatchableMap) that provides the
@@ -35,7 +44,7 @@ type AgentMap struct {
 	// things guarded by 'lock'
 	close       chan struct{} // can read from the channel while unlocked, IF you've already validated it's non-nil
 	value       map[string]*manager.AgentInfo
-	subscribers map[<-chan _AgentMapUpdate]chan<- _AgentMapUpdate // readEnd ↦ writeEnd
+	subscribers map[<-chan AgentMapUpdate]chan<- AgentMapUpdate // readEnd ↦ writeEnd
 
 	// not guarded by 'lock'
 	wg sync.WaitGroup
@@ -45,7 +54,7 @@ func (tm *AgentMap) unlockedInit() {
 	if tm.close == nil {
 		tm.close = make(chan struct{})
 		tm.value = make(map[string]*manager.AgentInfo)
-		tm.subscribers = make(map[<-chan _AgentMapUpdate]chan<- _AgentMapUpdate)
+		tm.subscribers = make(map[<-chan AgentMapUpdate]chan<- AgentMapUpdate)
 	}
 }
 
@@ -115,7 +124,7 @@ func (tm *AgentMap) unlockedStore(key string, val *manager.AgentInfo) {
 
 	tm.value[key] = val
 	for _, subscriber := range tm.subscribers {
-		subscriber <- _AgentMapUpdate{
+		subscriber <- AgentMapUpdate{
 			Key:   key,
 			Value: proto.Clone(val).(*manager.AgentInfo),
 		}
@@ -143,7 +152,7 @@ func (tm *AgentMap) unlockedDelete(key string) {
 	}
 	delete(tm.value, key)
 	for _, subscriber := range tm.subscribers {
-		subscriber <- _AgentMapUpdate{
+		subscriber <- AgentMapUpdate{
 			Key:    key,
 			Delete: true,
 		}
@@ -188,12 +197,12 @@ func (tm *AgentMap) Close() {
 
 // internalSubscribe returns a channel (that blocks on both ends), that is written to on each map
 // update.  If the map is already Close()ed, then this returns nil.
-func (tm *AgentMap) internalSubscribe(ctx context.Context) <-chan _AgentMapUpdate {
+func (tm *AgentMap) internalSubscribe(ctx context.Context) <-chan AgentMapUpdate {
 	tm.lock.Lock()
 	defer tm.lock.Unlock()
 	tm.unlockedInit()
 
-	ret := make(chan _AgentMapUpdate)
+	ret := make(chan AgentMapUpdate)
 	if tm.unlockedIsClosed() {
 		return nil
 	}
@@ -203,8 +212,9 @@ func (tm *AgentMap) internalSubscribe(ctx context.Context) <-chan _AgentMapUpdat
 
 // Subscribe returns a channel that will emits a complete snapshot of the map immediately after the
 // call to Subscribe(), and then whenever the map changes.  Updates are coalesced; if you do not
-// need to worry about reading from the channel faster than you are able.  A read from the channel
-// will block as long as there are no changes since the last read.
+// need to worry about reading from the channel faster than you are able.  The snapshot will contain
+// the full list of coalesced updates; the initial snapshot will contain 0 updates.  A read from the
+// channel will block as long as there are no changes since the last read.
 //
 // The values in the snapshot are deepcopies of the actual values in the map, but values may be
 // reused between snapshots; if you mutate a value in a snapshot, that mutation may erroneously
@@ -212,7 +222,7 @@ func (tm *AgentMap) internalSubscribe(ctx context.Context) <-chan _AgentMapUpdat
 //
 // The returned channel will be closed when the Context is Done, or .Close() is called.  If .Close()
 // has already been called, then an already-closed channel is returned.
-func (tm *AgentMap) Subscribe(ctx context.Context) <-chan map[string]*manager.AgentInfo {
+func (tm *AgentMap) Subscribe(ctx context.Context) <-chan AgentMapSnapshot {
 	return tm.SubscribeSubset(ctx, func(string, *manager.AgentInfo) bool {
 		return true
 	})
@@ -222,9 +232,9 @@ func (tm *AgentMap) Subscribe(ctx context.Context) <-chan map[string]*manager.Ag
 // the 'include' predicate.  Mutations to entries that don't satisfy the predicate do not cause a
 // new snapshot to be emitted.  If the value for a key changes from satisfying the predicate to not
 // satisfying it, then this is treated as a delete operation, and a new snapshot is generated.
-func (tm *AgentMap) SubscribeSubset(ctx context.Context, include func(string, *manager.AgentInfo) bool) <-chan map[string]*manager.AgentInfo {
+func (tm *AgentMap) SubscribeSubset(ctx context.Context, include func(string, *manager.AgentInfo) bool) <-chan AgentMapSnapshot {
 	upstream := tm.internalSubscribe(ctx)
-	downstream := make(chan map[string]*manager.AgentInfo)
+	downstream := make(chan AgentMapSnapshot)
 
 	if upstream == nil {
 		close(downstream)
@@ -240,8 +250,8 @@ func (tm *AgentMap) SubscribeSubset(ctx context.Context, include func(string, *m
 func (tm *AgentMap) coalesce(
 	ctx context.Context,
 	includep func(string, *manager.AgentInfo) bool,
-	upstream <-chan _AgentMapUpdate,
-	downstream chan<- map[string]*manager.AgentInfo,
+	upstream <-chan AgentMapUpdate,
+	downstream chan<- AgentMapSnapshot,
 ) {
 	defer tm.wg.Done()
 	defer close(downstream)
@@ -261,7 +271,7 @@ func (tm *AgentMap) coalesce(
 		}()
 	}
 
-	// Cur is a snapshot of the current state all the map according to all _AgentMapUpdates we've
+	// Cur is a snapshot of the current state all the map according to all AgentMapUpdates we've
 	// received from 'upstream', with any entries removed that do not satisfy the predicate
 	// 'includep'.
 	cur := make(map[string]*manager.AgentInfo)
@@ -271,39 +281,50 @@ func (tm *AgentMap) coalesce(
 		}
 	}
 
-	// curCopy is a copy of 'cur' that we send to the 'downstream' channel.  We don't send 'cur'
-	// directly because we're nescessarily in a separate goroutine from the reader of
-	// 'downstream', and map gets/sets aren't thread-safe, so we'd risk memory corruption with
-	// our updating of 'cur' and the reader's accessing of 'cur'.  curCopy gets set to 'nil'
-	// when we need to do a read before we can write to 'downstream' again.
-	curCopy := make(map[string]*manager.AgentInfo, len(cur))
+	snapshot := AgentMapSnapshot{
+		// snapshot.State is a copy of 'cur' that we send to the 'downstream' channel.  We
+		// don't send 'cur' directly because we're nescessarily in a separate goroutine from
+		// the reader of 'downstream', and map gets/sets aren't thread-safe, so we'd risk
+		// memory corruption with our updating of 'cur' and the reader's accessing of 'cur'.
+		// snapshot.State gets set to 'nil' when we need to do a read before we can write to
+		// 'downstream' again.
+		State: make(map[string]*manager.AgentInfo, len(cur)),
+
+		Updates: nil,
+	}
 	for k, v := range cur {
-		curCopy[k] = v
+		snapshot.State[k] = v
 	}
 
-	// applyUpdate applies an update to 'cur', and updates 'curCopy' as nescessary.
-	applyUpdate := func(update _AgentMapUpdate) {
+	// applyUpdate applies an update to 'cur', and updates 'snapshot.State' as nescessary.
+	applyUpdate := func(update AgentMapUpdate) {
 		if update.Delete || !includep(update.Key, update.Value) {
 			if _, haveOld := cur[update.Key]; haveOld {
+				if !update.Delete {
+					update.Delete = true
+					update.Value = nil
+				}
+				snapshot.Updates = append(snapshot.Updates, update)
 				delete(cur, update.Key)
-				if curCopy != nil {
-					delete(curCopy, update.Key)
+				if snapshot.State != nil {
+					delete(snapshot.State, update.Key)
 				} else {
-					curCopy = make(map[string]*manager.AgentInfo, len(cur))
+					snapshot.State = make(map[string]*manager.AgentInfo, len(cur))
 					for k, v := range cur {
-						curCopy[k] = v
+						snapshot.State[k] = v
 					}
 				}
 			}
 		} else {
 			if old, haveOld := cur[update.Key]; !haveOld || !proto.Equal(old, update.Value) {
+				snapshot.Updates = append(snapshot.Updates, update)
 				cur[update.Key] = update.Value
-				if curCopy != nil {
-					curCopy[update.Key] = update.Value
+				if snapshot.State != nil {
+					snapshot.State[update.Key] = update.Value
 				} else {
-					curCopy = make(map[string]*manager.AgentInfo, len(cur))
+					snapshot.State = make(map[string]*manager.AgentInfo, len(cur))
 					for k, v := range cur {
-						curCopy[k] = v
+						snapshot.State[k] = v
 					}
 				}
 			}
@@ -311,7 +332,7 @@ func (tm *AgentMap) coalesce(
 	}
 
 	for {
-		if curCopy == nil {
+		if snapshot.State == nil {
 			select {
 			case <-ctx.Done():
 				shutdown()
@@ -324,7 +345,7 @@ func (tm *AgentMap) coalesce(
 				applyUpdate(update)
 			}
 		} else {
-			// Same as above, but with an additional "downstream <- curCopy" case.
+			// Same as above, but with an additional "downstream <- snapshot" case.
 			select {
 			case <-ctx.Done():
 				shutdown()
@@ -335,8 +356,8 @@ func (tm *AgentMap) coalesce(
 					return
 				}
 				applyUpdate(update)
-			case downstream <- curCopy:
-				curCopy = nil
+			case downstream <- snapshot:
+				snapshot = AgentMapSnapshot{}
 			}
 		}
 	}

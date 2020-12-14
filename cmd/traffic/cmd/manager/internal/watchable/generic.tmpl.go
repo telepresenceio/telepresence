@@ -11,12 +11,21 @@ import (
 	"VALPKG"
 )
 
-// _MAPTYPEUpdate describes a mutation made to a MAPTYPE.
-type _MAPTYPEUpdate struct {
+// MAPTYPEUpdate describes a mutation made to a MAPTYPE.
+type MAPTYPEUpdate struct {
 	Key string
 	// Exactly one of either 'Value' or 'Delete' will be set.
 	Value  VALTYPE
 	Delete bool
+}
+
+// MAPTYPESnapshot contains a snapshot of the current state of a MAPTYPE, as well as a list of
+// changes that have happened since the last snapshot.
+type MAPTYPESnapshot struct {
+	// State is the current state of the snapshot.
+	State map[string]VALTYPE
+	// Updates is the list of mutations that have happened since the previous snapshot.
+	Updates []MAPTYPEUpdate
 }
 
 // MAPTYPE is a wrapper around map[string]VALTYPE (and around WatchableMap) that provides the
@@ -35,7 +44,7 @@ type MAPTYPE struct {
 	// things guarded by 'lock'
 	close       chan struct{} // can read from the channel while unlocked, IF you've already validated it's non-nil
 	value       map[string]VALTYPE
-	subscribers map[<-chan _MAPTYPEUpdate]chan<- _MAPTYPEUpdate // readEnd ↦ writeEnd
+	subscribers map[<-chan MAPTYPEUpdate]chan<- MAPTYPEUpdate // readEnd ↦ writeEnd
 
 	// not guarded by 'lock'
 	wg sync.WaitGroup
@@ -45,7 +54,7 @@ func (tm *MAPTYPE) unlockedInit() {
 	if tm.close == nil {
 		tm.close = make(chan struct{})
 		tm.value = make(map[string]VALTYPE)
-		tm.subscribers = make(map[<-chan _MAPTYPEUpdate]chan<- _MAPTYPEUpdate)
+		tm.subscribers = make(map[<-chan MAPTYPEUpdate]chan<- MAPTYPEUpdate)
 	}
 }
 
@@ -115,7 +124,7 @@ func (tm *MAPTYPE) unlockedStore(key string, val VALTYPE) {
 
 	tm.value[key] = val
 	for _, subscriber := range tm.subscribers {
-		subscriber <- _MAPTYPEUpdate{
+		subscriber <- MAPTYPEUpdate{
 			Key:   key,
 			Value: proto.Clone(val).(VALTYPE),
 		}
@@ -143,7 +152,7 @@ func (tm *MAPTYPE) unlockedDelete(key string) {
 	}
 	delete(tm.value, key)
 	for _, subscriber := range tm.subscribers {
-		subscriber <- _MAPTYPEUpdate{
+		subscriber <- MAPTYPEUpdate{
 			Key:    key,
 			Delete: true,
 		}
@@ -188,12 +197,12 @@ func (tm *MAPTYPE) Close() {
 
 // internalSubscribe returns a channel (that blocks on both ends), that is written to on each map
 // update.  If the map is already Close()ed, then this returns nil.
-func (tm *MAPTYPE) internalSubscribe(ctx context.Context) <-chan _MAPTYPEUpdate {
+func (tm *MAPTYPE) internalSubscribe(ctx context.Context) <-chan MAPTYPEUpdate {
 	tm.lock.Lock()
 	defer tm.lock.Unlock()
 	tm.unlockedInit()
 
-	ret := make(chan _MAPTYPEUpdate)
+	ret := make(chan MAPTYPEUpdate)
 	if tm.unlockedIsClosed() {
 		return nil
 	}
@@ -203,8 +212,9 @@ func (tm *MAPTYPE) internalSubscribe(ctx context.Context) <-chan _MAPTYPEUpdate 
 
 // Subscribe returns a channel that will emits a complete snapshot of the map immediately after the
 // call to Subscribe(), and then whenever the map changes.  Updates are coalesced; if you do not
-// need to worry about reading from the channel faster than you are able.  A read from the channel
-// will block as long as there are no changes since the last read.
+// need to worry about reading from the channel faster than you are able.  The snapshot will contain
+// the full list of coalesced updates; the initial snapshot will contain 0 updates.  A read from the
+// channel will block as long as there are no changes since the last read.
 //
 // The values in the snapshot are deepcopies of the actual values in the map, but values may be
 // reused between snapshots; if you mutate a value in a snapshot, that mutation may erroneously
@@ -212,7 +222,7 @@ func (tm *MAPTYPE) internalSubscribe(ctx context.Context) <-chan _MAPTYPEUpdate 
 //
 // The returned channel will be closed when the Context is Done, or .Close() is called.  If .Close()
 // has already been called, then an already-closed channel is returned.
-func (tm *MAPTYPE) Subscribe(ctx context.Context) <-chan map[string]VALTYPE {
+func (tm *MAPTYPE) Subscribe(ctx context.Context) <-chan MAPTYPESnapshot {
 	return tm.SubscribeSubset(ctx, func(string, VALTYPE) bool {
 		return true
 	})
@@ -222,9 +232,9 @@ func (tm *MAPTYPE) Subscribe(ctx context.Context) <-chan map[string]VALTYPE {
 // the 'include' predicate.  Mutations to entries that don't satisfy the predicate do not cause a
 // new snapshot to be emitted.  If the value for a key changes from satisfying the predicate to not
 // satisfying it, then this is treated as a delete operation, and a new snapshot is generated.
-func (tm *MAPTYPE) SubscribeSubset(ctx context.Context, include func(string, VALTYPE) bool) <-chan map[string]VALTYPE {
+func (tm *MAPTYPE) SubscribeSubset(ctx context.Context, include func(string, VALTYPE) bool) <-chan MAPTYPESnapshot {
 	upstream := tm.internalSubscribe(ctx)
-	downstream := make(chan map[string]VALTYPE)
+	downstream := make(chan MAPTYPESnapshot)
 
 	if upstream == nil {
 		close(downstream)
@@ -240,8 +250,8 @@ func (tm *MAPTYPE) SubscribeSubset(ctx context.Context, include func(string, VAL
 func (tm *MAPTYPE) coalesce(
 	ctx context.Context,
 	includep func(string, VALTYPE) bool,
-	upstream <-chan _MAPTYPEUpdate,
-	downstream chan<- map[string]VALTYPE,
+	upstream <-chan MAPTYPEUpdate,
+	downstream chan<- MAPTYPESnapshot,
 ) {
 	defer tm.wg.Done()
 	defer close(downstream)
@@ -261,7 +271,7 @@ func (tm *MAPTYPE) coalesce(
 		}()
 	}
 
-	// Cur is a snapshot of the current state all the map according to all _MAPTYPEUpdates we've
+	// Cur is a snapshot of the current state all the map according to all MAPTYPEUpdates we've
 	// received from 'upstream', with any entries removed that do not satisfy the predicate
 	// 'includep'.
 	cur := make(map[string]VALTYPE)
@@ -271,39 +281,50 @@ func (tm *MAPTYPE) coalesce(
 		}
 	}
 
-	// curCopy is a copy of 'cur' that we send to the 'downstream' channel.  We don't send 'cur'
-	// directly because we're nescessarily in a separate goroutine from the reader of
-	// 'downstream', and map gets/sets aren't thread-safe, so we'd risk memory corruption with
-	// our updating of 'cur' and the reader's accessing of 'cur'.  curCopy gets set to 'nil'
-	// when we need to do a read before we can write to 'downstream' again.
-	curCopy := make(map[string]VALTYPE, len(cur))
+	snapshot := MAPTYPESnapshot{
+		// snapshot.State is a copy of 'cur' that we send to the 'downstream' channel.  We
+		// don't send 'cur' directly because we're nescessarily in a separate goroutine from
+		// the reader of 'downstream', and map gets/sets aren't thread-safe, so we'd risk
+		// memory corruption with our updating of 'cur' and the reader's accessing of 'cur'.
+		// snapshot.State gets set to 'nil' when we need to do a read before we can write to
+		// 'downstream' again.
+		State: make(map[string]VALTYPE, len(cur)),
+
+		Updates: nil,
+	}
 	for k, v := range cur {
-		curCopy[k] = v
+		snapshot.State[k] = v
 	}
 
-	// applyUpdate applies an update to 'cur', and updates 'curCopy' as nescessary.
-	applyUpdate := func(update _MAPTYPEUpdate) {
+	// applyUpdate applies an update to 'cur', and updates 'snapshot.State' as nescessary.
+	applyUpdate := func(update MAPTYPEUpdate) {
 		if update.Delete || !includep(update.Key, update.Value) {
 			if _, haveOld := cur[update.Key]; haveOld {
+				if !update.Delete {
+					update.Delete = true
+					update.Value = nil
+				}
+				snapshot.Updates = append(snapshot.Updates, update)
 				delete(cur, update.Key)
-				if curCopy != nil {
-					delete(curCopy, update.Key)
+				if snapshot.State != nil {
+					delete(snapshot.State, update.Key)
 				} else {
-					curCopy = make(map[string]VALTYPE, len(cur))
+					snapshot.State = make(map[string]VALTYPE, len(cur))
 					for k, v := range cur {
-						curCopy[k] = v
+						snapshot.State[k] = v
 					}
 				}
 			}
 		} else {
 			if old, haveOld := cur[update.Key]; !haveOld || !proto.Equal(old, update.Value) {
+				snapshot.Updates = append(snapshot.Updates, update)
 				cur[update.Key] = update.Value
-				if curCopy != nil {
-					curCopy[update.Key] = update.Value
+				if snapshot.State != nil {
+					snapshot.State[update.Key] = update.Value
 				} else {
-					curCopy = make(map[string]VALTYPE, len(cur))
+					snapshot.State = make(map[string]VALTYPE, len(cur))
 					for k, v := range cur {
-						curCopy[k] = v
+						snapshot.State[k] = v
 					}
 				}
 			}
@@ -311,7 +332,7 @@ func (tm *MAPTYPE) coalesce(
 	}
 
 	for {
-		if curCopy == nil {
+		if snapshot.State == nil {
 			select {
 			case <-ctx.Done():
 				shutdown()
@@ -324,7 +345,7 @@ func (tm *MAPTYPE) coalesce(
 				applyUpdate(update)
 			}
 		} else {
-			// Same as above, but with an additional "downstream <- curCopy" case.
+			// Same as above, but with an additional "downstream <- snapshot" case.
 			select {
 			case <-ctx.Done():
 				shutdown()
@@ -335,8 +356,8 @@ func (tm *MAPTYPE) coalesce(
 					return
 				}
 				applyUpdate(update)
-			case downstream <- curCopy:
-				curCopy = nil
+			case downstream <- snapshot:
+				snapshot = MAPTYPESnapshot{}
 			}
 		}
 	}
