@@ -384,7 +384,7 @@ func getAnnotation(ann map[string]string, data interface{}) (bool, error) {
 		return false, err
 	}
 
-	annV, err := semver.Parse(data.(actions).version())
+	annV, err := semver.Parse(data.(multiAction).version())
 	if err != nil {
 		return false, fmt.Errorf("unable to parse semantic version in annotation %s", annTelepresenceActions)
 	}
@@ -419,6 +419,7 @@ func (ki *installer) undoDeploymentMods(c context.Context, dep *kates.Deployment
 		return err
 	}
 	delete(dep.Annotations, annTelepresenceActions)
+	explainUndo(c, &actions, svc)
 	return ki.client.Update(c, dep, dep)
 }
 
@@ -432,6 +433,7 @@ func (ki *installer) undoServiceMods(c context.Context, svc *kates.Service) erro
 		return err
 	}
 	delete(svc.Annotations, annTelepresenceActions)
+	explainUndo(c, &actions, svc)
 	return ki.client.Update(c, svc, svc)
 }
 
@@ -456,11 +458,12 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 	containerPort := -1
 	version := client.Semver().String()
 
+	var serverMod *svcActions
 	if sPort.TargetPort.Type == intstr.Int {
 		// Service needs to use a named port
 		targetPortSymbolic = false
 		containerPort = int(sPort.TargetPort.IntVal)
-		svcActions := &svcActions{
+		serverMod = &svcActions{
 			Version: version,
 			MakePortSymbolic: &makePortSymbolicAction{
 				PortName:   sPort.Name,
@@ -468,7 +471,7 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 			},
 		}
 		// apply the actions on the Service
-		if err = svcActions.do(svc); err != nil {
+		if err = serverMod.do(svc); err != nil {
 			return err
 		}
 
@@ -476,10 +479,10 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 		if svc.Annotations == nil {
 			svc.Annotations = make(map[string]string)
 		}
-		svc.Annotations[annTelepresenceActions] = svcActions.String()
+		svc.Annotations[annTelepresenceActions] = serverMod.String()
 	}
 
-	depActions := &deploymentActions{
+	deploymentMod := &deploymentActions{
 		Version:           version,
 		ReferencedService: svc.Name,
 		AddTrafficAgent: &addTrafficAgentAction{
@@ -494,7 +497,7 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 		icp := &icn.Ports[cPortIndex]
 		containerPort = int(icp.ContainerPort)
 		if targetPortSymbolic {
-			depActions.HideContainerPort = &hideContainerPortAction{
+			deploymentMod.HideContainerPort = &hideContainerPortAction{
 				ContainerName: icn.Name,
 				PortName:      sPort.TargetPort.StrVal,
 			}
@@ -506,7 +509,7 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 	}
 
 	// apply the actions on the Deployment
-	if err = depActions.do(dep); err != nil {
+	if err = deploymentMod.do(dep); err != nil {
 		return err
 	}
 
@@ -514,14 +517,14 @@ func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep
 	if dep.Annotations == nil {
 		dep.Annotations = make(map[string]string)
 	}
-	dep.Annotations[annTelepresenceActions] = depActions.String()
+	dep.Annotations[annTelepresenceActions] = deploymentMod.String()
 
-	dlog.Infof(c, "Adding agent to deployment %s in namespace %s. Image: %s", dep.Name, ki.Namespace, managerImageName())
+	explainDo(c, deploymentMod, dep)
 	if err = ki.client.Update(c, dep, dep); err != nil {
 		return err
 	}
-	if !targetPortSymbolic {
-		// service must be updated to use generated port name
+	if serverMod != nil {
+		explainDo(c, serverMod, svc)
 		if err = ki.client.Update(c, svc, svc); err != nil {
 			return err
 		}
