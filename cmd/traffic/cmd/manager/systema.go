@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
-	"os"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -77,14 +76,8 @@ func (p *systemaPool) Get() (systemarpc.SystemACRUDClient, error) {
 	defer p.mu.Unlock()
 
 	if p.ctx == nil {
-		host := os.Getenv("SYSTEMA_HOST")
-		if host == "" {
-			host = "beta-app.datawire.io"
-		}
-		port := os.Getenv("SYSTEMA_PORT")
-		if port == "" {
-			port = "443"
-		}
+		host := p.mgr.env.SystemAHost
+		port := p.mgr.env.SystemAPort
 
 		ctx, cancel := context.WithCancel(dgroup.WithGoroutineName(p.mgr.ctx, "/systema"))
 		client, wait, err := systema.ConnectToSystemA(

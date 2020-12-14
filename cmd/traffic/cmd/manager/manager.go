@@ -24,6 +24,11 @@ import (
 func Main(ctx context.Context, args ...string) error {
 	dlog.Infof(ctx, "Traffic Manager %s [pid:%d]", version.Version, os.Getpid())
 
+	env, err := LoadEnv(ctx)
+	if err != nil {
+		return err
+	}
+
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
 	})
@@ -34,7 +39,7 @@ func Main(ctx context.Context, args ...string) error {
 
 		// Avoid starting sshd while running locally for debugging. Launch sleep
 		// instead so that the launch and kill code is tested in development.
-		if os.Getenv("USER") != "" {
+		if env.User != "" {
 			dlog.Info(ctx, "Not starting sshd ($USER is set)")
 			cmd = dexec.CommandContext(ctx, "sleep", "1000000")
 		}
@@ -42,15 +47,12 @@ func Main(ctx context.Context, args ...string) error {
 		return cmd.Run()
 	})
 
-	mgr := NewManager(ctx)
+	mgr := NewManager(ctx, env)
 
 	// Serve HTTP (including gRPC)
 	g.Go("httpd", func(ctx context.Context) error {
-		host := os.Getenv("SERVER_HOST")
-		port := os.Getenv("SERVER_PORT")
-		if port == "" {
-			port = "8081"
-		}
+		host := env.ServerHost
+		port := env.ServerPort
 
 		grpcHandler := grpc.NewServer()
 		httpHandler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
