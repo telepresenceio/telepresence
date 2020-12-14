@@ -7,6 +7,8 @@ import (
 )
 
 type Env struct {
+	ClusterEnv
+
 	User        string `env:"USER,default="`
 	ServerHost  string `env:"SERVER_HOST,default="`
 	ServerPort  string `env:"SERVER_PORT,default=8081"`
@@ -17,5 +19,6 @@ type Env struct {
 func LoadEnv(ctx context.Context) (Env, error) {
 	var env Env
 	err := envconfig.Process(ctx, &env)
+	env.ClusterEnv.AmbassadorClusterID = GetClusterID(ctx, env.ClusterEnv)
 	return env, err
 }
