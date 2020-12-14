@@ -233,6 +233,50 @@ func (tm *trafficManager) setStatus(r *rpc.ConnectInfo) {
 	}
 }
 
+func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
+	result := &rpc.UninstallResult{}
+	var agents []*manager.AgentInfo
+	if ais := tm.agentInfoSnapshot(); ais != nil {
+		agents = ais.Agents
+	}
+
+	_ = tm.clearIntercepts(c)
+	switch ur.UninstallType {
+	case rpc.UninstallRequest_UNSPECIFIED:
+		return nil, errors.New("invalid uninstall request")
+	case rpc.UninstallRequest_NAMED_AGENTS:
+		var selectedAgents []*manager.AgentInfo
+		for _, di := range ur.Agents {
+			found := false
+			for _, ai := range agents {
+				if di == ai.Name {
+					found = true
+					selectedAgents = append(selectedAgents, ai)
+					break
+				}
+			}
+			if !found {
+				result.ErrorText = fmt.Sprintf("unable to find a deployment named %q with an agent installed", di)
+			}
+		}
+		agents = selectedAgents
+		fallthrough
+	case rpc.UninstallRequest_ALL_AGENTS:
+		if len(agents) > 0 {
+			if err := tm.installer.removeManagerAndAgents(c, true, agents); err != nil {
+				result.ErrorText = err.Error()
+			}
+		}
+	default:
+		// Cancel all communication with the manager
+		_ = tm.Close()
+		if err := tm.installer.removeManagerAndAgents(c, false, agents); err != nil {
+			result.ErrorText = err.Error()
+		}
+	}
+	return result, nil
+}
+
 // A watcher listens on a grpc.ClientStream and notifies listeners when
 // something arrives.
 type watcher struct {

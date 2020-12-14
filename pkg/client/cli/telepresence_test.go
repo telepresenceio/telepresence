@@ -31,7 +31,7 @@ var namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
 
 // serviceCount is the number of interceptable services that gets installed
 // in the cluster and later intercepted
-const serviceCount = 12
+const serviceCount = 9
 
 var _ = Describe("Telepresence", func() {
 	Context("With no daemon running", func() {
@@ -210,6 +210,54 @@ var _ = Describe("Telepresence", func() {
 		})
 		itTotal++
 	})
+
+	Context("when uninstalling", func() {
+		It("Uninstalls", func() {
+			// The following By's could be It's in their own right if order was guaranteed. An
+			// OrderedContext is announced for Ginkgo 2.0.
+
+			By("Uninstalling agent on given deployment", func() {
+				agentName := func() (string, error) {
+					return kubectlOut("get", "deploy", "with-probes", "-o",
+						`jsonpath={.spec.template.spec.containers[?(@.name=="traffic-agent")].name}`)
+				}
+				stdout, err := agentName()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(stdout).To(Equal("traffic-agent"))
+				_, stderr := telepresence("--namespace", namespace, "uninstall", "--agent", "with-probes")
+				Expect(stderr).To(BeEmpty())
+				defer telepresence("quit")
+				Eventually(agentName, 5*time.Second, 500*time.Millisecond).Should(BeEmpty())
+			})
+
+			By("Uninstalling all agents", func() {
+				agentNames := func() (string, error) {
+					return kubectlOut("get", "deploy", "-o",
+						`jsonpath={.items[*].spec.template.spec.containers[?(@.name=="traffic-agent")].name}`)
+				}
+				stdout, err := agentNames()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(len(strings.Split(stdout, " "))).To(Equal(serviceCount))
+				_, stderr := telepresence("--namespace", namespace, "uninstall", "--all-agents")
+				Expect(stderr).To(BeEmpty())
+				defer telepresence("quit")
+				Eventually(agentNames, 5*time.Second, 500*time.Millisecond).Should(BeEmpty())
+			})
+
+			By("Uninstalling the traffic manager and quitting", func() {
+				names := func() (string, error) {
+					return kubectlOut("get", "svc,deploy", "traffic-manager", "--ignore-not-found", "-o", "jsonpath={.items[*].metadata.name}")
+				}
+				stdout, err := names()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(len(strings.Split(stdout, " "))).To(Equal(2)) // The service and the deployment
+				stdout, stderr := telepresence("--namespace", namespace, "uninstall", "--everything")
+				Expect(stderr).To(BeEmpty())
+				Expect(stdout).To(ContainSubstring("Daemon quitting"))
+				Eventually(names, 5*time.Second, 500*time.Millisecond).Should(BeEmpty())
+			})
+		})
+	})
 })
 
 var _ = BeforeSuite(func() {
@@ -273,6 +321,9 @@ var _ = BeforeSuite(func() {
 		Expect(err).NotTo(HaveOccurred())
 	}()
 	wg.Wait()
+
+	// Ensure that no telepresence is running when the tests start
+	_, _ = telepresence("quit")
 })
 
 var _ = AfterSuite(func() {
@@ -316,6 +367,10 @@ func waitForService(name string) error {
 
 func kubectl(args ...string) error {
 	return run(append([]string{"kubectl", "--namespace", namespace}, args...)...)
+}
+
+func kubectlOut(args ...string) (string, error) {
+	return output(append([]string{"kubectl", "--namespace", namespace}, args...)...)
 }
 
 func run(args ...string) error {

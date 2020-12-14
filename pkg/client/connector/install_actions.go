@@ -1,29 +1,106 @@
 package connector
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/dlib/dlog"
 )
 
-type DeploymentAction interface {
-	do(dep *kates.Deployment) error
-	isDone(dep *kates.Deployment) bool
-	undo(dep *kates.Deployment) error
+type action interface {
+	do(obj kates.Object) error
+	explainDo(obj kates.Object, out io.Writer)
+	explainUndo(obj kates.Object, out io.Writer)
+	isDone(obj kates.Object) bool
+	undo(obj kates.Object) error
 }
 
-type ServiceAction interface {
-	do(dep *kates.Service) error
-	isDone(dep *kates.Service) bool
-	undo(dep *kates.Service) error
+type multiAction interface {
+	action
+	version() string
+	actions() []action
+	objectType() string
 }
 
-func mustMarshal(data interface{}) string {
+type explainFunc func(action action, obj kates.Object, out io.Writer)
+
+func explainDo(c context.Context, ma multiAction, obj kates.Object) {
+	explain(c, ma, obj, action.explainDo)
+}
+
+func explainUndo(c context.Context, ma multiAction, obj kates.Object) {
+	explain(c, ma, obj, action.explainUndo)
+}
+
+func explain(c context.Context, ma multiAction, obj kates.Object, ef explainFunc) {
+	buf := bytes.Buffer{}
+	explainActions(ma, obj, ef, &buf)
+	if bts := buf.Bytes(); len(bts) > 0 {
+		dlog.Info(c, string(bts))
+	}
+}
+
+func explainActions(ma multiAction, obj kates.Object, ef explainFunc, out io.Writer) {
+	actions := ma.actions()
+	last := len(actions) - 1
+	if last < 0 {
+		return
+	}
+	fmt.Fprintf(out, "In %s %s, ", ma.objectType(), obj.GetName())
+
+	switch last {
+	case 0:
+	case 1:
+		ef(actions[0], obj, out)
+		fmt.Fprint(out, " and ")
+	default:
+		for _, action := range actions[:last] {
+			ef(action, obj, out)
+			fmt.Fprint(out, ", ")
+		}
+		fmt.Fprint(out, "and ")
+	}
+	ef(actions[last], obj, out)
+	fmt.Fprint(out, ".")
+}
+
+func doActions(ma multiAction, obj kates.Object) (err error) {
+	for _, action := range ma.actions() {
+		if err = action.do(obj); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func isDoneActions(ma multiAction, obj kates.Object) bool {
+	for _, action := range ma.actions() {
+		if !action.isDone(obj) {
+			return false
+		}
+	}
+	return true
+}
+
+func undoActions(ma multiAction, obj kates.Object) (err error) {
+	actions := ma.actions()
+	for i := len(actions) - 1; i >= 0; i-- {
+		if err = actions[i].undo(obj); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func mustMarshal(data action) string {
 	js, err := json.Marshal(data)
 	if err != nil {
 		panic(fmt.Sprintf("internal error, unable to json.Marshal %T: %v", data, err))
@@ -35,23 +112,31 @@ func mustMarshal(data interface{}) string {
 // symbolic name so that an traffic-agent in a designated Deployment can reference the symbol
 // and then use the original port number as the port to forward to when it is not intercepting.
 type makePortSymbolicAction struct {
-	PortName     string `json:"port_name"`
+	PortName     string
 	TargetPort   int
 	SymbolicName string
 }
 
-func (m *makePortSymbolicAction) getPort(svc *kates.Service, targetPort intstr.IntOrString) (*kates.ServicePort, error) {
-	ports := svc.Spec.Ports
+func (m *makePortSymbolicAction) portName(port string) string {
+	if m.PortName == "" {
+		return port
+	}
+	return m.PortName + "." + port
+}
+
+func (m *makePortSymbolicAction) getPort(svc kates.Object, targetPort intstr.IntOrString) (*kates.ServicePort, error) {
+	ports := svc.(*kates.Service).Spec.Ports
 	for i := range ports {
 		p := &ports[i]
-		if p.TargetPort == targetPort {
+		if p.TargetPort == targetPort && p.Name == m.PortName {
 			return p, nil
 		}
 	}
-	return nil, fmt.Errorf("unable to find target port %s in Service %s", targetPort.String(), svc.Name)
+	return nil, fmt.Errorf("unable to find target port %s in Service %s",
+		m.portName(targetPort.String()), svc.GetName())
 }
 
-func (m *makePortSymbolicAction) do(svc *kates.Service) error {
+func (m *makePortSymbolicAction) do(svc kates.Object) error {
 	p, err := m.getPort(svc, intstr.FromInt(m.TargetPort))
 	if err != nil {
 		return err
@@ -61,12 +146,22 @@ func (m *makePortSymbolicAction) do(svc *kates.Service) error {
 	return nil
 }
 
-func (m *makePortSymbolicAction) isDone(svc *kates.Service) bool {
+func (m *makePortSymbolicAction) explainDo(_ kates.Object, out io.Writer) {
+	fmt.Fprintf(out, "make service port %s symbolic with name %q",
+		m.portName(strconv.Itoa(m.TargetPort)), m.SymbolicName)
+}
+
+func (m *makePortSymbolicAction) explainUndo(_ kates.Object, out io.Writer) {
+	fmt.Fprintf(out, "restore symbolic service port %s to numeric %d",
+		m.portName(m.SymbolicName), m.TargetPort)
+}
+
+func (m *makePortSymbolicAction) isDone(svc kates.Object) bool {
 	_, err := m.getPort(svc, intstr.FromString(m.SymbolicName))
 	return err == nil
 }
 
-func (m *makePortSymbolicAction) undo(svc *kates.Service) error {
+func (m *makePortSymbolicAction) undo(svc kates.Object) error {
 	p, err := m.getPort(svc, intstr.FromString(m.SymbolicName))
 	if err != nil {
 		return err
@@ -80,29 +175,43 @@ type svcActions struct {
 	MakePortSymbolic *makePortSymbolicAction `json:"make_port_symbolic,omitempty"`
 }
 
-func (s *svcActions) do(svc *kates.Service) error {
+func (s *svcActions) actions() (actions []action) {
 	if s.MakePortSymbolic != nil {
-		return s.MakePortSymbolic.do(svc)
+		actions = append(actions, s.MakePortSymbolic)
 	}
-	return nil
+	return actions
 }
 
-func (s *svcActions) isDone(svc *kates.Service) bool {
-	if s.MakePortSymbolic != nil {
-		return s.MakePortSymbolic.isDone(svc)
-	}
-	return false
+func (s *svcActions) do(svc kates.Object) (err error) {
+	return doActions(s, svc)
 }
 
-func (s *svcActions) undo(svc *kates.Service) error {
-	if s.MakePortSymbolic != nil {
-		return s.MakePortSymbolic.undo(svc)
-	}
-	return nil
+func (s *svcActions) explainDo(svc kates.Object, out io.Writer) {
+	explainActions(s, svc, action.explainDo, out)
+}
+
+func (s *svcActions) explainUndo(svc kates.Object, out io.Writer) {
+	explainActions(s, svc, action.explainUndo, out)
+}
+
+func (s *svcActions) isDone(svc kates.Object) bool {
+	return isDoneActions(s, svc)
+}
+
+func (s *svcActions) undo(svc kates.Object) (err error) {
+	return undoActions(s, svc)
+}
+
+func (s *svcActions) objectType() string {
+	return "service"
 }
 
 func (s *svcActions) String() string {
 	return mustMarshal(s)
+}
+
+func (s *svcActions) version() string {
+	return s.Version
 }
 
 // addTrafficAgentAction is an action that adds a traffic-agent to the set of
@@ -113,8 +222,8 @@ type addTrafficAgentAction struct {
 	AppPort            int    `json:"app_port"`
 }
 
-func (ata *addTrafficAgentAction) do(dep *kates.Deployment) error {
-	tplSpec := &dep.Spec.Template.Spec
+func (ata *addTrafficAgentAction) do(dep kates.Object) error {
+	tplSpec := &dep.(*kates.Deployment).Spec.Template.Spec
 	tplSpec.Containers = append(tplSpec.Containers, corev1.Container{
 		Name:  "traffic-agent",
 		Image: managerImageName(),
@@ -129,7 +238,7 @@ func (ata *addTrafficAgentAction) do(dep *kates.Deployment) error {
 			Value: "debug",
 		}, {
 			Name:  "AGENT_NAME",
-			Value: dep.Name,
+			Value: dep.GetName(),
 		}, {
 			Name:  "APP_PORT",
 			Value: strconv.Itoa(ata.AppPort),
@@ -137,8 +246,16 @@ func (ata *addTrafficAgentAction) do(dep *kates.Deployment) error {
 	return nil
 }
 
-func (ata *addTrafficAgentAction) isDone(dep *kates.Deployment) bool {
-	cns := dep.Spec.Template.Spec.Containers
+func (ata *addTrafficAgentAction) explainDo(_ kates.Object, out io.Writer) {
+	fmt.Fprint(out, "add traffic-agent container")
+}
+
+func (ata *addTrafficAgentAction) explainUndo(_ kates.Object, out io.Writer) {
+	fmt.Fprint(out, "remove traffic-agent container")
+}
+
+func (ata *addTrafficAgentAction) isDone(dep kates.Object) bool {
+	cns := dep.(*kates.Deployment).Spec.Template.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
 		if cn.Name == "traffic-agent" {
@@ -148,17 +265,21 @@ func (ata *addTrafficAgentAction) isDone(dep *kates.Deployment) bool {
 	return false
 }
 
-func (ata *addTrafficAgentAction) undo(dep *kates.Deployment) error {
-	cns := dep.Spec.Template.Spec.Containers
+func (ata *addTrafficAgentAction) undo(dep kates.Object) error {
+	tplSpec := &dep.(*kates.Deployment).Spec.Template.Spec
+	cns := tplSpec.Containers
 	for i := range cns {
 		cn := &cns[i]
-		if cn.Name == "traffic-agent" {
-			// remove and keep order
-			copy(cns[i:], cns[i+1:])
-			last := len(cns) - 1
-			cns[last] = kates.Container{}
-			cns = cns[:last]
+		if cn.Name != "traffic-agent" {
+			continue
 		}
+
+		// remove and keep order
+		copy(cns[i:], cns[i+1:])
+		last := len(cns) - 1
+		cns[last] = kates.Container{}
+		tplSpec.Containers = cns[:last]
+		break
 	}
 	return nil
 }
@@ -172,8 +293,8 @@ type hideContainerPortAction struct {
 	HiddenName    string `json:"hidden_name"`
 }
 
-func (hcp *hideContainerPortAction) getPort(dep *kates.Deployment, name string) (*kates.Container, *corev1.ContainerPort, error) {
-	cns := dep.Spec.Template.Spec.Containers
+func (hcp *hideContainerPortAction) getPort(dep kates.Object, name string) (*kates.Container, *corev1.ContainerPort, error) {
+	cns := dep.(*kates.Deployment).Spec.Template.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
 		if cn.Name != hcp.ContainerName {
@@ -187,7 +308,7 @@ func (hcp *hideContainerPortAction) getPort(dep *kates.Deployment, name string) 
 			}
 		}
 	}
-	return nil, nil, fmt.Errorf("unable to locate port %s in container %s in deployment %s", hcp.PortName, hcp.ContainerName, dep.Name)
+	return nil, nil, fmt.Errorf("unable to locate port %s in container %s in deployment %s", hcp.PortName, hcp.ContainerName, dep.GetName())
 }
 
 func swapPortName(cn *kates.Container, p *corev1.ContainerPort, from, to string) {
@@ -205,7 +326,7 @@ func swapPortName(cn *kates.Container, p *corev1.ContainerPort, from, to string)
 	p.Name = to
 }
 
-func (hcp *hideContainerPortAction) do(dep *kates.Deployment) error {
+func (hcp *hideContainerPortAction) do(dep kates.Object) error {
 	// New name must be max 15 characters long
 	cn, p, err := hcp.getPort(dep, hcp.PortName)
 	if err != nil {
@@ -216,12 +337,22 @@ func (hcp *hideContainerPortAction) do(dep *kates.Deployment) error {
 	return nil
 }
 
-func (hcp *hideContainerPortAction) isDone(dep *kates.Deployment) bool {
+func (hcp *hideContainerPortAction) explainDo(_ kates.Object, out io.Writer) {
+	fmt.Fprintf(out, "hide port %q in container %s from service by renaming it to %q",
+		hcp.PortName, hcp.ContainerName, hcp.HiddenName)
+}
+
+func (hcp *hideContainerPortAction) explainUndo(_ kates.Object, out io.Writer) {
+	fmt.Fprintf(out, "reveal hidden port %q in container %s by restoring its origina name %q",
+		hcp.HiddenName, hcp.ContainerName, hcp.PortName)
+}
+
+func (hcp *hideContainerPortAction) isDone(dep kates.Object) bool {
 	_, _, err := hcp.getPort(dep, hcp.HiddenName)
 	return err == nil
 }
 
-func (hcp *hideContainerPortAction) undo(dep *kates.Deployment) error {
+func (hcp *hideContainerPortAction) undo(dep kates.Object) error {
 	cn, p, err := hcp.getPort(dep, hcp.HiddenName)
 	if err != nil {
 		return err
@@ -231,44 +362,50 @@ func (hcp *hideContainerPortAction) undo(dep *kates.Deployment) error {
 }
 
 type deploymentActions struct {
-	Version           string                   `json:"version"`
+	Version           string `json:"version"`
+	ReferencedService string
 	HideContainerPort *hideContainerPortAction `json:"hide_container_port,omitempty"`
 	AddTrafficAgent   *addTrafficAgentAction   `json:"add_traffic_agent,omitempty"`
 }
 
-func (d *deploymentActions) do(dep *kates.Deployment) (err error) {
+func (d *deploymentActions) actions() (actions []action) {
 	if d.HideContainerPort != nil {
-		if err = d.HideContainerPort.do(dep); err != nil {
-			return err
-		}
+		actions = append(actions, d.HideContainerPort)
 	}
 	if d.AddTrafficAgent != nil {
-		if err = d.AddTrafficAgent.do(dep); err != nil {
-			return err
-		}
+		actions = append(actions, d.AddTrafficAgent)
 	}
-	return nil
+	return actions
 }
 
-func (d *deploymentActions) isDone(dep *kates.Deployment) bool {
-	return (d.HideContainerPort == nil || d.HideContainerPort.isDone(dep)) &&
-		(d.AddTrafficAgent == nil || d.AddTrafficAgent.isDone(dep))
+func (d *deploymentActions) explainDo(dep kates.Object, out io.Writer) {
+	explainActions(d, dep, action.explainDo, out)
 }
 
-func (d *deploymentActions) undo(dep *kates.Deployment) (err error) {
-	if d.AddTrafficAgent != nil {
-		if err = d.AddTrafficAgent.undo(dep); err != nil {
-			return err
-		}
-	}
-	if d.HideContainerPort != nil {
-		if err = d.HideContainerPort.undo(dep); err != nil {
-			return err
-		}
-	}
-	return nil
+func (d *deploymentActions) do(dep kates.Object) (err error) {
+	return doActions(d, dep)
+}
+
+func (d *deploymentActions) explainUndo(dep kates.Object, out io.Writer) {
+	explainActions(d, dep, action.explainUndo, out)
+}
+
+func (d *deploymentActions) isDone(dep kates.Object) bool {
+	return isDoneActions(d, dep)
+}
+
+func (d *deploymentActions) undo(dep kates.Object) (err error) {
+	return undoActions(d, dep)
+}
+
+func (d *deploymentActions) objectType() string {
+	return "deployment"
 }
 
 func (d *deploymentActions) String() string {
 	return mustMarshal(d)
+}
+
+func (d *deploymentActions) version() string {
+	return d.Version
 }

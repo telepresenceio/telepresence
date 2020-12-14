@@ -67,10 +67,10 @@ func (cs *connectorState) EnsureState() (bool, error) {
 
 func (cs *connectorState) setConnectInfo() error {
 	r, err := cs.grpc.Connect(cs.cmd.Context(), &connector.ConnectRequest{
-		Context:   cs.context,
-		Namespace: cs.namespace,
+		Context:   k8sContext,
+		Namespace: k8sNamespace,
 		InstallId: client.NewScout("unused").Reporter.InstallID(),
-		IsCi:      cs.isCI,
+		IsCi:      isCI,
 	})
 	if err != nil {
 		return err

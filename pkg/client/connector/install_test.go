@@ -143,7 +143,7 @@ func Test_findTrafficManager_notPresent(t *testing.T) {
 	version.Version = "v0.0.0-bogus"
 	defer func() { version.Version = testVersion }()
 
-	if _, err = ti.findDeployment(c, appName); err != nil {
+	if _, err = ti.findDeployment(c, managerAppName); err != nil {
 		if !kates.IsNotFound(err) {
 			t.Fatal(err)
 		}
@@ -168,7 +168,7 @@ func Test_findTrafficManager_present(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = ti.findDeployment(c, appName)
+	_, err = ti.findDeployment(c, managerAppName)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -55,6 +55,13 @@ func quitCommand() *cobra.Command {
 	}
 }
 
+// global options
+var k8sContext string
+var k8sNamespace string
+var dnsIP string
+var fallbackIP string
+var isCI bool
+
 // Command returns the top level "telepresence" CLI command
 func Command() *cobra.Command {
 	myName := "Telepresence"
@@ -77,6 +84,24 @@ func Command() *cobra.Command {
 	// the correct context and execute in-place immediately.
 	rootCmd.AddCommand(daemon.Command())
 	rootCmd.AddCommand(connector.Command())
+	flags := rootCmd.PersistentFlags()
+	flags.StringVarP(&dnsIP,
+		"dns", "", "",
+		"DNS IP address to intercept locally. Defaults to the first nameserver listed in /etc/resolv.conf.",
+	)
+	flags.StringVarP(&fallbackIP,
+		"fallback", "", "",
+		"DNS fallback, how non-cluster DNS queries are resolved. Defaults to Google DNS (8.8.8.8).",
+	)
+	flags.StringVarP(&k8sContext,
+		"context", "c", "",
+		"The Kubernetes context to use. Defaults to the current kubectl context.",
+	)
+	flags.StringVarP(&k8sNamespace,
+		"namespace", "n", "",
+		"The Kubernetes namespace to use. Defaults to kubectl's default for the context.",
+	)
+	flags.BoolVar(&isCI, "ci", false, "This session is a CI run.")
 
 	rootCmd.InitDefaultHelpCmd()
 	AddCommandGroups(rootCmd, []CommandGroup{
@@ -90,7 +115,7 @@ func Command() *cobra.Command {
 		},
 		{
 			Name:     "Other Commands",
-			Commands: []*cobra.Command{versionCommand() /*, "uninstall" */},
+			Commands: []*cobra.Command{versionCommand(), uninstallCommand()},
 		},
 	})
 	return rootCmd
