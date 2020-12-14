@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -30,8 +30,6 @@ type SessionState struct {
 // NewState.
 type State struct {
 	ctx context.Context
-
-	counter int64
 
 	mu sync.Mutex
 	// Things protected by 'mu': While the watchable.WhateverMaps have their own locking to
@@ -64,10 +62,6 @@ func NewState(ctx context.Context) *State {
 }
 
 // Internal ////////////////////////////////////////////////////////////////////////////////////////
-
-func (s *State) next() int64 {
-	return atomic.AddInt64(&s.counter, 1)
-}
 
 func (s *State) unlockedNextPort() uint16 {
 	for attempts := 0; attempts < hiPort-loPort; attempts++ {
@@ -194,7 +188,11 @@ func (s *State) SessionDone(id string) <-chan struct{} {
 // Sessions: Clients ///////////////////////////////////////////////////////////////////////////////
 
 func (s *State) AddClient(client *rpc.ClientInfo, now time.Time) string {
-	sessionID := fmt.Sprintf("C%03d", s.next())
+	// Use non-sequential things (i.e., UUIDs, not just a counter) as the session ID, because
+	// the session ID also exists in external systems (the client, SystemA), so it's confusing
+	// (to both humans and computers) if the manager restarts and those existing session IDs
+	// suddenly refer to different sessions.
+	sessionID := uuid.New().String()
 	return s.addClient(sessionID, client, now)
 }
 
@@ -260,7 +258,7 @@ func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 		s.agentsByName[agent.Name] = make(map[string]*rpc.AgentInfo)
 	}
 
-	sessionID := fmt.Sprintf("A%03d", s.next())
+	sessionID := uuid.New().String()
 	if oldAgent, hasConflict := s.agents.LoadOrStore(sessionID, agent); hasConflict {
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", sessionID, oldAgent, agent))
 	}
