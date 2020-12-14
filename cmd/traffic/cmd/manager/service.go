@@ -110,7 +110,11 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 	snapshotCh := m.state.WatchAgents(ctx, nil)
 	for {
 		select {
-		case snapshot := <-snapshotCh:
+		case snapshot, ok := <-snapshotCh:
+			if !ok {
+				// The request has been canceled.
+				return nil
+			}
 			agents := make([]*rpc.AgentInfo, 0, len(snapshot.State))
 			for _, agent := range snapshot.State {
 				agents = append(agents, agent)
@@ -121,9 +125,6 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 			if err := stream.Send(resp); err != nil {
 				return err
 			}
-		case <-ctx.Done():
-			// The request has been canceled.
-			return nil
 		case <-m.state.SessionDone(sessionID):
 			// Manager believes this session has ended.
 			return nil
@@ -155,7 +156,11 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	snapshotCh := m.state.WatchIntercepts(ctx, filter)
 	for {
 		select {
-		case snapshot := <-snapshotCh:
+		case snapshot, ok := <-snapshotCh:
+			if !ok {
+				dlog.Debugf(ctx, "WatchIntercepts request cancelled: %s", sessionID)
+				return nil
+			}
 			dlog.Debugf(ctx, "WatchIntercepts sending update: %s", sessionID)
 			intercepts := make([]*rpc.InterceptInfo, 0, len(snapshot.State))
 			for _, intercept := range snapshot.State {
@@ -171,9 +176,6 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 				dlog.Debugf(ctx, "WatchIntercepts encountered a write error: %v", err)
 				return err
 			}
-		case <-ctx.Done():
-			dlog.Debugf(ctx, "WatchIntercepts request cancelled: %s", sessionID)
-			return nil
 		case <-m.state.SessionDone(sessionID):
 			dlog.Debugf(ctx, "WatchIntercepts session cancelled: %s", sessionID)
 			return nil
