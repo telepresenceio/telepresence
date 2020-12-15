@@ -243,7 +243,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	})
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	cluster, err := trackKCluster(s.ctx, cr.Context, cr.Namespace, cr.Args)
+	cluster, err := trackKCluster(s.ctx, cr.Context, cr.Namespace, s.daemon, cr.Args)
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
 		r.Error = rpc.ConnectInfo_CLUSTER_FAILED
@@ -286,7 +286,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	}
 
 	dlog.Infof(c, "Starting traffic-manager bridge in context %s, namespace %s", cluster.Context, cluster.Namespace)
-	br := newBridge(cluster, s.daemon, tmgr.sshPort)
+	br := newBridge(cluster.Namespace, s.daemon, tmgr.sshPort)
 	err = br.start(s.ctx)
 	if err != nil {
 		dlog.Errorf(c, "Failed to start traffic-manager bridge: %v", err)

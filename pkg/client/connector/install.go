@@ -58,37 +58,6 @@ func managerImageName() string {
 	return managerImage
 }
 
-func (ki *installer) findDeployment(c context.Context, name string) (*kates.Deployment, error) {
-	dep := &kates.Deployment{
-		TypeMeta: kates.TypeMeta{
-			Kind: "Deployment",
-		},
-		ObjectMeta: kates.ObjectMeta{
-			Namespace: ki.Namespace,
-			Name:      name},
-	}
-	if err := ki.client.Get(c, dep, dep); err != nil {
-		return nil, err
-	}
-	return dep, nil
-}
-
-func (ki *installer) findSvc(c context.Context, name string) (*kates.Service, error) {
-	svc := &kates.Service{
-		TypeMeta: kates.TypeMeta{
-			Kind: "Service",
-		},
-		ObjectMeta: kates.ObjectMeta{
-			Namespace: ki.Namespace,
-			Name:      name},
-	}
-	if err := ki.client.Get(c, svc, svc); err != nil {
-		return nil, err
-	}
-	dlog.Infof(c, "Found existing traffic-manager service in namespace %s", ki.Namespace)
-	return svc, nil
-}
-
 func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error) {
 	svc := &kates.Service{
 		TypeMeta: kates.TypeMeta{
@@ -154,14 +123,11 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 		ai := ai // pin it
 		go func() {
 			defer wg.Done()
-			agent, err := ki.findDeployment(c, ai.Name)
-			if err != nil {
-				if !kates.IsNotFound(err) {
+			agent := ki.findDeployment(ai.Name)
+			if agent != nil {
+				if err := ki.undoDeploymentMods(c, agent); err != nil {
 					addError(err)
 				}
-			}
-			if err = ki.undoDeploymentMods(c, agent); err != nil {
-				addError(err)
 			}
 		}()
 	}
@@ -237,50 +203,59 @@ func (ki *installer) updateDeployment(c context.Context, currentDep *kates.Deplo
 	return dep, err
 }
 
-func (ki *installer) portToIntercept(c context.Context, name string, labels map[string]string, dep *kates.Deployment) (
+func (ki *installer) portToIntercept(portName string, dep *kates.Deployment) (
 	service *kates.Service, sPort *kates.ServicePort, cn *kates.Container, cPortIndex int, err error) {
-	svcs := make([]*kates.Service, 0)
-	err = ki.client.List(c, kates.Query{
-		Name:      name,
-		Kind:      "svc",
-		Namespace: ki.Namespace,
-	}, &svcs)
-	if err != nil {
-		return nil, nil, nil, 0, err
+	matching := ki.findMatchingServices(portName, dep)
+	if len(matching) == 0 {
+		return nil, nil, nil, 0, fmt.Errorf("found no services with just one port and a selector matching labels %v", dep.Spec.Template.Labels)
 	}
+	return findMatchingPort(dep, portName, matching)
+}
 
-	matching := make([]*kates.Service, 0)
-	for _, svc := range svcs {
-		selector := svc.Spec.Selector
-		matchOk := len(selector) > 0
-		for k, v := range selector {
-			if labels[k] != v {
-				matchOk = false
-				break
+func svcPortByName(svc *kates.Service, name string) *kates.ServicePort {
+	ports := svc.Spec.Ports
+	if name != "" {
+		for i := range ports {
+			port := &ports[i]
+			if port.Name == name {
+				return port
 			}
 		}
-		if matchOk {
+	} else if len(svc.Spec.Ports) == 1 {
+		return &ports[0]
+	}
+	return nil
+}
+
+func (ki *installer) findMatchingServices(portName string, dep *kates.Deployment) []*kates.Service {
+	labels := dep.Spec.Template.Labels
+	matching := make([]*kates.Service, 0)
+
+	ki.accLock.Lock()
+nextSvc:
+	for _, svc := range ki.Services {
+		selector := svc.Spec.Selector
+		if len(selector) == 0 {
+			continue nextSvc
+		}
+		for k, v := range selector {
+			if labels[k] != v {
+				continue nextSvc
+			}
+		}
+		if svcPortByName(svc, portName) != nil {
 			matching = append(matching, svc)
 		}
 	}
-
-	if len(matching) == 0 {
-		return nil, nil, nil, 0, fmt.Errorf("found no services with a selector matching labels %v", labels)
-	}
-	return findMatchingPort(c, dep, matching)
+	ki.accLock.Unlock()
+	return matching
 }
 
-func findMatchingPort(c context.Context, dep *kates.Deployment, svcs []*kates.Service) (
+func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Service) (
 	service *kates.Service, sPort *kates.ServicePort, cn *kates.Container, cPortIndex int, err error) {
 	cns := dep.Spec.Template.Spec.Containers
 	for _, svc := range svcs {
-		ports := svc.Spec.Ports
-		if len(ports) != 1 {
-			// TODO: Propagate warning about this to the user
-			dlog.Warnf(c, "discarding service %s because it has %d number of ports", svc.Name, len(ports))
-			continue
-		}
-		port := &ports[0]
+		port := svcPortByName(svc, portName)
 		var msp *corev1.ServicePort
 		var ccn *corev1.Container
 		var cpi int
@@ -353,13 +328,10 @@ func findMatchingPort(c context.Context, dep *kates.Deployment, svcs []*kates.Se
 var agentExists = errors.New("agent exists")
 var agentNotFound = errors.New("no such agent")
 
-func (ki *installer) ensureAgent(c context.Context, name, svcName string) error {
-	dep, err := ki.findDeployment(c, name)
-	if err != nil {
-		if kates.IsNotFound(err) {
-			err = agentNotFound
-		}
-		return err
+func (ki *installer) ensureAgent(c context.Context, name, portName string) error {
+	dep := ki.findDeployment(name)
+	if dep == nil {
+		return agentNotFound
 	}
 	cns := dep.Spec.Template.Spec.Containers
 	for i := len(cns) - 1; i >= 0; i-- {
@@ -369,7 +341,7 @@ func (ki *installer) ensureAgent(c context.Context, name, svcName string) error 
 		}
 	}
 	dlog.Infof(c, "no agent found for deployment %q", name)
-	return ki.addAgentToDeployment(c, svcName, dep)
+	return ki.addAgentToDeployment(c, portName, dep)
 }
 
 func getAnnotation(ann map[string]string, data interface{}) (bool, error) {
@@ -405,21 +377,17 @@ func (ki *installer) undoDeploymentMods(c context.Context, dep *kates.Deployment
 		return err
 	}
 
-	svc, err := ki.findSvc(c, actions.ReferencedService)
-	if err != nil {
-		if !kates.IsNotFound(err) {
-			return fmt.Errorf("unable to get service %s when uninstalling agent in deployment %s: %v",
-				actions.ReferencedService, dep.Name, err)
+	if svc := ki.findSvc(actions.ReferencedService); svc != nil {
+		if err = ki.undoServiceMods(c, svc); err != nil {
+			return err
 		}
-	} else if err = ki.undoServiceMods(c, svc); err != nil {
-		return err
 	}
 
 	if err = actions.undo(dep); err != nil {
 		return err
 	}
 	delete(dep.Annotations, annTelepresenceActions)
-	explainUndo(c, &actions, svc)
+	explainUndo(c, &actions, dep)
 	return ki.client.Update(c, dep, dep)
 }
 
@@ -437,14 +405,8 @@ func (ki *installer) undoServiceMods(c context.Context, svc *kates.Service) erro
 	return ki.client.Update(c, svc, svc)
 }
 
-func (ki *installer) addAgentToDeployment(c context.Context, svcName string, dep *kates.Deployment) error {
-	tplSpec := &dep.Spec.Template.Spec
-	containers := tplSpec.Containers
-	if len(containers) != 1 {
-		// TODO: How do we handle multiple containers?
-		return fmt.Errorf("unable to add agent to deployment %s. It doesn't have one container", dep.Name)
-	}
-	svc, sPort, icn, cPortIndex, err := ki.portToIntercept(c, svcName, dep.Spec.Template.Labels, dep)
+func (ki *installer) addAgentToDeployment(c context.Context, portName string, dep *kates.Deployment) error {
+	svc, sPort, icn, cPortIndex, err := ki.portToIntercept(portName, dep)
 	if err != nil {
 		return err
 	}
@@ -579,21 +541,16 @@ func (ki *installer) managerDeployment() *kates.Deployment {
 }
 
 func (ki *installer) ensureManager(c context.Context) (int32, int32, error) {
-	svc, err := ki.findSvc(c, managerAppName)
-	if err != nil {
-		if !kates.IsNotFound(err) {
-			return 0, 0, err
-		}
+	svc := ki.findSvc(managerAppName)
+	var err error
+	if svc == nil {
 		svc, err = ki.createManagerSvc(c)
 		if err != nil {
 			return 0, 0, err
 		}
 	}
-	dep, err := ki.findDeployment(c, managerAppName)
-	if err != nil {
-		if !kates.IsNotFound(err) {
-			return 0, 0, err
-		}
+	dep := ki.findDeployment(managerAppName)
+	if dep == nil {
 		err = ki.createManagerDeployment(c)
 	} else {
 		_, err = ki.updateDeployment(c, dep)

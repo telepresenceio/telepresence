@@ -25,6 +25,7 @@ import (
 // trafficManager is a handle to access the Traffic Manager in a
 // cluster.
 type trafficManager struct {
+	*k8sCluster
 	aiListener      aiListener
 	iiListener      iiListener
 	conn            *grpc.ClientConn
@@ -69,6 +70,7 @@ func newTrafficManager(c context.Context, cluster *k8sCluster, installID string,
 		return nil, errors.Wrap(err, "get free port for ssh")
 	}
 	tm := &trafficManager{
+		k8sCluster:  cluster,
 		installer:   ti,
 		apiPort:     localAPIPort,
 		sshPort:     localSSHPort,

@@ -11,10 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
 	"github.com/datawire/ambassador/pkg/dtest"
-	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/version"
@@ -131,8 +132,7 @@ func testContext() context.Context {
 	return dlog.WithLogger(context.Background(), dlog.WrapLogrus(logrus.StandardLogger()))
 }
 func Test_findTrafficManager_notPresent(t *testing.T) {
-	c := testContext()
-	kc, err := newKCluster(kubeconfig, "", namespace)
+	kc, err := newKCluster(kubeconfig, "", namespace, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,32 +143,45 @@ func Test_findTrafficManager_notPresent(t *testing.T) {
 	version.Version = "v0.0.0-bogus"
 	defer func() { version.Version = testVersion }()
 
-	if _, err = ti.findDeployment(c, managerAppName); err != nil {
-		if !kates.IsNotFound(err) {
-			t.Fatal(err)
-		}
-	} else {
-		t.Fatal("expected find to return not-found error")
+	if dep := ti.findDeployment(managerAppName); dep != nil {
+		t.Fatal("expected find to not find deployment")
 	}
 }
 
 func Test_findTrafficManager_present(t *testing.T) {
-	c := testContext()
-	publishManager(t)
-	defer removeManager(t)
-	kc, err := newKCluster(kubeconfig, "", namespace)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ti, err := newTrafficManagerInstaller(kc)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = ti.createManagerDeployment(c)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = ti.findDeployment(c, managerAppName)
+	c, cancel := context.WithCancel(testContext())
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g.Go("test-present", func(c context.Context) error {
+		defer cancel()
+		publishManager(t)
+		defer removeManager(t)
+		kc, err := newKCluster(kubeconfig, "", namespace, nil)
+		if err != nil {
+			return err
+		}
+		accWait := make(chan struct{})
+		err = kc.startWatches(c, namespace, accWait)
+		if err != nil {
+			return err
+		}
+		<-accWait
+		ti, err := newTrafficManagerInstaller(kc)
+		if err != nil {
+			return err
+		}
+		err = ti.createManagerDeployment(c)
+		if err != nil {
+			return err
+		}
+		for i := 0; i < 50; i++ {
+			if dep := ti.findDeployment(managerAppName); dep != nil {
+				return nil
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		return errors.New("traffic-manager deployment not found")
+	})
+	err := g.Wait()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +191,7 @@ func Test_ensureTrafficManager_notPresent(t *testing.T) {
 	c := testContext()
 	publishManager(t)
 	defer removeManager(t)
-	kc, err := newKCluster(kubeconfig, "", namespace)
+	kc, err := newKCluster(kubeconfig, "", namespace, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
