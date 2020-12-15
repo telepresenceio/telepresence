@@ -43,6 +43,22 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	defer tm.interceptsLock.Unlock()
 
 	spec := ir.InterceptSpec
+	for n, iCept := range tm.intercepts {
+		if n == spec.Name {
+			return &rpc.InterceptResult{
+				Error:     rpc.InterceptError_ALREADY_EXISTS,
+				ErrorText: n,
+			}, nil
+		}
+		if iCept.targetPort == spec.TargetPort && iCept.targetHost == spec.TargetHost {
+			return &rpc.InterceptResult{
+				InterceptInfo: &manager.InterceptInfo{Spec: spec},
+				Error:         rpc.InterceptError_LOCAL_TARGET_IN_USE,
+				ErrorText:     n,
+			}, nil
+		}
+	}
+
 	spec.Client = tm.userAndHost
 	if spec.Mechanism == "" {
 		spec.Mechanism = "tcp"
