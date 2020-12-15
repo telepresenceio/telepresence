@@ -24,6 +24,7 @@ type Clock interface {
 type Manager struct {
 	ctx     context.Context
 	clock   Clock
+	env     Env
 	state   *state.State
 	systema *systemaPool
 
@@ -36,7 +37,7 @@ func (wall) Now() time.Time {
 	return time.Now()
 }
 
-func NewManager(ctx context.Context) *Manager {
+func NewManager(ctx context.Context, env Env) *Manager {
 	ret := &Manager{
 		ctx:   ctx,
 		clock: wall{},
