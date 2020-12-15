@@ -108,6 +108,7 @@ func TestLoginFlow(t *testing.T) {
 		Runner               *auth.LoginExecutor
 		OpenedUrls           chan string
 	}
+	const mockCompletionUrl = "http://example.com/mock-completion"
 
 	setup := func(t *testing.T) *fixture {
 		mockSaveTokenWrapper := &MockSaveTokenWrapper{}
@@ -123,6 +124,7 @@ func TestLoginFlow(t *testing.T) {
 				Oauth2AuthUrl:  mockOauth2Server.AuthUrl(),
 				Oauth2TokenUrl: mockOauth2Server.TokenUrl(),
 				Oauth2ClientId: "",
+				CompletionUrl:  mockCompletionUrl,
 				SaveTokenFunc:  mockSaveTokenWrapper.SaveToken,
 				OpenURLFunc: func(url string) error {
 					openUrlChan <- url
@@ -153,7 +155,8 @@ func TestLoginFlow(t *testing.T) {
 
 		// then
 		assert.NilError(t, err, "no error running login flow")
-		assert.Assert(t, is.Equal(http.StatusOK, callbackResponse.StatusCode), "callback status is 200")
+		assert.Assert(t, is.Equal(http.StatusTemporaryRedirect, callbackResponse.StatusCode), "callback status is 307")
+		assert.Assert(t, is.Equal(mockCompletionUrl, callbackResponse.Header.Get("Location")), "location header")
 		assert.Assert(t, strings.HasPrefix(rawAuthUrl, f.MockOauth2Server.AuthUrl()), "auth url")
 		assert.Assert(t, is.Len(f.MockOpenURLWrapper.CallArguments, 1), "one call to open url")
 		assert.Assert(t, is.Len(f.MockOauth2Server.TokenRequestFormValues, 1), "one call to the token endpoint")
@@ -245,7 +248,8 @@ func TestLoginFlow(t *testing.T) {
 
 		// then
 		assert.Assert(t, is.ErrorContains(err, "error while exchanging code for token:"), "error message")
-		assert.Assert(t, is.Equal(http.StatusOK, callbackResponse.StatusCode), "callback status is 200")
+		assert.Assert(t, is.Equal(http.StatusTemporaryRedirect, callbackResponse.StatusCode), "callback status is 307")
+		assert.Assert(t, is.Equal(mockCompletionUrl, callbackResponse.Header.Get("Location")), "location header")
 		assert.Assert(t, is.Len(f.MockOpenURLWrapper.CallArguments, 1), "one call to open url")
 		assert.Assert(t, is.Len(f.MockOauth2Server.TokenRequestFormValues, 2), "one retry to the token endpoint")
 		assert.Assert(t, is.Len(f.MockSaveTokenWrapper.CallArguments, 0), "no call to save the token")
@@ -273,7 +277,8 @@ func TestLoginFlow(t *testing.T) {
 
 		// then
 		assert.Assert(t, is.Error(err, "could not save access token to user cache: disk error"), "error message")
-		assert.Assert(t, is.Equal(http.StatusOK, callbackResponse.StatusCode), "callback status is 200")
+		assert.Assert(t, is.Equal(http.StatusTemporaryRedirect, callbackResponse.StatusCode), "callback status is 307")
+		assert.Assert(t, is.Equal(mockCompletionUrl, callbackResponse.Header.Get("Location")), "location header")
 		assert.Assert(t, is.Len(f.MockOpenURLWrapper.CallArguments, 1), "one call to open url")
 		assert.Assert(t, is.Len(f.MockOauth2Server.TokenRequestFormValues, 1), "one retry to the token endpoint")
 		assert.Assert(t, is.Len(f.MockSaveTokenWrapper.CallArguments, 1), "no call to save the token")
@@ -281,7 +286,12 @@ func TestLoginFlow(t *testing.T) {
 }
 
 func sendCallbackRequest(t *testing.T, callbackUrl *url.URL) *http.Response {
-	callbackResponse, err := http.Get(callbackUrl.String())
+	// don't follow redirects
+	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	callbackResponse, err := client.Get(callbackUrl.String())
+
 	if err != nil {
 		t.Fatal(err)
 	}
