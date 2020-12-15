@@ -22,26 +22,32 @@ import (
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
+// intercept represents a live intercept in the form of an ssh port forward.
+type intercept struct {
+	cancel     context.CancelFunc
+	targetHost string
+	targetPort int32
+}
+
 // trafficManager is a handle to access the Traffic Manager in a
 // cluster.
 type trafficManager struct {
 	*k8sCluster
-	aiListener      aiListener
-	iiListener      iiListener
-	conn            *grpc.ClientConn
-	grpc            manager.ManagerClient
-	startup         chan bool
-	apiPort         int32
-	sshPort         int32
-	userAndHost     string
-	installID       string // telepresence's install ID
-	sessionID       string // sessionID returned by the traffic-manager
-	apiErr          error  // holds the latest traffic-manager API error
-	connectCI       bool   // whether --ci was passed to connect
-	installer       *installer
-	myIntercept     string
-	cancelIntercept context.CancelFunc
-	// previewHost string // hostname to use for preview URLs, if enabled
+	aiListener     aiListener
+	iiListener     iiListener
+	conn           *grpc.ClientConn
+	grpc           manager.ManagerClient
+	startup        chan bool
+	apiPort        int32
+	sshPort        int32
+	userAndHost    string
+	installID      string // telepresence's install ID
+	sessionID      string // sessionID returned by the traffic-manager
+	apiErr         error  // holds the latest traffic-manager API error
+	connectCI      bool   // whether --ci was passed to connect
+	installer      *installer
+	intercepts     map[string]*intercept
+	interceptsLock sync.Mutex
 }
 
 // newTrafficManager returns a TrafficManager resource for the given
@@ -77,7 +83,8 @@ func newTrafficManager(c context.Context, cluster *k8sCluster, installID string,
 		installID:   installID,
 		connectCI:   isCI,
 		startup:     make(chan bool),
-		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host)}
+		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host),
+		intercepts:  make(map[string]*intercept)}
 
 	dgroup.ParentGroup(c).Go("traffic-manager", tm.start)
 	return tm, nil

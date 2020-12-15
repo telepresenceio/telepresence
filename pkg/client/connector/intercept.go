@@ -39,6 +39,9 @@ func (s *service) interceptStatus() (rpc.InterceptError, string) {
 
 // addIntercept adds one intercept
 func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager.CreateInterceptRequest) (*rpc.InterceptResult, error) {
+	tm.interceptsLock.Lock()
+	defer tm.interceptsLock.Unlock()
+
 	spec := ir.InterceptSpec
 	spec.Client = tm.userAndHost
 	if spec.Mechanism == "" {
@@ -204,7 +207,7 @@ func (tm *trafficManager) waitForAgent(c context.Context, name string) (*manager
 }
 
 // makeIntercept acquires an intercept and returns a Resource handle
-// for it
+// for it. Must be called with tm.interceptsLock mutex locked
 func (tm *trafficManager) makeIntercept(c, longLived context.Context, ii *manager.InterceptInfo) error {
 	is := ii.Spec
 	dlog.Infof(c, "%s: Intercepting via port %v", is.Name, ii.ManagerPort)
@@ -218,8 +221,9 @@ func (tm *trafficManager) makeIntercept(c, longLived context.Context, ii *manage
 	}
 
 	dlog.Infof(c, "%s: starting SSH tunnel", is.Name)
-	tm.myIntercept = is.Name
-	c, tm.cancelIntercept = context.WithCancel(longLived)
+	c, cancel := context.WithCancel(longLived)
+	tm.intercepts[is.Name] = &intercept{cancel: cancel, targetHost: is.TargetHost, targetPort: is.TargetPort}
+
 	c = dgroup.WithGoroutineName(c, ii.Id)
 	return client.Retry(c, "ssh reverse tunnelling", func(c context.Context) error {
 		return dexec.CommandContext(c, "ssh", sshArgs...).Start()
@@ -228,10 +232,13 @@ func (tm *trafficManager) makeIntercept(c, longLived context.Context, ii *manage
 
 // removeIntercept removes one intercept by name
 func (tm *trafficManager) removeIntercept(c context.Context, name string) error {
-	if name == tm.myIntercept {
+	tm.interceptsLock.Lock()
+	defer tm.interceptsLock.Unlock()
+
+	if iCept, ok := tm.intercepts[name]; ok {
 		dlog.Debugf(c, "cancelling intercept %s", name)
-		tm.myIntercept = ""
-		tm.cancelIntercept()
+		delete(tm.intercepts, name)
+		iCept.cancel()
 	}
 	dlog.Debugf(c, "telling manager to remove intercept %s", name)
 	_, err := tm.grpc.RemoveIntercept(c, &manager.RemoveInterceptRequest2{
