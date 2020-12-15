@@ -206,17 +206,17 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	if sa, err := m.systema.Get(); err != nil {
 		dlog.Errorln(ctx, "systema:", err)
 	} else {
-		defer func() {
-			if err := m.systema.Done(); err != nil {
-				dlog.Errorln(ctx, "systema:", err)
-			}
-		}()
 		resp, err := sa.CreateDomain(ctx, &systema.CreateDomainRequest{
 			InterceptId: intercept.Id,
 		})
 		if err != nil {
 			dlog.Errorln(ctx, "systema:", err)
+			if err := m.systema.Done(); err != nil {
+				dlog.Errorln(ctx, "systema:", err)
+			}
 		} else {
+			// DON'T m.systema.Done(); keep the connection refcounted until the
+			// intercept is deleted.
 			intercept.PreviewDomain = resp.Domain
 			m.state.UpdateIntercept(intercept)
 		}
