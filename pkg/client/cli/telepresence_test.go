@@ -103,6 +103,7 @@ var _ = Describe("Telepresence", func() {
 				stdout, stderr := telepresence("quit")
 				Expect(stderr).To(BeEmpty())
 				Expect(stdout).To(ContainSubstring("quitting"))
+				time.Sleep(time.Second) // Allow some time for processes to die and sockets to vanish
 			}
 		})
 
@@ -189,11 +190,11 @@ var _ = Describe("Telepresence", func() {
 			})
 
 			By("listing active intercepts", func() {
-				stdout, stderr := telepresence("list")
+				stdout, stderr := telepresence("list", "--intercepts")
 				Expect(stderr).To(BeEmpty())
 				matches := make([]types.GomegaMatcher, serviceCount)
 				for i := 0; i < serviceCount; i++ {
-					matches[i] = ContainSubstring(" hello-%d\n", i)
+					matches[i] = ContainSubstring("hello-%d: intercepted", i)
 				}
 				Expect(stdout).To(And(matches...))
 			})
@@ -204,9 +205,9 @@ var _ = Describe("Telepresence", func() {
 			stdout, stderr := telepresence("intercept", "with-probes", "--port", "9090")
 			Expect(stderr).To(BeEmpty())
 			Expect(stdout).To(ContainSubstring("Using deployment with-probes"))
-			stdout, stderr = telepresence("list")
+			stdout, stderr = telepresence("list", "--intercepts")
 			Expect(stderr).To(BeEmpty())
-			Expect(stdout).To(ContainSubstring(" with-probes\n"))
+			Expect(stdout).To(ContainSubstring("with-probes: intercepted"))
 		})
 		itTotal++
 	})

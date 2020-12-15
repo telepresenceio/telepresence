@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -52,15 +51,6 @@ func leaveCommand() *cobra.Command {
 	}
 }
 
-func listCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "list",
-		Short: "List current intercepts",
-		Args:  cobra.NoArgs,
-		RunE:  listIntercepts,
-	}
-}
-
 func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 	ii.name = args[0]
 	args = args[1:]
@@ -83,42 +73,6 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 			return start(args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	})
-}
-
-// listIntercepts requests a list current intercepts from the daemon
-func listIntercepts(cmd *cobra.Command, _ []string) error {
-	var r *manager.InterceptInfoSnapshot
-	var err error
-	err = withStartedConnector(cmd, func(cs *connectorState) error {
-		r, err = cs.grpc.ListIntercepts(cmd.Context(), &empty.Empty{})
-		return err
-	})
-	if err != nil {
-		return err
-	}
-	stdout := cmd.OutOrStdout()
-	if len(r.Intercepts) == 0 {
-		fmt.Fprintln(stdout, "No intercepts")
-		return nil
-	}
-	for idx, cept := range r.Intercepts {
-		spec := cept.Spec
-		fmt.Fprintf(stdout, "%4d. %s\n", idx+1, spec.Name)
-		fmt.Fprintf(stdout, "      Intercepting requests and redirecting them to %s:%d\n", spec.TargetHost, spec.TargetPort)
-		var previewURL string
-		if cept.PreviewDomain != "" {
-			previewURL = cept.PreviewDomain
-			// Right now SystemA gives back domains with the leading "https://", but
-			// let's not rely on that.
-			if !strings.HasPrefix(previewURL, "https://") && !strings.HasPrefix(previewURL, "http://") {
-				previewURL = "https://" + previewURL
-			}
-		}
-		if previewURL != "" {
-			fmt.Fprintln(stdout, "Share a preview of your changes with anyone by visiting\n  ", previewURL)
-		}
-	}
-	return nil
 }
 
 // removeIntercept tells the daemon to deactivate and remove an existent intercept

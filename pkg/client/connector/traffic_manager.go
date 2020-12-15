@@ -194,6 +194,62 @@ func (tm *trafficManager) interceptInfoSnapshot() *manager.InterceptInfoSnapshot
 	return tm.iiListener.getData()
 }
 
+func (tm *trafficManager) deploymentInfoSnapshot(filter rpc.ListRequest_Filter) *rpc.DeploymentInfoSnapshot {
+	var iMap map[string]*manager.InterceptInfo
+	if is := tm.interceptInfoSnapshot(); is != nil {
+		iMap = make(map[string]*manager.InterceptInfo, len(is.Intercepts))
+		for _, i := range is.Intercepts {
+			iMap[i.Spec.Agent] = i
+		}
+	} else {
+		iMap = map[string]*manager.InterceptInfo{}
+	}
+	var aMap map[string]*manager.AgentInfo
+	if as := tm.agentInfoSnapshot(); as != nil {
+		aMap = make(map[string]*manager.AgentInfo, len(as.Agents))
+		for _, a := range as.Agents {
+			aMap[a.Name] = a
+		}
+	} else {
+		aMap = map[string]*manager.AgentInfo{}
+	}
+	depInfos := make([]*rpc.DeploymentInfo, 0)
+	for _, depName := range tm.deploymentNames() {
+		iCept, ok := iMap[depName]
+		if !ok && filter <= rpc.ListRequest_INTERCEPTS {
+			continue
+		}
+		agent, ok := aMap[depName]
+		if !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
+			continue
+		}
+		reason := ""
+		if agent == nil && iCept == nil {
+			// Check if interceptable
+			dep := tm.findDeployment(depName)
+			if dep == nil {
+				// Removed from snapshot since the name slice was obtained
+				continue
+			}
+			matchingSvcs := tm.installer.findMatchingServices("", dep)
+			if len(matchingSvcs) == 0 {
+				if !ok && filter <= rpc.ListRequest_INTERCEPTABLE {
+					continue
+				}
+				reason = "No service with matching selector"
+			}
+		}
+
+		depInfos = append(depInfos, &rpc.DeploymentInfo{
+			Name:                   depName,
+			NotInterceptableReason: reason,
+			AgentInfo:              aMap[depName],
+			InterceptInfo:          iMap[depName],
+		})
+	}
+	return &rpc.DeploymentInfoSnapshot{Deployments: depInfos}
+}
+
 func (tm *trafficManager) remain(c context.Context) error {
 	ticker := time.NewTicker(5 * time.Second)
 	for {

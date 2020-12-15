@@ -25,11 +25,8 @@ service Connector {
   // Uninstalls traffic-agents and traffic-manager from the cluster.
   rpc Uninstall(UninstallRequest) returns (UninstallResult);
 
-  // Returns a list of deployments available for intercept.
-  rpc AvailableIntercepts(google.protobuf.Empty) returns (telepresence.manager.AgentInfoSnapshot);
-
-  // Returns a list of currently active intercepts.
-  rpc ListIntercepts(google.protobuf.Empty) returns (telepresence.manager.InterceptInfoSnapshot);
+  // Returns a list of deployments and their current intercept status.
+  rpc List(ListRequest) returns (DeploymentInfoSnapshot);
 
   // Quits (terminates) the service.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
@@ -104,6 +101,36 @@ enum InterceptError {
   FAILED_TO_ESTABLISH = 9;
   FAILED_TO_REMOVE = 10;
   NOT_FOUND = 11;
+}
+
+message ListRequest {
+  enum Filter {
+    UNSPECIFIED = 0;
+    INTERCEPTS = 1;
+    INSTALLED_AGENTS = 2;
+    INTERCEPTABLE = 3;
+    EVERYTHING = 4;
+  }
+  Filter filter = 1;
+}
+
+// DeploymentInfo contains information about a deployment
+message DeploymentInfo {
+  // Name of deployment
+  string name = 1;
+
+  // Reason why deployment cannot be intercepted, or empty if it can.
+  string not_interceptable_reason = 2;
+
+  // AgentInfo reported from the traffic manager in case the deployment has a traffic-agent installed
+  telepresence.manager.AgentInfo agent_info = 3;
+
+  // InterceptInfo reported from the traffic manager in case the deployment is currently intercepted
+  telepresence.manager.InterceptInfo intercept_info = 4;
+}
+
+message DeploymentInfoSnapshot {
+  repeated DeploymentInfo deployments = 1;
 }
 
 message InterceptResult {

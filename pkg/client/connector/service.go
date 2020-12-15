@@ -166,18 +166,11 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 	return &rpc.InterceptResult{}, err
 }
 
-func (s *service) AvailableIntercepts(_ context.Context, _ *empty.Empty) (*manager.AgentInfoSnapshot, error) {
+func (s *service) List(_ context.Context, lr *rpc.ListRequest) (*rpc.DeploymentInfoSnapshot, error) {
 	if s.trafficMgr.grpc == nil {
-		return &manager.AgentInfoSnapshot{}, nil
+		return &rpc.DeploymentInfoSnapshot{}, nil
 	}
-	return s.trafficMgr.agentInfoSnapshot(), nil
-}
-
-func (s *service) ListIntercepts(_ context.Context, _ *empty.Empty) (*manager.InterceptInfoSnapshot, error) {
-	if s.trafficMgr.grpc == nil {
-		return &manager.InterceptInfoSnapshot{}, nil
-	}
-	return s.trafficMgr.interceptInfoSnapshot(), nil
+	return s.trafficMgr.deploymentInfoSnapshot(lr.Filter), nil
 }
 
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
