@@ -50,71 +50,58 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 		spec.Name = agentName
 	}
 
-	ags := tm.agentInfoSnapshot()
-	var found []*manager.AgentInfo
-	if ags != nil {
+	hasSpecMechanism := func(a *manager.AgentInfo) bool {
+		for _, mech := range a.Mechanisms {
+			if spec.Mechanism == mech.Name {
+				return true
+			}
+		}
+		return false
+	}
+
+	var found *manager.AgentInfo
+	if ags := tm.agentInfoSnapshot(); ags != nil {
 		for _, ag := range ags.Agents {
-			if ag.Name != spec.Agent {
+			if !(ag.Name == spec.Agent && hasSpecMechanism(ag)) {
 				continue
 			}
-			for _, m := range ag.Mechanisms {
-				if spec.Mechanism == m.Name {
-					found = append(found, ag)
-					break
-				}
+			if found == nil {
+				found = ag
+				continue
 			}
+			if ag.Version == found.Version && ag.Product == found.Product {
+				// Just hostname that differs, this is a replica
+				continue
+			}
+			txt, _ := json.Marshal([]*manager.AgentInfo{ag, found})
+			return &rpc.InterceptResult{
+				InterceptInfo: nil,
+				Error:         rpc.InterceptError_AMBIGUOUS_MATCH,
+				ErrorText:     string(txt),
+			}, nil
 		}
 	}
 
-	result := &rpc.InterceptResult{}
-	switch len(found) {
-	case 0:
-		if err := tm.installer.ensureAgent(c, agentName, ""); err != nil {
-			if err == agentExists {
-				// the agent exists although it has not been reported yet
-				break
-			}
-			dlog.Error(c, err)
-			if err == agentNotFound {
-				result.Error = rpc.InterceptError_NOT_FOUND
-				result.ErrorText = agentName
-			} else {
-				result.Error = rpc.InterceptError_FAILED_TO_ESTABLISH
-				result.ErrorText = err.Error()
-			}
+	if found == nil {
+		if result := tm.addAgent(c, agentName); result != nil {
 			return result, nil
 		}
-		dlog.Infof(c, "waiting for new agent for deployment %q", agentName)
-		_, err := tm.waitForAgent(c, agentName)
-		if err != nil {
-			dlog.Error(c, err)
-			result.Error = rpc.InterceptError_FAILED_TO_ESTABLISH
-			result.ErrorText = err.Error()
-			return result, nil
-		}
-		dlog.Infof(c, "agent created for deployment %q", agentName)
-	case 1:
+	} else {
 		dlog.Infof(c, "found agent for deployment %q", agentName)
-	default:
-		txt, _ := json.Marshal(found)
-		result.ErrorText = string(txt)
-		result.Error = rpc.InterceptError_AMBIGUOUS_MATCH
-		return result, nil
 	}
 
 	ir.Session = tm.session()
-	js, _ := json.Marshal(ir)
-	dlog.Debugf(c, "CreateIntercept request: %s", string(js))
+	dlog.Debugf(c, "creating intercept %s", ir.InterceptSpec.Name)
 	ii, err := tm.grpc.CreateIntercept(c, ir)
-	result.InterceptInfo = ii
+
+	result := &rpc.InterceptResult{InterceptInfo: ii}
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
 		result.Error = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
 		result.ErrorText = err.Error()
 		return result, nil
 	}
-	js, _ = json.Marshal(ii)
-	dlog.Debugf(c, "CreateIntercept response: %s", string(js))
+	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
 	ii, err = tm.waitForActiveIntercept(c, ii.Id)
 	if err != nil {
 		_ = tm.removeIntercept(c, spec.Name)
@@ -132,6 +119,37 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	}
 
 	return result, nil
+}
+
+func (tm *trafficManager) addAgent(c context.Context, agentName string) *rpc.InterceptResult {
+	if err := tm.installer.ensureAgent(c, agentName, ""); err != nil {
+		if err == agentExists {
+			return nil
+		}
+		if err == agentNotFound {
+			return &rpc.InterceptResult{
+				Error:     rpc.InterceptError_NOT_FOUND,
+				ErrorText: agentName,
+			}
+		}
+		dlog.Error(c, err)
+		return &rpc.InterceptResult{
+			Error:     rpc.InterceptError_FAILED_TO_ESTABLISH,
+			ErrorText: err.Error(),
+		}
+	}
+
+	dlog.Infof(c, "waiting for new agent for deployment %q", agentName)
+	_, err := tm.waitForAgent(c, agentName)
+	if err != nil {
+		dlog.Error(c, err)
+		return &rpc.InterceptResult{
+			Error:     rpc.InterceptError_FAILED_TO_ESTABLISH,
+			ErrorText: err.Error(),
+		}
+	}
+	dlog.Infof(c, "agent created for deployment %q", agentName)
+	return nil
 }
 
 func (tm *trafficManager) waitForActiveIntercept(c context.Context, id string) (*manager.InterceptInfo, error) {
