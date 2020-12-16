@@ -19,8 +19,9 @@ import (
 
 const (
 	callbackPath         = "/callback"
-	defaultOauthAuthUrl  = "https://app.getambassador.io/auth/realms/production/protocol/openid-connect/auth"
-	defaultOauthTokenUrl = "https://app.getambassador.io/auth/realms/production/protocol/openid-connect/token"
+	defaultOauthAuthUrl  = "https://auth.datawire.io/auth"
+	defaultOauthTokenUrl = "https://auth.datawire.io/token"
+	defaultCompletionUrl = "https://auth.datawire.io/completion"
 	defaultOauthClientId = "telepresence-cli"
 )
 
@@ -33,6 +34,7 @@ type oauth2Callback struct {
 type LoginExecutor struct {
 	Oauth2AuthUrl  string
 	Oauth2TokenUrl string
+	CompletionUrl  string
 	Oauth2ClientId string
 	SaveTokenFunc  func(*oauth2.Token) error
 	OpenURLFunc    func(string) error
@@ -46,7 +48,7 @@ func (l *LoginExecutor) LoginFlow(cmd *cobra.Command, args []string) error {
 	signal.Notify(interrupts, syscall.SIGINT, syscall.SIGTERM)
 
 	// start the background server on which we'll be listening for the OAuth2 callback
-	backgroundServer, err := startBackgroundServer(callbacks, cmd.ErrOrStderr())
+	backgroundServer, err := startBackgroundServer(callbacks, cmd.ErrOrStderr(), l.CompletionUrl)
 	defer func() {
 		err := backgroundServer.Shutdown(context.Background())
 		if err != nil {
@@ -124,7 +126,7 @@ func safeContext(cmd *cobra.Command) context.Context {
 	return ctx
 }
 
-func startBackgroundServer(callbacks chan oauth2Callback, stderr io.Writer) (*http.Server, error) {
+func startBackgroundServer(callbacks chan oauth2Callback, stderr io.Writer, completionUrl string) (*http.Server, error) {
 	// start listening on the next available port
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
@@ -132,7 +134,7 @@ func startBackgroundServer(callbacks chan oauth2Callback, stderr io.Writer) (*ht
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 	handler := http.NewServeMux()
-	handler.HandleFunc(callbackPath, newCallbackHandlerFunc(callbacks, stderr))
+	handler.HandleFunc(callbackPath, newCallbackHandlerFunc(callbacks, stderr, completionUrl))
 	server := &http.Server{
 		Addr:    fmt.Sprintf("localhost:%v", port),
 		Handler: handler,
@@ -149,7 +151,7 @@ func startBackgroundServer(callbacks chan oauth2Callback, stderr io.Writer) (*ht
 	return server, nil
 }
 
-func newCallbackHandlerFunc(callbacks chan oauth2Callback, stderr io.Writer) func(w http.ResponseWriter, r *http.Request) {
+func newCallbackHandlerFunc(callbacks chan oauth2Callback, stderr io.Writer, completionUrl string) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 		code := query.Get("code")
@@ -159,6 +161,8 @@ func newCallbackHandlerFunc(callbacks chan oauth2Callback, stderr io.Writer) fun
 		var sb strings.Builder
 		sb.WriteString("<!DOCTYPE html><html><head><title>Authentication Successful</title></head><body>")
 		if errorName == "" && code != "" {
+			w.Header().Set("Location", completionUrl)
+			w.WriteHeader(http.StatusTemporaryRedirect)
 			sb.WriteString("<h1>Authentication Successful</h1>")
 			sb.WriteString("<p>You can now close this tab and resume on the CLI.</p>")
 		} else {
