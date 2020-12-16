@@ -252,6 +252,7 @@ func (tm *trafficManager) deploymentInfoSnapshot(filter rpc.ListRequest_Filter) 
 
 func (tm *trafficManager) remain(c context.Context) error {
 	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-c.Done():
