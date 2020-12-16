@@ -296,32 +296,34 @@ func (kc *k8sCluster) deploymentNames() []string {
 	return depNames
 }
 
-// findDeployment finds a deployment with the given name in the clusters namespace with
-// at least one ready replica.
+// findDeployment finds a deployment with the given name in the clusters namespace and returns
+// either a copy of that deployment or nil if no such deployment could be found.
 func (kc *k8sCluster) findDeployment(name string) *kates.Deployment {
+	var depCopy *kates.Deployment
 	kc.accLock.Lock()
 	for _, dep := range kc.Deployments {
 		if dep.Namespace == kc.Namespace && dep.Name == name {
-			depCopy := *dep
-			kc.accLock.Unlock()
-			return &depCopy
+			depCopy = dep.DeepCopy()
+			break
 		}
 	}
 	kc.accLock.Unlock()
-	return nil
+	return depCopy
 }
 
+// findSvc finds a service with the given name in the clusters namespace and returns
+// either a copy of that service or nil if no such service could be found.
 func (kc *k8sCluster) findSvc(name string) *kates.Service {
+	var svcCopy *kates.Service
 	kc.accLock.Lock()
 	for _, svc := range kc.Services {
 		if svc.Namespace == kc.Namespace && svc.Name == name {
-			svcCopy := *svc
-			kc.accLock.Unlock()
-			return &svcCopy
+			svcCopy = svc.DeepCopy()
+			break
 		}
 	}
 	kc.accLock.Unlock()
-	return nil
+	return svcCopy
 }
 
 func newKCluster(kubeConfig, ctxName, namespace string, daemon daemon.DaemonClient, kargs ...string) (*k8sCluster, error) {
