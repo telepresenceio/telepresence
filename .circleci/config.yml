@@ -6,15 +6,15 @@ workflows:
   version: 2
   ci:
     jobs:
-      #- check-local
+      - check-local
       - build-image
-      #- deploy
+      - deploy
       - check-cluster-macos:
           requires:
             - build-image
-      #- check-cluster-linux:
-      #    requires:
-      #      - build-image
+      - check-cluster-linux:
+          requires:
+            - build-image
       #- build-testbench:
       #    requires:
       #      - build-image
