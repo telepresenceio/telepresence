@@ -32,17 +32,21 @@ type multiAction interface {
 
 type explainFunc func(action action, obj kates.Object, out io.Writer)
 
-func explainDo(c context.Context, ma multiAction, obj kates.Object) {
-	explain(c, ma, obj, action.explainDo)
+func explainDo(c context.Context, a action, obj kates.Object) {
+	explainAction(c, a, obj, action.explainDo)
 }
 
-func explainUndo(c context.Context, ma multiAction, obj kates.Object) {
-	explain(c, ma, obj, action.explainUndo)
+func explainUndo(c context.Context, a action, obj kates.Object) {
+	explainAction(c, a, obj, action.explainUndo)
 }
 
-func explain(c context.Context, ma multiAction, obj kates.Object, ef explainFunc) {
+func explainAction(c context.Context, a action, obj kates.Object, ef explainFunc) {
 	buf := bytes.Buffer{}
-	explainActions(ma, obj, ef, &buf)
+	if ma, ok := a.(multiAction); ok {
+		explainActions(ma, obj, ef, &buf)
+	} else {
+		ef(a, obj, &buf)
+	}
 	if bts := buf.Bytes(); len(bts) > 0 {
 		dlog.Info(c, string(bts))
 	}
@@ -220,13 +224,14 @@ type addTrafficAgentAction struct {
 	ContainerPortName  string `json:"container_port_name"`
 	ContainerPortProto string `json:"container_port_proto"`
 	AppPort            int    `json:"app_port"`
+	ImageName          string `json:"image_name"`
 }
 
 func (ata *addTrafficAgentAction) do(dep kates.Object) error {
 	tplSpec := &dep.(*kates.Deployment).Spec.Template.Spec
 	tplSpec.Containers = append(tplSpec.Containers, corev1.Container{
 		Name:  "traffic-agent",
-		Image: managerImageName(),
+		Image: ata.ImageName,
 		Args:  []string{"agent"},
 		Ports: []corev1.ContainerPort{{
 			Name:          ata.ContainerPortName,
@@ -247,11 +252,11 @@ func (ata *addTrafficAgentAction) do(dep kates.Object) error {
 }
 
 func (ata *addTrafficAgentAction) explainDo(_ kates.Object, out io.Writer) {
-	fmt.Fprint(out, "add traffic-agent container")
+	fmt.Fprintf(out, "add traffic-agent container with image %s", ata.ImageName)
 }
 
 func (ata *addTrafficAgentAction) explainUndo(_ kates.Object, out io.Writer) {
-	fmt.Fprint(out, "remove traffic-agent container")
+	fmt.Fprintf(out, "remove traffic-agent container with image %s", ata.ImageName)
 }
 
 func (ata *addTrafficAgentAction) isDone(dep kates.Object) bool {

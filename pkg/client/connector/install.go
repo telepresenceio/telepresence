@@ -58,6 +58,21 @@ func managerImageName() string {
 	return managerImage
 }
 
+func agentImageName(licensed bool) string {
+	resolveManagerName.Do(func() {
+		dockerReg := os.Getenv("TELEPRESENCE_REGISTRY")
+		if dockerReg == "" {
+			dockerReg = "docker.io/datawire"
+		}
+		image := "tel2"
+		if licensed {
+			image = "prop_" + image // TODO: proper name of the proprietary agent TBD
+		}
+		managerImage = fmt.Sprintf("%s/%s:%s", dockerReg, image, client.Version())
+	})
+	return managerImage
+}
+
 func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error) {
 	svc := &kates.Service{
 		TypeMeta: kates.TypeMeta{
@@ -328,20 +343,49 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 var agentExists = errors.New("agent exists")
 var agentNotFound = errors.New("no such agent")
 
-func (ki *installer) ensureAgent(c context.Context, name, portName string) error {
+func (ki *installer) ensureAgent(c context.Context, name, portName string, licensed bool) error {
 	dep := ki.findDeployment(name)
 	if dep == nil {
 		return agentNotFound
 	}
 	cns := dep.Spec.Template.Spec.Containers
+	var agentCn *kates.Container
 	for i := len(cns) - 1; i >= 0; i-- {
-		if cns[i].Name == "traffic-agent" {
-			dlog.Debugf(c, "deployment %q already has an agent", name)
-			return agentExists
+		cn := &cns[i]
+		if cn.Name == "traffic-agent" {
+			agentCn = cn
+			break
 		}
 	}
-	dlog.Infof(c, "no agent found for deployment %q", name)
-	return ki.addAgentToDeployment(c, portName, dep)
+
+	if agentCn == nil {
+		dlog.Infof(c, "no agent found for deployment %q", name)
+		return ki.addAgentToDeployment(c, portName, dep, licensed)
+	}
+
+	imageName := agentImageName(licensed)
+	if agentCn.Image == imageName {
+		dlog.Debugf(c, "deployment %q already has an installed and up-to-date agent", name)
+		return agentExists
+	}
+
+	var actions deploymentActions
+	ok, err := getAnnotation(dep.Annotations, &actions)
+	if err != nil {
+		return err
+	}
+
+	if !ok {
+		// This can only happen if someone manually tampered with the annTelepresenceActions annotation
+		return fmt.Errorf("expected %q annotation not found in %s", annTelepresenceActions, dep.Name)
+	}
+
+	aaa := actions.AddTrafficAgent
+	explainUndo(c, aaa, dep)
+	aaa.ImageName = imageName
+	agentCn.Image = imageName
+	explainDo(c, aaa, dep)
+	return ki.client.Update(c, dep, dep)
 }
 
 func getAnnotation(ann map[string]string, data interface{}) (bool, error) {
@@ -405,7 +449,7 @@ func (ki *installer) undoServiceMods(c context.Context, svc *kates.Service) erro
 	return ki.client.Update(c, svc, svc)
 }
 
-func (ki *installer) addAgentToDeployment(c context.Context, portName string, dep *kates.Deployment) error {
+func (ki *installer) addAgentToDeployment(c context.Context, portName string, dep *kates.Deployment, licensed bool) error {
 	svc, sPort, icn, cPortIndex, err := ki.portToIntercept(portName, dep)
 	if err != nil {
 		return err
@@ -451,6 +495,7 @@ func (ki *installer) addAgentToDeployment(c context.Context, portName string, de
 			ContainerPortName:  sPort.TargetPort.StrVal,
 			ContainerPortProto: string(sPort.Protocol),
 			AppPort:            containerPort,
+			ImageName:          agentImageName(licensed),
 		},
 	}
 
@@ -549,11 +594,26 @@ func (ki *installer) ensureManager(c context.Context) (int32, int32, error) {
 			return 0, 0, err
 		}
 	}
+
 	dep := ki.findDeployment(managerAppName)
 	if dep == nil {
 		err = ki.createManagerDeployment(c)
 	} else {
-		_, err = ki.updateDeployment(c, dep)
+		imageName := managerImageName()
+		cns := dep.Spec.Template.Spec.Containers
+		upToDate := false
+		for i := range cns {
+			cn := &cns[i]
+			if cn.Image == imageName {
+				upToDate = true
+				break
+			}
+		}
+		if upToDate {
+			dlog.Infof(c, "The traffic-manager in namespace %s is up-to-date. Image: %s", ki.Namespace, managerImageName())
+		} else {
+			_, err = ki.updateDeployment(c, dep)
+		}
 	}
 	if err != nil {
 		return 0, 0, err
