@@ -68,7 +68,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 
 	state := func(dep *connector.DeploymentInfo) string {
 		if ii := dep.InterceptInfo; ii != nil {
-			return fmt.Sprintf("intercepted, redirecting to %s:%d", ii.Spec.TargetHost, ii.Spec.TargetPort)
+			return fmt.Sprintf("intercepted, redirecting port %d to %s:%d", ii.ManagerPort, ii.Spec.TargetHost, ii.Spec.TargetPort)
 		}
 		ai := dep.AgentInfo
 		if ai != nil {
