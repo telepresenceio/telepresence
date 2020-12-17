@@ -47,6 +47,30 @@ image images: $(tools/ko) ## (Build) Build/tag the manager/agent container image
 push-images: images
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
 
+# The upload-binary target does the following:
+# 1. Check that the workspace is clean
+# 2. Check that the current commit is tagged
+# 3. Check that the tag is a semantic version starting with a 'v'
+# 4. Upload the object to S3.
+#
+# Prerequisites:
+# The awscli command must be installed and configured with credentials to upload
+# to the datawire-static-files bucket.
+.PHONY: upload-binary
+upload-binary: build
+	git diff --quiet HEAD && \
+	versionTag=`git describe --tags --exact-match` && \
+	verifiedTag=`echo $$versionTag | sed -E 's|^v([0-9]+\.[0-9]+\.[0-9]+(-.*)?$$)|\1|g'` && \
+	[ "$$versionTag" != "$$verifiedTag" ] && echo -n $$verifiedTag > $(BUILDDIR)/stable.txt
+	AWS_PAGER="" aws s3api put-object \
+		--bucket datawire-static-files \
+		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/$$(cat $(BUILDDIR)/stable.txt)/telepresence \
+		--body $(BINDIR)/telepresence
+	AWS_PAGER="" aws s3api put-object \
+		--bucket datawire-static-files \
+		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/stable.txt \
+		--body $(BUILDDIR)/stable.txt
+
 .PHONY: install
 install:  ## (Install) installs the telepresence binary under ~/go/bin
 	go install -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) ./cmd/telepresence
