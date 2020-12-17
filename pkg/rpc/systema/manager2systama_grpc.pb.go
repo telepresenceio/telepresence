@@ -4,6 +4,7 @@ package systema
 
 import (
 	context "context"
+	common "github.com/datawire/telepresence2/pkg/rpc/common"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
@@ -28,6 +29,9 @@ type SystemACRUDClient interface {
 	// so this requires that the manager authenticate itself, but does
 	// not require an end-user's token.
 	RemoveDomain(ctx context.Context, in *RemoveDomainRequest, opts ...grpc.CallOption) (*empty.Empty, error)
+	// PreferredAgent returns the active account's perferred agent
+	// sidecar, for the given Telepresence version.
+	PreferredAgent(ctx context.Context, in *common.VersionInfo, opts ...grpc.CallOption) (*PreferredAgentResponse, error)
 }
 
 type systemACRUDClient struct {
@@ -56,6 +60,15 @@ func (c *systemACRUDClient) RemoveDomain(ctx context.Context, in *RemoveDomainRe
 	return out, nil
 }
 
+func (c *systemACRUDClient) PreferredAgent(ctx context.Context, in *common.VersionInfo, opts ...grpc.CallOption) (*PreferredAgentResponse, error) {
+	out := new(PreferredAgentResponse)
+	err := c.cc.Invoke(ctx, "/telepresence.systema.SystemACRUD/PreferredAgent", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SystemACRUDServer is the server API for SystemACRUD service.
 // All implementations must embed UnimplementedSystemACRUDServer
 // for forward compatibility
@@ -70,6 +83,9 @@ type SystemACRUDServer interface {
 	// so this requires that the manager authenticate itself, but does
 	// not require an end-user's token.
 	RemoveDomain(context.Context, *RemoveDomainRequest) (*empty.Empty, error)
+	// PreferredAgent returns the active account's perferred agent
+	// sidecar, for the given Telepresence version.
+	PreferredAgent(context.Context, *common.VersionInfo) (*PreferredAgentResponse, error)
 	mustEmbedUnimplementedSystemACRUDServer()
 }
 
@@ -82,6 +98,9 @@ func (UnimplementedSystemACRUDServer) CreateDomain(context.Context, *CreateDomai
 }
 func (UnimplementedSystemACRUDServer) RemoveDomain(context.Context, *RemoveDomainRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveDomain not implemented")
+}
+func (UnimplementedSystemACRUDServer) PreferredAgent(context.Context, *common.VersionInfo) (*PreferredAgentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PreferredAgent not implemented")
 }
 func (UnimplementedSystemACRUDServer) mustEmbedUnimplementedSystemACRUDServer() {}
 
@@ -132,6 +151,24 @@ func _SystemACRUD_RemoveDomain_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SystemACRUD_PreferredAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(common.VersionInfo)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SystemACRUDServer).PreferredAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.systema.SystemACRUD/PreferredAgent",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SystemACRUDServer).PreferredAgent(ctx, req.(*common.VersionInfo))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _SystemACRUD_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "telepresence.systema.SystemACRUD",
 	HandlerType: (*SystemACRUDServer)(nil),
@@ -143,6 +180,10 @@ var _SystemACRUD_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveDomain",
 			Handler:    _SystemACRUD_RemoveDomain_Handler,
+		},
+		{
+			MethodName: "PreferredAgent",
+			Handler:    _SystemACRUD_PreferredAgent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
