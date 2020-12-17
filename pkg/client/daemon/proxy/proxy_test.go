@@ -14,13 +14,18 @@ func TestProxy_Run(t *testing.T) {
 	count := 0
 	latch := sync.WaitGroup{}
 	latch.Add(1)
+
+	connClosed := make(chan bool)
 	connHandler := func(pxy *Proxy, c context.Context, conn *net.TCPConn) {
 		count++
 		latch.Wait()
 		_ = conn.Close()
+		connClosed <- true
 	}
 
-	c, cancel := context.WithCancel(context.Background())
+	c, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
 	ln, err := net.Listen("tcp", ":1234")
 	if err != nil {
 		t.Fatal(err)
@@ -55,11 +60,11 @@ func TestProxy_Run(t *testing.T) {
 
 	// Release latch (close currently proxied connections)
 	latch.Done()
-	time.Sleep(100 * time.Millisecond)
-
-	// Check that the rest got proxied
-	if count != connLimit*2 {
-		t.Errorf("expected %d connections, got %d", connLimit, count)
+	for connsLeft := connLimit * 2; connsLeft > 0; connsLeft-- {
+		select {
+		case <-c.Done():
+			t.Fatalf("expected %d connections, got %d", connLimit, count)
+		case <-connClosed:
+		}
 	}
-	cancel()
 }
