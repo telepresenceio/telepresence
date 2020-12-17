@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/datawire/ambassador/pkg/dtest"
 	"github.com/datawire/telepresence2/pkg/client"
@@ -39,6 +40,16 @@ const serviceCount = 9
 
 func TestTelepresence(t *testing.T) {
 	RegisterFailHandler(Fail)
+
+	// Check that the "ko" program exists, and adjust PATH as necessary.
+	if info, err := os.Stat("../../../tools/bin/ko"); err != nil || !info.Mode().IsRegular() || (info.Mode().Perm()&0100) == 0 {
+		t.Fatal("it looks like the ./tools/bin/ko executable wasn't built; be sure to build it with `make` before running `go test`!")
+	}
+	toolbindir, err := filepath.Abs("../../../tools/bin")
+	if !assert.NoError(t, err) {
+		return
+	}
+	os.Setenv("PATH", toolbindir+":"+os.Getenv("PATH"))
 
 	// Remove very verbose output from DTEST initialization
 	log.SetOutput(ioutil.Discard)

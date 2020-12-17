@@ -7,12 +7,14 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/datawire/ambassador/pkg/dtest"
 	"github.com/datawire/dlib/dgroup"
@@ -85,10 +87,22 @@ func captureOut(t *testing.T, exe string, args ...string) string {
 var imageName string
 
 func publishManager(t *testing.T) {
+	t.Helper()
 	if imageName != "" {
 		return
 	}
-	t.Helper()
+
+	// Check that the "ko" program exists, and adjust PATH as necessary.
+	if info, err := os.Stat("../../../tools/bin/ko"); err != nil || !info.Mode().IsRegular() || (info.Mode().Perm()&0100) == 0 {
+		t.Fatal("it looks like the ./tools/bin/ko executable wasn't built; be sure to build it with `make` before running `go test`!")
+	}
+	toolbindir, err := filepath.Abs("../../../tools/bin")
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
+	os.Setenv("PATH", toolbindir+":"+os.Getenv("PATH"))
+
+	// OK, now run "ko" and friends.
 	_ = os.Chdir("../../..") // ko must be executed from root to find the .ko.yaml config
 	imageName = strings.TrimSpace(captureOut(t, "ko", "publish", "--local", "./cmd/traffic"))
 	tag := fmt.Sprintf("%s/tel2:%s", registry, client.Version())
