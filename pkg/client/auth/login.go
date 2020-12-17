@@ -15,6 +15,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
+
+	"github.com/datawire/telepresence2/pkg/client"
 )
 
 const (
@@ -38,6 +40,7 @@ type LoginExecutor struct {
 	Oauth2ClientId string
 	SaveTokenFunc  func(*oauth2.Token) error
 	OpenURLFunc    func(string) error
+	Scout          *client.Scout
 }
 
 func (l *LoginExecutor) LoginFlow(cmd *cobra.Command, args []string) error {
@@ -85,9 +88,17 @@ func (l *LoginExecutor) LoginFlow(cmd *cobra.Command, args []string) error {
 	// wait for callback completion or interruption
 	select {
 	case callback := <-callbacks:
-		return l.handleCallback(cmd, callback, oauth2Config, pkceVerifier)
+		err := l.handleCallback(cmd, callback, oauth2Config, pkceVerifier)
+		if err != nil {
+			_ = l.Scout.Report("login_failure", client.ScoutMeta{Key: "error", Value: err.Error()})
+		} else {
+			// TODO: Should we add ScoutMeta about the logged-in user?
+			_ = l.Scout.Report("login_success")
+		}
+		return err
 	case <-interrupts:
 		fmt.Fprintln(cmd.OutOrStdout(), "Login aborted.")
+		_ = l.Scout.Report("login_interrupted")
 		return nil
 	}
 }

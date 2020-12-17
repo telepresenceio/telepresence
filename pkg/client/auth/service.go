@@ -5,6 +5,8 @@ import (
 
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
+
+	"github.com/datawire/telepresence2/pkg/client"
 )
 
 // Command returns the telepresence sub-command "auth"
@@ -20,6 +22,7 @@ func LoginCommand() *cobra.Command {
 		CompletionUrl:  completionUrl,
 		SaveTokenFunc:  SaveTokenToUserCache,
 		OpenURLFunc:    browser.OpenURL,
+		Scout:          client.NewScout("cli"),
 	}
 	command := cobra.Command{
 		Use:   "login",

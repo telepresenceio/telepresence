@@ -15,6 +15,8 @@ import (
 	"gotest.tools/assert"
 	is "gotest.tools/assert/cmp"
 
+	"github.com/datawire/ambassador/pkg/metriton"
+	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/client/auth"
 )
 
@@ -115,6 +117,8 @@ func TestLoginFlow(t *testing.T) {
 		mockOpenURLWrapper := &MockOpenURLWrapper{}
 		openUrlChan := make(chan string)
 		mockOauth2Server := newMockOauth2Server(t)
+		scout := client.NewScout("go-test")
+		scout.Reporter.Endpoint = metriton.BetaEndpoint
 		return &fixture{
 			MockSaveTokenWrapper: mockSaveTokenWrapper,
 			MockOpenURLWrapper:   mockOpenURLWrapper,
@@ -130,6 +134,7 @@ func TestLoginFlow(t *testing.T) {
 					openUrlChan <- url
 					return mockOpenURLWrapper.OpenURL(url)
 				},
+				Scout: scout,
 			},
 		}
 	}
