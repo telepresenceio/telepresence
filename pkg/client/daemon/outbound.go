@@ -234,8 +234,17 @@ func (o *outbound) translatorWorker(c context.Context) (err error) {
 		case <-c.Done():
 			c = dcontext.HardContext(c)
 			dlog.Debug(c, "context cancelled, shutting down")
+			go func() {
+				// drain work queue (unlock and toss remaining work)
+				for range o.work {
+				}
+			}()
+			close(o.work)
 			return nil
 		case f := <-o.work:
+			if f == nil {
+				return
+			}
 			if err = f(c); err != nil {
 				dlog.Error(c, err)
 			}
@@ -272,12 +281,9 @@ func (o *outbound) destination(conn *net.TCPConn) (string, error) {
 }
 
 func (o *outbound) update(table *rpc.Table) {
-	result := make(chan error)
 	o.work <- func(c context.Context) error {
-		defer close(result)
 		return o.doUpdate(c, table)
 	}
-	<-result
 }
 
 func routesEqual(a, b *rpc.Route) bool {

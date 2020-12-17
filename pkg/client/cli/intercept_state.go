@@ -103,6 +103,10 @@ Please specify one or more header matches using --match.`
 		msg = "Connecting to traffic manager..."
 	case connector.InterceptError_ALREADY_EXISTS:
 		msg = fmt.Sprintf("Intercept with name %q already exists", r.ErrorText)
+	case connector.InterceptError_LOCAL_TARGET_IN_USE:
+		spec := r.InterceptInfo.Spec
+		msg = fmt.Sprintf("Port %s:%d is already in use by intercept %s",
+			spec.TargetHost, spec.TargetPort, r.ErrorText)
 	case connector.InterceptError_NO_ACCEPTABLE_DEPLOYMENT:
 		msg = fmt.Sprintf("No interceptable deployment matching %s found", r.ErrorText)
 	case connector.InterceptError_TRAFFIC_MANAGER_ERROR:
