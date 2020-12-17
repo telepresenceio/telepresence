@@ -93,12 +93,16 @@ func ConnectToSystemA(ctx context.Context,
 		listener.Close()
 		return nil
 	})
-	grp.Go("server", func(_ context.Context) error {
+	grp.Go("server", func(ctx context.Context) error {
 		grpcServer := grpc.NewServer()
 		serverImpl := server{ManagerServer: self}
 		manager.RegisterManagerServer(grpcServer, serverImpl)
 		manager.RegisterManagerProxyServer(grpcServer, serverImpl)
-		return grpcServer.Serve(listener)
+		err := grpcServer.Serve(listener)
+		if ctx.Err() != nil {
+			return nil
+		}
+		return err
 	})
 	grp.Go("client", func(ctx context.Context) error {
 		systemaProxy := systema.NewSystemAProxyClient(conn)
