@@ -9,6 +9,7 @@ from pprint import pformat
 from subprocess import check_output
 from time import time
 from urllib.request import urlopen
+import os
 
 import pytest
 
@@ -72,21 +73,23 @@ def test_environment_from_deployment(probe):
                 probe_environment,
             )
         )
-        assert "TELEPRESENCE_ROOT" in probe_json_env, probe_json_env
-        assert "/podinfo" in probe_json_env["TELEPRESENCE_MOUNTS"
-                                            ], probe_json_env
-        assert "/var/run/secrets/kubernetes.io/serviceaccount" in \
-            probe_json_env["TELEPRESENCE_MOUNTS"], probe_json_env
 
-        probe_envfile = probe.operation.envfile.read_text()
-        for key, value in probe.DESIRED_ENVIRONMENT.items():
-            report = key, probe_envfile
-            if "\n" in value:
-                assert "{}=".format(key) not in probe_envfile, report
-            else:
-                assert "{}={}\n".format(key, value) in probe_envfile
-        assert "TELEPRESENCE_ROOT=" in probe_envfile, probe_envfile
-        assert "TELEPRESENCE_MOUNTS=" in probe_envfile, probe_envfile
+        if not os.environ.get("TEL_TEST_NO_MOUNT"):  # Any non-empty value
+            assert "TELEPRESENCE_ROOT" in probe_json_env, probe_json_env
+            assert "/podinfo" in probe_json_env["TELEPRESENCE_MOUNTS"
+                                                ], probe_json_env
+            assert "/var/run/secrets/kubernetes.io/serviceaccount" in \
+                probe_json_env["TELEPRESENCE_MOUNTS"], probe_json_env
+
+            probe_envfile = probe.operation.envfile.read_text()
+            for key, value in probe.DESIRED_ENVIRONMENT.items():
+                report = key, probe_envfile
+                if "\n" in value:
+                    assert "{}=".format(key) not in probe_envfile, report
+                else:
+                    assert "{}={}\n".format(key, value) in probe_envfile
+            assert "TELEPRESENCE_ROOT=" in probe_envfile, probe_envfile
+            assert "TELEPRESENCE_MOUNTS=" in probe_envfile, probe_envfile
 
     if probe.method.inherits_client_environment():
         # Likewise, make an assertion about client environment being inherited
@@ -182,6 +185,10 @@ def test_volumes(probe):
     The Telepresence execution context exposes volumes.
     """
     probe_result = probe.result()
+
+    if os.environ.get("TEL_TEST_NO_MOUNT"):  # Any non-empty value
+        pytest.skip("TEL_TEST_NO_MOUNT set")
+
     path_contents = dict(probe_result.result["probe-paths"])
 
     if probe.operation.inherits_deployment_environment():

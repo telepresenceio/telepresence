@@ -160,7 +160,7 @@ jobs:
 
   check-cluster-macos:
     macos:
-      xcode: "9.0"
+      xcode: "11.1.0"
 
     environment:
       - PROJECT_NAME: "datawireio"
@@ -194,6 +194,7 @@ jobs:
             - "~/google-cloud-sdk/"
 
       - run: make virtualenv
+      - run: echo 'export TEL_TEST_NO_MOUNT=true' >> ${BASH_ENV}
       - run: make check-cluster DOCKER_PUSH='' VERSION_SUFFIX='' PYTEST_ARGS='--junitxml=test-reports/junit.xml'
       - store_test_results:
           # https://circleci.com/docs/2.0/collect-test-data/#pytest

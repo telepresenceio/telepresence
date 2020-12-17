@@ -207,7 +207,7 @@ def probe_commands(commands):
 
 
 def probe_paths(paths):
-    root = environ["TELEPRESENCE_ROOT"]
+    root = environ.get("TELEPRESENCE_ROOT", "/tel/root/not/set")
     for path in paths:
         try:
             with open(join(root, path)) as f:

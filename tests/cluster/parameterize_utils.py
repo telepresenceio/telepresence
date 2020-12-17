@@ -645,6 +645,9 @@ def run_telepresence_probe(
             http.expose_string(),
         ])
 
+    if os.environ.get("TEL_TEST_NO_MOUNT"):  # Any non-empty value
+        telepresence_args.append("--mount=false")
+
     operation_args = operation.telepresence_args(deployment_ident)
     method_args = method.telepresence_args(probe_endtoend)
     args = operation_args + telepresence_args + method_args + probe_args

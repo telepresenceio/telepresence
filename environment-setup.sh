@@ -19,11 +19,16 @@ OS=$4
 
 case "${OS}" in
     osx)
-        brew update > /dev/null
-        brew install python3 || brew upgrade python || brew link --overwrite python
-        brew cask install osxfuse
-        brew install sshfs torsocks
-        pip3 install virtualenv
+        if [ -n "$CI" ]; then
+            # Special case for CI... ick...
+            brew install torsocks
+        else
+            brew update > /dev/null
+            brew install python3 || brew upgrade python || brew link --overwrite python
+            brew cask install osxfuse
+            brew install sshfs torsocks
+            pip3 install virtualenv
+        fi
         ;;
 
     linux)
