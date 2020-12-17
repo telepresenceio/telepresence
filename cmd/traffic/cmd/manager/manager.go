@@ -96,23 +96,24 @@ func Main(ctx context.Context, args ...string) error {
 		for snapshot := range mgr.state.WatchIntercepts(ctx, nil) {
 			for _, update := range snapshot.Updates {
 				if update.Delete && update.Value.PreviewDomain != "" {
+					dlog.Debugf(ctx, "systema: removing domain: %q", update.Value.PreviewDomain)
 					if sa, err := mgr.systema.Get(); err != nil {
-						dlog.Errorln(ctx, "systema:", err)
+						dlog.Errorln(ctx, "systema: acquire connection:", err)
 					} else {
 						_, err := sa.RemoveDomain(ctx, &systema.RemoveDomainRequest{
 							Domain: update.Value.PreviewDomain,
 						})
 						if err != nil {
-							dlog.Errorln(ctx, "systema:", err)
+							dlog.Errorln(ctx, "systema: remove domain:", err)
 						}
 						// Release the connection we got to delete the domain
 						if err := mgr.systema.Done(); err != nil {
-							dlog.Errorln(ctx, "systema:", err)
+							dlog.Errorln(ctx, "systema: release management connection:", err)
 						}
 					}
 					// Release the refcount on the proxy connection
 					if err := mgr.systema.Done(); err != nil {
-						dlog.Errorln(ctx, "systema:", err)
+						dlog.Errorln(ctx, "systema: release proxy connection:", err)
 					}
 				}
 			}
