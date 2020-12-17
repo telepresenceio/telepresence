@@ -8,8 +8,12 @@ import (
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
+type State interface {
+	HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest
+}
+
 // State of the Traffic Agent.
-type State struct {
+type state struct {
 	forwarder   *Forwarder
 	managerHost string
 	appHost     string
@@ -17,9 +21,9 @@ type State struct {
 	chosenID    string
 }
 
-func NewState(forwarder *Forwarder, managerHost string) *State {
+func NewState(forwarder *Forwarder, managerHost string) State {
 	host, port := forwarder.Target()
-	return &State{
+	return &state{
 		forwarder:   forwarder,
 		managerHost: managerHost,
 		appHost:     host,
@@ -27,7 +31,7 @@ func NewState(forwarder *Forwarder, managerHost string) *State {
 	}
 }
 
-func (s *State) HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
+func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
 	var chosenIntercept, activeIntercept *manager.InterceptInfo
 
 	dlog.Debug(ctx, "HandleIntercepts called")

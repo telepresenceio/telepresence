@@ -19,7 +19,7 @@ const (
 	mgrHost       = "managerHost"
 )
 
-func makeFS(t *testing.T) (*agent.Forwarder, *agent.State) {
+func makeFS(t *testing.T) (*agent.Forwarder, agent.State) {
 	lAddr, err := net.ResolveTCPAddr("tcp", ":1111")
 	assert.NoError(t, err)
 
