@@ -12,19 +12,16 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dutil"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
 )
 
 // worker names
 const (
-	K8sBridgeWorker      = "K8S"
-	K8sPortForwardWorker = "KPF"
-	K8sSSHWorker         = "SSH"
+	K8sBridgeWorker = "K8S"
+	K8sSSHWorker    = "SSH"
 )
 
 // ProxyRedirPort is the port to which we redirect proxied IPs. It
@@ -34,138 +31,18 @@ const ProxyRedirPort = "1234"
 
 // teleproxy holds the configuration for a Teleproxy
 type bridge struct {
-	*k8sCluster
-	sshPort int32
-	daemon  daemon.DaemonClient
-	cancel  context.CancelFunc
+	sshPort   int32
+	namespace string
+	daemon    daemon.DaemonClient
+	cancel    context.CancelFunc
 }
 
-func newBridge(kc *k8sCluster, daemon daemon.DaemonClient, sshPort int32) *bridge {
+func newBridge(namespace string, daemon daemon.DaemonClient, sshPort int32) *bridge {
 	return &bridge{
-		k8sCluster: kc,
-		daemon:     daemon,
-		sshPort:    sshPort,
+		namespace: namespace,
+		daemon:    daemon,
+		sshPort:   sshPort,
 	}
-}
-
-/*
-func (t *bridge) restart(c context.Context) error {
-	if cancel := t.cancel; cancel != nil {
-		t.cancel = nil
-		cancel()
-	}
-	return t.start(c)
-}
-*/
-
-type bridgeData struct {
-	Pods     []*kates.Pod
-	Services []*kates.Service
-}
-
-func (br *bridge) updateTable(c context.Context, snapshot *bridgeData) {
-	table := daemon.Table{Name: "kubernetes"}
-	for _, svc := range snapshot.Services {
-		spec := svc.Spec
-
-		ip := spec.ClusterIP
-		// for headless services the IP is None, we
-		// should properly handle these by listening
-		// for endpoints and returning multiple A
-		// records at some point
-		if ip == "" || ip == "None" {
-			continue
-		}
-		qName := svc.Name + "." + svc.Namespace + ".svc.cluster.local"
-
-		ports := ""
-		for _, port := range spec.Ports {
-			if ports == "" {
-				ports = fmt.Sprintf("%d", port.Port)
-			} else {
-				ports = fmt.Sprintf("%s,%d", ports, port.Port)
-			}
-
-			// Kubernetes creates records for all named ports, of the form
-			// _my-port-name._my-port-protocol.my-svc.my-namespace.svc.cluster-domain.example
-			// https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#srv-records
-			if port.Name != "" {
-				proto := strings.ToLower(string(port.Protocol))
-				table.Routes = append(table.Routes, &daemon.Route{
-					Name:   fmt.Sprintf("_%v._%v.%v", port.Name, proto, qName),
-					Ip:     ip,
-					Port:   ports,
-					Proto:  proto,
-					Target: ProxyRedirPort,
-				})
-			}
-		}
-
-		table.Routes = append(table.Routes, &daemon.Route{
-			Name:   qName,
-			Ip:     ip,
-			Port:   ports,
-			Proto:  "tcp",
-			Target: ProxyRedirPort,
-		})
-	}
-	for _, pod := range snapshot.Pods {
-		qname := ""
-
-		hostname := pod.Spec.Hostname
-		if hostname != "" {
-			qname += hostname
-		}
-
-		subdomain := pod.Spec.Subdomain
-		if subdomain != "" {
-			qname += "." + subdomain
-		}
-
-		if qname == "" {
-			// Note: this is a departure from kubernetes, kubernetes will
-			// simply not publish a dns name in this case.
-			qname = pod.Name + "." + pod.Namespace + ".pod.cluster.local"
-		} else {
-			qname += ".svc.cluster.local"
-		}
-
-		ip := pod.Status.PodIP
-		if ip != "" {
-			table.Routes = append(table.Routes, &daemon.Route{
-				Name:   qname,
-				Ip:     ip,
-				Proto:  "tcp",
-				Target: ProxyRedirPort,
-			})
-		}
-	}
-
-	// Send updated table to daemon
-	dlog.Debugf(c, "sending table update for table iptables %s", table.Name)
-	if _, err := br.daemon.Update(c, &table); err != nil {
-		dlog.Errorf(c, "error posting update to %s: %v", table.Name, err)
-	}
-}
-
-func (br *bridge) createWatch(c context.Context, namespace string) (acc *kates.Accumulator, err error) {
-	defer func() {
-		if r := dutil.PanicToError(recover()); r != nil {
-			err = r
-		}
-	}()
-
-	return br.client.Watch(c,
-		kates.Query{
-			Name:      "Services",
-			Namespace: namespace,
-			Kind:      "service",
-		},
-		kates.Query{
-			Name:      "Pods",
-			Namespace: namespace,
-			Kind:      "pod",
-		}), nil
 }
 
 func (br *bridge) start(c context.Context) error {
@@ -182,9 +59,9 @@ func (br *bridge) start(c context.Context) error {
 
 func (br *bridge) bridgeWorker(c context.Context) error {
 	// setup kubernetes bridge
-	dlog.Infof(c, "kubernetes namespace=%s", br.Namespace)
+	dlog.Infof(c, "kubernetes namespace=%s", br.namespace)
 	paths := []string{
-		br.Namespace + ".svc.cluster.local.",
+		br.namespace + ".svc.cluster.local.",
 		"svc.cluster.local.",
 		"cluster.local.",
 		"",
@@ -193,39 +70,8 @@ func (br *bridge) bridgeWorker(c context.Context) error {
 	_, err := br.daemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths})
 	if err != nil {
 		dlog.Errorf(c, "error setting up search path: %v", err)
-		panic(err) // Because this will fail if we win the startup race
 	}
-
-	// start watcher using DoClean so that the user can interrupt it --
-	// it can take a while depending on the cluster and on connectivity.
-	if err = br.startWatches(c, kates.NamespaceAll); err == nil {
-		return nil
-	}
-	dlog.Errorf(c, "watch all namespaces: %+v", err)
-	dlog.Errorf(c, "falling back to watching only %q", br.Namespace)
-	return br.startWatches(c, br.Namespace)
-}
-
-func (br *bridge) startWatches(c context.Context, namespace string) error {
-	acc, err := br.createWatch(c, namespace)
-	if err != nil {
-		return err
-	}
-	snapshot := bridgeData{}
-
-	dgroup.ParentGroup(c).Go("watch-k8s", func(c context.Context) error {
-		for {
-			select {
-			case <-c.Done():
-				return nil
-			case <-acc.Changed():
-				if acc.Update(&snapshot) {
-					br.updateTable(c, &snapshot)
-				}
-			}
-		}
-	})
-	return nil
+	return err
 }
 
 func (br *bridge) sshWorker(c context.Context) error {

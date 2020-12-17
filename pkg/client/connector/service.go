@@ -166,18 +166,11 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 	return &rpc.InterceptResult{}, err
 }
 
-func (s *service) AvailableIntercepts(_ context.Context, _ *empty.Empty) (*manager.AgentInfoSnapshot, error) {
+func (s *service) List(_ context.Context, lr *rpc.ListRequest) (*rpc.DeploymentInfoSnapshot, error) {
 	if s.trafficMgr.grpc == nil {
-		return &manager.AgentInfoSnapshot{}, nil
+		return &rpc.DeploymentInfoSnapshot{}, nil
 	}
-	return s.trafficMgr.agentInfoSnapshot(), nil
-}
-
-func (s *service) ListIntercepts(_ context.Context, _ *empty.Empty) (*manager.InterceptInfoSnapshot, error) {
-	if s.trafficMgr.grpc == nil {
-		return &manager.InterceptInfoSnapshot{}, nil
-	}
-	return s.trafficMgr.interceptInfoSnapshot(), nil
+	return s.trafficMgr.deploymentInfoSnapshot(lr.Filter), nil
 }
 
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
@@ -243,7 +236,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	})
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	cluster, err := trackKCluster(s.ctx, cr.Context, cr.Namespace, cr.Args)
+	cluster, err := trackKCluster(s.ctx, cr.Context, cr.Namespace, s.daemon, cr.Args)
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
 		r.Error = rpc.ConnectInfo_CLUSTER_FAILED
@@ -286,7 +279,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	}
 
 	dlog.Infof(c, "Starting traffic-manager bridge in context %s, namespace %s", cluster.Context, cluster.Namespace)
-	br := newBridge(cluster, s.daemon, tmgr.sshPort)
+	br := newBridge(cluster.Namespace, s.daemon, tmgr.sshPort)
 	err = br.start(s.ctx)
 	if err != nil {
 		dlog.Errorf(c, "Failed to start traffic-manager bridge: %v", err)

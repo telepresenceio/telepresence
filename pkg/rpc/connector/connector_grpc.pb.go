@@ -30,10 +30,8 @@ type ConnectorClient interface {
 	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error)
 	// Uninstalls traffic-agents and traffic-manager from the cluster.
 	Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*UninstallResult, error)
-	// Returns a list of deployments available for intercept.
-	AvailableIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*manager.AgentInfoSnapshot, error)
-	// Returns a list of currently active intercepts.
-	ListIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*manager.InterceptInfoSnapshot, error)
+	// Returns a list of deployments and their current intercept status.
+	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*DeploymentInfoSnapshot, error)
 	// Quits (terminates) the service.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 }
@@ -91,18 +89,9 @@ func (c *connectorClient) Uninstall(ctx context.Context, in *UninstallRequest, o
 	return out, nil
 }
 
-func (c *connectorClient) AvailableIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*manager.AgentInfoSnapshot, error) {
-	out := new(manager.AgentInfoSnapshot)
-	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/AvailableIntercepts", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectorClient) ListIntercepts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*manager.InterceptInfoSnapshot, error) {
-	out := new(manager.InterceptInfoSnapshot)
-	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/ListIntercepts", in, out, opts...)
+func (c *connectorClient) List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*DeploymentInfoSnapshot, error) {
+	out := new(DeploymentInfoSnapshot)
+	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/List", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -132,10 +121,8 @@ type ConnectorServer interface {
 	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error)
 	// Uninstalls traffic-agents and traffic-manager from the cluster.
 	Uninstall(context.Context, *UninstallRequest) (*UninstallResult, error)
-	// Returns a list of deployments available for intercept.
-	AvailableIntercepts(context.Context, *empty.Empty) (*manager.AgentInfoSnapshot, error)
-	// Returns a list of currently active intercepts.
-	ListIntercepts(context.Context, *empty.Empty) (*manager.InterceptInfoSnapshot, error)
+	// Returns a list of deployments and their current intercept status.
+	List(context.Context, *ListRequest) (*DeploymentInfoSnapshot, error)
 	// Quits (terminates) the service.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	mustEmbedUnimplementedConnectorServer()
@@ -160,11 +147,8 @@ func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.Re
 func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest) (*UninstallResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Uninstall not implemented")
 }
-func (UnimplementedConnectorServer) AvailableIntercepts(context.Context, *empty.Empty) (*manager.AgentInfoSnapshot, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AvailableIntercepts not implemented")
-}
-func (UnimplementedConnectorServer) ListIntercepts(context.Context, *empty.Empty) (*manager.InterceptInfoSnapshot, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListIntercepts not implemented")
+func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*DeploymentInfoSnapshot, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method List not implemented")
 }
 func (UnimplementedConnectorServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
@@ -272,38 +256,20 @@ func _Connector_Uninstall_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Connector_AvailableIntercepts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+func _Connector_List_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ConnectorServer).AvailableIntercepts(ctx, in)
+		return srv.(ConnectorServer).List(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/telepresence.connector.Connector/AvailableIntercepts",
+		FullMethod: "/telepresence.connector.Connector/List",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).AvailableIntercepts(ctx, req.(*empty.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Connector_ListIntercepts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).ListIntercepts(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.connector.Connector/ListIntercepts",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).ListIntercepts(ctx, req.(*empty.Empty))
+		return srv.(ConnectorServer).List(ctx, req.(*ListRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -351,12 +317,8 @@ var _Connector_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Connector_Uninstall_Handler,
 		},
 		{
-			MethodName: "AvailableIntercepts",
-			Handler:    _Connector_AvailableIntercepts_Handler,
-		},
-		{
-			MethodName: "ListIntercepts",
-			Handler:    _Connector_ListIntercepts_Handler,
+			MethodName: "List",
+			Handler:    _Connector_List_Handler,
 		},
 		{
 			MethodName: "Quit",
