@@ -41,6 +41,7 @@ func NewManager(ctx context.Context, env Env) *Manager {
 	ret := &Manager{
 		ctx:   ctx,
 		clock: wall{},
+		env:   env,
 		state: state.NewState(ctx),
 	}
 	ret.systema = NewSystemAPool(ret)
