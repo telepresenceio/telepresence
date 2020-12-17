@@ -21,11 +21,10 @@ func (b *BoolEmptyNonempty) EnvDecode(str string) error {
 }
 
 type ClusterEnv struct {
-	DeprecatedAmbassadorScoutID string            `env:"AMBASSADOR_SCOUT_ID,default="`
-	AmbassadorClusterID         string            `env:"AMBASSADOR_CLUSTER_ID,default=$AMBASSADOR_SCOUT_ID"`
-	AmbassadorSingleNamespace   BoolEmptyNonempty `env:"AMBASSADOR_SINGLE_NAMESPACE,default="`
-	AmbassadorNamespace         string            `env:"AMBASSADOR_NAMESPACE,default=default"`
-	AmbassadorID                string            `env:"AMBASSADOR_ID,default=default"`
+	AmbassadorClusterID       string            `env:"AMBASSADOR_CLUSTER_ID,default=$AMBASSADOR_SCOUT_ID"`
+	AmbassadorSingleNamespace BoolEmptyNonempty `env:"AMBASSADOR_SINGLE_NAMESPACE,default="`
+	AmbassadorNamespace       string            `env:"AMBASSADOR_NAMESPACE,default=default"`
+	AmbassadorID              string            `env:"AMBASSADOR_ID,default=default"`
 }
 
 func GetClusterID(ctx context.Context, env ClusterEnv) string {
@@ -34,10 +33,20 @@ func GetClusterID(ctx context.Context, env ClusterEnv) string {
 		return clusterID
 	}
 
-	rootID := "00000000-0000-0000-0000-000000000000"
+	rootID := func() (rootID string) {
+		defer func() {
+			// If kates panics, then we didn't make it to the end, so the default rootID
+			// is still fine; and so we don't need to take any corrective action.
+			//
+			// PS: I can't express how frustrated I am that kates can panic.
+			_ = recover()
+		}()
+		rootID = "00000000-0000-0000-0000-000000000000"
 
-	client, err := kates.NewClient(kates.ClientOptions{})
-	if err == nil {
+		client, err := kates.NewClient(kates.ClientOptions{})
+		if err != nil {
+			return
+		}
 		nsName := "default"
 		if env.AmbassadorSingleNamespace {
 			nsName = env.AmbassadorNamespace
@@ -47,11 +56,13 @@ func GetClusterID(ctx context.Context, env ClusterEnv) string {
 			ObjectMeta: kates.ObjectMeta{Name: nsName},
 		}
 
-		err := client.Get(ctx, ns, ns)
-		if err == nil {
-			rootID = string(ns.GetUID())
+		if err := client.Get(ctx, ns, ns); err != nil {
+			return
 		}
-	}
+
+		rootID = string(ns.GetUID())
+		return
+	}()
 
 	clusterUrl := fmt.Sprintf("d6e_id://%s/%s", rootID, env.AmbassadorID)
 	uid := uuid.NewSHA1(uuid.NameSpaceURL, []byte(clusterUrl))
