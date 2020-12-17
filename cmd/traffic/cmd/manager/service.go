@@ -41,6 +41,7 @@ func NewManager(ctx context.Context, env Env) *Manager {
 	ret := &Manager{
 		ctx:   ctx,
 		clock: wall{},
+		env:   env,
 		state: state.NewState(ctx),
 	}
 	ret.systema = NewSystemAPool(ret)
@@ -109,9 +110,13 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 	snapshotCh := m.state.WatchAgents(ctx, nil)
 	for {
 		select {
-		case snapshot := <-snapshotCh:
-			agents := make([]*rpc.AgentInfo, 0, len(snapshot))
-			for _, agent := range snapshot {
+		case snapshot, ok := <-snapshotCh:
+			if !ok {
+				// The request has been canceled.
+				return nil
+			}
+			agents := make([]*rpc.AgentInfo, 0, len(snapshot.State))
+			for _, agent := range snapshot.State {
 				agents = append(agents, agent)
 			}
 			resp := &rpc.AgentInfoSnapshot{
@@ -120,9 +125,6 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 			if err := stream.Send(resp); err != nil {
 				return err
 			}
-		case <-ctx.Done():
-			// The request has been canceled.
-			return nil
 		case <-m.state.SessionDone(sessionID):
 			// Manager believes this session has ended.
 			return nil
@@ -154,10 +156,14 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	snapshotCh := m.state.WatchIntercepts(ctx, filter)
 	for {
 		select {
-		case snapshot := <-snapshotCh:
+		case snapshot, ok := <-snapshotCh:
+			if !ok {
+				dlog.Debugf(ctx, "WatchIntercepts request cancelled: %s", sessionID)
+				return nil
+			}
 			dlog.Debugf(ctx, "WatchIntercepts sending update: %s", sessionID)
-			intercepts := make([]*rpc.InterceptInfo, 0, len(snapshot))
-			for _, intercept := range snapshot {
+			intercepts := make([]*rpc.InterceptInfo, 0, len(snapshot.State))
+			for _, intercept := range snapshot.State {
 				intercepts = append(intercepts, intercept)
 			}
 			resp := &rpc.InterceptInfoSnapshot{
@@ -170,9 +176,6 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 				dlog.Debugf(ctx, "WatchIntercepts encountered a write error: %v", err)
 				return err
 			}
-		case <-ctx.Done():
-			dlog.Debugf(ctx, "WatchIntercepts request cancelled: %s", sessionID)
-			return nil
 		case <-m.state.SessionDone(sessionID):
 			dlog.Debugf(ctx, "WatchIntercepts session cancelled: %s", sessionID)
 			return nil
@@ -201,19 +204,19 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	}
 
 	if sa, err := m.systema.Get(); err != nil {
-		dlog.Errorln(ctx, "systema:", err)
+		dlog.Errorln(ctx, "systema: acquire connection:", err)
 	} else {
-		defer func() {
-			if err := m.systema.Done(); err != nil {
-				dlog.Errorln(ctx, "systema:", err)
-			}
-		}()
 		resp, err := sa.CreateDomain(ctx, &systema.CreateDomainRequest{
 			InterceptId: intercept.Id,
 		})
 		if err != nil {
-			dlog.Errorln(ctx, "systema:", err)
+			dlog.Errorln(ctx, "systema: create domain:", err)
+			if err := m.systema.Done(); err != nil {
+				dlog.Errorln(ctx, "systema: release connection:", err)
+			}
 		} else {
+			// DON'T m.systema.Done(); keep the connection refcounted until the
+			// intercept is deleted.
 			intercept.PreviewDomain = resp.Domain
 			m.state.UpdateIntercept(intercept)
 		}

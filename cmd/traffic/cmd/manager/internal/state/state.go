@@ -225,7 +225,7 @@ func (s *State) GetAllClients() map[string]*rpc.ClientInfo {
 func (s *State) WatchClients(
 	ctx context.Context,
 	filter func(sessionID string, client *rpc.ClientInfo) bool,
-) <-chan map[string]*rpc.ClientInfo {
+) <-chan watchable.ClientMapSnapshot {
 	if filter == nil {
 		return s.clients.Subscribe(ctx)
 	} else {
@@ -296,7 +296,7 @@ func (s *State) GetAgentsByName(name string) map[string]*rpc.AgentInfo {
 func (s *State) WatchAgents(
 	ctx context.Context,
 	filter func(sessionID string, agent *rpc.AgentInfo) bool,
-) <-chan map[string]*rpc.AgentInfo {
+) <-chan watchable.AgentMapSnapshot {
 	if filter == nil {
 		return s.agents.Subscribe(ctx)
 	} else {
@@ -357,7 +357,7 @@ func (s *State) RemoveIntercept(sessionID string, name string) bool {
 func (s *State) WatchIntercepts(
 	ctx context.Context,
 	filter func(sessionID string, intercept *rpc.InterceptInfo) bool,
-) <-chan map[string]*rpc.InterceptInfo {
+) <-chan watchable.InterceptMapSnapshot {
 	if filter == nil {
 		return s.intercepts.Subscribe(ctx)
 	} else {

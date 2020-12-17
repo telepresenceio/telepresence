@@ -18,6 +18,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dutil"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
+	"github.com/datawire/telepresence2/pkg/rpc/systema"
 	"github.com/datawire/telepresence2/pkg/version"
 )
 
@@ -76,7 +77,7 @@ func Main(ctx context.Context, args ...string) error {
 		return dutil.ListenAndServeHTTPWithContext(ctx, server)
 	})
 
-	g.Go("gc", func(ctx context.Context) error {
+	g.Go("intercept-gc", func(ctx context.Context) error {
 		// Loop calling Expire
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -91,15 +92,34 @@ func Main(ctx context.Context, args ...string) error {
 		}
 	})
 
-	if _, err := mgr.systema.Get(); err != nil {
-		dlog.Errorln(ctx, "systema:", err)
-	} else {
-		defer func() {
-			if err := mgr.systema.Done(); err != nil {
-				dlog.Errorln(ctx, "systema:", err)
+	g.Go("domain-gc", func(ctx context.Context) error {
+		for snapshot := range mgr.state.WatchIntercepts(ctx, nil) {
+			for _, update := range snapshot.Updates {
+				if update.Delete && update.Value.PreviewDomain != "" {
+					dlog.Debugf(ctx, "systema: removing domain: %q", update.Value.PreviewDomain)
+					if sa, err := mgr.systema.Get(); err != nil {
+						dlog.Errorln(ctx, "systema: acquire connection:", err)
+					} else {
+						_, err := sa.RemoveDomain(ctx, &systema.RemoveDomainRequest{
+							Domain: update.Value.PreviewDomain,
+						})
+						if err != nil {
+							dlog.Errorln(ctx, "systema: remove domain:", err)
+						}
+						// Release the connection we got to delete the domain
+						if err := mgr.systema.Done(); err != nil {
+							dlog.Errorln(ctx, "systema: release management connection:", err)
+						}
+					}
+					// Release the refcount on the proxy connection
+					if err := mgr.systema.Done(); err != nil {
+						dlog.Errorln(ctx, "systema: release proxy connection:", err)
+					}
+				}
 			}
-		}()
-	}
+		}
+		return nil
+	})
 
 	// Wait for exit
 	return g.Wait()
