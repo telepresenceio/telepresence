@@ -33,7 +33,7 @@ func (c *systemaCredentials) GetRequestMetadata(_ context.Context, _ ...string) 
 		return nil, errors.New("no token has been provided by a client")
 	}
 	md := map[string]string{
-		"X-Telepresence-ManagerID": c.mgr.env.AmbassadorClusterID,
+		"X-Telepresence-ManagerID": c.mgr.ID,
 		"Authorization":            "Bearer " + token,
 	}
 	return md, nil

@@ -27,12 +27,6 @@ func TestEnvconfig(t *testing.T) {
 	}()
 
 	defaults := manager.Env{
-		ClusterEnv: manager.ClusterEnv{
-			AmbassadorClusterID:       "07eb43c8-1166-5145-a060-45e4dd907e10",
-			AmbassadorSingleNamespace: false,
-			AmbassadorNamespace:       "default",
-			AmbassadorID:              "default",
-		},
 		User:        "",
 		ServerHost:  "",
 		ServerPort:  "8081",
@@ -48,60 +42,12 @@ func TestEnvconfig(t *testing.T) {
 			Input:  nil,
 			Output: func(*manager.Env) {},
 		},
-		"scout-id": {
+		"simple": {
 			Input: map[string]string{
-				"AMBASSADOR_SCOUT_ID": "foo",
+				"SYSTEMA_HOST": "app.getambassador.io",
 			},
 			Output: func(e *manager.Env) {
-				e.AmbassadorClusterID = "foo"
-			},
-		},
-		"cluster-id": {
-			Input: map[string]string{
-				"AMBASSADOR_CLUSTER_ID": "bar",
-			},
-			Output: func(e *manager.Env) {
-				e.AmbassadorClusterID = "bar"
-			},
-		},
-		"scout-and-clustercluster-id": {
-			Input: map[string]string{
-				"AMBASSADOR_SCOUT_ID":   "foo",
-				"AMBASSADOR_CLUSTER_ID": "bar",
-			},
-			Output: func(e *manager.Env) {
-				e.AmbassadorClusterID = "bar"
-			},
-		},
-		"single-ns-0": {
-			Input: map[string]string{},
-			Output: func(e *manager.Env) {
-				e.AmbassadorSingleNamespace = false
-			},
-		},
-		"single-ns-1": {
-			Input: map[string]string{
-				"AMBASSADOR_SINGLE_NAMESPACE": "",
-			},
-			Output: func(e *manager.Env) {
-				e.AmbassadorSingleNamespace = false
-			},
-		},
-		"single-ns-2": {
-			Input: map[string]string{
-				"AMBASSADOR_SINGLE_NAMESPACE": "true",
-			},
-			Output: func(e *manager.Env) {
-				e.AmbassadorSingleNamespace = true
-			},
-		},
-		"single-ns-3": {
-			// Check that it's an empty/nonempty check, not strconv.ParseBool
-			Input: map[string]string{
-				"AMBASSADOR_SINGLE_NAMESPACE": "false",
-			},
-			Output: func(e *manager.Env) {
-				e.AmbassadorSingleNamespace = true
+				e.SystemAHost = "app.getambassador.io"
 			},
 		},
 	}
