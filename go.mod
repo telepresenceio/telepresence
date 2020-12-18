@@ -5,7 +5,7 @@ go 1.15
 require (
 	github.com/blang/semver v3.5.0+incompatible
 	github.com/datawire/ambassador v1.9.1
-	github.com/datawire/dlib v0.0.0-20201121071656-6047eebdf853
+	github.com/datawire/dlib v1.1.0
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
 	github.com/datawire/telepresence2/pkg/rpc v0.0.0-00010101000000-000000000000
 	github.com/docker/docker v1.4.2-0.20200203170920-46ec8731fbce
