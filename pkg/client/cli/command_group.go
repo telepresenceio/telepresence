@@ -1,6 +1,10 @@
 package cli
 
 import (
+	"os"
+	"strconv"
+
+	"github.com/docker/docker/pkg/term"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -26,6 +30,37 @@ func init() {
 	})
 	cobra.AddTemplateFunc("globalFlagGroups", func() []FlagGroup {
 		return globalFlagGroups
+	})
+	cobra.AddTemplateFunc("wrappedFlagUsages", func(flags *pflag.FlagSet) string {
+		// This is based off of what Docker does (github.com/docker/cli/cli/cobra.go), but is
+		// adjusted
+		//  1. to take a pflag.FlagSet instead of a cobra.Command, so that we can have flag groups, and
+		//  2. to correct for the ways that Docker upsets me.
+
+		var cols int
+		var err error
+
+		// Obey COLUMNS if the shell or user sets it.  (Docker doesn't do this.)
+		if cols, err = strconv.Atoi(os.Getenv("COLUMNS")); err == nil {
+			goto end
+		}
+
+		// Try to detect the size of the stdout file descriptor.  (Docker checks stdin, not stdout.)
+		if ws, err := term.GetWinsize(1); err == nil {
+			cols = int(ws.Width)
+			goto end
+		}
+
+		// If stdout is a terminal but we were unable to get its size (I'm not sure how that can
+		// happen), then fall back to assuming 80.  If stdou tisn't a terminal, then we leave cols
+		// as 0, meaning "don't wrap it".  (Docker wraps it even if stdout isn't a terminal.)
+		if term.IsTerminal(1) {
+			cols = 80
+			goto end
+		}
+
+	end:
+		return flags.FlagUsagesWrapped(cols)
 	})
 }
 
@@ -58,12 +93,12 @@ Available Commands:{{range $group := commandGroups .}}
     {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
 
 Flags:
-{{.LocalNonPersistentFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if true}}
+{{.LocalNonPersistentFlags | wrappedFlagUsages | trimTrailingWhitespaces}}{{end}}{{if true}}
 
 Global Flags:{{range $group := globalFlagGroups}}
 
   {{$group.Name}}:
-{{$group.Flags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{end}}{{if .HasHelpSubCommands}}
+{{$group.Flags | wrappedFlagUsages | trimTrailingWhitespaces}}{{end}}{{end}}{{if .HasHelpSubCommands}}
 
 Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
   {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
