@@ -48,25 +48,23 @@ image images: $(tools/ko) ## (Build) Build/tag the manager/agent container image
 push-images: images
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
 
-# The push-executable target does the following:
-# 1. Check that the workspace is clean
-# 2. Check that the current commit is tagged
-# 3. Check that the tag is a semantic version starting with a 'v'
-# 4. Upload the object to S3.
-#
 # Prerequisites:
 # The awscli command must be installed and configured with credentials to upload
 # to the datawire-static-files bucket.
 .PHONY: push-executable
 push-executable: build
-	git diff --quiet HEAD && \
-	versionTag=`git describe --tags --exact-match` && \
-	verifiedTag=`echo $$versionTag | sed -E 's|^v([0-9]+\.[0-9]+\.[0-9]+(-.*)?$$)|\1|g'` && \
-	[ "$$versionTag" != "$$verifiedTag" ] && echo -n $$verifiedTag > $(BUILDDIR)/stable.txt
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
-		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/$$(cat $(BUILDDIR)/stable.txt)/telepresence \
+		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence \
 		--body $(BINDIR)/telepresence
+
+# Prerequisites:
+# The awscli command must be installed and configured with credentials to upload
+# to the datawire-static-files bucket.
+.PHONY: promote-to-stable
+promote-to-stable:
+	mkdir -p $(BUILDDIR)
+	echo $(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/stable.txt
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
 		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/stable.txt \

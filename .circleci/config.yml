@@ -1,3 +1,13 @@
+# This configuration makes use of the following things defined in the
+# CircleCI webui:
+#
+#  - A context named "telepresence2-release".  The context sets the
+#    following environment variableS:
+#     + DOCKERHUB_USERNAME
+#     + DOCKERHUB_PASSWORD
+#     + AWS_ACCESS_KEY_ID (for S3)
+#     + AWS_SECRET_ACCESS_KEY (for S3)
+
 version: 2.1
 
 executors:
@@ -5,6 +15,10 @@ executors:
   "vm-linux":
     machine:
       image: "ubuntu-2004:202008-01"
+
+  "vm-macos":
+    macos:
+      xcode: "12.2.0" # macOS 10.15.5
 
 commands:
 
@@ -112,6 +126,33 @@ jobs:
       - run: make generate
       - dirty-check
 
+  "release-linux":
+    executor: vm-linux
+    steps:
+      - checkout
+      - install-go
+      - run: pip3 install awscli
+      - run:
+          name: Docker login
+          command: |
+            docker login -u="${DOCKERHUB_USERNAME}" -p="${DOCKERHUB_PASSWORD}"
+      - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-images push-executable
+
+  "release-macos":
+    executor: vm-macos
+    steps:
+      - checkout
+      - install-go
+      - run: sudo pip3 install awscli
+      - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
+
+  "release-finalize":
+    executor: vm-linux
+    steps:
+      - checkout
+      - run: pip3 install awscli
+      - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
+
 workflows:
 
   'Dev':
@@ -119,3 +160,30 @@ workflows:
       - build-and-test
       - lint
       - generate
+
+  'Release':
+    jobs:
+      - release-linux:
+          context: telepresence2-release
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - release-macos:
+          context: telepresence2-release
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - release-finalize:
+          context: telepresence2-release
+          requires:
+            - release-linux
+            - release-macos
+          filters:
+            tags:
+              only: /^v[0-9]+\.[0-9]+\.[0-9+]$/
+            branches:
+              ignore: /.*/
