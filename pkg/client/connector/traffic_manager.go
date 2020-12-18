@@ -41,10 +41,10 @@ type trafficManager struct {
 	apiPort        int32
 	sshPort        int32
 	userAndHost    string
-	installID      string // telepresence's install ID
-	sessionID      string // sessionID returned by the traffic-manager
-	apiErr         error  // holds the latest traffic-manager API error
-	connectCI      bool   // whether --ci was passed to connect
+	installID      string               // telepresence's install ID
+	sessionInfo    *manager.SessionInfo // sessionInfo returned by the traffic-manager
+	apiErr         error                // holds the latest traffic-manager API error
+	connectCI      bool                 // whether --ci was passed to connect
 	installer      *installer
 	intercepts     map[string]*intercept
 	interceptsLock sync.Mutex
@@ -164,7 +164,7 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 	}
 	tm.conn = conn
 	tm.grpc = mClient
-	tm.sessionID = si.SessionId
+	tm.sessionInfo = si
 
 	g := dgroup.ParentGroup(c)
 	g.Go("remain", tm.remain)
@@ -190,7 +190,7 @@ func (tm *trafficManager) watchIntercepts(c context.Context) error {
 }
 
 func (tm *trafficManager) session() *manager.SessionInfo {
-	return &manager.SessionInfo{SessionId: tm.sessionID}
+	return tm.sessionInfo
 }
 
 func (tm *trafficManager) agentInfoSnapshot() *manager.AgentInfoSnapshot {

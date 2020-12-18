@@ -18,8 +18,7 @@ message ClientInfo {
   string install_id = 2;
   string product = 3;  // "telepresence"
   string version = 4;
-  string license_key = 5;
-  string bearer_token = 6;
+  string bearer_token = 5;
 }
 
 // AgentInfo is the self-reported metadata that an Agent (app-sidecar)
@@ -122,6 +121,7 @@ message InterceptInfo {
 
 message SessionInfo {
   string session_id = 1;
+  bool licensed_cluster = 2;
 }
 
 message AgentInfoSnapshot {
