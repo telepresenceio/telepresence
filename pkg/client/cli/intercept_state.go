@@ -36,7 +36,7 @@ func interceptCommand() *cobra.Command {
 	}
 	flags := cmd.Flags()
 
-	flags.StringVarP(&ii.agentName, "deployment", "s", "", "Name of deployment to intercept, if different from <name>")
+	flags.StringVarP(&ii.agentName, "deployment", "d", "", "Name of deployment to intercept, if different from <name>")
 	flags.IntVarP(&ii.port, "port", "p", 8080, "Local port to forward to")
 
 	return cmd

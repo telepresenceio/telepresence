@@ -34,10 +34,8 @@ service Connector {
 
 // ConnectRequest contains the information needed to connect ot a cluster.
 message ConnectRequest {
-  string context = 1;
-  string namespace = 2;
-  string install_id = 3;
-  repeated string args = 4;
+  map<string, string> kubeflags = 1;
+  string install_id = 2;
 }
 
 message ConnectInfo {

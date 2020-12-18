@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dexec"
@@ -23,11 +24,15 @@ const connectTimeout = 5 * time.Second
 
 // k8sCluster is a Kubernetes cluster reference
 type k8sCluster struct {
-	kates.ClientOptions
+	// Things for bypassing kates
+	Context      string
+	Namespace    string
+	kubeFlagArgs []string
+
+	// Main
 	client      *kates.Client
 	daemon      daemon.DaemonClient // for DNS updates
 	srv         string
-	kargs       []string
 	Deployments []*kates.Deployment
 	Pods        []*kates.Pod
 	Services    []*kates.Service
@@ -37,16 +42,7 @@ type k8sCluster struct {
 // getKubectlArgs returns the kubectl command arguments to run a
 // kubectl command with this cluster.
 func (kc *k8sCluster) getKubectlArgs(args ...string) []string {
-	if kc.Kubeconfig != "" {
-		args = append(args, "--kubeconfig", kc.Kubeconfig)
-	}
-	if kc.Context != "" {
-		args = append(args, "--context", kc.Context)
-	}
-	if kc.Namespace != "" {
-		args = append(args, "--namespace", kc.Namespace)
-	}
-	return append(args, kc.kargs...)
+	return append(kc.kubeFlagArgs, args...)
 }
 
 // getKubectlCmd returns a Cmd that runs kubectl with the given arguments and
@@ -326,24 +322,23 @@ func (kc *k8sCluster) findSvc(name string) *kates.Service {
 	return svcCopy
 }
 
-func newKCluster(kubeConfig, ctxName, namespace string, daemon daemon.DaemonClient, kargs ...string) (*k8sCluster, error) {
-	opts := kates.ClientOptions{
-		Kubeconfig: kubeConfig,
-		Context:    ctxName,
-		Namespace:  namespace}
-
-	kc, err := kates.NewClient(opts)
-	if err != nil {
-		return nil, err
+func newKCluster(c context.Context, kubeFlagMap map[string]string, daemon daemon.DaemonClient) (*k8sCluster, error) {
+	kubeFlagArgs := make([]string, 0, len(kubeFlagMap))
+	kubeFlagConfig := kates.NewConfigFlags(false)
+	kubeFlagSet := pflag.NewFlagSet("", 0)
+	kubeFlagConfig.AddFlags(kubeFlagSet)
+	for k, v := range kubeFlagMap {
+		kubeFlagArgs = append(kubeFlagArgs, "--"+k+"="+v)
+		if err := kubeFlagSet.Set(k, v); err != nil {
+			err = errors.Wrapf(err, "processing kubectl flag %q", "--"+k+"="+v)
+			return nil, err
+		}
 	}
-	return &k8sCluster{ClientOptions: opts, client: kc, daemon: daemon, kargs: kargs}, nil
-}
 
-// trackKCluster tracks connectivity to a cluster
-func trackKCluster(c context.Context, ctxName, namespace string, daemon daemon.DaemonClient, kargs []string) (*k8sCluster, error) {
 	// TODO: All shell-outs to kubectl here should go through the kates client.
+	ctxName := kubeFlagMap["context"]
 	if ctxName == "" {
-		cmd := dexec.CommandContext(c, "kubectl", "config", "current-context")
+		cmd := dexec.CommandContext(c, "kubectl", append(kubeFlagArgs, "config", "current-context")...)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return nil, fmt.Errorf("kubectl config current-context: %v", client.RunError(err))
@@ -351,9 +346,10 @@ func trackKCluster(c context.Context, ctxName, namespace string, daemon daemon.D
 		ctxName = strings.TrimSpace(string(output))
 	}
 
+	namespace := kubeFlagMap["namespace"]
 	if namespace == "" {
 		nsQuery := fmt.Sprintf("jsonpath={.contexts[?(@.name==\"%s\")].context.namespace}", ctxName)
-		cmd := dexec.CommandContext(c, "kubectl", "--context", ctxName, "config", "view", "-o", nsQuery)
+		cmd := dexec.CommandContext(c, "kubectl", append(kubeFlagArgs, "config", "view", "-o", nsQuery)...)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return nil, fmt.Errorf("kubectl config view ns failed: %v", client.RunError(err))
@@ -364,7 +360,24 @@ func trackKCluster(c context.Context, ctxName, namespace string, daemon daemon.D
 		}
 	}
 
-	kc, err := newKCluster("", ctxName, namespace, daemon, kargs...)
+	kc, err := kates.NewClientFromConfigFlags(kubeFlagConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	return &k8sCluster{
+		Context:      ctxName,
+		Namespace:    namespace,
+		kubeFlagArgs: kubeFlagArgs,
+
+		client: kc,
+		daemon: daemon,
+	}, nil
+}
+
+// trackKCluster tracks connectivity to a cluster
+func trackKCluster(c context.Context, kubeFlagMap map[string]string, daemon daemon.DaemonClient) (*k8sCluster, error) {
+	kc, err := newKCluster(c, kubeFlagMap, daemon)
 	if err != nil {
 		return nil, fmt.Errorf("k8s client create failed. %v", client.RunError(err))
 	}

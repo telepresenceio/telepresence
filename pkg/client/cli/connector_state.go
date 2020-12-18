@@ -7,6 +7,7 @@ import (
 
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
 
 	"github.com/datawire/telepresence2/pkg/client"
@@ -66,9 +67,14 @@ func (cs *connectorState) EnsureState() (bool, error) {
 }
 
 func (cs *connectorState) setConnectInfo() error {
+	kubeFlagMap := make(map[string]string)
+	kubeFlags.VisitAll(func(flag *pflag.Flag) {
+		if flag.Changed {
+			kubeFlagMap[flag.Name] = flag.Value.String()
+		}
+	})
 	r, err := cs.grpc.Connect(cs.cmd.Context(), &connector.ConnectRequest{
-		Context:   k8sContext,
-		Namespace: k8sNamespace,
+		Kubeflags: kubeFlagMap,
 		InstallId: client.NewScout("unused").Reporter.InstallID(),
 	})
 	if err != nil {
