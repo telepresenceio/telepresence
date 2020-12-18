@@ -44,7 +44,6 @@ type trafficManager struct {
 	installID      string               // telepresence's install ID
 	sessionInfo    *manager.SessionInfo // sessionInfo returned by the traffic-manager
 	apiErr         error                // holds the latest traffic-manager API error
-	connectCI      bool                 // whether --ci was passed to connect
 	installer      *installer
 	intercepts     map[string]*intercept
 	interceptsLock sync.Mutex
@@ -52,7 +51,7 @@ type trafficManager struct {
 
 // newTrafficManager returns a TrafficManager resource for the given
 // cluster if it has a Traffic Manager service.
-func newTrafficManager(c context.Context, cluster *k8sCluster, installID string, isCI bool) (*trafficManager, error) {
+func newTrafficManager(c context.Context, cluster *k8sCluster, installID string) (*trafficManager, error) {
 	userinfo, err := user.Current()
 	if err != nil {
 		return nil, errors.Wrap(err, "user.Current()")
@@ -81,7 +80,6 @@ func newTrafficManager(c context.Context, cluster *k8sCluster, installID string,
 		apiPort:     localAPIPort,
 		sshPort:     localSSHPort,
 		installID:   installID,
-		connectCI:   isCI,
 		startup:     make(chan bool),
 		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host),
 		intercepts:  make(map[string]*intercept)}

@@ -70,7 +70,6 @@ func (cs *connectorState) setConnectInfo() error {
 		Context:   k8sContext,
 		Namespace: k8sNamespace,
 		InstallId: client.NewScout("unused").Reporter.InstallID(),
-		IsCi:      isCI,
 	})
 	if err != nil {
 		return err

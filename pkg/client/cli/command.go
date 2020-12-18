@@ -60,7 +60,6 @@ var k8sContext string
 var k8sNamespace string
 var dnsIP string
 var fallbackIP string
-var isCI bool
 
 // Command returns the top level "telepresence" CLI command
 func Command() *cobra.Command {
@@ -101,7 +100,6 @@ func Command() *cobra.Command {
 		"namespace", "n", "",
 		"The Kubernetes namespace to use. Defaults to kubectl's default for the context.",
 	)
-	flags.BoolVar(&isCI, "ci", false, "This session is a CI run.")
 
 	rootCmd.InitDefaultHelpCmd()
 	AddCommandGroups(rootCmd, []CommandGroup{

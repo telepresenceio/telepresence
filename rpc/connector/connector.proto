@@ -38,9 +38,6 @@ message ConnectRequest {
   string namespace = 2;
   string install_id = 3;
   repeated string args = 4;
-
-  // true if this is part of a CI run
-  bool is_ci = 5;
 }
 
 message ConnectInfo {
