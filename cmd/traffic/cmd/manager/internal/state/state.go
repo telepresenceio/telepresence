@@ -376,6 +376,8 @@ func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) (*rpc.In
 		},
 	}
 
+	// [REDACTED]
+
 	// Wrap each potential-state-change in a
 	//
 	//     if cept.Disposition == rpc.InterceptDispositionType_WAITING { … }

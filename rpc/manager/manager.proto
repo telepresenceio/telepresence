@@ -68,14 +68,11 @@ message InterceptSpec {
   // How to decide which subset of requests to that agent to intercept.
   string mechanism = 4;
 
-  /*
-     additional mechanism-specific info
-     - header match patterns would go here
-     - perhaps a JSON blob for the Agent's mechanism implementation to parse
-     - how does the client decide to create this blob?
-     - perhaps just pass all the unrecognized CLI arguments? or all of them?
-     - maybe always pass client's install id to use for x-service-preview matches?
-   */
+  // Additional mechanism-specific info:
+  //
+  //  case "tcp": Ignored.
+  //
+  //  [REDACTED]
   string additional = 5;
 
   string target_host = 6;

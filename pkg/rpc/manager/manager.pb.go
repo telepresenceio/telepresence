@@ -295,13 +295,11 @@ type InterceptSpec struct {
 	Agent string `protobuf:"bytes,3,opt,name=agent,proto3" json:"agent,omitempty"`
 	// How to decide which subset of requests to that agent to intercept.
 	Mechanism string `protobuf:"bytes,4,opt,name=mechanism,proto3" json:"mechanism,omitempty"`
+	// Additional mechanism-specific info:
 	//
-	//additional mechanism-specific info
-	//- header match patterns would go here
-	//- perhaps a JSON blob for the Agent's mechanism implementation to parse
-	//- how does the client decide to create this blob?
-	//- perhaps just pass all the unrecognized CLI arguments? or all of them?
-	//- maybe always pass client's install id to use for x-service-preview matches?
+	//  case "tcp": Ignored.
+	//
+	//  [REDACTED]
 	Additional string `protobuf:"bytes,5,opt,name=additional,proto3" json:"additional,omitempty"`
 	TargetHost string `protobuf:"bytes,6,opt,name=target_host,json=targetHost,proto3" json:"target_host,omitempty"`
 	TargetPort int32  `protobuf:"varint,7,opt,name=target_port,json=targetPort,proto3" json:"target_port,omitempty"`

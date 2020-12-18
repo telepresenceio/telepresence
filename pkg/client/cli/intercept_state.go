@@ -19,6 +19,7 @@ type interceptInfo struct {
 	name      string
 	agentName string
 	port      int
+	// [REDACTED]
 }
 
 type interceptState struct {
@@ -39,6 +40,8 @@ func interceptCommand() *cobra.Command {
 
 	flags.StringVarP(&ii.agentName, "deployment", "d", "", "Name of deployment to intercept, if different from <name>")
 	flags.IntVarP(&ii.port, "port", "p", 8080, "Local port to forward to")
+
+	// [REDACTED]
 
 	return cmd
 }
@@ -141,17 +144,25 @@ Please specify one or more header matches using --match.`
 }
 
 func (is *interceptState) EnsureState() (bool, error) {
+	// Fill defaults
 	if is.name == "" {
 		is.name = is.agentName
 	}
+	// [REDACTED]
+
+	// Turn that in to a spec
+	spec := &manager.InterceptSpec{
+		Name:       is.name,
+		Agent:      is.agentName,
+		Mechanism:  "tcp",
+		TargetHost: "127.0.0.1",
+		TargetPort: int32(is.port),
+	}
+	// [REDACTED]
+
+	// Submit the spec
 	r, err := is.cs.grpc.CreateIntercept(is.cmd.Context(), &manager.CreateInterceptRequest{
-		InterceptSpec: &manager.InterceptSpec{
-			Name:       is.name,
-			Agent:      is.agentName,
-			Mechanism:  "tcp",
-			TargetHost: "127.0.0.1",
-			TargetPort: int32(is.port),
-		},
+		InterceptSpec: spec,
 	})
 	if err != nil {
 		return false, err

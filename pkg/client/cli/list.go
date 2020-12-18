@@ -116,6 +116,7 @@ func DescribeIntercept(ii *manager.InterceptInfo, debug bool) string {
 	switch ii.Spec.Mechanism {
 	case "tcp":
 		msg += "all connections"
+	// [REDACTED]
 	default:
 		msg += fmt.Sprintf("using unknown mechanism %q", ii.Spec.Mechanism)
 	}
