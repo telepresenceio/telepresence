@@ -9,7 +9,6 @@ import (
 
 	"github.com/sethvargo/go-envconfig"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
@@ -20,10 +19,9 @@ type Config struct {
 	Name    string `env:"AGENT_NAME,required"`
 	AppPort int32  `env:"APP_PORT,required"`
 
-	AgentPort        int32  `env:"AGENT_PORT,default=9900"`
-	DefaultMechanism string `env:"DEFAULT_MECHANISM,default=tcp"`
-	ManagerHost      string `env:"MANAGER_HOST,default=traffic-manager"`
-	ManagerPort      int32  `env:"MANAGER_PORT,default=8081"`
+	AgentPort   int32  `env:"AGENT_PORT,default=9900"`
+	ManagerHost string `env:"MANAGER_HOST,default=traffic-manager"`
+	ManagerPort int32  `env:"MANAGER_PORT,default=8081"`
 }
 
 func Main(ctx context.Context, args ...string) error {
@@ -72,34 +70,6 @@ func Main(ctx context.Context, args ...string) error {
 
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
-	})
-
-	// Manage the mechanism
-	mechSubprocessDisabled := true
-	g.Go("mech", func(ctx context.Context) error {
-		envAdd := []string{
-			fmt.Sprintf("AGENT_PORT=%v", config.AgentPort),
-			fmt.Sprintf("APP_PORT=%v", config.AppPort),
-			fmt.Sprintf("MECHANISM=%s", "tcp"), // FIXME
-			fmt.Sprintf("MANAGER_HOST=%s", config.ManagerHost),
-		}
-
-		if mechSubprocessDisabled {
-			return nil
-		}
-
-		for {
-			// Launch/start the mechanism
-			cmd := dexec.CommandContext(ctx, os.Args[0], "mech-tcp") // FIXME
-			cmd.Env = append(os.Environ(), envAdd...)
-
-			err := cmd.Run()
-			dlog.Infof(ctx, "mechanism terminated: %+v", err)
-
-			if ctx.Err() != nil {
-				return nil
-			}
-		}
 	})
 
 	var forwarder *Forwarder

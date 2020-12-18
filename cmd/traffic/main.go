@@ -34,8 +34,6 @@ func main() {
 			doMain(agent.Main, os.Args[2:]...)
 		case "manager":
 			doMain(manager.Main, os.Args[2:]...)
-		case "mech-tcp":
-			mech_tcp_main()
 		default:
 			fmt.Println("traffic: unknown command:", name)
 			os.Exit(127)
@@ -46,8 +44,6 @@ func main() {
 	switch name := filepath.Base(os.Args[0]); name {
 	case "traffic-agent":
 		doMain(agent.Main, os.Args[1:]...)
-	case "mechanism-tcp":
-		mech_tcp_main()
 	case "traffic-manager":
 		fallthrough
 	default:
