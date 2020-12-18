@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -25,6 +26,7 @@ type Manager struct {
 	ctx     context.Context
 	clock   Clock
 	env     Env
+	ID      string
 	state   *state.State
 	systema *systemaPool
 
@@ -42,6 +44,7 @@ func NewManager(ctx context.Context, env Env) *Manager {
 		ctx:   ctx,
 		clock: wall{},
 		env:   env,
+		ID:    uuid.New().String(),
 		state: state.NewState(ctx),
 	}
 	ret.systema = NewSystemAPool(ret)
