@@ -158,6 +158,7 @@ func (is *interceptState) EnsureState() (bool, error) {
 	switch r.Error {
 	case connector.InterceptError_UNSPECIFIED:
 		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", is.agentName)
+		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(r.InterceptInfo))
 		return true, nil
 	case connector.InterceptError_ALREADY_EXISTS:
 		fmt.Fprintln(is.cmd.OutOrStdout(), interceptMessage(r))
