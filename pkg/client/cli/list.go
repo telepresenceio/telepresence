@@ -2,10 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 type listInfo struct {
@@ -68,21 +70,45 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 
 	state := func(dep *connector.DeploymentInfo) string {
 		if ii := dep.InterceptInfo; ii != nil {
-			return fmt.Sprintf("intercepted, redirecting port %d to %s:%d", ii.ManagerPort, ii.Spec.TargetHost, ii.Spec.TargetPort)
+			return DescribeIntercept(ii)
 		}
 		ai := dep.AgentInfo
 		if ai != nil {
-			return "traffic-agent installed"
+			return "ready to intercept (traffic-agent already installed)"
 		}
-		txt := "traffic-agent not installed"
 		if dep.NotInterceptableReason != "" {
-			txt = txt + ": " + dep.NotInterceptableReason
+			return "not interceptable (traffic-agent not installed): " + dep.NotInterceptableReason
+		} else {
+			return "ready to intercept (traffic-agent not yet installed)"
 		}
-		return txt
 	}
 
 	for _, dep := range r.Deployments {
 		fmt.Fprintf(stdout, "%-*s: %s\n", nameLen, dep.Name, state(dep))
 	}
 	return nil
+}
+
+func DescribeIntercept(ii *manager.InterceptInfo) string {
+	msg := fmt.Sprintf("intercepted, redirecting port %d to %s:%d",
+		ii.ManagerPort, ii.Spec.TargetHost, ii.Spec.TargetPort)
+
+	switch ii.Spec.Mechanism {
+	case "tcp":
+		msg += "\n    Intercepting all requests"
+	default:
+		msg += fmt.Sprintf("\n    Using unknown mechanism %q", ii.Spec.Mechanism)
+	}
+
+	if ii.PreviewDomain != "" {
+		previewURL := ii.PreviewDomain
+		// Right now SystemA gives back domains with the leading "https://", but
+		// let's not rely on that.
+		if !strings.HasPrefix(previewURL, "https://") && !strings.HasPrefix(previewURL, "http://") {
+			previewURL = "https://" + previewURL
+		}
+		msg += "\n    Preview URL: " + previewURL
+	}
+
+	return msg
 }
