@@ -154,5 +154,6 @@ In the long run we'll improve this to work more like classic Telepresence, but e
 3. Make sure your environment is clean: `unset TELEPRESENCE_REGISTRY TELEPRESENCE_VERSION`
 4. Build everything: `VERSION_SUFFIX="" make build images`
 5. Push the new image: `docker push docker.io/datawire/tel2:v0.x.y`
-6. Build the binary on other platforms (MacOS and Linux for now)
+6. Build the CLI binary on other platforms (MacOS and Linux for now)
+7. Upload the CLI binary to S3 `VERSION_SUFFIX="" make upload-binary`
 
