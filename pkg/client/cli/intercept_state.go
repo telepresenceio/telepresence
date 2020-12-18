@@ -29,10 +29,11 @@ type interceptState struct {
 func interceptCommand() *cobra.Command {
 	ii := &interceptInfo{}
 	cmd := &cobra.Command{
-		Use:   "intercept [flags] <name> [-- command with arguments...]",
-		Short: "Intercept a service",
-		Args:  cobra.MinimumNArgs(1),
-		RunE:  ii.intercept,
+		Use:     "intercept [flags] <name> [-- command with arguments...]",
+		Short:   "Intercept a service",
+		Args:    cobra.MinimumNArgs(1),
+		RunE:    ii.intercept,
+		PreRunE: updateCheck,
 	}
 	flags := cmd.Flags()
 
