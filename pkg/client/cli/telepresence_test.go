@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -13,9 +15,11 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/config"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
 	"github.com/spf13/cobra"
@@ -32,6 +36,19 @@ var namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
 // serviceCount is the number of interceptable services that gets installed
 // in the cluster and later intercepted
 const serviceCount = 9
+
+func TestTelepresence(t *testing.T) {
+	RegisterFailHandler(Fail)
+
+	// Remove very verbose output from DTEST initialization
+	log.SetOutput(ioutil.Discard)
+
+	config.DefaultReporterConfig.SlowSpecThreshold = 20
+	dtest.WithMachineLock(func() {
+		_ = os.Chdir("../../..")
+		RunSpecs(t, "Telepresence Suite")
+	})
+}
 
 var _ = Describe("Telepresence", func() {
 	Context("With no daemon running", func() {
