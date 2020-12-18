@@ -41,10 +41,10 @@ var labelMap = map[string]string{
 	"telepresence": telName,
 }
 
-// ManagerImage is inserted at build using --ldflags -X
-var managerImage string
-
-var resolveManagerName = sync.Once{}
+var (
+	managerImage       string
+	resolveManagerName = sync.Once{}
+)
 
 func managerImageName(env client.Env) string {
 	resolveManagerName.Do(func() {
@@ -55,7 +55,9 @@ func managerImageName(env client.Env) string {
 
 func agentImageName(env client.Env, licensed bool) string {
 	if licensed {
-		return managerImageName(env) + "-proprietary" // TODO: proper name of the proprietary agent TBD
+		// FIXME(lukeshu): Don't hard-code this (the plan is to address that during the
+		// licensing work).
+		return "docker.io/lukeshu/ambassador-telepresence-agent:v0.3.1-8-g3fdedd7-1610440959"
 	}
 	return managerImageName(env)
 }

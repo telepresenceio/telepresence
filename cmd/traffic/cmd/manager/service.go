@@ -66,7 +66,10 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 
 	sessionID := m.state.AddClient(client, m.clock.Now())
 
-	return &rpc.SessionInfo{SessionId: sessionID}, nil
+	return &rpc.SessionInfo{
+		SessionId:       sessionID,
+		LicensedCluster: true,
+	}, nil
 }
 
 // ArriveAsAgent establishes a session between an agent and the Manager.
