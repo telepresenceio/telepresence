@@ -83,7 +83,6 @@ clobber: clean ## (Build) Remove all build artifacts and tools
 
 .PHONY: lint-deps
 lint-deps: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Everything nescessary to lint
-	go mod vendor && rm -rf vendor
 
 .PHONY: lint
 lint: lint-deps ## (Lint) Run the linters (golangci-lint and protolint)
