@@ -116,7 +116,7 @@ jobs:
           # Don't hold the Go compiler against golangci-lint's
           # timeout.
           name: "Pre-load Go build cache"
-          command: go test -run=donotrun ./...
+          command: go list ./... | xargs -n1 go test -c -o /dev/null
       - run: make lint
 
   "generate":
