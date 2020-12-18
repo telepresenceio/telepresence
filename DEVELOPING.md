@@ -152,8 +152,5 @@ In the long run we'll improve this to work more like classic Telepresence, but e
 1. Make sure your source tree is updated and clean.
 2. Tag the new version: `git tag -a v0.x.y -m "Release 0.x.y"`
 3. Make sure your environment is clean: `unset TELEPRESENCE_REGISTRY TELEPRESENCE_VERSION`
-4. Build everything: `VERSION_SUFFIX="" make build images`
-5. Push the new image: `docker push docker.io/datawire/tel2:v0.x.y`
-6. Build the CLI binary on other platforms (MacOS and Linux for now)
-7. Upload the CLI binary to S3 `VERSION_SUFFIX="" make upload-binary`
-
+4. Build and push everything: `VERSION_SUFFIX="" make push-images push-executable`
+5. Build the CLI binary on other platforms (MacOS and Linux for now): On every platform other than the one you used in step 5, run `VERSION_SUFFIX="" make push-executable`
