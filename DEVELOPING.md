@@ -20,7 +20,7 @@ $ make build
 mkdir -p build-output/bin
 go build -ldflags=-X=github.com/datawire/telepresence2/pkg/version.Version=v0.2.0-1605793571 -o build-output/bin ./cmd/...
 
-$ ./build-output/bin/telepresence --version
+$ ./build-output/bin/telepresence version
 Client v0.2.0-1605793571 (api v3)
 ```
 
@@ -126,11 +126,11 @@ The image is now in your machine's Docker daemon and tagged as shown. You can pu
 ```console
 $ docker push docker.io/ark3/tel2:v0.2.0-1605794277
 The push refers to repository [docker.io/ark3/tel2]
-41e7a1ba6d29: Pushed 
-4f76c7cc1547: Mounted from datawire/tel2 
-3a3c83bc9ed4: Mounted from datawire/tel2 
-7e2446562a4e: Mounted from datawire/tel2 
-721384ec99e5: Mounted from ark3/telepresence-local 
+41e7a1ba6d29: Pushed
+4f76c7cc1547: Mounted from datawire/tel2
+3a3c83bc9ed4: Mounted from datawire/tel2
+7e2446562a4e: Mounted from datawire/tel2
+721384ec99e5: Mounted from ark3/telepresence-local
 v0.2.0-1605794277: digest: sha256:f9b26f48659748fea4977cf4664233eb4b98bf6861bfd46033b3c309d34cb6fd size: 1363
 ```
 
