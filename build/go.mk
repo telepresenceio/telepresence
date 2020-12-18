@@ -19,6 +19,7 @@ PROTO_SRCS = $(shell echo rpc/*/*.proto)
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
 generate: generate-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
+	rm -rf ./pkg/rpc/vendor ./vendor
 	$(TOOLSBINDIR)/protoc --proto_path=. --go_out=. --go-grpc_out=. --go_opt=module=github.com/datawire/telepresence2 --go-grpc_opt=module=github.com/datawire/telepresence2 $(PROTO_SRCS)
 	go generate ./...
 	cd ./pkg/rpc && go mod tidy
