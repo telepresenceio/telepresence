@@ -19,7 +19,8 @@ PROTO_SRCS = $(shell echo rpc/*/*.proto)
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
 generate: generate-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
-	$(TOOLSBINDIR)/protoc --proto_path=. --go_out=. --go-grpc_out=. --go_opt=module=github.com/datawire/telepresence2 --go-grpc_opt=module=github.com/datawire/telepresence2 $(PROTO_SRCS)
+	rm -rf ./pkg/rpc/vendor ./vendor
+	$(tools/protoc) --proto_path=. --go_out=. --go-grpc_out=. --go_opt=module=github.com/datawire/telepresence2 --go-grpc_opt=module=github.com/datawire/telepresence2 $(PROTO_SRCS)
 	go generate ./...
 	cd ./pkg/rpc && go mod tidy
 	cd ./pkg/rpc && go mod vendor
@@ -47,25 +48,23 @@ image images: $(tools/ko) ## (Build) Build/tag the manager/agent container image
 push-images: images
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
 
-# The upload-binary target does the following:
-# 1. Check that the workspace is clean
-# 2. Check that the current commit is tagged
-# 3. Check that the tag is a semantic version starting with a 'v'
-# 4. Upload the object to S3.
-#
 # Prerequisites:
 # The awscli command must be installed and configured with credentials to upload
 # to the datawire-static-files bucket.
-.PHONY: upload-binary
-upload-binary: build
-	git diff --quiet HEAD && \
-	versionTag=`git describe --tags --exact-match` && \
-	verifiedTag=`echo $$versionTag | sed -E 's|^v([0-9]+\.[0-9]+\.[0-9]+(-.*)?$$)|\1|g'` && \
-	[ "$$versionTag" != "$$verifiedTag" ] && echo -n $$verifiedTag > $(BUILDDIR)/stable.txt
+.PHONY: push-executable
+push-executable: build
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
-		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/$$(cat $(BUILDDIR)/stable.txt)/telepresence \
+		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/$(patsubst v%,%,$(TELEPRESENCE_VERSION))/telepresence \
 		--body $(BINDIR)/telepresence
+
+# Prerequisites:
+# The awscli command must be installed and configured with credentials to upload
+# to the datawire-static-files bucket.
+.PHONY: promote-to-stable
+promote-to-stable:
+	mkdir -p $(BUILDDIR)
+	echo $(patsubst v%,%,$(TELEPRESENCE_VERSION)) > $(BUILDDIR)/stable.txt
 	AWS_PAGER="" aws s3api put-object \
 		--bucket datawire-static-files \
 		--key tel2/$(GOHOSTOS)/$(GOHOSTARCH)/stable.txt \
@@ -82,15 +81,18 @@ clean: ## (Build) Remove all build artifacts
 .PHONY: clobber
 clobber: clean ## (Build) Remove all build artifacts and tools
 
+.PHONY: lint-deps
+lint-deps: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Everything nescessary to lint
+
 .PHONY: lint
-lint: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Run the linters (golangci-lint and protolint)
-	golangci-lint run --timeout 2m ./...
-	protolint lint rpc
+lint: lint-deps ## (Lint) Run the linters (golangci-lint and protolint)
+	$(tools/golangci-lint) run --timeout 2m ./...
+	$(tools/protolint) lint rpc
 
 .PHONY: format
 format: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Automatically fix linter complaints
-	golangci-lint run --fix --timeout 2m ./... || true
-	protolint lint --fix rpc || true
+	$(tools/golangci-lint) run --fix --timeout 2m ./... || true
+	$(tools/protolint) lint --fix rpc || true
 
 .PHONY: test check
 test check: $(tools/ko) ## (Test) Run the test suite

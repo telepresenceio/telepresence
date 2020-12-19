@@ -59,4 +59,5 @@ $(TOOLSDIR)/$(PROTOLINT_TGZ):
 	mkdir -p $(@D)
 	curl -sfL https://github.com/yoheimuta/protolint/releases/download/v$(PROTOLINT_VERSION)/$(PROTOLINT_TGZ) -o $@
 %/bin/protolint %/bin/protoc-gen-protolint: %/$(PROTOLINT_TGZ)
-	tar -C $(@D) -zxf $< protolint protoc-gen-protolint
+	mkdir -p $(@D)
+	tar -C $(@D) -zxmf $< protolint protoc-gen-protolint
