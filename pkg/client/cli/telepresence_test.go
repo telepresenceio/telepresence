@@ -5,20 +5,22 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/types"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/datawire/ambassador/pkg/dtest"
 	"github.com/datawire/telepresence2/pkg/client"
@@ -33,138 +35,178 @@ var namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
 // in the cluster and later intercepted
 const serviceCount = 9
 
-var _ = Describe("Telepresence", func() {
-	Context("With no daemon running", func() {
-		It("Returns version", func() {
+func TestTelepresence(t *testing.T) {
+	// Check that the "ko" program exists, and adjust PATH as necessary.
+	if info, err := os.Stat("../../../tools/bin/ko"); err != nil || !info.Mode().IsRegular() || (info.Mode().Perm()&0100) == 0 {
+		t.Fatal("it looks like the ./tools/bin/ko executable wasn't built; be sure to build it with `make` before running `go test`!")
+	}
+	toolbindir, err := filepath.Abs("../../../tools/bin")
+	if !assert.NoError(t, err) {
+		return
+	}
+	os.Setenv("PATH", toolbindir+":"+os.Getenv("PATH"))
+
+	// Remove very verbose output from DTEST initialization
+	log.SetOutput(ioutil.Discard)
+
+	dtest.WithMachineLock(func() {
+		_ = os.Chdir("../../..")
+		beforeSuite(t)
+		defer afterSuite(t)
+		testTelepresence(t)
+	})
+}
+
+func testTelepresence(t *testing.T) {
+	t.Run("With no daemon running", func(t *testing.T) {
+		t.Run("Returns version", func(t *testing.T) {
 			stdout, stderr := telepresence("version")
-			Expect(stderr).To(BeEmpty())
-			Expect(stdout).To(Equal(fmt.Sprintf("Client %s", client.DisplayVersion())))
+			assert.Empty(t, stderr)
+			assert.Equal(t, fmt.Sprintf("Client %s", client.DisplayVersion()), stdout)
 		})
-		It("Returns valid status", func() {
+		t.Run("Returns valid status", func(t *testing.T) {
 			out, _ := telepresence("status")
-			Expect(out).To(ContainSubstring("The telepresence daemon has not been started"))
+			assert.Contains(t, out, "The telepresence daemon has not been started")
 		})
 	})
 
-	Context("When attempting to connect", func() {
-		Context("Using an invalid KUBECONFIG", func() {
-			It("Reports config error and exits", func() {
+	t.Run("When attempting to connect", func(t *testing.T) {
+		t.Run("Using an invalid KUBECONFIG", func(t *testing.T) {
+			t.Run("Reports config error and exits", func(t *testing.T) {
 				kubeConfig := os.Getenv("KUBECONFIG")
 				defer os.Setenv("KUBECONFIG", kubeConfig)
 				os.Setenv("KUBECONFIG", "/dev/null")
 				stdout, stderr := telepresence("connect")
-				Expect(stderr).To(ContainSubstring("kubectl config current-context"))
-				Expect(stdout).To(ContainSubstring("Launching Telepresence Daemon"))
-				Expect(stdout).To(ContainSubstring("Daemon quitting"))
+				assert.Contains(t, stderr, "kubectl config current-context")
+				assert.Contains(t, stdout, "Launching Telepresence Daemon")
+				assert.Contains(t, stdout, "Daemon quitting")
 			})
 		})
 
-		Context("With non existing context", func() {
-			It("Reports connect error and exits", func() {
+		t.Run("With non existing context", func(t *testing.T) {
+			t.Run("Reports connect error and exits", func(t *testing.T) {
 				stdout, stderr := telepresence("connect", "--context", "not-likely-to-exist")
-				Expect(stderr).To(ContainSubstring(`"not-likely-to-exist" does not exist`))
-				Expect(stdout).To(ContainSubstring("Launching Telepresence Daemon"))
-				Expect(stdout).To(ContainSubstring("Daemon quitting"))
+				assert.Contains(t, stderr, `"not-likely-to-exist" does not exist`)
+				assert.Contains(t, stdout, "Launching Telepresence Daemon")
+				assert.Contains(t, stdout, "Daemon quitting")
 			})
 		})
 	})
 
-	Context("When connecting with a command", func() {
-		It("Connects, executes the command, and then exits", func() {
+	t.Run("When connecting with a command", func(t *testing.T) {
+		t.Run("Connects, executes the command, and then exits", func(t *testing.T) {
 			stdout, stderr := telepresence("--namespace", namespace, "connect", "--", client.GetExe(), "status")
-			Expect(stderr).To(BeEmpty())
-			Expect(stdout).To(ContainSubstring("Launching Telepresence Daemon"))
-			Expect(stdout).To(ContainSubstring("Connected to context"))
-			Expect(stdout).To(ContainSubstring("Context:"))
-			Expect(stdout).To(MatchRegexp(`Proxy:\s+ON`))
-			Expect(stdout).To(ContainSubstring("Daemon quitting"))
+			assert.Empty(t, stderr)
+			assert.Contains(t, stdout, "Launching Telepresence Daemon")
+			assert.Contains(t, stdout, "Connected to context")
+			assert.Contains(t, stdout, "Context:")
+			assert.Regexp(t, `Proxy:\s+ON`, stdout)
+			assert.Contains(t, stdout, "Daemon quitting")
 		})
 	})
 
-	Context("When connected", func() {
+	t.Run("When connected", func(t *testing.T) {
 		itCount := int32(0)
-		itTotal := int32(0) // To simulate AfterAll. Add one for each added It() test
-		BeforeEach(func() {
-			// This is a bit annoying, but ginkgo does not provide a context scoped "BeforeAll"
-			// Will be fixed in ginkgo 2.0
-			if atomic.CompareAndSwapInt32(&itCount, 0, 1) {
-				stdout, stderr := telepresence("--namespace", namespace, "connect")
-				Expect(stderr).To(BeEmpty())
-				Expect(stdout).To(ContainSubstring("Connected to context"))
-			} else {
-				atomic.AddInt32(&itCount, 1)
-			}
-		})
+		itTotal := int32(0) // To simulate AfterAll. Add one for each added t.Run(t *testing.T) test
 
-		AfterEach(func() {
-			// This is a bit annoying, but ginkgo does not provide a context scoped "AfterAll"
-			// Will be fixed in ginkgo 2.0
-			if atomic.CompareAndSwapInt32(&itCount, itTotal, 0) {
-				stdout, stderr := telepresence("quit")
-				Expect(stderr).To(BeEmpty())
-				Expect(stdout).To(ContainSubstring("quitting"))
-				time.Sleep(time.Second) // Allow some time for processes to die and sockets to vanish
-			}
-		})
+		Run := func(name string, fn func(*testing.T)) {
+			t.Run(name, func(t *testing.T) {
+				// This is a bit annoying, but ginkgo does not provide a context scoped "BeforeAll"
+				// Will be fixed in ginkgo 2.0
+				if atomic.CompareAndSwapInt32(&itCount, 0, 1) {
+					stdout, stderr := telepresence("--namespace", namespace, "connect")
+					assert.Empty(t, stderr)
+					assert.Contains(t, stdout, "Connected to context")
+				} else {
+					atomic.AddInt32(&itCount, 1)
+				}
 
-		It("Reports version from daemon", func() {
+				defer func() {
+					// This is a bit annoying, but ginkgo does not provide a context scoped "AfterAll"
+					// Will be fixed in ginkgo 2.0
+					if atomic.CompareAndSwapInt32(&itCount, itTotal, 0) {
+						stdout, stderr := telepresence("quit")
+						assert.Empty(t, stderr)
+						assert.Contains(t, stdout, "quitting")
+						time.Sleep(time.Second) // Allow some time for processes to die and sockets to vanish
+					}
+				}()
+
+				fn(t)
+			})
+		}
+
+		Run("Reports version from daemon", func(t *testing.T) {
 			stdout, stderr := telepresence("version")
-			Expect(stderr).To(BeEmpty())
+			assert.Empty(t, stderr)
 			vs := client.DisplayVersion()
-			Expect(stdout).To(ContainSubstring(fmt.Sprintf("Client %s", vs)))
-			Expect(stdout).To(ContainSubstring(fmt.Sprintf("Daemon %s", vs)))
+			assert.Contains(t, stdout, fmt.Sprintf("Client %s", vs))
+			assert.Contains(t, stdout, fmt.Sprintf("Daemon %s", vs))
 		})
 		itTotal++
 
-		It("Reports status as connected", func() {
+		Run("Reports status as connected", func(t *testing.T) {
 			stdout, stderr := telepresence("status")
-			Expect(stderr).To(BeEmpty())
-			Expect(stdout).To(ContainSubstring("Context:"))
+			assert.Empty(t, stderr)
+			assert.Contains(t, stdout, "Context:")
 		})
 		itTotal++
 
-		It("Proxies outbound traffic", func() {
+		Run("Proxies outbound traffic", func(t *testing.T) {
 			// Give outbound interceptor 15 seconds to kick in.
-			Eventually(func() (string, string) {
-				return telepresence("status")
-			}, 15*time.Second, time.Second).Should(MatchRegexp(`Proxy:\s+ON`), "Timeout waiting for network overrides to establish")
+			assert.Eventually(t,
+				// condition
+				func() bool {
+					stdout, _ := telepresence("status")
+					return regexp.MustCompile(`Proxy:\s+ON`).FindString(stdout) != ""
+				},
+				15*time.Second, // waitFor
+				time.Second,    // polling interval
+				"Timeout waiting for network overrides to establish", // msg
+			)
 
 			for i := 0; i < serviceCount; i++ {
 				svc := fmt.Sprintf("hello-%d", i)
-				Eventually(func() (string, error) {
-					return output("curl", "-s", svc)
-				}, 5*time.Second, 500*time.Millisecond).Should(ContainSubstring(fmt.Sprintf("Request served by %s-", svc)))
+				assert.Eventually(t,
+					// condition
+					func() bool {
+						out, _ := output("curl", "-s", svc)
+						return strings.Contains(out, fmt.Sprintf("Request served by %s-", svc))
+					},
+					5*time.Second,        // waitfor
+					500*time.Millisecond, // polling interval
+				)
 			}
 		})
 		itTotal++
 
-		It("Proxies concurrent inbound traffic with intercept", func() {
+		Run("Proxies concurrent inbound traffic with intercept", func(t *testing.T) {
 			intercepts := make([]string, 0, serviceCount)
 			services := make([]*http.Server, 0, serviceCount)
 
 			defer func() {
 				for _, svc := range intercepts {
 					stdout, stderr := telepresence("leave", svc)
-					Expect(stderr).To(BeEmpty())
-					Expect(stdout).To(BeEmpty())
+					assert.Empty(t, stderr)
+					assert.Empty(t, stdout)
 				}
 				for _, srv := range services {
 					_ = srv.Shutdown(context.Background())
 				}
 			}()
 
-			By("adding intercepts", func() {
+			t.Run("adding intercepts", func(t *testing.T) {
 				for i := 0; i < serviceCount; i++ {
 					svc := fmt.Sprintf("hello-%d", i)
 					port := strconv.Itoa(9000 + i)
 					stdout, stderr := telepresence("intercept", svc, "--port", port)
-					Expect(stderr).To(BeEmpty())
+					assert.Empty(t, stderr)
 					intercepts = append(intercepts, svc)
-					Expect(stdout).To(ContainSubstring("Using deployment " + svc))
+					assert.Contains(t, stdout, "Using deployment "+svc)
 				}
 			})
 
-			By("starting http servers", func() {
+			t.Run("starting http servers", func(t *testing.T) {
 				for i := 0; i < serviceCount; i++ {
 					svc := fmt.Sprintf("hello-%d", i)
 					port := strconv.Itoa(9000 + i)
@@ -175,108 +217,133 @@ var _ = Describe("Telepresence", func() {
 						})
 						services = append(services, srv)
 						err := srv.ListenAndServe()
-						Expect(err).To(Equal(http.ErrServerClosed))
+						assert.Equal(t, http.ErrServerClosed, err)
 					}()
 				}
 			})
 
-			By("verifying responses from interceptor", func() {
+			t.Run("verifying responses from interceptor", func(t *testing.T) {
 				for i := 0; i < serviceCount; i++ {
 					svc := fmt.Sprintf("hello-%d", i)
-					Eventually(func() (string, error) {
-						return output("curl", "-s", svc)
-					}, 5*time.Second, 50*time.Millisecond).Should(Equal(fmt.Sprintf("%s from intercept at /", svc)))
+					assert.Eventually(t,
+						// condition
+						func() bool {
+							out, _ := output("curl", "-s", svc)
+							return out == fmt.Sprintf("%s from intercept at /", svc)
+						},
+						5*time.Second,       // waitFor
+						50*time.Millisecond, // polling interval
+					)
 				}
 			})
 
-			By("listing active intercepts", func() {
+			t.Run("listing active intercepts", func(t *testing.T) {
 				stdout, stderr := telepresence("list", "--intercepts")
-				Expect(stderr).To(BeEmpty())
-				matches := make([]types.GomegaMatcher, serviceCount)
+				assert.Empty(t, stderr)
 				for i := 0; i < serviceCount; i++ {
-					matches[i] = ContainSubstring("hello-%d: intercepted", i)
+					assert.Contains(t, stdout, fmt.Sprintf("hello-%d: intercepted", i))
 				}
-				Expect(stdout).To(And(matches...))
 			})
 		})
 		itTotal++
 
-		It("Successfully intercepts deployment with probes", func() {
+		Run("Successfully intercepts deployment with probes", func(t *testing.T) {
 			stdout, stderr := telepresence("intercept", "with-probes", "--port", "9090")
-			Expect(stderr).To(BeEmpty())
-			Expect(stdout).To(ContainSubstring("Using deployment with-probes"))
+			assert.Empty(t, stderr)
+			assert.Contains(t, stdout, "Using deployment with-probes")
 			stdout, stderr = telepresence("list", "--intercepts")
-			Expect(stderr).To(BeEmpty())
-			Expect(stdout).To(ContainSubstring("with-probes: intercepted"))
+			assert.Empty(t, stderr)
+			assert.Contains(t, stdout, "with-probes: intercepted")
 		})
 		itTotal++
 	})
 
-	Context("when uninstalling", func() {
-		It("Uninstalls", func() {
+	t.Run("when uninstalling", func(t *testing.T) {
+		t.Run("Uninstalls", func(t *testing.T) {
 			// The following By's could be It's in their own right if order was guaranteed. An
 			// OrderedContext is announced for Ginkgo 2.0.
 
-			By("Uninstalling agent on given deployment", func() {
+			t.Run("Uninstalling agent on given deployment", func(t *testing.T) {
 				agentName := func() (string, error) {
 					return kubectlOut("get", "deploy", "with-probes", "-o",
 						`jsonpath={.spec.template.spec.containers[?(@.name=="traffic-agent")].name}`)
 				}
 				stdout, err := agentName()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(stdout).To(Equal("traffic-agent"))
+				assert.NoError(t, err)
+				assert.Equal(t, "traffic-agent", stdout)
 				_, stderr := telepresence("--namespace", namespace, "uninstall", "--agent", "with-probes")
-				Expect(stderr).To(BeEmpty())
+				assert.Empty(t, stderr)
 				defer telepresence("quit")
-				Eventually(agentName, 5*time.Second, 500*time.Millisecond).Should(BeEmpty())
+				assert.Eventually(t,
+					// condition
+					func() bool {
+						stdout, _ := agentName()
+						return stdout == ""
+					},
+					5*time.Second,        // waitFor
+					500*time.Millisecond, // polling interval
+				)
 			})
 
-			By("Uninstalling all agents", func() {
+			t.Run("Uninstalling all agents", func(t *testing.T) {
 				agentNames := func() (string, error) {
 					return kubectlOut("get", "deploy", "-o",
 						`jsonpath={.items[*].spec.template.spec.containers[?(@.name=="traffic-agent")].name}`)
 				}
 				stdout, err := agentNames()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(len(strings.Split(stdout, " "))).To(Equal(serviceCount))
+				assert.NoError(t, err)
+				assert.Equal(t, serviceCount, len(strings.Split(stdout, " ")))
 				_, stderr := telepresence("--namespace", namespace, "uninstall", "--all-agents")
-				Expect(stderr).To(BeEmpty())
+				assert.Empty(t, stderr)
 				defer telepresence("quit")
-				Eventually(agentNames, 5*time.Second, 500*time.Millisecond).Should(BeEmpty())
+				assert.Eventually(t,
+					func() bool {
+						stdout, _ := agentNames()
+						return stdout == ""
+					},
+					5*time.Second,        // waitFor
+					500*time.Millisecond, // polling interval
+				)
 			})
 
-			By("Uninstalling the traffic manager and quitting", func() {
+			t.Run("Uninstalling the traffic manager and quitting", func(t *testing.T) {
 				names := func() (string, error) {
 					return kubectlOut("get", "svc,deploy", "traffic-manager", "--ignore-not-found", "-o", "jsonpath={.items[*].metadata.name}")
 				}
 				stdout, err := names()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(len(strings.Split(stdout, " "))).To(Equal(2)) // The service and the deployment
+				assert.NoError(t, err)
+				assert.Equal(t, 2, len(strings.Split(stdout, " "))) // The service and the deployment
 				stdout, stderr := telepresence("--namespace", namespace, "uninstall", "--everything")
-				Expect(stderr).To(BeEmpty())
-				Expect(stdout).To(ContainSubstring("Daemon quitting"))
-				Eventually(names, 5*time.Second, 500*time.Millisecond).Should(BeEmpty())
+				assert.Empty(t, stderr)
+				assert.Contains(t, stdout, "Daemon quitting")
+				assert.Eventually(t,
+					func() bool {
+						stdout, _ := names()
+						return stdout == ""
+					},
+					5*time.Second,        // waitFor
+					500*time.Millisecond, // polling interval
+				)
 			})
 		})
 	})
-})
+}
 
-var _ = BeforeSuite(func() {
+func beforeSuite(t *testing.T) {
 	version.Version = testVersion
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		defer GinkgoRecover()
 		defer wg.Done()
 		executable, err := buildExecutable(testVersion)
-		Expect(err).NotTo(HaveOccurred())
+		assert.NoError(t, err)
 		client.SetExe(executable)
 	}()
 
 	_ = os.Remove(client.ConnectorSocketName)
 	err := run("sudo", "true")
-	Expect(err).ToNot(HaveOccurred(), "acquire privileges")
+	assert.NoError(t, err, "acquire privileges")
 
 	registry := dtest.DockerRegistry()
 	os.Setenv("KO_DOCKER_REPO", registry)
@@ -284,22 +351,20 @@ var _ = BeforeSuite(func() {
 
 	wg.Add(1)
 	go func() {
-		defer GinkgoRecover()
 		defer wg.Done()
 		err := publishManager(testVersion)
-		Expect(err).NotTo(HaveOccurred())
+		assert.NoError(t, err)
 	}()
 
 	wg.Add(1)
 	go func() {
-		defer GinkgoRecover()
 		defer wg.Done()
 
 		kubeconfig := dtest.Kubeconfig()
 		os.Setenv("DTEST_KUBECONFIG", kubeconfig)
 		os.Setenv("KUBECONFIG", kubeconfig)
 		err = run("kubectl", "create", "namespace", namespace)
-		Expect(err).NotTo(HaveOccurred())
+		assert.NoError(t, err)
 	}()
 	wg.Wait()
 
@@ -307,29 +372,27 @@ var _ = BeforeSuite(func() {
 	for i := 0; i < serviceCount; i++ {
 		i := i
 		go func() {
-			defer GinkgoRecover()
 			defer wg.Done()
 			err = applyEchoService(fmt.Sprintf("hello-%d", i))
-			Expect(err).NotTo(HaveOccurred())
+			assert.NoError(t, err)
 		}()
 	}
 
 	wg.Add(1)
 	go func() {
-		defer GinkgoRecover()
 		defer wg.Done()
 		err = applyApp("with-probes")
-		Expect(err).NotTo(HaveOccurred())
+		assert.NoError(t, err)
 	}()
 	wg.Wait()
 
 	// Ensure that no telepresence is running when the tests start
 	_, _ = telepresence("quit")
-})
+}
 
-var _ = AfterSuite(func() {
+func afterSuite(t *testing.T) {
 	_ = run("kubectl", "delete", "namespace", namespace)
-})
+}
 
 func applyApp(name string) error {
 	err := kubectl("apply", "-f", fmt.Sprintf("k8s/%s.yaml", name))
