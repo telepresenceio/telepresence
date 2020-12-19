@@ -11,7 +11,7 @@ import (
 	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
-func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, state *State) error {
+func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, state State) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
