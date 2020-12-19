@@ -218,15 +218,6 @@ func (ki *installer) updateDeployment(c context.Context, currentDep *kates.Deplo
 	return dep, err
 }
 
-func (ki *installer) portToIntercept(portName string, dep *kates.Deployment) (
-	service *kates.Service, sPort *kates.ServicePort, cn *kates.Container, cPortIndex int, err error) {
-	matching := ki.findMatchingServices(portName, dep)
-	if len(matching) == 0 {
-		return nil, nil, nil, 0, fmt.Errorf("found no services with just one port and a selector matching labels %v", dep.Spec.Template.Labels)
-	}
-	return findMatchingPort(dep, portName, matching)
-}
-
 func svcPortByName(svc *kates.Service, name string) *kates.ServicePort {
 	ports := svc.Spec.Ports
 	if name != "" {
@@ -360,7 +351,23 @@ func (ki *installer) ensureAgent(c context.Context, name, portName string, licen
 
 	if agentCn == nil {
 		dlog.Infof(c, "no agent found for deployment %q", name)
-		return ki.addAgentToDeployment(c, portName, dep, licensed)
+		matchingSvcs := ki.findMatchingServices(portName, dep)
+		if len(matchingSvcs) == 0 {
+			return fmt.Errorf("found no services with just one port and a selector matching labels %v", dep.Spec.Template.Labels)
+		}
+		dep, svc, err := addAgentToDeployment(c, licensed, portName, dep, matchingSvcs)
+		if err != nil {
+			return err
+		}
+		if err = ki.client.Update(c, dep, dep); err != nil {
+			return err
+		}
+		if svc != nil {
+			if err = ki.client.Update(c, svc, svc); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
 	imageName := agentImageName(licensed)
@@ -449,10 +456,18 @@ func (ki *installer) undoServiceMods(c context.Context, svc *kates.Service) erro
 	return ki.client.Update(c, svc, svc)
 }
 
-func (ki *installer) addAgentToDeployment(c context.Context, portName string, dep *kates.Deployment, licensed bool) error {
-	svc, sPort, icn, cPortIndex, err := ki.portToIntercept(portName, dep)
+func addAgentToDeployment(
+	c context.Context, licensed bool,
+	portName string,
+	dep *kates.Deployment, matchingSvcs []*kates.Service,
+) (
+	*kates.Deployment,
+	*kates.Service,
+	error,
+) {
+	svc, sPort, icn, cPortIndex, err := findMatchingPort(dep, portName, matchingSvcs)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	name := sPort.Name
 	if name == "" {
@@ -478,7 +493,7 @@ func (ki *installer) addAgentToDeployment(c context.Context, portName string, de
 		}
 		// apply the actions on the Service
 		if err = serverMod.do(svc); err != nil {
-			return err
+			return nil, nil, err
 		}
 
 		// save the actions so that they can be undone.
@@ -512,12 +527,12 @@ func (ki *installer) addAgentToDeployment(c context.Context, portName string, de
 	}
 
 	if containerPort < 0 {
-		return fmt.Errorf("unable to add agent to deployment %s. The container port cannot be determined", dep.Name)
+		return nil, nil, fmt.Errorf("unable to add agent to deployment %s. The container port cannot be determined", dep.Name)
 	}
 
 	// apply the actions on the Deployment
 	if err = deploymentMod.do(dep); err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	// save the actions so that they can be undone.
@@ -527,16 +542,12 @@ func (ki *installer) addAgentToDeployment(c context.Context, portName string, de
 	dep.Annotations[annTelepresenceActions] = deploymentMod.String()
 
 	explainDo(c, deploymentMod, dep)
-	if err = ki.client.Update(c, dep, dep); err != nil {
-		return err
-	}
 	if serverMod != nil {
 		explainDo(c, serverMod, svc)
-		if err = ki.client.Update(c, svc, svc); err != nil {
-			return err
-		}
+	} else {
+		svc = nil
 	}
-	return nil
+	return dep, svc, nil
 }
 
 func (ki *installer) managerDeployment() *kates.Deployment {

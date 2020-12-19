@@ -35,6 +35,7 @@ require (
 	k8s.io/apiextensions-apiserver v0.18.8 // indirect
 	k8s.io/apimachinery v0.18.8
 	k8s.io/kubectl v0.18.8 // indirect
+	sigs.k8s.io/yaml v1.2.0
 )
 
 replace github.com/Azure/go-autorest v10.8.1+incompatible => github.com/Azure/go-autorest v13.3.2+incompatible

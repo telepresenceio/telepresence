@@ -14,8 +14,11 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/ambassador/pkg/dtest"
+	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/pkg/client"
@@ -68,21 +71,6 @@ func capture(t *testing.T, exe string, args ...string) string {
 	return sout
 }
 
-func captureOut(t *testing.T, exe string, args ...string) string {
-	showArgs(exe, args)
-	cmd := exec.Command(exe, args...)
-	out, err := cmd.Output()
-	sout := string(out)
-	if err != nil {
-		if t != nil {
-			t.Fatalf("%s\n%v", sout, err)
-		} else {
-			log.Fatalf("%s\n%v", sout, err)
-		}
-	}
-	return sout
-}
-
 var imageName string
 
 func publishManager(t *testing.T) {
@@ -102,8 +90,13 @@ func publishManager(t *testing.T) {
 	os.Setenv("PATH", toolbindir+":"+os.Getenv("PATH"))
 
 	// OK, now run "ko" and friends.
-	_ = os.Chdir("../../..") // ko must be executed from root to find the .ko.yaml config
-	imageName = strings.TrimSpace(captureOut(t, "ko", "publish", "--local", "./cmd/traffic"))
+	cmd := exec.Command("ko", "publish", "--local", "./cmd/traffic")
+	cmd.Dir = "../../.." // ko must be executed from root to find the .ko.yaml config
+	stdout, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("%s\n%v", stdout, err)
+	}
+	imageName = strings.TrimSpace(string(stdout))
 	tag := fmt.Sprintf("%s/tel2:%s", registry, client.Version())
 	capture(t, "docker", "tag", imageName, tag)
 	capture(t, "docker", "push", tag)
@@ -220,4 +213,109 @@ func Test_ensureTrafficManager_notPresent(t *testing.T) {
 	if api != 8081 {
 		t.Fatal("expected api port to be 8081")
 	}
+}
+
+func TestAddAgentToDeployment(t *testing.T) {
+	type testcase struct {
+		InputLicensed   bool
+		InputPortName   string
+		InputDeployment *kates.Deployment
+		InputService    *kates.Service
+
+		OutputDeployment *kates.Deployment
+		OutputService    *kates.Service
+	}
+	testcases := map[string]testcase{}
+
+	fileinfos, err := ioutil.ReadDir("testdata/addAgentToDeployment")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fi := range fileinfos {
+		if !strings.HasSuffix(fi.Name(), ".input.yaml") {
+			continue
+		}
+		tcName := strings.TrimSuffix(fi.Name(), ".input.yaml")
+
+		var tmp struct {
+			Deployment *kates.Deployment `json:"deployment"`
+			Service    *kates.Service    `json:"service"`
+		}
+
+		var tc testcase
+
+		inBody, err := ioutil.ReadFile(filepath.Join("testdata/addAgentToDeployment", fi.Name()))
+		if err != nil {
+			t.Fatalf("%s.input.yaml: %v", tcName, err)
+		}
+		if err := yaml.Unmarshal(inBody, &tmp); err != nil {
+			t.Fatalf("%s.input.yaml: %v", tcName, err)
+		}
+		tc.InputDeployment = tmp.Deployment
+		tc.InputService = tmp.Service
+		tmp.Deployment = nil
+		tmp.Service = nil
+
+		outBody, err := ioutil.ReadFile(filepath.Join("testdata/addAgentToDeployment", tcName+".output.yaml"))
+		if err != nil {
+			t.Fatalf("%s.output.yaml: %v", tcName, err)
+		}
+		if err := yaml.Unmarshal(outBody, &tmp); err != nil {
+			t.Fatalf("%s.output.yaml: %v", tcName, err)
+		}
+		tc.OutputDeployment = tmp.Deployment
+		tc.OutputService = tmp.Service
+
+		testcases[tcName] = tc
+	}
+
+	for tcName, tc := range testcases {
+		tc := tc
+		t.Run(tcName, func(t *testing.T) {
+			ctx := dlog.NewTestContext(t, true)
+
+			expectedDep := tc.OutputDeployment.DeepCopy()
+			sanitizeDeployment(expectedDep)
+
+			expectedSvc := tc.OutputService.DeepCopy()
+			sanitizeService(expectedSvc)
+
+			actualDep, actualSvc, actualErr := addAgentToDeployment(ctx,
+				tc.InputLicensed,
+				tc.InputPortName,
+				tc.InputDeployment.DeepCopy(),
+				[]*kates.Service{tc.InputService.DeepCopy()},
+			)
+			if !assert.NoError(t, actualErr) {
+				return
+			}
+
+			sanitizeDeployment(actualDep)
+			if actualSvc == nil {
+				actualSvc = tc.InputService.DeepCopy()
+			}
+			sanitizeService(actualSvc)
+
+			assert.Equal(t, expectedDep, actualDep)
+			assert.Equal(t, expectedSvc, actualSvc)
+		})
+	}
+}
+
+func sanitizeDeployment(dep *kates.Deployment) {
+	dep.ObjectMeta.ResourceVersion = ""
+	dep.ObjectMeta.Generation = 0
+	dep.ObjectMeta.CreationTimestamp = metav1.Time{}
+	for i, c := range dep.Spec.Template.Spec.Containers {
+		c.TerminationMessagePath = ""
+		c.TerminationMessagePolicy = ""
+		c.ImagePullPolicy = ""
+		dep.Spec.Template.Spec.Containers[i] = c
+	}
+}
+
+func sanitizeService(svc *kates.Service) {
+	svc.ObjectMeta.ResourceVersion = ""
+	svc.ObjectMeta.Generation = 0
+	svc.ObjectMeta.CreationTimestamp = metav1.Time{}
 }
