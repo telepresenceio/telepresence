@@ -3,19 +3,19 @@ package auth
 import (
 	"encoding/json"
 	"io/ioutil"
-	"os"
 	"path/filepath"
 
 	"golang.org/x/oauth2"
+
+	"github.com/datawire/telepresence2/pkg/client"
 )
 
 const (
-	telepresenceCacheDir = "telepresence"
-	tokenFile            = "tokens.json"
+	tokenFile = "tokens.json"
 )
 
 func SaveTokenToUserCache(token *oauth2.Token) error {
-	cacheDir, err := getCacheDir()
+	cacheDir, err := client.CacheDir()
 	if err != nil {
 		return err
 	}
@@ -27,7 +27,7 @@ func SaveTokenToUserCache(token *oauth2.Token) error {
 }
 
 func LoadTokenFromUserCache() (*oauth2.Token, error) {
-	cacheDir, err := getCacheDir()
+	cacheDir, err := client.CacheDir()
 	if err != nil {
 		return nil, err
 	}
@@ -40,17 +40,4 @@ func LoadTokenFromUserCache() (*oauth2.Token, error) {
 		return nil, err
 	}
 	return &token, nil
-}
-
-func getCacheDir() (string, error) {
-	userCacheDir, err := os.UserCacheDir()
-	if err != nil {
-		return "", err
-	}
-	cacheDir := filepath.Join(userCacheDir, telepresenceCacheDir)
-	err = os.MkdirAll(cacheDir, 0700)
-	if err != nil {
-		return "", err
-	}
-	return cacheDir, nil
 }
