@@ -1,7 +1,12 @@
 package cli
 
 import (
+	"os"
+	"strconv"
+
+	"github.com/docker/docker/pkg/term"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // CommandGroup represents a group of commands and the name of that group
@@ -10,11 +15,52 @@ type CommandGroup struct {
 	Commands []*cobra.Command
 }
 
+// FlagGroup represents a group of flags and the name of that group
+type FlagGroup struct {
+	Name  string
+	Flags *pflag.FlagSet
+}
+
 var commandGroupMap = make(map[string][]CommandGroup)
+var globalFlagGroups []FlagGroup
 
 func init() {
 	cobra.AddTemplateFunc("commandGroups", func(cmd *cobra.Command) []CommandGroup {
 		return commandGroupMap[cmd.Name()]
+	})
+	cobra.AddTemplateFunc("globalFlagGroups", func() []FlagGroup {
+		return globalFlagGroups
+	})
+	cobra.AddTemplateFunc("wrappedFlagUsages", func(flags *pflag.FlagSet) string {
+		// This is based off of what Docker does (github.com/docker/cli/cli/cobra.go), but is
+		// adjusted
+		//  1. to take a pflag.FlagSet instead of a cobra.Command, so that we can have flag groups, and
+		//  2. to correct for the ways that Docker upsets me.
+
+		var cols int
+		var err error
+
+		// Obey COLUMNS if the shell or user sets it.  (Docker doesn't do this.)
+		if cols, err = strconv.Atoi(os.Getenv("COLUMNS")); err == nil {
+			goto end
+		}
+
+		// Try to detect the size of the stdout file descriptor.  (Docker checks stdin, not stdout.)
+		if ws, err := term.GetWinsize(1); err == nil {
+			cols = int(ws.Width)
+			goto end
+		}
+
+		// If stdout is a terminal but we were unable to get its size (I'm not sure how that can
+		// happen), then fall back to assuming 80.  If stdou tisn't a terminal, then we leave cols
+		// as 0, meaning "don't wrap it".  (Docker wraps it even if stdout isn't a terminal.)
+		if term.IsTerminal(1) {
+			cols = 80
+			goto end
+		}
+
+	end:
+		return flags.FlagUsagesWrapped(cols)
 	})
 }
 
@@ -40,16 +86,19 @@ Aliases:
   {{.NameAndAliases}}{{end}}{{if .HasExample}}
 
 Examples:
-{{.Example}}{{end}}{{range commandGroups .}}
+{{.Example}}{{end}}{{if .HasAvailableSubCommands}}
 
-{{.Name}}:{{range .Commands}}
-  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
+Available Commands:{{range $group := commandGroups .}}
+  {{$group.Name}}:{{range $group.Commands}}
+    {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
 
 Flags:
-{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
+{{.LocalNonPersistentFlags | wrappedFlagUsages | trimTrailingWhitespaces}}{{end}}{{if true}}
 
-Global Flags:
-{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasHelpSubCommands}}
+Global Flags:{{range $group := globalFlagGroups}}
+
+  {{$group.Name}}:
+{{$group.Flags | wrappedFlagUsages | trimTrailingWhitespaces}}{{end}}{{end}}{{if .HasHelpSubCommands}}
 
 Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
   {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}

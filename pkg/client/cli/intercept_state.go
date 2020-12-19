@@ -36,7 +36,7 @@ func interceptCommand() *cobra.Command {
 	}
 	flags := cmd.Flags()
 
-	flags.StringVarP(&ii.agentName, "deployment", "s", "", "Name of deployment to intercept, if different from <name>")
+	flags.StringVarP(&ii.agentName, "deployment", "d", "", "Name of deployment to intercept, if different from <name>")
 	flags.IntVarP(&ii.port, "port", "p", 8080, "Local port to forward to")
 
 	return cmd
@@ -158,6 +158,7 @@ func (is *interceptState) EnsureState() (bool, error) {
 	switch r.Error {
 	case connector.InterceptError_UNSPECIFIED:
 		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", is.agentName)
+		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(r.InterceptInfo))
 		return true, nil
 	case connector.InterceptError_ALREADY_EXISTS:
 		fmt.Fprintln(is.cmd.OutOrStdout(), interceptMessage(r))

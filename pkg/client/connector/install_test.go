@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/datawire/ambassador/pkg/dtest"
@@ -142,11 +141,9 @@ func removeManager(t *testing.T) {
 	}
 }
 
-func testContext() context.Context {
-	return dlog.WithLogger(context.Background(), dlog.WrapLogrus(logrus.StandardLogger()))
-}
 func Test_findTrafficManager_notPresent(t *testing.T) {
-	kc, err := newKCluster(kubeconfig, "", namespace, nil)
+	ctx := dlog.NewTestContext(t, false)
+	kc, err := newKCluster(ctx, map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,13 +160,13 @@ func Test_findTrafficManager_notPresent(t *testing.T) {
 }
 
 func Test_findTrafficManager_present(t *testing.T) {
-	c, cancel := context.WithCancel(testContext())
+	c, cancel := context.WithCancel(dlog.NewTestContext(t, false))
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("test-present", func(c context.Context) error {
 		defer cancel()
 		publishManager(t)
 		defer removeManager(t)
-		kc, err := newKCluster(kubeconfig, "", namespace, nil)
+		kc, err := newKCluster(c, map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, nil)
 		if err != nil {
 			return err
 		}
@@ -202,10 +199,10 @@ func Test_findTrafficManager_present(t *testing.T) {
 }
 
 func Test_ensureTrafficManager_notPresent(t *testing.T) {
-	c := testContext()
+	c := dlog.NewTestContext(t, false)
 	publishManager(t)
 	defer removeManager(t)
-	kc, err := newKCluster(kubeconfig, "", namespace, nil)
+	kc, err := newKCluster(c, map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

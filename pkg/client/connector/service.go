@@ -236,7 +236,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	})
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	cluster, err := trackKCluster(s.ctx, cr.Context, cr.Namespace, s.daemon, cr.Args)
+	cluster, err := trackKCluster(s.ctx, cr.Kubeflags, s.daemon)
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
 		r.Error = rpc.ConnectInfo_CLUSTER_FAILED
@@ -256,7 +256,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 
 	dlog.Infof(c, "Connected to context %s (%s)", s.cluster.Context, s.cluster.server())
 
-	tmgr, err := newTrafficManager(s.ctx, s.cluster, cr.InstallId, cr.IsCi)
+	tmgr, err := newTrafficManager(s.ctx, s.cluster, cr.InstallId)
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED

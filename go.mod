@@ -8,6 +8,7 @@ require (
 	github.com/datawire/dlib v0.0.0-20201121071656-6047eebdf853
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
 	github.com/datawire/telepresence2/pkg/rpc v0.0.0-00010101000000-000000000000
+	github.com/docker/docker v1.4.2-0.20200203170920-46ec8731fbce
 	github.com/golang/protobuf v1.4.3
 	github.com/google/go-cmp v0.5.0
 	github.com/google/uuid v1.1.2
@@ -17,6 +18,7 @@ require (
 	github.com/sethvargo/go-envconfig v0.3.2
 	github.com/sirupsen/logrus v1.7.0
 	github.com/spf13/cobra v1.1.1
+	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
 	golang.org/x/net v0.0.0-20201029055024-942e2f445f3c
@@ -30,8 +32,9 @@ require (
 	gopkg.in/yaml.v2 v2.3.0
 	gotest.tools v2.2.0+incompatible
 	k8s.io/api v0.18.8
+	k8s.io/apiextensions-apiserver v0.18.8 // indirect
 	k8s.io/apimachinery v0.18.8
-	k8s.io/client-go v0.18.8 // indirect
+	k8s.io/kubectl v0.18.8 // indirect
 )
 
 replace github.com/Azure/go-autorest v10.8.1+incompatible => github.com/Azure/go-autorest v13.3.2+incompatible

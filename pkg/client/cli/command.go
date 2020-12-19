@@ -2,7 +2,9 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
+	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/telepresence2/pkg/client/auth"
 	"github.com/datawire/telepresence2/pkg/client/connector"
 	"github.com/datawire/telepresence2/pkg/client/daemon"
@@ -56,11 +58,9 @@ func quitCommand() *cobra.Command {
 }
 
 // global options
-var k8sContext string
-var k8sNamespace string
 var dnsIP string
 var fallbackIP string
-var isCI bool
+var kubeFlags *pflag.FlagSet
 
 // Command returns the top level "telepresence" CLI command
 func Command() *cobra.Command {
@@ -76,32 +76,48 @@ func Command() *cobra.Command {
 		Args:         cobra.NoArgs,
 		SilenceUsage: true, // https://github.com/spf13/cobra/issues/340
 	}
-	_ = rootCmd.PersistentFlags().Bool(
-		"no-report", false, "turn off anonymous crash reports and log submission on failure",
-	)
 
 	// Hidden/internal commands. These are called by Telepresence itself from
 	// the correct context and execute in-place immediately.
 	rootCmd.AddCommand(daemon.Command())
 	rootCmd.AddCommand(connector.Command())
-	flags := rootCmd.PersistentFlags()
-	flags.StringVarP(&dnsIP,
-		"dns", "", "",
-		"DNS IP address to intercept locally. Defaults to the first nameserver listed in /etc/resolv.conf.",
-	)
-	flags.StringVarP(&fallbackIP,
-		"fallback", "", "",
-		"DNS fallback, how non-cluster DNS queries are resolved. Defaults to Google DNS (8.8.8.8).",
-	)
-	flags.StringVarP(&k8sContext,
-		"context", "c", "",
-		"The Kubernetes context to use. Defaults to the current kubectl context.",
-	)
-	flags.StringVarP(&k8sNamespace,
-		"namespace", "n", "",
-		"The Kubernetes namespace to use. Defaults to kubectl's default for the context.",
-	)
-	flags.BoolVar(&isCI, "ci", false, "This session is a CI run.")
+
+	globalFlagGroups = []FlagGroup{
+		{
+			Name: "Kubernetes flags",
+			Flags: func() *pflag.FlagSet {
+				kubeFlags = pflag.NewFlagSet("", 0)
+				kates.NewConfigFlags(false).AddFlags(kubeFlags)
+				return kubeFlags
+			}(),
+		},
+		{
+			Name: "Telepresence networking flags",
+			Flags: func() *pflag.FlagSet {
+				netflags := pflag.NewFlagSet("", 0)
+				netflags.StringVarP(&dnsIP,
+					"dns", "", "",
+					"DNS IP address to intercept locally. Defaults to the first nameserver listed in /etc/resolv.conf.",
+				)
+				netflags.StringVarP(&fallbackIP,
+					"fallback", "", "",
+					"DNS fallback, how non-cluster DNS queries are resolved. Defaults to Google DNS (8.8.8.8).",
+				)
+				return netflags
+			}(),
+		},
+		{
+			Name: "other Telepresence flags",
+			Flags: func() *pflag.FlagSet {
+				flags := pflag.NewFlagSet("", 0)
+				flags.Bool(
+					"no-report", false,
+					"turn off anonymous crash reports and log submission on failure",
+				)
+				return flags
+			}(),
+		},
+	}
 
 	rootCmd.InitDefaultHelpCmd()
 	AddCommandGroups(rootCmd, []CommandGroup{
@@ -118,5 +134,8 @@ func Command() *cobra.Command {
 			Commands: []*cobra.Command{versionCommand(), uninstallCommand()},
 		},
 	})
+	for _, group := range globalFlagGroups {
+		rootCmd.PersistentFlags().AddFlagSet(group.Flags)
+	}
 	return rootCmd
 }
