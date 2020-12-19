@@ -20,7 +20,7 @@ PROTO_SRCS = $(shell echo rpc/*/*.proto)
 generate: ## (Generate) Update generated files that get checked in to Git
 generate: generate-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
 	rm -rf ./pkg/rpc/vendor ./vendor
-	$(TOOLSBINDIR)/protoc --proto_path=. --go_out=. --go-grpc_out=. --go_opt=module=github.com/datawire/telepresence2 --go-grpc_opt=module=github.com/datawire/telepresence2 $(PROTO_SRCS)
+	$(tools/protoc) --proto_path=. --go_out=. --go-grpc_out=. --go_opt=module=github.com/datawire/telepresence2 --go-grpc_opt=module=github.com/datawire/telepresence2 $(PROTO_SRCS)
 	go generate ./...
 	cd ./pkg/rpc && go mod tidy
 	cd ./pkg/rpc && go mod vendor
@@ -86,13 +86,13 @@ lint-deps: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Everything nesces
 
 .PHONY: lint
 lint: lint-deps ## (Lint) Run the linters (golangci-lint and protolint)
-	golangci-lint run --timeout 2m ./...
-	protolint lint rpc
+	$(tools/golangci-lint) run --timeout 2m ./...
+	$(tools/protolint) lint rpc
 
 .PHONY: format
 format: $(tools/golangci-lint) $(tools/protolint) ## (Lint) Automatically fix linter complaints
-	golangci-lint run --fix --timeout 2m ./... || true
-	protolint lint --fix rpc || true
+	$(tools/golangci-lint) run --fix --timeout 2m ./... || true
+	$(tools/protolint) lint --fix rpc || true
 
 .PHONY: test check
 test check: $(tools/ko) ## (Test) Run the test suite
