@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -76,9 +77,10 @@ func Test_newUpdateChecker(t *testing.T) {
 
 	// An update to latestVer should be available
 	currentVer := semver.MustParse("1.2.2")
-	v, err := uc.updateAvailable(&currentVer)
-	if err != nil {
-		t.Fatal(err)
+	errOut := &bytes.Buffer{}
+	v, _ := uc.updateAvailable(&currentVer, errOut)
+	if len(errOut.Bytes()) > 0 {
+		t.Fatal(errOut.String())
 	}
 	if v == nil || !lastestVer.EQ(*v) {
 		t.Fatal(fmt.Sprintf("Expected updateAvailable() to return %s", lastestVer))
@@ -111,9 +113,9 @@ func Test_newUpdateChecker(t *testing.T) {
 
 	// No updates available
 	currentVer = lastestVer
-	v, err = uc.updateAvailable(&currentVer)
-	if err != nil {
-		t.Fatal(err)
+	v, _ = uc.updateAvailable(&currentVer, errOut)
+	if len(errOut.Bytes()) > 0 {
+		t.Fatal(errOut.String())
 	}
 	if v != nil {
 		t.Fatal("Expected updateAvailable() to return nil")
@@ -136,9 +138,9 @@ func Test_newUpdateChecker(t *testing.T) {
 	}
 
 	// An update should be available
-	v, err = uc.updateAvailable(&currentVer)
-	if err != nil {
-		t.Fatal(err)
+	v, _ = uc.updateAvailable(&currentVer, errOut)
+	if len(errOut.Bytes()) > 0 {
+		t.Fatal(errOut.String())
 	}
 	if v == nil || !lastestVer.EQ(*v) {
 		t.Fatal(fmt.Sprintf("Expected updateAvailable() to return %s", lastestVer))

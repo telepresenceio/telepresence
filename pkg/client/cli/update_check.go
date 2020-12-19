@@ -3,11 +3,13 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/blang/semver"
@@ -58,9 +60,9 @@ func updateCheck(cmd *cobra.Command, _ []string) error {
 	}
 
 	ourVersion := client.Semver()
-	update, err := uc.updateAvailable(&ourVersion)
-	if err != nil {
-		// Failed to contact remote server. Next attempt is due in an hour
+	update, ok := uc.updateAvailable(&ourVersion, cmd.ErrOrStderr())
+	if !ok {
+		// Failed to read from remote server. Next attempt is due in an hour
 		return uc.storeNextCheck(time.Hour)
 	}
 	if update != nil {
@@ -84,24 +86,29 @@ func (uc *updateChecker) storeNextCheck(d time.Duration) error {
 	return err
 }
 
-func (uc *updateChecker) updateAvailable(currentVersion *semver.Version) (*semver.Version, error) {
+func (uc *updateChecker) updateAvailable(currentVersion *semver.Version, errOut io.Writer) (*semver.Version, bool) {
 	resp, err := http.Get(uc.url)
 	if err != nil {
-		return nil, err
+		// silently ignore connection failures
+		return nil, false
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		// silently ignore failure to read response body
+		return nil, false
 	}
-	lastVersion, err := semver.Parse(string(body))
+	vs := strings.TrimSpace(string(body))
+	lastVersion, err := semver.Parse(vs)
 	if err != nil {
-		return nil, err
+		// The version found remotely is invalid. Not fatal, but inform the user.
+		fmt.Fprintf(errOut, "Update checker was unable to parse version %q returned from %s: %v\n", vs, uc.url, err)
+		return nil, false
 	}
 	if currentVersion.LT(lastVersion) {
-		return &lastVersion, nil
+		return &lastVersion, true
 	}
-	return nil, nil
+	return nil, true
 }
 
 func (uc *updateChecker) timeToCheck() bool {
