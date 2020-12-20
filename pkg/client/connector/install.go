@@ -258,7 +258,12 @@ nextSvc:
 }
 
 func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Service) (
-	service *kates.Service, sPort *kates.ServicePort, cn *kates.Container, cPortIndex int, err error) {
+	service *kates.Service,
+	sPort *kates.ServicePort,
+	cn *kates.Container,
+	cPortIndex int,
+	err error,
+) {
 	cns := dep.Spec.Template.Spec.Containers
 	for _, svc := range svcs {
 		port := svcPortByName(svc, portName)
@@ -459,95 +464,114 @@ func (ki *installer) undoServiceMods(c context.Context, svc *kates.Service) erro
 func addAgentToDeployment(
 	c context.Context, licensed bool,
 	portName string,
-	dep *kates.Deployment, matchingSvcs []*kates.Service,
+	deployment *kates.Deployment, matchingServices []*kates.Service,
 ) (
 	*kates.Deployment,
 	*kates.Service,
 	error,
 ) {
-	svc, sPort, icn, cPortIndex, err := findMatchingPort(dep, portName, matchingSvcs)
+	service, servicePort, container, containerPortIndex, err := findMatchingPort(deployment, portName, matchingServices)
 	if err != nil {
 		return nil, nil, err
 	}
-	name := sPort.Name
-	if name == "" {
-		name = strconv.Itoa(int(sPort.Port))
-	}
-	dlog.Debugf(c, "using service %s port %s when intercepting deployment %q", svc.Name, name, dep.Name)
+	dlog.Debugf(c, "using service %s port %s when intercepting deployment %q",
+		service.Name,
+		func() string {
+			if servicePort.Name != "" {
+				return servicePort.Name
+			}
+			return strconv.Itoa(int(servicePort.Port))
+		}(),
+		deployment.Name)
 
-	targetPortSymbolic := true
-	containerPort := uint16(0)
 	version := client.Semver().String()
 
-	var serverMod *svcActions
-	if sPort.TargetPort.Type == intstr.Int {
-		// Service needs to use a named port
-		targetPortSymbolic = false
-		containerPort = uint16(sPort.TargetPort.IntVal)
-		serverMod = &svcActions{
-			Version: version,
-			MakePortSymbolic: &makePortSymbolicAction{
-				PortName:   sPort.Name,
-				TargetPort: containerPort,
-			},
+	// Try to detect the container port we'll be taking over.
+	var containerPort struct {
+		Name     string // If the existing container port doesn't have a name, we'll make one up.
+		Number   uint16
+		Protocol corev1.Protocol
+	}
+	// Start by filling from the servicePort; if these are the zero values, that's OK.
+	containerPort.Name = servicePort.TargetPort.StrVal
+	containerPort.Number = uint16(servicePort.TargetPort.IntVal)
+	containerPort.Protocol = servicePort.Protocol
+	// Now fill from the Deployment's containerPort.
+	if containerPortIndex >= 0 {
+		if containerPort.Name == "" {
+			containerPort.Name = container.Ports[containerPortIndex].Name
 		}
-		// apply the actions on the Service
-		if err = serverMod.do(svc); err != nil {
-			return nil, nil, err
+		if containerPort.Number == 0 {
+			containerPort.Number = uint16(container.Ports[containerPortIndex].ContainerPort)
 		}
-
-		// save the actions so that they can be undone.
-		if svc.Annotations == nil {
-			svc.Annotations = make(map[string]string)
+		if containerPort.Protocol == "" {
+			containerPort.Protocol = container.Ports[containerPortIndex].Protocol
 		}
-		svc.Annotations[annTelepresenceActions] = serverMod.String()
+	}
+	if containerPort.Number == 0 {
+		return nil, nil, fmt.Errorf("unable to add agent to deployment %s. The container port cannot be determined", deployment.Name)
+	}
+	if containerPort.Name == "" {
+		containerPort.Name = fmt.Sprintf("tel2px-%d", containerPort.Number)
 	}
 
+	// Figure what modifications we need to make.
 	deploymentMod := &deploymentActions{
 		Version:           version,
-		ReferencedService: svc.Name,
+		ReferencedService: service.Name,
 		AddTrafficAgent: &addTrafficAgentAction{
-			ContainerPortName:   sPort.TargetPort.StrVal,
-			ContainerPortProto:  sPort.Protocol,
-			ContainerPortNumber: containerPort,
+			ContainerPortName:   containerPort.Name,
+			ContainerPortProto:  containerPort.Protocol,
+			ContainerPortNumber: containerPort.Number,
 			ImageName:           agentImageName(licensed),
 		},
 	}
-
-	if cPortIndex >= 0 {
-		// Remove name and change container port of the port appointed by the service
-		icp := &icn.Ports[cPortIndex]
-		containerPort = uint16(icp.ContainerPort)
-		if targetPortSymbolic {
-			deploymentMod.HideContainerPort = &hideContainerPortAction{
-				ContainerName: icn.Name,
-				PortName:      sPort.TargetPort.StrVal,
-			}
+	// Depending on whether the the Service refers to the port by name or by number, we either
+	// need to patch the names in the deployment, or the number in the service.
+	var serviceMod *svcActions
+	if servicePort.TargetPort.Type == intstr.Int {
+		// Change the port number that the Service refers to.
+		serviceMod = &svcActions{
+			Version: version,
+			MakePortSymbolic: &makePortSymbolicAction{
+				PortName:     servicePort.Name,
+				TargetPort:   containerPort.Number,
+				SymbolicName: containerPort.Name,
+			},
+		}
+	} else {
+		// Hijack the port name in the Deployment.
+		deploymentMod.HideContainerPort = &hideContainerPortAction{
+			ContainerName: container.Name,
+			PortName:      containerPort.Name,
 		}
 	}
 
-	if containerPort == 0 {
-		return nil, nil, fmt.Errorf("unable to add agent to deployment %s. The container port cannot be determined", dep.Name)
-	}
-
-	// apply the actions on the Deployment
-	if err = deploymentMod.do(dep); err != nil {
+	// Apply the actions on the Deployment.
+	if err = deploymentMod.do(deployment); err != nil {
 		return nil, nil, err
 	}
-
-	// save the actions so that they can be undone.
-	if dep.Annotations == nil {
-		dep.Annotations = make(map[string]string)
+	if deployment.Annotations == nil {
+		deployment.Annotations = make(map[string]string)
 	}
-	dep.Annotations[annTelepresenceActions] = deploymentMod.String()
+	deployment.Annotations[annTelepresenceActions] = deploymentMod.String()
+	explainDo(c, deploymentMod, deployment)
 
-	explainDo(c, deploymentMod, dep)
-	if serverMod != nil {
-		explainDo(c, serverMod, svc)
+	// Apply the actions on the Service.
+	if serviceMod != nil {
+		if err = serviceMod.do(service); err != nil {
+			return nil, nil, err
+		}
+		if service.Annotations == nil {
+			service.Annotations = make(map[string]string)
+		}
+		service.Annotations[annTelepresenceActions] = serviceMod.String()
+		explainDo(c, serviceMod, service)
 	} else {
-		svc = nil
+		service = nil
 	}
-	return dep, svc, nil
+
+	return deployment, service, nil
 }
 
 func (ki *installer) managerDeployment() *kates.Deployment {

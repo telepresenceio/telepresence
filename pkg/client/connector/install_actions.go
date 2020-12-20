@@ -145,7 +145,6 @@ func (m *makePortSymbolicAction) do(svc kates.Object) error {
 	if err != nil {
 		return err
 	}
-	m.SymbolicName = fmt.Sprintf("tel2px-%d", p.TargetPort.IntVal)
 	p.TargetPort = intstr.FromString(m.SymbolicName)
 	return nil
 }
@@ -340,7 +339,7 @@ func (hcp *hideContainerPortAction) do(dep kates.Object) error {
 	if err != nil {
 		return err
 	}
-	hcp.HiddenName = fmt.Sprintf("tel2mv-%d", p.HostPort)
+	hcp.HiddenName = "tel2mv-" + p.Name
 	swapPortName(cn, p, hcp.PortName, hcp.HiddenName)
 	return nil
 }
