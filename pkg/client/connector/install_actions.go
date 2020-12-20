@@ -129,6 +129,8 @@ type makePortSymbolicAction struct {
 	SymbolicName string
 }
 
+var _ action = (*makePortSymbolicAction)(nil)
+
 func (m *makePortSymbolicAction) portName(port string) string {
 	if m.PortName == "" {
 		return port
@@ -190,6 +192,8 @@ type addSymbolicPortAction struct {
 	makePortSymbolicAction
 }
 
+var _ action = (*addSymbolicPortAction)(nil)
+
 func (m *addSymbolicPortAction) getPort(svc kates.Object, targetPort int32) (*kates.ServicePort, error) {
 	ports := svc.(*kates.Service).Spec.Ports
 	for i := range ports {
@@ -236,6 +240,8 @@ type svcActions struct {
 	MakePortSymbolic *makePortSymbolicAction `json:"make_port_symbolic,omitempty"`
 	AddSymbolicPort  *addSymbolicPortAction  `json:"add_symbolic_port,omitempty"`
 }
+
+var _ multiAction = (*svcActions)(nil)
 
 func (s *svcActions) actions() (actions []action) {
 	if s.MakePortSymbolic != nil {
@@ -300,6 +306,8 @@ type addTrafficAgentAction struct {
 	// The name of the app container. Not exported because its not needed for undo.
 	containerName string
 }
+
+var _ action = (*addTrafficAgentAction)(nil)
 
 func (ata *addTrafficAgentAction) appContainer(dep *kates.Deployment) *kates.Container {
 	cns := dep.Spec.Template.Spec.Containers
@@ -486,6 +494,8 @@ type hideContainerPortAction struct {
 	HiddenName    string `json:"hidden_name"`
 }
 
+var _ action = (*hideContainerPortAction)(nil)
+
 func (hcp *hideContainerPortAction) getPort(dep kates.Object, name string) (*kates.Container, *corev1.ContainerPort, error) {
 	cns := dep.(*kates.Deployment).Spec.Template.Spec.Containers
 	for i := range cns {
@@ -563,6 +573,8 @@ type deploymentActions struct {
 	HideContainerPort         *hideContainerPortAction `json:"hide_container_port,omitempty"`
 	AddTrafficAgent           *addTrafficAgentAction   `json:"add_traffic_agent,omitempty"`
 }
+
+var _ multiAction = (*deploymentActions)(nil)
 
 func (d *deploymentActions) actions() (actions []action) {
 	if d.HideContainerPort != nil {
