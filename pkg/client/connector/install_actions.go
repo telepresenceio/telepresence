@@ -1,7 +1,6 @@
 package connector
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -44,9 +43,6 @@ type completeAction interface {
 	MarshalAnnotation() (string, error)
 	UnmarshalAnnotation(string) error
 
-	// The list of smaller component actions that make up this completeAction.
-	Actions() []partialAction
-
 	// In the UI/logging, what resource type should we tell the user that this action operates
 	// on?
 	ObjectType() string
@@ -58,64 +54,80 @@ type completeAction interface {
 }
 
 func explainDo(c context.Context, a completeAction, obj kates.Object) {
-	explainAction(c, a, obj, partialAction.ExplainDo)
+	var buf strings.Builder
+	a.ExplainDo(obj, &buf)
+	if buf.Len() > 0 {
+		dlog.Info(c, fmt.Sprintf("In %s %s, %s.",
+			a.ObjectType(),
+			obj.GetName(),
+			buf.String()))
+	}
 }
 
 func explainUndo(c context.Context, a completeAction, obj kates.Object) {
-	explainAction(c, a, obj, partialAction.ExplainUndo)
-}
-
-// Internal implementation pieces //////////////////////////////////////////////
-
-type explainFunc func(partialAction partialAction, obj kates.Object, out io.Writer)
-
-func explainAction(c context.Context, a partialAction, obj kates.Object, ef explainFunc) {
-	buf := bytes.Buffer{}
-	if ma, ok := a.(completeAction); ok {
-		explainActions(ma, obj, ef, &buf)
-	} else {
-		ef(a, obj, &buf)
-	}
-	if bts := buf.Bytes(); len(bts) > 0 {
-		dlog.Info(c, string(bts))
+	var buf strings.Builder
+	a.ExplainUndo(obj, &buf)
+	if buf.Len() > 0 {
+		dlog.Info(c, fmt.Sprintf("In %s %s, %s.",
+			a.ObjectType(),
+			obj.GetName(),
+			buf.String()))
 	}
 }
 
-func explainActions(ma completeAction, obj kates.Object, ef explainFunc, out io.Writer) {
-	actions := ma.Actions()
-	last := len(actions) - 1
+// multiAction /////////////////////////////////////////////////////////////////
+
+// A multiAction combines zero-or-more partialActions together in to a single action.  This is
+// useful as an internal implementation detail for implementing completeActions.
+type multiAction []partialAction
+
+var _ partialAction = multiAction(nil)
+
+func (ma multiAction) explain(
+	obj kates.Object,
+	out io.Writer,
+	ef func(partialAction partialAction, obj kates.Object, out io.Writer),
+) {
+	last := len(ma) - 1
 	if last < 0 {
 		return
 	}
-	fmt.Fprintf(out, "In %s %s, ", ma.ObjectType(), obj.GetName())
 
 	switch last {
 	case 0:
 	case 1:
-		ef(actions[0], obj, out)
+		ef(ma[0], obj, out)
 		fmt.Fprint(out, " and ")
 	default:
-		for _, partialAction := range actions[:last] {
+		for _, partialAction := range ma[:last] {
 			ef(partialAction, obj, out)
 			fmt.Fprint(out, ", ")
 		}
 		fmt.Fprint(out, "and ")
 	}
-	ef(actions[last], obj, out)
+	ef(ma[last], obj, out)
 	fmt.Fprint(out, ".")
 }
 
-func doActions(ma completeAction, obj kates.Object) (err error) {
-	for _, partialAction := range ma.Actions() {
-		if err = partialAction.Do(obj); err != nil {
+func (ma multiAction) ExplainDo(obj kates.Object, out io.Writer) {
+	ma.explain(obj, out, partialAction.ExplainDo)
+}
+
+func (ma multiAction) ExplainUndo(obj kates.Object, out io.Writer) {
+	ma.explain(obj, out, partialAction.ExplainUndo)
+}
+
+func (ma multiAction) Do(obj kates.Object) error {
+	for _, partialAction := range ma {
+		if err := partialAction.Do(obj); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func isDoneActions(ma completeAction, obj kates.Object) bool {
-	for _, partialAction := range ma.Actions() {
+func (ma multiAction) IsDone(obj kates.Object) bool {
+	for _, partialAction := range ma {
 		if !partialAction.IsDone(obj) {
 			return false
 		}
@@ -123,15 +135,16 @@ func isDoneActions(ma completeAction, obj kates.Object) bool {
 	return true
 }
 
-func undoActions(ma completeAction, obj kates.Object) (err error) {
-	actions := ma.Actions()
-	for i := len(actions) - 1; i >= 0; i-- {
-		if err = actions[i].Undo(obj); err != nil {
+func (ma multiAction) Undo(obj kates.Object) error {
+	for i := len(ma) - 1; i >= 0; i-- {
+		if err := ma[i].Undo(obj); err != nil {
 			return err
 		}
 	}
 	return nil
 }
+
+// Internal convenience functions //////////////////////////////////////////////
 
 func marshalString(data completeAction) (string, error) {
 	js, err := json.Marshal(data)
@@ -270,7 +283,7 @@ type svcActions struct {
 
 var _ completeAction = (*svcActions)(nil)
 
-func (s *svcActions) Actions() (actions []partialAction) {
+func (s *svcActions) actions() (actions multiAction) {
 	if s.MakePortSymbolic != nil {
 		actions = append(actions, s.MakePortSymbolic)
 	}
@@ -281,26 +294,26 @@ func (s *svcActions) Actions() (actions []partialAction) {
 }
 
 func (s *svcActions) Do(svc kates.Object) (err error) {
-	return doActions(s, svc)
+	return s.actions().Do(svc)
 }
 
 func (s *svcActions) ExplainDo(svc kates.Object, out io.Writer) {
-	explainActions(s, svc, partialAction.ExplainDo, out)
+	s.actions().ExplainDo(svc, out)
 }
 
 func (s *svcActions) ExplainUndo(svc kates.Object, out io.Writer) {
-	explainActions(s, svc, partialAction.ExplainUndo, out)
+	s.actions().ExplainUndo(svc, out)
 }
 
 func (s *svcActions) IsDone(svc kates.Object) bool {
-	return isDoneActions(s, svc)
+	return s.actions().IsDone(svc)
 }
 
 func (s *svcActions) Undo(svc kates.Object) (err error) {
-	return undoActions(s, svc)
+	return s.actions().Undo(svc)
 }
 
-func (s *svcActions) ObjectType() string {
+func (_ *svcActions) ObjectType() string {
 	return "service"
 }
 
@@ -608,7 +621,7 @@ type deploymentActions struct {
 
 var _ completeAction = (*deploymentActions)(nil)
 
-func (d *deploymentActions) Actions() (actions []partialAction) {
+func (d *deploymentActions) actions() (actions multiAction) {
 	if d.HideContainerPort != nil {
 		actions = append(actions, d.HideContainerPort)
 	}
@@ -619,26 +632,26 @@ func (d *deploymentActions) Actions() (actions []partialAction) {
 }
 
 func (d *deploymentActions) ExplainDo(dep kates.Object, out io.Writer) {
-	explainActions(d, dep, partialAction.ExplainDo, out)
+	d.actions().ExplainDo(dep, out)
 }
 
 func (d *deploymentActions) Do(dep kates.Object) (err error) {
-	return doActions(d, dep)
+	return d.actions().Do(dep)
 }
 
 func (d *deploymentActions) ExplainUndo(dep kates.Object, out io.Writer) {
-	explainActions(d, dep, partialAction.ExplainUndo, out)
+	d.actions().ExplainUndo(dep, out)
 }
 
 func (d *deploymentActions) IsDone(dep kates.Object) bool {
-	return isDoneActions(d, dep)
+	return d.actions().IsDone(dep)
 }
 
 func (d *deploymentActions) Undo(dep kates.Object) (err error) {
-	return undoActions(d, dep)
+	return d.actions().Undo(dep)
 }
 
-func (d *deploymentActions) ObjectType() string {
+func (_ *deploymentActions) ObjectType() string {
 	return "deployment"
 }
 
