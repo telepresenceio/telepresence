@@ -20,26 +20,35 @@ import (
 // Public interface-y pieces ///////////////////////////////////////////////////
 
 type action interface {
-	do(obj kates.Object) error
-	explainDo(obj kates.Object, out io.Writer)
-	explainUndo(obj kates.Object, out io.Writer)
-	isDone(obj kates.Object) bool
-	undo(obj kates.Object) error
+	// These are all Exported, so that you can easily tell which methods are implementing the
+	// external interface and which are internal.
+
+	Do(obj kates.Object) error
+	Undo(obj kates.Object) error
+
+	ExplainDo(obj kates.Object, out io.Writer)
+	ExplainUndo(obj kates.Object, out io.Writer)
+
+	IsDone(obj kates.Object) bool
 }
 
 type multiAction interface {
 	action
-	version() string
-	actions() []action
-	objectType() string
+
+	// These are all Exported, so that you can easily tell which methods are implementing the
+	// external interface and which are internal.
+
+	Actions() []action
+	ObjectType() string
+	TelVersion() string
 }
 
 func explainDo(c context.Context, a action, obj kates.Object) {
-	explainAction(c, a, obj, action.explainDo)
+	explainAction(c, a, obj, action.ExplainDo)
 }
 
 func explainUndo(c context.Context, a action, obj kates.Object) {
-	explainAction(c, a, obj, action.explainUndo)
+	explainAction(c, a, obj, action.ExplainUndo)
 }
 
 // Internal implementation pieces //////////////////////////////////////////////
@@ -59,12 +68,12 @@ func explainAction(c context.Context, a action, obj kates.Object, ef explainFunc
 }
 
 func explainActions(ma multiAction, obj kates.Object, ef explainFunc, out io.Writer) {
-	actions := ma.actions()
+	actions := ma.Actions()
 	last := len(actions) - 1
 	if last < 0 {
 		return
 	}
-	fmt.Fprintf(out, "In %s %s, ", ma.objectType(), obj.GetName())
+	fmt.Fprintf(out, "In %s %s, ", ma.ObjectType(), obj.GetName())
 
 	switch last {
 	case 0:
@@ -83,8 +92,8 @@ func explainActions(ma multiAction, obj kates.Object, ef explainFunc, out io.Wri
 }
 
 func doActions(ma multiAction, obj kates.Object) (err error) {
-	for _, action := range ma.actions() {
-		if err = action.do(obj); err != nil {
+	for _, action := range ma.Actions() {
+		if err = action.Do(obj); err != nil {
 			return err
 		}
 	}
@@ -92,8 +101,8 @@ func doActions(ma multiAction, obj kates.Object) (err error) {
 }
 
 func isDoneActions(ma multiAction, obj kates.Object) bool {
-	for _, action := range ma.actions() {
-		if !action.isDone(obj) {
+	for _, action := range ma.Actions() {
+		if !action.IsDone(obj) {
 			return false
 		}
 	}
@@ -101,9 +110,9 @@ func isDoneActions(ma multiAction, obj kates.Object) bool {
 }
 
 func undoActions(ma multiAction, obj kates.Object) (err error) {
-	actions := ma.actions()
+	actions := ma.Actions()
 	for i := len(actions) - 1; i >= 0; i-- {
-		if err = actions[i].undo(obj); err != nil {
+		if err = actions[i].Undo(obj); err != nil {
 			return err
 		}
 	}
@@ -150,7 +159,7 @@ func (m *makePortSymbolicAction) getPort(svc kates.Object, targetPort intstr.Int
 		m.portName(targetPort.String()), svc.GetName())
 }
 
-func (m *makePortSymbolicAction) do(svc kates.Object) error {
+func (m *makePortSymbolicAction) Do(svc kates.Object) error {
 	p, err := m.getPort(svc, intstr.FromInt(int(m.TargetPort)))
 	if err != nil {
 		return err
@@ -159,22 +168,22 @@ func (m *makePortSymbolicAction) do(svc kates.Object) error {
 	return nil
 }
 
-func (m *makePortSymbolicAction) explainDo(_ kates.Object, out io.Writer) {
+func (m *makePortSymbolicAction) ExplainDo(_ kates.Object, out io.Writer) {
 	fmt.Fprintf(out, "make service port %s symbolic with name %q",
 		m.portName(strconv.Itoa(int(m.TargetPort))), m.SymbolicName)
 }
 
-func (m *makePortSymbolicAction) explainUndo(_ kates.Object, out io.Writer) {
+func (m *makePortSymbolicAction) ExplainUndo(_ kates.Object, out io.Writer) {
 	fmt.Fprintf(out, "restore symbolic service port %s to numeric %d",
 		m.portName(m.SymbolicName), m.TargetPort)
 }
 
-func (m *makePortSymbolicAction) isDone(svc kates.Object) bool {
+func (m *makePortSymbolicAction) IsDone(svc kates.Object) bool {
 	_, err := m.getPort(svc, intstr.FromString(m.SymbolicName))
 	return err == nil
 }
 
-func (m *makePortSymbolicAction) undo(svc kates.Object) error {
+func (m *makePortSymbolicAction) Undo(svc kates.Object) error {
 	p, err := m.getPort(svc, intstr.FromString(m.SymbolicName))
 	if err != nil {
 		return err
@@ -206,12 +215,12 @@ func (m *addSymbolicPortAction) getPort(svc kates.Object, targetPort int32) (*ka
 	return nil, fmt.Errorf("unable to find port %d in Service %s", targetPort, svc.GetName())
 }
 
-func (m *addSymbolicPortAction) explainDo(_ kates.Object, out io.Writer) {
+func (m *addSymbolicPortAction) ExplainDo(_ kates.Object, out io.Writer) {
 	fmt.Fprintf(out, "add targetPort to service port %s symbolic with name %q",
 		m.portName(strconv.Itoa(int(m.TargetPort))), m.SymbolicName)
 }
 
-func (m *addSymbolicPortAction) do(svc kates.Object) error {
+func (m *addSymbolicPortAction) Do(svc kates.Object) error {
 	p, err := m.getPort(svc, int32(m.TargetPort))
 	if err != nil {
 		return err
@@ -220,11 +229,11 @@ func (m *addSymbolicPortAction) do(svc kates.Object) error {
 	return nil
 }
 
-func (m *addSymbolicPortAction) explainUndo(_ kates.Object, out io.Writer) {
+func (m *addSymbolicPortAction) ExplainUndo(_ kates.Object, out io.Writer) {
 	fmt.Fprintf(out, "remove symbolic service port %s", m.portName(m.SymbolicName))
 }
 
-func (m *addSymbolicPortAction) undo(svc kates.Object) error {
+func (m *addSymbolicPortAction) Undo(svc kates.Object) error {
 	p, err := m.makePortSymbolicAction.getPort(svc, intstr.FromString(m.SymbolicName))
 	if err != nil {
 		return err
@@ -243,7 +252,7 @@ type svcActions struct {
 
 var _ multiAction = (*svcActions)(nil)
 
-func (s *svcActions) actions() (actions []action) {
+func (s *svcActions) Actions() (actions []action) {
 	if s.MakePortSymbolic != nil {
 		actions = append(actions, s.MakePortSymbolic)
 	}
@@ -253,27 +262,27 @@ func (s *svcActions) actions() (actions []action) {
 	return actions
 }
 
-func (s *svcActions) do(svc kates.Object) (err error) {
+func (s *svcActions) Do(svc kates.Object) (err error) {
 	return doActions(s, svc)
 }
 
-func (s *svcActions) explainDo(svc kates.Object, out io.Writer) {
-	explainActions(s, svc, action.explainDo, out)
+func (s *svcActions) ExplainDo(svc kates.Object, out io.Writer) {
+	explainActions(s, svc, action.ExplainDo, out)
 }
 
-func (s *svcActions) explainUndo(svc kates.Object, out io.Writer) {
-	explainActions(s, svc, action.explainUndo, out)
+func (s *svcActions) ExplainUndo(svc kates.Object, out io.Writer) {
+	explainActions(s, svc, action.ExplainUndo, out)
 }
 
-func (s *svcActions) isDone(svc kates.Object) bool {
+func (s *svcActions) IsDone(svc kates.Object) bool {
 	return isDoneActions(s, svc)
 }
 
-func (s *svcActions) undo(svc kates.Object) (err error) {
+func (s *svcActions) Undo(svc kates.Object) (err error) {
 	return undoActions(s, svc)
 }
 
-func (s *svcActions) objectType() string {
+func (s *svcActions) ObjectType() string {
 	return "service"
 }
 
@@ -281,7 +290,7 @@ func (s *svcActions) String() string {
 	return mustMarshal(s)
 }
 
-func (s *svcActions) version() string {
+func (s *svcActions) TelVersion() string {
 	return s.Version
 }
 
@@ -320,7 +329,7 @@ func (ata *addTrafficAgentAction) appContainer(dep *kates.Deployment) *kates.Con
 	return nil
 }
 
-func (ata *addTrafficAgentAction) do(obj kates.Object) error {
+func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
 	dep := obj.(*kates.Deployment)
 	appContainer := ata.appContainer(dep)
 	if appContainer == nil {
@@ -445,15 +454,15 @@ func (ata *addTrafficAgentAction) appEnvironment(appContainer *kates.Container) 
 	return envCopy
 }
 
-func (ata *addTrafficAgentAction) explainDo(_ kates.Object, out io.Writer) {
+func (ata *addTrafficAgentAction) ExplainDo(_ kates.Object, out io.Writer) {
 	fmt.Fprintf(out, "add traffic-agent container with image %s", ata.ImageName)
 }
 
-func (ata *addTrafficAgentAction) explainUndo(_ kates.Object, out io.Writer) {
+func (ata *addTrafficAgentAction) ExplainUndo(_ kates.Object, out io.Writer) {
 	fmt.Fprintf(out, "remove traffic-agent container with image %s", ata.ImageName)
 }
 
-func (ata *addTrafficAgentAction) isDone(dep kates.Object) bool {
+func (ata *addTrafficAgentAction) IsDone(dep kates.Object) bool {
 	cns := dep.(*kates.Deployment).Spec.Template.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
@@ -464,7 +473,7 @@ func (ata *addTrafficAgentAction) isDone(dep kates.Object) bool {
 	return false
 }
 
-func (ata *addTrafficAgentAction) undo(dep kates.Object) error {
+func (ata *addTrafficAgentAction) Undo(dep kates.Object) error {
 	tplSpec := &dep.(*kates.Deployment).Spec.Template.Spec
 	cns := tplSpec.Containers
 	for i := range cns {
@@ -529,7 +538,7 @@ func swapPortName(cn *kates.Container, p *corev1.ContainerPort, from, to string)
 	p.Name = to
 }
 
-func (hcp *hideContainerPortAction) do(dep kates.Object) error {
+func (hcp *hideContainerPortAction) Do(dep kates.Object) error {
 	// New name must be max 15 characters long
 	cn, p, err := hcp.getPort(dep, hcp.PortName)
 	if err != nil {
@@ -540,22 +549,22 @@ func (hcp *hideContainerPortAction) do(dep kates.Object) error {
 	return nil
 }
 
-func (hcp *hideContainerPortAction) explainDo(_ kates.Object, out io.Writer) {
+func (hcp *hideContainerPortAction) ExplainDo(_ kates.Object, out io.Writer) {
 	fmt.Fprintf(out, "hide port %q in container %s from service by renaming it to %q",
 		hcp.PortName, hcp.ContainerName, hcp.HiddenName)
 }
 
-func (hcp *hideContainerPortAction) explainUndo(_ kates.Object, out io.Writer) {
+func (hcp *hideContainerPortAction) ExplainUndo(_ kates.Object, out io.Writer) {
 	fmt.Fprintf(out, "reveal hidden port %q in container %s by restoring its origina name %q",
 		hcp.HiddenName, hcp.ContainerName, hcp.PortName)
 }
 
-func (hcp *hideContainerPortAction) isDone(dep kates.Object) bool {
+func (hcp *hideContainerPortAction) IsDone(dep kates.Object) bool {
 	_, _, err := hcp.getPort(dep, hcp.HiddenName)
 	return err == nil
 }
 
-func (hcp *hideContainerPortAction) undo(dep kates.Object) error {
+func (hcp *hideContainerPortAction) Undo(dep kates.Object) error {
 	cn, p, err := hcp.getPort(dep, hcp.HiddenName)
 	if err != nil {
 		return err
@@ -576,7 +585,7 @@ type deploymentActions struct {
 
 var _ multiAction = (*deploymentActions)(nil)
 
-func (d *deploymentActions) actions() (actions []action) {
+func (d *deploymentActions) Actions() (actions []action) {
 	if d.HideContainerPort != nil {
 		actions = append(actions, d.HideContainerPort)
 	}
@@ -586,27 +595,27 @@ func (d *deploymentActions) actions() (actions []action) {
 	return actions
 }
 
-func (d *deploymentActions) explainDo(dep kates.Object, out io.Writer) {
-	explainActions(d, dep, action.explainDo, out)
+func (d *deploymentActions) ExplainDo(dep kates.Object, out io.Writer) {
+	explainActions(d, dep, action.ExplainDo, out)
 }
 
-func (d *deploymentActions) do(dep kates.Object) (err error) {
+func (d *deploymentActions) Do(dep kates.Object) (err error) {
 	return doActions(d, dep)
 }
 
-func (d *deploymentActions) explainUndo(dep kates.Object, out io.Writer) {
-	explainActions(d, dep, action.explainUndo, out)
+func (d *deploymentActions) ExplainUndo(dep kates.Object, out io.Writer) {
+	explainActions(d, dep, action.ExplainUndo, out)
 }
 
-func (d *deploymentActions) isDone(dep kates.Object) bool {
+func (d *deploymentActions) IsDone(dep kates.Object) bool {
 	return isDoneActions(d, dep)
 }
 
-func (d *deploymentActions) undo(dep kates.Object) (err error) {
+func (d *deploymentActions) Undo(dep kates.Object) (err error) {
 	return undoActions(d, dep)
 }
 
-func (d *deploymentActions) objectType() string {
+func (d *deploymentActions) ObjectType() string {
 	return "deployment"
 }
 
@@ -614,6 +623,6 @@ func (d *deploymentActions) String() string {
 	return mustMarshal(d)
 }
 
-func (d *deploymentActions) version() string {
+func (d *deploymentActions) TelVersion() string {
 	return d.Version
 }

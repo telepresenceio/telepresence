@@ -541,7 +541,7 @@ func getAnnotation(obj kates.Object, data multiAction) (bool, error) {
 		return false, err
 	}
 
-	annV, err := semver.Parse(data.version())
+	annV, err := semver.Parse(data.TelVersion())
 	if err != nil {
 		return false, fmt.Errorf("unable to parse semantic version in annotation %s of %s %s", annTelepresenceActions,
 			obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
@@ -576,7 +576,7 @@ func undoDeploymentMods(c context.Context, dep *kates.Deployment) (string, error
 		return "", err
 	}
 
-	if err = actions.undo(dep); err != nil {
+	if err = actions.Undo(dep); err != nil {
 		return "", err
 	}
 	delete(dep.Annotations, annTelepresenceActions)
@@ -600,7 +600,7 @@ func undoServiceMods(c context.Context, svc *kates.Service) error {
 	if !ok {
 		return err
 	}
-	if err = actions.undo(svc); err != nil {
+	if err = actions.Undo(svc); err != nil {
 		return err
 	}
 	delete(svc.Annotations, annTelepresenceActions)
@@ -733,7 +733,7 @@ func addAgentToDeployment(
 	}
 
 	// Apply the actions on the Deployment.
-	if err = deploymentMod.do(deployment); err != nil {
+	if err = deploymentMod.Do(deployment); err != nil {
 		return nil, nil, err
 	}
 	if deployment.Annotations == nil {
@@ -744,7 +744,7 @@ func addAgentToDeployment(
 
 	// Apply the actions on the Service.
 	if serviceMod != nil {
-		if err = serviceMod.do(service); err != nil {
+		if err = serviceMod.Do(service); err != nil {
 			return nil, nil, err
 		}
 		if service.Annotations == nil {
