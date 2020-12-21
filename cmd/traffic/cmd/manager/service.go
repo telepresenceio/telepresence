@@ -219,10 +219,27 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 				dlog.Errorln(ctx, "systema: release connection:", err)
 			}
 		} else {
-			// DON'T m.systema.Done(); keep the connection refcounted until the
-			// intercept is deleted.
-			intercept.PreviewDomain = resp.Domain
-			m.state.UpdateIntercept(intercept)
+			_intercept := m.state.UpdateIntercept(intercept.Id, func(intercept *rpc.InterceptInfo) {
+				intercept.PreviewDomain = resp.Domain
+			})
+			if _intercept == nil {
+				// Someone else deleted the intercept while we were at it?
+				_, err := sa.RemoveDomain(ctx, &systema.RemoveDomainRequest{
+					Domain: resp.Domain,
+				})
+				if err != nil {
+					dlog.Errorln(ctx, "systema: remove domain:", err)
+				}
+				if err := m.systema.Done(); err != nil {
+					dlog.Errorln(ctx, "systema: release connection:", err)
+				}
+			} else {
+				// Success!
+				//
+				// DON'T m.systema.Done(); keep the connection refcounted until the
+				// intercept is deleted.
+				intercept = _intercept
+			}
 		}
 	}
 
@@ -254,11 +271,26 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 
 	dlog.Debugf(ctx, "ReviewIntercept called: %s %s - %s", sessionID, ceptID, rIReq.Disposition)
 
-	if m.state.GetAgent(sessionID) == nil {
+	agent := m.state.GetAgent(sessionID)
+	if agent == nil {
 		return nil, status.Errorf(codes.NotFound, "Agent session %q not found", sessionID)
 	}
 
-	if !m.state.ReviewIntercept(sessionID, ceptID, rIReq.Disposition, rIReq.Message) {
+	intercept := m.state.UpdateIntercept(ceptID, func(intercept *rpc.InterceptInfo) {
+		// Sanity check: The reviewing agent must be an agent for the intercept.
+		if intercept.Spec.Agent != agent.Name {
+			return
+		}
+
+		// Only update intercepts in the waiting state.  Agents race to review an intercept, but we
+		// expect they will always compatible answers.
+		if intercept.Disposition == rpc.InterceptDispositionType_WAITING {
+			intercept.Disposition = rIReq.Disposition
+			intercept.Message = rIReq.Message
+		}
+	})
+
+	if intercept == nil {
 		return nil, status.Errorf(codes.NotFound, "Intercept with ID %q not found for this session", ceptID)
 	}
 

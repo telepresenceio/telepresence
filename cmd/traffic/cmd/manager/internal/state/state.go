@@ -362,8 +362,30 @@ func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) (*rpc.In
 	return cept, nil
 }
 
-func (s *State) UpdateIntercept(intercept *rpc.InterceptInfo) {
-	s.intercepts.Store(intercept.Id, intercept)
+// UpdateIntercept applies a given mutator function to the stored intercept with interceptID;
+// storing and returning the result.  If the given intercept does not exist, then the mutator
+// function is not run, and nil is returned.
+//
+// This does not lock; but instead uses CAS and may therefore call the mutator function multiple
+// times.  So: it is safe to perform blocking operations in your mutator function, but you must take
+// care that it is safe to call your mutator function multiple times.
+func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInfo)) *rpc.InterceptInfo {
+	for {
+		cur, ok := s.intercepts.Load(interceptID)
+		if !ok || cur == nil {
+			// Doesn't exist (possibly was deleted while this loop was running).
+			return nil
+		}
+
+		new := proto.Clone(cur).(*rpc.InterceptInfo)
+		apply(new)
+
+		swapped := s.intercepts.CompareAndSwap(new.Id, cur, new)
+		if swapped {
+			// Success!
+			return cur
+		}
+	}
 }
 
 func (s *State) RemoveIntercept(sessionID string, name string) bool {
@@ -380,36 +402,4 @@ func (s *State) WatchIntercepts(
 	} else {
 		return s.intercepts.SubscribeSubset(ctx, filter)
 	}
-}
-
-func (s *State) ReviewIntercept(sessionID string, ceptID string, disposition rpc.InterceptDispositionType, message string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	agent, ok := s.agents.Load(sessionID)
-	if !ok {
-		return false
-	}
-
-	intercept, ok := s.intercepts.Load(ceptID)
-	if !ok {
-		return false
-	}
-
-	// Sanity check: The reviewing agent must be an agent for the intercept.
-	if intercept.Spec.Agent != agent.Name {
-		return false
-	}
-
-	// Only update intercepts in the waiting state.  Agents race to review an intercept, but we
-	// expect they will always compatible answers.
-	if intercept.Disposition == rpc.InterceptDispositionType_WAITING {
-		intercept.Disposition = disposition
-		intercept.Message = message
-
-		// Save the result.
-		s.intercepts.Store(ceptID, intercept)
-	}
-
-	return true
 }
