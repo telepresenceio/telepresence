@@ -147,7 +147,22 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	if agent := m.state.GetAgent(sessionID); agent != nil {
 		// sessionID refers to an agent session
 		filter = func(id string, info *rpc.InterceptInfo) bool {
-			return info.Spec.Agent == agent.Name
+			// Don't return intercepts for different agents.
+			if info.Spec.Agent != agent.Name {
+				return false
+			}
+			// Don't return intercepts that aren't in a "agent-owned" state.
+			switch info.Disposition {
+			case rpc.InterceptDispositionType_WAITING:
+			case rpc.InterceptDispositionType_ACTIVE:
+			case rpc.InterceptDispositionType_AGENT_ERROR:
+				// agent-owned state: continue along
+			default:
+				// otherwise: don't return this intercept
+				return false
+			}
+			// We haven't found a reason to exlude this intercept, so include it.
+			return true
 		}
 	} else {
 		// sessionID refers to a client session
