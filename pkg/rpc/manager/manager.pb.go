@@ -396,8 +396,7 @@ type InterceptInfo struct {
 	Spec *InterceptSpec `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
 	// manager_port is the port on the manager that the agent should
 	// send intercepted traffic to.  This gets set by the manager when
-	// the agent calls ReviewIntercept setting the disposition to
-	// ACTIVE.
+	// the the intercept is first created.
 	ManagerPort int32 `protobuf:"varint,2,opt,name=manager_port,json=managerPort,proto3" json:"manager_port,omitempty"`
 	// preview_domain is the SystemA domain that will proxy in traffic
 	// to this intercept.  This gets set by the manager at some

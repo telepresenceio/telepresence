@@ -321,20 +321,37 @@ func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) (*rpc.In
 		},
 	}
 
-	if len(s.agentsByName[cept.Spec.Agent]) == 0 {
-		cept.Disposition = rpc.InterceptDispositionType_NO_AGENT
-		cept.Message = fmt.Sprintf("No agent found for %q", spec.Agent)
-	} else {
-		agents := make([]*rpc.AgentInfo, 0, len(s.agentsByName[cept.Spec.Agent]))
-		for _, agent := range s.agentsByName[cept.Spec.Agent] {
-			agents = append(agents, agent)
+	// Wrap each potential-state-change in a
+	//
+	//     if cept.Disposition == rpc.InterceptDispositionType_WAITING { … }
+	//
+	// so that we don't need to worry about different state-changes stomping on eachother.
+
+	if cept.Disposition == rpc.InterceptDispositionType_WAITING {
+		cept.ManagerPort = int32(s.unlockedNextPort())
+		if cept.ManagerPort == 0 {
+			// Wow, there are no ports left!  That is... unlikely!
+			cept.Disposition = rpc.InterceptDispositionType_NO_PORTS
+			cept.Message = ""
 		}
-		if !agentsAreCompatible(agents) {
+	}
+
+	if cept.Disposition == rpc.InterceptDispositionType_WAITING {
+		if len(s.agentsByName[cept.Spec.Agent]) == 0 {
 			cept.Disposition = rpc.InterceptDispositionType_NO_AGENT
-			cept.Message = fmt.Sprintf("Agents for %q are not consistent", spec.Agent)
-		} else if !agentHasMechanism(agents[0], spec.Mechanism) {
-			cept.Disposition = rpc.InterceptDispositionType_NO_MECHANISM
-			cept.Message = fmt.Sprintf("Agents for %q do not have mechanism %q", spec.Agent, spec.Mechanism)
+			cept.Message = fmt.Sprintf("No agent found for %q", spec.Agent)
+		} else {
+			agents := make([]*rpc.AgentInfo, 0, len(s.agentsByName[cept.Spec.Agent]))
+			for _, agent := range s.agentsByName[cept.Spec.Agent] {
+				agents = append(agents, agent)
+			}
+			if !agentsAreCompatible(agents) {
+				cept.Disposition = rpc.InterceptDispositionType_NO_AGENT
+				cept.Message = fmt.Sprintf("Agents for %q are not consistent", spec.Agent)
+			} else if !agentHasMechanism(agents[0], spec.Mechanism) {
+				cept.Disposition = rpc.InterceptDispositionType_NO_MECHANISM
+				cept.Message = fmt.Sprintf("Agents for %q do not have mechanism %q", spec.Agent, spec.Mechanism)
+			}
 		}
 	}
 
@@ -389,15 +406,6 @@ func (s *State) ReviewIntercept(sessionID string, ceptID string, disposition rpc
 	if intercept.Disposition == rpc.InterceptDispositionType_WAITING {
 		intercept.Disposition = disposition
 		intercept.Message = message
-
-		// An intercept going active needs to be allocated a free port
-		if disposition == rpc.InterceptDispositionType_ACTIVE {
-			intercept.ManagerPort = int32(s.unlockedNextPort())
-			if intercept.ManagerPort == 0 {
-				// Wow, there are no ports left!  That is... unlikely!
-				intercept.Disposition = rpc.InterceptDispositionType_NO_PORTS
-			}
-		}
 
 		// Save the result.
 		s.intercepts.Store(ceptID, intercept)
