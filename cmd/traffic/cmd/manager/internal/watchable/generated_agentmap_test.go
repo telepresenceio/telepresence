@@ -174,6 +174,10 @@ func TestAgentMap_Store(t *testing.T) {
 	// TODO
 }
 
+func TestAgentMap_CompareAndSwap(t *testing.T) {
+	// TODO
+}
+
 func TestAgentMap_Subscribe(t *testing.T) {
 	ctx := dlog.NewTestContext(t, true)
 	ctx, cancelCtx := context.WithCancel(ctx)

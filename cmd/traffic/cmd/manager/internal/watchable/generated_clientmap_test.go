@@ -174,6 +174,10 @@ func TestClientMap_Store(t *testing.T) {
 	// TODO
 }
 
+func TestClientMap_CompareAndSwap(t *testing.T) {
+	// TODO
+}
+
 func TestClientMap_Subscribe(t *testing.T) {
 	ctx := dlog.NewTestContext(t, true)
 	ctx, cancelCtx := context.WithCancel(ctx)

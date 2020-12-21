@@ -174,6 +174,10 @@ func TestInterceptMap_Store(t *testing.T) {
 	// TODO
 }
 
+func TestInterceptMap_CompareAndSwap(t *testing.T) {
+	// TODO
+}
+
 func TestInterceptMap_Subscribe(t *testing.T) {
 	ctx := dlog.NewTestContext(t, true)
 	ctx, cancelCtx := context.WithCancel(ctx)

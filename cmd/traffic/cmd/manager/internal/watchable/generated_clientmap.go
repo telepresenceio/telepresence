@@ -30,17 +30,14 @@ type ClientMapSnapshot struct {
 	Updates []ClientMapUpdate
 }
 
-// ClientMap is a wrapper around map[string]*manager.ClientInfo (and around WatchableMap) that provides the
-// additional features that:
+// ClientMap is a wrapper around map[string]*manager.ClientInfo that is very similar to sync.Map, and that that
+// provides the additional features that:
 //
-// 1. it is thread-safe (via WatchableMap)
-// 2. you can Subscribe to watch for updates (via WatchableMap)
-// 3. you can Subscribe to just a subset of the map
-// 4. it provides type safety beyond the abstract proto.Message interface (compared to WatchableMap,
-//    which uses proto.Message similary to `interface{}`)
-// 5. the Subscribe channel includes full snapshots, so you don't need to track the world (compared
-//    to WatchableMap)
-// 6. the Subscribe channel coalesces updates (compared to WatchableMap)
+// 1. it is thread-safe (compared to a bare map)
+// 2. it provides type safety (compared to a sync.Map)
+// 3. it provides a compare-and-swap operation
+// 4. you can Subscribe to either the whole map or just a subset of the map to watch for updates.
+//    This gives you complete snapshots, deltas, and coalescing of rapid updates.
 type ClientMap struct {
 	lock sync.RWMutex
 	// things guarded by 'lock'
@@ -114,6 +111,24 @@ func (tm *ClientMap) LoadOrStore(key string, val *manager.ClientInfo) (value *ma
 	}
 	tm.unlockedStore(key, val)
 	return proto.Clone(val).(*manager.ClientInfo), false
+}
+
+// CompareAndSwap is the atomic equivalent of:
+//
+//     if loadedVal, loadedOK := m.Load(key); loadedOK && proto.Equal(loadedVal, old) {
+//         m.Store(key, new)
+//         return true
+//     }
+//     return false
+func (tm *ClientMap) CompareAndSwap(key string, old, new *manager.ClientInfo) bool {
+	tm.lock.Lock()
+	defer tm.lock.Unlock()
+
+	if loadedVal, loadedOK := tm.value[key]; loadedOK && proto.Equal(loadedVal, old) {
+		tm.unlockedStore(key, new)
+		return true
+	}
+	return false
 }
 
 func (tm *ClientMap) unlockedStore(key string, val *manager.ClientInfo) {
