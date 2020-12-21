@@ -90,10 +90,32 @@ enum InterceptDispositionType {
 
   // Failure states
 
+  // What does "NO_CLIENT" mean?  The Manager garbage-collects the
+  // intercept if the client goes away.
   NO_CLIENT = 3;
+
+  // NO_AGENT indicates that there are no currently-running agents
+  // that can service the intercept, or that there is a inconsistency
+  // between the agents that are running.  This may be an ephemeral
+  // state, such as inconsistency between agents during the middle of
+  // a rolling update.
   NO_AGENT = 4;
+
+  // NO_MECHANISM indicates that the agent(s) that would handle this
+  // intercept do not report that they support the mechanism of the
+  // intercept.  For example, if you are running the OSS agent but ask
+  // for an intercept using the "http" mechanism, which requires the
+  // Ambassador Telepresence agent.
   NO_MECHANISM = 5;
+
+  // NO_PORT indicates that that the manager was unable to allocate a
+  // port to act as the rendezvous point between the client and the
+  // agent.
   NO_PORTS = 6;
+
+  // AGENT_ERROR indicates that the intercept was submitted to an
+  // agent, but that the agent rejected it (by calling
+  // ReviewIntercept).
   AGENT_ERROR = 7;
 }
 

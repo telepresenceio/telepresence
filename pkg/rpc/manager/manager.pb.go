@@ -34,14 +34,32 @@ const _ = proto.ProtoPackageIsVersion4
 type InterceptDispositionType int32
 
 const (
-	InterceptDispositionType_UNSPECIFIED  InterceptDispositionType = 0
-	InterceptDispositionType_ACTIVE       InterceptDispositionType = 1
-	InterceptDispositionType_WAITING      InterceptDispositionType = 2
-	InterceptDispositionType_NO_CLIENT    InterceptDispositionType = 3
-	InterceptDispositionType_NO_AGENT     InterceptDispositionType = 4
+	InterceptDispositionType_UNSPECIFIED InterceptDispositionType = 0
+	InterceptDispositionType_ACTIVE      InterceptDispositionType = 1
+	InterceptDispositionType_WAITING     InterceptDispositionType = 2
+	// What does "NO_CLIENT" mean?  The Manager garbage-collects the
+	// intercept if the client goes away.
+	InterceptDispositionType_NO_CLIENT InterceptDispositionType = 3
+	// NO_AGENT indicates that there are no currently-running agents
+	// that can service the intercept, or that there is a inconsistency
+	// between the agents that are running.  This may be an ephemeral
+	// state, such as inconsistency between agents during the middle of
+	// a rolling update.
+	InterceptDispositionType_NO_AGENT InterceptDispositionType = 4
+	// NO_MECHANISM indicates that the agent(s) that would handle this
+	// intercept do not report that they support the mechanism of the
+	// intercept.  For example, if you are running the OSS agent but ask
+	// for an intercept using the "http" mechanism, which requires the
+	// Ambassador Telepresence agent.
 	InterceptDispositionType_NO_MECHANISM InterceptDispositionType = 5
-	InterceptDispositionType_NO_PORTS     InterceptDispositionType = 6
-	InterceptDispositionType_AGENT_ERROR  InterceptDispositionType = 7
+	// NO_PORT indicates that that the manager was unable to allocate a
+	// port to act as the rendezvous point between the client and the
+	// agent.
+	InterceptDispositionType_NO_PORTS InterceptDispositionType = 6
+	// AGENT_ERROR indicates that the intercept was submitted to an
+	// agent, but that the agent rejected it (by calling
+	// ReviewIntercept).
+	InterceptDispositionType_AGENT_ERROR InterceptDispositionType = 7
 )
 
 // Enum value maps for InterceptDispositionType.
