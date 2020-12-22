@@ -229,8 +229,9 @@ def run_docker_command(
     )
 
     # Prepare container environment
-    for key in remote_env:
-        docker_command.append("-e={}".format(key))
+    if not "--env-file" in docker_args:
+        for key in remote_env:
+            docker_command.append("-e={}".format(key))
     docker_env = os.environ.copy()
     docker_env.update(remote_env)
 
