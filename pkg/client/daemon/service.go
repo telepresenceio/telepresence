@@ -10,12 +10,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
 	"google.golang.org/grpc"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/datawire/dlib/dgroup"

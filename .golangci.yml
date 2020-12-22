@@ -3,7 +3,12 @@ run:
     - citest
 
 issues:
+  # Give me the full output
+  max-same-issues: 0
+
+  # Use the default excludes...
   exclude-use-default: false
+  # ...but also add some of our own
   exclude:
     - Error return value of `(\w+\.)+(Close|Flush|Remove|(Un)?Setenv|(Fp|P)rint(f|ln))\` is not checked
     - 'structtag: struct field \w+ repeats json tag'
@@ -20,6 +25,11 @@ issues:
         - unparam
 
 linters-settings:
+  depguard:
+    list-type: blacklist
+    packages-with-error-message:
+      - github.com/golang/protobuf: "Use google.golang.org/protobuf instead of github.com/golang/protobuf"
+
   gocyclo:
     min-complexity: 35
 
