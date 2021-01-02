@@ -15,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -52,8 +51,8 @@ func TestTelepresence(t *testing.T) {
 	dtest.WithMachineLock(func() {
 		_ = os.Chdir("../../..")
 		beforeSuite(t)
-		defer afterSuite(t)
-		testTelepresence(t)
+		defer t.Run("clean up", afterSuite)
+		t.Run("Telepresence", testTelepresence)
 	})
 }
 
@@ -106,53 +105,32 @@ func testTelepresence(t *testing.T) {
 	})
 
 	t.Run("When connected", func(t *testing.T) {
-		itCount := int32(0)
-		itTotal := int32(0) // To simulate AfterAll. Add one for each added t.Run(t *testing.T) test
+		stdout, stderr := telepresence("--namespace", namespace, "connect")
+		assert.Empty(t, stderr)
+		assert.Contains(t, stdout, "Connected to context")
 
-		Run := func(name string, fn func(*testing.T)) {
-			t.Run(name, func(t *testing.T) {
-				// This is a bit annoying, but ginkgo does not provide a context scoped "BeforeAll"
-				// Will be fixed in ginkgo 2.0
-				if atomic.CompareAndSwapInt32(&itCount, 0, 1) {
-					stdout, stderr := telepresence("--namespace", namespace, "connect")
-					assert.Empty(t, stderr)
-					assert.Contains(t, stdout, "Connected to context")
-				} else {
-					atomic.AddInt32(&itCount, 1)
-				}
+		defer t.Run("clean up", func(t *testing.T) {
+			stdout, stderr := telepresence("quit")
+			assert.Empty(t, stderr)
+			assert.Contains(t, stdout, "quitting")
+			time.Sleep(time.Second) // Allow some time for processes to die and sockets to vanish
+		})
 
-				defer func() {
-					// This is a bit annoying, but ginkgo does not provide a context scoped "AfterAll"
-					// Will be fixed in ginkgo 2.0
-					if atomic.CompareAndSwapInt32(&itCount, itTotal, 0) {
-						stdout, stderr := telepresence("quit")
-						assert.Empty(t, stderr)
-						assert.Contains(t, stdout, "quitting")
-						time.Sleep(time.Second) // Allow some time for processes to die and sockets to vanish
-					}
-				}()
-
-				fn(t)
-			})
-		}
-
-		Run("Reports version from daemon", func(t *testing.T) {
+		t.Run("Reports version from daemon", func(t *testing.T) {
 			stdout, stderr := telepresence("version")
 			assert.Empty(t, stderr)
 			vs := client.DisplayVersion()
 			assert.Contains(t, stdout, fmt.Sprintf("Client %s", vs))
 			assert.Contains(t, stdout, fmt.Sprintf("Daemon %s", vs))
 		})
-		itTotal++
 
-		Run("Reports status as connected", func(t *testing.T) {
+		t.Run("Reports status as connected", func(t *testing.T) {
 			stdout, stderr := telepresence("status")
 			assert.Empty(t, stderr)
 			assert.Contains(t, stdout, "Context:")
 		})
-		itTotal++
 
-		Run("Proxies outbound traffic", func(t *testing.T) {
+		t.Run("Proxies outbound traffic", func(t *testing.T) {
 			// Give outbound interceptor 15 seconds to kick in.
 			assert.Eventually(t,
 				// condition
@@ -178,13 +156,12 @@ func testTelepresence(t *testing.T) {
 				)
 			}
 		})
-		itTotal++
 
-		Run("Proxies concurrent inbound traffic with intercept", func(t *testing.T) {
+		t.Run("Proxies concurrent inbound traffic with intercept", func(t *testing.T) {
 			intercepts := make([]string, 0, serviceCount)
 			services := make([]*http.Server, 0, serviceCount)
 
-			defer func() {
+			defer t.Run("cleaning up", func(t *testing.T) {
 				for _, svc := range intercepts {
 					stdout, stderr := telepresence("leave", svc)
 					assert.Empty(t, stderr)
@@ -193,7 +170,7 @@ func testTelepresence(t *testing.T) {
 				for _, srv := range services {
 					_ = srv.Shutdown(context.Background())
 				}
-			}()
+			})
 
 			t.Run("adding intercepts", func(t *testing.T) {
 				for i := 0; i < serviceCount; i++ {
@@ -245,9 +222,8 @@ func testTelepresence(t *testing.T) {
 				}
 			})
 		})
-		itTotal++
 
-		Run("Successfully intercepts deployment with probes", func(t *testing.T) {
+		t.Run("Successfully intercepts deployment with probes", func(t *testing.T) {
 			stdout, stderr := telepresence("intercept", "with-probes", "--port", "9090")
 			assert.Empty(t, stderr)
 			assert.Contains(t, stdout, "Using deployment with-probes")
@@ -255,76 +231,71 @@ func testTelepresence(t *testing.T) {
 			assert.Empty(t, stderr)
 			assert.Contains(t, stdout, "with-probes: intercepted")
 		})
-		itTotal++
 	})
 
-	t.Run("when uninstalling", func(t *testing.T) {
-		t.Run("Uninstalls", func(t *testing.T) {
-			// The following By's could be It's in their own right if order was guaranteed. An
-			// OrderedContext is announced for Ginkgo 2.0.
+	t.Run("When uninstalling", func(t *testing.T) {
+		t.Run("Uninstalls agent on given deployment", func(t *testing.T) {
+			agentName := func() (string, error) {
+				return kubectlOut("get", "deploy", "with-probes", "-o",
+					`jsonpath={.spec.template.spec.containers[?(@.name=="traffic-agent")].name}`)
+			}
+			stdout, err := agentName()
+			assert.NoError(t, err)
+			assert.Equal(t, "traffic-agent", stdout)
+			_, stderr := telepresence("--namespace", namespace, "uninstall", "--agent", "with-probes")
+			assert.Empty(t, stderr)
+			defer telepresence("quit")
+			assert.Eventually(t,
+				// condition
+				func() bool {
+					stdout, _ := agentName()
+					return stdout == ""
+				},
+				5*time.Second,        // waitFor
+				500*time.Millisecond, // polling interval
+			)
+		})
 
-			t.Run("Uninstalling agent on given deployment", func(t *testing.T) {
-				agentName := func() (string, error) {
-					return kubectlOut("get", "deploy", "with-probes", "-o",
-						`jsonpath={.spec.template.spec.containers[?(@.name=="traffic-agent")].name}`)
-				}
-				stdout, err := agentName()
-				assert.NoError(t, err)
-				assert.Equal(t, "traffic-agent", stdout)
-				_, stderr := telepresence("--namespace", namespace, "uninstall", "--agent", "with-probes")
-				assert.Empty(t, stderr)
-				defer telepresence("quit")
-				assert.Eventually(t,
-					// condition
-					func() bool {
-						stdout, _ := agentName()
-						return stdout == ""
-					},
-					5*time.Second,        // waitFor
-					500*time.Millisecond, // polling interval
-				)
-			})
+		t.Run("Uninstalls all agents", func(t *testing.T) {
+			agentNames := func() (string, error) {
+				return kubectlOut("get", "deploy", "-o",
+					`jsonpath={.items[*].spec.template.spec.containers[?(@.name=="traffic-agent")].name}`)
+			}
+			stdout, err := agentNames()
+			assert.NoError(t, err)
+			assert.Equal(t, serviceCount, len(strings.Split(stdout, " ")))
+			_, stderr := telepresence("--namespace", namespace, "uninstall", "--all-agents")
+			assert.Empty(t, stderr)
+			defer telepresence("quit")
+			assert.Eventually(t,
+				func() bool {
+					stdout, _ := agentNames()
+					return stdout == ""
+				},
+				5*time.Second,        // waitFor
+				500*time.Millisecond, // polling interval
+			)
+		})
 
-			t.Run("Uninstalling all agents", func(t *testing.T) {
-				agentNames := func() (string, error) {
-					return kubectlOut("get", "deploy", "-o",
-						`jsonpath={.items[*].spec.template.spec.containers[?(@.name=="traffic-agent")].name}`)
-				}
-				stdout, err := agentNames()
-				assert.NoError(t, err)
-				assert.Equal(t, serviceCount, len(strings.Split(stdout, " ")))
-				_, stderr := telepresence("--namespace", namespace, "uninstall", "--all-agents")
-				assert.Empty(t, stderr)
-				defer telepresence("quit")
-				assert.Eventually(t,
-					func() bool {
-						stdout, _ := agentNames()
-						return stdout == ""
-					},
-					5*time.Second,        // waitFor
-					500*time.Millisecond, // polling interval
-				)
-			})
-
-			t.Run("Uninstalling the traffic manager and quitting", func(t *testing.T) {
-				names := func() (string, error) {
-					return kubectlOut("get", "svc,deploy", "traffic-manager", "--ignore-not-found", "-o", "jsonpath={.items[*].metadata.name}")
-				}
-				stdout, err := names()
-				assert.NoError(t, err)
-				assert.Equal(t, 2, len(strings.Split(stdout, " "))) // The service and the deployment
-				stdout, stderr := telepresence("--namespace", namespace, "uninstall", "--everything")
-				assert.Empty(t, stderr)
-				assert.Contains(t, stdout, "Daemon quitting")
-				assert.Eventually(t,
-					func() bool {
-						stdout, _ := names()
-						return stdout == ""
-					},
-					5*time.Second,        // waitFor
-					500*time.Millisecond, // polling interval
-				)
-			})
+		t.Run("Uninstalls the traffic manager and quits", func(t *testing.T) {
+			names := func() (string, error) {
+				return kubectlOut("get", "svc,deploy", "traffic-manager", "--ignore-not-found", "-o", "jsonpath={.items[*].metadata.name}")
+			}
+			stdout, err := names()
+			assert.NoError(t, err)
+			assert.Equal(t, 2, len(strings.Split(stdout, " "))) // The service and the deployment
+			stdout, stderr := telepresence("--namespace", namespace, "uninstall", "--everything")
+			assert.Empty(t, stderr)
+			assert.Contains(t, stdout, "Daemon quitting")
+			assert.Eventually(t,
+				func() bool {
+					stdout, _ := names()
+					t.Log(stdout)
+					return stdout == ""
+				},
+				5*time.Second,        // waitFor
+				500*time.Millisecond, // polling interval
+			)
 		})
 	})
 }
@@ -390,7 +361,7 @@ func beforeSuite(t *testing.T) {
 	_, _ = telepresence("quit")
 }
 
-func afterSuite(t *testing.T) {
+func afterSuite(_ *testing.T) {
 	_ = run("kubectl", "delete", "namespace", namespace)
 }
 
