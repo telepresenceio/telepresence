@@ -89,13 +89,20 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 			return
 		}
 	}
-	dlog.Debugf(c, "QTYPE[%v] %s -> FALLBACK", r.Question[0].Qtype, domain)
-	in, err := dns.Exchange(r, s.fallback)
-	if err != nil {
-		dlog.Error(c, err)
-		return
+	if s.fallback != "" {
+		dlog.Debugf(c, "QTYPE[%v] %s -> FALLBACK", r.Question[0].Qtype, domain)
+		in, err := dns.Exchange(r, s.fallback)
+		if err != nil {
+			dlog.Error(c, err)
+			return
+		}
+		_ = w.WriteMsg(in)
+	} else {
+		dlog.Debugf(c, "QTYPE[%v] %s -> NOT FOUND", r.Question[0].Qtype, domain)
+		m := new(dns.Msg)
+		m.SetRcode(r, dns.RcodeNameError)
+		_ = w.WriteMsg(m)
 	}
-	_ = w.WriteMsg(in)
 }
 
 // Start starts the DNS server
