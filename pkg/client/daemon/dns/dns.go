@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"strings"
+	"sync"
 
 	"github.com/miekg/dns"
 	"github.com/pkg/errors"
@@ -106,21 +107,25 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 }
 
 // Start starts the DNS server
-func (s *Server) Run(c context.Context) error {
+func (s *Server) Run(c context.Context, initDone *sync.WaitGroup) error {
 	type lwa struct {
 		addr     string
 		listener net.PacketConn
 	}
 	listeners := make([]*lwa, len(s.listeners))
 	for i, addr := range s.listeners {
-		listener, err := net.ListenPacket("udp", addr)
+		lc := net.ListenConfig{}
+		listener, err := lc.ListenPacket(c, "udp", addr)
 		if err != nil {
+			initDone.Done()
 			return errors.Wrap(err, "failed to set up udp listener")
 		}
 		listeners[i] = &lwa{addr: addr, listener: listener}
 	}
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	wg := &sync.WaitGroup{}
+	wg.Add(len(listeners))
 	for _, lwa := range listeners {
 		srv := &dns.Server{PacketConn: lwa.listener, Handler: s}
 		g.Go(lwa.addr, func(c context.Context) error {
@@ -128,8 +133,11 @@ func (s *Server) Run(c context.Context) error {
 				<-c.Done()
 				_ = srv.ShutdownContext(dcontext.HardContext(c))
 			}()
+			wg.Done()
 			return srv.ActivateAndServe()
 		})
 	}
+	wg.Wait()
+	initDone.Done()
 	return g.Wait()
 }
