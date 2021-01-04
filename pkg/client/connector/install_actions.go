@@ -54,11 +54,11 @@ type completeAction interface {
 	TelVersion() string
 }
 
-func explainDo(c context.Context, a partialAction, obj kates.Object) {
+func explainDo(c context.Context, a completeAction, obj kates.Object) {
 	explainAction(c, a, obj, partialAction.ExplainDo)
 }
 
-func explainUndo(c context.Context, a partialAction, obj kates.Object) {
+func explainUndo(c context.Context, a completeAction, obj kates.Object) {
 	explainAction(c, a, obj, partialAction.ExplainUndo)
 }
 

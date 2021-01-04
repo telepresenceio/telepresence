@@ -471,9 +471,12 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, a
 		}
 
 		dlog.Debugf(c, "Updating agent for deployment %s.%s", name, namespace)
-		aaa := actions.AddTrafficAgent
+		aaa := &deploymentActions{
+			Version:         actions.Version,
+			AddTrafficAgent: actions.AddTrafficAgent,
+		}
 		explainUndo(c, aaa, dep)
-		aaa.ImageName = agentImageName
+		aaa.AddTrafficAgent.ImageName = agentImageName
 		agentContainer.Image = agentImageName
 		explainDo(c, aaa, dep)
 	default:
