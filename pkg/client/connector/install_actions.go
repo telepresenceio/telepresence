@@ -41,6 +41,9 @@ type completeAction interface {
 	// These are all Exported, so that you can easily tell which methods are implementing the
 	// external interface and which are internal.
 
+	MarshalAnnotation() (string, error)
+	UnmarshalAnnotation(string) error
+
 	// The list of smaller component actions that make up this completeAction.
 	Actions() []partialAction
 
@@ -130,12 +133,16 @@ func undoActions(ma completeAction, obj kates.Object) (err error) {
 	return nil
 }
 
-func mustMarshal(data partialAction) string {
+func marshalString(data completeAction) (string, error) {
 	js, err := json.Marshal(data)
 	if err != nil {
-		panic(fmt.Sprintf("internal error, unable to json.Marshal %T: %v", data, err))
+		return "", err
 	}
-	return string(js)
+	return string(js), nil
+}
+
+func unmarshalString(in string, out completeAction) error {
+	return json.Unmarshal([]byte(in), out)
 }
 
 // makePortSymbolicAction //////////////////////////////////////////////////////
@@ -297,8 +304,12 @@ func (s *svcActions) ObjectType() string {
 	return "service"
 }
 
-func (s *svcActions) String() string {
-	return mustMarshal(s)
+func (s *svcActions) MarshalAnnotation() (string, error) {
+	return marshalString(s)
+}
+
+func (s *svcActions) UnmarshalAnnotation(str string) error {
+	return unmarshalString(str, s)
 }
 
 func (s *svcActions) TelVersion() string {
@@ -631,8 +642,12 @@ func (d *deploymentActions) ObjectType() string {
 	return "deployment"
 }
 
-func (d *deploymentActions) String() string {
-	return mustMarshal(d)
+func (d *deploymentActions) MarshalAnnotation() (string, error) {
+	return marshalString(d)
+}
+
+func (d *deploymentActions) UnmarshalAnnotation(str string) error {
+	return unmarshalString(str, d)
 }
 
 func (d *deploymentActions) TelVersion() string {

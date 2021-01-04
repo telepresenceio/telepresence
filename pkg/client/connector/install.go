@@ -3,7 +3,6 @@ package connector
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -540,7 +539,7 @@ func getAnnotation(obj kates.Object, data completeAction) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	if err := json.Unmarshal([]byte(ajs), data); err != nil {
+	if err := data.UnmarshalAnnotation(ajs); err != nil {
 		return false, err
 	}
 
@@ -742,7 +741,10 @@ func addAgentToDeployment(
 	if deployment.Annotations == nil {
 		deployment.Annotations = make(map[string]string)
 	}
-	deployment.Annotations[annTelepresenceActions] = deploymentMod.String()
+	deployment.Annotations[annTelepresenceActions], err = deploymentMod.MarshalAnnotation()
+	if err != nil {
+		return nil, nil, err
+	}
 	explainDo(c, deploymentMod, deployment)
 
 	// Apply the actions on the Service.
@@ -753,7 +755,10 @@ func addAgentToDeployment(
 		if service.Annotations == nil {
 			service.Annotations = make(map[string]string)
 		}
-		service.Annotations[annTelepresenceActions] = serviceMod.String()
+		service.Annotations[annTelepresenceActions], err = serviceMod.MarshalAnnotation()
+		if err != nil {
+			return nil, nil, err
+		}
 		explainDo(c, serviceMod, service)
 	} else {
 		service = nil
