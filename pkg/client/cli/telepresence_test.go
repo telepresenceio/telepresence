@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/datawire/ambassador/pkg/dtest"
@@ -33,21 +32,7 @@ import (
 const serviceCount = 9
 
 func TestTelepresence(t *testing.T) {
-	// Check that the "ko" program exists, and adjust PATH as necessary.
-	if info, err := os.Stat("../../../tools/bin/ko"); err != nil || !info.Mode().IsRegular() || (info.Mode().Perm()&0100) == 0 {
-		t.Fatal("it looks like the ./tools/bin/ko executable wasn't built; be sure to build it with `make` before running `go test`!")
-	}
-	toolbindir, err := filepath.Abs("../../../tools/bin")
-	if !assert.NoError(t, err) {
-		return
-	}
-	os.Setenv("PATH", toolbindir+":"+os.Getenv("PATH"))
-
-	// Remove very verbose output from DTEST initialization
-	log.SetOutput(ioutil.Discard)
-
 	dtest.WithMachineLock(func() {
-		_ = os.Chdir("../../..")
 		suite.Run(t, new(telepresenceSuite))
 	})
 }
@@ -58,7 +43,91 @@ type telepresenceSuite struct {
 	namespace   string
 }
 
-func (ts *telepresenceSuite) TestWithNoDaemonRunning() {
+func (ts *telepresenceSuite) SetupSuite() {
+	// Check that the "ko" program exists, and adjust PATH as necessary.
+	if info, err := os.Stat("../../../tools/bin/ko"); err != nil || !info.Mode().IsRegular() || (info.Mode().Perm()&0100) == 0 {
+		ts.Fail("it looks like the ./tools/bin/ko executable wasn't built; be sure to build it with `make` before running `go test`!")
+		return
+	}
+	toolbindir, err := filepath.Abs("../../../tools/bin")
+	if !ts.NoError(err) {
+		return
+	}
+	_ = os.Chdir("../../..")
+
+	os.Setenv("PATH", toolbindir+":"+os.Getenv("PATH"))
+
+	// Remove very verbose output from DTEST initialization
+	log.SetOutput(ioutil.Discard)
+
+	ts.testVersion = "v0.1.2-test"
+	ts.namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
+
+	version.Version = ts.testVersion
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		executable, err := ts.buildExecutable()
+		ts.NoError(err)
+		client.SetExe(executable)
+	}()
+
+	_ = os.Remove(client.ConnectorSocketName)
+	err = run("sudo", "true")
+	ts.NoError(err, "acquire privileges")
+
+	registry := dtest.DockerRegistry()
+	os.Setenv("KO_DOCKER_REPO", registry)
+	os.Setenv("TELEPRESENCE_REGISTRY", registry)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := ts.publishManager()
+		ts.NoError(err)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		kubeconfig := dtest.Kubeconfig()
+		os.Setenv("DTEST_KUBECONFIG", kubeconfig)
+		os.Setenv("KUBECONFIG", kubeconfig)
+		err = run("kubectl", "create", "namespace", ts.namespace)
+		ts.NoError(err)
+	}()
+	wg.Wait()
+
+	wg.Add(serviceCount)
+	for i := 0; i < serviceCount; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			err = ts.applyEchoService(fmt.Sprintf("hello-%d", i))
+			ts.NoError(err)
+		}()
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err = ts.applyApp("with-probes")
+		ts.NoError(err)
+	}()
+	wg.Wait()
+
+	// Ensure that no telepresence is running when the tests start
+	_, _ = telepresence("quit")
+}
+
+func (ts *telepresenceSuite) TearDownSuite() {
+	_ = run("kubectl", "delete", "namespace", ts.namespace)
+}
+
+func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 	ts.Run("Version", func() {
 		stdout, stderr := telepresence("version")
 		ts.Empty(stderr)
@@ -103,159 +172,11 @@ func (ts *telepresenceSuite) TestWithNoDaemonRunning() {
 	})
 }
 
-type connectedSuite struct {
-	suite.Suite
-	namespace string
-}
-
-func (ts *telepresenceSuite) TestConnected() {
+func (ts *telepresenceSuite) TestB_Connected() {
 	suite.Run(ts.T(), &connectedSuite{namespace: ts.namespace})
 }
 
-func (cs *connectedSuite) SetupSuite() {
-	stdout, stderr := telepresence("--namespace", cs.namespace, "connect")
-	cs.Empty(stderr)
-	cs.Contains(stdout, "Connected to context")
-
-	// Give outbound interceptor 15 seconds to kick in.
-	cs.Eventually(
-		// condition
-		func() bool {
-			stdout, _ := telepresence("status")
-			return regexp.MustCompile(`Proxy:\s+ON`).FindString(stdout) != ""
-		},
-		15*time.Second, // waitFor
-		time.Second,    // polling interval
-		"Timeout waiting for network overrides to establish", // msg
-	)
-}
-
-func (cs *connectedSuite) TearDownSuite() {
-	stdout, stderr := telepresence("quit")
-	cs.Empty(stderr)
-	cs.Contains(stdout, "quitting")
-	time.Sleep(time.Second) // Allow some time for processes to die and sockets to vanish
-}
-
-func (cs *connectedSuite) TestReportsVersionFromDaemon() {
-	stdout, stderr := telepresence("version")
-	cs.Empty(stderr)
-	vs := client.DisplayVersion()
-	cs.Contains(stdout, fmt.Sprintf("Client %s", vs))
-	cs.Contains(stdout, fmt.Sprintf("Daemon %s", vs))
-}
-
-func (cs *connectedSuite) TestReportsStatusAsConnected() {
-	stdout, stderr := telepresence("status")
-	cs.Empty(stderr)
-	cs.Contains(stdout, "Context:")
-}
-
-func (cs *connectedSuite) TestProxiesOutboundTraffic() {
-	for i := 0; i < serviceCount; i++ {
-		svc := fmt.Sprintf("hello-%d", i)
-		expectedOutput := fmt.Sprintf("Request served by %s-", svc)
-		cs.Eventually(
-			// condition
-			func() bool {
-				out, _ := output("curl", "-s", svc)
-				return strings.Contains(out, expectedOutput)
-			},
-			5*time.Second,        // waitfor
-			500*time.Millisecond, // polling interval
-			`output from command "curl -s %s" contains %q`, svc, expectedOutput,
-		)
-	}
-}
-
-type interceptedSuite struct {
-	suite.Suite
-	intercepts []string
-	services   []*http.Server
-}
-
-func (cs *connectedSuite) TestIntercepted() {
-	suite.Run(cs.T(), new(interceptedSuite))
-}
-
-func (is *interceptedSuite) TearDownSuite() {
-	for _, svc := range is.intercepts {
-		stdout, stderr := telepresence("leave", svc)
-		is.Empty(stderr)
-		is.Empty(stdout)
-	}
-	for _, srv := range is.services {
-		_ = srv.Shutdown(context.Background())
-	}
-}
-
-func (is *interceptedSuite) SetupSuite() {
-	is.intercepts = make([]string, 0, serviceCount)
-	is.services = make([]*http.Server, 0, serviceCount)
-
-	is.Run("adding intercepts", func() {
-		for i := 0; i < serviceCount; i++ {
-			svc := fmt.Sprintf("hello-%d", i)
-			port := strconv.Itoa(9000 + i)
-			stdout, stderr := telepresence("intercept", svc, "--port", port)
-			is.Empty(stderr)
-			is.intercepts = append(is.intercepts, svc)
-			is.Contains(stdout, "Using deployment "+svc)
-		}
-	})
-
-	is.Run("starting http servers", func() {
-		for i := 0; i < serviceCount; i++ {
-			svc := fmt.Sprintf("hello-%d", i)
-			port := strconv.Itoa(9000 + i)
-			srv := &http.Server{Addr: ":" + port, Handler: http.NewServeMux()}
-			go func() {
-				srv.Handler.(*http.ServeMux).HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-					fmt.Fprintf(w, "%s from intercept at %s", svc, r.URL.Path)
-				})
-				is.services = append(is.services, srv)
-				err := srv.ListenAndServe()
-				is.Equal(http.ErrServerClosed, err)
-			}()
-		}
-	})
-}
-
-func (is *interceptedSuite) TestVerifyingResponsesFromInterceptor() {
-	for i := 0; i < serviceCount; i++ {
-		svc := fmt.Sprintf("hello-%d", i)
-		expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
-		is.Eventually(
-			// condition
-			func() bool {
-				out, _ := output("curl", "-s", svc)
-				return out == expectedOutput
-			},
-			5*time.Second,       // waitFor
-			50*time.Millisecond, // polling interval
-			`output from command "curl -s %s" equals %q`, svc, expectedOutput,
-		)
-	}
-}
-
-func (is *interceptedSuite) TestListingActiveIntercepts() {
-	stdout, stderr := telepresence("list", "--intercepts")
-	is.Empty(stderr)
-	for i := 0; i < serviceCount; i++ {
-		is.Contains(stdout, fmt.Sprintf("hello-%d: intercepted", i))
-	}
-}
-
-func (cs *connectedSuite) TestSuccessfullyInterceptsDeploymentWithProbes() {
-	stdout, stderr := telepresence("intercept", "with-probes", "--port", "9090")
-	cs.Empty(stderr)
-	cs.Contains(stdout, "Using deployment with-probes")
-	stdout, stderr = telepresence("list", "--intercepts")
-	cs.Empty(stderr)
-	cs.Contains(stdout, "with-probes: intercepted")
-}
-
-func (ts *telepresenceSuite) TestUninstall() {
+func (ts *telepresenceSuite) TestC_Uninstall() {
 	ts.Run("Uninstalls agent on given deployment", func() {
 		agentName := func() (string, error) {
 			return ts.kubectlOut("get", "deploy", "with-probes", "-o",
@@ -320,72 +241,153 @@ func (ts *telepresenceSuite) TestUninstall() {
 	})
 }
 
-func (ts *telepresenceSuite) SetupSuite() {
-	ts.testVersion = "v0.1.2-test"
-	ts.namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
-
-	version.Version = ts.testVersion
-
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		executable, err := ts.buildExecutable()
-		ts.NoError(err)
-		client.SetExe(executable)
-	}()
-
-	_ = os.Remove(client.ConnectorSocketName)
-	err := run("sudo", "true")
-	ts.NoError(err, "acquire privileges")
-
-	registry := dtest.DockerRegistry()
-	os.Setenv("KO_DOCKER_REPO", registry)
-	os.Setenv("TELEPRESENCE_REGISTRY", registry)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := ts.publishManager()
-		ts.NoError(err)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		kubeconfig := dtest.Kubeconfig()
-		os.Setenv("DTEST_KUBECONFIG", kubeconfig)
-		os.Setenv("KUBECONFIG", kubeconfig)
-		err = run("kubectl", "create", "namespace", ts.namespace)
-		ts.NoError(err)
-	}()
-	wg.Wait()
-
-	wg.Add(serviceCount)
-	for i := 0; i < serviceCount; i++ {
-		i := i
-		go func() {
-			defer wg.Done()
-			err = ts.applyEchoService(fmt.Sprintf("hello-%d", i))
-			ts.NoError(err)
-		}()
-	}
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err = ts.applyApp("with-probes")
-		ts.NoError(err)
-	}()
-	wg.Wait()
-
-	// Ensure that no telepresence is running when the tests start
-	_, _ = telepresence("quit")
+type connectedSuite struct {
+	suite.Suite
+	namespace string
 }
 
-func (ts *telepresenceSuite) TearDownSuite() {
-	_ = run("kubectl", "delete", "namespace", ts.namespace)
+func (cs *connectedSuite) SetupSuite() {
+	stdout, stderr := telepresence("--namespace", cs.namespace, "connect")
+	cs.Empty(stderr)
+	cs.Contains(stdout, "Connected to context")
+
+	// Give outbound interceptor 15 seconds to kick in.
+	cs.Eventually(
+		// condition
+		func() bool {
+			stdout, _ := telepresence("status")
+			return regexp.MustCompile(`Proxy:\s+ON`).FindString(stdout) != ""
+		},
+		15*time.Second, // waitFor
+		time.Second,    // polling interval
+		"Timeout waiting for network overrides to establish", // msg
+	)
+}
+
+func (cs *connectedSuite) TearDownSuite() {
+	stdout, stderr := telepresence("quit")
+	cs.Empty(stderr)
+	cs.Contains(stdout, "quitting")
+	time.Sleep(time.Second) // Allow some time for processes to die and sockets to vanish
+}
+
+func (cs *connectedSuite) TestA_ReportsVersionFromDaemon() {
+	stdout, stderr := telepresence("version")
+	cs.Empty(stderr)
+	vs := client.DisplayVersion()
+	cs.Contains(stdout, fmt.Sprintf("Client %s", vs))
+	cs.Contains(stdout, fmt.Sprintf("Daemon %s", vs))
+}
+
+func (cs *connectedSuite) TestB_ReportsStatusAsConnected() {
+	stdout, stderr := telepresence("status")
+	cs.Empty(stderr)
+	cs.Contains(stdout, "Context:")
+}
+
+func (cs *connectedSuite) TestC_ProxiesOutboundTraffic() {
+	for i := 0; i < serviceCount; i++ {
+		svc := fmt.Sprintf("hello-%d", i)
+		expectedOutput := fmt.Sprintf("Request served by %s-", svc)
+		cs.Eventually(
+			// condition
+			func() bool {
+				out, _ := output("curl", "-s", svc)
+				return strings.Contains(out, expectedOutput)
+			},
+			5*time.Second,        // waitfor
+			500*time.Millisecond, // polling interval
+			`output from command "curl -s %s" contains %q`, svc, expectedOutput,
+		)
+	}
+}
+
+func (cs *connectedSuite) TestD_Intercepted() {
+	suite.Run(cs.T(), new(interceptedSuite))
+}
+
+func (cs *connectedSuite) TestE_SuccessfullyInterceptsDeploymentWithProbes() {
+	stdout, stderr := telepresence("intercept", "with-probes", "--port", "9090")
+	cs.Empty(stderr)
+	cs.Contains(stdout, "Using deployment with-probes")
+	stdout, stderr = telepresence("list", "--intercepts")
+	cs.Empty(stderr)
+	cs.Contains(stdout, "with-probes: intercepted")
+}
+
+type interceptedSuite struct {
+	suite.Suite
+	intercepts []string
+	services   []*http.Server
+}
+
+func (is *interceptedSuite) SetupSuite() {
+	is.intercepts = make([]string, 0, serviceCount)
+	is.services = make([]*http.Server, 0, serviceCount)
+
+	is.Run("adding intercepts", func() {
+		for i := 0; i < serviceCount; i++ {
+			svc := fmt.Sprintf("hello-%d", i)
+			port := strconv.Itoa(9000 + i)
+			stdout, stderr := telepresence("intercept", svc, "--port", port)
+			is.Empty(stderr)
+			is.intercepts = append(is.intercepts, svc)
+			is.Contains(stdout, "Using deployment "+svc)
+		}
+	})
+
+	is.Run("starting http servers", func() {
+		for i := 0; i < serviceCount; i++ {
+			svc := fmt.Sprintf("hello-%d", i)
+			port := strconv.Itoa(9000 + i)
+			srv := &http.Server{Addr: ":" + port, Handler: http.NewServeMux()}
+			go func() {
+				srv.Handler.(*http.ServeMux).HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+					fmt.Fprintf(w, "%s from intercept at %s", svc, r.URL.Path)
+				})
+				is.services = append(is.services, srv)
+				err := srv.ListenAndServe()
+				is.Equal(http.ErrServerClosed, err)
+			}()
+		}
+	})
+}
+
+func (is *interceptedSuite) TearDownSuite() {
+	for _, svc := range is.intercepts {
+		stdout, stderr := telepresence("leave", svc)
+		is.Empty(stderr)
+		is.Empty(stdout)
+	}
+	for _, srv := range is.services {
+		_ = srv.Shutdown(context.Background())
+	}
+	time.Sleep(time.Second) // Allow some time for processes to die and intercepts to vanish
+}
+
+func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
+	for i := 0; i < serviceCount; i++ {
+		svc := fmt.Sprintf("hello-%d", i)
+		expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
+		is.Eventually(
+			// condition
+			func() bool {
+				out, _ := output("curl", "-s", svc)
+				return out == expectedOutput
+			},
+			5*time.Second,       // waitFor
+			50*time.Millisecond, // polling interval
+			`output from command "curl -s %s" equals %q`, svc, expectedOutput,
+		)
+	}
+}
+
+func (is *interceptedSuite) TestB_ListingActiveIntercepts() {
+	stdout, stderr := telepresence("list", "--intercepts")
+	is.Empty(stderr)
+	for i := 0; i < serviceCount; i++ {
+		is.Contains(stdout, fmt.Sprintf("hello-%d: intercepted", i))
+	}
 }
 
 func (ts *telepresenceSuite) applyApp(name string) error {
@@ -431,15 +433,6 @@ func (ts *telepresenceSuite) kubectlOut(args ...string) (string, error) {
 	return output(append([]string{"kubectl", "--namespace", ts.namespace}, args...)...)
 }
 
-func run(args ...string) error {
-	return client.RunError(exec.Command(args[0], args[1:]...).Run())
-}
-
-func output(args ...string) (string, error) {
-	out, err := exec.Command(args[0], args[1:]...).Output()
-	return string(out), client.RunError(err)
-}
-
 func (ts *telepresenceSuite) publishManager() error {
 	cmd := exec.Command("ko", "publish", "--local", "./cmd/traffic")
 	cmd.Env = append(os.Environ(),
@@ -463,6 +456,15 @@ func (ts *telepresenceSuite) buildExecutable() (string, error) {
 	return executable, run("go", "build", "-ldflags",
 		fmt.Sprintf("-X=github.com/datawire/telepresence2/pkg/version.Version=%s", ts.testVersion),
 		"-o", executable, "./cmd/telepresence")
+}
+
+func run(args ...string) error {
+	return client.RunError(exec.Command(args[0], args[1:]...).Run())
+}
+
+func output(args ...string) (string, error) {
+	out, err := exec.Command(args[0], args[1:]...).Output()
+	return string(out), client.RunError(err)
 }
 
 func getCommand(args ...string) *cobra.Command {
