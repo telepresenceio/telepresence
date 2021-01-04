@@ -19,6 +19,8 @@ import (
 
 // Public interface-y pieces ///////////////////////////////////////////////////
 
+// A partialAction is a single change that can be applied to an object.  A partialAction may not be
+// applied by itself; it may only be applied as part of a larger completeAction.
 type partialAction interface {
 	// These are all Exported, so that you can easily tell which methods are implementing the
 	// external interface and which are internal.
@@ -32,14 +34,23 @@ type partialAction interface {
 	IsDone(obj kates.Object) bool
 }
 
+// A completeAction is a set of smaller partialActions that may be applied to an object.
 type completeAction interface {
 	partialAction
 
 	// These are all Exported, so that you can easily tell which methods are implementing the
 	// external interface and which are internal.
 
+	// The list of smaller component actions that make up this completeAction.
 	Actions() []partialAction
+
+	// In the UI/logging, what resource type should we tell the user that this action operates
+	// on?
 	ObjectType() string
+
+	// For actions-that-we-well-do, this is the currently running Telepresence version.  For
+	// actions that we've read from in-cluster annotations, this is the Telepresence version
+	// that originally performed the action.
 	TelVersion() string
 }
 
@@ -500,7 +511,8 @@ func (ata *addTrafficAgentAction) Undo(dep kates.Object) error {
 type hideContainerPortAction struct {
 	ContainerName string `json:"container_name"`
 	PortName      string `json:"port_name"`
-	HiddenName    string `json:"hidden_name"`
+	// HiddenName is the name that we swapped it to; this is set by Do(), and read by Undo().
+	HiddenName string `json:"hidden_name"`
 }
 
 var _ partialAction = (*hideContainerPortAction)(nil)
