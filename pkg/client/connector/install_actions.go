@@ -533,8 +533,8 @@ type hideContainerPortAction struct {
 
 var _ partialAction = (*hideContainerPortAction)(nil)
 
-func (hcp *hideContainerPortAction) getPort(dep kates.Object, name string) (*kates.Container, *corev1.ContainerPort, error) {
-	cns := dep.(*kates.Deployment).Spec.Template.Spec.Containers
+func (hcp *hideContainerPortAction) getPort(dep *kates.Deployment, name string) (*kates.Container, *corev1.ContainerPort, error) {
+	cns := dep.Spec.Template.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
 		if cn.Name != hcp.ContainerName {
@@ -567,6 +567,10 @@ func swapPortName(cn *kates.Container, p *corev1.ContainerPort, from, to string)
 }
 
 func (hcp *hideContainerPortAction) Do(dep kates.Object) error {
+	return hcp.do(dep.(*kates.Deployment))
+}
+
+func (hcp *hideContainerPortAction) do(dep *kates.Deployment) error {
 	// New name must be max 15 characters long
 	cn, p, err := hcp.getPort(dep, hcp.PortName)
 	if err != nil {
@@ -588,11 +592,15 @@ func (hcp *hideContainerPortAction) ExplainUndo(_ kates.Object, out io.Writer) {
 }
 
 func (hcp *hideContainerPortAction) IsDone(dep kates.Object) bool {
-	_, _, err := hcp.getPort(dep, hcp.HiddenName)
+	_, _, err := hcp.getPort(dep.(*kates.Deployment), hcp.HiddenName)
 	return err == nil
 }
 
 func (hcp *hideContainerPortAction) Undo(dep kates.Object) error {
+	return hcp.undo(dep.(*kates.Deployment))
+}
+
+func (hcp *hideContainerPortAction) undo(dep *kates.Deployment) error {
 	cn, p, err := hcp.getPort(dep, hcp.HiddenName)
 	if err != nil {
 		return err
