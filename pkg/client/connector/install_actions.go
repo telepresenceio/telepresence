@@ -88,25 +88,17 @@ func (ma multiAction) explain(
 	out io.Writer,
 	ef func(partialAction partialAction, obj kates.Object, out io.Writer),
 ) {
-	last := len(ma) - 1
-	if last < 0 {
-		return
-	}
-
-	switch last {
-	case 0:
-	case 1:
-		ef(ma[0], obj, out)
-		fmt.Fprint(out, " and ")
-	default:
-		for _, partialAction := range ma[:last] {
-			ef(partialAction, obj, out)
-			fmt.Fprint(out, ", ")
+	for i, action := range ma {
+		switch i {
+		case 0:
+			// nothing
+		case len(ma) - 1:
+			_, _ = io.WriteString(out, ", and ")
+		default:
+			_, _ = io.WriteString(out, ", ")
 		}
-		fmt.Fprint(out, "and ")
+		ef(action, obj, out)
 	}
-	ef(ma[last], obj, out)
-	fmt.Fprint(out, ".")
 }
 
 func (ma multiAction) ExplainDo(obj kates.Object, out io.Writer) {
