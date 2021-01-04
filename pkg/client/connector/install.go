@@ -476,14 +476,14 @@ func addAgentToDeployment(
 	dlog.Debugf(c, "using service %s port %s when intercepting deployment %q", svc.Name, name, dep.Name)
 
 	targetPortSymbolic := true
-	containerPort := -1
+	containerPort := uint16(0)
 	version := client.Semver().String()
 
 	var serverMod *svcActions
 	if sPort.TargetPort.Type == intstr.Int {
 		// Service needs to use a named port
 		targetPortSymbolic = false
-		containerPort = int(sPort.TargetPort.IntVal)
+		containerPort = uint16(sPort.TargetPort.IntVal)
 		serverMod = &svcActions{
 			Version: version,
 			MakePortSymbolic: &makePortSymbolicAction{
@@ -507,17 +507,17 @@ func addAgentToDeployment(
 		Version:           version,
 		ReferencedService: svc.Name,
 		AddTrafficAgent: &addTrafficAgentAction{
-			ContainerPortName:  sPort.TargetPort.StrVal,
-			ContainerPortProto: string(sPort.Protocol),
-			AppPort:            containerPort,
-			ImageName:          agentImageName(licensed),
+			ContainerPortName:   sPort.TargetPort.StrVal,
+			ContainerPortProto:  sPort.Protocol,
+			ContainerPortNumber: containerPort,
+			ImageName:           agentImageName(licensed),
 		},
 	}
 
 	if cPortIndex >= 0 {
 		// Remove name and change container port of the port appointed by the service
 		icp := &icn.Ports[cPortIndex]
-		containerPort = int(icp.ContainerPort)
+		containerPort = uint16(icp.ContainerPort)
 		if targetPortSymbolic {
 			deploymentMod.HideContainerPort = &hideContainerPortAction{
 				ContainerName: icn.Name,
@@ -526,7 +526,7 @@ func addAgentToDeployment(
 		}
 	}
 
-	if containerPort < 0 {
+	if containerPort == 0 {
 		return nil, nil, fmt.Errorf("unable to add agent to deployment %s. The container port cannot be determined", dep.Name)
 	}
 
