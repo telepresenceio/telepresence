@@ -528,7 +528,7 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, dep
 	}
 }
 
-func getAnnotation(obj kates.Object, data interface{}) (bool, error) {
+func getAnnotation(obj kates.Object, data multiAction) (bool, error) {
 	ann := obj.GetAnnotations()
 	if ann == nil {
 		return false, nil
@@ -541,7 +541,7 @@ func getAnnotation(obj kates.Object, data interface{}) (bool, error) {
 		return false, err
 	}
 
-	annV, err := semver.Parse(data.(multiAction).version())
+	annV, err := semver.Parse(data.version())
 	if err != nil {
 		return false, fmt.Errorf("unable to parse semantic version in annotation %s of %s %s", annTelepresenceActions,
 			obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
