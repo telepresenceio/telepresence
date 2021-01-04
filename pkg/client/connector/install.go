@@ -528,7 +528,7 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, dep
 	}
 }
 
-func getAnnotation(obj kates.Object, data multiAction) (bool, error) {
+func getAnnotation(obj kates.Object, data completeAction) (bool, error) {
 	ann := obj.GetAnnotations()
 	if ann == nil {
 		return false, nil

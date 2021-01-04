@@ -19,7 +19,7 @@ import (
 
 // Public interface-y pieces ///////////////////////////////////////////////////
 
-type action interface {
+type partialAction interface {
 	// These are all Exported, so that you can easily tell which methods are implementing the
 	// external interface and which are internal.
 
@@ -32,32 +32,32 @@ type action interface {
 	IsDone(obj kates.Object) bool
 }
 
-type multiAction interface {
-	action
+type completeAction interface {
+	partialAction
 
 	// These are all Exported, so that you can easily tell which methods are implementing the
 	// external interface and which are internal.
 
-	Actions() []action
+	Actions() []partialAction
 	ObjectType() string
 	TelVersion() string
 }
 
-func explainDo(c context.Context, a action, obj kates.Object) {
-	explainAction(c, a, obj, action.ExplainDo)
+func explainDo(c context.Context, a partialAction, obj kates.Object) {
+	explainAction(c, a, obj, partialAction.ExplainDo)
 }
 
-func explainUndo(c context.Context, a action, obj kates.Object) {
-	explainAction(c, a, obj, action.ExplainUndo)
+func explainUndo(c context.Context, a partialAction, obj kates.Object) {
+	explainAction(c, a, obj, partialAction.ExplainUndo)
 }
 
 // Internal implementation pieces //////////////////////////////////////////////
 
-type explainFunc func(action action, obj kates.Object, out io.Writer)
+type explainFunc func(partialAction partialAction, obj kates.Object, out io.Writer)
 
-func explainAction(c context.Context, a action, obj kates.Object, ef explainFunc) {
+func explainAction(c context.Context, a partialAction, obj kates.Object, ef explainFunc) {
 	buf := bytes.Buffer{}
-	if ma, ok := a.(multiAction); ok {
+	if ma, ok := a.(completeAction); ok {
 		explainActions(ma, obj, ef, &buf)
 	} else {
 		ef(a, obj, &buf)
@@ -67,7 +67,7 @@ func explainAction(c context.Context, a action, obj kates.Object, ef explainFunc
 	}
 }
 
-func explainActions(ma multiAction, obj kates.Object, ef explainFunc, out io.Writer) {
+func explainActions(ma completeAction, obj kates.Object, ef explainFunc, out io.Writer) {
 	actions := ma.Actions()
 	last := len(actions) - 1
 	if last < 0 {
@@ -81,8 +81,8 @@ func explainActions(ma multiAction, obj kates.Object, ef explainFunc, out io.Wri
 		ef(actions[0], obj, out)
 		fmt.Fprint(out, " and ")
 	default:
-		for _, action := range actions[:last] {
-			ef(action, obj, out)
+		for _, partialAction := range actions[:last] {
+			ef(partialAction, obj, out)
 			fmt.Fprint(out, ", ")
 		}
 		fmt.Fprint(out, "and ")
@@ -91,25 +91,25 @@ func explainActions(ma multiAction, obj kates.Object, ef explainFunc, out io.Wri
 	fmt.Fprint(out, ".")
 }
 
-func doActions(ma multiAction, obj kates.Object) (err error) {
-	for _, action := range ma.Actions() {
-		if err = action.Do(obj); err != nil {
+func doActions(ma completeAction, obj kates.Object) (err error) {
+	for _, partialAction := range ma.Actions() {
+		if err = partialAction.Do(obj); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func isDoneActions(ma multiAction, obj kates.Object) bool {
-	for _, action := range ma.Actions() {
-		if !action.IsDone(obj) {
+func isDoneActions(ma completeAction, obj kates.Object) bool {
+	for _, partialAction := range ma.Actions() {
+		if !partialAction.IsDone(obj) {
 			return false
 		}
 	}
 	return true
 }
 
-func undoActions(ma multiAction, obj kates.Object) (err error) {
+func undoActions(ma completeAction, obj kates.Object) (err error) {
 	actions := ma.Actions()
 	for i := len(actions) - 1; i >= 0; i-- {
 		if err = actions[i].Undo(obj); err != nil {
@@ -119,7 +119,7 @@ func undoActions(ma multiAction, obj kates.Object) (err error) {
 	return nil
 }
 
-func mustMarshal(data interface{}) string {
+func mustMarshal(data partialAction) string {
 	js, err := json.Marshal(data)
 	if err != nil {
 		panic(fmt.Sprintf("internal error, unable to json.Marshal %T: %v", data, err))
@@ -138,7 +138,7 @@ type makePortSymbolicAction struct {
 	SymbolicName string
 }
 
-var _ action = (*makePortSymbolicAction)(nil)
+var _ partialAction = (*makePortSymbolicAction)(nil)
 
 func (m *makePortSymbolicAction) portName(port string) string {
 	if m.PortName == "" {
@@ -201,7 +201,7 @@ type addSymbolicPortAction struct {
 	makePortSymbolicAction
 }
 
-var _ action = (*addSymbolicPortAction)(nil)
+var _ partialAction = (*addSymbolicPortAction)(nil)
 
 func (m *addSymbolicPortAction) getPort(svc kates.Object, targetPort int32) (*kates.ServicePort, error) {
 	ports := svc.(*kates.Service).Spec.Ports
@@ -250,9 +250,9 @@ type svcActions struct {
 	AddSymbolicPort  *addSymbolicPortAction  `json:"add_symbolic_port,omitempty"`
 }
 
-var _ multiAction = (*svcActions)(nil)
+var _ completeAction = (*svcActions)(nil)
 
-func (s *svcActions) Actions() (actions []action) {
+func (s *svcActions) Actions() (actions []partialAction) {
 	if s.MakePortSymbolic != nil {
 		actions = append(actions, s.MakePortSymbolic)
 	}
@@ -267,11 +267,11 @@ func (s *svcActions) Do(svc kates.Object) (err error) {
 }
 
 func (s *svcActions) ExplainDo(svc kates.Object, out io.Writer) {
-	explainActions(s, svc, action.ExplainDo, out)
+	explainActions(s, svc, partialAction.ExplainDo, out)
 }
 
 func (s *svcActions) ExplainUndo(svc kates.Object, out io.Writer) {
-	explainActions(s, svc, action.ExplainUndo, out)
+	explainActions(s, svc, partialAction.ExplainUndo, out)
 }
 
 func (s *svcActions) IsDone(svc kates.Object) bool {
@@ -301,8 +301,8 @@ const (
 	telAppMountPoint = "/tel_app_mounts"
 )
 
-// addTrafficAgentAction is an action that adds a traffic-agent to the set of
-// containers in a pod template spec.
+// addTrafficAgentAction is a partialAction that adds a traffic-agent to the set of containers in a
+// pod template spec.
 type addTrafficAgentAction struct {
 	// The information of the pre-existing container port that the agent will take over.
 	ContainerPortName   string          `json:"container_port_name"`
@@ -316,7 +316,7 @@ type addTrafficAgentAction struct {
 	containerName string
 }
 
-var _ action = (*addTrafficAgentAction)(nil)
+var _ partialAction = (*addTrafficAgentAction)(nil)
 
 func (ata *addTrafficAgentAction) appContainer(dep *kates.Deployment) *kates.Container {
 	cns := dep.Spec.Template.Spec.Containers
@@ -503,7 +503,7 @@ type hideContainerPortAction struct {
 	HiddenName    string `json:"hidden_name"`
 }
 
-var _ action = (*hideContainerPortAction)(nil)
+var _ partialAction = (*hideContainerPortAction)(nil)
 
 func (hcp *hideContainerPortAction) getPort(dep kates.Object, name string) (*kates.Container, *corev1.ContainerPort, error) {
 	cns := dep.(*kates.Deployment).Spec.Template.Spec.Containers
@@ -583,9 +583,9 @@ type deploymentActions struct {
 	AddTrafficAgent           *addTrafficAgentAction   `json:"add_traffic_agent,omitempty"`
 }
 
-var _ multiAction = (*deploymentActions)(nil)
+var _ completeAction = (*deploymentActions)(nil)
 
-func (d *deploymentActions) Actions() (actions []action) {
+func (d *deploymentActions) Actions() (actions []partialAction) {
 	if d.HideContainerPort != nil {
 		actions = append(actions, d.HideContainerPort)
 	}
@@ -596,7 +596,7 @@ func (d *deploymentActions) Actions() (actions []action) {
 }
 
 func (d *deploymentActions) ExplainDo(dep kates.Object, out io.Writer) {
-	explainActions(d, dep, action.ExplainDo, out)
+	explainActions(d, dep, partialAction.ExplainDo, out)
 }
 
 func (d *deploymentActions) Do(dep kates.Object) (err error) {
@@ -604,7 +604,7 @@ func (d *deploymentActions) Do(dep kates.Object) (err error) {
 }
 
 func (d *deploymentActions) ExplainUndo(dep kates.Object, out io.Writer) {
-	explainActions(d, dep, action.ExplainUndo, out)
+	explainActions(d, dep, partialAction.ExplainUndo, out)
 }
 
 func (d *deploymentActions) IsDone(dep kates.Object) bool {
