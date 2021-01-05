@@ -164,7 +164,7 @@ func (d *service) Update(_ context.Context, table *rpc.Table) (*empty.Empty, err
 }
 
 func (d *service) SetDnsSearchPath(_ context.Context, paths *rpc.Paths) (*empty.Empty, error) {
-	d.outbound.setSearchPath(paths.Paths)
+	d.outbound.setSearchPath(d.callCtx, paths.Paths)
 	return &empty.Empty{}, nil
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/telepresence2/pkg/client/daemon/dbus"
 	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/pkg/client/daemon/nat"
 	"github.com/datawire/telepresence2/pkg/client/daemon/proxy"
@@ -76,36 +77,6 @@ func dnsListeners(c context.Context, port string) (listeners []string) {
 //
 // If fallbackIP is empty, it will default to Google DNS.
 func start(c context.Context, dnsIP, fallbackIP string, noSearch bool) (*outbound, error) {
-	if dnsIP == "" {
-		dat, err := ioutil.ReadFile("/etc/resolv.conf")
-		if err != nil {
-			return nil, err
-		}
-		for _, line := range strings.Split(string(dat), "\n") {
-			if strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
-				fields := strings.Fields(line)
-				dnsIP = fields[1]
-				dlog.Infof(c, "Automatically set -dns=%v", dnsIP)
-				break
-			}
-		}
-	}
-	if dnsIP == "" {
-		return nil, errors.New("couldn't determine dns ip from /etc/resolv.conf")
-	}
-
-	if fallbackIP == "" {
-		if dnsIP == "8.8.8.8" {
-			fallbackIP = "8.8.4.4"
-		} else {
-			fallbackIP = "8.8.8.8"
-		}
-		dlog.Infof(c, "Automatically set -fallback=%v", fallbackIP)
-	}
-	if fallbackIP == dnsIP {
-		return nil, errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
-	}
-
 	ic := newOutbound("traffic-manager", dnsIP, fallbackIP, noSearch, nil)
 	g := dgroup.ParentGroup(c)
 	g.Go(dnsServerWorker, ic.dnsServerWorker)
@@ -125,6 +96,9 @@ type outbound struct {
 
 	search     []string
 	searchLock sync.RWMutex
+
+	dBusResolveD *dbus.ResolveD
+	ifIndex      int
 
 	work   chan func(context.Context) error
 	cancel context.CancelFunc
@@ -146,16 +120,60 @@ func newOutbound(name string, dnsIP, fallbackIP string, noSearch bool, cancel co
 	return ret
 }
 
+var errResolveDNotConfigured = errors.New("resolved not configured")
+
 func (o *outbound) dnsServerWorker(c context.Context) error {
+	err := o.tryResolveD(c)
+	if err == errResolveDNotConfigured {
+		dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
+		err = o.runLocalServer(c)
+	}
+	return err
+}
+
+func (o *outbound) runLocalServer(c context.Context) error {
+	if o.dnsIP == "" {
+		dat, err := ioutil.ReadFile("/etc/resolv.conf")
+		if err != nil {
+			return err
+		}
+		for _, line := range strings.Split(string(dat), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "nameserver") {
+				fields := strings.Fields(line)
+				o.dnsIP = fields[1]
+				dlog.Infof(c, "Automatically set -dns=%v", o.dnsIP)
+				break
+			}
+		}
+	}
+	if o.dnsIP == "" {
+		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
+	}
+
+	if o.fallbackIP == "" {
+		if o.dnsIP == "8.8.8.8" {
+			o.fallbackIP = "8.8.4.4"
+		} else {
+			o.fallbackIP = "8.8.8.8"
+		}
+		dlog.Infof(c, "Automatically set -fallback=%v", o.fallbackIP)
+	}
+	if o.fallbackIP == o.dnsIP {
+		return errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
+	}
+
+	dgroup.ParentGroup(c).Go(proxyWorker, o.proxyWorker)
+
 	srv := dns.NewServer(c, dnsListeners(c, dnsRedirPort), o.fallbackIP+":53", func(domain string) string {
 		if r := o.resolve(domain); r != nil {
 			return r.Ip
 		}
 		return ""
 	})
-	dgroup.ParentGroup(c).Go(proxyWorker, o.proxyWorker)
 	dlog.Debug(c, "Starting server")
-	err := srv.Run(c)
+	initDone := &sync.WaitGroup{}
+	initDone.Add(1)
+	err := srv.Run(c, initDone)
 	dlog.Debug(c, "Server done")
 	return err
 }
@@ -226,7 +244,9 @@ func (o *outbound) translatorWorker(c context.Context) (err error) {
 	}
 	o.tablesLock.Unlock()
 
-	dgroup.ParentGroup(c).Go(dnsConfigWorker, o.dnsConfigWorker)
+	if o.dBusResolveD == nil {
+		dgroup.ParentGroup(c).Go(dnsConfigWorker, o.dnsConfigWorker)
+	}
 
 	dlog.Debug(c, "Starting server")
 	for {
@@ -271,6 +291,13 @@ func (o *outbound) resolve(query string) *rpc.Route {
 		}
 	}
 	o.searchLock.RUnlock()
+	o.domainsLock.RUnlock()
+	return route
+}
+
+func (o *outbound) resolveNoNS(query string) *rpc.Route {
+	o.domainsLock.RLock()
+	route := o.domains[strings.ToLower(query)]
 	o.domainsLock.RUnlock()
 	return route
 }
@@ -402,10 +429,17 @@ func (o *outbound) doUpdate(c context.Context, table *rpc.Table) error {
 }
 
 // SetSearchPath updates the DNS search path used by the resolver
-func (o *outbound) setSearchPath(paths []string) {
-	o.searchLock.Lock()
-	o.search = paths
-	o.searchLock.Unlock()
+func (o *outbound) setSearchPath(c context.Context, paths []string) {
+	if o.dBusResolveD != nil {
+		err := o.dBusResolveD.SetLinkDomains(o.ifIndex, paths...)
+		if err != nil {
+			dlog.Errorf(c, "failed to revert virtual interface link: %v", err)
+		}
+	} else {
+		o.searchLock.Lock()
+		o.search = paths
+		o.searchLock.Unlock()
+	}
 }
 
 func (o *outbound) shutdown() {

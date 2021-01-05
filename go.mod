@@ -9,6 +9,7 @@ require (
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
 	github.com/datawire/telepresence2/pkg/rpc v0.0.0-00010101000000-000000000000
 	github.com/docker/docker v1.4.2-0.20200203170920-46ec8731fbce
+	github.com/godbus/dbus/v5 v5.0.4-0.20201218172701-b3768b321399
 	github.com/golang/protobuf v1.4.3
 	github.com/google/go-cmp v0.5.0
 	github.com/google/uuid v1.1.2
@@ -24,6 +25,7 @@ require (
 	golang.org/x/net v0.0.0-20201029055024-942e2f445f3c
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
+	golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20200806141610-86f49bd18e98 // indirect
 	google.golang.org/grpc v1.34.0
