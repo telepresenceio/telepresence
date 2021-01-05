@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package telepresence.systema;
+
+import "rpc/manager/manager.proto";
+
+option go_package = "github.com/datawire/telepresence2/pkg/rpc/systema";
+
+// How Calls from the agent to System A are authenticated is TBD.
+service SystemAAgent {
+  // ReviewIntercept gives SystemA an opportunity to review an
+  // intercept before the Ambassador Telepresence agent activates it.
+  //
+  // There is no "remove" call; SystemA should call
+  // telepresence.manager.Manager/WatchIntercepts to be informed of
+  // such things.
+  rpc ReviewIntercept(manager.InterceptInfo) returns (ReviewInterceptResponse);
+}
+
+message ReviewInterceptResponse {
+  enum Status {
+    UNSPECIFIED = 0;
+    ALLOW = 1;
+    DENY = 2;
+  }
+
+  // Status is whether or not to allow this intercept to become active.
+  Status status = 1;
+  // Msg is a user-facing explanation of why the intercept is not
+  // allowed to become active.
+  string msg = 2;
+}

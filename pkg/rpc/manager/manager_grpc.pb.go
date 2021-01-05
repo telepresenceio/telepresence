@@ -30,9 +30,16 @@ type ManagerClient interface {
 	// Depart terminates a session.
 	Depart(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*empty.Empty, error)
 	// WatchAgents notifies a client of the set of known Agents.
+	//
+	// A session ID is required; if no session ID is given then the call
+	// returns immediately, having not deliverd any snapshots.
 	WatchAgents(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchAgentsClient, error)
 	// WatchIntercepts notifies a client or agent of the set of intercepts
 	// relevant to that client or agent.
+	//
+	// If a session ID is given, then only intercepts associated with
+	// that session are watched.  If no session ID is given, then all
+	// intercepts are watched.
 	WatchIntercepts(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (Manager_WatchInterceptsClient, error)
 	// CreateIntercept lets a client create an intercept.  It will be
 	// created in the "WATING" disposition, and it will remain in that
@@ -208,9 +215,16 @@ type ManagerServer interface {
 	// Depart terminates a session.
 	Depart(context.Context, *SessionInfo) (*empty.Empty, error)
 	// WatchAgents notifies a client of the set of known Agents.
+	//
+	// A session ID is required; if no session ID is given then the call
+	// returns immediately, having not deliverd any snapshots.
 	WatchAgents(*SessionInfo, Manager_WatchAgentsServer) error
 	// WatchIntercepts notifies a client or agent of the set of intercepts
 	// relevant to that client or agent.
+	//
+	// If a session ID is given, then only intercepts associated with
+	// that session are watched.  If no session ID is given, then all
+	// intercepts are watched.
 	WatchIntercepts(*SessionInfo, Manager_WatchInterceptsServer) error
 	// CreateIntercept lets a client create an intercept.  It will be
 	// created in the "WATING" disposition, and it will remain in that

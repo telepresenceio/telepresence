@@ -182,10 +182,17 @@ service Manager {
   // Watches
 
   // WatchAgents notifies a client of the set of known Agents.
+  //
+  // A session ID is required; if no session ID is given then the call
+  // returns immediately, having not deliverd any snapshots.
   rpc WatchAgents(SessionInfo) returns (stream AgentInfoSnapshot);
 
   // WatchIntercepts notifies a client or agent of the set of intercepts
   // relevant to that client or agent.
+  //
+  // If a session ID is given, then only intercepts associated with
+  // that session are watched.  If no session ID is given, then all
+  // intercepts are watched.
   rpc WatchIntercepts(SessionInfo) returns (stream InterceptInfoSnapshot);
 
   // CRUD
