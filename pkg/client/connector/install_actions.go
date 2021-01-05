@@ -117,7 +117,7 @@ func mustMarshal(data action) string {
 // and then use the original port number as the port to forward to when it is not intercepting.
 type makePortSymbolicAction struct {
 	PortName     string
-	TargetPort   int
+	TargetPort   uint16
 	SymbolicName string
 }
 
@@ -141,18 +141,17 @@ func (m *makePortSymbolicAction) getPort(svc kates.Object, targetPort intstr.Int
 }
 
 func (m *makePortSymbolicAction) do(svc kates.Object) error {
-	p, err := m.getPort(svc, intstr.FromInt(m.TargetPort))
+	p, err := m.getPort(svc, intstr.FromInt(int(m.TargetPort)))
 	if err != nil {
 		return err
 	}
-	m.SymbolicName = fmt.Sprintf("tel2px-%d", p.TargetPort.IntVal)
 	p.TargetPort = intstr.FromString(m.SymbolicName)
 	return nil
 }
 
 func (m *makePortSymbolicAction) explainDo(_ kates.Object, out io.Writer) {
 	fmt.Fprintf(out, "make service port %s symbolic with name %q",
-		m.portName(strconv.Itoa(m.TargetPort)), m.SymbolicName)
+		m.portName(strconv.Itoa(int(m.TargetPort))), m.SymbolicName)
 }
 
 func (m *makePortSymbolicAction) explainUndo(_ kates.Object, out io.Writer) {
@@ -170,7 +169,7 @@ func (m *makePortSymbolicAction) undo(svc kates.Object) error {
 	if err != nil {
 		return err
 	}
-	p.TargetPort = intstr.FromInt(m.TargetPort)
+	p.TargetPort = intstr.FromInt(int(m.TargetPort))
 	return nil
 }
 
@@ -221,10 +220,13 @@ func (s *svcActions) version() string {
 // addTrafficAgentAction is an action that adds a traffic-agent to the set of
 // containers in a pod template spec.
 type addTrafficAgentAction struct {
-	ContainerPortName  string `json:"container_port_name"`
-	ContainerPortProto string `json:"container_port_proto"`
-	AppPort            int    `json:"app_port"`
-	ImageName          string `json:"image_name"`
+	// The information of the pre-existing container port that the agent will take over.
+	ContainerPortName   string          `json:"container_port_name"`
+	ContainerPortProto  corev1.Protocol `json:"container_port_proto"`
+	ContainerPortNumber uint16          `json:"app_port"`
+
+	// The image name of the agent to add
+	ImageName string `json:"image_name"`
 }
 
 func (ata *addTrafficAgentAction) do(dep kates.Object) error {
@@ -235,7 +237,7 @@ func (ata *addTrafficAgentAction) do(dep kates.Object) error {
 		Args:  []string{"agent"},
 		Ports: []corev1.ContainerPort{{
 			Name:          ata.ContainerPortName,
-			Protocol:      corev1.Protocol(ata.ContainerPortProto),
+			Protocol:      ata.ContainerPortProto,
 			ContainerPort: 9900,
 		}},
 		Env: []corev1.EnvVar{{
@@ -246,7 +248,7 @@ func (ata *addTrafficAgentAction) do(dep kates.Object) error {
 			Value: dep.GetName(),
 		}, {
 			Name:  "APP_PORT",
-			Value: strconv.Itoa(ata.AppPort),
+			Value: strconv.Itoa(int(ata.ContainerPortNumber)),
 		}}})
 	return nil
 }
@@ -337,7 +339,7 @@ func (hcp *hideContainerPortAction) do(dep kates.Object) error {
 	if err != nil {
 		return err
 	}
-	hcp.HiddenName = fmt.Sprintf("tel2mv-%d", p.HostPort)
+	hcp.HiddenName = "tel2mv-" + p.Name
 	swapPortName(cn, p, hcp.PortName, hcp.HiddenName)
 	return nil
 }
