@@ -11,30 +11,36 @@ import (
 )
 
 type (
-	DBusResolveD struct {
+	// A ResolveD is a `dbus.Conn` with methods to communicate with the ResolveD daemon.
+	ResolveD struct {
 		*dbus.Conn
 	}
 
+	// A resolvedLinkAddress is the type of the array members of the argument to the SetLinkDNS DBus call. It consists
+	// of an address family (either AF_INET or AF_INET6), followed by a 4-byte or 16-byte array with the raw address data.
 	resolvedLinkAddress struct {
 		Dialect int32
 		IP      net.IP
 	}
 
+	// A resolvedDomain is the type of the array members of the argument to the SetLinkDomains DBus call. It is a domain
+	// name string and a parameter identifying whether to include that domain in the search path, or only to be used for
+	// deciding which DNS server to route a given request to.
 	resolvedDomain struct {
-		Name    string
-		Routing bool
+		Name        string
+		RoutingOnly bool
 	}
 )
 
-func NewDbusResolveD() (*DBusResolveD, error) {
+func NewResolveD() (*ResolveD, error) {
 	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to system bus: %v", err)
 	}
-	return &DBusResolveD{conn}, nil
+	return &ResolveD{conn}, nil
 }
 
-func (conn DBusResolveD) IsRunning() bool {
+func (conn *ResolveD) IsRunning() bool {
 	var names []string
 	err := conn.BusObject().Call("org.freedesktop.DBus.ListNames", 0).Store(&names)
 	if err != nil {
@@ -48,7 +54,7 @@ func (conn DBusResolveD) IsRunning() bool {
 	return false
 }
 
-func (conn DBusResolveD) SetLinkDNS(networkIndex int, ips ...net.IP) error {
+func (conn *ResolveD) SetLinkDNS(networkIndex int, ips ...net.IP) error {
 	addrs := make([]resolvedLinkAddress, len(ips))
 	for i, ip := range ips {
 		addr := &addrs[i]
@@ -66,7 +72,7 @@ func (conn DBusResolveD) SetLinkDNS(networkIndex int, ips ...net.IP) error {
 		"org.freedesktop.resolve1.Manager.SetLinkDNS", dbus.FlagNoReplyExpected, int32(networkIndex), addrs).Err
 }
 
-func (conn DBusResolveD) SetLinkDomains(networkIndex int, domains ...string) error {
+func (conn *ResolveD) SetLinkDomains(networkIndex int, domains ...string) error {
 	dds := make([]resolvedDomain, 0, len(domains))
 	for _, domain := range domains {
 		if domain == "" {
@@ -77,13 +83,13 @@ func (conn DBusResolveD) SetLinkDomains(networkIndex int, domains ...string) err
 			domain = domain[1:]
 			routing = true
 		}
-		dds = append(dds, resolvedDomain{Name: domain, Routing: routing})
+		dds = append(dds, resolvedDomain{Name: domain, RoutingOnly: routing})
 	}
 	return conn.Object("org.freedesktop.resolve1", "/org/freedesktop/resolve1").Call(
 		"org.freedesktop.resolve1.Manager.SetLinkDomains", dbus.FlagNoReplyExpected, int32(networkIndex), dds).Err
 }
 
-func (conn DBusResolveD) RevertLink(networkIndex int) error {
+func (conn *ResolveD) RevertLink(networkIndex int) error {
 	return conn.Object("org.freedesktop.resolve1", "/org/freedesktop/resolve1").Call(
 		"org.freedesktop.resolve1.Manager.RevertLink", dbus.FlagNoReplyExpected, int32(networkIndex)).Err
 }

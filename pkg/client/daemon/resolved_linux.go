@@ -16,7 +16,7 @@ import (
 
 func (o *outbound) tryResolveD(c context.Context) error {
 	// Connect to ResolveD via DBUS.
-	dConn, err := dbus.NewDbusResolveD()
+	dConn, err := dbus.NewResolveD()
 	if err != nil {
 		return errResolveDNotConfigured
 	}

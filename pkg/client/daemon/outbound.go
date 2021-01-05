@@ -97,7 +97,7 @@ type outbound struct {
 	search     []string
 	searchLock sync.RWMutex
 
-	dBusResolveD *dbus.DBusResolveD
+	dBusResolveD *dbus.ResolveD
 	ifIndex      int
 
 	work   chan func(context.Context) error

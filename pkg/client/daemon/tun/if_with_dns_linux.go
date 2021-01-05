@@ -125,7 +125,7 @@ func checksum(buf []byte) uint16 {
 // CreateInterfaceWithDNS creates a new TUN device and assigns the first available class C subnet
 // to it. The x.x.x.2 address of that network is then declared to be the DNS service of that
 // network. The interface is then set to state "up".
-func CreateInterfaceWithDNS(c context.Context, dConn *dbus.DBusResolveD) (*InterfaceWithDNS, error) {
+func CreateInterfaceWithDNS(c context.Context, dConn *dbus.ResolveD) (*InterfaceWithDNS, error) {
 	// Obtain an available class C subnet
 	ifCIDR, err := findAvailableSubnetClassC()
 	if err != nil {
