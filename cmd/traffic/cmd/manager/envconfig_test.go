@@ -30,7 +30,7 @@ func TestEnvconfig(t *testing.T) {
 		User:        "",
 		ServerHost:  "",
 		ServerPort:  "8081",
-		SystemAHost: "beta-app.datawire.io",
+		SystemAHost: "app.getambassador.io",
 		SystemAPort: "443",
 	}
 
