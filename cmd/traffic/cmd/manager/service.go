@@ -210,7 +210,8 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		dlog.Errorln(ctx, "systema: acquire connection:", err)
 	} else {
 		resp, err := sa.CreateDomain(ctx, &systema.CreateDomainRequest{
-			InterceptId: intercept.Id,
+			InterceptId:   intercept.Id,
+			DisplayBanner: true, // FIXME(lukeshu): Don't hard-code this.
 		})
 		if err != nil {
 			dlog.Errorln(ctx, "systema: create domain:", err)
