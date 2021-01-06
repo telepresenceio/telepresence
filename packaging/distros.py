@@ -40,4 +40,5 @@ distros = [
     ("fedora", "30", "rpm", fedora_deps, install_rpm),  # EOL 2020-05-26
     ("fedora", "31", "rpm", fedora_deps, install_rpm),
     ("fedora", "32", "rpm", fedora_deps, install_rpm),
+    ("fedora", "33", "rpm", fedora_deps, install_rpm),
 ]
