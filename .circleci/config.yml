@@ -137,6 +137,7 @@ jobs:
           command: |
             docker login -u="${DOCKERHUB_USERNAME}" -p="${DOCKERHUB_PASSWORD}"
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-images push-executable
+      - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
 
   "release-macos":
     executor: vm-macos
@@ -145,13 +146,14 @@ jobs:
       - install-go
       - run: sudo pip3 install awscli
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
-
-  "release-finalize":
-    executor: vm-linux
-    steps:
-      - checkout
-      - run: pip3 install awscli
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
+
+#  "release-finalize":
+#    executor: vm-linux
+#    steps:
+#      - checkout
+#      - run: pip3 install awscli
+#      - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
 
 workflows:
 
@@ -177,13 +179,13 @@ workflows:
               only: /^v.*/
             branches:
               ignore: /.*/
-      - release-finalize:
-          context: telepresence2-release
-          requires:
-            - release-linux
-            - release-macos
-          filters:
-            tags:
-              only: /^v[0-9]+\.[0-9]+\.[0-9+]$/
-            branches:
-              ignore: /.*/
+      #- release-finalize:
+      #    context: telepresence2-release
+      #    requires:
+      #      - release-linux
+      #      - release-macos
+      #    filters:
+      #      tags:
+      #        only: /^v[0-9]+\.[0-9]+\.[0-9+]$/
+      #      branches:
+      #        ignore: /.*/
