@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -15,6 +16,7 @@ type listInfo struct {
 	onlyIntercepts    bool
 	onlyAgents        bool
 	onlyInterceptable bool
+	debug             bool
 }
 
 func listCommand() *cobra.Command {
@@ -29,6 +31,7 @@ func listCommand() *cobra.Command {
 	flags.BoolVarP(&s.onlyIntercepts, "intercepts", "i", false, "intercepts only")
 	flags.BoolVarP(&s.onlyAgents, "agents", "a", false, "with installed agents only")
 	flags.BoolVarP(&s.onlyInterceptable, "only-interceptable", "o", true, "interceptable deployments only")
+	flags.BoolVar(&s.debug, "debug", false, "include debugging information")
 	return cmd
 }
 
@@ -70,7 +73,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 
 	state := func(dep *connector.DeploymentInfo) string {
 		if ii := dep.InterceptInfo; ii != nil {
-			return DescribeIntercept(ii)
+			return DescribeIntercept(ii, s.debug)
 		}
 		ai := dep.AgentInfo
 		if ai != nil {
@@ -89,15 +92,32 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func DescribeIntercept(ii *manager.InterceptInfo) string {
-	msg := fmt.Sprintf("intercepted, redirecting port %d to %s:%d",
-		ii.ManagerPort, ii.Spec.TargetHost, ii.Spec.TargetPort)
+func DescribeIntercept(ii *manager.InterceptInfo, debug bool) string {
+	msg := "intercepted"
 
+	msg += "\n    State       : "
+	if ii.Disposition > manager.InterceptDispositionType_WAITING {
+		msg += "error: "
+	}
+	msg += ii.Disposition.String()
+	if ii.Message != "" {
+		msg += ": " + ii.Message
+	}
+
+	if debug {
+		msg += fmt.Sprintf("\n    ID          : %s", ii.Id)
+		msg += fmt.Sprintf("\n    Manager Port: %d", ii.ManagerPort)
+	}
+
+	msg += fmt.Sprintf("\n    Destination : %s",
+		net.JoinHostPort(ii.Spec.TargetHost, fmt.Sprintf("%d", ii.Spec.TargetPort)))
+
+	msg += "\n    Intercepting: "
 	switch ii.Spec.Mechanism {
 	case "tcp":
-		msg += "\n    Intercepting all requests"
+		msg += "all connections"
 	default:
-		msg += fmt.Sprintf("\n    Using unknown mechanism %q", ii.Spec.Mechanism)
+		msg += fmt.Sprintf("using unknown mechanism %q", ii.Spec.Mechanism)
 	}
 
 	if ii.PreviewDomain != "" {
@@ -107,7 +127,7 @@ func DescribeIntercept(ii *manager.InterceptInfo) string {
 		if !strings.HasPrefix(previewURL, "https://") && !strings.HasPrefix(previewURL, "http://") {
 			previewURL = "https://" + previewURL
 		}
-		msg += "\n    Preview URL: " + previewURL
+		msg += "\n    Preview URL : " + previewURL
 	}
 
 	return msg
