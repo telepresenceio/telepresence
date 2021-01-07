@@ -39,6 +39,7 @@ to troubleshoot problems.
 // service represents the state of the Telepresence Connector
 type service struct {
 	rpc.UnimplementedConnectorServer
+	env          client.Env
 	daemon       daemon.DaemonClient
 	daemonLogger daemonLogger
 	cluster      *k8sCluster
@@ -57,8 +58,8 @@ func Command() *cobra.Command {
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
 		Long:   help,
-		RunE: func(_ *cobra.Command, args []string) error {
-			return run(init)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return run(cmd.Context(), init)
 		},
 	}
 	flags := c.Flags()
@@ -256,7 +257,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 
 	dlog.Infof(c, "Connected to context %s (%s)", s.cluster.Context, s.cluster.server())
 
-	tmgr, err := newTrafficManager(s.ctx, s.cluster, cr.InstallId)
+	tmgr, err := newTrafficManager(s.ctx, s.env, s.cluster, cr.InstallId)
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
@@ -316,16 +317,24 @@ func (s *service) setUpLogging(c context.Context) (context.Context, error) {
 }
 
 // run is the main function when executing as the connector
-func run(init bool) error {
+func run(c context.Context, init bool) error {
+	env, err := client.LoadEnv(c)
+	if err != nil {
+		return err
+	}
+
 	// establish a connection to the daemon gRPC service
 	conn, err := client.DialSocket(client.DaemonSocketName)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
-	s := &service{daemon: daemon.NewDaemonClient(conn)}
+	s := &service{
+		env:    env,
+		daemon: daemon.NewDaemonClient(conn),
+	}
 
-	c, err := s.setUpLogging(context.Background())
+	c, err = s.setUpLogging(c)
 	if err != nil {
 		return err
 	}

@@ -32,6 +32,7 @@ type intercept struct {
 // trafficManager is a handle to access the Traffic Manager in a
 // cluster.
 type trafficManager struct {
+	env client.Env
 	*k8sCluster
 	aiListener     aiListener
 	iiListener     iiListener
@@ -51,7 +52,7 @@ type trafficManager struct {
 
 // newTrafficManager returns a TrafficManager resource for the given
 // cluster if it has a Traffic Manager service.
-func newTrafficManager(c context.Context, cluster *k8sCluster, installID string) (*trafficManager, error) {
+func newTrafficManager(c context.Context, env client.Env, cluster *k8sCluster, installID string) (*trafficManager, error) {
 	userinfo, err := user.Current()
 	if err != nil {
 		return nil, errors.Wrap(err, "user.Current()")
@@ -75,6 +76,7 @@ func newTrafficManager(c context.Context, cluster *k8sCluster, installID string)
 		return nil, errors.Wrap(err, "get free port for ssh")
 	}
 	tm := &trafficManager{
+		env:         env,
 		k8sCluster:  cluster,
 		installer:   ti,
 		apiPort:     localAPIPort,
@@ -94,7 +96,7 @@ func (tm *trafficManager) waitUntilStarted() error {
 }
 
 func (tm *trafficManager) start(c context.Context) error {
-	remoteSSHPort, remoteAPIPort, err := tm.installer.ensureManager(c)
+	remoteSSHPort, remoteAPIPort, err := tm.installer.ensureManager(c, tm.env)
 	if err != nil {
 		tm.apiErr = err
 		close(tm.startup)

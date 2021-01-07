@@ -20,11 +20,7 @@ import (
 )
 
 const (
-	callbackPath         = "/callback"
-	defaultOauthAuthUrl  = "https://auth.datawire.io/auth"
-	defaultOauthTokenUrl = "https://auth.datawire.io/token"
-	defaultCompletionUrl = "https://auth.datawire.io/completion"
-	defaultOauthClientId = "telepresence-cli"
+	callbackPath = "/callback"
 )
 
 type oauth2Callback struct {

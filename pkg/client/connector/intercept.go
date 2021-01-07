@@ -102,7 +102,7 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	}
 
 	if found == nil {
-		if result := tm.addAgent(c, agentName); result != nil {
+		if result := tm.addAgent(c, tm.env, agentName); result != nil {
 			return result, nil
 		}
 	} else {
@@ -140,8 +140,8 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	return result, nil
 }
 
-func (tm *trafficManager) addAgent(c context.Context, agentName string) *rpc.InterceptResult {
-	if err := tm.installer.ensureAgent(c, agentName, "", tm.sessionInfo.LicensedCluster); err != nil {
+func (tm *trafficManager) addAgent(c context.Context, env client.Env, agentName string) *rpc.InterceptResult {
+	if err := tm.installer.ensureAgent(c, env, agentName, "", tm.sessionInfo.LicensedCluster); err != nil {
 		if err == agentExists {
 			return nil
 		}
