@@ -19,7 +19,7 @@ func WithEnsuredState(r EnsuredState, retain bool, f func() error) (err error) {
 	defer func() {
 		// Always deactivate an acquired state unless there's no error
 		// and a desire to retain it.
-		if wasAcquired && !(err == nil && retain) {
+		if wasAcquired && (err != nil || !retain) {
 			if cerr := r.DeactivateState(); cerr != nil {
 				if err == nil {
 					err = cerr
