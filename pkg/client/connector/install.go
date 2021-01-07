@@ -34,7 +34,7 @@ const sshdPort = 8022
 const apiPort = 8081
 const managerAppName = "traffic-manager"
 const telName = "manager"
-const domainPrefix = "telepresence.datawire.io/"
+const domainPrefix = "telepresence.getambassador.io/"
 const annTelepresenceActions = domainPrefix + "actions"
 
 var labelMap = map[string]string{
