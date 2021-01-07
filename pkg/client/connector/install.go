@@ -563,6 +563,17 @@ func addAgentToDeployment(
 
 func (ki *installer) managerDeployment(env client.Env) *kates.Deployment {
 	replicas := int32(1)
+
+	var containerEnv []corev1.EnvVar
+
+	containerEnv = append(containerEnv, corev1.EnvVar{Name: "LOG_LEVEL", Value: "debug"})
+	if env.SystemAHost != "" {
+		containerEnv = append(containerEnv, corev1.EnvVar{Name: "SYSTEMA_HOST", Value: env.SystemAHost})
+	}
+	if env.SystemAPort != "" {
+		containerEnv = append(containerEnv, corev1.EnvVar{Name: "SYSTEMA_PORT", Value: env.SystemAPort})
+	}
+
 	return &kates.Deployment{
 		TypeMeta: kates.TypeMeta{
 			Kind: "Deployment",
@@ -586,10 +597,7 @@ func (ki *installer) managerDeployment(env client.Env) *kates.Deployment {
 						{
 							Name:  managerAppName,
 							Image: managerImageName(env),
-							Env: []corev1.EnvVar{{
-								Name:  "LOG_LEVEL",
-								Value: "debug",
-							}},
+							Env:   containerEnv,
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "sshd",

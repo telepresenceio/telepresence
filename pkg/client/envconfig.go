@@ -13,6 +13,9 @@ type Env struct {
 	LoginClientID      string `env:"TELEPRESENCE_LOGIN_CLIENT_ID,default=telepresence-cli"`
 
 	Registry string `env:"TELEPRESENCE_REGISTRY,default=docker.io/datawire"`
+
+	SystemAHost string `env:"SYSTEMA_HOST,default="`
+	SystemAPort string `env:"SYSTEMA_PORT,default="`
 }
 
 func LoadEnv(ctx context.Context) (Env, error) {
