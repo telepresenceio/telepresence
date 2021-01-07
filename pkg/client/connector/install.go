@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
 	"sync"
 
@@ -34,7 +33,7 @@ const sshdPort = 8022
 const apiPort = 8081
 const managerAppName = "traffic-manager"
 const telName = "manager"
-const domainPrefix = "telepresence.datawire.io/"
+const domainPrefix = "telepresence.getambassador.io/"
 const annTelepresenceActions = domainPrefix + "actions"
 
 var labelMap = map[string]string{
@@ -47,30 +46,18 @@ var managerImage string
 
 var resolveManagerName = sync.Once{}
 
-func managerImageName() string {
+func managerImageName(env client.Env) string {
 	resolveManagerName.Do(func() {
-		dockerReg := os.Getenv("TELEPRESENCE_REGISTRY")
-		if dockerReg == "" {
-			dockerReg = "docker.io/datawire"
-		}
-		managerImage = fmt.Sprintf("%s/tel2:%s", dockerReg, client.Version())
+		managerImage = fmt.Sprintf("%s/tel2:%s", env.Registry, client.Version())
 	})
 	return managerImage
 }
 
-func agentImageName(licensed bool) string {
-	resolveManagerName.Do(func() {
-		dockerReg := os.Getenv("TELEPRESENCE_REGISTRY")
-		if dockerReg == "" {
-			dockerReg = "docker.io/datawire"
-		}
-		image := "tel2"
-		if licensed {
-			image = "prop_" + image // TODO: proper name of the proprietary agent TBD
-		}
-		managerImage = fmt.Sprintf("%s/%s:%s", dockerReg, image, client.Version())
-	})
-	return managerImage
+func agentImageName(env client.Env, licensed bool) string {
+	if licensed {
+		return managerImageName(env) + "-proprietary" // TODO: proper name of the proprietary agent TBD
+	}
+	return managerImageName(env)
 }
 
 func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error) {
@@ -113,9 +100,9 @@ func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error)
 	return svc, nil
 }
 
-func (ki *installer) createManagerDeployment(c context.Context) error {
-	dep := ki.managerDeployment()
-	dlog.Infof(c, "Installing traffic-manager deployment in namespace %s. Image: %s", ki.Namespace, managerImageName())
+func (ki *installer) createManagerDeployment(c context.Context, env client.Env) error {
+	dep := ki.managerDeployment(env)
+	dlog.Infof(c, "Installing traffic-manager deployment in namespace %s. Image: %s", ki.Namespace, managerImageName(env))
 	return ki.client.Create(c, dep, dep)
 }
 
@@ -207,10 +194,10 @@ func (ki *installer) removeManagerDeployment(c context.Context) error {
 	return ki.client.Delete(c, dep, dep)
 }
 
-func (ki *installer) updateDeployment(c context.Context, currentDep *kates.Deployment) (*kates.Deployment, error) {
-	dep := ki.managerDeployment()
+func (ki *installer) updateDeployment(c context.Context, env client.Env, currentDep *kates.Deployment) (*kates.Deployment, error) {
+	dep := ki.managerDeployment(env)
 	dep.ResourceVersion = currentDep.ResourceVersion
-	dlog.Infof(c, "Updating traffic-manager deployment in namespace %s. Image: %s", ki.Namespace, managerImageName())
+	dlog.Infof(c, "Updating traffic-manager deployment in namespace %s. Image: %s", ki.Namespace, managerImageName(env))
 	err := ki.client.Update(c, dep, dep)
 	if err != nil {
 		return nil, err
@@ -339,7 +326,7 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 var agentExists = errors.New("agent exists")
 var agentNotFound = errors.New("no such agent")
 
-func (ki *installer) ensureAgent(c context.Context, name, portName string, licensed bool) error {
+func (ki *installer) ensureAgent(c context.Context, env client.Env, name, portName string, licensed bool) error {
 	dep := ki.findDeployment(name)
 	if dep == nil {
 		return agentNotFound
@@ -360,7 +347,7 @@ func (ki *installer) ensureAgent(c context.Context, name, portName string, licen
 		if len(matchingSvcs) == 0 {
 			return fmt.Errorf("found no services with just one port and a selector matching labels %v", dep.Spec.Template.Labels)
 		}
-		dep, svc, err := addAgentToDeployment(c, licensed, portName, dep, matchingSvcs)
+		dep, svc, err := addAgentToDeployment(c, env, licensed, portName, dep, matchingSvcs)
 		if err != nil {
 			return err
 		}
@@ -375,7 +362,7 @@ func (ki *installer) ensureAgent(c context.Context, name, portName string, licen
 		return nil
 	}
 
-	imageName := agentImageName(licensed)
+	imageName := agentImageName(env, licensed)
 	if agentCn.Image == imageName {
 		dlog.Debugf(c, "deployment %q already has an installed and up-to-date agent", name)
 		return agentExists
@@ -462,7 +449,7 @@ func (ki *installer) undoServiceMods(c context.Context, svc *kates.Service) erro
 }
 
 func addAgentToDeployment(
-	c context.Context, licensed bool,
+	c context.Context, env client.Env, licensed bool,
 	portName string,
 	deployment *kates.Deployment, matchingServices []*kates.Service,
 ) (
@@ -523,7 +510,7 @@ func addAgentToDeployment(
 			ContainerPortName:   containerPort.Name,
 			ContainerPortProto:  containerPort.Protocol,
 			ContainerPortNumber: containerPort.Number,
-			ImageName:           agentImageName(licensed),
+			ImageName:           agentImageName(env, licensed),
 		},
 	}
 	// Depending on whether the the Service refers to the port by name or by number, we either
@@ -574,8 +561,19 @@ func addAgentToDeployment(
 	return deployment, service, nil
 }
 
-func (ki *installer) managerDeployment() *kates.Deployment {
+func (ki *installer) managerDeployment(env client.Env) *kates.Deployment {
 	replicas := int32(1)
+
+	var containerEnv []corev1.EnvVar
+
+	containerEnv = append(containerEnv, corev1.EnvVar{Name: "LOG_LEVEL", Value: "debug"})
+	if env.SystemAHost != "" {
+		containerEnv = append(containerEnv, corev1.EnvVar{Name: "SYSTEMA_HOST", Value: env.SystemAHost})
+	}
+	if env.SystemAPort != "" {
+		containerEnv = append(containerEnv, corev1.EnvVar{Name: "SYSTEMA_PORT", Value: env.SystemAPort})
+	}
+
 	return &kates.Deployment{
 		TypeMeta: kates.TypeMeta{
 			Kind: "Deployment",
@@ -598,11 +596,8 @@ func (ki *installer) managerDeployment() *kates.Deployment {
 					Containers: []corev1.Container{
 						{
 							Name:  managerAppName,
-							Image: managerImageName(),
-							Env: []corev1.EnvVar{{
-								Name:  "LOG_LEVEL",
-								Value: "debug",
-							}},
+							Image: managerImageName(env),
+							Env:   containerEnv,
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "sshd",
@@ -620,7 +615,7 @@ func (ki *installer) managerDeployment() *kates.Deployment {
 	}
 }
 
-func (ki *installer) ensureManager(c context.Context) (int32, int32, error) {
+func (ki *installer) ensureManager(c context.Context, env client.Env) (int32, int32, error) {
 	svc := ki.findSvc(managerAppName)
 	var err error
 	if svc == nil {
@@ -632,9 +627,9 @@ func (ki *installer) ensureManager(c context.Context) (int32, int32, error) {
 
 	dep := ki.findDeployment(managerAppName)
 	if dep == nil {
-		err = ki.createManagerDeployment(c)
+		err = ki.createManagerDeployment(c, env)
 	} else {
-		imageName := managerImageName()
+		imageName := managerImageName(env)
 		cns := dep.Spec.Template.Spec.Containers
 		upToDate := false
 		for i := range cns {
@@ -645,9 +640,9 @@ func (ki *installer) ensureManager(c context.Context) (int32, int32, error) {
 			}
 		}
 		if upToDate {
-			dlog.Infof(c, "The traffic-manager in namespace %s is up-to-date. Image: %s", ki.Namespace, managerImageName())
+			dlog.Infof(c, "The traffic-manager in namespace %s is up-to-date. Image: %s", ki.Namespace, managerImageName(env))
 		} else {
-			_, err = ki.updateDeployment(c, dep)
+			_, err = ki.updateDeployment(c, env, dep)
 		}
 	}
 	if err != nil {

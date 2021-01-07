@@ -155,6 +155,10 @@ func Test_findTrafficManager_notPresent(t *testing.T) {
 func Test_findTrafficManager_present(t *testing.T) {
 	c, cancel := context.WithCancel(dlog.NewTestContext(t, false))
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	env, err := client.LoadEnv(c)
+	if err != nil {
+		t.Fatal(err)
+	}
 	g.Go("test-present", func(c context.Context) error {
 		defer cancel()
 		publishManager(t)
@@ -173,7 +177,7 @@ func Test_findTrafficManager_present(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		err = ti.createManagerDeployment(c)
+		err = ti.createManagerDeployment(c, env)
 		if err != nil {
 			return err
 		}
@@ -185,8 +189,7 @@ func Test_findTrafficManager_present(t *testing.T) {
 		}
 		return errors.New("traffic-manager deployment not found")
 	})
-	err := g.Wait()
-	if err != nil {
+	if err := g.Wait(); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -195,6 +198,10 @@ func Test_ensureTrafficManager_notPresent(t *testing.T) {
 	c := dlog.NewTestContext(t, false)
 	publishManager(t)
 	defer removeManager(t)
+	env, err := client.LoadEnv(c)
+	if err != nil {
+		t.Fatal(err)
+	}
 	kc, err := newKCluster(c, map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -203,7 +210,7 @@ func Test_ensureTrafficManager_notPresent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sshd, api, err := ti.ensureManager(c)
+	sshd, api, err := ti.ensureManager(c, env)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,6 +276,10 @@ func TestAddAgentToDeployment(t *testing.T) {
 		testcases[tcName] = tc
 	}
 
+	env, err := client.LoadEnv(dlog.NewTestContext(t, true))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for tcName, tc := range testcases {
 		tc := tc
 		t.Run(tcName, func(t *testing.T) {
@@ -280,7 +291,7 @@ func TestAddAgentToDeployment(t *testing.T) {
 			expectedSvc := tc.OutputService.DeepCopy()
 			sanitizeService(expectedSvc)
 
-			actualDep, actualSvc, actualErr := addAgentToDeployment(ctx,
+			actualDep, actualSvc, actualErr := addAgentToDeployment(ctx, env,
 				tc.InputLicensed,
 				tc.InputPortName,
 				tc.InputDeployment.DeepCopy(),
