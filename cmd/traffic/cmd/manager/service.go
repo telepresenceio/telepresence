@@ -30,7 +30,7 @@ type Manager struct {
 	state   *state.State
 	systema *systemaPool
 
-	rpc.UnimplementedManagerServer
+	rpc.UnsafeManagerServer
 }
 
 type wall struct{}

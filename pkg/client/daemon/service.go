@@ -41,7 +41,7 @@ to troubleshoot problems.
 
 // daemon represents the state of the Telepresence Daemon
 type service struct {
-	rpc.UnimplementedDaemonServer
+	rpc.UnsafeDaemonServer
 	dns      string
 	fallback string
 	hClient  *http.Client

@@ -38,7 +38,7 @@ to troubleshoot problems.
 
 // service represents the state of the Telepresence Connector
 type service struct {
-	rpc.UnimplementedConnectorServer
+	rpc.UnsafeConnectorServer
 	env          client.Env
 	daemon       daemon.DaemonClient
 	daemonLogger daemonLogger
