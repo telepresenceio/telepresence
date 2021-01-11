@@ -25,14 +25,31 @@ def origin_ip():
 
 
 @with_probe
-def test_nothing(probe):
+def test_probe_launch(probe, origin_ip):
     """
-    This test will probably run first for this set of probe arguments. Cause
-    the probe to run and then test nothing. This exists to keep probe launch
-    time from counting against other tests during profiling.
+    This test runs first for a given set of probe arguments. It doesn't check
+    anything, but provides an opportunity to
+    - account for probe launch time separately from actual tests
+    - notice if the probe crashes or succeeds when it should not
     """
-    _ = probe.result()
-    return
+
+    # The combination method=vpn-tcp and operation=existing deployment does not
+    # work with local clusters. Detect this combination, make sure the probe
+    # exits as expected, and don't fail the test when that happens.
+    local_vpn_existing = (
+        origin_ip is None and  # Local cluster
+        probe.method.name == "vpn-tcp" and  # Method
+        probe.operation.name == "existing"  # Operation
+    )
+
+    try:
+        _ = probe.result()
+    except Exception:
+        if not local_vpn_existing:
+            raise  # Some legitimate test failure
+    else:
+        if local_vpn_existing:
+            raise Exception("Expected error for local/vpn/existing")
 
 
 @with_probe
@@ -548,10 +565,20 @@ def test_resolve_addresses_failure(probe):
 
 
 @after_probe
-def test_exit_code(probe):
+def test_exit_code(probe, origin_ip):
     """
     The Telepresence session exited with the expected return code.
     """
+    # The combination method=vpn-tcp and operation=existing deployment does not
+    # work with local clusters. Don't fail the test when that happens.
+    local_vpn_existing = (
+        origin_ip is None and  # Local cluster
+        probe.method.name == "vpn-tcp" and  # Method
+        probe.operation.name == "existing"  # Operation
+    )
+    if local_vpn_existing:
+        pytest.skip("Probe has failed local/vpn/existing")
+
     result = _get_post_exit_result(probe)
     assert result.returncode == probe.desired_exit_code, result.returncode
 
