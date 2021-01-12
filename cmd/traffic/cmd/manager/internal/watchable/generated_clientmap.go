@@ -30,7 +30,7 @@ type ClientMapSnapshot struct {
 	Updates []ClientMapUpdate
 }
 
-// ClientMap is a wrapper around map[string]*manager.ClientInfo that is very similar to sync.Map, and that that
+// ClientMap is a wrapper around map[string]*manager.ClientInfo that is very similar to sync.Map, and that
 // provides the additional features that:
 //
 // 1. it is thread-safe (compared to a bare map)

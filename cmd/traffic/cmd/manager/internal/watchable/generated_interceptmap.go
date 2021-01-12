@@ -30,7 +30,7 @@ type InterceptMapSnapshot struct {
 	Updates []InterceptMapUpdate
 }
 
-// InterceptMap is a wrapper around map[string]*manager.InterceptInfo that is very similar to sync.Map, and that that
+// InterceptMap is a wrapper around map[string]*manager.InterceptInfo that is very similar to sync.Map, and that
 // provides the additional features that:
 //
 // 1. it is thread-safe (compared to a bare map)

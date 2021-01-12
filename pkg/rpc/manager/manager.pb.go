@@ -52,9 +52,8 @@ const (
 	// for an intercept using the "http" mechanism, which requires the
 	// Ambassador Telepresence agent.
 	InterceptDispositionType_NO_MECHANISM InterceptDispositionType = 5
-	// NO_PORT indicates that that the manager was unable to allocate a
-	// port to act as the rendezvous point between the client and the
-	// agent.
+	// NO_PORT indicates that the manager was unable to allocate a port
+	// to act as the rendezvous point between the client and the agent.
 	InterceptDispositionType_NO_PORTS InterceptDispositionType = 6
 	// AGENT_ERROR indicates that the intercept was submitted to an
 	// agent, but that the agent rejected it (by calling
@@ -394,7 +393,7 @@ type InterceptInfo struct {
 	Spec *InterceptSpec `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
 	// manager_port is the port on the manager that the agent should
 	// send intercepted traffic to.  This gets set by the manager when
-	// the the intercept is first created.
+	// the intercept is first created.
 	ManagerPort int32 `protobuf:"varint,2,opt,name=manager_port,json=managerPort,proto3" json:"manager_port,omitempty"`
 	// preview_domain is the SystemA domain that will proxy in traffic
 	// to this intercept.  This gets set by the manager at some

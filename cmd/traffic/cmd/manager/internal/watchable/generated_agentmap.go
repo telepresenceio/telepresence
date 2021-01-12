@@ -30,7 +30,7 @@ type AgentMapSnapshot struct {
 	Updates []AgentMapUpdate
 }
 
-// AgentMap is a wrapper around map[string]*manager.AgentInfo that is very similar to sync.Map, and that that
+// AgentMap is a wrapper around map[string]*manager.AgentInfo that is very similar to sync.Map, and that
 // provides the additional features that:
 //
 // 1. it is thread-safe (compared to a bare map)

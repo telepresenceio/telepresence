@@ -30,7 +30,7 @@ type MAPTYPESnapshot struct {
 	Updates []MAPTYPEUpdate
 }
 
-// MAPTYPE is a wrapper around map[string]VALTYPE that is very similar to sync.Map, and that that
+// MAPTYPE is a wrapper around map[string]VALTYPE that is very similar to sync.Map, and that
 // provides the additional features that:
 //
 // 1. it is thread-safe (compared to a bare map)

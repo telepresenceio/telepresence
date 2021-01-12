@@ -172,8 +172,8 @@ func (srv *Server) Serve(ctx context.Context) error {
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 
 	grp.Go("grpc-server", func(ctx context.Context) error {
-		// This is both where where the Telepresence managers dial to (or rather, this is
-		// where Envoy routes requests from Telepresence managers to), and also where the
+		// This is both where the Telepresence managers dial to (or rather, this is where
+		// Envoy routes requests from Telepresence managers to), and also where the
 		// "systema" service dials to when it wants to make an RPC to the Telepresence
 		// manager.
 		grpcHandler := grpc.NewServer()

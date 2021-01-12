@@ -515,8 +515,8 @@ func addAgentToDeployment(
 			ImageName:           agentImageName(env, licensed),
 		},
 	}
-	// Depending on whether the the Service refers to the port by name or by number, we either
-	// need to patch the names in the deployment, or the number in the service.
+	// Depending on whether the Service refers to the port by name or by number, we either need
+	// to patch the names in the deployment, or the number in the service.
 	var serviceMod *svcActions
 	if servicePort.TargetPort.Type == intstr.Int {
 		// Change the port number that the Service refers to.

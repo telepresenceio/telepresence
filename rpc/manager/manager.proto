@@ -105,9 +105,8 @@ enum InterceptDispositionType {
   // Ambassador Telepresence agent.
   NO_MECHANISM = 5;
 
-  // NO_PORT indicates that that the manager was unable to allocate a
-  // port to act as the rendezvous point between the client and the
-  // agent.
+  // NO_PORT indicates that the manager was unable to allocate a port
+  // to act as the rendezvous point between the client and the agent.
   NO_PORTS = 6;
 
   // AGENT_ERROR indicates that the intercept was submitted to an
@@ -122,7 +121,7 @@ message InterceptInfo {
 
   // manager_port is the port on the manager that the agent should
   // send intercepted traffic to.  This gets set by the manager when
-  // the the intercept is first created.
+  // the intercept is first created.
   int32 manager_port = 2;
 
   // preview_domain is the SystemA domain that will proxy in traffic
@@ -217,9 +216,9 @@ service Manager {
 
   // CreateIntercept lets a client create an intercept.  It will be
   // created in the "WATING" disposition, and it will remain in that
-  // state until until the Agent (the app-sidecar) calls
-  // ReviewIntercept() to transition it to the "ACTIVE" disposition
-  // (or one of the error dispositions).
+  // state until the Agent (the app-sidecar) calls ReviewIntercept()
+  // to transition it to the "ACTIVE" disposition (or one of the error
+  // dispositions).
   rpc CreateIntercept(CreateInterceptRequest) returns (InterceptInfo);
 
   // RemoveIntercept lets a client remove an intercept.
