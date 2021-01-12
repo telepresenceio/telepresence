@@ -5,10 +5,10 @@ import (
 	"sort"
 	"time"
 
-	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/state"
@@ -30,7 +30,7 @@ type Manager struct {
 	state   *state.State
 	systema *systemaPool
 
-	rpc.UnimplementedManagerServer
+	rpc.UnsafeManagerServer
 }
 
 type wall struct{}
@@ -66,7 +66,10 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 
 	sessionID := m.state.AddClient(client, m.clock.Now())
 
-	return &rpc.SessionInfo{SessionId: sessionID}, nil
+	return &rpc.SessionInfo{
+		SessionId:       sessionID,
+		LicensedCluster: true,
+	}, nil
 }
 
 // ArriveAsAgent establishes a session between an agent and the Manager.
@@ -147,7 +150,22 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	if agent := m.state.GetAgent(sessionID); agent != nil {
 		// sessionID refers to an agent session
 		filter = func(id string, info *rpc.InterceptInfo) bool {
-			return info.Spec.Agent == agent.Name
+			// Don't return intercepts for different agents.
+			if info.Spec.Agent != agent.Name {
+				return false
+			}
+			// Don't return intercepts that aren't in a "agent-owned" state.
+			switch info.Disposition {
+			case rpc.InterceptDispositionType_WAITING:
+			case rpc.InterceptDispositionType_ACTIVE:
+			case rpc.InterceptDispositionType_AGENT_ERROR:
+				// agent-owned state: continue along
+			default:
+				// otherwise: don't return this intercept
+				return false
+			}
+			// We haven't found a reason to exlude this intercept, so include it.
+			return true
 		}
 	} else {
 		// sessionID refers to a client session
@@ -219,10 +237,27 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 				dlog.Errorln(ctx, "systema: release connection:", err)
 			}
 		} else {
-			// DON'T m.systema.Done(); keep the connection refcounted until the
-			// intercept is deleted.
-			intercept.PreviewDomain = resp.Domain
-			m.state.UpdateIntercept(intercept)
+			_intercept := m.state.UpdateIntercept(intercept.Id, func(intercept *rpc.InterceptInfo) {
+				intercept.PreviewDomain = resp.Domain
+			})
+			if _intercept == nil {
+				// Someone else deleted the intercept while we were at it?
+				_, err := sa.RemoveDomain(ctx, &systema.RemoveDomainRequest{
+					Domain: resp.Domain,
+				})
+				if err != nil {
+					dlog.Errorln(ctx, "systema: remove domain:", err)
+				}
+				if err := m.systema.Done(); err != nil {
+					dlog.Errorln(ctx, "systema: release connection:", err)
+				}
+			} else {
+				// Success!
+				//
+				// DON'T m.systema.Done(); keep the connection refcounted until the
+				// intercept is deleted.
+				intercept = _intercept
+			}
 		}
 	}
 
@@ -254,11 +289,26 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 
 	dlog.Debugf(ctx, "ReviewIntercept called: %s %s - %s", sessionID, ceptID, rIReq.Disposition)
 
-	if m.state.GetAgent(sessionID) == nil {
+	agent := m.state.GetAgent(sessionID)
+	if agent == nil {
 		return nil, status.Errorf(codes.NotFound, "Agent session %q not found", sessionID)
 	}
 
-	if !m.state.ReviewIntercept(sessionID, ceptID, rIReq.Disposition, rIReq.Message) {
+	intercept := m.state.UpdateIntercept(ceptID, func(intercept *rpc.InterceptInfo) {
+		// Sanity check: The reviewing agent must be an agent for the intercept.
+		if intercept.Spec.Agent != agent.Name {
+			return
+		}
+
+		// Only update intercepts in the waiting state.  Agents race to review an intercept, but we
+		// expect they will always compatible answers.
+		if intercept.Disposition == rpc.InterceptDispositionType_WAITING {
+			intercept.Disposition = rIReq.Disposition
+			intercept.Message = rIReq.Message
+		}
+	})
+
+	if intercept == nil {
 		return nil, status.Errorf(codes.NotFound, "Intercept with ID %q not found for this session", ceptID)
 	}
 

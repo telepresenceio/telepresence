@@ -31,7 +31,7 @@ type ManagerServer interface {
 
 type server struct {
 	ManagerServer
-	manager.UnimplementedManagerProxyServer
+	manager.UnsafeManagerProxyServer
 }
 
 // HandleConnection implements manager.ManagerProxyServer

@@ -7,13 +7,13 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dutil"

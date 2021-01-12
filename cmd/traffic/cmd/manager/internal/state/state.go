@@ -93,6 +93,57 @@ func (s *State) unlockedNextPort() uint16 {
 	return 0
 }
 
+func (s *State) unlockedCheckAgentsForIntercept(intercept *rpc.InterceptInfo) (errCode rpc.InterceptDispositionType, errMsg string) {
+	// Don't overwrite an existing error state
+	switch intercept.Disposition {
+	case rpc.InterceptDispositionType_UNSPECIFIED:
+		// Continue through; we can trasition to an error state from here.
+	case rpc.InterceptDispositionType_ACTIVE:
+		// Continue through; we can trasition to an error state from here.
+	case rpc.InterceptDispositionType_WAITING:
+		// Continue through; we can trasition to an error state from here.
+	case rpc.InterceptDispositionType_NO_CLIENT:
+		// Don't overwrite this error state.
+		return intercept.Disposition, intercept.Message
+	case rpc.InterceptDispositionType_NO_AGENT:
+		// Continue through; this is an error state that this function "owns".
+	case rpc.InterceptDispositionType_NO_MECHANISM:
+		// Continue through; this is an error state that this function "owns".
+	case rpc.InterceptDispositionType_NO_PORTS:
+		// Don't overwrite this error state.
+		return intercept.Disposition, intercept.Message
+	case rpc.InterceptDispositionType_AGENT_ERROR:
+		// Continue through; the error states of this function take precedence.
+	}
+
+	agentSet := s.agentsByName[intercept.Spec.Agent]
+
+	if len(agentSet) == 0 {
+		errCode = rpc.InterceptDispositionType_NO_AGENT
+		errMsg = fmt.Sprintf("No agent found for %q", intercept.Spec.Agent)
+		return
+	}
+
+	agentList := make([]*rpc.AgentInfo, 0, len(agentSet))
+	for _, agent := range agentSet {
+		agentList = append(agentList, agent)
+	}
+
+	if !agentsAreCompatible(agentList) {
+		errCode = rpc.InterceptDispositionType_NO_AGENT
+		errMsg = fmt.Sprintf("Agents for %q are not consistent", intercept.Spec.Agent)
+		return
+	}
+
+	if !agentHasMechanism(agentList[0], intercept.Spec.Mechanism) {
+		errCode = rpc.InterceptDispositionType_NO_MECHANISM
+		errMsg = fmt.Sprintf("Agents for %q do not have mechanism %q", intercept.Spec.Agent, intercept.Spec.Mechanism)
+		return
+	}
+
+	return rpc.InterceptDispositionType_UNSPECIFIED, ""
+}
+
 // Sessions: common ////////////////////////////////////////////////////////////////////////////////
 
 // Mark a session as being present at the indicated time.  Returns true if everything goes OK,
@@ -147,11 +198,15 @@ func (s *State) unlockedRemoveSession(sessionID string) {
 		//  2. Don't have any agents (agent.Name == intercept.Spec.Agent)
 		for interceptID, intercept := range s.intercepts.LoadAll() {
 			if intercept.ClientSession.SessionId == sessionID {
-				// owner went away
+				// Client went away:
+				// Delete it.
 				s.intercepts.Delete(interceptID)
-			} else if len(s.agentsByName[intercept.Spec.Agent]) == 0 {
-				// refcount went to 0
-				s.intercepts.Delete(interceptID)
+			} else if errCode, errMsg := s.unlockedCheckAgentsForIntercept(intercept); errCode != 0 {
+				// Refcount went to zero:
+				// Tell the client, so that the client can tell us to delete it.
+				intercept.Disposition = errCode
+				intercept.Message = errMsg
+				s.intercepts.Store(interceptID, intercept)
 			}
 		}
 	}
@@ -239,23 +294,23 @@ func (s *State) AddAgent(agent *rpc.AgentInfo, now time.Time) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	agents := make([]*rpc.AgentInfo, 0, len(s.agentsByName[agent.Name]))
-	for _, agent := range s.agentsByName[agent.Name] {
-		agents = append(agents, agent)
-	}
-	agents = append(agents, agent)
-	if len(agents) > 1 && !agentsAreCompatible(agents) {
-		message := fmt.Sprintf("Agents for %q are not consistent", agent.Name)
-		for interceptID, intercept := range s.intercepts.LoadAll() {
-			if intercept.Spec.Agent == agent.Name {
-				intercept.Disposition = rpc.InterceptDispositionType_NO_AGENT
-				intercept.Message = message
-				s.intercepts.Store(interceptID, intercept)
-			}
-		}
-	}
-	if len(agents) == 1 {
+	if s.agentsByName[agent.Name] == nil {
 		s.agentsByName[agent.Name] = make(map[string]*rpc.AgentInfo)
+	}
+
+	for interceptID, intercept := range s.intercepts.LoadAll() {
+		// Check whether each intercept needs to either (1) be moved in to a NO_AGENT state
+		// because this agent made things incosnsitent, or (2) be moved out of a NO_AGENT
+		// state because it just gained an agent.
+		if errCode, errMsg := s.unlockedCheckAgentsForIntercept(intercept); errCode != 0 {
+			intercept.Disposition = errCode
+			intercept.Message = errMsg
+			s.intercepts.Store(interceptID, intercept)
+		} else if intercept.Disposition == rpc.InterceptDispositionType_NO_AGENT {
+			intercept.Disposition = rpc.InterceptDispositionType_WAITING
+			intercept.Message = ""
+			s.intercepts.Store(interceptID, intercept)
+		}
 	}
 
 	sessionID := uuid.New().String()
@@ -321,20 +376,27 @@ func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) (*rpc.In
 		},
 	}
 
-	if len(s.agentsByName[cept.Spec.Agent]) == 0 {
-		cept.Disposition = rpc.InterceptDispositionType_NO_AGENT
-		cept.Message = fmt.Sprintf("No agent found for %q", spec.Agent)
-	} else {
-		agents := make([]*rpc.AgentInfo, 0, len(s.agentsByName[cept.Spec.Agent]))
-		for _, agent := range s.agentsByName[cept.Spec.Agent] {
-			agents = append(agents, agent)
+	// [REDACTED]
+
+	// Wrap each potential-state-change in a
+	//
+	//     if cept.Disposition == rpc.InterceptDispositionType_WAITING { … }
+	//
+	// so that we don't need to worry about different state-changes stomping on eachother.
+
+	if cept.Disposition == rpc.InterceptDispositionType_WAITING {
+		cept.ManagerPort = int32(s.unlockedNextPort())
+		if cept.ManagerPort == 0 {
+			// Wow, there are no ports left!  That is... unlikely!
+			cept.Disposition = rpc.InterceptDispositionType_NO_PORTS
+			cept.Message = ""
 		}
-		if !agentsAreCompatible(agents) {
-			cept.Disposition = rpc.InterceptDispositionType_NO_AGENT
-			cept.Message = fmt.Sprintf("Agents for %q are not consistent", spec.Agent)
-		} else if !agentHasMechanism(agents[0], spec.Mechanism) {
-			cept.Disposition = rpc.InterceptDispositionType_NO_MECHANISM
-			cept.Message = fmt.Sprintf("Agents for %q do not have mechanism %q", spec.Agent, spec.Mechanism)
+	}
+
+	if cept.Disposition == rpc.InterceptDispositionType_WAITING {
+		if errCode, errMsg := s.unlockedCheckAgentsForIntercept(cept); errCode != 0 {
+			cept.Disposition = errCode
+			cept.Message = errMsg
 		}
 	}
 
@@ -345,8 +407,30 @@ func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) (*rpc.In
 	return cept, nil
 }
 
-func (s *State) UpdateIntercept(intercept *rpc.InterceptInfo) {
-	s.intercepts.Store(intercept.Id, intercept)
+// UpdateIntercept applies a given mutator function to the stored intercept with interceptID;
+// storing and returning the result.  If the given intercept does not exist, then the mutator
+// function is not run, and nil is returned.
+//
+// This does not lock; but instead uses CAS and may therefore call the mutator function multiple
+// times.  So: it is safe to perform blocking operations in your mutator function, but you must take
+// care that it is safe to call your mutator function multiple times.
+func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInfo)) *rpc.InterceptInfo {
+	for {
+		cur, ok := s.intercepts.Load(interceptID)
+		if !ok || cur == nil {
+			// Doesn't exist (possibly was deleted while this loop was running).
+			return nil
+		}
+
+		new := proto.Clone(cur).(*rpc.InterceptInfo)
+		apply(new)
+
+		swapped := s.intercepts.CompareAndSwap(new.Id, cur, new)
+		if swapped {
+			// Success!
+			return cur
+		}
+	}
 }
 
 func (s *State) RemoveIntercept(sessionID string, name string) bool {
@@ -363,45 +447,4 @@ func (s *State) WatchIntercepts(
 	} else {
 		return s.intercepts.SubscribeSubset(ctx, filter)
 	}
-}
-
-func (s *State) ReviewIntercept(sessionID string, ceptID string, disposition rpc.InterceptDispositionType, message string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	agent, ok := s.agents.Load(sessionID)
-	if !ok {
-		return false
-	}
-
-	intercept, ok := s.intercepts.Load(ceptID)
-	if !ok {
-		return false
-	}
-
-	// Sanity check: The reviewing agent must be an agent for the intercept.
-	if intercept.Spec.Agent != agent.Name {
-		return false
-	}
-
-	// Only update intercepts in the waiting state.  Agents race to review an intercept, but we
-	// expect they will always compatible answers.
-	if intercept.Disposition == rpc.InterceptDispositionType_WAITING {
-		intercept.Disposition = disposition
-		intercept.Message = message
-
-		// An intercept going active needs to be allocated a free port
-		if disposition == rpc.InterceptDispositionType_ACTIVE {
-			intercept.ManagerPort = int32(s.unlockedNextPort())
-			if intercept.ManagerPort == 0 {
-				// Wow, there are no ports left!  That is... unlikely!
-				intercept.Disposition = rpc.InterceptDispositionType_NO_PORTS
-			}
-		}
-
-		// Save the result.
-		s.intercepts.Store(ceptID, intercept)
-	}
-
-	return true
 }

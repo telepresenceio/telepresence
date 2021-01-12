@@ -41,10 +41,10 @@ var labelMap = map[string]string{
 	"telepresence": telName,
 }
 
-// ManagerImage is inserted at build using --ldflags -X
-var managerImage string
-
-var resolveManagerName = sync.Once{}
+var (
+	managerImage       string
+	resolveManagerName = sync.Once{}
+)
 
 func managerImageName(env client.Env) string {
 	resolveManagerName.Do(func() {
@@ -55,7 +55,9 @@ func managerImageName(env client.Env) string {
 
 func agentImageName(env client.Env, licensed bool) string {
 	if licensed {
-		return managerImageName(env) + "-proprietary" // TODO: proper name of the proprietary agent TBD
+		// FIXME(lukeshu): Don't hard-code this (the plan is to address that during the
+		// licensing work).
+		return "docker.io/lukeshu/ambassador-telepresence-agent:v0.3.1-8-g3fdedd7-1610440959"
 	}
 	return managerImageName(env)
 }
@@ -513,8 +515,8 @@ func addAgentToDeployment(
 			ImageName:           agentImageName(env, licensed),
 		},
 	}
-	// Depending on whether the the Service refers to the port by name or by number, we either
-	// need to patch the names in the deployment, or the number in the service.
+	// Depending on whether the Service refers to the port by name or by number, we either need
+	// to patch the names in the deployment, or the number in the service.
 	var serviceMod *svcActions
 	if servicePort.TargetPort.Type == intstr.Int {
 		// Change the port number that the Service refers to.

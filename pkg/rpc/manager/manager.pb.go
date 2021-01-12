@@ -34,14 +34,31 @@ const _ = proto.ProtoPackageIsVersion4
 type InterceptDispositionType int32
 
 const (
-	InterceptDispositionType_UNSPECIFIED  InterceptDispositionType = 0
-	InterceptDispositionType_ACTIVE       InterceptDispositionType = 1
-	InterceptDispositionType_WAITING      InterceptDispositionType = 2
-	InterceptDispositionType_NO_CLIENT    InterceptDispositionType = 3
-	InterceptDispositionType_NO_AGENT     InterceptDispositionType = 4
+	InterceptDispositionType_UNSPECIFIED InterceptDispositionType = 0
+	InterceptDispositionType_ACTIVE      InterceptDispositionType = 1
+	InterceptDispositionType_WAITING     InterceptDispositionType = 2
+	// What does "NO_CLIENT" mean?  The Manager garbage-collects the
+	// intercept if the client goes away.
+	InterceptDispositionType_NO_CLIENT InterceptDispositionType = 3
+	// NO_AGENT indicates that there are no currently-running agents
+	// that can service the intercept, or that there is a inconsistency
+	// between the agents that are running.  This may be an ephemeral
+	// state, such as inconsistency between agents during the middle of
+	// a rolling update.
+	InterceptDispositionType_NO_AGENT InterceptDispositionType = 4
+	// NO_MECHANISM indicates that the agent(s) that would handle this
+	// intercept do not report that they support the mechanism of the
+	// intercept.  For example, if you are running the OSS agent but ask
+	// for an intercept using the "http" mechanism, which requires the
+	// Ambassador Telepresence agent.
 	InterceptDispositionType_NO_MECHANISM InterceptDispositionType = 5
-	InterceptDispositionType_NO_PORTS     InterceptDispositionType = 6
-	InterceptDispositionType_AGENT_ERROR  InterceptDispositionType = 7
+	// NO_PORT indicates that the manager was unable to allocate a port
+	// to act as the rendezvous point between the client and the agent.
+	InterceptDispositionType_NO_PORTS InterceptDispositionType = 6
+	// AGENT_ERROR indicates that the intercept was submitted to an
+	// agent, but that the agent rejected it (by calling
+	// ReviewIntercept).
+	InterceptDispositionType_AGENT_ERROR InterceptDispositionType = 7
 )
 
 // Enum value maps for InterceptDispositionType.
@@ -277,13 +294,11 @@ type InterceptSpec struct {
 	Agent string `protobuf:"bytes,3,opt,name=agent,proto3" json:"agent,omitempty"`
 	// How to decide which subset of requests to that agent to intercept.
 	Mechanism string `protobuf:"bytes,4,opt,name=mechanism,proto3" json:"mechanism,omitempty"`
+	// Additional mechanism-specific info:
 	//
-	//additional mechanism-specific info
-	//- header match patterns would go here
-	//- perhaps a JSON blob for the Agent's mechanism implementation to parse
-	//- how does the client decide to create this blob?
-	//- perhaps just pass all the unrecognized CLI arguments? or all of them?
-	//- maybe always pass client's install id to use for x-service-preview matches?
+	//  case "tcp": Ignored.
+	//
+	//  [REDACTED]
 	Additional string `protobuf:"bytes,5,opt,name=additional,proto3" json:"additional,omitempty"`
 	TargetHost string `protobuf:"bytes,6,opt,name=target_host,json=targetHost,proto3" json:"target_host,omitempty"`
 	TargetPort int32  `protobuf:"varint,7,opt,name=target_port,json=targetPort,proto3" json:"target_port,omitempty"`
@@ -378,8 +393,7 @@ type InterceptInfo struct {
 	Spec *InterceptSpec `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
 	// manager_port is the port on the manager that the agent should
 	// send intercepted traffic to.  This gets set by the manager when
-	// the agent calls ReviewIntercept setting the disposition to
-	// ACTIVE.
+	// the intercept is first created.
 	ManagerPort int32 `protobuf:"varint,2,opt,name=manager_port,json=managerPort,proto3" json:"manager_port,omitempty"`
 	// preview_domain is the SystemA domain that will proxy in traffic
 	// to this intercept.  This gets set by the manager at some

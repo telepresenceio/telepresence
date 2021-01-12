@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/golang/protobuf/ptypes/empty"
 	"google.golang.org/grpc"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"

@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/ptypes/empty"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -172,8 +172,8 @@ func (srv *Server) Serve(ctx context.Context) error {
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 
 	grp.Go("grpc-server", func(ctx context.Context) error {
-		// This is both where where the Telepresence managers dial to (or rather, this is
-		// where Envoy routes requests from Telepresence managers to), and also where the
+		// This is both where the Telepresence managers dial to (or rather, this is where
+		// Envoy routes requests from Telepresence managers to), and also where the
 		// "systema" service dials to when it wants to make an RPC to the Telepresence
 		// manager.
 		grpcHandler := grpc.NewServer()

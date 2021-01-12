@@ -68,14 +68,11 @@ message InterceptSpec {
   // How to decide which subset of requests to that agent to intercept.
   string mechanism = 4;
 
-  /*
-     additional mechanism-specific info
-     - header match patterns would go here
-     - perhaps a JSON blob for the Agent's mechanism implementation to parse
-     - how does the client decide to create this blob?
-     - perhaps just pass all the unrecognized CLI arguments? or all of them?
-     - maybe always pass client's install id to use for x-service-preview matches?
-   */
+  // Additional mechanism-specific info:
+  //
+  //  case "tcp": Ignored.
+  //
+  //  [REDACTED]
   string additional = 5;
 
   string target_host = 6;
@@ -90,10 +87,31 @@ enum InterceptDispositionType {
 
   // Failure states
 
+  // What does "NO_CLIENT" mean?  The Manager garbage-collects the
+  // intercept if the client goes away.
   NO_CLIENT = 3;
+
+  // NO_AGENT indicates that there are no currently-running agents
+  // that can service the intercept, or that there is a inconsistency
+  // between the agents that are running.  This may be an ephemeral
+  // state, such as inconsistency between agents during the middle of
+  // a rolling update.
   NO_AGENT = 4;
+
+  // NO_MECHANISM indicates that the agent(s) that would handle this
+  // intercept do not report that they support the mechanism of the
+  // intercept.  For example, if you are running the OSS agent but ask
+  // for an intercept using the "http" mechanism, which requires the
+  // Ambassador Telepresence agent.
   NO_MECHANISM = 5;
+
+  // NO_PORT indicates that the manager was unable to allocate a port
+  // to act as the rendezvous point between the client and the agent.
   NO_PORTS = 6;
+
+  // AGENT_ERROR indicates that the intercept was submitted to an
+  // agent, but that the agent rejected it (by calling
+  // ReviewIntercept).
   AGENT_ERROR = 7;
 }
 
@@ -103,8 +121,7 @@ message InterceptInfo {
 
   // manager_port is the port on the manager that the agent should
   // send intercepted traffic to.  This gets set by the manager when
-  // the agent calls ReviewIntercept setting the disposition to
-  // ACTIVE.
+  // the intercept is first created.
   int32 manager_port = 2;
 
   // preview_domain is the SystemA domain that will proxy in traffic
@@ -199,9 +216,9 @@ service Manager {
 
   // CreateIntercept lets a client create an intercept.  It will be
   // created in the "WATING" disposition, and it will remain in that
-  // state until until the Agent (the app-sidecar) calls
-  // ReviewIntercept() to transition it to the "ACTIVE" disposition
-  // (or one of the error dispositions).
+  // state until the Agent (the app-sidecar) calls ReviewIntercept()
+  // to transition it to the "ACTIVE" disposition (or one of the error
+  // dispositions).
   rpc CreateIntercept(CreateInterceptRequest) returns (InterceptInfo);
 
   // RemoveIntercept lets a client remove an intercept.

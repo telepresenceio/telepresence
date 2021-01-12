@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
