@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 
@@ -11,6 +12,8 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dlog"
+	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 	systemarpc "github.com/datawire/telepresence2/pkg/rpc/systema"
 	"github.com/datawire/telepresence2/pkg/systema"
 )
@@ -45,13 +48,26 @@ func (c *systemaCredentials) RequireTransportSecurity() bool {
 }
 
 func (m *Manager) DialIntercept(ctx context.Context, interceptID string) (net.Conn, error) {
-	// TODO: Don't hard-code
-	dialer := &tls.Dialer{
-		Config: &tls.Config{
-			InsecureSkipVerify: true,
-		},
+	iiVal, ok := m.ingressInfos.Load(interceptID)
+	if !ok {
+		return nil, fmt.Errorf("missing ingress information for intercept %s", interceptID)
 	}
-	return dialer.DialContext(ctx, "tcp", "ambassador.ambassador:443")
+	ingressInfo := iiVal.(*rpc.IngressInfo)
+
+	dialAddr := fmt.Sprintf("%s:%d", ingressInfo.Host, ingressInfo.Port)
+	if ingressInfo.UseTls {
+		dialer := &tls.Dialer{
+			Config: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		}
+		dlog.Debugf(ctx, "HandleConnection: dialing intercept %s using TLS on %s", interceptID, dialAddr)
+		return dialer.DialContext(ctx, "tcp", dialAddr)
+	}
+
+	dialer := net.Dialer{}
+	dlog.Debugf(ctx, "HandleConnection: dialing intercept %s using clear text on %s", interceptID, dialAddr)
+	return dialer.DialContext(ctx, "tcp", dialAddr)
 }
 
 type systemaPool struct {

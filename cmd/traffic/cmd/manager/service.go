@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,12 +24,13 @@ type Clock interface {
 }
 
 type Manager struct {
-	ctx     context.Context
-	clock   Clock
-	env     Env
-	ID      string
-	state   *state.State
-	systema *systemaPool
+	ctx          context.Context
+	clock        Clock
+	env          Env
+	ID           string
+	state        *state.State
+	systema      *systemaPool
+	ingressInfos sync.Map
 
 	rpc.UnsafeManagerServer
 }
@@ -227,6 +229,9 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	if sa, err := m.systema.Get(); err != nil {
 		dlog.Errorln(ctx, "systema: acquire connection:", err)
 	} else {
+		if spec.IngressInfo != nil {
+			m.ingressInfos.Store(intercept.Id, spec.IngressInfo)
+		}
 		resp, err := sa.CreateDomain(ctx, &systema.CreateDomainRequest{
 			InterceptId:   intercept.Id,
 			DisplayBanner: true, // FIXME(lukeshu): Don't hard-code this.
