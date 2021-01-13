@@ -1,15 +1,23 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/client/auth"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
@@ -24,7 +32,8 @@ type interceptInfo struct {
 
 type interceptState struct {
 	*interceptInfo
-	cs *connectorState
+	ingressInfo *manager.IngressInfo
+	cs          *connectorState
 }
 
 func interceptCommand() *cobra.Command {
@@ -64,7 +73,7 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 	ii.cmd = cmd
 	if len(args) == 0 {
 		// start and retain the intercept
-		return ii.withConnector(true, func(cs *connectorState) error {
+		return ii.withConnector(true, func(cs *connectorState) (err error) {
 			is := ii.newInterceptState(cs)
 			return client.WithEnsuredState(is, true, func() error { return nil })
 		})
@@ -148,15 +157,23 @@ func (is *interceptState) EnsureState() (bool, error) {
 	if is.name == "" {
 		is.name = is.agentName
 	}
+	token, _ := auth.LoadTokenFromUserCache()
+	isLoggedIn := token != nil
 	// [REDACTED]
+	if isLoggedIn {
+		if err := is.selectIngress(); err != nil {
+			return false, err
+		}
+	}
 
 	// Turn that in to a spec
 	spec := &manager.InterceptSpec{
-		Name:       is.name,
-		Agent:      is.agentName,
-		Mechanism:  "tcp",
-		TargetHost: "127.0.0.1",
-		TargetPort: int32(is.port),
+		Name:        is.name,
+		Agent:       is.agentName,
+		IngressInfo: is.ingressInfo,
+		Mechanism:   "tcp",
+		TargetHost:  "127.0.0.1",
+		TargetPort:  int32(is.port),
 	}
 	// [REDACTED]
 
@@ -194,4 +211,158 @@ func (is *interceptState) DeactivateState() error {
 		return errors.New(interceptMessage(r))
 	}
 	return nil
+}
+
+var hostRx = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$`)
+
+func askForHostname(cachedHost string, reader *bufio.Reader, out io.Writer) (string, error) {
+	for {
+		if cachedHost != "" {
+			fmt.Fprintf(out, "Hostname [%s] ? ", cachedHost)
+		} else {
+			fmt.Fprint(out, "Hostname: ")
+		}
+		reply, err := reader.ReadString('\n')
+		if err != nil {
+			return "", err
+		}
+		reply = strings.TrimSpace(reply)
+		if reply == "" {
+			if cachedHost == "" {
+				continue
+			}
+			return cachedHost, nil
+		}
+		if hostRx.MatchString(reply) {
+			return reply, nil
+		}
+		fmt.Fprintf(out,
+			"hostname %q must match the regex [a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)* (e.g. 'example.com')\n",
+			reply)
+	}
+}
+
+func askForPortNumber(cachedPort int32, reader *bufio.Reader, out io.Writer) (int32, error) {
+	for {
+		if cachedPort != 0 {
+			fmt.Fprintf(out, "Port [%d] ? ", cachedPort)
+		} else {
+			fmt.Fprint(out, "Hostname: ")
+		}
+		reply, err := reader.ReadString('\n')
+		if err != nil {
+			return 0, err
+		}
+		reply = strings.TrimSpace(reply)
+		if reply == "" {
+			if cachedPort == 0 {
+				continue
+			}
+			return cachedPort, nil
+		}
+		port, err := strconv.Atoi(reply)
+		if err == nil && port > 0 {
+			return int32(port), nil
+		}
+		fmt.Fprintln(out, "port must be a positive integer")
+	}
+}
+
+func askForUseTLS(cachedUseTLS bool, reader *bufio.Reader, out io.Writer) (bool, error) {
+	for {
+		yn := "n"
+		if cachedUseTLS {
+			yn = "y"
+		}
+		fmt.Fprintf(out, "Use TLS y/n [%s] ? ", yn)
+		reply, err := reader.ReadString('\n')
+		if err != nil {
+			return false, err
+		}
+		switch strings.TrimSpace(reply) {
+		case "", "n", "N":
+			return false, nil
+		case "y", "Y":
+			return true, nil
+		}
+		fmt.Fprintln(out, "please answer y or n")
+	}
+}
+
+func (is *interceptState) selectIngress() error {
+	infos, err := readIngressCache()
+	if err != nil {
+		return err
+	}
+	cs := is.cs
+	key := cs.info.ClusterServer + "/" + cs.info.ClusterContext
+	cachedIngressInfo := infos[key]
+	if cachedIngressInfo == nil {
+		iis := cs.info.IngressInfos
+		if len(iis) > 0 {
+			cachedIngressInfo = iis[0] // TODO: Better handling when there are several alternatives. Perhaps use SystemA for this?
+		} else {
+			cachedIngressInfo = &manager.IngressInfo{}
+		}
+	}
+
+	out := is.cmd.OutOrStdout()
+	reader := bufio.NewReader(is.cmd.InOrStdin())
+
+	fmt.Fprintln(out, "Select the ingress to use for preview URL access")
+	reply := &manager.IngressInfo{}
+	if reply.Host, err = askForHostname(cachedIngressInfo.Host, reader, out); err != nil {
+		return err
+	}
+	if reply.Port, err = askForPortNumber(cachedIngressInfo.Port, reader, out); err != nil {
+		return err
+	}
+	if reply.UseTls, err = askForUseTLS(cachedIngressInfo.UseTls, reader, out); err != nil {
+		return err
+	}
+
+	if !ingressInfoEqual(cachedIngressInfo, reply) {
+		infos[key] = reply
+		if err = writeIngressInfoCache(infos); err != nil {
+			return err
+		}
+		is.ingressInfo = reply
+	}
+	return nil
+}
+
+func ingressInfoEqual(a, b *manager.IngressInfo) bool {
+	return a.Host == b.Host && a.Port == b.Port && a.UseTls == b.UseTls
+}
+
+func ingressInfoCacheFile() string {
+	cache, err := client.CacheDir()
+	if err != nil {
+		panic(err)
+	}
+	return filepath.Join(cache, "ingresses.json")
+}
+
+func readIngressCache() (map[string]*manager.IngressInfo, error) {
+	js, err := ioutil.ReadFile(ingressInfoCacheFile())
+	var infos map[string]*manager.IngressInfo
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+		return make(map[string]*manager.IngressInfo), nil
+	}
+	if err = json.Unmarshal(js, &infos); err != nil {
+		return nil, err
+	}
+	return infos, nil
+}
+
+func writeIngressInfoCache(infos map[string]*manager.IngressInfo) error {
+	js, err := json.Marshal(infos)
+	if err != nil {
+		// Shouldn't happen really
+		return err
+	}
+	return ioutil.WriteFile(ingressInfoCacheFile(), js, 0600)
 }
