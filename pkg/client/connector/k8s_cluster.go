@@ -10,6 +10,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
+	v1 "k8s.io/api/core/v1"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dexec"
@@ -320,6 +321,21 @@ func (kc *k8sCluster) findSvc(name string) *kates.Service {
 	}
 	kc.accLock.Unlock()
 	return svcCopy
+}
+
+// findAllSvc finds a service with the given service type in all namespaces of the clusters returns
+// a slice containing a copy of those services.
+func (kc *k8sCluster) findAllSvcByType(svcType v1.ServiceType) []*kates.Service {
+	var svcCopies []*kates.Service
+	kc.accLock.Lock()
+	for _, svc := range kc.Services {
+		if svc.Spec.Type == svcType {
+			svcCopies = append(svcCopies, svc.DeepCopy())
+			break
+		}
+	}
+	kc.accLock.Unlock()
+	return svcCopies
 }
 
 func newKCluster(c context.Context, kubeFlagMap map[string]string, daemon daemon.DaemonClient) (*k8sCluster, error) {
