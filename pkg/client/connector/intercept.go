@@ -14,7 +14,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/client/actions"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
@@ -174,7 +173,7 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	}
 
 	if found == nil {
-		if result := tm.addAgent(c, tm.env, agentName); result != nil {
+		if result := tm.addAgent(c, agentName, agentImageName(tm.env, tm.sessionInfo.LicensedCluster)); result != nil {
 			return result, nil
 		}
 	} else {
@@ -205,8 +204,8 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	return result, nil
 }
 
-func (tm *trafficManager) addAgent(c context.Context, env client.Env, agentName string) *rpc.InterceptResult {
-	if err := tm.installer.ensureAgent(c, env, agentName, "", tm.sessionInfo.LicensedCluster); err != nil {
+func (tm *trafficManager) addAgent(c context.Context, agentName, agentImageName string) *rpc.InterceptResult {
+	if err := tm.installer.ensureAgent(c, agentName, "", agentImageName); err != nil {
 		if err == agentExists {
 			return nil
 		}

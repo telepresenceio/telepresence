@@ -284,9 +284,9 @@ func TestAddAgentToDeployment(t *testing.T) {
 			expectedSvc := tc.OutputService.DeepCopy()
 			sanitizeService(expectedSvc)
 
-			actualDep, actualSvc, actualErr := addAgentToDeployment(ctx, env,
-				tc.InputLicensed,
+			actualDep, actualSvc, actualErr := addAgentToDeployment(ctx,
 				tc.InputPortName,
+				agentImageName(env, tc.InputLicensed),
 				tc.InputDeployment.DeepCopy(),
 				[]*kates.Service{tc.InputService.DeepCopy()},
 			)

@@ -328,7 +328,7 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 var agentExists = errors.New("agent exists")
 var agentNotFound = errors.New("no such agent")
 
-func (ki *installer) ensureAgent(c context.Context, env client.Env, name, portName string, licensed bool) error {
+func (ki *installer) ensureAgent(c context.Context, name, portName, agentImageName string) error {
 	dep := ki.findDeployment(name)
 	if dep == nil {
 		return agentNotFound
@@ -349,7 +349,7 @@ func (ki *installer) ensureAgent(c context.Context, env client.Env, name, portNa
 		if len(matchingSvcs) == 0 {
 			return fmt.Errorf("found no services with just one port and a selector matching labels %v", dep.Spec.Template.Labels)
 		}
-		dep, svc, err := addAgentToDeployment(c, env, licensed, portName, dep, matchingSvcs)
+		dep, svc, err := addAgentToDeployment(c, portName, agentImageName, dep, matchingSvcs)
 		if err != nil {
 			return err
 		}
@@ -364,8 +364,7 @@ func (ki *installer) ensureAgent(c context.Context, env client.Env, name, portNa
 		return nil
 	}
 
-	imageName := agentImageName(env, licensed)
-	if agentCn.Image == imageName {
+	if agentCn.Image == agentImageName {
 		dlog.Debugf(c, "deployment %q already has an installed and up-to-date agent", name)
 		return agentExists
 	}
@@ -383,8 +382,8 @@ func (ki *installer) ensureAgent(c context.Context, env client.Env, name, portNa
 
 	aaa := actions.AddTrafficAgent
 	explainUndo(c, aaa, dep)
-	aaa.ImageName = imageName
-	agentCn.Image = imageName
+	aaa.ImageName = agentImageName
+	agentCn.Image = agentImageName
 	explainDo(c, aaa, dep)
 	return ki.client.Update(c, dep, dep)
 }
@@ -451,8 +450,9 @@ func (ki *installer) undoServiceMods(c context.Context, svc *kates.Service) erro
 }
 
 func addAgentToDeployment(
-	c context.Context, env client.Env, licensed bool,
+	c context.Context,
 	portName string,
+	agentImageName string,
 	deployment *kates.Deployment, matchingServices []*kates.Service,
 ) (
 	*kates.Deployment,
@@ -512,7 +512,7 @@ func addAgentToDeployment(
 			ContainerPortName:   containerPort.Name,
 			ContainerPortProto:  containerPort.Protocol,
 			ContainerPortNumber: containerPort.Number,
-			ImageName:           agentImageName(env, licensed),
+			ImageName:           agentImageName,
 		},
 	}
 	// Depending on whether the Service refers to the port by name or by number, we either need
