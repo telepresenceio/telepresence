@@ -210,15 +210,8 @@ func Test_ensureTrafficManager_notPresent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sshd, api, err := ti.ensureManager(c, env)
-	if err != nil {
+	if err := ti.ensureManager(c, env); err != nil {
 		t.Fatal(err)
-	}
-	if sshd != 8022 {
-		t.Fatal("expected sshd port to be 8082")
-	}
-	if api != 8081 {
-		t.Fatal("expected api port to be 8081")
 	}
 }
 

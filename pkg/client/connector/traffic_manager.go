@@ -95,7 +95,7 @@ func (tm *trafficManager) waitUntilStarted() error {
 }
 
 func (tm *trafficManager) start(c context.Context) error {
-	remoteSSHPort, remoteAPIPort, err := tm.installer.ensureManager(c, tm.env)
+	err := tm.installer.ensureManager(c, tm.env)
 	if err != nil {
 		tm.apiErr = err
 		close(tm.startup)
@@ -104,8 +104,8 @@ func (tm *trafficManager) start(c context.Context) error {
 	kpfArgs := []string{
 		"port-forward",
 		"svc/traffic-manager",
-		fmt.Sprintf("%d:%d", tm.sshPort, remoteSSHPort),
-		fmt.Sprintf("%d:%d", tm.apiPort, remoteAPIPort)}
+		fmt.Sprintf("%d:%d", tm.sshPort, ManagerPortSSH),
+		fmt.Sprintf("%d:%d", tm.apiPort, ManagerPortHTTP)}
 
 	err = client.Retry(c, "svc/traffic-manager port-forward", func(c context.Context) error {
 		return tm.installer.portForwardAndThen(c, kpfArgs, "init-grpc", tm.initGrpc)
