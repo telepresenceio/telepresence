@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,7 +13,15 @@ import (
 	"github.com/datawire/telepresence2/pkg/client/daemon/dbus"
 	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/pkg/client/daemon/tun"
+	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
 )
+
+func (o *outbound) resolveNoNS(query string) *rpc.Route {
+	o.domainsLock.RLock()
+	route := o.domains[strings.ToLower(query)]
+	o.domainsLock.RUnlock()
+	return route
+}
 
 func (o *outbound) tryResolveD(c context.Context) error {
 	// Connect to ResolveD via DBUS.

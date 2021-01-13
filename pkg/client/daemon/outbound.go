@@ -295,13 +295,6 @@ func (o *outbound) resolve(query string) *rpc.Route {
 	return route
 }
 
-func (o *outbound) resolveNoNS(query string) *rpc.Route {
-	o.domainsLock.RLock()
-	route := o.domains[strings.ToLower(query)]
-	o.domainsLock.RUnlock()
-	return route
-}
-
 func (o *outbound) destination(conn *net.TCPConn) (string, error) {
 	_, host, err := o.translator.GetOriginalDst(conn)
 	return host, err
