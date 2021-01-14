@@ -51,7 +51,6 @@ type service struct {
 
 // Command returns the CLI sub-command for "connector-foreground"
 func Command() *cobra.Command {
-	var init bool
 	c := &cobra.Command{
 		Use:    "connector-foreground",
 		Short:  "Launch Telepresence Connector in the foreground (debug)",
@@ -59,11 +58,9 @@ func Command() *cobra.Command {
 		Hidden: true,
 		Long:   help,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), init)
+			return run(cmd.Context())
 		},
 	}
-	flags := c.Flags()
-	flags.BoolVar(&init, "init", false, "initialize running connector (for debugging)")
 	return c
 }
 
@@ -317,14 +314,24 @@ func (s *service) setUpLogging(c context.Context) (context.Context, error) {
 }
 
 // run is the main function when executing as the connector
-func run(c context.Context, init bool) error {
+func run(c context.Context) error {
 	env, err := client.LoadEnv(c)
 	if err != nil {
 		return err
 	}
+	if client.SocketExists(client.ConnectorSocketName) {
+		return fmt.Errorf("socket %s exists so connector already started or terminated ungracefully",
+			client.SocketURL(client.ConnectorSocketName))
+	}
+	defer func() {
+		if perr := dutil.PanicToError(recover()); perr != nil {
+			dlog.Error(c, perr)
+		}
+		_ = os.Remove(client.ConnectorSocketName)
+	}()
 
 	// establish a connection to the daemon gRPC service
-	conn, err := client.DialSocket(client.DaemonSocketName)
+	conn, err := client.DialSocket(c, client.DaemonSocketName)
 	if err != nil {
 		return err
 	}
@@ -339,43 +346,24 @@ func run(c context.Context, init bool) error {
 		return err
 	}
 
-	c = dgroup.WithGoroutineName(c, "connector")
-
-	var cancel context.CancelFunc
-	c, cancel = context.WithCancel(c)
-	s.cancel = func() {
-		dlog.Debug(s.ctx, "cancelling connector context")
-		cancel()
-	}
-
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
-		EnableSignalHandling: true})
+		EnableSignalHandling: true,
+		ShutdownOnNonError:   true})
 
-	dlog.Info(c, "---")
-	dlog.Infof(c, "Telepresence Connector %s starting...", client.DisplayVersion())
-	dlog.Infof(c, "PID is %d", os.Getpid())
-	dlog.Info(c, "")
+	s.cancel = func() { g.Go("connector-quit", func(_ context.Context) error { return nil }) }
 
-	svcStarted := make(chan bool)
-	if init {
-		g.Go("debug-init", func(c context.Context) error {
-			<-svcStarted
-			_, _ = s.Connect(c, &rpc.ConnectRequest{InstallId: "dummy-id"})
-			return nil
-		})
-	}
+	g.Go("connector", func(c context.Context) (err error) {
+		listener, err := net.Listen("unix", client.ConnectorSocketName)
+		if err != nil {
+			return err
+		}
 
-	g.Go("service", func(c context.Context) (err error) {
-		var listener net.Listener
 		defer func() {
 			if perr := dutil.PanicToError(recover()); perr != nil {
 				dlog.Error(c, perr)
-				if listener != nil {
-					_ = listener.Close()
-				}
-				_ = os.Remove(client.ConnectorSocketName)
 			}
+			_ = listener.Close()
 			if err != nil {
 				dlog.Errorf(c, "Server ended with: %v", err)
 			} else {
@@ -384,52 +372,32 @@ func run(c context.Context, init bool) error {
 		}()
 
 		// Listen on unix domain socket
-		dlog.Debug(c, "Server starting")
-		s.ctx = c
-		listener, err = net.Listen("unix", client.ConnectorSocketName)
-		if err != nil {
-			return err
-		}
+
+		dlog.Info(c, "---")
+		dlog.Infof(c, "Telepresence Connector %s starting...", client.DisplayVersion())
+		dlog.Infof(c, "PID is %d", os.Getpid())
+		dlog.Info(c, "")
 
 		svc := grpc.NewServer()
 		rpc.RegisterConnectorServer(svc, s)
 
-		go func() {
+		// Need a subgroup here because several services started by incoming gRPC calls run using
+		// dgroup.ParentGroup().Go()
+		dgroup.NewGroup(c, dgroup.GroupConfig{}).Go("server", func(c context.Context) error {
+			s.ctx = c
 			<-c.Done()
+			dlog.Info(c, "Shutting down")
 			svc.GracefulStop()
-		}()
-
-		close(svcStarted)
-		return svc.Serve(listener)
+			return nil
+		})
+		err = svc.Serve(listener)
+		dlog.Info(c, "Done serving")
+		return err
 	})
-
-	g.Go("teardown", s.handleShutdown)
 
 	err = g.Wait()
 	if err != nil {
 		dlog.Error(c, err)
 	}
 	return err
-}
-
-// handleShutdown ensures that the connector quits gracefully when receiving a signal
-// or when the context is cancelled.
-func (s *service) handleShutdown(c context.Context) error {
-	<-c.Done()
-	dlog.Info(c, "Shutting down")
-
-	cluster := s.cluster
-	if cluster == nil {
-		return nil
-	}
-	s.cluster = nil
-
-	trafficMgr := s.trafficMgr
-	s.trafficMgr = nil
-	if trafficMgr != nil {
-		_ = trafficMgr.clearIntercepts(context.Background())
-		_ = trafficMgr.Close()
-	}
-	s.bridge = nil
-	return nil
 }

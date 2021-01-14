@@ -188,63 +188,66 @@ func run(dns, fallback string) error {
 		}}}
 
 	c := setUpLogging(context.Background())
-	c = dgroup.WithGoroutineName(c, "daemon")
-	c, d.cancel = context.WithCancel(c)
-
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
-		EnableSignalHandling: true})
-
-	dlog.Info(c, "---")
-	dlog.Infof(c, "Telepresence daemon %s starting...", client.DisplayVersion())
-	dlog.Infof(c, "PID is %d", os.Getpid())
-	dlog.Info(c, "")
-
-	g.Go("outbound", func(c context.Context) (err error) {
-		d.outbound, err = start(c, dns, fallback, false)
-		return err
+		EnableSignalHandling: true,
+		ShutdownOnNonError:   true,
 	})
 
-	g.Go("service", func(c context.Context) (err error) {
-		var listener net.Listener
-		defer func() {
-			if perr := dutil.PanicToError(recover()); perr != nil {
-				dlog.Error(c, perr)
-				if listener != nil {
-					_ = listener.Close()
+	// The d.cancel will start a "quit" go-routine that will cause the group to initiate a a shutdown when it returns.
+	d.cancel = func() { g.Go("daemon-quit", d.quitConnector) }
+	g.Go("daemon", func(c context.Context) error {
+		dlog.Info(c, "---")
+		dlog.Infof(c, "Telepresence daemon %s starting...", client.DisplayVersion())
+		dlog.Infof(c, "PID is %d", os.Getpid())
+		dlog.Info(c, "")
+
+		g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+		g.Go("outbound", func(c context.Context) (err error) {
+			d.outbound, err = start(c, dns, fallback, false)
+			return err
+		})
+
+		g.Go("service", func(c context.Context) (err error) {
+			var listener net.Listener
+			defer func() {
+				if perr := dutil.PanicToError(recover()); perr != nil {
+					dlog.Error(c, perr)
+					if listener != nil {
+						_ = listener.Close()
+					}
+					_ = os.Remove(client.DaemonSocketName)
 				}
-				_ = os.Remove(client.DaemonSocketName)
-			}
+				if err != nil {
+					dlog.Errorf(c, "Server ended with: %v", err)
+				} else {
+					dlog.Debug(c, "Server ended")
+				}
+			}()
+
+			// Listen on unix domain socket
+			dlog.Debug(c, "Server starting")
+			d.callCtx = c
+			listener, err = net.Listen("unix", client.DaemonSocketName)
 			if err != nil {
-				dlog.Errorf(c, "Server ended with: %v", err)
-			} else {
-				dlog.Debug(c, "Server ended")
+				return errors.Wrap(err, "listen")
 			}
-		}()
+			err = os.Chmod(client.DaemonSocketName, 0777)
+			if err != nil {
+				return errors.Wrap(err, "chmod")
+			}
 
-		// Listen on unix domain socket
-		dlog.Debug(c, "Server starting")
-		d.callCtx = c
-		listener, err = net.Listen("unix", client.DaemonSocketName)
-		if err != nil {
-			return errors.Wrap(err, "listen")
-		}
-		err = os.Chmod(client.DaemonSocketName, 0777)
-		if err != nil {
-			return errors.Wrap(err, "chmod")
-		}
-
-		svc := grpc.NewServer()
-		rpc.RegisterDaemonServer(svc, d)
-		go func() {
-			<-c.Done()
-			dlog.Debug(c, "Server stopping")
-			svc.GracefulStop()
-		}()
-		return svc.Serve(listener)
+			svc := grpc.NewServer()
+			rpc.RegisterDaemonServer(svc, d)
+			go func() {
+				<-c.Done()
+				dlog.Debug(c, "Server stopping")
+				svc.GracefulStop()
+			}()
+			return svc.Serve(listener)
+		})
+		return g.Wait()
 	})
-
-	g.Go("teardown", d.handleShutdown)
 
 	err := g.Wait()
 	if err != nil {
@@ -253,19 +256,25 @@ func run(dns, fallback string) error {
 	return err
 }
 
-// handleShutdown ensures that the daemon quits gracefully when the context is cancelled.
-func (d *service) handleShutdown(c context.Context) error {
-	<-c.Done()
-	dlog.Info(c, "Shutting down")
-
+// quitConnector ensures that the connector quits gracefully.
+func (d *service) quitConnector(c context.Context) error {
 	if !client.SocketExists(client.ConnectorSocketName) {
+		// no connector socket, so nothing to shut down
 		return nil
 	}
-	conn, err := client.DialSocket(client.ConnectorSocketName)
+
+	// Send a "quit" message from here.
+	dlog.Info(c, "Shutting down connector")
+	c, cancel := context.WithTimeout(c, 500*time.Millisecond)
+	defer cancel()
+	conn, err := client.DialSocket(c, client.ConnectorSocketName)
 	if err != nil {
 		return nil
 	}
 	defer conn.Close()
-	_, _ = connector.NewConnectorClient(conn).Quit(context.Background(), &empty.Empty{})
+	dlog.Debug(c, "Sending quit message to connector")
+	_, _ = connector.NewConnectorClient(conn).Quit(c, &empty.Empty{})
+	dlog.Debug(c, "Connector shutdown complete")
+	time.Sleep(200 * time.Millisecond) // Give some time to receive final log messages from connector
 	return nil
 }

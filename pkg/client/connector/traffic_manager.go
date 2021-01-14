@@ -36,7 +36,6 @@ type trafficManager struct {
 	*k8sCluster
 	aiListener     aiListener
 	iiListener     iiListener
-	conn           *grpc.ClientConn
 	grpc           manager.ManagerClient
 	startup        chan bool
 	apiPort        int32
@@ -162,7 +161,6 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 		conn.Close()
 		return err
 	}
-	tm.conn = conn
 	tm.grpc = mClient
 	tm.sessionInfo = si
 
@@ -263,7 +261,9 @@ func (tm *trafficManager) remain(c context.Context) error {
 	for {
 		select {
 		case <-c.Done():
-			return nil
+			_ = tm.clearIntercepts(context.Background())
+			_, err := tm.grpc.Depart(context.Background(), tm.session())
+			return err
 		case <-ticker.C:
 			_, err := tm.grpc.Remain(c, &manager.RemainRequest{
 				Session:     tm.session(),
@@ -274,16 +274,6 @@ func (tm *trafficManager) remain(c context.Context) error {
 			}
 		}
 	}
-}
-
-// Close implements io.Closer
-func (tm *trafficManager) Close() error {
-	if tm.conn != nil {
-		_ = tm.conn.Close()
-		tm.conn = nil
-		tm.grpc = nil
-	}
-	return nil
 }
 
 func (tm *trafficManager) setStatus(r *rpc.ConnectInfo) {
@@ -335,7 +325,6 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 		}
 	default:
 		// Cancel all communication with the manager
-		_ = tm.Close()
 		if err := tm.installer.removeManagerAndAgents(c, false, agents); err != nil {
 			result.ErrorText = err.Error()
 		}
@@ -390,7 +379,7 @@ func (r *watcher) watch(c context.Context) error {
 	for {
 		data := r.entryMaker()
 		if err = r.stream.RecvMsg(data); err != nil {
-			if err == io.EOF || strings.HasSuffix(err.Error(), " is closing") {
+			if err == io.EOF || c.Err() != nil || strings.HasSuffix(err.Error(), " is closing") {
 				err = nil
 			}
 			break

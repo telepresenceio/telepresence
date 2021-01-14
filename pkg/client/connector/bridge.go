@@ -69,7 +69,11 @@ func (br *bridge) bridgeWorker(c context.Context) error {
 	dlog.Infof(c, "Setting DNS search path: %s", paths[0])
 	_, err := br.daemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths})
 	if err != nil {
-		dlog.Errorf(c, "error setting up search path: %v", err)
+		if c.Err() != nil {
+			err = nil
+		} else {
+			err = fmt.Errorf("error setting up search path: %v", err)
+		}
 	}
 	return err
 }
@@ -80,7 +84,11 @@ func (br *bridge) sshWorker(c context.Context) error {
 	ssh := dexec.CommandContext(c, "ssh", "-D", "localhost:1080", "-C", "-N", "-oConnectTimeout=5",
 		"-oExitOnForwardFailure=yes", "-oStrictHostKeyChecking=no",
 		"-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", strconv.Itoa(int(br.sshPort)))
-	return ssh.Run()
+	err := ssh.Run()
+	if err != nil && c.Err() != nil {
+		err = nil
+	}
+	return err
 }
 
 const kubectlErr = "kubectl version 1.10 or greater is required"
