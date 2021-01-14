@@ -4,6 +4,8 @@ import (
 	"context"
 	"runtime"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -36,7 +38,7 @@ func OverrideSearchDomains(c context.Context, domains string) (func(), error) {
 		if err != nil {
 			dlog.Errorf(c, "error getting search domain for interface %v: %v", iface, err)
 		} else {
-			err = setSearchDomains(c, iface, domains)
+			err = setSearchDomains(c, iface, domains, true)
 			if err != nil {
 				dlog.Errorf(c, "error setting search domain for interface %v: %v", iface, err)
 			} else {
@@ -49,7 +51,7 @@ func OverrideSearchDomains(c context.Context, domains string) (func(), error) {
 	return func() {
 		c = dlog.WithLogger(context.Background(), dlog.WrapLogrus(logrus.StandardLogger()))
 		for _, prev := range previous {
-			if err := setSearchDomains(c, prev.interfaces, prev.domains); err != nil {
+			if err := setSearchDomains(c, prev.interfaces, prev.domains, false); err != nil {
 				dlog.Errorf(c, "error setting search domain for interface %v: %v", prev.interfaces, err)
 			}
 		}
@@ -74,6 +76,8 @@ func getIfaces(c context.Context) (ifaces []string, err error) {
 }
 
 func getSearchDomains(c context.Context, iface string) (string, error) {
+	c, cancel := context.WithTimeout(c, time.Second)
+	defer cancel()
 	out, err := dexec.CommandContext(c, "networksetup", "-getsearchdomains", iface).Output()
 	if err != nil {
 		return "", err
@@ -81,6 +85,13 @@ func getSearchDomains(c context.Context, iface string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func setSearchDomains(c context.Context, iface, domains string) error {
-	return dexec.CommandContext(c, "networksetup", "-setsearchdomains", iface, domains).Run()
+func setSearchDomains(c context.Context, iface, domains string, wait bool) error {
+	c, cancel := context.WithTimeout(c, time.Second)
+	defer cancel()
+	cmd := dexec.CommandContext(c, "networksetup", "-setsearchdomains", iface, domains)
+	if wait {
+		return cmd.Run()
+	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	return cmd.Start()
 }
