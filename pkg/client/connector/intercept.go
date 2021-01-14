@@ -229,11 +229,22 @@ func (tm *trafficManager) makeIntercept(c, longLived context.Context, ii *manage
 	dlog.Infof(c, "%s: Intercepting via port %v", is.Name, ii.ManagerPort)
 
 	sshArgs := []string{
-		"-C", "-N", "telepresence@localhost",
-		"-oConnectTimeout=10", "-oExitOnForwardFailure=yes",
-		"-oStrictHostKeyChecking=no", "-oUserKnownHostsFile=/dev/null",
+		"ssh",
+
+		// connection settings
+		"-C", // compression
+		"-oConnectTimeout=10",
+		"-oStrictHostKeyChecking=no",     // don't bother checking the host key...
+		"-oUserKnownHostsFile=/dev/null", // and since we're not checking it, don't bother remembering it either
+
+		// port-forward settings
+		"-N", // no remote command; just connect and forward ports
+		"-oExitOnForwardFailure=yes",
+		"-R", fmt.Sprintf("%d:%s:%d", ii.ManagerPort, is.TargetHost, is.TargetPort), // port to forward
+
+		// where to connect to
 		"-p", strconv.Itoa(int(tm.sshPort)),
-		"-R", fmt.Sprintf("%d:%s:%d", ii.ManagerPort, is.TargetHost, is.TargetPort),
+		"telepresence@localhost",
 	}
 
 	dlog.Infof(c, "%s: starting SSH tunnel", is.Name)
@@ -242,7 +253,7 @@ func (tm *trafficManager) makeIntercept(c, longLived context.Context, ii *manage
 
 	c = dgroup.WithGoroutineName(c, ii.Id)
 	return client.Retry(c, "ssh reverse tunnelling", func(c context.Context) error {
-		return dexec.CommandContext(c, "ssh", sshArgs...).Start()
+		return dexec.CommandContext(c, sshArgs[0], sshArgs[1:]...).Start()
 	})
 }
 
