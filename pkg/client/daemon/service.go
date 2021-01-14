@@ -261,7 +261,12 @@ func (d *service) handleShutdown(c context.Context) error {
 	if !client.SocketExists(client.ConnectorSocketName) {
 		return nil
 	}
-	conn, err := client.DialSocket(client.ConnectorSocketName)
+
+	// Send a "quit" message from here.
+	dlog.Info(c, "Shutting down connector")
+	c, cancel := context.WithTimeout(c, 500*time.Millisecond)
+	defer cancel()
+	conn, err := client.DialSocket(c, client.ConnectorSocketName)
 	if err != nil {
 		return nil
 	}

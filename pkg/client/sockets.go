@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -65,6 +66,6 @@ func SocketURL(socket string) string {
 }
 
 // DialSocket dials the given unix socket and returns the resulting connection
-func DialSocket(socketName string) (*grpc.ClientConn, error) {
-	return grpc.Dial(SocketURL(socketName), grpc.WithInsecure(), grpc.WithNoProxy())
+func DialSocket(c context.Context, socketName string) (*grpc.ClientConn, error) {
+	return grpc.DialContext(c, SocketURL(socketName), grpc.WithInsecure(), grpc.WithNoProxy())
 }

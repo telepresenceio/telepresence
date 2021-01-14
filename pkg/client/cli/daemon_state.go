@@ -88,7 +88,7 @@ func (ds *daemonState) isConnected() bool {
 
 // connect opens the client connection to the daemon.
 func (ds *daemonState) connect() (err error) {
-	if ds.conn, err = client.DialSocket(client.DaemonSocketName); err == nil {
+	if ds.conn, err = client.DialSocket(ds.cmd.Context(), client.DaemonSocketName); err == nil {
 		ds.grpc = daemon.NewDaemonClient(ds.conn)
 	}
 	return

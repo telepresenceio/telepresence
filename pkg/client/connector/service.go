@@ -324,7 +324,7 @@ func run(c context.Context, init bool) error {
 	}
 
 	// establish a connection to the daemon gRPC service
-	conn, err := client.DialSocket(client.DaemonSocketName)
+	conn, err := client.DialSocket(c, client.DaemonSocketName)
 	if err != nil {
 		return err
 	}
