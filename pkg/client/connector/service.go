@@ -205,6 +205,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		if s.trafficMgr != nil {
 			s.trafficMgr.setStatus(r)
 		}
+		r.IngressInfos = s.cluster.detectIngressBehavior()
 	}
 
 	// Sanity checks

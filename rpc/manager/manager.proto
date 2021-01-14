@@ -77,6 +77,8 @@ message InterceptSpec {
 
   string target_host = 6;
   int32 target_port = 7;
+
+  IngressInfo ingress_info = 8;
 }
 
 enum InterceptDispositionType {
@@ -115,6 +117,11 @@ enum InterceptDispositionType {
   AGENT_ERROR = 7;
 }
 
+message IngressInfo {
+  string host = 1;
+  int32 port = 2;
+  bool use_tls = 3;
+}
 
 message InterceptInfo {
   InterceptSpec spec = 1;
