@@ -49,13 +49,14 @@ to troubleshoot problems.
 // service represents the state of the Telepresence Connector
 type service struct {
 	rpc.UnsafeConnectorServer
-	env        client.Env
-	daemon     daemon.DaemonClient
-	cluster    *k8sCluster
-	bridge     *bridge
-	trafficMgr *trafficManager
-	ctx        context.Context
-	cancel     func()
+	env          client.Env
+	daemon       daemon.DaemonClient
+	cluster      *k8sCluster
+	bridge       *bridge
+	trafficMgr   *trafficManager
+	managerProxy mgrProxy
+	ctx          context.Context
+	cancel       func()
 }
 
 // Command returns the CLI sub-command for "connector-foreground"
@@ -275,6 +276,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		s.cancel()
 		return r
 	}
+	s.managerProxy.SetClient(tmgr.managerClient)
 
 	dlog.Infof(c, "Starting traffic-manager bridge in context %s, namespace %s", cluster.Context, cluster.Namespace)
 	br := newBridge(cluster.Namespace, s.daemon, tmgr.sshPort)
@@ -415,6 +417,7 @@ func run(c context.Context) error {
 
 		svc := grpc.NewServer()
 		rpc.RegisterConnectorServer(svc, s)
+		manager.RegisterManagerServer(svc, &s.managerProxy)
 
 		// Need a subgroup here because several services started by incoming gRPC calls run using
 		// dgroup.ParentGroup().Go()
