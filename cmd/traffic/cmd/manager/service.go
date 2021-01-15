@@ -149,7 +149,12 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	dlog.Debugf(ctx, "WatchIntercepts called: %s", sessionID)
 
 	var filter func(id string, info *rpc.InterceptInfo) bool
-	if agent := m.state.GetAgent(sessionID); agent != nil {
+	if sessionID == "" {
+		// No sessonID; watch everything
+		filter = func(id string, info *rpc.InterceptInfo) bool {
+			return true
+		}
+	} else if agent := m.state.GetAgent(sessionID); agent != nil {
 		// sessionID refers to an agent session
 		filter = func(id string, info *rpc.InterceptInfo) bool {
 			// Don't return intercepts for different agents.
@@ -176,6 +181,15 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 		}
 	}
 
+	var sessionDone <-chan struct{}
+	if sessionID == "" {
+		ch := make(chan struct{})
+		defer close(ch)
+		sessionDone = ch
+	} else {
+		sessionDone = m.state.SessionDone(sessionID)
+	}
+
 	snapshotCh := m.state.WatchIntercepts(ctx, filter)
 	for {
 		select {
@@ -199,7 +213,7 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 				dlog.Debugf(ctx, "WatchIntercepts encountered a write error: %v", err)
 				return err
 			}
-		case <-m.state.SessionDone(sessionID):
+		case <-sessionDone:
 			dlog.Debugf(ctx, "WatchIntercepts session cancelled: %s", sessionID)
 			return nil
 		}
