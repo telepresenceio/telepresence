@@ -350,7 +350,8 @@ func run(c context.Context) error {
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true,
-		ShutdownOnNonError:   true})
+		ShutdownOnNonError:   true,
+	})
 
 	s.cancel = func() { g.Go("connector-quit", func(_ context.Context) error { return nil }) }
 
