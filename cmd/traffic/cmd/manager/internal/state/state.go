@@ -428,7 +428,7 @@ func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInf
 		swapped := s.intercepts.CompareAndSwap(new.Id, cur, new)
 		if swapped {
 			// Success!
-			return cur
+			return new
 		}
 	}
 }
