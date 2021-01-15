@@ -280,7 +280,9 @@ func askForUseTLS(cachedUseTLS bool, reader *bufio.Reader, out io.Writer) (bool,
 			return false, err
 		}
 		switch strings.TrimSpace(reply) {
-		case "", "n", "N":
+		case "":
+			return cachedUseTLS, nil
+		case "n", "N":
 			return false, nil
 		case "y", "Y":
 			return true, nil
