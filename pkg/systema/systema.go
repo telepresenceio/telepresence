@@ -47,20 +47,26 @@ func (s server) HandleConnection(rawconn manager.ManagerProxy_HandleConnectionSe
 
 	interceptConn, err := s.DialIntercept(ctx, interceptID)
 	if err != nil {
-		return fmt.Errorf("HandleConnection: accept: %w", err)
+		err = fmt.Errorf("HandleConnection: accept: %w", err)
+		dlog.Errorln(ctx, err)
+		return err
 	}
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 
 	grp.Go("pump-recv", func(_ context.Context) error {
 		if _, err := io.Copy(interceptConn, systemaConn); err != nil {
-			return fmt.Errorf("HandleConnection: pump cluster<-systema: %w", err)
+			err = fmt.Errorf("HandleConnection: pump cluster<-systema: %w", err)
+			dlog.Errorln(ctx, err)
+			return err
 		}
 		return nil
 	})
 	grp.Go("pump-send", func(_ context.Context) error {
 		if _, err := io.Copy(systemaConn, interceptConn); err != nil {
-			return fmt.Errorf("HandleConnection: pump systema<-cluster: %w", err)
+			err = fmt.Errorf("HandleConnection: pump systema<-cluster: %w", err)
+			dlog.Errorln(ctx, err)
+			return err
 		}
 		return nil
 	})
