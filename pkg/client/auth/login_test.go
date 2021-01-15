@@ -3,14 +3,17 @@ package auth_test
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 	"gotest.tools/assert"
 	is "gotest.tools/assert/cmp"
@@ -287,6 +290,50 @@ func TestLoginFlow(t *testing.T) {
 		assert.Assert(t, is.Len(f.MockOpenURLWrapper.CallArguments, 1), "one call to open url")
 		assert.Assert(t, is.Len(f.MockOauth2Server.TokenRequestFormValues, 1), "one retry to the token endpoint")
 		assert.Assert(t, is.Len(f.MockSaveTokenWrapper.CallArguments, 1), "no call to save the token")
+	})
+
+	t.Run("will remove token from user cache dir when logging out", func(t *testing.T) {
+		// given
+		f := setup(t)
+		defer f.MockOauth2Server.TearDown(t)
+		errs := make(chan error)
+
+		// a fake user cache directory (this changes a global temporarily, so test cannot be parallel)
+		tmpDir, err := ioutil.TempDir("", "update-test-")
+		require.NoError(t, err)
+		defer func() {
+			_ = os.RemoveAll(tmpDir)
+		}()
+		client.SetUserCacheDirFunc(func() (string, error) {
+			return tmpDir, nil
+		})
+		defer client.SetUserCacheDirFunc(os.UserCacheDir)
+		f.Runner.SaveTokenFunc = auth.SaveTokenToUserCache
+
+		// when
+		go func() {
+			errs <- f.Runner.LoginFlow(&cobra.Command{}, []string{})
+		}()
+		rawAuthUrl := <-f.OpenedUrls
+		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
+		callbackQuery := callbackUrl.Query()
+		callbackQuery.Set("code", "mock-code")
+		callbackUrl.RawQuery = callbackQuery.Encode()
+		callbackResponse := sendCallbackRequest(t, callbackUrl)
+		defer callbackResponse.Body.Close()
+		err = <-errs
+
+		// then
+		require.NoError(t, err, "no error running login flow")
+		token, err := auth.LoadTokenFromUserCache()
+		require.NoError(t, err, "no error reading token")
+		require.NotNil(t, token)
+		err = auth.LogoutCommand().Execute()
+		require.NoError(t, err, "no error executing logout")
+		_, err = auth.LoadTokenFromUserCache()
+		require.Error(t, err, "error reading token")
+		err = auth.LogoutCommand().Execute()
+		require.Error(t, err, "error executing logout when not logged in")
 	})
 }
 

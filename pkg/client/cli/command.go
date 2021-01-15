@@ -123,7 +123,7 @@ func Command() *cobra.Command {
 	AddCommandGroups(rootCmd, []CommandGroup{
 		{
 			Name:     "Session Commands",
-			Commands: []*cobra.Command{connectCommand(), auth.LoginCommand(), statusCommand(), quitCommand()},
+			Commands: []*cobra.Command{connectCommand(), auth.LoginCommand(), auth.LogoutCommand(), statusCommand(), quitCommand()},
 		},
 		{
 			Name:     "Traffic Commands",

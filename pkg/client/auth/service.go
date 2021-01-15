@@ -1,6 +1,10 @@
 package auth
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
+
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 
@@ -31,4 +35,25 @@ func LoginCommand() *cobra.Command {
 		},
 	}
 	return &command
+}
+
+func LogoutCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "logout",
+		Short: "Logout from Ambassador Cloud",
+		Long:  "Logout from Ambassador Cloud",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cacheDir, err := client.CacheDir()
+			if err != nil {
+				return err
+			}
+			cacheFile := filepath.Join(cacheDir, tokenFile)
+			if _, err = os.Stat(cacheFile); err != nil {
+				if os.IsNotExist(err) {
+					err = errors.New("not logged in")
+				}
+				return err
+			}
+			return os.Remove(cacheFile)
+		}}
 }
