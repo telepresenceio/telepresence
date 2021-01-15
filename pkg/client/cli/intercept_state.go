@@ -328,8 +328,8 @@ func (is *interceptState) selectIngress() error {
 		if err = writeIngressInfoCache(infos); err != nil {
 			return err
 		}
-		is.ingressInfo = reply
 	}
+	is.ingressInfo = reply
 	return nil
 }
 
