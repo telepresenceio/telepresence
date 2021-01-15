@@ -231,6 +231,8 @@ func (tm *trafficManager) makeIntercept(c, longLived context.Context, ii *manage
 	sshArgs := []string{
 		"ssh",
 
+		"-F", "none", // don't load the user's config file
+
 		// connection settings
 		"-C", // compression
 		"-oConnectTimeout=10",

@@ -83,6 +83,8 @@ func (br *bridge) sshWorker(c context.Context) error {
 	// curl after wakeup seems to trigger detection of death
 	ssh := dexec.CommandContext(c, "ssh",
 
+		"-F", "none", // don't load the user's config file
+
 		// connection settings
 		"-C", // compression
 		"-oConnectTimeout=5",
