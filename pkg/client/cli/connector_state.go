@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/pkg/errors"
@@ -11,6 +12,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/client/cache"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
 )
@@ -66,7 +68,11 @@ func (cs *connectorState) EnsureState() (bool, error) {
 	fmt.Fprintln(cs.cmd.OutOrStdout(), "Connecting to traffic manager...")
 
 	if err = client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
-		return false, fmt.Errorf("connector service did not start (see %s for more info)", client.Logfile)
+		cachedir, cerr := cache.CacheDir()
+		if cerr != nil {
+			return false, cerr
+		}
+		return false, fmt.Errorf("connector service did not start (see %q for more info)", filepath.Join(cachedir, "connector.log"))
 	}
 	err = cs.connect()
 	if err != nil {

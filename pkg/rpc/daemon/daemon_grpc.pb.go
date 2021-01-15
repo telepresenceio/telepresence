@@ -27,9 +27,6 @@ type DaemonClient interface {
 	Pause(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*PauseInfo, error)
 	// Turns network overrides back on (after using Pause)
 	Resume(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ResumeInfo, error)
-	// Logger accepts a stream that can be used for posting messages to
-	// the daemon logger.
-	Logger(ctx context.Context, opts ...grpc.CallOption) (Daemon_LoggerClient, error)
 	// Quits (terminates) the service.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Update assigns adds or updates an IP-table.
@@ -82,40 +79,6 @@ func (c *daemonClient) Resume(ctx context.Context, in *empty.Empty, opts ...grpc
 	return out, nil
 }
 
-func (c *daemonClient) Logger(ctx context.Context, opts ...grpc.CallOption) (Daemon_LoggerClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Daemon_serviceDesc.Streams[0], "/telepresence.daemon.Daemon/Logger", opts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &daemonLoggerClient{stream}
-	return x, nil
-}
-
-type Daemon_LoggerClient interface {
-	Send(*LogMessage) error
-	CloseAndRecv() (*empty.Empty, error)
-	grpc.ClientStream
-}
-
-type daemonLoggerClient struct {
-	grpc.ClientStream
-}
-
-func (x *daemonLoggerClient) Send(m *LogMessage) error {
-	return x.ClientStream.SendMsg(m)
-}
-
-func (x *daemonLoggerClient) CloseAndRecv() (*empty.Empty, error) {
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	m := new(empty.Empty)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 func (c *daemonClient) Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Quit", in, out, opts...)
@@ -155,9 +118,6 @@ type DaemonServer interface {
 	Pause(context.Context, *empty.Empty) (*PauseInfo, error)
 	// Turns network overrides back on (after using Pause)
 	Resume(context.Context, *empty.Empty) (*ResumeInfo, error)
-	// Logger accepts a stream that can be used for posting messages to
-	// the daemon logger.
-	Logger(Daemon_LoggerServer) error
 	// Quits (terminates) the service.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	// Update assigns adds or updates an IP-table.
@@ -182,9 +142,6 @@ func (UnimplementedDaemonServer) Pause(context.Context, *empty.Empty) (*PauseInf
 }
 func (UnimplementedDaemonServer) Resume(context.Context, *empty.Empty) (*ResumeInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Resume not implemented")
-}
-func (UnimplementedDaemonServer) Logger(Daemon_LoggerServer) error {
-	return status.Errorf(codes.Unimplemented, "method Logger not implemented")
 }
 func (UnimplementedDaemonServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
@@ -280,32 +237,6 @@ func _Daemon_Resume_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Daemon_Logger_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(DaemonServer).Logger(&daemonLoggerServer{stream})
-}
-
-type Daemon_LoggerServer interface {
-	SendAndClose(*empty.Empty) error
-	Recv() (*LogMessage, error)
-	grpc.ServerStream
-}
-
-type daemonLoggerServer struct {
-	grpc.ServerStream
-}
-
-func (x *daemonLoggerServer) SendAndClose(m *empty.Empty) error {
-	return x.ServerStream.SendMsg(m)
-}
-
-func (x *daemonLoggerServer) Recv() (*LogMessage, error) {
-	m := new(LogMessage)
-	if err := x.ServerStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 func _Daemon_Quit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(empty.Empty)
 	if err := dec(in); err != nil {
@@ -393,12 +324,6 @@ var _Daemon_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Daemon_SetDnsSearchPath_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{
-		{
-			StreamName:    "Logger",
-			Handler:       _Daemon_Logger_Handler,
-			ClientStreams: true,
-		},
-	},
+	Streams:  []grpc.StreamDesc{},
 	Metadata: "rpc/daemon/daemon.proto",
 }
