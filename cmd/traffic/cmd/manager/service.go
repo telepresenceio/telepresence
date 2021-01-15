@@ -89,7 +89,7 @@ func (m *Manager) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 
 // Remain indicates that the session is still valid.
 func (m *Manager) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
-	sessionID := req.Session.SessionId
+	sessionID := req.GetSession().GetSessionId()
 	dlog.Debugf(ctx, "Remain called: %s", sessionID)
 
 	if ok := m.state.MarkSession(req, m.clock.Now()); !ok {
@@ -101,9 +101,9 @@ func (m *Manager) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Em
 
 // Depart terminates a session.
 func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.Empty, error) {
-	dlog.Debugf(ctx, "Depart called: %s", session.SessionId)
+	dlog.Debugf(ctx, "Depart called: %s", session.GetSessionId())
 
-	m.state.RemoveSession(session.SessionId)
+	m.state.RemoveSession(session.GetSessionId())
 
 	return &empty.Empty{}, nil
 }
@@ -111,7 +111,7 @@ func (m *Manager) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 // WatchAgents notifies a client of the set of known Agents.
 func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_WatchAgentsServer) error {
 	ctx := stream.Context()
-	sessionID := session.SessionId
+	sessionID := session.GetSessionId()
 
 	dlog.Debugf(ctx, "WatchAgents called: %s", sessionID)
 
@@ -144,7 +144,7 @@ func (m *Manager) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 // relevant to that client or agent.
 func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_WatchInterceptsServer) error {
 	ctx := stream.Context()
-	sessionID := session.SessionId
+	sessionID := session.GetSessionId()
 
 	dlog.Debugf(ctx, "WatchIntercepts called: %s", sessionID)
 
@@ -208,7 +208,7 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 
 // CreateIntercept lets a client create an intercept.
 func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error) {
-	sessionID := ciReq.Session.SessionId
+	sessionID := ciReq.GetSession().GetSessionId()
 	spec := ciReq.InterceptSpec
 
 	dlog.Debugf(ctx, "CreateIntercept called: %s", sessionID)
@@ -271,7 +271,7 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 
 // RemoveIntercept lets a client remove an intercept.
 func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveInterceptRequest2) (*empty.Empty, error) {
-	sessionID := riReq.Session.SessionId
+	sessionID := riReq.GetSession().GetSessionId()
 	name := riReq.Name
 
 	dlog.Debugf(ctx, "RemoveIntercept called: %s %s", sessionID, name)
@@ -289,7 +289,7 @@ func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 
 // ReviewIntercept lets an agent approve or reject an intercept.
 func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewInterceptRequest) (*empty.Empty, error) {
-	sessionID := rIReq.Session.SessionId
+	sessionID := rIReq.GetSession().GetSessionId()
 	ceptID := rIReq.Id
 
 	dlog.Debugf(ctx, "ReviewIntercept called: %s %s - %s", sessionID, ceptID, rIReq.Disposition)
