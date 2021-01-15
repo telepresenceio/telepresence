@@ -168,12 +168,11 @@ func (is *interceptState) EnsureState() (bool, error) {
 
 	// Turn that in to a spec
 	spec := &manager.InterceptSpec{
-		Name:        is.name,
-		Agent:       is.agentName,
-		IngressInfo: is.ingressInfo,
-		Mechanism:   "tcp",
-		TargetHost:  "127.0.0.1",
-		TargetPort:  int32(is.port),
+		Name:       is.name,
+		Agent:      is.agentName,
+		Mechanism:  "tcp",
+		TargetHost: "127.0.0.1",
+		TargetPort: int32(is.port),
 	}
 	// [REDACTED]
 
@@ -186,8 +185,22 @@ func (is *interceptState) EnsureState() (bool, error) {
 	}
 	switch r.Error {
 	case connector.InterceptError_UNSPECIFIED:
-		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", is.agentName)
-		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(r.InterceptInfo, false))
+		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", spec.Agent)
+		intercept, err := is.cs.managerClient.UpdateIntercept(is.cmd.Context(), &manager.UpdateInterceptRequest{
+			Session: is.cs.info.SessionInfo,
+			Name:    spec.Name,
+			PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
+				AddPreviewDomain: is.ingressInfo,
+			},
+		})
+		if err != nil {
+			err = fmt.Errorf("creating preview domain: %w", err)
+			// non-fatal, for now
+			fmt.Fprintln(is.cmd.OutOrStdout(), "error", err)
+			intercept = r.InterceptInfo
+			// return true, err
+		}
+		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, false))
 		return true, nil
 	case connector.InterceptError_ALREADY_EXISTS:
 		fmt.Fprintln(is.cmd.OutOrStdout(), interceptMessage(r))

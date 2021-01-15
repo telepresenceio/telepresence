@@ -15,6 +15,7 @@ import (
 	"github.com/datawire/telepresence2/pkg/client/cache"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 type connectorState struct {
@@ -23,6 +24,7 @@ type connectorState struct {
 
 	connectorConn   *grpc.ClientConn
 	connectorClient connector.ConnectorClient
+	managerClient   manager.ManagerClient
 
 	info *connector.ConnectInfo
 }
@@ -152,6 +154,7 @@ func (cs *connectorState) isConnected() bool {
 func (cs *connectorState) connect() (err error) {
 	if cs.connectorConn, err = client.DialSocket(cs.cmd.Context(), client.ConnectorSocketName); err == nil {
 		cs.connectorClient = connector.NewConnectorClient(cs.connectorConn)
+		cs.managerClient = manager.NewManagerClient(cs.connectorConn)
 	}
 	return
 }
@@ -161,6 +164,7 @@ func (cs *connectorState) disconnect() {
 	conn := cs.connectorConn
 	cs.connectorConn = nil
 	cs.connectorClient = nil
+	cs.managerClient = nil
 	if conn != nil {
 		conn.Close()
 	}

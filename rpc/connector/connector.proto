@@ -58,6 +58,8 @@ message ConnectInfo {
   telepresence.manager.AgentInfoSnapshot agents = 7;
   telepresence.manager.InterceptInfoSnapshot intercepts = 8;
   repeated manager.IngressInfo ingress_infos = 9;
+
+  telepresence.manager.SessionInfo session_info = 10;
 }
 
 message UninstallRequest {

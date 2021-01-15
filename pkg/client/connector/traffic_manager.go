@@ -270,6 +270,7 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 		intercepts, _ := actions.ListMyIntercepts(ctx, tm.managerClient, tm.session().SessionId)
 		r.Agents = &manager.AgentInfoSnapshot{Agents: agents}
 		r.Intercepts = &manager.InterceptInfoSnapshot{Intercepts: intercepts}
+		r.SessionInfo = tm.session()
 	}
 }
 

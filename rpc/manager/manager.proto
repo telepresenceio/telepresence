@@ -77,8 +77,6 @@ message InterceptSpec {
 
   string target_host = 6;
   int32 target_port = 7;
-
-  IngressInfo ingress_info = 8;
 }
 
 enum InterceptDispositionType {
@@ -132,10 +130,11 @@ message InterceptInfo {
   int32 manager_port = 2;
 
   // preview_domain is the SystemA domain that will proxy in traffic
-  // to this intercept.  This gets set by the manager at some
-  // likely-to-change point in the process of setting up the
-  // intercept.
+  // to this intercept, and preview_ingress is where it will get
+  // proxied to.  They both get set by the manager when the client
+  // makes a call to UpdateIntercept with add_preview_domain set.
   string preview_domain = 7;
+  IngressInfo preview_ingress = 8;
 
   InterceptDispositionType disposition = 3;
   string message = 4;
@@ -159,6 +158,16 @@ message InterceptInfoSnapshot {
 message CreateInterceptRequest {
   SessionInfo session = 1;
   InterceptSpec intercept_spec = 2;
+}
+
+message UpdateInterceptRequest {
+  SessionInfo session = 1;
+  string name = 2;
+
+  oneof preview_domain_action {
+    IngressInfo add_preview_domain = 3;
+    bool remove_preview_domain = 4;
+  }
 }
 
 message RemoveInterceptRequest2 {
@@ -230,6 +239,8 @@ service Manager {
 
   // RemoveIntercept lets a client remove an intercept.
   rpc RemoveIntercept(RemoveInterceptRequest2) returns (google.protobuf.Empty);
+
+  rpc UpdateIntercept(UpdateInterceptRequest) returns (InterceptInfo);
 
   // ReviewIntercept lets an agent approve or reject an intercept by
   // changing the disposition from "WATING" to "ACTIVE" or to an

@@ -438,6 +438,11 @@ func (s *State) RemoveIntercept(sessionID string, name string) bool {
 	return didDelete
 }
 
+func (s *State) GetIntercept(interceptID string) *rpc.InterceptInfo {
+	intercept, _ := s.intercepts.Load(interceptID)
+	return intercept
+}
+
 func (s *State) WatchIntercepts(
 	ctx context.Context,
 	filter func(sessionID string, intercept *rpc.InterceptInfo) bool,

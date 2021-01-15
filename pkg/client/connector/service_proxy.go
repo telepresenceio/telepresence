@@ -134,6 +134,13 @@ func (p *mgrProxy) RemoveIntercept(ctx context.Context, arg *managerrpc.RemoveIn
 	}
 	return client.RemoveIntercept(ctx, arg, callOptions...)
 }
+func (p *mgrProxy) UpdateIntercept(ctx context.Context, arg *managerrpc.UpdateInterceptRequest) (*managerrpc.InterceptInfo, error) {
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	return client.UpdateIntercept(ctx, arg, callOptions...)
+}
 func (p *mgrProxy) ReviewIntercept(ctx context.Context, arg *managerrpc.ReviewInterceptRequest) (*empty.Empty, error) {
 	client, callOptions, err := p.get()
 	if err != nil {
