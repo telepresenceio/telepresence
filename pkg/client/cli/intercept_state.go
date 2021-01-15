@@ -178,7 +178,7 @@ func (is *interceptState) EnsureState() (bool, error) {
 	// [REDACTED]
 
 	// Submit the spec
-	r, err := is.cs.grpc.CreateIntercept(is.cmd.Context(), &manager.CreateInterceptRequest{
+	r, err := is.cs.connectorClient.CreateIntercept(is.cmd.Context(), &manager.CreateInterceptRequest{
 		InterceptSpec: spec,
 	})
 	if err != nil {
@@ -203,7 +203,7 @@ func (is *interceptState) DeactivateState() error {
 	name := strings.TrimSpace(is.name)
 	var r *connector.InterceptResult
 	var err error
-	r, err = is.cs.grpc.RemoveIntercept(context.Background(), &manager.RemoveInterceptRequest2{Name: name})
+	r, err = is.cs.connectorClient.RemoveIntercept(context.Background(), &manager.RemoveInterceptRequest2{Name: name})
 	if err != nil {
 		return err
 	}

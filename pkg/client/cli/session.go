@@ -75,7 +75,7 @@ func (si *sessionInfo) connect(cmd *cobra.Command, args []string) error {
 }
 
 func (si *sessionInfo) newConnectorState(daemon daemon.DaemonClient) (*connectorState, error) {
-	cs := &connectorState{sessionInfo: si, daemon: daemon}
+	cs := NewConnectorState(si, daemon)
 	err := assertConnectorStarted()
 	if err == nil {
 		err = cs.connect()

@@ -63,7 +63,7 @@ func (u *uninstallInfo) uninstall(cmd *cobra.Command, args []string) error {
 			}
 			ur.UninstallType = connector.UninstallRequest_EVERYTHING
 		}
-		r, err := cs.grpc.Uninstall(cmd.Context(), ur)
+		r, err := cs.connectorClient.Uninstall(cmd.Context(), ur)
 		if err != nil {
 			return err
 		}
