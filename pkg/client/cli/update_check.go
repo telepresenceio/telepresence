@@ -20,7 +20,6 @@ import (
 )
 
 const checkDuration = 24 * time.Hour
-const checkURL = "https://s3.amazonaws.com/datawire-static-files/tel2"
 const binaryName = "telepresence"
 
 type updateChecker struct {
@@ -54,7 +53,11 @@ func newUpdateChecker(url string) (*updateChecker, error) {
 // updateCheck performs an update check for the telepresence binary on the current os/arch and
 // prints a message on stdout if an update is available
 func updateCheck(cmd *cobra.Command, _ []string) error {
-	uc, err := newUpdateChecker(fmt.Sprintf("%s/%s/%s/stable.txt", checkURL, runtime.GOOS, runtime.GOARCH))
+	env, err := client.LoadEnv(cmd.Context())
+	if err != nil {
+		return err
+	}
+	uc, err := newUpdateChecker(fmt.Sprintf("https://%s/download/tel2/%s/%s/stable.txt", env.SystemAHost, runtime.GOOS, runtime.GOARCH))
 	if err != nil || !uc.timeToCheck() {
 		return err
 	}
@@ -66,9 +69,9 @@ func updateCheck(cmd *cobra.Command, _ []string) error {
 		return uc.storeNextCheck(time.Hour)
 	}
 	if update != nil {
-		fmt.Fprintf(cmd.OutOrStdout(), "An update of %s from version %s to %s is available. Download it from %s/%s/%s/%s/%s\n",
+		fmt.Fprintf(cmd.OutOrStdout(), "An update of %s from version %s to %s is available. Please visit https://%s/docs/latest/ for more info.\n",
 			binaryName, &ourVersion, update,
-			checkURL, runtime.GOOS, runtime.GOARCH, update, binaryName)
+			env.SystemAHost)
 	}
 	return uc.storeNextCheck(checkDuration)
 }
