@@ -28,6 +28,7 @@ type interceptInfo struct {
 	agentName string
 	port      int
 	// [REDACTED]
+	previewDomain bool
 }
 
 type interceptState struct {
@@ -51,6 +52,11 @@ func interceptCommand() *cobra.Command {
 	flags.IntVarP(&ii.port, "port", "p", 8080, "Local port to forward to")
 
 	// [REDACTED]
+
+	flags.BoolVar(&ii.previewDomain, "preview-domain", isLoggedIn(), ``+
+		`Generate an edgestack.me preview domain for this intercept. `+
+		`(default "true" if you are logged in with 'telepresence login', default "false" otherwise)`,
+	)
 
 	return cmd
 }
@@ -152,15 +158,18 @@ Please specify one or more header matches using --match.`
 	}
 }
 
+func isLoggedIn() bool {
+	token, _ := cache.LoadTokenFromUserCache()
+	return token != nil
+}
+
 func (is *interceptState) EnsureState() (bool, error) {
 	// Fill defaults
 	if is.name == "" {
 		is.name = is.agentName
 	}
-	token, _ := cache.LoadTokenFromUserCache()
-	isLoggedIn := token != nil
 	// [REDACTED]
-	if isLoggedIn {
+	if is.previewDomain {
 		if err := is.selectIngress(); err != nil {
 			return false, err
 		}
@@ -186,19 +195,21 @@ func (is *interceptState) EnsureState() (bool, error) {
 	switch r.Error {
 	case connector.InterceptError_UNSPECIFIED:
 		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", spec.Agent)
-		intercept, err := is.cs.managerClient.UpdateIntercept(is.cmd.Context(), &manager.UpdateInterceptRequest{
-			Session: is.cs.info.SessionInfo,
-			Name:    spec.Name,
-			PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
-				AddPreviewDomain: is.ingressInfo,
-			},
-		})
-		if err != nil {
-			err = fmt.Errorf("creating preview domain: %w", err)
-			// non-fatal, for now
-			fmt.Fprintln(is.cmd.OutOrStdout(), "error", err)
+		var intercept *manager.InterceptInfo
+		if is.previewDomain {
+			intercept, err = is.cs.managerClient.UpdateIntercept(is.cmd.Context(), &manager.UpdateInterceptRequest{
+				Session: is.cs.info.SessionInfo,
+				Name:    spec.Name,
+				PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
+					AddPreviewDomain: is.ingressInfo,
+				},
+			})
+			if err != nil {
+				err = fmt.Errorf("creating preview domain: %w", err)
+				return true, err
+			}
+		} else {
 			intercept = r.InterceptInfo
-			// return true, err
 		}
 		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, false))
 		return true, nil
