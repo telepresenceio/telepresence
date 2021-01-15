@@ -33,6 +33,7 @@ func LoadEnv(ctx context.Context) (Env, error) {
 		maybeSetEnv("SYSTEMA_HOST", "beta-app.datawire.io")
 	default:
 		maybeSetEnv("TELEPRESENCE_LOGIN_DOMAIN", "auth.datawire.io")
+		maybeSetEnv("SYSTEMA_HOST", "app.getambassador.io")
 	}
 
 	var env Env

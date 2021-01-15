@@ -131,7 +131,7 @@ func Command() *cobra.Command {
 		},
 		{
 			Name:     "Other Commands",
-			Commands: []*cobra.Command{versionCommand(), uninstallCommand()},
+			Commands: []*cobra.Command{versionCommand(), uninstallCommand(), dashboardCommand()},
 		},
 	})
 	for _, group := range globalFlagGroups {
