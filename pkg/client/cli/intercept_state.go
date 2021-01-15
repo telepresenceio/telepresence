@@ -170,9 +170,11 @@ func (is *interceptState) EnsureState() (bool, error) {
 	}
 	// [REDACTED]
 	if is.previewDomain {
-		if err := is.selectIngress(); err != nil {
+		ingress, err := is.cs.selectIngress(is.cmd.InOrStdin(), is.cmd.OutOrStdout())
+		if err != nil {
 			return false, err
 		}
+		is.ingressInfo = ingress
 	}
 
 	// Turn that in to a spec
@@ -315,12 +317,11 @@ func askForUseTLS(cachedUseTLS bool, reader *bufio.Reader, out io.Writer) (bool,
 	}
 }
 
-func (is *interceptState) selectIngress() error {
+func (cs *connectorState) selectIngress(in io.Reader, out io.Writer) (*manager.IngressInfo, error) {
 	infos, err := readIngressCache()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	cs := is.cs
 	key := cs.info.ClusterServer + "/" + cs.info.ClusterContext
 	cachedIngressInfo := infos[key]
 	if cachedIngressInfo == nil {
@@ -332,29 +333,27 @@ func (is *interceptState) selectIngress() error {
 		}
 	}
 
-	out := is.cmd.OutOrStdout()
-	reader := bufio.NewReader(is.cmd.InOrStdin())
+	reader := bufio.NewReader(in)
 
 	fmt.Fprintln(out, "Select the ingress to use for preview URL access")
 	reply := &manager.IngressInfo{}
 	if reply.Host, err = askForHostname(cachedIngressInfo.Host, reader, out); err != nil {
-		return err
+		return nil, err
 	}
 	if reply.Port, err = askForPortNumber(cachedIngressInfo.Port, reader, out); err != nil {
-		return err
+		return nil, err
 	}
 	if reply.UseTls, err = askForUseTLS(cachedIngressInfo.UseTls, reader, out); err != nil {
-		return err
+		return nil, err
 	}
 
 	if !ingressInfoEqual(cachedIngressInfo, reply) {
 		infos[key] = reply
 		if err = writeIngressInfoCache(infos); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	is.ingressInfo = reply
-	return nil
+	return reply, nil
 }
 
 func ingressInfoEqual(a, b *manager.IngressInfo) bool {

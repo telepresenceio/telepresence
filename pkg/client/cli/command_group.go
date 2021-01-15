@@ -88,9 +88,17 @@ Aliases:
 Examples:
 {{.Example}}{{end}}{{if .HasAvailableSubCommands}}
 
-Available Commands:{{range $group := commandGroups .}}
+Available Commands:
+{{- if commandGroups .}}
+{{- range $group := commandGroups .}}
   {{$group.Name}}:{{range $group.Commands}}
-    {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
+    {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}
+{{- else}}
+{{- range .Commands}}{{if (or .IsAvailableCommand (eq .Name "help"))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}
+{{- end}}
+{{- end}}
+{{- if .HasAvailableLocalFlags}}
 
 Flags:
 {{.LocalNonPersistentFlags | wrappedFlagUsages | trimTrailingWhitespaces}}{{end}}{{if true}}

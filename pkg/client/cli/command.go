@@ -178,7 +178,7 @@ func Command() *cobra.Command {
 		},
 		{
 			Name:     "Traffic Commands",
-			Commands: []*cobra.Command{listCommand(), interceptCommand(), leaveCommand() /*, "preview" */},
+			Commands: []*cobra.Command{listCommand(), interceptCommand(), leaveCommand(), previewCommand()},
 		},
 		{
 			Name:     "Other Commands",
