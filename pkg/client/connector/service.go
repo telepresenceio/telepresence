@@ -173,11 +173,11 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 	return &rpc.InterceptResult{}, err
 }
 
-func (s *service) List(_ context.Context, lr *rpc.ListRequest) (*rpc.DeploymentInfoSnapshot, error) {
-	if s.trafficMgr.grpc == nil {
+func (s *service) List(ctx context.Context, lr *rpc.ListRequest) (*rpc.DeploymentInfoSnapshot, error) {
+	if s.trafficMgr.managerClient == nil {
 		return &rpc.DeploymentInfoSnapshot{}, nil
 	}
-	return s.trafficMgr.deploymentInfoSnapshot(lr.Filter), nil
+	return s.trafficMgr.deploymentInfoSnapshot(ctx, lr.Filter), nil
 }
 
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
@@ -202,7 +202,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 			r.BridgeOk = s.bridge.check(c)
 		}
 		if s.trafficMgr != nil {
-			s.trafficMgr.setStatus(r)
+			s.trafficMgr.setStatus(c, r)
 		}
 		r.IngressInfos = s.cluster.detectIngressBehavior()
 	}

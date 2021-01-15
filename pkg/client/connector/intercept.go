@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -13,7 +13,9 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/client/actions"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
@@ -26,10 +28,10 @@ func (s *service) interceptStatus() (rpc.InterceptError, string) {
 		ie = rpc.InterceptError_NO_CONNECTION
 	case s.trafficMgr == nil:
 		ie = rpc.InterceptError_NO_TRAFFIC_MANAGER
-	case s.trafficMgr.grpc == nil:
-		if s.trafficMgr.apiErr != nil {
+	case s.trafficMgr.managerClient == nil:
+		if s.trafficMgr.managerErr != nil {
 			ie = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
-			msg = s.trafficMgr.apiErr.Error()
+			msg = s.trafficMgr.managerErr.Error()
 		} else {
 			ie = rpc.InterceptError_TRAFFIC_MANAGER_CONNECTING
 		}
@@ -37,24 +39,94 @@ func (s *service) interceptStatus() (rpc.InterceptError, string) {
 	return ie, msg
 }
 
+type portForward struct {
+	ManagerPort int32
+	TargetHost  string
+	TargetPort  int32
+}
+
+func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error {
+	// Don't use a dgroup.Group because:
+	//  1. we don't actually care about tracking errors (we just always retry) or any of
+	//     dgroup's other functionality
+	//  2. because goroutines may churn as intercepts are created and deleted, tracking all of
+	//     their exit statuses is just a memory leak
+	//  3. because we want a per-worker cancel, we'd have to implement our own Context
+	//     management on top anyway, so dgroup wouldn't actually save us any complexity.
+	var wg sync.WaitGroup
+
+	livePortForwards := make(map[portForward]context.CancelFunc)
+
+	backoff := 100 * time.Millisecond
+	for ctx.Err() == nil {
+		stream, err := tm.managerClient.WatchIntercepts(ctx, tm.session())
+		for err == nil {
+			var snapshot *manager.InterceptInfoSnapshot
+			snapshot, err = stream.Recv()
+			if err != nil {
+				break
+			}
+			snapshotPortForwards := make(map[portForward]struct{})
+			for _, intercept := range snapshot.Intercepts {
+				pf := portForward{
+					ManagerPort: intercept.ManagerPort,
+					TargetHost:  intercept.Spec.TargetHost,
+					TargetPort:  intercept.Spec.TargetPort,
+				}
+				snapshotPortForwards[pf] = struct{}{}
+				if _, isLive := livePortForwards[pf]; !isLive {
+					pfCtx, pfCancel := context.WithCancel(ctx)
+					pfCtx = dgroup.WithGoroutineName(pfCtx,
+						fmt.Sprintf("/%d:%s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort))
+					livePortForwards[pf] = pfCancel
+
+					wg.Add(1)
+					go tm.workerPortForwardIntercept(pfCtx, pf)
+				}
+			}
+			for pf, cancel := range livePortForwards {
+				if _, isWanted := snapshotPortForwards[pf]; !isWanted {
+					dlog.Infof(ctx, "Terminating port-forward manager:%d -> %s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort)
+					cancel()
+					delete(livePortForwards, pf)
+				}
+			}
+		}
+
+		if ctx.Err() == nil {
+			dlog.Errorf(ctx, "communicating with manager: %v", err)
+			dtime.SleepWithContext(ctx, backoff)
+			backoff *= 2
+			if backoff > 3*time.Second {
+				backoff = 3 * time.Second
+			}
+		}
+	}
+
+	wg.Wait()
+
+	return nil
+}
+
 // addIntercept adds one intercept
 func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager.CreateInterceptRequest) (*rpc.InterceptResult, error) {
-	tm.interceptsLock.Lock()
-	defer tm.interceptsLock.Unlock()
-
 	spec := ir.InterceptSpec
-	for n, iCept := range tm.intercepts {
-		if n == spec.Name {
+	intercepts, err := actions.ListMyIntercepts(c, tm.managerClient, tm.session().SessionId)
+	if err != nil {
+		return nil, err
+	}
+	for _, iCept := range intercepts {
+		if iCept.Spec.Name == spec.Name {
 			return &rpc.InterceptResult{
 				Error:     rpc.InterceptError_ALREADY_EXISTS,
-				ErrorText: n,
+				ErrorText: iCept.Spec.Name,
 			}, nil
 		}
-		if iCept.targetPort == spec.TargetPort && iCept.targetHost == spec.TargetHost {
+		if iCept.Spec.TargetPort == spec.TargetPort && iCept.Spec.TargetHost == spec.TargetHost {
 			return &rpc.InterceptResult{
 				InterceptInfo: &manager.InterceptInfo{Spec: spec},
 				Error:         rpc.InterceptError_LOCAL_TARGET_IN_USE,
-				ErrorText:     n,
+				ErrorText:     iCept.Spec.Name,
 			}, nil
 		}
 	}
@@ -79,8 +151,8 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	}
 
 	var found *manager.AgentInfo
-	if ags := tm.agentInfoSnapshot(); ags != nil {
-		for _, ag := range ags.Agents {
+	if ags, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId); ags != nil {
+		for _, ag := range ags {
 			if !(ag.Name == spec.Agent && hasSpecMechanism(ag)) {
 				continue
 			}
@@ -111,7 +183,7 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 
 	ir.Session = tm.session()
 	dlog.Debugf(c, "creating intercept %s", ir.InterceptSpec.Name)
-	ii, err := tm.grpc.CreateIntercept(c, ir)
+	ii, err := tm.managerClient.CreateIntercept(c, ir)
 
 	result := &rpc.InterceptResult{InterceptInfo: ii}
 	if err != nil {
@@ -128,14 +200,7 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 		result.ErrorText = err.Error()
 		return result, nil
 	}
-
-	err = tm.makeIntercept(c, longLived, ii)
-	if err != nil {
-		_ = tm.removeIntercept(c, spec.Name)
-		result.Error = rpc.InterceptError_FAILED_TO_ESTABLISH
-		result.ErrorText = err.Error()
-		return result, nil
-	}
+	result.InterceptInfo = ii
 
 	return result, nil
 }
@@ -171,62 +236,68 @@ func (tm *trafficManager) addAgent(c context.Context, env client.Env, agentName 
 	return nil
 }
 
-func (tm *trafficManager) waitForActiveIntercept(c context.Context, id string) (*manager.InterceptInfo, error) {
-	done := make(chan *manager.InterceptInfo)
-
-	il := &iiActive{id: id, done: done}
-	go func() {
-		if cis := tm.iiListener.getData(); cis != nil {
-			// Send initial snapshot to listener
-			il.onData(cis)
-		}
-		tm.iiListener.addListener(il)
-	}()
-	defer tm.iiListener.removeListener(il)
-
-	dlog.Debugf(c, "waiting for intercept with id %s to become active", id)
-	c, cancel := context.WithTimeout(c, 30*time.Second)
+func (tm *trafficManager) waitForActiveIntercept(ctx context.Context, id string) (*manager.InterceptInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	select {
-	case ii := <-done:
-		if ii.Disposition == manager.InterceptDispositionType_ACTIVE {
-			return ii, nil
+
+	dlog.Debugf(ctx, "waiting for intercept id=%q to become active", id)
+	stream, err := tm.managerClient.WatchIntercepts(ctx, tm.session())
+	for err != nil {
+		return nil, fmt.Errorf("waiting for intercept id=%q to become active: %w", id, err)
+	}
+	for {
+		snapshot, err := stream.Recv()
+		if err != nil {
+			return nil, fmt.Errorf("waiting for intercept id=%q to become active: %w", id, err)
 		}
-		dlog.Errorf(c, "intercept id: %s, state: %s, message: %s", id, ii.Disposition, ii.Message)
-		return nil, errors.New(ii.Message)
-	case <-c.Done():
-		return nil, fmt.Errorf("%v while waiting for intercept with id %s to become active", c.Err(), id)
+
+		var intercept *manager.InterceptInfo
+		for _, straw := range snapshot.Intercepts {
+			if straw.Id == id {
+				intercept = straw
+				break
+			}
+		}
+
+		switch {
+		case intercept == nil:
+			dlog.Debugf(ctx, "wait status: intercept id=%q does not yet exist", id)
+		case intercept.Disposition == manager.InterceptDispositionType_WAITING:
+			dlog.Debugf(ctx, "wait status: intercept id=%q is still WAITING", id)
+		default:
+			dlog.Debugf(ctx, "wait status: intercept id=%q is no longer WAITING; is now %v", id, intercept.Disposition)
+			if intercept.Disposition != manager.InterceptDispositionType_ACTIVE {
+				return nil, errors.Errorf("intercept in error state %v: %v", intercept.Disposition, intercept.Message)
+			}
+			return intercept, nil
+		}
 	}
 }
 
-func (tm *trafficManager) waitForAgent(c context.Context, name string) (*manager.AgentInfo, error) {
-	done := make(chan *manager.AgentInfo)
-
-	al := &aiPresent{name: name, done: done}
-	go func() {
-		if cas := tm.aiListener.getData(); cas != nil {
-			// Send initial snapshot to listener
-			al.onData(cas)
-		}
-		tm.aiListener.addListener(al)
-	}()
-	defer tm.aiListener.removeListener(al)
-
-	c, cancel := context.WithTimeout(c, 120*time.Second) // installing a new agent can take some time
+func (tm *trafficManager) waitForAgent(ctx context.Context, name string) (*manager.AgentInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, 120*time.Second) // installing a new agent can take some time
 	defer cancel()
-	select {
-	case ai := <-done:
-		return ai, nil
-	case <-c.Done():
-		return nil, fmt.Errorf("%v while waiting for agent %s to be present", c.Err(), name)
+
+	stream, err := tm.managerClient.WatchAgents(ctx, tm.session())
+	if err != nil {
+		return nil, fmt.Errorf("waiting for agent %q to be present: %q", name, err)
+	}
+	for {
+		snapshot, err := stream.Recv()
+		if err != nil {
+			return nil, fmt.Errorf("waiting for agent %q to be present: %q", name, err)
+		}
+
+		for _, agent := range snapshot.Agents {
+			if agent.Name == name {
+				return agent, nil
+			}
+		}
 	}
 }
 
-// makeIntercept acquires an intercept and returns a Resource handle
-// for it. Must be called with tm.interceptsLock mutex locked
-func (tm *trafficManager) makeIntercept(c, longLived context.Context, ii *manager.InterceptInfo) error {
-	is := ii.Spec
-	dlog.Infof(c, "%s: Intercepting via port %v", is.Name, ii.ManagerPort)
+func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf portForward) {
+	dlog.Infof(ctx, "Initiating port-forward manager:%d -> %s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort)
 
 	sshArgs := []string{
 		"ssh",
@@ -242,35 +313,44 @@ func (tm *trafficManager) makeIntercept(c, longLived context.Context, ii *manage
 		// port-forward settings
 		"-N", // no remote command; just connect and forward ports
 		"-oExitOnForwardFailure=yes",
-		"-R", fmt.Sprintf("%d:%s:%d", ii.ManagerPort, is.TargetHost, is.TargetPort), // port to forward
+		"-R", fmt.Sprintf("%d:%s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort), // port to forward
 
 		// where to connect to
 		"-p", strconv.Itoa(int(tm.sshPort)),
 		"telepresence@localhost",
 	}
 
-	dlog.Infof(c, "%s: starting SSH tunnel", is.Name)
-	c, cancel := context.WithCancel(longLived)
-	tm.intercepts[is.Name] = &intercept{cancel: cancel, targetHost: is.TargetHost, targetPort: is.TargetPort}
+	backoff := 100 * time.Millisecond
+	for ctx.Err() == nil {
+		start := time.Now()
+		err := dexec.CommandContext(ctx, sshArgs[0], sshArgs[1:]...).Run()
+		lifetime := time.Since(start)
 
-	c = dgroup.WithGoroutineName(c, ii.Id)
-	return client.Retry(c, "ssh reverse tunnelling", func(c context.Context) error {
-		return dexec.CommandContext(c, sshArgs[0], sshArgs[1:]...).Start()
-	})
+		if ctx.Err() == nil {
+			if err == nil {
+				err = errors.New("process terminated unexpectedly")
+			}
+			dlog.Errorf(ctx, "communicating with manager: %v", err)
+			if lifetime >= 20*time.Second {
+				backoff = 100 * time.Millisecond
+				dtime.SleepWithContext(ctx, backoff)
+			} else {
+				dtime.SleepWithContext(ctx, backoff)
+				backoff *= 2
+				if backoff > 3*time.Second {
+					backoff = 3 * time.Second
+				}
+			}
+		}
+	}
+
+	dlog.Infof(ctx, "Terminated port-forward manager:%d -> %s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort)
 }
 
 // removeIntercept removes one intercept by name
 func (tm *trafficManager) removeIntercept(c context.Context, name string) error {
-	tm.interceptsLock.Lock()
-	defer tm.interceptsLock.Unlock()
-
-	if iCept, ok := tm.intercepts[name]; ok {
-		dlog.Debugf(c, "cancelling intercept %s", name)
-		delete(tm.intercepts, name)
-		iCept.cancel()
-	}
 	dlog.Debugf(c, "telling manager to remove intercept %s", name)
-	_, err := tm.grpc.RemoveIntercept(c, &manager.RemoveInterceptRequest2{
+	_, err := tm.managerClient.RemoveIntercept(c, &manager.RemoveInterceptRequest2{
 		Session: tm.session(),
 		Name:    name,
 	})
@@ -279,30 +359,12 @@ func (tm *trafficManager) removeIntercept(c context.Context, name string) error 
 
 // clearIntercepts removes all intercepts
 func (tm *trafficManager) clearIntercepts(c context.Context) error {
-	is := tm.interceptInfoSnapshot()
-	if is == nil {
-		return nil
-	}
-	for _, cept := range is.Intercepts {
+	intercepts, _ := actions.ListMyIntercepts(c, tm.managerClient, tm.session().SessionId)
+	for _, cept := range intercepts {
 		err := tm.removeIntercept(c, cept.Spec.Name)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// An iiListener keeps track of the latest received InterceptInfoSnapshot and provides the
-// watcher needed to register other listeners.
-type iiListener struct {
-	watcher
-	data atomic.Value
-}
-
-func (il *iiListener) getData() *manager.InterceptInfoSnapshot {
-	v := il.data.Load()
-	if v == nil {
-		return nil
-	}
-	return v.(*manager.InterceptInfoSnapshot)
 }
