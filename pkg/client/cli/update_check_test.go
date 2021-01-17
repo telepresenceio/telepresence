@@ -13,7 +13,7 @@ import (
 	"github.com/blang/semver"
 
 	"github.com/datawire/dlib/dtime"
-	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/client/cache"
 )
 
 func newHttpServer(t *testing.T) *http.Server {
@@ -53,7 +53,7 @@ func Test_newUpdateChecker(t *testing.T) {
 	defer func() {
 		_ = os.RemoveAll(tmpDir)
 	}()
-	client.SetUserCacheDirFunc(func() (string, error) {
+	cache.SetUserCacheDirFunc(func() (string, error) {
 		return tmpDir, nil
 	})
 

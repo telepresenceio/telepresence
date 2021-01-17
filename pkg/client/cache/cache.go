@@ -1,6 +1,8 @@
-package client
+package cache
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 )
@@ -35,4 +37,43 @@ func CacheDir() (string, error) {
 		return "", err
 	}
 	return cacheDir, nil
+}
+
+func saveToUserCache(object interface{}, file string) error {
+	cacheDir, err := CacheDir()
+	if err != nil {
+		return err
+	}
+	jsonContent, err := json.Marshal(object)
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(filepath.Join(cacheDir, file), jsonContent, 0600)
+}
+
+func loadFromUserCache(dest interface{}, file string) error {
+	cacheDir, err := CacheDir()
+	if err != nil {
+		return err
+	}
+	jsonContent, err := ioutil.ReadFile(filepath.Join(cacheDir, file))
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(jsonContent, &dest); err != nil {
+		return err
+	}
+	return nil
+}
+
+func deleteFromUserCache(file string) error {
+	cacheDir, err := CacheDir()
+	if err != nil {
+		return err
+	}
+	cacheFile := filepath.Join(cacheDir, file)
+	if _, err = os.Stat(cacheFile); err != nil {
+		return err
+	}
+	return os.Remove(cacheFile)
 }

@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -21,6 +22,7 @@ import (
 	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/client/auth"
+	"github.com/datawire/telepresence2/pkg/client/cache"
 )
 
 type MockSaveTokenWrapper struct {
@@ -30,6 +32,16 @@ type MockSaveTokenWrapper struct {
 
 func (m *MockSaveTokenWrapper) SaveToken(token *oauth2.Token) error {
 	m.CallArguments = append(m.CallArguments, token)
+	return m.Err
+}
+
+type MockSaveUserInfoWrapper struct {
+	CallArguments []cache.UserInfo
+	Err           error
+}
+
+func (m *MockSaveUserInfoWrapper) SaveUserInfo(userInfo cache.UserInfo) error {
+	m.CallArguments = append(m.CallArguments, userInfo)
 	return m.Err
 }
 
@@ -47,6 +59,7 @@ type MockOauth2Server struct {
 	Server                 *http.Server
 	TokenRequestFormValues []url.Values
 	TokenResponseCode      int
+	UserInfo               *cache.UserInfo
 }
 
 func newMockOauth2Server(t *testing.T) *MockOauth2Server {
@@ -65,8 +78,17 @@ func newMockOauth2Server(t *testing.T) *MockOauth2Server {
 		}
 	}()
 	oauth2Server := &MockOauth2Server{Server: server, TokenResponseCode: http.StatusOK}
+	oauth2Server.UserInfo = &cache.UserInfo{
+		Id:               "mock-user-id",
+		Name:             "mock-user-name",
+		AvatarUrl:        "mock-user-avatar-url",
+		AccountId:        "mock-account-id",
+		AccountName:      "mock-account-name",
+		AccountAvatarUrl: "mock-account-avatar-url",
+	}
 	handler.Handle("/auth", http.NotFoundHandler())
 	handler.Handle("/token", oauth2Server.HandleToken())
+	handler.Handle("/api/userinfo", oauth2Server.HandleUserInfo())
 	return oauth2Server
 }
 
@@ -82,6 +104,10 @@ func (s *MockOauth2Server) AuthUrl() string {
 
 func (s *MockOauth2Server) TokenUrl() string {
 	return s.urlForPath("/token")
+}
+
+func (s *MockOauth2Server) UserInfoUrl() string {
+	return s.urlForPath("/api/userinfo")
 }
 
 func (s *MockOauth2Server) urlForPath(path string) string {
@@ -105,64 +131,109 @@ func (s *MockOauth2Server) HandleToken() http.Handler {
 	})
 }
 
+func (s *MockOauth2Server) HandleUserInfo() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.UserInfo == nil {
+			http.NotFound(w, r)
+			return
+		}
+		bytes, err := json.Marshal(s.UserInfo)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_, _ = w.Write(bytes)
+	})
+}
+
 func TestLoginFlow(t *testing.T) {
 	type fixture struct {
-		MockSaveTokenWrapper *MockSaveTokenWrapper
-		MockOpenURLWrapper   *MockOpenURLWrapper
-		MockOauth2Server     *MockOauth2Server
-		Runner               *auth.LoginExecutor
-		OpenedUrls           chan string
+		MockSaveTokenWrapper    *MockSaveTokenWrapper
+		MockSaveUserInfoWrapper *MockSaveUserInfoWrapper
+		MockOpenURLWrapper      *MockOpenURLWrapper
+		MockOauth2Server        *MockOauth2Server
+		Runner                  auth.LoginExecutor
+		OpenedUrls              chan string
 	}
 	const mockCompletionUrl = "http://example.com/mock-completion"
 
-	setup := func(t *testing.T) *fixture {
+	setupWithCacheFuncs := func(t *testing.T, saveTokenFunc func(*oauth2.Token) error,
+		saveUserInfoFunc func(cache.UserInfo) error) *fixture {
 		mockSaveTokenWrapper := &MockSaveTokenWrapper{}
+		saveToken := saveTokenFunc
+		if saveToken == nil {
+			saveToken = mockSaveTokenWrapper.SaveToken
+		}
+		mockSaveUserInfoWrapper := &MockSaveUserInfoWrapper{}
+		saveUserInfo := saveUserInfoFunc
+		if saveUserInfo == nil {
+			saveUserInfo = mockSaveUserInfoWrapper.SaveUserInfo
+		}
 		mockOpenURLWrapper := &MockOpenURLWrapper{}
 		openUrlChan := make(chan string)
 		mockOauth2Server := newMockOauth2Server(t)
 		scout := client.NewScout("go-test")
 		scout.Reporter.Endpoint = metriton.BetaEndpoint
 		return &fixture{
-			MockSaveTokenWrapper: mockSaveTokenWrapper,
-			MockOpenURLWrapper:   mockOpenURLWrapper,
-			MockOauth2Server:     mockOauth2Server,
-			OpenedUrls:           openUrlChan,
-			Runner: &auth.LoginExecutor{
-				Oauth2AuthUrl:  mockOauth2Server.AuthUrl(),
-				Oauth2TokenUrl: mockOauth2Server.TokenUrl(),
-				Oauth2ClientId: "",
-				CompletionUrl:  mockCompletionUrl,
-				SaveTokenFunc:  mockSaveTokenWrapper.SaveToken,
-				OpenURLFunc: func(url string) error {
+			MockSaveTokenWrapper:    mockSaveTokenWrapper,
+			MockSaveUserInfoWrapper: mockSaveUserInfoWrapper,
+			MockOpenURLWrapper:      mockOpenURLWrapper,
+			MockOauth2Server:        mockOauth2Server,
+			OpenedUrls:              openUrlChan,
+			Runner: auth.NewLoginExecutor(
+				mockOauth2Server.AuthUrl(),
+				mockOauth2Server.TokenUrl(),
+				"",
+				mockCompletionUrl,
+				mockOauth2Server.UserInfoUrl(),
+				saveToken,
+				saveUserInfo,
+				func(url string) error {
 					openUrlChan <- url
 					return mockOpenURLWrapper.OpenURL(url)
 				},
-				Scout: scout,
-			},
+				scout,
+			),
 		}
 	}
-	t.Run("will save token to user cache dir if code flow is successful", func(t *testing.T) {
-		// given
-		t.Parallel()
-		f := setup(t)
-		defer f.MockOauth2Server.TearDown(t)
+	setup := func(t *testing.T) *fixture {
+		return setupWithCacheFuncs(t, nil, nil)
+	}
+	executeLoginFlowWithErrorParam := func(t *testing.T, f *fixture, errorCode, errorDescription string) (*http.Response, string, error) {
 		errs := make(chan error)
-
-		// when
 		go func() {
 			errs <- f.Runner.LoginFlow(&cobra.Command{}, []string{})
 		}()
 		rawAuthUrl := <-f.OpenedUrls
 		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
 		callbackQuery := callbackUrl.Query()
-		callbackQuery.Set("code", "mock-code")
+		if errorCode == "" {
+			callbackQuery.Set("code", "mock-code")
+		} else {
+			callbackQuery.Set("error", errorCode)
+			callbackQuery.Set("error_description", errorDescription)
+		}
 		callbackUrl.RawQuery = callbackQuery.Encode()
 		callbackResponse := sendCallbackRequest(t, callbackUrl)
-		defer callbackResponse.Body.Close()
 		err := <-errs
+		return callbackResponse, rawAuthUrl, err
+	}
+	executeDefaultLoginFlow := func(t *testing.T, f *fixture) (*http.Response, string, error) {
+		return executeLoginFlowWithErrorParam(t, f, "", "")
+	}
+	t.Run("will save token to user cache dir if code flow is successful", func(t *testing.T) {
+		// given
+		t.Parallel()
+		f := setup(t)
+		defer f.MockOauth2Server.TearDown(t)
+
+		// when
+		callbackResponse, rawAuthUrl, err := executeDefaultLoginFlow(t, f)
 
 		// then
 		assert.NilError(t, err, "no error running login flow")
+		defer callbackResponse.Body.Close()
 		assert.Assert(t, is.Equal(http.StatusTemporaryRedirect, callbackResponse.StatusCode), "callback status is 307")
 		assert.Assert(t, is.Equal(mockCompletionUrl, callbackResponse.Header.Get("Location")), "location header")
 		assert.Assert(t, strings.HasPrefix(rawAuthUrl, f.MockOauth2Server.AuthUrl()), "auth url")
@@ -173,65 +244,89 @@ func TestLoginFlow(t *testing.T) {
 		token := f.MockSaveTokenWrapper.CallArguments[0]
 		assert.Assert(t, is.Equal("mock-access-token", token.AccessToken), "access token")
 		assert.Assert(t, is.Equal("mock-refresh-token", token.RefreshToken), "refresh token")
+		assert.Assert(t, is.Len(f.MockSaveUserInfoWrapper.CallArguments, 1), "one call to save the user info")
 		assert.Assert(t, is.Equal("bearer", token.TokenType), "bearer token type")
 		assert.Assert(t, token.Expiry.After(time.Now().Add(time.Minute*59)), "access token expires after 59 min")
 		assert.Assert(t, token.Expiry.Before(time.Now().Add(time.Minute*61)), "access token expires before 61 min")
+		userInfo := f.MockSaveUserInfoWrapper.CallArguments[0]
+		assert.Assert(t, is.Equal("mock-user-id", userInfo.Id), "user id")
+		assert.Assert(t, is.Equal("mock-user-name", userInfo.Name), "user name")
+		assert.Assert(t, is.Equal("mock-user-avatar-url", userInfo.AvatarUrl), "user avatar url")
+		assert.Assert(t, is.Equal("mock-account-id", userInfo.AccountId), "account id")
+		assert.Assert(t, is.Equal("mock-account-name", userInfo.AccountName), "account name")
+		assert.Assert(t, is.Equal("mock-account-avatar-url", userInfo.AccountAvatarUrl), "account avatar url")
 	})
 	t.Run("will save token to user cache if opening up the url fails", func(t *testing.T) {
 		// given
 		t.Parallel()
 		f := setup(t)
 		defer f.MockOauth2Server.TearDown(t)
-		errs := make(chan error)
 		f.MockOpenURLWrapper.Err = errors.New("browser issue")
 
 		// when
-		go func() {
-			errs <- f.Runner.LoginFlow(&cobra.Command{}, []string{})
-		}()
-		rawAuthUrl := <-f.OpenedUrls
-		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
-		callbackQuery := callbackUrl.Query()
-		callbackQuery.Set("code", "mock-code")
-		callbackUrl.RawQuery = callbackQuery.Encode()
-		callbackResponse := sendCallbackRequest(t, callbackUrl)
-		defer callbackResponse.Body.Close()
-		err := <-errs
+		callbackResponse, _, err := executeDefaultLoginFlow(t, f)
 
 		// then
 		assert.NilError(t, err, "no error running login flow")
+		defer callbackResponse.Body.Close()
 		assert.Assert(t, is.Len(f.MockOpenURLWrapper.CallArguments, 1), "one call to open url")
 		assert.Assert(t, is.Len(f.MockOauth2Server.TokenRequestFormValues, 1), "one call to the token endpoint")
 		assert.Assert(t, is.Len(f.MockSaveTokenWrapper.CallArguments, 1), "one call to save the token")
+		assert.Assert(t, is.Len(f.MockSaveUserInfoWrapper.CallArguments, 1), "one call to save the user info")
+	})
+	t.Run("will return no error if user info retrieval fails", func(t *testing.T) {
+		// given
+		t.Parallel()
+		f := setup(t)
+		defer f.MockOauth2Server.TearDown(t)
+		f.MockOauth2Server.UserInfo = nil
+
+		// when
+		callbackResponse, _, err := executeDefaultLoginFlow(t, f)
+
+		// then
+		assert.NilError(t, err, "no error running login flow")
+		defer callbackResponse.Body.Close()
+		assert.Assert(t, is.Len(f.MockOpenURLWrapper.CallArguments, 1), "one call to open url")
+		assert.Assert(t, is.Len(f.MockOauth2Server.TokenRequestFormValues, 1), "one call to the token endpoint")
+		assert.Assert(t, is.Len(f.MockSaveTokenWrapper.CallArguments, 1), "one call to save the token")
+		assert.Assert(t, is.Len(f.MockSaveUserInfoWrapper.CallArguments, 0), "no call to save the user info")
+	})
+	t.Run("will return no error if user info persistence fails", func(t *testing.T) {
+		// given
+		t.Parallel()
+		f := setup(t)
+		defer f.MockOauth2Server.TearDown(t)
+		f.MockSaveUserInfoWrapper.Err = errors.New("could not save user info")
+
+		// when
+		callbackResponse, _, err := executeDefaultLoginFlow(t, f)
+
+		// then
+		assert.NilError(t, err, "no error running login flow")
+		defer callbackResponse.Body.Close()
+		assert.Assert(t, is.Len(f.MockOpenURLWrapper.CallArguments, 1), "one call to open url")
+		assert.Assert(t, is.Len(f.MockOauth2Server.TokenRequestFormValues, 1), "one call to the token endpoint")
+		assert.Assert(t, is.Len(f.MockSaveTokenWrapper.CallArguments, 1), "one call to save the token")
+		assert.Assert(t, is.Len(f.MockSaveUserInfoWrapper.CallArguments, 1), "one call to save the user info")
 	})
 	t.Run("will return an error if callback is invoked with error parameters", func(t *testing.T) {
 		// given
 		t.Parallel()
 		f := setup(t)
 		defer f.MockOauth2Server.TearDown(t)
-		errs := make(chan error)
 
 		// when
-		go func() {
-			errs <- f.Runner.LoginFlow(&cobra.Command{}, []string{})
-		}()
-		rawAuthUrl := <-f.OpenedUrls
-		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
-		callbackQuery := callbackUrl.Query()
-		callbackQuery.Set("code", "")
-		callbackQuery.Set("error", "some_error")
-		callbackQuery.Set("error_description", "some elaborate description")
-		callbackUrl.RawQuery = callbackQuery.Encode()
-		callbackResponse := sendCallbackRequest(t, callbackUrl)
-		defer callbackResponse.Body.Close()
-		err := <-errs
+		callbackResponse, _, err := executeLoginFlowWithErrorParam(t, f, "some_error", "some elaborate description")
 
 		// then
 		assert.Assert(t, is.Error(err, "some_error error returned on OAuth2 callback: some elaborate description"), "error message")
+		defer callbackResponse.Body.Close()
 		assert.Assert(t, is.Equal(http.StatusInternalServerError, callbackResponse.StatusCode), "callback status is 500")
 		assert.Assert(t, is.Len(f.MockOpenURLWrapper.CallArguments, 1), "one call to open url")
 		assert.Assert(t, is.Len(f.MockOauth2Server.TokenRequestFormValues, 0), "no call to the token endpoint")
 		assert.Assert(t, is.Len(f.MockSaveTokenWrapper.CallArguments, 0), "no call to save the token")
+		assert.Assert(t, is.Len(f.MockSaveUserInfoWrapper.CallArguments, 0), "no call to save the user info")
 	})
 	t.Run("will return an error if the code exchange fails", func(t *testing.T) {
 		// given
@@ -239,62 +334,44 @@ func TestLoginFlow(t *testing.T) {
 		f := setup(t)
 		f.MockOauth2Server.TokenResponseCode = http.StatusInternalServerError
 		defer f.MockOauth2Server.TearDown(t)
-		errs := make(chan error)
 
 		// when
-		go func() {
-			errs <- f.Runner.LoginFlow(&cobra.Command{}, []string{})
-		}()
-		rawAuthUrl := <-f.OpenedUrls
-		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
-		callbackQuery := callbackUrl.Query()
-		callbackQuery.Set("code", "mock-code")
-		callbackUrl.RawQuery = callbackQuery.Encode()
-		callbackResponse := sendCallbackRequest(t, callbackUrl)
-		defer callbackResponse.Body.Close()
-		err := <-errs
+		callbackResponse, _, err := executeDefaultLoginFlow(t, f)
 
 		// then
 		assert.Assert(t, is.ErrorContains(err, "error while exchanging code for token:"), "error message")
+		defer callbackResponse.Body.Close()
 		assert.Assert(t, is.Equal(http.StatusTemporaryRedirect, callbackResponse.StatusCode), "callback status is 307")
 		assert.Assert(t, is.Equal(mockCompletionUrl, callbackResponse.Header.Get("Location")), "location header")
 		assert.Assert(t, is.Len(f.MockOpenURLWrapper.CallArguments, 1), "one call to open url")
 		assert.Assert(t, is.Len(f.MockOauth2Server.TokenRequestFormValues, 2), "one retry to the token endpoint")
 		assert.Assert(t, is.Len(f.MockSaveTokenWrapper.CallArguments, 0), "no call to save the token")
+		assert.Assert(t, is.Len(f.MockSaveUserInfoWrapper.CallArguments, 0), "no call to save the user info")
 	})
 	t.Run("returns an error if the token can't be saved", func(t *testing.T) {
 		// given
 		t.Parallel()
 		f := setup(t)
 		defer f.MockOauth2Server.TearDown(t)
-		errs := make(chan error)
 		f.MockSaveTokenWrapper.Err = errors.New("disk error")
 
 		// when
-		go func() {
-			errs <- f.Runner.LoginFlow(&cobra.Command{}, []string{})
-		}()
-		rawAuthUrl := <-f.OpenedUrls
-		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
-		callbackQuery := callbackUrl.Query()
-		callbackQuery.Set("code", "mock-code")
-		callbackUrl.RawQuery = callbackQuery.Encode()
-		callbackResponse := sendCallbackRequest(t, callbackUrl)
-		defer callbackResponse.Body.Close()
-		err := <-errs
+		callbackResponse, _, err := executeDefaultLoginFlow(t, f)
 
 		// then
 		assert.Assert(t, is.Error(err, "could not save access token to user cache: disk error"), "error message")
+		defer callbackResponse.Body.Close()
 		assert.Assert(t, is.Equal(http.StatusTemporaryRedirect, callbackResponse.StatusCode), "callback status is 307")
 		assert.Assert(t, is.Equal(mockCompletionUrl, callbackResponse.Header.Get("Location")), "location header")
 		assert.Assert(t, is.Len(f.MockOpenURLWrapper.CallArguments, 1), "one call to open url")
 		assert.Assert(t, is.Len(f.MockOauth2Server.TokenRequestFormValues, 1), "one retry to the token endpoint")
-		assert.Assert(t, is.Len(f.MockSaveTokenWrapper.CallArguments, 1), "no call to save the token")
+		assert.Assert(t, is.Len(f.MockSaveTokenWrapper.CallArguments, 1), "one call to save the token")
+		assert.Assert(t, is.Len(f.MockSaveUserInfoWrapper.CallArguments, 0), "no call to save the user info")
 	})
 
-	t.Run("will remove token from user cache dir when logging out", func(t *testing.T) {
+	t.Run("will remove token and user info from user cache dir when logging out", func(t *testing.T) {
 		// given
-		f := setup(t)
+		f := setupWithCacheFuncs(t, cache.SaveTokenToUserCache, cache.SaveUserInfoToUserCache)
 		defer f.MockOauth2Server.TearDown(t)
 		errs := make(chan error)
 
@@ -304,11 +381,10 @@ func TestLoginFlow(t *testing.T) {
 		defer func() {
 			_ = os.RemoveAll(tmpDir)
 		}()
-		client.SetUserCacheDirFunc(func() (string, error) {
+		cache.SetUserCacheDirFunc(func() (string, error) {
 			return tmpDir, nil
 		})
-		defer client.SetUserCacheDirFunc(os.UserCacheDir)
-		f.Runner.SaveTokenFunc = auth.SaveTokenToUserCache
+		defer cache.SetUserCacheDirFunc(os.UserCacheDir)
 
 		// when
 		go func() {
@@ -325,13 +401,18 @@ func TestLoginFlow(t *testing.T) {
 
 		// then
 		require.NoError(t, err, "no error running login flow")
-		token, err := auth.LoadTokenFromUserCache()
+		token, err := cache.LoadTokenFromUserCache()
 		require.NoError(t, err, "no error reading token")
 		require.NotNil(t, token)
+		userInfo, err := cache.LoadUserInfoFromUserCache()
+		require.NoError(t, err, "no error reading user info")
+		require.NotNil(t, userInfo)
 		err = auth.LogoutCommand().Execute()
 		require.NoError(t, err, "no error executing logout")
-		_, err = auth.LoadTokenFromUserCache()
+		_, err = cache.LoadTokenFromUserCache()
 		require.Error(t, err, "error reading token")
+		_, err = cache.LoadUserInfoFromUserCache()
+		require.Error(t, err, "error reading user info")
 		err = auth.LogoutCommand().Execute()
 		require.Error(t, err, "error executing logout when not logged in")
 	})

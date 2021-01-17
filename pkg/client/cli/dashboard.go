@@ -8,6 +8,7 @@ import (
 
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/client/auth"
+	"github.com/datawire/telepresence2/pkg/client/cache"
 )
 
 func dashboardCommand() *cobra.Command {
@@ -22,16 +23,18 @@ func dashboardCommand() *cobra.Command {
 			}
 
 			// Login unless already logged in.
-			if token, _ := auth.LoadTokenFromUserCache(); token == nil {
-				l := &auth.LoginExecutor{
-					Oauth2AuthUrl:  env.LoginAuthURL,
-					Oauth2TokenUrl: env.LoginTokenURL,
-					Oauth2ClientId: env.LoginClientID,
-					CompletionUrl:  env.LoginCompletionURL,
-					SaveTokenFunc:  auth.SaveTokenToUserCache,
-					OpenURLFunc:    browser.OpenURL,
-					Scout:          client.NewScout("cli"),
-				}
+			if token, _ := cache.LoadTokenFromUserCache(); token == nil {
+				l := auth.NewLoginExecutor(
+					env.LoginAuthURL,
+					env.LoginTokenURL,
+					env.LoginClientID,
+					env.LoginCompletionURL,
+					env.UserInfoUrl,
+					cache.SaveTokenToUserCache,
+					cache.SaveUserInfoToUserCache,
+					browser.OpenURL,
+					client.NewScout("cli"),
+				)
 				err = l.LoginFlow(cmd, args)
 			} else {
 				// The LoginFlow actually takes the user to the dashboard. Hence the else here.

@@ -17,7 +17,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/client/auth"
+	"github.com/datawire/telepresence2/pkg/client/cache"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
@@ -118,7 +118,7 @@ func (tm *trafficManager) start(c context.Context) error {
 }
 
 func (tm *trafficManager) bearerToken() string {
-	token, err := auth.LoadTokenFromUserCache()
+	token, err := cache.LoadTokenFromUserCache()
 	if err != nil {
 		return ""
 	}
