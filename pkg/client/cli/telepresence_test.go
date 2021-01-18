@@ -295,7 +295,7 @@ func (cs *connectedSuite) TestC_ProxiesOutboundTraffic() {
 				out, _ := output("curl", "-s", svc)
 				return strings.Contains(out, expectedOutput)
 			},
-			5*time.Second,        // waitfor
+			15*time.Second,       // waitfor
 			500*time.Millisecond, // polling interval
 			`output from command "curl -s %s" contains %q`, svc, expectedOutput,
 		)
@@ -375,8 +375,8 @@ func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
 				out, _ := output("curl", "-s", svc)
 				return out == expectedOutput
 			},
-			5*time.Second,       // waitFor
-			50*time.Millisecond, // polling interval
+			15*time.Second,       // waitFor
+			500*time.Millisecond, // polling interval
 			`output from command "curl -s %s" equals %q`, svc, expectedOutput,
 		)
 	}
