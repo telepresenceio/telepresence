@@ -23,7 +23,7 @@ func LoadUserInfoFromUserCache() (*UserInfo, error) {
 	var userInfo UserInfo
 	err := loadFromUserCache(&userInfo, userInfoFile)
 	if err != nil {
-	    return nil, err
+		return nil, err
 	}
 	return &userInfo, nil
 }

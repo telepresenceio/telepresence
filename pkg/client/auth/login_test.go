@@ -36,11 +36,11 @@ func (m *MockSaveTokenWrapper) SaveToken(token *oauth2.Token) error {
 }
 
 type MockSaveUserInfoWrapper struct {
-	CallArguments []cache.UserInfo
+	CallArguments []*cache.UserInfo
 	Err           error
 }
 
-func (m *MockSaveUserInfoWrapper) SaveUserInfo(userInfo cache.UserInfo) error {
+func (m *MockSaveUserInfoWrapper) SaveUserInfo(userInfo *cache.UserInfo) error {
 	m.CallArguments = append(m.CallArguments, userInfo)
 	return m.Err
 }
@@ -159,7 +159,7 @@ func TestLoginFlow(t *testing.T) {
 	const mockCompletionUrl = "http://example.com/mock-completion"
 
 	setupWithCacheFuncs := func(t *testing.T, saveTokenFunc func(*oauth2.Token) error,
-		saveUserInfoFunc func(cache.UserInfo) error) *fixture {
+		saveUserInfoFunc func(*cache.UserInfo) error) *fixture {
 		mockSaveTokenWrapper := &MockSaveTokenWrapper{}
 		saveToken := saveTokenFunc
 		if saveToken == nil {
