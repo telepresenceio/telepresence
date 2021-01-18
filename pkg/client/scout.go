@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/datawire/ambassador/pkg/metriton"
+	"github.com/datawire/telepresence2/pkg/client/cache"
 )
 
 // Scout is a Metriton reported
@@ -68,11 +69,15 @@ func (s *Scout) Report(action string, meta ...ScoutMeta) error {
 		"action": action,
 		"index":  s.index,
 	}
+	userInfo, err := cache.LoadUserInfoFromUserCache()
+	if err == nil && userInfo.Id != "" {
+		metadata["user_id"] = userInfo.Id
+	}
 	for _, metaItem := range meta {
 		metadata[metaItem.Key] = metaItem.Value
 	}
 
-	_, err := s.Reporter.Report(context.TODO(), metadata)
+	_, err = s.Reporter.Report(context.TODO(), metadata)
 	if err != nil {
 		return errors.Wrap(err, "scout report")
 	}

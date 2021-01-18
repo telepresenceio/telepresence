@@ -3,12 +3,12 @@ package auth
 import (
 	"errors"
 	"os"
-	"path/filepath"
 
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/client/cache"
 )
 
 // Command returns the telepresence sub-command "auth"
@@ -22,15 +22,17 @@ func LoginCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			l := &LoginExecutor{
-				Oauth2AuthUrl:  env.LoginAuthURL,
-				Oauth2TokenUrl: env.LoginTokenURL,
-				Oauth2ClientId: env.LoginClientID,
-				CompletionUrl:  env.LoginCompletionURL,
-				SaveTokenFunc:  SaveTokenToUserCache,
-				OpenURLFunc:    browser.OpenURL,
-				Scout:          client.NewScout("cli"),
-			}
+			l := NewLoginExecutor(
+				env.LoginAuthURL,
+				env.LoginTokenURL,
+				env.LoginClientID,
+				env.LoginCompletionURL,
+				env.UserInfoURL,
+				cache.SaveTokenToUserCache,
+				cache.SaveUserInfoToUserCache,
+				browser.OpenURL,
+				client.NewScout("cli"),
+			)
 			return l.LoginFlow(cmd, args)
 		},
 	}
@@ -43,17 +45,15 @@ func LogoutCommand() *cobra.Command {
 		Short: "Logout from Ambassador Cloud",
 		Long:  "Logout from Ambassador Cloud",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cacheDir, err := client.CacheDir()
+			_ = cache.DeleteUserInfoFromUserCache()
+			err := cache.DeleteTokenFromUserCache()
 			if err != nil {
-				return err
-			}
-			cacheFile := filepath.Join(cacheDir, tokenFile)
-			if _, err = os.Stat(cacheFile); err != nil {
 				if os.IsNotExist(err) {
 					err = errors.New("not logged in")
 				}
 				return err
 			}
-			return os.Remove(cacheFile)
-		}}
+			return nil
+		},
+	}
 }

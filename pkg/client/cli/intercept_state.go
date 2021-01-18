@@ -17,7 +17,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/client/auth"
+	"github.com/datawire/telepresence2/pkg/client/cache"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
@@ -157,7 +157,7 @@ func (is *interceptState) EnsureState() (bool, error) {
 	if is.name == "" {
 		is.name = is.agentName
 	}
-	token, _ := auth.LoadTokenFromUserCache()
+	token, _ := cache.LoadTokenFromUserCache()
 	isLoggedIn := token != nil
 	// [REDACTED]
 	if isLoggedIn {
@@ -338,7 +338,7 @@ func ingressInfoEqual(a, b *manager.IngressInfo) bool {
 }
 
 func ingressInfoCacheFile() string {
-	cache, err := client.CacheDir()
+	cache, err := cache.CacheDir()
 	if err != nil {
 		panic(err)
 	}

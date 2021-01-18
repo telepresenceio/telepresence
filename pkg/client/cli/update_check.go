@@ -17,6 +17,7 @@ import (
 
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/client/cache"
 )
 
 const checkDuration = 24 * time.Hour
@@ -30,7 +31,7 @@ type updateChecker struct {
 
 // newUpdateChecker returns a new update checker, possibly initialized from the users cache.
 func newUpdateChecker(url string) (*updateChecker, error) {
-	cache, err := client.CacheDir()
+	cache, err := cache.CacheDir()
 	if err != nil {
 		return nil, err
 	}
