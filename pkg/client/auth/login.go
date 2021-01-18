@@ -39,7 +39,7 @@ type loginExecutor struct {
 	Oauth2ClientId   string
 	UserInfoUrl      string
 	SaveTokenFunc    func(*oauth2.Token) error
-	SaveUserInfoFunc func(cache.UserInfo) error
+	SaveUserInfoFunc func(*cache.UserInfo) error
 	OpenURLFunc      func(string) error
 	Scout            *client.Scout
 }
@@ -56,9 +56,9 @@ func NewLoginExecutor(oauth2AuthUrl string,
 	completionUrl string,
 	userInfoUrl string,
 	saveTokenFunc func(*oauth2.Token) error,
-	saveUserInfoFunc func(cache.UserInfo) error,
+	saveUserInfoFunc func(*cache.UserInfo) error,
 	openURLFunc func(string) error,
-	scout *client.Scout) *loginExecutor {
+	scout *client.Scout) LoginExecutor {
 	return &loginExecutor{
 		Oauth2AuthUrl:    oauth2AuthUrl,
 		Oauth2TokenUrl:   oauth2TokenUrl,
@@ -186,7 +186,7 @@ func (l *loginExecutor) retrieveUserInfo(token *oauth2.Token) error {
 	if err != nil {
 		return err
 	}
-	return l.SaveUserInfoFunc(userInfo)
+	return l.SaveUserInfoFunc(&userInfo)
 }
 
 // safeContext is to solve an issue with the tests where the Context in

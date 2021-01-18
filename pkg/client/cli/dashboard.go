@@ -29,7 +29,7 @@ func dashboardCommand() *cobra.Command {
 					env.LoginTokenURL,
 					env.LoginClientID,
 					env.LoginCompletionURL,
-					env.UserInfoUrl,
+					env.UserInfoURL,
 					cache.SaveTokenToUserCache,
 					cache.SaveUserInfoToUserCache,
 					browser.OpenURL,
