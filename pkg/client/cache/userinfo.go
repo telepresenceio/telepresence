@@ -28,7 +28,8 @@ func LoadUserInfoFromUserCache() (*UserInfo, error) {
 	return &userInfo, nil
 }
 
-// DeleteUserInfoFromUserCache removes user info cache if existing or returns an error
+// DeleteUserInfoFromUserCache removes user info cache if existing or returns an error. An attempt
+// to remove a non existing cache is a no-op and the function returns nil.
 func DeleteUserInfoFromUserCache() error {
 	return deleteFromUserCache(userInfoFile)
 }
