@@ -73,6 +73,9 @@ func deleteFromUserCache(file string) error {
 	}
 	cacheFile := filepath.Join(cacheDir, file)
 	if _, err = os.Stat(cacheFile); err != nil {
+		if os.IsNotExist(err) {
+			err = nil
+		}
 		return err
 	}
 	return os.Remove(cacheFile)

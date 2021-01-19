@@ -4,6 +4,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	"github.com/datawire/telepresence2/pkg/client/cache"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
 )
 
@@ -31,7 +32,6 @@ func uninstallCommand() *cobra.Command {
 
 // uninstall
 func (u *uninstallInfo) uninstall(cmd *cobra.Command, args []string) error {
-	doQuit := false
 	if u.agent && u.allAgents || u.agent && u.everything || u.allAgents && u.everything {
 		return errors.New("--agent, --all-agents, or --everything are mutually exclusive")
 	}
@@ -40,6 +40,7 @@ func (u *uninstallInfo) uninstall(cmd *cobra.Command, args []string) error {
 	}
 
 	u.cmd = cmd
+	doQuit := false
 	err := u.withConnector(true, func(cs *connectorState) error {
 		ur := &connector.UninstallRequest{
 			UninstallType: 0,
@@ -71,12 +72,42 @@ func (u *uninstallInfo) uninstall(cmd *cobra.Command, args []string) error {
 			return errors.New(r.ErrorText)
 		}
 
-		// No need to keep daemons once everything is uninstalled
-		doQuit = ur.UninstallType == connector.UninstallRequest_EVERYTHING
+		if ur.UninstallType == connector.UninstallRequest_EVERYTHING {
+			// No need to keep daemons once everything is uninstalled
+			doQuit = true
+			return cs.removeClusterFromUserCache()
+		}
 		return nil
 	})
-	if doQuit {
+	if err == nil && doQuit {
 		err = quit(cmd, nil)
 	}
 	return err
+}
+
+func (cs *connectorState) removeClusterFromUserCache() (err error) {
+	// Login token is affined to the traffic-manager that just got removed. The user-info
+	// in turn, is info obtained using that token so both are removed here as a
+	// consequence of removing the manager.
+	if err = cache.DeleteTokenFromUserCache(); err != nil {
+		return err
+	}
+	if err = cache.DeleteUserInfoFromUserCache(); err != nil {
+		return err
+	}
+
+	// Delete the ingress info for the cluster if it exists.
+	ingresses, err := cache.LoadIngressesFromUserCache()
+	if err != nil {
+		return err
+	}
+
+	key := cs.info.ClusterServer + "/" + cs.info.ClusterContext
+	if _, ok := ingresses[key]; ok {
+		delete(ingresses, key)
+		if err = cache.SaveIngressesToUserCache(ingresses); err != nil {
+			return err
+		}
+	}
+	return nil
 }

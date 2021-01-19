@@ -123,6 +123,9 @@ func (ts *telepresenceSuite) SetupSuite() {
 
 	// Ensure that no telepresence is running when the tests start
 	_, _ = telepresence("quit")
+
+	// Also ensure that telepresence is not logged in
+	_, _ = telepresence("logout")
 }
 
 func (ts *telepresenceSuite) TearDownSuite() {
