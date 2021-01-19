@@ -70,7 +70,7 @@ func updateCheck(cmd *cobra.Command, _ []string) error {
 		return uc.storeNextCheck(time.Hour)
 	}
 	if update != nil {
-		fmt.Fprintf(cmd.OutOrStdout(), "An update of %s from version %s to %s is available. Please visit https://%s/docs/latest/ for more info.\n",
+		fmt.Fprintf(cmd.OutOrStdout(), "An update of %s from version %s to %s is available. Please visit https://%s/docs/latest/telepresence/howtos/upgrading/ for more info.\n",
 			binaryName, &ourVersion, update,
 			env.SystemAHost)
 	}
