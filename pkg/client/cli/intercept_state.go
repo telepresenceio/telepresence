@@ -25,14 +25,13 @@ type interceptInfo struct {
 	agentName string
 	port      int
 	// [REDACTED]
-	displayBanner bool
-	previewDomain bool
+	previewEnabled bool
+	previewSpec    manager.PreviewSpec
 }
 
 type interceptState struct {
 	*interceptInfo
-	ingressInfo *manager.IngressInfo
-	cs          *connectorState
+	cs *connectorState
 }
 
 func interceptCommand() *cobra.Command {
@@ -48,14 +47,14 @@ func interceptCommand() *cobra.Command {
 
 	flags.StringVarP(&ii.agentName, "deployment", "d", "", "Name of deployment to intercept, if different from <name>")
 	flags.IntVarP(&ii.port, "port", "p", 8080, "Local port to forward to")
-	flags.BoolVarP(&ii.displayBanner, "banner", "b", true, "Display banner on preview page")
 
 	// [REDACTED]
 
-	flags.BoolVar(&ii.previewDomain, "preview-domain", isLoggedIn(), ``+
+	flags.BoolVarP(&ii.previewEnabled, "preview-url", "u", isLoggedIn(), ``+
 		`Generate an edgestack.me preview domain for this intercept. `+
 		`(default "true" if you are logged in with 'telepresence login', default "false" otherwise)`,
 	)
+	addPreviewFlags("preview-url-", flags, &ii.previewSpec)
 
 	return cmd
 }
@@ -168,12 +167,12 @@ func (is *interceptState) EnsureState() (bool, error) {
 		is.name = is.agentName
 	}
 	// [REDACTED]
-	if is.previewDomain {
+	if is.previewEnabled && is.previewSpec.Ingress == nil {
 		ingress, err := is.cs.selectIngress(is.cmd.InOrStdin(), is.cmd.OutOrStdout())
 		if err != nil {
 			return false, err
 		}
-		is.ingressInfo = ingress
+		is.previewSpec.Ingress = ingress
 	}
 
 	// Turn that in to a spec
@@ -197,15 +196,12 @@ func (is *interceptState) EnsureState() (bool, error) {
 	case connector.InterceptError_UNSPECIFIED:
 		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", spec.Agent)
 		var intercept *manager.InterceptInfo
-		if is.previewDomain {
+		if is.previewEnabled {
 			intercept, err = is.cs.managerClient.UpdateIntercept(is.cmd.Context(), &manager.UpdateInterceptRequest{
 				Session: is.cs.info.SessionInfo,
 				Name:    spec.Name,
 				PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
-					AddPreviewDomain: &manager.PreviewSpec{
-						Ingress:       is.ingressInfo,
-						DisplayBanner: is.displayBanner,
-					},
+					AddPreviewDomain: &is.previewSpec,
 				},
 			})
 			if err != nil {
