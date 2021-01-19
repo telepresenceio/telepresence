@@ -77,6 +77,8 @@ message InterceptSpec {
 
   string target_host = 6;
   int32 target_port = 7;
+
+  bool display_banner = 8;
 }
 
 enum InterceptDispositionType {
