@@ -6,9 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -318,7 +315,7 @@ func askForUseTLS(cachedUseTLS bool, reader *bufio.Reader, out io.Writer) (bool,
 }
 
 func (cs *connectorState) selectIngress(in io.Reader, out io.Writer) (*manager.IngressInfo, error) {
-	infos, err := readIngressCache()
+	infos, err := cache.LoadIngressesFromUserCache()
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +346,7 @@ func (cs *connectorState) selectIngress(in io.Reader, out io.Writer) (*manager.I
 
 	if !ingressInfoEqual(cachedIngressInfo, reply) {
 		infos[key] = reply
-		if err = writeIngressInfoCache(infos); err != nil {
+		if err = cache.SaveIngressesToUserCache(infos); err != nil {
 			return nil, err
 		}
 	}
@@ -358,36 +355,4 @@ func (cs *connectorState) selectIngress(in io.Reader, out io.Writer) (*manager.I
 
 func ingressInfoEqual(a, b *manager.IngressInfo) bool {
 	return a.Host == b.Host && a.Port == b.Port && a.UseTls == b.UseTls
-}
-
-func ingressInfoCacheFile() string {
-	cache, err := cache.CacheDir()
-	if err != nil {
-		panic(err)
-	}
-	return filepath.Join(cache, "ingresses.json")
-}
-
-func readIngressCache() (map[string]*manager.IngressInfo, error) {
-	js, err := ioutil.ReadFile(ingressInfoCacheFile())
-	var infos map[string]*manager.IngressInfo
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, err
-		}
-		return make(map[string]*manager.IngressInfo), nil
-	}
-	if err = json.Unmarshal(js, &infos); err != nil {
-		return nil, err
-	}
-	return infos, nil
-}
-
-func writeIngressInfoCache(infos map[string]*manager.IngressInfo) error {
-	js, err := json.Marshal(infos)
-	if err != nil {
-		// Shouldn't happen really
-		return err
-	}
-	return ioutil.WriteFile(ingressInfoCacheFile(), js, 0600)
 }
