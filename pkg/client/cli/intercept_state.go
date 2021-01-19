@@ -178,12 +178,11 @@ func (is *interceptState) EnsureState() (bool, error) {
 
 	// Turn that in to a spec
 	spec := &manager.InterceptSpec{
-		Name:          is.name,
-		Agent:         is.agentName,
-		DisplayBanner: is.displayBanner,
-		Mechanism:     "tcp",
-		TargetHost:    "127.0.0.1",
-		TargetPort:    int32(is.port),
+		Name:       is.name,
+		Agent:      is.agentName,
+		Mechanism:  "tcp",
+		TargetHost: "127.0.0.1",
+		TargetPort: int32(is.port),
 	}
 	// [REDACTED]
 
@@ -203,7 +202,10 @@ func (is *interceptState) EnsureState() (bool, error) {
 				Session: is.cs.info.SessionInfo,
 				Name:    spec.Name,
 				PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
-					AddPreviewDomain: is.ingressInfo,
+					AddPreviewDomain: &manager.PreviewSpec{
+						Ingress:       is.ingressInfo,
+						DisplayBanner: is.displayBanner,
+					},
 				},
 			})
 			if err != nil {

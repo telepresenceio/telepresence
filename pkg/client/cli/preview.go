@@ -31,7 +31,10 @@ func previewCommand() *cobra.Command {
 					Session: cs.info.SessionInfo,
 					Name:    args[0],
 					PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
-						AddPreviewDomain: ingress,
+						AddPreviewDomain: &manager.PreviewSpec{
+							Ingress:       ingress,
+							DisplayBanner: true, // FIXME(lukeshu): Don't hard-code this
+						},
 					},
 				})
 				if err != nil {

@@ -272,7 +272,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 				var resp *systema.CreateDomainResponse
 				resp, err = sa.CreateDomain(ctx, &systema.CreateDomainRequest{
 					InterceptId:   intercept.Id,
-					DisplayBanner: intercept.Spec.DisplayBanner,
+					DisplayBanner: action.AddPreviewDomain.DisplayBanner,
 				})
 				if err != nil {
 					err = errors.Wrap(err, "systema: create domain")
@@ -283,7 +283,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 
 			// Apply that to the intercept.
 			intercept.PreviewDomain = domain
-			intercept.PreviewIngress = action.AddPreviewDomain
+			intercept.PreviewSpec = action.AddPreviewDomain
 		})
 		if err != nil || intercept == nil || domain == "" || intercept.PreviewDomain != domain {
 			// Oh no, something went wrong.  Clean up.
