@@ -49,6 +49,7 @@ type ManagerClient interface {
 	CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error)
 	// RemoveIntercept lets a client remove an intercept.
 	RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest2, opts ...grpc.CallOption) (*empty.Empty, error)
+	UpdateIntercept(ctx context.Context, in *UpdateInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error)
 	// ReviewIntercept lets an agent approve or reject an intercept by
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
@@ -190,6 +191,15 @@ func (c *managerClient) RemoveIntercept(ctx context.Context, in *RemoveIntercept
 	return out, nil
 }
 
+func (c *managerClient) UpdateIntercept(ctx context.Context, in *UpdateInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error) {
+	out := new(InterceptInfo)
+	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/UpdateIntercept", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *managerClient) ReviewIntercept(ctx context.Context, in *ReviewInterceptRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.manager.Manager/ReviewIntercept", in, out, opts...)
@@ -234,6 +244,7 @@ type ManagerServer interface {
 	CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptInfo, error)
 	// RemoveIntercept lets a client remove an intercept.
 	RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*empty.Empty, error)
+	UpdateIntercept(context.Context, *UpdateInterceptRequest) (*InterceptInfo, error)
 	// ReviewIntercept lets an agent approve or reject an intercept by
 	// changing the disposition from "WATING" to "ACTIVE" or to an
 	// error, and setting a human-readable status message.
@@ -271,6 +282,9 @@ func (UnimplementedManagerServer) CreateIntercept(context.Context, *CreateInterc
 }
 func (UnimplementedManagerServer) RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
+}
+func (UnimplementedManagerServer) UpdateIntercept(context.Context, *UpdateInterceptRequest) (*InterceptInfo, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateIntercept not implemented")
 }
 func (UnimplementedManagerServer) ReviewIntercept(context.Context, *ReviewInterceptRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReviewIntercept not implemented")
@@ -456,6 +470,24 @@ func _Manager_RemoveIntercept_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Manager_UpdateIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateInterceptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).UpdateIntercept(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/telepresence.manager.Manager/UpdateIntercept",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).UpdateIntercept(ctx, req.(*UpdateInterceptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Manager_ReviewIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ReviewInterceptRequest)
 	if err := dec(in); err != nil {
@@ -505,6 +537,10 @@ var _Manager_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveIntercept",
 			Handler:    _Manager_RemoveIntercept_Handler,
+		},
+		{
+			MethodName: "UpdateIntercept",
+			Handler:    _Manager_UpdateIntercept_Handler,
 		},
 		{
 			MethodName: "ReviewIntercept",

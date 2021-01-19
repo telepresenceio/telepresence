@@ -22,6 +22,8 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/datawire/ambassador/pkg/dtest"
+	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/client/cli"
 	"github.com/datawire/telepresence2/pkg/version"
@@ -295,7 +297,7 @@ func (cs *connectedSuite) TestC_ProxiesOutboundTraffic() {
 				out, _ := output("curl", "-s", svc)
 				return strings.Contains(out, expectedOutput)
 			},
-			5*time.Second,        // waitfor
+			15*time.Second,       // waitfor
 			500*time.Millisecond, // polling interval
 			`output from command "curl -s %s" contains %q`, svc, expectedOutput,
 		)
@@ -375,8 +377,8 @@ func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
 				out, _ := output("curl", "-s", svc)
 				return out == expectedOutput
 			},
-			5*time.Second,       // waitFor
-			50*time.Millisecond, // polling interval
+			15*time.Second,       // waitFor
+			500*time.Millisecond, // polling interval
 			`output from command "curl -s %s" equals %q`, svc, expectedOutput,
 		)
 	}
@@ -434,21 +436,15 @@ func (ts *telepresenceSuite) kubectlOut(args ...string) (string, error) {
 }
 
 func (ts *telepresenceSuite) publishManager() error {
-	cmd := exec.Command("ko", "publish", "--local", "./cmd/traffic")
+	ctx := dlog.NewTestContext(ts.T(), true)
+	cmd := dexec.CommandContext(ctx, "make", "push-image")
 	cmd.Env = append(os.Environ(),
-		fmt.Sprintf(`GOFLAGS=-ldflags=-X=github.com/datawire/telepresence2/pkg/version.Version=%s`,
-			ts.testVersion))
-	out, err := cmd.Output()
-	if err != nil {
+		"TELEPRESENCE_VERSION="+ts.testVersion,
+		"TELEPRESENCE_REGISTRY="+dtest.DockerRegistry())
+	if err := cmd.Run(); err != nil {
 		return client.RunError(err)
 	}
-	imageName := strings.TrimSpace(string(out))
-	tag := fmt.Sprintf("%s/tel2:%s", dtest.DockerRegistry(), ts.testVersion)
-	err = run("docker", "tag", imageName, tag)
-	if err != nil {
-		return err
-	}
-	return run("docker", "push", tag)
+	return nil
 }
 
 func (ts *telepresenceSuite) buildExecutable() (string, error) {

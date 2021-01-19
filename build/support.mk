@@ -1,10 +1,12 @@
 # Additional targets to help developers
 
+TELEPRESENCE_BASE_VERSION := $(firstword $(shell shasum base-image/Dockerfile))
 .PHONY: base-image
-base-image: ## (ZSupport) Rebuild the base image
-	cd base-image && docker build . -t $(TELEPRESENCE_REGISTRY)/tel2-base:$(shell date +%Y%m%d)
-	@echo
-	@echo "To use this base image, push the image and update .ko.yaml"
+base-image: base-image/Dockerfile ## (ZSupport) Rebuild the base image
+	if ! docker pull $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION); then \
+	  cd base-image && docker build --pull -t $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION) . && \
+	  docker push $(TELEPRESENCE_REGISTRY)/tel2-base:$(TELEPRESENCE_BASE_VERSION); \
+	fi
 
 .PHONY: help
 help:  ## (ZSupport) Show this message

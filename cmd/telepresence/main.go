@@ -2,24 +2,17 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/datawire/telepresence2/pkg/client/cli"
 )
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		cancel()
-	}()
-
-	if err := cli.Command().ExecuteContext(ctx); err != nil {
+	ctx := context.Background()
+	cmd := cli.Command()
+	if err := cmd.ExecuteContext(ctx); err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
 		os.Exit(1)
 	}
 }

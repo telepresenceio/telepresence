@@ -29,8 +29,8 @@ func newTrafficManagerInstaller(kc *k8sCluster) (*installer, error) {
 	return &installer{k8sCluster: kc}, nil
 }
 
-const sshdPort = 8022
-const apiPort = 8081
+const ManagerPortSSH = 8022
+const ManagerPortHTTP = 8081
 const managerAppName = "traffic-manager"
 const telName = "manager"
 const domainPrefix = "telepresence.getambassador.io/"
@@ -77,7 +77,7 @@ func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error)
 			Ports: []kates.ServicePort{
 				{
 					Name: "sshd",
-					Port: sshdPort,
+					Port: ManagerPortSSH,
 					TargetPort: kates.IntOrString{
 						Type:   intstr.String,
 						StrVal: "sshd",
@@ -85,7 +85,7 @@ func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error)
 				},
 				{
 					Name: "api",
-					Port: apiPort,
+					Port: ManagerPortHTTP,
 					TargetPort: kates.IntOrString{
 						Type:   intstr.String,
 						StrVal: "api",
@@ -603,11 +603,11 @@ func (ki *installer) managerDeployment(env client.Env) *kates.Deployment {
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "sshd",
-									ContainerPort: sshdPort,
+									ContainerPort: ManagerPortSSH,
 								},
 								{
 									Name:          "api",
-									ContainerPort: apiPort,
+									ContainerPort: ManagerPortHTTP,
 								},
 							}}},
 					RestartPolicy: corev1.RestartPolicyAlways,
@@ -617,13 +617,12 @@ func (ki *installer) managerDeployment(env client.Env) *kates.Deployment {
 	}
 }
 
-func (ki *installer) ensureManager(c context.Context, env client.Env) (int32, int32, error) {
-	svc := ki.findSvc(managerAppName)
+func (ki *installer) ensureManager(c context.Context, env client.Env) error {
 	var err error
-	if svc == nil {
-		svc, err = ki.createManagerSvc(c)
+	if svc := ki.findSvc(managerAppName); svc == nil {
+		_, err = ki.createManagerSvc(c)
 		if err != nil {
-			return 0, 0, err
+			return err
 		}
 	}
 
@@ -648,23 +647,8 @@ func (ki *installer) ensureManager(c context.Context, env client.Env) (int32, in
 		}
 	}
 	if err != nil {
-		return 0, 0, err
+		return err
 	}
 
-	var sshdPort, apiPort int32
-	for _, port := range svc.Spec.Ports {
-		switch port.Name {
-		case "sshd":
-			sshdPort = port.Port
-		case "api":
-			apiPort = port.Port
-		}
-	}
-	if sshdPort == 0 {
-		return 0, 0, errors.New("traffic-manager has no sshd port configured")
-	}
-	if apiPort == 0 {
-		return 0, 0, errors.New("traffic-manager has no api port configured")
-	}
-	return sshdPort, apiPort, nil
+	return nil
 }

@@ -52,7 +52,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		default:
 			filter = connector.ListRequest_EVERYTHING
 		}
-		r, err = cs.grpc.List(cmd.Context(), &connector.ListRequest{Filter: filter})
+		r, err = cs.connectorClient.List(cmd.Context(), &connector.ListRequest{Filter: filter})
 		return err
 	})
 	if err != nil {

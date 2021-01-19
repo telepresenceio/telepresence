@@ -19,7 +19,8 @@ RUN \
   ssh-keygen -A && \
   echo -e "ClientAliveInterval 1\nGatewayPorts yes\nPermitEmptyPasswords yes\nPort 8022\nClientAliveCountMax 10\nPermitRootLogin yes\n" >> /etc/ssh/sshd_config && \
   chmod -R g+r /etc/ssh && \
-  echo "telepresence::1000:0:Telepresence User:/usr/src/app:/bin/ash" >> /etc/passwd
+  mkdir /home/telepresence && \
+  echo "telepresence::1000:0:Telepresence User:/home/telepresence:/bin/ash" >> /etc/passwd
 
 # Make symlinks so we can use these commands directly in k8s.
 RUN \

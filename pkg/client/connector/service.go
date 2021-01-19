@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -19,6 +21,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dutil"
 	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/client/cache"
 	"github.com/datawire/telepresence2/pkg/rpc/common"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
@@ -31,8 +34,15 @@ requires that a daemon is already running.
 Launch the Telepresence Connector:
     telepresence connect
 
-The Connector uses the Daemon's log so its output can be found in
-    ` + client.Logfile + `
+Examine the Connector's log output in
+    ` +
+	func() string {
+		cachedir, err := cache.UserCacheDir()
+		if err != nil {
+			cachedir = "${user_cache_dir}"
+		}
+		return filepath.Join(cachedir, "telepresence", "connector.log")
+	}() + `
 to troubleshoot problems.
 `
 
@@ -41,10 +51,10 @@ type service struct {
 	rpc.UnsafeConnectorServer
 	env          client.Env
 	daemon       daemon.DaemonClient
-	daemonLogger daemonLogger
 	cluster      *k8sCluster
 	bridge       *bridge
 	trafficMgr   *trafficManager
+	managerProxy mgrProxy
 	ctx          context.Context
 	cancel       func()
 }
@@ -164,11 +174,11 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 	return &rpc.InterceptResult{}, err
 }
 
-func (s *service) List(_ context.Context, lr *rpc.ListRequest) (*rpc.DeploymentInfoSnapshot, error) {
-	if s.trafficMgr.grpc == nil {
+func (s *service) List(ctx context.Context, lr *rpc.ListRequest) (*rpc.DeploymentInfoSnapshot, error) {
+	if s.trafficMgr.managerClient == nil {
 		return &rpc.DeploymentInfoSnapshot{}, nil
 	}
-	return s.trafficMgr.deploymentInfoSnapshot(lr.Filter), nil
+	return s.trafficMgr.deploymentInfoSnapshot(ctx, lr.Filter), nil
 }
 
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
@@ -182,16 +192,6 @@ func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) 
 	return &empty.Empty{}, nil
 }
 
-// daemonLogger is an io.Writer implementation that sends data to the daemon logger
-type daemonLogger struct {
-	stream daemon.Daemon_LoggerClient
-}
-
-func (d *daemonLogger) Write(data []byte) (n int, err error) {
-	err = d.stream.Send(&daemon.LogMessage{Text: data})
-	return len(data), err
-}
-
 // connect the connector to a cluster
 func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
 	r := &rpc.ConnectInfo{}
@@ -203,7 +203,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 			r.BridgeOk = s.bridge.check(c)
 		}
 		if s.trafficMgr != nil {
-			s.trafficMgr.setStatus(r)
+			s.trafficMgr.setStatus(c, r)
 		}
 		r.IngressInfos = s.cluster.detectIngressBehavior()
 	}
@@ -276,6 +276,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		s.cancel()
 		return r
 	}
+	s.managerProxy.SetClient(tmgr.managerClient)
 
 	dlog.Infof(c, "Starting traffic-manager bridge in context %s, namespace %s", cluster.Context, cluster.Namespace)
 	br := newBridge(cluster.Namespace, s.daemon, tmgr.sshPort)
@@ -294,32 +295,71 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	return r
 }
 
-// setUpLogging connects to the daemon logger
-func (s *service) setUpLogging(c context.Context) (context.Context, error) {
-	var err error
-	s.daemonLogger.stream, err = s.daemon.Logger(c)
+func setupLogging(ctx context.Context) (context.Context, error) {
+	// Whenever we start, log to "connector.log", but first rename any existing "connector.log"
+	// to "connector.log.old"; so the last 2 logs are always available (a poor-man's logrotate).
+	// This is what X11 does with "$XDG_DATA_HOME/xorg/Xorg.${display_number}.log".
+	//
+	// (Except we use XDG_CACHE_HOME not XDG_DATA_HOME, because it's always bothered me when
+	// things put logs in XDG_DATA_HOME -- XDG_DATA_HOME is for "user-specific data", and
+	// XDG_CACHE_HOME is for "user-specific non-essential (cached) data"[1]; logs are
+	// non-essential!  A good rule of thumb is: If you track your configuration with Git, and
+	// you wouldn't check a given file in to Git (possibly encrypting it before checking it in),
+	// then that file either needs to go in XDG_RUNTIME_DIR or XDG_CACHE_DIR; and NOT
+	// XDG_DATA_HOME or XDG_CONFIG_HOME.)
+	//
+	// [1]: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+	//
+	// In the past there was a mechanism where the connector RPC'd its logs over to the daemon,
+	// and the daemon put them in to a unified log file.  This turned out to make things hard to
+	// debug--it was hard to tell where a log line was coming from, and some things were
+	// missing.  Logs related to RPC problems nescessarily got dropped, and things that didn't
+	// play nice/go through our logger (things we haven't audited as thoroughly;
+	// *cough*client-go*cough*) ended up getting their logs dropped; and those are all cases
+	// where we *especially* want the logs.
+	cachedir, err := cache.CacheDir()
 	if err != nil {
-		return nil, err
+		return ctx, err
+	}
+	logfilename := filepath.Join(cachedir, "connector.log")
+	// Rename the existing .log to .log.old even if we're logging to stdout (below); this way
+	// you can't get confused and think that "connector.log" is the logs of the currently
+	// running connector even when it's not.
+	_ = os.Rename(logfilename, logfilename+".old")
+
+	logger := logrus.New()
+	logger.SetLevel(logrus.DebugLevel)
+	logger.Formatter = client.NewFormatter("15:04:05")
+
+	if !terminal.IsTerminal(int(os.Stdout.Fd())) {
+		logger.Formatter = client.NewFormatter("2006/01/02 15:04:05")
+
+		logfile, err := os.OpenFile(logfilename, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
+		if err != nil {
+			return ctx, err
+		}
+		defer logfile.Close()
+
+		// https://github.com/golang/go/issues/325
+		_ = syscall.Dup2(int(logfile.Fd()), int(os.Stdout.Fd()))
+		_ = syscall.Dup2(int(logfile.Fd()), int(os.Stderr.Fd()))
 	}
 
-	logger := logrus.StandardLogger()
-	logger.Out = &s.daemonLogger
-	loggingToTerminal := terminal.IsTerminal(int(os.Stdout.Fd()))
-	if loggingToTerminal {
-		logger.Formatter = client.NewFormatter("15:04:05")
-	} else {
-		logger.Formatter = client.NewFormatter("2006/01/02 15:04:05")
-	}
-	logger.Level = logrus.DebugLevel
-	return dlog.WithLogger(c, dlog.WrapLogrus(logger)), nil
+	return dlog.WithLogger(ctx, dlog.WrapLogrus(logger)), nil
 }
 
 // run is the main function when executing as the connector
 func run(c context.Context) error {
+	c, err := setupLogging(c)
+	if err != nil {
+		return err
+	}
+
 	env, err := client.LoadEnv(c)
 	if err != nil {
 		return err
 	}
+
 	if client.SocketExists(client.ConnectorSocketName) {
 		return fmt.Errorf("socket %s exists so connector already started or terminated ungracefully",
 			client.SocketURL(client.ConnectorSocketName))
@@ -342,15 +382,11 @@ func run(c context.Context) error {
 		daemon: daemon.NewDaemonClient(conn),
 	}
 
-	c, err = s.setUpLogging(c)
-	if err != nil {
-		return err
-	}
-
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true,
-		ShutdownOnNonError:   true})
+		ShutdownOnNonError:   true,
+	})
 
 	s.cancel = func() { g.Go("connector-quit", func(_ context.Context) error { return nil }) }
 
@@ -381,6 +417,7 @@ func run(c context.Context) error {
 
 		svc := grpc.NewServer()
 		rpc.RegisterConnectorServer(svc, s)
+		manager.RegisterManagerServer(svc, &s.managerProxy)
 
 		// Need a subgroup here because several services started by incoming gRPC calls run using
 		// dgroup.ParentGroup().Go()

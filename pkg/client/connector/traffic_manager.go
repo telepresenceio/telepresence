@@ -3,12 +3,8 @@ package connector
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/user"
-	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -17,36 +13,47 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/client/actions"
 	"github.com/datawire/telepresence2/pkg/client/cache"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
-// intercept represents a live intercept in the form of an ssh port forward.
-type intercept struct {
-	cancel     context.CancelFunc
-	targetHost string
-	targetPort int32
-}
-
 // trafficManager is a handle to access the Traffic Manager in a
 // cluster.
 type trafficManager struct {
-	env client.Env
-	*k8sCluster
-	aiListener     aiListener
-	iiListener     iiListener
-	grpc           manager.ManagerClient
-	startup        chan bool
-	apiPort        int32
-	sshPort        int32
-	userAndHost    string
-	installID      string               // telepresence's install ID
-	sessionInfo    *manager.SessionInfo // sessionInfo returned by the traffic-manager
-	apiErr         error                // holds the latest traffic-manager API error
-	installer      *installer
-	intercepts     map[string]*intercept
-	interceptsLock sync.Mutex
+	// local information
+	env         client.Env
+	installID   string // telepresence's install ID
+	userAndHost string // "laptop-username@laptop-hostname"
+
+	// k8s client
+	k8sClient *k8sCluster
+
+	// manager client
+	managerClient manager.ManagerClient
+	managerErr    error     // if managerClient is nil, why it's nil
+	startup       chan bool // gets closed when managerClient is fully initialized (or managerErr is set)
+
+	sessionInfo *manager.SessionInfo // sessionInfo returned by the traffic-manager
+
+	// apiPort is a local TCP port number that the userd uses internally that gets forwarded to
+	// the gRPC port on the manager Pod.
+	//
+	// FIXME(lukeshu): apiPort is exposed to the rest of the machine because we use separate
+	// `kubectl port-forward` process; it should go away by way of moving the port-forward to
+	// happen in the userd process.
+	apiPort int32
+
+	// sshPort is a local TCP port number that the userd uses internally that gets forwarded to
+	// the SSH port on the manager Pod.
+	//
+	// FIXME(lukeshu): sshPort is exposed to the rest of the machine because we use separate
+	// `kubectl port-forward` and `ssh -D` processes; it should go away by way of moving the
+	// port-forwarding to happen in the userd process.
+	sshPort int32
+
+	installer *installer
 }
 
 // newTrafficManager returns a TrafficManager resource for the given
@@ -76,14 +83,14 @@ func newTrafficManager(c context.Context, env client.Env, cluster *k8sCluster, i
 	}
 	tm := &trafficManager{
 		env:         env,
-		k8sCluster:  cluster,
+		k8sClient:   cluster,
 		installer:   ti,
 		apiPort:     localAPIPort,
 		sshPort:     localSSHPort,
 		installID:   installID,
 		startup:     make(chan bool),
 		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host),
-		intercepts:  make(map[string]*intercept)}
+	}
 
 	dgroup.ParentGroup(c).Go("traffic-manager", tm.start)
 	return tm, nil
@@ -91,27 +98,27 @@ func newTrafficManager(c context.Context, env client.Env, cluster *k8sCluster, i
 
 func (tm *trafficManager) waitUntilStarted() error {
 	<-tm.startup
-	return tm.apiErr
+	return tm.managerErr
 }
 
 func (tm *trafficManager) start(c context.Context) error {
-	remoteSSHPort, remoteAPIPort, err := tm.installer.ensureManager(c, tm.env)
+	err := tm.installer.ensureManager(c, tm.env)
 	if err != nil {
-		tm.apiErr = err
+		tm.managerErr = err
 		close(tm.startup)
 		return err
 	}
 	kpfArgs := []string{
 		"port-forward",
 		"svc/traffic-manager",
-		fmt.Sprintf("%d:%d", tm.sshPort, remoteSSHPort),
-		fmt.Sprintf("%d:%d", tm.apiPort, remoteAPIPort)}
+		fmt.Sprintf("%d:%d", tm.sshPort, ManagerPortSSH),
+		fmt.Sprintf("%d:%d", tm.apiPort, ManagerPortHTTP)}
 
 	err = client.Retry(c, "svc/traffic-manager port-forward", func(c context.Context) error {
 		return tm.installer.portForwardAndThen(c, kpfArgs, "init-grpc", tm.initGrpc)
 	}, 2*time.Second, 15*time.Second, time.Minute)
-	if err != nil && tm.apiErr == nil {
-		tm.apiErr = err
+	if err != nil && tm.managerErr == nil {
+		tm.managerErr = err
 		close(tm.startup)
 	}
 	return err
@@ -127,7 +134,7 @@ func (tm *trafficManager) bearerToken() string {
 
 func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 	defer func() {
-		tm.apiErr = err
+		tm.managerErr = err
 		close(tm.startup)
 	}()
 
@@ -161,65 +168,40 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 		conn.Close()
 		return err
 	}
-	tm.grpc = mClient
+	tm.managerClient = mClient
 	tm.sessionInfo = si
 
 	g := dgroup.ParentGroup(c)
 	g.Go("remain", tm.remain)
-	g.Go("watch-agents", tm.watchAgents)
-	g.Go("watch-intercepts", tm.watchIntercepts)
+	g.Go("intercept-port-forward", tm.workerPortForwardIntercepts)
 	return nil
-}
-
-func (tm *trafficManager) watchAgents(c context.Context) error {
-	ac, err := tm.grpc.WatchAgents(c, tm.session())
-	if err != nil {
-		return err
-	}
-	return tm.aiListener.start(c, ac)
-}
-
-func (tm *trafficManager) watchIntercepts(c context.Context) error {
-	ic, err := tm.grpc.WatchIntercepts(c, tm.session())
-	if err != nil {
-		return err
-	}
-	return tm.iiListener.start(c, ic)
 }
 
 func (tm *trafficManager) session() *manager.SessionInfo {
 	return tm.sessionInfo
 }
 
-func (tm *trafficManager) agentInfoSnapshot() *manager.AgentInfoSnapshot {
-	return tm.aiListener.getData()
-}
-
-func (tm *trafficManager) interceptInfoSnapshot() *manager.InterceptInfoSnapshot {
-	return tm.iiListener.getData()
-}
-
-func (tm *trafficManager) deploymentInfoSnapshot(filter rpc.ListRequest_Filter) *rpc.DeploymentInfoSnapshot {
+func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, filter rpc.ListRequest_Filter) *rpc.DeploymentInfoSnapshot {
 	var iMap map[string]*manager.InterceptInfo
-	if is := tm.interceptInfoSnapshot(); is != nil {
-		iMap = make(map[string]*manager.InterceptInfo, len(is.Intercepts))
-		for _, i := range is.Intercepts {
+	if is, _ := actions.ListMyIntercepts(ctx, tm.managerClient, tm.session().SessionId); is != nil {
+		iMap = make(map[string]*manager.InterceptInfo, len(is))
+		for _, i := range is {
 			iMap[i.Spec.Agent] = i
 		}
 	} else {
 		iMap = map[string]*manager.InterceptInfo{}
 	}
 	var aMap map[string]*manager.AgentInfo
-	if as := tm.agentInfoSnapshot(); as != nil {
-		aMap = make(map[string]*manager.AgentInfo, len(as.Agents))
-		for _, a := range as.Agents {
+	if as, _ := actions.ListAllAgents(ctx, tm.managerClient, tm.session().SessionId); as != nil {
+		aMap = make(map[string]*manager.AgentInfo, len(as))
+		for _, a := range as {
 			aMap[a.Name] = a
 		}
 	} else {
 		aMap = map[string]*manager.AgentInfo{}
 	}
 	depInfos := make([]*rpc.DeploymentInfo, 0)
-	for _, depName := range tm.deploymentNames() {
+	for _, depName := range tm.k8sClient.deploymentNames() {
 		iCept, ok := iMap[depName]
 		if !ok && filter <= rpc.ListRequest_INTERCEPTS {
 			continue
@@ -231,7 +213,7 @@ func (tm *trafficManager) deploymentInfoSnapshot(filter rpc.ListRequest_Filter) 
 		reason := ""
 		if agent == nil && iCept == nil {
 			// Check if interceptable
-			dep := tm.findDeployment(depName)
+			dep := tm.k8sClient.findDeployment(depName)
 			if dep == nil {
 				// Removed from snapshot since the name slice was obtained
 				continue
@@ -262,10 +244,10 @@ func (tm *trafficManager) remain(c context.Context) error {
 		select {
 		case <-c.Done():
 			_ = tm.clearIntercepts(context.Background())
-			_, err := tm.grpc.Depart(context.Background(), tm.session())
+			_, err := tm.managerClient.Depart(context.Background(), tm.session())
 			return err
 		case <-ticker.C:
-			_, err := tm.grpc.Remain(c, &manager.RemainRequest{
+			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
 				Session:     tm.session(),
 				BearerToken: tm.bearerToken(),
 			})
@@ -276,25 +258,25 @@ func (tm *trafficManager) remain(c context.Context) error {
 	}
 }
 
-func (tm *trafficManager) setStatus(r *rpc.ConnectInfo) {
-	if tm.grpc == nil {
+func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
+	if tm.managerClient == nil {
 		r.Intercepts = &manager.InterceptInfoSnapshot{}
 		r.Agents = &manager.AgentInfoSnapshot{}
-		if err := tm.apiErr; err != nil {
+		if err := tm.managerErr; err != nil {
 			r.ErrorText = err.Error()
 		}
 	} else {
-		r.Agents = tm.agentInfoSnapshot()
-		r.Intercepts = tm.interceptInfoSnapshot()
+		agents, _ := actions.ListAllAgents(ctx, tm.managerClient, tm.session().SessionId)
+		intercepts, _ := actions.ListMyIntercepts(ctx, tm.managerClient, tm.session().SessionId)
+		r.Agents = &manager.AgentInfoSnapshot{Agents: agents}
+		r.Intercepts = &manager.InterceptInfoSnapshot{Intercepts: intercepts}
+		r.SessionInfo = tm.session()
 	}
 }
 
 func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
 	result := &rpc.UninstallResult{}
-	var agents []*manager.AgentInfo
-	if ais := tm.agentInfoSnapshot(); ais != nil {
-		agents = ais.Agents
-	}
+	agents, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId)
 
 	_ = tm.clearIntercepts(c)
 	switch ur.UninstallType {
@@ -330,174 +312,4 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 		}
 	}
 	return result, nil
-}
-
-// A watcher listens on a grpc.ClientStream and notifies listeners when
-// something arrives.
-type watcher struct {
-	entryMaker    func() interface{} // returns an instance of the type produced by the stream
-	listeners     []listener
-	listenersLock sync.RWMutex
-	stream        grpc.ClientStream
-}
-
-// watch reads messages from the stream and passes them onto registered listeners. The
-// function terminates when the context used when the stream was acquired is cancelled,
-// when io.EOF is encountered, or an error occurs during read.
-func (r *watcher) watch(c context.Context) error {
-	dataChan := make(chan interface{}, 1000)
-	defer close(dataChan)
-
-	done := int32(0)
-	go func() {
-		for {
-			select {
-			case <-c.Done():
-				// ensure no more writes and drain channel to unblock writer
-				atomic.StoreInt32(&done, 1)
-				for range dataChan {
-				}
-				return
-			case data := <-dataChan:
-				if data == nil {
-					return
-				}
-
-				r.listenersLock.RLock()
-				lc := make([]listener, len(r.listeners))
-				copy(lc, r.listeners)
-				r.listenersLock.RUnlock()
-
-				for _, l := range lc {
-					l.onData(data)
-				}
-			}
-		}
-	}()
-
-	var err error
-	for {
-		data := r.entryMaker()
-		if err = r.stream.RecvMsg(data); err != nil {
-			if err == io.EOF || c.Err() != nil || strings.HasSuffix(err.Error(), " is closing") {
-				err = nil
-			}
-			break
-		}
-		if atomic.LoadInt32(&done) != 0 {
-			break
-		}
-		dataChan <- data
-		if atomic.LoadInt32(&done) != 0 {
-			break
-		}
-	}
-	return err
-}
-
-func (r *watcher) addListener(l listener) {
-	r.listenersLock.Lock()
-	r.listeners = append(r.listeners, l)
-	r.listenersLock.Unlock()
-}
-
-func (r *watcher) removeListener(l listener) {
-	r.listenersLock.Lock()
-	ls := r.listeners
-	for i, x := range ls {
-		if l == x {
-			last := len(ls) - 1
-			ls[i] = ls[last]
-			ls[last] = nil
-			r.listeners = ls[:last]
-			break
-		}
-	}
-	r.listenersLock.Unlock()
-}
-
-// A listener gets notified by a watcher when something arrives on the stream
-type listener interface {
-	onData(data interface{})
-}
-
-// An aiListener keeps track of the latest received AgentInfoSnapshot and provides the
-// watcher needed to register other listeners.
-type aiListener struct {
-	watcher
-	data atomic.Value
-}
-
-func (al *aiListener) getData() *manager.AgentInfoSnapshot {
-	v := al.data.Load()
-	if v == nil {
-		return nil
-	}
-	return v.(*manager.AgentInfoSnapshot)
-}
-
-func (al *aiListener) onData(d interface{}) {
-	al.data.Store(d)
-}
-
-func (al *aiListener) start(c context.Context, stream grpc.ClientStream) error {
-	al.stream = stream
-	al.listeners = []listener{al}
-	al.entryMaker = func() interface{} { return new(manager.AgentInfoSnapshot) }
-	return al.watch(c)
-}
-
-func (il *iiListener) onData(d interface{}) {
-	il.data.Store(d)
-}
-
-func (il *iiListener) start(c context.Context, stream grpc.ClientStream) error {
-	il.stream = stream
-	il.listeners = []listener{il}
-	il.entryMaker = func() interface{} { return new(manager.InterceptInfoSnapshot) }
-	return il.watch(c)
-}
-
-// iiActive is a listener that waits for an intercept with a given id to become active
-type iiActive struct {
-	id   string
-	done chan *manager.InterceptInfo
-}
-
-func (ia *iiActive) onData(d interface{}) {
-	if iis, ok := d.(*manager.InterceptInfoSnapshot); ok {
-		for _, ii := range iis.Intercepts {
-			if ii.Id == ia.id && ii.Disposition != manager.InterceptDispositionType_WAITING {
-				done := ia.done
-				ia.done = nil
-				if done != nil {
-					done <- ii
-					close(done)
-				}
-				break
-			}
-		}
-	}
-}
-
-// aiPresent is a listener that waits for an agent with a given name to be present
-type aiPresent struct {
-	name string
-	done chan *manager.AgentInfo
-}
-
-func (ap *aiPresent) onData(d interface{}) {
-	if ais, ok := d.(*manager.AgentInfoSnapshot); ok {
-		for _, ai := range ais.Agents {
-			if ai.Name == ap.name {
-				done := ap.done
-				ap.done = nil
-				if done != nil {
-					done <- ai
-					close(done)
-				}
-				break
-			}
-		}
-	}
 }

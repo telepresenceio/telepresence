@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/pkg/errors"
@@ -11,16 +12,28 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/client/cache"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/daemon"
+	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
 type connectorState struct {
 	*sessionInfo
-	conn   *grpc.ClientConn
-	daemon daemon.DaemonClient
-	grpc   connector.ConnectorClient
-	info   *connector.ConnectInfo
+	daemonClient daemon.DaemonClient
+
+	connectorConn   *grpc.ClientConn
+	connectorClient connector.ConnectorClient
+	managerClient   manager.ManagerClient
+
+	info *connector.ConnectInfo
+}
+
+func NewConnectorState(sessionInfo *sessionInfo, daemonClient daemon.DaemonClient) *connectorState {
+	return &connectorState{
+		sessionInfo:  sessionInfo,
+		daemonClient: daemonClient,
+	}
 }
 
 // Connect asks the daemon to connect to a cluster
@@ -30,7 +43,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 	}
 
 	for attempt := 0; ; attempt++ {
-		dr, err := cs.daemon.Status(cs.cmd.Context(), &empty.Empty{})
+		dr, err := cs.daemonClient.Status(cs.cmd.Context(), &empty.Empty{})
 		if err != nil {
 			return false, err
 		}
@@ -57,7 +70,11 @@ func (cs *connectorState) EnsureState() (bool, error) {
 	fmt.Fprintln(cs.cmd.OutOrStdout(), "Connecting to traffic manager...")
 
 	if err = client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
-		return false, fmt.Errorf("connector service did not start (see %s for more info)", client.Logfile)
+		cachedir, cerr := cache.CacheDir()
+		if cerr != nil {
+			return false, cerr
+		}
+		return false, fmt.Errorf("connector service did not start (see %q for more info)", filepath.Join(cachedir, "connector.log"))
 	}
 	err = cs.connect()
 	if err != nil {
@@ -73,7 +90,7 @@ func (cs *connectorState) setConnectInfo() error {
 			kubeFlagMap[flag.Name] = flag.Value.String()
 		}
 	})
-	r, err := cs.grpc.Connect(cs.cmd.Context(), &connector.ConnectRequest{
+	r, err := cs.connectorClient.Connect(cs.cmd.Context(), &connector.ConnectRequest{
 		Kubeflags: kubeFlagMap,
 		InstallId: client.NewScout("unused").Reporter.InstallID(),
 	})
@@ -107,7 +124,7 @@ func (cs *connectorState) DeactivateState() error {
 	if client.SocketExists(client.ConnectorSocketName) {
 		// using context.Background() here since it's likely that the
 		// command context has been cancelled.
-		_, err = cs.grpc.Quit(context.Background(), &empty.Empty{})
+		_, err = cs.connectorClient.Quit(context.Background(), &empty.Empty{})
 	}
 	cs.disconnect()
 	if err == nil {
@@ -130,22 +147,24 @@ func assertConnectorStarted() error {
 
 // isConnected returns true if a connection has been established to the daemon
 func (cs *connectorState) isConnected() bool {
-	return cs.conn != nil
+	return cs.connectorConn != nil
 }
 
 // connect opens the client connection to the daemon.
 func (cs *connectorState) connect() (err error) {
-	if cs.conn, err = client.DialSocket(cs.cmd.Context(), client.ConnectorSocketName); err == nil {
-		cs.grpc = connector.NewConnectorClient(cs.conn)
+	if cs.connectorConn, err = client.DialSocket(cs.cmd.Context(), client.ConnectorSocketName); err == nil {
+		cs.connectorClient = connector.NewConnectorClient(cs.connectorConn)
+		cs.managerClient = manager.NewManagerClient(cs.connectorConn)
 	}
 	return
 }
 
 // disconnect closes the client connection to the daemon.
 func (cs *connectorState) disconnect() {
-	conn := cs.conn
-	cs.conn = nil
-	cs.grpc = nil
+	conn := cs.connectorConn
+	cs.connectorConn = nil
+	cs.connectorClient = nil
+	cs.managerClient = nil
 	if conn != nil {
 		conn.Close()
 	}

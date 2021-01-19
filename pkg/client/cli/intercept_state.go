@@ -28,6 +28,7 @@ type interceptInfo struct {
 	agentName string
 	port      int
 	// [REDACTED]
+	previewDomain bool
 }
 
 type interceptState struct {
@@ -51,6 +52,11 @@ func interceptCommand() *cobra.Command {
 	flags.IntVarP(&ii.port, "port", "p", 8080, "Local port to forward to")
 
 	// [REDACTED]
+
+	flags.BoolVar(&ii.previewDomain, "preview-domain", isLoggedIn(), ``+
+		`Generate an edgestack.me preview domain for this intercept. `+
+		`(default "true" if you are logged in with 'telepresence login', default "false" otherwise)`,
+	)
 
 	return cmd
 }
@@ -152,33 +158,37 @@ Please specify one or more header matches using --match.`
 	}
 }
 
+func isLoggedIn() bool {
+	token, _ := cache.LoadTokenFromUserCache()
+	return token != nil
+}
+
 func (is *interceptState) EnsureState() (bool, error) {
 	// Fill defaults
 	if is.name == "" {
 		is.name = is.agentName
 	}
-	token, _ := cache.LoadTokenFromUserCache()
-	isLoggedIn := token != nil
 	// [REDACTED]
-	if isLoggedIn {
-		if err := is.selectIngress(); err != nil {
+	if is.previewDomain {
+		ingress, err := is.cs.selectIngress(is.cmd.InOrStdin(), is.cmd.OutOrStdout())
+		if err != nil {
 			return false, err
 		}
+		is.ingressInfo = ingress
 	}
 
 	// Turn that in to a spec
 	spec := &manager.InterceptSpec{
-		Name:        is.name,
-		Agent:       is.agentName,
-		IngressInfo: is.ingressInfo,
-		Mechanism:   "tcp",
-		TargetHost:  "127.0.0.1",
-		TargetPort:  int32(is.port),
+		Name:       is.name,
+		Agent:      is.agentName,
+		Mechanism:  "tcp",
+		TargetHost: "127.0.0.1",
+		TargetPort: int32(is.port),
 	}
 	// [REDACTED]
 
 	// Submit the spec
-	r, err := is.cs.grpc.CreateIntercept(is.cmd.Context(), &manager.CreateInterceptRequest{
+	r, err := is.cs.connectorClient.CreateIntercept(is.cmd.Context(), &manager.CreateInterceptRequest{
 		InterceptSpec: spec,
 	})
 	if err != nil {
@@ -186,8 +196,24 @@ func (is *interceptState) EnsureState() (bool, error) {
 	}
 	switch r.Error {
 	case connector.InterceptError_UNSPECIFIED:
-		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", is.agentName)
-		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(r.InterceptInfo, false))
+		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", spec.Agent)
+		var intercept *manager.InterceptInfo
+		if is.previewDomain {
+			intercept, err = is.cs.managerClient.UpdateIntercept(is.cmd.Context(), &manager.UpdateInterceptRequest{
+				Session: is.cs.info.SessionInfo,
+				Name:    spec.Name,
+				PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
+					AddPreviewDomain: is.ingressInfo,
+				},
+			})
+			if err != nil {
+				err = fmt.Errorf("creating preview domain: %w", err)
+				return true, err
+			}
+		} else {
+			intercept = r.InterceptInfo
+		}
+		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, false))
 		return true, nil
 	case connector.InterceptError_ALREADY_EXISTS:
 		fmt.Fprintln(is.cmd.OutOrStdout(), interceptMessage(r))
@@ -203,7 +229,7 @@ func (is *interceptState) DeactivateState() error {
 	name := strings.TrimSpace(is.name)
 	var r *connector.InterceptResult
 	var err error
-	r, err = is.cs.grpc.RemoveIntercept(context.Background(), &manager.RemoveInterceptRequest2{Name: name})
+	r, err = is.cs.connectorClient.RemoveIntercept(context.Background(), &manager.RemoveInterceptRequest2{Name: name})
 	if err != nil {
 		return err
 	}
@@ -291,12 +317,11 @@ func askForUseTLS(cachedUseTLS bool, reader *bufio.Reader, out io.Writer) (bool,
 	}
 }
 
-func (is *interceptState) selectIngress() error {
+func (cs *connectorState) selectIngress(in io.Reader, out io.Writer) (*manager.IngressInfo, error) {
 	infos, err := readIngressCache()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	cs := is.cs
 	key := cs.info.ClusterServer + "/" + cs.info.ClusterContext
 	cachedIngressInfo := infos[key]
 	if cachedIngressInfo == nil {
@@ -308,29 +333,27 @@ func (is *interceptState) selectIngress() error {
 		}
 	}
 
-	out := is.cmd.OutOrStdout()
-	reader := bufio.NewReader(is.cmd.InOrStdin())
+	reader := bufio.NewReader(in)
 
 	fmt.Fprintln(out, "Select the ingress to use for preview URL access")
 	reply := &manager.IngressInfo{}
 	if reply.Host, err = askForHostname(cachedIngressInfo.Host, reader, out); err != nil {
-		return err
+		return nil, err
 	}
 	if reply.Port, err = askForPortNumber(cachedIngressInfo.Port, reader, out); err != nil {
-		return err
+		return nil, err
 	}
 	if reply.UseTls, err = askForUseTLS(cachedIngressInfo.UseTls, reader, out); err != nil {
-		return err
+		return nil, err
 	}
 
 	if !ingressInfoEqual(cachedIngressInfo, reply) {
 		infos[key] = reply
 		if err = writeIngressInfoCache(infos); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	is.ingressInfo = reply
-	return nil
+	return reply, nil
 }
 
 func ingressInfoEqual(a, b *manager.IngressInfo) bool {

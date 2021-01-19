@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"crypto/tls"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -83,19 +82,6 @@ func setUpLogging(c context.Context) context.Context {
 	}
 	logger.Level = logrus.DebugLevel
 	return dlog.WithLogger(c, dlog.WrapLogrus(logger))
-}
-
-func (d *service) Logger(server rpc.Daemon_LoggerServer) error {
-	for {
-		msg, err := server.Recv()
-		if err == io.EOF || d.callCtx.Err() != nil {
-			return server.SendAndClose(&empty.Empty{})
-		}
-		if err != nil {
-			return err
-		}
-		_, _ = logrus.StandardLogger().Out.Write(msg.Text)
-	}
 }
 
 func (d *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {

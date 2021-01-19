@@ -40,13 +40,18 @@ build: ## (Build) Build all the source code
 	mkdir -p $(BINDIR)
 	go build -ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION) -o $(BINDIR) ./cmd/...
 
-.PHONY: image images
-image images: $(tools/ko) ## (Build) Build/tag the manager/agent container image
+.ko.yaml: .ko.yaml.in base-image
+	sed $(foreach v,TELEPRESENCE_REGISTRY TELEPRESENCE_BASE_VERSION, -e 's|@$v@|$($v)|g') <$< >$@
+.PHONY: image push-image
+image: .ko.yaml $(tools/ko) ## (Build) Build/tag the manager/agent container image
 	localname=$$(GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION)" ko publish --local ./cmd/traffic) && \
 	docker tag "$$localname" $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
-.PHONY: push-images
-push-images: images
+push-image: image
 	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
+
+.PHONY: images push-images
+images: image
+push-images: push-image
 
 # Prerequisites:
 # The awscli command must be installed and configured with credentials to upload

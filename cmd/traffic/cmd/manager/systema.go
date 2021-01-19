@@ -13,7 +13,6 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 	systemarpc "github.com/datawire/telepresence2/pkg/rpc/systema"
 	"github.com/datawire/telepresence2/pkg/systema"
 )
@@ -48,11 +47,11 @@ func (c *systemaCredentials) RequireTransportSecurity() bool {
 }
 
 func (m *Manager) DialIntercept(ctx context.Context, interceptID string) (net.Conn, error) {
-	iiVal, ok := m.ingressInfos.Load(interceptID)
-	if !ok {
+	intercept := m.state.GetIntercept(interceptID)
+	if intercept == nil || intercept.PreviewIngress == nil {
 		return nil, fmt.Errorf("missing ingress information for intercept %s", interceptID)
 	}
-	ingressInfo := iiVal.(*rpc.IngressInfo)
+	ingressInfo := intercept.PreviewIngress
 
 	dialAddr := fmt.Sprintf("%s:%d", ingressInfo.Host, ingressInfo.Port)
 	if ingressInfo.UseTls {

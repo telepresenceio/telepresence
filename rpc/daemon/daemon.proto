@@ -22,10 +22,6 @@ service Daemon {
   // Turns network overrides back on (after using Pause)
   rpc Resume(google.protobuf.Empty) returns (ResumeInfo);
 
-  // Logger accepts a stream that can be used for posting messages to
-  // the daemon logger.
-  rpc Logger(stream LogMessage) returns (google.protobuf.Empty);
-
   // Quits (terminates) the service.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 
@@ -34,11 +30,6 @@ service Daemon {
 
   // SetSearch sets a new search path.
   rpc SetDnsSearchPath(Paths) returns (google.protobuf.Empty);
-}
-
-// LogMessage carries a preformatted log message.
-message LogMessage {
-  bytes text = 1;
 }
 
 message PauseInfo {

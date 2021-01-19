@@ -81,9 +81,25 @@ func (br *bridge) bridgeWorker(c context.Context) error {
 func (br *bridge) sshWorker(c context.Context) error {
 	// XXX: probably need some kind of keepalive check for ssh, first
 	// curl after wakeup seems to trigger detection of death
-	ssh := dexec.CommandContext(c, "ssh", "-D", "localhost:1080", "-C", "-N", "-oConnectTimeout=5",
-		"-oExitOnForwardFailure=yes", "-oStrictHostKeyChecking=no",
-		"-oUserKnownHostsFile=/dev/null", "telepresence@localhost", "-p", strconv.Itoa(int(br.sshPort)))
+	ssh := dexec.CommandContext(c, "ssh",
+
+		"-F", "none", // don't load the user's config file
+
+		// connection settings
+		"-C", // compression
+		"-oConnectTimeout=5",
+		"-oStrictHostKeyChecking=no",     // don't bother checking the host key...
+		"-oUserKnownHostsFile=/dev/null", // and since we're not checking it, don't bother remembering it either
+
+		// port-forward settings
+		"-N", // no remote command; just connect and forward ports
+		"-oExitOnForwardFailure=yes",
+		"-D", "localhost:1080",
+
+		// where to connect to
+		"-p", strconv.Itoa(int(br.sshPort)),
+		"telepresence@localhost",
+	)
 	err := ssh.Run()
 	if err != nil && c.Err() != nil {
 		err = nil

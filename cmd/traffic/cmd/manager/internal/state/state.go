@@ -428,7 +428,7 @@ func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInf
 		swapped := s.intercepts.CompareAndSwap(new.Id, cur, new)
 		if swapped {
 			// Success!
-			return cur
+			return new
 		}
 	}
 }
@@ -436,6 +436,11 @@ func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInf
 func (s *State) RemoveIntercept(sessionID string, name string) bool {
 	_, didDelete := s.intercepts.LoadAndDelete(sessionID + ":" + name)
 	return didDelete
+}
+
+func (s *State) GetIntercept(interceptID string) *rpc.InterceptInfo {
+	intercept, _ := s.intercepts.Load(interceptID)
+	return intercept
 }
 
 func (s *State) WatchIntercepts(
