@@ -28,6 +28,7 @@ type interceptInfo struct {
 	agentName string
 	port      int
 	// [REDACTED]
+	displayBanner bool
 	previewDomain bool
 }
 
@@ -50,6 +51,7 @@ func interceptCommand() *cobra.Command {
 
 	flags.StringVarP(&ii.agentName, "deployment", "d", "", "Name of deployment to intercept, if different from <name>")
 	flags.IntVarP(&ii.port, "port", "p", 8080, "Local port to forward to")
+	flags.BoolVarP(&ii.displayBanner, "banner", "b", true, "Display banner on preview page")
 
 	// [REDACTED]
 
@@ -179,11 +181,12 @@ func (is *interceptState) EnsureState() (bool, error) {
 
 	// Turn that in to a spec
 	spec := &manager.InterceptSpec{
-		Name:       is.name,
-		Agent:      is.agentName,
-		Mechanism:  "tcp",
-		TargetHost: "127.0.0.1",
-		TargetPort: int32(is.port),
+		Name:          is.name,
+		Agent:         is.agentName,
+		DisplayBanner: is.displayBanner,
+		Mechanism:     "tcp",
+		TargetHost:    "127.0.0.1",
+		TargetPort:    int32(is.port),
 	}
 	// [REDACTED]
 
