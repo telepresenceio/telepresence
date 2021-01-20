@@ -77,8 +77,6 @@ message InterceptSpec {
 
   string target_host = 6;
   int32 target_port = 7;
-
-  bool display_banner = 8;
 }
 
 enum InterceptDispositionType {
@@ -123,6 +121,11 @@ message IngressInfo {
   bool use_tls = 3;
 }
 
+message PreviewSpec {
+  IngressInfo ingress = 1;
+  bool display_banner = 2;
+}
+
 message InterceptInfo {
   InterceptSpec spec = 1;
 
@@ -136,7 +139,7 @@ message InterceptInfo {
   // proxied to.  They both get set by the manager when the client
   // makes a call to UpdateIntercept with add_preview_domain set.
   string preview_domain = 7;
-  IngressInfo preview_ingress = 8;
+  PreviewSpec preview_spec = 9;
 
   InterceptDispositionType disposition = 3;
   string message = 4;
@@ -167,7 +170,7 @@ message UpdateInterceptRequest {
   string name = 2;
 
   oneof preview_domain_action {
-    IngressInfo add_preview_domain = 3;
+    PreviewSpec add_preview_domain = 5;
     bool remove_preview_domain = 4;
   }
 }
