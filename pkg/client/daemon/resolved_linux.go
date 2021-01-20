@@ -14,7 +14,19 @@ import (
 	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/pkg/client/daemon/tun"
 	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
+	"github.com/pkg/errors"
 )
+
+var errResolveDNotConfigured = errors.New("systemd-resolved not configured")
+
+func (o *outbound) dnsServerWorker(c context.Context) error {
+	err := o.tryResolveD(c)
+	if err == errResolveDNotConfigured {
+		dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
+		err = o.runLocalServer(c)
+	}
+	return err
+}
 
 func (o *outbound) resolveNoNS(query string) *rpc.Route {
 	o.domainsLock.RLock()
@@ -30,7 +42,6 @@ func (o *outbound) tryResolveD(c context.Context) error {
 		return errResolveDNotConfigured
 	}
 	defer func() {
-		o.dBusResolveD = nil
 		_ = dConn.Close()
 	}()
 
@@ -53,7 +64,6 @@ func (o *outbound) tryResolveD(c context.Context) error {
 		return addr, err
 	}()
 	if err != nil {
-		dlog.Errorf(c, "unable to resolve udp addr: %v", err)
 		return errResolveDNotConfigured
 	}
 
@@ -64,8 +74,12 @@ func (o *outbound) tryResolveD(c context.Context) error {
 		return errResolveDNotConfigured
 	}
 
-	o.ifIndex = t.InterfaceIndex()
-	o.dBusResolveD = dConn
+	o.setSearchPathFunc = func(c context.Context, paths []string) {
+		err := dConn.SetLinkDomains(t.InterfaceIndex(), paths...)
+		if err != nil {
+			dlog.Errorf(c, "failed to revert virtual interface link: %v", err)
+		}
+	}
 
 	c, cancel := context.WithCancel(c)
 	defer cancel()

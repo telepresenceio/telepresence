@@ -1,7 +1,9 @@
 package daemon
 
-import "context"
+import (
+	"context"
+)
 
-func (o *outbound) tryResolveD(_ context.Context) error {
-	return errResolveDNotConfigured
+func (o *outbound) dnsServerWorker(c context.Context) error {
+	return o.runLocalServer(c)
 }

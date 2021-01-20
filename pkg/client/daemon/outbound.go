@@ -16,7 +16,6 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/pkg/client/daemon/dbus"
 	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/pkg/client/daemon/nat"
 	"github.com/datawire/telepresence2/pkg/client/daemon/proxy"
@@ -91,14 +90,14 @@ type outbound struct {
 	tables     map[string]*rpc.Table
 	tablesLock sync.RWMutex
 
-	domains     map[string]*rpc.Route
-	domainsLock sync.RWMutex
+	domains           map[string]*rpc.Route
+	domainsLock       sync.RWMutex
+	setSearchPathFunc func(c context.Context, paths []string)
 
 	search     []string
 	searchLock sync.RWMutex
 
-	dBusResolveD *dbus.ResolveD
-	ifIndex      int
+	overridePrimaryDNS bool
 
 	work   chan func(context.Context) error
 	cancel context.CancelFunc
@@ -118,17 +117,6 @@ func newOutbound(name string, dnsIP, fallbackIP string, noSearch bool, cancel co
 	}
 	ret.tablesLock.Lock() // leave it locked until translatorWorker unlocks it
 	return ret
-}
-
-var errResolveDNotConfigured = errors.New("resolved not configured")
-
-func (o *outbound) dnsServerWorker(c context.Context) error {
-	err := o.tryResolveD(c)
-	if err == errResolveDNotConfigured {
-		dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
-		err = o.runLocalServer(c)
-	}
-	return err
 }
 
 func (o *outbound) runLocalServer(c context.Context) error {
@@ -162,6 +150,13 @@ func (o *outbound) runLocalServer(c context.Context) error {
 		return errors.New("if your fallbackIP and your dnsIP are the same, you will have a dns loop")
 	}
 
+	o.setSearchPathFunc = func(c context.Context, paths []string) {
+		o.searchLock.Lock()
+		o.search = paths
+		o.searchLock.Unlock()
+	}
+
+	o.overridePrimaryDNS = true
 	dgroup.ParentGroup(c).Go(proxyWorker, o.proxyWorker)
 
 	srv := dns.NewServer(c, dnsListeners(c, dnsRedirPort), o.fallbackIP+":53", func(domain string) string {
@@ -244,7 +239,7 @@ func (o *outbound) translatorWorker(c context.Context) (err error) {
 	}
 	o.tablesLock.Unlock()
 
-	if o.dBusResolveD == nil {
+	if o.overridePrimaryDNS {
 		dgroup.ParentGroup(c).Go(dnsConfigWorker, o.dnsConfigWorker)
 	}
 
@@ -423,16 +418,9 @@ func (o *outbound) doUpdate(c context.Context, table *rpc.Table) error {
 
 // SetSearchPath updates the DNS search path used by the resolver
 func (o *outbound) setSearchPath(c context.Context, paths []string) {
-	if o.dBusResolveD != nil {
-		err := o.dBusResolveD.SetLinkDomains(o.ifIndex, paths...)
-		if err != nil {
-			dlog.Errorf(c, "failed to revert virtual interface link: %v", err)
-		}
-	} else {
-		o.searchLock.Lock()
-		o.search = paths
-		o.searchLock.Unlock()
-	}
+	o.searchLock.Lock()
+	defer o.searchLock.Unlock()
+	o.setSearchPathFunc(c, paths)
 }
 
 func (o *outbound) shutdown() {
