@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	ppf "github.com/datawire/pf"
 	"github.com/datawire/telepresence2/pkg/client"
@@ -31,6 +30,11 @@ func pf(c context.Context, args []string, stdin string) error {
 		return err
 	}
 	return cmd.Wait()
+}
+
+func pfo(c context.Context, args ...string) ([]byte, error) {
+	dlog.Debugf(c, "running %s", client.ShellString("pfctl", args))
+	return exec.Command("pfctl", args...).CombinedOutput()
 }
 
 func splitPorts(portspec string) (result []string) {
@@ -120,7 +124,7 @@ func (t *Translator) Enable(c context.Context) error {
 	_ = pf(c, []string{"-f", "/dev/stdin"}, "pass on lo0")
 	_ = pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 
-	output, err := dexec.CommandContext(c, "pfctl", "-E").CombinedOutput()
+	output, err := pfo(c, "-E")
 	if err != nil {
 		return err
 	}
