@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/datawire/telepresence2/pkg/client/auth"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
 )
 
@@ -29,6 +30,9 @@ func previewCommand() *cobra.Command {
 		Short: "Create a preview domain for an existing intercept",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := auth.AssertLoggedIn(cmd); err != nil {
+				return err
+			}
 			si := &sessionInfo{cmd: cmd}
 			return si.withConnector(true, func(cs *connectorState) error {
 				if createSpec.Ingress == nil {

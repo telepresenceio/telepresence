@@ -15,6 +15,7 @@ import (
 	"syscall"
 
 	"github.com/google/uuid"
+	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
 
@@ -72,6 +73,31 @@ func NewLoginExecutor(oauth2AuthUrl string,
 	}
 }
 
+// AssertLoggedIn will check if the user is logged in and if not initiate the login flow.
+func AssertLoggedIn(cmd *cobra.Command) error {
+	if token, _ := cache.LoadTokenFromUserCache(); token != nil {
+		return nil
+	}
+
+	env, err := client.LoadEnv(cmd.Context())
+	if err != nil {
+		return err
+	}
+
+	l := NewLoginExecutor(
+		env.LoginAuthURL,
+		env.LoginTokenURL,
+		env.LoginClientID,
+		env.LoginCompletionURL,
+		env.UserInfoURL,
+		cache.SaveTokenToUserCache,
+		cache.SaveUserInfoToUserCache,
+		browser.OpenURL,
+		client.NewScout("cli"),
+	)
+	return l.LoginFlow(cmd, nil)
+}
+
 // LoginFlow tries logging the user by opening a browser window and authenticating against the
 // configured OAuth2 provider user a code flow. An HTTP server is started in the background during
 // authentication to handle the callback url. Once the callback url is invoked, the login flow will
@@ -79,7 +105,7 @@ func NewLoginExecutor(oauth2AuthUrl string,
 // SaveTokenFunc (which would usually write to user cache).
 // If login succeeds, the login flow will then try invoking the userinfo endpoint and persisting it
 // using SaveUserInfoFunc (which would usually write to user cache).
-func (l *loginExecutor) LoginFlow(cmd *cobra.Command, args []string) error {
+func (l *loginExecutor) LoginFlow(cmd *cobra.Command, _ []string) error {
 	// oauth2Callback chan that will receive the callback info
 	callbacks := make(chan oauth2Callback)
 	// also listen for interruption to cancel the flow

@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/pkg/client/auth"
 	"github.com/datawire/telepresence2/pkg/client/cache"
 	"github.com/datawire/telepresence2/pkg/rpc/connector"
 	"github.com/datawire/telepresence2/pkg/rpc/manager"
@@ -69,6 +70,12 @@ func leaveCommand() *cobra.Command {
 }
 
 func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
+	if ii.previewEnabled {
+		if err := auth.AssertLoggedIn(cmd); err != nil {
+			return err
+		}
+	}
+
 	ii.name = args[0]
 	args = args[1:]
 	if ii.agentName == "" {
