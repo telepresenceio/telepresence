@@ -244,9 +244,9 @@ var hostRx = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?(?:\.
 func askForHostname(cachedHost string, reader *bufio.Reader, out io.Writer) (string, error) {
 	for {
 		if cachedHost != "" {
-			fmt.Fprintf(out, "Hostname [%s] ? ", cachedHost)
+			fmt.Fprintf(out, "Ingress service.namespace [%s] ? ", cachedHost)
 		} else {
-			fmt.Fprint(out, "Hostname: ")
+			fmt.Fprint(out, "Ingress service.namespace ? ")
 		}
 		reply, err := reader.ReadString('\n')
 		if err != nil {
@@ -263,7 +263,7 @@ func askForHostname(cachedHost string, reader *bufio.Reader, out io.Writer) (str
 			return reply, nil
 		}
 		fmt.Fprintf(out,
-			"hostname %q must match the regex [a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)* (e.g. 'example.com')\n",
+			"Ingress %q must match the regex [a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)* (e.g. 'myingress.mynamespace')\n",
 			reply)
 	}
 }
@@ -273,7 +273,7 @@ func askForPortNumber(cachedPort int32, reader *bufio.Reader, out io.Writer) (in
 		if cachedPort != 0 {
 			fmt.Fprintf(out, "Port [%d] ? ", cachedPort)
 		} else {
-			fmt.Fprint(out, "Hostname: ")
+			fmt.Fprint(out, "Port ? ")
 		}
 		reply, err := reader.ReadString('\n')
 		if err != nil {
@@ -323,19 +323,21 @@ func (cs *connectorState) selectIngress(in io.Reader, out io.Writer) (*manager.I
 		return nil, err
 	}
 	key := cs.info.ClusterServer + "/" + cs.info.ClusterContext
+	selectOrConfirm := "Confirm"
 	cachedIngressInfo := infos[key]
 	if cachedIngressInfo == nil {
 		iis := cs.info.IngressInfos
 		if len(iis) > 0 {
 			cachedIngressInfo = iis[0] // TODO: Better handling when there are several alternatives. Perhaps use SystemA for this?
 		} else {
+			selectOrConfirm = "Select" // Hard to confirm unless there's a default.
 			cachedIngressInfo = &manager.IngressInfo{}
 		}
 	}
 
 	reader := bufio.NewReader(in)
 
-	fmt.Fprintln(out, "Select the ingress to use for preview URL access")
+	fmt.Fprintf(out, "%s the ingress to use for preview URL access\n", selectOrConfirm)
 	reply := &manager.IngressInfo{}
 	if reply.Host, err = askForHostname(cachedIngressInfo.Host, reader, out); err != nil {
 		return nil, err
