@@ -44,7 +44,7 @@ func (kc *k8sCluster) detectIngressBehavior() []*manager.IngressInfo {
 		}
 
 		iis = append(iis, &manager.IngressInfo{
-			Host:   lb.Namespace + "." + lb.Name,
+			Host:   lb.Name + "." + lb.Namespace,
 			UseTls: port.Port == 443,
 			Port:   port.Port,
 		})
