@@ -16,6 +16,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/pkg/client/daemon/dbus"
+	"github.com/datawire/telepresence2/pkg/subnet"
 )
 
 const (
@@ -127,7 +128,7 @@ func checksum(buf []byte) uint16 {
 // network. The interface is then set to state "up".
 func CreateInterfaceWithDNS(c context.Context, dConn *dbus.ResolveD) (*InterfaceWithDNS, error) {
 	// Obtain an available class C subnet
-	ifCIDR, err := findAvailableSubnetClassC()
+	ifCIDR, err := subnet.FindAvailableClassC()
 	if err != nil {
 		return nil, err
 	}

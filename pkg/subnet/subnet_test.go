@@ -1,4 +1,4 @@
-package tun
+package subnet
 
 import (
 	"net"
@@ -49,7 +49,7 @@ func Test_findAvailableIPV4CIDR(t *testing.T) {
 	interfaceAddrs = func() ([]net.Addr, error) {
 		return nil, nil
 	}
-	got, err := findAvailableSubnetClassC()
+	got, err := FindAvailableClassC()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func Test_findAvailableIPV4CIDR_busy(t *testing.T) {
 	interfaceAddrs = func() ([]net.Addr, error) {
 		return []net.Addr{&net.IPNet{IP: net.IP{10, 0, 0, 0}, Mask: net.CIDRMask(24, 32)}}, nil
 	}
-	got, err := findAvailableSubnetClassC()
+	got, err := FindAvailableClassC()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func Test_findAvailableIPV4CIDR_all_C_in_10_10_busy(t *testing.T) {
 	interfaceAddrs = func() ([]net.Addr, error) {
 		return []net.Addr{&net.IPNet{IP: net.IP{10, 0, 0, 0}, Mask: net.CIDRMask(16, 32)}}, nil
 	}
-	got, err := findAvailableSubnetClassC()
+	got, err := FindAvailableClassC()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func Test_findAvailableIPV4CIDR_all_B_in_10_busy(t *testing.T) {
 	interfaceAddrs = func() ([]net.Addr, error) {
 		return []net.Addr{&net.IPNet{IP: net.IP{10, 0, 0, 0}, Mask: net.CIDRMask(8, 32)}}, nil
 	}
-	got, err := findAvailableSubnetClassC()
+	got, err := FindAvailableClassC()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func Test_findAvailableIPV4CIDR_all_10_and_17_busy(t *testing.T) {
 			&net.IPNet{IP: net.IP{17, 16, 0, 0}, Mask: net.CIDRMask(12, 32)},
 		}, nil
 	}
-	got, err := findAvailableSubnetClassC()
+	got, err := FindAvailableClassC()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func Test_findAvailableIPV4CIDR_all_10_17_and_some_192_busy(t *testing.T) {
 			&net.IPNet{IP: net.IP{192, 168, 0, 0}, Mask: net.CIDRMask(21, 32)},
 		}, nil
 	}
-	got, err := findAvailableSubnetClassC()
+	got, err := FindAvailableClassC()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,6 +141,6 @@ func Test_findAvailableIPV4CIDR_all_busy(t *testing.T) {
 		}
 		return addrs, nil
 	}
-	_, err := findAvailableSubnetClassC()
+	_, err := FindAvailableClassC()
 	assert.Error(t, err)
 }

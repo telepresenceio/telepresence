@@ -1,4 +1,5 @@
-package tun
+// Package subnet contains functions to discover available subnets
+package subnet
 
 import (
 	"errors"
@@ -14,9 +15,9 @@ type ipAndNetwork struct {
 // stubbable version
 var interfaceAddrs = net.InterfaceAddrs
 
-// findAvailableSubnetClassC returns the first class C subnet CIDR in the address ranges reserved
+// FindAvailableClassC returns the first class C subnet CIDR in the address ranges reserved
 // for private (non-routed) use that isn't in use by an existing network interface.
-func findAvailableSubnetClassC() (string, error) {
+func FindAvailableClassC() (string, error) {
 	addrs, err := interfaceAddrs()
 	if err != nil {
 		return "", fmt.Errorf("failed to obtain interface addresses: %v", err)
