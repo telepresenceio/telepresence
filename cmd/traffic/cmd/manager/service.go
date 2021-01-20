@@ -273,6 +273,7 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 				resp, err = sa.CreateDomain(ctx, &systema.CreateDomainRequest{
 					InterceptId:   intercept.Id,
 					DisplayBanner: action.AddPreviewDomain.DisplayBanner,
+					InterceptSpec: intercept.Spec,
 				})
 				if err != nil {
 					err = errors.Wrap(err, "systema: create domain")

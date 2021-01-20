@@ -8,6 +8,7 @@ package telepresence.systema;
 
 import "google/protobuf/empty.proto";
 import "rpc/common/version.proto";
+import "rpc/manager/manager.proto";
 
 option go_package = "github.com/datawire/telepresence2/pkg/rpc/systema";
 
@@ -48,6 +49,7 @@ service SystemAProxy {
 message CreateDomainRequest {
   string intercept_id = 1;
   bool display_banner = 2;
+  manager.InterceptSpec intercept_spec = 3;
 }
 
 message CreateDomainResponse {
