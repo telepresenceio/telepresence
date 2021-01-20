@@ -8,6 +8,10 @@ import (
 )
 
 type Env struct {
+	// I'd like to set TELEPRESENCE_LOGIN_DOMAIN,default=auth.datawire.io, but
+	// sethvargo/go-envconfig doesn't support filling in the default for our later references to
+	// it in following settings, so we have to do the hack with maybeSetDefault below.  *sigh* I
+	// guess I'm just spoiled by apro/cmd/amb-sidecar/types/internal/envconfig.
 	LoginDomain        string `env:"TELEPRESENCE_LOGIN_DOMAIN,required"`
 	LoginAuthURL       string `env:"TELEPRESENCE_LOGIN_AUTH_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/auth"`
 	LoginTokenURL      string `env:"TELEPRESENCE_LOGIN_TOKEN_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/token"`
@@ -17,8 +21,8 @@ type Env struct {
 
 	Registry string `env:"TELEPRESENCE_REGISTRY,default=docker.io/datawire"`
 
-	SystemAHost string `env:"SYSTEMA_HOST,default="`
-	SystemAPort string `env:"SYSTEMA_PORT,default="`
+	SystemAHost string `env:"SYSTEMA_HOST,default=app.getambassador.io"`
+	SystemAPort string `env:"SYSTEMA_PORT,default=443"`
 }
 
 func maybeSetEnv(key, val string) {
@@ -34,7 +38,6 @@ func LoadEnv(ctx context.Context) (Env, error) {
 		maybeSetEnv("SYSTEMA_HOST", "beta-app.datawire.io")
 	default:
 		maybeSetEnv("TELEPRESENCE_LOGIN_DOMAIN", "auth.datawire.io")
-		maybeSetEnv("SYSTEMA_HOST", "app.getambassador.io")
 	}
 
 	var env Env
