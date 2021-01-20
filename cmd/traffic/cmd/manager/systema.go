@@ -22,18 +22,27 @@ type systemaCredentials struct {
 }
 
 // GetRequestMetadata implements credentials.PerRPCCredentials.
-func (c *systemaCredentials) GetRequestMetadata(_ context.Context, _ ...string) (map[string]string, error) {
-	// FIXME: This is just picking a token arbitrarily right now.
+func (c *systemaCredentials) GetRequestMetadata(ctx context.Context, _ ...string) (map[string]string, error) {
+	sessionID := GetSessionID(ctx)
+
 	var token string
-	for _, client := range c.mgr.state.GetAllClients() {
-		if client.BearerToken != "" {
-			token = client.BearerToken
-			break
+	if sessionID != "" {
+		client := c.mgr.state.GetClient(sessionID)
+		token = client.GetBearerToken()
+	} else {
+		// Uhh... pick one arbitrarily.  This case should be limited to the
+		// ReverseConnection call, since that call doesn't belong to any one user action.
+		for _, client := range c.mgr.state.GetAllClients() {
+			if client.BearerToken != "" {
+				token = client.BearerToken
+				break
+			}
 		}
 	}
 	if token == "" {
 		return nil, errors.New("no token has been provided by a client")
 	}
+
 	md := map[string]string{
 		"X-Telepresence-ManagerID": c.mgr.ID,
 		"Authorization":            "Bearer " + token,
