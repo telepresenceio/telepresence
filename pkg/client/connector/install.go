@@ -53,11 +53,12 @@ func managerImageName(env client.Env) string {
 	return managerImage
 }
 
-func agentImageName(env client.Env, licensed bool) string {
-	if licensed {
-		// FIXME(lukeshu): Don't hard-code this (the plan is to address that during the
-		// licensing work).
-		return "docker.io/lukeshu/ambassador-telepresence-agent:v0.3.1-8-g3fdedd7-1610440959"
+func agentImageName(ctx context.Context, env client.Env) string {
+	if env.AgentImage != "" {
+		return env.AgentImage
+	}
+	if preferred, err := systemaGetPreferredAgentImageName(ctx, env); err == nil && preferred != "" {
+		return preferred
 	}
 	return managerImageName(env)
 }

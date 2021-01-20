@@ -19,7 +19,8 @@ type Env struct {
 	LoginClientID      string `env:"TELEPRESENCE_LOGIN_CLIENT_ID,default=telepresence-cli"`
 	UserInfoURL        string `env:"TELEPRESENCE_USER_INFO_URL,default=https://${TELEPRESENCE_LOGIN_DOMAIN}/api/userinfo"`
 
-	Registry string `env:"TELEPRESENCE_REGISTRY,default=docker.io/datawire"`
+	Registry   string `env:"TELEPRESENCE_REGISTRY,default=docker.io/datawire"`
+	AgentImage string `env:"TELEPRESENCE_AGENT_IMAGE,default="`
 
 	SystemAHost string `env:"SYSTEMA_HOST,default=app.getambassador.io"`
 	SystemAPort string `env:"SYSTEMA_PORT,default=443"`

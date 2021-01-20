@@ -217,7 +217,6 @@ func Test_ensureTrafficManager_notPresent(t *testing.T) {
 
 func TestAddAgentToDeployment(t *testing.T) {
 	type testcase struct {
-		InputLicensed   bool
 		InputPortName   string
 		InputDeployment *kates.Deployment
 		InputService    *kates.Service
@@ -286,7 +285,7 @@ func TestAddAgentToDeployment(t *testing.T) {
 
 			actualDep, actualSvc, actualErr := addAgentToDeployment(ctx,
 				tc.InputPortName,
-				agentImageName(env, tc.InputLicensed),
+				agentImageName(ctx, env),
 				tc.InputDeployment.DeepCopy(),
 				[]*kates.Service{tc.InputService.DeepCopy()},
 			)

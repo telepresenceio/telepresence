@@ -173,7 +173,7 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	}
 
 	if found == nil {
-		if result := tm.addAgent(c, agentName, agentImageName(tm.env, tm.sessionInfo.LicensedCluster)); result != nil {
+		if result := tm.addAgent(c, agentName, agentImageName(c, tm.env)); result != nil {
 			return result, nil
 		}
 	} else {

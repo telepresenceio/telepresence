@@ -68,8 +68,7 @@ func (m *Manager) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 	sessionID := m.state.AddClient(client, m.clock.Now())
 
 	return &rpc.SessionInfo{
-		SessionId:       sessionID,
-		LicensedCluster: true,
+		SessionId: sessionID,
 	}, nil
 }
 
