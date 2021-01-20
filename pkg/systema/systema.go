@@ -111,6 +111,7 @@ func ConnectToSystemA(ctx context.Context,
 		return err
 	})
 	grp.Go("client", func(ctx context.Context) error {
+		defer conn.Close()
 		systemaProxy := systema.NewSystemAProxyClient(conn)
 		var tempDelay time.Duration
 		for ctx.Err() == nil {
