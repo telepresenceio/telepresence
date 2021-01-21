@@ -149,7 +149,6 @@ message InterceptInfo {
 
 message SessionInfo {
   string session_id = 1;
-  bool licensed_cluster = 2;
 }
 
 message AgentInfoSnapshot {
