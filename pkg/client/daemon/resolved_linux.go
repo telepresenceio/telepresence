@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -12,27 +11,7 @@ import (
 	"github.com/datawire/telepresence2/pkg/client/daemon/dbus"
 	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/pkg/client/daemon/tun"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
-	"github.com/pkg/errors"
 )
-
-var errResolveDNotConfigured = errors.New("systemd-resolved not configured")
-
-func (o *outbound) dnsServerWorker(c context.Context) error {
-	err := o.tryResolveD(c)
-	if err == errResolveDNotConfigured {
-		dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
-		err = o.runLocalServer(c)
-	}
-	return err
-}
-
-func (o *outbound) resolveNoNS(query string) *rpc.Route {
-	o.domainsLock.RLock()
-	route := o.domains[strings.ToLower(query)]
-	o.domainsLock.RUnlock()
-	return route
-}
 
 func (o *outbound) tryResolveD(c context.Context) error {
 	// Connect to ResolveD via DBUS.

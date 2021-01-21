@@ -5,5 +5,6 @@ import (
 )
 
 func (o *outbound) dnsServerWorker(c context.Context) error {
-	return o.runLocalServer(c)
+	// No representation of DNS server for MacOS in this commit
+	return nil
 }
