@@ -125,7 +125,11 @@ func (p *mgrProxy) CreateIntercept(ctx context.Context, arg *managerrpc.CreateIn
 	return nil, errors.New("must call connector.CreateIntercept instead of manager.CreateIntercept")
 }
 func (p *mgrProxy) RemoveIntercept(ctx context.Context, arg *managerrpc.RemoveInterceptRequest2) (*empty.Empty, error) {
-	return nil, errors.New("must call connector.RemoveIntercept instead of manager.RemoveIntercept")
+	client, callOptions, err := p.get()
+	if err != nil {
+		return nil, err
+	}
+	return client.RemoveIntercept(ctx, arg, callOptions...)
 }
 func (p *mgrProxy) UpdateIntercept(ctx context.Context, arg *managerrpc.UpdateInterceptRequest) (*managerrpc.InterceptInfo, error) {
 	client, callOptions, err := p.get()

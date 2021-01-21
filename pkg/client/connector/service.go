@@ -187,17 +187,6 @@ func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequ
 	return s.trafficMgr.addIntercept(c, ir)
 }
 
-func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
-	ie, is := s.interceptStatus()
-	if ie != rpc.InterceptError_UNSPECIFIED {
-		return &rpc.InterceptResult{Error: ie, ErrorText: is}, nil
-	}
-	c = s.callCtx(c, "RemoveIntercept")
-	defer func() { err = callRecovery(c, recover(), err) }()
-	err = s.trafficMgr.removeIntercept(c, rr.Name)
-	return &rpc.InterceptResult{}, err
-}
-
 func (s *service) List(ctx context.Context, lr *rpc.ListRequest) (*rpc.DeploymentInfoSnapshot, error) {
 	if s.trafficMgr.managerClient == nil {
 		return &rpc.DeploymentInfoSnapshot{}, nil

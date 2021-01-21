@@ -25,10 +25,6 @@ service Connector {
   // Connect.
   rpc CreateIntercept(CreateInterceptRequest) returns (InterceptResult);
 
-  // Deactivates and removes an existent deployment intercept.
-  // Requires having already called Connect.
-  rpc RemoveIntercept(telepresence.manager.RemoveInterceptRequest2) returns (InterceptResult);
-
   // Uninstalls traffic-agents and traffic-manager from the cluster.
   // Requires having already called Connect.
   rpc Uninstall(UninstallRequest) returns (UninstallResult);

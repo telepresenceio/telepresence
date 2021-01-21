@@ -444,15 +444,11 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 }
 
 func (is *interceptState) DeactivateState() error {
-	name := strings.TrimSpace(is.name)
-	var r *connector.InterceptResult
-	var err error
-	r, err = is.cs.connectorClient.RemoveIntercept(context.Background(), &manager.RemoveInterceptRequest2{Name: name})
+	_, err := is.cs.managerClient.RemoveIntercept(context.Background(), &manager.RemoveInterceptRequest2{
+		Name: strings.TrimSpace(is.name),
+	})
 	if err != nil {
 		return err
-	}
-	if r.Error != connector.InterceptError_UNSPECIFIED {
-		return errors.New(interceptMessage(r))
 	}
 	return nil
 }

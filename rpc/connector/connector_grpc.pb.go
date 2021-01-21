@@ -6,7 +6,6 @@ import (
 	context "context"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
-	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -32,9 +31,6 @@ type ConnectorClient interface {
 	// Adds a deployment intercept.  Requires having already called
 	// Connect.
 	CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error)
-	// Deactivates and removes an existent deployment intercept.
-	// Requires having already called Connect.
-	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error)
 	// Uninstalls traffic-agents and traffic-manager from the cluster.
 	// Requires having already called Connect.
 	Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*UninstallResult, error)
@@ -74,15 +70,6 @@ func (c *connectorClient) Connect(ctx context.Context, in *ConnectRequest, opts 
 func (c *connectorClient) CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error) {
 	out := new(InterceptResult)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/CreateIntercept", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectorClient) RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error) {
-	out := new(InterceptResult)
-	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/RemoveIntercept", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -132,9 +119,6 @@ type ConnectorServer interface {
 	// Adds a deployment intercept.  Requires having already called
 	// Connect.
 	CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error)
-	// Deactivates and removes an existent deployment intercept.
-	// Requires having already called Connect.
-	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error)
 	// Uninstalls traffic-agents and traffic-manager from the cluster.
 	// Requires having already called Connect.
 	Uninstall(context.Context, *UninstallRequest) (*UninstallResult, error)
@@ -158,9 +142,6 @@ func (UnimplementedConnectorServer) Connect(context.Context, *ConnectRequest) (*
 }
 func (UnimplementedConnectorServer) CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateIntercept not implemented")
-}
-func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
 func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest) (*UninstallResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Uninstall not implemented")
@@ -238,24 +219,6 @@ func _Connector_CreateIntercept_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Connector_RemoveIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(manager.RemoveInterceptRequest2)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).RemoveIntercept(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.connector.Connector/RemoveIntercept",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).RemoveIntercept(ctx, req.(*manager.RemoveInterceptRequest2))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Connector_Uninstall_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UninstallRequest)
 	if err := dec(in); err != nil {
@@ -325,10 +288,6 @@ var _Connector_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateIntercept",
 			Handler:    _Connector_CreateIntercept_Handler,
-		},
-		{
-			MethodName: "RemoveIntercept",
-			Handler:    _Connector_RemoveIntercept_Handler,
 		},
 		{
 			MethodName: "Uninstall",
