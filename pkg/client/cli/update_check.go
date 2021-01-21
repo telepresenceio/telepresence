@@ -51,15 +51,27 @@ func newUpdateChecker(url string) (*updateChecker, error) {
 	return ts, nil
 }
 
+func updateCheckIfDue(cmd *cobra.Command, _ []string) error {
+	return updateCheck(cmd, false)
+}
+
+func forcedUpdateCheck(cmd *cobra.Command, _ []string) error {
+	return updateCheck(cmd, true)
+}
+
 // updateCheck performs an update check for the telepresence binary on the current os/arch and
-// prints a message on stdout if an update is available
-func updateCheck(cmd *cobra.Command, _ []string) error {
+// prints a message on stdout if an update is available.
+//
+// Arguments:
+//   cmd:         the command that provides Context and stout/stderr
+//   forcedCheck: if true, perform check regardless of if it's due or not
+func updateCheck(cmd *cobra.Command, forceCheck bool) error {
 	env, err := client.LoadEnv(cmd.Context())
 	if err != nil {
 		return err
 	}
 	uc, err := newUpdateChecker(fmt.Sprintf("https://%s/download/tel2/%s/%s/stable.txt", env.SystemAHost, runtime.GOOS, runtime.GOARCH))
-	if err != nil || !uc.timeToCheck() {
+	if err != nil || !(forceCheck || uc.timeToCheck()) {
 		return err
 	}
 

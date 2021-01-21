@@ -41,7 +41,7 @@ func interceptCommand() *cobra.Command {
 		Short:   "Intercept a service",
 		Args:    cobra.MinimumNArgs(1),
 		RunE:    ii.intercept,
-		PreRunE: updateCheck,
+		PreRunE: updateCheckIfDue,
 	}
 	flags := cmd.Flags()
 

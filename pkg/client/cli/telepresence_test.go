@@ -136,7 +136,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 	ts.Run("Version", func() {
 		stdout, stderr := telepresence("version")
 		ts.Empty(stderr)
-		ts.Equal(fmt.Sprintf("Client %s", client.DisplayVersion()), stdout)
+		ts.Contains(stdout, fmt.Sprintf("Client %s", client.DisplayVersion()))
 	})
 	ts.Run("Status", func() {
 		out, _ := telepresence("status")
