@@ -240,7 +240,19 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) {
 	ctx = WithSessionInfo(ctx, req.GetSession())
 	sessionID := req.GetSession().GetSessionId()
-	interceptID := sessionID + ":" + req.Name
+	var interceptID string
+	// When something without a session ID (e.g. System A) calls this function,
+	// it is sending the intercept ID as the name, so we use that.
+	//
+	// TODO: Look at cmd/traffic/cmd/manager/internal/state API and see if it makes
+	// sense to make more / all functions use intercept ID instead of session ID + name.
+	// Or at least functions outside services (e.g. SystemA), which don't know about sessions,
+	// use in requests.
+	if sessionID == "" {
+		interceptID = req.Name
+	} else {
+		interceptID = sessionID + ":" + req.Name
+	}
 
 	dlog.Debugf(ctx, "UpdateIntercept called: %s", interceptID)
 
