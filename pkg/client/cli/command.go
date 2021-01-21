@@ -45,10 +45,11 @@ func statusCommand() *cobra.Command {
 
 func versionCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "version",
-		Short: "Show version",
-		Args:  cobra.NoArgs,
-		RunE:  printVersion,
+		Use:     "version",
+		Short:   "Show version",
+		Args:    cobra.NoArgs,
+		PreRunE: forcedUpdateCheck,
+		RunE:    printVersion,
 	}
 }
 
