@@ -101,7 +101,7 @@ func (o *outbound) proxyWorker(c context.Context) error {
 }
 
 func (o *outbound) dnsConfigWorker(c context.Context) error {
-	dlog.Debug(c, "Starting server")
+	dlog.Debug(c, "Bootstrapping local DNS server")
 	bootstrap := rpc.Table{Name: "bootstrap", Routes: []*rpc.Route{{
 		Ip:     o.dnsIP,
 		Target: dnsRedirPort,
@@ -109,20 +109,6 @@ func (o *outbound) dnsConfigWorker(c context.Context) error {
 	}}}
 	o.update(&bootstrap)
 	dns.Flush()
-
-	if o.noSearch {
-		dlog.Debug(c, "Server done")
-		return nil
-	}
-
-	restore, err := dns.OverrideSearchDomains(c, ".")
-	if err != nil {
-		return err
-	}
-	<-c.Done()
-	restore()
-	dns.Flush()
-	dlog.Debug(c, "Server done")
 	return nil
 }
 
