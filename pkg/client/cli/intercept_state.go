@@ -70,8 +70,8 @@ func leaveCommand() *cobra.Command {
 }
 
 func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
-	if ii.previewEnabled {
-		if err := auth.AssertLoggedIn(cmd); err != nil {
+	if ii.previewEnabled /* || [REDACTED] */ {
+		if err := auth.EnsureLoggedIn(cmd); err != nil {
 			return err
 		}
 	}

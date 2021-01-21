@@ -73,8 +73,8 @@ func NewLoginExecutor(oauth2AuthUrl string,
 	}
 }
 
-// AssertLoggedIn will check if the user is logged in and if not initiate the login flow.
-func AssertLoggedIn(cmd *cobra.Command) error {
+// EnsureLoggedIn will check if the user is logged in and if not initiate the login flow.
+func EnsureLoggedIn(cmd *cobra.Command) error {
 	if token, _ := cache.LoadTokenFromUserCache(); token != nil {
 		return nil
 	}
