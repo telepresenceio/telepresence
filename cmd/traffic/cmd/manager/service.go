@@ -251,14 +251,13 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 	if sessionID == "" {
 		interceptID = req.Name
 	} else {
+		if m.state.GetClient(sessionID) == nil {
+			return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+		}
 		interceptID = sessionID + ":" + req.Name
 	}
 
 	dlog.Debugf(ctx, "UpdateIntercept called: %s", interceptID)
-
-	if m.state.GetClient(sessionID) == nil {
-		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
-	}
 
 	switch action := req.PreviewDomainAction.(type) {
 	case *rpc.UpdateInterceptRequest_AddPreviewDomain:
