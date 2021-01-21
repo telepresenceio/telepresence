@@ -205,7 +205,15 @@ message CreateInterceptRequest {
 
 message UpdateInterceptRequest {
   SessionInfo session = 1;
-  string name = 2;
+
+  // You may either refer to the intercept by its name (scoped to the
+  // client session), or by its ID (scoped to the manager).  You MUST
+  // use the ID instead of the name if you don't set the session
+  // (above).
+  oneof intercept {
+    string name = 6;
+    string id = 2;
+  }
 
   oneof preview_domain_action {
     PreviewSpec add_preview_domain = 5;
@@ -215,7 +223,15 @@ message UpdateInterceptRequest {
 
 message RemoveInterceptRequest2 {
   SessionInfo session = 1;
-  string name = 2;
+
+  // You may either refer to the intercept by its name (scoped to the
+  // client session), or by its ID (scoped to the manager).  You MUST
+  // use the ID instead of the name if you don't set the session
+  // (above).
+  oneof intercept {
+    string name = 2;
+    string id = 3;
+  }
 }
 
 message ReviewInterceptRequest {

@@ -240,21 +240,18 @@ func (m *Manager) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) {
 	ctx = WithSessionInfo(ctx, req.GetSession())
 	sessionID := req.GetSession().GetSessionId()
+
 	var interceptID string
-	// When something without a session ID (e.g. System A) calls this function,
-	// it is sending the intercept ID as the name, so we use that.
-	//
-	// TODO: Look at cmd/traffic/cmd/manager/internal/state API and see if it makes
-	// sense to make more / all functions use intercept ID instead of session ID + name.
-	// Or at least functions outside services (e.g. SystemA), which don't know about sessions,
-	// use in requests.
-	if sessionID == "" {
-		interceptID = req.Name
-	} else {
+	switch intercept := req.Intercept.(type) {
+	case *rpc.UpdateInterceptRequest_Name:
 		if m.state.GetClient(sessionID) == nil {
 			return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 		}
-		interceptID = sessionID + ":" + req.Name
+		interceptID = m.state.ResolveIntercept(sessionID, intercept.Name)
+	case *rpc.UpdateInterceptRequest_Id:
+		interceptID = intercept.Id
+	default:
+		panic("this should not happen -- someone updated manager.proto without updating service.go")
 	}
 
 	dlog.Debugf(ctx, "UpdateIntercept called: %s", interceptID)
@@ -359,16 +356,25 @@ func (m *Manager) UpdateIntercept(ctx context.Context, req *rpc.UpdateInterceptR
 func (m *Manager) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveInterceptRequest2) (*empty.Empty, error) {
 	ctx = WithSessionInfo(ctx, riReq.GetSession())
 	sessionID := riReq.GetSession().GetSessionId()
-	name := riReq.Name
 
-	dlog.Debugf(ctx, "RemoveIntercept called: %s", name)
+	var interceptID string
+	switch intercept := riReq.Intercept.(type) {
+	case *rpc.RemoveInterceptRequest2_Name:
+		interceptID = m.state.ResolveIntercept(sessionID, intercept.Name)
+	case *rpc.RemoveInterceptRequest2_Id:
+		interceptID = intercept.Id
+	default:
+		panic("this should not happen -- someone updated manager.proto without updating service.go")
+	}
+
+	dlog.Debugf(ctx, "RemoveIntercept called: %s", interceptID)
 
 	if m.state.GetClient(sessionID) == nil {
 		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
 	}
 
-	if !m.state.RemoveIntercept(sessionID, name) {
-		return nil, status.Errorf(codes.NotFound, "Intercept named %q not found", name)
+	if !m.state.RemoveIntercept(interceptID) {
+		return nil, status.Errorf(codes.NotFound, "Intercept %q not found", interceptID)
 	}
 
 	return &empty.Empty{}, nil

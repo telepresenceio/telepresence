@@ -392,7 +392,9 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 		if is.previewEnabled {
 			intercept, err = is.cs.managerClient.UpdateIntercept(is.cmd.Context(), &manager.UpdateInterceptRequest{
 				Session: is.cs.info.SessionInfo,
-				Name:    is.name,
+				Intercept: &manager.UpdateInterceptRequest_Name{
+					Name: is.name,
+				},
 				PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
 					AddPreviewDomain: &is.previewSpec,
 				},
@@ -445,7 +447,9 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 
 func (is *interceptState) DeactivateState() error {
 	_, err := is.cs.managerClient.RemoveIntercept(context.Background(), &manager.RemoveInterceptRequest2{
-		Name: strings.TrimSpace(is.name),
+		Intercept: &manager.RemoveInterceptRequest2_Name{
+			Name: strings.TrimSpace(is.name),
+		},
 	})
 	if err != nil {
 		return err

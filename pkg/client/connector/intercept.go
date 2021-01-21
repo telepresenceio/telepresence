@@ -505,7 +505,9 @@ func (tm *trafficManager) removeIntercept(c context.Context, name string) error 
 	dlog.Debugf(c, "telling manager to remove intercept %s", name)
 	_, err := tm.managerClient.RemoveIntercept(c, &manager.RemoveInterceptRequest2{
 		Session: tm.session(),
-		Name:    name,
+		Intercept: &manager.RemoveInterceptRequest2_Name{
+			Name: name,
+		},
 	})
 	return err
 }

@@ -373,6 +373,10 @@ func (s *State) WatchAgents(
 
 // Intercepts //////////////////////////////////////////////////////////////////////////////////////
 
+func (_ *State) ResolveIntercept(sessionID, interceptName string) (interceptID string) {
+	return sessionID + ":" + interceptName
+}
+
 func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) (*rpc.InterceptInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -443,8 +447,8 @@ func (s *State) UpdateIntercept(interceptID string, apply func(*rpc.InterceptInf
 	}
 }
 
-func (s *State) RemoveIntercept(sessionID string, name string) bool {
-	_, didDelete := s.intercepts.LoadAndDelete(sessionID + ":" + name)
+func (s *State) RemoveIntercept(interceptID string) bool {
+	_, didDelete := s.intercepts.LoadAndDelete(interceptID)
 	return didDelete
 }
 

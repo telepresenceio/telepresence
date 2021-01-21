@@ -246,7 +246,9 @@ func TestConnect(t *testing.T) {
 
 	_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
 		Session: aliceSess2,
-		Name:    spec.Name,
+		Intercept: &rpc.RemoveInterceptRequest2_Name{
+			Name: spec.Name,
+		},
 	})
 	a.NoError(err)
 	t.Logf("removed intercept")
@@ -265,13 +267,17 @@ func TestConnect(t *testing.T) {
 
 	_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
 		Session: aliceSess2,
-		Name:    spec.Name, // no longer present, right?
+		Intercept: &rpc.RemoveInterceptRequest2_Name{
+			Name: spec.Name, // no longer present, right?
+		},
 	})
 	a.Error(err)
 
 	_, err = client.RemoveIntercept(ctx, &rpc.RemoveInterceptRequest2{
 		Session: aliceSess1, // no longer a valid session, right?
-		Name:    spec.Name,  // doesn't matter...
+		Intercept: &rpc.RemoveInterceptRequest2_Name{
+			Name: spec.Name, // doesn't matter...
+		},
 	})
 	a.Error(err)
 }

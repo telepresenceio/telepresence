@@ -46,7 +46,9 @@ func previewCommand() *cobra.Command {
 				}
 				intercept, err := cs.managerClient.UpdateIntercept(cmd.Context(), &manager.UpdateInterceptRequest{
 					Session: cs.info.SessionInfo,
-					Name:    args[0],
+					Intercept: &manager.UpdateInterceptRequest_Name{
+						Name: args[0],
+					},
 					PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
 						AddPreviewDomain: &createSpec,
 					},
@@ -71,7 +73,9 @@ func previewCommand() *cobra.Command {
 			return si.withConnector(true, func(cs *connectorState) error {
 				intercept, err := cs.managerClient.UpdateIntercept(cmd.Context(), &manager.UpdateInterceptRequest{
 					Session: cs.info.SessionInfo,
-					Name:    args[0],
+					Intercept: &manager.UpdateInterceptRequest_Name{
+						Name: args[0],
+					},
 					PreviewDomainAction: &manager.UpdateInterceptRequest_RemovePreviewDomain{
 						RemovePreviewDomain: true,
 					},
