@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"net"
 	"strings"
 	"sync"
 	"time"
@@ -50,19 +49,7 @@ func (o *outbound) tryResolveD(c context.Context) error {
 	}
 
 	// Create a new local address that the DNS resolver can listen to.
-	dnsResolverAddr, err := func() (*net.UDPAddr, error) {
-		l, err := net.ListenPacket("udp4", "localhost:")
-		if err != nil {
-			return nil, err
-		}
-		addr, ok := l.LocalAddr().(*net.UDPAddr)
-		l.Close()
-		if !ok {
-			// listening to udp should definitely return an *net.UDPAddr
-			panic("cast error")
-		}
-		return addr, err
-	}()
+	dnsResolverAddr, err := dnsResolverAddr()
 	if err != nil {
 		return errResolveDNotConfigured
 	}

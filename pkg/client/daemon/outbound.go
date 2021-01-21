@@ -119,6 +119,21 @@ func newOutbound(name string, dnsIP, fallbackIP string, noSearch bool, cancel co
 	return ret
 }
 
+// dnsResolverAddr obtains a new local address that the DNS resolver can listen to.
+func dnsResolverAddr() (*net.UDPAddr, error) {
+	l, err := net.ListenPacket("udp4", "localhost:")
+	if err != nil {
+		return nil, fmt.Errorf("unable to resolve udp addr: %v", err)
+	}
+	addr, ok := l.LocalAddr().(*net.UDPAddr)
+	_ = l.Close()
+	if !ok {
+		// listening to udp should definitely return an *net.UDPAddr
+		panic("cast error")
+	}
+	return addr, err
+}
+
 func (o *outbound) runLocalServer(c context.Context) error {
 	if o.dnsIP == "" {
 		dat, err := ioutil.ReadFile("/etc/resolv.conf")
