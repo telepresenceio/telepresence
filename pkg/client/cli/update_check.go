@@ -82,7 +82,8 @@ func updateCheck(cmd *cobra.Command, forceCheck bool) error {
 		return uc.storeNextCheck(time.Hour)
 	}
 	if update != nil {
-		fmt.Fprintf(cmd.OutOrStdout(), "An update of %s from version %s to %s is available. Please visit https://www.getambassador.io/docs/latest/telepresence/howtos/upgrading/ for more info.\n",
+		fmt.Fprintf(cmd.OutOrStdout(),
+			"An update of %s from version %s to %s is available. Please visit https://www.getambassador.io/docs/latest/telepresence/howtos/upgrading/ for more info.\n",
 			binaryName, &ourVersion, update)
 	}
 	return uc.storeNextCheck(checkDuration)
