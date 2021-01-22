@@ -111,12 +111,11 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 }
 
 func (o *outbound) dnsServerWorker(c context.Context) error {
-	// Create a new local address that the DNS resolver can listen to.
 	resolverDirName := filepath.Join("/etc", "resolver")
 	resolverFileName := filepath.Join(resolverDirName, "telepresence.local")
 
 	err := os.MkdirAll(resolverDirName, 0755)
-	if err != nil && !os.IsExist(err) {
+	if err != nil {
 		return err
 	}
 
