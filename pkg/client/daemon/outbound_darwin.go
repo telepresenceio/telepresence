@@ -168,9 +168,7 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 		// Remove loopback device
 		_ = exec.Command("ifconfig", "lo0", "-alias", dnsIP.String()).Run()
 
-		// Tell DNS to reload
-		_ = exec.Command("killall", "-HUP", "mDNSResponder").Run()
-
+		dns.Flush()
 		if r != nil {
 			// Propagate panic, it's of no interest here
 			panic(r)
@@ -192,10 +190,7 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	})
 	initDone.Wait()
 
-	// Tell DNS to reload
-	if err = dexec.CommandContext(c, "killall", "-HUP", "mDNSResponder").Run(); err != nil {
-		return err
-	}
+	dns.Flush()
 
 	g.Go(proxyWorker, o.proxyWorker)
 	return g.Wait()
