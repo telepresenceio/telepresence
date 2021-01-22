@@ -14,9 +14,9 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/datawire/telepresence2/pkg/client/actions"
-	rpc "github.com/datawire/telepresence2/rpc/connector"
-	"github.com/datawire/telepresence2/rpc/manager"
+	rpc "github.com/datawire/telepresence2/rpc/v2/connector"
+	"github.com/datawire/telepresence2/rpc/v2/manager"
+	"github.com/datawire/telepresence2/v2/pkg/client/actions"
 )
 
 func (s *service) interceptStatus() (rpc.InterceptError, string) {

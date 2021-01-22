@@ -19,8 +19,8 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
 
-	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/client/cache"
+	"github.com/datawire/telepresence2/v2/pkg/client"
+	"github.com/datawire/telepresence2/v2/pkg/client/cache"
 )
 
 const (

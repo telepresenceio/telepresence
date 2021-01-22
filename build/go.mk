@@ -22,10 +22,10 @@ generate: generate-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-g
 	$(tools/protoc) \
 	  \
 	  --go_out=./rpc \
-	  --go_opt=module=github.com/datawire/telepresence2/rpc \
+	  --go_opt=module=github.com/datawire/telepresence2/rpc/v2 \
 	  \
 	  --go-grpc_out=./rpc \
-	  --go-grpc_opt=module=github.com/datawire/telepresence2/rpc \
+	  --go-grpc_opt=module=github.com/datawire/telepresence2/rpc/v2 \
 	  \
 	  --proto_path=. \
 	  $$(find ./rpc/ -name '*.proto')

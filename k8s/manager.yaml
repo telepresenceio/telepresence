@@ -38,7 +38,7 @@ spec:
     spec:
       containers:
       - name: traffic-manager
-        image: ko://github.com/datawire/telepresence2/cmd/traffic
+        image: ko://github.com/datawire/telepresence2/v2/cmd/traffic
         ports:
         - name: sshd
           containerPort: 8022

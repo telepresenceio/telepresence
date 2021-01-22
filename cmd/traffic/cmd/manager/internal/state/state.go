@@ -11,8 +11,8 @@ import (
 	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/watchable"
-	rpc "github.com/datawire/telepresence2/rpc/manager"
+	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
+	"github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/internal/watchable"
 )
 
 const (

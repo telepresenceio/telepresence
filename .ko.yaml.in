@@ -1,2 +1,2 @@
 baseImageOverrides:
-  github.com/datawire/telepresence2/cmd/traffic: @TELEPRESENCE_REGISTRY@/tel2-base:@TELEPRESENCE_BASE_VERSION@
+  github.com/datawire/telepresence2/v2/cmd/traffic: @TELEPRESENCE_REGISTRY@/tel2-base:@TELEPRESENCE_BASE_VERSION@

@@ -7,9 +7,9 @@ import (
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/rpc/connector"
-	"github.com/datawire/telepresence2/rpc/daemon"
+	"github.com/datawire/telepresence2/rpc/v2/connector"
+	"github.com/datawire/telepresence2/rpc/v2/daemon"
+	"github.com/datawire/telepresence2/v2/pkg/client"
 )
 
 // IsServerRunning reports whether or not the daemon server is running.

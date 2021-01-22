@@ -1,7 +1,7 @@
 syntax = "proto3";
 package telepresence.common;
 
-option go_package = "github.com/datawire/telepresence2/rpc/common";
+option go_package = "github.com/datawire/telepresence2/rpc/v2/common";
 
 // VersionInfo is the type that both `telepresence daemon` (the super-user
 // daemon) and `telepresence conector` (the normal-user daemon) use

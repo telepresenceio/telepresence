@@ -4,8 +4,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/datawire/telepresence2/pkg/client/cache"
-	"github.com/datawire/telepresence2/rpc/connector"
+	"github.com/datawire/telepresence2/rpc/v2/connector"
+	"github.com/datawire/telepresence2/v2/pkg/client/cache"
 )
 
 type uninstallInfo struct {

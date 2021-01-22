@@ -16,8 +16,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/dlib/dtime"
-	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/client/cache"
+	"github.com/datawire/telepresence2/v2/pkg/client"
+	"github.com/datawire/telepresence2/v2/pkg/client/cache"
 )
 
 const checkDuration = 24 * time.Hour

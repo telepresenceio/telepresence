@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/cmd/traffic/cmd/agent"
-	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager"
+	"github.com/datawire/telepresence2/v2/cmd/traffic/cmd/agent"
+	"github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager"
 )
 
 func doMain(fn func(ctx context.Context, args ...string) error, args ...string) {

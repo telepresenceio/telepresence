@@ -20,12 +20,12 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dutil"
-	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/client/cache"
-	"github.com/datawire/telepresence2/rpc/common"
-	rpc "github.com/datawire/telepresence2/rpc/connector"
-	"github.com/datawire/telepresence2/rpc/daemon"
-	"github.com/datawire/telepresence2/rpc/manager"
+	"github.com/datawire/telepresence2/rpc/v2/common"
+	rpc "github.com/datawire/telepresence2/rpc/v2/connector"
+	"github.com/datawire/telepresence2/rpc/v2/daemon"
+	"github.com/datawire/telepresence2/rpc/v2/manager"
+	"github.com/datawire/telepresence2/v2/pkg/client"
+	"github.com/datawire/telepresence2/v2/pkg/client/cache"
 )
 
 var help = `The Telepresence Connect is a background component that manages a connection. It

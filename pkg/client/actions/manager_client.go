@@ -5,7 +5,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	rpc "github.com/datawire/telepresence2/rpc/manager"
+	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
 )
 
 func ListAllAgents(ctx context.Context, client rpc.ManagerClient, sessionID string, opts ...grpc.CallOption) ([]*rpc.AgentInfo, error) {

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/rpc/manager"
+	"github.com/datawire/telepresence2/rpc/v2/manager"
 )
 
 func WithSessionInfo(ctx context.Context, si *manager.SessionInfo) context.Context {

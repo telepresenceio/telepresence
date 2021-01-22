@@ -9,9 +9,9 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/datawire/ambassador/pkg/kates"
-	"github.com/datawire/telepresence2/pkg/client/auth"
-	"github.com/datawire/telepresence2/pkg/client/connector"
-	"github.com/datawire/telepresence2/pkg/client/daemon"
+	"github.com/datawire/telepresence2/v2/pkg/client/auth"
+	"github.com/datawire/telepresence2/v2/pkg/client/connector"
+	"github.com/datawire/telepresence2/v2/pkg/client/daemon"
 )
 
 var help = `Telepresence can connect to a cluster and route all outbound traffic from your

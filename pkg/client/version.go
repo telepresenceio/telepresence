@@ -5,7 +5,7 @@ import (
 
 	"github.com/blang/semver"
 
-	"github.com/datawire/telepresence2/pkg/version"
+	"github.com/datawire/telepresence2/v2/pkg/version"
 )
 
 // Version returns the version of this executable.

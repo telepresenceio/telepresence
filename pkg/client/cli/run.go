@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/v2/pkg/client"
 )
 
 func runAsRoot(exe string, args []string) error {

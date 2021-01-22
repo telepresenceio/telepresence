@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/cmd/traffic/cmd/agent"
-	rpc "github.com/datawire/telepresence2/rpc/manager"
+	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
+	"github.com/datawire/telepresence2/v2/cmd/traffic/cmd/agent"
 )
 
 const (

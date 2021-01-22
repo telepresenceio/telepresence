@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/rpc/manager"
+	"github.com/datawire/telepresence2/rpc/v2/manager"
 )
 
 type State interface {
