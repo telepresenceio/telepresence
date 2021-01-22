@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/blang/semver"
@@ -48,7 +49,7 @@ var (
 
 func managerImageName(env client.Env) string {
 	resolveManagerName.Do(func() {
-		managerImage = fmt.Sprintf("%s/tel2:%s", env.Registry, client.Version())
+		managerImage = fmt.Sprintf("%s/tel2:%s", env.Registry, strings.TrimPrefix(client.Version(), "v"))
 	})
 	return managerImage
 }

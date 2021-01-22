@@ -4,7 +4,7 @@ deployment:
   metadata:
     annotations:
       deployment.kubernetes.io/revision: "1"
-      telepresence.getambassador.io/actions: '{"version":"0.1.2-test","ReferencedService":"hello-6","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:v0.1.2-test"}}'
+      telepresence.getambassador.io/actions: '{"version":"0.1.2-test","ReferencedService":"hello-6","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:0.1.2-test"}}'
     creationTimestamp: "2020-12-19T07:17:54Z"
     generation: 2
     labels:
@@ -48,7 +48,7 @@ deployment:
             value: hello-6
           - name: APP_PORT
             value: "8080"
-          image: localhost:5000/tel2:v0.1.2-test
+          image: localhost:5000/tel2:0.1.2-test
           imagePullPolicy: IfNotPresent
           name: traffic-agent
           ports:

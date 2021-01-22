@@ -45,9 +45,9 @@ build: ## (Build) Build all the source code
 .PHONY: image push-image
 image: .ko.yaml $(tools/ko) ## (Build) Build/tag the manager/agent container image
 	localname=$$(GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION)" ko publish --local ./cmd/traffic) && \
-	docker tag "$$localname" $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
+	docker tag "$$localname" $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 push-image: image
-	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
+	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 
 .PHONY: images push-images
 images: image
