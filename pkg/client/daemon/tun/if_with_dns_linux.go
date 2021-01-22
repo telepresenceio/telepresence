@@ -16,6 +16,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/pkg/client/daemon/dbus"
+	"github.com/datawire/telepresence2/pkg/subnet"
 )
 
 const (
@@ -127,16 +128,9 @@ func checksum(buf []byte) uint16 {
 // network. The interface is then set to state "up".
 func CreateInterfaceWithDNS(c context.Context, dConn *dbus.ResolveD) (*InterfaceWithDNS, error) {
 	// Obtain an available class C subnet
-	ifCIDR, err := findAvailableSubnetClassC()
+	ifCIDR, err := subnet.FindAvailableClassC()
 	if err != nil {
 		return nil, err
-	}
-	ifAddr, network, err := net.ParseCIDR(ifCIDR)
-	if err != nil {
-		return nil, fmt.Errorf("unable to parse interface address CIDR: %v", err)
-	}
-	if if4Addr := ifAddr.To4(); if4Addr != nil {
-		ifAddr = if4Addr
 	}
 
 	vni, vName, err := OpenTun()
@@ -156,8 +150,8 @@ func CreateInterfaceWithDNS(c context.Context, dConn *dbus.ResolveD) (*Interface
 	dlog.Infof(c, "network interface %q has index %d", vName, tunIfd.Index)
 
 	// Place the DNS server in the private network at x.x.x.2
-	dnsIP := make(net.IP, len(ifAddr))
-	copy(dnsIP, ifAddr)
+	dnsIP := make(net.IP, len(ifCIDR.IP))
+	copy(dnsIP, ifCIDR.IP)
 	dnsIP[len(dnsIP)-1] = 2
 
 	// Configure interface with DNS and search domains
@@ -171,7 +165,7 @@ func CreateInterfaceWithDNS(c context.Context, dConn *dbus.ResolveD) (*Interface
 		return nil, err
 	}
 
-	err = dexec.CommandContext(c, "ip", "addr", "add", network.String(), "dev", vName).Run()
+	err = dexec.CommandContext(c, "ip", "addr", "add", ifCIDR.String(), "dev", vName).Run()
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +176,7 @@ func CreateInterfaceWithDNS(c context.Context, dConn *dbus.ResolveD) (*Interface
 	}
 	return &InterfaceWithDNS{
 		ReadWriteCloser: vni,
-		ifIP:            ifAddr,
+		ifIP:            ifCIDR.IP,
 		tunIfd:          tunIfd,
 		dnsIP:           dnsIP,
 	}, nil

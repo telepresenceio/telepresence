@@ -2,8 +2,6 @@ package daemon
 
 import (
 	"context"
-	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -13,15 +11,7 @@ import (
 	"github.com/datawire/telepresence2/pkg/client/daemon/dbus"
 	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/pkg/client/daemon/tun"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
 )
-
-func (o *outbound) resolveNoNS(query string) *rpc.Route {
-	o.domainsLock.RLock()
-	route := o.domains[strings.ToLower(query)]
-	o.domainsLock.RUnlock()
-	return route
-}
 
 func (o *outbound) tryResolveD(c context.Context) error {
 	// Connect to ResolveD via DBUS.
@@ -30,7 +20,6 @@ func (o *outbound) tryResolveD(c context.Context) error {
 		return errResolveDNotConfigured
 	}
 	defer func() {
-		o.dBusResolveD = nil
 		_ = dConn.Close()
 	}()
 
@@ -39,21 +28,8 @@ func (o *outbound) tryResolveD(c context.Context) error {
 	}
 
 	// Create a new local address that the DNS resolver can listen to.
-	dnsResolverAddr, err := func() (*net.UDPAddr, error) {
-		l, err := net.ListenPacket("udp4", "localhost:")
-		if err != nil {
-			return nil, err
-		}
-		addr, ok := l.LocalAddr().(*net.UDPAddr)
-		l.Close()
-		if !ok {
-			// listening to udp should definitely return an *net.UDPAddr
-			panic("cast error")
-		}
-		return addr, err
-	}()
+	dnsResolverAddr, err := dnsResolverAddr()
 	if err != nil {
-		dlog.Errorf(c, "unable to resolve udp addr: %v", err)
 		return errResolveDNotConfigured
 	}
 
@@ -64,8 +40,12 @@ func (o *outbound) tryResolveD(c context.Context) error {
 		return errResolveDNotConfigured
 	}
 
-	o.ifIndex = t.InterfaceIndex()
-	o.dBusResolveD = dConn
+	o.setSearchPathFunc = func(c context.Context, paths []string) {
+		err := dConn.SetLinkDomains(t.InterfaceIndex(), paths...)
+		if err != nil {
+			dlog.Errorf(c, "failed to revert virtual interface link: %v", err)
+		}
+	}
 
 	c, cancel := context.WithCancel(c)
 	defer cancel()
