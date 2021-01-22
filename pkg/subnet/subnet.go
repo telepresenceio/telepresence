@@ -18,10 +18,10 @@ var interfaceAddrs = net.InterfaceAddrs
 
 // FindAvailableClassC returns the first class C subnet CIDR in the address ranges reserved
 // for private (non-routed) use that isn't in use by an existing network interface.
-func FindAvailableClassC() (string, error) {
+func FindAvailableClassC() (*net.IPNet, error) {
 	addrs, err := interfaceAddrs()
 	if err != nil {
-		return "", fmt.Errorf("failed to obtain interface addresses: %v", err)
+		return nil, fmt.Errorf("failed to obtain interface addresses: %v", err)
 	}
 
 	cidrs := make([]*ipAndNetwork, 0, len(addrs))
@@ -44,15 +44,15 @@ func FindAvailableClassC() (string, error) {
 	if found := findChunk(cidrs, 192, 168); found >= 0 {
 		return cidr24(192, 168, found), nil
 	}
-	return "", errors.New("no available CIDR")
+	return nil, errors.New("no available CIDR")
 }
 
 // FindAvailableLoopBackClassC returns the first class C subnet CIDR in the address ranges reserved
 // for private (non-routed) use that isn't in use by an existing network interface.
-func FindAvailableLoopBackClassC() (string, error) {
+func FindAvailableLoopBackClassC() (*net.IPNet, error) {
 	addrs, err := interfaceAddrs()
 	if err != nil {
-		return "", fmt.Errorf("failed to obtain interface addresses: %v", err)
+		return nil, fmt.Errorf("failed to obtain interface addresses: %v", err)
 	}
 
 	cidrs := make([]*ipAndNetwork, 0)
@@ -79,7 +79,7 @@ func FindAvailableLoopBackClassC() (string, error) {
 			return cidr24(127, i, found), nil
 		}
 	}
-	return "", errors.New("no available CIDR")
+	return nil, errors.New("no available CIDR")
 }
 
 // onesFromEight computes the number of ones needed to mask everything from
@@ -107,8 +107,15 @@ func findChunk(cidrs []*ipAndNetwork, ar1, ar2 int) int {
 	return findAvailableChunk(wantedRange, cidrs)
 }
 
-func cidr24(ar1, ar2, ar3 int) string {
-	return fmt.Sprintf("%d.%d.%d.0/24", ar1, ar2, ar3)
+func cidr24(ar1, ar2, ar3 int) *net.IPNet {
+	ip := make(net.IP, 4)
+	ip[0] = byte(ar1)
+	ip[1] = byte(ar2)
+	ip[2] = byte(ar3)
+	return &net.IPNet{
+		IP:   ip,
+		Mask: net.CIDRMask(24, 32),
+	}
 }
 
 // covers answers the question if network range a contains all of network range b

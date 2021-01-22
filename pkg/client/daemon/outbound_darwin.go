@@ -124,17 +124,10 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	if err != nil {
 		return err
 	}
-	ifAddr, _, err := net.ParseCIDR(loopBackCIDR)
-	if err != nil {
-		return fmt.Errorf("unable to parse interface address CIDR: %v", err)
-	}
-	if if4Addr := ifAddr.To4(); if4Addr != nil {
-		ifAddr = if4Addr
-	}
 
 	// Place the DNS server in the private network at x.x.x.2
-	dnsIP := make(net.IP, len(ifAddr))
-	copy(dnsIP, ifAddr)
+	dnsIP := make(net.IP, len(loopBackCIDR.IP))
+	copy(dnsIP, loopBackCIDR.IP)
 	dnsIP[len(dnsIP)-1] = 2
 
 	rf := resolveFile{

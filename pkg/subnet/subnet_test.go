@@ -54,7 +54,7 @@ func Test_findAvailableIPV4CIDR(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.Equal(t, "10.0.0.0/24", got)
+	assert.Equal(t, "10.0.0.0/24", got.String())
 }
 
 func Test_findAvailableIPV4CIDR_busy(t *testing.T) {
@@ -65,7 +65,7 @@ func Test_findAvailableIPV4CIDR_busy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.Equal(t, "10.0.1.0/24", got)
+	assert.Equal(t, "10.0.1.0/24", got.String())
 }
 
 func Test_findAvailableIPV4CIDR_all_C_in_10_10_busy(t *testing.T) {
@@ -76,7 +76,7 @@ func Test_findAvailableIPV4CIDR_all_C_in_10_10_busy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.Equal(t, "10.1.0.0/24", got)
+	assert.Equal(t, "10.1.0.0/24", got.String())
 }
 
 func Test_findAvailableIPV4CIDR_all_B_in_10_busy(t *testing.T) {
@@ -87,7 +87,7 @@ func Test_findAvailableIPV4CIDR_all_B_in_10_busy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.Equal(t, "17.16.0.0/24", got)
+	assert.Equal(t, "17.16.0.0/24", got.String())
 }
 
 func Test_findAvailableIPV4CIDR_all_10_and_17_busy(t *testing.T) {
@@ -101,7 +101,7 @@ func Test_findAvailableIPV4CIDR_all_10_and_17_busy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.Equal(t, "192.168.0.0/24", got)
+	assert.Equal(t, "192.168.0.0/24", got.String())
 }
 
 func Test_findAvailableIPV4CIDR_all_10_17_and_some_192_busy(t *testing.T) {
@@ -116,7 +116,7 @@ func Test_findAvailableIPV4CIDR_all_10_17_and_some_192_busy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.Equal(t, "192.168.8.0/24", got)
+	assert.Equal(t, "192.168.8.0/24", got.String())
 }
 
 func Test_findAvailableIPV4CIDR_all_busy(t *testing.T) {
@@ -155,5 +155,5 @@ func TestFindAvailableLoopBackClassC(t *testing.T) {
 	}
 	got, err := FindAvailableLoopBackClassC()
 	require.NoError(t, err)
-	assert.Equal(t, "127.0.1.0/24", got)
+	assert.Equal(t, "127.0.1.0/24", got.String())
 }
