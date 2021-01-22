@@ -20,7 +20,7 @@ import (
 	"github.com/datawire/telepresence2/pkg/subnet"
 )
 
-const domainName = "cluster.local"
+const kubernetesZone = "cluster.local"
 
 type resolveFile struct {
 	domain      string
@@ -131,9 +131,9 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	dnsIP[len(dnsIP)-1] = 2
 
 	rf := resolveFile{
-		domain:      domainName,
+		domain:      kubernetesZone,
 		nameservers: []net.IP{dnsIP},
-		search:      []string{domainName},
+		search:      []string{kubernetesZone},
 	}
 	if err = rf.write(resolverFileName); err != nil {
 		return err
