@@ -2,7 +2,7 @@
 # CircleCI webui:
 #
 #  - A context named "telepresence2-release".  The context sets the
-#    following environment variableS:
+#    following environment variables:
 #     + DOCKERHUB_USERNAME
 #     + DOCKERHUB_PASSWORD
 #     + AWS_ACCESS_KEY_ID (for S3)
