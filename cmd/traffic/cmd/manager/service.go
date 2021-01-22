@@ -13,9 +13,9 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/state"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
-	"github.com/datawire/telepresence2/pkg/rpc/systema"
 	"github.com/datawire/telepresence2/pkg/version"
+	rpc "github.com/datawire/telepresence2/rpc/manager"
+	"github.com/datawire/telepresence2/rpc/systema"
 )
 
 // Clock is the mechanism used by the Manager state to get the current time.

@@ -15,8 +15,8 @@ import (
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/client/actions"
 	"github.com/datawire/telepresence2/pkg/client/cache"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/connector"
-	"github.com/datawire/telepresence2/pkg/rpc/manager"
+	rpc "github.com/datawire/telepresence2/rpc/connector"
+	"github.com/datawire/telepresence2/rpc/manager"
 )
 
 // trafficManager is a handle to access the Traffic Manager in a

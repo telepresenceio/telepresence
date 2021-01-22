@@ -97,11 +97,11 @@ ok      github.com/datawire/telepresence2/pkg/client/daemon/nat 55.759s
 --- SKIP: TestWatches (0.00s)
 PASS
 ok      github.com/datawire/telepresence2/pkg/manager   (cached)
-?       github.com/datawire/telepresence2/pkg/rpc       [no test files]
-?       github.com/datawire/telepresence2/pkg/rpc/connector     [no test files]
-?       github.com/datawire/telepresence2/pkg/rpc/daemon        [no test files]
-?       github.com/datawire/telepresence2/pkg/rpc/iptables      [no test files]
-?       github.com/datawire/telepresence2/pkg/rpc/version       [no test files]
+?       github.com/datawire/telepresence2/rpc       [no test files]
+?       github.com/datawire/telepresence2/rpc/connector     [no test files]
+?       github.com/datawire/telepresence2/rpc/daemon        [no test files]
+?       github.com/datawire/telepresence2/rpc/iptables      [no test files]
+?       github.com/datawire/telepresence2/rpc/version       [no test files]
 ?       github.com/datawire/telepresence2/pkg/version   [no test files]
 ```
 

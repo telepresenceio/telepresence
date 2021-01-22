@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/watchable"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
+	rpc "github.com/datawire/telepresence2/rpc/manager"
 )
 
 const (

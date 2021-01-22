@@ -19,7 +19,7 @@ import (
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/rpc/manager"
+	"github.com/datawire/telepresence2/rpc/manager"
 )
 
 type installer struct {

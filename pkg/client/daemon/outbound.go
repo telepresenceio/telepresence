@@ -14,7 +14,7 @@ import (
 	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/pkg/client/daemon/nat"
 	"github.com/datawire/telepresence2/pkg/client/daemon/proxy"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
+	rpc "github.com/datawire/telepresence2/rpc/daemon"
 )
 
 const (

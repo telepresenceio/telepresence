@@ -12,7 +12,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/watchable"
-	"github.com/datawire/telepresence2/pkg/rpc/manager"
+	"github.com/datawire/telepresence2/rpc/manager"
 )
 
 func assertClientMapSnapshotEqual(t *testing.T, expected, actual watchable.ClientMapSnapshot, msgAndArgs ...interface{}) bool {

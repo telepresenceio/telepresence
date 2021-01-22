@@ -10,7 +10,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/cmd/traffic/cmd/agent"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
+	rpc "github.com/datawire/telepresence2/rpc/manager"
 )
 
 const (

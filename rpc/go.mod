@@ -1,4 +1,4 @@
-module github.com/datawire/telepresence2/pkg/rpc
+module github.com/datawire/telepresence2/rpc
 
 go 1.15
 

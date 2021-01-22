@@ -4,7 +4,7 @@ package telepresence.systema;
 
 import "rpc/manager/manager.proto";
 
-option go_package = "github.com/datawire/telepresence2/pkg/rpc/systema";
+option go_package = "github.com/datawire/telepresence2/rpc/systema";
 
 // How Calls from the agent to System A are authenticated is TBD.
 service SystemAAgent {

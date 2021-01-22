@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/datawire/telepresence2/pkg/client/auth"
-	"github.com/datawire/telepresence2/pkg/rpc/manager"
+	"github.com/datawire/telepresence2/rpc/manager"
 )
 
 // addPreviewFlags mutates 'flags', adding flags to it such that the flags set the appropriate

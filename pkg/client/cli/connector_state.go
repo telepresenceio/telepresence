@@ -13,9 +13,9 @@ import (
 
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/client/cache"
-	"github.com/datawire/telepresence2/pkg/rpc/connector"
-	"github.com/datawire/telepresence2/pkg/rpc/daemon"
-	"github.com/datawire/telepresence2/pkg/rpc/manager"
+	"github.com/datawire/telepresence2/rpc/connector"
+	"github.com/datawire/telepresence2/rpc/daemon"
+	"github.com/datawire/telepresence2/rpc/manager"
 )
 
 type connectorState struct {

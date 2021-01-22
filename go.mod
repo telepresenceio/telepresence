@@ -7,7 +7,7 @@ require (
 	github.com/datawire/ambassador v1.9.1
 	github.com/datawire/dlib v1.1.0
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
-	github.com/datawire/telepresence2/pkg/rpc v0.0.0-00010101000000-000000000000
+	github.com/datawire/telepresence2/rpc v0.0.0-00010101000000-000000000000
 	github.com/docker/docker v1.4.2-0.20200203170920-46ec8731fbce
 	github.com/godbus/dbus/v5 v5.0.4-0.20201218172701-b3768b321399
 	github.com/golang/protobuf v1.4.3
@@ -45,4 +45,4 @@ replace github.com/Azure/go-autorest v10.8.1+incompatible => github.com/Azure/go
 // Pin down golang.org/x/sys to a version that contains unix.SYS_IOCTL on darwin
 replace golang.org/x/sys => golang.org/x/sys v0.0.0-20200826173525-f9321e4c35a6
 
-replace github.com/datawire/telepresence2/pkg/rpc => ./pkg/rpc
+replace github.com/datawire/telepresence2/rpc => ./rpc

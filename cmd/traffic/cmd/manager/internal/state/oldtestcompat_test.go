@@ -3,7 +3,7 @@ package state
 import (
 	"time"
 
-	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
+	rpc "github.com/datawire/telepresence2/rpc/manager"
 )
 
 func (s *State) IsPresent(sessionID string) bool {

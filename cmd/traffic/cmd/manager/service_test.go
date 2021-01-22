@@ -19,8 +19,8 @@ import (
 	"github.com/datawire/dlib/dutil"
 	"github.com/datawire/telepresence2/cmd/traffic/cmd/manager"
 	testdata "github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/test"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
 	"github.com/datawire/telepresence2/pkg/version"
+	rpc "github.com/datawire/telepresence2/rpc/manager"
 )
 
 func dumps(o interface{}) string {

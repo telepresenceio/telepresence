@@ -8,8 +8,8 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/rpc/connector"
-	"github.com/datawire/telepresence2/pkg/rpc/daemon"
+	"github.com/datawire/telepresence2/rpc/connector"
+	"github.com/datawire/telepresence2/rpc/daemon"
 )
 
 // IsServerRunning reports whether or not the daemon server is running.

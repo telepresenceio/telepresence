@@ -3,7 +3,7 @@ package connector
 import (
 	v1 "k8s.io/api/core/v1"
 
-	"github.com/datawire/telepresence2/pkg/rpc/manager"
+	"github.com/datawire/telepresence2/rpc/manager"
 )
 
 func (kc *k8sCluster) detectIngressBehavior() []*manager.IngressInfo {

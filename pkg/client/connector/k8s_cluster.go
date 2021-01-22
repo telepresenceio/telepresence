@@ -18,7 +18,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dutil"
 	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/rpc/daemon"
+	"github.com/datawire/telepresence2/rpc/daemon"
 )
 
 const connectTimeout = 5 * time.Second

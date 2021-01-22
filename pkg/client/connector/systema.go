@@ -11,8 +11,8 @@ import (
 
 	"github.com/datawire/telepresence2/pkg/client"
 	"github.com/datawire/telepresence2/pkg/client/cache"
-	"github.com/datawire/telepresence2/pkg/rpc/common"
-	"github.com/datawire/telepresence2/pkg/rpc/systema"
+	"github.com/datawire/telepresence2/rpc/common"
+	"github.com/datawire/telepresence2/rpc/systema"
 )
 
 type systemaCredentials string

@@ -4,8 +4,8 @@ package connector
 
 import (
 	context "context"
-	common "github.com/datawire/telepresence2/pkg/rpc/common"
-	manager "github.com/datawire/telepresence2/pkg/rpc/manager"
+	common "github.com/datawire/telepresence2/rpc/common"
+	manager "github.com/datawire/telepresence2/rpc/manager"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"

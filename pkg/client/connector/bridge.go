@@ -15,7 +15,7 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/pkg/rpc/daemon"
+	"github.com/datawire/telepresence2/rpc/daemon"
 )
 
 // worker names

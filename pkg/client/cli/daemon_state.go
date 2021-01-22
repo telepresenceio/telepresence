@@ -13,7 +13,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/rpc/daemon"
+	"github.com/datawire/telepresence2/rpc/daemon"
 )
 
 type daemonState struct {

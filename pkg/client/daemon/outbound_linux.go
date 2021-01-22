@@ -16,7 +16,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
+	rpc "github.com/datawire/telepresence2/rpc/daemon"
 )
 
 var errResolveDNotConfigured = errors.New("resolved not configured")
