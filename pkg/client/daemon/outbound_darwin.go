@@ -110,6 +110,16 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 	r.search = ps
 }
 
+// dnsServerWorker places a file under the /etc/resolver directory so that it is picked up by the
+// MacOS resolver. The file is configured with a single nameserver that points to the local IP
+// that the Telepresence DNS server listens to. The file is removed, and the DNS is flushed when
+// the worker terminates
+//
+// For more information about /etc/resolver files, please view the man pages available at
+//
+//   man 5 resolver
+//
+// or, if not on a Mac, follow this link: https://www.manpagez.com/man/5/resolver/
 func (o *outbound) dnsServerWorker(c context.Context) error {
 	resolverDirName := filepath.Join("/etc", "resolver")
 	resolverFileName := filepath.Join(resolverDirName, "telepresence.local")
