@@ -13,6 +13,7 @@ import (
 
 	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
 	"github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/internal/watchable"
+	"github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/managerutil"
 )
 
 const (
@@ -129,7 +130,7 @@ func (s *State) unlockedCheckAgentsForIntercept(intercept *rpc.InterceptInfo) (e
 		agentList = append(agentList, agent)
 	}
 
-	if !agentsAreCompatible(agentList) {
+	if !managerutil.AgentsAreCompatible(agentList) {
 		errCode = rpc.InterceptDispositionType_NO_AGENT
 		errMsg = fmt.Sprintf("Agents for %q are not consistent", intercept.Spec.Agent)
 		return
