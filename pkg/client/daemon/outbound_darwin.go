@@ -157,6 +157,11 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 			return
 		}
 		rf.setSearchPaths(paths...)
+
+		// Versions prior to Big Sur will not trigger an update unless the resolver file
+		// is removed and recreated.
+		_ = os.Remove(resolverFileName)
+
 		if err = rf.write(resolverFileName); err != nil {
 			dlog.Error(c, err)
 			return
