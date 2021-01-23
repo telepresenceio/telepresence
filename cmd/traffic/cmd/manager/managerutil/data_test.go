@@ -1,4 +1,4 @@
-package state
+package managerutil
 
 import (
 	"testing"
@@ -9,7 +9,7 @@ import (
 	testdata "github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/internal/test"
 )
 
-func TestMechanismHelpers(t *testing.T) {
+func TestMechanismsAreTheSame(t *testing.T) {
 	a := assert.New(t)
 
 	testMechs := testdata.GetTestMechanisms(t)
@@ -31,7 +31,7 @@ func TestMechanismHelpers(t *testing.T) {
 	a.True(mechanismsAreTheSame(oss, []*rpc.AgentInfo_Mechanism{testMechs["tcp"]}))
 }
 
-func TestAgentHelpers(t *testing.T) {
+func TestAgentsAreCompatible(t *testing.T) {
 	a := assert.New(t)
 
 	testAgents := testdata.GetTestAgents(t)
@@ -40,9 +40,9 @@ func TestAgentHelpers(t *testing.T) {
 	demoAgent1 := testAgents["demo1"]
 	demoAgent2 := testAgents["demo2"]
 
-	a.True(agentsAreCompatible([]*rpc.AgentInfo{demoAgent1, demoAgent2}))
-	a.True(agentsAreCompatible([]*rpc.AgentInfo{helloAgent}))
-	a.True(agentsAreCompatible([]*rpc.AgentInfo{helloProAgent}))
-	a.False(agentsAreCompatible([]*rpc.AgentInfo{}))
-	a.False(agentsAreCompatible([]*rpc.AgentInfo{helloAgent, helloProAgent}))
+	a.True(AgentsAreCompatible([]*rpc.AgentInfo{demoAgent1, demoAgent2}))
+	a.True(AgentsAreCompatible([]*rpc.AgentInfo{helloAgent}))
+	a.True(AgentsAreCompatible([]*rpc.AgentInfo{helloProAgent}))
+	a.False(AgentsAreCompatible([]*rpc.AgentInfo{}))
+	a.False(AgentsAreCompatible([]*rpc.AgentInfo{helloAgent, helloProAgent}))
 }

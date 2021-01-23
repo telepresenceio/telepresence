@@ -327,67 +327,79 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 	return service, sPort, cn, cPortIndex, nil
 }
 
-var agentExists = errors.New("agent exists")
 var agentNotFound = errors.New("no such agent")
 
 func (ki *installer) ensureAgent(c context.Context, name, portName, agentImageName string) error {
-	dep := ki.findDeployment(name)
+	var (
+		dep *kates.Deployment
+		svc *kates.Service
+	)
+	dep = ki.findDeployment(name)
 	if dep == nil {
 		return agentNotFound
 	}
-	cns := dep.Spec.Template.Spec.Containers
-	var agentCn *kates.Container
-	for i := len(cns) - 1; i >= 0; i-- {
-		cn := &cns[i]
-		if cn.Name == "traffic-agent" {
-			agentCn = cn
+	var agentContainer *kates.Container
+	for i := range dep.Spec.Template.Spec.Containers {
+		container := &dep.Spec.Template.Spec.Containers[i]
+		if container.Name == "traffic-agent" {
+			agentContainer = container
 			break
 		}
 	}
 
-	if agentCn == nil {
+	switch {
+	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for deployment %q", name)
 		matchingSvcs := ki.findMatchingServices(portName, dep)
 		if len(matchingSvcs) == 0 {
 			return fmt.Errorf("found no services with just one port and a selector matching labels %v", dep.Spec.Template.Labels)
 		}
-		dep, svc, err := addAgentToDeployment(c, portName, agentImageName, dep, matchingSvcs)
+		var err error
+		dep, svc, err = addAgentToDeployment(c, portName, agentImageName, dep, matchingSvcs)
 		if err != nil {
 			return err
 		}
-		if err = ki.client.Update(c, dep, dep); err != nil {
+	case agentContainer.Image != agentImageName:
+		var actions deploymentActions
+		ok, err := getAnnotation(dep.Annotations, &actions)
+		if err != nil {
 			return err
+		} else if !ok {
+			// This can only happen if someone manually tampered with the annTelepresenceActions annotation
+			return fmt.Errorf("expected %q annotation not found in %s", annTelepresenceActions, dep.Name)
 		}
-		if svc != nil {
-			if err = ki.client.Update(c, svc, svc); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
 
-	if agentCn.Image == agentImageName {
+		aaa := actions.AddTrafficAgent
+		explainUndo(c, aaa, dep)
+		aaa.ImageName = agentImageName
+		agentContainer.Image = agentImageName
+		explainDo(c, aaa, dep)
+	default:
 		dlog.Debugf(c, "deployment %q already has an installed and up-to-date agent", name)
-		return agentExists
 	}
 
-	var actions deploymentActions
-	ok, err := getAnnotation(dep.Annotations, &actions)
-	if err != nil {
+	if err := ki.client.Update(c, dep, dep); err != nil {
 		return err
 	}
-
-	if !ok {
-		// This can only happen if someone manually tampered with the annTelepresenceActions annotation
-		return fmt.Errorf("expected %q annotation not found in %s", annTelepresenceActions, dep.Name)
+	if svc != nil {
+		if err := ki.client.Update(c, svc, svc); err != nil {
+			return err
+		}
 	}
 
-	aaa := actions.AddTrafficAgent
-	explainUndo(c, aaa, dep)
-	aaa.ImageName = agentImageName
-	agentCn.Image = agentImageName
-	explainDo(c, aaa, dep)
-	return ki.client.Update(c, dep, dep)
+	origGeneration := dep.ObjectMeta.Generation
+	return ki.waitUntil(c, func(c context.Context) (bool, error) {
+		dep := ki.findDeploymentUnlocked(name)
+		if dep == nil {
+			return false, agentNotFound
+		}
+		deployed := dep.ObjectMeta.Generation >= origGeneration &&
+			dep.Status.ObservedGeneration == dep.ObjectMeta.Generation &&
+			(dep.Spec.Replicas == nil || dep.Status.UpdatedReplicas >= *dep.Spec.Replicas) &&
+			dep.Status.UpdatedReplicas == dep.Status.Replicas &&
+			dep.Status.AvailableReplicas == dep.Status.Replicas
+		return deployed, nil
+	})
 }
 
 func getAnnotation(ann map[string]string, data interface{}) (bool, error) {

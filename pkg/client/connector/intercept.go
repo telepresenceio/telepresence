@@ -16,6 +16,7 @@ import (
 	"github.com/datawire/dlib/dtime"
 	rpc "github.com/datawire/telepresence2/rpc/v2/connector"
 	"github.com/datawire/telepresence2/rpc/v2/manager"
+	"github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/datawire/telepresence2/v2/pkg/client/actions"
 )
 
@@ -206,9 +207,6 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 
 func (tm *trafficManager) addAgent(c context.Context, agentName, agentImageName string) *rpc.InterceptResult {
 	if err := tm.installer.ensureAgent(c, agentName, "", agentImageName); err != nil {
-		if err == agentExists {
-			return nil
-		}
 		if err == agentNotFound {
 			return &rpc.InterceptResult{
 				Error:     rpc.InterceptError_NOT_FOUND,
@@ -222,7 +220,7 @@ func (tm *trafficManager) addAgent(c context.Context, agentName, agentImageName 
 		}
 	}
 
-	dlog.Infof(c, "waiting for new agent for deployment %q", agentName)
+	dlog.Infof(c, "waiting for agent for deployment %q", agentName)
 	_, err := tm.waitForAgent(c, agentName)
 	if err != nil {
 		dlog.Error(c, err)
@@ -287,10 +285,14 @@ func (tm *trafficManager) waitForAgent(ctx context.Context, name string) (*manag
 			return nil, fmt.Errorf("waiting for agent %q to be present: %q", name, err)
 		}
 
+		var agentList []*manager.AgentInfo
 		for _, agent := range snapshot.Agents {
 			if agent.Name == name {
-				return agent, nil
+				agentList = append(agentList, agent)
 			}
+		}
+		if managerutil.AgentsAreCompatible(agentList) {
+			return agentList[0], nil
 		}
 	}
 }

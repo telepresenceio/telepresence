@@ -198,7 +198,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	setStatus := func() {
 		r.ClusterOk = true
 		r.ClusterContext = s.cluster.Context
-		r.ClusterServer = s.cluster.server()
+		r.ClusterServer = s.cluster.Server
 		if s.bridge != nil {
 			r.BridgeOk = s.bridge.check(c)
 		}
@@ -253,7 +253,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		}
 	*/
 
-	dlog.Infof(c, "Connected to context %s (%s)", s.cluster.Context, s.cluster.server())
+	dlog.Infof(c, "Connected to context %s (%s)", s.cluster.Context, s.cluster.Server)
 
 	tmgr, err := newTrafficManager(s.ctx, s.env, s.cluster, cr.InstallId)
 	if err != nil {
