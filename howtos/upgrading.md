@@ -6,7 +6,7 @@ description: "How to upgrade your installation of Telepresence and install previ
 
 The Telepresence CLI will periodically check for new versions and notify you when an upgrade is available.  [Running the same commands used for installation](../../quick-start/) will replace your current binary with the latest version.
 
-### <img class="os-logo" src="../../images/apple.png"/> macOS
+### <img class="os-logo" src="../../../images/apple.png"/> macOS
 
 ```
 sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/latest/telepresence \
@@ -15,7 +15,7 @@ sudo chmod a+x /usr/local/bin/telepresence && \
 telepresence version
 ```
 
-### <img class="os-logo" src="../../images/linux.png"/> Linux
+### <img class="os-logo" src="../../../images/linux.png"/> Linux
 
 ```
 sudo curl -fL https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence \
