@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
+	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
 )
 
 func callerPackage(skip int) string {

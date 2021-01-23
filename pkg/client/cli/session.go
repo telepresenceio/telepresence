@@ -3,8 +3,8 @@ package cli
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/rpc/daemon"
+	"github.com/datawire/telepresence2/rpc/v2/daemon"
+	"github.com/datawire/telepresence2/v2/pkg/client"
 )
 
 type sessionInfo struct {

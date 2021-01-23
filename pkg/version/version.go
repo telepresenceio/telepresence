@@ -5,7 +5,8 @@ import (
 	"runtime/debug"
 )
 
-// Version is inserted at build using --ldflags -X
+// Version is a "vSEMVER" string, and is either populated at build-time using `--ldflags -X`, or at
+// init()-time by inspecting the binary's own debug info.
 var Version string
 
 func init() {

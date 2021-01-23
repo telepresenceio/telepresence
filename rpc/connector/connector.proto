@@ -5,7 +5,7 @@ import "google/protobuf/empty.proto";
 import "rpc/common/version.proto";
 import "rpc/manager/manager.proto";
 
-option go_package = "github.com/datawire/telepresence2/pkg/rpc/connector";
+option go_package = "github.com/datawire/telepresence2/rpc/v2/connector";
 
 // The Connector service is responsible for connecting to the traffic manager
 // and manage intercepts. It can only run when a Daemon is running.

@@ -11,11 +11,11 @@ import (
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/client/cache"
-	"github.com/datawire/telepresence2/pkg/rpc/connector"
-	"github.com/datawire/telepresence2/pkg/rpc/daemon"
-	"github.com/datawire/telepresence2/pkg/rpc/manager"
+	"github.com/datawire/telepresence2/rpc/v2/connector"
+	"github.com/datawire/telepresence2/rpc/v2/daemon"
+	"github.com/datawire/telepresence2/rpc/v2/manager"
+	"github.com/datawire/telepresence2/v2/pkg/client"
+	"github.com/datawire/telepresence2/v2/pkg/client/cache"
 )
 
 type connectorState struct {

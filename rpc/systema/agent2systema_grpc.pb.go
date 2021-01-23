@@ -4,7 +4,7 @@ package systema
 
 import (
 	context "context"
-	manager "github.com/datawire/telepresence2/pkg/rpc/manager"
+	manager "github.com/datawire/telepresence2/rpc/v2/manager"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"

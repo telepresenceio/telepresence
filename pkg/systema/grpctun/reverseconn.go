@@ -9,7 +9,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/datawire/telepresence2/pkg/rpc/systema"
+	"github.com/datawire/telepresence2/rpc/v2/systema"
 )
 
 // ReverseConnectionImpl is the intersection of these two interfaces:

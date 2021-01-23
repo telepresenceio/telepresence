@@ -18,7 +18,7 @@ The output of `make help` shows some of this information, but not all of it, and
 ```console
 $ make build
 mkdir -p build-output/bin
-go build -ldflags=-X=github.com/datawire/telepresence2/pkg/version.Version=v0.2.0-1605793571 -o build-output/bin ./cmd/...
+go build -ldflags=-X=github.com/datawire/telepresence2/v2/pkg/version.Version=v0.2.0-1605793571 -o build-output/bin ./cmd/...
 
 $ ./build-output/bin/telepresence version
 Client v0.2.0-1605793571 (api v3)
@@ -37,13 +37,13 @@ uid=0(root) gid=0(root) groups=0(root)
 
 $ make check
 go test -v ./...
-?       github.com/datawire/telepresence2/cmd/telepresence      [no test files]
-?       github.com/datawire/telepresence2/cmd/traffic   [no test files]
+?       github.com/datawire/telepresence2/v2/cmd/telepresence      [no test files]
+?       github.com/datawire/telepresence2/v2/cmd/traffic   [no test files]
 === RUN   TestState_HandleIntercepts
 --- PASS: TestState_HandleIntercepts (0.01s)
 PASS
-ok      github.com/datawire/telepresence2/pkg/agent     (cached)
-?       github.com/datawire/telepresence2/pkg/client    [no test files]
+ok      github.com/datawire/telepresence2/v2/pkg/agent     (cached)
+?       github.com/datawire/telepresence2/v2/pkg/client    [no test files]
 === RUN   TestTelepresence
 Running Suite: Telepresence Suite
 =================================
@@ -55,7 +55,7 @@ Ran 9 of 9 Specs in 47.723 seconds
 SUCCESS! -- 9 Passed | 0 Failed | 0 Pending | 0 Skipped
 --- PASS: TestTelepresence (47.72s)
 PASS
-ok      github.com/datawire/telepresence2/pkg/client/cli        47.756s
+ok      github.com/datawire/telepresence2/v2/pkg/client/cli        47.756s
 + kubectl --kubeconfig /tmp/dtest-kubeconfig-ark3-d4942b3f89a9.yaml create namespace telepresence-349112
 === RUN   Test_findTrafficManager_notPresent
 --- PASS: Test_findTrafficManager_notPresent (0.01s)
@@ -67,17 +67,17 @@ ok      github.com/datawire/telepresence2/pkg/client/cli        47.756s
 === RUN   Test_ensureTrafficManager_notPresent
 --- PASS: Test_ensureTrafficManager_notPresent (0.17s)
 PASS
-ok      github.com/datawire/telepresence2/pkg/client/connector  52.269s
-?       github.com/datawire/telepresence2/pkg/client/daemon     [no test files]
-?       github.com/datawire/telepresence2/pkg/client/daemon/dns [no test files]
+ok      github.com/datawire/telepresence2/v2/pkg/client/connector  52.269s
+?       github.com/datawire/telepresence2/v2/pkg/client/daemon     [no test files]
+?       github.com/datawire/telepresence2/v2/pkg/client/daemon/dns [no test files]
 2020/11/19 08:48:20 Acquiring machine lock "default" took 50.24 seconds
 === RUN   TestTranslator
 --- PASS: TestTranslator (3.54s)
 === RUN   TestSorted
 --- PASS: TestSorted (0.01s)
 PASS
-ok      github.com/datawire/telepresence2/pkg/client/daemon/nat 55.759s
-?       github.com/datawire/telepresence2/pkg/client/daemon/proxy       [no test files]
+ok      github.com/datawire/telepresence2/v2/pkg/client/daemon/nat 55.759s
+?       github.com/datawire/telepresence2/v2/pkg/client/daemon/proxy       [no test files]
 === RUN   TestMechanismHelpers
 --- PASS: TestMechanismHelpers (0.00s)
 === RUN   TestAgentHelpers
@@ -96,13 +96,13 @@ ok      github.com/datawire/telepresence2/pkg/client/daemon/nat 55.759s
     watches_test.go:26: Skipped! Use "env CI=true go test [...]" to run
 --- SKIP: TestWatches (0.00s)
 PASS
-ok      github.com/datawire/telepresence2/pkg/manager   (cached)
-?       github.com/datawire/telepresence2/pkg/rpc       [no test files]
-?       github.com/datawire/telepresence2/pkg/rpc/connector     [no test files]
-?       github.com/datawire/telepresence2/pkg/rpc/daemon        [no test files]
-?       github.com/datawire/telepresence2/pkg/rpc/iptables      [no test files]
-?       github.com/datawire/telepresence2/pkg/rpc/version       [no test files]
-?       github.com/datawire/telepresence2/pkg/version   [no test files]
+ok      github.com/datawire/telepresence2/v2/pkg/manager   (cached)
+?       github.com/datawire/telepresence2/rpc/v2       [no test files]
+?       github.com/datawire/telepresence2/rpc/v2/connector     [no test files]
+?       github.com/datawire/telepresence2/rpc/v2/daemon        [no test files]
+?       github.com/datawire/telepresence2/rpc/v2/iptables      [no test files]
+?       github.com/datawire/telepresence2/rpc/v2/version       [no test files]
+?       github.com/datawire/telepresence2/v2/pkg/version   [no test files]
 ```
 
 You can also use `gotestsum` or manually run `go test` as you prefer.
@@ -112,8 +112,8 @@ You can also use `gotestsum` or manually run `go test` as you prefer.
 
 ```console
 $ make image
-2020/11/19 08:57:58 Using base docker.io/datawire/tel2-base:20201105 for github.com/datawire/telepresence2/cmd/traffic
-2020/11/19 08:57:58 Building github.com/datawire/telepresence2/cmd/traffic for linux/amd64
+2020/11/19 08:57:58 Using base docker.io/datawire/tel2-base:20201105 for github.com/datawire/telepresence2/v2/cmd/traffic
+2020/11/19 08:57:58 Building github.com/datawire/telepresence2/v2/cmd/traffic for linux/amd64
 2020/11/19 08:57:59 Loading ko.local/traffic-6c3ca0a9c236a15e275ec10cceb31334:2f96b389da4fb4a3ae249e55293c3608fb8d9a9cf979d534bea7ace69e853ce0
 2020/11/19 08:58:01 Loaded ko.local/traffic-6c3ca0a9c236a15e275ec10cceb31334:2f96b389da4fb4a3ae249e55293c3608fb8d9a9cf979d534bea7ace69e853ce0
 2020/11/19 08:58:01 Adding tag latest

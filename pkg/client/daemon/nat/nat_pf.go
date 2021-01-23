@@ -12,7 +12,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	ppf "github.com/datawire/pf"
-	"github.com/datawire/telepresence2/pkg/client"
+	"github.com/datawire/telepresence2/v2/pkg/client"
 )
 
 type Translator struct {

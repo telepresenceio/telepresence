@@ -17,10 +17,10 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/pkg/rpc/manager"
-	"github.com/datawire/telepresence2/pkg/rpc/systema"
-	"github.com/datawire/telepresence2/pkg/systema/grpctun"
-	"github.com/datawire/telepresence2/pkg/systema/internal/loopback"
+	"github.com/datawire/telepresence2/rpc/v2/manager"
+	"github.com/datawire/telepresence2/rpc/v2/systema"
+	"github.com/datawire/telepresence2/v2/pkg/systema/grpctun"
+	"github.com/datawire/telepresence2/v2/pkg/systema/internal/loopback"
 )
 
 // ManagerServer is the interface that you must implement for when System A talks to the Manager.

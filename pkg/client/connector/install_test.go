@@ -21,8 +21,8 @@ import (
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/version"
+	"github.com/datawire/telepresence2/v2/pkg/client"
+	"github.com/datawire/telepresence2/v2/pkg/version"
 )
 
 var kubeconfig string
@@ -97,7 +97,7 @@ func publishManager(t *testing.T) {
 		t.Fatalf("%s\n%v", stdout, err)
 	}
 	imageName = strings.TrimSpace(string(stdout))
-	tag := fmt.Sprintf("%s/tel2:%s", registry, client.Version())
+	tag := fmt.Sprintf("%s/tel2:%s", registry, strings.TrimPrefix(client.Version(), "v"))
 	capture(t, "docker", "tag", imageName, tag)
 	capture(t, "docker", "push", tag)
 }

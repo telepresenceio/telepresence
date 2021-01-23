@@ -9,10 +9,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
-	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/client/cache"
-	"github.com/datawire/telepresence2/pkg/rpc/common"
-	"github.com/datawire/telepresence2/pkg/rpc/systema"
+	"github.com/datawire/telepresence2/rpc/v2/common"
+	"github.com/datawire/telepresence2/rpc/v2/systema"
+	"github.com/datawire/telepresence2/v2/pkg/client"
+	"github.com/datawire/telepresence2/v2/pkg/client/cache"
 )
 
 type systemaCredentials string

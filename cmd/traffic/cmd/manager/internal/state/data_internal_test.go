@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	testdata "github.com/datawire/telepresence2/cmd/traffic/cmd/manager/internal/test"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
+	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
+	testdata "github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/internal/test"
 )
 
 func TestMechanismHelpers(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dlog"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/manager"
+	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
 )
 
 func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, state State) error {

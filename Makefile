@@ -30,3 +30,11 @@ default: help
 include build/tools.mk
 include build/go.mk
 include build/support.mk
+
+.PHONY: prepare-release
+prepare-release: ## (Release) Update nescessary files and tag the release (does not push)
+	go mod edit -require=github.com/datawire/telepresence2/rpc/v2@$(TELEPRESENCE_VERSION)
+	git add go.mod
+	git commit --message='Prepare $(TELEPRESENCE_VERSION)'
+	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)
+	git tag --annotate --message='$(TELEPRESENCE_VERSION)' rpc/$(TELEPRESENCE_VERSION)

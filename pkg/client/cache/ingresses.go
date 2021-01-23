@@ -3,7 +3,7 @@ package cache
 import (
 	"os"
 
-	"github.com/datawire/telepresence2/pkg/rpc/manager"
+	"github.com/datawire/telepresence2/rpc/v2/manager"
 )
 
 const ingressesFile = "ingresses.json"

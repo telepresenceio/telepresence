@@ -13,7 +13,7 @@ import (
 	"github.com/blang/semver"
 
 	"github.com/datawire/dlib/dtime"
-	"github.com/datawire/telepresence2/pkg/client/cache"
+	"github.com/datawire/telepresence2/v2/pkg/client/cache"
 )
 
 func newHttpServer(t *testing.T) *http.Server {

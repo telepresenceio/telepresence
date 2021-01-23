@@ -34,7 +34,7 @@ spec:
           ports:
             - containerPort: 8080
         - name: traffic-agent
-          image: ko://github.com/datawire/telepresence2/cmd/traffic
+          image: ko://github.com/datawire/telepresence2/v2/cmd/traffic
           args: ["agent"]
           ports:
             - name: http

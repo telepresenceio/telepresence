@@ -11,10 +11,10 @@ import (
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
-	"github.com/datawire/telepresence2/pkg/client/daemon/nat"
-	"github.com/datawire/telepresence2/pkg/client/daemon/proxy"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
+	rpc "github.com/datawire/telepresence2/rpc/v2/daemon"
+	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
+	"github.com/datawire/telepresence2/v2/pkg/client/daemon/nat"
+	"github.com/datawire/telepresence2/v2/pkg/client/daemon/proxy"
 )
 
 const (

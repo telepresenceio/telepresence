@@ -13,8 +13,8 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	systemarpc "github.com/datawire/telepresence2/pkg/rpc/systema"
-	"github.com/datawire/telepresence2/pkg/systema"
+	systemarpc "github.com/datawire/telepresence2/rpc/v2/systema"
+	"github.com/datawire/telepresence2/v2/pkg/systema"
 )
 
 type systemaCredentials struct {

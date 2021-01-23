@@ -6,9 +6,9 @@ import (
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 
-	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/client/auth"
-	"github.com/datawire/telepresence2/pkg/client/cache"
+	"github.com/datawire/telepresence2/v2/pkg/client"
+	"github.com/datawire/telepresence2/v2/pkg/client/auth"
+	"github.com/datawire/telepresence2/v2/pkg/client/cache"
 )
 
 func dashboardCommand() *cobra.Command {

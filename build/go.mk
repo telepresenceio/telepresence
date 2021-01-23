@@ -14,24 +14,34 @@ BINDIR=$(BUILDDIR)/bin
 
 # proto/gRPC generation using protoc
 
-PROTO_SRCS = $(shell echo rpc/*/*.proto)
-
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
 generate: generate-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-go-grpc)
-	rm -rf ./pkg/rpc/vendor ./vendor
-	$(tools/protoc) --proto_path=. --go_out=. --go-grpc_out=. --go_opt=module=github.com/datawire/telepresence2 --go-grpc_opt=module=github.com/datawire/telepresence2 $(PROTO_SRCS)
+	rm -rf ./rpc/vendor
+	find ./rpc -name '*.go' -delete
+	$(tools/protoc) \
+	  \
+	  --go_out=./rpc \
+	  --go_opt=module=github.com/datawire/telepresence2/rpc/v2 \
+	  \
+	  --go-grpc_out=./rpc \
+	  --go-grpc_opt=module=github.com/datawire/telepresence2/rpc/v2 \
+	  \
+	  --proto_path=. \
+	  $$(find ./rpc/ -name '*.proto')
+	cd ./rpc && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
+
+	rm -rf ./vendor
 	go generate ./...
-	cd ./pkg/rpc && go mod tidy
-	cd ./pkg/rpc && go mod vendor
-	go mod tidy
-	go mod vendor
-	rm -rf ./pkg/rpc/vendor ./vendor
+	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 
 .PHONY: generate-clean
 generate-clean: ## (Generate) Delete generated files that get checked in to Git
+	rm -rf ./rpc/vendor
+	find ./rpc -name '*.go' -delete
+
+	rm -rf ./vendor
 	find pkg cmd -name 'generated_*.go' -delete
-	rm -rf pkg/rpc/*/
 
 PKG_VERSION = $(shell go list ./pkg/version)
 
@@ -45,9 +55,9 @@ build: ## (Build) Build all the source code
 .PHONY: image push-image
 image: .ko.yaml $(tools/ko) ## (Build) Build/tag the manager/agent container image
 	localname=$$(GOFLAGS="-ldflags=-X=$(PKG_VERSION).Version=$(TELEPRESENCE_VERSION)" ko publish --local ./cmd/traffic) && \
-	docker tag "$$localname" $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
+	docker tag "$$localname" $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 push-image: image
-	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(TELEPRESENCE_VERSION)
+	docker push $(TELEPRESENCE_REGISTRY)/tel2:$(patsubst v%,%,$(TELEPRESENCE_VERSION))
 
 .PHONY: images push-images
 images: image

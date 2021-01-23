@@ -20,11 +20,11 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dutil"
-	"github.com/datawire/telepresence2/pkg/client"
-	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
-	"github.com/datawire/telepresence2/pkg/rpc/common"
-	"github.com/datawire/telepresence2/pkg/rpc/connector"
-	rpc "github.com/datawire/telepresence2/pkg/rpc/daemon"
+	"github.com/datawire/telepresence2/rpc/v2/common"
+	"github.com/datawire/telepresence2/rpc/v2/connector"
+	rpc "github.com/datawire/telepresence2/rpc/v2/daemon"
+	"github.com/datawire/telepresence2/v2/pkg/client"
+	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
 )
 
 var help = `The Telepresence Daemon is a long-lived background component that manages

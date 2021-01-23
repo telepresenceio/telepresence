@@ -8,9 +8,9 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/pkg/client/daemon/dbus"
-	"github.com/datawire/telepresence2/pkg/client/daemon/dns"
-	"github.com/datawire/telepresence2/pkg/client/daemon/tun"
+	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dbus"
+	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
+	"github.com/datawire/telepresence2/v2/pkg/client/daemon/tun"
 )
 
 func (o *outbound) tryResolveD(c context.Context) error {
