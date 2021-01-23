@@ -16,6 +16,7 @@ import (
 	"github.com/datawire/dlib/dtime"
 	rpc "github.com/datawire/telepresence2/rpc/v2/connector"
 	"github.com/datawire/telepresence2/rpc/v2/manager"
+	"github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/datawire/telepresence2/v2/pkg/client/actions"
 )
 
@@ -284,10 +285,14 @@ func (tm *trafficManager) waitForAgent(ctx context.Context, name string) (*manag
 			return nil, fmt.Errorf("waiting for agent %q to be present: %q", name, err)
 		}
 
+		var agentList []*manager.AgentInfo
 		for _, agent := range snapshot.Agents {
 			if agent.Name == name {
-				return agent, nil
+				agentList = append(agentList, agent)
 			}
+		}
+		if managerutil.AgentsAreCompatible(agentList) {
+			return agentList[0], nil
 		}
 	}
 }
