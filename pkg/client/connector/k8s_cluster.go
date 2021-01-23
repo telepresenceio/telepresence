@@ -26,18 +26,21 @@ const connectTimeout = 5 * time.Second
 // k8sCluster is a Kubernetes cluster reference
 type k8sCluster struct {
 	// Things for bypassing kates
+	Server       string
 	Context      string
 	Namespace    string
 	kubeFlagArgs []string
 
 	// Main
-	client      *kates.Client
-	daemon      daemon.DaemonClient // for DNS updates
-	srv         string
+	client *kates.Client
+	daemon daemon.DaemonClient // for DNS updates
+
+	// Current snapshot.
+	// These fields (except for accLock) get set by acc.Update().
+	accLock     sync.Mutex
 	Deployments []*kates.Deployment
 	Pods        []*kates.Pod
 	Services    []*kates.Service
-	accLock     sync.Mutex
 }
 
 // getKubectlArgs returns the kubectl command arguments to run a
@@ -50,11 +53,6 @@ func (kc *k8sCluster) getKubectlArgs(args ...string) []string {
 // the appropriate environment to talk to the cluster
 func (kc *k8sCluster) getKubectlCmd(c context.Context, args ...string) *dexec.Cmd {
 	return dexec.CommandContext(c, "kubectl", kc.getKubectlArgs(args...)...)
-}
-
-// server returns the cluster's server configuration
-func (kc *k8sCluster) server() string {
-	return kc.srv
 }
 
 func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, thenName string, then func(context.Context) error) error {
@@ -381,35 +379,48 @@ func newKCluster(c context.Context, kubeFlagMap map[string]string, daemon daemon
 		return nil, err
 	}
 
-	return &k8sCluster{
+	ret := &k8sCluster{
 		Context:      ctxName,
 		Namespace:    namespace,
 		kubeFlagArgs: kubeFlagArgs,
 
 		client: kc,
 		daemon: daemon,
-	}, nil
+	}
+
+	if err := ret.check(c); err != nil {
+		return nil, fmt.Errorf("initial cluster check failed: %v", client.RunError(err))
+	}
+
+	server := kubeFlagMap["server"]
+	if server == "" {
+		// By using --minify, we prune all clusters not relevant to the current context, so
+		// we can just use "[0]" instead of correlating the cluster index with the context.
+		//
+		// In order to have a helpful error message when the context doesn't exist (so
+		// .clusters==[]), we do this *after* the .check().
+		srvQuery := "jsonpath={.clusters[0].cluster.server}"
+		cmd := dexec.CommandContext(c, "kubectl", append(kubeFlagArgs, "config", "view", "--minify", "-o", srvQuery)...)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("kubectl config view server: %v", client.RunError(err))
+		}
+		server = strings.TrimSpace(string(output))
+	}
+	ret.Server = server
+
+	return ret, nil
 }
 
 // trackKCluster tracks connectivity to a cluster
 func trackKCluster(c context.Context, kubeFlagMap map[string]string, daemon daemon.DaemonClient) (*k8sCluster, error) {
 	kc, err := newKCluster(c, kubeFlagMap, daemon)
 	if err != nil {
-		return nil, fmt.Errorf("k8s client create failed. %v", client.RunError(err))
+		return nil, fmt.Errorf("k8s client create failed: %v", err)
 	}
 
-	if err := kc.check(c); err != nil {
-		return nil, fmt.Errorf("initial cluster check failed: %v", client.RunError(err))
-	}
 	dlog.Infof(c, "Context: %s", kc.Context)
-
-	cmd := kc.getKubectlCmd(c, "config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("kubectl config view server: %v", client.RunError(err))
-	}
-	kc.srv = strings.TrimSpace(string(output))
-	dlog.Infof(c, "Server: %s", kc.srv)
+	dlog.Infof(c, "Server: %s", kc.Server)
 
 	// accWait is closed when the watch produces its first snapshot
 	accWait := make(chan struct{})
