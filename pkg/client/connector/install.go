@@ -387,7 +387,19 @@ func (ki *installer) ensureAgent(c context.Context, name, portName, agentImageNa
 		}
 	}
 
-	return nil
+	origGeneration := dep.ObjectMeta.Generation
+	return ki.waitUntil(c, func(c context.Context) (bool, error) {
+		dep := ki.findDeploymentUnlocked(name)
+		if dep == nil {
+			return false, agentNotFound
+		}
+		deployed := dep.ObjectMeta.Generation >= origGeneration &&
+			dep.Status.ObservedGeneration == dep.ObjectMeta.Generation &&
+			(dep.Spec.Replicas == nil || dep.Status.UpdatedReplicas >= *dep.Spec.Replicas) &&
+			dep.Status.UpdatedReplicas == dep.Status.Replicas &&
+			dep.Status.AvailableReplicas == dep.Status.Replicas
+		return deployed, nil
+	})
 }
 
 func getAnnotation(ann map[string]string, data interface{}) (bool, error) {

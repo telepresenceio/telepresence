@@ -219,7 +219,7 @@ func (tm *trafficManager) addAgent(c context.Context, agentName, agentImageName 
 		}
 	}
 
-	dlog.Infof(c, "waiting for new agent for deployment %q", agentName)
+	dlog.Infof(c, "waiting for agent for deployment %q", agentName)
 	_, err := tm.waitForAgent(c, agentName)
 	if err != nil {
 		dlog.Error(c, err)

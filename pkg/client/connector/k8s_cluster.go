@@ -36,8 +36,9 @@ type k8sCluster struct {
 	daemon daemon.DaemonClient // for DNS updates
 
 	// Current snapshot.
-	// These fields (except for accLock) get set by acc.Update().
+	// These fields (except for accLock/accCond) get set by acc.Update().
 	accLock     sync.Mutex
+	accCond     *sync.Cond
 	Deployments []*kates.Deployment
 	Pods        []*kates.Pod
 	Services    []*kates.Service
@@ -154,6 +155,24 @@ func (kc *k8sCluster) createWatch(c context.Context, namespace string) (acc *kat
 		}), nil
 }
 
+func (kc *k8sCluster) waitUntil(ctx context.Context, fn func(context.Context) (bool, error)) error {
+	kc.accLock.Lock()
+	defer kc.accLock.Unlock()
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		done, err := fn(ctx)
+		if err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+		kc.accCond.Wait()
+	}
+}
+
 func (kc *k8sCluster) startWatches(c context.Context, namespace string, accWait chan<- struct{}) error {
 	acc, err := kc.createWatch(c, namespace)
 	if err != nil {
@@ -179,6 +198,7 @@ func (kc *k8sCluster) startWatches(c context.Context, namespace string, accWait 
 					defer kc.accLock.Unlock()
 					if acc.Update(kc) {
 						kc.updateTable(c)
+						kc.accCond.Broadcast()
 					}
 				}()
 				closeAccWait()
@@ -294,16 +314,19 @@ func (kc *k8sCluster) deploymentNames() []string {
 // findDeployment finds a deployment with the given name in the clusters namespace and returns
 // either a copy of that deployment or nil if no such deployment could be found.
 func (kc *k8sCluster) findDeployment(name string) *kates.Deployment {
-	var depCopy *kates.Deployment
 	kc.accLock.Lock()
+	defer kc.accLock.Unlock()
+	return kc.findDeploymentUnlocked(name)
+}
+
+// findDeploymentUnlocked is like findDeployment, but assumes that kc.accLock is already held.
+func (kc *k8sCluster) findDeploymentUnlocked(name string) *kates.Deployment {
 	for _, dep := range kc.Deployments {
 		if dep.Namespace == kc.Namespace && dep.Name == name {
-			depCopy = dep.DeepCopy()
-			break
+			return dep.DeepCopy()
 		}
 	}
-	kc.accLock.Unlock()
-	return depCopy
+	return nil
 }
 
 // findSvc finds a service with the given name in the clusters namespace and returns
@@ -387,6 +410,7 @@ func newKCluster(c context.Context, kubeFlagMap map[string]string, daemon daemon
 		client: kc,
 		daemon: daemon,
 	}
+	ret.accCond = sync.NewCond(&ret.accLock)
 
 	if err := ret.check(c); err != nil {
 		return nil, fmt.Errorf("initial cluster check failed: %v", client.RunError(err))
