@@ -206,9 +206,6 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 
 func (tm *trafficManager) addAgent(c context.Context, agentName, agentImageName string) *rpc.InterceptResult {
 	if err := tm.installer.ensureAgent(c, agentName, "", agentImageName); err != nil {
-		if err == agentExists {
-			return nil
-		}
 		if err == agentNotFound {
 			return &rpc.InterceptResult{
 				Error:     rpc.InterceptError_NOT_FOUND,
