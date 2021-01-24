@@ -7,7 +7,7 @@ require (
 	github.com/datawire/ambassador v1.9.1
 	github.com/datawire/dlib v1.1.0
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
-	github.com/datawire/telepresence2/rpc/v2 v2.0.0-rc.1
+	github.com/datawire/telepresence2/rpc/v2 v2.0.0-rc.2
 	github.com/docker/docker v1.4.2-0.20200203170920-46ec8731fbce
 	github.com/godbus/dbus/v5 v5.0.4-0.20201218172701-b3768b321399
 	github.com/golang/protobuf v1.4.3
