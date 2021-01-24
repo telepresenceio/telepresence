@@ -74,12 +74,17 @@ def labels():
 
 
 @given(labels(), labels(), labels())
-def test_prefer_longest_suffix(resolver, first, second, third):
+def test_prefer_longest_suffix(first, second, third):
     """
     If ``LocalResolver`` observes overlapping suffixes (for example, "foo" and
     "bar.foo") then it prefers to strip the longest one possible from any
     queries it forwards.
     """
+    # See the resolver fixture defined above. Not using a fixture here because
+    # that only gets run once per test function, and we want this to run once
+    # per Hypothesis call.
+    resolver = LocalResolver(b"example.invalid", u"default")
+
     probe = "hellotelepresence"
     target_suffix = "{}.{}".format(second, third)
 
