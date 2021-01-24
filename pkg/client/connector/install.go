@@ -421,7 +421,7 @@ func getAnnotation(ann map[string]string, data interface{}) (bool, error) {
 	ourV := client.Semver()
 
 	// Compare major and minor versions. 100% backward compatibility is assumed and greater patch versions are allowed
-	if ourV.Major < annV.Major || ourV.Minor < annV.Minor {
+	if ourV.Major < annV.Major || ourV.Major == annV.Major && ourV.Minor < annV.Minor {
 		return false, fmt.Errorf("the version %v found in annotation %s is more recent than version %v of this binary",
 			annTelepresenceActions, annV, ourV)
 	}
