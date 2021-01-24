@@ -2,6 +2,7 @@ package connector
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -121,10 +122,15 @@ func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, th
 func (kc *k8sCluster) check(c context.Context) error {
 	c, cancel := context.WithTimeout(c, connectTimeout)
 	defer cancel()
-	err := kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found").Run()
+	cmd := kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found")
+	stderr := bytes.Buffer{}
+	cmd.Stderr = &stderr
+	err := cmd.Run()
 	if err != nil {
 		if c.Err() == context.DeadlineExceeded {
 			err = errors.New("timeout when testing cluster connectivity")
+		} else if msg := stderr.String(); len(msg) > 0 {
+			err = errors.New(msg)
 		}
 	}
 	return err
