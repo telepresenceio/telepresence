@@ -361,7 +361,7 @@ func (ki *installer) ensureAgent(c context.Context, name, portName, agentImageNa
 		}
 	case agentContainer.Image != agentImageName:
 		var actions deploymentActions
-		ok, err := getAnnotation(dep.Annotations, &actions)
+		ok, err := getAnnotation(dep, &actions)
 		if err != nil {
 			return err
 		} else if !ok {
@@ -402,7 +402,8 @@ func (ki *installer) ensureAgent(c context.Context, name, portName, agentImageNa
 	})
 }
 
-func getAnnotation(ann map[string]string, data interface{}) (bool, error) {
+func getAnnotation(obj kates.Object, data interface{}) (bool, error) {
+	ann := obj.GetAnnotations()
 	if ann == nil {
 		return false, nil
 	}
@@ -416,21 +417,22 @@ func getAnnotation(ann map[string]string, data interface{}) (bool, error) {
 
 	annV, err := semver.Parse(data.(multiAction).version())
 	if err != nil {
-		return false, fmt.Errorf("unable to parse semantic version in annotation %s", annTelepresenceActions)
+		return false, fmt.Errorf("unable to parse semantic version in annotation %s of %s %s", annTelepresenceActions,
+			obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
 	}
 	ourV := client.Semver()
 
 	// Compare major and minor versions. 100% backward compatibility is assumed and greater patch versions are allowed
 	if ourV.Major < annV.Major || ourV.Major == annV.Major && ourV.Minor < annV.Minor {
-		return false, fmt.Errorf("the version %v found in annotation %s is more recent than version %v of this binary",
-			annTelepresenceActions, annV, ourV)
+		return false, fmt.Errorf("the version %v found in annotation %s of %s %s is more recent than version %v of this binary",
+			annV, annTelepresenceActions, obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName(), ourV)
 	}
 	return true, nil
 }
 
 func (ki *installer) undoDeploymentMods(c context.Context, dep *kates.Deployment) error {
 	var actions deploymentActions
-	ok, err := getAnnotation(dep.Annotations, &actions)
+	ok, err := getAnnotation(dep, &actions)
 	if !ok {
 		return err
 	}
@@ -451,7 +453,7 @@ func (ki *installer) undoDeploymentMods(c context.Context, dep *kates.Deployment
 
 func (ki *installer) undoServiceMods(c context.Context, svc *kates.Service) error {
 	var actions svcActions
-	ok, err := getAnnotation(svc.Annotations, &actions)
+	ok, err := getAnnotation(svc, &actions)
 	if !ok {
 		return err
 	}
