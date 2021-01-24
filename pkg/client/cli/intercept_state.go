@@ -22,10 +22,15 @@ import (
 
 type interceptInfo struct {
 	sessionInfo
+
 	name      string
 	agentName string
 	port      int
+
 	// [REDACTED]
+	matchMechanism string // parsed
+	// [REDACTED]
+
 	previewEnabled bool
 	previewSpec    manager.PreviewSpec
 }
@@ -70,7 +75,11 @@ func leaveCommand() *cobra.Command {
 }
 
 func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
-	if ii.previewEnabled /* || [REDACTED] */ {
+	// [REDACTED]
+	ii.matchMechanism = "tcp"
+	// [REDACTED]
+
+	if ii.previewEnabled || ii.matchMechanism != "tcp" {
 		if err := auth.EnsureLoggedIn(cmd); err != nil {
 			return err
 		}
@@ -173,7 +182,6 @@ func (is *interceptState) EnsureState() (bool, error) {
 	if is.name == "" {
 		is.name = is.agentName
 	}
-	// [REDACTED]
 	if is.previewEnabled && is.previewSpec.Ingress == nil {
 		ingress, err := is.cs.selectIngress(is.cmd.InOrStdin(), is.cmd.OutOrStdout())
 		if err != nil {
@@ -184,13 +192,13 @@ func (is *interceptState) EnsureState() (bool, error) {
 
 	// Turn that in to a spec
 	spec := &manager.InterceptSpec{
-		Name:       is.name,
-		Agent:      is.agentName,
-		Mechanism:  "tcp",
+		Name:      is.name,
+		Agent:     is.agentName,
+		Mechanism: is.matchMechanism,
+		// [REDACTED],
 		TargetHost: "127.0.0.1",
 		TargetPort: int32(is.port),
 	}
-	// [REDACTED]
 
 	// Submit the spec
 	r, err := is.cs.connectorClient.CreateIntercept(is.cmd.Context(), &manager.CreateInterceptRequest{
