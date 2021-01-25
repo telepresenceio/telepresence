@@ -26,6 +26,6 @@ sudo dnf upgrade telepresence
 
 Take a look at the [changelog](changelog) to see what's new.
 
-See what others are up to on the [community page](community).
+See what others are up to, including tools for scaling Telepresence to your teams, on the [community page](community).
 
 Get involved! Find us in the [Slack chatroom](https://d6e.co/slack) or [submit a pull request](https://github.com/datawire/telepresence/pulls).
