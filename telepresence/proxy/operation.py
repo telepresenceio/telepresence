@@ -227,8 +227,8 @@ class Swap(ProxyOperation):
         })
 
         for unneeded in [
-            "args", "livenessProbe", "readinessProbe", "workingDir",
-            "lifecycle"
+            "args", "livenessProbe", "startupProbe", "readinessProbe",
+            "workingDir", "lifecycle"
         ]:
             try:
                 container.pop(unneeded)
