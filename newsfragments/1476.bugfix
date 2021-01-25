@@ -1,0 +1,1 @@
+> unprivileged container check via iptables will not hang on DNS lookups

@@ -81,7 +81,7 @@ def setup_vpn(runner: Runner, args: Namespace) -> LaunchType:
     if runner.platform == "linux":
         # Do a quick iptables sanity check, post sudo
         try:
-            ipt_command = ["sudo", "iptables", "--list"]
+            ipt_command = ["sudo", "iptables", "--list", "--numeric"]
             runner.get_output(ipt_command, stderr_to_stdout=True)
         except subprocess.CalledProcessError as exc:
             runner.show("Quick test of iptables failed:")
