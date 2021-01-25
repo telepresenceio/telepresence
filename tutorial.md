@@ -8,7 +8,7 @@ In this tutorial you will explore some of the key features of Telepresence. To g
 
 ## Prerequisites
 
-You must have the [Telepresence CLI installed](../../quick-start) on your laptop and access via RBAC to create and update deployments and services in the cluster. It is recommended to use an empty development cluster for this tutorial. You must also have [Node.js installed](https://nodejs.org/en/download/package-manager/) on your laptop to run the demo app code.
+You must have the [Telepresence CLI installed](../quick-start) on your laptop and access via RBAC to create and update deployments and services in the cluster. It is recommended to use an empty development cluster for this tutorial. You must also have [Node.js installed](https://nodejs.org/en/download/package-manager/) on your laptop to run the demo app code.
 
 ## Cluster Setup
 
@@ -20,37 +20,36 @@ You must have the [Telepresence CLI installed](../../quick-start) on your laptop
 
 2. Install [Edge Stack](../../../../../../products/edge-stack/) to use as an ingress controller for your cluster. We need an ingress controller to allow access to the web app from the internet.
 
-  Run the following two commands to deploy Edge Stack:
+  Change into the repo directory, then into `k8s-config`, and apply the YAML files to deploy Edge Stack.
 
   ```
-   kubectl apply -f https://www.getambassador.io/yaml/aes-crds.yaml && \ 
-   kubectl wait --for condition=established --timeout=90s crd -lproduct=aes && \
-   kubectl apply -f https://www.getambassador.io/yaml/aes.yaml && \
-   kubectl -n ambassador wait --for condition=available --timeout=90s deploy -lproduct=aes
+  cd amb-code-quickstart-app/k8s-config
+  kubectl apply -f 1-aes-crds.yml && kubectl wait --for condition=established --timeout=90s crd -lproduct=aes
+  kubectl apply -f 2-aes.yml && kubectl wait -n ambassador deploy -lproduct=aes --for condition=available --timeout=90s
   ```
 
-3. Wait a few moments for the external load balancer to become available, then retrieve its IP address:
-
-  ```
-  kubectl get service -n ambassador ambassador -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
-  ```
-
-4. Change into the repo directory, then into the `k8s-config` directory. Install the web app by applying its manifest:
+3. Install the web app by applying its manifest:
 
   ```
   kubectl apply -f edgy-corp-web-app.yaml
   ```
 
+4. Wait a few moments for the external load balancer to become available, then retrieve its IP address:
+
+  ```
+  kubectl get service -n ambassador ambassador -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+  ```
+
 <table style="border-collapse: collapse; border: none; padding: 5px; line-height: 29px">
 <tr style="border: none; padding: 5px">
-    <td style="border: none; padding: 5px; width:65%"><ol start="5"><li>Wait until all the pods start, then access the the Edgy Corp web app in your browser at <code>http://&lt;load-balancer-ip/&gt;</code>. You should see the landing page for the web app with an architecture diagram. The web app is composed of three services, with the frontend <code>VeryLargeJavaService</code> dependent on the two backend services.</li></ol></td>
+    <td style="border: none; padding: 5px; width:65%"><ol start="5"><li>Wait until all the pods start, then access the the Edgy Corp web app in your browser at <code>http://&lt;load-balancer-ip/&gt;</code>. Be sure you use <code>http</code>, not <code>https</code>! <br/>You should see the landing page for the web app with an architecture diagram. The web app is composed of three services, with the frontend <code>VeryLargeJavaService</code> dependent on the two backend services.</li></ol></td>
     <td style="border: none; padding: 5px"><img src="../../images/tp-tutorial-1.png"/></td>
 </tr>
 </table>
 
 ## Developing with Telepresence
 
-Now that your cluster is all wired up you're ready to start doing development work with Telepresence. Imagine you are a Java developer and first on your to-do list for the day is a change on the `DataProcessingNodeService`. One thing this service does is set the color for the title and a pod in the diagram. The production version of the app on the cluster uses <span style="color:green" class="bold">green</span> elements, but you want to see a version with these elements set to <span style="color:blue" class="bold">blue</span>.
+Now that your app is all wired up you're ready to start doing development work with Telepresence. Imagine you are a Java developer and first on your to-do list for the day is a change on the `DataProcessingNodeService`. One thing this service does is set the color for the title and a pod in the diagram. The production version of the app on the cluster uses <span style="color:green" class="bold">green</span> elements, but you want to see a version with these elements set to <span style="color:blue" class="bold">blue</span>.
 
 The `DataProcessingNodeService` service is dependent on the `VeryLargeJavaService` and `VeryLargeDataStore` services to run. Local development would require one of the two following setups, neither of which is ideal.
 
@@ -76,7 +75,7 @@ Alternatively, you can use Telepresence's `intercept` command to proxy traffic b
   node app -c blue
   ```
 
-4. In a new terminal window start the intercept. This will proxy requests to the `DataProcessingNodeService` service to your laptop.  It will also generate a preview URL, which will let you access your app but with requests to the intercepted service proxied to your laptop.
+4. In a new terminal window start the intercept. This will proxy requests to the `DataProcessingNodeService` service to your laptop.  It will also generate a preview URL, which will let you view the app with the intercepted service in your browser.
 
   The intercept requires you specify the name of the deployment to be intercepted and the port to proxy. 
 
@@ -84,14 +83,14 @@ Alternatively, you can use Telepresence's `intercept` command to proxy traffic b
   telepresence intercept dataprocessingnodeservice --port 3000
   ```
 
-  You will be prompted with a few options. Telepresence tries to intelligently determine the deployment and namespace of your ingress controller.  Hit `enter` to accept the default value of `ambassador.ambassador` for `Ingress`.  You can accept the defaults for the next options as well: `443` for `Port` and `y` for `TLS`.
-
+  You will be prompted with a few options. Telepresence tries to intelligently determine the deployment and namespace of your ingress controller.  Hit `enter` to accept the default value of `ambassador.ambassador` for `Ingress`.  For simplicity's sake, our app uses 80 for the port and does not use TLS, so use those options when prompted for the `port` and `TLS` settings.
+  
   ```
   $ telepresence intercept dataprocessingnodeservice --port 3000
   Confirm the ingress to use for preview URL access
   Ingress service.namespace [ambassador.ambassador] ?
-  Port [443] ? 
-  Use TLS y/n [y] ? 
+  Port [443] ? 80
+  Use TLS y/n [y] ? n
   Using deployment dataprocessingnodeservice
   intercepted
       State       : ACTIVE
@@ -103,7 +102,7 @@ Alternatively, you can use Telepresence's `intercept` command to proxy traffic b
 
 <table style="border-collapse: collapse; border: none; padding: 5px; line-height: 29px">
 <tr style="border: none; padding: 5px">
-    <td style="border: none; padding: 5px; width:65%"><ol start="5"><li>Open the preview URL in your browser. What loads will be the web app but sending requests to the <code>DataProcessingNodeService</code> service to your laptop. The Node server replies back to the cluster with the <span style="color:blue" class="bold">blue</span> option enabled; you will see a blue title and blue pod in the diagram. Remember that previously these elements were <span style="color:green" class="bold">green</span>.<br />You will also see a banner at the bottom on the page informing that you are viewing a preview URL with your name and org name.</li></ol></td>
+    <td style="border: none; padding: 5px; width:65%"><ol start="5"><li>Open the preview URL in your browser to see the intercepted version of the app. The Node server on your laptop replies back to the cluster with the <span style="color:blue" class="bold">blue</span> option enabled; you will see a blue title and blue pod in the diagram. Remember that previously these elements were <span style="color:green" class="bold">green</span>.<br />You will also see a banner at the bottom on the page informing that you are viewing a preview URL with your name and org name.</li></ol></td>
     <td style="border: none; padding: 5px"><img src="../../images/tp-tutorial-2.png"/></td>
 </tr>
 </table>
@@ -115,7 +114,7 @@ Alternatively, you can use Telepresence's `intercept` command to proxy traffic b
 </tr>
 </table>
 
-This diagram demonstrates the flow of requests the intercept has created.  The laptop on the left visits the preview URL, the request is redirected to the cluster ingress, and requests to and from the `DataProcessingNodeService` by other pods are proxied to the developer laptop running Telepresence.  
+This diagram demonstrates the flow of requests using the intercept.  The laptop on the left visits the preview URL, the request is redirected to the cluster ingress, and requests to and from the `DataProcessingNodeService` by other pods are proxied to the developer laptop running Telepresence.  
 
 ![Intercept Architecture](../../images/tp-tutorial-4.png) 
 
