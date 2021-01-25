@@ -73,7 +73,7 @@ def set_up_torsocks(runner: Runner, socks_port: int) -> Dict[str, str]:
         span.end()
 
 
-def terminate_local_process(runner, process):
+def terminate_local_process(runner: Runner, process: Popen) -> None:
     ret = process.poll()
     if ret is None:
         runner.write("Killing local process...")
@@ -82,14 +82,30 @@ def terminate_local_process(runner, process):
         runner.write("Local process is already dead (ret={})".format(ret))
 
 
-def get_local_env(runner, env_overrides, replace_dns_tools):
+def launch_local(
+    runner: Runner,
+    command: List[str],
+    env_overrides: Dict[str, str],
+    replace_dns_tools: bool,
+) -> Popen:
+    # Compute user process environment
     env = os.environ.copy()
     env.update(env_overrides)
     env["PROMPT_COMMAND"] = (
         'PS1="@{}|$PS1";unset PROMPT_COMMAND'.format(runner.kubectl.context)
     )
     env["PATH"] = apply_workarounds(runner, env["PATH"], replace_dns_tools)
-    return env
+
+    # Launch the user process
+    runner.show("Setup complete. Launching your command.")
+    try:
+        process = Popen(command, env=env)
+    except OSError as exc:
+        raise runner.fail("Failed to launch your command: {}".format(exc))
+    runner.add_cleanup(
+        "Terminate local process", terminate_local_process, runner, process
+    )
+    return process
 
 
 def launch_inject(
@@ -103,13 +119,7 @@ def launch_inject(
     """
     torsocks_env = set_up_torsocks(runner, socks_port)
     env_overrides.update(torsocks_env)
-    env = get_local_env(runner, env_overrides, True)
-    runner.show("Setup complete. Launching your command.")
-    process = Popen(command, env=env)
-    runner.add_cleanup(
-        "Terminate local process", terminate_local_process, runner, process
-    )
-    return process
+    return launch_local(runner, command, env_overrides, True)
 
 
 def launch_vpn(
@@ -125,16 +135,8 @@ def launch_vpn(
     """
     connect_sshuttle(runner, remote_info, also_proxy, ssh)
     _flush_dns_cache(runner)
-    env = get_local_env(runner, env_overrides, False)
-    runner.show("Setup complete. Launching your command.")
-    try:
-        process = Popen(command, env=env)
-    except OSError as exc:
-        raise runner.fail("Failed to launch your command: {}".format(exc))
-    runner.add_cleanup(
-        "Terminate local process", terminate_local_process, runner, process
-    )
-    return process
+
+    return launch_local(runner, command, env_overrides, False)
 
 
 def _flush_dns_cache(runner: Runner):
