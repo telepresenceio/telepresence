@@ -22,6 +22,6 @@ You can collaborate with teammates by sending your preview URL to them via Slack
 
 ## Sharing a Preview URL (With Outside Collaborators)
 
-To collaborate with someone outside of your GitHub organization, you must go to the [Ambassador Cloud dashboard](https://app.getambassador.io/cloud/preview/), select the preview URL, and click **Make Publicly Accessible**.  Now anyone with the link will have access to the preview URL. When they visit the preview URL, they will see the intercepted service running on your laptop. Your laptop must be online and running the service for them to see the live intercept.
+To collaborate with someone outside of your GitHub organization, you must go to the Ambassador Cloud dashboard (run `telepresence dashboard` to reopen it), select the preview URL, and click **Make Publicly Accessible**.  Now anyone with the link will have access to the preview URL. When they visit the preview URL, they will see the intercepted service running on your laptop. Your laptop must be online and running the service for them to see the live intercept.
 
 To disable sharing the preview URL publicly, click **Require Authentication** in the dashboard. Removing the intercept either from the dashboard or by running `telepresence leave <service>` also removes all access to the preview URL.

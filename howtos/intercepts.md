@@ -10,7 +10,7 @@ When starting an intercept, Telepresence will create a preview URLs. When visiti
 
 Preview URLs are all managed through Ambassador Cloud.  You must run `telepresence login` to access Ambassador Cloud and access the preview URL dashboard. From the dashboard you can see all your active intercepts, delete active intercepts, and change them between private and public for collaboration. Private preview URLs can be accessed by anyone else in the GitHub organization you select when logging in. Public URLs can be accessed by anyone who has the link.
 
-While preview URLs selectively proxy traffic to your laptop, you can also run an [intercept without creating a preview URL](#intercepts-without-preview-urls), which will proxy all traffic to the service.
+While preview URLs selectively proxy traffic to your laptop, you can also run an [intercept without creating a preview URL](#creating-an-intercept-without-a-preview-url), which will proxy all traffic to the service.
 
 > For a detailed walk though on creating intercepts, follow the [Telepresence tutorial](../../tutorial/).
 
