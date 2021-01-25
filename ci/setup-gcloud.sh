@@ -68,7 +68,7 @@ gcloud auth activate-service-account --key-file "${SERVICE_KEY}"
 
 gcloud --quiet config set project $PROJECT_NAME
 gcloud --quiet config set container/cluster $CLUSTER_NAME
-gcloud --quiet config set compute/zone ${CLOUDSDK_COMPUTE_ZONE}
+gcloud --quiet config set compute/zone ${CLOUDSDK_COMPUTE_ZONE} || true
 gcloud --quiet container clusters get-credentials $CLUSTER_NAME
 
 # `gcloud docker` implicitly generates Docker authentication configuration for
