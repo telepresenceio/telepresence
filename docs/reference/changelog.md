@@ -1,6 +1,20 @@
 # Changelog
 
 <!--- towncrier start line -->
+
+#### 0.109 (January 25, 2021)
+
+Bug fixes:
+
+* When using the vpn-tcp method on Linux, the initial `iptables` check will not hang on DNS lookups.
+  Thanks to Peter Janes for the patch.
+  ([#1476](https://github.com/telepresenceio/telepresence/issues/1476))
+* The swap deployment operation no longer fails on Deployments that have startup probes configured.
+  Thanks to GitHub user deicon and Anton Troshin for the patch.
+  ([#1479](https://github.com/telepresenceio/telepresence/issues/1479))
+- Now provide pre-built packages for Fedora 33 and Ubuntu 20.20 Groovy Gorilla.
+- No longer provide pre-built packages for Ubuntu 19.10 Eoan Ermine.
+
 #### 0.108 (September 10, 2020)
 
 Bug fixes:

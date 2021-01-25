@@ -1,2 +1,0 @@
-The swap deployment operation no longer fails on Deployments that have startup probes configured.
-Thanks to GitHub user deicon and Anton Troshin for the patch.
