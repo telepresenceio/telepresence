@@ -1,1 +1,2 @@
-> unprivileged container check via iptables will not hang on DNS lookups
+When using the vpn-tcp method on Linux, the initial `iptables` check will not hang on DNS lookups.
+Thanks to Peter Janes for the patch.
