@@ -12,7 +12,10 @@ Bug fixes:
 * The swap deployment operation no longer fails on Deployments that have startup probes configured.
   Thanks to GitHub user deicon and Anton Troshin for the patch.
   ([#1479](https://github.com/telepresenceio/telepresence/issues/1479))
-- No longer provide pre-built packages for Ubuntu 19.10 Eoan Ermine.
+
+Misc:
+
+* No longer provide pre-built packages for Ubuntu 19.10 Eoan Ermine.
 
 #### 0.108 (September 10, 2020)
 
