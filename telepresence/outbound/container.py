@@ -229,7 +229,15 @@ def run_docker_command(
     )
 
     # Prepare container environment
-    if not "--env-file" in docker_args:
+    if "--env-file" in docker_args:
+        if runner.chatty:
+            runner.show(
+                "Not proxying cluster environment variables to your container "
+                "because you are passing '--env-file' to 'docker run'. See "
+                "https://www.telepresence.io/reference/proxying#environment-variables "  # noqa: E501
+                "for more information"
+            )
+    else:
         for key in remote_env:
             docker_command.append("-e={}".format(key))
     docker_env = os.environ.copy()

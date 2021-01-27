@@ -144,3 +144,14 @@ Currently unsupported:
 
 * Fully qualified Kubernetes DNS names that end with `.local`, e.g. `redis-master.default.svc.cluster.local`, won't work on Linux (see [the relevant ticket](https://github.com/datawire/telepresence/issues/161) for details.)
 * UDP messages in any direction.
+
+### Docker and Kubernetes in clusters with severall services
+
+There is a kubernetes configuration `EnableServiceLinks` that by default is set to `true` if not defined.
+If enabled this flag will instruct kubernetes to inject environment variables with service information into the pods.
+This behaviour can bring problems in clusters that have many services, having negative impact in the number of environment variables that are defined for a pod and effectivelly invalidating the successfull start of a docker container through passing the variables by adding multiple entries of the argument `-e VAR=VALUE`.
+To avoid that the docker container can be initiallized to load the environment variables from a file with the parameter `--env-file` instead of from a list of arguments, more info [in docker documentation](https://docs.docker.com/engine/reference/commandline/run/#set-environment-variables--e---env---env-file).
+
+To use it you should use the `---env-file filepath` pointing to a file where the environment variables are defined.
+
+
