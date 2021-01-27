@@ -37,6 +37,7 @@ ProxyIntent = NamedTuple(
         ("expose", PortMapping),
         ("env", Dict[str, str]),
         ("service_account", str),
+        ("deployment_type", str)
     ]
 )
 
@@ -168,7 +169,7 @@ class Swap(ProxyOperation):
         self.manifests = []  # type: List[Manifest]
 
         # Grab original deployment's pod config
-        deployment = get_deployment(runner, self.intent.name)  # type: Manifest
+        deployment = get_deployment(runner, self.intent.name, self.intent.deployment_type)  # type: Manifest
         self.deployment_type = deployment["kind"]  # type: str
         self.original_replicas = deployment["spec"]["replicas"]  # type: str
 

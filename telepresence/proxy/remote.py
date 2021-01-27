@@ -59,7 +59,7 @@ class RemoteInfo(object):
         return version
 
 
-def get_deployment(runner: Runner, name: str) -> Dict[str, Any]:
+def get_deployment(runner: Runner, name: str, deployment_type: str = "deployment") -> Dict[str, Any]:
     """
     Retrieve the Deployment/DeploymentConfig manifest named, or emit an error
     message for the user.
@@ -89,7 +89,7 @@ def get_deployment(runner: Runner, name: str) -> Dict[str, Any]:
     if manifest == "":
         try:
             manifest = runner.get_output(
-                runner.kubectl("get", "deploy", name, "-o", "json"),
+                runner.kubectl("get", deployment_type, name, "-o", "json"),
                 reveal=True,
             )
         except CalledProcessError as exc:

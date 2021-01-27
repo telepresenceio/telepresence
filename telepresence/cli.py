@@ -264,6 +264,11 @@ def parse_args(in_args: Optional[List[str]] = None) -> argparse.Namespace:
         )
     )
     parser.add_argument(
+        "--deployment-type",
+        default="deployment",
+        help=("The deployment type to swap. Defaults to \"deployment\"")
+    )
+    parser.add_argument(
         "--context",
         default=None,
         help=(

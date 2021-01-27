@@ -292,6 +292,7 @@ def supplant_deployment(
     expose: PortMapping,
     deployment_env: Dict,
     service_account: str,
+    deployment_type: str
 ) -> Tuple[str, str]:
     """
     Swap out an existing Deployment, supplant method.
@@ -310,7 +311,7 @@ def supplant_deployment(
     )
 
     deployment, container = _split_deployment_container(deployment_arg)
-    deployment_json = get_deployment(runner, deployment)
+    deployment_json = get_deployment(runner, deployment, deployment_type)
     container = _get_container_name(container, deployment_json)
 
     new_deployment_json = new_swapped_deployment(
@@ -321,6 +322,7 @@ def supplant_deployment(
         expose,
         service_account,
         deployment_env,
+        deployment_type
     )
 
     # Compute a new name that isn't too long, i.e. up to 63 characters.
@@ -337,7 +339,7 @@ def supplant_deployment(
         """Resize the original deployment (kubectl scale)"""
         runner.check_call(
             runner.kubectl(
-                "scale", "deployment", deployment,
+                "scale", deployment_type, deployment,
                 "--replicas={}".format(replicas)
             )
         )
@@ -354,7 +356,7 @@ def supplant_deployment(
             )
         runner.check_call(
             runner.kubectl(
-                "delete", "deployment", new_deployment_name, *ignore
+                "delete", deployment_type, new_deployment_name, *ignore
             )
         )
 
@@ -385,6 +387,7 @@ def new_swapped_deployment(
     expose: PortMapping,
     service_account: str,
     deployment_env: Dict,
+    deployment_type: str
 ) -> Dict:
     """
     Create a new Deployment that uses telepresence-k8s image.
