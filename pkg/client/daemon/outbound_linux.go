@@ -156,6 +156,30 @@ func dnsListeners(c context.Context) ([]*net.UDPAddr, error) {
 		return listeners, nil
 	}
 
+	// Check that the dockerGatewayIP is registered as an interface on this machine. When running WSL2 on
+	// a Windows box, the gateway is managed by Windows and never visible to the Linux host and hence
+	// will not be affected by the nat logic. Also, any attempt to listen to it will fail.
+	found := false
+	ifAddrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, err
+	}
+	for _, ifAddr := range ifAddrs {
+		_, network, err := net.ParseCIDR(ifAddr.String())
+		if err != nil {
+			continue
+		}
+		if network.Contains(dockerGatewayIP) {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		dlog.Infof(c, "docker gateway %s is not visible as a network interface", dockerGatewayIP)
+		return listeners, nil
+	}
+
 	for {
 		extraAddr := &net.UDPAddr{IP: dockerGatewayIP, Port: localAddr.Port}
 		ls, err = net.ListenUDP("udp4", extraAddr)
