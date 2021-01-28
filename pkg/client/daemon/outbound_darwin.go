@@ -194,7 +194,7 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	initDone.Add(1)
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
-		v := dns.NewServer(c, []string{fmt.Sprintf("%s:53", dnsIP.String())}, "", func(domain string) string {
+		v := dns.NewServer(c, []*net.UDPAddr{{IP: dnsIP, Port: 53}}, "", func(domain string) string {
 			if r := o.resolveNoNS(domain); r != nil {
 				return r.Ip
 			}

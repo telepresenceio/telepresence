@@ -17,13 +17,13 @@ import (
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface
 type Server struct {
 	ctx       context.Context // necessary to make logging work in ServeDNS function
-	listeners []string
+	listeners []*net.UDPAddr
 	fallback  string
 	resolve   func(string) string
 }
 
 // NewServer returns a new dns.Server
-func NewServer(c context.Context, listeners []string, fallback string, resolve func(string) string) *Server {
+func NewServer(c context.Context, listeners []*net.UDPAddr, fallback string, resolve func(string) string) *Server {
 	return &Server{
 		ctx:       c,
 		listeners: listeners,
@@ -113,7 +113,8 @@ func (s *Server) Run(c context.Context, initDone *sync.WaitGroup) error {
 		listener net.PacketConn
 	}
 	listeners := make([]*lwa, len(s.listeners))
-	for i, addr := range s.listeners {
+	for i, udpAddr := range s.listeners {
+		addr := udpAddr.String()
 		lc := net.ListenConfig{}
 		listener, err := lc.ListenPacket(c, "udp", addr)
 		if err != nil {

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"net"
 	"sync"
 	"time"
 
@@ -65,7 +66,7 @@ func (o *outbound) tryResolveD(c context.Context) error {
 	initDone := &sync.WaitGroup{}
 	initDone.Add(2)
 	g.Go("Server", func(c context.Context) error {
-		v := dns.NewServer(c, []string{dnsResolverAddr.String()}, "", func(domain string) string {
+		v := dns.NewServer(c, []*net.UDPAddr{dnsResolverAddr}, "", func(domain string) string {
 			// Namespaces are defined on the network DNS config and managed by ResolveD, so not needed here.
 			if r := o.resolveNoNS(domain); r != nil {
 				return r.Ip
