@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
@@ -94,21 +95,16 @@ func ConnectToSystemA(ctx context.Context,
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 
-	grp.Go("listener", func(ctx context.Context) error {
-		<-ctx.Done()
-		listener.Close()
-		return nil
-	})
 	grp.Go("server", func(ctx context.Context) error {
 		grpcServer := grpc.NewServer()
 		serverImpl := server{ManagerServer: self}
 		manager.RegisterManagerServer(grpcServer, serverImpl)
 		manager.RegisterManagerProxyServer(grpcServer, serverImpl)
-		err := grpcServer.Serve(listener)
-		if ctx.Err() != nil {
-			return nil
+
+		sc := &dhttp.ServerConfig{
+			Handler: grpcServer,
 		}
-		return err
+		return sc.Serve(ctx, listener)
 	})
 	grp.Go("client", func(ctx context.Context) error {
 		defer conn.Close()

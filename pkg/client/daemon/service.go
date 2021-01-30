@@ -18,6 +18,7 @@ import (
 
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -48,11 +49,6 @@ type service struct {
 	hClient  *http.Client
 	outbound *outbound
 	cancel   context.CancelFunc
-
-	// callCtx is a hack for the gRPC server, since it doesn't let us pass it a Context.  It
-	// should go away when we migrate to dhttp and Contexts can get passed around properly for
-	// HTTP/2 requests.
-	callCtx context.Context
 }
 
 // Command returns the telepresence sub-command "daemon-foreground"
@@ -82,19 +78,19 @@ func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, 
 	return r, nil
 }
 
-func (d *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
-	dlog.Debug(d.callCtx, "Received gRPC Quit")
+func (d *service) Quit(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
+	dlog.Debug(ctx, "Received gRPC Quit")
 	d.cancel()
 	return &empty.Empty{}, nil
 }
 
-func (d *service) SetDnsSearchPath(_ context.Context, paths *rpc.Paths) (*empty.Empty, error) {
-	d.outbound.setSearchPath(d.callCtx, paths.Paths)
+func (d *service) SetDnsSearchPath(ctx context.Context, paths *rpc.Paths) (*empty.Empty, error) {
+	d.outbound.setSearchPath(ctx, paths.Paths)
 	return &empty.Empty{}, nil
 }
 
-func (d *service) SetOutboundInfo(_ context.Context, info *rpc.OutboundInfo) (*empty.Empty, error) {
-	return &empty.Empty{}, d.outbound.setInfo(d.callCtx, info)
+func (d *service) SetOutboundInfo(ctx context.Context, info *rpc.OutboundInfo) (*empty.Empty, error) {
+	return &empty.Empty{}, d.outbound.setInfo(ctx, info)
 }
 
 // run is the main function when executing as the daemon
@@ -195,7 +191,6 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 
 		// Listen on unix domain socket
 		dlog.Debug(c, "gRPC server starting")
-		d.callCtx = c
 		origUmask := unix.Umask(0)
 		listener, err = net.Listen("unix", client.DaemonSocketName)
 		unix.Umask(origUmask)
@@ -206,12 +201,11 @@ func run(c context.Context, loggingDir, configDir, dns string) error {
 
 		svc := grpc.NewServer()
 		rpc.RegisterDaemonServer(svc, d)
-		go func() {
-			<-c.Done()
-			dlog.Debug(c, "gRPC server stopping")
-			svc.GracefulStop()
-		}()
-		return svc.Serve(listener)
+
+		sc := &dhttp.ServerConfig{
+			Handler: svc,
+		}
+		return sc.Serve(c, listener)
 	})
 
 	err = g.Wait()

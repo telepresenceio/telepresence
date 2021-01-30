@@ -8,14 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dutil"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/mutator"
@@ -47,22 +45,20 @@ func Main(ctx context.Context, args ...string) error {
 		httpHandler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "Hello World from: %s\n", r.URL.Path)
 		}))
-		server := &http.Server{
-			Addr:     host + ":" + port,
-			ErrorLog: dlog.StdLogger(ctx, dlog.LogLevelError),
-			Handler: h2c.NewHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sc := &dhttp.ServerConfig{
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 					grpcHandler.ServeHTTP(w, r)
 				} else {
 					httpHandler.ServeHTTP(w, r)
 				}
-			}), &http2.Server{}),
+			}),
 		}
 
 		rpc.RegisterManagerServer(grpcHandler, mgr)
 		grpc_health_v1.RegisterHealthServer(grpcHandler, &HealthChecker{})
 
-		return dutil.ListenAndServeHTTPWithContext(ctx, server)
+		return sc.ListenAndServe(ctx, host+":"+port)
 	})
 
 	g.Go("agent-injector", mutator.ServeMutator)
