@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -10,49 +11,47 @@ import (
 
 	"github.com/blang/semver"
 
+	"github.com/datawire/dlib/dcontext"
+	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-func newHttpServer(t *testing.T) *http.Server {
-	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
-	if err != nil {
-		t.Helper()
-		t.Fatal(err)
-	}
-
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		t.Helper()
-		t.Fatal(err)
-	}
-	srv := &http.Server{Handler: http.NewServeMux()}
-	srv.Addr = l.Addr().String()
-	go func() { _ = srv.Serve(l) }()
-	return srv
-}
-
 func Test_newUpdateChecker(t *testing.T) {
 	ctx := dlog.NewTestContext(t, false)
 
 	// the server that delivers the latest version
-	httpServer := newHttpServer(t)
-	defer httpServer.Close()
+	l, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lastestVer := semver.MustParse("1.2.3")
+	httpSrvCfg := &dhttp.ServerConfig{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(lastestVer.String()))
+		}),
+	}
+	httpSrvCh := make(chan error)
+	httpSrvCtx, httpSrvCancel := context.WithCancel(dcontext.WithSoftness(ctx))
+	go func() {
+		httpSrvCh <- httpSrvCfg.Serve(httpSrvCtx, l)
+		close(httpSrvCh)
+	}()
+	defer func() {
+		httpSrvCancel()
+		if err := <-httpSrvCh; err != nil {
+			t.Error(err)
+		}
+	}()
 
 	// a fake user cache directory
 	ctx = filelocation.WithUserHomeDir(ctx, t.TempDir())
 
-	// request handler, returning the latest version
-	lastestVer := semver.MustParse("1.2.3")
-	httpServer.Handler.(*http.ServeMux).HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(lastestVer.String()))
-	})
-
 	ft := dtime.NewFakeTime()
 	dtime.SetNow(ft.Now)
 
-	uc, err := newUpdateChecker(ctx, fmt.Sprintf("http://%s", httpServer.Addr))
+	uc, err := newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +78,7 @@ func Test_newUpdateChecker(t *testing.T) {
 
 	// An hour later it should not be time to check yet
 	ft.Step(time.Hour)
-	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", httpServer.Addr))
+	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +88,7 @@ func Test_newUpdateChecker(t *testing.T) {
 
 	// An day later it should be time to check
 	ft.Step(checkDuration)
-	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", httpServer.Addr))
+	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +114,7 @@ func Test_newUpdateChecker(t *testing.T) {
 
 	// An day later it should be time to check again
 	ft.Step(checkDuration + 1)
-	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", httpServer.Addr))
+	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", l.Addr()))
 	if err != nil {
 		t.Fatal(err)
 	}
