@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -40,17 +39,11 @@ func Test_newUpdateChecker(t *testing.T) {
 	defer httpServer.Close()
 
 	// a fake user cache directory
-	tmpDir, err := ioutil.TempDir("", "update-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		_ = os.RemoveAll(tmpDir)
-		cache.SetUserCacheDirFunc(os.UserCacheDir)
-	}()
+	tmpDir := t.TempDir()
 	cache.SetUserCacheDirFunc(func() (string, error) {
 		return tmpDir, nil
 	})
+	defer cache.SetUserCacheDirFunc(os.UserCacheDir)
 
 	// request handler, returning the latest version
 	lastestVer := semver.MustParse("1.2.3")

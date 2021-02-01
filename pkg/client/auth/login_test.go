@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -376,11 +375,7 @@ func TestLoginFlow(t *testing.T) {
 		errs := make(chan error)
 
 		// a fake user cache directory (this changes a global temporarily, so test cannot be parallel)
-		tmpDir, err := ioutil.TempDir("", "update-test-")
-		require.NoError(t, err)
-		defer func() {
-			_ = os.RemoveAll(tmpDir)
-		}()
+		tmpDir := t.TempDir()
 		cache.SetUserCacheDirFunc(func() (string, error) {
 			return tmpDir, nil
 		})
@@ -397,7 +392,7 @@ func TestLoginFlow(t *testing.T) {
 		callbackUrl.RawQuery = callbackQuery.Encode()
 		callbackResponse := sendCallbackRequest(t, callbackUrl)
 		defer callbackResponse.Body.Close()
-		err = <-errs
+		err := <-errs
 
 		// then
 		require.NoError(t, err, "no error running login flow")

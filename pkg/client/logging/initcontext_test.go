@@ -32,14 +32,10 @@ func TestInitContext(t *testing.T) {
 	// Ensure that we use a temporary logging.Dir and never consider Stdout to be a terminal
 	saveDir := Dir
 	saveIsTerminal := IsTerminal
-	logDir, err := ioutil.TempDir("", "rotating-log-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
+	logDir := t.TempDir()
 	defer func() {
 		Dir = saveDir
 		IsTerminal = saveIsTerminal
-		_ = os.RemoveAll(logDir)
 	}()
 
 	Dir = func() string {
