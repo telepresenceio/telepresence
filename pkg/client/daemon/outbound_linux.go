@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 
@@ -80,10 +80,16 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 		o.search = paths
 	}
 
+	listeners, err := dnsListeners(c)
+	if err != nil {
+		return err
+	}
+	o.dnsRedirPort = listeners[0].Port
+
 	o.overridePrimaryDNS = true
 	dgroup.ParentGroup(c).Go(proxyWorker, o.proxyWorker)
 
-	srv := dns.NewServer(c, dnsListeners(c, dnsRedirPort), o.fallbackIP+":53", func(domain string) string {
+	srv := dns.NewServer(c, listeners, o.fallbackIP+":53", func(domain string) string {
 		if r := o.resolve(domain); r != nil {
 			return r.Ip
 		}
@@ -92,7 +98,7 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 	dlog.Debug(c, "Starting server")
 	initDone := &sync.WaitGroup{}
 	initDone.Add(1)
-	err := srv.Run(c, initDone)
+	err = srv.Run(c, initDone)
 	dlog.Debug(c, "Server done")
 	return err
 }
@@ -120,30 +126,78 @@ func (o *outbound) resolve(query string) *rpc.Route {
 	return route
 }
 
-func dnsListeners(c context.Context, port string) (listeners []string) {
-	// turns out you need to listen on localhost for nat to work
-	// properly for udp, otherwise you get an "unexpected source
-	// blah thingy" because the dns reply packets look like they
-	// are coming from the wrong place
-	listeners = append(listeners, "127.0.0.1:"+port)
+func dnsListeners(c context.Context) ([]*net.UDPAddr, error) {
+	localAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
+	ls, err := net.ListenUDP("udp4", localAddr)
+	if err != nil {
+		return nil, err
+	}
+	localAddr = ls.LocalAddr().(*net.UDPAddr)
+	ls.Close()
 
-	_, err := os.Stat("/.dockerenv")
-	insideDocker := err == nil
+	listeners := []*net.UDPAddr{localAddr}
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		// Inside docker. Don't add docker bridge
+		return listeners, nil
+	}
 
-	if runtime.GOOS == "linux" && !insideDocker {
-		// This is the default docker bridge. We need to listen here because the nat logic we use to intercept
-		// dns packets will divert the packet to the interface it originates from, which in the case of
-		// containers is the docker bridge. Without this dns won't work from inside containers.
-		output, err := dexec.CommandContext(c, "docker", "inspect", "bridge",
-			"-f", "{{(index .IPAM.Config 0).Gateway}}").Output()
+	// This is the default docker bridge. We need to listen here because the nat logic we use to intercept
+	// dns packets will divert the packet to the interface it originates from, which in the case of
+	// containers is the docker bridge. Without this dns won't work from inside containers.
+	output, err := dexec.CommandContext(c, "docker", "inspect", "bridge",
+		"-f", "{{(index .IPAM.Config 0).Gateway}}").Output()
+	if err != nil {
+		dlog.Info(c, "not listening on docker bridge")
+		return listeners, nil
+	}
+
+	dockerGatewayIP := net.ParseIP(strings.TrimSpace(string(output)))
+	if dockerGatewayIP == nil || dockerGatewayIP.Equal(localAddr.IP) {
+		return listeners, nil
+	}
+
+	// Check that the dockerGatewayIP is registered as an interface on this machine. When running WSL2 on
+	// a Windows box, the gateway is managed by Windows and never visible to the Linux host and hence
+	// will not be affected by the nat logic. Also, any attempt to listen to it will fail.
+	found := false
+	ifAddrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, err
+	}
+	for _, ifAddr := range ifAddrs {
+		_, network, err := net.ParseCIDR(ifAddr.String())
 		if err != nil {
-			dlog.Error(c, "not listening on docker bridge")
-			return
+			continue
 		}
-		extraIP := strings.TrimSpace(string(output))
-		if extraIP != "127.0.0.1" && extraIP != "0.0.0.0" && extraIP != "" {
-			listeners = append(listeners, fmt.Sprintf("%s:%s", extraIP, port))
+		if network.Contains(dockerGatewayIP) {
+			found = true
+			break
 		}
 	}
-	return
+
+	if !found {
+		dlog.Infof(c, "docker gateway %s is not visible as a network interface", dockerGatewayIP)
+		return listeners, nil
+	}
+
+	for {
+		extraAddr := &net.UDPAddr{IP: dockerGatewayIP, Port: localAddr.Port}
+		ls, err = net.ListenUDP("udp4", extraAddr)
+		if err == nil {
+			ls.Close()
+			dlog.Infof(c, "listening to docker bridge at %s", dockerGatewayIP)
+			return append(listeners, extraAddr), nil
+		}
+
+		// the extraAddr was busy, try next available port
+		for localAddr.Port++; localAddr.Port <= math.MaxUint16; localAddr.Port++ {
+			if ls, err = net.ListenUDP("udp4", localAddr); err == nil {
+				ls.Close()
+				break
+			}
+		}
+		if localAddr.Port > math.MaxUint16 {
+			return nil, fmt.Errorf("unable to find a free port for both %s and %s", localAddr.IP, extraAddr.IP)
+		}
+	}
 }

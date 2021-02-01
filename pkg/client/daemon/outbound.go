@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -23,11 +24,6 @@ const (
 	proxyWorker      = "PXY"
 	dnsServerWorker  = "DNS"
 	dnsConfigWorker  = "CFG"
-
-	// dnsRedirPort is the port to which we redirect dns requests. It
-	// should probably eventually be configurable and/or dynamically
-	// chosen
-	dnsRedirPort = "1233"
 
 	// proxyRedirPort is the port to which we redirect proxied IPs. It
 	// should probably eventually be configurable and/or dynamically
@@ -66,6 +62,9 @@ type outbound struct {
 
 	overridePrimaryDNS bool
 
+	// dnsRedirPort is the port to which we redirect dns requests.
+	dnsRedirPort int
+
 	work   chan func(context.Context) error
 	cancel context.CancelFunc
 }
@@ -101,10 +100,10 @@ func (o *outbound) proxyWorker(c context.Context) error {
 }
 
 func (o *outbound) dnsConfigWorker(c context.Context) error {
-	dlog.Debug(c, "Bootstrapping local DNS server")
+	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", o.dnsRedirPort)
 	bootstrap := rpc.Table{Name: "bootstrap", Routes: []*rpc.Route{{
 		Ip:     o.dnsIP,
-		Target: dnsRedirPort,
+		Target: strconv.Itoa(o.dnsRedirPort),
 		Proto:  "udp",
 	}}}
 	o.update(&bootstrap)
