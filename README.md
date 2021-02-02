@@ -233,6 +233,13 @@ Events:
   Normal  Started    3m20s  kubelet            Started container traffic-agent
 ```
 
+### Troubleshooting
+
+The telepresence background processes `daemon` and `commector`both produces log files that can be very helpful when problems are encountered. The files are named `daemon.log` and `connector.log`. The location of the logs differ depending on what platform that is used:
+
+- MacOS `~/Library/Logs/telepresence`
+- Linux `~/.cache/telepresence/logs` 
+
 ## Comparison to classic Telepresence
 
 Telepresence will launch your command or a shell when you start a session. When that program ends, the session ends and Telepresence cleans up.

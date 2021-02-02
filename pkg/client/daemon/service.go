@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/pkg/errors"
@@ -35,7 +36,7 @@ Launch the Telepresence Daemon:
     sudo telepresence service
 
 Examine the Daemon's log output in
-    ` + client.Logfile + `
+    ` + filepath.Join(logging.Dir(), "daemon.log") + `
 to troubleshoot problems.
 `
 
@@ -55,11 +56,11 @@ func Command() *cobra.Command {
 	return &cobra.Command{
 		Use:    "daemon-foreground",
 		Short:  "Launch Telepresence Daemon in the foreground (debug)",
-		Args:   cobra.ExactArgs(2),
+		Args:   cobra.ExactArgs(3),
 		Hidden: true,
 		Long:   help,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return run(args[0], args[1])
+			return run(args[0], args[1], args[2])
 		},
 	}
 }
@@ -74,7 +75,7 @@ func setUpLogging(c context.Context) context.Context {
 		logger.Formatter = logging.NewFormatter("2006/01/02 15:04:05")
 		log.SetOutput(logger.Writer())
 		logger.SetOutput(&lumberjack.Logger{
-			Filename:   client.Logfile,
+			Filename:   filepath.Join(logging.Dir(), "daemon.log"),
 			MaxSize:    10,   // megabytes
 			MaxBackups: 3,    // in the same directory
 			MaxAge:     60,   // days
@@ -156,9 +157,13 @@ func (d *service) SetDnsSearchPath(_ context.Context, paths *rpc.Paths) (*empty.
 }
 
 // run is the main function when executing as the daemon
-func run(dns, fallback string) error {
+func run(loggingDir, dns, fallback string) error {
 	if os.Geteuid() != 0 {
 		return errors.New("telepresence daemon must run as root")
+	}
+
+	logging.Dir = func() string {
+		return loggingDir
 	}
 
 	d := &service{dns: dns, fallback: fallback, hClient: &http.Client{

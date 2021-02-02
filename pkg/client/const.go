@@ -6,9 +6,6 @@ import (
 )
 
 const (
-	// Logfile is the full path of the file used for all log output
-	Logfile = "/tmp/telepresence.log"
-
 	// APIVersion is the API version of the daemon and connector API
 	APIVersion = 3
 )
