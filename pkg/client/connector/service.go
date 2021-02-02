@@ -301,16 +301,6 @@ func setupLogging(ctx context.Context) (context.Context, error) {
 	// to "connector.log.old"; so the last 2 logs are always available (a poor-man's logrotate).
 	// This is what X11 does with "$XDG_DATA_HOME/xorg/Xorg.${display_number}.log".
 	//
-	// (Except we use XDG_CACHE_HOME not XDG_DATA_HOME, because it's always bothered me when
-	// things put logs in XDG_DATA_HOME -- XDG_DATA_HOME is for "user-specific data", and
-	// XDG_CACHE_HOME is for "user-specific non-essential (cached) data"[1]; logs are
-	// non-essential!  A good rule of thumb is: If you track your configuration with Git, and
-	// you wouldn't check a given file in to Git (possibly encrypting it before checking it in),
-	// then that file either needs to go in XDG_RUNTIME_DIR or XDG_CACHE_DIR; and NOT
-	// XDG_DATA_HOME or XDG_CONFIG_HOME.)
-	//
-	// [1]: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
-	//
 	// In the past there was a mechanism where the connector RPC'd its logs over to the daemon,
 	// and the daemon put them in to a unified log file.  This turned out to make things hard to
 	// debug--it was hard to tell where a log line was coming from, and some things were
@@ -319,7 +309,7 @@ func setupLogging(ctx context.Context) (context.Context, error) {
 	// *cough*client-go*cough*) ended up getting their logs dropped; and those are all cases
 	// where we *especially* want the logs.
 
-	logfilename := filepath.Join(cache.CacheDir(), "connector.log")
+	logfilename := filepath.Join(logging.Dir(), "connector.log")
 	// Rename the existing .log to .log.old even if we're logging to stdout (below); this way
 	// you can't get confused and think that "connector.log" is the logs of the currently
 	// running connector even when it's not.
