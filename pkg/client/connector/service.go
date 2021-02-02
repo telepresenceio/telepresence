@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -327,10 +326,7 @@ func setupLogging(ctx context.Context) (context.Context, error) {
 			return ctx, err
 		}
 		defer logfile.Close()
-
-		// https://github.com/golang/go/issues/325
-		_ = syscall.Dup2(int(logfile.Fd()), int(os.Stdout.Fd()))
-		_ = syscall.Dup2(int(logfile.Fd()), int(os.Stderr.Fd()))
+		_ = logging.DupToStd(logfile)
 	}
 
 	return dlog.WithLogger(ctx, dlog.WrapLogrus(logger)), nil
