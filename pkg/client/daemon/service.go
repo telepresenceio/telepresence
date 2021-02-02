@@ -3,7 +3,7 @@ package daemon
 import (
 	"context"
 	"crypto/tls"
-	"log"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -11,12 +11,9 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ssh/terminal"
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -29,18 +26,21 @@ import (
 	"github.com/datawire/telepresence2/v2/pkg/client/logging"
 )
 
-var help = `The Telepresence Daemon is a long-lived background component that manages
+const processName = "daemon"
+const titleName = "Daemon"
+
+var help = `The Telepresence ` + titleName + ` is a long-lived background component that manages
 connections and network state.
 
-Launch the Telepresence Daemon:
+Launch the Telepresence ` + titleName + `:
     sudo telepresence service
 
-Examine the Daemon's log output in
-    ` + filepath.Join(logging.Dir(), "daemon.log") + `
+Examine the ` + titleName + `'s log output in
+    ` + filepath.Join(logging.Dir(), processName+".log") + `
 to troubleshoot problems.
 `
 
-// daemon represents the state of the Telepresence Daemon
+// service represents the state of the Telepresence Daemon
 type service struct {
 	rpc.UnsafeDaemonServer
 	dns      string
@@ -54,8 +54,8 @@ type service struct {
 // Command returns the telepresence sub-command "daemon-foreground"
 func Command() *cobra.Command {
 	return &cobra.Command{
-		Use:    "daemon-foreground",
-		Short:  "Launch Telepresence Daemon in the foreground (debug)",
+		Use:    processName + "-foreground",
+		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
 		Args:   cobra.ExactArgs(3),
 		Hidden: true,
 		Long:   help,
@@ -63,27 +63,6 @@ func Command() *cobra.Command {
 			return run(args[0], args[1], args[2])
 		},
 	}
-}
-
-// setUpLogging sets up standard Telepresence Daemon logging
-func setUpLogging(c context.Context) context.Context {
-	loggingToTerminal := terminal.IsTerminal(int(os.Stdout.Fd()))
-	logger := logrus.StandardLogger()
-	if loggingToTerminal {
-		logger.Formatter = logging.NewFormatter("15:04:05")
-	} else {
-		logger.Formatter = logging.NewFormatter("2006/01/02 15:04:05")
-		log.SetOutput(logger.Writer())
-		logger.SetOutput(&lumberjack.Logger{
-			Filename:   filepath.Join(logging.Dir(), "daemon.log"),
-			MaxSize:    10,   // megabytes
-			MaxBackups: 3,    // in the same directory
-			MaxAge:     60,   // days
-			LocalTime:  true, // rotated logfiles use local time names
-		})
-	}
-	logger.Level = logrus.DebugLevel
-	return dlog.WithLogger(c, dlog.WrapLogrus(logger))
 }
 
 func (d *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
@@ -159,11 +138,18 @@ func (d *service) SetDnsSearchPath(_ context.Context, paths *rpc.Paths) (*empty.
 // run is the main function when executing as the daemon
 func run(loggingDir, dns, fallback string) error {
 	if os.Geteuid() != 0 {
-		return errors.New("telepresence daemon must run as root")
+		return fmt.Errorf("telepresence %s must run as root", processName)
 	}
 
+	// Reassign logging.Dir function so that it returns the original users logging dir rather
+	// than the logging.Dir for the root user.
 	logging.Dir = func() string {
 		return loggingDir
+	}
+
+	c, err := logging.InitContext(context.Background(), processName)
+	if err != nil {
+		return err
 	}
 
 	d := &service{dns: dns, fallback: fallback, hClient: &http.Client{
@@ -179,7 +165,6 @@ func run(loggingDir, dns, fallback string) error {
 			DisableKeepAlives: true,
 		}}}
 
-	c := setUpLogging(context.Background())
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true,
@@ -187,10 +172,10 @@ func run(loggingDir, dns, fallback string) error {
 	})
 
 	// The d.cancel will start a "quit" go-routine that will cause the group to initiate a a shutdown when it returns.
-	d.cancel = func() { g.Go("daemon-quit", d.quitConnector) }
-	g.Go("daemon", func(c context.Context) error {
+	d.cancel = func() { g.Go(processName+"-quit", d.quitConnector) }
+	g.Go(processName, func(c context.Context) error {
 		dlog.Info(c, "---")
-		dlog.Infof(c, "Telepresence daemon %s starting...", client.DisplayVersion())
+		dlog.Infof(c, "Telepresence %s %s starting...", processName, client.DisplayVersion())
 		dlog.Infof(c, "PID is %d", os.Getpid())
 		dlog.Info(c, "")
 
@@ -241,7 +226,7 @@ func run(loggingDir, dns, fallback string) error {
 		return g.Wait()
 	})
 
-	err := g.Wait()
+	err = g.Wait()
 	if err != nil {
 		dlog.Error(c, err)
 	}
