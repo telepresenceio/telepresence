@@ -10,17 +10,17 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// LogFormatter formats log messages for Telepresence client
-type LogFormatter struct {
+// Formatter formats log messages for Telepresence client
+type Formatter struct {
 	timestampFormat string
 }
 
-func NewFormatter(timestampFormat string) *LogFormatter {
-	return &LogFormatter{timestampFormat: timestampFormat}
+func NewFormatter(timestampFormat string) *Formatter {
+	return &Formatter{timestampFormat: timestampFormat}
 }
 
 // Format implements logrus.Formatter
-func (f *LogFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+func (f *Formatter) Format(entry *logrus.Entry) ([]byte, error) {
 	var b *bytes.Buffer
 	if entry.Buffer != nil {
 		b = entry.Buffer
