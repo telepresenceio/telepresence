@@ -318,11 +318,8 @@ func setupLogging(ctx context.Context) (context.Context, error) {
 	// play nice/go through our logger (things we haven't audited as thoroughly;
 	// *cough*client-go*cough*) ended up getting their logs dropped; and those are all cases
 	// where we *especially* want the logs.
-	cachedir, err := cache.CacheDir()
-	if err != nil {
-		return ctx, err
-	}
-	logfilename := filepath.Join(cachedir, "connector.log")
+
+	logfilename := filepath.Join(cache.CacheDir(), "connector.log")
 	// Rename the existing .log to .log.old even if we're logging to stdout (below); this way
 	// you can't get confused and think that "connector.log" is the logs of the currently
 	// running connector even when it's not.

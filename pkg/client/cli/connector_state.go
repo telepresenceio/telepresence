@@ -70,11 +70,7 @@ func (cs *connectorState) EnsureState() (bool, error) {
 	fmt.Fprintln(cs.cmd.OutOrStdout(), "Connecting to traffic manager...")
 
 	if err = client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
-		cachedir, cerr := cache.CacheDir()
-		if cerr != nil {
-			return false, cerr
-		}
-		return false, fmt.Errorf("connector service did not start (see %q for more info)", filepath.Join(cachedir, "connector.log"))
+		return false, fmt.Errorf("connector service did not start (see %q for more info)", filepath.Join(cache.CacheDir(), "connector.log"))
 	}
 	err = cs.connect()
 	if err != nil {
