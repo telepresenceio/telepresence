@@ -25,6 +25,7 @@ import (
 	rpc "github.com/datawire/telepresence2/rpc/v2/daemon"
 	"github.com/datawire/telepresence2/v2/pkg/client"
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
+	"github.com/datawire/telepresence2/v2/pkg/client/logging"
 )
 
 var help = `The Telepresence Daemon is a long-lived background component that manages
@@ -68,9 +69,9 @@ func setUpLogging(c context.Context) context.Context {
 	loggingToTerminal := terminal.IsTerminal(int(os.Stdout.Fd()))
 	logger := logrus.StandardLogger()
 	if loggingToTerminal {
-		logger.Formatter = client.NewFormatter("15:04:05")
+		logger.Formatter = logging.NewFormatter("15:04:05")
 	} else {
-		logger.Formatter = client.NewFormatter("2006/01/02 15:04:05")
+		logger.Formatter = logging.NewFormatter("2006/01/02 15:04:05")
 		log.SetOutput(logger.Writer())
 		logger.SetOutput(&lumberjack.Logger{
 			Filename:   client.Logfile,

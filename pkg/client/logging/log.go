@@ -1,4 +1,4 @@
-package client
+package logging
 
 import (
 	"bytes"

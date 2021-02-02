@@ -9,13 +9,13 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/datawire/telepresence2/v2/pkg/client"
+	"github.com/datawire/telepresence2/v2/pkg/client/logging"
 )
 
 func runAsRoot(exe string, args []string) error {
 	if os.Geteuid() != 0 {
 		if err := exec.Command("sudo", "-n", "true").Run(); err != nil {
-			fmt.Printf("Need root privileges to run %q\n", client.ShellString(exe, args))
+			fmt.Printf("Need root privileges to run %q\n", logging.ShellString(exe, args))
 			if err = exec.Command("sudo", "true").Run(); err != nil {
 				return err
 			}
@@ -42,7 +42,7 @@ func start(exe string, args []string, wait bool, stdin io.Reader, stdout, stderr
 
 	var err error
 	if err = cmd.Start(); err != nil {
-		return fmt.Errorf("%s: %v", client.ShellString(exe, args), err)
+		return fmt.Errorf("%s: %v", logging.ShellString(exe, args), err)
 	}
 	if !wait {
 		_ = cmd.Process.Release()
@@ -61,7 +61,7 @@ func start(exe string, args []string, wait bool, stdin io.Reader, stdout, stderr
 	}()
 	s, err := cmd.Process.Wait()
 	if err != nil {
-		return fmt.Errorf("%s: %v", client.ShellString(exe, args), err)
+		return fmt.Errorf("%s: %v", logging.ShellString(exe, args), err)
 	}
 
 	sigCh <- nil

@@ -26,6 +26,7 @@ import (
 	"github.com/datawire/telepresence2/rpc/v2/manager"
 	"github.com/datawire/telepresence2/v2/pkg/client"
 	"github.com/datawire/telepresence2/v2/pkg/client/cache"
+	"github.com/datawire/telepresence2/v2/pkg/client/logging"
 )
 
 var help = `The Telepresence Connect is a background component that manages a connection. It
@@ -329,10 +330,10 @@ func setupLogging(ctx context.Context) (context.Context, error) {
 
 	logger := logrus.New()
 	logger.SetLevel(logrus.DebugLevel)
-	logger.Formatter = client.NewFormatter("15:04:05")
+	logger.Formatter = logging.NewFormatter("15:04:05")
 
 	if !terminal.IsTerminal(int(os.Stdout.Fd())) {
-		logger.Formatter = client.NewFormatter("2006/01/02 15:04:05")
+		logger.Formatter = logging.NewFormatter("2006/01/02 15:04:05")
 
 		logfile, err := os.OpenFile(logfilename, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
 		if err != nil {
