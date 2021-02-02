@@ -7,11 +7,11 @@ import (
 	"syscall"
 )
 
-// DupToStd ensures that anything written to the file descriptor used by
+// dupToStd ensures that anything written to the file descriptor used by
 // internal functions such as panic and println will end up in the given file.
 //
 // https://github.com/golang/go/issues/325
-func DupToStd(file *os.File) (err error) {
+func dupToStd(file *os.File) (err error) {
 	fd := file.Fd()
 
 	// Dup2 to file descriptors 1 and 2 explicitly instead of using os.Stdout.Fd() and os.Stderr.Fd() since even if
