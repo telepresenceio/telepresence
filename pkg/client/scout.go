@@ -72,6 +72,7 @@ func (s *Scout) Report(action string, meta ...ScoutMeta) error {
 	userInfo, err := cache.LoadUserInfoFromUserCache()
 	if err == nil && userInfo.Id != "" {
 		metadata["user_id"] = userInfo.Id
+		metadata["account_id"] = userInfo.AccountId
 	}
 	for _, metaItem := range meta {
 		metadata[metaItem.Key] = metaItem.Value
