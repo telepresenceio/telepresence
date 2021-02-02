@@ -186,6 +186,9 @@ func TestInitContext(t *testing.T) {
 			dlog.Info(c, infoMsg)
 			closeLog(t)
 		}
+		// Give file remover some time to finish
+		time.Sleep(100 * time.Millisecond)
+
 		files, err := ioutil.ReadDir(logDir)
 		check.NoError(err)
 		check.Equal(5, len(files))
