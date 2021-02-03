@@ -22,7 +22,7 @@ sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/latest/tel
 -o /usr/local/bin/telepresence
 
 # 2. Make the binary executable:
-sudo chmod a+x /usr/local/bin/telepresence && \
+sudo chmod a+x /usr/local/bin/telepresence
 
 # 3. Login with the CLI:
 telepresence login
