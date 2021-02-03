@@ -20,10 +20,10 @@ Finally, you will need the Telepresence CLI. Run the commands for your OS to ins
 # 1. Download the latest binary (~60 MB):
 sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/latest/telepresence \
 -o /usr/local/bin/telepresence
-
+ 
 # 2. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
-
+ 
 # 3. Login with the CLI:
 telepresence login
 ```
@@ -36,10 +36,10 @@ telepresence login
 # 1. Download the latest binary (~50 MB):
 sudo curl -fL https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence \
 -o /usr/local/bin/telepresence
-
+ 
 # 2. Make the binary executable:
 sudo chmod a+x /usr/local/bin/telepresence
-
+ 
 # 3. Login with the CLI:
 telepresence login
 ```
