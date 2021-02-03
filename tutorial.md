@@ -2,13 +2,37 @@
 description: "Learn to use Telepresence to intercept services running in your Kubernetes cluster, speeding up local development and debugging."
 ---
 
+import Alert from '@material-ui/lab/Alert';
+
 # Telepresence Tutorial
 
-In this tutorial you will explore some of the key features of Telepresence. To get started you will deploy an ingress controller and demo web app to your cluster. Then you will run one of the app's microservices on your laptop, using Telepresence to intercept requests to the service on the cluster, proxy them to your laptop, and see your changes live via a preview URL without having to run dependent services locally or waiting on code changes to deploy to a test cluster. 
+In this tutorial you will explore some of the key features of Telepresence. First, you will install the Telepresence CLI and set up a test cluster with a demo web app. Then, you will run one of the app's services on your laptop, using Telepresence to intercept requests to the service on the cluster and see your changes live via a preview URL. 
 
 ## Prerequisites
 
-You must have the [Telepresence CLI installed](../quick-start) on your laptop and access via RBAC to create and update deployments and services in the cluster. It is recommended to use an empty development cluster for this tutorial. You must also have [Node.js installed](https://nodejs.org/en/download/package-manager/) on your laptop to run the demo app code.
+It is recommended to use an empty development cluster for this tutorial.  You must have access via RBAC to create and update deployments and services in the cluster.  You must also have [Node.js installed](https://nodejs.org/en/download/package-manager/) on your laptop to run the demo app code.
+
+Finally, you will need the Telepresence CLI. Run the commands for your OS to install it and login to Ambassador Cloud in your browser. Follow the prompts to login with GitHub then select your organization.  You will be redirected to the dashboard; later you will manage your preview URLs here.
+
+### <img class="os-logo" src="../../images/apple.png"/> macOS
+
+```
+sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/latest/telepresence \
+-o /usr/local/bin/telepresence && \
+sudo chmod a+x /usr/local/bin/telepresence && \
+telepresence login
+```
+<Alert severity="info" variant="outlined">If you receive an error saying the developer cannot be verified, open <b>System Preferences → Security & Privacy → General</b>.  Click <b>Open Anyway</b> at the bottom to bypass the security block. Then retry the <code>telepresence login</code> command.</Alert>
+
+
+### <img class="os-logo" src="../../images/linux.png"/> Linux
+
+```
+sudo curl -fL https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence \
+-o /usr/local/bin/telepresence && \
+sudo chmod a+x /usr/local/bin/telepresence && \
+telepresence login
+```
 
 ## Cluster Setup
 
@@ -41,7 +65,7 @@ You must have the [Telepresence CLI installed](../quick-start) on your laptop an
   ```
 
 <table style="border-collapse: collapse; border: none; padding: 5px; line-height: 29px">
-<tr style="border: none; padding: 5px">
+<tr style="background:transparent; border: none; padding: 5px">
     <td style="border: none; padding: 5px; width:65%"><ol start="5"><li>Wait until all the pods start, then access the the Edgy Corp web app in your browser at <code>http://&lt;load-balancer-ip/&gt;</code>. Be sure you use <code>http</code>, not <code>https</code>! <br/>You should see the landing page for the web app with an architecture diagram. The web app is composed of three services, with the frontend <code>VeryLargeJavaService</code> dependent on the two backend services.</li></ol></td>
     <td style="border: none; padding: 5px"><img src="../../images/tp-tutorial-1.png"/></td>
 </tr>
@@ -61,11 +85,11 @@ Second, you could run everything in a development cluster. However, the cycle of
 
 Alternatively, you can use Telepresence's `intercept` command to proxy traffic bound for a service to your laptop. This will let you test and debug services on code running locally without needing to run dependent services or redeploy code updates to your cluster on every change. It also will generate a preview URL, which loads your web app from the cluster ingress but with requests to the intercepted service proxied to your laptop. 
 
-1. In your terminal run `telepresence login`. This logs you into Ambassador Cloud, which will track your intercepts and let you share them with colleagues. A browser will open to authenticate you. Login with GitHub then select your organization, then you will be redirected to the dashboard which is used to manage your preview URLs.
+1. You started this tutorial by installing the Telepresence CLI and logging into Ambassador Cloud.  The Cloud dashboard is used to manage your intercepts and share them with colleagues. You must be logged in to create selective intercepts as we are going to do here.
 
-  > If you are logged in and close the dashboard browser tab, quickly reopen it by running `telepresence dashboard`.
+  <Alert severity="info" variant="outlined">Run <code>telepresence dashboard</code> if you are already logged in and just need to reopen the dashboard.</Alert>
 
-2. Return to your terminal and run `telepresence list`.  This will connect to your cluster, install the [Traffic Manager](../reference/#architecture) to proxy the traffic, and return a list of services that Telepresence is able to intercept.
+2. In your terminal and run `telepresence list`.  This will connect to your cluster, install the [Traffic Manager](../reference/#architecture) to proxy the traffic, and return a list of services that Telepresence is able to intercept.
 
 3. Navigate up one directory to the root of the repo then into `DataProcessingNodeService`. Install the Node.js dependencies and start the app passing the `blue` argument, which is used by the app to set the title and pod color in the diagram you saw earlier.
 
@@ -75,7 +99,7 @@ Alternatively, you can use Telepresence's `intercept` command to proxy traffic b
   node app -c blue
   ```
 
-4. In a new terminal window start the intercept. This will proxy requests to the `DataProcessingNodeService` service to your laptop.  It will also generate a preview URL, which will let you view the app with the intercepted service in your browser.
+4. In a new terminal window start the intercept with the command below. This will proxy requests to the `DataProcessingNodeService` service to your laptop.  It will also generate a preview URL, which will let you view the app with the intercepted service in your browser.
 
   The intercept requires you specify the name of the deployment to be intercepted and the port to proxy. 
 
@@ -83,7 +107,7 @@ Alternatively, you can use Telepresence's `intercept` command to proxy traffic b
   telepresence intercept dataprocessingnodeservice --port 3000
   ```
 
-  You will be prompted with a few options. Telepresence tries to intelligently determine the deployment and namespace of your ingress controller.  Hit `enter` to accept the default value of `ambassador.ambassador` for `Ingress`.  For simplicity's sake, our app uses 80 for the port and does not use TLS, so use those options when prompted for the `port` and `TLS` settings.
+  You will be prompted with a few options. Telepresence tries to intelligently determine the deployment and namespace of your ingress controller.  Hit `enter` to accept the default value of `ambassador.ambassador` for `Ingress`.  For simplicity's sake, our app uses 80 for the port and does *not* use TLS, so use those options when prompted for the `port` and `TLS` settings. Your output should be similar to this:
   
   ```
   $ telepresence intercept dataprocessingnodeservice --port 3000
@@ -101,14 +125,14 @@ Alternatively, you can use Telepresence's `intercept` command to proxy traffic b
   ```
 
 <table style="border-collapse: collapse; border: none; padding: 5px; line-height: 29px">
-<tr style="border: none; padding: 5px">
+<tr style="background:transparent; border: none; padding: 5px">
     <td style="border: none; padding: 5px; width:65%"><ol start="5"><li>Open the preview URL in your browser to see the intercepted version of the app. The Node server on your laptop replies back to the cluster with the <span style="color:blue" class="bold">blue</span> option enabled; you will see a blue title and blue pod in the diagram. Remember that previously these elements were <span style="color:green" class="bold">green</span>.<br />You will also see a banner at the bottom on the page informing that you are viewing a preview URL with your name and org name.</li></ol></td>
     <td style="border: none; padding: 5px"><img src="../../images/tp-tutorial-2.png"/></td>
 </tr>
 </table>
 
 <table style="border-collapse: collapse; border: none; padding: 5px; line-height: 29px">
-<tr style="border: none; padding: 5px">
+<tr style="background:transparent; border: none; padding: 5px">
     <td style="border: none; padding: 5px; width:65%"><ol start="6"><li>Switch back in your browser to the dashboard page and refresh it to see your preview URL listed. Click the box to expand out options where you can disable authentication or remove the preview.<br/>If there were other developers in your organization also creating preview URLs, you would see them here as well.</li></ol></td>
     <td style="border: none; padding: 5px"><img src="../../images/tp-tutorial-3.png"/></td>
 </tr>
