@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -17,21 +16,12 @@ import (
 	"github.com/datawire/telepresence2/v2/pkg/version"
 )
 
-// appEnv implements the json.Unmarshaler interface so that envconfig.Process can parse
-// it correctly
-type appEnv map[string]string
-
-func (e *appEnv) UnmarshalJSON(bytes []byte) error {
-	return json.Unmarshal(bytes, (*map[string]string)(e))
-}
-
 type Config struct {
-	Name           string `env:"AGENT_NAME,required"`
-	AppPort        int32  `env:"APP_PORT,required"`
-	AgentPort      int32  `env:"AGENT_PORT,default=9900"`
-	ManagerHost    string `env:"MANAGER_HOST,default=traffic-manager"`
-	ManagerPort    int32  `env:"MANAGER_PORT,default=8081"`
-	AppEnvironment appEnv `env:"APP_ENVIRONMENT,default={}"`
+	Name        string `env:"AGENT_NAME,required"`
+	AppPort     int32  `env:"APP_PORT,required"`
+	AgentPort   int32  `env:"AGENT_PORT,default=9900"`
+	ManagerHost string `env:"MANAGER_HOST,default=traffic-manager"`
+	ManagerPort int32  `env:"MANAGER_PORT,default=8081"`
 }
 
 var skipKeys = map[string]bool{
@@ -54,17 +44,20 @@ var skipKeys = map[string]bool{
 // config.
 func (c *Config) fullAppEnvironment() map[string]string {
 	osEnv := os.Environ()
-	fullEnv := make(map[string]string, len(osEnv)+len(c.AppEnvironment))
+	appEnv := make(map[string]string)
+	fullEnv := make(map[string]string, len(osEnv))
 	for _, env := range osEnv {
 		pair := strings.SplitN(env, "=", 2)
 		if len(pair) == 2 {
 			k := pair[0]
-			if _, skip := skipKeys[k]; !skip {
+			if strings.HasPrefix(k, "TEL_APP_") {
+				appEnv[k[8:]] = pair[1]
+			} else if _, skip := skipKeys[k]; !skip {
 				fullEnv[k] = pair[1]
 			}
 		}
 	}
-	for k, v := range c.AppEnvironment {
+	for k, v := range appEnv {
 		fullEnv[k] = v
 	}
 	return fullEnv

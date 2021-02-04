@@ -249,37 +249,41 @@ func (ata *addTrafficAgentAction) do(obj kates.Object) error {
 }
 
 func (ata *addTrafficAgentAction) agentEnvironment(dep *kates.Deployment) []corev1.EnvVar {
-	env := []corev1.EnvVar{{
-		Name:  "LOG_LEVEL",
-		Value: "debug",
-	}, {
-		Name:  "AGENT_NAME",
-		Value: dep.GetName(),
-	}, {
-		Name:  "APP_PORT",
-		Value: strconv.Itoa(int(ata.ContainerPortNumber)),
-	}}
-	if appEnv := ata.appEnvironment(dep); len(appEnv) > 0 {
-		env = append(env, corev1.EnvVar{
-			Name:  "APP_ENVIRONMENT",
-			Value: mustMarshal(appEnv),
+	appEnv := ata.appEnvironment(dep)
+	env := make([]corev1.EnvVar, len(appEnv), len(appEnv)+3)
+	copy(env, appEnv)
+	return append(env,
+		corev1.EnvVar{
+			Name:  "LOG_LEVEL",
+			Value: "debug",
+		},
+		corev1.EnvVar{
+			Name:  "AGENT_NAME",
+			Value: dep.GetName(),
+		},
+		corev1.EnvVar{
+			Name:  "APP_PORT",
+			Value: strconv.Itoa(int(ata.ContainerPortNumber)),
 		})
-	}
-	return env
 }
 
-func (ata *addTrafficAgentAction) appEnvironment(dep *kates.Deployment) map[string]string {
+func (ata *addTrafficAgentAction) appEnvironment(dep *kates.Deployment) []corev1.EnvVar {
 	cns := dep.Spec.Template.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
 		if cn.Name == ata.containerName {
 			env := cn.Env
-			envMap := make(map[string]string, len(env)+1)
-			envMap["TELEPRESENCE_CONTAINER"] = cn.Name
+			envCopy := make([]corev1.EnvVar, 0, len(env)+1)
 			for _, ev := range env {
-				envMap[ev.Name] = ev.Value
+				evCopy := ev // by value copy
+				evCopy.Name = "TEL_APP_" + ev.Name
+				envCopy = append(envCopy, evCopy)
 			}
-			return envMap
+			envCopy = append(envCopy, corev1.EnvVar{
+				Name:  "TELEPRESENCE_CONTAINER",
+				Value: cn.Name,
+			})
+			return envCopy
 		}
 	}
 	return nil

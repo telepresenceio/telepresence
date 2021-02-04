@@ -42,14 +42,14 @@ deployment:
         - args:
           - agent
           env:
+          - name: TELEPRESENCE_CONTAINER
+            value: echo-server
           - name: LOG_LEVEL
             value: debug
           - name: AGENT_NAME
             value: hello-6
           - name: APP_PORT
             value: "8080"
-          - name: APP_ENVIRONMENT
-            value: "{\"TELEPRESENCE_CONTAINER\":\"echo-server\"}"
           image: localhost:5000/tel2:0.1.2-test
           imagePullPolicy: IfNotPresent
           name: traffic-agent

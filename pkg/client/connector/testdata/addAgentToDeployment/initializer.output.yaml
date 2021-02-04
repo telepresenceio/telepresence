@@ -42,14 +42,16 @@ deployment:
           - name: traffic-agent
             args: [agent]
             env:
+            - name: TEL_APP_LISTEN_PORT
+              value: "3000"
+            - name: TELEPRESENCE_CONTAINER
+              value: sample-app
             - name: LOG_LEVEL
               value: debug
             - name: AGENT_NAME
               value: sample-app
             - name: APP_PORT
               value: "3000"
-            - name: APP_ENVIRONMENT
-              value: "{\"LISTEN_PORT\":\"3000\",\"TELEPRESENCE_CONTAINER\":\"sample-app\"}"
             image: localhost:5000/tel2:0.1.2-test
             imagePullPolicy: IfNotPresent
             ports:

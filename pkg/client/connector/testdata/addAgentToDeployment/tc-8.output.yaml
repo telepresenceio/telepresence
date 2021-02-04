@@ -38,6 +38,11 @@ deployment:
             value: /path/to/one
           - name: TEST_TXT
             value: some arbitrary text
+          - name: TEST_FROM
+            valueFrom:
+              configMapKeyRef:
+                name: some-map
+                key: some-key
           image: jmalloc/echo-server:0.1.0
           imagePullPolicy: IfNotPresent
           name: echo-server
@@ -47,14 +52,23 @@ deployment:
         - args:
           - agent
           env:
+          - name: TEL_APP_TEST_PATH
+            value: /path/to/one
+          - name: TEL_APP_TEST_TXT
+            value: some arbitrary text
+          - name: TEL_APP_TEST_FROM
+            valueFrom:
+              configMapKeyRef:
+                name: some-map
+                key: some-key
+          - name: TELEPRESENCE_CONTAINER
+            value: echo-server
           - name: LOG_LEVEL
             value: debug
           - name: AGENT_NAME
             value: hello-8
           - name: APP_PORT
             value: "8080"
-          - name: APP_ENVIRONMENT
-            value: "{\"TELEPRESENCE_CONTAINER\":\"echo-server\",\"TEST_PATH\":\"/path/to/one\",\"TEST_TXT\":\"some arbitrary text\"}"
           image: localhost:5000/tel2:0.1.2-test
           imagePullPolicy: IfNotPresent
           name: traffic-agent

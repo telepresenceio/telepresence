@@ -37,6 +37,11 @@ deployment:
             value: /path/to/one
           - name: TEST_TXT
             value: some arbitrary text
+          - name: TEST_FROM
+            valueFrom:
+              configMapKeyRef:
+                name: some-map
+                key: some-key
           image: jmalloc/echo-server:0.1.0
           imagePullPolicy: IfNotPresent
           name: echo-server
