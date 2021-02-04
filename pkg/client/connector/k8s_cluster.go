@@ -469,6 +469,30 @@ func trackKCluster(c context.Context, kubeFlagMap map[string]string, daemon daem
 	return kc, nil
 }
 
+func (kc *k8sCluster) getClusterId(c context.Context) (clusterID string) {
+	rootID := func() (rootID string) {
+		defer func() {
+			// If kates panics, we'll use the default rootID, so we
+			// can recover here
+			_ = recover()
+		}()
+		rootID = "00000000-0000-0000-0000-000000000000"
+
+		nsName := "default"
+		ns := &kates.Namespace{
+			TypeMeta:   kates.TypeMeta{Kind: "Namespace"},
+			ObjectMeta: kates.ObjectMeta{Name: nsName},
+		}
+		if err := kc.client.Get(c, ns, ns); err != nil {
+			return
+		}
+
+		rootID = string(ns.GetUID())
+		return
+	}()
+	return rootID
+}
+
 /*
 // getClusterPreviewHostname returns the hostname of the first Host resource it
 // finds that has Preview URLs enabled with a supported URL type.

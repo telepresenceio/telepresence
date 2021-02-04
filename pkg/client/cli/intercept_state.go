@@ -212,11 +212,12 @@ func (is *interceptState) EnsureState() (bool, error) {
 
 	// Add metadata to scout
 	is.Scout.SetMetadatum("service_name", is.agentName)
-	is.Scout.SetMetadatum("cluster_id", is.cs.info.ClusterServer)
-	// TODO: Right now intercepts are only possible in whichever
-	// namespace the manager is in. When we support intercepts for
-	// multiple namespaces, we should pass that metadata along
-	// is.Scout.SetMetadatum("service_namespace", <TOGET>)
+	is.Scout.SetMetadatum("cluster_id", is.cs.info.ClusterId)
+
+	// For now this will be using the namespace where the traffic manager
+	// is installed. Once we support intercepts in multiple namespaces,
+	// we should change this to use that information
+	is.Scout.SetMetadatum("service_namespace", is.cs.info.ClusterNamespace)
 
 	is.Scout.SetMetadatum("intercept_id", r.InterceptInfo.Id)
 	if is.matchMechanism == "http" /* && [REDACTED] */ {

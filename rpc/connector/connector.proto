@@ -60,6 +60,8 @@ message ConnectInfo {
   repeated manager.IngressInfo ingress_infos = 9;
 
   telepresence.manager.SessionInfo session_info = 10;
+  string cluster_namespace = 11;
+  string cluster_id = 12;
 }
 
 message UninstallRequest {
