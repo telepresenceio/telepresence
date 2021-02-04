@@ -26,6 +26,16 @@ func runAsRoot(exe string, args []string) error {
 	return start(exe, args, false, nil, nil, nil)
 }
 
+func envPairs(env map[string]string) []string {
+	pairs := make([]string, len(env))
+	i := 0
+	for k, v := range env {
+		pairs[i] = k + "=" + v
+		i++
+	}
+	return pairs
+}
+
 func start(exe string, args []string, wait bool, stdin io.Reader, stdout, stderr io.Writer, env ...string) error {
 	cmd := exec.Command(exe, args...)
 	cmd.Stdout = stdout
