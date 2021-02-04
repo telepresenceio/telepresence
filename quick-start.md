@@ -8,11 +8,21 @@ import Alert from '@material-ui/lab/Alert';
 
 In this guide you will explore some of the key features of Telepresence. First, you will install the Telepresence CLI and set up a test cluster with a demo web app. Then, you will run one of the app's services on your laptop, using Telepresence to intercept requests to the service on the cluster and see your changes live via a preview URL. 
 
-## Prerequisites
+[Watch the demo video](https://www.youtube.com/watch?v=W_a3aErN3NU) if you want to see Telepresence in action before following this guide.
 
-It is recommended to use an empty development cluster for this guide.  You must have access via RBAC to create and update deployments and services in the cluster.  You must also have [Node.js installed](https://nodejs.org/en/download/package-manager/) on your laptop to run the demo app code.
+## Set Up Your Laptop
 
-Finally, you will need the Telepresence CLI. Run the commands for your OS to install it and login to Ambassador Cloud in your browser. Follow the prompts to login with GitHub then select your organization.  You will be redirected to the dashboard; later you will manage your preview URLs here.
+You will use a demo web app written in Java for this guide. Start by cloning the repo:
+
+  ```
+  git clone https://github.com/datawire/amb-code-quickstart-app.git
+  ```
+
+You will run one of the app's services on your laptop later, you must have [Node.js installed](https://nodejs.org/en/download/package-manager/) for this.
+
+You also must download the Telepresence CLI.  This command-line tool is used to login to Ambassador Cloud, create and remove intercepts, and create preview URLs, all of which will be covered in this guide.
+
+Run the commands for your OS to install the CLI and login to Ambassador Cloud in your browser. Once your browser opens, follow the prompts to login with GitHub then select your organization.  You will be redirected to the dashboard; later you will manage your preview URLs here.
 
 ### <img class="os-logo" src="../../images/apple.png"/> macOS
 
@@ -44,39 +54,38 @@ sudo chmod a+x /usr/local/bin/telepresence
 telepresence login
 ```
 
-## Cluster Setup
+## Set Up Your Cluster
 
-1. You will use a sample Java app for this guide. Later, after deploying the app into your cluster, we will review its architecture. Start by cloning the repo:
+It is recommended to use an empty development Kubernetes cluster for this guide. You'll use this cluster to run the demo web app that you cloned earlier. You must have access via RBAC to create and update deployments and services in the cluster.
 
-  ```
-  git clone https://github.com/datawire/amb-code-quickstart-app.git
-  ```
-
-2. Install [Edge Stack](../../../../../../products/edge-stack/) to use as an ingress controller for your cluster. We need an ingress controller to allow access to the web app from the internet.
+1. Install [Edge Stack](../../../../../../products/edge-stack/) to use as an ingress controller for your cluster. An ingress controller is required to access the web app from the internet.
 
   Change into the repo directory, then into `k8s-config`, and apply the YAML files to deploy Edge Stack.
 
   ```
   cd amb-code-quickstart-app/k8s-config
-  kubectl apply -f 1-aes-crds.yml && kubectl wait --for condition=established --timeout=90s crd -lproduct=aes
-  kubectl apply -f 2-aes.yml && kubectl wait -n ambassador deploy -lproduct=aes --for condition=available --timeout=90s
+  kubectl apply -f 1-aes-crds.yml && \
+  kubectl wait --for condition=established --timeout=90s crd -lproduct=aes
+  kubectl apply -f 2-aes.yml && \
+  kubectl wait -n ambassador deploy -lproduct=aes --for condition=available --timeout=90s
   ```
 
-3. Install the web app by applying its manifest:
+1. Install the web app by applying its manifest:
 
   ```
   kubectl apply -f edgy-corp-web-app.yaml
   ```
 
-4. Wait a few moments for the external load balancer to become available, then retrieve its IP address:
+1. Wait a few moments for the external load balancer to become available, then retrieve its IP address:
 
   ```
-  kubectl get service -n ambassador ambassador -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+  kubectl get service -n ambassador ambassador \
+  -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
   ```
 
 <table style="border-collapse: collapse; border: none; padding: 5px; line-height: 29px">
 <tr style="background:transparent; border: none; padding: 5px">
-    <td style="border: none; padding: 5px; width:65%"><ol start="5"><li>Wait until all the pods start, then access the the Edgy Corp web app in your browser at <code>http://&lt;load-balancer-ip/&gt;</code>. Be sure you use <code>http</code>, not <code>https</code>! <br/>You should see the landing page for the web app with an architecture diagram. The web app is composed of three services, with the frontend <code>VeryLargeJavaService</code> dependent on the two backend services.</li></ol></td>
+    <td style="border: none; padding: 5px; width:65%"><ol start="5"><li>Wait until all the pods start, then access the the Edgy Corp web app in your browser at <code>http://&lt;load-balancer-ip/&gt;</code>. Be sure to use <code>http</code>, not <code>https</code>! <br/>You should see the landing page for the web app with an architecture diagram. The web app is composed of three services, with the frontend <code>VeryLargeJavaService</code> dependent on the two backend services.</li></ol></td>
     <td style="border: none; padding: 5px"><img src="../../images/tp-tutorial-1.png"/></td>
 </tr>
 </table>
@@ -164,7 +173,7 @@ This diagram demonstrates the flow of requests using the intercept.  The laptop 
 
 ## <img class="os-logo" src="../../images/logo.png"/> What's Next?
 
-Telepresence and preview URLS open up powerful possibilities for [collaborating](../howtos/preview-urls) with your colleagues and others outside of your organization.
+Telepresence and [preview URLS](../howtos/preview-urls) open up powerful possibilities for collaborating with your colleagues and others outside of your organization.
 
 Learn more about how Telepresence handles [outbound sessions](../howtos/outbound), allowing locally running services to interact with cluster services without an intercept.
 
