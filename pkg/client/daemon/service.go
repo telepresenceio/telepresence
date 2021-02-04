@@ -47,8 +47,12 @@ type service struct {
 	fallback string
 	hClient  *http.Client
 	outbound *outbound
-	callCtx  context.Context
 	cancel   context.CancelFunc
+
+	// callCtx is a hack for the gRPC server, since it doesn't let us pass it a Context.  It
+	// should go away when we migrate to dhttp and Contexts can get passed around properly for
+	// HTTP/2 requests.
+	callCtx context.Context
 }
 
 // Command returns the telepresence sub-command "daemon-foreground"
