@@ -181,7 +181,6 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 	} else {
 		result = &rpc.InterceptResult{
 			Environment: found.Environment,
-			MountPoints: found.MountPoints,
 		}
 	}
 
@@ -232,7 +231,6 @@ func (tm *trafficManager) addAgent(c context.Context, agentName, agentImageName 
 	return &rpc.InterceptResult{
 		Error:       rpc.InterceptError_UNSPECIFIED,
 		Environment: agent.Environment,
-		MountPoints: agent.MountPoints,
 	}
 }
 

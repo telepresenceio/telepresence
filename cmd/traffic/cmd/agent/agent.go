@@ -97,18 +97,12 @@ func Main(ctx context.Context, args ...string) error {
 		hostname = fmt.Sprintf("unknown: %+v", err)
 	}
 
-	mountPoints, err := mountPoints()
-	if err != nil {
-		return fmt.Errorf("failed to retrieve mount-points: %v", err)
-	}
-
 	info := &rpc.AgentInfo{
 		Name:        config.Name,
 		Hostname:    hostname,
 		Product:     "telepresence",
 		Version:     version.Version,
 		Environment: config.fullAppEnvironment(),
-		MountPoints: mountPoints,
 	}
 
 	// Select initial mechanism

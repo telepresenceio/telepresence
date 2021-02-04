@@ -52,9 +52,6 @@ message AgentInfo {
 
   // The environment of the app
   map<string, string> environment = 6;
-
-  // A filtered set of mount-points available to the app
-  repeated string mount_points = 7;
 }
 
 message InterceptSpec {

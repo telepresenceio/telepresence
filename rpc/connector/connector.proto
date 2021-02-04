@@ -141,7 +141,4 @@ message InterceptResult {
 
   // The environment of the app
   map<string,string> environment = 4;
-
-  // A filtered set of mount-points available to the app
-  repeated string mount_points = 5;
 }
