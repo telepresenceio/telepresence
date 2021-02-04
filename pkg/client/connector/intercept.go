@@ -173,32 +173,31 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 		}
 	}
 
+	var result *rpc.InterceptResult
 	if found == nil {
-		if result := tm.addAgent(c, agentName, agentImageName(c, tm.env)); result != nil {
+		if result = tm.addAgent(c, agentName, agentImageName(c, tm.env)); result.Error != rpc.InterceptError_UNSPECIFIED {
 			return result, nil
 		}
 	} else {
-		dlog.Infof(c, "found agent for deployment %q", agentName)
+		result = &rpc.InterceptResult{
+			Environment: found.Environment,
+			MountPoints: found.MountPoints,
+		}
 	}
 
 	ir.Session = tm.session()
 	dlog.Debugf(c, "creating intercept %s", ir.InterceptSpec.Name)
 	ii, err := tm.managerClient.CreateIntercept(c, ir)
-
-	result := &rpc.InterceptResult{InterceptInfo: ii}
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
-		result.Error = rpc.InterceptError_TRAFFIC_MANAGER_ERROR
-		result.ErrorText = err.Error()
-		return result, nil
+		return &rpc.InterceptResult{Error: rpc.InterceptError_TRAFFIC_MANAGER_ERROR, ErrorText: err.Error()}, nil
 	}
 	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
+
 	ii, err = tm.waitForActiveIntercept(c, ii.Id)
 	if err != nil {
 		_ = tm.removeIntercept(c, spec.Name)
-		result.Error = rpc.InterceptError_FAILED_TO_ESTABLISH
-		result.ErrorText = err.Error()
-		return result, nil
+		return &rpc.InterceptResult{Error: rpc.InterceptError_FAILED_TO_ESTABLISH, ErrorText: err.Error()}, nil
 	}
 	result.InterceptInfo = ii
 
@@ -221,7 +220,7 @@ func (tm *trafficManager) addAgent(c context.Context, agentName, agentImageName 
 	}
 
 	dlog.Infof(c, "waiting for agent for deployment %q", agentName)
-	_, err := tm.waitForAgent(c, agentName)
+	agent, err := tm.waitForAgent(c, agentName)
 	if err != nil {
 		dlog.Error(c, err)
 		return &rpc.InterceptResult{
@@ -230,7 +229,11 @@ func (tm *trafficManager) addAgent(c context.Context, agentName, agentImageName 
 		}
 	}
 	dlog.Infof(c, "agent created for deployment %q", agentName)
-	return nil
+	return &rpc.InterceptResult{
+		Error:       rpc.InterceptError_UNSPECIFIED,
+		Environment: agent.Environment,
+		MountPoints: agent.MountPoints,
+	}
 }
 
 func (tm *trafficManager) waitForActiveIntercept(ctx context.Context, id string) (*manager.InterceptInfo, error) {
