@@ -69,3 +69,23 @@ func AppUserConfigDir(ctx context.Context) (string, error) {
 	}
 	return filepath.Join(userDir, appName), nil
 }
+
+// AppSystemConfigDirs returns a list of directories to search for
+// application-specific (but not user-specific) configuration data.
+//
+// On all platforms, this returns the list from SystemConfigDirs, with
+// "/telepresence" appended to each directory (using the appropriate path
+// separator, if not "/").
+//
+// If the location cannot be determined, then it will return an error.
+func AppSystemConfigDirs(ctx context.Context) ([]string, error) {
+	dirs, err := systemConfigDirs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ret := make([]string, 0, len(dirs))
+	for _, dir := range dirs {
+		ret = append(ret, filepath.Join(dir, appName))
+	}
+	return ret, nil
+}
