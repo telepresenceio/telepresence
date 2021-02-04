@@ -48,9 +48,10 @@ deployment:
               value: sample-app
             - name: APP_PORT
               value: "3000"
+            - name: APP_ENVIRONMENT
+              value: "{\"LISTEN_PORT\":\"3000\",\"TELEPRESENCE_CONTAINER\":\"sample-app\"}"
             image: localhost:5000/tel2:0.1.2-test
             imagePullPolicy: IfNotPresent
-            name: traffic-agent
             ports:
             - containerPort: 9900
               name: http

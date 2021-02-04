@@ -36,6 +36,7 @@ const managerAppName = "traffic-manager"
 const telName = "manager"
 const domainPrefix = "telepresence.getambassador.io/"
 const annTelepresenceActions = domainPrefix + "actions"
+const agentContainerName = "traffic-agent"
 
 var labelMap = map[string]string{
 	"app":          managerAppName,
@@ -341,7 +342,7 @@ func (ki *installer) ensureAgent(c context.Context, name, portName, agentImageNa
 	var agentContainer *kates.Container
 	for i := range dep.Spec.Template.Spec.Containers {
 		container := &dep.Spec.Template.Spec.Containers[i]
-		if container.Name == "traffic-agent" {
+		if container.Name == agentContainerName {
 			agentContainer = container
 			break
 		}
@@ -525,6 +526,7 @@ func addAgentToDeployment(
 		Version:           version,
 		ReferencedService: service.Name,
 		AddTrafficAgent: &addTrafficAgentAction{
+			containerName:       container.Name,
 			ContainerPortName:   containerPort.Name,
 			ContainerPortProto:  containerPort.Protocol,
 			ContainerPortNumber: containerPort.Number,

@@ -33,7 +33,12 @@ deployment:
           app: hello-8
       spec:
         containers:
-        - image: jmalloc/echo-server:0.1.0
+        - env:
+          - name: TEST_PATH
+            value: /path/to/one
+          - name: TEST_TXT
+            value: some arbitrary text
+          image: jmalloc/echo-server:0.1.0
           imagePullPolicy: IfNotPresent
           name: echo-server
           resources: {}
@@ -48,6 +53,8 @@ deployment:
             value: hello-8
           - name: APP_PORT
             value: "8080"
+          - name: APP_ENVIRONMENT
+            value: "{\"TELEPRESENCE_CONTAINER\":\"echo-server\",\"TEST_PATH\":\"/path/to/one\",\"TEST_TXT\":\"some arbitrary text\"}"
           image: localhost:5000/tel2:0.1.2-test
           imagePullPolicy: IfNotPresent
           name: traffic-agent
