@@ -7,12 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os/exec"
 	"strings"
+	"time"
 
+	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	ppf "github.com/datawire/pf"
-	"github.com/datawire/telepresence2/v2/pkg/client/logging"
 )
 
 type Translator struct {
@@ -21,24 +21,29 @@ type Translator struct {
 	token string
 }
 
-func pf(c context.Context, args []string, stdin string) error {
-	// We specifically avoid using dexec.CommandContext() for the pfctl commands to ensure that they
-	// are unaffected by a context cancellation. Interrupting may result in instabilities in MacOS packet filtering.
-	dlog.Debugf(c, "running %s", logging.ShellString("pfctl", args))
-	cmd := exec.Command("pfctl", args...)
-	cmd.Stdin = strings.NewReader(stdin)
-	err := cmd.Start()
-	if err != nil {
-		return err
-	}
-	return cmd.Wait()
+type withoutCancel struct {
+	context.Context
 }
 
-func pfo(c context.Context, args ...string) ([]byte, error) {
-	// We specifically avoid using dexec.CommandContext() for the pfctl commands to ensure that they
-	// are unaffected by a context cancellation. Interrupting may result in instabilities in MacOS packet filtering.
-	dlog.Debugf(c, "running %s", logging.ShellString("pfctl", args))
-	return exec.Command("pfctl", args...).CombinedOutput()
+func (withoutCancel) Deadline() (deadline time.Time, ok bool) { return }
+func (withoutCancel) Done() <-chan struct{}                   { return nil }
+func (withoutCancel) Err() error                              { return nil }
+func (c withoutCancel) String() string                        { return fmt.Sprintf("%v.WithoutCancel", c.Context) }
+
+func pf(ctx context.Context, args []string, stdin string) error {
+	// We specifically don't want to use the cancellation of 'ctx' for pfctl, because
+	// interrupting pfctl may result in instabilities in macOS packet filtering.  But we still
+	// want to use dexec instead of os/exec because we want dexec's logging.
+	cmd := dexec.CommandContext(withoutCancel{ctx}, "pfctl", args...)
+	cmd.Stdin = strings.NewReader(stdin)
+	return cmd.Run()
+}
+
+func pfo(ctx context.Context, args ...string) ([]byte, error) {
+	// We specifically don't want to use the cancellation of 'ctx' for pfctl, because
+	// interrupting pfctl may result in instabilities in macOS packet filtering.  But we still
+	// want to use dexec instead of os/exec because we want dexec's logging.
+	return dexec.CommandContext(withoutCancel{ctx}, "pfctl", args...).CombinedOutput()
 }
 
 func splitPorts(portspec string) (result []string) {
