@@ -16,12 +16,6 @@ service Daemon {
   // Returns the current connectivity status
   rpc Status(google.protobuf.Empty) returns (DaemonStatus);
 
-  // Turns network overrides off.
-  rpc Pause(google.protobuf.Empty) returns (PauseInfo);
-
-  // Turns network overrides back on (after using Pause)
-  rpc Resume(google.protobuf.Empty) returns (ResumeInfo);
-
   // Quits (terminates) the service.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 
@@ -32,33 +26,10 @@ service Daemon {
   rpc SetDnsSearchPath(Paths) returns (google.protobuf.Empty);
 }
 
-message PauseInfo {
-  enum ErrType {
-    UNSPECIFIED = 0;
-    ALREADY_PAUSED = 1;
-    CONNECTED_TO_CLUSTER = 2;
-    UNEXPECTED_PAUSE_ERROR = 3;
-  }
-  ErrType error = 1;
-  string error_text = 2;
-}
-
-message ResumeInfo {
-  enum ErrType {
-    UNSPECIFIED = 0;
-    NOT_PAUSED = 1;
-    REESTABLISHING = 2;
-    UNEXPECTED_RESUME_ERROR = 3;
-  }
-  ErrType error = 1;
-  string error_text = 2;
-}
-
 message DaemonStatus {
   enum ErrType {
     UNSPECIFIED = 0;
     NOT_STARTED = 1;
-    PAUSED = 2;
     NO_NETWORK = 3;
   }
   ErrType error = 1;

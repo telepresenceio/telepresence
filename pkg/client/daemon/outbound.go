@@ -39,7 +39,7 @@ const (
 //
 // If fallbackIP is empty, it will default to Google DNS.
 func start(c context.Context, dnsIP, fallbackIP string, noSearch bool) (*outbound, error) {
-	ic := newOutbound("traffic-manager", dnsIP, fallbackIP, noSearch, nil)
+	ic := newOutbound("traffic-manager", dnsIP, fallbackIP, noSearch)
 	g := dgroup.ParentGroup(c)
 	g.Go(dnsServerWorker, ic.dnsServerWorker)
 	return ic, nil
@@ -65,11 +65,10 @@ type outbound struct {
 	// dnsRedirPort is the port to which we redirect dns requests.
 	dnsRedirPort int
 
-	work   chan func(context.Context) error
-	cancel context.CancelFunc
+	work chan func(context.Context) error
 }
 
-func newOutbound(name string, dnsIP, fallbackIP string, noSearch bool, cancel context.CancelFunc) *outbound {
+func newOutbound(name string, dnsIP, fallbackIP string, noSearch bool) *outbound {
 	ret := &outbound{
 		dnsIP:      dnsIP,
 		fallbackIP: fallbackIP,
@@ -79,7 +78,6 @@ func newOutbound(name string, dnsIP, fallbackIP string, noSearch bool, cancel co
 		domains:    make(map[string]*rpc.Route),
 		search:     []string{""},
 		work:       make(chan func(context.Context) error),
-		cancel:     cancel,
 	}
 	ret.tablesLock.Lock() // leave it locked until translatorWorker unlocks it
 	return ret
@@ -302,8 +300,4 @@ func (o *outbound) setSearchPath(c context.Context, paths []string) {
 	o.searchLock.Lock()
 	defer o.searchLock.Unlock()
 	o.setSearchPathFunc(c, paths)
-}
-
-func (o *outbound) shutdown() {
-	o.cancel()
 }

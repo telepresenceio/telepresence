@@ -72,50 +72,11 @@ func (d *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 	}, nil
 }
 
-func (d *service) callContext(_ context.Context) context.Context {
-	return d.callCtx
-}
-
 func (d *service) Status(_ context.Context, _ *empty.Empty) (*rpc.DaemonStatus, error) {
 	r := &rpc.DaemonStatus{}
-	if d.outbound == nil {
-		r.Error = rpc.DaemonStatus_PAUSED
-		return r, nil
-	}
 	r.Dns = d.dns
 	r.Fallback = d.fallback
 	return r, nil
-}
-
-func (d *service) Pause(_ context.Context, _ *empty.Empty) (*rpc.PauseInfo, error) {
-	r := rpc.PauseInfo{}
-	switch {
-	case d.outbound == nil:
-		r.Error = rpc.PauseInfo_ALREADY_PAUSED
-	case client.SocketExists(client.ConnectorSocketName):
-		r.Error = rpc.PauseInfo_CONNECTED_TO_CLUSTER
-	default:
-		d.outbound.shutdown()
-		d.outbound = nil
-	}
-	return &r, nil
-}
-
-func (d *service) Resume(c context.Context, _ *empty.Empty) (*rpc.ResumeInfo, error) {
-	r := rpc.ResumeInfo{}
-	if d.outbound != nil {
-		r.Error = rpc.ResumeInfo_NOT_PAUSED
-	} else {
-		c := d.callContext(c)
-		outbound, err := start(c, d.dns, d.fallback, false)
-		if err != nil {
-			r.Error = rpc.ResumeInfo_UNEXPECTED_RESUME_ERROR
-			r.ErrorText = err.Error()
-			dlog.Infof(c, "resume: %v", err)
-		}
-		d.outbound = outbound
-	}
-	return &r, nil
 }
 
 func (d *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
