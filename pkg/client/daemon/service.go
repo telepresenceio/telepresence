@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -63,8 +64,8 @@ func Command() *cobra.Command {
 		Args:   cobra.ExactArgs(3),
 		Hidden: true,
 		Long:   help,
-		RunE: func(_ *cobra.Command, args []string) error {
-			return run(args[0], args[1], args[2])
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return run(cmd.Context(), args[0], args[1], args[2])
 		},
 	}
 }
@@ -101,7 +102,7 @@ func (d *service) SetDnsSearchPath(_ context.Context, paths *rpc.Paths) (*empty.
 }
 
 // run is the main function when executing as the daemon
-func run(loggingDir, dns, fallback string) error {
+func run(c context.Context, loggingDir, dns, fallback string) error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("telepresence %s must run as root", processName)
 	}
@@ -112,7 +113,7 @@ func run(loggingDir, dns, fallback string) error {
 		return loggingDir
 	}
 
-	c, err := logging.InitContext(context.Background(), processName)
+	c, err := logging.InitContext(c, processName)
 	if err != nil {
 		return err
 	}
@@ -133,7 +134,10 @@ func run(loggingDir, dns, fallback string) error {
 				DisableKeepAlives: true,
 			},
 		},
+		outbound: newOutbound("traffic-manager", dns, fallback, false),
 	}
+
+	c = dgroup.WithGoroutineName(c, "/daemon")
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -143,62 +147,94 @@ func run(loggingDir, dns, fallback string) error {
 
 	// The d.cancel will start a "quit" go-routine that will cause the group to initiate a a shutdown when it returns.
 	d.cancel = func() { g.Go(processName+"-quit", d.quitConnector) }
-	g.Go(processName, func(c context.Context) error {
-		dlog.Info(c, "---")
-		dlog.Infof(c, "Telepresence %s %s starting...", processName, client.DisplayVersion())
-		dlog.Infof(c, "PID is %d", os.Getpid())
-		dlog.Info(c, "")
 
-		g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-		g.Go("outbound", func(c context.Context) (err error) {
-			d.outbound, err = start(c, dns, fallback, false)
-			return err
-		})
+	dlog.Info(c, "---")
+	dlog.Infof(c, "Telepresence %s %s starting...", processName, client.DisplayVersion())
+	dlog.Infof(c, "PID is %d", os.Getpid())
+	dlog.Info(c, "")
 
-		g.Go("service", func(c context.Context) (err error) {
-			var listener net.Listener
-			defer func() {
-				// Tell the firewall-configurator that we won't be sending it any more
-				// updates.
-				d.outbound.noMoreUpdates()
+	// Don't configure the firewall before firewall-to-socks is running so that the place we
+	// tell the firewall to send the packets exists, and don't configure the firewall before DNS
+	// is working so that... hrmph, I (LukeShu) am not actually sure why, but it seems to be
+	// important on ResolveD systems.
+	var readyForFirewall sync.WaitGroup
+	readyForFirewall.Add(2)
+	readyForFirewallCh := make(chan struct{})
+	go func() {
+		readyForFirewall.Wait()
+		close(readyForFirewallCh)
+	}()
 
-				// Error recovery.
-				if perr := dutil.PanicToError(recover()); perr != nil {
-					dlog.Error(c, perr)
-					if listener != nil {
-						_ = listener.Close()
-					}
-					_ = os.Remove(client.DaemonSocketName)
+	// server-dns runs a local DNS server that resolves *.cluster.local names.  Exactly where it
+	// listens varies by platform.
+	g.Go("server-dns", func(ctx context.Context) error {
+		return d.outbound.dnsServerWorker(ctx, readyForFirewall.Done)
+	})
+
+	// tunnel-firewall-to-socks listens on TCP localhost:1234 and forwards those connections to
+	// the connector's SOCKS server, which then forwards them to the cluster.  It counts on
+	// tunnel-firewall-configurator (below) having configured the host firewall to send all
+	// cluster-bound TCP connections to this port, and we make special syscalls/ioctls to
+	// determine where each connection was originally bound for, so that we know what to tell
+	// SOCKS.
+	g.Go("firewall-to-socks", func(ctx context.Context) error {
+		return d.outbound.firewall2socksWorker(ctx, readyForFirewall.Done)
+	})
+
+	// The 'Update' gRPC (below) call puts firewall updates in to a work queue;
+	// tunnel-firewall-configurator is the worker process that reads that work queue.
+	g.Go("firewall-configurator", func(ctx context.Context) error {
+		select {
+		case <-ctx.Done():
+		case <-readyForFirewallCh:
+		}
+		return d.outbound.firewallConfiguratorWorker(ctx)
+	})
+
+	// server-grpc listens on /var/run/telepresence-daemon.socket and services gRPC requests
+	// from the connector and from the CLI.
+	g.Go("server-grpc", func(c context.Context) (err error) {
+		var listener net.Listener
+		defer func() {
+			// Tell the firewall-configurator that we won't be sending it any more
+			// updates.
+			d.outbound.noMoreUpdates()
+
+			// Error recovery.
+			if perr := dutil.PanicToError(recover()); perr != nil {
+				dlog.Error(c, perr)
+				if listener != nil {
+					_ = listener.Close()
 				}
-				if err != nil {
-					dlog.Errorf(c, "Server ended with: %v", err)
-				} else {
-					dlog.Debug(c, "Server ended")
-				}
-			}()
-
-			// Listen on unix domain socket
-			dlog.Debug(c, "Server starting")
-			d.callCtx = c
-			listener, err = net.Listen("unix", client.DaemonSocketName)
-			if err != nil {
-				return errors.Wrap(err, "listen")
+				_ = os.Remove(client.DaemonSocketName)
 			}
-			err = os.Chmod(client.DaemonSocketName, 0777)
 			if err != nil {
-				return errors.Wrap(err, "chmod")
+				dlog.Errorf(c, "Server ended with: %v", err)
+			} else {
+				dlog.Debug(c, "Server ended")
 			}
+		}()
 
-			svc := grpc.NewServer()
-			rpc.RegisterDaemonServer(svc, d)
-			go func() {
-				<-c.Done()
-				dlog.Debug(c, "Server stopping")
-				svc.GracefulStop()
-			}()
-			return svc.Serve(listener)
-		})
-		return g.Wait()
+		// Listen on unix domain socket
+		dlog.Debug(c, "Server starting")
+		d.callCtx = c
+		listener, err = net.Listen("unix", client.DaemonSocketName)
+		if err != nil {
+			return errors.Wrap(err, "listen")
+		}
+		err = os.Chmod(client.DaemonSocketName, 0777)
+		if err != nil {
+			return errors.Wrap(err, "chmod")
+		}
+
+		svc := grpc.NewServer()
+		rpc.RegisterDaemonServer(svc, d)
+		go func() {
+			<-c.Done()
+			dlog.Debug(c, "Server stopping")
+			svc.GracefulStop()
+		}()
+		return svc.Serve(listener)
 	})
 
 	err = g.Wait()

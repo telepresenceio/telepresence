@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/datawire/dlib/dcontext"
-	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/datawire/telepresence2/rpc/v2/daemon"
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
@@ -19,32 +18,15 @@ import (
 )
 
 const (
-	// worker names
-	translatorWorker = "NAT"
-	proxyWorker      = "PXY"
-	dnsServerWorker  = "DNS"
-	dnsConfigWorker  = "CFG"
-
 	// proxyRedirPort is the port to which we redirect proxied IPs. It
 	// should probably eventually be configurable and/or dynamically
 	// chosen.
 	proxyRedirPort = "1234"
 )
 
-// start starts the interceptor, and only returns once the
-// interceptor is successfully running in another goroutine.  It
-// returns a function to call to shut down that goroutine.
+// outbound does stuff, idk, I didn't write it.
 //
-// If dnsIP is empty, it will be detected from /etc/resolv.conf
-//
-// If fallbackIP is empty, it will default to Google DNS.
-func start(c context.Context, dnsIP, fallbackIP string, noSearch bool) (*outbound, error) {
-	ic := newOutbound("traffic-manager", dnsIP, fallbackIP, noSearch)
-	g := dgroup.ParentGroup(c)
-	g.Go(dnsServerWorker, ic.dnsServerWorker)
-	return ic, nil
-}
-
+// A zero outbound is invalid; you must use newOutbound.
 type outbound struct {
 	dnsIP      string
 	fallbackIP string
@@ -68,6 +50,11 @@ type outbound struct {
 	work chan func(context.Context) error
 }
 
+// newOutbound returns a new properly initialized outbound object.
+//
+// If dnsIP is empty, it will be detected from /etc/resolv.conf
+//
+// If fallbackIP is empty, it will default to Google DNS.
 func newOutbound(name string, dnsIP, fallbackIP string, noSearch bool) *outbound {
 	ret := &outbound{
 		dnsIP:      dnsIP,
@@ -79,10 +66,16 @@ func newOutbound(name string, dnsIP, fallbackIP string, noSearch bool) *outbound
 		search:     []string{""},
 		work:       make(chan func(context.Context) error),
 	}
-	ret.tablesLock.Lock() // leave it locked until translatorWorker unlocks it
+	ret.tablesLock.Lock() // leave it locked until firewallConfiguratorWorker unlocks it
 	return ret
 }
-func (o *outbound) proxyWorker(c context.Context) error {
+
+// firewall2socksWorker listens on localhost:1234 and forwards those connections to the connector's
+// SOCKS server, for them to be forwarded to the cluster.  We count on firewallConfiguratorWorker
+// having configured the host firewall to send all cluster-bound TCP connections to this port, and
+// we make special syscalls/ioctls to determine where each connection was originally bound for, so
+// that we know what to tell SOCKS.
+func (o *outbound) firewall2socksWorker(c context.Context, onReady func()) error {
 	// hmm, we may not actually need to get the original
 	// destination, we could just forward each ip to a unique port
 	// and either listen on that port or run port-forward
@@ -90,31 +83,16 @@ func (o *outbound) proxyWorker(c context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "Proxy")
 	}
-	dgroup.ParentGroup(c).Go(translatorWorker, o.translatorWorker)
 	dlog.Debug(c, "Starting server")
+	onReady()
 	pr.Run(c, 10000)
 	dlog.Debug(c, "Server done")
 	return nil
 }
 
-func (o *outbound) dnsConfigWorker(c context.Context) error {
-	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", o.dnsRedirPort)
-	bootstrap := rpc.Table{
-		Name: "bootstrap",
-		Routes: []*rpc.Route{
-			{
-				Ip:     o.dnsIP,
-				Target: strconv.Itoa(o.dnsRedirPort),
-				Proto:  "udp",
-			},
-		},
-	}
-	o.update(&bootstrap)
-	dns.Flush()
-	return nil
-}
-
-func (o *outbound) translatorWorker(c context.Context) (err error) {
+// firewallConfiguratorWorker reads from the work queue of firewall config changes that is written
+// to by the 'Update' gRPC call.
+func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
 	defer func() {
 		o.tablesLock.Lock()
 		if err2 := o.translator.Disable(dcontext.HardContext(c)); err2 != nil {
@@ -140,7 +118,21 @@ func (o *outbound) translatorWorker(c context.Context) (err error) {
 	o.tablesLock.Unlock()
 
 	if o.overridePrimaryDNS {
-		dgroup.ParentGroup(c).Go(dnsConfigWorker, o.dnsConfigWorker)
+		dlog.Debugf(c, "Bootstrapping local DNS server on port %d", o.dnsRedirPort)
+		err := o.doUpdate(c, &rpc.Table{
+			Name: "bootstrap",
+			Routes: []*rpc.Route{
+				{
+					Ip:     o.dnsIP,
+					Target: strconv.Itoa(o.dnsRedirPort),
+					Proto:  "udp",
+				},
+			},
+		})
+		if err != nil {
+			dlog.Error(c, err)
+		}
+		dns.Flush()
 	}
 
 	dlog.Debug(c, "Starting server")
