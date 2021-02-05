@@ -99,11 +99,16 @@ func (o *outbound) proxyWorker(c context.Context) error {
 
 func (o *outbound) dnsConfigWorker(c context.Context) error {
 	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", o.dnsRedirPort)
-	bootstrap := rpc.Table{Name: "bootstrap", Routes: []*rpc.Route{{
-		Ip:     o.dnsIP,
-		Target: strconv.Itoa(o.dnsRedirPort),
-		Proto:  "udp",
-	}}}
+	bootstrap := rpc.Table{
+		Name: "bootstrap",
+		Routes: []*rpc.Route{
+			{
+				Ip:     o.dnsIP,
+				Target: strconv.Itoa(o.dnsRedirPort),
+				Proto:  "udp",
+			},
+		},
+	}
 	o.update(&bootstrap)
 	dns.Flush()
 	return nil

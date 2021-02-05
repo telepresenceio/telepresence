@@ -117,18 +117,23 @@ func run(loggingDir, dns, fallback string) error {
 		return err
 	}
 
-	d := &service{dns: dns, fallback: fallback, hClient: &http.Client{
-		Timeout: 15 * time.Second,
-		Transport: &http.Transport{
-			// #nosec G402
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			Proxy:           nil,
-			DialContext: (&net.Dialer{
-				Timeout:   10 * time.Second,
-				KeepAlive: 1 * time.Second,
-			}).DialContext,
-			DisableKeepAlives: true,
-		}}}
+	d := &service{
+		dns:      dns,
+		fallback: fallback,
+		hClient: &http.Client{
+			Timeout: 15 * time.Second,
+			Transport: &http.Transport{
+				// #nosec G402
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				Proxy:           nil,
+				DialContext: (&net.Dialer{
+					Timeout:   10 * time.Second,
+					KeepAlive: 1 * time.Second,
+				}).DialContext,
+				DisableKeepAlives: true,
+			},
+		},
+	}
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
