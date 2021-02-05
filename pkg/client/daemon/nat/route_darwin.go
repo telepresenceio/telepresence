@@ -16,8 +16,9 @@ import (
 
 type pfRouter struct {
 	routingTableCommon
-	dev   *ppf.Handle
-	token string
+	dev      *ppf.Handle
+	token    string
+	curRules string
 }
 
 var _ FirewallRouter = (*pfRouter)(nil)
@@ -98,31 +99,40 @@ func (t *pfRouter) sorted() []Entry {
 	return entries
 }
 
-func (t *pfRouter) rules() string {
-	if t.dev == nil {
-		return ""
-	}
+func (t *pfRouter) rules() (rulesStr string, changed bool) {
+	var result string
+	if t.dev != nil {
+		entries := t.sorted()
 
-	entries := t.sorted()
+		for _, entry := range entries {
+			dst := entry.Destination
+			for _, addr := range fmtDest(dst) {
+				result += "rdr pass on lo0 inet " + addr + " -> 127.0.0.1 port " + entry.Port + "\n"
+			}
+		}
 
-	result := ""
-	for _, entry := range entries {
-		dst := entry.Destination
-		for _, addr := range fmtDest(dst) {
-			result += "rdr pass on lo0 inet " + addr + " -> 127.0.0.1 port " + entry.Port + "\n"
+		result += "pass out quick inet proto tcp to 127.0.0.1/32\n"
+
+		for _, entry := range entries {
+			dst := entry.Destination
+			for _, addr := range fmtDest(dst) {
+				result += "pass out route-to lo0 inet " + addr + " keep state\n"
+			}
 		}
 	}
-
-	result += "pass out quick inet proto tcp to 127.0.0.1/32\n"
-
-	for _, entry := range entries {
-		dst := entry.Destination
-		for _, addr := range fmtDest(dst) {
-			result += "pass out route-to lo0 inet " + addr + " keep state\n"
-		}
+	changed = result != t.curRules
+	if changed {
+		t.curRules = result
 	}
+	return result, changed
+}
 
-	return result
+func (t *pfRouter) updateAnchor(ctx context.Context) error {
+	rules, changed := t.rules()
+	if !changed {
+		return nil
+	}
+	return pf(ctx, []string{"-a", t.Name, "-f", "/dev/stdin"}, rules)
 }
 
 var actions = []ppf.Action{ppf.ActionPass, ppf.ActionRDR}
@@ -157,7 +167,8 @@ func (t *pfRouter) Enable(c context.Context) error {
 	// doesn't seem to work, it has to be a syntax error of some
 	// kind.
 	_ = pf(c, []string{"-f", "/dev/stdin"}, "pass on lo0")
-	_ = pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+
+	_ = t.updateAnchor(c)
 
 	output, err := pfo(c, "-E")
 	if err != nil {
@@ -220,17 +231,26 @@ func (t *pfRouter) ForwardUDP(c context.Context, ip, port, toPort string) error 
 func (t *pfRouter) forward(c context.Context, protocol, ip, port, toPort string) error {
 	t.clear(protocol, ip, port)
 	t.Mappings[Address{protocol, ip, port}] = toPort
-	return pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	if err := t.updateAnchor(c); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (t *pfRouter) ClearTCP(c context.Context, ip, port string) error {
 	t.clear("tcp", ip, port)
-	return pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	if err := t.updateAnchor(c); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (t *pfRouter) ClearUDP(c context.Context, ip, port string) error {
 	t.clear("udp", ip, port)
-	return pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
+	if err := t.updateAnchor(c); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (t *pfRouter) clear(protocol, ip, port string) {
