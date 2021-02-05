@@ -120,7 +120,7 @@ If you receive an error saying the developer cannot be verified, open <b>System 
       <TabPanel value={value} index={2}>
 
         {/*Windows install instructions*/}
-        Telepresence for Windows is coming soon, sign up here to notified when it is available.<br /><br />
+        Telepresence for Windows is coming soon! Sign up here to notified when it is available.<br /><br />
         <HubspotForm
           portalId='485087'
           formId='2f542f1b-3da8-4319-8057-96fed78e4c26'
