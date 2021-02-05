@@ -3,6 +3,7 @@ description: "Install Telepresence and learn to use it to intercept services run
 ---
 
 import Alert from '@material-ui/lab/Alert';
+import QSTabs from './quick-start'
 
 # Telepresence Quick Start
 
@@ -12,51 +13,22 @@ In this guide you will explore some of the key features of Telepresence. First, 
 
 ## Set Up Your Laptop
 
-You will use a demo web app written in Java for this guide. Start by cloning the repo:
+First, download the Telepresence CLI.  This command-line tool is used to login to Ambassador Cloud, create and remove intercepts, and create preview URLs, all of which will be covered in this guide.
+
+Run the commands for your OS to install the CLI and login to Ambassador Cloud in your browser. Once your browser opens, follow the prompts to login with GitHub then select your organization.  You will be redirected to the dashboard; later you will manage your preview URLs here.
+
+<QSTabs/>
+
+
+## Set Up Your Cluster
+
+We recommended that you use an empty development Kubernetes cluster for this guide. You'll use this cluster to run a demo web app and test out Telepresence. You must have access via RBAC to create and update deployments and services in the cluster.
+
+1. First clone clone the repo containing the web app code and Kubernetes YAML files:
 
   ```
   git clone https://github.com/datawire/amb-code-quickstart-app.git
   ```
-
-You will run one of the app's services on your laptop later, you must have [Node.js installed](https://nodejs.org/en/download/package-manager/) for this.
-
-You also must download the Telepresence CLI.  This command-line tool is used to login to Ambassador Cloud, create and remove intercepts, and create preview URLs, all of which will be covered in this guide.
-
-Run the commands for your OS to install the CLI and login to Ambassador Cloud in your browser. Once your browser opens, follow the prompts to login with GitHub then select your organization.  You will be redirected to the dashboard; later you will manage your preview URLs here.
-
-### <img class="os-logo" src="../../images/apple.png"/> macOS
-
-```
-# 1. Download the latest binary (~60 MB):
-sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/latest/telepresence \
--o /usr/local/bin/telepresence
- 
-# 2. Make the binary executable:
-sudo chmod a+x /usr/local/bin/telepresence
- 
-# 3. Login with the CLI:
-telepresence login
-```
-<Alert severity="info" variant="outlined">If you receive an error saying the developer cannot be verified, open <b>System Preferences → Security & Privacy → General</b>.  Click <b>Open Anyway</b> at the bottom to bypass the security block. Then retry the <code>telepresence login</code> command.</Alert>
-
-
-### <img class="os-logo" src="../../images/linux.png"/> Linux
-
-```
-# 1. Download the latest binary (~50 MB):
-sudo curl -fL https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence \
--o /usr/local/bin/telepresence
- 
-# 2. Make the binary executable:
-sudo chmod a+x /usr/local/bin/telepresence
- 
-# 3. Login with the CLI:
-telepresence login
-```
-
-## Set Up Your Cluster
-
-It is recommended to use an empty development Kubernetes cluster for this guide. You'll use this cluster to run the demo web app that you cloned earlier. You must have access via RBAC to create and update deployments and services in the cluster.
 
 1. Install [Edge Stack](../../../../../../products/edge-stack/) to use as an ingress controller for your cluster. An ingress controller is required to access the web app from the internet.
 
@@ -70,7 +42,7 @@ It is recommended to use an empty development Kubernetes cluster for this guide.
   kubectl wait -n ambassador deploy -lproduct=aes --for condition=available --timeout=90s
   ```
 
-1. Install the web app by applying its manifest:
+1. Install the web app by applying its YAML file:
 
   ```
   kubectl apply -f edgy-corp-web-app.yaml
@@ -94,9 +66,9 @@ It is recommended to use an empty development Kubernetes cluster for this guide.
 
 Now that your app is all wired up you're ready to start doing development work with Telepresence. Imagine you are a Java developer and first on your to-do list for the day is a change on the `DataProcessingNodeService`. One thing this service does is set the color for the title and a pod in the diagram. The production version of the app on the cluster uses <span style="color:green" class="bold">green</span> elements, but you want to see a version with these elements set to <span style="color:blue" class="bold">blue</span>.
 
-The `DataProcessingNodeService` service is dependent on the `VeryLargeJavaService` and `VeryLargeDataStore` services to run. Local development would require one of the two following setups, neither of which is ideal.
+The `DataProcessingNodeService` service is dependent on the `VeryLargeJavaService` and `VeryLargeDataStore` services to run. Normally, local development would require one of the two following setups.
 
-First, you could run the two dependent services on your laptop. However, as their names suggest, they are too large to run locally. This option also doesn't scale well. Two services isn't a lot to manage, but more complex apps requiring many more dependencies is not feasible to manage running on your laptop.
+First, you could run the two dependent services on your laptop. However, as their names suggest, they are too large to run locally. This option also doesn't scale well. Two services isn't a lot to manage, but more complex apps requiring many more dependencies are not feasible to manage running on your laptop.
 
 Second, you could run everything in a development cluster. However, the cycle of writing code then waiting on containers to build and deploy is incredibly disruptive. The lengthening of the [inner dev loop](../concepts/devloop) in this way can have a significant impact on developer productivity.
 
@@ -112,11 +84,16 @@ Alternatively, you can use Telepresence's `intercept` command to proxy traffic b
 
 3. Navigate up one directory to the root of the repo then into `DataProcessingNodeService`. Install the Node.js dependencies and start the app passing the `blue` argument, which is used by the app to set the title and pod color in the diagram you saw earlier.
 
+  <Alert severity="info" variant="outlined"><a href="https://nodejs.org/en/download/package-manager/">Install Node.js from here</a> if needed. </Alert>
+
   ```
   cd ../DataProcessingNodeService
   npm install
   node app -c blue
   ```
+
+
+
 
 4. In a new terminal window start the intercept with the command below. This will proxy requests to the `DataProcessingNodeService` service to your laptop.  It will also generate a preview URL, which will let you view the app with the intercepted service in your browser.
 
