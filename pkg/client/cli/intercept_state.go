@@ -38,6 +38,8 @@ type interceptInfo struct {
 type interceptState struct {
 	*interceptInfo
 	cs *connectorState
+
+	Scout *client.Scout
 }
 
 func interceptCommand() *cobra.Command {
@@ -117,7 +119,7 @@ func removeIntercept(cmd *cobra.Command, args []string) error {
 }
 
 func (ii *interceptInfo) newInterceptState(cs *connectorState) *interceptState {
-	return &interceptState{interceptInfo: ii, cs: cs}
+	return &interceptState{interceptInfo: ii, cs: cs, Scout: client.NewScout("cli")}
 }
 
 func interceptMessage(r *connector.InterceptResult) string {
@@ -207,6 +209,23 @@ func (is *interceptState) EnsureState() (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
+	// Add metadata to scout
+	is.Scout.SetMetadatum("service_name", is.agentName)
+	is.Scout.SetMetadatum("cluster_id", is.cs.info.ClusterId)
+
+	// For now this will be using the namespace where the traffic manager
+	// is installed. Once we support intercepts in multiple namespaces,
+	// we should change this to use that information
+	is.Scout.SetMetadatum("service_namespace", is.cs.info.ClusterNamespace)
+
+	is.Scout.SetMetadatum("intercept_id", r.InterceptInfo.Id)
+	if is.matchMechanism == "http" /* && [REDACTED] */ {
+		is.Scout.SetMetadatum("intercept_mode", "headers")
+	} else {
+		is.Scout.SetMetadatum("intercept_mode", "all")
+	}
+
 	switch r.Error {
 	case connector.InterceptError_UNSPECIFIED:
 		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", spec.Agent)
@@ -220,13 +239,16 @@ func (is *interceptState) EnsureState() (bool, error) {
 				},
 			})
 			if err != nil {
+				_ = is.Scout.Report("preview_domain_create_fail", client.ScoutMeta{Key: "error", Value: err.Error()})
 				err = fmt.Errorf("creating preview domain: %w", err)
 				return true, err
 			}
+			is.Scout.SetMetadatum("preview_url", intercept.PreviewDomain)
 		} else {
 			intercept = r.InterceptInfo
 		}
 		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, false))
+		_ = is.Scout.Report("intercept_success")
 		return true, nil
 	case connector.InterceptError_ALREADY_EXISTS:
 		fmt.Fprintln(is.cmd.OutOrStdout(), interceptMessage(r))

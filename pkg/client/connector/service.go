@@ -199,6 +199,8 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		r.ClusterOk = true
 		r.ClusterContext = s.cluster.Context
 		r.ClusterServer = s.cluster.Server
+		r.ClusterNamespace = s.cluster.Namespace
+		r.ClusterId = s.cluster.getClusterId(c)
 		if s.bridge != nil {
 			r.BridgeOk = s.bridge.check(c)
 		}
