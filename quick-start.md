@@ -62,7 +62,7 @@ We recommended using an empty development Kubernetes cluster for this guide. You
 </tr>
 </table>
 
-<font size="+3">💡</font><b>All right! With your laptop and cluster set up let's get have some fun and start developing using Telepresence!</b>
+<font size="+3">💡</font><b>All right! With your laptop and cluster set up let's have some fun and start developing using Telepresence!</b>
 
 ## Developing with Telepresence
 
