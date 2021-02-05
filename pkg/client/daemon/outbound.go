@@ -112,7 +112,7 @@ func (o *outbound) dnsConfigWorker(c context.Context) error {
 func (o *outbound) translatorWorker(c context.Context) (err error) {
 	defer func() {
 		o.tablesLock.Lock()
-		if err2 := o.translator.Disable(c); err2 != nil {
+		if err2 := o.translator.Disable(dcontext.HardContext(c)); err2 != nil {
 			if err == nil {
 				err = err2
 			} else {
@@ -139,27 +139,18 @@ func (o *outbound) translatorWorker(c context.Context) (err error) {
 	}
 
 	dlog.Debug(c, "Starting server")
-	for {
-		select {
-		case <-c.Done():
-			c = dcontext.HardContext(c)
-			dlog.Debug(c, "context cancelled, shutting down")
-			go func() {
-				// drain work queue (unlock and toss remaining work)
-				for range o.work {
-				}
-			}()
-			close(o.work)
-			return nil
-		case f := <-o.work:
-			if f == nil {
-				return
-			}
+	// No need to select between <-o.work and <-c.Done(); o.work will get closed when we start
+	// shutting down.
+	for f := range o.work {
+		if c.Err() == nil {
+			// As long as we're not shutting down, keep doing work.  (If we are shutting
+			// down, do nothing but don't 'break'; keep draining the queue.)
 			if err = f(c); err != nil {
 				dlog.Error(c, err)
 			}
 		}
 	}
+	return nil
 }
 
 func (o *outbound) resolveNoNS(query string) *rpc.Route {
@@ -178,6 +169,10 @@ func (o *outbound) update(table *rpc.Table) {
 	o.work <- func(c context.Context) error {
 		return o.doUpdate(c, table)
 	}
+}
+
+func (o *outbound) noMoreUpdates() {
+	close(o.work)
 }
 
 func routesEqual(a, b *rpc.Route) bool {

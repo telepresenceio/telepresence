@@ -153,6 +153,11 @@ func run(loggingDir, dns, fallback string) error {
 		g.Go("service", func(c context.Context) (err error) {
 			var listener net.Listener
 			defer func() {
+				// Tell the firewall-configurator that we won't be sending it any more
+				// updates.
+				d.outbound.noMoreUpdates()
+
+				// Error recovery.
 				if perr := dutil.PanicToError(recover()); perr != nil {
 					dlog.Error(c, perr)
 					if listener != nil {
