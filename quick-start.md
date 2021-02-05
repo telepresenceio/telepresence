@@ -13,7 +13,7 @@ In this guide you will explore some of the key features of Telepresence. First, 
 
 ## Set Up Your Laptop
 
-First, download the Telepresence CLI.  This command-line tool is used to login to Ambassador Cloud, create and remove intercepts, and create preview URLs, all of which will be covered in this guide.
+First, download the Telepresence CLI. This command-line tool is used to login to Ambassador Cloud, create and remove intercepts, and create preview URLs, all of which will be covered in this guide.
 
 Run the commands for your OS to install the CLI and login to Ambassador Cloud in your browser. Once your browser opens, follow the prompts to login with GitHub then select your organization.  You will be redirected to the dashboard; later you will manage your preview URLs here.
 
@@ -22,9 +22,9 @@ Run the commands for your OS to install the CLI and login to Ambassador Cloud in
 
 ## Set Up Your Cluster
 
-We recommended that you use an empty development Kubernetes cluster for this guide. You'll use this cluster to run a demo web app and test out Telepresence. You must have access via RBAC to create and update deployments and services in the cluster.
+We recommended using an empty development Kubernetes cluster for this guide. You'll use this cluster to run a demo web app and test out Telepresence. You must have access via RBAC to create and update deployments and services in the cluster.
 
-1. First clone clone the repo containing the web app code and Kubernetes YAML files:
+1. First clone the repo containing the web app code and Kubernetes YAML files:
 
   ```
   git clone https://github.com/datawire/amb-code-quickstart-app.git
