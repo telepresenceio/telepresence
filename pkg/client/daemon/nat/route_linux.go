@@ -16,7 +16,7 @@ type iptablesRouter struct {
 	routingTableCommon
 }
 
-func newRouter(name string) FirewallRouter {
+func newRouter(name string, _ net.IP) FirewallRouter {
 	return &iptablesRouter{
 		routingTableCommon: routingTableCommon{
 			Name:     name,

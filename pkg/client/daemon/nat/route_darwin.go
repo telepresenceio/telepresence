@@ -16,6 +16,7 @@ import (
 
 type pfRouter struct {
 	routingTableCommon
+	localIP  net.IP
 	dev      *ppf.Handle
 	token    string
 	curRules string
@@ -23,12 +24,13 @@ type pfRouter struct {
 
 var _ FirewallRouter = (*pfRouter)(nil)
 
-func newRouter(name string) *pfRouter {
+func newRouter(name string, localIP net.IP) *pfRouter {
 	return &pfRouter{
 		routingTableCommon: routingTableCommon{
 			Name:     name,
 			Mappings: make(map[Address]string),
 		},
+		localIP: localIP,
 	}
 }
 
@@ -81,6 +83,15 @@ func fmtDest(a Address) (result []string) {
 	}
 
 	return
+}
+
+func (t *pfRouter) hasRuleForIP(ip string) bool {
+	for addr := range t.Mappings {
+		if addr.IP == ip {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *pfRouter) sorted() []Entry {
@@ -169,6 +180,9 @@ func (t *pfRouter) Enable(c context.Context) error {
 	_ = pf(c, []string{"-f", "/dev/stdin"}, "pass on lo0")
 
 	_ = t.updateAnchor(c)
+	for k, v := range t.Mappings {
+		_ = t.forward(c, k.Proto, k.IP, k.Port, v)
+	}
 
 	output, err := pfo(c, "-E")
 	if err != nil {
@@ -229,8 +243,15 @@ func (t *pfRouter) ForwardUDP(c context.Context, ip, port, toPort string) error 
 }
 
 func (t *pfRouter) forward(c context.Context, protocol, ip, port, toPort string) error {
-	t.clear(protocol, ip, port)
+	if err := t.clear(c, protocol, ip, port); err != nil {
+		return err
+	}
 	t.Mappings[Address{protocol, ip, port}] = toPort
+	// Add an entry to the routing table to make sure the firewall-to-socks worker's response
+	// packets get written to the correct interface.
+	if err := dexec.CommandContext(c, "route", "add", ip+"/32", t.localIP.String()).Run(); err != nil {
+		return err
+	}
 	if err := t.updateAnchor(c); err != nil {
 		return err
 	}
@@ -238,7 +259,9 @@ func (t *pfRouter) forward(c context.Context, protocol, ip, port, toPort string)
 }
 
 func (t *pfRouter) ClearTCP(c context.Context, ip, port string) error {
-	t.clear("tcp", ip, port)
+	if err := t.clear(c, "tcp", ip, port); err != nil {
+		return err
+	}
 	if err := t.updateAnchor(c); err != nil {
 		return err
 	}
@@ -246,15 +269,23 @@ func (t *pfRouter) ClearTCP(c context.Context, ip, port string) error {
 }
 
 func (t *pfRouter) ClearUDP(c context.Context, ip, port string) error {
-	t.clear("udp", ip, port)
+	if err := t.clear(c, "udp", ip, port); err != nil {
+		return err
+	}
 	if err := t.updateAnchor(c); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (t *pfRouter) clear(protocol, ip, port string) {
+func (t *pfRouter) clear(ctx context.Context, protocol, ip, port string) error {
 	delete(t.Mappings, Address{protocol, ip, port})
+	if !t.hasRuleForIP(ip) {
+		if err := dexec.CommandContext(ctx, "route", "delete", ip+"/32", t.localIP.String()).Run(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (t *pfRouter) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host string, err error) {

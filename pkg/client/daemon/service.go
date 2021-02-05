@@ -134,7 +134,10 @@ func run(c context.Context, loggingDir, dns, fallback string) error {
 				DisableKeepAlives: true,
 			},
 		},
-		outbound: newOutbound("traffic-manager", dns, fallback, false),
+	}
+	d.outbound, err = newOutbound("traffic-manager", dns, fallback, false)
+	if err != nil {
+		return err
 	}
 
 	c = dgroup.WithGoroutineName(c, "/daemon")

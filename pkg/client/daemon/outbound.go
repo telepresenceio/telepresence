@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"net"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/nat"
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/proxy"
+	"github.com/datawire/telepresence2/v2/pkg/subnet"
 )
 
 const (
@@ -28,6 +30,7 @@ const (
 //
 // A zero outbound is invalid; you must use newOutbound.
 type outbound struct {
+	localIP    net.IP
 	dnsIP      string
 	fallbackIP string
 	noSearch   bool
@@ -55,19 +58,34 @@ type outbound struct {
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
 //
 // If fallbackIP is empty, it will default to Google DNS.
-func newOutbound(name string, dnsIP, fallbackIP string, noSearch bool) *outbound {
+func newOutbound(name string, dnsIP, fallbackIP string, noSearch bool) (*outbound, error) {
+	var localIP net.IP
+	if runtime.GOOS == "darwin" {
+		// TODO(lukeshu): Unify the GNU/Linux code with this.
+		loopBackCIDR, err := subnet.FindAvailableLoopBackClassC()
+		if err != nil {
+			return nil, err
+		}
+		// Place the daemon DNS & firewall-to-socks servers in the private network at
+		// x.x.x.2.
+		localIP = make(net.IP, len(loopBackCIDR.IP))
+		copy(localIP, loopBackCIDR.IP)
+		localIP[len(localIP)-1] = 2
+	}
+
 	ret := &outbound{
+		localIP:    localIP,
 		dnsIP:      dnsIP,
 		fallbackIP: fallbackIP,
 		noSearch:   noSearch,
 		tables:     make(map[string]*rpc.Table),
-		translator: nat.NewRouter(name),
+		translator: nat.NewRouter(name, localIP),
 		domains:    make(map[string]*rpc.Route),
 		search:     []string{""},
 		work:       make(chan func(context.Context) error),
 	}
 	ret.tablesLock.Lock() // leave it locked until firewallConfiguratorWorker unlocks it
-	return ret
+	return ret, nil
 }
 
 // firewall2socksWorker listens on localhost:1234 and forwards those connections to the connector's

@@ -3,6 +3,7 @@ package nat
 import (
 	"context"
 	"fmt"
+	"net"
 	"reflect"
 	"strings"
 	"testing"
@@ -68,7 +69,7 @@ func (e *env) teardown(c context.Context) error {
 func TestSorted(t *testing.T) {
 	g, _ := testGroup()
 	g.Go("sorted-test", func(c context.Context) (err error) {
-		tr := newRouter("test-table")
+		tr := newRouter("test-table", net.IP{127, 0, 1, 2})
 		if err = tr.Enable(c); err != nil {
 			return err
 		}

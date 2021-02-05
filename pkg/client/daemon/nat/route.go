@@ -21,9 +21,9 @@ type FirewallRouter interface {
 	GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host string, err error)
 }
 
-func NewRouter(name string) FirewallRouter {
+func NewRouter(name string, localIP net.IP) FirewallRouter {
 	// newRouter is implemented in platform-specific files.
-	return newRouter(name)
+	return newRouter(name, localIP)
 }
 
 type Address struct {
