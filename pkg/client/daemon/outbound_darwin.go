@@ -174,8 +174,6 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 	}
 
 	defer func() {
-		// recover a panic. The DNS must be reset, no matter what
-		r := recover()
 		// Remove the resolver file
 		_ = os.Remove(resolverFileName)
 
@@ -183,10 +181,6 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 		_ = exec.Command("ifconfig", "lo0", "-alias", dnsIP.String()).Run()
 
 		dns.Flush()
-		if r != nil {
-			// Propagate panic, it's of no interest here
-			panic(r)
-		}
 	}()
 
 	// Start local DNS server
