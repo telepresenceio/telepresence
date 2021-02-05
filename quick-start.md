@@ -62,6 +62,8 @@ We recommended that you use an empty development Kubernetes cluster for this gui
 </tr>
 </table>
 
+<font size="+3">💡</font><b>All right! With your laptop and cluster set up let's get have some fun and start developing using Telepresence!</b>
+
 ## Developing with Telepresence
 
 Now that your app is all wired up you're ready to start doing development work with Telepresence. Imagine you are a Java developer and first on your to-do list for the day is a change on the `DataProcessingNodeService`. One thing this service does is set the color for the title and a pod in the diagram. The production version of the app on the cluster uses <span style="color:green" class="bold">green</span> elements, but you want to see a version with these elements set to <span style="color:blue" class="bold">blue</span>.
@@ -122,7 +124,12 @@ Alternatively, you can use Telepresence's `intercept` command to proxy traffic b
 
 <table style="border-collapse: collapse; border: none; padding: 5px; line-height: 29px">
 <tr style="background:transparent; border: none; padding: 5px">
-    <td style="border: none; padding: 5px; width:65%"><ol start="5"><li>Open the preview URL in your browser to see the intercepted version of the app. The Node server on your laptop replies back to the cluster with the <span style="color:blue" class="bold">blue</span> option enabled; you will see a blue title and blue pod in the diagram. Remember that previously these elements were <span style="color:green" class="bold">green</span>.<br />You will also see a banner at the bottom on the page informing that you are viewing a preview URL with your name and org name.</li></ol></td>
+    <td style="border: none; padding: 5px; width:65%">
+      <ol start="5"><li>
+      Open the preview URL in your browser to see the intercepted version of the app. The Node server on your laptop replies back to the cluster with the <span style="color:blue" class="bold">blue</span> title and pod in the diagram. Remember that previously these elements were <span style="color:green" class="bold">green</span>.
+      <br />
+      <font size="+3">💡</font><b>Success, you can now work on your service locally and see your changes live!</b>
+    </li></ol></td>
     <td style="border: none; padding: 5px"><img src="../../images/tp-tutorial-2.png"/></td>
 </tr>
 </table>
