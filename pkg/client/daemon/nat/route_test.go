@@ -212,7 +212,7 @@ func TestTranslator(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, network := range networks {
-				tr := NewTranslator("test-table")
+				tr := NewRouter("test-table")
 
 				for _, mapping := range mappings {
 					checkNoForwardTCP(t, fmt.Sprintf("%s.%s", network, mapping.from), mapping.forwarded)

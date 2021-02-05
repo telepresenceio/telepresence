@@ -1,5 +1,3 @@
-// +build darwin
-
 package nat
 
 import (
@@ -70,7 +68,7 @@ func (e *env) teardown(c context.Context) error {
 func TestSorted(t *testing.T) {
 	g, _ := testGroup()
 	g.Go("sorted-test", func(c context.Context) (err error) {
-		tr := NewTranslator("test-table")
+		tr := newRouter("test-table")
 		if err = tr.Enable(c); err != nil {
 			return err
 		}

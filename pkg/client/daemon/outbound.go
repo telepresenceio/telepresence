@@ -31,7 +31,7 @@ type outbound struct {
 	dnsIP      string
 	fallbackIP string
 	noSearch   bool
-	translator *nat.Translator
+	translator nat.FirewallRouter
 	tables     map[string]*rpc.Table
 	tablesLock sync.RWMutex
 
@@ -61,7 +61,7 @@ func newOutbound(name string, dnsIP, fallbackIP string, noSearch bool) *outbound
 		fallbackIP: fallbackIP,
 		noSearch:   noSearch,
 		tables:     make(map[string]*rpc.Table),
-		translator: nat.NewTranslator(name),
+		translator: nat.NewRouter(name),
 		domains:    make(map[string]*rpc.Route),
 		search:     []string{""},
 		work:       make(chan func(context.Context) error),

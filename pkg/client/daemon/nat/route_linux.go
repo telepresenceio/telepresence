@@ -1,5 +1,3 @@
-// +build linux
-
 package nat
 
 import (
@@ -14,17 +12,26 @@ import (
 	"github.com/datawire/telepresence2/v2/pkg/client/logging"
 )
 
-type Translator struct {
-	commonTranslator
+type iptablesRouter struct {
+	routingTableCommon
 }
 
-func (t *Translator) ipt(c context.Context, args ...string) error {
+func newRouter(name string) FirewallRouter {
+	return &iptablesRouter{
+		routingTableCommon: routingTableCommon{
+			Name:     name,
+			Mappings: make(map[Address]string),
+		},
+	}
+}
+
+func (t *iptablesRouter) ipt(c context.Context, args ...string) error {
 	// Deliberately avoiding dexec here as this cannot be interrupted when cleaning up
 	dlog.Debugf(c, "running %s", logging.ShellString("iptables", args))
 	return exec.Command("iptables", append([]string{"-t", "nat"}, args...)...).Run()
 }
 
-func (t *Translator) Enable(c context.Context) (err error) {
+func (t *iptablesRouter) Enable(c context.Context) (err error) {
 	// XXX: -D only removes one copy of the rule, need to figure out how to remove all copies just in case
 	_ = t.ipt(c, "-D", "OUTPUT", "-j", t.Name)
 	// we need to be in the PREROUTING chain in order to get traffic
@@ -49,7 +56,7 @@ func (t *Translator) Enable(c context.Context) (err error) {
 	return t.ipt(c, "-A", t.Name, "-j", "RETURN", "--dest", "127.0.0.1/32", "-p", "tcp")
 }
 
-func (t *Translator) Disable(c context.Context) (err error) {
+func (t *iptablesRouter) Disable(c context.Context) (err error) {
 	// XXX: -D only removes one copy of the rule, need to figure out how to remove all copies just in case
 	if err = t.ipt(c, "-D", "OUTPUT", "-j", t.Name); err != nil {
 		return err
@@ -63,15 +70,15 @@ func (t *Translator) Disable(c context.Context) (err error) {
 	return t.ipt(c, "-X", t.Name)
 }
 
-func (t *Translator) ForwardTCP(c context.Context, ip, port, toPort string) error {
+func (t *iptablesRouter) ForwardTCP(c context.Context, ip, port, toPort string) error {
 	return t.forward(c, "tcp", ip, port, toPort)
 }
 
-func (t *Translator) ForwardUDP(c context.Context, ip, port, toPort string) error {
+func (t *iptablesRouter) ForwardUDP(c context.Context, ip, port, toPort string) error {
 	return t.forward(c, "udp", ip, port, toPort)
 }
 
-func (t *Translator) forward(c context.Context, protocol, ip, port, toPort string) error {
+func (t *iptablesRouter) forward(c context.Context, protocol, ip, port, toPort string) error {
 	_ = t.clear(c, protocol, ip, port)
 	args := []string{"-A", t.Name, "-j", "REDIRECT", "-p", protocol, "--dest", ip + "/32"}
 	if port != "" {
@@ -89,15 +96,15 @@ func (t *Translator) forward(c context.Context, protocol, ip, port, toPort strin
 	return nil
 }
 
-func (t *Translator) ClearTCP(c context.Context, ip, port string) error {
+func (t *iptablesRouter) ClearTCP(c context.Context, ip, port string) error {
 	return t.clear(c, "tcp", ip, port)
 }
 
-func (t *Translator) ClearUDP(c context.Context, ip, port string) error {
+func (t *iptablesRouter) ClearUDP(c context.Context, ip, port string) error {
 	return t.clear(c, "udp", ip, port)
 }
 
-func (t *Translator) clear(c context.Context, protocol, ip, port string) error {
+func (t *iptablesRouter) clear(c context.Context, protocol, ip, port string) error {
 	if previous, exists := t.Mappings[Address{protocol, ip, port}]; exists {
 		args := []string{"-D", t.Name, "-j", "REDIRECT", "-p", protocol, "--dest", ip + "/32"}
 		if port != "" {
@@ -124,7 +131,7 @@ const (
 // GetOriginalDst gets the original destination for the socket when redirect by linux iptables
 // refer to https://raw.githubusercontent.com/missdeer/avege/master/src/inbound/redir/redir_iptables.go
 //
-func (t *Translator) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host string, err error) {
+func (t *iptablesRouter) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host string, err error) {
 	var addr *syscall.IPv6Mreq
 
 	// Get original destination

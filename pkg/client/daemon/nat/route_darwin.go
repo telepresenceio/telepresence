@@ -1,5 +1,3 @@
-// +build darwin
-
 package nat
 
 import (
@@ -16,10 +14,21 @@ import (
 	ppf "github.com/datawire/pf"
 )
 
-type Translator struct {
-	commonTranslator
+type pfRouter struct {
+	routingTableCommon
 	dev   *ppf.Handle
 	token string
+}
+
+var _ FirewallRouter = (*pfRouter)(nil)
+
+func newRouter(name string) *pfRouter {
+	return &pfRouter{
+		routingTableCommon: routingTableCommon{
+			Name:     name,
+			Mappings: make(map[Address]string),
+		},
+	}
 }
 
 type withoutCancel struct {
@@ -73,7 +82,7 @@ func fmtDest(a Address) (result []string) {
 	return
 }
 
-func (t *Translator) sorted() []Entry {
+func (t *pfRouter) sorted() []Entry {
 	entries := make([]Entry, len(t.Mappings))
 
 	index := 0
@@ -89,7 +98,7 @@ func (t *Translator) sorted() []Entry {
 	return entries
 }
 
-func (t *Translator) rules() string {
+func (t *pfRouter) rules() string {
 	if t.dev == nil {
 		return ""
 	}
@@ -118,7 +127,7 @@ func (t *Translator) rules() string {
 
 var actions = []ppf.Action{ppf.ActionPass, ppf.ActionRDR}
 
-func (t *Translator) Enable(c context.Context) error {
+func (t *pfRouter) Enable(c context.Context) error {
 	var err error
 	t.dev, err = ppf.Open()
 	if err != nil {
@@ -168,7 +177,7 @@ func (t *Translator) Enable(c context.Context) error {
 	return nil
 }
 
-func (t *Translator) Disable(c context.Context) error {
+func (t *pfRouter) Disable(c context.Context) error {
 	defer func() {
 		_ = pf(c, []string{"-a", t.Name, "-F", "all"}, "")
 	}()
@@ -200,35 +209,35 @@ func (t *Translator) Disable(c context.Context) error {
 	return nil
 }
 
-func (t *Translator) ForwardTCP(c context.Context, ip, port, toPort string) error {
+func (t *pfRouter) ForwardTCP(c context.Context, ip, port, toPort string) error {
 	return t.forward(c, "tcp", ip, port, toPort)
 }
 
-func (t *Translator) ForwardUDP(c context.Context, ip, port, toPort string) error {
+func (t *pfRouter) ForwardUDP(c context.Context, ip, port, toPort string) error {
 	return t.forward(c, "udp", ip, port, toPort)
 }
 
-func (t *Translator) forward(c context.Context, protocol, ip, port, toPort string) error {
+func (t *pfRouter) forward(c context.Context, protocol, ip, port, toPort string) error {
 	t.clear(protocol, ip, port)
 	t.Mappings[Address{protocol, ip, port}] = toPort
 	return pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
-func (t *Translator) ClearTCP(c context.Context, ip, port string) error {
+func (t *pfRouter) ClearTCP(c context.Context, ip, port string) error {
 	t.clear("tcp", ip, port)
 	return pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
-func (t *Translator) ClearUDP(c context.Context, ip, port string) error {
+func (t *pfRouter) ClearUDP(c context.Context, ip, port string) error {
 	t.clear("udp", ip, port)
 	return pf(c, []string{"-a", t.Name, "-f", "/dev/stdin"}, t.rules())
 }
 
-func (t *Translator) clear(protocol, ip, port string) {
+func (t *pfRouter) clear(protocol, ip, port string) {
 	delete(t.Mappings, Address{protocol, ip, port})
 }
 
-func (t *Translator) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host string, err error) {
+func (t *pfRouter) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host string, err error) {
 	remote := conn.RemoteAddr().(*net.TCPAddr)
 	local := conn.LocalAddr().(*net.TCPAddr)
 	addr, port, err := t.dev.NatLook(remote.IP.String(), remote.Port, local.IP.String(), local.Port)
