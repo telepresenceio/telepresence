@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/pkg/errors"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/datawire/telepresence2/rpc/v2/daemon"
 	"github.com/datawire/telepresence2/v2/pkg/client"
+	"github.com/datawire/telepresence2/v2/pkg/client/logging"
 )
 
 type daemonState struct {
@@ -39,13 +42,30 @@ func (ds *daemonState) EnsureState() (bool, error) {
 
 	fmt.Fprintln(ds.cmd.OutOrStdout(), "Launching Telepresence Daemon", client.DisplayVersion())
 
-	err := runAsRoot(client.GetExe(), []string{"daemon-foreground", dnsIP, fallbackIP})
+	// Ensure that the logfile is present before the daemon starts so that it isn't created with
+	// root permissions.
+	logFile := filepath.Join(logging.Dir(), "daemon.log")
+	if _, err := os.Stat(logFile); err != nil {
+		if !os.IsNotExist(err) {
+			return false, err
+		}
+		if err = os.MkdirAll(filepath.Dir(logFile), 0700); err != nil {
+			return false, err
+		}
+		lf, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0600)
+		if err != nil {
+			return false, err
+		}
+		_ = lf.Close()
+	}
+
+	err := runAsRoot(client.GetExe(), []string{"daemon-foreground", logging.Dir(), dnsIP, fallbackIP})
 	if err != nil {
 		return false, errors.Wrap(err, "failed to launch the server")
 	}
 
 	if err = client.WaitUntilSocketAppears("daemon", client.DaemonSocketName, 10*time.Second); err != nil {
-		return false, fmt.Errorf("daemon service did not start (see %s for more info)", client.Logfile)
+		return false, fmt.Errorf("daemon service did not start (see %s for more info)", logFile)
 	}
 	err = ds.connect()
 	return err == nil, err

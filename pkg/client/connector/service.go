@@ -7,12 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
-	"syscall"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ssh/terminal"
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -25,24 +22,20 @@ import (
 	"github.com/datawire/telepresence2/rpc/v2/daemon"
 	"github.com/datawire/telepresence2/rpc/v2/manager"
 	"github.com/datawire/telepresence2/v2/pkg/client"
-	"github.com/datawire/telepresence2/v2/pkg/client/cache"
+	"github.com/datawire/telepresence2/v2/pkg/client/logging"
 )
 
-var help = `The Telepresence Connect is a background component that manages a connection. It
+const processName = "connector"
+const titleName = "Connector"
+
+var help = `The Telepresence ` + titleName + ` is a background component that manages a connection. It
 requires that a daemon is already running.
 
-Launch the Telepresence Connector:
+Launch the Telepresence ` + titleName + `:
     telepresence connect
 
-Examine the Connector's log output in
-    ` +
-	func() string {
-		cachedir, err := cache.UserCacheDir()
-		if err != nil {
-			cachedir = "${user_cache_dir}"
-		}
-		return filepath.Join(cachedir, "telepresence", "connector.log")
-	}() + `
+Examine the ` + titleName + `'s log output in
+    ` + filepath.Join(logging.Dir(), processName+".log") + `
 to troubleshoot problems.
 `
 
@@ -62,8 +55,8 @@ type service struct {
 // Command returns the CLI sub-command for "connector-foreground"
 func Command() *cobra.Command {
 	c := &cobra.Command{
-		Use:    "connector-foreground",
-		Short:  "Launch Telepresence Connector in the foreground (debug)",
+		Use:    processName + "-foreground",
+		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
 		Long:   help,
@@ -297,62 +290,9 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	return r
 }
 
-func setupLogging(ctx context.Context) (context.Context, error) {
-	// Whenever we start, log to "connector.log", but first rename any existing "connector.log"
-	// to "connector.log.old"; so the last 2 logs are always available (a poor-man's logrotate).
-	// This is what X11 does with "$XDG_DATA_HOME/xorg/Xorg.${display_number}.log".
-	//
-	// (Except we use XDG_CACHE_HOME not XDG_DATA_HOME, because it's always bothered me when
-	// things put logs in XDG_DATA_HOME -- XDG_DATA_HOME is for "user-specific data", and
-	// XDG_CACHE_HOME is for "user-specific non-essential (cached) data"[1]; logs are
-	// non-essential!  A good rule of thumb is: If you track your configuration with Git, and
-	// you wouldn't check a given file in to Git (possibly encrypting it before checking it in),
-	// then that file either needs to go in XDG_RUNTIME_DIR or XDG_CACHE_DIR; and NOT
-	// XDG_DATA_HOME or XDG_CONFIG_HOME.)
-	//
-	// [1]: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
-	//
-	// In the past there was a mechanism where the connector RPC'd its logs over to the daemon,
-	// and the daemon put them in to a unified log file.  This turned out to make things hard to
-	// debug--it was hard to tell where a log line was coming from, and some things were
-	// missing.  Logs related to RPC problems nescessarily got dropped, and things that didn't
-	// play nice/go through our logger (things we haven't audited as thoroughly;
-	// *cough*client-go*cough*) ended up getting their logs dropped; and those are all cases
-	// where we *especially* want the logs.
-	cachedir, err := cache.CacheDir()
-	if err != nil {
-		return ctx, err
-	}
-	logfilename := filepath.Join(cachedir, "connector.log")
-	// Rename the existing .log to .log.old even if we're logging to stdout (below); this way
-	// you can't get confused and think that "connector.log" is the logs of the currently
-	// running connector even when it's not.
-	_ = os.Rename(logfilename, logfilename+".old")
-
-	logger := logrus.New()
-	logger.SetLevel(logrus.DebugLevel)
-	logger.Formatter = client.NewFormatter("15:04:05")
-
-	if !terminal.IsTerminal(int(os.Stdout.Fd())) {
-		logger.Formatter = client.NewFormatter("2006/01/02 15:04:05")
-
-		logfile, err := os.OpenFile(logfilename, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
-		if err != nil {
-			return ctx, err
-		}
-		defer logfile.Close()
-
-		// https://github.com/golang/go/issues/325
-		_ = syscall.Dup2(int(logfile.Fd()), int(os.Stdout.Fd()))
-		_ = syscall.Dup2(int(logfile.Fd()), int(os.Stderr.Fd()))
-	}
-
-	return dlog.WithLogger(ctx, dlog.WrapLogrus(logger)), nil
-}
-
 // run is the main function when executing as the connector
 func run(c context.Context) error {
-	c, err := setupLogging(c)
+	c, err := logging.InitContext(c, processName)
 	if err != nil {
 		return err
 	}
@@ -363,8 +303,8 @@ func run(c context.Context) error {
 	}
 
 	if client.SocketExists(client.ConnectorSocketName) {
-		return fmt.Errorf("socket %s exists so connector already started or terminated ungracefully",
-			client.SocketURL(client.ConnectorSocketName))
+		return fmt.Errorf("socket %s exists so %s already started or terminated ungracefully",
+			client.SocketURL(client.ConnectorSocketName), processName)
 	}
 	defer func() {
 		if perr := dutil.PanicToError(recover()); perr != nil {
@@ -390,9 +330,9 @@ func run(c context.Context) error {
 		ShutdownOnNonError:   true,
 	})
 
-	s.cancel = func() { g.Go("connector-quit", func(_ context.Context) error { return nil }) }
+	s.cancel = func() { g.Go(processName+"-quit", func(_ context.Context) error { return nil }) }
 
-	g.Go("connector", func(c context.Context) (err error) {
+	g.Go(processName, func(c context.Context) (err error) {
 		listener, err := net.Listen("unix", client.ConnectorSocketName)
 		if err != nil {
 			return err
@@ -413,7 +353,7 @@ func run(c context.Context) error {
 		// Listen on unix domain socket
 
 		dlog.Info(c, "---")
-		dlog.Infof(c, "Telepresence Connector %s starting...", client.DisplayVersion())
+		dlog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
 		dlog.Infof(c, "PID is %d", os.Getpid())
 		dlog.Info(c, "")
 

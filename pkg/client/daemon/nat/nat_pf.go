@@ -12,7 +12,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	ppf "github.com/datawire/pf"
-	"github.com/datawire/telepresence2/v2/pkg/client"
+	"github.com/datawire/telepresence2/v2/pkg/client/logging"
 )
 
 type Translator struct {
@@ -24,7 +24,7 @@ type Translator struct {
 func pf(c context.Context, args []string, stdin string) error {
 	// We specifically avoid using dexec.CommandContext() for the pfctl commands to ensure that they
 	// are unaffected by a context cancellation. Interrupting may result in instabilities in MacOS packet filtering.
-	dlog.Debugf(c, "running %s", client.ShellString("pfctl", args))
+	dlog.Debugf(c, "running %s", logging.ShellString("pfctl", args))
 	cmd := exec.Command("pfctl", args...)
 	cmd.Stdin = strings.NewReader(stdin)
 	err := cmd.Start()
@@ -37,7 +37,7 @@ func pf(c context.Context, args []string, stdin string) error {
 func pfo(c context.Context, args ...string) ([]byte, error) {
 	// We specifically avoid using dexec.CommandContext() for the pfctl commands to ensure that they
 	// are unaffected by a context cancellation. Interrupting may result in instabilities in MacOS packet filtering.
-	dlog.Debugf(c, "running %s", client.ShellString("pfctl", args))
+	dlog.Debugf(c, "running %s", logging.ShellString("pfctl", args))
 	return exec.Command("pfctl", args...).CombinedOutput()
 }
 

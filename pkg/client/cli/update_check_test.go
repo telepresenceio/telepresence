@@ -34,24 +34,19 @@ func newHttpServer(t *testing.T) *http.Server {
 	return srv
 }
 
-func tempDir(t *testing.T) string {
-	tmpDir, err := ioutil.TempDir("", "update-test-")
-	if err != nil {
-		t.Helper()
-		t.Fatal(err)
-	}
-	return tmpDir
-}
-
 func Test_newUpdateChecker(t *testing.T) {
 	// the server that delivers the latest version
 	httpServer := newHttpServer(t)
 	defer httpServer.Close()
 
 	// a fake user cache directory
-	tmpDir := tempDir(t)
+	tmpDir, err := ioutil.TempDir("", "update-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer func() {
 		_ = os.RemoveAll(tmpDir)
+		cache.SetUserCacheDirFunc(os.UserCacheDir)
 	}()
 	cache.SetUserCacheDirFunc(func() (string, error) {
 		return tmpDir, nil

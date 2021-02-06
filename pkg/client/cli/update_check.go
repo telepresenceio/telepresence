@@ -31,11 +31,7 @@ type updateChecker struct {
 
 // newUpdateChecker returns a new update checker, possibly initialized from the users cache.
 func newUpdateChecker(url string) (*updateChecker, error) {
-	cache, err := cache.CacheDir()
-	if err != nil {
-		return nil, err
-	}
-	ts := &updateChecker{url: url, cacheFile: filepath.Join(cache, "update-checks.json")}
+	ts := &updateChecker{url: url, cacheFile: filepath.Join(cache.CacheDir(), "update-checks.json")}
 
 	js, err := ioutil.ReadFile(ts.cacheFile)
 	if err != nil {

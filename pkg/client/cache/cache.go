@@ -2,6 +2,7 @@ package cache
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -26,37 +27,29 @@ func SetUserCacheDirFunc(ucf func() (string, error)) {
 
 // CacheDir returns the full path to the directory "telepresence", parented by the directory returned
 // by UserCacheDir(). The directory is created if it does not exist.
-func CacheDir() (string, error) {
+func CacheDir() string {
 	userCacheDir, err := UserCacheDir()
 	if err != nil {
-		return "", err
+		panic(fmt.Sprintf("unable to obtain user cache directory: %v", err))
 	}
 	cacheDir := filepath.Join(userCacheDir, telepresenceCacheDir)
 	err = os.MkdirAll(cacheDir, 0700)
 	if err != nil {
-		return "", err
+		panic(err)
 	}
-	return cacheDir, nil
+	return cacheDir
 }
 
 func saveToUserCache(object interface{}, file string) error {
-	cacheDir, err := CacheDir()
-	if err != nil {
-		return err
-	}
 	jsonContent, err := json.Marshal(object)
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(filepath.Join(cacheDir, file), jsonContent, 0600)
+	return ioutil.WriteFile(filepath.Join(CacheDir(), file), jsonContent, 0600)
 }
 
 func loadFromUserCache(dest interface{}, file string) error {
-	cacheDir, err := CacheDir()
-	if err != nil {
-		return err
-	}
-	jsonContent, err := ioutil.ReadFile(filepath.Join(cacheDir, file))
+	jsonContent, err := ioutil.ReadFile(filepath.Join(CacheDir(), file))
 	if err != nil {
 		return err
 	}
@@ -67,12 +60,8 @@ func loadFromUserCache(dest interface{}, file string) error {
 }
 
 func deleteFromUserCache(file string) error {
-	cacheDir, err := CacheDir()
-	if err != nil {
-		return err
-	}
-	cacheFile := filepath.Join(cacheDir, file)
-	if _, err = os.Stat(cacheFile); err != nil {
+	cacheFile := filepath.Join(CacheDir(), file)
+	if _, err := os.Stat(cacheFile); err != nil {
 		if os.IsNotExist(err) {
 			err = nil
 		}

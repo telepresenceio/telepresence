@@ -86,8 +86,7 @@ commands:
           command: |
             rsync -ma --include='*/' --include='*.tap' --include='*.log' --include='Test*.webm' --exclude='*' . /tmp/test-logs
             for file in \
-              /tmp/telepresence.log \
-              {"${XDG_CACHE_HOME:-$HOME/.cache}","$HOME/Library/Caches"}/telepresence/connector.log{,.old}
+              {"${XDG_CACHE_HOME:-$HOME/.cache}/telepresence/logs","$HOME/Library/Logs/telepresence"}/*.log
             do
               if [ -s "$file" ]; then
                 cp "$file" /tmp/test-logs
