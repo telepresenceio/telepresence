@@ -49,6 +49,9 @@ message AgentInfo {
   // This is a list of the mechanisms that the Agent advertises that
   // it supports.
   repeated Mechanism mechanisms = 5;
+
+  // The environment of the app
+  map<string, string> environment = 6;
 }
 
 message InterceptSpec {

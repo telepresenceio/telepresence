@@ -42,6 +42,8 @@ deployment:
         - args:
           - agent
           env:
+          - name: TELEPRESENCE_CONTAINER
+            value: echo-server
           - name: LOG_LEVEL
             value: debug
           - name: AGENT_NAME

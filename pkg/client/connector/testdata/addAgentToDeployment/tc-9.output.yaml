@@ -70,6 +70,10 @@ deployment:
         - args:
           - agent
           env:
+          - name: TEL_APP_LISTEN_PORT
+            value: "3000"
+          - name: TELEPRESENCE_CONTAINER
+            value: sample-app
           - name: LOG_LEVEL
             value: debug
           - name: AGENT_NAME

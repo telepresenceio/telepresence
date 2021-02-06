@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/sethvargo/go-envconfig"
@@ -16,12 +17,50 @@ import (
 )
 
 type Config struct {
-	Name    string `env:"AGENT_NAME,required"`
-	AppPort int32  `env:"APP_PORT,required"`
-
+	Name        string `env:"AGENT_NAME,required"`
+	AppPort     int32  `env:"APP_PORT,required"`
 	AgentPort   int32  `env:"AGENT_PORT,default=9900"`
 	ManagerHost string `env:"MANAGER_HOST,default=traffic-manager"`
 	ManagerPort int32  `env:"MANAGER_PORT,default=8081"`
+}
+
+var skipKeys = map[string]bool{
+	// Keys found in the Config
+	"AGENT_NAME":      true,
+	"AGENT_PORT":      true,
+	"APP_PORT":        true,
+	"APP_ENVIRONMENT": true,
+	"MANAGER_HOST":    true,
+	"MANAGER_PORT":    true,
+
+	// Keys that aren't useful when running on the local machine
+	"HOME":     true,
+	"PATH":     true,
+	"HOSTNAME": true,
+}
+
+// fullAppEnvironment returns the environment visible to this agent together with environment variables
+// explicitly declared for the app container and minus the environment variables provided by this
+// config.
+func (c *Config) fullAppEnvironment() map[string]string {
+	osEnv := os.Environ()
+	appEnv := make(map[string]string)
+	fullEnv := make(map[string]string, len(osEnv))
+	for _, env := range osEnv {
+		pair := strings.SplitN(env, "=", 2)
+		if len(pair) == 2 {
+			k := pair[0]
+			if strings.HasPrefix(k, "TEL_APP_") {
+				appEnv[k[8:]] = pair[1]
+			} else if _, skip := skipKeys[k]; !skip {
+				fullEnv[k] = pair[1]
+			}
+		}
+	}
+	for k, v := range appEnv {
+		fullEnv[k] = v
+	}
+	return fullEnv
 }
 
 func Main(ctx context.Context, args ...string) error {
@@ -52,10 +91,11 @@ func Main(ctx context.Context, args ...string) error {
 	}
 
 	info := &rpc.AgentInfo{
-		Name:     config.Name,
-		Hostname: hostname,
-		Product:  "telepresence",
-		Version:  version.Version,
+		Name:        config.Name,
+		Hostname:    hostname,
+		Product:     "telepresence",
+		Version:     version.Version,
+		Environment: config.fullAppEnvironment(),
 	}
 
 	// Select initial mechanism

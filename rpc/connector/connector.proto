@@ -138,4 +138,7 @@ message InterceptResult {
   telepresence.manager.InterceptInfo intercept_info = 1;
   InterceptError error = 2;
   string error_text = 3;
+
+  // The environment of the app
+  map<string,string> environment = 4;
 }

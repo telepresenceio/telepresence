@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -33,13 +36,16 @@ type interceptInfo struct {
 
 	previewEnabled bool
 	previewSpec    manager.PreviewSpec
+
+	envFile string
+	envJSON string
 }
 
 type interceptState struct {
 	*interceptInfo
-	cs *connectorState
-
+	cs    *connectorState
 	Scout *client.Scout
+	env   map[string]string
 }
 
 func interceptCommand() *cobra.Command {
@@ -64,6 +70,11 @@ func interceptCommand() *cobra.Command {
 	)
 	addPreviewFlags("preview-url-", flags, &ii.previewSpec)
 
+	flags.StringVarP(&ii.envFile, "env-file", "e", "", ``+
+		`Also emit the remote environment to an env file in Docker Compose format. `+
+		`See https://docs.docker.com/compose/env-file/ for more information on the limitations of this format.`)
+
+	flags.StringVarP(&ii.envJSON, "env-json", "j", "", `Also emit the remote environment to a file as a JSON blob.`)
 	return cmd
 }
 
@@ -105,7 +116,7 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 	return ii.withConnector(false, func(cs *connectorState) error {
 		is := ii.newInterceptState(cs)
 		return client.WithEnsuredState(is, false, func() error {
-			return start(args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return start(args[0], args[1:], true, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr(), envPairs(is.env)...)
 		})
 	})
 }
@@ -247,6 +258,17 @@ func (is *interceptState) EnsureState() (bool, error) {
 		} else {
 			intercept = r.InterceptInfo
 		}
+		is.env = r.Environment
+		if is.envFile != "" {
+			if err = is.writeEnvFile(); err != nil {
+				return true, err
+			}
+		}
+		if is.envJSON != "" {
+			if err = is.writeEnvJSON(); err != nil {
+				return true, err
+			}
+		}
 		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, false))
 		_ = is.Scout.Report("intercept_success")
 		return true, nil
@@ -272,6 +294,48 @@ func (is *interceptState) DeactivateState() error {
 		return errors.New(interceptMessage(r))
 	}
 	return nil
+}
+
+func (is *interceptState) writeEnvFile() error {
+	file, err := os.Create(is.envFile)
+	if err != nil {
+		return fmt.Errorf("failed to create environment file %q: %v", is.envFile, err)
+	}
+	defer file.Close()
+	w := bufio.NewWriter(file)
+
+	keys := make([]string, len(is.env))
+	i := 0
+	for k := range is.env {
+		keys[i] = k
+		i++
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		if _, err = w.WriteString(k); err != nil {
+			return err
+		}
+		if err = w.WriteByte('='); err != nil {
+			return err
+		}
+		if _, err = w.WriteString(is.env[k]); err != nil {
+			return err
+		}
+		if err = w.WriteByte('\n'); err != nil {
+			return err
+		}
+	}
+	return w.Flush()
+}
+
+func (is *interceptState) writeEnvJSON() error {
+	data, err := json.MarshalIndent(is.env, "", "  ")
+	if err != nil {
+		// Creating JSON from a map[string]string should never fail
+		panic(err)
+	}
+	return ioutil.WriteFile(is.envJSON, data, 0644)
 }
 
 var hostRx = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$`)

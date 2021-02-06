@@ -104,7 +104,7 @@ func undoActions(ma multiAction, obj kates.Object) (err error) {
 	return nil
 }
 
-func mustMarshal(data action) string {
+func mustMarshal(data interface{}) string {
 	js, err := json.Marshal(data)
 	if err != nil {
 		panic(fmt.Sprintf("internal error, unable to json.Marshal %T: %v", data, err))
@@ -227,12 +227,16 @@ type addTrafficAgentAction struct {
 
 	// The image name of the agent to add
 	ImageName string `json:"image_name"`
+
+	// The name of the app container. Not exported because its not needed for undo.
+	containerName string
 }
 
-func (ata *addTrafficAgentAction) do(dep kates.Object) error {
-	tplSpec := &dep.(*kates.Deployment).Spec.Template.Spec
+func (ata *addTrafficAgentAction) do(obj kates.Object) error {
+	dep := obj.(*kates.Deployment)
+	tplSpec := &dep.Spec.Template.Spec
 	tplSpec.Containers = append(tplSpec.Containers, corev1.Container{
-		Name:  "traffic-agent",
+		Name:  agentContainerName,
 		Image: ata.ImageName,
 		Args:  []string{"agent"},
 		Ports: []corev1.ContainerPort{{
@@ -240,16 +244,48 @@ func (ata *addTrafficAgentAction) do(dep kates.Object) error {
 			Protocol:      ata.ContainerPortProto,
 			ContainerPort: 9900,
 		}},
-		Env: []corev1.EnvVar{{
+		Env: ata.agentEnvironment(dep)})
+	return nil
+}
+
+func (ata *addTrafficAgentAction) agentEnvironment(dep *kates.Deployment) []corev1.EnvVar {
+	appEnv := ata.appEnvironment(dep)
+	env := make([]corev1.EnvVar, len(appEnv), len(appEnv)+3)
+	copy(env, appEnv)
+	return append(env,
+		corev1.EnvVar{
 			Name:  "LOG_LEVEL",
 			Value: "debug",
-		}, {
+		},
+		corev1.EnvVar{
 			Name:  "AGENT_NAME",
 			Value: dep.GetName(),
-		}, {
+		},
+		corev1.EnvVar{
 			Name:  "APP_PORT",
 			Value: strconv.Itoa(int(ata.ContainerPortNumber)),
-		}}})
+		})
+}
+
+func (ata *addTrafficAgentAction) appEnvironment(dep *kates.Deployment) []corev1.EnvVar {
+	cns := dep.Spec.Template.Spec.Containers
+	for i := range cns {
+		cn := &cns[i]
+		if cn.Name == ata.containerName {
+			env := cn.Env
+			envCopy := make([]corev1.EnvVar, 0, len(env)+1)
+			for _, ev := range env {
+				evCopy := ev // by value copy
+				evCopy.Name = "TEL_APP_" + ev.Name
+				envCopy = append(envCopy, evCopy)
+			}
+			envCopy = append(envCopy, corev1.EnvVar{
+				Name:  "TELEPRESENCE_CONTAINER",
+				Value: cn.Name,
+			})
+			return envCopy
+		}
+	}
 	return nil
 }
 
@@ -265,7 +301,7 @@ func (ata *addTrafficAgentAction) isDone(dep kates.Object) bool {
 	cns := dep.(*kates.Deployment).Spec.Template.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
-		if cn.Name == "traffic-agent" {
+		if cn.Name == agentContainerName {
 			return true
 		}
 	}
@@ -277,7 +313,7 @@ func (ata *addTrafficAgentAction) undo(dep kates.Object) error {
 	cns := tplSpec.Containers
 	for i := range cns {
 		cn := &cns[i]
-		if cn.Name != "traffic-agent" {
+		if cn.Name != agentContainerName {
 			continue
 		}
 
