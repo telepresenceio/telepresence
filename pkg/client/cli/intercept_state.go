@@ -221,26 +221,26 @@ func (is *interceptState) EnsureState() (bool, error) {
 		return false, err
 	}
 
-	// Add metadata to scout
-	is.Scout.SetMetadatum("service_name", is.agentName)
-	is.Scout.SetMetadatum("cluster_id", is.cs.info.ClusterId)
-
-	// For now this will be using the namespace where the traffic manager
-	// is installed. Once we support intercepts in multiple namespaces,
-	// we should change this to use that information
-	is.Scout.SetMetadatum("service_namespace", is.cs.info.ClusterNamespace)
-
-	is.Scout.SetMetadatum("intercept_id", r.InterceptInfo.Id)
-	if is.matchMechanism == "http" /* && [REDACTED] */ {
-		is.Scout.SetMetadatum("intercept_mode", "headers")
-	} else {
-		is.Scout.SetMetadatum("intercept_mode", "all")
-	}
-
 	switch r.Error {
 	case connector.InterceptError_UNSPECIFIED:
 		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", spec.Agent)
 		var intercept *manager.InterceptInfo
+
+		// Add metadata to scout
+		is.Scout.SetMetadatum("service_name", is.agentName)
+		is.Scout.SetMetadatum("cluster_id", is.cs.info.ClusterId)
+
+		// For now this will be using the namespace where the traffic manager
+		// is installed. Once we support intercepts in multiple namespaces,
+		// we should change this to use that information
+		is.Scout.SetMetadatum("service_namespace", is.cs.info.ClusterNamespace)
+
+		if is.matchMechanism == "http" /* && [REDACTED] */ {
+			is.Scout.SetMetadatum("intercept_mode", "headers")
+		} else {
+			is.Scout.SetMetadatum("intercept_mode", "all")
+		}
+
 		if is.previewEnabled {
 			intercept, err = is.cs.managerClient.UpdateIntercept(is.cmd.Context(), &manager.UpdateInterceptRequest{
 				Session: is.cs.info.SessionInfo,
@@ -258,6 +258,8 @@ func (is *interceptState) EnsureState() (bool, error) {
 		} else {
 			intercept = r.InterceptInfo
 		}
+		is.Scout.SetMetadatum("intercept_id", intercept.Id)
+
 		is.env = r.Environment
 		if is.envFile != "" {
 			if err = is.writeEnvFile(); err != nil {
