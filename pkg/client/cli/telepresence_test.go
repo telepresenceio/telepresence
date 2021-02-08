@@ -419,7 +419,7 @@ func (ts *telepresenceSuite) waitForService(name string) error {
 	for i := 0; i < 120; i++ {
 		time.Sleep(time.Second)
 		err := ts.kubectl("run", "curl-from-cluster", "--rm", "-it",
-			"--image=pstauffer/curl", "--restart=Never", "--",
+			"--image=docker.io/pstauffer/curl", "--restart=Never", "--",
 			"curl", "--silent", "--output", "/dev/null",
 			fmt.Sprintf("http://%s.%s", name, ts.namespace),
 		)
