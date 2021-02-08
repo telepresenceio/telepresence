@@ -55,3 +55,7 @@ TELEPRESENCE_REMOTE_IMAGE_OCP = "{}/telepresence-ocp:{}".format(
 # - the directory that contains the telepresence Python package (which is
 #   a directory containing this __init__.py file)
 TELEPRESENCE_BINARY = Path(__file__).parents[1].resolve()
+
+from ._version import get_versions
+__version__ = get_versions()['version']
+del get_versions
