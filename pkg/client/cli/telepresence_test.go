@@ -297,12 +297,25 @@ func (cs *connectedSuite) TestC_ProxiesOutboundTraffic() {
 		cs.Eventually(
 			// condition
 			func() bool {
-				out, _ := output("curl", "-s", svc)
-				return strings.Contains(out, expectedOutput)
+				cs.T().Logf("trying %q...", "http://"+svc)
+				resp, err := http.Get("http://" + svc)
+				if err != nil {
+					cs.T().Log(err)
+					return false
+				}
+				defer resp.Body.Close()
+				cs.T().Logf("status code: %v", resp.StatusCode)
+				body, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					cs.T().Log(err)
+					return false
+				}
+				cs.T().Logf("body: %q", body)
+				return strings.Contains(string(body), expectedOutput)
 			},
 			15*time.Second,       // waitfor
 			500*time.Millisecond, // polling interval
-			`output from command "curl -s %s" contains %q`, svc, expectedOutput,
+			`body of %q contains %q`, "http://"+svc, expectedOutput,
 		)
 	}
 }
@@ -377,12 +390,25 @@ func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
 		is.Eventually(
 			// condition
 			func() bool {
-				out, _ := output("curl", "-s", svc)
-				return out == expectedOutput
+				is.T().Logf("trying %q...", "http://"+svc)
+				resp, err := http.Get("http://" + svc)
+				if err != nil {
+					is.T().Log(err)
+					return false
+				}
+				defer resp.Body.Close()
+				is.T().Logf("status code: %v", resp.StatusCode)
+				body, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					is.T().Log(err)
+					return false
+				}
+				is.T().Logf("body: %q", body)
+				return string(body) == expectedOutput
 			},
 			15*time.Second,       // waitFor
 			500*time.Millisecond, // polling interval
-			`output from command "curl -s %s" equals %q`, svc, expectedOutput,
+			`body of %q equals %q`, "http://"+svc, expectedOutput,
 		)
 	}
 }
