@@ -8,6 +8,7 @@ import (
 	"os/user"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -49,6 +50,9 @@ type trafficManager struct {
 	sshPort int32
 
 	installer *installer
+
+	// Map of desired mount points for intercepts
+	mountPoints sync.Map
 }
 
 // newTrafficManager returns a TrafficManager resource for the given
