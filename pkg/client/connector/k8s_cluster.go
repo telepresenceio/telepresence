@@ -295,7 +295,6 @@ func (kc *k8sCluster) updateTable(c context.Context) {
 	}
 
 	// Send updated table to daemon
-	dlog.Debugf(c, "sending table update for table iptables %s", table.Name)
 	if _, err := kc.daemon.Update(c, &table); err != nil {
 		dlog.Errorf(c, "error posting update to %s: %v", table.Name, err)
 	}
