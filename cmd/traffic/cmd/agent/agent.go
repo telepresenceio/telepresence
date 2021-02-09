@@ -18,19 +18,23 @@ import (
 
 type Config struct {
 	Name        string `env:"AGENT_NAME,required"`
-	AppPort     int32  `env:"APP_PORT,required"`
+	Namespace   string `env:"AGENT_NAMESPACE,required"`
+	PodName     string `env:"AGENT_POD_NAME,required"`
 	AgentPort   int32  `env:"AGENT_PORT,default=9900"`
+	AppPort     int32  `env:"APP_PORT,required"`
 	ManagerHost string `env:"MANAGER_HOST,default=traffic-manager"`
 	ManagerPort int32  `env:"MANAGER_PORT,default=8081"`
 }
 
 var skipKeys = map[string]bool{
 	// Keys found in the Config
-	"AGENT_NAME":   true,
-	"AGENT_PORT":   true,
-	"APP_PORT":     true,
-	"MANAGER_HOST": true,
-	"MANAGER_PORT": true,
+	"AGENT_NAME":      true,
+	"AGENT_NAMESPACE": true,
+	"AGENT_POD_NAME":  true,
+	"AGENT_PORT":      true,
+	"APP_PORT":        true,
+	"MANAGER_HOST":    true,
+	"MANAGER_PORT":    true,
 
 	// Keys that aren't useful when running on the local machine
 	"HOME":     true,
