@@ -47,9 +47,6 @@ func status(cmd *cobra.Command, _ []string) error {
 	case daemon.DaemonStatus_NOT_STARTED:
 		fmt.Fprintln(out, "The telepresence daemon has not been started")
 		return nil
-	case daemon.DaemonStatus_PAUSED:
-		fmt.Fprintln(out, "Network overrides are paused")
-		return nil
 	case daemon.DaemonStatus_NO_NETWORK:
 		fmt.Fprintln(out, "Network overrides NOT established")
 		return nil

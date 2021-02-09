@@ -1,10 +1,12 @@
-// +build darwin
-
 package nat
 
 import (
 	"context"
+	"fmt"
+	"net"
+	"reflect"
 	"strings"
+	"testing"
 
 	"github.com/datawire/dlib/dexec"
 )
@@ -62,4 +64,42 @@ func (e *env) setup(c context.Context) error {
 func (e *env) teardown(c context.Context) error {
 	_ = pf(c, []string{"-F", "all"}, "")
 	return pf(c, []string{"-f", "/dev/stdin"}, e.before)
+}
+
+func TestSorted(t *testing.T) {
+	g, _ := testGroup()
+	g.Go("sorted-test", func(c context.Context) (err error) {
+		tr := newRouter("test-table", net.IP{127, 0, 1, 2})
+		if err = tr.Enable(c); err != nil {
+			return err
+		}
+		defer func() {
+			_ = tr.Disable(c)
+		}()
+		if err = tr.ForwardTCP(c, "192.0.2.1", "", "4321"); err != nil {
+			return err
+		}
+		if err = tr.ForwardTCP(c, "192.0.2.3", "", "4323"); err != nil {
+			return err
+		}
+		if err = tr.ForwardTCP(c, "192.0.2.2", "", "4322"); err != nil {
+			return err
+		}
+		if err = tr.ForwardUDP(c, "192.0.2.4", "", "2134"); err != nil {
+			return err
+		}
+		entries := tr.sorted()
+		if !reflect.DeepEqual(entries, []Entry{
+			{Address{"tcp", "192.0.2.1", ""}, "4321"},
+			{Address{"tcp", "192.0.2.2", ""}, "4322"},
+			{Address{"tcp", "192.0.2.3", ""}, "4323"},
+			{Address{"udp", "192.0.2.4", ""}, "2134"},
+		}) {
+			return fmt.Errorf("not sorted: %s", entries)
+		}
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		t.Fatal(err)
+	}
 }

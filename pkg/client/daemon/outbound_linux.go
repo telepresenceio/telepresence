@@ -21,11 +21,11 @@ import (
 
 var errResolveDNotConfigured = errors.New("resolved not configured")
 
-func (o *outbound) dnsServerWorker(c context.Context) error {
-	err := o.tryResolveD(c)
+func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
+	err := o.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), onReady)
 	if err == errResolveDNotConfigured {
 		dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
-		err = o.runOverridingServer(c)
+		err = o.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"), onReady)
 	}
 	return err
 }
@@ -45,7 +45,7 @@ func dnsResolverAddr() (*net.UDPAddr, error) {
 	return addr, err
 }
 
-func (o *outbound) runOverridingServer(c context.Context) error {
+func (o *outbound) runOverridingServer(c context.Context, onReady func()) error {
 	if o.dnsIP == "" {
 		dat, err := ioutil.ReadFile("/etc/resolv.conf")
 		if err != nil {
@@ -87,7 +87,7 @@ func (o *outbound) runOverridingServer(c context.Context) error {
 	o.dnsRedirPort = listeners[0].Port
 
 	o.overridePrimaryDNS = true
-	dgroup.ParentGroup(c).Go(proxyWorker, o.proxyWorker)
+	onReady()
 
 	srv := dns.NewServer(c, listeners, o.fallbackIP+":53", func(domain string) string {
 		if r := o.resolve(domain); r != nil {

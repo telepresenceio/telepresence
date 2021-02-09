@@ -17,7 +17,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
-	"github.com/datawire/telepresence2/v2/pkg/subnet"
 )
 
 const kubernetesZone = "cluster.local"
@@ -120,7 +119,7 @@ func (r *resolveFile) setSearchPaths(paths ...string) {
 //   man 5 resolver
 //
 // or, if not on a Mac, follow this link: https://www.manpagez.com/man/5/resolver/
-func (o *outbound) dnsServerWorker(c context.Context) error {
+func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 	resolverDirName := filepath.Join("/etc", "resolver")
 	resolverFileName := filepath.Join(resolverDirName, "telepresence.local")
 
@@ -129,19 +128,9 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 		return err
 	}
 
-	loopBackCIDR, err := subnet.FindAvailableLoopBackClassC()
-	if err != nil {
-		return err
-	}
-
-	// Place the DNS server in the private network at x.x.x.2
-	dnsIP := make(net.IP, len(loopBackCIDR.IP))
-	copy(dnsIP, loopBackCIDR.IP)
-	dnsIP[len(dnsIP)-1] = 2
-
 	rf := resolveFile{
 		domain:      kubernetesZone,
-		nameservers: []net.IP{dnsIP},
+		nameservers: []net.IP{o.localIP},
 		search:      []string{kubernetesZone},
 	}
 	if err = rf.write(resolverFileName); err != nil {
@@ -169,24 +158,18 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	}
 
 	// Up our loopback device
-	if err = dexec.CommandContext(c, "ifconfig", "lo0", "alias", dnsIP.String(), "up").Run(); err != nil {
+	if err = dexec.CommandContext(c, "ifconfig", "lo0", "alias", o.localIP.String(), "up").Run(); err != nil {
 		return err
 	}
 
 	defer func() {
-		// recover a panic. The DNS must be reset, no matter what
-		r := recover()
 		// Remove the resolver file
 		_ = os.Remove(resolverFileName)
 
 		// Remove loopback device
-		_ = exec.Command("ifconfig", "lo0", "-alias", dnsIP.String()).Run()
+		_ = exec.Command("ifconfig", "lo0", "-alias", o.localIP.String()).Run()
 
 		dns.Flush()
-		if r != nil {
-			// Propagate panic, it's of no interest here
-			panic(r)
-		}
 	}()
 
 	// Start local DNS server
@@ -194,7 +177,7 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 	initDone.Add(1)
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
-		v := dns.NewServer(c, []*net.UDPAddr{{IP: dnsIP, Port: 53}}, "", func(domain string) string {
+		v := dns.NewServer(c, []*net.UDPAddr{{IP: o.localIP, Port: 53}}, "", func(domain string) string {
 			if r := o.resolveNoNS(domain); r != nil {
 				return r.Ip
 			}
@@ -206,6 +189,6 @@ func (o *outbound) dnsServerWorker(c context.Context) error {
 
 	dns.Flush()
 
-	g.Go(proxyWorker, o.proxyWorker)
+	onReady()
 	return g.Wait()
 }

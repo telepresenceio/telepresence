@@ -23,10 +23,6 @@ type DaemonClient interface {
 	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
 	// Returns the current connectivity status
 	Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*DaemonStatus, error)
-	// Turns network overrides off.
-	Pause(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*PauseInfo, error)
-	// Turns network overrides back on (after using Pause)
-	Resume(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ResumeInfo, error)
 	// Quits (terminates) the service.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Update assigns adds or updates an IP-table.
@@ -55,24 +51,6 @@ func (c *daemonClient) Version(ctx context.Context, in *empty.Empty, opts ...grp
 func (c *daemonClient) Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*DaemonStatus, error) {
 	out := new(DaemonStatus)
 	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Status", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *daemonClient) Pause(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*PauseInfo, error) {
-	out := new(PauseInfo)
-	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Pause", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *daemonClient) Resume(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ResumeInfo, error) {
-	out := new(ResumeInfo)
-	err := c.cc.Invoke(ctx, "/telepresence.daemon.Daemon/Resume", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -114,10 +92,6 @@ type DaemonServer interface {
 	Version(context.Context, *empty.Empty) (*common.VersionInfo, error)
 	// Returns the current connectivity status
 	Status(context.Context, *empty.Empty) (*DaemonStatus, error)
-	// Turns network overrides off.
-	Pause(context.Context, *empty.Empty) (*PauseInfo, error)
-	// Turns network overrides back on (after using Pause)
-	Resume(context.Context, *empty.Empty) (*ResumeInfo, error)
 	// Quits (terminates) the service.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	// Update assigns adds or updates an IP-table.
@@ -136,12 +110,6 @@ func (UnimplementedDaemonServer) Version(context.Context, *empty.Empty) (*common
 }
 func (UnimplementedDaemonServer) Status(context.Context, *empty.Empty) (*DaemonStatus, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Status not implemented")
-}
-func (UnimplementedDaemonServer) Pause(context.Context, *empty.Empty) (*PauseInfo, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Pause not implemented")
-}
-func (UnimplementedDaemonServer) Resume(context.Context, *empty.Empty) (*ResumeInfo, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Resume not implemented")
 }
 func (UnimplementedDaemonServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
@@ -197,42 +165,6 @@ func _Daemon_Status_Handler(srv interface{}, ctx context.Context, dec func(inter
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaemonServer).Status(ctx, req.(*empty.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Daemon_Pause_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaemonServer).Pause(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.daemon.Daemon/Pause",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).Pause(ctx, req.(*empty.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Daemon_Resume_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaemonServer).Resume(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.daemon.Daemon/Resume",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).Resume(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -302,14 +234,6 @@ var _Daemon_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Status",
 			Handler:    _Daemon_Status_Handler,
-		},
-		{
-			MethodName: "Pause",
-			Handler:    _Daemon_Pause_Handler,
-		},
-		{
-			MethodName: "Resume",
-			Handler:    _Daemon_Resume_Handler,
 		},
 		{
 			MethodName: "Quit",

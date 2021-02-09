@@ -14,7 +14,7 @@ import (
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/tun"
 )
 
-func (o *outbound) tryResolveD(c context.Context) error {
+func (o *outbound) tryResolveD(c context.Context, onReady func()) error {
 	// Connect to ResolveD via DBUS.
 	dConn, err := dbus.NewResolveD()
 	if err != nil {
@@ -78,7 +78,7 @@ func (o *outbound) tryResolveD(c context.Context) error {
 	g.Go("Forwarder", func(c context.Context) error {
 		return t.ForwardDNS(c, dnsResolverAddr, initDone)
 	})
-	g.Go(proxyWorker, func(c context.Context) error {
+	g.Go("SanityCheck", func(c context.Context) error {
 		initDone.Wait()
 
 		// Check if an attempt to resolve a DNS address reaches our DNS resolver, 300ms should be plenty
@@ -88,7 +88,8 @@ func (o *outbound) tryResolveD(c context.Context) error {
 		if t.RequestCount() == 0 {
 			return errResolveDNotConfigured
 		}
-		return o.proxyWorker(c)
+		onReady()
+		return nil
 	})
 	return g.Wait()
 }
