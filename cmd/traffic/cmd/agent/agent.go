@@ -26,12 +26,11 @@ type Config struct {
 
 var skipKeys = map[string]bool{
 	// Keys found in the Config
-	"AGENT_NAME":      true,
-	"AGENT_PORT":      true,
-	"APP_PORT":        true,
-	"APP_ENVIRONMENT": true,
-	"MANAGER_HOST":    true,
-	"MANAGER_PORT":    true,
+	"AGENT_NAME":   true,
+	"AGENT_PORT":   true,
+	"APP_PORT":     true,
+	"MANAGER_HOST": true,
+	"MANAGER_PORT": true,
 
 	// Keys that aren't useful when running on the local machine
 	"HOME":     true,
@@ -39,11 +38,13 @@ var skipKeys = map[string]bool{
 	"HOSTNAME": true,
 }
 
-// fullAppEnvironment returns the environment visible to this agent together with environment variables
+// AppEnvironment returns the environment visible to this agent together with environment variables
 // explicitly declared for the app container and minus the environment variables provided by this
 // config.
-func (c *Config) fullAppEnvironment() map[string]string {
+func AppEnvironment() map[string]string {
 	osEnv := os.Environ()
+	// Keep track of the "TEL_APP_"-prefixed variables separately at first, so that we can
+	// ensure that they have higher precedence.
 	appEnv := make(map[string]string)
 	fullEnv := make(map[string]string, len(osEnv))
 	for _, env := range osEnv {
@@ -51,7 +52,7 @@ func (c *Config) fullAppEnvironment() map[string]string {
 		if len(pair) == 2 {
 			k := pair[0]
 			if strings.HasPrefix(k, "TEL_APP_") {
-				appEnv[k[8:]] = pair[1]
+				appEnv[k[len("TEL_APP_"):]] = pair[1]
 			} else if _, skip := skipKeys[k]; !skip {
 				fullEnv[k] = pair[1]
 			}
@@ -95,7 +96,7 @@ func Main(ctx context.Context, args ...string) error {
 		Hostname:    hostname,
 		Product:     "telepresence",
 		Version:     version.Version,
-		Environment: config.fullAppEnvironment(),
+		Environment: AppEnvironment(),
 	}
 
 	// Select initial mechanism
