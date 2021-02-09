@@ -141,7 +141,8 @@ jobs:
           command: |
             docker login -u="${DOCKERHUB_USERNAME}" -p="${DOCKERHUB_PASSWORD}"
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-images push-executable
-      - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
+      - run: |
+          [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
 
   "release-macos":
     executor: vm-macos
