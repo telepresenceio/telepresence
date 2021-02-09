@@ -112,16 +112,18 @@ func Main(ctx context.Context, args ...string) error {
 		EnableSignalHandling: true,
 	})
 
-	var forwarder *Forwarder
+	forwarderChan := make(chan *Forwarder)
 
 	// Manage the forwarder
 	g.Go("forward", func(ctx context.Context) error {
 		lisAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", config.AgentPort))
 		if err != nil {
+			close(forwarderChan)
 			return err
 		}
 
-		forwarder = NewForwarder(lisAddr)
+		forwarder := NewForwarder(lisAddr)
+		forwarderChan <- forwarder
 
 		return forwarder.Serve(ctx, "", config.AppPort)
 	})
@@ -133,6 +135,11 @@ func Main(ctx context.Context, args ...string) error {
 		// Don't reconnect more than once every five seconds
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
+
+		forwarder := <-forwarderChan
+		if forwarder == nil {
+			return nil
+		}
 
 		state := NewState(forwarder, config.ManagerHost)
 
