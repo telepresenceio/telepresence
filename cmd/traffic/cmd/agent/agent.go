@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/sethvargo/go-envconfig"
 
+	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
@@ -72,7 +74,8 @@ func Main(ctx context.Context, args ...string) error {
 	dlog.Infof(ctx, "Traffic Agent %s [pid:%d]", version.Version, os.Getpid())
 
 	// Add defaults for development work
-	if os.Getenv("USER") != "" {
+	user := os.Getenv("USER)")
+	if user != "" {
 		dlog.Infof(ctx, "Launching in dev mode ($USER is set)")
 		if os.Getenv("AGENT_NAME") == "" {
 			os.Setenv("AGENT_NAME", "test-agent")
@@ -117,6 +120,31 @@ func Main(ctx context.Context, args ...string) error {
 		EnableSignalHandling: true,
 	})
 
+	sshPort := 0
+	if user == "" {
+		l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+		if err != nil {
+			return err
+		}
+		sshPort = l.Addr().(*net.TCPAddr).Port
+		_ = l.Close()
+	}
+
+	// Run sshd
+	g.Go("sshd", func(ctx context.Context) error {
+		var cmd *dexec.Cmd
+
+		// Avoid starting sshd while running locally for debugging. Launch sleep
+		// instead so that the launch and kill code is tested in development.
+		if user != "" {
+			dlog.Info(ctx, "Not starting sshd ($USER is set)")
+			cmd = dexec.CommandContext(ctx, "sleep", "1000000")
+		} else {
+			cmd = dexec.CommandContext(ctx, "/usr/sbin/sshd", "-De", "-p", strconv.Itoa(sshPort))
+		}
+		return cmd.Run()
+	})
+
 	forwarderChan := make(chan *Forwarder)
 
 	// Manage the forwarder
@@ -146,7 +174,7 @@ func Main(ctx context.Context, args ...string) error {
 			return nil
 		}
 
-		state := NewState(forwarder, config.ManagerHost)
+		state := NewState(forwarder, config.ManagerHost, config.PodName, int32(sshPort))
 
 		for {
 			if err := TalkToManager(ctx, gRPCAddress, info, state); err != nil {

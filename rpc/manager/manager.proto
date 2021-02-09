@@ -148,6 +148,10 @@ message InterceptInfo {
   string message = 4;
   string id = 5;
   SessionInfo client_session = 6;
+
+  // pod name and ssh port to use when doing sshfs mounts
+  string pod_name = 10;
+  int32 ssh_port = 11;
 }
 
 message SessionInfo {
@@ -187,6 +191,10 @@ message ReviewInterceptRequest {
   string id = 2;
   InterceptDispositionType disposition = 3;
   string message = 4;
+
+  // pod name and ssh port to use when doing sshfs mounts
+  string pod_name = 10;
+  int32 ssh_port = 11;
 }
 
 message RemainRequest {

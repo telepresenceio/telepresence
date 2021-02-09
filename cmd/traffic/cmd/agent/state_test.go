@@ -35,7 +35,7 @@ func makeFS(t *testing.T) (*agent.Forwarder, agent.State) {
 		return port == appPort
 	}, 1*time.Second, 10*time.Millisecond)
 
-	s := agent.NewState(f, mgrHost)
+	s := agent.NewState(f, mgrHost, "xyz", 0)
 
 	return f, s
 }
