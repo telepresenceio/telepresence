@@ -57,12 +57,28 @@ func (kc *k8sCluster) getKubectlCmd(c context.Context, args ...string) *dexec.Cm
 	return dexec.CommandContext(c, "kubectl", kc.getKubectlArgs(args...)...)
 }
 
-func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, thenName string, then func(context.Context) error) error {
-	pf := dexec.CommandContext(c, "kubectl", kc.getKubectlArgs(kpfArgs...)...)
+// portForwardAndThen starts a kubectl port-forward command, passes its output to the given scanner, and waits for
+// the scanner to produce a result. A new goroutine is started as a sibling in the current dgroup.Group if the scanner
+// returns something other than nil. The sibling is named after the argument thenName and executes the then function,
+// passing what the scanner returned as an argument.
+func (kc *k8sCluster) portForwardAndThen(
+	c context.Context,
+	kpfArgs []string,
+	outputHandler func(*bufio.Scanner) interface{},
+	thenName string,
+	then func(context.Context, interface{}) error,
+) error {
+	args := make([]string, 0, len(kc.kubeFlagArgs)+1+len(kpfArgs))
+	args = append(args, kc.kubeFlagArgs...)
+	args = append(args, "port-forward")
+	args = append(args, kpfArgs...)
+
+	pf := dexec.CommandContext(c, "kubectl", args...)
 	out, err := pf.StdoutPipe()
 	if err != nil {
 		return err
 	}
+	defer out.Close()
 
 	// We want this command to keep on running. If it returns an error, then it was unsuccessful.
 	if err = pf.Start(); err != nil {
@@ -79,42 +95,24 @@ func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, th
 	})
 
 	// wait group is done when next process starts.
-	wg := sync.WaitGroup{}
-	wg.Add(1)
 	go func() {
-		defer out.Close()
-		ok := false
-		for sc.Scan() {
-			txt := sc.Text()
-			if !ok && strings.HasPrefix(txt, "Forwarding from") {
-				// Forwarding is running. This is what we waited for
-				dlog.Debug(c, txt)
-				ok = true
-				timer.Stop()
-				wg.Done()
-				dgroup.ParentGroup(c).Go(thenName, then)
-			}
-		}
-
-		// let the port forward continue running. It will either be killed by the
-		// timer (if it didn't produce the expected output) or by a context cancel.
-		if err = pf.Wait(); err != nil {
-			if c.Err() != nil {
-				// Context cancelled
-				err = nil
-			} else {
-				err = client.RunError(err)
-				dlog.Errorf(c, "port-forward failed: %v", err)
-			}
-		}
-		if !ok {
-			timer.Stop()
-			wg.Done()
+		defer timer.Stop()
+		if output := outputHandler(sc); output != nil {
+			dgroup.ParentGroup(c).Go(thenName, func(c context.Context) error { return then(c, output) })
 		}
 	}()
 
-	// Wait for successful start of next process or failure to do port-forward
-	wg.Wait()
+	// let the port forward continue running. It will either be killed by the
+	// timer (if it didn't produce the expected output) or by a context cancel.
+	if err = pf.Wait(); err != nil {
+		if c.Err() != nil {
+			// Context cancelled
+			err = nil
+		} else {
+			err = client.RunError(err)
+			dlog.Errorf(c, "port-forward failed: %v", err)
+		}
+	}
 	return err
 }
 
