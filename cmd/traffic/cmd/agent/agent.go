@@ -26,12 +26,11 @@ type Config struct {
 
 var skipKeys = map[string]bool{
 	// Keys found in the Config
-	"AGENT_NAME":      true,
-	"AGENT_PORT":      true,
-	"APP_PORT":        true,
-	"APP_ENVIRONMENT": true,
-	"MANAGER_HOST":    true,
-	"MANAGER_PORT":    true,
+	"AGENT_NAME":   true,
+	"AGENT_PORT":   true,
+	"APP_PORT":     true,
+	"MANAGER_HOST": true,
+	"MANAGER_PORT": true,
 
 	// Keys that aren't useful when running on the local machine
 	"HOME":     true,
@@ -44,6 +43,8 @@ var skipKeys = map[string]bool{
 // config.
 func AppEnvironment() map[string]string {
 	osEnv := os.Environ()
+	// Keep track of the "TEL_APP_"-prefixed variables separately at first, so that we can
+	// ensure that they have higher precedence.
 	appEnv := make(map[string]string)
 	fullEnv := make(map[string]string, len(osEnv))
 	for _, env := range osEnv {
@@ -51,7 +52,7 @@ func AppEnvironment() map[string]string {
 		if len(pair) == 2 {
 			k := pair[0]
 			if strings.HasPrefix(k, "TEL_APP_") {
-				appEnv[k[8:]] = pair[1]
+				appEnv[k[len("TEL_APP_"):]] = pair[1]
 			} else if _, skip := skipKeys[k]; !skip {
 				fullEnv[k] = pair[1]
 			}
