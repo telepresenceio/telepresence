@@ -39,6 +39,7 @@ type interceptInfo struct {
 
 	envFile string
 	envJSON string
+	mount   string
 }
 
 type interceptState struct {
@@ -75,6 +76,11 @@ func interceptCommand() *cobra.Command {
 		`See https://docs.docker.com/compose/env-file/ for more information on the limitations of this format.`)
 
 	flags.StringVarP(&ii.envJSON, "env-json", "j", "", `Also emit the remote environment to a file as a JSON blob.`)
+
+	flags.StringVarP(&ii.mount, "mount", "", "true", ``+
+		`The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use "true" to `+
+		`have Telepresence pick a random mount point (default). Use "false" to disable filesystem mounting entirely.`)
+
 	return cmd
 }
 
@@ -177,6 +183,8 @@ Please specify one or more header matches using --match.`
 		msg = fmt.Sprintf("Error while removing intercept: %v", r.ErrorText)
 	case connector.InterceptError_NOT_FOUND:
 		msg = fmt.Sprintf("Intercept named %q not found", r.ErrorText)
+	case connector.InterceptError_MOUNT_POINT_BUSY:
+		msg = fmt.Sprintf("Mount point already in use by intercept %q", r.ErrorText)
 	}
 	if id := r.GetInterceptInfo().GetId(); id != "" {
 		return fmt.Sprintf("Intercept %q: %s", id, msg)
@@ -195,6 +203,8 @@ func (is *interceptState) EnsureState() (bool, error) {
 	if is.name == "" {
 		is.name = is.agentName
 	}
+
+	var err error
 	if is.previewEnabled && is.previewSpec.Ingress == nil {
 		ingress, err := is.cs.selectIngress(is.cmd.InOrStdin(), is.cmd.OutOrStdout())
 		if err != nil {
@@ -203,27 +213,41 @@ func (is *interceptState) EnsureState() (bool, error) {
 		is.previewSpec.Ingress = ingress
 	}
 
-	// Turn that in to a spec
-	spec := &manager.InterceptSpec{
-		Name:      is.name,
-		Agent:     is.agentName,
-		Mechanism: is.matchMechanism,
+	mountPoint := ""
+	switch {
+	case strings.EqualFold(is.mount, "false"):
+	case strings.EqualFold(is.mount, "true"):
+		if mountPoint, err = ioutil.TempDir("", "telfs-"); err != nil {
+			return false, err
+		}
+	default:
+		if err = os.MkdirAll(is.mount, 0700); err != nil {
+			return false, err
+		}
+		mountPoint = is.mount
+	}
+
+	// Turn that in to a create request
+	ir := connector.CreateInterceptRequest{
+		Session:        is.cs.info.SessionInfo,
+		Name:           is.name,
+		AgentName:      is.agentName,
+		MatchMechanism: is.matchMechanism,
 		// [REDACTED],
 		TargetHost: "127.0.0.1",
 		TargetPort: int32(is.port),
+		MountPoint: mountPoint,
 	}
 
-	// Submit the spec
-	r, err := is.cs.connectorClient.CreateIntercept(is.cmd.Context(), &manager.CreateInterceptRequest{
-		InterceptSpec: spec,
-	})
+	// Submit the request
+	r, err := is.cs.connectorClient.CreateIntercept(is.cmd.Context(), &ir)
 	if err != nil {
 		return false, err
 	}
 
 	switch r.Error {
 	case connector.InterceptError_UNSPECIFIED:
-		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", spec.Agent)
+		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", is.agentName)
 		var intercept *manager.InterceptInfo
 
 		// Add metadata to scout
@@ -244,7 +268,7 @@ func (is *interceptState) EnsureState() (bool, error) {
 		if is.previewEnabled {
 			intercept, err = is.cs.managerClient.UpdateIntercept(is.cmd.Context(), &manager.UpdateInterceptRequest{
 				Session: is.cs.info.SessionInfo,
-				Name:    spec.Name,
+				Name:    is.name,
 				PreviewDomainAction: &manager.UpdateInterceptRequest_AddPreviewDomain{
 					AddPreviewDomain: &is.previewSpec,
 				},

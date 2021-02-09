@@ -112,20 +112,27 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 }
 
 // addIntercept adds one intercept
-func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager.CreateInterceptRequest) (*rpc.InterceptResult, error) {
-	spec := ir.InterceptSpec
+func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
+	spec := &manager.InterceptSpec{
+		Name:       ir.Name,
+		Agent:      ir.AgentName,
+		Mechanism:  ir.MatchMechanism,
+		Additional: ir.MatchAdditional,
+		TargetHost: ir.TargetHost,
+		TargetPort: ir.TargetPort,
+	}
 	intercepts, err := actions.ListMyIntercepts(c, tm.managerClient, tm.session().SessionId)
 	if err != nil {
 		return nil, err
 	}
 	for _, iCept := range intercepts {
-		if iCept.Spec.Name == spec.Name {
+		if iCept.Spec.Name == ir.Name {
 			return &rpc.InterceptResult{
 				Error:     rpc.InterceptError_ALREADY_EXISTS,
 				ErrorText: iCept.Spec.Name,
 			}, nil
 		}
-		if iCept.Spec.TargetPort == spec.TargetPort && iCept.Spec.TargetHost == spec.TargetHost {
+		if iCept.Spec.TargetPort == ir.TargetPort && iCept.Spec.TargetHost == ir.TargetHost {
 			return &rpc.InterceptResult{
 				InterceptInfo: &manager.InterceptInfo{Spec: spec},
 				Error:         rpc.InterceptError_LOCAL_TARGET_IN_USE,
@@ -187,9 +194,11 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 		}
 	}
 
-	ir.Session = tm.session()
-	dlog.Debugf(c, "creating intercept %s", ir.InterceptSpec.Name)
-	ii, err := tm.managerClient.CreateIntercept(c, ir)
+	dlog.Debugf(c, "creating intercept %s", ir.Name)
+	ii, err := tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
+		Session:       tm.session(),
+		InterceptSpec: spec,
+	})
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
 		return &rpc.InterceptResult{Error: rpc.InterceptError_TRAFFIC_MANAGER_ERROR, ErrorText: err.Error()}, nil
