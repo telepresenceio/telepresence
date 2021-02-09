@@ -39,10 +39,10 @@ var skipKeys = map[string]bool{
 	"HOSTNAME": true,
 }
 
-// fullAppEnvironment returns the environment visible to this agent together with environment variables
+// AppEnvironment returns the environment visible to this agent together with environment variables
 // explicitly declared for the app container and minus the environment variables provided by this
 // config.
-func (c *Config) fullAppEnvironment() map[string]string {
+func AppEnvironment() map[string]string {
 	osEnv := os.Environ()
 	appEnv := make(map[string]string)
 	fullEnv := make(map[string]string, len(osEnv))
@@ -95,7 +95,7 @@ func Main(ctx context.Context, args ...string) error {
 		Hostname:    hostname,
 		Product:     "telepresence",
 		Version:     version.Version,
-		Environment: config.fullAppEnvironment(),
+		Environment: AppEnvironment(),
 	}
 
 	// Select initial mechanism
