@@ -1,6 +1,7 @@
 package connector
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -92,9 +93,11 @@ func publishManager(t *testing.T) {
 	// OK, now run "ko" and friends.
 	cmd := exec.Command("ko", "publish", "--local", "./cmd/traffic")
 	cmd.Dir = "../../.." // ko must be executed from root to find the .ko.yaml config
+	errCapture := bytes.Buffer{}
+	cmd.Stderr = &errCapture
 	stdout, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("%s\n%v", stdout, err)
+		t.Fatalf("%s\n%v", errCapture.String(), err)
 	}
 	imageName = strings.TrimSpace(string(stdout))
 	tag := fmt.Sprintf("%s/tel2:%s", registry, strings.TrimPrefix(client.Version(), "v"))
@@ -153,16 +156,21 @@ func Test_findTrafficManager_notPresent(t *testing.T) {
 }
 
 func Test_findTrafficManager_present(t *testing.T) {
-	c, cancel := context.WithCancel(dlog.NewTestContext(t, false))
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	c := dlog.NewTestContext(t, false)
+	publishManager(t)
+	defer removeManager(t)
+
 	env, err := client.LoadEnv(c)
 	if err != nil {
 		t.Fatal(err)
 	}
-	g.Go("test-present", func(c context.Context) error {
+
+	c, cancel := context.WithCancel(c)
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g.Go("test-present", func(c context.Context) (err error) {
+		// Kill sibling go-routines
 		defer cancel()
-		publishManager(t)
-		defer removeManager(t)
+
 		kc, err := newKCluster(c, map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, nil)
 		if err != nil {
 			return err
