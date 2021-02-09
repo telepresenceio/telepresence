@@ -150,7 +150,8 @@ jobs:
       - install-go
       - run: sudo pip3 install awscli
       - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make push-executable
-      - run: TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
+      - run: |
+          [[ $CIRCLE_TAG == *-* ]] || TELEPRESENCE_VERSION=$CIRCLE_TAG make promote-to-stable
 
 #  "release-finalize":
 #    executor: vm-linux
