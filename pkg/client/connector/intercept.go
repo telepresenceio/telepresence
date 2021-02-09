@@ -68,6 +68,9 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 			}
 			snapshotPortForwards := make(map[portForward]struct{})
 			for _, intercept := range snapshot.Intercepts {
+				if intercept.Disposition != manager.InterceptDispositionType_ACTIVE {
+					continue
+				}
 				pf := portForward{
 					ManagerPort: intercept.ManagerPort,
 					TargetHost:  intercept.Spec.TargetHost,
