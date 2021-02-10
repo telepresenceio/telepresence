@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"os"
 
 	"github.com/datawire/telepresence2/rpc/v2/manager"
@@ -10,18 +11,18 @@ const ingressesFile = "ingresses.json"
 
 // SaveIngressesToUserCache saves the provided ingresses to user cache and returns an error if
 // something goes wrong while marshalling or persisting.
-func SaveIngressesToUserCache(ingresses map[string]*manager.IngressInfo) error {
+func SaveIngressesToUserCache(ctx context.Context, ingresses map[string]*manager.IngressInfo) error {
 	if len(ingresses) == 0 {
-		return DeleteIngressesFromUserCache()
+		return DeleteIngressesFromUserCache(ctx)
 	}
-	return saveToUserCache(ingresses, ingressesFile)
+	return saveToUserCache(ctx, ingresses, ingressesFile)
 }
 
 // LoadIngressesFromUserCache gets the ingresses from cache. An empty map is returned if the
 // file does not exist. An error is returned if something goes wrong while loading or unmarshalling.
-func LoadIngressesFromUserCache() (map[string]*manager.IngressInfo, error) {
+func LoadIngressesFromUserCache(ctx context.Context) (map[string]*manager.IngressInfo, error) {
 	var ingresses map[string]*manager.IngressInfo
-	err := loadFromUserCache(&ingresses, ingressesFile)
+	err := loadFromUserCache(ctx, &ingresses, ingressesFile)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
@@ -33,6 +34,6 @@ func LoadIngressesFromUserCache() (map[string]*manager.IngressInfo, error) {
 
 // DeleteIngressesFromUserCache removes the ingresses cache if exists or returns an error. An attempt
 // to remove a non existing cache is a no-op and the function returns nil.
-func DeleteIngressesFromUserCache() error {
-	return deleteFromUserCache(ingressesFile)
+func DeleteIngressesFromUserCache(ctx context.Context) error {
+	return deleteFromUserCache(ctx, ingressesFile)
 }

@@ -31,7 +31,7 @@ func (c systemaCredentials) RequireTransportSecurity() bool {
 }
 
 func systemaGetPreferredAgentImageName(ctx context.Context, env client.Env) (string, error) {
-	tokenData, err := cache.LoadTokenFromUserCache()
+	tokenData, err := cache.LoadTokenFromUserCache(ctx)
 	if err != nil {
 		return "", fmt.Errorf("not logged in: %w", err)
 	}

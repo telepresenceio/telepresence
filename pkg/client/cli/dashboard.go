@@ -23,7 +23,7 @@ func dashboardCommand() *cobra.Command {
 			}
 
 			// Login unless already logged in.
-			if token, _ := cache.LoadTokenFromUserCache(); token == nil {
+			if token, _ := cache.LoadTokenFromUserCache(cmd.Context()); token == nil {
 				l := auth.NewLoginExecutor(
 					env.LoginAuthURL,
 					env.LoginTokenURL,

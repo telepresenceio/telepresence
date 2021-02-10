@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
@@ -98,7 +99,7 @@ func RunSubcommands(cmd *cobra.Command, args []string) error {
 }
 
 // Command returns the top level "telepresence" CLI command
-func Command() *cobra.Command {
+func Command(ctx context.Context) *cobra.Command {
 	myName := "Telepresence"
 	if !IsServerRunning() {
 		myName = "Telepresence (daemon unavailable)"
@@ -193,7 +194,7 @@ func Command() *cobra.Command {
 		},
 		{
 			Name:     "Traffic Commands",
-			Commands: []*cobra.Command{listCommand(), interceptCommand(), leaveCommand(), previewCommand()},
+			Commands: []*cobra.Command{listCommand(), interceptCommand(ctx), leaveCommand(), previewCommand()},
 		},
 		{
 			Name:     "Other Commands",

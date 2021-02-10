@@ -11,6 +11,7 @@ import (
 
 	"github.com/blang/semver"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/telepresence2/v2/pkg/client/cache"
 )
@@ -34,6 +35,8 @@ func newHttpServer(t *testing.T) *http.Server {
 }
 
 func Test_newUpdateChecker(t *testing.T) {
+	ctx := dlog.NewTestContext(t, false)
+
 	// the server that delivers the latest version
 	httpServer := newHttpServer(t)
 	defer httpServer.Close()
@@ -54,7 +57,7 @@ func Test_newUpdateChecker(t *testing.T) {
 	ft := dtime.NewFakeTime()
 	dtime.SetNow(ft.Now)
 
-	uc, err := newUpdateChecker(fmt.Sprintf("http://%s", httpServer.Addr))
+	uc, err := newUpdateChecker(ctx, fmt.Sprintf("http://%s", httpServer.Addr))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +84,7 @@ func Test_newUpdateChecker(t *testing.T) {
 
 	// An hour later it should not be time to check yet
 	ft.Step(time.Hour)
-	uc, err = newUpdateChecker(fmt.Sprintf("http://%s", httpServer.Addr))
+	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", httpServer.Addr))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +94,7 @@ func Test_newUpdateChecker(t *testing.T) {
 
 	// An day later it should be time to check
 	ft.Step(checkDuration)
-	uc, err = newUpdateChecker(fmt.Sprintf("http://%s", httpServer.Addr))
+	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", httpServer.Addr))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +120,7 @@ func Test_newUpdateChecker(t *testing.T) {
 
 	// An day later it should be time to check again
 	ft.Step(checkDuration + 1)
-	uc, err = newUpdateChecker(fmt.Sprintf("http://%s", httpServer.Addr))
+	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", httpServer.Addr))
 	if err != nil {
 		t.Fatal(err)
 	}

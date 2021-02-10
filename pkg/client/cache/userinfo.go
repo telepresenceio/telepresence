@@ -1,5 +1,9 @@
 package cache
 
+import (
+	"context"
+)
+
 const userInfoFile = "user-info.json"
 
 type UserInfo struct {
@@ -13,15 +17,15 @@ type UserInfo struct {
 
 // SaveUserInfoToUserCache saves the provided user info to user cache and returns an error if
 // something goes wrong while marshalling or persisting.
-func SaveUserInfoToUserCache(userInfo *UserInfo) error {
-	return saveToUserCache(userInfo, userInfoFile)
+func SaveUserInfoToUserCache(ctx context.Context, userInfo *UserInfo) error {
+	return saveToUserCache(ctx, userInfo, userInfoFile)
 }
 
 // LoadUserInfoFromUserCache gets the user info from cache or returns an error if something goes
 // wrong while loading or unmarshalling.
-func LoadUserInfoFromUserCache() (*UserInfo, error) {
+func LoadUserInfoFromUserCache(ctx context.Context) (*UserInfo, error) {
 	var userInfo UserInfo
-	err := loadFromUserCache(&userInfo, userInfoFile)
+	err := loadFromUserCache(ctx, &userInfo, userInfoFile)
 	if err != nil {
 		return nil, err
 	}
@@ -30,6 +34,6 @@ func LoadUserInfoFromUserCache() (*UserInfo, error) {
 
 // DeleteUserInfoFromUserCache removes user info cache if existing or returns an error. An attempt
 // to remove a non existing cache is a no-op and the function returns nil.
-func DeleteUserInfoFromUserCache() error {
-	return deleteFromUserCache(userInfoFile)
+func DeleteUserInfoFromUserCache(ctx context.Context) error {
+	return deleteFromUserCache(ctx, userInfoFile)
 }

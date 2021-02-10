@@ -51,7 +51,7 @@ type interceptState struct {
 	env   map[string]string
 }
 
-func interceptCommand() *cobra.Command {
+func interceptCommand(ctx context.Context) *cobra.Command {
 	ii := &interceptInfo{}
 	cmd := &cobra.Command{
 		Use:     "intercept [flags] <name> [-- command with arguments...]",
@@ -67,7 +67,7 @@ func interceptCommand() *cobra.Command {
 
 	// [REDACTED]
 
-	flags.BoolVarP(&ii.previewEnabled, "preview-url", "u", isLoggedIn(), ``+
+	flags.BoolVarP(&ii.previewEnabled, "preview-url", "u", isLoggedIn(ctx), ``+
 		`Generate an edgestack.me preview domain for this intercept. `+
 		`(default "true" if you are logged in with 'telepresence login', default "false" otherwise)`,
 	)
@@ -197,8 +197,8 @@ Please specify one or more header matches using --match.`
 	}
 }
 
-func isLoggedIn() bool {
-	token, _ := cache.LoadTokenFromUserCache()
+func isLoggedIn(ctx context.Context) bool {
+	token, _ := cache.LoadTokenFromUserCache(ctx)
 	return token != nil
 }
 
@@ -209,7 +209,7 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 	}
 
 	if is.previewEnabled && is.previewSpec.Ingress == nil {
-		ingress, err := is.cs.selectIngress(is.cmd.InOrStdin(), is.cmd.OutOrStdout())
+		ingress, err := is.cs.selectIngress(is.cmd.Context(), is.cmd.InOrStdin(), is.cmd.OutOrStdout())
 		if err != nil {
 			return false, err
 		}
@@ -302,7 +302,7 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 				},
 			})
 			if err != nil {
-				_ = is.Scout.Report("preview_domain_create_fail", client.ScoutMeta{Key: "error", Value: err.Error()})
+				_ = is.Scout.Report(is.cmd.Context(), "preview_domain_create_fail", client.ScoutMeta{Key: "error", Value: err.Error()})
 				err = fmt.Errorf("creating preview domain: %w", err)
 				return true, err
 			}
@@ -324,7 +324,7 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 			}
 		}
 		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, false))
-		_ = is.Scout.Report("intercept_success")
+		_ = is.Scout.Report(is.cmd.Context(), "intercept_success")
 		return true, nil
 	case connector.InterceptError_ALREADY_EXISTS:
 		fmt.Fprintln(is.cmd.OutOrStdout(), interceptMessage(r))
@@ -470,8 +470,8 @@ func askForUseTLS(cachedUseTLS bool, reader *bufio.Reader, out io.Writer) (bool,
 	}
 }
 
-func (cs *connectorState) selectIngress(in io.Reader, out io.Writer) (*manager.IngressInfo, error) {
-	infos, err := cache.LoadIngressesFromUserCache()
+func (cs *connectorState) selectIngress(ctx context.Context, in io.Reader, out io.Writer) (*manager.IngressInfo, error) {
+	infos, err := cache.LoadIngressesFromUserCache(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -504,7 +504,7 @@ func (cs *connectorState) selectIngress(in io.Reader, out io.Writer) (*manager.I
 
 	if !ingressInfoEqual(cachedIngressInfo, reply) {
 		infos[key] = reply
-		if err = cache.SaveIngressesToUserCache(infos); err != nil {
+		if err = cache.SaveIngressesToUserCache(ctx, infos); err != nil {
 			return nil, err
 		}
 	}

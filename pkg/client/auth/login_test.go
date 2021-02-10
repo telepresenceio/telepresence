@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,7 +31,7 @@ type MockSaveTokenWrapper struct {
 	Err           error
 }
 
-func (m *MockSaveTokenWrapper) SaveToken(token *oauth2.Token) error {
+func (m *MockSaveTokenWrapper) SaveToken(_ context.Context, token *oauth2.Token) error {
 	m.CallArguments = append(m.CallArguments, token)
 	return m.Err
 }
@@ -40,7 +41,7 @@ type MockSaveUserInfoWrapper struct {
 	Err           error
 }
 
-func (m *MockSaveUserInfoWrapper) SaveUserInfo(userInfo *cache.UserInfo) error {
+func (m *MockSaveUserInfoWrapper) SaveUserInfo(_ context.Context, userInfo *cache.UserInfo) error {
 	m.CallArguments = append(m.CallArguments, userInfo)
 	return m.Err
 }
@@ -158,8 +159,11 @@ func TestLoginFlow(t *testing.T) {
 	}
 	const mockCompletionUrl = "http://example.com/mock-completion"
 
-	setupWithCacheFuncs := func(t *testing.T, saveTokenFunc func(*oauth2.Token) error,
-		saveUserInfoFunc func(*cache.UserInfo) error) *fixture {
+	setupWithCacheFuncs := func(
+		t *testing.T,
+		saveTokenFunc func(context.Context, *oauth2.Token) error,
+		saveUserInfoFunc func(context.Context, *cache.UserInfo) error,
+	) *fixture {
 		mockSaveTokenWrapper := &MockSaveTokenWrapper{}
 		saveToken := saveTokenFunc
 		if saveToken == nil {
@@ -375,6 +379,7 @@ func TestLoginFlow(t *testing.T) {
 
 	t.Run("will remove token and user info from user cache dir when logging out", func(t *testing.T) {
 		// given
+		ctx := dlog.NewTestContext(t, false)
 		f := setupWithCacheFuncs(t, cache.SaveTokenToUserCache, cache.SaveUserInfoToUserCache)
 		defer f.MockOauth2Server.TearDown(t)
 		errs := make(chan error)
@@ -392,7 +397,7 @@ func TestLoginFlow(t *testing.T) {
 				RunE: f.Runner.LoginFlow,
 			}
 			cmd.SetArgs([]string{})
-			errs <- cmd.ExecuteContext(dlog.NewTestContext(t, false))
+			errs <- cmd.ExecuteContext(ctx)
 		}()
 		rawAuthUrl := <-f.OpenedUrls
 		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
@@ -405,19 +410,19 @@ func TestLoginFlow(t *testing.T) {
 
 		// then
 		require.NoError(t, err, "no error running login flow")
-		token, err := cache.LoadTokenFromUserCache()
+		token, err := cache.LoadTokenFromUserCache(ctx)
 		require.NoError(t, err, "no error reading token")
 		require.NotNil(t, token)
-		userInfo, err := cache.LoadUserInfoFromUserCache()
+		userInfo, err := cache.LoadUserInfoFromUserCache(ctx)
 		require.NoError(t, err, "no error reading user info")
 		require.NotNil(t, userInfo)
-		err = auth.LogoutCommand().Execute()
+		err = auth.LogoutCommand().ExecuteContext(ctx)
 		require.NoError(t, err, "no error executing logout")
-		_, err = cache.LoadTokenFromUserCache()
+		_, err = cache.LoadTokenFromUserCache(ctx)
 		require.Error(t, err, "error reading token")
-		_, err = cache.LoadUserInfoFromUserCache()
+		_, err = cache.LoadUserInfoFromUserCache(ctx)
 		require.Error(t, err, "error reading user info")
-		err = auth.LogoutCommand().Execute()
+		err = auth.LogoutCommand().ExecuteContext(ctx)
 		require.Error(t, err, "error executing logout when not logged in")
 	})
 }

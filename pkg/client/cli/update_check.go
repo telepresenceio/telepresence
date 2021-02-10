@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,7 +31,7 @@ type updateChecker struct {
 }
 
 // newUpdateChecker returns a new update checker, possibly initialized from the users cache.
-func newUpdateChecker(url string) (*updateChecker, error) {
+func newUpdateChecker(ctx context.Context, url string) (*updateChecker, error) {
 	ts := &updateChecker{url: url, cacheFile: filepath.Join(cache.CacheDir(), "update-checks.json")}
 
 	js, err := ioutil.ReadFile(ts.cacheFile)
@@ -66,7 +67,7 @@ func updateCheck(cmd *cobra.Command, forceCheck bool) error {
 	if err != nil {
 		return err
 	}
-	uc, err := newUpdateChecker(fmt.Sprintf("https://%s/download/tel2/%s/%s/stable.txt", env.SystemAHost, runtime.GOOS, runtime.GOARCH))
+	uc, err := newUpdateChecker(cmd.Context(), fmt.Sprintf("https://%s/download/tel2/%s/%s/stable.txt", env.SystemAHost, runtime.GOOS, runtime.GOARCH))
 	if err != nil || !(forceCheck || uc.timeToCheck()) {
 		return err
 	}

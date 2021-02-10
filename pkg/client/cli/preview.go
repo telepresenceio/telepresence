@@ -36,7 +36,7 @@ func previewCommand() *cobra.Command {
 			si := &sessionInfo{cmd: cmd}
 			return si.withConnector(true, func(cs *connectorState) error {
 				if createSpec.Ingress == nil {
-					ingress, err := cs.selectIngress(cmd.InOrStdin(), cmd.OutOrStdout())
+					ingress, err := cs.selectIngress(cmd.Context(), cmd.InOrStdin(), cmd.OutOrStdout())
 					if err != nil {
 						return err
 					}
