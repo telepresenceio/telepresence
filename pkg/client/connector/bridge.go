@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blang/semver"
 	"github.com/pkg/errors"
 
 	"github.com/datawire/dlib/dexec"
@@ -117,8 +118,7 @@ func checkKubectl(c context.Context) error {
 
 	var info struct {
 		ClientVersion struct {
-			Major string
-			Minor string
+			GitVersion string
 		}
 	}
 
@@ -126,17 +126,13 @@ func checkKubectl(c context.Context) error {
 		return errors.Wrap(err, kubectlErr)
 	}
 
-	major, err := strconv.Atoi(info.ClientVersion.Major)
-	if err != nil {
-		return errors.Wrap(err, kubectlErr)
-	}
-	minor, err := strconv.Atoi(info.ClientVersion.Minor)
+	version, err := semver.ParseTolerant(info.ClientVersion.GitVersion)
 	if err != nil {
 		return errors.Wrap(err, kubectlErr)
 	}
 
-	if major != 1 || minor < 10 {
-		return errors.Errorf("%s (found %d.%d)", kubectlErr, major, minor)
+	if version.Major != 1 || version.Minor < 10 {
+		return errors.Errorf("%s (found %s)", kubectlErr, info.ClientVersion.GitVersion)
 	}
 	return nil
 }
