@@ -85,9 +85,15 @@ func newTrafficManager(c context.Context, env client.Env, cluster *k8sCluster, i
 	return tm, nil
 }
 
-func (tm *trafficManager) waitUntilStarted() error {
-	<-tm.startup
-	return tm.managerErr
+func (tm *trafficManager) waitUntilStarted(c context.Context) error {
+	select {
+	case <-c.Done():
+		return c.Err()
+	case <-tm.startup:
+		return tm.managerErr
+	case <-time.After(60 * time.Second):
+		return errors.New("timeout establishing connection to traffic-manager")
+	}
 }
 
 func (tm *trafficManager) run(c context.Context) error {
@@ -97,19 +103,6 @@ func (tm *trafficManager) run(c context.Context) error {
 		close(tm.startup)
 		return err
 	}
-
-	// Ensure that startup is made within a minute. Context must not be cancelled when the startup
-	// succeeds.
-	c, cancel := context.WithCancel(c)
-	defer cancel()
-	go func() {
-		select {
-		case <-tm.startup:
-			return
-		case <-time.After(time.Minute):
-			cancel()
-		}
-	}()
 
 	kpfArgs := []string{
 		"svc/traffic-manager",
@@ -138,15 +131,9 @@ func (tm *trafficManager) run(c context.Context) error {
 		return nil
 	}
 
-	err = client.Retry(c, "svc/traffic-manager port-forward", func(c context.Context) error {
-		return tm.installer.portForwardAndThen(c, kpfArgs, outputScanner, "init-grpc", tm.initGrpc)
-	}, 2*time.Second, 15*time.Second)
-
-	if err != nil && tm.managerErr == nil {
-		tm.managerErr = err
-		close(tm.startup)
-	}
-	return err
+	return client.Retry(c, "svc/traffic-manager port-forward", func(c context.Context) error {
+		return tm.installer.portForwardAndThen(c, kpfArgs, outputScanner, tm.initGrpc)
+	}, 2*time.Second, 6*time.Second)
 }
 
 func (tm *trafficManager) bearerToken() string {
@@ -158,11 +145,6 @@ func (tm *trafficManager) bearerToken() string {
 }
 
 func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err error) {
-	defer func() {
-		tm.managerErr = err
-		close(tm.startup)
-	}()
-
 	ports := portsIf.([]string)
 	sshPort, _ := strconv.Atoi(ports[0])
 	tm.sshPort = int32(sshPort)
@@ -180,6 +162,8 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 		if tc.Err() == context.DeadlineExceeded {
 			err = errors.New("timeout when connecting to traffic-manager")
 		}
+		tm.managerErr = err
+		close(tm.startup)
 		return err
 	}
 
@@ -195,15 +179,18 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 	if err != nil {
 		dlog.Errorf(c, "ArriveAsClient: %v", err)
 		conn.Close()
+		tm.managerErr = err
+		close(tm.startup)
 		return err
 	}
 	tm.managerClient = mClient
 	tm.sessionInfo = si
 
-	g := dgroup.ParentGroup(c)
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("remain", tm.remain)
 	g.Go("intercept-port-forward", tm.workerPortForwardIntercepts)
-	return nil
+	close(tm.startup)
+	return g.Wait()
 }
 
 func (tm *trafficManager) session() *manager.SessionInfo {

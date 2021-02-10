@@ -263,7 +263,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	s.trafficMgr = tmgr
 	// Wait for traffic manager to connect
 	dlog.Info(c, "Waiting for TrafficManager to connect")
-	if err := tmgr.waitUntilStarted(); err != nil {
+	if err := tmgr.waitUntilStarted(c); err != nil {
 		dlog.Errorf(c, "Failed to start traffic-manager: %v", err)
 		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
 		r.ErrorText = err.Error()

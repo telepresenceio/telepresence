@@ -458,7 +458,7 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 
 	// Retry mount in case it gets disconnected
 	err := client.Retry(ctx, "kubectl port-forward to pod", func(ctx context.Context) error {
-		return tm.k8sClient.portForwardAndThen(ctx, pfArgs, outputScanner, "sshfs mount", func(ctx context.Context, rg interface{}) error {
+		return tm.k8sClient.portForwardAndThen(ctx, pfArgs, outputScanner, func(ctx context.Context, rg interface{}) error {
 			localPort := rg.(string)
 			sshArgs := []string{
 				"-F", "none", // don't load the user's config file
