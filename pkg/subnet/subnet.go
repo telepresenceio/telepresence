@@ -30,7 +30,6 @@ func FindAvailableClassC() (*net.IPNet, error) {
 			cidrs = append(cidrs, &ipAndNetwork{ip: ip, network: network})
 		}
 	}
-
 	for i := 0; i < 256; i++ {
 		if found := findChunk(cidrs, 10, i); found >= 0 {
 			return cidr24(10, i, found), nil
@@ -49,7 +48,10 @@ func FindAvailableClassC() (*net.IPNet, error) {
 
 // FindAvailableLoopBackClassC returns the first class C subnet CIDR in the address ranges reserved
 // for private (non-routed) use that isn't in use by an existing network interface.
-func FindAvailableLoopBackClassC() (*net.IPNet, error) {
+//
+// The optional filter function can be used to test if a given network can be used for a specific
+// purpose. If not, the filter should return false.
+func FindAvailableLoopBackClassC(filter func(ip *net.IPNet) bool) (*net.IPNet, error) {
 	addrs, err := interfaceAddrs()
 	if err != nil {
 		return nil, fmt.Errorf("failed to obtain interface addresses: %v", err)
@@ -76,7 +78,10 @@ func FindAvailableLoopBackClassC() (*net.IPNet, error) {
 
 	for i := 0; i < 256; i++ {
 		if found := findChunk(cidrs, 127, i); found >= 0 {
-			return cidr24(127, i, found), nil
+			cidr := cidr24(127, i, found)
+			if filter == nil || filter(cidr) {
+				return cidr, nil
+			}
 		}
 	}
 	return nil, errors.New("no available CIDR")
