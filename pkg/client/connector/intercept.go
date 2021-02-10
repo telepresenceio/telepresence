@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"sync"
@@ -21,6 +23,7 @@ import (
 	"github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/datawire/telepresence2/v2/pkg/client"
 	"github.com/datawire/telepresence2/v2/pkg/client/actions"
+	"github.com/datawire/telepresence2/v2/pkg/client/logging"
 )
 
 func (s *service) interceptStatus() (rpc.InterceptError, string) {
@@ -408,7 +411,22 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 		dlog.Errorf(ctx, "No mount point found for intercept %q", mf.Name)
 		return
 	}
-	defer tm.mountPoints.Delete(mountPoint)
+
+	defer func() {
+		if _, err := os.Stat(mountPoint); !os.IsNotExist(err) {
+			// Attempt a umount regardless. If context is cancelled, the sshfs command might have succeeded with
+			// the mount but still return an error.
+			dlog.Debug(ctx, logging.ShellString("fusermount", []string{"-u", mountPoint}))
+			_ = exec.Command("fusermount", "-u", mountPoint).Run()
+
+			// Remove if empty
+			if err := os.Remove(mountPoint); err != nil {
+				dlog.Errorf(ctx, "removal of %q failed: %v", mountPoint, err)
+			}
+		}
+		tm.mountPoints.Delete(mountPoint)
+		dlog.Infof(ctx, "Removed file system mount %q", mountPoint)
+	}()
 
 	dlog.Infof(ctx, "Mounting file system for intercept %q at %q", mf.Name, mountPoint)
 
@@ -458,12 +476,6 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 				mountPoint,                 // where to mount it
 			}
 
-			// Attempt a umount regardless. If context is cancelled, the sshfs command might have succeeded with
-			// the mount but still return an error.
-			defer func() {
-				_ = dexec.CommandContext(context.Background(), "umount", mountPoint).Run()
-			}()
-
 			err := dexec.CommandContext(ctx, "sshfs", sshArgs...).Run()
 			if err != nil {
 				if ctx.Err() != nil {
@@ -479,7 +491,6 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 	if err != nil {
 		dlog.Error(ctx, err)
 	}
-	dlog.Infof(ctx, "Removed file system mount for intercept")
 }
 
 // removeIntercept removes one intercept by name
