@@ -98,8 +98,8 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 					livePortForwards[pf] = pfCancel
 
 					wg.Add(2)
-					go tm.workerPortForwardIntercept(pfCtx, pf)
-					go tm.workerMountForwardIntercept(pfCtx, mf)
+					go tm.workerPortForwardIntercept(pfCtx, pf, &wg)
+					go tm.workerMountForwardIntercept(pfCtx, mf, &wg)
 				}
 			}
 			for pf, cancel := range livePortForwards {
@@ -340,7 +340,9 @@ func (tm *trafficManager) waitForAgent(ctx context.Context, name string) (*manag
 	}
 }
 
-func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf portForward) {
+func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf portForward, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	dlog.Infof(ctx, "Initiating port-forward manager:%d -> %s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort)
 
 	sshArgs := []string{
@@ -391,7 +393,9 @@ func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf por
 	dlog.Infof(ctx, "Terminated port-forward manager:%d -> %s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort)
 }
 
-func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mountForward) {
+func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mountForward, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	var mountPoint string
 	tm.mountPoints.Range(func(key, value interface{}) bool {
 		if mf.Name == value.(string) {
