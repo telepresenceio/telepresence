@@ -273,14 +273,17 @@ func (tm *trafficManager) remain(c context.Context) error {
 		select {
 		case <-c.Done():
 			_ = tm.clearIntercepts(context.Background())
-			_, err := tm.managerClient.Depart(context.Background(), tm.session())
-			return err
+			_, _ = tm.managerClient.Depart(context.Background(), tm.session())
+			return nil
 		case <-ticker.C:
 			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
 				Session:     tm.session(),
 				BearerToken: tm.bearerToken(),
 			})
 			if err != nil {
+				if c.Err() != nil {
+					err = nil
+				}
 				return err
 			}
 		}
