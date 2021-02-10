@@ -135,7 +135,7 @@ func run(c context.Context, loggingDir, dns, fallback string) error {
 			},
 		},
 	}
-	d.outbound, err = newOutbound("traffic-manager", dns, fallback, false)
+	d.outbound, err = newOutbound(c, "traffic-manager", dns, fallback, false)
 	if err != nil {
 		return err
 	}

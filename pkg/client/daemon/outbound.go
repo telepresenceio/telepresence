@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/datawire/dlib/dcontext"
+	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/datawire/telepresence2/rpc/v2/daemon"
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
@@ -58,19 +59,50 @@ type outbound struct {
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
 //
 // If fallbackIP is empty, it will default to Google DNS.
-func newOutbound(name string, dnsIP, fallbackIP string, noSearch bool) (*outbound, error) {
+func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSearch bool) (*outbound, error) {
 	var localIP net.IP
+
+	// makeIP2 returns a copy where the last byte is 2.
+	makeIP2 := func(ip net.IP) net.IP {
+		ip2 := make(net.IP, len(ip))
+		copy(ip2, ip)
+		ip2[len(ip2)-1] = 2
+		return ip2
+	}
+
 	if runtime.GOOS == "darwin" {
 		// TODO(lukeshu): Unify the GNU/Linux code with this.
-		loopBackCIDR, err := subnet.FindAvailableLoopBackClassC()
+
+		// availabilityFilter checks that the IP can be added as an alias to the loopback device and
+		// that port 53 can be bound to UDP. The alias will remain in place if the bind succeeds.
+		availabilityFilter := func(ipn *net.IPNet) bool {
+			localIP := makeIP2(ipn.IP)
+
+			// Up our loopback device
+			if err := dexec.CommandContext(c, "ifconfig", "lo0", "alias", localIP.String(), "up").Run(); err != nil {
+				return false
+			}
+
+			// Try binding to port 53
+			udpAddr := net.UDPAddr{IP: localIP, Port: 53}
+			lc := net.ListenConfig{}
+			listener, err := lc.ListenPacket(c, "udp", udpAddr.String())
+			if err != nil {
+				// Remove loopback device
+				_ = dexec.CommandContext(c, "ifconfig", "lo0", "-alias", localIP.String()).Run()
+				dlog.Error(c, err)
+				return false
+			}
+			_ = listener.Close()
+			return true
+		}
+
+		loopBackCIDR, err := subnet.FindAvailableLoopBackClassC(availabilityFilter)
 		if err != nil {
 			return nil, err
 		}
-		// Place the daemon DNS & firewall-to-socks servers in the private network at
-		// x.x.x.2.
-		localIP = make(net.IP, len(loopBackCIDR.IP))
-		copy(localIP, loopBackCIDR.IP)
-		localIP[len(localIP)-1] = 2
+		// Place the daemon DNS & firewall-to-socks servers in the private network at x.x.x.2.
+		localIP = makeIP2(loopBackCIDR.IP)
 	}
 
 	ret := &outbound{
