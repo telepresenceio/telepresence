@@ -162,18 +162,30 @@ func (kc *k8sCluster) createWatch(c context.Context, namespace string) (acc *kat
 func (kc *k8sCluster) waitUntil(ctx context.Context, fn func(context.Context) (bool, error)) error {
 	kc.accLock.Lock()
 	defer kc.accLock.Unlock()
+
+	// Ensure that accCond.Wait() is released if ctx is cancelled. A child
+	// context is needed since the broadcast should happen only when the
+	// parent context's Err() isn't nil. The childCtx Err() will never be
+	// nil due to the defer cancel() when this function returns.
+	childCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		<-childCtx.Done()
+		if ctx.Err() != nil {
+			// parent context got cancelled
+			kc.accCond.Broadcast()
+		}
+	}()
+
 	for {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
 		done, err := fn(ctx)
-		if err != nil {
+		if done || err != nil {
 			return err
-		}
-		if done {
-			return nil
 		}
 		kc.accCond.Wait()
+		if err = ctx.Err(); err != nil {
+			return err
+		}
 	}
 }
 
