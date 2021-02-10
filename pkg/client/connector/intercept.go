@@ -232,8 +232,11 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	}
 	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
 
-	ii, err = tm.waitForActiveIntercept(c, ii.Id)
-	if err != nil {
+	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
+	// should become active within a few seconds.
+	c, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	if ii, err = tm.waitForActiveIntercept(c, ii.Id); err != nil {
 		_ = tm.removeIntercept(c, spec.Name)
 		return &rpc.InterceptResult{Error: rpc.InterceptError_FAILED_TO_ESTABLISH, ErrorText: err.Error()}, nil
 	}
@@ -277,9 +280,6 @@ func (tm *trafficManager) addAgent(c context.Context, agentName, agentImageName 
 }
 
 func (tm *trafficManager) waitForActiveIntercept(ctx context.Context, id string) (*manager.InterceptInfo, error) {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
 	dlog.Debugf(ctx, "waiting for intercept id=%q to become active", id)
 	stream, err := tm.managerClient.WatchIntercepts(ctx, tm.session())
 	for err != nil {
