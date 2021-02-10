@@ -15,6 +15,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/datawire/telepresence2/v2/pkg/filelocation"
 )
 
 type dtimeHook struct{}
@@ -43,9 +44,7 @@ func TestInitContext(t *testing.T) {
 
 		// Ensure that we use a temporary log dir
 		logDir = t.TempDir()
-		saveDir := Dir
-		Dir = func() string { return logDir }
-		t.Cleanup(func() { Dir = saveDir })
+		ctx = filelocation.WithAppUserLogDir(ctx, logDir)
 
 		// Ensure that we never consider Stdout to be a terminal
 		saveIsTerminal := IsTerminal

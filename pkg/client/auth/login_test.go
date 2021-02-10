@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +23,7 @@ import (
 	"github.com/datawire/telepresence2/v2/pkg/client"
 	"github.com/datawire/telepresence2/v2/pkg/client/auth"
 	"github.com/datawire/telepresence2/v2/pkg/client/cache"
+	"github.com/datawire/telepresence2/v2/pkg/filelocation"
 )
 
 type MockSaveTokenWrapper struct {
@@ -384,12 +384,8 @@ func TestLoginFlow(t *testing.T) {
 		defer f.MockOauth2Server.TearDown(t)
 		errs := make(chan error)
 
-		// a fake user cache directory (this changes a global temporarily, so test cannot be parallel)
-		tmpDir := t.TempDir()
-		cache.SetUserCacheDirFunc(func() (string, error) {
-			return tmpDir, nil
-		})
-		defer cache.SetUserCacheDirFunc(os.UserCacheDir)
+		// a fake user cache directory
+		ctx = filelocation.WithUserHomeDir(ctx, t.TempDir())
 
 		// when
 		go func() {

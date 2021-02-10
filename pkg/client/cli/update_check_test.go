@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 
@@ -13,7 +12,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/datawire/telepresence2/v2/pkg/client/cache"
+	"github.com/datawire/telepresence2/v2/pkg/filelocation"
 )
 
 func newHttpServer(t *testing.T) *http.Server {
@@ -42,11 +41,7 @@ func Test_newUpdateChecker(t *testing.T) {
 	defer httpServer.Close()
 
 	// a fake user cache directory
-	tmpDir := t.TempDir()
-	cache.SetUserCacheDirFunc(func() (string, error) {
-		return tmpDir, nil
-	})
-	defer cache.SetUserCacheDirFunc(os.UserCacheDir)
+	ctx = filelocation.WithUserHomeDir(ctx, t.TempDir())
 
 	// request handler, returning the latest version
 	lastestVer := semver.MustParse("1.2.3")

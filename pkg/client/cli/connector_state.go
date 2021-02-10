@@ -14,7 +14,7 @@ import (
 	"github.com/datawire/telepresence2/rpc/v2/daemon"
 	"github.com/datawire/telepresence2/rpc/v2/manager"
 	"github.com/datawire/telepresence2/v2/pkg/client"
-	"github.com/datawire/telepresence2/v2/pkg/client/cache"
+	"github.com/datawire/telepresence2/v2/pkg/filelocation"
 )
 
 type connectorState struct {
@@ -67,7 +67,8 @@ func (cs *connectorState) EnsureState() (bool, error) {
 	fmt.Fprintln(cs.cmd.OutOrStdout(), "Connecting to traffic manager...")
 
 	if err = client.WaitUntilSocketAppears("connector", client.ConnectorSocketName, 10*time.Second); err != nil {
-		return false, fmt.Errorf("connector service did not start (see %q for more info)", filepath.Join(cache.CacheDir(), "connector.log"))
+		logDir, _ := filelocation.AppUserLogDir(cs.cmd.Context())
+		return false, fmt.Errorf("connector service did not start (see %q for more info)", filepath.Join(logDir, "connector.log"))
 	}
 	err = cs.connect()
 	if err != nil {

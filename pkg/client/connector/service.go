@@ -23,6 +23,7 @@ import (
 	"github.com/datawire/telepresence2/rpc/v2/manager"
 	"github.com/datawire/telepresence2/v2/pkg/client"
 	"github.com/datawire/telepresence2/v2/pkg/client/logging"
+	"github.com/datawire/telepresence2/v2/pkg/filelocation"
 )
 
 const processName = "connector"
@@ -35,7 +36,7 @@ Launch the Telepresence ` + titleName + `:
     telepresence connect
 
 Examine the ` + titleName + `'s log output in
-    ` + filepath.Join(logging.Dir(), processName+".log") + `
+    ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), processName+".log") + `
 to troubleshoot problems.
 `
 
