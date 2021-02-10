@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
@@ -198,13 +199,12 @@ func isLoggedIn() bool {
 	return token != nil
 }
 
-func (is *interceptState) EnsureState() (bool, error) {
+func (is *interceptState) EnsureState() (acquired bool, err error) {
 	// Fill defaults
 	if is.name == "" {
 		is.name = is.agentName
 	}
 
-	var err error
 	if is.previewEnabled && is.previewSpec.Ingress == nil {
 		ingress, err := is.cs.selectIngress(is.cmd.InOrStdin(), is.cmd.OutOrStdout())
 		if err != nil {
@@ -214,17 +214,39 @@ func (is *interceptState) EnsureState() (bool, error) {
 	}
 
 	mountPoint := ""
-	switch {
-	case strings.EqualFold(is.mount, "false"):
-	case strings.EqualFold(is.mount, "true"):
-		if mountPoint, err = ioutil.TempDir("", "telfs-"); err != nil {
+	if !strings.EqualFold(is.mount, "false") {
+		needBinary := func(prog string) error {
+			if exec.Command(prog, "-V").Run() != nil {
+				return errors.New(prog +
+					` is required in order to mount remote filesystems. ` +
+					`Please install it or use intercept with --mount=false to intercept without mounting`)
+			}
+			return nil
+		}
+		if err = needBinary("sshfs"); err != nil {
 			return false, err
 		}
-	default:
-		if err = os.MkdirAll(is.mount, 0700); err != nil {
+		if err = needBinary("fusermount"); err != nil {
 			return false, err
 		}
-		mountPoint = is.mount
+
+		if strings.EqualFold(is.mount, "true") {
+			if mountPoint, err = ioutil.TempDir("", "telfs-"); err != nil {
+				return false, err
+			}
+		} else {
+			if err = os.MkdirAll(is.mount, 0700); err != nil {
+				return false, err
+			}
+			mountPoint = is.mount
+		}
+
+		defer func() {
+			if !acquired {
+				// remove if empty
+				_ = os.Remove(mountPoint)
+			}
+		}()
 	}
 
 	// Turn that in to a create request
