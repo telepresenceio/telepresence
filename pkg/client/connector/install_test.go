@@ -41,11 +41,14 @@ func TestMain(m *testing.M) {
 	os.Setenv("DTEST_KUBECONFIG", kubeconfig)
 	os.Setenv("KO_DOCKER_REPO", registry)
 	os.Setenv("TELEPRESENCE_REGISTRY", registry)
+
+	var exitCode int
 	dtest.WithMachineLock(func() {
 		capture(nil, "kubectl", "--kubeconfig", kubeconfig, "create", "namespace", namespace)
 		defer capture(nil, "kubectl", "--kubeconfig", kubeconfig, "delete", "namespace", namespace, "--wait=false")
-		os.Exit(m.Run())
+		exitCode = m.Run()
 	})
+	os.Exit(exitCode)
 }
 
 func showArgs(exe string, args []string) {
