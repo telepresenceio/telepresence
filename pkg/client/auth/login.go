@@ -172,7 +172,7 @@ func (l *loginExecutor) handleCallback(cmd *cobra.Command, callback oauth2Callba
 
 	// retrieve access token from callback code
 	token, err := oauth2Config.Exchange(
-		safeContext(cmd),
+		cmd.Context(),
 		callback.Code,
 		oauth2.SetAuthURLParam("code_verifier", pkceVerifier.String()),
 	)
@@ -213,16 +213,6 @@ func (l *loginExecutor) retrieveUserInfo(token *oauth2.Token) error {
 		return err
 	}
 	return l.SaveUserInfoFunc(&userInfo)
-}
-
-// safeContext is to solve an issue with the tests where the Context in
-// cobra.Command can't be set
-func safeContext(cmd *cobra.Command) context.Context {
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return ctx
 }
 
 func startBackgroundServer(callbacks chan oauth2Callback, stderr io.Writer, completionUrl string) (*http.Server, error) {

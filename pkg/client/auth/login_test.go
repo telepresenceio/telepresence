@@ -19,6 +19,7 @@ import (
 	is "gotest.tools/assert/cmp"
 
 	"github.com/datawire/ambassador/pkg/metriton"
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/v2/pkg/client"
 	"github.com/datawire/telepresence2/v2/pkg/client/auth"
 	"github.com/datawire/telepresence2/v2/pkg/client/cache"
@@ -202,7 +203,11 @@ func TestLoginFlow(t *testing.T) {
 	executeLoginFlowWithErrorParam := func(t *testing.T, f *fixture, errorCode, errorDescription string) (*http.Response, string, error) {
 		errs := make(chan error)
 		go func() {
-			errs <- f.Runner.LoginFlow(&cobra.Command{}, []string{})
+			cmd := &cobra.Command{
+				RunE: f.Runner.LoginFlow,
+			}
+			cmd.SetArgs([]string{})
+			errs <- cmd.ExecuteContext(dlog.NewTestContext(t, false))
 		}()
 		rawAuthUrl := <-f.OpenedUrls
 		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
@@ -383,7 +388,11 @@ func TestLoginFlow(t *testing.T) {
 
 		// when
 		go func() {
-			errs <- f.Runner.LoginFlow(&cobra.Command{}, []string{})
+			cmd := &cobra.Command{
+				RunE: f.Runner.LoginFlow,
+			}
+			cmd.SetArgs([]string{})
+			errs <- cmd.ExecuteContext(dlog.NewTestContext(t, false))
 		}()
 		rawAuthUrl := <-f.OpenedUrls
 		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
