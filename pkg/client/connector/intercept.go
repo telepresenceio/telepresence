@@ -75,8 +75,6 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 			if err != nil {
 				break
 			}
-			bts, _ := json.MarshalIndent(snapshot.Intercepts, "", "  ")
-			dlog.Info(ctx, string(bts))
 			snapshotPortForwards := make(map[portForward]struct{})
 			for _, intercept := range snapshot.Intercepts {
 				if intercept.Disposition != manager.InterceptDispositionType_ACTIVE {
@@ -403,6 +401,7 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 		return true
 	})
 	if mountPoint == "" {
+		dlog.Errorf(ctx, "No mount point found for intercept %q", mf.Name)
 		return
 	}
 	defer tm.mountPoints.Delete(mountPoint)
@@ -423,9 +422,14 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 	// kubectl port-forward output scanner that captures the dynamically assigned local port
 	outputScanner := func(sc *bufio.Scanner) interface{} {
 		for sc.Scan() {
-			if rgs := rxPortForward.FindStringSubmatch(sc.Text()); rgs != nil {
+			text := sc.Text()
+			dlog.Debug(ctx, text)
+			if rgs := rxPortForward.FindStringSubmatch(text); rgs != nil {
 				return rgs[1]
 			}
+		}
+		if err := sc.Err(); err != nil {
+			dlog.Error(ctx, err)
 		}
 		return nil
 	}
