@@ -326,7 +326,7 @@ func (cs *connectedSuite) TestD_Intercepted() {
 }
 
 func (cs *connectedSuite) TestE_SuccessfullyInterceptsDeploymentWithProbes() {
-	stdout, stderr := telepresence("intercept", "with-probes", "--port", "9090")
+	stdout, stderr := telepresence("intercept", "--mount", "false", "with-probes", "--port", "9090")
 	cs.Empty(stderr)
 	cs.Contains(stdout, "Using deployment with-probes")
 	stdout, stderr = telepresence("list", "--intercepts")
@@ -371,7 +371,7 @@ func (is *interceptedSuite) SetupSuite() {
 		for i := 0; i < serviceCount; i++ {
 			svc := fmt.Sprintf("hello-%d", i)
 			port := strconv.Itoa(9000 + i)
-			stdout, stderr := telepresence("intercept", svc, "--port", port)
+			stdout, stderr := telepresence("intercept", "--mount", "false", svc, "--port", port)
 			is.Empty(stderr)
 			is.intercepts = append(is.intercepts, svc)
 			is.Contains(stdout, "Using deployment "+svc)
