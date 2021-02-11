@@ -214,7 +214,13 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 	}
 
 	mountPoint := ""
-	if !strings.EqualFold(is.mount, "false") {
+	doMount, err := strconv.ParseBool(is.mount)
+	if err != nil {
+		mountPoint = is.mount
+		doMount = len(mountPoint) > 0
+	}
+
+	if doMount {
 		needBinary := func(prog string) error {
 			if exec.Command(prog, "-V").Run() != nil {
 				return errors.New(prog +
@@ -230,15 +236,14 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 			return false, err
 		}
 
-		if strings.EqualFold(is.mount, "true") {
+		if mountPoint == "" {
 			if mountPoint, err = ioutil.TempDir("", "telfs-"); err != nil {
 				return false, err
 			}
 		} else {
-			if err = os.MkdirAll(is.mount, 0700); err != nil {
+			if err = os.MkdirAll(mountPoint, 0700); err != nil {
 				return false, err
 			}
-			mountPoint = is.mount
 		}
 
 		defer func() {
