@@ -1,9 +1,12 @@
 package connector
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -17,6 +20,7 @@ import (
 	rpc "github.com/datawire/telepresence2/rpc/v2/connector"
 	"github.com/datawire/telepresence2/rpc/v2/manager"
 	"github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/datawire/telepresence2/v2/pkg/client"
 	"github.com/datawire/telepresence2/v2/pkg/client/actions"
 )
 
@@ -45,6 +49,12 @@ type portForward struct {
 	TargetPort  int32
 }
 
+type mountForward struct {
+	Name    string
+	PodName string
+	SshPort int32
+}
+
 func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error {
 	// Don't use a dgroup.Group because:
 	//  1. we don't actually care about tracking errors (we just always retry) or any of
@@ -68,10 +78,18 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 			}
 			snapshotPortForwards := make(map[portForward]struct{})
 			for _, intercept := range snapshot.Intercepts {
+				if intercept.Disposition != manager.InterceptDispositionType_ACTIVE {
+					continue
+				}
 				pf := portForward{
 					ManagerPort: intercept.ManagerPort,
 					TargetHost:  intercept.Spec.TargetHost,
 					TargetPort:  intercept.Spec.TargetPort,
+				}
+				mf := mountForward{
+					Name:    intercept.Spec.Name,
+					PodName: intercept.PodName,
+					SshPort: intercept.SshPort,
 				}
 				snapshotPortForwards[pf] = struct{}{}
 				if _, isLive := livePortForwards[pf]; !isLive {
@@ -80,8 +98,9 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 						fmt.Sprintf("/%d:%s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort))
 					livePortForwards[pf] = pfCancel
 
-					wg.Add(1)
-					go tm.workerPortForwardIntercept(pfCtx, pf)
+					wg.Add(2)
+					go tm.workerPortForwardIntercept(pfCtx, pf, &wg)
+					go tm.workerMountForwardIntercept(pfCtx, mf, &wg)
 				}
 			}
 			for pf, cancel := range livePortForwards {
@@ -109,20 +128,27 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 }
 
 // addIntercept adds one intercept
-func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager.CreateInterceptRequest) (*rpc.InterceptResult, error) {
-	spec := ir.InterceptSpec
+func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
+	spec := &manager.InterceptSpec{
+		Name:       ir.Name,
+		Agent:      ir.AgentName,
+		Mechanism:  ir.MatchMechanism,
+		Additional: ir.MatchAdditional,
+		TargetHost: ir.TargetHost,
+		TargetPort: ir.TargetPort,
+	}
 	intercepts, err := actions.ListMyIntercepts(c, tm.managerClient, tm.session().SessionId)
 	if err != nil {
 		return nil, err
 	}
 	for _, iCept := range intercepts {
-		if iCept.Spec.Name == spec.Name {
+		if iCept.Spec.Name == ir.Name {
 			return &rpc.InterceptResult{
 				Error:     rpc.InterceptError_ALREADY_EXISTS,
 				ErrorText: iCept.Spec.Name,
 			}, nil
 		}
-		if iCept.Spec.TargetPort == spec.TargetPort && iCept.Spec.TargetHost == spec.TargetHost {
+		if iCept.Spec.TargetPort == ir.TargetPort && iCept.Spec.TargetHost == ir.TargetHost {
 			return &rpc.InterceptResult{
 				InterceptInfo: &manager.InterceptInfo{Spec: spec},
 				Error:         rpc.InterceptError_LOCAL_TARGET_IN_USE,
@@ -184,21 +210,41 @@ func (tm *trafficManager) addIntercept(c, longLived context.Context, ir *manager
 		}
 	}
 
-	ir.Session = tm.session()
-	dlog.Debugf(c, "creating intercept %s", ir.InterceptSpec.Name)
-	ii, err := tm.managerClient.CreateIntercept(c, ir)
+	if ir.MountPoint != "" {
+		// Don't overwrite a mount-point for the agent. If a previous mount-point exists, it will
+		// be used.
+		if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, ir.Name); loaded {
+			return &rpc.InterceptResult{
+				InterceptInfo: nil,
+				Error:         rpc.InterceptError_MOUNT_POINT_BUSY,
+				ErrorText:     prev.(string),
+			}, nil
+		}
+	}
+
+	dlog.Debugf(c, "creating intercept %s", ir.Name)
+	ii, err := tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
+		Session:       tm.session(),
+		InterceptSpec: spec,
+	})
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
 		return &rpc.InterceptResult{Error: rpc.InterceptError_TRAFFIC_MANAGER_ERROR, ErrorText: err.Error()}, nil
 	}
 	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
 
-	ii, err = tm.waitForActiveIntercept(c, ii.Id)
-	if err != nil {
+	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
+	// should become active within a few seconds.
+	c, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	if ii, err = tm.waitForActiveIntercept(c, ii.Id); err != nil {
 		_ = tm.removeIntercept(c, spec.Name)
 		return &rpc.InterceptResult{Error: rpc.InterceptError_FAILED_TO_ESTABLISH, ErrorText: err.Error()}, nil
 	}
 	result.InterceptInfo = ii
+	if ir.MountPoint != "" {
+		result.Environment["TELEPRESENCE_ROOT"] = ir.MountPoint
+	}
 
 	return result, nil
 }
@@ -235,9 +281,6 @@ func (tm *trafficManager) addAgent(c context.Context, agentName, agentImageName 
 }
 
 func (tm *trafficManager) waitForActiveIntercept(ctx context.Context, id string) (*manager.InterceptInfo, error) {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
 	dlog.Debugf(ctx, "waiting for intercept id=%q to become active", id)
 	stream, err := tm.managerClient.WatchIntercepts(ctx, tm.session())
 	for err != nil {
@@ -298,7 +341,9 @@ func (tm *trafficManager) waitForAgent(ctx context.Context, name string) (*manag
 	}
 }
 
-func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf portForward) {
+func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf portForward, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	dlog.Infof(ctx, "Initiating port-forward manager:%d -> %s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort)
 
 	sshArgs := []string{
@@ -347,6 +392,95 @@ func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf por
 	}
 
 	dlog.Infof(ctx, "Terminated port-forward manager:%d -> %s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort)
+}
+
+func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mountForward, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	var mountPoint string
+	tm.mountPoints.Range(func(key, value interface{}) bool {
+		if mf.Name == value.(string) {
+			mountPoint = key.(string)
+			return false
+		}
+		return true
+	})
+	if mountPoint == "" {
+		dlog.Errorf(ctx, "No mount point found for intercept %q", mf.Name)
+		return
+	}
+
+	defer func() {
+		if _, err := os.Stat(mountPoint); !os.IsNotExist(err) {
+			// Remove if empty
+			if err := os.Remove(mountPoint); err != nil {
+				dlog.Errorf(ctx, "removal of %q failed: %v", mountPoint, err)
+			}
+		}
+		tm.mountPoints.Delete(mountPoint)
+		dlog.Infof(ctx, "Removed file system mount %q", mountPoint)
+	}()
+
+	dlog.Infof(ctx, "Mounting file system for intercept %q at %q", mf.Name, mountPoint)
+
+	// kubectl port-forward arguments
+	pfArgs := []string{
+		// Port forward to pod
+		mf.PodName,
+
+		// from dynamically allocated local port to the pods sshPort
+		fmt.Sprintf(":%d", mf.SshPort),
+	}
+
+	rxPortForward := regexp.MustCompile(`\AForwarding from \d+\.\d+\.\d+\.\d+:(\d+) `)
+
+	// kubectl port-forward output scanner that captures the dynamically assigned local port
+	outputScanner := func(sc *bufio.Scanner) interface{} {
+		for sc.Scan() {
+			text := sc.Text()
+			dlog.Debug(ctx, text)
+			if rgs := rxPortForward.FindStringSubmatch(text); rgs != nil {
+				return rgs[1]
+			}
+		}
+		if err := sc.Err(); err != nil {
+			dlog.Error(ctx, err)
+		}
+		return nil
+	}
+
+	// Retry mount in case it gets disconnected
+	err := client.Retry(ctx, "kubectl port-forward to pod", func(ctx context.Context) error {
+		return tm.k8sClient.portForwardAndThen(ctx, pfArgs, outputScanner, func(ctx context.Context, rg interface{}) error {
+			localPort := rg.(string)
+			sshArgs := []string{
+				"-F", "none", // don't load the user's config file
+				"-f", // foreground operation
+
+				// connection settings
+				"-C", // compression
+				"-oConnectTimeout=10",
+				"-oStrictHostKeyChecking=no",     // don't bother checking the host key...
+				"-oUserKnownHostsFile=/dev/null", // and since we're not checking it, don't bother remembering it either
+
+				"-p", localPort, // port to connect to
+
+				// mount directives
+				"telepresence@localhost:" + telAppMountPoint, // remote user and what to mount
+				mountPoint, // where to mount it
+			}
+
+			err := dexec.CommandContext(ctx, "sshfs", sshArgs...).Run()
+			if err != nil && ctx.Err() != nil {
+				err = nil
+			}
+			return err
+		})
+	}, 3*time.Second, 6*time.Second)
+
+	if err != nil {
+		dlog.Error(ctx, err)
+	}
 }
 
 // removeIntercept removes one intercept by name

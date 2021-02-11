@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/datawire/ambassador/pkg/dtest"
@@ -62,7 +63,7 @@ func (ts *telepresenceSuite) SetupSuite() {
 	// Remove very verbose output from DTEST initialization
 	log.SetOutput(ioutil.Discard)
 
-	ts.testVersion = "v0.1.2-test"
+	ts.testVersion = fmt.Sprintf("v0.1.%d", os.Getpid())
 	ts.namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
 
 	version.Version = ts.testVersion
@@ -325,7 +326,7 @@ func (cs *connectedSuite) TestD_Intercepted() {
 }
 
 func (cs *connectedSuite) TestE_SuccessfullyInterceptsDeploymentWithProbes() {
-	stdout, stderr := telepresence("intercept", "with-probes", "--port", "9090")
+	stdout, stderr := telepresence("intercept", "--mount", "false", "with-probes", "--port", "9090")
 	cs.Empty(stderr)
 	cs.Contains(stdout, "Using deployment with-probes")
 	stdout, stderr = telepresence("list", "--intercepts")
@@ -343,11 +344,34 @@ func (is *interceptedSuite) SetupSuite() {
 	is.intercepts = make([]string, 0, serviceCount)
 	is.services = make([]*http.Server, 0, serviceCount)
 
+	is.Run("all intercepts ready", func() {
+		rxs := make([]*regexp.Regexp, serviceCount)
+		for i := 0; i < serviceCount; i++ {
+			rxs[i] = regexp.MustCompile(fmt.Sprintf("hello-%d\\s*:\\s+ready to intercept", i))
+		}
+		require.Eventually(is.T(),
+			// condition
+			func() bool {
+				stdout, _ := telepresence("list")
+				is.T().Log(stdout)
+				for i := 0; i < serviceCount; i++ {
+					if !rxs[i].MatchString(stdout) {
+						return false
+					}
+				}
+				return true
+			},
+			15*time.Second,       // waitFor
+			500*time.Millisecond, // polling interval
+			`telepresence list reports all agents`,
+		)
+	})
+
 	is.Run("adding intercepts", func() {
 		for i := 0; i < serviceCount; i++ {
 			svc := fmt.Sprintf("hello-%d", i)
 			port := strconv.Itoa(9000 + i)
-			stdout, stderr := telepresence("intercept", svc, "--port", port)
+			stdout, stderr := telepresence("intercept", "--mount", "false", svc, "--port", port)
 			is.Empty(stderr)
 			is.intercepts = append(is.intercepts, svc)
 			is.Contains(stdout, "Using deployment "+svc)

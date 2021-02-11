@@ -57,12 +57,30 @@ func (kc *k8sCluster) getKubectlCmd(c context.Context, args ...string) *dexec.Cm
 	return dexec.CommandContext(c, "kubectl", kc.getKubectlArgs(args...)...)
 }
 
-func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, thenName string, then func(context.Context) error) error {
-	pf := dexec.CommandContext(c, "kubectl", kc.getKubectlArgs(kpfArgs...)...)
+// portForwardAndThen starts a kubectl port-forward command, passes its output to the given scanner, and waits for
+// the scanner to produce a result. The then function is started in a new goroutine if the scanner returns something
+// other than nil using returned value as an argument. The kubectl port-forward is cancelled when the then function
+// returns.
+func (kc *k8sCluster) portForwardAndThen(
+	c context.Context,
+	kpfArgs []string,
+	outputHandler func(*bufio.Scanner) interface{},
+	then func(context.Context, interface{}) error,
+) error {
+	args := make([]string, 0, len(kc.kubeFlagArgs)+1+len(kpfArgs))
+	args = append(args, kc.kubeFlagArgs...)
+	args = append(args, "port-forward")
+	args = append(args, kpfArgs...)
+
+	c, cancel := context.WithCancel(c)
+	defer cancel()
+
+	pf := dexec.CommandContext(c, "kubectl", args...)
 	out, err := pf.StdoutPipe()
 	if err != nil {
 		return err
 	}
+	defer out.Close()
 
 	// We want this command to keep on running. If it returns an error, then it was unsuccessful.
 	if err = pf.Start(); err != nil {
@@ -75,46 +93,37 @@ func (kc *k8sCluster) portForwardAndThen(c context.Context, kpfArgs []string, th
 
 	// Give port-forward 10 seconds to produce the correct output and spawn the next process
 	timer := time.AfterFunc(10*time.Second, func() {
-		_ = pf.Process.Kill()
+		cancel()
 	})
 
 	// wait group is done when next process starts.
-	wg := sync.WaitGroup{}
-	wg.Add(1)
+	var thenErr error
 	go func() {
-		defer out.Close()
-		ok := false
-		for sc.Scan() {
-			txt := sc.Text()
-			if !ok && strings.HasPrefix(txt, "Forwarding from") {
-				// Forwarding is running. This is what we waited for
-				dlog.Debug(c, txt)
-				ok = true
-				timer.Stop()
-				wg.Done()
-				dgroup.ParentGroup(c).Go(thenName, then)
-			}
-		}
-
-		// let the port forward continue running. It will either be killed by the
-		// timer (if it didn't produce the expected output) or by a context cancel.
-		if err = pf.Wait(); err != nil {
-			if c.Err() != nil {
-				// Context cancelled
-				err = nil
-			} else {
-				err = client.RunError(err)
-				dlog.Errorf(c, "port-forward failed: %v", err)
-			}
-		}
-		if !ok {
-			timer.Stop()
-			wg.Done()
+		if output := outputHandler(sc); output != nil {
+			timer.Stop() // prevent premature context cancellation
+			go func() {
+				// discard other output sent to the scanner
+				for sc.Scan() {
+				}
+			}()
+			thenErr = then(c, output)
+			cancel()
 		}
 	}()
 
-	// Wait for successful start of next process or failure to do port-forward
-	wg.Wait()
+	// let the port forward continue running. It will either be killed by the
+	// timer (if it didn't produce the expected output) or by a context cancel.
+	if err = pf.Wait(); err != nil {
+		switch c.Err() {
+		case context.Canceled:
+			err = thenErr
+		case context.DeadlineExceeded:
+			err = errors.New("port-forward timed out")
+		default:
+			err = client.RunError(err)
+			dlog.Errorf(c, "port-forward failed: %v", err)
+		}
+	}
 	return err
 }
 
@@ -164,18 +173,30 @@ func (kc *k8sCluster) createWatch(c context.Context, namespace string) (acc *kat
 func (kc *k8sCluster) waitUntil(ctx context.Context, fn func(context.Context) (bool, error)) error {
 	kc.accLock.Lock()
 	defer kc.accLock.Unlock()
+
+	// Ensure that accCond.Wait() is released if ctx is cancelled. A child
+	// context is needed since the broadcast should happen only when the
+	// parent context's Err() isn't nil. The childCtx Err() will never be
+	// nil due to the defer cancel() when this function returns.
+	childCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go func() {
+		<-childCtx.Done()
+		if ctx.Err() != nil {
+			// parent context got cancelled
+			kc.accCond.Broadcast()
+		}
+	}()
+
 	for {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
 		done, err := fn(ctx)
-		if err != nil {
+		if done || err != nil {
 			return err
-		}
-		if done {
-			return nil
 		}
 		kc.accCond.Wait()
+		if err = ctx.Err(); err != nil {
+			return err
+		}
 	}
 }
 
@@ -297,7 +318,6 @@ func (kc *k8sCluster) updateTable(c context.Context) {
 	}
 
 	// Send updated table to daemon
-	dlog.Debugf(c, "sending table update for table iptables %s", table.Name)
 	if _, err := kc.daemon.Update(c, &table); err != nil {
 		dlog.Errorf(c, "error posting update to %s: %v", table.Name, err)
 	}
@@ -463,10 +483,16 @@ func trackKCluster(c context.Context, kubeFlagMap map[string]string, daemon daem
 			return nil, err
 		}
 	}
-	// wait until accumulator has produced its first snapshot. A context cancel is guaranteed to also close this channel
-	<-accWait
-
-	return kc, nil
+	// wait until accumulator has produced its first snapshot.
+	select {
+	case <-accWait:
+		return kc, nil
+	case <-time.After(10 * time.Second):
+		// if first snapshot hasn't arrived within 10 seconds, then something is wrong.
+		return nil, errors.New("timeout waiting for information from cluster")
+	case <-c.Done():
+		return nil, c.Err()
+	}
 }
 
 func (kc *k8sCluster) getClusterId(c context.Context) (clusterID string) {

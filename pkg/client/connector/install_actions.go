@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
@@ -14,6 +15,8 @@ import (
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 )
+
+const telAppMountPoint = "/tel_app_mounts"
 
 type action interface {
 	do(obj kates.Object) error
@@ -232,8 +235,24 @@ type addTrafficAgentAction struct {
 	containerName string
 }
 
+func (ata *addTrafficAgentAction) appContainer(dep *kates.Deployment) *kates.Container {
+	cns := dep.Spec.Template.Spec.Containers
+	for i := range cns {
+		cn := &cns[i]
+		if cn.Name == ata.containerName {
+			return cn
+		}
+	}
+	return nil
+}
+
 func (ata *addTrafficAgentAction) do(obj kates.Object) error {
 	dep := obj.(*kates.Deployment)
+	appContainer := ata.appContainer(dep)
+	if appContainer == nil {
+		return fmt.Errorf("unable to find app container %s in deployment %s", ata.containerName, dep.GetName())
+	}
+
 	tplSpec := &dep.Spec.Template.Spec
 	tplSpec.Containers = append(tplSpec.Containers, corev1.Container{
 		Name:  agentContainerName,
@@ -244,12 +263,14 @@ func (ata *addTrafficAgentAction) do(obj kates.Object) error {
 			Protocol:      ata.ContainerPortProto,
 			ContainerPort: 9900,
 		}},
-		Env: ata.agentEnvironment(dep)})
+		Env:          ata.agentEnvironment(dep.GetName(), appContainer),
+		VolumeMounts: ata.agentVolumeMounts(appContainer.VolumeMounts),
+	})
 	return nil
 }
 
-func (ata *addTrafficAgentAction) agentEnvironment(dep *kates.Deployment) []corev1.EnvVar {
-	appEnv := ata.appEnvironment(dep)
+func (ata *addTrafficAgentAction) agentEnvironment(agentName string, appContainer *kates.Container) []corev1.EnvVar {
+	appEnv := ata.appEnvironment(appContainer)
 	env := make([]corev1.EnvVar, len(appEnv), len(appEnv)+3)
 	copy(env, appEnv)
 	return append(env,
@@ -259,7 +280,23 @@ func (ata *addTrafficAgentAction) agentEnvironment(dep *kates.Deployment) []core
 		},
 		corev1.EnvVar{
 			Name:  "AGENT_NAME",
-			Value: dep.GetName(),
+			Value: agentName,
+		},
+		corev1.EnvVar{
+			Name: "AGENT_POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		corev1.EnvVar{
+			Name: "AGENT_NAMESPACE",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.namespace",
+				},
+			},
 		},
 		corev1.EnvVar{
 			Name:  "APP_PORT",
@@ -267,26 +304,29 @@ func (ata *addTrafficAgentAction) agentEnvironment(dep *kates.Deployment) []core
 		})
 }
 
-func (ata *addTrafficAgentAction) appEnvironment(dep *kates.Deployment) []corev1.EnvVar {
-	cns := dep.Spec.Template.Spec.Containers
-	for i := range cns {
-		cn := &cns[i]
-		if cn.Name == ata.containerName {
-			env := cn.Env
-			envCopy := make([]corev1.EnvVar, 0, len(env)+1)
-			for _, ev := range env {
-				evCopy := ev // by value copy
-				evCopy.Name = "TEL_APP_" + ev.Name
-				envCopy = append(envCopy, evCopy)
-			}
-			envCopy = append(envCopy, corev1.EnvVar{
-				Name:  "TELEPRESENCE_CONTAINER",
-				Value: cn.Name,
-			})
-			return envCopy
-		}
+func (ata *addTrafficAgentAction) agentVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
+	if mounts == nil {
+		return nil
 	}
-	return nil
+	agentMounts := make([]corev1.VolumeMount, len(mounts))
+	for i, mount := range mounts {
+		mount.MountPath = filepath.Join(telAppMountPoint, mount.MountPath)
+		agentMounts[i] = mount
+	}
+	return agentMounts
+}
+
+func (ata *addTrafficAgentAction) appEnvironment(appContainer *kates.Container) []corev1.EnvVar {
+	envCopy := make([]corev1.EnvVar, len(appContainer.Env)+1)
+	for i, ev := range appContainer.Env {
+		ev.Name = "TEL_APP_" + ev.Name
+		envCopy[i] = ev
+	}
+	envCopy[len(appContainer.Env)] = corev1.EnvVar{
+		Name:  "TELEPRESENCE_CONTAINER",
+		Value: appContainer.Name,
+	}
+	return envCopy
 }
 
 func (ata *addTrafficAgentAction) explainDo(_ kates.Object, out io.Writer) {

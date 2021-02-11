@@ -19,15 +19,19 @@ type state struct {
 	appHost     string
 	appPort     int32
 	chosenID    string
+	podName     string
+	sshPort     int32
 }
 
-func NewState(forwarder *Forwarder, managerHost string) State {
+func NewState(forwarder *Forwarder, managerHost, podName string, sshPort int32) State {
 	host, port := forwarder.Target()
 	return &state{
 		forwarder:   forwarder,
 		managerHost: managerHost,
 		appHost:     host,
 		appPort:     port,
+		podName:     podName,
+		sshPort:     sshPort,
 	}
 }
 
@@ -82,6 +86,8 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 				reviews = append(reviews, &manager.ReviewInterceptRequest{
 					Id:          cept.Id,
 					Disposition: manager.InterceptDispositionType_ACTIVE,
+					PodName:     s.podName,
+					SshPort:     s.sshPort,
 				})
 			case chosenIntercept == nil:
 				// We don't have an intercept in play, so choose this one. All
@@ -95,6 +101,8 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 				reviews = append(reviews, &manager.ReviewInterceptRequest{
 					Id:          cept.Id,
 					Disposition: manager.InterceptDispositionType_ACTIVE,
+					PodName:     s.podName,
+					SshPort:     s.sshPort,
 				})
 			default:
 				// We already have an intercept in play, so reject this one.

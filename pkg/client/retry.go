@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dutil"
 )
 
 const defaultRetryDelay = 100 * time.Millisecond
@@ -18,7 +17,7 @@ const defaultMaxDelay = 3 * time.Second
 //  Delay - initial delay, i.e. the delay between the first and the second call.
 //  MaxDelay - maximum delay between calling the functions (delay will never grow beyond this value)
 //  MaxTime - maximum time before giving up.
-func Retry(c context.Context, text string, f func(context.Context) error, durations ...time.Duration) (err error) {
+func Retry(c context.Context, text string, f func(context.Context) error, durations ...time.Duration) error {
 	delay := defaultRetryDelay
 	maxDelay := defaultMaxDelay
 	maxTime := time.Duration(0)
@@ -44,41 +43,28 @@ func Retry(c context.Context, text string, f func(context.Context) error, durati
 		maxDelay = delay
 	}
 
-	done := make(chan bool)
 	if maxTime > 0 {
 		var cancel context.CancelFunc
-		c, cancel = context.WithCancel(c)
-		go func() {
-			select {
-			case <-done:
-			case <-c.Done():
-			case <-time.After(maxTime):
-				err = fmt.Errorf("retry timed out after: %s", maxTime.String())
-				cancel()
-			}
-		}()
+		c, cancel = context.WithTimeout(c, maxTime)
+		defer cancel()
 	}
 
-	defer func() {
-		if pe := dutil.PanicToError(recover()); pe != nil {
-			err = pe
-		}
-		close(done)
-	}()
-
-	for retry := 0; ; retry++ {
-		funcErr := f(c)
-		if funcErr == nil {
+	for {
+		err := f(c)
+		if err == nil {
 			// success
 			return nil
 		}
 
 		// Logging at higher log levels should be done in the called function
-		dlog.Debugf(c, "%s waiting %s before retrying after error: %v", text, delay.String(), funcErr)
+		dlog.Debugf(c, "%s waiting %s before retrying after error: %v", text, delay.String(), err)
 
 		select {
 		case <-c.Done():
-			return fmt.Errorf("%s was unable to succeed", text)
+			if c.Err() == context.DeadlineExceeded {
+				err = fmt.Errorf("retry timed out after: %s", maxTime.String())
+			}
+			return err
 		case <-time.After(delay):
 		}
 		delay *= 2

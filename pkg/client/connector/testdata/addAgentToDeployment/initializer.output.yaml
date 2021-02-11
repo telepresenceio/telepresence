@@ -50,6 +50,14 @@ deployment:
               value: debug
             - name: AGENT_NAME
               value: sample-app
+            - name: AGENT_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: AGENT_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: APP_PORT
               value: "3000"
             image: localhost:5000/tel2:0.1.2-test

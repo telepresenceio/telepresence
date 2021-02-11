@@ -397,6 +397,8 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 		if intercept.Disposition == rpc.InterceptDispositionType_WAITING {
 			intercept.Disposition = rIReq.Disposition
 			intercept.Message = rIReq.Message
+			intercept.PodName = rIReq.PodName
+			intercept.SshPort = rIReq.SshPort
 		}
 	})
 

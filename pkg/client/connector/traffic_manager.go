@@ -1,10 +1,14 @@
 package connector
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"os/user"
+	"regexp"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -37,14 +41,6 @@ type trafficManager struct {
 
 	sessionInfo *manager.SessionInfo // sessionInfo returned by the traffic-manager
 
-	// apiPort is a local TCP port number that the userd uses internally that gets forwarded to
-	// the gRPC port on the manager Pod.
-	//
-	// FIXME(lukeshu): apiPort is exposed to the rest of the machine because we use separate
-	// `kubectl port-forward` process; it should go away by way of moving the port-forward to
-	// happen in the userd process.
-	apiPort int32
-
 	// sshPort is a local TCP port number that the userd uses internally that gets forwarded to
 	// the SSH port on the manager Pod.
 	//
@@ -54,6 +50,9 @@ type trafficManager struct {
 	sshPort int32
 
 	installer *installer
+
+	// Map of desired mount points for intercepts
+	mountPoints sync.Map
 }
 
 // newTrafficManager returns a TrafficManager resource for the given
@@ -73,55 +72,68 @@ func newTrafficManager(c context.Context, env client.Env, cluster *k8sCluster, i
 	if err != nil {
 		return nil, errors.Wrap(err, "new installer")
 	}
-	localAPIPort, err := getFreePort()
-	if err != nil {
-		return nil, errors.Wrap(err, "get free port for API")
-	}
-	localSSHPort, err := getFreePort()
-	if err != nil {
-		return nil, errors.Wrap(err, "get free port for ssh")
-	}
 	tm := &trafficManager{
 		env:         env,
 		k8sClient:   cluster,
 		installer:   ti,
-		apiPort:     localAPIPort,
-		sshPort:     localSSHPort,
 		installID:   installID,
 		startup:     make(chan bool),
 		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host),
 	}
 
-	dgroup.ParentGroup(c).Go("traffic-manager", tm.start)
+	dgroup.ParentGroup(c).Go("traffic-manager", tm.run)
 	return tm, nil
 }
 
-func (tm *trafficManager) waitUntilStarted() error {
-	<-tm.startup
-	return tm.managerErr
+func (tm *trafficManager) waitUntilStarted(c context.Context) error {
+	select {
+	case <-c.Done():
+		return c.Err()
+	case <-tm.startup:
+		return tm.managerErr
+	case <-time.After(60 * time.Second):
+		return errors.New("timeout establishing connection to traffic-manager")
+	}
 }
 
-func (tm *trafficManager) start(c context.Context) error {
+func (tm *trafficManager) run(c context.Context) error {
 	err := tm.installer.ensureManager(c, tm.env)
 	if err != nil {
 		tm.managerErr = err
 		close(tm.startup)
 		return err
 	}
-	kpfArgs := []string{
-		"port-forward",
-		"svc/traffic-manager",
-		fmt.Sprintf("%d:%d", tm.sshPort, ManagerPortSSH),
-		fmt.Sprintf("%d:%d", tm.apiPort, ManagerPortHTTP)}
 
-	err = client.Retry(c, "svc/traffic-manager port-forward", func(c context.Context) error {
-		return tm.installer.portForwardAndThen(c, kpfArgs, "init-grpc", tm.initGrpc)
-	}, 2*time.Second, 15*time.Second, time.Minute)
-	if err != nil && tm.managerErr == nil {
-		tm.managerErr = err
-		close(tm.startup)
+	kpfArgs := []string{
+		"svc/traffic-manager",
+		fmt.Sprintf(":%d", ManagerPortSSH),
+		fmt.Sprintf(":%d", ManagerPortHTTP)}
+
+	// Scan port-forward output and grab the dynamically allocated ports
+	rxPortForward := regexp.MustCompile(`\AForwarding from \d+\.\d+\.\d+\.\d+:(\d+) -> (\d+)`)
+	outputScanner := func(sc *bufio.Scanner) interface{} {
+		var sshPort, apiPort string
+		for sc.Scan() {
+			if rxr := rxPortForward.FindStringSubmatch(sc.Text()); rxr != nil {
+				toPort, _ := strconv.Atoi(rxr[2])
+				if toPort == ManagerPortSSH {
+					sshPort = rxr[1]
+					dlog.Debugf(c, "traffic-manager ssh-port %s", sshPort)
+				} else if toPort == ManagerPortHTTP {
+					apiPort = rxr[1]
+					dlog.Debugf(c, "traffic-manager api-port %s", apiPort)
+				}
+				if sshPort != "" && apiPort != "" {
+					return []string{sshPort, apiPort}
+				}
+			}
+		}
+		return nil
 	}
-	return err
+
+	return client.Retry(c, "svc/traffic-manager port-forward", func(c context.Context) error {
+		return tm.installer.portForwardAndThen(c, kpfArgs, outputScanner, tm.initGrpc)
+	}, 2*time.Second, 6*time.Second)
 }
 
 func (tm *trafficManager) bearerToken() string {
@@ -132,18 +144,17 @@ func (tm *trafficManager) bearerToken() string {
 	return token.AccessToken
 }
 
-func (tm *trafficManager) initGrpc(c context.Context) (err error) {
-	defer func() {
-		tm.managerErr = err
-		close(tm.startup)
-	}()
+func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err error) {
+	ports := portsIf.([]string)
+	sshPort, _ := strconv.Atoi(ports[0])
+	tm.sshPort = int32(sshPort)
 
 	// First check. Establish connection
 	tc, cancel := context.WithTimeout(c, connectTimeout)
 	defer cancel()
 
 	var conn *grpc.ClientConn
-	conn, err = grpc.DialContext(tc, fmt.Sprintf("127.0.0.1:%d", tm.apiPort),
+	conn, err = grpc.DialContext(tc, "127.0.0.1:"+ports[1],
 		grpc.WithInsecure(),
 		grpc.WithNoProxy(),
 		grpc.WithBlock())
@@ -151,6 +162,8 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 		if tc.Err() == context.DeadlineExceeded {
 			err = errors.New("timeout when connecting to traffic-manager")
 		}
+		tm.managerErr = err
+		close(tm.startup)
 		return err
 	}
 
@@ -166,15 +179,18 @@ func (tm *trafficManager) initGrpc(c context.Context) (err error) {
 	if err != nil {
 		dlog.Errorf(c, "ArriveAsClient: %v", err)
 		conn.Close()
+		tm.managerErr = err
+		close(tm.startup)
 		return err
 	}
 	tm.managerClient = mClient
 	tm.sessionInfo = si
 
-	g := dgroup.ParentGroup(c)
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("remain", tm.remain)
 	g.Go("intercept-port-forward", tm.workerPortForwardIntercepts)
-	return nil
+	close(tm.startup)
+	return g.Wait()
 }
 
 func (tm *trafficManager) session() *manager.SessionInfo {
@@ -244,14 +260,17 @@ func (tm *trafficManager) remain(c context.Context) error {
 		select {
 		case <-c.Done():
 			_ = tm.clearIntercepts(context.Background())
-			_, err := tm.managerClient.Depart(context.Background(), tm.session())
-			return err
+			_, _ = tm.managerClient.Depart(context.Background(), tm.session())
+			return nil
 		case <-ticker.C:
 			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
 				Session:     tm.session(),
 				BearerToken: tm.bearerToken(),
 			})
 			if err != nil {
+				if c.Err() != nil {
+					err = nil
+				}
 				return err
 			}
 		}

@@ -17,7 +17,7 @@ service Connector {
   rpc Connect(ConnectRequest) returns (ConnectInfo);
 
   // Adds a deployment intercept
-  rpc CreateIntercept(telepresence.manager.CreateInterceptRequest) returns (InterceptResult);
+  rpc CreateIntercept(CreateInterceptRequest) returns (InterceptResult);
 
   // Deactivates and removes an existent deployment intercept.
   rpc RemoveIntercept(telepresence.manager.RemoveInterceptRequest2) returns (InterceptResult);
@@ -86,6 +86,17 @@ message UninstallResult {
   string error_text = 1;
 }
 
+message CreateInterceptRequest {
+  manager.SessionInfo session = 1;
+  string name = 2;
+  string agent_name = 3;
+  string match_mechanism = 4;
+  string match_additional = 5;
+  string target_host = 6;
+  int32 target_port = 7;
+  string mount_point = 8;
+}
+
 // InterceptError is a common error type used by the intercept call family (add,
 // remove, list, available).
 enum InterceptError {
@@ -102,6 +113,7 @@ enum InterceptError {
   FAILED_TO_ESTABLISH = 10;
   FAILED_TO_REMOVE = 11;
   NOT_FOUND = 12;
+  MOUNT_POINT_BUSY = 13;
 }
 
 message ListRequest {

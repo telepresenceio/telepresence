@@ -146,14 +146,14 @@ func (s *service) Connect(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.Co
 	return s.connect(c, cr), nil
 }
 
-func (s *service) CreateIntercept(c context.Context, ir *manager.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
 	ie, is := s.interceptStatus()
 	if ie != rpc.InterceptError_UNSPECIFIED {
 		return &rpc.InterceptResult{Error: ie, ErrorText: is}, nil
 	}
 	c = s.callCtx(c, "CreateIntercept")
 	defer func() { err = callRecovery(c, recover(), err) }()
-	return s.trafficMgr.addIntercept(c, s.ctx, ir)
+	return s.trafficMgr.addIntercept(c, ir)
 }
 
 func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
@@ -263,7 +263,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	s.trafficMgr = tmgr
 	// Wait for traffic manager to connect
 	dlog.Info(c, "Waiting for TrafficManager to connect")
-	if err := tmgr.waitUntilStarted(); err != nil {
+	if err := tmgr.waitUntilStarted(c); err != nil {
 		dlog.Errorf(c, "Failed to start traffic-manager: %v", err)
 		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
 		r.ErrorText = err.Error()
