@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
@@ -14,6 +15,8 @@ import (
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dlog"
 )
+
+const telAppMountPoint = "/tel_app_mounts"
 
 type action interface {
 	do(obj kates.Object) error
@@ -261,8 +264,8 @@ func (ata *addTrafficAgentAction) do(obj kates.Object) error {
 			ContainerPort: 9900,
 		}},
 		Env:          ata.agentEnvironment(dep.GetName(), appContainer),
-		VolumeMounts: appContainer.VolumeMounts})
-
+		VolumeMounts: ata.agentVolumeMounts(appContainer.VolumeMounts),
+	})
 	return nil
 }
 
@@ -299,6 +302,18 @@ func (ata *addTrafficAgentAction) agentEnvironment(agentName string, appContaine
 			Name:  "APP_PORT",
 			Value: strconv.Itoa(int(ata.ContainerPortNumber)),
 		})
+}
+
+func (ata *addTrafficAgentAction) agentVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
+	if mounts == nil {
+		return nil
+	}
+	agentMounts := make([]corev1.VolumeMount, len(mounts))
+	for i, mount := range mounts {
+		mount.MountPath = filepath.Join(telAppMountPoint, mount.MountPath)
+		agentMounts[i] = mount
+	}
+	return agentMounts
 }
 
 func (ata *addTrafficAgentAction) appEnvironment(appContainer *kates.Container) []corev1.EnvVar {

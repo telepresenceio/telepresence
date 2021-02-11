@@ -472,8 +472,8 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 				"-p", localPort, // port to connect to
 
 				// mount directives
-				"telepresence@localhost:/", // remote user and what to mount
-				mountPoint,                 // where to mount it
+				"telepresence@localhost:" + telAppMountPoint, // remote user and what to mount
+				mountPoint, // where to mount it
 			}
 
 			err := dexec.CommandContext(ctx, "sshfs", sshArgs...).Run()

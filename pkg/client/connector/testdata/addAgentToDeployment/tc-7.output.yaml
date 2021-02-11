@@ -39,6 +39,9 @@ deployment:
           resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: "/usr/share/nginx/html"
+            name: hello-storage
         - args:
           - agent
           env:
@@ -68,6 +71,9 @@ deployment:
           resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: "/tel_app_mounts/usr/share/nginx/html"
+              name: hello-storage
         dnsPolicy: ClusterFirst
         restartPolicy: Always
         schedulerName: default-scheduler
