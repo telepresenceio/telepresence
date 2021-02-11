@@ -232,9 +232,6 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 		if err = needBinary("sshfs"); err != nil {
 			return false, err
 		}
-		if err = needBinary("fusermount"); err != nil {
-			return false, err
-		}
 
 		if mountPoint == "" {
 			if mountPoint, err = ioutil.TempDir("", "telfs-"); err != nil {
