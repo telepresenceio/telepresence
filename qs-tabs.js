@@ -74,48 +74,23 @@ export default function SimpleTabs() {
 
         {/*macOS install instructions*/}
 
-        <CodeBlock>
-          {
-            '# 1. Download the latest binary (~60 MB):' + 
-            '\n' +
-            'sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/latest/telepresence -o /usr/local/bin/telepresence' +
-            '\n \n' +
-            '# 2. Make the binary executable:' +
-            '\n' +
-            'sudo chmod a+x /usr/local/bin/telepresence' +
-            '\n \n' +
-            '# 3. Login with the CLI:' +
-            '\n' +
-            'telepresence login'
-          }
-        </CodeBlock>
-
-If you receive an error saying the developer cannot be verified, open <b>System Preferences → Security & Privacy → General</b>. Click <b>Open Anyway</b> at the bottom to bypass the security block. Then retry the telepresence login command.
+      1. Download the latest binary(~60 MB):<br/>
+      <code>sudo curl -fL https://app.getambassador.io/download/tel2/darwin/amd64/latest/telepresence -o /usr/local/bin/telepresence</code><br/>
+      2. Make the binary executable:<br/>
+      <code>sudo chmod a+x /usr/local/bin/telepresence</code>
 
       </TabPanel>
-
 
       <TabPanel value={value} index={1}>
 
         {/*Linux install instructions*/}
         
-        <CodeBlock>
-          {
-            '# 1. Download the latest binary (~60 MB):' + 
-            '\n' +
-            'sudo curl -fL https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence -o /usr/local/bin/telepresence' +
-            '\n \n' +
-            '# 2. Make the binary executable:' +
-            '\n' +
-            'sudo chmod a+x /usr/local/bin/telepresence' +
-            '\n \n' +
-            '# 3. Login with the CLI:' +
-            '\n' +
-            'telepresence login'
-          }
-        </CodeBlock>
+      1. Download the latest binary(~50 MB):<br/>
+      <code>sudo curl -fL https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence -o /usr/local/bin/telepresence</code><br/>
+      2. Make the binary executable:<br/>
+      <code>sudo chmod a+x /usr/local/bin/telepresence</code> 
 
-      </TabPanel>
+        </TabPanel>
 
       <TabPanel value={value} index={2}>
 
