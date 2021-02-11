@@ -62,16 +62,16 @@ type outbound struct {
 func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSearch bool) (*outbound, error) {
 	var localIP net.IP
 
-	// makeIP2 returns a copy where the last byte is 2.
-	makeIP2 := func(ip net.IP) net.IP {
-		ip2 := make(net.IP, len(ip))
-		copy(ip2, ip)
-		ip2[len(ip2)-1] = 2
-		return ip2
-	}
-
 	if runtime.GOOS == "darwin" {
 		// TODO(lukeshu): Unify the GNU/Linux code with this.
+
+		// makeIP2 returns a copy where the last byte is 2.
+		makeIP2 := func(ip net.IP) net.IP {
+			ip2 := make(net.IP, len(ip))
+			copy(ip2, ip)
+			ip2[len(ip2)-1] = 2
+			return ip2
+		}
 
 		// availabilityFilter checks that the IP can be added as an alias to the loopback device and
 		// that port 53 can be bound to UDP. The alias will remain in place if the bind succeeds.
