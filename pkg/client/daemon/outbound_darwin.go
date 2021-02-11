@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
@@ -155,11 +154,6 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 			dlog.Error(c, err)
 			return
 		}
-	}
-
-	// Up our loopback device
-	if err = dexec.CommandContext(c, "ifconfig", "lo0", "alias", o.localIP.String(), "up").Run(); err != nil {
-		return err
 	}
 
 	defer func() {
