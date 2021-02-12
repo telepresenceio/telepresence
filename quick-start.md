@@ -72,8 +72,8 @@ Your local workstation may not have the compute or memory resources necessary to
   ```
   $ kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-nodejs/main/k8s-config/edgey-corp-web-app-no-mapping.yaml
     
-    deployment.apps/dataprocessingnodeservice created
-    service/dataprocessingnodeservice created
+    deployment.apps/dataprocessingservice created
+    service/dataprocessingservice created
     ...  
 
   ```
@@ -89,7 +89,7 @@ Your local workstation may not have the compute or memory resources necessary to
     traffic-manager-f8c64686-8f4jn               1/1     Running   0          2m47s
     verylargedatastore-855c8b8789-z8nhs          1/1     Running   0          78s
     verylargejavaservice-7dfddbc95c-696br        1/1     Running   0          78s
-    dataprocessingnodeservice-5f6bfdcf7b-qvd27   1/1     Running   0          79s
+    dataprocessingservice-5f6bfdcf7b-qvd27       1/1     Running   0          79s
   ```
 
 3. Once all the pods are in a `Running` status, stop the `watch` command with `Ctrl+C`.  Then go to the frontend service in your browser at [http://verylargejavaservice:8080](http://verylargejavaservice:8080).
@@ -99,7 +99,7 @@ Your local workstation may not have the compute or memory resources necessary to
 <Alert severity="success"><b>Congratulations, you can now access services running in your cluster by name from your laptop!</b></Alert>
 
 ## 4. Set up a local development environment
-You will now download the repo containing the services' code and run the DataProcessingNodeService service locally. This version of the code has the UI color set to <span style="color:blue" class="bold">blue</span> instead of <span style="color:green" class="bold">green</span>.
+You will now download the repo containing the services' code and run the DataProcessingService service locally. This version of the code has the UI color set to <span style="color:blue" class="bold">blue</span> instead of <span style="color:green" class="bold">green</span>.
 
 1. Clone the web app’s GitHub repo:  
 `git clone https://github.com/datawire/edgey-corp-nodejs.git`
@@ -112,8 +112,8 @@ You will now download the repo containing the services' code and run the DataPro
     ...
   ```
 
-2. Change into the repo directory, then into DataProcessingNodeService:  
-`cd edgey-corp-nodejs/DataProcessingNodeService/`
+2. Change into the repo directory, then into DataProcessingService:  
+`cd edgey-corp-nodejs/DataProcessingService/`
 
 3. Install the Node dependencies and start the Node server:  
 `npm install && npm start`
@@ -122,7 +122,7 @@ You will now download the repo containing the services' code and run the DataPro
   $ npm install && npm start
     
     ...
-    Welcome to the DataProcessingNodeService!
+    Welcome to the DataProcessingService!
     { _: [] }
     Server running on port 3000
   ```
@@ -141,15 +141,15 @@ You will now download the repo containing the services' code and run the DataPro
 <Alert severity="success"><b>Victory, your local Node server is running a-ok!</b></Alert>
 
 ## 5. Intercept all traffic to the service
-Next, we’ll create an intercept. An intercept is a rule that tells Telepresence where to send traffic. In this example, we will send all traffic destined for the DataProcessingNodeService to the version of the DataProcessingNodeService running locally instead: 
+Next, we’ll create an intercept. An intercept is a rule that tells Telepresence where to send traffic. In this example, we will send all traffic destined for the DataProcessingService to the version of the DataProcessingService running locally instead: 
 
 1. Start the intercept with the `intercept` command, setting the service name and port:  
-`telepresence intercept dataprocessingnodeservice --port 3000`
+`telepresence intercept dataprocessingservice --port 3000`
 
   ```
-  $ telepresence intercept dataprocessingnodeservice --port 3000
+  $ telepresence intercept dataprocessingservice --port 3000
     
-    Using deployment dataprocessingnodeservice
+    Using deployment dataprocessingservice
     intercepted
         State       : ACTIVE
         Destination : 127.0.0.1:3000
@@ -158,12 +158,12 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
 
 2. Go to the frontend service again in your browser at [http://verylargejavaservice:8080](http://verylargejavaservice:8080). You will now see the <span style="color:blue" class="bold">blue</span> elements in the app.  
 
-<Alert severity="success"><b>The frontend’s request to DataProcessingNodeService is being intercepted and rerouted to the Node server on your laptop!</b></Alert>
+<Alert severity="success"><b>The frontend’s request to DataProcessingService is being intercepted and rerouted to the Node server on your laptop!</b></Alert>
 
 ## 6. Make a code change
-We’ve now set up a local development environment for the DataProcessingNodeService, and we’ve created an intercept that sends traffic in the cluster to our local environment. We can now combine these two concepts to show how we can quickly make and test changes.
+We’ve now set up a local development environment for the DataProcessingService, and we’ve created an intercept that sends traffic in the cluster to our local environment. We can now combine these two concepts to show how we can quickly make and test changes.
 
-1. Open `edgey-corp-nodejs/DataProcessingNodeService/app.js` in your editor and change line 6 from `blue` to `orange`. Save the file and the Node server will auto reload.
+1. Open `edgey-corp-nodejs/DataProcessingService/app.js` in your editor and change line 6 from `blue` to `orange`. Save the file and the Node server will auto reload.
 
 2. Now, visit [http://verylargejavaservice:8080](http://verylargejavaservice:8080) again in your browser. You will now see the orange elements in the application.
 
@@ -173,7 +173,7 @@ We’ve now set up a local development environment for the DataProcessingNodeSer
 Create preview URLs to do selective intercepts, meaning only traffic coming from the preview URL will be intercepted, so you can easily share the services you’re working on with your teammates.
 
 1. Clean up your previous intercept by removing it:  
-`telepresence leave dataprocessingnodeservice`
+`telepresence leave dataprocessingservice`
 
 2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:  
 `telepresence login`  
@@ -189,24 +189,24 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
   ```
 
 3. Start the intercept again:  
-`telepresence intercept dataprocessingnodeservice --port 3000`  
+`telepresence intercept dataprocessingservice --port 3000`  
   You will be asked for your ingress; specify the front end service: `verylargejavaservice.default`  
   Then when asked for the port, type `8080`.  
   Finally, type `n` for “Use TLS”.
 
   ```
-    $ telepresence intercept dataprocessingnodeservice --port 3000
+    $ telepresence intercept dataprocessingservice --port 3000
       
       Confirm the ingress to use for preview URL access
       Ingress service.namespace ? verylargejavaservice.default
       Port ? 8080
       Use TLS y/n ? n
-      Using deployment dataprocessingnodeservice
+      Using deployment dataprocessingservice
       intercepted
           State       : ACTIVE
           Destination : 127.0.0.1:3000
           Intercepting: HTTP requests that match all of:
-            header("x-telepresence-intercept-id") ~= regexp("86cb4a70-c7e1-1138-89c2-d8fed7a46cae:dataprocessingnodeservice")
+            header("x-telepresence-intercept-id") ~= regexp("86cb4a70-c7e1-1138-89c2-d8fed7a46cae:dataprocessingservice")
           Preview URL : https://<random-subdomain>.preview.edgestack.me  
   ```
 
