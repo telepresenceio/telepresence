@@ -136,6 +136,9 @@ message PreviewSpec {
 message InterceptInfo {
   InterceptSpec spec = 1;
 
+  string id = 5;
+  SessionInfo client_session = 6;
+
   // manager_port is the port on the manager that the agent should
   // send intercepted traffic to.  This gets set by the manager when
   // the intercept is first created.
@@ -148,12 +151,15 @@ message InterceptInfo {
   string preview_domain = 7;
   PreviewSpec preview_spec = 9;
 
+  // The current intercept state; a status code and a human-friendly
+  // message to go along with the status code.  These may be set
+  // manager itself, or may be set by the agent's call to
+  // ReviewIntercept.
   InterceptDispositionType disposition = 3;
   string message = 4;
-  string id = 5;
-  SessionInfo client_session = 6;
 
-  // pod name and ssh port to use when doing sshfs mounts
+  // The Pod name and SSH port to use when doing sshfs mounts.  These
+  // are set by the agent's call to ReviewIntercept.
   string pod_name = 10;
   int32 ssh_port = 11;
 }
