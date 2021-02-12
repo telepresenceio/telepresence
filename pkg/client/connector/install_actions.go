@@ -271,9 +271,9 @@ func (ata *addTrafficAgentAction) do(obj kates.Object) error {
 
 func (ata *addTrafficAgentAction) agentEnvironment(agentName string, appContainer *kates.Container) []corev1.EnvVar {
 	appEnv := ata.appEnvironment(appContainer)
-	env := make([]corev1.EnvVar, len(appEnv), len(appEnv)+3)
+	env := make([]corev1.EnvVar, len(appEnv), len(appEnv)+6)
 	copy(env, appEnv)
-	return append(env,
+	env = append(env,
 		corev1.EnvVar{
 			Name:  "LOG_LEVEL",
 			Value: "debug",
@@ -302,6 +302,13 @@ func (ata *addTrafficAgentAction) agentEnvironment(agentName string, appContaine
 			Name:  "APP_PORT",
 			Value: strconv.Itoa(int(ata.ContainerPortNumber)),
 		})
+	if len(appContainer.VolumeMounts) > 0 {
+		env = append(env, corev1.EnvVar{
+			Name:  "APP_MOUNTS",
+			Value: telAppMountPoint,
+		})
+	}
+	return env
 }
 
 func (ata *addTrafficAgentAction) agentVolumeMounts(mounts []corev1.VolumeMount) []corev1.VolumeMount {
