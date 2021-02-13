@@ -68,16 +68,6 @@ func managerImageName(env client.Env) string {
 	return managerImage
 }
 
-func agentImageName(ctx context.Context, env client.Env) string {
-	if env.AgentImage != "" {
-		return env.AgentImage
-	}
-	if preferred, err := systemaGetPreferredAgentImageName(ctx, env); err == nil && preferred != "" {
-		return preferred
-	}
-	return managerImageName(env)
-}
-
 func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error) {
 	svc := &kates.Service{
 		TypeMeta: kates.TypeMeta{

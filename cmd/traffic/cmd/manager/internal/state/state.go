@@ -121,6 +121,9 @@ func (s *State) unlockedCheckAgentsForIntercept(intercept *rpc.InterceptInfo) (e
 		return intercept.Disposition, intercept.Message
 	case rpc.InterceptDispositionType_AGENT_ERROR:
 		// Continue through; the error states of this function take precedence.
+	case rpc.InterceptDispositionType_BAD_ARGS:
+		// Don't overwrite this error state.
+		return intercept.Disposition, intercept.Message
 	}
 
 	// main ////////////////////////////////////////////////////////////////
@@ -384,8 +387,6 @@ func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) (*rpc.In
 			SessionId: sessionID,
 		},
 	}
-
-	// [REDACTED]
 
 	// Wrap each potential-state-change in a
 	//

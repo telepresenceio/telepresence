@@ -124,14 +124,15 @@ func DescribeIntercept(ii *manager.InterceptInfo, debug bool) string {
 	fields = append(fields, kv{"Destination",
 		net.JoinHostPort(ii.Spec.TargetHost, fmt.Sprintf("%d", ii.Spec.TargetPort))})
 
+	if debug {
+		fields = append(fields, kv{"Mechanism", ii.Spec.Mechanism})
+		fields = append(fields, kv{"Mechanism Args", fmt.Sprintf("%q", ii.Spec.MechanismArgs)})
+	}
 	fields = append(fields, kv{"Intercepting", func() string {
-		switch ii.Spec.Mechanism {
-		case "tcp":
-			return "all connections"
-		// [REDACTED]
-		default:
-			return fmt.Sprintf("using unknown mechanism %q", ii.Spec.Mechanism)
+		if ii.MechanismArgsDesc == "" {
+			return fmt.Sprintf("using mechanism=%q with args=%q", ii.Spec.Mechanism, ii.Spec.MechanismArgs)
 		}
+		return ii.MechanismArgsDesc
 	}()})
 
 	if ii.PreviewDomain != "" {

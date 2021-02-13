@@ -182,7 +182,6 @@ func TestConnect(t *testing.T) {
 		Client:     testClients["alice"].Name,
 		Agent:      testAgents["hello"].Name,
 		Mechanism:  "tcp",
-		Additional: "",
 		TargetHost: "asdf",
 		TargetPort: 9876,
 	}

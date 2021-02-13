@@ -205,7 +205,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	var result *rpc.InterceptResult
 	if found == nil {
-		if result = tm.addAgent(c, spec.Namespace, spec.Agent, agentImageName(c, tm.env)); result.Error != rpc.InterceptError_UNSPECIFIED {
+		if result = tm.addAgent(c, spec.Namespace, spec.Agent, ir.AgentImage); result.Error != rpc.InterceptError_UNSPECIFIED {
 			return result, nil
 		}
 	} else {
