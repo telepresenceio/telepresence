@@ -255,20 +255,21 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 	}
 
 	// Turn that in to a create request
-	ir := connector.CreateInterceptRequest{
-		Session:        is.cs.info.SessionInfo,
-		Name:           is.name,
-		Namespace:      is.namespace,
-		AgentName:      is.agentName,
-		MatchMechanism: is.matchMechanism,
-		// [REDACTED],
-		TargetHost: "127.0.0.1",
-		TargetPort: int32(is.port),
+	ir := &connector.CreateInterceptRequest{
+		Spec: &manager.InterceptSpec{
+			Name:      is.name,
+			Agent:     is.agentName,
+			Namespace: is.namespace,
+			Mechanism: is.matchMechanism,
+			// [REDACTED],
+			TargetHost: "127.0.0.1",
+			TargetPort: int32(is.port),
+		},
 		MountPoint: mountPoint,
 	}
 
 	// Submit the request
-	r, err := is.cs.connectorClient.CreateIntercept(is.cmd.Context(), &ir)
+	r, err := is.cs.connectorClient.CreateIntercept(is.cmd.Context(), ir)
 	if err != nil {
 		return false, err
 	}

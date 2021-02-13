@@ -91,15 +91,11 @@ message UninstallResult {
 }
 
 message CreateInterceptRequest {
-  manager.SessionInfo session = 1;
-  string name = 2;
-  string agent_name = 3;
-  string namespace = 9;
-  string match_mechanism = 4;
-  string match_additional = 5;
-  string target_host = 6;
-  int32 target_port = 7;
-  string mount_point = 8;
+  // No need to set spec.client; the connector will fill that in for
+  // you.
+  telepresence.manager.InterceptSpec spec = 1;
+  string mount_point = 2;
+  string agent_image = 3;
 }
 
 // InterceptError is a common error type used by the intercept call family (add,
