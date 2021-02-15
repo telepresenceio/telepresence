@@ -153,7 +153,7 @@ func Test_findTrafficManager_notPresent(t *testing.T) {
 	version.Version = "v0.0.0-bogus"
 	defer func() { version.Version = testVersion }()
 
-	if dep := ti.findDeployment(managerAppName); dep != nil {
+	if _, err := ti.findDeployment(ctx, managerAppName); err == nil {
 		t.Fatal("expected find to not find deployment")
 	}
 }
@@ -193,7 +193,7 @@ func Test_findTrafficManager_present(t *testing.T) {
 			return err
 		}
 		for i := 0; i < 50; i++ {
-			if dep := ti.findDeployment(managerAppName); dep != nil {
+			if _, err := ti.findDeployment(c, managerAppName); err == nil {
 				return nil
 			}
 			time.Sleep(100 * time.Millisecond)

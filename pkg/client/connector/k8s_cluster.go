@@ -24,6 +24,14 @@ import (
 
 const connectTimeout = 5 * time.Second
 
+type nameMeta struct {
+	Name string `json:"name"`
+}
+
+type objName struct {
+	nameMeta `json:"metadata"`
+}
+
 // k8sCluster is a Kubernetes cluster reference
 type k8sCluster struct {
 	// Things for bypassing kates
@@ -38,11 +46,10 @@ type k8sCluster struct {
 
 	// Current snapshot.
 	// These fields (except for accLock/accCond) get set by acc.Update().
-	accLock     sync.Mutex
-	accCond     *sync.Cond
-	Deployments []*kates.Deployment
-	Pods        []*kates.Pod
-	Services    []*kates.Service
+	accLock  sync.Mutex
+	accCond  *sync.Cond
+	Pods     []*kates.Pod
+	Services []*kates.Service
 }
 
 // getKubectlArgs returns the kubectl command arguments to run a
@@ -159,45 +166,10 @@ func (kc *k8sCluster) createWatch(c context.Context, namespace string) (acc *kat
 			Kind:      "service",
 		},
 		kates.Query{
-			Name:      "Deployments",
-			Namespace: namespace,
-			Kind:      "deployment",
-		},
-		kates.Query{
 			Name:      "Pods",
 			Namespace: namespace,
 			Kind:      "pod",
 		}), nil
-}
-
-func (kc *k8sCluster) waitUntil(ctx context.Context, fn func(context.Context) (bool, error)) error {
-	kc.accLock.Lock()
-	defer kc.accLock.Unlock()
-
-	// Ensure that accCond.Wait() is released if ctx is cancelled. A child
-	// context is needed since the broadcast should happen only when the
-	// parent context's Err() isn't nil. The childCtx Err() will never be
-	// nil due to the defer cancel() when this function returns.
-	childCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	go func() {
-		<-childCtx.Done()
-		if ctx.Err() != nil {
-			// parent context got cancelled
-			kc.accCond.Broadcast()
-		}
-	}()
-
-	for {
-		done, err := fn(ctx)
-		if done || err != nil {
-			return err
-		}
-		kc.accCond.Wait()
-		if err = ctx.Err(); err != nil {
-			return err
-		}
-	}
 }
 
 func (kc *k8sCluster) startWatches(c context.Context, namespace string, accWait chan<- struct{}) error {
@@ -323,36 +295,30 @@ func (kc *k8sCluster) updateTable(c context.Context) {
 	}
 }
 
-// deploymentNames  returns the names found in the current namespace of the last deployments
-// snapshot produced by the accumulator
-func (kc *k8sCluster) deploymentNames() []string {
-	kc.accLock.Lock()
-	depNames := make([]string, 0)
-	for _, dep := range kc.Deployments {
-		if dep.Namespace == kc.Namespace {
-			depNames = append(depNames, dep.Name)
-		}
+// deploymentNames  returns the names of all deployments found in the given Namespace
+func (kc *k8sCluster) deploymentNames(c context.Context) ([]string, error) {
+	var objNames []objName
+	if err := kc.client.List(c, kates.Query{Kind: "Deployment"}, &objNames); err != nil {
+		return nil, err
 	}
-	kc.accLock.Unlock()
-	return depNames
+	names := make([]string, len(objNames))
+	for i, n := range objNames {
+		names[i] = n.Name
+	}
+	return names, nil
 }
 
-// findDeployment finds a deployment with the given name in the clusters namespace and returns
-// either a copy of that deployment or nil if no such deployment could be found.
-func (kc *k8sCluster) findDeployment(name string) *kates.Deployment {
-	kc.accLock.Lock()
-	defer kc.accLock.Unlock()
-	return kc.findDeploymentUnlocked(name)
-}
-
-// findDeploymentUnlocked is like findDeployment, but assumes that kc.accLock is already held.
-func (kc *k8sCluster) findDeploymentUnlocked(name string) *kates.Deployment {
-	for _, dep := range kc.Deployments {
-		if dep.Namespace == kc.Namespace && dep.Name == name {
-			return dep.DeepCopy()
-		}
+// findDeployment returns a deployment with the given name in the given namespace or nil
+// if no such deployment could be found.
+func (kc *k8sCluster) findDeployment(c context.Context, name string) (*kates.Deployment, error) {
+	dep := &kates.Deployment{
+		TypeMeta:   kates.TypeMeta{Kind: "Deployment"},
+		ObjectMeta: kates.ObjectMeta{Name: name},
 	}
-	return nil
+	if err := kc.client.Get(c, dep, dep); err != nil {
+		return nil, err
+	}
+	return dep, nil
 }
 
 // findSvc finds a service with the given name in the clusters namespace and returns

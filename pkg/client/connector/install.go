@@ -8,16 +8,19 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/blang/semver"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	errors2 "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	"github.com/datawire/telepresence2/rpc/v2/manager"
 	"github.com/datawire/telepresence2/v2/pkg/client"
 )
@@ -130,11 +133,15 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 		ai := ai // pin it
 		go func() {
 			defer wg.Done()
-			agent := ki.findDeployment(ai.Name)
-			if agent != nil {
-				if err := ki.undoDeploymentMods(c, agent); err != nil {
+			agent, err := ki.findDeployment(c, ai.Name)
+			if err != nil {
+				if !errors2.IsNotFound(err) {
 					addError(err)
 				}
+				return
+			}
+			if err = ki.undoDeploymentMods(c, agent); err != nil {
+				addError(err)
 			}
 		}()
 	}
@@ -331,13 +338,12 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 var agentNotFound = errors.New("no such agent")
 
 func (ki *installer) ensureAgent(c context.Context, name, portName, agentImageName string) error {
-	var (
-		dep *kates.Deployment
-		svc *kates.Service
-	)
-	dep = ki.findDeployment(name)
-	if dep == nil {
-		return agentNotFound
+	dep, err := ki.findDeployment(c, name)
+	if err != nil {
+		if errors2.IsNotFound(err) {
+			err = agentNotFound
+		}
+		return err
 	}
 	var agentContainer *kates.Container
 	for i := range dep.Spec.Template.Spec.Containers {
@@ -347,6 +353,8 @@ func (ki *installer) ensureAgent(c context.Context, name, portName, agentImageNa
 			break
 		}
 	}
+
+	var svc *kates.Service
 
 	switch {
 	case agentContainer == nil:
@@ -387,20 +395,44 @@ func (ki *installer) ensureAgent(c context.Context, name, portName, agentImageNa
 			return err
 		}
 	}
+	return ki.waitForApply(c, name, dep)
+}
 
-	origGeneration := dep.ObjectMeta.Generation
-	return ki.waitUntil(c, func(c context.Context) (bool, error) {
-		dep := ki.findDeploymentUnlocked(name)
-		if dep == nil {
-			return false, agentNotFound
+func (ki *installer) waitForApply(c context.Context, name string, dep *kates.Deployment) error {
+	c, cancel := context.WithTimeout(c, 1*time.Minute)
+	defer cancel()
+
+	origGeneration := int64(0)
+	if dep != nil {
+		origGeneration = dep.ObjectMeta.Generation
+	}
+
+	timeout := fmt.Errorf("timeout while waiting for install/update of %s", name)
+	for {
+		dtime.SleepWithContext(c, time.Second)
+		if c.Err() != nil {
+			return timeout
 		}
+
+		dep, err := ki.findDeployment(c, name)
+		if err != nil {
+			if c.Err() != nil {
+				err = timeout
+			}
+			return err
+		}
+
 		deployed := dep.ObjectMeta.Generation >= origGeneration &&
 			dep.Status.ObservedGeneration == dep.ObjectMeta.Generation &&
 			(dep.Spec.Replicas == nil || dep.Status.UpdatedReplicas >= *dep.Spec.Replicas) &&
 			dep.Status.UpdatedReplicas == dep.Status.Replicas &&
 			dep.Status.AvailableReplicas == dep.Status.Replicas
-		return deployed, nil
-	})
+
+		if deployed {
+			dlog.Debugf(c, "deployment %s successfully applied", name)
+			return nil
+		}
+	}
 }
 
 func getAnnotation(obj kates.Object, data interface{}) (bool, error) {
@@ -644,29 +676,34 @@ func (ki *installer) ensureManager(c context.Context, env client.Env) error {
 		}
 	}
 
-	dep := ki.findDeployment(managerAppName)
-	if dep == nil {
-		err = ki.createManagerDeployment(c, env)
-	} else {
-		imageName := managerImageName(env)
-		cns := dep.Spec.Template.Spec.Containers
-		upToDate := false
-		for i := range cns {
-			cn := &cns[i]
-			if cn.Image == imageName {
-				upToDate = true
-				break
+	dep, err := ki.findDeployment(c, managerAppName)
+	if err != nil {
+		if errors2.IsNotFound(err) {
+			err = ki.createManagerDeployment(c, env)
+			if err == nil {
+				err = ki.waitForApply(c, managerAppName, nil)
 			}
 		}
-		if upToDate {
-			dlog.Infof(c, "The traffic-manager in namespace %s is up-to-date. Image: %s", ki.Namespace, managerImageName(env))
-		} else {
-			_, err = ki.updateDeployment(c, env, dep)
-		}
-	}
-	if err != nil {
 		return err
 	}
 
-	return nil
+	imageName := managerImageName(env)
+	cns := dep.Spec.Template.Spec.Containers
+	upToDate := false
+	for i := range cns {
+		cn := &cns[i]
+		if cn.Image == imageName {
+			upToDate = true
+			break
+		}
+	}
+	if upToDate {
+		dlog.Infof(c, "%s is up-to-date. Image: %s", managerAppName, managerImageName(env))
+	} else {
+		_, err = ki.updateDeployment(c, env, dep)
+		if err == nil {
+			err = ki.waitForApply(c, managerAppName, dep)
+		}
+	}
+	return err
 }

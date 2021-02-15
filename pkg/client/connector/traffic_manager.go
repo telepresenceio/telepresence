@@ -217,7 +217,12 @@ func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, filter rpc
 		aMap = map[string]*manager.AgentInfo{}
 	}
 	depInfos := make([]*rpc.DeploymentInfo, 0)
-	for _, depName := range tm.k8sClient.deploymentNames() {
+	depNames, err := tm.k8sClient.deploymentNames(ctx)
+	if err != nil {
+		dlog.Error(ctx, err)
+		return &rpc.DeploymentInfoSnapshot{}
+	}
+	for _, depName := range depNames {
 		iCept, ok := iMap[depName]
 		if !ok && filter <= rpc.ListRequest_INTERCEPTS {
 			continue
@@ -229,8 +234,8 @@ func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, filter rpc
 		reason := ""
 		if agent == nil && iCept == nil {
 			// Check if interceptable
-			dep := tm.k8sClient.findDeployment(depName)
-			if dep == nil {
+			dep, err := tm.installer.findDeployment(ctx, depName)
+			if err != nil {
 				// Removed from snapshot since the name slice was obtained
 				continue
 			}
