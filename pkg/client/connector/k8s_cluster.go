@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/spf13/pflag"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/discovery"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dexec"
@@ -23,7 +23,7 @@ import (
 	"github.com/datawire/telepresence2/v2/pkg/client"
 )
 
-const connectTimeout = 5 * time.Second
+const connectTimeout = 10 * time.Second
 
 type nameMeta struct {
 	Name string `json:"name"`
@@ -35,11 +35,7 @@ type objName struct {
 
 // k8sCluster is a Kubernetes cluster reference
 type k8sCluster struct {
-	// Things for bypassing kates
-	Server       string
-	Context      string
-	Namespace    string
-	kubeFlagArgs []string
+	*k8sConfig
 
 	// Main
 	client *kates.Client
@@ -56,18 +52,6 @@ type k8sCluster struct {
 	Namespaces []*objName
 }
 
-// getKubectlArgs returns the kubectl command arguments to run a
-// kubectl command with this cluster.
-func (kc *k8sCluster) getKubectlArgs(args ...string) []string {
-	return append(kc.kubeFlagArgs, args...)
-}
-
-// getKubectlCmd returns a Cmd that runs kubectl with the given arguments and
-// the appropriate environment to talk to the cluster
-func (kc *k8sCluster) getKubectlCmd(c context.Context, args ...string) *dexec.Cmd {
-	return dexec.CommandContext(c, "kubectl", kc.getKubectlArgs(args...)...)
-}
-
 // portForwardAndThen starts a kubectl port-forward command, passes its output to the given scanner, and waits for
 // the scanner to produce a result. The then function is started in a new goroutine if the scanner returns something
 // other than nil using returned value as an argument. The kubectl port-forward is cancelled when the then function
@@ -78,8 +62,8 @@ func (kc *k8sCluster) portForwardAndThen(
 	outputHandler func(*bufio.Scanner) interface{},
 	then func(context.Context, interface{}) error,
 ) error {
-	args := make([]string, 0, len(kc.kubeFlagArgs)+1+len(kpfArgs))
-	args = append(args, kc.kubeFlagArgs...)
+	args := make([]string, 0, len(kc.flagArgs)+1+len(kpfArgs))
+	args = append(args, kc.flagArgs...)
 	args = append(args, "port-forward")
 	args = append(args, kpfArgs...)
 
@@ -92,6 +76,9 @@ func (kc *k8sCluster) portForwardAndThen(
 		return err
 	}
 	defer out.Close()
+
+	errBuf := bytes.Buffer{}
+	pf.Stderr = &errBuf
 
 	// We want this command to keep on running. If it returns an error, then it was unsuccessful.
 	if err = pf.Start(); err != nil {
@@ -120,6 +107,9 @@ func (kc *k8sCluster) portForwardAndThen(
 			thenErr = then(c, output)
 			cancel()
 		}
+		if errBuf.Len() > 0 {
+			dlog.Error(c, errBuf.String())
+		}
 	}()
 
 	// let the port forward continue running. It will either be killed by the
@@ -138,22 +128,23 @@ func (kc *k8sCluster) portForwardAndThen(
 	return err
 }
 
-// check for cluster connectivity
+// check uses a non-caching DiscoveryClientConfig to retrieve the server version
 func (kc *k8sCluster) check(c context.Context) error {
 	c, cancel := context.WithTimeout(c, connectTimeout)
 	defer cancel()
-	cmd := kc.getKubectlCmd(c, "get", "po", "ohai", "--ignore-not-found")
-	stderr := bytes.Buffer{}
-	cmd.Stderr = &stderr
-	err := cmd.Run()
+	dc, err := discovery.NewDiscoveryClientForConfig(kc.config)
+	if err != nil {
+		return err
+	}
+	info, err := dc.ServerVersion()
 	if err != nil {
 		if c.Err() == context.DeadlineExceeded {
 			err = errors.New("timeout when testing cluster connectivity")
-		} else if msg := stderr.String(); len(msg) > 0 {
-			err = errors.New(msg)
 		}
+		return err
 	}
-	return err
+	dlog.Infof(c, "Server version %s", info.GitVersion)
+	return nil
 }
 
 func (kc *k8sCluster) createWatch(c context.Context, namespace string) (acc *kates.Accumulator, err error) {
@@ -392,8 +383,7 @@ func (kc *k8sCluster) findAllSvcByType(svcType v1.ServiceType) []*kates.Service 
 	return svcCopies
 }
 
-func (kc *k8sCluster) namespaceExists(namespace string) bool {
-	exists := false
+func (kc *k8sCluster) namespaceExists(namespace string) (exists bool) {
 	kc.accLock.Lock()
 	for _, n := range kc.lastNamespaces {
 		if n == namespace {
@@ -405,93 +395,29 @@ func (kc *k8sCluster) namespaceExists(namespace string) bool {
 	return exists
 }
 
-func newKCluster(c context.Context, kubeFlagMap map[string]string, daemon daemon.DaemonClient) (*k8sCluster, error) {
-	kubeFlagArgs := make([]string, 0, len(kubeFlagMap))
-	kubeFlagConfig := kates.NewConfigFlags(false)
-	kubeFlagSet := pflag.NewFlagSet("", 0)
-	kubeFlagConfig.AddFlags(kubeFlagSet)
-	for k, v := range kubeFlagMap {
-		kubeFlagArgs = append(kubeFlagArgs, "--"+k+"="+v)
-		if err := kubeFlagSet.Set(k, v); err != nil {
-			err = errors.Wrapf(err, "processing kubectl flag %q", "--"+k+"="+v)
-			return nil, err
-		}
-	}
-
-	// TODO: All shell-outs to kubectl here should go through the kates client.
-	ctxName := kubeFlagMap["context"]
-	if ctxName == "" {
-		cmd := dexec.CommandContext(c, "kubectl", append(kubeFlagArgs, "config", "current-context")...)
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			return nil, fmt.Errorf("kubectl config current-context: %v", client.RunError(err))
-		}
-		ctxName = strings.TrimSpace(string(output))
-	}
-
-	namespace := kubeFlagMap["namespace"]
-	if namespace == "" {
-		nsQuery := fmt.Sprintf("jsonpath={.contexts[?(@.name==\"%s\")].context.namespace}", ctxName)
-		cmd := dexec.CommandContext(c, "kubectl", append(kubeFlagArgs, "config", "view", "-o", nsQuery)...)
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			return nil, fmt.Errorf("kubectl config view ns failed: %v", client.RunError(err))
-		}
-		namespace = strings.TrimSpace(string(output))
-		if namespace == "" { // This is what kubens does
-			namespace = "default"
-		}
-	}
-
-	kc, err := kates.NewClientFromConfigFlags(kubeFlagConfig)
+func newKCluster(c context.Context, kubeFlags *k8sConfig, daemon daemon.DaemonClient) (*k8sCluster, error) {
+	// TODO: Add constructor to kates that takes an additional restConfig argument to prevent that kates recreates it.
+	kc, err := kates.NewClientFromConfigFlags(kubeFlags.configFlags)
 	if err != nil {
 		return nil, err
 	}
 
 	ret := &k8sCluster{
-		Context:      ctxName,
-		Namespace:    namespace,
-		kubeFlagArgs: kubeFlagArgs,
-
-		client: kc,
-		daemon: daemon,
+		k8sConfig: kubeFlags,
+		client:    kc,
+		daemon:    daemon,
 	}
 	ret.accCond = sync.NewCond(&ret.accLock)
 
 	if err := ret.check(c); err != nil {
 		return nil, fmt.Errorf("initial cluster check failed: %v", client.RunError(err))
 	}
-
-	server := kubeFlagMap["server"]
-	if server == "" {
-		// By using --minify, we prune all clusters not relevant to the current context, so
-		// we can just use "[0]" instead of correlating the cluster index with the context.
-		//
-		// In order to have a helpful error message when the context doesn't exist (so
-		// .clusters==[]), we do this *after* the .check().
-		srvQuery := "jsonpath={.clusters[0].cluster.server}"
-		cmd := dexec.CommandContext(c, "kubectl", append(kubeFlagArgs, "config", "view", "--minify", "-o", srvQuery)...)
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			return nil, fmt.Errorf("kubectl config view server: %v", client.RunError(err))
-		}
-		server = strings.TrimSpace(string(output))
-	}
-	ret.Server = server
-
 	return ret, nil
 }
 
-func (kc *k8sCluster) actualNamespace(namespace string) string {
-	if namespace == "" {
-		namespace = kc.Namespace
-	}
-	return namespace
-}
-
 // trackKCluster tracks connectivity to a cluster
-func trackKCluster(c context.Context, kubeFlagMap map[string]string, daemon daemon.DaemonClient) (*k8sCluster, error) {
-	kc, err := newKCluster(c, kubeFlagMap, daemon)
+func trackKCluster(c context.Context, kubeFlags *k8sConfig, daemon daemon.DaemonClient) (*k8sCluster, error) {
+	kc, err := newKCluster(c, kubeFlags, daemon)
 	if err != nil {
 		return nil, fmt.Errorf("k8s client create failed: %v", err)
 	}

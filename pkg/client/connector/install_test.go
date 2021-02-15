@@ -152,7 +152,11 @@ func Test_findTrafficManager_notPresent(t *testing.T) {
 	managerNamespace = managerTestNamespace
 
 	ctx := dlog.NewTestContext(t, false)
-	kc, err := newKCluster(ctx, map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, nil)
+	cfgAndFlags, err := newConfigAndFlags(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kc, err := newKCluster(ctx, cfgAndFlags, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +194,11 @@ func Test_findTrafficManager_present(t *testing.T) {
 		// Kill sibling go-routines
 		defer cancel()
 
-		kc, err := newKCluster(c, map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, nil)
+		cfgAndFlags, err := newConfigAndFlags(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
+		if err != nil {
+			return err
+		}
+		kc, err := newKCluster(c, cfgAndFlags, nil)
 		if err != nil {
 			return err
 		}
@@ -238,7 +246,11 @@ func Test_ensureTrafficManager_notPresent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kc, err := newKCluster(c, map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, nil)
+	cfgAndFlags, err := newConfigAndFlags(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kc, err := newKCluster(c, cfgAndFlags, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,6 +320,7 @@ func TestAddAgentToDeployment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for tcName, tc := range testcases {
 		tc := tc
 		t.Run(tcName, func(t *testing.T) {

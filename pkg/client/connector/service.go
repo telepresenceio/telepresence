@@ -192,7 +192,6 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		r.ClusterOk = true
 		r.ClusterContext = s.cluster.Context
 		r.ClusterServer = s.cluster.Server
-		r.ClusterNamespace = s.cluster.Namespace
 		r.ClusterId = s.cluster.getClusterId(c)
 		if s.bridge != nil {
 			r.BridgeOk = s.bridge.check(c)
@@ -203,10 +202,21 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		r.IngressInfos = s.cluster.detectIngressBehavior()
 	}
 
+	configAndFlags, err := newConfigAndFlags(cr.Kubeflags)
+	if err != nil {
+		r.Error = rpc.ConnectInfo_CLUSTER_FAILED
+		r.ErrorText = err.Error()
+		return r
+	}
+
 	// Sanity checks
 	if s.cluster != nil {
 		setStatus()
-		r.Error = rpc.ConnectInfo_ALREADY_CONNECTED
+		if s.cluster.equals(configAndFlags) {
+			r.Error = rpc.ConnectInfo_ALREADY_CONNECTED
+		} else {
+			r.Error = rpc.ConnectInfo_MUST_RESTART
+		}
 		return r
 	}
 
@@ -230,7 +240,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	})
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	cluster, err := trackKCluster(s.ctx, cr.Kubeflags, s.daemon)
+	cluster, err := trackKCluster(s.ctx, configAndFlags, s.daemon)
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
 		r.Error = rpc.ConnectInfo_CLUSTER_FAILED
@@ -264,7 +274,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	}
 	s.managerProxy.SetClient(tmgr.managerClient)
 
-	dlog.Infof(c, "Starting traffic-manager bridge in context %s, namespace %s", cluster.Context, cluster.Namespace)
+	dlog.Infof(c, "Starting traffic-manager bridge in context %s", cluster.Context)
 	br := newBridge(s.daemon, tmgr.sshPort)
 	err = br.start(s.ctx)
 	if err != nil {

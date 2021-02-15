@@ -47,6 +47,7 @@ message ConnectInfo {
     CLUSTER_FAILED = 4;
     BRIDGE_FAILED = 5;
     TRAFFIC_MANAGER_FAILED = 6;
+    MUST_RESTART = 7;
   }
   ErrType error = 1;
   string error_text = 2;

@@ -150,7 +150,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			defer os.Setenv("KUBECONFIG", kubeConfig)
 			os.Setenv("KUBECONFIG", "/dev/null")
 			stdout, stderr := telepresence("connect")
-			ts.Contains(stderr, "kubectl config current-context")
+			ts.Contains(stderr, "kubeconfig has no context definition")
 			ts.Contains(stdout, "Launching Telepresence Daemon")
 			ts.Contains(stdout, "Daemon quitting")
 		})
