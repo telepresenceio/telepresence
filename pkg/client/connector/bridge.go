@@ -30,19 +30,17 @@ const (
 // chosen.
 const ProxyRedirPort = "1234"
 
-// teleproxy holds the configuration for a Teleproxy
+// bridge holds the configuration for a Teleproxy
 type bridge struct {
-	sshPort   int32
-	namespace string
-	daemon    daemon.DaemonClient
-	cancel    context.CancelFunc
+	sshPort int32
+	daemon  daemon.DaemonClient
+	cancel  context.CancelFunc
 }
 
-func newBridge(namespace string, daemon daemon.DaemonClient, sshPort int32) *bridge {
+func newBridge(daemon daemon.DaemonClient, sshPort int32) *bridge {
 	return &bridge{
-		namespace: namespace,
-		daemon:    daemon,
-		sshPort:   sshPort,
+		daemon:  daemon,
+		sshPort: sshPort,
 	}
 }
 
@@ -50,36 +48,15 @@ func (br *bridge) start(c context.Context) error {
 	if err := checkKubectl(c); err != nil {
 		return err
 	}
-	c, br.cancel = context.WithCancel(c)
-
 	g := dgroup.ParentGroup(c)
-	g.Go(K8sSSHWorker, br.sshWorker)
-	g.Go(K8sBridgeWorker, br.bridgeWorker)
+	g.Go("bridge ssh tunnel", br.sshWorker)
 	return nil
 }
 
-func (br *bridge) bridgeWorker(c context.Context) error {
-	// setup kubernetes bridge
-	dlog.Infof(c, "kubernetes namespace=%s", br.namespace)
-	paths := []string{
-		br.namespace + ".svc.cluster.local.",
-		"svc.cluster.local.",
-		"cluster.local.",
-		"",
-	}
-	dlog.Infof(c, "Setting DNS search path: %s", paths[0])
-	_, err := br.daemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths})
-	if err != nil {
-		if c.Err() != nil {
-			err = nil
-		} else {
-			err = fmt.Errorf("error setting up search path: %v", err)
-		}
-	}
-	return err
-}
-
 func (br *bridge) sshWorker(c context.Context) error {
+	c, br.cancel = context.WithCancel(c)
+	defer br.cancel()
+
 	// XXX: probably need some kind of keepalive check for ssh, first
 	// curl after wakeup seems to trigger detection of death
 	ssh := dexec.CommandContext(c, "ssh",

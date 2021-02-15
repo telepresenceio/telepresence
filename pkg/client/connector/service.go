@@ -274,7 +274,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	s.managerProxy.SetClient(tmgr.managerClient)
 
 	dlog.Infof(c, "Starting traffic-manager bridge in context %s, namespace %s", cluster.Context, cluster.Namespace)
-	br := newBridge(cluster.Namespace, s.daemon, tmgr.sshPort)
+	br := newBridge(s.daemon, tmgr.sshPort)
 	err = br.start(s.ctx)
 	if err != nil {
 		dlog.Errorf(c, "Failed to start traffic-manager bridge: %v", err)

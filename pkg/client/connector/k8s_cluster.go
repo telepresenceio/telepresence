@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -44,12 +45,15 @@ type k8sCluster struct {
 	client *kates.Client
 	daemon daemon.DaemonClient // for DNS updates
 
+	lastNamespaces []string
+
 	// Current snapshot.
 	// These fields (except for accLock/accCond) get set by acc.Update().
-	accLock  sync.Mutex
-	accCond  *sync.Cond
-	Pods     []*kates.Pod
-	Services []*kates.Service
+	accLock    sync.Mutex
+	accCond    *sync.Cond
+	Pods       []*kates.Pod
+	Services   []*kates.Service
+	Namespaces []*objName
 }
 
 // getKubectlArgs returns the kubectl command arguments to run a
@@ -166,6 +170,11 @@ func (kc *k8sCluster) createWatch(c context.Context, namespace string) (acc *kat
 			Kind:      "service",
 		},
 		kates.Query{
+			Name:      "Namespaces",
+			Namespace: namespace,
+			Kind:      "namespace",
+		},
+		kates.Query{
 			Name:      "Pods",
 			Namespace: namespace,
 			Kind:      "pod",
@@ -196,7 +205,7 @@ func (kc *k8sCluster) startWatches(c context.Context, namespace string, accWait 
 					kc.accLock.Lock()
 					defer kc.accLock.Unlock()
 					if acc.Update(kc) {
-						kc.updateTable(c)
+						kc.updateDaemon(c)
 						kc.accCond.Broadcast()
 					}
 				}()
@@ -207,9 +216,41 @@ func (kc *k8sCluster) startWatches(c context.Context, namespace string, accWait 
 	return nil
 }
 
-func (kc *k8sCluster) updateTable(c context.Context) {
+func (kc *k8sCluster) updateDaemon(c context.Context) {
 	if kc.daemon == nil {
 		return
+	}
+
+	namespaces := make([]string, 0, len(kc.Namespaces))
+	for _, ns := range kc.Namespaces {
+		if !strings.HasPrefix(ns.Name, "kube-") {
+			namespaces = append(namespaces, ns.Name)
+		}
+	}
+	sort.Strings(namespaces)
+
+	nsChange := len(namespaces) != len(kc.lastNamespaces)
+	if !nsChange {
+		for i, ns := range namespaces {
+			if ns != kc.lastNamespaces[i] {
+				nsChange = true
+				break
+			}
+		}
+	}
+
+	if nsChange {
+		// Send updated search path to the daemon
+		paths := make([]string, 0, len(namespaces)+3)
+		for _, ns := range namespaces {
+			paths = append(paths, ns+".svc.cluster.local.")
+		}
+		paths = append(paths, "svc.cluster.local.", "cluster.local.", "")
+		dlog.Debugf(c, "posting search paths to %s", strings.Join(paths, " "))
+		if _, err := kc.daemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths}); err != nil {
+			dlog.Errorf(c, "error posting search paths to %s: %v", strings.Join(paths, " "), err)
+		}
+		kc.lastNamespaces = namespaces
 	}
 
 	table := daemon.Table{Name: "kubernetes"}
@@ -442,12 +483,8 @@ func trackKCluster(c context.Context, kubeFlagMap map[string]string, daemon daem
 	accWait := make(chan struct{})
 	if err := kc.startWatches(c, kates.NamespaceAll, accWait); err != nil {
 		dlog.Errorf(c, "watch all namespaces: %+v", err)
-		dlog.Errorf(c, "falling back to watching only %q", kc.Namespace)
-		err = kc.startWatches(c, kc.Namespace, accWait)
-		if err != nil {
-			close(accWait)
-			return nil, err
-		}
+		close(accWait)
+		return nil, err
 	}
 	// wait until accumulator has produced its first snapshot.
 	select {
