@@ -136,7 +136,7 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 
 // addIntercept adds one intercept
 func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
-	namespace := tm.k8sClient.actualNamespace(ir.Namespace)
+	namespace := tm.actualNamespace(ir.Namespace)
 
 	spec := &manager.InterceptSpec{
 		Name:       ir.Name,
@@ -268,7 +268,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 }
 
 func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, agentImageName string) *rpc.InterceptResult {
-	if err := tm.installer.ensureAgent(c, namespace, agentName, "", agentImageName); err != nil {
+	if err := tm.ensureAgent(c, namespace, agentName, "", agentImageName); err != nil {
 		if err == agentNotFound {
 			return &rpc.InterceptResult{
 				Error:     rpc.InterceptError_NOT_FOUND,
@@ -471,7 +471,7 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 
 	// Retry mount in case it gets disconnected
 	err := client.Retry(ctx, "kubectl port-forward to pod", func(ctx context.Context) error {
-		return tm.k8sClient.portForwardAndThen(ctx, pfArgs, outputScanner, func(ctx context.Context, rg interface{}) error {
+		return tm.portForwardAndThen(ctx, pfArgs, outputScanner, func(ctx context.Context, rg interface{}) error {
 			localPort := rg.(string)
 			sshArgs := []string{
 				"-F", "none", // don't load the user's config file
