@@ -105,6 +105,8 @@ func (tm *trafficManager) run(c context.Context) error {
 	}
 
 	kpfArgs := []string{
+		"--namespace",
+		managerNamespace,
 		"svc/traffic-manager",
 		fmt.Sprintf(":%d", ManagerPortSSH),
 		fmt.Sprintf(":%d", ManagerPortHTTP)}
@@ -234,7 +236,7 @@ func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, filter rpc
 		reason := ""
 		if agent == nil && iCept == nil {
 			// Check if interceptable
-			dep, err := tm.installer.findDeployment(ctx, depName)
+			dep, err := tm.installer.findDeployment(ctx, tm.k8sClient.Namespace, depName)
 			if err != nil {
 				// Removed from snapshot since the name slice was obtained
 				continue

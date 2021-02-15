@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"github.com/blang/semver"
-	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
@@ -40,6 +40,9 @@ const telName = "manager"
 const domainPrefix = "telepresence.getambassador.io/"
 const annTelepresenceActions = domainPrefix + "actions"
 const agentContainerName = "traffic-agent"
+
+// this is modified in tests
+var managerNamespace = "ambassador"
 
 var labelMap = map[string]string{
 	"app":          managerAppName,
@@ -74,7 +77,7 @@ func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error)
 			Kind: "Service",
 		},
 		ObjectMeta: kates.ObjectMeta{
-			Namespace: ki.Namespace,
+			Namespace: managerNamespace,
 			Name:      managerAppName},
 		Spec: kates.ServiceSpec{
 			Type:      "ClusterIP",
@@ -101,7 +104,22 @@ func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error)
 		},
 	}
 
-	dlog.Infof(c, "Installing traffic-manager service in namespace %s", ki.Namespace)
+	// Ensure that the managerNamespace exists
+	if !ki.namespaceExists(managerNamespace) {
+		ns := &kates.Namespace{
+			TypeMeta:   kates.TypeMeta{Kind: "Namespace"},
+			ObjectMeta: kates.ObjectMeta{Name: managerNamespace},
+		}
+		dlog.Infof(c, "Creating namespace %q", managerNamespace)
+		if err := ki.client.Create(c, ns, ns); err != nil {
+			// trap race condition. If it's there, then all is good.
+			if !errors2.IsAlreadyExists(err) {
+				return nil, err
+			}
+		}
+	}
+
+	dlog.Infof(c, "Installing traffic-manager service in namespace %s", managerNamespace)
 	if err := ki.client.Create(c, svc, svc); err != nil {
 		return nil, err
 	}
@@ -110,7 +128,7 @@ func (ki *installer) createManagerSvc(c context.Context) (*kates.Service, error)
 
 func (ki *installer) createManagerDeployment(c context.Context, env client.Env) error {
 	dep := ki.managerDeployment(env)
-	dlog.Infof(c, "Installing traffic-manager deployment in namespace %s. Image: %s", ki.Namespace, managerImageName(env))
+	dlog.Infof(c, "Installing traffic-manager deployment in namespace %s. Image: %s", managerNamespace, managerImageName(env))
 	return ki.client.Create(c, dep, dep)
 }
 
@@ -133,7 +151,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 		ai := ai // pin it
 		go func() {
 			defer wg.Done()
-			agent, err := ki.findDeployment(c, ai.Name)
+			agent, err := ki.findDeployment(c, ki.Namespace, ai.Name)
 			if err != nil {
 				if !errors2.IsNotFound(err) {
 					addError(err)
@@ -187,9 +205,9 @@ func (ki *installer) removeManagerService(c context.Context) error {
 			Kind: "Service",
 		},
 		ObjectMeta: kates.ObjectMeta{
-			Namespace: ki.Namespace,
+			Namespace: managerNamespace,
 			Name:      managerAppName}}
-	dlog.Infof(c, "Deleting traffic-manager service from namespace %s", ki.Namespace)
+	dlog.Infof(c, "Deleting traffic-manager service from namespace %s", managerNamespace)
 	return ki.client.Delete(c, svc, svc)
 }
 
@@ -199,17 +217,17 @@ func (ki *installer) removeManagerDeployment(c context.Context) error {
 			Kind: "Deployment",
 		},
 		ObjectMeta: kates.ObjectMeta{
-			Namespace: ki.Namespace,
+			Namespace: managerNamespace,
 			Name:      managerAppName,
 		}}
-	dlog.Infof(c, "Deleting traffic-manager deployment from namespace %s", ki.Namespace)
+	dlog.Infof(c, "Deleting traffic-manager deployment from namespace %s", managerNamespace)
 	return ki.client.Delete(c, dep, dep)
 }
 
 func (ki *installer) updateDeployment(c context.Context, env client.Env, currentDep *kates.Deployment) (*kates.Deployment, error) {
 	dep := ki.managerDeployment(env)
 	dep.ResourceVersion = currentDep.ResourceVersion
-	dlog.Infof(c, "Updating traffic-manager deployment in namespace %s. Image: %s", ki.Namespace, managerImageName(env))
+	dlog.Infof(c, "Updating traffic-manager deployment in namespace %s. Image: %s", managerNamespace, managerImageName(env))
 	err := ki.client.Update(c, dep, dep)
 	if err != nil {
 		return nil, err
@@ -338,7 +356,7 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 var agentNotFound = errors.New("no such agent")
 
 func (ki *installer) ensureAgent(c context.Context, name, portName, agentImageName string) error {
-	dep, err := ki.findDeployment(c, name)
+	dep, err := ki.findDeployment(c, ki.Namespace, name)
 	if err != nil {
 		if errors2.IsNotFound(err) {
 			err = agentNotFound
@@ -395,10 +413,10 @@ func (ki *installer) ensureAgent(c context.Context, name, portName, agentImageNa
 			return err
 		}
 	}
-	return ki.waitForApply(c, name, dep)
+	return ki.waitForApply(c, ki.Namespace, name, dep)
 }
 
-func (ki *installer) waitForApply(c context.Context, name string, dep *kates.Deployment) error {
+func (ki *installer) waitForApply(c context.Context, namespace, name string, dep *kates.Deployment) error {
 	c, cancel := context.WithTimeout(c, 1*time.Minute)
 	defer cancel()
 
@@ -407,14 +425,14 @@ func (ki *installer) waitForApply(c context.Context, name string, dep *kates.Dep
 		origGeneration = dep.ObjectMeta.Generation
 	}
 
-	timeout := fmt.Errorf("timeout while waiting for install/update of %s", name)
+	timeout := fmt.Errorf("timeout while waiting for install/update of %s.%s", name, namespace)
 	for {
 		dtime.SleepWithContext(c, time.Second)
 		if c.Err() != nil {
 			return timeout
 		}
 
-		dep, err := ki.findDeployment(c, name)
+		dep, err := ki.findDeployment(c, namespace, name)
 		if err != nil {
 			if c.Err() != nil {
 				err = timeout
@@ -429,7 +447,7 @@ func (ki *installer) waitForApply(c context.Context, name string, dep *kates.Dep
 			dep.Status.AvailableReplicas == dep.Status.Replicas
 
 		if deployed {
-			dlog.Debugf(c, "deployment %s successfully applied", name)
+			dlog.Debugf(c, "deployment %s.%s successfully applied", name, namespace)
 			return nil
 		}
 	}
@@ -470,7 +488,7 @@ func (ki *installer) undoDeploymentMods(c context.Context, dep *kates.Deployment
 		return err
 	}
 
-	if svc := ki.findSvc(actions.ReferencedService); svc != nil {
+	if svc := ki.findSvc(ki.Namespace, actions.ReferencedService); svc != nil {
 		if err = ki.undoServiceMods(c, svc); err != nil {
 			return err
 		}
@@ -631,7 +649,7 @@ func (ki *installer) managerDeployment(env client.Env) *kates.Deployment {
 			Kind: "Deployment",
 		},
 		ObjectMeta: kates.ObjectMeta{
-			Namespace: ki.Namespace,
+			Namespace: managerNamespace,
 			Name:      managerAppName,
 			Labels:    labelMap,
 		},
@@ -669,19 +687,19 @@ func (ki *installer) managerDeployment(env client.Env) *kates.Deployment {
 
 func (ki *installer) ensureManager(c context.Context, env client.Env) error {
 	var err error
-	if svc := ki.findSvc(managerAppName); svc == nil {
+	if svc := ki.findSvc(managerNamespace, managerAppName); svc == nil {
 		_, err = ki.createManagerSvc(c)
 		if err != nil {
 			return err
 		}
 	}
 
-	dep, err := ki.findDeployment(c, managerAppName)
+	dep, err := ki.findDeployment(c, managerNamespace, managerAppName)
 	if err != nil {
 		if errors2.IsNotFound(err) {
 			err = ki.createManagerDeployment(c, env)
 			if err == nil {
-				err = ki.waitForApply(c, managerAppName, nil)
+				err = ki.waitForApply(c, managerNamespace, managerAppName, nil)
 			}
 		}
 		return err
@@ -698,11 +716,11 @@ func (ki *installer) ensureManager(c context.Context, env client.Env) error {
 		}
 	}
 	if upToDate {
-		dlog.Infof(c, "%s is up-to-date. Image: %s", managerAppName, managerImageName(env))
+		dlog.Infof(c, "%s.%s is up-to-date. Image: %s", managerAppName, managerNamespace, managerImageName(env))
 	} else {
 		_, err = ki.updateDeployment(c, env, dep)
 		if err == nil {
-			err = ki.waitForApply(c, managerAppName, dep)
+			err = ki.waitForApply(c, managerNamespace, managerAppName, dep)
 		}
 	}
 	return err

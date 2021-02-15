@@ -351,10 +351,10 @@ func (kc *k8sCluster) deploymentNames(c context.Context) ([]string, error) {
 
 // findDeployment returns a deployment with the given name in the given namespace or nil
 // if no such deployment could be found.
-func (kc *k8sCluster) findDeployment(c context.Context, name string) (*kates.Deployment, error) {
+func (kc *k8sCluster) findDeployment(c context.Context, namespace, name string) (*kates.Deployment, error) {
 	dep := &kates.Deployment{
 		TypeMeta:   kates.TypeMeta{Kind: "Deployment"},
-		ObjectMeta: kates.ObjectMeta{Name: name},
+		ObjectMeta: kates.ObjectMeta{Name: name, Namespace: namespace},
 	}
 	if err := kc.client.Get(c, dep, dep); err != nil {
 		return nil, err
@@ -362,13 +362,13 @@ func (kc *k8sCluster) findDeployment(c context.Context, name string) (*kates.Dep
 	return dep, nil
 }
 
-// findSvc finds a service with the given name in the clusters namespace and returns
+// findSvc finds a service with the given name in the given Namespace and returns
 // either a copy of that service or nil if no such service could be found.
-func (kc *k8sCluster) findSvc(name string) *kates.Service {
+func (kc *k8sCluster) findSvc(namespace, name string) *kates.Service {
 	var svcCopy *kates.Service
 	kc.accLock.Lock()
 	for _, svc := range kc.Services {
-		if svc.Namespace == kc.Namespace && svc.Name == name {
+		if svc.Namespace == namespace && svc.Name == name {
 			svcCopy = svc.DeepCopy()
 			break
 		}
@@ -377,7 +377,7 @@ func (kc *k8sCluster) findSvc(name string) *kates.Service {
 	return svcCopy
 }
 
-// findAllSvc finds a service with the given service type in all namespaces of the clusters returns
+// findAllSvc finds services with the given service type in all namespaces of the cluster returns
 // a slice containing a copy of those services.
 func (kc *k8sCluster) findAllSvcByType(svcType v1.ServiceType) []*kates.Service {
 	var svcCopies []*kates.Service
@@ -390,6 +390,19 @@ func (kc *k8sCluster) findAllSvcByType(svcType v1.ServiceType) []*kates.Service 
 	}
 	kc.accLock.Unlock()
 	return svcCopies
+}
+
+func (kc *k8sCluster) namespaceExists(namespace string) bool {
+	exists := false
+	kc.accLock.Lock()
+	for _, n := range kc.lastNamespaces {
+		if n == namespace {
+			exists = true
+			break
+		}
+	}
+	kc.accLock.Unlock()
+	return exists
 }
 
 func newKCluster(c context.Context, kubeFlagMap map[string]string, daemon daemon.DaemonClient) (*k8sCluster, error) {

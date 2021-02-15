@@ -25,7 +25,7 @@ type Config struct {
 	AgentPort   int32  `env:"AGENT_PORT,default=9900"`
 	AppMounts   string `env:"APP_MOUNTS,default="`
 	AppPort     int32  `env:"APP_PORT,required"`
-	ManagerHost string `env:"MANAGER_HOST,default=traffic-manager"`
+	ManagerHost string `env:"MANAGER_HOST,default=traffic-manager.ambassador"`
 	ManagerPort int32  `env:"MANAGER_PORT,default=8081"`
 }
 

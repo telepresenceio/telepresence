@@ -30,11 +30,14 @@ var kubeconfig string
 var namespace string
 var registry string
 var testVersion = "v0.1.2-test"
+var managerTestNamespace string
 
 func TestMain(m *testing.M) {
 	log.SetOutput(ioutil.Discard) // We want success or failure, not an abundance of output
 	kubeconfig = dtest.Kubeconfig()
 	namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
+	managerTestNamespace = fmt.Sprintf("ambassador-%d", os.Getpid())
+
 	registry = dtest.DockerRegistry()
 	version.Version = testVersion
 
@@ -46,6 +49,7 @@ func TestMain(m *testing.M) {
 	dtest.WithMachineLock(func() {
 		capture(nil, "kubectl", "--kubeconfig", kubeconfig, "create", "namespace", namespace)
 		defer capture(nil, "kubectl", "--kubeconfig", kubeconfig, "delete", "namespace", namespace, "--wait=false")
+		defer capture(nil, "kubectl", "--kubeconfig", kubeconfig, "delete", "namespace", managerTestNamespace, "--wait=false")
 		exitCode = m.Run()
 	})
 	os.Exit(exitCode)
@@ -110,13 +114,13 @@ func publishManager(t *testing.T) {
 
 func removeManager(t *testing.T) {
 	// Remove service and deployment
-	cmd := exec.Command("kubectl", "--kubeconfig", kubeconfig, "--namespace", namespace, "delete", "svc,deployment", "traffic-manager")
+	cmd := exec.Command("kubectl", "--kubeconfig", kubeconfig, "--namespace", managerNamespace, "delete", "svc,deployment", "traffic-manager")
 	_, _ = cmd.Output()
 
 	// Wait until getting them fails
 	gone := false
 	for cnt := 0; cnt < 10; cnt++ {
-		cmd = exec.Command("kubectl", "--kubeconfig", kubeconfig, "--namespace", namespace, "get", "deployment", "traffic-manager")
+		cmd = exec.Command("kubectl", "--kubeconfig", kubeconfig, "--namespace", managerNamespace, "get", "deployment", "traffic-manager")
 		if err := cmd.Run(); err != nil {
 			gone = true
 			break
@@ -128,7 +132,7 @@ func removeManager(t *testing.T) {
 	}
 	gone = false
 	for cnt := 0; cnt < 10; cnt++ {
-		cmd = exec.Command("kubectl", "--kubeconfig", kubeconfig, "--namespace", namespace, "get", "svc", "traffic-manager")
+		cmd = exec.Command("kubectl", "--kubeconfig", kubeconfig, "--namespace", managerNamespace, "get", "svc", "traffic-manager")
 		if err := cmd.Run(); err != nil {
 			gone = true
 			break
@@ -141,6 +145,12 @@ func removeManager(t *testing.T) {
 }
 
 func Test_findTrafficManager_notPresent(t *testing.T) {
+	saveManagerNamespace := managerNamespace
+	defer func() {
+		managerNamespace = saveManagerNamespace
+	}()
+	managerNamespace = managerTestNamespace
+
 	ctx := dlog.NewTestContext(t, false)
 	kc, err := newKCluster(ctx, map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, nil)
 	if err != nil {
@@ -153,12 +163,18 @@ func Test_findTrafficManager_notPresent(t *testing.T) {
 	version.Version = "v0.0.0-bogus"
 	defer func() { version.Version = testVersion }()
 
-	if _, err := ti.findDeployment(ctx, managerAppName); err == nil {
+	if _, err := ti.findDeployment(ctx, managerNamespace, managerAppName); err == nil {
 		t.Fatal("expected find to not find deployment")
 	}
 }
 
 func Test_findTrafficManager_present(t *testing.T) {
+	saveManagerNamespace := managerNamespace
+	defer func() {
+		managerNamespace = saveManagerNamespace
+	}()
+	managerNamespace = managerTestNamespace
+
 	c := dlog.NewTestContext(t, false)
 	publishManager(t)
 	defer removeManager(t)
@@ -188,12 +204,16 @@ func Test_findTrafficManager_present(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		_, err = ti.createManagerSvc(c)
+		if err != nil {
+			return err
+		}
 		err = ti.createManagerDeployment(c, env)
 		if err != nil {
 			return err
 		}
 		for i := 0; i < 50; i++ {
-			if _, err := ti.findDeployment(c, managerAppName); err == nil {
+			if _, err := ti.findDeployment(c, managerNamespace, managerAppName); err == nil {
 				return nil
 			}
 			time.Sleep(100 * time.Millisecond)
@@ -206,6 +226,11 @@ func Test_findTrafficManager_present(t *testing.T) {
 }
 
 func Test_ensureTrafficManager_notPresent(t *testing.T) {
+	saveManagerNamespace := managerNamespace
+	defer func() {
+		managerNamespace = saveManagerNamespace
+	}()
+	managerNamespace = managerTestNamespace
 	c := dlog.NewTestContext(t, false)
 	publishManager(t)
 	defer removeManager(t)
