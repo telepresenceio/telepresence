@@ -255,6 +255,7 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 	ir := connector.CreateInterceptRequest{
 		Session:        is.cs.info.SessionInfo,
 		Name:           is.name,
+		Namespace:      is.namespace,
 		AgentName:      is.agentName,
 		MatchMechanism: is.matchMechanism,
 		// [REDACTED],
@@ -281,7 +282,7 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 		// For now this will be using the namespace where the traffic manager
 		// is installed. Once we support intercepts in multiple namespaces,
 		// we should change this to use that information
-		is.Scout.SetMetadatum("service_namespace", is.cs.info.ClusterNamespace)
+		is.Scout.SetMetadatum("service_namespace", is.namespace)
 
 		if is.matchMechanism == "http" /* && [REDACTED] */ {
 			is.Scout.SetMetadatum("intercept_mode", "headers")

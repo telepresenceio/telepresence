@@ -80,6 +80,9 @@ message UninstallRequest {
 
   UninstallType uninstall_type = 1;
   repeated string agents = 2;
+
+  // Namespace of agents to remove.
+  string namespace = 3;
 }
 
 message UninstallResult {
@@ -90,6 +93,7 @@ message CreateInterceptRequest {
   manager.SessionInfo session = 1;
   string name = 2;
   string agent_name = 3;
+  string namespace = 9;
   string match_mechanism = 4;
   string match_additional = 5;
   string target_host = 6;
@@ -125,6 +129,9 @@ message ListRequest {
     EVERYTHING = 4;
   }
   Filter filter = 1;
+
+  // Namespace to list.
+  string namespace = 2;
 }
 
 // DeploymentInfo contains information about a deployment

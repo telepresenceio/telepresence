@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -78,14 +77,8 @@ func (cs *connectorState) EnsureState() (bool, error) {
 }
 
 func (cs *connectorState) setConnectInfo() error {
-	kubeFlagMap := make(map[string]string)
-	kubeFlags.VisitAll(func(flag *pflag.Flag) {
-		if flag.Changed {
-			kubeFlagMap[flag.Name] = flag.Value.String()
-		}
-	})
 	r, err := cs.connectorClient.Connect(cs.cmd.Context(), &connector.ConnectRequest{
-		Kubeflags: kubeFlagMap,
+		Kubeflags: cs.kubeFlagMap(),
 		InstallId: client.NewScout("unused").Reporter.InstallID(),
 	})
 	if err != nil {

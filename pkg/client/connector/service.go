@@ -171,7 +171,7 @@ func (s *service) List(ctx context.Context, lr *rpc.ListRequest) (*rpc.Deploymen
 	if s.trafficMgr.managerClient == nil {
 		return &rpc.DeploymentInfoSnapshot{}, nil
 	}
-	return s.trafficMgr.deploymentInfoSnapshot(ctx, lr.Filter), nil
+	return s.trafficMgr.deploymentInfoSnapshot(ctx, lr), nil
 }
 
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {

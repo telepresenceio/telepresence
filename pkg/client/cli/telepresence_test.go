@@ -167,7 +167,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 
 	ts.Run("Connect with a command", func() {
 		ts.Run("Connects, executes the command, and then exits", func() {
-			stdout, stderr := telepresence("--namespace", ts.namespace, "connect", "--", client.GetExe(), "status")
+			stdout, stderr := telepresence("connect", "--", client.GetExe(), "status")
 			ts.Empty(stderr)
 			ts.Contains(stdout, "Launching Telepresence Daemon")
 			ts.Contains(stdout, "Connected to context")
@@ -191,7 +191,7 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 		stdout, err := agentName()
 		ts.NoError(err)
 		ts.Equal("traffic-agent", stdout)
-		_, stderr := telepresence("--namespace", ts.namespace, "uninstall", "--agent", "with-probes")
+		_, stderr := telepresence("uninstall", "--namespace", ts.namespace, "--agent", "with-probes")
 		ts.Empty(stderr)
 		defer telepresence("quit")
 		ts.Eventually(
@@ -213,7 +213,7 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 		stdout, err := agentNames()
 		ts.NoError(err)
 		ts.Equal(serviceCount, len(strings.Split(stdout, " ")))
-		_, stderr := telepresence("--namespace", ts.namespace, "uninstall", "--all-agents")
+		_, stderr := telepresence("uninstall", "--namespace", ts.namespace, "--all-agents")
 		ts.Empty(stderr)
 		defer telepresence("quit")
 		ts.Eventually(
@@ -228,12 +228,16 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 
 	ts.Run("Uninstalls the traffic manager and quits", func() {
 		names := func() (string, error) {
-			return ts.kubectlOut("get", "svc,deploy", "traffic-manager", "--ignore-not-found", "-o", "jsonpath={.items[*].metadata.name}")
+			return ts.kubectlOut("get",
+				"--namespace", "ambassador",
+				"svc,deploy", "traffic-manager",
+				"--ignore-not-found",
+				"-o", "jsonpath={.items[*].metadata.name}")
 		}
 		stdout, err := names()
 		ts.NoError(err)
 		ts.Equal(2, len(strings.Split(stdout, " "))) // The service and the deployment
-		stdout, stderr := telepresence("--namespace", ts.namespace, "uninstall", "--everything")
+		stdout, stderr := telepresence("uninstall", "--everything")
 		ts.Empty(stderr)
 		ts.Contains(stdout, "Daemon quitting")
 		ts.Eventually(
@@ -253,7 +257,7 @@ type connectedSuite struct {
 }
 
 func (cs *connectedSuite) SetupSuite() {
-	stdout, stderr := telepresence("--namespace", cs.namespace, "connect")
+	stdout, stderr := telepresence("connect")
 	cs.Empty(stderr)
 	cs.Contains(stdout, "Connected to context")
 
@@ -322,20 +326,21 @@ func (cs *connectedSuite) TestC_ProxiesOutboundTraffic() {
 }
 
 func (cs *connectedSuite) TestD_Intercepted() {
-	suite.Run(cs.T(), new(interceptedSuite))
+	suite.Run(cs.T(), &interceptedSuite{namespace: cs.namespace})
 }
 
 func (cs *connectedSuite) TestE_SuccessfullyInterceptsDeploymentWithProbes() {
-	stdout, stderr := telepresence("intercept", "--mount", "false", "with-probes", "--port", "9090")
+	stdout, stderr := telepresence("intercept", "--namespace", cs.namespace, "--mount", "false", "with-probes", "--port", "9090")
 	cs.Empty(stderr)
 	cs.Contains(stdout, "Using deployment with-probes")
-	stdout, stderr = telepresence("list", "--intercepts")
+	stdout, stderr = telepresence("list", "--namespace", cs.namespace, "--intercepts")
 	cs.Empty(stderr)
 	cs.Contains(stdout, "with-probes: intercepted")
 }
 
 type interceptedSuite struct {
 	suite.Suite
+	namespace  string
 	intercepts []string
 	services   []*http.Server
 }
@@ -352,7 +357,7 @@ func (is *interceptedSuite) SetupSuite() {
 		require.Eventually(is.T(),
 			// condition
 			func() bool {
-				stdout, _ := telepresence("list")
+				stdout, _ := telepresence("list", "--namespace", is.namespace)
 				is.T().Log(stdout)
 				for i := 0; i < serviceCount; i++ {
 					if !rxs[i].MatchString(stdout) {
@@ -371,7 +376,7 @@ func (is *interceptedSuite) SetupSuite() {
 		for i := 0; i < serviceCount; i++ {
 			svc := fmt.Sprintf("hello-%d", i)
 			port := strconv.Itoa(9000 + i)
-			stdout, stderr := telepresence("intercept", "--mount", "false", svc, "--port", port)
+			stdout, stderr := telepresence("intercept", "--namespace", is.namespace, "--mount", "false", svc, "--port", port)
 			is.Empty(stderr)
 			is.intercepts = append(is.intercepts, svc)
 			is.Contains(stdout, "Using deployment "+svc)
@@ -438,7 +443,7 @@ func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
 }
 
 func (is *interceptedSuite) TestB_ListingActiveIntercepts() {
-	stdout, stderr := telepresence("list", "--intercepts")
+	stdout, stderr := telepresence("--namespace", is.namespace, "list", "--intercepts")
 	is.Empty(stderr)
 	for i := 0; i < serviceCount; i++ {
 		is.Contains(stdout, fmt.Sprintf("hello-%d: intercepted", i))

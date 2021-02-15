@@ -337,9 +337,9 @@ func (kc *k8sCluster) updateDaemon(c context.Context) {
 }
 
 // deploymentNames  returns the names of all deployments found in the given Namespace
-func (kc *k8sCluster) deploymentNames(c context.Context) ([]string, error) {
+func (kc *k8sCluster) deploymentNames(c context.Context, namespace string) ([]string, error) {
 	var objNames []objName
-	if err := kc.client.List(c, kates.Query{Kind: "Deployment"}, &objNames); err != nil {
+	if err := kc.client.List(c, kates.Query{Kind: "Deployment", Namespace: namespace}, &objNames); err != nil {
 		return nil, err
 	}
 	names := make([]string, len(objNames))
@@ -480,6 +480,13 @@ func newKCluster(c context.Context, kubeFlagMap map[string]string, daemon daemon
 	ret.Server = server
 
 	return ret, nil
+}
+
+func (kc *k8sCluster) actualNamespace(namespace string) string {
+	if namespace == "" {
+		namespace = kc.Namespace
+	}
+	return namespace
 }
 
 // trackKCluster tracks connectivity to a cluster

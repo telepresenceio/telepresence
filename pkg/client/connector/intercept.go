@@ -136,7 +136,7 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 
 // addIntercept adds one intercept
 func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
-	namespace := tm.k8sClient.Namespace
+	namespace := tm.k8sClient.actualNamespace(ir.Namespace)
 
 	spec := &manager.InterceptSpec{
 		Name:       ir.Name,
@@ -211,7 +211,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	var result *rpc.InterceptResult
 	if found == nil {
-		if result = tm.addAgent(c, agentName, agentImageName(c, tm.env)); result.Error != rpc.InterceptError_UNSPECIFIED {
+		if result = tm.addAgent(c, namespace, agentName, agentImageName(c, tm.env)); result.Error != rpc.InterceptError_UNSPECIFIED {
 			return result, nil
 		}
 	} else {
@@ -267,8 +267,8 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	return result, nil
 }
 
-func (tm *trafficManager) addAgent(c context.Context, agentName, agentImageName string) *rpc.InterceptResult {
-	if err := tm.installer.ensureAgent(c, agentName, "", agentImageName); err != nil {
+func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, agentImageName string) *rpc.InterceptResult {
+	if err := tm.installer.ensureAgent(c, namespace, agentName, "", agentImageName); err != nil {
 		if err == agentNotFound {
 			return &rpc.InterceptResult{
 				Error:     rpc.InterceptError_NOT_FOUND,

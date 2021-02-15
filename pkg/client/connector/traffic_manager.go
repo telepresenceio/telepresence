@@ -13,6 +13,7 @@ import (
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -199,12 +200,17 @@ func (tm *trafficManager) session() *manager.SessionInfo {
 	return tm.sessionInfo
 }
 
-func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, filter rpc.ListRequest_Filter) *rpc.DeploymentInfoSnapshot {
+func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, rq *rpc.ListRequest) *rpc.DeploymentInfoSnapshot {
 	var iMap map[string]*manager.InterceptInfo
+
+	namespace := tm.k8sClient.actualNamespace(rq.Namespace)
+
 	if is, _ := actions.ListMyIntercepts(ctx, tm.managerClient, tm.session().SessionId); is != nil {
 		iMap = make(map[string]*manager.InterceptInfo, len(is))
 		for _, i := range is {
-			iMap[i.Spec.Agent] = i
+			if i.Spec.Namespace == namespace {
+				iMap[i.Spec.Agent] = i
+			}
 		}
 	} else {
 		iMap = map[string]*manager.InterceptInfo{}
@@ -213,13 +219,17 @@ func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, filter rpc
 	if as, _ := actions.ListAllAgents(ctx, tm.managerClient, tm.session().SessionId); as != nil {
 		aMap = make(map[string]*manager.AgentInfo, len(as))
 		for _, a := range as {
-			aMap[a.Name] = a
+			if a.Namespace == namespace {
+				aMap[a.Name] = a
+			}
 		}
 	} else {
 		aMap = map[string]*manager.AgentInfo{}
 	}
+
+	filter := rq.Filter
 	depInfos := make([]*rpc.DeploymentInfo, 0)
-	depNames, err := tm.k8sClient.deploymentNames(ctx)
+	depNames, err := tm.k8sClient.deploymentNames(ctx, namespace)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return &rpc.DeploymentInfoSnapshot{}
@@ -236,9 +246,12 @@ func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, filter rpc
 		reason := ""
 		if agent == nil && iCept == nil {
 			// Check if interceptable
-			dep, err := tm.installer.findDeployment(ctx, tm.k8sClient.Namespace, depName)
+			dep, err := tm.k8sClient.findDeployment(ctx, namespace, depName)
 			if err != nil {
 				// Removed from snapshot since the name slice was obtained
+				if !errors2.IsNotFound(err) {
+					dlog.Error(ctx, err)
+				}
 				continue
 			}
 			matchingSvcs := tm.installer.findMatchingServices("", dep)
@@ -301,6 +314,7 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 }
 
 func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
+	namespace := tm.k8sClient.actualNamespace(ur.Namespace)
 	result := &rpc.UninstallResult{}
 	agents, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId)
 
@@ -313,7 +327,7 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 		for _, di := range ur.Agents {
 			found := false
 			for _, ai := range agents {
-				if di == ai.Name {
+				if namespace == ai.Namespace && di == ai.Name {
 					found = true
 					selectedAgents = append(selectedAgents, ai)
 					break

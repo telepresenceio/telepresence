@@ -151,7 +151,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 		ai := ai // pin it
 		go func() {
 			defer wg.Done()
-			agent, err := ki.findDeployment(c, ki.Namespace, ai.Name)
+			agent, err := ki.findDeployment(c, ai.Namespace, ai.Name)
 			if err != nil {
 				if !errors2.IsNotFound(err) {
 					addError(err)
@@ -355,8 +355,8 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 
 var agentNotFound = errors.New("no such agent")
 
-func (ki *installer) ensureAgent(c context.Context, name, portName, agentImageName string) error {
-	dep, err := ki.findDeployment(c, ki.Namespace, name)
+func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, agentImageName string) error {
+	dep, err := ki.findDeployment(c, namespace, name)
 	if err != nil {
 		if errors2.IsNotFound(err) {
 			err = agentNotFound
@@ -376,7 +376,7 @@ func (ki *installer) ensureAgent(c context.Context, name, portName, agentImageNa
 
 	switch {
 	case agentContainer == nil:
-		dlog.Infof(c, "no agent found for deployment %q", name)
+		dlog.Infof(c, "no agent found for deployment %s.%s", name, namespace)
 		matchingSvcs := ki.findMatchingServices(portName, dep)
 		if len(matchingSvcs) == 0 {
 			return fmt.Errorf("found no services with just one port and a selector matching labels %v", dep.Spec.Template.Labels)
@@ -393,16 +393,17 @@ func (ki *installer) ensureAgent(c context.Context, name, portName, agentImageNa
 			return err
 		} else if !ok {
 			// This can only happen if someone manually tampered with the annTelepresenceActions annotation
-			return fmt.Errorf("expected %q annotation not found in %s", annTelepresenceActions, dep.Name)
+			return fmt.Errorf("expected %q annotation not found in %s.%s", annTelepresenceActions, name, namespace)
 		}
 
+		dlog.Debugf(c, "Updating agent for deployment %s.%s", name, namespace)
 		aaa := actions.AddTrafficAgent
 		explainUndo(c, aaa, dep)
 		aaa.ImageName = agentImageName
 		agentContainer.Image = agentImageName
 		explainDo(c, aaa, dep)
 	default:
-		dlog.Debugf(c, "deployment %q already has an installed and up-to-date agent", name)
+		dlog.Debugf(c, "Deployment %s.%s already has an installed and up-to-date agent", name, namespace)
 	}
 
 	if err := ki.client.Update(c, dep, dep); err != nil {
@@ -413,7 +414,7 @@ func (ki *installer) ensureAgent(c context.Context, name, portName, agentImageNa
 			return err
 		}
 	}
-	return ki.waitForApply(c, ki.Namespace, name, dep)
+	return ki.waitForApply(c, namespace, name, dep)
 }
 
 func (ki *installer) waitForApply(c context.Context, namespace, name string, dep *kates.Deployment) error {
@@ -488,7 +489,7 @@ func (ki *installer) undoDeploymentMods(c context.Context, dep *kates.Deployment
 		return err
 	}
 
-	if svc := ki.findSvc(ki.Namespace, actions.ReferencedService); svc != nil {
+	if svc := ki.findSvc(dep.Namespace, actions.ReferencedService); svc != nil {
 		if err = ki.undoServiceMods(c, svc); err != nil {
 			return err
 		}
@@ -530,7 +531,7 @@ func addAgentToDeployment(
 	if err != nil {
 		return nil, nil, err
 	}
-	dlog.Debugf(c, "using service %s port %s when intercepting deployment %q",
+	dlog.Debugf(c, "using service %q port %q when intercepting deployment %q",
 		service.Name,
 		func() string {
 			if servicePort.Name != "" {

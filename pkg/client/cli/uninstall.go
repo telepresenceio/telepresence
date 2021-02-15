@@ -44,15 +44,15 @@ func (u *uninstallInfo) uninstall(cmd *cobra.Command, args []string) error {
 	err := u.withConnector(true, func(cs *connectorState) error {
 		ur := &connector.UninstallRequest{
 			UninstallType: 0,
-			Agents:        args,
+			Namespace:     u.namespace,
 		}
 		switch {
 		case u.agent:
 			ur.UninstallType = connector.UninstallRequest_NAMED_AGENTS
-			ur.Agents = args
 			if len(args) == 0 {
 				return errors.New("at least one argument (the name of an agent) is expected")
 			}
+			ur.Agents = args
 		case u.allAgents:
 			ur.UninstallType = connector.UninstallRequest_ALL_AGENTS
 			if len(args) != 0 {
