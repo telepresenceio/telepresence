@@ -134,8 +134,11 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 
 // addIntercept adds one intercept
 func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
+	namespace := tm.k8sClient.Namespace
+
 	spec := &manager.InterceptSpec{
 		Name:       ir.Name,
+		Namespace:  namespace,
 		Agent:      ir.AgentName,
 		Mechanism:  ir.MatchMechanism,
 		Additional: ir.MatchAdditional,
@@ -184,7 +187,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	var found *manager.AgentInfo
 	if ags, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId); ags != nil {
 		for _, ag := range ags {
-			if !(ag.Name == spec.Agent && hasSpecMechanism(ag)) {
+			if !(ag.Namespace == namespace && ag.Name == spec.Agent && hasSpecMechanism(ag)) {
 				continue
 			}
 			if found == nil {

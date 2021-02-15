@@ -106,6 +106,7 @@ func Main(ctx context.Context, args ...string) error {
 		Product:     "telepresence",
 		Version:     version.Version,
 		Environment: AppEnvironment(),
+		Namespace:   config.Namespace,
 	}
 
 	// Select initial mechanism
@@ -169,7 +170,7 @@ func Main(ctx context.Context, args ...string) error {
 			return nil
 		}
 
-		state := NewState(forwarder, config.ManagerHost, config.PodName, int32(sshPort))
+		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodName, int32(sshPort))
 
 		for {
 			if err := TalkToManager(ctx, gRPCAddress, info, state); err != nil {

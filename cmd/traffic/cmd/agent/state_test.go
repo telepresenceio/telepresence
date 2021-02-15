@@ -35,7 +35,7 @@ func makeFS(t *testing.T) (*agent.Forwarder, agent.State) {
 		return port == appPort
 	}, 1*time.Second, 10*time.Millisecond)
 
-	s := agent.NewState(f, mgrHost, "xyz", 0)
+	s := agent.NewState(f, mgrHost, "default", "xyz", 0)
 
 	return f, s
 }
@@ -75,6 +75,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 				Client:    "user@host1",
 				Agent:     "agentName",
 				Mechanism: "tcp",
+				Namespace: "default",
 			},
 			Id: "intercept-01",
 		},
@@ -84,6 +85,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 				Client:    "user@host2",
 				Agent:     "agentName",
 				Mechanism: "tcp",
+				Namespace: "default",
 			},
 			Id: "intercept-02",
 		},
