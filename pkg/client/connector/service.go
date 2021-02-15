@@ -239,15 +239,6 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		return r
 	}
 	s.cluster = cluster
-
-	/*
-		previewHost, err := cluster.getClusterPreviewHostname(p)
-		if err != nil {
-			p.Logf("get preview URL hostname: %+v", err)
-			previewHost = ""
-		}
-	*/
-
 	dlog.Infof(c, "Connected to context %s (%s)", s.cluster.Context, s.cluster.Server)
 
 	tmgr, err := newTrafficManager(s.ctx, s.env, s.cluster, cr.InstallId)
