@@ -1,5 +1,11 @@
 # Changelog
 
+### 2.0.2 (TBD)
+
+- Feature: Telepresence is now capable of forwarding the intercepted Pod's volume mounts (as Telepresence 0.x did) via the `--mount` flag to `telepresence intercept`.
+- Bugfix: Fix the kubectl version number check to handle version numbers with a "+" in them.
+- Bugfix: Fix a bug with some configurations on macOS where we clash with mDNSResponder's use of port 53.
+
 ### 2.0.1 (February 9, 2021)
 
 - Feature: Telepresence is now capable of forwarding the environment variables of an intercepted service (as Telepresence 0.x did) and emit them to a file as text or JSON. The environment variables will also be propagated to any command started by doing a `telepresence intercept nnn -- <command>`.
