@@ -50,9 +50,10 @@ type portForward struct {
 }
 
 type mountForward struct {
-	Name    string
-	PodName string
-	SshPort int32
+	Name      string
+	Namespace string
+	PodName   string
+	SshPort   int32
 }
 
 func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error {
@@ -99,9 +100,10 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 					// There's nothing to mount if the SshPort is zero
 					if intercept.SshPort != 0 {
 						mf := mountForward{
-							Name:    intercept.Spec.Name,
-							PodName: intercept.PodName,
-							SshPort: intercept.SshPort,
+							Name:      intercept.Spec.Name,
+							Namespace: intercept.Spec.Namespace,
+							PodName:   intercept.PodName,
+							SshPort:   intercept.SshPort,
 						}
 						wg.Add(1)
 						go tm.workerMountForwardIntercept(pfCtx, mf, &wg)
@@ -442,6 +444,8 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 	// kubectl port-forward arguments
 	pfArgs := []string{
 		// Port forward to pod
+		"--namespace",
+		mf.Namespace,
 		mf.PodName,
 
 		// from dynamically allocated local port to the pods sshPort
