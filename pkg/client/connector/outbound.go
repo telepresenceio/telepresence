@@ -229,6 +229,10 @@ func (kc *k8sCluster) watchPodsAndServices(c context.Context, watcher *k8sWatche
 // updateDaemonNamespaces will create a new DNS search path from the given namespaces and
 // send it to the DNS-resolver in the daemon.
 func (kc *k8sCluster) updateDaemonNamespaces(c context.Context, namespaces []string) {
+	if kc.daemon == nil {
+		// NOTE! Some tests dont't set the daemon
+		return
+	}
 	// Send updated search path to the daemon
 	paths := make([]string, 0, len(namespaces)+3)
 	for _, ns := range namespaces {
@@ -245,6 +249,10 @@ func (kc *k8sCluster) updateDaemonNamespaces(c context.Context, namespaces []str
 // updateDaemonTable will create IP-tables based on the current snapshots of services and pods
 // that the watchers have produced.
 func (kc *k8sCluster) updateDaemonTable(c context.Context) {
+	if kc.daemon == nil {
+		// NOTE! Some tests dont't set the daemon
+		return
+	}
 	table := &daemon.Table{Name: "kubernetes"}
 	kc.accLock.Lock()
 	for _, watcher := range kc.watchers {
