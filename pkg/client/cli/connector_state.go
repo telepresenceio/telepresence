@@ -78,8 +78,9 @@ func (cs *connectorState) EnsureState() (bool, error) {
 
 func (cs *connectorState) setConnectInfo() error {
 	r, err := cs.connectorClient.Connect(cs.cmd.Context(), &connector.ConnectRequest{
-		Kubeflags: cs.kubeFlagMap(),
-		InstallId: client.NewScout("unused").Reporter.InstallID(),
+		KubeFlags:        cs.kubeFlagMap(),
+		InstallId:        client.NewScout("unused").Reporter.InstallID(),
+		MappedNamespaces: mappedNamespaces,
 	})
 	if err != nil {
 		return err

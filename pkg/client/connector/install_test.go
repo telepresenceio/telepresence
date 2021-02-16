@@ -152,7 +152,7 @@ func Test_findTrafficManager_notPresent(t *testing.T) {
 	managerNamespace = managerTestNamespace
 
 	ctx := dlog.NewTestContext(t, false)
-	cfgAndFlags, err := newConfigAndFlags(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
+	cfgAndFlags, err := newConfigAndFlags(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func Test_findTrafficManager_present(t *testing.T) {
 		// Kill sibling go-routines
 		defer cancel()
 
-		cfgAndFlags, err := newConfigAndFlags(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
+		cfgAndFlags, err := newConfigAndFlags(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, nil)
 		if err != nil {
 			return err
 		}
@@ -246,7 +246,7 @@ func Test_ensureTrafficManager_notPresent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfgAndFlags, err := newConfigAndFlags(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
+	cfgAndFlags, err := newConfigAndFlags(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

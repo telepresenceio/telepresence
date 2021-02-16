@@ -22,8 +22,8 @@ type k8sConfig struct {
 	config           *rest.Config
 }
 
-func newConfigAndFlags(flagMap map[string]string) (*k8sConfig, error) {
-	// Namespace option will be passed only when explicitly needed. The k8s_cluster is namespace agnostic with
+func newConfigAndFlags(flagMap map[string]string, mappedNamespaces []string) (*k8sConfig, error) {
+	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")
 
@@ -75,12 +75,13 @@ func newConfigAndFlags(flagMap map[string]string) (*k8sConfig, error) {
 
 	// Sort for easy comparison
 	sort.Strings(flagArgs)
+	sort.Strings(mappedNamespaces)
 
 	return &k8sConfig{
 		Context:          ctxName,
 		Server:           cluster.Server,
 		Namespace:        namespace,
-		mappedNamespaces: nil,
+		mappedNamespaces: mappedNamespaces,
 		flagMap:          flagMap,
 		flagArgs:         flagArgs,
 		configFlags:      configFlags,
@@ -98,7 +99,9 @@ func (kc *k8sConfig) actualNamespace(namespace string) string {
 // equals determines if this instance is equal to the given instance with respect to everything but
 // Namespace.
 func (kf *k8sConfig) equals(okf *k8sConfig) bool {
-	if kf.Context != okf.Context || kf.Server != okf.Server || len(kf.flagArgs) != len(okf.flagArgs) {
+	if kf.Context != okf.Context ||
+		kf.Server != okf.Server ||
+		len(kf.flagArgs) != len(okf.flagArgs) {
 		return false
 	}
 	for i, arg := range kf.flagArgs {

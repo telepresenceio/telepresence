@@ -85,7 +85,17 @@ func (kc *k8sCluster) onNamespacesChange(c context.Context, acc *kates.Accumulat
 		kc.accLock.Unlock()
 		return false
 	}
+	return kc.refreshNamespacesAndUnlock(c, accWait)
+}
 
+func (kc *k8sCluster) setMappedNamespaces(c context.Context, namespaces []string) {
+	sort.Strings(namespaces)
+	kc.accLock.Lock()
+	kc.mappedNamespaces = namespaces
+	kc.refreshNamespacesAndUnlock(c, nil)
+}
+
+func (kc *k8sCluster) refreshNamespacesAndUnlock(c context.Context, accWait chan<- struct{}) bool {
 	namespaces := make([]string, 0, len(kc.Namespaces))
 	for _, ns := range kc.Namespaces {
 		if kc.shouldBeWatched(ns.Name) {

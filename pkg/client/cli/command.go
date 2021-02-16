@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -65,6 +66,7 @@ func quitCommand() *cobra.Command {
 // global options
 var dnsIP string
 var fallbackIP string
+var mappedNamespaces []string
 var kubeFlags *pflag.FlagSet
 
 // OnlySubcommands is a cobra.PositionalArgs that is similar to cobra.NoArgs, but prints a better
@@ -142,11 +144,15 @@ func Command() *cobra.Command {
 				kates.NewConfigFlags(false).AddFlags(kubeFlags)
 				return kubeFlags
 			}(),
-		},
-		{
-			Name: "Telepresence networking flags",
-			Flags: func() *pflag.FlagSet {
-				netflags := pflag.NewFlagSet("", 0)
+		}}
+
+	globalFlagGroups = append(globalFlagGroups, FlagGroup{
+		Name: "Telepresence networking flags",
+		Flags: func() *pflag.FlagSet {
+			netflags := pflag.NewFlagSet("", 0)
+			// TODO: Those flags aren't applicable on a Linux with systemd.resolved configured either but
+			//  that's unknown until it's been tested during the first connect attempt.
+			if runtime.GOOS != "darwin" {
 				netflags.StringVarP(&dnsIP,
 					"dns", "", "",
 					"DNS IP address to intercept locally. Defaults to the first nameserver listed in /etc/resolv.conf.",
@@ -155,21 +161,27 @@ func Command() *cobra.Command {
 					"fallback", "", "",
 					"DNS fallback, how non-cluster DNS queries are resolved. Defaults to Google DNS (8.8.8.8).",
 				)
-				return netflags
-			}(),
-		},
-		{
-			Name: "other Telepresence flags",
-			Flags: func() *pflag.FlagSet {
-				flags := pflag.NewFlagSet("", 0)
-				flags.Bool(
-					"no-report", false,
-					"turn off anonymous crash reports and log submission on failure",
-				)
-				return flags
-			}(),
-		},
-	}
+			}
+			netflags.StringSliceVar(&mappedNamespaces,
+				"mapped-namespaces", nil, ``+
+					`Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. `+
+					`Defaults to all namespaces`)
+
+			return netflags
+		}(),
+	})
+
+	globalFlagGroups = append(globalFlagGroups, FlagGroup{
+		Name: "other Telepresence flags",
+		Flags: func() *pflag.FlagSet {
+			flags := pflag.NewFlagSet("", 0)
+			flags.Bool(
+				"no-report", false,
+				"turn off anonymous crash reports and log submission on failure",
+			)
+			return flags
+		}(),
+	})
 
 	rootCmd.InitDefaultHelpCmd()
 	AddCommandGroups(rootCmd, []CommandGroup{

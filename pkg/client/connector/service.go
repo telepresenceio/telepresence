@@ -202,7 +202,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		r.IngressInfos = s.cluster.detectIngressBehavior()
 	}
 
-	configAndFlags, err := newConfigAndFlags(cr.Kubeflags)
+	configAndFlags, err := newConfigAndFlags(cr.KubeFlags, cr.MappedNamespaces)
 	if err != nil {
 		r.Error = rpc.ConnectInfo_CLUSTER_FAILED
 		r.ErrorText = err.Error()
@@ -213,6 +213,13 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	if s.cluster != nil {
 		setStatus()
 		if s.cluster.equals(configAndFlags) {
+			mns := configAndFlags.mappedNamespaces
+			if len(mns) > 0 {
+				if len(mns) == 1 && mns[0] == "all" {
+					mns = nil
+				}
+				s.cluster.setMappedNamespaces(c, mns)
+			}
 			r.Error = rpc.ConnectInfo_ALREADY_CONNECTED
 		} else {
 			r.Error = rpc.ConnectInfo_MUST_RESTART
