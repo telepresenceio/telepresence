@@ -116,7 +116,6 @@ func (kc *k8sCluster) refreshNamespacesAndUnlock(c context.Context, accWait chan
 	kc.accLock.Unlock()
 
 	if nsChange {
-		kc.updateDaemonNamespaces(c, namespaces)
 		kc.refreshWatchers(c, namespaces, accWait)
 		kc.lastNamespaces = namespaces
 	}
@@ -228,17 +227,24 @@ func (kc *k8sCluster) watchPodsAndServices(c context.Context, watcher *k8sWatche
 
 // updateDaemonNamespaces will create a new DNS search path from the given namespaces and
 // send it to the DNS-resolver in the daemon.
-func (kc *k8sCluster) updateDaemonNamespaces(c context.Context, namespaces []string) {
+func (kc *k8sCluster) updateDaemonNamespaces(c context.Context, nsMap map[string]struct{}) {
 	if kc.daemon == nil {
 		// NOTE! Some tests dont't set the daemon
 		return
 	}
-	// Send updated search path to the daemon
+
+	namespaces := make([]string, len(nsMap))
+	i := 0
+	for ns := range nsMap {
+		namespaces[i] = ns
+		i++
+	}
+	sort.Strings(namespaces)
+
 	paths := make([]string, 0, len(namespaces)+3)
 	for _, ns := range namespaces {
 		paths = append(paths, ns+".svc.cluster.local.")
 	}
-
 	paths = append(paths, "svc.cluster.local.", "cluster.local.", "")
 	dlog.Debugf(c, "posting search paths to %s", strings.Join(paths, " "))
 	if _, err := kc.daemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths}); err != nil {

@@ -78,10 +78,12 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 				break
 			}
 			snapshotPortForwards := make(map[portForward]struct{})
+			namespaces := make(map[string]struct{})
 			for _, intercept := range snapshot.Intercepts {
 				if intercept.Disposition != manager.InterceptDispositionType_ACTIVE {
 					continue
 				}
+				namespaces[intercept.Spec.Namespace] = struct{}{}
 				pf := portForward{
 					ManagerPort: intercept.ManagerPort,
 					TargetHost:  intercept.Spec.TargetHost,
@@ -117,6 +119,7 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 					delete(livePortForwards, pf)
 				}
 			}
+			tm.updateDaemonNamespaces(ctx, namespaces)
 		}
 
 		if ctx.Err() == nil {
