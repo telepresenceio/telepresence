@@ -29,19 +29,7 @@ If you need another protocol supported, please [drop us a line](../../../../feed
 
 ** When using Telepresence to intercept a pod, are the Kubernetes cluster environment variables proxied to my local machine?**
 
-Yes, you have three options for getting the environment variables from
-the cluster; when creating the intercept with `telepresence
-intercept`, you can:
-
-  1. Use the `--env-file=FILENAME` flag to write the environment
-     variables to a [Docker Compose
-     env-file](https://docs.docker.com/compose/env-file/).
-  2. Use the `--env-json=FILENAME` flag to write the environment
-     variables to a JSON blob file.
-  3. Append a command to `telepresence intercept`, separating it from
-     the usual arguments with `--` (`telepresence intercept
-     YOURSERVICE -- <COMMAND>`) to run a command with the environment
-     variables set.
+Yes, please see [this document](../reference/environment/) for more information.
 
 ** When using Telepresence to intercept a pod, are the associated pod volume mounts also proxied and shared with my local machine?**
 
