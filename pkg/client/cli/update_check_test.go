@@ -78,7 +78,7 @@ func Test_newUpdateChecker(t *testing.T) {
 	}
 
 	// create the initial cache.
-	if err = uc.storeNextCheck(checkDuration); err != nil {
+	if err = uc.storeNextCheck(ctx, checkDuration); err != nil {
 		t.Fatal(err)
 	}
 
@@ -111,7 +111,7 @@ func Test_newUpdateChecker(t *testing.T) {
 	if v != nil {
 		t.Fatal("Expected updateAvailable() to return nil")
 	}
-	if err = uc.storeNextCheck(checkDuration); err != nil {
+	if err = uc.storeNextCheck(ctx, checkDuration); err != nil {
 		t.Fatal(err)
 	}
 

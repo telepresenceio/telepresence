@@ -15,14 +15,14 @@ func SaveIngressesToUserCache(ctx context.Context, ingresses map[string]*manager
 	if len(ingresses) == 0 {
 		return DeleteIngressesFromUserCache(ctx)
 	}
-	return saveToUserCache(ctx, ingresses, ingressesFile)
+	return SaveToUserCache(ctx, ingresses, ingressesFile)
 }
 
 // LoadIngressesFromUserCache gets the ingresses from cache. An empty map is returned if the
 // file does not exist. An error is returned if something goes wrong while loading or unmarshalling.
 func LoadIngressesFromUserCache(ctx context.Context) (map[string]*manager.IngressInfo, error) {
 	var ingresses map[string]*manager.IngressInfo
-	err := loadFromUserCache(ctx, &ingresses, ingressesFile)
+	err := LoadFromUserCache(ctx, &ingresses, ingressesFile)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
@@ -35,5 +35,5 @@ func LoadIngressesFromUserCache(ctx context.Context) (map[string]*manager.Ingres
 // DeleteIngressesFromUserCache removes the ingresses cache if exists or returns an error. An attempt
 // to remove a non existing cache is a no-op and the function returns nil.
 func DeleteIngressesFromUserCache(ctx context.Context) error {
-	return deleteFromUserCache(ctx, ingressesFile)
+	return DeleteFromUserCache(ctx, ingressesFile)
 }

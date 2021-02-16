@@ -41,7 +41,7 @@ func CacheDir() string {
 	return cacheDir
 }
 
-func saveToUserCache(ctx context.Context, object interface{}, file string) error {
+func SaveToUserCache(ctx context.Context, object interface{}, file string) error {
 	jsonContent, err := json.Marshal(object)
 	if err != nil {
 		return err
@@ -49,7 +49,7 @@ func saveToUserCache(ctx context.Context, object interface{}, file string) error
 	return ioutil.WriteFile(filepath.Join(CacheDir(), file), jsonContent, 0600)
 }
 
-func loadFromUserCache(ctx context.Context, dest interface{}, file string) error {
+func LoadFromUserCache(ctx context.Context, dest interface{}, file string) error {
 	jsonContent, err := ioutil.ReadFile(filepath.Join(CacheDir(), file))
 	if err != nil {
 		return err
@@ -60,7 +60,7 @@ func loadFromUserCache(ctx context.Context, dest interface{}, file string) error
 	return nil
 }
 
-func deleteFromUserCache(ctx context.Context, file string) error {
+func DeleteFromUserCache(ctx context.Context, file string) error {
 	cacheFile := filepath.Join(CacheDir(), file)
 	if _, err := os.Stat(cacheFile); err != nil {
 		if os.IsNotExist(err) {

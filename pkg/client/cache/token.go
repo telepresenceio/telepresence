@@ -13,14 +13,14 @@ const (
 // SaveTokenToUserCache saves the provided token to user cache and returns an error if something
 // goes wrong while marshalling or persisting.
 func SaveTokenToUserCache(ctx context.Context, token *oauth2.Token) error {
-	return saveToUserCache(ctx, token, tokenFile)
+	return SaveToUserCache(ctx, token, tokenFile)
 }
 
 // LoadTokenFromUserCache gets the token instance from cache or returns an error if something goes
 // wrong while loading or unmarshalling.
 func LoadTokenFromUserCache(ctx context.Context) (*oauth2.Token, error) {
 	var token oauth2.Token
-	err := loadFromUserCache(ctx, &token, tokenFile)
+	err := LoadFromUserCache(ctx, &token, tokenFile)
 	if err != nil {
 		return nil, err
 	}
@@ -29,5 +29,5 @@ func LoadTokenFromUserCache(ctx context.Context) (*oauth2.Token, error) {
 
 // DeleteTokenFromUserCache removes token cache if existing or returns an error
 func DeleteTokenFromUserCache(ctx context.Context) error {
-	return deleteFromUserCache(ctx, tokenFile)
+	return DeleteFromUserCache(ctx, tokenFile)
 }
