@@ -13,6 +13,7 @@ type uninstallInfo struct {
 	agent      bool
 	allAgents  bool
 	everything bool
+	namespace  string
 }
 
 func uninstallCommand() *cobra.Command {
@@ -27,6 +28,8 @@ func uninstallCommand() *cobra.Command {
 	flags.BoolVarP(&ui.agent, "agent", "d", false, "uninstall intercept agent on specific deployments")
 	flags.BoolVarP(&ui.allAgents, "all-agents", "a", false, "uninstall intercept agent on all deployments")
 	flags.BoolVarP(&ui.everything, "everything", "e", false, "uninstall intercept agent on all deployments")
+	flags.StringVarP(&ui.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
+
 	return cmd
 }
 

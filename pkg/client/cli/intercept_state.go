@@ -29,6 +29,7 @@ type interceptInfo struct {
 
 	name      string
 	agentName string
+	namespace string
 	port      int
 
 	// [REDACTED]
@@ -81,6 +82,8 @@ func interceptCommand() *cobra.Command {
 	flags.StringVarP(&ii.mount, "mount", "", "true", ``+
 		`The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use "true" to `+
 		`have Telepresence pick a random mount point (default). Use "false" to disable filesystem mounting entirely.`)
+
+	flags.StringVarP(&ii.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
 
 	return cmd
 }

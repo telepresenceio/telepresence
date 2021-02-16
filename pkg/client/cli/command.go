@@ -141,7 +141,9 @@ func Command() *cobra.Command {
 			Name: "Kubernetes flags",
 			Flags: func() *pflag.FlagSet {
 				kubeFlags = pflag.NewFlagSet("", 0)
-				kates.NewConfigFlags(false).AddFlags(kubeFlags)
+				cfgFlags := kates.NewConfigFlags(false)
+				cfgFlags.Namespace = nil // some of the subcommands, like "connect", don't take --namespace
+				cfgFlags.AddFlags(kubeFlags)
 				return kubeFlags
 			}(),
 		}}

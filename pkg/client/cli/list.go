@@ -17,6 +17,7 @@ type listInfo struct {
 	onlyAgents        bool
 	onlyInterceptable bool
 	debug             bool
+	namespace         string
 }
 
 func listCommand() *cobra.Command {
@@ -32,6 +33,7 @@ func listCommand() *cobra.Command {
 	flags.BoolVarP(&s.onlyAgents, "agents", "a", false, "with installed agents only")
 	flags.BoolVarP(&s.onlyInterceptable, "only-interceptable", "o", true, "interceptable deployments only")
 	flags.BoolVar(&s.debug, "debug", false, "include debugging information")
+	flags.StringVarP(&s.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
 	return cmd
 }
 

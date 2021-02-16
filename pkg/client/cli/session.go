@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"errors"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -12,9 +10,6 @@ import (
 
 type sessionInfo struct {
 	cmd *cobra.Command
-
-	// Namespace used in within the scope of a single command
-	namespace string
 }
 
 // withDaemon establishes a daemon session and calls the function with the gRPC client. If
@@ -39,10 +34,6 @@ func (si *sessionInfo) kubeFlagMap() map[string]string {
 			kubeFlagMap[flag.Name] = flag.Value.String()
 		}
 	})
-
-	// The namespace option is never passed on to the connector as an option
-	si.namespace = kubeFlagMap["namespace"]
-	delete(kubeFlagMap, "namespace")
 	return kubeFlagMap
 }
 
@@ -85,11 +76,6 @@ func withStartedConnector(cmd *cobra.Command, f func(state *connectorState) erro
 }
 
 func (si *sessionInfo) connect(cmd *cobra.Command, args []string) error {
-	if cmd.Flag("namespace").Changed {
-		return cmd.FlagErrorFunc()(cmd, errors.New(``+
-			`the --namespace flag is not supported by the connect command because the `+
-			`outbound cluster connectivity that it establishes is namespace insensitive`))
-	}
 	si.cmd = cmd
 	if len(args) == 0 {
 		return si.withConnector(true, func(_ *connectorState) error { return nil })
