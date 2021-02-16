@@ -216,7 +216,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	deleteMount := false
 	if ir.MountPoint != "" {
-		// Ensure that the mount-point is free t use
+		// Ensure that the mount-point is free to use
 		if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, spec.Name); loaded {
 			return &rpc.InterceptResult{
 				InterceptInfo: nil,
