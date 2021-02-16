@@ -86,11 +86,6 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 					TargetHost:  intercept.Spec.TargetHost,
 					TargetPort:  intercept.Spec.TargetPort,
 				}
-				mf := mountForward{
-					Name:    intercept.Spec.Name,
-					PodName: intercept.PodName,
-					SshPort: intercept.SshPort,
-				}
 				snapshotPortForwards[pf] = struct{}{}
 				if _, isLive := livePortForwards[pf]; !isLive {
 					pfCtx, pfCancel := context.WithCancel(ctx)
@@ -98,9 +93,19 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 						fmt.Sprintf("/%d:%s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort))
 					livePortForwards[pf] = pfCancel
 
-					wg.Add(2)
+					wg.Add(1)
 					go tm.workerPortForwardIntercept(pfCtx, pf, &wg)
-					go tm.workerMountForwardIntercept(pfCtx, mf, &wg)
+
+					// There's nothing to mount if the SshPort is zero
+					if intercept.SshPort != 0 {
+						mf := mountForward{
+							Name:    intercept.Spec.Name,
+							PodName: intercept.PodName,
+							SshPort: intercept.SshPort,
+						}
+						wg.Add(1)
+						go tm.workerMountForwardIntercept(pfCtx, mf, &wg)
+					}
 				}
 			}
 			for pf, cancel := range livePortForwards {
@@ -210,9 +215,9 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 		}
 	}
 
+	deleteMount := false
 	if ir.MountPoint != "" {
-		// Don't overwrite a mount-point for the agent. If a previous mount-point exists, it will
-		// be used.
+		// Ensure that the mount-point is free t use
 		if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, ir.Name); loaded {
 			return &rpc.InterceptResult{
 				InterceptInfo: nil,
@@ -220,6 +225,15 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 				ErrorText:     prev.(string),
 			}, nil
 		}
+
+		// Assume that the mount-point should to be removed from the busy map. Only a happy path
+		// to successful intercept that actually has remote mounts will set this to false.
+		deleteMount = true
+		defer func() {
+			if deleteMount {
+				tm.mountPoints.Delete(ir.MountPoint)
+			}
+		}()
 	}
 
 	dlog.Debugf(c, "creating intercept %s", ir.Name)
@@ -238,14 +252,13 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	c, cancel := context.WithTimeout(c, 5*time.Second)
 	defer cancel()
 	if ii, err = tm.waitForActiveIntercept(c, ii.Id); err != nil {
-		_ = tm.removeIntercept(c, spec.Name)
 		return &rpc.InterceptResult{Error: rpc.InterceptError_FAILED_TO_ESTABLISH, ErrorText: err.Error()}, nil
 	}
 	result.InterceptInfo = ii
-	if ir.MountPoint != "" {
+	if ir.MountPoint != "" && ii.SshPort > 0 {
 		result.Environment["TELEPRESENCE_ROOT"] = ir.MountPoint
+		deleteMount = false // Mount-point is busy until intercept ends
 	}
-
 	return result, nil
 }
 

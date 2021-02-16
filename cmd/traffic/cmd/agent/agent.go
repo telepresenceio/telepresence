@@ -23,6 +23,7 @@ type Config struct {
 	Namespace   string `env:"AGENT_NAMESPACE,required"`
 	PodName     string `env:"AGENT_POD_NAME,required"`
 	AgentPort   int32  `env:"AGENT_PORT,default=9900"`
+	AppMounts   string `env:"APP_MOUNTS,default="`
 	AppPort     int32  `env:"APP_PORT,required"`
 	ManagerHost string `env:"MANAGER_HOST,default=traffic-manager"`
 	ManagerPort int32  `env:"MANAGER_PORT,default=8081"`
@@ -34,6 +35,7 @@ var skipKeys = map[string]bool{
 	"AGENT_NAMESPACE": true,
 	"AGENT_POD_NAME":  true,
 	"AGENT_PORT":      true,
+	"APP_MOUNTS":      true,
 	"APP_PORT":        true,
 	"MANAGER_HOST":    true,
 	"MANAGER_PORT":    true,
@@ -121,29 +123,22 @@ func Main(ctx context.Context, args ...string) error {
 	})
 
 	sshPort := 0
-	if user == "" {
+	if config.AppMounts != "" && user == "" {
+		// start an ssh daemon to server remote sshfs mounts
 		l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 		if err != nil {
 			return err
 		}
 		sshPort = l.Addr().(*net.TCPAddr).Port
 		_ = l.Close()
+
+		// Run sshd
+		g.Go("sshd", func(ctx context.Context) error {
+			return dexec.CommandContext(ctx, "/usr/sbin/sshd", "-De", "-p", strconv.Itoa(sshPort)).Run()
+		})
+	} else {
+		dlog.Info(ctx, "Not starting sshd ($APP_MOUNTS is empty or $USER is set)")
 	}
-
-	// Run sshd
-	g.Go("sshd", func(ctx context.Context) error {
-		var cmd *dexec.Cmd
-
-		// Avoid starting sshd while running locally for debugging. Launch sleep
-		// instead so that the launch and kill code is tested in development.
-		if user != "" {
-			dlog.Info(ctx, "Not starting sshd ($USER is set)")
-			cmd = dexec.CommandContext(ctx, "sleep", "1000000")
-		} else {
-			cmd = dexec.CommandContext(ctx, "/usr/sbin/sshd", "-De", "-p", strconv.Itoa(sshPort))
-		}
-		return cmd.Run()
-	})
 
 	forwarderChan := make(chan *Forwarder)
 
