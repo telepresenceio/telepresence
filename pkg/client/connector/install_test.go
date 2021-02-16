@@ -203,7 +203,7 @@ func Test_findTrafficManager_present(t *testing.T) {
 			return err
 		}
 		accWait := make(chan struct{})
-		err = kc.startWatches(c, namespace, accWait)
+		err = kc.startWatchers(c, accWait)
 		if err != nil {
 			return err
 		}

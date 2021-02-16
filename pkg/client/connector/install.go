@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -255,19 +256,21 @@ func (ki *installer) findMatchingServices(portName string, dep *kates.Deployment
 	matching := make([]*kates.Service, 0)
 
 	ki.accLock.Lock()
-nextSvc:
-	for _, svc := range ki.Services {
-		selector := svc.Spec.Selector
-		if len(selector) == 0 {
-			continue nextSvc
-		}
-		for k, v := range selector {
-			if labels[k] != v {
+	for _, watch := range ki.watchers {
+	nextSvc:
+		for _, svc := range watch.Services {
+			selector := svc.Spec.Selector
+			if len(selector) == 0 {
 				continue nextSvc
 			}
-		}
-		if svcPortByName(svc, portName) != nil {
-			matching = append(matching, svc)
+			for k, v := range selector {
+				if labels[k] != v {
+					continue nextSvc
+				}
+			}
+			if svcPortByName(svc, portName) != nil {
+				matching = append(matching, svc)
+			}
 		}
 	}
 	ki.accLock.Unlock()
@@ -281,6 +284,22 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 	cPortIndex int,
 	err error,
 ) {
+	// Sort slice of services so that the ones in the same namespace get prioritized.
+	sort.Slice(svcs, func(i, j int) bool {
+		a := svcs[i]
+		b := svcs[j]
+		if a.Namespace != b.Namespace {
+			if a.Namespace == dep.Namespace {
+				return true
+			}
+			if b.Namespace == dep.Namespace {
+				return false
+			}
+			return a.Namespace < b.Namespace
+		}
+		return a.Name < b.Name
+	})
+
 	cns := dep.Spec.Template.Spec.Containers
 	for _, svc := range svcs {
 		port := svcPortByName(svc, portName)
@@ -686,10 +705,22 @@ func (ki *installer) managerDeployment(env client.Env) *kates.Deployment {
 	}
 }
 
+func (ki *installer) findManagerSvc(c context.Context) (*kates.Service, error) {
+	svc := &kates.Service{
+		TypeMeta:   kates.TypeMeta{Kind: "Service"},
+		ObjectMeta: kates.ObjectMeta{Name: managerAppName, Namespace: managerNamespace},
+	}
+	if err := ki.client.Get(c, svc, svc); err != nil {
+		return nil, err
+	}
+	return svc, nil
+}
+
 func (ki *installer) ensureManager(c context.Context, env client.Env) error {
-	var err error
-	if svc := ki.findSvc(managerNamespace, managerAppName); svc == nil {
-		_, err = ki.createManagerSvc(c)
+	if _, err := ki.findManagerSvc(c); err != nil {
+		if errors2.IsNotFound(err) {
+			_, err = ki.createManagerSvc(c)
+		}
 		if err != nil {
 			return err
 		}

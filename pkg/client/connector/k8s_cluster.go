@@ -5,8 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -16,9 +14,7 @@ import (
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dexec"
-	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dutil"
 	"github.com/datawire/telepresence2/rpc/v2/daemon"
 	"github.com/datawire/telepresence2/v2/pkg/client"
 )
@@ -43,12 +39,13 @@ type k8sCluster struct {
 
 	lastNamespaces []string
 
-	// Current snapshot.
-	// These fields (except for accLock/accCond) get set by acc.Update().
-	accLock    sync.Mutex
-	accCond    *sync.Cond
-	Pods       []*kates.Pod
-	Services   []*kates.Service
+	accLock  sync.Mutex
+	watchers map[string]*k8sWatcher
+
+	// watcherChanged is a channel that accumulates the channels of all watchers.
+	watcherChanged chan struct{}
+
+	// Current Namespace snapshot, get set by acc.Update().
 	Namespaces []*objName
 }
 
@@ -147,186 +144,6 @@ func (kc *k8sCluster) check(c context.Context) error {
 	return nil
 }
 
-func (kc *k8sCluster) createWatch(c context.Context, namespace string) (acc *kates.Accumulator, err error) {
-	defer func() {
-		if r := dutil.PanicToError(recover()); r != nil {
-			err = r
-		}
-	}()
-
-	return kc.client.Watch(c,
-		kates.Query{
-			Name:      "Services",
-			Namespace: namespace,
-			Kind:      "service",
-		},
-		kates.Query{
-			Name:      "Namespaces",
-			Namespace: namespace,
-			Kind:      "namespace",
-		},
-		kates.Query{
-			Name:      "Pods",
-			Namespace: namespace,
-			Kind:      "pod",
-		}), nil
-}
-
-func (kc *k8sCluster) startWatches(c context.Context, namespace string, accWait chan<- struct{}) error {
-	acc, err := kc.createWatch(c, namespace)
-	if err != nil {
-		return err
-	}
-
-	closeAccWait := func() {
-		if accWait != nil {
-			close(accWait)
-			accWait = nil
-		}
-	}
-
-	dgroup.ParentGroup(c).Go("watch-k8s", func(c context.Context) error {
-		for {
-			select {
-			case <-c.Done():
-				closeAccWait()
-				return nil
-			case <-acc.Changed():
-				func() {
-					kc.accLock.Lock()
-					defer kc.accLock.Unlock()
-					if acc.Update(kc) {
-						kc.updateDaemon(c)
-						kc.accCond.Broadcast()
-					}
-				}()
-				closeAccWait()
-			}
-		}
-	})
-	return nil
-}
-
-func (kc *k8sCluster) updateDaemon(c context.Context) {
-	if kc.daemon == nil {
-		return
-	}
-
-	namespaces := make([]string, 0, len(kc.Namespaces))
-	for _, ns := range kc.Namespaces {
-		if !strings.HasPrefix(ns.Name, "kube-") {
-			namespaces = append(namespaces, ns.Name)
-		}
-	}
-	sort.Strings(namespaces)
-
-	nsChange := len(namespaces) != len(kc.lastNamespaces)
-	if !nsChange {
-		for i, ns := range namespaces {
-			if ns != kc.lastNamespaces[i] {
-				nsChange = true
-				break
-			}
-		}
-	}
-
-	if nsChange {
-		// Send updated search path to the daemon
-		paths := make([]string, 0, len(namespaces)+3)
-		for _, ns := range namespaces {
-			paths = append(paths, ns+".svc.cluster.local.")
-		}
-		paths = append(paths, "svc.cluster.local.", "cluster.local.", "")
-		dlog.Debugf(c, "posting search paths to %s", strings.Join(paths, " "))
-		if _, err := kc.daemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths}); err != nil {
-			dlog.Errorf(c, "error posting search paths to %s: %v", strings.Join(paths, " "), err)
-		}
-		kc.lastNamespaces = namespaces
-	}
-
-	table := daemon.Table{Name: "kubernetes"}
-	for _, svc := range kc.Services {
-		spec := svc.Spec
-
-		ip := spec.ClusterIP
-		// for headless services the IP is None, we
-		// should properly handle these by listening
-		// for endpoints and returning multiple A
-		// records at some point
-		if ip == "" || ip == "None" {
-			continue
-		}
-		qName := svc.Name + "." + svc.Namespace + ".svc.cluster.local"
-
-		ports := ""
-		for _, port := range spec.Ports {
-			if ports == "" {
-				ports = fmt.Sprintf("%d", port.Port)
-			} else {
-				ports = fmt.Sprintf("%s,%d", ports, port.Port)
-			}
-
-			// Kubernetes creates records for all named ports, of the form
-			// _my-port-name._my-port-protocol.my-svc.my-namespace.svc.cluster-domain.example
-			// https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#srv-records
-			if port.Name != "" {
-				proto := strings.ToLower(string(port.Protocol))
-				table.Routes = append(table.Routes, &daemon.Route{
-					Name:   fmt.Sprintf("_%v._%v.%v", port.Name, proto, qName),
-					Ip:     ip,
-					Port:   ports,
-					Proto:  proto,
-					Target: ProxyRedirPort,
-				})
-			}
-		}
-
-		table.Routes = append(table.Routes, &daemon.Route{
-			Name:   qName,
-			Ip:     ip,
-			Port:   ports,
-			Proto:  "tcp",
-			Target: ProxyRedirPort,
-		})
-	}
-	for _, pod := range kc.Pods {
-		qname := ""
-
-		hostname := pod.Spec.Hostname
-		if hostname != "" {
-			qname += hostname
-		}
-
-		subdomain := pod.Spec.Subdomain
-		if subdomain != "" {
-			qname += "." + subdomain
-		}
-
-		if qname == "" {
-			// Note: this is a departure from kubernetes, kubernetes will
-			// simply not publish a dns name in this case.
-			qname = pod.Name + "." + pod.Namespace + ".pod.cluster.local"
-		} else {
-			qname += ".svc.cluster.local"
-		}
-
-		ip := pod.Status.PodIP
-		if ip != "" {
-			table.Routes = append(table.Routes, &daemon.Route{
-				Name:   qname,
-				Ip:     ip,
-				Proto:  "tcp",
-				Target: ProxyRedirPort,
-			})
-		}
-	}
-
-	// Send updated table to daemon
-	if _, err := kc.daemon.Update(c, &table); err != nil {
-		dlog.Errorf(c, "error posting update to %s: %v", table.Name, err)
-	}
-}
-
 // deploymentNames  returns the names of all deployments found in the given Namespace
 func (kc *k8sCluster) deploymentNames(c context.Context, namespace string) ([]string, error) {
 	var objNames []objName
@@ -358,10 +175,12 @@ func (kc *k8sCluster) findDeployment(c context.Context, namespace, name string) 
 func (kc *k8sCluster) findSvc(namespace, name string) *kates.Service {
 	var svcCopy *kates.Service
 	kc.accLock.Lock()
-	for _, svc := range kc.Services {
-		if svc.Namespace == namespace && svc.Name == name {
-			svcCopy = svc.DeepCopy()
-			break
+	if watcher, ok := kc.watchers[namespace]; ok {
+		for _, svc := range watcher.Services {
+			if svc.Namespace == namespace && svc.Name == name {
+				svcCopy = svc.DeepCopy()
+				break
+			}
 		}
 	}
 	kc.accLock.Unlock()
@@ -373,10 +192,12 @@ func (kc *k8sCluster) findSvc(namespace, name string) *kates.Service {
 func (kc *k8sCluster) findAllSvcByType(svcType v1.ServiceType) []*kates.Service {
 	var svcCopies []*kates.Service
 	kc.accLock.Lock()
-	for _, svc := range kc.Services {
-		if svc.Spec.Type == svcType {
-			svcCopies = append(svcCopies, svc.DeepCopy())
-			break
+	for _, watcher := range kc.watchers {
+		for _, svc := range watcher.Services {
+			if svc.Spec.Type == svcType {
+				svcCopies = append(svcCopies, svc.DeepCopy())
+				break
+			}
 		}
 	}
 	kc.accLock.Unlock()
@@ -403,11 +224,11 @@ func newKCluster(c context.Context, kubeFlags *k8sConfig, daemon daemon.DaemonCl
 	}
 
 	ret := &k8sCluster{
-		k8sConfig: kubeFlags,
-		client:    kc,
-		daemon:    daemon,
+		k8sConfig:      kubeFlags,
+		client:         kc,
+		daemon:         daemon,
+		watcherChanged: make(chan struct{}),
 	}
-	ret.accCond = sync.NewCond(&ret.accLock)
 
 	if err := ret.check(c); err != nil {
 		return nil, fmt.Errorf("initial cluster check failed: %v", client.RunError(err))
@@ -425,16 +246,17 @@ func trackKCluster(c context.Context, kubeFlags *k8sConfig, daemon daemon.Daemon
 	dlog.Infof(c, "Context: %s", kc.Context)
 	dlog.Infof(c, "Server: %s", kc.Server)
 
-	// accWait is closed when the watch produces its first snapshot
+	// accWait is closed when the watcher produces its first snapshot
 	accWait := make(chan struct{})
-	if err := kc.startWatches(c, kates.NamespaceAll, accWait); err != nil {
-		dlog.Errorf(c, "watch all namespaces: %+v", err)
+	if err := kc.startWatchers(c, accWait); err != nil {
+		dlog.Errorf(c, "watcher cluster resources: %+v", err)
 		close(accWait)
 		return nil, err
 	}
 	// wait until accumulator has produced its first snapshot.
 	select {
 	case <-accWait:
+		dlog.Debug(c, "tracker ready")
 		return kc, nil
 	case <-time.After(10 * time.Second):
 		// if first snapshot hasn't arrived within 10 seconds, then something is wrong.

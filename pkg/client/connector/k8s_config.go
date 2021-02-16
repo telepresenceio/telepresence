@@ -12,13 +12,14 @@ import (
 )
 
 type k8sConfig struct {
-	Namespace   string // default cluster namespace.
-	Context     string
-	Server      string
-	flagMap     map[string]string
-	flagArgs    []string
-	configFlags *kates.ConfigFlags
-	config      *rest.Config
+	Namespace        string // default cluster namespace.
+	Context          string
+	Server           string
+	mappedNamespaces []string
+	flagMap          map[string]string
+	flagArgs         []string
+	configFlags      *kates.ConfigFlags
+	config           *rest.Config
 }
 
 func newConfigAndFlags(flagMap map[string]string) (*k8sConfig, error) {
@@ -26,22 +27,12 @@ func newConfigAndFlags(flagMap map[string]string) (*k8sConfig, error) {
 	// respect to this option.
 	delete(flagMap, "namespace")
 
-	// Sort lexically to make comparison easy
-	ks := make([]string, len(flagMap))
-	i := 0
-	for k := range flagMap {
-		ks[i] = k
-		i++
-	}
-	sort.Strings(ks)
-
-	flagArgs := make([]string, len(ks))
+	flagArgs := make([]string, 0, len(flagMap))
 	configFlags := kates.NewConfigFlags(false)
 	flags := pflag.NewFlagSet("", 0)
 	configFlags.AddFlags(flags)
-	for i, k := range ks {
-		v := flagMap[k]
-		flagArgs[i] = "--" + k + "=" + v
+	for k, v := range flagMap {
+		flagArgs = append(flagArgs, "--"+k+"="+v)
 		if err := flags.Set(k, v); err != nil {
 			return nil, fmt.Errorf("error processing kubectl flag --%s=%s: %v", k, v, err)
 		}
@@ -82,14 +73,18 @@ func newConfigAndFlags(flagMap map[string]string) (*k8sConfig, error) {
 		namespace = "default"
 	}
 
+	// Sort for easy comparison
+	sort.Strings(flagArgs)
+
 	return &k8sConfig{
-		Context:     ctxName,
-		Server:      cluster.Server,
-		Namespace:   namespace,
-		flagMap:     flagMap,
-		flagArgs:    flagArgs,
-		configFlags: configFlags,
-		config:      restConfig,
+		Context:          ctxName,
+		Server:           cluster.Server,
+		Namespace:        namespace,
+		mappedNamespaces: nil,
+		flagMap:          flagMap,
+		flagArgs:         flagArgs,
+		configFlags:      configFlags,
+		config:           restConfig,
 	}, nil
 }
 
