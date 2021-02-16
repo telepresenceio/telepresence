@@ -32,7 +32,7 @@ import (
 
 // serviceCount is the number of interceptable services that gets installed
 // in the cluster and later intercepted
-const serviceCount = 9
+const serviceCount = 3
 
 func TestTelepresence(t *testing.T) {
 	dtest.WithMachineLock(func() {
@@ -297,8 +297,8 @@ func (cs *connectedSuite) TestB_ReportsStatusAsConnected() {
 
 func (cs *connectedSuite) TestC_ProxiesOutboundTraffic() {
 	for i := 0; i < serviceCount; i++ {
-		svc := fmt.Sprintf("hello-%d", i)
-		expectedOutput := fmt.Sprintf("Request served by %s-", svc)
+		svc := fmt.Sprintf("hello-%d.%s.svc.cluster.local", i, cs.namespace)
+		expectedOutput := fmt.Sprintf("Request served by hello-%d", i)
 		cs.Eventually(
 			// condition
 			func() bool {
@@ -318,8 +318,8 @@ func (cs *connectedSuite) TestC_ProxiesOutboundTraffic() {
 				cs.T().Logf("body: %q", body)
 				return strings.Contains(string(body), expectedOutput)
 			},
-			15*time.Second,       // waitfor
-			500*time.Millisecond, // polling interval
+			15*time.Second, // waitfor
+			3*time.Second,  // polling interval
 			`body of %q contains %q`, "http://"+svc, expectedOutput,
 		)
 	}
@@ -366,8 +366,8 @@ func (is *interceptedSuite) SetupSuite() {
 				}
 				return true
 			},
-			15*time.Second,       // waitFor
-			500*time.Millisecond, // polling interval
+			15*time.Second, // waitFor
+			3*time.Second,  // polling interval
 			`telepresence list reports all agents`,
 		)
 	})
@@ -435,8 +435,8 @@ func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
 				is.T().Logf("body: %q", body)
 				return string(body) == expectedOutput
 			},
-			15*time.Second,       // waitFor
-			500*time.Millisecond, // polling interval
+			15*time.Second, // waitFor
+			3*time.Second,  // polling interval
 			`body of %q equals %q`, "http://"+svc, expectedOutput,
 		)
 	}
