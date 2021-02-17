@@ -74,9 +74,6 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 	// Review waiting intercepts
 	reviews := []*manager.ReviewInterceptRequest{}
 	for i, cept := range cepts {
-		if cept.Spec.Namespace != s.namespace {
-			continue
-		}
 		if cept.Disposition == manager.InterceptDispositionType_WAITING {
 			// This intercept is ready to be active
 			switch {
