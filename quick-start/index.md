@@ -91,7 +91,7 @@ Your local workstation may not have the compute or memory resources necessary to
     traffic-manager-f8c64686-8f4jn               1/1     Running   0          2m47s
     verylargedatastore-855c8b8789-z8nhs          1/1     Running   0          78s
     verylargejavaservice-7dfddbc95c-696br        1/1     Running   0          78s
-    dataprocessingservice-5f6bfdcf7b-qvd27   1/1     Running   0          79s
+    dataprocessingservice-5f6bfdcf7b-qvd27       1/1     Running   0          79s
   ```
 
 3. Once all the pods are in a `Running` status, stop the `watch` command with `Ctrl+C`.  Then go to the frontend service in your browser at [http://verylargejavaservice:8080](http://verylargejavaservice:8080).
