@@ -156,7 +156,7 @@ func (m *Manager) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 		// sessionID refers to an agent session
 		filter = func(id string, info *rpc.InterceptInfo) bool {
 			// Don't return intercepts for different agents.
-			if info.Spec.Agent != agent.Name {
+			if info.Spec.Namespace != agent.Namespace || info.Spec.Agent != agent.Name {
 				return false
 			}
 			// Don't return intercepts that aren't in a "agent-owned" state.
