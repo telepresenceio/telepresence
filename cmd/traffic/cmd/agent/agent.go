@@ -25,7 +25,7 @@ type Config struct {
 	AgentPort   int32  `env:"AGENT_PORT,default=9900"`
 	AppMounts   string `env:"APP_MOUNTS,default="`
 	AppPort     int32  `env:"APP_PORT,required"`
-	ManagerHost string `env:"MANAGER_HOST,default=traffic-manager"`
+	ManagerHost string `env:"MANAGER_HOST,default=traffic-manager.ambassador"`
 	ManagerPort int32  `env:"MANAGER_PORT,default=8081"`
 }
 
@@ -106,6 +106,7 @@ func Main(ctx context.Context, args ...string) error {
 		Product:     "telepresence",
 		Version:     version.Version,
 		Environment: AppEnvironment(),
+		Namespace:   config.Namespace,
 	}
 
 	// Select initial mechanism
@@ -169,7 +170,7 @@ func Main(ctx context.Context, args ...string) error {
 			return nil
 		}
 
-		state := NewState(forwarder, config.ManagerHost, config.PodName, int32(sshPort))
+		state := NewState(forwarder, config.ManagerHost, config.Namespace, config.PodName, int32(sshPort))
 
 		for {
 			if err := TalkToManager(ctx, gRPCAddress, info, state); err != nil {

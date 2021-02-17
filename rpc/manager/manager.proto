@@ -24,7 +24,8 @@ message ClientInfo {
 // AgentInfo is the self-reported metadata that an Agent (app-sidecar)
 // reports at boot-up when it connects to the Telepresence Manager.
 message AgentInfo {
-  string name = 1; // namespace/name of the Deployment
+  string name = 1;      // name of the Deployment
+  string namespace = 7; // namespace of the Deployment
   string hostname = 2;
   string product = 3; // distinguish open source, our closed source, someone else's thing
   string version = 4;
@@ -65,8 +66,11 @@ message InterceptSpec {
   // Same as ClientInfo.Name; "user@hostname".
   string client = 2;
 
-  // Same as AgentInfo.Name; "name/namespace" of the Deployment.
+  // Same as AgentInfo.Name of the Deployment.
   string agent = 3;
+
+  // Same as AgentInfo.Namespace of the Deployment
+  string namespace = 8;
 
   // How to decide which subset of requests to that agent to intercept.
   string mechanism = 4;
@@ -193,8 +197,8 @@ message ReviewInterceptRequest {
   string message = 4;
 
   // pod name and ssh port to use when doing sshfs mounts
-  string pod_name = 10;
-  int32 ssh_port = 11;
+  string pod_name = 5;
+  int32 ssh_port = 6;
 }
 
 message RemainRequest {

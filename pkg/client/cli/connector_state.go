@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
@@ -78,15 +77,10 @@ func (cs *connectorState) EnsureState() (bool, error) {
 }
 
 func (cs *connectorState) setConnectInfo() error {
-	kubeFlagMap := make(map[string]string)
-	kubeFlags.VisitAll(func(flag *pflag.Flag) {
-		if flag.Changed {
-			kubeFlagMap[flag.Name] = flag.Value.String()
-		}
-	})
 	r, err := cs.connectorClient.Connect(cs.cmd.Context(), &connector.ConnectRequest{
-		Kubeflags: kubeFlagMap,
-		InstallId: client.NewScout("unused").Reporter.InstallID(),
+		KubeFlags:        cs.kubeFlagMap(),
+		InstallId:        client.NewScout("unused").Reporter.InstallID(),
+		MappedNamespaces: mappedNamespaces,
 	})
 	if err != nil {
 		return err
@@ -102,6 +96,8 @@ func (cs *connectorState) setConnectInfo() error {
 		return nil
 	case connector.ConnectInfo_DISCONNECTING:
 		msg = "Unable to connect while disconnecting"
+	case connector.ConnectInfo_MUST_RESTART:
+		msg = "Cluster configuration changed, please quit telepresence and reconnect"
 	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_CLUSTER_FAILED, connector.ConnectInfo_BRIDGE_FAILED:
 		msg = r.ErrorText
 	}

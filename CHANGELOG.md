@@ -3,6 +3,8 @@
 ### 2.0.2 (TBD)
 
 - Feature: Telepresence is now capable of forwarding the intercepted Pod's volume mounts (as Telepresence 0.x did) via the `--mount` flag to `telepresence intercept`.
+- Feature: Telepresence will now allow simultaneous intercepts in different namespaces.
+- Feature: It is now possible for a user to limit what namespaces that will be used by the DNS-resolver and the NAT.
 - Bugfix: Fix the kubectl version number check to handle version numbers with a "+" in them.
 - Bugfix: Fix a bug with some configurations on macOS where we clash with mDNSResponder's use of port 53.
 

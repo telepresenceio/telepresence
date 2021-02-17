@@ -50,9 +50,10 @@ type portForward struct {
 }
 
 type mountForward struct {
-	Name    string
-	PodName string
-	SshPort int32
+	Name      string
+	Namespace string
+	PodName   string
+	SshPort   int32
 }
 
 func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error {
@@ -77,10 +78,12 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 				break
 			}
 			snapshotPortForwards := make(map[portForward]struct{})
+			namespaces := make(map[string]struct{})
 			for _, intercept := range snapshot.Intercepts {
 				if intercept.Disposition != manager.InterceptDispositionType_ACTIVE {
 					continue
 				}
+				namespaces[intercept.Spec.Namespace] = struct{}{}
 				pf := portForward{
 					ManagerPort: intercept.ManagerPort,
 					TargetHost:  intercept.Spec.TargetHost,
@@ -99,9 +102,10 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 					// There's nothing to mount if the SshPort is zero
 					if intercept.SshPort != 0 {
 						mf := mountForward{
-							Name:    intercept.Spec.Name,
-							PodName: intercept.PodName,
-							SshPort: intercept.SshPort,
+							Name:      intercept.Spec.Name,
+							Namespace: intercept.Spec.Namespace,
+							PodName:   intercept.PodName,
+							SshPort:   intercept.SshPort,
 						}
 						wg.Add(1)
 						go tm.workerMountForwardIntercept(pfCtx, mf, &wg)
@@ -115,6 +119,7 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 					delete(livePortForwards, pf)
 				}
 			}
+			tm.updateDaemonNamespaces(ctx, namespaces)
 		}
 
 		if ctx.Err() == nil {
@@ -134,8 +139,11 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 
 // addIntercept adds one intercept
 func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
+	namespace := tm.actualNamespace(ir.Namespace)
+
 	spec := &manager.InterceptSpec{
 		Name:       ir.Name,
+		Namespace:  namespace,
 		Agent:      ir.AgentName,
 		Mechanism:  ir.MatchMechanism,
 		Additional: ir.MatchAdditional,
@@ -184,7 +192,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	var found *manager.AgentInfo
 	if ags, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId); ags != nil {
 		for _, ag := range ags {
-			if !(ag.Name == spec.Agent && hasSpecMechanism(ag)) {
+			if !(ag.Namespace == namespace && ag.Name == spec.Agent && hasSpecMechanism(ag)) {
 				continue
 			}
 			if found == nil {
@@ -206,7 +214,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	var result *rpc.InterceptResult
 	if found == nil {
-		if result = tm.addAgent(c, agentName, agentImageName(c, tm.env)); result.Error != rpc.InterceptError_UNSPECIFIED {
+		if result = tm.addAgent(c, namespace, agentName, agentImageName(c, tm.env)); result.Error != rpc.InterceptError_UNSPECIFIED {
 			return result, nil
 		}
 	} else {
@@ -262,8 +270,8 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	return result, nil
 }
 
-func (tm *trafficManager) addAgent(c context.Context, agentName, agentImageName string) *rpc.InterceptResult {
-	if err := tm.installer.ensureAgent(c, agentName, "", agentImageName); err != nil {
+func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, agentImageName string) *rpc.InterceptResult {
+	if err := tm.ensureAgent(c, namespace, agentName, "", agentImageName); err != nil {
 		if err == agentNotFound {
 			return &rpc.InterceptResult{
 				Error:     rpc.InterceptError_NOT_FOUND,
@@ -439,6 +447,8 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 	// kubectl port-forward arguments
 	pfArgs := []string{
 		// Port forward to pod
+		"--namespace",
+		mf.Namespace,
 		mf.PodName,
 
 		// from dynamically allocated local port to the pods sshPort
@@ -464,7 +474,7 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 
 	// Retry mount in case it gets disconnected
 	err := client.Retry(ctx, "kubectl port-forward to pod", func(ctx context.Context) error {
-		return tm.k8sClient.portForwardAndThen(ctx, pfArgs, outputScanner, func(ctx context.Context, rg interface{}) error {
+		return tm.portForwardAndThen(ctx, pfArgs, outputScanner, func(ctx context.Context, rg interface{}) error {
 			localPort := rg.(string)
 			sshArgs := []string{
 				"-F", "none", // don't load the user's config file

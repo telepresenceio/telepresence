@@ -178,6 +178,7 @@ func TestConnect(t *testing.T) {
 
 	spec := &rpc.InterceptSpec{
 		Name:       "first",
+		Namespace:  "default",
 		Client:     testClients["alice"].Name,
 		Agent:      testAgents["hello"].Name,
 		Mechanism:  "tcp",

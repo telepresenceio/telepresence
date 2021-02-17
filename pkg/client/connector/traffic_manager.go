@@ -13,6 +13,7 @@ import (
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -26,13 +27,12 @@ import (
 // trafficManager is a handle to access the Traffic Manager in a
 // cluster.
 type trafficManager struct {
+	*installer // installer is also a k8sCluster
+
 	// local information
 	env         client.Env
 	installID   string // telepresence's install ID
 	userAndHost string // "laptop-username@laptop-hostname"
-
-	// k8s client
-	k8sClient *k8sCluster
 
 	// manager client
 	managerClient manager.ManagerClient
@@ -48,8 +48,6 @@ type trafficManager struct {
 	// `kubectl port-forward` and `ssh -D` processes; it should go away by way of moving the
 	// port-forwarding to happen in the userd process.
 	sshPort int32
-
-	installer *installer
 
 	// Map of desired mount points for intercepts
 	mountPoints sync.Map
@@ -73,9 +71,8 @@ func newTrafficManager(c context.Context, env client.Env, cluster *k8sCluster, i
 		return nil, errors.Wrap(err, "new installer")
 	}
 	tm := &trafficManager{
-		env:         env,
-		k8sClient:   cluster,
 		installer:   ti,
+		env:         env,
 		installID:   installID,
 		startup:     make(chan bool),
 		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host),
@@ -97,7 +94,7 @@ func (tm *trafficManager) waitUntilStarted(c context.Context) error {
 }
 
 func (tm *trafficManager) run(c context.Context) error {
-	err := tm.installer.ensureManager(c, tm.env)
+	err := tm.ensureManager(c, tm.env)
 	if err != nil {
 		tm.managerErr = err
 		close(tm.startup)
@@ -105,6 +102,8 @@ func (tm *trafficManager) run(c context.Context) error {
 	}
 
 	kpfArgs := []string{
+		"--namespace",
+		managerNamespace,
 		"svc/traffic-manager",
 		fmt.Sprintf(":%d", ManagerPortSSH),
 		fmt.Sprintf(":%d", ManagerPortHTTP)}
@@ -132,7 +131,7 @@ func (tm *trafficManager) run(c context.Context) error {
 	}
 
 	return client.Retry(c, "svc/traffic-manager port-forward", func(c context.Context) error {
-		return tm.installer.portForwardAndThen(c, kpfArgs, outputScanner, tm.initGrpc)
+		return tm.portForwardAndThen(c, kpfArgs, outputScanner, tm.initGrpc)
 	}, 2*time.Second, 6*time.Second)
 }
 
@@ -197,12 +196,17 @@ func (tm *trafficManager) session() *manager.SessionInfo {
 	return tm.sessionInfo
 }
 
-func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, filter rpc.ListRequest_Filter) *rpc.DeploymentInfoSnapshot {
+func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, rq *rpc.ListRequest) *rpc.DeploymentInfoSnapshot {
 	var iMap map[string]*manager.InterceptInfo
+
+	namespace := tm.actualNamespace(rq.Namespace)
+
 	if is, _ := actions.ListMyIntercepts(ctx, tm.managerClient, tm.session().SessionId); is != nil {
 		iMap = make(map[string]*manager.InterceptInfo, len(is))
 		for _, i := range is {
-			iMap[i.Spec.Agent] = i
+			if i.Spec.Namespace == namespace {
+				iMap[i.Spec.Agent] = i
+			}
 		}
 	} else {
 		iMap = map[string]*manager.InterceptInfo{}
@@ -211,13 +215,22 @@ func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, filter rpc
 	if as, _ := actions.ListAllAgents(ctx, tm.managerClient, tm.session().SessionId); as != nil {
 		aMap = make(map[string]*manager.AgentInfo, len(as))
 		for _, a := range as {
-			aMap[a.Name] = a
+			if a.Namespace == namespace {
+				aMap[a.Name] = a
+			}
 		}
 	} else {
 		aMap = map[string]*manager.AgentInfo{}
 	}
+
+	filter := rq.Filter
 	depInfos := make([]*rpc.DeploymentInfo, 0)
-	for _, depName := range tm.k8sClient.deploymentNames() {
+	depNames, err := tm.deploymentNames(ctx, namespace)
+	if err != nil {
+		dlog.Error(ctx, err)
+		return &rpc.DeploymentInfoSnapshot{}
+	}
+	for _, depName := range depNames {
 		iCept, ok := iMap[depName]
 		if !ok && filter <= rpc.ListRequest_INTERCEPTS {
 			continue
@@ -229,12 +242,15 @@ func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, filter rpc
 		reason := ""
 		if agent == nil && iCept == nil {
 			// Check if interceptable
-			dep := tm.k8sClient.findDeployment(depName)
-			if dep == nil {
+			dep, err := tm.findDeployment(ctx, namespace, depName)
+			if err != nil {
 				// Removed from snapshot since the name slice was obtained
+				if !errors2.IsNotFound(err) {
+					dlog.Error(ctx, err)
+				}
 				continue
 			}
-			matchingSvcs := tm.installer.findMatchingServices("", dep)
+			matchingSvcs := tm.findMatchingServices("", dep)
 			if len(matchingSvcs) == 0 {
 				if !ok && filter <= rpc.ListRequest_INTERCEPTABLE {
 					continue
@@ -294,6 +310,7 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 }
 
 func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
+	namespace := tm.actualNamespace(ur.Namespace)
 	result := &rpc.UninstallResult{}
 	agents, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId)
 
@@ -306,7 +323,7 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 		for _, di := range ur.Agents {
 			found := false
 			for _, ai := range agents {
-				if di == ai.Name {
+				if namespace == ai.Namespace && di == ai.Name {
 					found = true
 					selectedAgents = append(selectedAgents, ai)
 					break
@@ -320,13 +337,13 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 		fallthrough
 	case rpc.UninstallRequest_ALL_AGENTS:
 		if len(agents) > 0 {
-			if err := tm.installer.removeManagerAndAgents(c, true, agents); err != nil {
+			if err := tm.removeManagerAndAgents(c, true, agents); err != nil {
 				result.ErrorText = err.Error()
 			}
 		}
 	default:
 		// Cancel all communication with the manager
-		if err := tm.installer.removeManagerAndAgents(c, false, agents); err != nil {
+		if err := tm.removeManagerAndAgents(c, false, agents); err != nil {
 			result.ErrorText = err.Error()
 		}
 	}

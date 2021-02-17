@@ -19,17 +19,19 @@ type state struct {
 	appHost     string
 	appPort     int32
 	chosenID    string
+	namespace   string
 	podName     string
 	sshPort     int32
 }
 
-func NewState(forwarder *Forwarder, managerHost, podName string, sshPort int32) State {
+func NewState(forwarder *Forwarder, managerHost, namespace, podName string, sshPort int32) State {
 	host, port := forwarder.Target()
 	return &state{
 		forwarder:   forwarder,
 		managerHost: managerHost,
 		appHost:     host,
 		appPort:     port,
+		namespace:   namespace,
 		podName:     podName,
 		sshPort:     sshPort,
 	}
@@ -72,6 +74,9 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 	// Review waiting intercepts
 	reviews := []*manager.ReviewInterceptRequest{}
 	for i, cept := range cepts {
+		if cept.Spec.Namespace != s.namespace {
+			continue
+		}
 		if cept.Disposition == manager.InterceptDispositionType_WAITING {
 			// This intercept is ready to be active
 			switch {

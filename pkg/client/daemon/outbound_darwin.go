@@ -152,7 +152,6 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 
 		if err = rf.write(resolverFileName); err != nil {
 			dlog.Error(c, err)
-			return
 		}
 	}
 

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/datawire/telepresence2/rpc/v2/daemon"
 	"github.com/datawire/telepresence2/v2/pkg/client"
@@ -24,6 +25,16 @@ func (si *sessionInfo) withDaemon(retain bool, f func(state *daemonState) error)
 	}
 	defer ds.disconnect()
 	return client.WithEnsuredState(ds, retain, func() error { return f(ds) })
+}
+
+func (si *sessionInfo) kubeFlagMap() map[string]string {
+	kubeFlagMap := make(map[string]string)
+	kubeFlags.VisitAll(func(flag *pflag.Flag) {
+		if flag.Changed {
+			kubeFlagMap[flag.Name] = flag.Value.String()
+		}
+	})
+	return kubeFlagMap
 }
 
 func withStartedDaemon(cmd *cobra.Command, f func(state *daemonState) error) error {

@@ -171,7 +171,7 @@ func (s *service) List(ctx context.Context, lr *rpc.ListRequest) (*rpc.Deploymen
 	if s.trafficMgr.managerClient == nil {
 		return &rpc.DeploymentInfoSnapshot{}, nil
 	}
-	return s.trafficMgr.deploymentInfoSnapshot(ctx, lr.Filter), nil
+	return s.trafficMgr.deploymentInfoSnapshot(ctx, lr), nil
 }
 
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {
@@ -192,7 +192,6 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		r.ClusterOk = true
 		r.ClusterContext = s.cluster.Context
 		r.ClusterServer = s.cluster.Server
-		r.ClusterNamespace = s.cluster.Namespace
 		r.ClusterId = s.cluster.getClusterId(c)
 		if s.bridge != nil {
 			r.BridgeOk = s.bridge.check(c)
@@ -203,10 +202,28 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		r.IngressInfos = s.cluster.detectIngressBehavior()
 	}
 
+	configAndFlags, err := newConfigAndFlags(cr.KubeFlags, cr.MappedNamespaces)
+	if err != nil {
+		r.Error = rpc.ConnectInfo_CLUSTER_FAILED
+		r.ErrorText = err.Error()
+		return r
+	}
+
 	// Sanity checks
 	if s.cluster != nil {
 		setStatus()
-		r.Error = rpc.ConnectInfo_ALREADY_CONNECTED
+		if s.cluster.equals(configAndFlags) {
+			mns := configAndFlags.mappedNamespaces
+			if len(mns) > 0 {
+				if len(mns) == 1 && mns[0] == "all" {
+					mns = nil
+				}
+				s.cluster.setMappedNamespaces(c, mns)
+			}
+			r.Error = rpc.ConnectInfo_ALREADY_CONNECTED
+		} else {
+			r.Error = rpc.ConnectInfo_MUST_RESTART
+		}
 		return r
 	}
 
@@ -230,7 +247,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	})
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	cluster, err := trackKCluster(s.ctx, cr.Kubeflags, s.daemon)
+	cluster, err := trackKCluster(s.ctx, configAndFlags, s.daemon)
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
 		r.Error = rpc.ConnectInfo_CLUSTER_FAILED
@@ -239,15 +256,6 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		return r
 	}
 	s.cluster = cluster
-
-	/*
-		previewHost, err := cluster.getClusterPreviewHostname(p)
-		if err != nil {
-			p.Logf("get preview URL hostname: %+v", err)
-			previewHost = ""
-		}
-	*/
-
 	dlog.Infof(c, "Connected to context %s (%s)", s.cluster.Context, s.cluster.Server)
 
 	tmgr, err := newTrafficManager(s.ctx, s.env, s.cluster, cr.InstallId)
@@ -273,8 +281,8 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	}
 	s.managerProxy.SetClient(tmgr.managerClient)
 
-	dlog.Infof(c, "Starting traffic-manager bridge in context %s, namespace %s", cluster.Context, cluster.Namespace)
-	br := newBridge(cluster.Namespace, s.daemon, tmgr.sshPort)
+	dlog.Infof(c, "Starting traffic-manager bridge in context %s", cluster.Context)
+	br := newBridge(s.daemon, tmgr.sshPort)
 	err = br.start(s.ctx)
 	if err != nil {
 		dlog.Errorf(c, "Failed to start traffic-manager bridge: %v", err)

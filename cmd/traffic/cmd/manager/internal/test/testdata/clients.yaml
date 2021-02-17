@@ -1,21 +1,25 @@
 ---
 alice:
   name: alice@squirtle.bigcorp.com
+  namespace: default
   installid: install_id_for_alice
   product: telepresence
   version: "1"
 bob:
   name: bob@bulbasaur.bigcorp.com
+  namespace: default
   installid: install_id_for_bob
   product: telepresence
   version: "1"
 cameron:
   name: cameron@charmander.bigcorp.com
+  namespace: default
   installid: install_id_for_cameron
   product: telepresence
   version: "1"
 pat:
   name: pat@pikachu.bigcorp.com
+  namespace: default
   installid: install_id_for_pat
   product: telepresence
   version: "1"

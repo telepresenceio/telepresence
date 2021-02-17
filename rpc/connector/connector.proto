@@ -34,8 +34,9 @@ service Connector {
 
 // ConnectRequest contains the information needed to connect ot a cluster.
 message ConnectRequest {
-  map<string, string> kubeflags = 1;
-  string install_id = 2;
+  map<string, string> kube_flags = 1;
+  repeated string mapped_namespaces = 2;
+  string install_id = 3;
 }
 
 message ConnectInfo {
@@ -47,6 +48,7 @@ message ConnectInfo {
     CLUSTER_FAILED = 4;
     BRIDGE_FAILED = 5;
     TRAFFIC_MANAGER_FAILED = 6;
+    MUST_RESTART = 7;
   }
   ErrType error = 1;
   string error_text = 2;
@@ -60,8 +62,7 @@ message ConnectInfo {
   repeated manager.IngressInfo ingress_infos = 9;
 
   telepresence.manager.SessionInfo session_info = 10;
-  string cluster_namespace = 11;
-  string cluster_id = 12;
+  string cluster_id = 11;
 }
 
 message UninstallRequest {
@@ -80,6 +81,9 @@ message UninstallRequest {
 
   UninstallType uninstall_type = 1;
   repeated string agents = 2;
+
+  // Namespace of agents to remove.
+  string namespace = 3;
 }
 
 message UninstallResult {
@@ -90,6 +94,7 @@ message CreateInterceptRequest {
   manager.SessionInfo session = 1;
   string name = 2;
   string agent_name = 3;
+  string namespace = 9;
   string match_mechanism = 4;
   string match_additional = 5;
   string target_host = 6;
@@ -125,6 +130,9 @@ message ListRequest {
     EVERYTHING = 4;
   }
   Filter filter = 1;
+
+  // Namespace to list.
+  string namespace = 2;
 }
 
 // DeploymentInfo contains information about a deployment
