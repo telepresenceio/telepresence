@@ -71,7 +71,6 @@ func (kc *k8sCluster) startWatchers(c context.Context, accWait chan struct{}) (e
 			case <-c.Done():
 				return nil
 			case <-kc.watcherChanged:
-				dlog.Debug(c, "watcher changed")
 				kc.updateDaemonTable(c)
 			}
 		}

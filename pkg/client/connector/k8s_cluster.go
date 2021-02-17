@@ -256,7 +256,6 @@ func trackKCluster(c context.Context, kubeFlags *k8sConfig, daemon daemon.Daemon
 	// wait until accumulator has produced its first snapshot.
 	select {
 	case <-accWait:
-		dlog.Debug(c, "tracker ready")
 		return kc, nil
 	case <-time.After(10 * time.Second):
 		// if first snapshot hasn't arrived within 10 seconds, then something is wrong.
