@@ -2,7 +2,6 @@ package cli_test
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -18,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -525,35 +523,31 @@ func output(args ...string) (string, error) {
 	return string(out), client.RunError(err)
 }
 
-func getCommand(ctx context.Context, args ...string) *cobra.Command {
-	cmd := cli.Command(ctx)
-	cmd.SetArgs(args)
-	flags := cmd.Flags()
-
-	// Circumvent test flag conflict explained here https://golang.org/doc/go1.13#testing
-	flag.Visit(func(f *flag.Flag) {
-		flags.AddGoFlag(f)
-	})
-	cmd.SetOut(new(strings.Builder))
-	cmd.SetErr(new(strings.Builder))
-	cmd.SilenceErrors = true
-	return cmd
-}
-
-func trimmed(f func() io.Writer) string {
-	if out, ok := f().(*strings.Builder); ok {
-		return strings.TrimSpace(out.String())
-	}
-	return ""
-}
-
 // telepresence executes the CLI command in-process
 func telepresence(t testing.TB, args ...string) (string, string) {
 	ctx := dlog.NewTestContext(t, false)
-	cmd := getCommand(ctx, args...)
-	err := cmd.ExecuteContext(ctx)
-	if err != nil {
+
+	dlog.Infof(ctx, "running command: %q", append([]string{"telepresence"}, args...))
+
+	cmd := cli.Command(ctx)
+
+	stdout := new(strings.Builder)
+	cmd.SetOut(io.MultiWriter(
+		stdout,
+		dlog.StdLogger(dlog.WithField(ctx, "stream", "stdout"), dlog.LogLevelInfo).Writer(),
+	))
+
+	stderr := new(strings.Builder)
+	cmd.SetErr(io.MultiWriter(
+		stderr,
+		dlog.StdLogger(dlog.WithField(ctx, "stream", "stderr"), dlog.LogLevelInfo).Writer(),
+	))
+
+	cmd.SetArgs(args)
+	if err := cmd.ExecuteContext(ctx); err != nil {
 		fmt.Fprintln(cmd.ErrOrStderr(), err)
 	}
-	return trimmed(cmd.OutOrStdout), trimmed(cmd.ErrOrStderr)
+
+	dlog.Infof(ctx, "command terminated %q", append([]string{"telepresence"}, args...))
+	return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String())
 }
