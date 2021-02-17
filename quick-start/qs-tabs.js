@@ -8,7 +8,7 @@ import Typography from '@material-ui/core/Typography';
 import Box from '@material-ui/core/Box';
 import Button from '@material-ui/core/Button';
 import HubspotForm from 'react-hubspot-form';
-import CodeBlock from '../../../../src/components/CodeBlock/CodeBlock'
+
 
 
 function TabPanel(props) {
