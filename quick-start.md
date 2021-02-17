@@ -6,7 +6,7 @@ import Alert from '@material-ui/lab/Alert';
 import QSTabs from './qs-tabs'
 import QSCards from './qs-cards'
 
-# Telepresence Quick Start X
+# Telepresence Quick Start
 
 ## Prerequisites
 You’ll need `kubectl` installed and configured to use a Kubernetes cluster, preferably an empty test cluster.  You must have RBAC permissions in the cluster to create and update deployments and services.
