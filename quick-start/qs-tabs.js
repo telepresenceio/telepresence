@@ -8,7 +8,7 @@ import Typography from '@material-ui/core/Typography';
 import Box from '@material-ui/core/Box';
 import Button from '@material-ui/core/Button';
 import HubspotForm from 'react-hubspot-form';
-import CodeBlock from '../../../../src/components/CodeBlock/CodeBlock'
+
 
 
 function TabPanel(props) {
@@ -88,7 +88,7 @@ export default function SimpleTabs() {
       1. Download the latest binary(~50 MB):<br/>
       <code>sudo curl -fL https://app.getambassador.io/download/tel2/linux/amd64/latest/telepresence -o /usr/local/bin/telepresence</code><br/>
       2. Make the binary executable:<br/>
-      <code>sudo chmod a+x /usr/local/bin/telepresence</code>  
+      <code>sudo chmod a+x /usr/local/bin/telepresence</code> 
 
         </TabPanel>
 
