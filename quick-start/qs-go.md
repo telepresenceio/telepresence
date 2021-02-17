@@ -64,7 +64,7 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
 
 <Alert severity="success"><b>Congratulations! You’ve just accessed your remote Kubernetes API server, as if you were on the same network!</b> With Telepresence, you’re able to use any tool that you have locally to connect to any service in the cluster.</Alert>
 
-## 3. Install a sample application
+## 3. Install a sample Go application
 
 Your local workstation may not have the compute or memory resources necessary to run all the services in a multi-service application. In this example, we’ll show you how Telepresence can give you a fast development loop, even in this situation.
 
