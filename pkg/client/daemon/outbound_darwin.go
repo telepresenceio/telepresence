@@ -245,7 +245,7 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 		defer o.dnsListener.Close()
 		v := dns.NewServer(c, []net.PacketConn{o.dnsListener}, "", func(domain string) string {
 			if r := o.resolveNoSearch(domain); r != nil {
-				return r.Ip
+				return o.getIP(r.Ips)
 			}
 			return ""
 		})

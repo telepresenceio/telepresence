@@ -84,7 +84,7 @@ func (o *outbound) tryResolveD(c context.Context, onReady func()) error {
 		v := dns.NewServer(c, []net.PacketConn{dnsResolverListener}, "", func(domain string) string {
 			// Namespaces are defined on the network DNS config and managed by ResolveD, so not needed here.
 			if r := o.resolveNoSearch(domain); r != nil {
-				return r.Ip
+				return o.getIP(r.Ips)
 			}
 			return ""
 		})

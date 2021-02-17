@@ -3,6 +3,7 @@ package connector
 import (
 	"context"
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 
@@ -17,6 +18,7 @@ import (
 type k8sWatcher struct {
 	Pods      []*kates.Pod
 	Services  []*kates.Service
+	Endpoints []*kates.Endpoints
 	cancel    context.CancelFunc
 	namespace string
 }
@@ -206,6 +208,11 @@ func (kc *k8sCluster) watchPodsAndServices(c context.Context, watcher *k8sWatche
 			Kind:      "service",
 		},
 		kates.Query{
+			Name:      "Endpoints",
+			Namespace: watcher.namespace,
+			Kind:      "endpoints",
+		},
+		kates.Query{
 			Name:      "Pods",
 			Namespace: watcher.namespace,
 			Kind:      "pod",
@@ -289,7 +296,7 @@ func (kc *k8sCluster) updateDaemonTable(c context.Context) {
 	kc.accLock.Lock()
 	for _, watcher := range kc.watchers {
 		for _, svc := range watcher.Services {
-			updateTableFromService(svc, table)
+			updateTableFromService(c, svc, watcher.Endpoints, table)
 		}
 		for _, pod := range watcher.Pods {
 			updateTableFromPod(pod, table)
@@ -303,15 +310,22 @@ func (kc *k8sCluster) updateDaemonTable(c context.Context) {
 	}
 }
 
-func updateTableFromService(svc *kates.Service, table *daemon.Table) {
+func updateTableFromService(c context.Context, svc *kates.Service, endpoints []*kates.Endpoints, table *daemon.Table) {
 	spec := &svc.Spec
-	ip := spec.ClusterIP
-	// for headless services the IP is None, we
-	// should properly handle these by listening
-	// for endpoints and returning multiple A
-	// records at some point
-	if ip == "" || ip == "None" {
-		return
+	clusterIP := spec.ClusterIP
+	var ips []string
+	var err error
+	// Handle headless services separately since they don't have cluster IPs
+	if clusterIP == "" || clusterIP == "None" {
+		ips, err = getIPsFromHeadlessService(svc, spec.ExternalName, endpoints)
+		if err != nil {
+			dlog.Errorf(c, "Error finding IPs for service %s: %s", svc.Name, err)
+		}
+		if len(ips) == 0 {
+			dlog.Errorf(c, "Found no IPs for service %s", svc.Name)
+		}
+	} else {
+		ips = append(ips, clusterIP)
 	}
 	qName := svc.Name + "." + svc.Namespace + clusterServerSuffix
 
@@ -330,7 +344,7 @@ func updateTableFromService(svc *kates.Service, table *daemon.Table) {
 			proto := strings.ToLower(string(port.Protocol))
 			table.Routes = append(table.Routes, &daemon.Route{
 				Name:   fmt.Sprintf("_%v._%v.%v", port.Name, proto, qName),
-				Ip:     ip,
+				Ips:    ips,
 				Port:   ports,
 				Proto:  proto,
 				Target: ProxyRedirPort,
@@ -340,11 +354,56 @@ func updateTableFromService(svc *kates.Service, table *daemon.Table) {
 
 	table.Routes = append(table.Routes, &daemon.Route{
 		Name:   qName,
-		Ip:     ip,
+		Ips:    ips,
 		Port:   ports,
 		Proto:  "tcp",
 		Target: ProxyRedirPort,
 	})
+}
+
+// Headless Services don't have a cluster IP so we need to get their IP(s) separately.
+// Docs on headless services can be found here
+// https://kubernetes.io/docs/concepts/services-networking/service/#headless-services
+func getIPsFromHeadlessService(svc *kates.Service, externalName string, endpoints []*kates.Endpoints) ([]string, error) {
+	serviceName := svc.Name
+	var ips []string
+	// ExternalName services don't have endpoints so we handle them separately.
+	if externalName != "" {
+		domainIPs, err := net.LookupIP(externalName)
+		if err != nil {
+			return nil, err
+		}
+		if len(domainIPs) == 0 {
+			return nil, nil
+		}
+		for _, ip := range domainIPs {
+			ips = append(ips, ip.String())
+		}
+	} else {
+		// see if there's an associated endpoint with the headless service
+		for i := range endpoints {
+			if endpoints[i].ObjectMeta.Name == serviceName {
+				matchingEndpoint := endpoints[i]
+				if len(matchingEndpoint.Subsets) > 0 {
+					endpointSubset := matchingEndpoint.Subsets[0]
+
+					// Endpoints have two sets of addresses: Addresses and NotReadyAddresses
+					// We only want to forward traffic to pods that are ready one so we only
+					// loop through the ready addresses
+					for _, address := range endpointSubset.Addresses {
+						ips = append(ips, address.IP)
+					}
+					if len(ips) == 0 {
+						return nil, nil
+					}
+				} else {
+					return nil, nil
+				}
+				break
+			}
+		}
+	}
+	return ips, nil
 }
 
 func updateTableFromPod(pod *kates.Pod, table *daemon.Table) {
@@ -368,11 +427,11 @@ func updateTableFromPod(pod *kates.Pod, table *daemon.Table) {
 		qname += clusterServerSuffix
 	}
 
-	ip := pod.Status.PodIP
-	if ip != "" {
+	ips := []string{pod.Status.PodIP}
+	if len(ips) > 0 {
 		table.Routes = append(table.Routes, &daemon.Route{
 			Name:   qname,
-			Ip:     ip,
+			Ips:    ips,
 			Proto:  "tcp",
 			Target: ProxyRedirPort,
 		})

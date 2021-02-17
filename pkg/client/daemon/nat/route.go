@@ -12,12 +12,12 @@ import (
 // TODO(lukeshu): Why have we implemented the routing table in the firewall?  Mostly historical
 // reasons, and we should consider using the real routing table.
 type FirewallRouter interface {
-	ClearTCP(ctx context.Context, ip, port string) error
-	ClearUDP(ctx context.Context, ip, port string) error
+	ClearTCP(ctx context.Context, ips []string, port string) error
+	ClearUDP(ctx context.Context, ips []string, port string) error
 	Disable(ctx context.Context) error
 	Enable(ctx context.Context) error
-	ForwardTCP(ctx context.Context, ip, port, toPort string) error
-	ForwardUDP(ctx context.Context, ip, port, toPort string) error
+	ForwardTCP(ctx context.Context, ips []string, port, toPort string) error
+	ForwardUDP(ctx context.Context, ips []string, port, toPort string) error
 	GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host string, err error)
 }
 

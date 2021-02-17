@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net"
 	"strconv"
 	"strings"
@@ -154,7 +155,7 @@ func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
 			Name: "bootstrap",
 			Routes: []*rpc.Route{
 				{
-					Ip:     o.dnsIP,
+					Ips:    []string{o.dnsIP},
 					Target: strconv.Itoa(o.dnsRedirPort),
 					Proto:  "udp",
 				},
@@ -196,6 +197,20 @@ func (o *outbound) resolveNoSearch(query string) *rpc.Route {
 	return route
 }
 
+// Since headless and externalName services can have multiple IPs, we randomly
+// pick an IP here. I (donnyyung) admit this is not sophisticated + could be
+// improved, but for now I think it's sufficient.
+func (o *outbound) getIP(ips []string) string {
+	if len(ips) == 0 {
+		return ""
+	}
+	if len(ips) == 1 {
+		return ips[0]
+	}
+	randomIndex := rand.Intn(len(ips))
+	return ips[randomIndex]
+}
+
 func (o *outbound) destination(conn *net.TCPConn) (string, error) {
 	_, host, err := o.translator.GetOriginalDst(conn)
 	return host, err
@@ -211,6 +226,34 @@ func (o *outbound) noMoreUpdates() {
 	close(o.work)
 }
 
+// Helper function for seeing if two unordered
+// slices of IPs are equal.
+func ipsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	// Instead of comparing the slices directly, we make a
+	// map of the first slice, and then remove elements if
+	// they are in the second slice.
+	diff := make(map[string]int, len(a))
+	for _, aIP := range a {
+		diff[aIP]++
+	}
+	for _, bIP := range b {
+		// ip was in a, but not in b, so we quit early
+		if _, ok := diff[bIP]; !ok {
+			return false
+		}
+		diff[bIP]--
+		if diff[bIP] == 0 {
+			delete(diff, bIP)
+		}
+	}
+	// If the diff map is empty at the end, then the ips are the same
+	return len(diff) == 0
+}
+
 func routesEqual(a, b *rpc.Route) bool {
 	if a == b {
 		return true
@@ -218,7 +261,10 @@ func routesEqual(a, b *rpc.Route) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	return a.Name == b.Name && a.Action == b.Action && a.Ip == b.Ip && a.Port == b.Port && a.Target == b.Target
+	if !ipsEqual(a.Ips, b.Ips) {
+		return false
+	}
+	return a.Name == b.Name && a.Action == b.Action && a.Port == b.Port && a.Target == b.Target
 }
 
 func domain(r *rpc.Route) string {
@@ -251,11 +297,11 @@ func (o *outbound) doUpdate(c context.Context, table *rpc.Table) error {
 			if oldRouteOk {
 				switch newRoute.Proto {
 				case "tcp":
-					if err := o.translator.ClearTCP(c, oldRoute.Ip, oldRoute.Port); err != nil {
+					if err := o.translator.ClearTCP(c, oldRoute.Ips, oldRoute.Port); err != nil {
 						dlog.Errorf(c, "clear tpc: %v", err)
 					}
 				case "udp":
-					if err := o.translator.ClearUDP(c, oldRoute.Ip, oldRoute.Port); err != nil {
+					if err := o.translator.ClearUDP(c, oldRoute.Ips, oldRoute.Port); err != nil {
 						dlog.Errorf(c, "clear udp: %v", err)
 					}
 				default:
@@ -266,11 +312,11 @@ func (o *outbound) doUpdate(c context.Context, table *rpc.Table) error {
 			if newRoute.Target != "" {
 				switch newRoute.Proto {
 				case "tcp":
-					if err := o.translator.ForwardTCP(c, newRoute.Ip, newRoute.Port, newRoute.Target); err != nil {
+					if err := o.translator.ForwardTCP(c, newRoute.Ips, newRoute.Port, newRoute.Target); err != nil {
 						dlog.Errorf(c, "forward tcp: %v", err)
 					}
 				case "udp":
-					if err := o.translator.ForwardUDP(c, newRoute.Ip, newRoute.Port, newRoute.Target); err != nil {
+					if err := o.translator.ForwardUDP(c, newRoute.Ips, newRoute.Port, newRoute.Target); err != nil {
 						dlog.Errorf(c, "forward udp: %v", err)
 					}
 				default:
@@ -301,11 +347,11 @@ func (o *outbound) doUpdate(c context.Context, table *rpc.Table) error {
 
 		switch route.Proto {
 		case "tcp":
-			if err := o.translator.ClearTCP(c, route.Ip, route.Port); err != nil {
+			if err := o.translator.ClearTCP(c, route.Ips, route.Port); err != nil {
 				dlog.Errorf(c, "clear tpc: %v", err)
 			}
 		case "udp":
-			if err := o.translator.ClearUDP(c, route.Ip, route.Port); err != nil {
+			if err := o.translator.ClearUDP(c, route.Ips, route.Port); err != nil {
 				dlog.Errorf(c, "clear udp: %v", err)
 			}
 		default:

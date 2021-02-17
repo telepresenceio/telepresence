@@ -5,7 +5,7 @@ option go_package = "github.com/datawire/telepresence2/rpc/v2/daemon";
 
 message Route {
   string name = 1;
-  string ip = 2;
+  repeated string ips = 2;
   string proto = 3;
   string port = 4;
   string target = 5;

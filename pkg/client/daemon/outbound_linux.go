@@ -80,7 +80,7 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 
 	srv := dns.NewServer(c, listeners, o.fallbackIP+":53", func(domain string) string {
 		if r := o.resolve(domain); r != nil {
-			return r.Ip
+			return o.getIP(r.Ips)
 		}
 		return ""
 	})
