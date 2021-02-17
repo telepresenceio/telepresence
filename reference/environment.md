@@ -11,7 +11,7 @@ There are three options available to do this:
 
 1. `telepresence intercept <service> --port <port> --env-file=<filename>`
 
-  This will write the environment variables to a Docker Compose `.env` file. This file can be used with `docker-compose` when starting containers locally. Please see the Docker documentation regarding the <file syntax>(https://docs.docker.com/compose/env-file/) and <usage>(https://docs.docker.com/compose/environment-variables/) for more information.
+  This will write the environment variables to a Docker Compose `.env` file. This file can be used with `docker-compose` when starting containers locally. Please see the Docker documentation regarding the [file syntax](https://docs.docker.com/compose/env-file/) and [usage](https://docs.docker.com/compose/environment-variables/) for more information.
 
 2. `telepresence intercept <service> --port <port> --env-json=<filename>`
 
