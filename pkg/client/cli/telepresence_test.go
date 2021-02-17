@@ -42,8 +42,9 @@ func TestTelepresence(t *testing.T) {
 
 type telepresenceSuite struct {
 	suite.Suite
-	testVersion string
-	namespace   string
+	testVersion          string
+	namespace            string
+	managerTestNamespace string
 }
 
 func (ts *telepresenceSuite) SetupSuite() {
@@ -65,6 +66,7 @@ func (ts *telepresenceSuite) SetupSuite() {
 
 	ts.testVersion = fmt.Sprintf("v0.1.%d", os.Getpid())
 	ts.namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
+	ts.managerTestNamespace = fmt.Sprintf("ambassador-%d", os.Getpid())
 
 	version.Version = ts.testVersion
 
@@ -84,6 +86,7 @@ func (ts *telepresenceSuite) SetupSuite() {
 	registry := dtest.DockerRegistry()
 	os.Setenv("KO_DOCKER_REPO", registry)
 	os.Setenv("TELEPRESENCE_REGISTRY", registry)
+	os.Setenv("TELEPRESENCE_MANAGER_NAMESPACE", ts.managerTestNamespace)
 
 	wg.Add(1)
 	go func() {
@@ -131,6 +134,7 @@ func (ts *telepresenceSuite) SetupSuite() {
 
 func (ts *telepresenceSuite) TearDownSuite() {
 	_ = run("kubectl", "delete", "namespace", ts.namespace)
+	_ = run("kubectl", "delete", "namespace", ts.managerTestNamespace)
 }
 
 func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
@@ -229,7 +233,7 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 	ts.Run("Uninstalls the traffic manager and quits", func() {
 		names := func() (string, error) {
 			return ts.kubectlOut("get",
-				"--namespace", "ambassador",
+				"--namespace", ts.managerTestNamespace,
 				"svc,deploy", "traffic-manager",
 				"--ignore-not-found",
 				"-o", "jsonpath={.items[*].metadata.name}")

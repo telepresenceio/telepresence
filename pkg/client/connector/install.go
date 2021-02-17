@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -43,7 +44,12 @@ const annTelepresenceActions = domainPrefix + "actions"
 const agentContainerName = "traffic-agent"
 
 // this is modified in tests
-var managerNamespace = "ambassador"
+var managerNamespace = func() string {
+	if ns := os.Getenv("TELEPRESENCE_MANAGER_NAMESPACE"); ns != "" {
+		return ns
+	}
+	return "ambassador"
+}()
 
 var labelMap = map[string]string{
 	"app":          managerAppName,
