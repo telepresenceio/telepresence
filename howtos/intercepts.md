@@ -2,6 +2,8 @@
 description: "Telepresence help you develop Kubernetes services locally without running dependent services or redeploying code updates to your cluster on every change."
 ---
 
+import Alert from '@material-ui/lab/Alert';
+
 # Intercepts
 
 Intercepts enable you to test and debug services locally without needing to run dependent services or redeploy code updates to your cluster on every change.  A typical workflow would be to run the service you wish to develop on locally, then start an intercept. Changes to the local code can then be tested immediately along side other services running in the cluster.
@@ -12,8 +14,7 @@ Preview URLs are all managed through Ambassador Cloud.  You must run `telepresen
 
 While preview URLs selectively proxy traffic to your laptop, you can also run an [intercept without creating a preview URL](#creating-an-intercept-without-a-preview-url), which will proxy all traffic to the service.
 
-> For a detailed walk though on creating intercepts, follow the [Telepresence tutorial](../../tutorial/).
-
+<Alert severity="info">For a detailed walk though on creating intercepts, follow the [Telepresence tutorial](../../tutorial/).</Alert>
 
 ## Creating an Intercept
 
@@ -21,7 +22,7 @@ The following quick overview on creating an intercept assumes you have a deploym
 
 1. In your terminal run `telepresence login`. This logs you into the Ambassador Cloud, which will track your intercepts and let you share them with colleagues. 
 
-> If you are logged in and close the dashboard browser tab, quickly reopen it by running `telepresence dashboard`.
+<Alert severity="info"> If you are logged in and close the dashboard browser tab, you can quickly reopen it by running `telepresence dashboard`</Alert>
 
 2. Return to your terminal and run `telepresence list`.  This will connect to your cluster, install the [Traffic Manager](../../reference/) to proxy the traffic, and return a list of services that Telepresence is able to intercept.
 
@@ -48,6 +49,10 @@ The following quick overview on creating an intercept assumes you have a deploym
   telepresence quit
   telepresence uninstall --everything
   ```
+
+## Importing Environment Variables
+
+Telepresence can import the environment variables from the pod that is being intercepted, see [this doc](../../reference/environment.md) for more details.
 
 ## Creating an Intercept Without a Preview URL
 
