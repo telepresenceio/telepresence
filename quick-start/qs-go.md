@@ -68,7 +68,7 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
 
 Your local workstation may not have the compute or memory resources necessary to run all the services in a multi-service application. In this example, we’ll show you how Telepresence can give you a fast development loop, even in this situation.
 
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Go. <a href="../#3-install-a-sample-application">We also have a version with the sample app written in Node.js if you prefer</a>.</Alert>
+<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Go. <a href="../#3-install-a-sample-nodejs-application">We also have a version with the sample app written in Node.js if you prefer</a>.</Alert>
 
 1. Start by installing a sample application that consists of multiple services:  
 `kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-GO/main/k8s-config/edgey-corp-web-app-no-mapping.yaml`
