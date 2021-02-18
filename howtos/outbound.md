@@ -54,3 +54,9 @@ Connecting to the cluster starts the background daemon on your machine and insta
   $ telepresence quit
   Telepresence Daemon quitting...done
   ```
+
+## Controlling Outbound Connectivity
+
+By default, Telepresence will provide access to all Services found in all namespaces in the connected cluster. This might lead to problems if the user does not have access permissions to all namespaces via RBAC. The `--mapped-namespaces <comma separated list of namespaces>` flag was added to give the user control over exactly which namespaces that will accessible.
+
+When using this option, it is important to include all namespaces containing services to be accessed and also all namespaces that contain services that those intercepted services might use.
