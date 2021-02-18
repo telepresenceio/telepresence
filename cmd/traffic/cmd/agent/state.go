@@ -86,10 +86,11 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 				// manager to mark it ACTIVE again anyway, just to be safe.
 				dlog.Infof(ctx, "Setting intercept %q as ACTIVE (again?)", cept.Id)
 				reviews = append(reviews, &manager.ReviewInterceptRequest{
-					Id:          cept.Id,
-					Disposition: manager.InterceptDispositionType_ACTIVE,
-					PodName:     s.podName,
-					SshPort:     s.sshPort,
+					Id:                cept.Id,
+					Disposition:       manager.InterceptDispositionType_ACTIVE,
+					PodName:           s.podName,
+					SshPort:           s.sshPort,
+					MechanismArgsDesc: "all TCP connections",
 				})
 			case chosenIntercept == nil:
 				// We don't have an intercept in play, so choose this one. All
@@ -101,10 +102,11 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 				s.chosenID = cept.Id
 				chosenIntercept = cepts[i]
 				reviews = append(reviews, &manager.ReviewInterceptRequest{
-					Id:          cept.Id,
-					Disposition: manager.InterceptDispositionType_ACTIVE,
-					PodName:     s.podName,
-					SshPort:     s.sshPort,
+					Id:                cept.Id,
+					Disposition:       manager.InterceptDispositionType_ACTIVE,
+					PodName:           s.podName,
+					SshPort:           s.sshPort,
+					MechanismArgsDesc: "all TCP connections",
 				})
 			default:
 				// We already have an intercept in play, so reject this one.
@@ -116,9 +118,10 @@ func (s *state) HandleIntercepts(ctx context.Context, cepts []*manager.Intercept
 					msg = fmt.Sprintf("Conflicts with the currently-waiting-to-be-served intercept %q", s.chosenID)
 				}
 				reviews = append(reviews, &manager.ReviewInterceptRequest{
-					Id:          cept.Id,
-					Disposition: manager.InterceptDispositionType_AGENT_ERROR,
-					Message:     msg,
+					Id:                cept.Id,
+					Disposition:       manager.InterceptDispositionType_AGENT_ERROR,
+					Message:           msg,
+					MechanismArgsDesc: "all TCP connections",
 				})
 			}
 		}

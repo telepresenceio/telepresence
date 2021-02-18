@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
@@ -78,7 +80,7 @@ func (u *uninstallInfo) uninstall(cmd *cobra.Command, args []string) error {
 		if ur.UninstallType == connector.UninstallRequest_EVERYTHING {
 			// No need to keep daemons once everything is uninstalled
 			doQuit = true
-			return cs.removeClusterFromUserCache()
+			return cs.removeClusterFromUserCache(cmd.Context())
 		}
 		return nil
 	})
@@ -88,19 +90,19 @@ func (u *uninstallInfo) uninstall(cmd *cobra.Command, args []string) error {
 	return err
 }
 
-func (cs *connectorState) removeClusterFromUserCache() (err error) {
+func (cs *connectorState) removeClusterFromUserCache(ctx context.Context) (err error) {
 	// Login token is affined to the traffic-manager that just got removed. The user-info
 	// in turn, is info obtained using that token so both are removed here as a
 	// consequence of removing the manager.
-	if err = cache.DeleteTokenFromUserCache(); err != nil {
+	if err = cache.DeleteTokenFromUserCache(ctx); err != nil {
 		return err
 	}
-	if err = cache.DeleteUserInfoFromUserCache(); err != nil {
+	if err = cache.DeleteUserInfoFromUserCache(ctx); err != nil {
 		return err
 	}
 
 	// Delete the ingress info for the cluster if it exists.
-	ingresses, err := cache.LoadIngressesFromUserCache()
+	ingresses, err := cache.LoadIngressesFromUserCache(ctx)
 	if err != nil {
 		return err
 	}
@@ -108,7 +110,7 @@ func (cs *connectorState) removeClusterFromUserCache() (err error) {
 	key := cs.info.ClusterServer + "/" + cs.info.ClusterContext
 	if _, ok := ingresses[key]; ok {
 		delete(ingresses, key)
-		if err = cache.SaveIngressesToUserCache(ingresses); err != nil {
+		if err = cache.SaveIngressesToUserCache(ctx, ingresses); err != nil {
 			return err
 		}
 	}

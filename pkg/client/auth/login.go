@@ -39,8 +39,8 @@ type loginExecutor struct {
 	CompletionUrl    string
 	Oauth2ClientId   string
 	UserInfoUrl      string
-	SaveTokenFunc    func(*oauth2.Token) error
-	SaveUserInfoFunc func(*cache.UserInfo) error
+	SaveTokenFunc    func(context.Context, *oauth2.Token) error
+	SaveUserInfoFunc func(context.Context, *cache.UserInfo) error
 	OpenURLFunc      func(string) error
 	Scout            *client.Scout
 }
@@ -56,8 +56,8 @@ func NewLoginExecutor(oauth2AuthUrl string,
 	oauth2ClientId string,
 	completionUrl string,
 	userInfoUrl string,
-	saveTokenFunc func(*oauth2.Token) error,
-	saveUserInfoFunc func(*cache.UserInfo) error,
+	saveTokenFunc func(context.Context, *oauth2.Token) error,
+	saveUserInfoFunc func(context.Context, *cache.UserInfo) error,
 	openURLFunc func(string) error,
 	scout *client.Scout) LoginExecutor {
 	return &loginExecutor{
@@ -75,7 +75,7 @@ func NewLoginExecutor(oauth2AuthUrl string,
 
 // EnsureLoggedIn will check if the user is logged in and if not initiate the login flow.
 func EnsureLoggedIn(cmd *cobra.Command) error {
-	if token, _ := cache.LoadTokenFromUserCache(); token != nil {
+	if token, _ := cache.LoadTokenFromUserCache(cmd.Context()); token != nil {
 		return nil
 	}
 
@@ -152,15 +152,15 @@ func (l *loginExecutor) LoginFlow(cmd *cobra.Command, _ []string) error {
 	case callback := <-callbacks:
 		token, err := l.handleCallback(cmd, callback, oauth2Config, pkceVerifier)
 		if err != nil {
-			_ = l.Scout.Report("login_failure", client.ScoutMeta{Key: "error", Value: err.Error()})
+			_ = l.Scout.Report(cmd.Context(), "login_failure", client.ScoutMeta{Key: "error", Value: err.Error()})
 		} else {
-			_ = l.retrieveUserInfo(token)
-			_ = l.Scout.Report("login_success")
+			_ = l.retrieveUserInfo(cmd.Context(), token)
+			_ = l.Scout.Report(cmd.Context(), "login_success")
 		}
 		return err
 	case <-interrupts:
 		fmt.Fprintln(cmd.OutOrStdout(), "Login aborted.")
-		_ = l.Scout.Report("login_interrupted")
+		_ = l.Scout.Report(cmd.Context(), "login_interrupted")
 		return nil
 	}
 }
@@ -172,7 +172,7 @@ func (l *loginExecutor) handleCallback(cmd *cobra.Command, callback oauth2Callba
 
 	// retrieve access token from callback code
 	token, err := oauth2Config.Exchange(
-		safeContext(cmd),
+		cmd.Context(),
 		callback.Code,
 		oauth2.SetAuthURLParam("code_verifier", pkceVerifier.String()),
 	)
@@ -180,7 +180,7 @@ func (l *loginExecutor) handleCallback(cmd *cobra.Command, callback oauth2Callba
 		return nil, fmt.Errorf("error while exchanging code for token: %w", err)
 	}
 
-	err = l.SaveTokenFunc(token)
+	err = l.SaveTokenFunc(cmd.Context(), token)
 	if err != nil {
 		return nil, fmt.Errorf("could not save access token to user cache: %w", err)
 	}
@@ -189,7 +189,7 @@ func (l *loginExecutor) handleCallback(cmd *cobra.Command, callback oauth2Callba
 	return token, nil
 }
 
-func (l *loginExecutor) retrieveUserInfo(token *oauth2.Token) error {
+func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Token) error {
 	var userInfo cache.UserInfo
 	req, err := http.NewRequest("GET", l.UserInfoUrl, nil)
 	if err != nil {
@@ -212,17 +212,7 @@ func (l *loginExecutor) retrieveUserInfo(token *oauth2.Token) error {
 	if err != nil {
 		return err
 	}
-	return l.SaveUserInfoFunc(&userInfo)
-}
-
-// safeContext is to solve an issue with the tests where the Context in
-// cobra.Command can't be set
-func safeContext(cmd *cobra.Command) context.Context {
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return ctx
+	return l.SaveUserInfoFunc(ctx, &userInfo)
 }
 
 func startBackgroundServer(callbacks chan oauth2Callback, stderr io.Writer, completionUrl string) (*http.Server, error) {

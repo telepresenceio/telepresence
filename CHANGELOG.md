@@ -1,5 +1,10 @@
 # Changelog
 
+### 2.0.3 (TBD)
+
+- Feature: There is now an extension mechanism where you can tell Telepresence about different agents and what arguments they support.  The new `--mechanism` flag can explicitly identify which extension to use.
+- Change: Related to things now being in extensions, the `--match` flag has been renamed to `--http-match`.
+
 ### 2.0.2 (TBD)
 
 - Feature: Telepresence is now capable of forwarding the intercepted Pod's volume mounts (as Telepresence 0.x did) via the `--mount` flag to `telepresence intercept`.

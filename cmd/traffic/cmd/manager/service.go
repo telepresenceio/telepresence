@@ -399,6 +399,7 @@ func (m *Manager) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 			intercept.Message = rIReq.Message
 			intercept.PodName = rIReq.PodName
 			intercept.SshPort = rIReq.SshPort
+			intercept.MechanismArgsDesc = rIReq.MechanismArgsDesc
 		}
 	})
 

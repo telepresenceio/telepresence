@@ -15,6 +15,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
+	"github.com/datawire/telepresence2/v2/pkg/filelocation"
 )
 
 type dtimeHook struct{}
@@ -29,66 +30,49 @@ func (dtimeHook) Fire(entry *logrus.Entry) error {
 }
 
 func TestInitContext(t *testing.T) {
-	// Ensure that we use a temporary logging.Dir and never consider Stdout to be a terminal
-	saveDir := Dir
-	saveIsTerminal := IsTerminal
-	logDir, err := ioutil.TempDir("", "rotating-log-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		Dir = saveDir
-		IsTerminal = saveIsTerminal
-		_ = os.RemoveAll(logDir)
-	}()
-
-	Dir = func() string {
-		return logDir
-	}
-
-	IsTerminal = func(int) bool {
-		return false
-	}
+	const logName = "testing"
 
 	ft := dtime.NewFakeTime()
-	dtime.SetNow(ft.Now)
 
 	// Ensure that logger timestamps using dtime.Now()
 	lrLogger := logrus.StandardLogger()
 	lrLogger.AddHook(&dtimeHook{})
 
-	nowFormatted := func() string {
-		return dtime.Now().Format("2006/01/02 15:04:05")
-	}
-
-	// The file descriptors 1 and 2 and os.Stdout, and os.Stdin needs to be backed up so that
-	// they can be restored after each test
-	saveStdout := os.Stdout
-	saveStderr := os.Stderr
-
-	// The duplicates are needed so that the 1 and 2 descriptors can be restored after each test.
-	stdoutFd, err := unix.Dup(1)
-	require.NoError(t, err)
-
-	stderrFd, err := unix.Dup(2)
-	require.NoError(t, err)
-
-	afterEach := func(t *testing.T) {
-		os.Stdout = saveStdout
-		os.Stderr = saveStderr
-		_ = unix.Dup2(stdoutFd, 1)
-		_ = unix.Dup2(stderrFd, 2)
-
+	testSetup := func(t *testing.T) (ctx context.Context, logDir, logFile string) {
 		t.Helper()
-		check := require.New(t)
-		files, err := ioutil.ReadDir(logDir)
-		check.NoError(err)
-		for _, file := range files {
-			check.NoError(os.Remove(filepath.Join(logDir, file.Name())))
-		}
+		ctx = dlog.NewTestContext(t, false)
+
+		// Ensure that we use a temporary log dir
+		logDir = t.TempDir()
+		ctx = filelocation.WithAppUserLogDir(ctx, logDir)
+
+		// Ensure that we never consider Stdout to be a terminal
+		saveIsTerminal := IsTerminal
+		IsTerminal = func(int) bool { return false }
+		t.Cleanup(func() { IsTerminal = saveIsTerminal })
+
+		// Use ft
+		dtime.SetNow(ft.Now)
+		t.Cleanup(func() { dtime.SetNow(time.Now) })
+
+		// InitContext overrides both file descriptors 1/2 and the variables
+		// os.Stdout/os.Stdin; so they need to be backed up and restored.
+		saveStdout := os.Stdout
+		saveStderr := os.Stderr
+		stdoutFd, err := unix.Dup(1)
+		require.NoError(t, err)
+		stderrFd, err := unix.Dup(2)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			os.Stdout = saveStdout
+			os.Stderr = saveStderr
+			_ = unix.Dup2(stdoutFd, 1)
+			_ = unix.Dup2(stderrFd, 2)
+		})
+
+		return ctx, logDir, filepath.Join(logDir, logName+".log")
 	}
 
-	const logName = "testing"
 	closeLog := func(t *testing.T) {
 		t.Helper()
 		check := require.New(t)
@@ -96,13 +80,11 @@ func TestInitContext(t *testing.T) {
 		check.NoError(lrLogger.Out.(*RotatingFile).Close())
 	}
 
-	logFile := filepath.Join(logDir, logName+".log")
-
 	t.Run("stdout and stderr", func(t *testing.T) {
-		defer afterEach(t)
+		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(context.Background(), logName)
+		c, err := InitContext(ctx, logName)
 		check.NoError(err)
 		check.NotNil(c)
 		defer closeLog(t)
@@ -123,10 +105,10 @@ func TestInitContext(t *testing.T) {
 	})
 
 	t.Run("captures output of builtin functions", func(t *testing.T) {
-		defer afterEach(t)
+		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(context.Background(), logName)
+		c, err := InitContext(ctx, logName)
 		check.NoError(err)
 		check.NotNil(c)
 		defer closeLog(t)
@@ -141,17 +123,17 @@ func TestInitContext(t *testing.T) {
 	})
 
 	t.Run("next session rotates on write", func(t *testing.T) {
-		defer afterEach(t)
+		ctx, logDir, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(context.Background(), logName)
+		c, err := InitContext(ctx, logName)
 		check.NoError(err)
 		check.NotNil(c)
 		infoMsg := "info message"
 		dlog.Info(c, infoMsg)
 		closeLog(t)
 
-		c, err = InitContext(context.Background(), logName)
+		c, err = InitContext(ctx, logName)
 		check.NoError(err)
 		check.NotNil(c)
 		defer closeLog(t)
@@ -163,7 +145,7 @@ func TestInitContext(t *testing.T) {
 		check.NoFileExists(backupFile)
 
 		ft.Step(time.Second)
-		infoTs := nowFormatted()
+		infoTs := dtime.Now().Format("2006/01/02 15:04:05")
 		dlog.Info(c, infoMsg)
 		backupFile = filepath.Join(logDir, fmt.Sprintf("%s-%s.log", logName, dtime.Now().Format("20060102T150405")))
 		check.FileExists(backupFile)
@@ -174,12 +156,12 @@ func TestInitContext(t *testing.T) {
 	})
 
 	t.Run("old files are removed", func(t *testing.T) {
-		defer afterEach(t)
+		ctx, logDir, _ := testSetup(t)
 		check := require.New(t)
 
 		for i := 0; i < 7; i++ {
 			ft.Step(24 * time.Hour)
-			c, err := InitContext(context.Background(), logName)
+			c, err := InitContext(ctx, logName)
 			check.NoError(err)
 			check.NotNil(c)
 			infoMsg := "info message"

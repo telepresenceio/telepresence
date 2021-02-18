@@ -94,15 +94,21 @@ func (s *State) unlockedNextPort() uint16 {
 	return 0
 }
 
+// unlockedCheckAgentsForIntercept (1) assumes that s.mu is already locked, and (2) checks the
+// status of all agents that would be relevant to the given intercept spec, and returns whether the
+// state of those agents would require transitioning to an error state.  If everything looks good,
+// it returns the zero error code (InterceptDispositionType_UNSPECIFIED).
 func (s *State) unlockedCheckAgentsForIntercept(intercept *rpc.InterceptInfo) (errCode rpc.InterceptDispositionType, errMsg string) {
 	// Don't overwrite an existing error state
 	switch intercept.Disposition {
+	// non-error states ////////////////////////////////////////////////////
 	case rpc.InterceptDispositionType_UNSPECIFIED:
 		// Continue through; we can trasition to an error state from here.
 	case rpc.InterceptDispositionType_ACTIVE:
 		// Continue through; we can trasition to an error state from here.
 	case rpc.InterceptDispositionType_WAITING:
 		// Continue through; we can trasition to an error state from here.
+	// error states ////////////////////////////////////////////////////////
 	case rpc.InterceptDispositionType_NO_CLIENT:
 		// Don't overwrite this error state.
 		return intercept.Disposition, intercept.Message
@@ -115,7 +121,12 @@ func (s *State) unlockedCheckAgentsForIntercept(intercept *rpc.InterceptInfo) (e
 		return intercept.Disposition, intercept.Message
 	case rpc.InterceptDispositionType_AGENT_ERROR:
 		// Continue through; the error states of this function take precedence.
+	case rpc.InterceptDispositionType_BAD_ARGS:
+		// Don't overwrite this error state.
+		return intercept.Disposition, intercept.Message
 	}
+
+	// main ////////////////////////////////////////////////////////////////
 
 	agentSet := s.agentsByName[intercept.Spec.Agent]
 
@@ -376,8 +387,6 @@ func (s *State) AddIntercept(sessionID string, spec *rpc.InterceptSpec) (*rpc.In
 			SessionId: sessionID,
 		},
 	}
-
-	// [REDACTED]
 
 	// Wrap each potential-state-change in a
 	//

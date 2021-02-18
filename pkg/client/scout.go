@@ -63,13 +63,13 @@ func (s *Scout) SetMetadatum(key string, value interface{}) {
 // call. It also includes and increments the index, which can be used to
 // determine the correct order of reported events for this installation
 // attempt (correlated by the trace_id set at the start).
-func (s *Scout) Report(action string, meta ...ScoutMeta) error {
+func (s *Scout) Report(ctx context.Context, action string, meta ...ScoutMeta) error {
 	s.index++
 	metadata := map[string]interface{}{
 		"action": action,
 		"index":  s.index,
 	}
-	userInfo, err := cache.LoadUserInfoFromUserCache()
+	userInfo, err := cache.LoadUserInfoFromUserCache(ctx)
 	if err == nil && userInfo.Id != "" {
 		metadata["user_id"] = userInfo.Id
 		metadata["account_id"] = userInfo.AccountId
@@ -78,7 +78,7 @@ func (s *Scout) Report(action string, meta ...ScoutMeta) error {
 		metadata[metaItem.Key] = metaItem.Value
 	}
 
-	_, err = s.Reporter.Report(context.TODO(), metadata)
+	_, err = s.Reporter.Report(ctx, metadata)
 	if err != nil {
 		return errors.Wrap(err, "scout report")
 	}

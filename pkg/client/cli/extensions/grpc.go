@@ -1,10 +1,10 @@
-package connector
+package extensions
 
 import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"net"
+	"net/url"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -30,15 +30,25 @@ func (c systemaCredentials) RequireTransportSecurity() bool {
 	return true
 }
 
-func systemaGetPreferredAgentImageName(ctx context.Context, env client.Env) (string, error) {
-	tokenData, err := cache.LoadTokenFromUserCache()
+func systemaGetPreferredAgentImageName(ctx context.Context, urlStr string) (string, error) {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return "", err
+	}
+	// Discard any path/query/fragment components.
+	u = &url.URL{
+		Scheme: "dns",
+		Host:   u.Host,
+	}
+
+	tokenData, err := cache.LoadTokenFromUserCache(ctx)
 	if err != nil {
 		return "", fmt.Errorf("not logged in: %w", err)
 	}
 	creds := systemaCredentials(tokenData.AccessToken)
 
-	conn, err := grpc.DialContext(ctx, net.JoinHostPort(env.SystemAHost, env.SystemAPort),
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{ServerName: env.SystemAHost})),
+	conn, err := grpc.DialContext(ctx, u.String(),
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{ServerName: u.Hostname()})),
 		grpc.WithPerRPCCredentials(creds))
 	if err != nil {
 		return "", err

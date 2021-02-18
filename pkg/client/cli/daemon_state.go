@@ -16,7 +16,7 @@ import (
 
 	"github.com/datawire/telepresence2/rpc/v2/daemon"
 	"github.com/datawire/telepresence2/v2/pkg/client"
-	"github.com/datawire/telepresence2/v2/pkg/client/logging"
+	"github.com/datawire/telepresence2/v2/pkg/filelocation"
 )
 
 type daemonState struct {
@@ -44,12 +44,16 @@ func (ds *daemonState) EnsureState() (bool, error) {
 
 	// Ensure that the logfile is present before the daemon starts so that it isn't created with
 	// root permissions.
-	logFile := filepath.Join(logging.Dir(), "daemon.log")
+	logDir, err := filelocation.AppUserLogDir(ds.cmd.Context())
+	if err != nil {
+		return false, err
+	}
+	logFile := filepath.Join(logDir, "daemon.log")
 	if _, err := os.Stat(logFile); err != nil {
 		if !os.IsNotExist(err) {
 			return false, err
 		}
-		if err = os.MkdirAll(filepath.Dir(logFile), 0700); err != nil {
+		if err = os.MkdirAll(logDir, 0700); err != nil {
 			return false, err
 		}
 		lf, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0600)
@@ -59,7 +63,7 @@ func (ds *daemonState) EnsureState() (bool, error) {
 		_ = lf.Close()
 	}
 
-	err := runAsRoot(client.GetExe(), []string{"daemon-foreground", logging.Dir(), dnsIP, fallbackIP})
+	err = runAsRoot(client.GetExe(), []string{"daemon-foreground", logDir, dnsIP, fallbackIP})
 	if err != nil {
 		return false, errors.Wrap(err, "failed to launch the server")
 	}

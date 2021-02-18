@@ -3,17 +3,16 @@ package cli
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/blang/semver"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/datawire/telepresence2/v2/pkg/client/cache"
+	"github.com/datawire/telepresence2/v2/pkg/filelocation"
 )
 
 func newHttpServer(t *testing.T) *http.Server {
@@ -35,22 +34,14 @@ func newHttpServer(t *testing.T) *http.Server {
 }
 
 func Test_newUpdateChecker(t *testing.T) {
+	ctx := dlog.NewTestContext(t, false)
+
 	// the server that delivers the latest version
 	httpServer := newHttpServer(t)
 	defer httpServer.Close()
 
 	// a fake user cache directory
-	tmpDir, err := ioutil.TempDir("", "update-test-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() {
-		_ = os.RemoveAll(tmpDir)
-		cache.SetUserCacheDirFunc(os.UserCacheDir)
-	}()
-	cache.SetUserCacheDirFunc(func() (string, error) {
-		return tmpDir, nil
-	})
+	ctx = filelocation.WithUserHomeDir(ctx, t.TempDir())
 
 	// request handler, returning the latest version
 	lastestVer := semver.MustParse("1.2.3")
@@ -61,7 +52,7 @@ func Test_newUpdateChecker(t *testing.T) {
 	ft := dtime.NewFakeTime()
 	dtime.SetNow(ft.Now)
 
-	uc, err := newUpdateChecker(fmt.Sprintf("http://%s", httpServer.Addr))
+	uc, err := newUpdateChecker(ctx, fmt.Sprintf("http://%s", httpServer.Addr))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,13 +73,13 @@ func Test_newUpdateChecker(t *testing.T) {
 	}
 
 	// create the initial cache.
-	if err = uc.storeNextCheck(checkDuration); err != nil {
+	if err = uc.storeNextCheck(ctx, checkDuration); err != nil {
 		t.Fatal(err)
 	}
 
 	// An hour later it should not be time to check yet
 	ft.Step(time.Hour)
-	uc, err = newUpdateChecker(fmt.Sprintf("http://%s", httpServer.Addr))
+	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", httpServer.Addr))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +89,7 @@ func Test_newUpdateChecker(t *testing.T) {
 
 	// An day later it should be time to check
 	ft.Step(checkDuration)
-	uc, err = newUpdateChecker(fmt.Sprintf("http://%s", httpServer.Addr))
+	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", httpServer.Addr))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +106,7 @@ func Test_newUpdateChecker(t *testing.T) {
 	if v != nil {
 		t.Fatal("Expected updateAvailable() to return nil")
 	}
-	if err = uc.storeNextCheck(checkDuration); err != nil {
+	if err = uc.storeNextCheck(ctx, checkDuration); err != nil {
 		t.Fatal(err)
 	}
 
@@ -124,7 +115,7 @@ func Test_newUpdateChecker(t *testing.T) {
 
 	// An day later it should be time to check again
 	ft.Step(checkDuration + 1)
-	uc, err = newUpdateChecker(fmt.Sprintf("http://%s", httpServer.Addr))
+	uc, err = newUpdateChecker(ctx, fmt.Sprintf("http://%s", httpServer.Addr))
 	if err != nil {
 		t.Fatal(err)
 	}

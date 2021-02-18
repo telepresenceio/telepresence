@@ -22,6 +22,7 @@ import (
 	"github.com/datawire/telepresence2/v2/pkg/client"
 	"github.com/datawire/telepresence2/v2/pkg/client/auth"
 	"github.com/datawire/telepresence2/v2/pkg/client/cache"
+	"github.com/datawire/telepresence2/v2/pkg/client/cli/extensions"
 )
 
 type interceptInfo struct {
@@ -32,16 +33,15 @@ type interceptInfo struct {
 	namespace string
 	port      int
 
-	// [REDACTED]
-	matchMechanism string // parsed
-	// [REDACTED]
-
 	previewEnabled bool
 	previewSpec    manager.PreviewSpec
 
 	envFile string
 	envJSON string
 	mount   string
+
+	extState *extensions.ExtensionsState
+	extErr   error
 }
 
 type interceptState struct {
@@ -51,7 +51,7 @@ type interceptState struct {
 	env   map[string]string
 }
 
-func interceptCommand() *cobra.Command {
+func interceptCommand(ctx context.Context) *cobra.Command {
 	ii := &interceptInfo{}
 	cmd := &cobra.Command{
 		Use:     "intercept [flags] <name> [-- command with arguments...]",
@@ -65,9 +65,7 @@ func interceptCommand() *cobra.Command {
 	flags.StringVarP(&ii.agentName, "deployment", "d", "", "Name of deployment to intercept, if different from <name>")
 	flags.IntVarP(&ii.port, "port", "p", 8080, "Local port to forward to")
 
-	// [REDACTED]
-
-	flags.BoolVarP(&ii.previewEnabled, "preview-url", "u", isLoggedIn(), ``+
+	flags.BoolVarP(&ii.previewEnabled, "preview-url", "u", isLoggedIn(ctx), ``+
 		`Generate an edgestack.me preview domain for this intercept. `+
 		`(default "true" if you are logged in with 'telepresence login', default "false" otherwise)`,
 	)
@@ -85,6 +83,8 @@ func interceptCommand() *cobra.Command {
 
 	flags.StringVarP(&ii.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
 
+	ii.extState, ii.extErr = extensions.LoadExtensions(ctx, flags)
+
 	return cmd
 }
 
@@ -98,11 +98,15 @@ func leaveCommand() *cobra.Command {
 }
 
 func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
-	// [REDACTED]
-	ii.matchMechanism = "tcp"
-	// [REDACTED]
+	if ii.extErr != nil {
+		return ii.extErr
+	}
 
-	if ii.previewEnabled || ii.matchMechanism != "tcp" {
+	extRequiresLogin, err := ii.extState.RequiresAPIKey()
+	if err != nil {
+		return err
+	}
+	if ii.previewEnabled || extRequiresLogin {
 		if err := auth.EnsureLoggedIn(cmd); err != nil {
 			return err
 		}
@@ -197,8 +201,8 @@ Please specify one or more header matches using --match.`
 	}
 }
 
-func isLoggedIn() bool {
-	token, _ := cache.LoadTokenFromUserCache()
+func isLoggedIn(ctx context.Context) bool {
+	token, _ := cache.LoadTokenFromUserCache(ctx)
 	return token != nil
 }
 
@@ -209,12 +213,14 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 	}
 
 	if is.previewEnabled && is.previewSpec.Ingress == nil {
-		ingress, err := is.cs.selectIngress(is.cmd.InOrStdin(), is.cmd.OutOrStdout())
+		ingress, err := is.cs.selectIngress(is.cmd.Context(), is.cmd.InOrStdin(), is.cmd.OutOrStdout())
 		if err != nil {
 			return false, err
 		}
 		is.previewSpec.Ingress = ingress
 	}
+
+	// Parse inputs
 
 	mountPoint := ""
 	doMount, err := strconv.ParseBool(is.mount)
@@ -254,21 +260,40 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 		}()
 	}
 
+	mechname, err := is.extState.Mechanism()
+	if err != nil {
+		return false, err
+	}
+	mechargs, err := is.extState.MechanismArgs()
+	if err != nil {
+		return false, err
+	}
+	env, err := client.LoadEnv(is.cmd.Context())
+	if err != nil {
+		return false, err
+	}
+	agentImage, err := is.extState.AgentImage(is.cmd.Context(), env)
+	if err != nil {
+		return false, err
+	}
+
 	// Turn that in to a create request
-	ir := connector.CreateInterceptRequest{
-		Session:        is.cs.info.SessionInfo,
-		Name:           is.name,
-		Namespace:      is.namespace,
-		AgentName:      is.agentName,
-		MatchMechanism: is.matchMechanism,
-		// [REDACTED],
-		TargetHost: "127.0.0.1",
-		TargetPort: int32(is.port),
+	ir := &connector.CreateInterceptRequest{
+		Spec: &manager.InterceptSpec{
+			Name:          is.name,
+			Agent:         is.agentName,
+			Namespace:     is.namespace,
+			Mechanism:     mechname,
+			MechanismArgs: mechargs,
+			TargetHost:    "127.0.0.1",
+			TargetPort:    int32(is.port),
+		},
 		MountPoint: mountPoint,
+		AgentImage: agentImage,
 	}
 
 	// Submit the request
-	r, err := is.cs.connectorClient.CreateIntercept(is.cmd.Context(), &ir)
+	r, err := is.cs.connectorClient.CreateIntercept(is.cmd.Context(), ir)
 	if err != nil {
 		return false, err
 	}
@@ -287,11 +312,10 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 		// we should change this to use that information
 		is.Scout.SetMetadatum("service_namespace", is.namespace)
 
-		if is.matchMechanism == "http" /* && [REDACTED] */ {
-			is.Scout.SetMetadatum("intercept_mode", "headers")
-		} else {
-			is.Scout.SetMetadatum("intercept_mode", "all")
-		}
+		mechanism, _ := is.extState.Mechanism()
+		mechanismArgs, _ := is.extState.MechanismArgs()
+		is.Scout.SetMetadatum("intercept_mechanism", mechanism)
+		is.Scout.SetMetadatum("intercept_mechanism_numargs", len(mechanismArgs))
 
 		if is.previewEnabled {
 			intercept, err = is.cs.managerClient.UpdateIntercept(is.cmd.Context(), &manager.UpdateInterceptRequest{
@@ -302,7 +326,7 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 				},
 			})
 			if err != nil {
-				_ = is.Scout.Report("preview_domain_create_fail", client.ScoutMeta{Key: "error", Value: err.Error()})
+				_ = is.Scout.Report(is.cmd.Context(), "preview_domain_create_fail", client.ScoutMeta{Key: "error", Value: err.Error()})
 				err = fmt.Errorf("creating preview domain: %w", err)
 				return true, err
 			}
@@ -324,7 +348,7 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 			}
 		}
 		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, false))
-		_ = is.Scout.Report("intercept_success")
+		_ = is.Scout.Report(is.cmd.Context(), "intercept_success")
 		return true, nil
 	case connector.InterceptError_ALREADY_EXISTS:
 		fmt.Fprintln(is.cmd.OutOrStdout(), interceptMessage(r))
@@ -332,6 +356,11 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 	case connector.InterceptError_NO_CONNECTION:
 		return false, errConnectorIsNotRunning
 	default:
+		if r.GetInterceptInfo().GetDisposition() == manager.InterceptDispositionType_BAD_ARGS {
+			_ = is.DeactivateState()
+			_ = is.cmd.FlagErrorFunc()(is.cmd, errors.New(r.InterceptInfo.Message))
+			panic("not reached; FlagErrorFunc should call os.Exit()")
+		}
 		return false, errors.New(interceptMessage(r))
 	}
 }
@@ -470,8 +499,8 @@ func askForUseTLS(cachedUseTLS bool, reader *bufio.Reader, out io.Writer) (bool,
 	}
 }
 
-func (cs *connectorState) selectIngress(in io.Reader, out io.Writer) (*manager.IngressInfo, error) {
-	infos, err := cache.LoadIngressesFromUserCache()
+func (cs *connectorState) selectIngress(ctx context.Context, in io.Reader, out io.Writer) (*manager.IngressInfo, error) {
+	infos, err := cache.LoadIngressesFromUserCache(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -504,7 +533,7 @@ func (cs *connectorState) selectIngress(in io.Reader, out io.Writer) (*manager.I
 
 	if !ingressInfoEqual(cachedIngressInfo, reply) {
 		infos[key] = reply
-		if err = cache.SaveIngressesToUserCache(infos); err != nil {
+		if err = cache.SaveIngressesToUserCache(ctx, infos); err != nil {
 			return nil, err
 		}
 	}

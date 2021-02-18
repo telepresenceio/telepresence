@@ -8,6 +8,7 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/telepresence2/v2/pkg/filelocation"
 )
 
 // IsTerminal returns whether the given file descriptor is a terminal
@@ -22,7 +23,11 @@ func InitContext(ctx context.Context, name string) (context.Context, error) {
 		logger.Formatter = NewFormatter("15:04:05")
 	} else {
 		logger.Formatter = NewFormatter("2006/01/02 15:04:05")
-		rf, err := OpenRotatingFile(Dir(), name+".log", "20060102T150405", true, true, 0600, NewRotateOnce(), 5)
+		dir, err := filelocation.AppUserLogDir(ctx)
+		if err != nil {
+			return ctx, err
+		}
+		rf, err := OpenRotatingFile(dir, name+".log", "20060102T150405", true, true, 0600, NewRotateOnce(), 5)
 		if err != nil {
 			return ctx, err
 		}

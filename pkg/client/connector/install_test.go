@@ -334,7 +334,7 @@ func TestAddAgentToDeployment(t *testing.T) {
 
 			actualDep, actualSvc, actualErr := addAgentToDeployment(ctx,
 				tc.InputPortName,
-				agentImageName(ctx, env),
+				managerImageName(env), // ignore extensions
 				tc.InputDeployment.DeepCopy(),
 				[]*kates.Service{tc.InputService.DeepCopy()},
 			)

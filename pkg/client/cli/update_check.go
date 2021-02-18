@@ -1,13 +1,12 @@
 package cli
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -22,27 +21,24 @@ import (
 
 const checkDuration = 24 * time.Hour
 const binaryName = "telepresence"
+const cacheFilename = "update-checks.json"
 
 type updateChecker struct {
 	NextCheck map[string]time.Time `json:"next_check"`
 	url       string
-	cacheFile string
 }
 
 // newUpdateChecker returns a new update checker, possibly initialized from the users cache.
-func newUpdateChecker(url string) (*updateChecker, error) {
-	ts := &updateChecker{url: url, cacheFile: filepath.Join(cache.CacheDir(), "update-checks.json")}
+func newUpdateChecker(ctx context.Context, url string) (*updateChecker, error) {
+	ts := &updateChecker{
+		url: url,
+	}
 
-	js, err := ioutil.ReadFile(ts.cacheFile)
-	if err != nil {
+	if err := cache.LoadFromUserCache(ctx, ts, cacheFilename); err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
 		}
 		ts.NextCheck = make(map[string]time.Time)
-		return ts, nil
-	}
-	if err = json.Unmarshal(js, ts); err != nil {
-		return nil, err
 	}
 	return ts, nil
 }
@@ -66,7 +62,7 @@ func updateCheck(cmd *cobra.Command, forceCheck bool) error {
 	if err != nil {
 		return err
 	}
-	uc, err := newUpdateChecker(fmt.Sprintf("https://%s/download/tel2/%s/%s/stable.txt", env.SystemAHost, runtime.GOOS, runtime.GOARCH))
+	uc, err := newUpdateChecker(cmd.Context(), fmt.Sprintf("https://%s/download/tel2/%s/%s/stable.txt", env.SystemAHost, runtime.GOOS, runtime.GOARCH))
 	if err != nil || !(forceCheck || uc.timeToCheck()) {
 		return err
 	}
@@ -75,27 +71,19 @@ func updateCheck(cmd *cobra.Command, forceCheck bool) error {
 	update, ok := uc.updateAvailable(&ourVersion, cmd.ErrOrStderr())
 	if !ok {
 		// Failed to read from remote server. Next attempt is due in an hour
-		return uc.storeNextCheck(time.Hour)
+		return uc.storeNextCheck(cmd.Context(), time.Hour)
 	}
 	if update != nil {
 		fmt.Fprintf(cmd.OutOrStdout(),
 			"An update of %s from version %s to %s is available. Please visit https://www.getambassador.io/docs/latest/telepresence/howtos/upgrading/ for more info.\n",
 			binaryName, &ourVersion, update)
 	}
-	return uc.storeNextCheck(checkDuration)
+	return uc.storeNextCheck(cmd.Context(), checkDuration)
 }
 
-func (uc *updateChecker) storeNextCheck(d time.Duration) error {
+func (uc *updateChecker) storeNextCheck(ctx context.Context, d time.Duration) error {
 	uc.NextCheck[uc.url] = dtime.Now().Add(d)
-	js, err := json.MarshalIndent(uc, "", "  ")
-	if err != nil {
-		// Internal error. The updateChecker struct cannot be marshalled.
-		panic(err)
-	}
-	if err = ioutil.WriteFile(uc.cacheFile, js, 0600); err != nil {
-		err = fmt.Errorf("unable to write update check cache %s: %v", uc.cacheFile, err)
-	}
-	return err
+	return cache.SaveToUserCache(ctx, uc, cacheFilename)
 }
 
 func (uc *updateChecker) updateAvailable(currentVersion *semver.Version, errOut io.Writer) (*semver.Version, bool) {

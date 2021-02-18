@@ -25,6 +25,7 @@ import (
 	"github.com/datawire/telepresence2/v2/pkg/client"
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/v2/pkg/client/logging"
+	"github.com/datawire/telepresence2/v2/pkg/filelocation"
 )
 
 const processName = "daemon"
@@ -37,7 +38,7 @@ Launch the Telepresence ` + titleName + `:
     sudo telepresence service
 
 Examine the ` + titleName + `'s log output in
-    ` + filepath.Join(logging.Dir(), processName+".log") + `
+    ` + filepath.Join(func() string { dir, _ := filelocation.AppUserLogDir(context.Background()); return dir }(), processName+".log") + `
 to troubleshoot problems.
 `
 
@@ -107,11 +108,9 @@ func run(c context.Context, loggingDir, dns, fallback string) error {
 		return fmt.Errorf("telepresence %s must run as root", processName)
 	}
 
-	// Reassign logging.Dir function so that it returns the original users logging dir rather
-	// than the logging.Dir for the root user.
-	logging.Dir = func() string {
-		return loggingDir
-	}
+	// Spoof the AppUserLogDir so that it returns the original user's logging dir rather than
+	// the logging dir for the root user.
+	c = filelocation.WithAppUserLogDir(c, loggingDir)
 
 	c, err := logging.InitContext(c, processName)
 	if err != nil {

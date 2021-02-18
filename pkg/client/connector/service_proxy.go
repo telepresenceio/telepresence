@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"errors"
 	"io"
 	"sync"
 
@@ -121,18 +122,10 @@ func (p *mgrProxy) WatchIntercepts(arg *managerrpc.SessionInfo, srv managerrpc.M
 	}
 }
 func (p *mgrProxy) CreateIntercept(ctx context.Context, arg *managerrpc.CreateInterceptRequest) (*managerrpc.InterceptInfo, error) {
-	client, callOptions, err := p.get()
-	if err != nil {
-		return nil, err
-	}
-	return client.CreateIntercept(ctx, arg, callOptions...)
+	return nil, errors.New("must call connector.CreateIntercept instead of manager.CreateIntercept")
 }
 func (p *mgrProxy) RemoveIntercept(ctx context.Context, arg *managerrpc.RemoveInterceptRequest2) (*empty.Empty, error) {
-	client, callOptions, err := p.get()
-	if err != nil {
-		return nil, err
-	}
-	return client.RemoveIntercept(ctx, arg, callOptions...)
+	return nil, errors.New("must call connector.RemoveIntercept instead of manager.RemoveIntercept")
 }
 func (p *mgrProxy) UpdateIntercept(ctx context.Context, arg *managerrpc.UpdateInterceptRequest) (*managerrpc.InterceptInfo, error) {
 	client, callOptions, err := p.get()

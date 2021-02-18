@@ -139,45 +139,36 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 
 // addIntercept adds one intercept
 func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
-	namespace := tm.actualNamespace(ir.Namespace)
+	ir.Spec.Namespace = tm.actualNamespace(ir.Spec.Namespace)
 
-	spec := &manager.InterceptSpec{
-		Name:       ir.Name,
-		Namespace:  namespace,
-		Agent:      ir.AgentName,
-		Mechanism:  ir.MatchMechanism,
-		Additional: ir.MatchAdditional,
-		TargetHost: ir.TargetHost,
-		TargetPort: ir.TargetPort,
-	}
 	intercepts, err := actions.ListMyIntercepts(c, tm.managerClient, tm.session().SessionId)
 	if err != nil {
 		return nil, err
 	}
 	for _, iCept := range intercepts {
-		if iCept.Spec.Name == ir.Name {
+		if iCept.Spec.Name == ir.Spec.Name {
 			return &rpc.InterceptResult{
 				Error:     rpc.InterceptError_ALREADY_EXISTS,
 				ErrorText: iCept.Spec.Name,
 			}, nil
 		}
-		if iCept.Spec.TargetPort == ir.TargetPort && iCept.Spec.TargetHost == ir.TargetHost {
+		if iCept.Spec.TargetPort == ir.Spec.TargetPort && iCept.Spec.TargetHost == ir.Spec.TargetHost {
 			return &rpc.InterceptResult{
-				InterceptInfo: &manager.InterceptInfo{Spec: spec},
+				InterceptInfo: &manager.InterceptInfo{Spec: ir.Spec},
 				Error:         rpc.InterceptError_LOCAL_TARGET_IN_USE,
 				ErrorText:     iCept.Spec.Name,
 			}, nil
 		}
 	}
 
+	spec := ir.Spec
 	spec.Client = tm.userAndHost
 	if spec.Mechanism == "" {
 		spec.Mechanism = "tcp"
 	}
 
-	agentName := spec.Agent
 	if spec.Name == "" {
-		spec.Name = agentName
+		spec.Name = spec.Agent
 	}
 
 	hasSpecMechanism := func(a *manager.AgentInfo) bool {
@@ -192,7 +183,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	var found *manager.AgentInfo
 	if ags, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId); ags != nil {
 		for _, ag := range ags {
-			if !(ag.Namespace == namespace && ag.Name == spec.Agent && hasSpecMechanism(ag)) {
+			if !(ag.Namespace == spec.Namespace && ag.Name == spec.Agent && hasSpecMechanism(ag)) {
 				continue
 			}
 			if found == nil {
@@ -214,7 +205,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	var result *rpc.InterceptResult
 	if found == nil {
-		if result = tm.addAgent(c, namespace, agentName, agentImageName(c, tm.env)); result.Error != rpc.InterceptError_UNSPECIFIED {
+		if result = tm.addAgent(c, spec.Namespace, spec.Agent, ir.AgentImage); result.Error != rpc.InterceptError_UNSPECIFIED {
 			return result, nil
 		}
 	} else {
@@ -225,8 +216,8 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	deleteMount := false
 	if ir.MountPoint != "" {
-		// Ensure that the mount-point is free t use
-		if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, ir.Name); loaded {
+		// Ensure that the mount-point is free to use
+		if prev, loaded := tm.mountPoints.LoadOrStore(ir.MountPoint, spec.Name); loaded {
 			return &rpc.InterceptResult{
 				InterceptInfo: nil,
 				Error:         rpc.InterceptError_MOUNT_POINT_BUSY,
@@ -244,7 +235,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 		}()
 	}
 
-	dlog.Debugf(c, "creating intercept %s", ir.Name)
+	dlog.Debugf(c, "creating intercept %s", spec.Name)
 	ii, err := tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
 		Session:       tm.session(),
 		InterceptSpec: spec,
@@ -260,7 +251,11 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	c, cancel := context.WithTimeout(c, 5*time.Second)
 	defer cancel()
 	if ii, err = tm.waitForActiveIntercept(c, ii.Id); err != nil {
-		return &rpc.InterceptResult{Error: rpc.InterceptError_FAILED_TO_ESTABLISH, ErrorText: err.Error()}, nil
+		return &rpc.InterceptResult{
+			InterceptInfo: ii,
+			Error:         rpc.InterceptError_FAILED_TO_ESTABLISH,
+			ErrorText:     err.Error(),
+		}, nil
 	}
 	result.InterceptInfo = ii
 	if ir.MountPoint != "" && ii.SshPort > 0 {
@@ -329,7 +324,7 @@ func (tm *trafficManager) waitForActiveIntercept(ctx context.Context, id string)
 		default:
 			dlog.Debugf(ctx, "wait status: intercept id=%q is no longer WAITING; is now %v", id, intercept.Disposition)
 			if intercept.Disposition != manager.InterceptDispositionType_ACTIVE {
-				return nil, errors.Errorf("intercept in error state %v: %v", intercept.Disposition, intercept.Message)
+				return intercept, errors.Errorf("intercept in error state %v: %v", intercept.Disposition, intercept.Message)
 			}
 			return intercept, nil
 		}

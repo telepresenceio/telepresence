@@ -135,8 +135,8 @@ func (tm *trafficManager) run(c context.Context) error {
 	}, 2*time.Second, 6*time.Second)
 }
 
-func (tm *trafficManager) bearerToken() string {
-	token, err := cache.LoadTokenFromUserCache()
+func (tm *trafficManager) bearerToken(ctx context.Context) string {
+	token, err := cache.LoadTokenFromUserCache(ctx)
 	if err != nil {
 		return ""
 	}
@@ -172,7 +172,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 		InstallId:   tm.installID,
 		Product:     "telepresence",
 		Version:     client.Version(),
-		BearerToken: tm.bearerToken(),
+		BearerToken: tm.bearerToken(c),
 	})
 
 	if err != nil {
@@ -281,7 +281,7 @@ func (tm *trafficManager) remain(c context.Context) error {
 		case <-ticker.C:
 			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
 				Session:     tm.session(),
-				BearerToken: tm.bearerToken(),
+				BearerToken: tm.bearerToken(c),
 			})
 			if err != nil {
 				if c.Err() != nil {

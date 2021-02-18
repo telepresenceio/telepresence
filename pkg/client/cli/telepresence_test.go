@@ -2,7 +2,6 @@ package cli_test
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -18,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -126,10 +124,10 @@ func (ts *telepresenceSuite) SetupSuite() {
 	wg.Wait()
 
 	// Ensure that no telepresence is running when the tests start
-	_, _ = telepresence("quit")
+	_, _ = telepresence(ts.T(), "quit")
 
 	// Also ensure that telepresence is not logged in
-	_, _ = telepresence("logout")
+	_, _ = telepresence(ts.T(), "logout")
 }
 
 func (ts *telepresenceSuite) TearDownSuite() {
@@ -139,12 +137,12 @@ func (ts *telepresenceSuite) TearDownSuite() {
 
 func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 	ts.Run("Version", func() {
-		stdout, stderr := telepresence("version")
+		stdout, stderr := telepresence(ts.T(), "version")
 		ts.Empty(stderr)
 		ts.Contains(stdout, fmt.Sprintf("Client %s", client.DisplayVersion()))
 	})
 	ts.Run("Status", func() {
-		out, _ := telepresence("status")
+		out, _ := telepresence(ts.T(), "status")
 		ts.Contains(out, "The telepresence daemon has not been started")
 	})
 
@@ -153,7 +151,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 			kubeConfig := os.Getenv("KUBECONFIG")
 			defer os.Setenv("KUBECONFIG", kubeConfig)
 			os.Setenv("KUBECONFIG", "/dev/null")
-			stdout, stderr := telepresence("connect")
+			stdout, stderr := telepresence(ts.T(), "connect")
 			ts.Contains(stderr, "kubeconfig has no context definition")
 			ts.Contains(stdout, "Launching Telepresence Daemon")
 			ts.Contains(stdout, "Daemon quitting")
@@ -162,7 +160,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 
 	ts.Run("Connect with non existing context", func() {
 		ts.Run("Reports connect error and exits", func() {
-			stdout, stderr := telepresence("connect", "--context", "not-likely-to-exist")
+			stdout, stderr := telepresence(ts.T(), "connect", "--context", "not-likely-to-exist")
 			ts.Contains(stderr, `"not-likely-to-exist" does not exist`)
 			ts.Contains(stdout, "Launching Telepresence Daemon")
 			ts.Contains(stdout, "Daemon quitting")
@@ -171,7 +169,7 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 
 	ts.Run("Connect with a command", func() {
 		ts.Run("Connects, executes the command, and then exits", func() {
-			stdout, stderr := telepresence("connect", "--", client.GetExe(), "status")
+			stdout, stderr := telepresence(ts.T(), "connect", "--", client.GetExe(), "status")
 			ts.Empty(stderr)
 			ts.Contains(stdout, "Launching Telepresence Daemon")
 			ts.Contains(stdout, "Connected to context")
@@ -195,9 +193,9 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 		stdout, err := agentName()
 		ts.NoError(err)
 		ts.Equal("traffic-agent", stdout)
-		_, stderr := telepresence("uninstall", "--namespace", ts.namespace, "--agent", "with-probes")
+		_, stderr := telepresence(ts.T(), "uninstall", "--namespace", ts.namespace, "--agent", "with-probes")
 		ts.Empty(stderr)
-		defer telepresence("quit")
+		defer telepresence(ts.T(), "quit")
 		ts.Eventually(
 			// condition
 			func() bool {
@@ -217,9 +215,9 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 		stdout, err := agentNames()
 		ts.NoError(err)
 		ts.Equal(serviceCount, len(strings.Split(stdout, " ")))
-		_, stderr := telepresence("uninstall", "--namespace", ts.namespace, "--all-agents")
+		_, stderr := telepresence(ts.T(), "uninstall", "--namespace", ts.namespace, "--all-agents")
 		ts.Empty(stderr)
-		defer telepresence("quit")
+		defer telepresence(ts.T(), "quit")
 		ts.Eventually(
 			func() bool {
 				stdout, _ := agentNames()
@@ -241,7 +239,7 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 		stdout, err := names()
 		ts.NoError(err)
 		ts.Equal(2, len(strings.Split(stdout, " "))) // The service and the deployment
-		stdout, stderr := telepresence("uninstall", "--everything")
+		stdout, stderr := telepresence(ts.T(), "uninstall", "--everything")
 		ts.Empty(stderr)
 		ts.Contains(stdout, "Daemon quitting")
 		ts.Eventually(
@@ -261,7 +259,7 @@ type connectedSuite struct {
 }
 
 func (cs *connectedSuite) SetupSuite() {
-	stdout, stderr := telepresence("connect")
+	stdout, stderr := telepresence(cs.T(), "connect")
 	cs.Empty(stderr)
 	cs.Contains(stdout, "Connected to context")
 
@@ -269,7 +267,7 @@ func (cs *connectedSuite) SetupSuite() {
 	cs.Eventually(
 		// condition
 		func() bool {
-			stdout, _ := telepresence("status")
+			stdout, _ := telepresence(cs.T(), "status")
 			return regexp.MustCompile(`Proxy:\s+ON`).FindString(stdout) != ""
 		},
 		15*time.Second, // waitFor
@@ -279,14 +277,14 @@ func (cs *connectedSuite) SetupSuite() {
 }
 
 func (cs *connectedSuite) TearDownSuite() {
-	stdout, stderr := telepresence("quit")
+	stdout, stderr := telepresence(cs.T(), "quit")
 	cs.Empty(stderr)
 	cs.Contains(stdout, "quitting")
 	time.Sleep(time.Second) // Allow some time for processes to die and sockets to vanish
 }
 
 func (cs *connectedSuite) TestA_ReportsVersionFromDaemon() {
-	stdout, stderr := telepresence("version")
+	stdout, stderr := telepresence(cs.T(), "version")
 	cs.Empty(stderr)
 	vs := client.DisplayVersion()
 	cs.Contains(stdout, fmt.Sprintf("Client %s", vs))
@@ -294,7 +292,7 @@ func (cs *connectedSuite) TestA_ReportsVersionFromDaemon() {
 }
 
 func (cs *connectedSuite) TestB_ReportsStatusAsConnected() {
-	stdout, stderr := telepresence("status")
+	stdout, stderr := telepresence(cs.T(), "status")
 	cs.Empty(stderr)
 	cs.Contains(stdout, "Context:")
 }
@@ -334,10 +332,10 @@ func (cs *connectedSuite) TestD_Intercepted() {
 }
 
 func (cs *connectedSuite) TestE_SuccessfullyInterceptsDeploymentWithProbes() {
-	stdout, stderr := telepresence("intercept", "--namespace", cs.namespace, "--mount", "false", "with-probes", "--port", "9090")
+	stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.namespace, "--mount", "false", "with-probes", "--port", "9090")
 	cs.Empty(stderr)
 	cs.Contains(stdout, "Using deployment with-probes")
-	stdout, stderr = telepresence("list", "--namespace", cs.namespace, "--intercepts")
+	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.namespace, "--intercepts")
 	cs.Empty(stderr)
 	cs.Contains(stdout, "with-probes: intercepted")
 }
@@ -361,7 +359,7 @@ func (is *interceptedSuite) SetupSuite() {
 		require.Eventually(is.T(),
 			// condition
 			func() bool {
-				stdout, _ := telepresence("list", "--namespace", is.namespace)
+				stdout, _ := telepresence(is.T(), "list", "--namespace", is.namespace)
 				is.T().Log(stdout)
 				for i := 0; i < serviceCount; i++ {
 					if !rxs[i].MatchString(stdout) {
@@ -380,7 +378,7 @@ func (is *interceptedSuite) SetupSuite() {
 		for i := 0; i < serviceCount; i++ {
 			svc := fmt.Sprintf("hello-%d", i)
 			port := strconv.Itoa(9000 + i)
-			stdout, stderr := telepresence("intercept", "--namespace", is.namespace, "--mount", "false", svc, "--port", port)
+			stdout, stderr := telepresence(is.T(), "intercept", "--namespace", is.namespace, "--mount", "false", svc, "--port", port)
 			is.Empty(stderr)
 			is.intercepts = append(is.intercepts, svc)
 			is.Contains(stdout, "Using deployment "+svc)
@@ -406,7 +404,7 @@ func (is *interceptedSuite) SetupSuite() {
 
 func (is *interceptedSuite) TearDownSuite() {
 	for _, svc := range is.intercepts {
-		stdout, stderr := telepresence("leave", svc)
+		stdout, stderr := telepresence(is.T(), "leave", svc)
 		is.Empty(stderr)
 		is.Empty(stdout)
 	}
@@ -447,7 +445,7 @@ func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
 }
 
 func (is *interceptedSuite) TestB_ListingActiveIntercepts() {
-	stdout, stderr := telepresence("--namespace", is.namespace, "list", "--intercepts")
+	stdout, stderr := telepresence(is.T(), "--namespace", is.namespace, "list", "--intercepts")
 	is.Empty(stderr)
 	for i := 0; i < serviceCount; i++ {
 		is.Contains(stdout, fmt.Sprintf("hello-%d: intercepted", i))
@@ -525,34 +523,31 @@ func output(args ...string) (string, error) {
 	return string(out), client.RunError(err)
 }
 
-func getCommand(args ...string) *cobra.Command {
-	cmd := cli.Command()
-	cmd.SetArgs(args)
-	flags := cmd.Flags()
-
-	// Circumvent test flag conflict explained here https://golang.org/doc/go1.13#testing
-	flag.Visit(func(f *flag.Flag) {
-		flags.AddGoFlag(f)
-	})
-	cmd.SetOut(new(strings.Builder))
-	cmd.SetErr(new(strings.Builder))
-	cmd.SilenceErrors = true
-	return cmd
-}
-
-func trimmed(f func() io.Writer) string {
-	if out, ok := f().(*strings.Builder); ok {
-		return strings.TrimSpace(out.String())
-	}
-	return ""
-}
-
 // telepresence executes the CLI command in-process
-func telepresence(args ...string) (string, string) {
-	cmd := getCommand(args...)
-	err := cmd.Execute()
-	if err != nil {
+func telepresence(t testing.TB, args ...string) (string, string) {
+	ctx := dlog.NewTestContext(t, false)
+
+	dlog.Infof(ctx, "running command: %q", append([]string{"telepresence"}, args...))
+
+	cmd := cli.Command(ctx)
+
+	stdout := new(strings.Builder)
+	cmd.SetOut(io.MultiWriter(
+		stdout,
+		dlog.StdLogger(dlog.WithField(ctx, "stream", "stdout"), dlog.LogLevelInfo).Writer(),
+	))
+
+	stderr := new(strings.Builder)
+	cmd.SetErr(io.MultiWriter(
+		stderr,
+		dlog.StdLogger(dlog.WithField(ctx, "stream", "stderr"), dlog.LogLevelInfo).Writer(),
+	))
+
+	cmd.SetArgs(args)
+	if err := cmd.ExecuteContext(ctx); err != nil {
 		fmt.Fprintln(cmd.ErrOrStderr(), err)
 	}
-	return trimmed(cmd.OutOrStdout), trimmed(cmd.ErrOrStderr)
+
+	dlog.Infof(ctx, "command terminated %q", append([]string{"telepresence"}, args...))
+	return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String())
 }

@@ -10,7 +10,7 @@ import (
 
 func main() {
 	ctx := context.Background()
-	cmd := cli.Command()
+	cmd := cli.Command(ctx)
 	if err := cmd.ExecuteContext(ctx); err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), "%s: error: %v\n", cmd.CommandPath(), err)
 		os.Exit(1)

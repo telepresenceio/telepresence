@@ -26,6 +26,36 @@ type Env struct {
 	SystemAPort string `env:"SYSTEMA_PORT,default=443"`
 }
 
+func (env Env) Get(key string) string {
+	switch key {
+	case "TELEPRESENCE_LOGIN_DOMAIN":
+		return env.LoginDomain
+	case "TELEPRESENCE_LOGIN_AUTH_URL":
+		return env.LoginAuthURL
+	case "TELEPRESENCE_LOGIN_TOKEN_URL":
+		return env.LoginTokenURL
+	case "TELEPRESENCE_LOGIN_COMPLETION_URL":
+		return env.LoginCompletionURL
+	case "TELEPRESENCE_LOGIN_CLIENT_ID":
+		return env.LoginClientID
+	case "TELEPRESENCE_USER_INFO_URL":
+		return env.UserInfoURL
+
+	case "TELEPRESENCE_REGISTRY":
+		return env.Registry
+	case "TELEPRESENCE_AGENT_IMAGE":
+		return env.AgentImage
+
+	case "SYSTEMA_HOST":
+		return env.SystemAHost
+	case "SYSTEMA_PORT":
+		return env.SystemAPort
+
+	default:
+		return os.Getenv(key)
+	}
+}
+
 func maybeSetEnv(key, val string) {
 	if os.Getenv(key) == "" {
 		os.Setenv(key, val)

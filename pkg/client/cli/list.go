@@ -97,31 +97,43 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 func DescribeIntercept(ii *manager.InterceptInfo, debug bool) string {
 	msg := "intercepted"
 
-	msg += "\n    State       : "
-	if ii.Disposition > manager.InterceptDispositionType_WAITING {
-		msg += "error: "
+	type kv struct {
+		Key   string
+		Value string
 	}
-	msg += ii.Disposition.String()
-	if ii.Message != "" {
-		msg += ": " + ii.Message
-	}
+
+	var fields []kv
+
+	fields = append(fields, kv{"State", func() string {
+		msg := ""
+		if ii.Disposition > manager.InterceptDispositionType_WAITING {
+			msg += "error: "
+		}
+		msg += ii.Disposition.String()
+		if ii.Message != "" {
+			msg += ": " + ii.Message
+		}
+		return msg
+	}()})
 
 	if debug {
-		msg += fmt.Sprintf("\n    ID          : %s", ii.Id)
-		msg += fmt.Sprintf("\n    Manager Port: %d", ii.ManagerPort)
+		fields = append(fields, kv{"ID", ii.Id})
+		fields = append(fields, kv{"Manager Port", fmt.Sprintf("%d", ii.ManagerPort)})
 	}
 
-	msg += fmt.Sprintf("\n    Destination : %s",
-		net.JoinHostPort(ii.Spec.TargetHost, fmt.Sprintf("%d", ii.Spec.TargetPort)))
+	fields = append(fields, kv{"Destination",
+		net.JoinHostPort(ii.Spec.TargetHost, fmt.Sprintf("%d", ii.Spec.TargetPort))})
 
-	msg += "\n    Intercepting: "
-	switch ii.Spec.Mechanism {
-	case "tcp":
-		msg += "all connections"
-	// [REDACTED]
-	default:
-		msg += fmt.Sprintf("using unknown mechanism %q", ii.Spec.Mechanism)
+	if debug {
+		fields = append(fields, kv{"Mechanism", ii.Spec.Mechanism})
+		fields = append(fields, kv{"Mechanism Args", fmt.Sprintf("%q", ii.Spec.MechanismArgs)})
 	}
+	fields = append(fields, kv{"Intercepting", func() string {
+		if ii.MechanismArgsDesc == "" {
+			return fmt.Sprintf("using mechanism=%q with args=%q", ii.Spec.Mechanism, ii.Spec.MechanismArgs)
+		}
+		return ii.MechanismArgsDesc
+	}()})
 
 	if ii.PreviewDomain != "" {
 		previewURL := ii.PreviewDomain
@@ -130,8 +142,21 @@ func DescribeIntercept(ii *manager.InterceptInfo, debug bool) string {
 		if !strings.HasPrefix(previewURL, "https://") && !strings.HasPrefix(previewURL, "http://") {
 			previewURL = "https://" + previewURL
 		}
-		msg += "\n    Preview URL : " + previewURL
+		fields = append(fields, kv{"Preview URL", previewURL})
 	}
 
+	klen := 0
+	for _, kv := range fields {
+		if len(kv.Key) > klen {
+			klen = len(kv.Key)
+		}
+	}
+	for _, kv := range fields {
+		vlines := strings.Split(strings.TrimSpace(kv.Value), "\n")
+		msg += fmt.Sprintf("\n    %-*s: %s", klen, kv.Key, vlines[0])
+		for _, vline := range vlines[1:] {
+			msg += "\n      " + vline
+		}
+	}
 	return msg
 }

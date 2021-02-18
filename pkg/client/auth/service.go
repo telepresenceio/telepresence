@@ -45,12 +45,12 @@ func LogoutCommand() *cobra.Command {
 		Short: "Logout from Ambassador Cloud",
 		Long:  "Logout from Ambassador Cloud",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, err := cache.LoadTokenFromUserCache()
+			_, err := cache.LoadTokenFromUserCache(cmd.Context())
 			if err != nil && os.IsNotExist(err) {
 				return errors.New("not logged in")
 			}
-			_ = cache.DeleteTokenFromUserCache()
-			_ = cache.DeleteUserInfoFromUserCache()
+			_ = cache.DeleteTokenFromUserCache(cmd.Context())
+			_ = cache.DeleteUserInfoFromUserCache(cmd.Context())
 			return nil
 		},
 	}
