@@ -35,10 +35,10 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
   <Alert severity="info"> macOS users: If you receive an error when running Telepresence that the developer cannot be verified, open <b>System Preferences → Security & Privacy → General</b>. Click <b>Open Anyway</b> at the bottom to bypass the security block. Then retry the <code>telepresence connect</code> command.</Alert>
 
 2. Test that Telepresence is working properly by connecting to the Kubernetes API server:  
-`curl -ik https://kubernetes`
+`curl -ik https://kubernetes.default.svc.cluster.local
 
   ```
-  $ curl -ik https://kubernetes
+  $ curl -ik https://kubernetes.default.svc.cluster.local
     
     HTTP/1.1 401 Unauthorized
     Cache-Control: no-cache, private
@@ -96,7 +96,7 @@ Your local workstation may not have the compute or memory resources necessary to
     dataprocessingservice-5f6bfdcf7b-qvd27       1/1     Running   0          79s
   ```
 
-3. Once all the pods are in a `Running` status, stop the `watch` command with `Ctrl+C`.  Then go to the frontend service in your browser at [http://verylargejavaservice:8080](http://verylargejavaservice:8080).
+3. Once all the pods are in a `Running` status, stop the `watch` command with `Ctrl+C`.  Then go to the frontend service in your browser at [http://verylargejavaservice.default.svc.cluster.local:8080](http://verylargejavaservice.default.svc.cluster.local:8080).
 
 4. You should see the EdgyCorp WebApp with a <span style="color:green" class="bold">green</span> title and <span style="color:green" class="bold">green</span> pod in the diagram.
 
@@ -160,7 +160,7 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
         Intercepting: all connections
   ```
 
-2. Go to the frontend service again in your browser at [http://verylargejavaservice:8080](http://verylargejavaservice:8080). You will now see the <span style="color:blue" class="bold">blue</span> elements in the app.  
+2. Go to the frontend service again in your browser. Since the service is now intercepted it can be reached directly by its service name at [http://verylargejavaservice:8080](http://verylargejavaservice:8080). You will now see the <span style="color:blue" class="bold">blue</span> elements in the app.
 
 <Alert severity="success"><b>The frontend’s request to DataProcessingService is being intercepted and rerouted to the Go server on your laptop!</b></Alert>
 
