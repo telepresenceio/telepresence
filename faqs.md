@@ -37,7 +37,7 @@ If you are using Kubernetes 1.16+, you can also create an ephemeral container (a
 
 ** When using Telepresence to intercept a pod, are the associated pod volume mounts also proxied and shared with my local machine?**
 
- This feature is coming soon. 
+Yes, please see [this doc on using volume mounts](../reference/volume/).
 
 For the moment you can `kubectl exec` into a container running on the pod in order to explore the volumes.
 
