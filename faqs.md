@@ -35,8 +35,6 @@ Yes, please see [this document](../reference/environment/) for more information.
 
 Yes, please see [this doc on using volume mounts](../reference/volume/).
 
-If you are using Kubernetes 1.16+, you can also create an ephemeral container (an alpha feature) within a pod, and explore the volumes using this approach.
-
 ** When connected to a Kubernetes cluster via Telepresence, can I access cluster-based services via their DNS name?**
 
 Yes. After you have successfully connected to your cluster via `telepresence connect` you have full access to the cluster namespace.
