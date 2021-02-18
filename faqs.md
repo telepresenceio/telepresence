@@ -69,7 +69,7 @@ On Fedora, Telepresence also creates a virtual network device (a TUN network) fo
 
 ** What components get installed in the cluster when running Telepresence?**
 
-A single Traffic Manager service is deployed in the default namespace within your cluster, and this manages resilient intercepts and connections between your local machine and the cluster.
+A single Traffic Manager service is deployed in the `ambassador` namespace within your cluster, and this manages resilient intercepts and connections between your local machine and the cluster.
 
 A Traffic Agent container is injected per pod that is being intercepted. The first time a deployment is intercepted all pods associated with this deployment will be restarted with the Traffic Agent automatically injected.
 
