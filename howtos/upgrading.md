@@ -24,6 +24,10 @@ sudo chmod a+x /usr/local/bin/telepresence && \
 telepresence version
 ```
 
+### Upgrading Telepresence of version 2.0.1 or older
+
+The traffic-manager must be uninstalled manually. This can be done using `telepresence uninstall --everything` _before_ the upgrade or by using `kubectl delete svc,deploy traffic-manager`.
+
 ## Installing Older Versions of Telepresence
 
 Use the following URLs to install an older version, replacing `x.x.x` with the version you want.
