@@ -79,6 +79,7 @@ func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (*Extensi
 	if err != nil {
 		return nil, err
 	}
+	// Iterate over the directories from highest-precedence to lowest-precedence.
 	for _, dir := range append([]string{userDir}, systemDirs...) {
 		fileinfos, err := ioutil.ReadDir(filepath.Join(dir, "extensions"))
 		if err != nil {
@@ -92,9 +93,12 @@ func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (*Extensi
 				continue
 			}
 			extname := strings.TrimSuffix(fileinfo.Name(), ".yml")
+
+			// Avoid overwriting files from higher-precedence directories.
 			if _, masked := es.ext2file[extname]; masked {
 				continue
 			}
+
 			es.ext2file[extname] = filepath.Join(dir, "extensions", fileinfo.Name())
 		}
 	}
