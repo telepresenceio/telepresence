@@ -22,7 +22,7 @@ The following quick overview on creating an intercept assumes you have a deploym
 
 1. In your terminal run `telepresence login`. This logs you into the Ambassador Cloud, which will track your intercepts and let you share them with colleagues. 
 
-  <Alert severity="info">If you are logged in and close the dashboard browser tab, quickly reopen it by running <code>telepresence dashboard</code>.</Alert>
+  <Alert severity="info">If you are logged in and close the dashboard browser tab, you can quickly reopen it by running <code>telepresence dashboard</code>.</Alert>
 
 2. Return to your terminal and run `telepresence list`.  This will connect to your cluster, install the [Traffic Manager](../../reference/) to proxy the traffic, and return a list of services that Telepresence is able to intercept.
 
