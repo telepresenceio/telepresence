@@ -63,6 +63,8 @@ deployment:
             value: "8080"
           - name: APP_MOUNTS
             value: "/tel_app_mounts"
+          - name: TEL_APP_TELEPRESENCE_MOUNTS
+            value: "/usr/share/nginx/html"
           image: localhost:5000/tel2:0.1.2-test
           imagePullPolicy: IfNotPresent
           name: traffic-agent

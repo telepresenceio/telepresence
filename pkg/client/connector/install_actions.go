@@ -8,6 +8,7 @@ import (
 	"io"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -271,7 +272,7 @@ func (ata *addTrafficAgentAction) do(obj kates.Object) error {
 
 func (ata *addTrafficAgentAction) agentEnvironment(agentName string, appContainer *kates.Container) []corev1.EnvVar {
 	appEnv := ata.appEnvironment(appContainer)
-	env := make([]corev1.EnvVar, len(appEnv), len(appEnv)+6)
+	env := make([]corev1.EnvVar, len(appEnv), len(appEnv)+7)
 	copy(env, appEnv)
 	env = append(env,
 		corev1.EnvVar{
@@ -306,6 +307,17 @@ func (ata *addTrafficAgentAction) agentEnvironment(agentName string, appContaine
 		env = append(env, corev1.EnvVar{
 			Name:  "APP_MOUNTS",
 			Value: telAppMountPoint,
+		})
+
+		// Have the agent propagate the mount-points as TELEPRESENCE_MOUNTS to make it easy for the
+		// local app to create symlinks.
+		mounts := make([]string, len(appContainer.VolumeMounts))
+		for i := range appContainer.VolumeMounts {
+			mounts[i] = appContainer.VolumeMounts[i].MountPath
+		}
+		env = append(env, corev1.EnvVar{
+			Name:  "TEL_APP_TELEPRESENCE_MOUNTS",
+			Value: strings.Join(mounts, ":"),
 		})
 	}
 	if managerNamespace != "ambassador" {
