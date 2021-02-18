@@ -320,12 +320,10 @@ func (ata *addTrafficAgentAction) agentEnvironment(agentName string, appContaine
 			Value: strings.Join(mounts, ":"),
 		})
 	}
-	if managerNamespace != "ambassador" {
-		env = append(env, corev1.EnvVar{
-			Name:  "MANAGER_HOST",
-			Value: managerAppName + "." + managerNamespace,
-		})
-	}
+	env = append(env, corev1.EnvVar{
+		Name:  "MANAGER_HOST",
+		Value: managerAppName + "." + managerNamespace,
+	})
 	return env
 }
 

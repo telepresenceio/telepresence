@@ -20,12 +20,12 @@ import (
 
 type Config struct {
 	Name        string `env:"AGENT_NAME,required"`
-	Namespace   string `env:"AGENT_NAMESPACE,required"`
-	PodName     string `env:"AGENT_POD_NAME,required"`
+	Namespace   string `env:"AGENT_NAMESPACE,default="`
+	PodName     string `env:"AGENT_POD_NAME,default="`
 	AgentPort   int32  `env:"AGENT_PORT,default=9900"`
 	AppMounts   string `env:"APP_MOUNTS,default="`
 	AppPort     int32  `env:"APP_PORT,required"`
-	ManagerHost string `env:"MANAGER_HOST,default=traffic-manager.ambassador"`
+	ManagerHost string `env:"MANAGER_HOST,default=traffic-manager"`
 	ManagerPort int32  `env:"MANAGER_PORT,default=8081"`
 }
 
