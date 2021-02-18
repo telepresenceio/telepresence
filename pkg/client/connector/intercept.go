@@ -251,7 +251,11 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	c, cancel := context.WithTimeout(c, 5*time.Second)
 	defer cancel()
 	if ii, err = tm.waitForActiveIntercept(c, ii.Id); err != nil {
-		return &rpc.InterceptResult{Error: rpc.InterceptError_FAILED_TO_ESTABLISH, ErrorText: err.Error()}, nil
+		return &rpc.InterceptResult{
+			InterceptInfo: ii,
+			Error:         rpc.InterceptError_FAILED_TO_ESTABLISH,
+			ErrorText:     err.Error(),
+		}, nil
 	}
 	result.InterceptInfo = ii
 	if ir.MountPoint != "" && ii.SshPort > 0 {
@@ -320,7 +324,7 @@ func (tm *trafficManager) waitForActiveIntercept(ctx context.Context, id string)
 		default:
 			dlog.Debugf(ctx, "wait status: intercept id=%q is no longer WAITING; is now %v", id, intercept.Disposition)
 			if intercept.Disposition != manager.InterceptDispositionType_ACTIVE {
-				return nil, errors.Errorf("intercept in error state %v: %v", intercept.Disposition, intercept.Message)
+				return intercept, errors.Errorf("intercept in error state %v: %v", intercept.Disposition, intercept.Message)
 			}
 			return intercept, nil
 		}
