@@ -77,7 +77,7 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 	}
 
 	o.setSearchPathFunc = func(c context.Context, paths []string) {
-		o.search = paths
+		o.search = append(paths, "svc.cluster.local.", "cluster.local.", "")
 	}
 
 	listeners, err := dnsListeners(c)

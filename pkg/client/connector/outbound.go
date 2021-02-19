@@ -244,7 +244,6 @@ func (kc *k8sCluster) updateDaemonNamespaces(c context.Context, nsMap map[string
 	for _, ns := range namespaces {
 		paths = append(paths, ns+".svc.cluster.local.")
 	}
-	paths = append(paths, "svc.cluster.local.", "cluster.local.", "")
 	dlog.Debugf(c, "posting search paths to %s", strings.Join(paths, " "))
 	if _, err := kc.daemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths}); err != nil {
 		dlog.Errorf(c, "error posting search paths to %s: %v", strings.Join(paths, " "), err)
