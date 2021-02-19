@@ -2,7 +2,7 @@
 {
 	if [[ $# != 3 ]]; then
 		echo >&2 "$0: expected 3 arguments, got $#: $*"
-		echo >&2 "Usage: $0 MAPTYPE VALPKG.VALTYPE"
+		echo >&2 "Usage: $0 MAPTYPE VALPKG.VALTYPE TESTFIELD"
 		exit 2
 	fi
 	MAPTYPE=$1
