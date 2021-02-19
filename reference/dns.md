@@ -4,7 +4,7 @@ The Telepresence DNS resolver is dynamically configured to resolve names using t
 
 All intercepts contribute to the DNS resolver, even those that do not use the `--namespace=<value>` option. This is because `--namespace default` is implied, and in this context, `default` is treated just like any other namespace.
 
-No namespaces are used by the DNS resolver (not even `default`) when no intercepts are active, which means that no service is available by <svc-name> only. Without an active intercept, the full DNS name must be used (in the form `<svc-name>.<namespace>.svc.cluster.local`).
+No namespaces are used by the DNS resolver (not even `default`) when no intercepts are active, which means that no service is available by `<svc-name>` only. Without an active intercept, the full DNS name must be used (in the form `<svc-name>.<namespace>.svc.cluster.local`).
 
 See this demonstrated below, using the [quick start's](../../quick-start/) sample app services.
 
