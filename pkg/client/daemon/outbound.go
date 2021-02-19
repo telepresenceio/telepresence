@@ -206,7 +206,7 @@ func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
 func (o *outbound) resolveNoSearch(query string) *rpc.Route {
 	o.domainsLock.RLock()
 
-	// Check is this is a NAME.NAMESPACE. query
+	// Check if this is a NAME.NAMESPACE. query
 	ds := strings.Split(query, ".")
 	if len(ds) == 3 && ds[2] == "" {
 		if _, ok := o.namespaces[ds[1]]; ok {
