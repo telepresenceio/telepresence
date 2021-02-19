@@ -119,7 +119,7 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 					delete(livePortForwards, pf)
 				}
 			}
-			tm.updateDaemonNamespaces(ctx, namespaces)
+			tm.setInterceptedNamespaces(ctx, namespaces)
 		}
 
 		if ctx.Err() == nil {

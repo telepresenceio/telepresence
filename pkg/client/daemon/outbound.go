@@ -39,6 +39,8 @@ type outbound struct {
 	tables     map[string]*rpc.Table
 	tablesLock sync.RWMutex
 
+	// Namespaces, accessible using <service-name>.<namespace-name>
+	namespaces        map[string]struct{}
 	domains           map[string]*rpc.Route
 	domainsLock       sync.RWMutex
 	setSearchPathFunc func(c context.Context, paths []string)
@@ -112,6 +114,7 @@ func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSea
 		noSearch:   noSearch,
 		tables:     make(map[string]*rpc.Table),
 		translator: nat.NewRouter(name, localIP),
+		namespaces: make(map[string]struct{}),
 		domains:    make(map[string]*rpc.Route),
 		search:     []string{""},
 		work:       make(chan func(context.Context) error),
@@ -200,8 +203,16 @@ func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
 	return nil
 }
 
-func (o *outbound) resolveNoNS(query string) *rpc.Route {
+func (o *outbound) resolveNoSearch(query string) *rpc.Route {
 	o.domainsLock.RLock()
+
+	// Check is this is a NAME.NAMESPACE. query
+	ds := strings.Split(query, ".")
+	if len(ds) == 3 && ds[2] == "" {
+		if _, ok := o.namespaces[ds[1]]; ok {
+			query += "svc.cluster.local."
+		}
+	}
 	route := o.domains[strings.ToLower(query)]
 	o.domainsLock.RUnlock()
 	return route

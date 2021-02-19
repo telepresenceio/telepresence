@@ -39,6 +39,9 @@ type k8sCluster struct {
 
 	lastNamespaces []string
 
+	// Currently intercepted namespaces
+	interceptedNamespaces map[string]struct{}
+
 	accLock  sync.Mutex
 	watchers map[string]*k8sWatcher
 
