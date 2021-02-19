@@ -321,22 +321,12 @@ func run(c context.Context) error {
 	if err != nil {
 		return err
 	}
+	c = dgroup.WithGoroutineName(c, "/"+processName)
 
 	env, err := client.LoadEnv(c)
 	if err != nil {
 		return err
 	}
-
-	if client.SocketExists(client.ConnectorSocketName) {
-		return fmt.Errorf("socket %s exists so %s already started or terminated ungracefully",
-			client.SocketURL(client.ConnectorSocketName), processName)
-	}
-	defer func() {
-		if perr := derror.PanicToError(recover()); perr != nil {
-			dlog.Error(c, perr)
-		}
-		_ = os.Remove(client.ConnectorSocketName)
-	}()
 
 	// establish a connection to the daemon gRPC service
 	conn, err := client.DialSocket(c, client.DaemonSocketName)
@@ -354,10 +344,26 @@ func run(c context.Context) error {
 		EnableSignalHandling: true,
 		ShutdownOnNonError:   true,
 	})
+	s.cancel = func() { g.Go("quit", func(_ context.Context) error { return nil }) }
 
-	s.cancel = func() { g.Go(processName+"-quit", func(_ context.Context) error { return nil }) }
+	dlog.Info(c, "---")
+	dlog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
+	dlog.Infof(c, "PID is %d", os.Getpid())
+	dlog.Info(c, "")
 
-	g.Go(processName, func(c context.Context) (err error) {
+	g.Go("server-grpc", func(c context.Context) error {
+		if client.SocketExists(client.ConnectorSocketName) {
+			return fmt.Errorf("socket %s exists so %s already started or terminated ungracefully",
+				client.SocketURL(client.ConnectorSocketName), processName)
+		}
+		defer func() {
+			if perr := derror.PanicToError(recover()); perr != nil {
+				dlog.Error(c, perr)
+			}
+			_ = os.Remove(client.ConnectorSocketName)
+		}()
+
+		// Listen on unix domain socket
 		listener, err := net.Listen("unix", client.ConnectorSocketName)
 		if err != nil {
 			return err
@@ -375,29 +381,29 @@ func run(c context.Context) error {
 			}
 		}()
 
-		// Listen on unix domain socket
-
-		dlog.Info(c, "---")
-		dlog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
-		dlog.Infof(c, "PID is %d", os.Getpid())
-		dlog.Info(c, "")
-
 		svc := grpc.NewServer()
 		rpc.RegisterConnectorServer(svc, s)
 		manager.RegisterManagerServer(svc, &s.managerProxy)
 
-		// Need a subgroup here because several services started by incoming gRPC calls run using
-		// dgroup.ParentGroup().Go()
-		dgroup.NewGroup(c, dgroup.GroupConfig{}).Go("server", func(c context.Context) error {
-			s.ctx = c
+		// Need a subgroup here because several services started by incoming gRPC calls run
+		// using dgroup.ParentGroup().Go(), and we don't want them to trip
+		// ShutdownOnNonError.
+		subg := dgroup.NewGroup(c, dgroup.GroupConfig{})
+
+		subg.Go("GracefulStop", func(c context.Context) error {
 			<-c.Done()
 			dlog.Info(c, "Shutting down")
 			svc.GracefulStop()
 			return nil
 		})
-		err = svc.Serve(listener)
-		dlog.Info(c, "Done serving")
-		return err
+		subg.Go("Serve", func(c context.Context) error {
+			s.ctx = c
+			err = svc.Serve(listener)
+			dlog.Info(c, "Done serving")
+			return err
+		})
+
+		return subg.Wait()
 	})
 
 	err = g.Wait()
