@@ -35,11 +35,6 @@ func systemaGetPreferredAgentImageName(ctx context.Context, urlStr string) (stri
 	if err != nil {
 		return "", err
 	}
-	// Discard any path/query/fragment components.
-	u = &url.URL{
-		Scheme: "dns",
-		Host:   u.Host,
-	}
 
 	tokenData, err := cache.LoadTokenFromUserCache(ctx)
 	if err != nil {
@@ -47,7 +42,8 @@ func systemaGetPreferredAgentImageName(ctx context.Context, urlStr string) (stri
 	}
 	creds := systemaCredentials(tokenData.AccessToken)
 
-	conn, err := grpc.DialContext(ctx, u.String(),
+	conn, err := grpc.DialContext(ctx,
+		(&url.URL{Scheme: "dns", Path: "/" + u.Host}).String(), // https://github.com/grpc/grpc/blob/master/doc/naming.md
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{ServerName: u.Hostname()})),
 		grpc.WithPerRPCCredentials(creds))
 	if err != nil {

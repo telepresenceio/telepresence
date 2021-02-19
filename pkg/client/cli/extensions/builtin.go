@@ -24,7 +24,7 @@ func builtinExtensions(_ context.Context) map[string]ExtensionInfo {
 		// extension, but we don't yet have an installer to install the extension file; so this
 		// metadata here is fine in the mean-time.
 		"/builtin/ambassador": {
-			Image:          "grpc+https://${SYSTEMA_HOST}:$(SYSTEMA_PORT}", // XXX: not using net.JoinHostPort means that setting SYSTEMA_HOST to an IPv6 address won't work
+			Image:          "grpc+https://${SYSTEMA_HOST}:${SYSTEMA_PORT}", // XXX: not using net.JoinHostPort means that setting SYSTEMA_HOST to an IPv6 address won't work
 			RequiresAPIKey: true,
 			Mechanisms: map[string]MechanismInfo{
 				"http": {
