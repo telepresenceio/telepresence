@@ -14,9 +14,9 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/ambassador/pkg/metriton"
+	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dutil"
 	"github.com/datawire/telepresence2/rpc/v2/common"
 	rpc "github.com/datawire/telepresence2/rpc/v2/connector"
 	"github.com/datawire/telepresence2/rpc/v2/daemon"
@@ -106,7 +106,7 @@ func (c callCtx) Value(key interface{}) interface{} {
 }
 
 func callRecovery(c context.Context, r interface{}, err error) error {
-	perr := dutil.PanicToError(r)
+	perr := derror.PanicToError(r)
 	if perr != nil {
 		if err == nil {
 			err = perr
@@ -332,7 +332,7 @@ func run(c context.Context) error {
 			client.SocketURL(client.ConnectorSocketName), processName)
 	}
 	defer func() {
-		if perr := dutil.PanicToError(recover()); perr != nil {
+		if perr := derror.PanicToError(recover()); perr != nil {
 			dlog.Error(c, perr)
 		}
 		_ = os.Remove(client.ConnectorSocketName)
@@ -364,7 +364,7 @@ func run(c context.Context) error {
 		}
 
 		defer func() {
-			if perr := dutil.PanicToError(recover()); perr != nil {
+			if perr := derror.PanicToError(recover()); perr != nil {
 				dlog.Error(c, perr)
 			}
 			_ = listener.Close()
