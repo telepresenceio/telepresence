@@ -71,10 +71,10 @@ Your local workstation may not have the compute or memory resources necessary to
 <Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Go. <a href="../#3-install-a-sample-nodejs-application">We also have a version with the sample app written in Node.js if you prefer</a>.</Alert>
 
 1. Start by installing a sample application that consists of multiple services:  
-`kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-GO/main/k8s-config/edgey-corp-web-app-no-mapping.yaml`
+`kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-go/main/k8s-config/edgey-corp-web-app-no-mapping.yaml`
 
   ```
-  $ kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-GO/main/k8s-config/edgey-corp-web-app-no-mapping.yaml
+  $ kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-go/main/k8s-config/edgey-corp-web-app-no-mapping.yaml
     
     deployment.apps/dataprocessingservice created
     service/dataprocessingservice created
@@ -106,18 +106,18 @@ Your local workstation may not have the compute or memory resources necessary to
 You will now download the repo containing the services' code and run the DataProcessingService service locally. This version of the code has the UI color set to <span style="color:blue" class="bold">blue</span> instead of <span style="color:green" class="bold">green</span>.
 
 1. Clone the web app’s GitHub repo:  
-`git clone https://github.com/datawire/edgey-corp-GO.git`
+`git clone https://github.com/datawire/edgey-corp-go.git`
 
   ```
-  $ git clone https://github.com/datawire/edgey-corp-GO.git
+  $ git clone https://github.com/datawire/edgey-corp-go.git
     
-    Cloning into 'edgey-corp-GO'...
+    Cloning into 'edgey-corp-go'...
     remote: Enumerating objects: 441, done.
     ...
   ```
 
 2. Change into the repo directory, then into DataProcessingService:  
-`cd edgey-corp-GO/DataProcessingService/`
+`cd edgey-corp-go/DataProcessingService/`
 
 3. Start the Go server:  
 `$GOPATH/bin/fresh`
@@ -167,7 +167,7 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
 ## 6. Make a code change
 We’ve now set up a local development environment for the DataProcessingService, and we’ve created an intercept that sends traffic in the cluster to our local environment. We can now combine these two concepts to show how we can quickly make and test changes.
 
-1. Open `edgey-corp-GO/DataProcessingService/main.go` in your editor and change `var color string` from `blue` to `orange`. Save the file and the Go server will auto reload.
+1. Open `edgey-corp-go/DataProcessingService/main.go` in your editor and change `var color string` from `blue` to `orange`. Save the file and the Go server will auto reload.
 
 2. Now, visit [http://verylargejavaservice:8080](http://verylargejavaservice:8080) again in your browser. You will now see the orange elements in the application.
 
