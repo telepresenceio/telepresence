@@ -162,6 +162,10 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
 
 2. Go to the frontend service again in your browser. Since the service is now intercepted it can be reached directly by its service name at [http://verylargejavaservice:8080](http://verylargejavaservice:8080). You will now see the <span style="color:blue" class="bold">blue</span> elements in the app.  
 
+<Alert severity="info">See <a href="../reference/dns">this doc</a> for more information on how Telepresence resolves DNS.</Alert>
+
+<hr style="height:0px; visibility:hidden;" />
+
 <Alert severity="success"><b>The frontend’s request to DataProcessingService is being intercepted and rerouted to the Node server on your laptop!</b></Alert>
 
 ## 6. Make a code change
