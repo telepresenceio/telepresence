@@ -14,7 +14,7 @@ Preview URLs are all managed through Ambassador Cloud.  You must run `telepresen
 
 While preview URLs selectively proxy traffic to your laptop, you can also run an [intercept without creating a preview URL](#creating-an-intercept-without-a-preview-url), which will proxy all traffic to the service.
 
-<Alert severity="info">For a detailed walk though on creating intercepts, follow the [Telepresence tutorial](../../tutorial/).</Alert>
+<Alert severity="info">For a detailed walk though on creating intercepts, follow the <a href="../../tutorial/">Telepresence tutorial</a>.</Alert>
 
 ## Creating an Intercept
 
@@ -22,7 +22,7 @@ The following quick overview on creating an intercept assumes you have a deploym
 
 1. In your terminal run `telepresence login`. This logs you into the Ambassador Cloud, which will track your intercepts and let you share them with colleagues. 
 
-<Alert severity="info"> If you are logged in and close the dashboard browser tab, quickly reopen it by running `telepresence dashboard`</Alert>
+  <Alert severity="info">If you are logged in and close the dashboard browser tab, you can quickly reopen it by running <code>telepresence dashboard</code>.</Alert>
 
 2. Return to your terminal and run `telepresence list`.  This will connect to your cluster, install the [Traffic Manager](../../reference/) to proxy the traffic, and return a list of services that Telepresence is able to intercept.
 
