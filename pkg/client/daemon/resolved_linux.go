@@ -43,7 +43,6 @@ func (o *outbound) tryResolveD(c context.Context, onReady func()) error {
 	}
 
 	o.setSearchPathFunc = func(c context.Context, paths []string) {
-
 		// When using systemd.resolved, we provide resolution of NAME.NAMESPACE by adding each
 		// namespace as a route (a search entry prefixed with ~)
 		namespaces := make(map[string]struct{})
