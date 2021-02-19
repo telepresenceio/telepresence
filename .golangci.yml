@@ -31,6 +31,8 @@ linters-settings:
     packages-with-error-message:
       - os/exec:                    "Use `github.com/datawire/dlib/dexec` instead of `os/exec`"
       - github.com/golang/protobuf: "Use `google.golang.org/protobuf` instead of `github.com/golang/protobuf`"
+      - github/datawire/dlib/dutil: "Use either `github/datawire/dlib/derror` or `github/datawire/dlib/dhttp` instead of `github/datawire/dlib/dutil`"
+      - golang.org/x/net/http2/h2c: "Use `github/datawire/dlib/dhttp` instead of `golang.org/x/net/http2/h2c`"
 
   gocyclo:
     min-complexity: 35
