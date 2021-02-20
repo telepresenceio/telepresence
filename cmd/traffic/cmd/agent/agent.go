@@ -151,10 +151,10 @@ func Main(ctx context.Context, args ...string) error {
 			return err
 		}
 
-		forwarder := NewForwarder(lisAddr)
+		forwarder := NewForwarder(lisAddr, "", config.AppPort)
 		forwarderChan <- forwarder
 
-		return forwarder.Serve(ctx, "", config.AppPort)
+		return forwarder.Serve(ctx)
 	})
 
 	// Talk to the Traffic Manager

@@ -23,13 +23,15 @@ type Forwarder struct {
 	targetPort int32
 }
 
-func NewForwarder(listen *net.TCPAddr) *Forwarder {
+func NewForwarder(listen *net.TCPAddr, targetHost string, targetPort int32) *Forwarder {
 	return &Forwarder{
 		listenAddr: listen,
+		targetHost: targetHost,
+		targetPort: targetPort,
 	}
 }
 
-func (f *Forwarder) Serve(ctx context.Context, targetHost string, targetPort int32) error {
+func (f *Forwarder) Serve(ctx context.Context) error {
 	f.mu.Lock()
 
 	// Set up listener lifetime (same as the overall forwarder lifetime)
@@ -38,8 +40,6 @@ func (f *Forwarder) Serve(ctx context.Context, targetHost string, targetPort int
 
 	// Set up target lifetime
 	f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
-	f.targetHost = targetHost
-	f.targetPort = targetPort
 
 	ctx = f.lCtx
 	listenAddr := f.listenAddr
