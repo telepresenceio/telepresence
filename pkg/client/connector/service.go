@@ -41,6 +41,11 @@ Examine the ` + titleName + `'s log output in
 to troubleshoot problems.
 `
 
+type parsedConnectRequest struct {
+	*rpc.ConnectRequest
+	*k8sConfig
+}
+
 // service represents the state of the Telepresence Connector
 type service struct {
 	rpc.UnsafeConnectorServer
@@ -50,7 +55,6 @@ type service struct {
 	scout  *client.Scout
 
 	managerProxy mgrProxy
-	ctx          context.Context
 	cancel       func()
 
 	connectMu sync.Mutex
@@ -58,6 +62,15 @@ type service struct {
 	cluster    *k8sCluster
 	bridge     *bridge
 	trafficMgr *trafficManager
+
+	// These are used to communicate between the various goroutines.
+	connectRequest  chan parsedConnectRequest // server-grpc.connect() -> connectWorker
+	connectResponse chan *rpc.ConnectInfo     // connectWorker -> server-grpc.connect()
+
+	// ctx is part of the "callCtx hack", to hack around an issue in the gRPC server, since it
+	// doesn't let us pass it a Context.  It should go away when we migrate to dhttp and
+	// Contexts can get passed around properly for HTTP/2 requests.
+	ctx context.Context
 }
 
 // Command returns the CLI sub-command for "connector-foreground"
@@ -205,7 +218,6 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 			ErrorText: err.Error(),
 		}
 	}
-	// Check for the various "this is not the first call to Connect" states:
 	switch {
 	case s.cluster != nil && s.cluster.k8sConfig.equals(k8sConfig):
 		if mns := cr.MappedNamespaces; len(mns) > 0 {
@@ -244,19 +256,28 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 			Error: rpc.ConnectInfo_DISCONNECTING,
 		}
 	default:
-		// Proceed; this is the first call to Connect.
+		// This is the first call to Connect; we have to tell the background connect
+		// goroutine to actually do the work.
+		s.connectRequest <- parsedConnectRequest{
+			ConnectRequest: cr,
+			k8sConfig:      k8sConfig,
+		}
+		close(s.connectRequest)
+		return <-s.connectResponse
 	}
+}
 
+func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sConfig *k8sConfig) *rpc.ConnectInfo {
 	mappedNamespaces := cr.MappedNamespaces
 	if len(mappedNamespaces) == 1 && mappedNamespaces[0] == "all" {
 		mappedNamespaces = nil
 	}
 	sort.Strings(mappedNamespaces)
 
-	_ = s.scout.Report(s.ctx, "connect")
+	_ = s.scout.Report(c, "connect")
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	cluster, err := trackKCluster(s.ctx, k8sConfig, mappedNamespaces, s.daemon)
+	cluster, err := trackKCluster(c, k8sConfig, mappedNamespaces, s.daemon)
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
 		s.cancel()
@@ -275,10 +296,10 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		s.scout.SetMetadatum(objectType, num)
 	}
 	s.scout.SetMetadatum("mapped_namespaces", len(cr.MappedNamespaces))
-	_ = s.scout.Report(s.ctx, "connecting_traffic_manager")
+	_ = s.scout.Report(c, "connecting_traffic_manager")
 
 	connectStart := time.Now()
-	tmgr, err := newTrafficManager(s.ctx, s.env, s.cluster, s.scout.Reporter.InstallID())
+	tmgr, err := newTrafficManager(c, s.env, s.cluster, s.scout.Reporter.InstallID())
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		// No point in continuing without a traffic manager
@@ -305,7 +326,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 
 	dlog.Infof(c, "Starting traffic-manager bridge in context %s", cluster.Context)
 	br := newBridge(s.daemon, tmgr.sshPort)
-	err = br.start(s.ctx)
+	err = br.start(c)
 	if err != nil {
 		dlog.Errorf(c, "Failed to start traffic-manager bridge: %v", err)
 		// No point in continuing without a bridge
@@ -319,7 +340,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	s.bridge = br
 
 	// Collect data on how long connection time took
-	_ = s.scout.Report(s.ctx, "finished_connecting_traffic_manager",
+	_ = s.scout.Report(c, "finished_connecting_traffic_manager",
 		client.ScoutMeta{Key: "connect_duration", Value: time.Since(connectStart).Seconds()})
 
 	ret := &rpc.ConnectInfo{
@@ -354,12 +375,15 @@ func run(c context.Context) error {
 		return err
 	}
 	defer conn.Close()
+
 	s := &service{
 		env:    env,
 		daemon: daemon.NewDaemonClient(conn),
 		scout:  client.NewScout(c, "connector"),
-	}
 
+		connectRequest:  make(chan parsedConnectRequest),
+		connectResponse: make(chan *rpc.ConnectInfo),
+	}
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true,
@@ -382,6 +406,13 @@ func run(c context.Context) error {
 				dlog.Error(c, perr)
 			}
 			_ = os.Remove(client.ConnectorSocketName)
+
+			// Close s.connectRequest if it hasn't already been closed.
+			select {
+			case <-s.connectRequest:
+			default:
+				close(s.connectRequest)
+			}
 		}()
 
 		// Listen on unix domain socket
@@ -406,9 +437,6 @@ func run(c context.Context) error {
 		rpc.RegisterConnectorServer(svc, s)
 		manager.RegisterManagerServer(svc, &s.managerProxy)
 
-		// Need a subgroup here because several services started by incoming gRPC calls run
-		// using dgroup.ParentGroup().Go(), and we don't want them to trip
-		// ShutdownOnNonError.
 		subg := dgroup.NewGroup(c, dgroup.GroupConfig{})
 
 		subg.Go("GracefulStop", func(c context.Context) error {
@@ -422,6 +450,29 @@ func run(c context.Context) error {
 			err = svc.Serve(listener)
 			dlog.Info(c, "Done serving")
 			return err
+		})
+
+		return subg.Wait()
+	})
+
+	g.Go("background", func(c context.Context) error {
+		// Need a subgroup here because s.connectWorker() starts several other workers with
+		// dgroup.ParentGroup().Go(), and we don't want them to trip ShutdownOnNonError.
+		subg := dgroup.NewGroup(c, dgroup.GroupConfig{})
+
+		subg.Go("connect", func(c context.Context) (err error) {
+			defer func() {
+				close(s.connectResponse) // -> server-grpc.connect()
+				<-c.Done()               // Don't trip ShutdownOnNonError in the parent group.
+			}()
+
+			pcr, ok := <-s.connectRequest
+			if !ok {
+				return nil
+			}
+			s.connectResponse <- s.connectWorker(c, pcr.ConnectRequest, pcr.k8sConfig)
+
+			return nil
 		})
 
 		return subg.Wait()
