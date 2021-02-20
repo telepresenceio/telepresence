@@ -66,6 +66,7 @@ type service struct {
 	// These are used to communicate between the various goroutines.
 	connectRequest  chan parsedConnectRequest // server-grpc.connect() -> connectWorker
 	connectResponse chan *rpc.ConnectInfo     // connectWorker -> server-grpc.connect()
+	clusterRequest  chan *k8sCluster          // connectWorker -> background-k8swatch
 
 	// ctx is part of the "callCtx hack", to hack around an issue in the gRPC server, since it
 	// doesn't let us pass it a Context.  It should go away when we migrate to dhttp and
@@ -276,8 +277,20 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	_ = s.scout.Report(c, "connect")
 
-	dlog.Info(c, "Connecting to traffic manager...")
-	cluster, err := trackKCluster(c, k8sConfig, mappedNamespaces, s.daemon)
+	dlog.Info(c, "Connecting to k8s cluster...")
+	cluster, err := func() (*k8sCluster, error) {
+		cluster, err := newKCluster(c, k8sConfig, mappedNamespaces, s.daemon)
+		if err != nil {
+			return nil, err
+		}
+		s.clusterRequest <- cluster
+		c, cancel := context.WithTimeout(c, 10*time.Second)
+		defer cancel()
+		if err := cluster.waitUntilReady(c); err != nil {
+			return nil, err
+		}
+		return cluster, nil
+	}()
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
 		s.cancel()
@@ -299,6 +312,8 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	_ = s.scout.Report(c, "connecting_traffic_manager")
 
 	connectStart := time.Now()
+
+	dlog.Info(c, "Connecting to traffic manager...")
 	tmgr, err := newTrafficManager(c, s.env, s.cluster, s.scout.Reporter.InstallID())
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
@@ -383,6 +398,7 @@ func run(c context.Context) error {
 
 		connectRequest:  make(chan parsedConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
+		clusterRequest:  make(chan *k8sCluster),
 	}
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -463,6 +479,7 @@ func run(c context.Context) error {
 		subg.Go("connect", func(c context.Context) (err error) {
 			defer func() {
 				close(s.connectResponse) // -> server-grpc.connect()
+				close(s.clusterRequest)  // -> background-k8swatch
 				<-c.Done()               // Don't trip ShutdownOnNonError in the parent group.
 			}()
 
@@ -476,6 +493,14 @@ func run(c context.Context) error {
 		})
 
 		return subg.Wait()
+	})
+
+	g.Go("background-k8swatch", func(c context.Context) error {
+		cluster, ok := <-s.clusterRequest
+		if !ok {
+			return nil
+		}
+		return cluster.runWatchers(c)
 	})
 
 	err = g.Wait()
