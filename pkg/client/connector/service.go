@@ -67,6 +67,7 @@ type service struct {
 	connectRequest  chan parsedConnectRequest // server-grpc.connect() -> connectWorker
 	connectResponse chan *rpc.ConnectInfo     // connectWorker -> server-grpc.connect()
 	clusterRequest  chan *k8sCluster          // connectWorker -> background-k8swatch
+	managerRequest  chan *trafficManager      // connectWorker -> background-manager
 
 	// ctx is part of the "callCtx hack", to hack around an issue in the gRPC server, since it
 	// doesn't let us pass it a Context.  It should go away when we migrate to dhttp and
@@ -324,8 +325,9 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 			ErrorText: err.Error(),
 		}
 	}
-
+	s.managerRequest <- tmgr
 	s.trafficMgr = tmgr
+
 	// Wait for traffic manager to connect
 	dlog.Info(c, "Waiting for TrafficManager to connect")
 	if err := tmgr.waitUntilStarted(c); err != nil {
@@ -399,6 +401,7 @@ func run(c context.Context) error {
 		connectRequest:  make(chan parsedConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 		clusterRequest:  make(chan *k8sCluster),
+		managerRequest:  make(chan *trafficManager),
 	}
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -480,6 +483,7 @@ func run(c context.Context) error {
 			defer func() {
 				close(s.connectResponse) // -> server-grpc.connect()
 				close(s.clusterRequest)  // -> background-k8swatch
+				close(s.managerRequest)  // -> background-manager
 				<-c.Done()               // Don't trip ShutdownOnNonError in the parent group.
 			}()
 
@@ -501,6 +505,14 @@ func run(c context.Context) error {
 			return nil
 		}
 		return cluster.runWatchers(c)
+	})
+
+	g.Go("background-manager", func(c context.Context) error {
+		tm, ok := <-s.managerRequest
+		if !ok {
+			return nil
+		}
+		return tm.run(c)
 	})
 
 	err = g.Wait()
