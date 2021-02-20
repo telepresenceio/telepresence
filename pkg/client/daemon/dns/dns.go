@@ -4,10 +4,8 @@ import (
 	"context"
 	"net"
 	"strings"
-	"sync"
 
 	"github.com/miekg/dns"
-	"github.com/pkg/errors"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
@@ -17,13 +15,13 @@ import (
 // Server is a DNS server which implements the github.com/miekg/dns Handler interface
 type Server struct {
 	ctx       context.Context // necessary to make logging work in ServeDNS function
-	listeners []*net.UDPAddr
+	listeners []net.PacketConn
 	fallback  string
 	resolve   func(string) string
 }
 
 // NewServer returns a new dns.Server
-func NewServer(c context.Context, listeners []*net.UDPAddr, fallback string, resolve func(string) string) *Server {
+func NewServer(c context.Context, listeners []net.PacketConn, fallback string, resolve func(string) string) *Server {
 	return &Server{
 		ctx:       c,
 		listeners: listeners,
@@ -107,38 +105,17 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 }
 
 // Start starts the DNS server
-func (s *Server) Run(c context.Context, initDone *sync.WaitGroup) error {
-	type lwa struct {
-		addr     string
-		listener net.PacketConn
-	}
-	listeners := make([]*lwa, len(s.listeners))
-	for i, udpAddr := range s.listeners {
-		addr := udpAddr.String()
-		lc := net.ListenConfig{}
-		listener, err := lc.ListenPacket(c, "udp", addr)
-		if err != nil {
-			initDone.Done()
-			return errors.Wrap(err, "failed to set up udp listener")
-		}
-		listeners[i] = &lwa{addr: addr, listener: listener}
-	}
-
+func (s *Server) Run(c context.Context) error {
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-	wg := &sync.WaitGroup{}
-	wg.Add(len(listeners))
-	for _, lwa := range listeners {
-		srv := &dns.Server{PacketConn: lwa.listener, Handler: s}
-		g.Go(lwa.addr, func(c context.Context) error {
+	for _, listener := range s.listeners {
+		srv := &dns.Server{PacketConn: listener, Handler: s}
+		g.Go(listener.LocalAddr().String(), func(c context.Context) error {
 			go func() {
 				<-c.Done()
 				_ = srv.ShutdownContext(dcontext.HardContext(c))
 			}()
-			wg.Done()
 			return srv.ActivateAndServe()
 		})
 	}
-	wg.Wait()
-	initDone.Done()
 	return g.Wait()
 }

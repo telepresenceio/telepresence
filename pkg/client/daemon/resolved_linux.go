@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dbus"
@@ -30,7 +29,11 @@ func (o *outbound) tryResolveD(c context.Context, onReady func()) error {
 	}
 
 	// Create a new local address that the DNS resolver can listen to.
-	dnsResolverAddr, err := dnsResolverAddr()
+	dnsResolverListener, err := net.ListenPacket("udp", "127.0.0.1:")
+	if err != nil {
+		return errResolveDNotConfigured
+	}
+	dnsResolverAddr, err := splitToUDPAddr(dnsResolverListener.LocalAddr())
 	if err != nil {
 		return errResolveDNotConfigured
 	}
@@ -77,18 +80,18 @@ func (o *outbound) tryResolveD(c context.Context, onReady func()) error {
 	})
 
 	// DNS resolver
-	initDone := &sync.WaitGroup{}
-	initDone.Add(2)
 	g.Go("Server", func(c context.Context) error {
-		v := dns.NewServer(c, []*net.UDPAddr{dnsResolverAddr}, "", func(domain string) string {
+		v := dns.NewServer(c, []net.PacketConn{dnsResolverListener}, "", func(domain string) string {
 			// Namespaces are defined on the network DNS config and managed by ResolveD, so not needed here.
 			if r := o.resolveNoSearch(domain); r != nil {
 				return r.Ip
 			}
 			return ""
 		})
-		return v.Run(c, initDone)
+		return v.Run(c)
 	})
+	initDone := &sync.WaitGroup{}
+	initDone.Add(1)
 	g.Go("Forwarder", func(c context.Context) error {
 		return t.ForwardDNS(c, dnsResolverAddr, initDone)
 	})
@@ -96,6 +99,7 @@ func (o *outbound) tryResolveD(c context.Context, onReady func()) error {
 		initDone.Wait()
 
 		// Check if an attempt to resolve a DNS address reaches our DNS resolver, 300ms should be plenty
+
 		cmdC, cmdCancel := context.WithTimeout(c, 300*time.Millisecond)
 		defer cmdCancel()
 		_, _ = net.DefaultResolver.LookupHost(cmdC, "jhfweoitnkgyeta")

@@ -2,8 +2,8 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"net"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -11,13 +11,11 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/datawire/dlib/dcontext"
-	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/datawire/telepresence2/rpc/v2/daemon"
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/nat"
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/proxy"
-	"github.com/datawire/telepresence2/v2/pkg/subnet"
 )
 
 const (
@@ -31,13 +29,13 @@ const (
 //
 // A zero outbound is invalid; you must use newOutbound.
 type outbound struct {
-	localIP    net.IP
-	dnsIP      string
-	fallbackIP string
-	noSearch   bool
-	translator nat.FirewallRouter
-	tables     map[string]*rpc.Table
-	tablesLock sync.RWMutex
+	dnsListener net.PacketConn
+	dnsIP       string
+	fallbackIP  string
+	noSearch    bool
+	translator  nat.FirewallRouter
+	tables      map[string]*rpc.Table
+	tablesLock  sync.RWMutex
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces        map[string]struct{}
@@ -56,68 +54,48 @@ type outbound struct {
 	work chan func(context.Context) error
 }
 
+// splitToUDPAddr splits the given address into an UDPAddr. It's
+// an  error if the address is based on a hostname rather than an IP.
+func splitToUDPAddr(netAddr net.Addr) (*net.UDPAddr, error) {
+	addr := netAddr.String()
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+	nsIP := net.ParseIP(host)
+	if nsIP == nil {
+		return nil, fmt.Errorf("host of address %q is not an IP address", addr)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return nil, fmt.Errorf("port of address %s is not an integer", addr)
+	}
+	return &net.UDPAddr{IP: nsIP, Port: port}, nil
+}
+
 // newOutbound returns a new properly initialized outbound object.
 //
 // If dnsIP is empty, it will be detected from /etc/resolv.conf
 //
 // If fallbackIP is empty, it will default to Google DNS.
 func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSearch bool) (*outbound, error) {
-	var localIP net.IP
-
-	if runtime.GOOS == "darwin" {
-		// TODO(lukeshu): Unify the GNU/Linux code with this.
-
-		// makeIP2 returns a copy where the last byte is 2.
-		makeIP2 := func(ip net.IP) net.IP {
-			ip2 := make(net.IP, len(ip))
-			copy(ip2, ip)
-			ip2[len(ip2)-1] = 2
-			return ip2
-		}
-
-		// availabilityFilter checks that the IP can be added as an alias to the loopback device and
-		// that port 53 can be bound to UDP. The alias will remain in place if the bind succeeds.
-		availabilityFilter := func(ipn *net.IPNet) bool {
-			localIP := makeIP2(ipn.IP)
-
-			// Up our loopback device
-			if err := dexec.CommandContext(c, "ifconfig", "lo0", "alias", localIP.String(), "up").Run(); err != nil {
-				return false
-			}
-
-			// Try binding to port 53
-			udpAddr := net.UDPAddr{IP: localIP, Port: 53}
-			lc := net.ListenConfig{}
-			listener, err := lc.ListenPacket(c, "udp", udpAddr.String())
-			if err != nil {
-				// Remove loopback device
-				_ = dexec.CommandContext(c, "ifconfig", "lo0", "-alias", localIP.String()).Run()
-				dlog.Error(c, err)
-				return false
-			}
-			_ = listener.Close()
-			return true
-		}
-
-		loopBackCIDR, err := subnet.FindAvailableLoopBackClassC(availabilityFilter)
-		if err != nil {
-			return nil, err
-		}
-		// Place the daemon DNS & firewall-to-socks servers in the private network at x.x.x.2.
-		localIP = makeIP2(loopBackCIDR.IP)
+	lc := &net.ListenConfig{}
+	listener, err := lc.ListenPacket(c, "udp", "127.0.0.1:0")
+	if err != nil {
+		return nil, err
 	}
 
 	ret := &outbound{
-		localIP:    localIP,
-		dnsIP:      dnsIP,
-		fallbackIP: fallbackIP,
-		noSearch:   noSearch,
-		tables:     make(map[string]*rpc.Table),
-		translator: nat.NewRouter(name, localIP),
-		namespaces: make(map[string]struct{}),
-		domains:    make(map[string]*rpc.Route),
-		search:     []string{""},
-		work:       make(chan func(context.Context) error),
+		dnsListener: listener,
+		dnsIP:       dnsIP,
+		fallbackIP:  fallbackIP,
+		noSearch:    noSearch,
+		tables:      make(map[string]*rpc.Table),
+		translator:  nat.NewRouter(name, net.IPv4(127, 0, 0, 1)),
+		namespaces:  make(map[string]struct{}),
+		domains:     make(map[string]*rpc.Route),
+		search:      []string{""},
+		work:        make(chan func(context.Context) error),
 	}
 	ret.tablesLock.Lock() // leave it locked until firewallConfiguratorWorker unlocks it
 	return ret, nil

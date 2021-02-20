@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strings"
 )
 
 type ipAndNetwork struct {
@@ -44,64 +43,6 @@ func FindAvailableClassC() (*net.IPNet, error) {
 		return cidr24(192, 168, found), nil
 	}
 	return nil, errors.New("no available CIDR")
-}
-
-// FindAvailableLoopBackClassC returns the first class C subnet CIDR in the address ranges reserved
-// for private (non-routed) use that isn't in use by an existing network interface.
-//
-// The optional filter function can be used to test if a given network can be used for a specific
-// purpose. If not, the filter should return false.
-func FindAvailableLoopBackClassC(filter func(ip *net.IPNet) bool) (*net.IPNet, error) {
-	addrs, err := interfaceAddrs()
-	if err != nil {
-		return nil, fmt.Errorf("failed to obtain interface addresses: %v", err)
-	}
-
-	cidrs := make([]*ipAndNetwork, 0)
-	for _, a := range addrs {
-		s := a.String()
-		if !strings.HasPrefix(s, "127.") {
-			// Only consider ipv4 loopback addresses
-			continue
-		}
-		var ip net.IP
-		if ip, _, err = net.ParseCIDR(s); err != nil {
-			continue
-		}
-
-		m := net.CIDRMask(onesFromEight(ip), 32)
-		cidrs = append(cidrs, &ipAndNetwork{ip: ip, network: &net.IPNet{
-			IP:   ip.Mask(m),
-			Mask: m,
-		}})
-	}
-
-	for i := 0; i < 256; i++ {
-		if found := findChunk(cidrs, 127, i); found >= 0 {
-			cidr := cidr24(127, i, found)
-			if filter == nil || filter(cidr) {
-				return cidr, nil
-			}
-		}
-	}
-	return nil, errors.New("no available CIDR")
-}
-
-// onesFromEight computes the number of ones needed to mask everything from
-// the first bit found in the second and third byte of the IP address. I.e. the
-// number of ones will vary between 8 and 24.
-func onesFromEight(ip net.IP) int {
-	ones := 8
-	for bt := 1; bt < 3; bt++ {
-		ip1 := int(ip[1])
-		for bit := 7; bit >= 0; bit-- {
-			if ip1>>bit != 0 {
-				return ones
-			}
-			ones++
-		}
-	}
-	return ones
 }
 
 func findChunk(cidrs []*ipAndNetwork, ar1, ar2 int) int {

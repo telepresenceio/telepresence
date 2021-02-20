@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func Test_covers(t *testing.T) {
@@ -144,30 +143,4 @@ func Test_findAvailableIPV4CIDR_all_busy(t *testing.T) {
 	}
 	_, err := FindAvailableClassC()
 	assert.Error(t, err)
-}
-
-func TestFindAvailableLoopBackClassC(t *testing.T) {
-	interfaceAddrs = func() ([]net.Addr, error) {
-		return []net.Addr{
-			&net.IPNet{IP: net.IP{127, 0, 0, 1}, Mask: net.CIDRMask(8, 32)},
-			&net.IPNet{IP: net.IP{127, 0, 2, 1}, Mask: net.CIDRMask(8, 32)},
-		}, nil
-	}
-	got, err := FindAvailableLoopBackClassC(nil)
-	require.NoError(t, err)
-	assert.Equal(t, "127.0.1.0/24", got.String())
-}
-
-func TestFindAvailableLoopBackClassC_filter(t *testing.T) {
-	interfaceAddrs = func() ([]net.Addr, error) {
-		return []net.Addr{
-			&net.IPNet{IP: net.IP{127, 0, 0, 1}, Mask: net.CIDRMask(8, 32)},
-			&net.IPNet{IP: net.IP{127, 0, 2, 1}, Mask: net.CIDRMask(8, 32)},
-		}, nil
-	}
-	got, err := FindAvailableLoopBackClassC(func(ipn *net.IPNet) bool {
-		return !ipn.IP.Equal(net.IPv4(127, 0, 1, 0))
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "127.1.0.0/24", got.String())
 }

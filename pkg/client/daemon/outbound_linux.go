@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/pkg/errors"
 
@@ -28,21 +27,6 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 		err = o.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"), onReady)
 	}
 	return err
-}
-
-// dnsResolverAddr obtains a new local address that the DNS resolver can listen to.
-func dnsResolverAddr() (*net.UDPAddr, error) {
-	l, err := net.ListenPacket("udp4", "localhost:")
-	if err != nil {
-		return nil, fmt.Errorf("unable to resolve udp addr: %v", err)
-	}
-	addr, ok := l.LocalAddr().(*net.UDPAddr)
-	_ = l.Close()
-	if !ok {
-		// listening to udp should definitely return an *net.UDPAddr
-		panic("cast error")
-	}
-	return addr, err
 }
 
 func (o *outbound) runOverridingServer(c context.Context, onReady func()) error {
@@ -81,11 +65,15 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 		o.search = paths
 	}
 
-	listeners, err := dnsListeners(c)
+	listeners, err := o.dnsListeners(c)
 	if err != nil {
 		return err
 	}
-	o.dnsRedirPort = listeners[0].Port
+	dnsAddr, err := splitToUDPAddr(listeners[0].LocalAddr())
+	if err != nil {
+		return err
+	}
+	o.dnsRedirPort = dnsAddr.Port
 
 	o.overridePrimaryDNS = true
 	onReady()
@@ -97,9 +85,7 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 		return ""
 	})
 	dlog.Debug(c, "Starting server")
-	initDone := &sync.WaitGroup{}
-	initDone.Add(1)
-	err = srv.Run(c, initDone)
+	err = srv.Run(c)
 	dlog.Debug(c, "Server done")
 	return err
 }
@@ -127,16 +113,8 @@ func (o *outbound) resolve(query string) *rpc.Route {
 	return route
 }
 
-func dnsListeners(c context.Context) ([]*net.UDPAddr, error) {
-	localAddr := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0}
-	ls, err := net.ListenUDP("udp4", localAddr)
-	if err != nil {
-		return nil, err
-	}
-	localAddr = ls.LocalAddr().(*net.UDPAddr)
-	ls.Close()
-
-	listeners := []*net.UDPAddr{localAddr}
+func (o *outbound) dnsListeners(c context.Context) ([]net.PacketConn, error) {
+	listeners := []net.PacketConn{o.dnsListener}
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		// Inside docker. Don't add docker bridge
 		return listeners, nil
@@ -150,6 +128,11 @@ func dnsListeners(c context.Context) ([]*net.UDPAddr, error) {
 	if err != nil {
 		dlog.Info(c, "not listening on docker bridge")
 		return listeners, nil
+	}
+
+	localAddr, err := splitToUDPAddr(o.dnsListener.LocalAddr())
+	if err != nil {
+		return nil, err
 	}
 
 	dockerGatewayIP := net.ParseIP(strings.TrimSpace(string(output)))
@@ -183,17 +166,21 @@ func dnsListeners(c context.Context) ([]*net.UDPAddr, error) {
 
 	for {
 		extraAddr := &net.UDPAddr{IP: dockerGatewayIP, Port: localAddr.Port}
-		ls, err = net.ListenUDP("udp4", extraAddr)
+		ls, err := net.ListenPacket("udp", extraAddr.String())
 		if err == nil {
-			ls.Close()
 			dlog.Infof(c, "listening to docker bridge at %s", dockerGatewayIP)
-			return append(listeners, extraAddr), nil
+			return append(listeners, ls), nil
 		}
 
 		// the extraAddr was busy, try next available port
 		for localAddr.Port++; localAddr.Port <= math.MaxUint16; localAddr.Port++ {
-			if ls, err = net.ListenUDP("udp4", localAddr); err == nil {
-				ls.Close()
+			if ls, err = net.ListenPacket("udp", localAddr.String()); err == nil {
+				if localAddr, err = splitToUDPAddr(ls.LocalAddr()); err != nil {
+					ls.Close()
+					return nil, err
+				}
+				_ = listeners[0].Close()
+				listeners = []net.PacketConn{ls}
 				break
 			}
 		}
