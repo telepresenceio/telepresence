@@ -79,30 +79,35 @@ func (kc *k8sCluster) startWatchers(c context.Context, accWait chan struct{}) (e
 }
 
 func (kc *k8sCluster) onNamespacesChange(c context.Context, acc *kates.Accumulator, accWait chan<- struct{}) bool {
-	kc.accLock.Lock()
-	if !acc.Update(kc) {
-		kc.accLock.Unlock()
-		return false
+	changed := func() bool {
+		kc.accLock.Lock()
+		defer kc.accLock.Unlock()
+		return acc.Update(kc)
+	}()
+	if changed {
+		changed = kc.refreshNamespaces(c, accWait)
 	}
-	return kc.refreshNamespacesAndUnlock(c, accWait)
+	return changed
 }
 
 func (kc *k8sCluster) setMappedNamespaces(c context.Context, namespaces []string) {
 	sort.Strings(namespaces)
 	kc.accLock.Lock()
 	kc.mappedNamespaces = namespaces
-	kc.refreshNamespacesAndUnlock(c, nil)
+	kc.accLock.Unlock()
+	kc.refreshNamespaces(c, nil)
 }
 
-func (kc *k8sCluster) refreshNamespacesAndUnlock(c context.Context, accWait chan<- struct{}) bool {
+func (kc *k8sCluster) refreshNamespaces(c context.Context, accWait chan<- struct{}) bool {
+	kc.accLock.Lock()
 	namespaces := make([]string, 0, len(kc.Namespaces))
 	for _, ns := range kc.Namespaces {
 		if kc.shouldBeWatched(ns.Name) {
 			namespaces = append(namespaces, ns.Name)
 		}
 	}
-
 	sort.Strings(namespaces)
+
 	nsChange := len(namespaces) != len(kc.lastNamespaces)
 	if !nsChange {
 		for i, ns := range namespaces {
@@ -112,11 +117,14 @@ func (kc *k8sCluster) refreshNamespacesAndUnlock(c context.Context, accWait chan
 			}
 		}
 	}
+	if nsChange {
+		kc.lastNamespaces = namespaces
+	}
 	kc.accLock.Unlock()
 
 	if nsChange {
 		kc.refreshWatchers(c, namespaces, accWait)
-		kc.lastNamespaces = namespaces
+		kc.updateDaemonNamespaces(c)
 	}
 	return nsChange
 }
@@ -133,14 +141,11 @@ func (kc *k8sCluster) shouldBeWatched(namespace string) bool {
 	return false
 }
 
-// refreshWatchers ensures that the current set of namespaces are watched.
+// refreshWatchersLocked ensures that the current set of namespaces are watched.
 //
 // The accWait channel should only be passed once to this function and will be closed once all watchers have
 // received their initial snapshot.
 func (kc *k8sCluster) refreshWatchers(c context.Context, namespaces []string, accWait chan<- struct{}) {
-	kc.accLock.Lock()
-	defer kc.accLock.Unlock()
-
 	var onChange func(int)
 	if accWait == nil {
 		onChange = func(_ int) {}
@@ -165,6 +170,7 @@ func (kc *k8sCluster) refreshWatchers(c context.Context, namespaces []string, ac
 		}
 	}
 
+	kc.accLock.Lock()
 	if kc.watchers == nil {
 		kc.watchers = make(map[string]*k8sWatcher, len(namespaces))
 	}
@@ -182,6 +188,7 @@ func (kc *k8sCluster) refreshWatchers(c context.Context, namespaces []string, ac
 
 		go kc.watchPodsAndServices(wc, watcher, i, onChange)
 	}
+	kc.accLock.Unlock()
 
 	// Cancel watchers of undesired namespaces
 	for namespace, watcher := range kc.watchers {
@@ -224,27 +231,44 @@ func (kc *k8sCluster) watchPodsAndServices(c context.Context, watcher *k8sWatche
 	}
 }
 
-// updateDaemonNamespaces will create a new DNS search path from the given namespaces and
+func (kc *k8sCluster) setInterceptedNamespaces(c context.Context, interceptedNamespaces map[string]struct{}) {
+	kc.accLock.Lock()
+	kc.interceptedNamespaces = interceptedNamespaces
+	kc.accLock.Unlock()
+	kc.updateDaemonNamespaces(c)
+}
+
+const clusterServerSuffix = ".svc.cluster.local"
+
+// updateDaemonNamespacesLocked will create a new DNS search path from the given namespaces and
 // send it to the DNS-resolver in the daemon.
-func (kc *k8sCluster) updateDaemonNamespaces(c context.Context, nsMap map[string]struct{}) {
+func (kc *k8sCluster) updateDaemonNamespaces(c context.Context) {
 	if kc.daemon == nil {
 		// NOTE! Some tests dont't set the daemon
 		return
 	}
 
-	namespaces := make([]string, len(nsMap))
+	kc.accLock.Lock()
+	namespaces := make([]string, len(kc.interceptedNamespaces))
 	i := 0
-	for ns := range nsMap {
+	for ns := range kc.interceptedNamespaces {
 		namespaces[i] = ns
 		i++
 	}
-	sort.Strings(namespaces)
 
-	paths := make([]string, 0, len(namespaces)+3)
+	// Pass current mapped namespaces as plain names (no ending dot). The DNS-resolver will
+	// create special mapping for those, allowing names like myservice.mynamespace to be resolved
+	paths := make([]string, len(kc.lastNamespaces), len(kc.lastNamespaces)+len(namespaces))
+	copy(paths, kc.lastNamespaces)
+
+	// Avoid being locked for the remainder of this function.
+	kc.accLock.Unlock()
+
+	// Provide direct access to intercepted namespaces
+	sort.Strings(namespaces)
 	for _, ns := range namespaces {
-		paths = append(paths, ns+".svc.cluster.local.")
+		paths = append(paths, ns+clusterServerSuffix+".")
 	}
-	paths = append(paths, "svc.cluster.local.", "cluster.local.", "")
 	dlog.Debugf(c, "posting search paths to %s", strings.Join(paths, " "))
 	if _, err := kc.daemon.SetDnsSearchPath(c, &daemon.Paths{Paths: paths}); err != nil {
 		dlog.Errorf(c, "error posting search paths to %s: %v", strings.Join(paths, " "), err)
@@ -286,7 +310,7 @@ func updateTableFromService(svc *kates.Service, table *daemon.Table) {
 	if ip == "" || ip == "None" {
 		return
 	}
-	qName := svc.Name + "." + svc.Namespace + ".svc.cluster.local"
+	qName := svc.Name + "." + svc.Namespace + clusterServerSuffix
 
 	ports := ""
 	for _, port := range spec.Ports {
@@ -338,7 +362,7 @@ func updateTableFromPod(pod *kates.Pod, table *daemon.Table) {
 		// simply not publish a dns name in this case.
 		qname = pod.Name + "." + pod.Namespace + ".pod.cluster.local"
 	} else {
-		qname += ".svc.cluster.local"
+		qname += clusterServerSuffix
 	}
 
 	ip := pod.Status.PodIP

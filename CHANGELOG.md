@@ -4,6 +4,7 @@
 
 - Feature: There is now an extension mechanism where you can tell Telepresence about different agents and what arguments they support.  The new `--mechanism` flag can explicitly identify which extension to use.
 - Change: Related to things now being in extensions, the `--match` flag has been renamed to `--http-match`.
+- Bugfix: Fix a regression in the DNS resolver that prevented name resolution using NAME.NAMESPACE. Instead, NAME.NAMESPACE.svc.cluster.local was required.
 
 ### 2.0.2 (TBD)
 

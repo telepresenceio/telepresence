@@ -49,21 +49,21 @@ Connected to context default (https://35.232.104.64)
 A session is now active and outbound connections will be routed to the cluster. I.e. your laptop is "inside" the cluster.
 
 ```console
-$ curl hello.default.svc.cluster.local
+$ curl hello.default
 CLIENT VALUES:
 client_address=10.42.0.7
 command=GET
 real path=/
 query=nil
 request_version=1.1
-request_uri=http://hello.default.svc.cluster.local:8080/
+request_uri=http://hello.default:8080/
 
 SERVER VALUES:
 server_version=nginx: 1.10.0 - lua: 10001
 
 HEADERS RECEIVED:
 accept=*/*
-host=hello.default.svc.cluster.local
+host=hello.default
 user-agent=curl/7.71.1
 BODY:
 -no body in request-
@@ -110,18 +110,18 @@ Observe that the python service reports that it's being accessed:
 ::ffff:127.0.0.1 - - [17/Feb/2021 13:16:54] "GET / HTTP/1.1" 200 -
 ```
 
-Since telepresence is now intercepting services in the default namespace, all services in that namespace can now be reached directly by their name. You can of course still use the full name too, e.g. `curl hello.default.svc.cluster.local`.
+Since telepresence is now intercepting services in the default namespace, all services in that namespace can now be reached directly by their name. You can of course still use the namespaced name too, e.g. `curl hello.default`.
 
 ### Clean-up and close daemon processes
 
-End the service with `<ctrl>-C` and then try `curl hello.default.svc.cluster.local` or `http://hello.default.svc.cluster.local` again. The intercept is gone, and the echo service responds as normal. Using just `curl hello` will no longer succeed. This is because telepresence stopped mapping the default namespace when there were no more intercepts using it.
+End the service with `<ctrl>-C` and then try `curl hello.default` or `http://hello.default` again. The intercept is gone, and the echo service responds as normal. Using just `curl hello` will no longer succeed. This is because telepresence stopped mapping the default namespace when there were no more intercepts using it.
 
 Now end the session too. Your desktop no longer has access to the cluster internals.
 ```console
 $ telepresence quit
 Telepresence Daemon quitting...done
-$ curl hello.default.svc.cluster.local
-curl: (6) Could not resolve host: hello.default.svc.cluster.local
+$ curl hello.default
+curl: (6) Could not resolve host: hello.default
 ```
 
 ### Start outbound and intercept with one single command

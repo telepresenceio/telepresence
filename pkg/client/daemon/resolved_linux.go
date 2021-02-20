@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -42,6 +43,19 @@ func (o *outbound) tryResolveD(c context.Context, onReady func()) error {
 	}
 
 	o.setSearchPathFunc = func(c context.Context, paths []string) {
+		// When using systemd.resolved, we provide resolution of NAME.NAMESPACE by adding each
+		// namespace as a route (a search entry prefixed with ~)
+		namespaces := make(map[string]struct{})
+		for i, path := range paths {
+			if !strings.ContainsRune(path, '.') {
+				namespaces[path] = struct{}{}
+				// Turn namespace into a route
+				paths[i] = "~" + path
+			}
+		}
+		o.domainsLock.Lock()
+		o.namespaces = namespaces
+		o.domainsLock.Unlock()
 		err := dConn.SetLinkDomains(t.InterfaceIndex(), paths...)
 		if err != nil {
 			dlog.Errorf(c, "failed to revert virtual interface link: %v", err)
@@ -68,7 +82,7 @@ func (o *outbound) tryResolveD(c context.Context, onReady func()) error {
 	g.Go("Server", func(c context.Context) error {
 		v := dns.NewServer(c, []*net.UDPAddr{dnsResolverAddr}, "", func(domain string) string {
 			// Namespaces are defined on the network DNS config and managed by ResolveD, so not needed here.
-			if r := o.resolveNoNS(domain); r != nil {
+			if r := o.resolveNoSearch(domain); r != nil {
 				return r.Ip
 			}
 			return ""

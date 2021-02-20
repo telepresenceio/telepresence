@@ -137,6 +137,10 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 	}
 	dlog.Infof(c, "Generated new %s", resolverFileName)
 
+	namespaceResolverFile := func(namespace string) string {
+		return filepath.Join(resolverDirName, "telepresence."+namespace+".local")
+	}
+
 	o.setSearchPathFunc = func(c context.Context, paths []string) {
 		dlog.Infof(c, "setting search paths %s", strings.Join(paths, " "))
 		rf, err := readResolveFile(resolverFileName)
@@ -144,7 +148,55 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 			dlog.Error(c, err)
 			return
 		}
-		rf.setSearchPaths(paths...)
+		namespaces := make(map[string]struct{})
+		search := make([]string, 0)
+		for _, path := range paths {
+			if strings.ContainsRune(path, '.') {
+				search = append(search, path)
+			} else if path != "" {
+				namespaces[path] = struct{}{}
+			}
+		}
+
+		// On Darwin, we provide resolution of NAME.NAMESPACE by adding one domain
+		// for each namespace in its own domain file under /etc/resolver. Each file
+		// is named "telepresence.<domain>.local"
+		var removals []string
+		var additions []string
+		o.domainsLock.Lock()
+		for ns := range o.namespaces {
+			if _, ok := namespaces[ns]; !ok {
+				removals = append(removals, ns)
+			}
+		}
+		for ns := range namespaces {
+			if _, ok := o.namespaces[ns]; !ok {
+				additions = append(additions, ns)
+			}
+		}
+		o.namespaces = namespaces
+		o.domainsLock.Unlock()
+
+		for _, namespace := range removals {
+			nsFile := namespaceResolverFile(namespace)
+			dlog.Infof(c, "Removing %s", nsFile)
+			if err = os.Remove(nsFile); err != nil {
+				dlog.Error(c, err)
+			}
+		}
+		for _, namespace := range additions {
+			df := resolveFile{
+				domain:      namespace,
+				nameservers: []net.IP{o.localIP},
+			}
+			nsFile := namespaceResolverFile(namespace)
+			dlog.Infof(c, "Generated new %s", nsFile)
+			if err = df.write(nsFile); err != nil {
+				dlog.Error(c, err)
+			}
+		}
+
+		rf.setSearchPaths(search...)
 
 		// Versions prior to Big Sur will not trigger an update unless the resolver file
 		// is removed and recreated.
@@ -156,8 +208,13 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 	}
 
 	defer func() {
-		// Remove the resolver file
+		// Remove the main resolver file
 		_ = os.Remove(resolverFileName)
+
+		// Remove each namespace resolver file
+		for namespace := range o.namespaces {
+			_ = os.Remove(namespaceResolverFile(namespace))
+		}
 
 		// Remove loopback device
 		_ = exec.Command("ifconfig", "lo0", "-alias", o.localIP.String()).Run()
@@ -171,7 +228,7 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
 		v := dns.NewServer(c, []*net.UDPAddr{{IP: o.localIP, Port: 53}}, "", func(domain string) string {
-			if r := o.resolveNoNS(domain); r != nil {
+			if r := o.resolveNoSearch(domain); r != nil {
 				return r.Ip
 			}
 			return ""

@@ -299,7 +299,7 @@ func (cs *connectedSuite) TestB_ReportsStatusAsConnected() {
 
 func (cs *connectedSuite) TestC_ProxiesOutboundTraffic() {
 	for i := 0; i < serviceCount; i++ {
-		svc := fmt.Sprintf("hello-%d.%s.svc.cluster.local", i, cs.namespace)
+		svc := fmt.Sprintf("hello-%d.%s", i, cs.namespace)
 		expectedOutput := fmt.Sprintf("Request served by hello-%d", i)
 		cs.Eventually(
 			// condition
