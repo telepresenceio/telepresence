@@ -483,30 +483,22 @@ func run(c context.Context) error {
 		return br.sshWorker(c)
 	})
 
-	g.Go("background", func(c context.Context) error {
-		// Need a subgroup here because s.connectWorker() starts several other workers with
-		// dgroup.ParentGroup().Go(), and we don't want them to trip ShutdownOnNonError.
-		subg := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g.Go("background-init", func(c context.Context) error {
+		defer func() {
+			close(s.connectResponse) // -> server-grpc.connect()
+			close(s.clusterRequest)  // -> background-k8swatch
+			close(s.managerRequest)  // -> background-manager
+			close(s.bridgeRequest)   // -> server-socks
+			<-c.Done()               // Don't trip ShutdownOnNonError in the parent group.
+		}()
 
-		subg.Go("connect", func(c context.Context) (err error) {
-			defer func() {
-				close(s.connectResponse) // -> server-grpc.connect()
-				close(s.clusterRequest)  // -> background-k8swatch
-				close(s.managerRequest)  // -> background-manager
-				close(s.bridgeRequest)   // -> server-socks
-				<-c.Done()               // Don't trip ShutdownOnNonError in the parent group.
-			}()
-
-			pcr, ok := <-s.connectRequest
-			if !ok {
-				return nil
-			}
-			s.connectResponse <- s.connectWorker(c, pcr.ConnectRequest, pcr.k8sConfig)
-
+		pcr, ok := <-s.connectRequest
+		if !ok {
 			return nil
-		})
+		}
+		s.connectResponse <- s.connectWorker(c, pcr.ConnectRequest, pcr.k8sConfig)
 
-		return subg.Wait()
+		return nil
 	})
 
 	g.Go("background-k8swatch", func(c context.Context) error {
