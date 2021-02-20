@@ -68,6 +68,7 @@ type service struct {
 	connectResponse chan *rpc.ConnectInfo     // connectWorker -> server-grpc.connect()
 	clusterRequest  chan *k8sCluster          // connectWorker -> background-k8swatch
 	managerRequest  chan *trafficManager      // connectWorker -> background-manager
+	bridgeRequest   chan *bridge              // connectWorker -> server-socks
 
 	// ctx is part of the "callCtx hack", to hack around an issue in the gRPC server, since it
 	// doesn't let us pass it a Context.  It should go away when we migrate to dhttp and
@@ -343,8 +344,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	dlog.Infof(c, "Starting traffic-manager bridge in context %s", cluster.Context)
 	br := newBridge(s.daemon, tmgr.sshPort)
-	err = br.start(c)
-	if err != nil {
+	if err := checkKubectl(c); err != nil {
 		dlog.Errorf(c, "Failed to start traffic-manager bridge: %v", err)
 		// No point in continuing without a bridge
 		s.cancel()
@@ -353,7 +353,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 			ErrorText: err.Error(),
 		}
 	}
-
+	s.bridgeRequest <- br
 	s.bridge = br
 
 	// Collect data on how long connection time took
@@ -402,6 +402,7 @@ func run(c context.Context) error {
 		connectResponse: make(chan *rpc.ConnectInfo),
 		clusterRequest:  make(chan *k8sCluster),
 		managerRequest:  make(chan *trafficManager),
+		bridgeRequest:   make(chan *bridge),
 	}
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -474,6 +475,14 @@ func run(c context.Context) error {
 		return subg.Wait()
 	})
 
+	g.Go("server-socks", func(c context.Context) error {
+		br, ok := <-s.bridgeRequest
+		if !ok {
+			return nil
+		}
+		return br.sshWorker(c)
+	})
+
 	g.Go("background", func(c context.Context) error {
 		// Need a subgroup here because s.connectWorker() starts several other workers with
 		// dgroup.ParentGroup().Go(), and we don't want them to trip ShutdownOnNonError.
@@ -484,6 +493,7 @@ func run(c context.Context) error {
 				close(s.connectResponse) // -> server-grpc.connect()
 				close(s.clusterRequest)  // -> background-k8swatch
 				close(s.managerRequest)  // -> background-manager
+				close(s.bridgeRequest)   // -> server-socks
 				<-c.Done()               // Don't trip ShutdownOnNonError in the parent group.
 			}()
 
