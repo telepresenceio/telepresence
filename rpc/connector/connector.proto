@@ -13,22 +13,31 @@ service Connector {
   // Returns version information from the Connector
   rpc Version(google.protobuf.Empty) returns (telepresence.common.VersionInfo);
 
-  // Connects the daemon to a cluster and returns status
+  // Connects to the cluster and connects the laptop's network (via
+  // the daemon process) to the cluster's network.  A result code of
+  // UNSPECIFIED indicates that the connection was successfully
+  // initiated; if already connected, then either ALREADY_CONNECTED or
+  // MUST_RESTART is returned, based on whether the current connection
+  // is in agreement with the ConnectionRequest.
   rpc Connect(ConnectRequest) returns (ConnectInfo);
 
-  // Adds a deployment intercept
+  // Adds a deployment intercept.  Requires having already called
+  // Connect.
   rpc CreateIntercept(CreateInterceptRequest) returns (InterceptResult);
 
   // Deactivates and removes an existent deployment intercept.
+  // Requires having already called Connect.
   rpc RemoveIntercept(telepresence.manager.RemoveInterceptRequest2) returns (InterceptResult);
 
   // Uninstalls traffic-agents and traffic-manager from the cluster.
+  // Requires having already called Connect.
   rpc Uninstall(UninstallRequest) returns (UninstallResult);
 
   // Returns a list of deployments and their current intercept status.
+  // Requires having already called Connect.
   rpc List(ListRequest) returns (DeploymentInfoSnapshot);
 
-  // Quits (terminates) the service.
+  // Quits (terminates) the connector process.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
@@ -41,9 +50,9 @@ message ConnectRequest {
 
 message ConnectInfo {
   enum ErrType {
-    UNSPECIFIED = 0;
+    UNSPECIFIED = 0; // success
     NOT_STARTED = 1;
-    ALREADY_CONNECTED = 2;
+    ALREADY_CONNECTED = 2; // success
     DISCONNECTING = 3;
     CLUSTER_FAILED = 4;
     BRIDGE_FAILED = 5;
