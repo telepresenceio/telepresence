@@ -98,7 +98,7 @@ func (o *outbound) tryResolveD(c context.Context, onReady func()) error {
 		// Check if an attempt to resolve a DNS address reaches our DNS resolver, 300ms should be plenty
 		cmdC, cmdCancel := context.WithTimeout(c, 300*time.Millisecond)
 		defer cmdCancel()
-		_ = dexec.CommandContext(cmdC, "nslookup", "jhfweoitnkgyeta").Run()
+		_, _ = net.DefaultResolver.LookupHost(cmdC, "jhfweoitnkgyeta")
 		if t.RequestCount() == 0 {
 			return errResolveDNotConfigured
 		}
