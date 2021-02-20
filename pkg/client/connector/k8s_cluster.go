@@ -33,6 +33,7 @@ type objName struct {
 // k8sCluster is a Kubernetes cluster reference
 type k8sCluster struct {
 	*k8sConfig
+	mappedNamespaces []string
 
 	// Main
 	client *kates.Client
@@ -245,7 +246,7 @@ func (kc *k8sCluster) namespaceExists(namespace string) (exists bool) {
 	return exists
 }
 
-func newKCluster(c context.Context, kubeFlags *k8sConfig, daemon daemon.DaemonClient) (*k8sCluster, error) {
+func newKCluster(c context.Context, kubeFlags *k8sConfig, mappedNamespaces []string, daemon daemon.DaemonClient) (*k8sCluster, error) {
 	// TODO: Add constructor to kates that takes an additional restConfig argument to prevent that kates recreates it.
 	kc, err := kates.NewClientFromConfigFlags(kubeFlags.configFlags)
 	if err != nil {
@@ -253,11 +254,12 @@ func newKCluster(c context.Context, kubeFlags *k8sConfig, daemon daemon.DaemonCl
 	}
 
 	ret := &k8sCluster{
-		k8sConfig:       kubeFlags,
-		client:          kc,
-		daemon:          daemon,
-		localIntercepts: map[string]string{},
-		watcherChanged:  make(chan struct{}),
+		k8sConfig:        kubeFlags,
+		mappedNamespaces: mappedNamespaces,
+		client:           kc,
+		daemon:           daemon,
+		localIntercepts:  map[string]string{},
+		watcherChanged:   make(chan struct{}),
 	}
 
 	if err := ret.check(c); err != nil {
@@ -267,8 +269,8 @@ func newKCluster(c context.Context, kubeFlags *k8sConfig, daemon daemon.DaemonCl
 }
 
 // trackKCluster tracks connectivity to a cluster
-func trackKCluster(c context.Context, kubeFlags *k8sConfig, daemon daemon.DaemonClient) (*k8sCluster, error) {
-	kc, err := newKCluster(c, kubeFlags, daemon)
+func trackKCluster(c context.Context, kubeFlags *k8sConfig, mappedNamespaces []string, daemon daemon.DaemonClient) (*k8sCluster, error) {
+	kc, err := newKCluster(c, kubeFlags, mappedNamespaces, daemon)
 	if err != nil {
 		return nil, fmt.Errorf("k8s client create failed: %v", err)
 	}

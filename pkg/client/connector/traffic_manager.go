@@ -305,6 +305,9 @@ func (tm *trafficManager) remain(c context.Context) error {
 }
 
 func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
+	if tm == nil {
+		return
+	}
 	if tm.managerClient == nil {
 		r.Intercepts = &manager.InterceptInfoSnapshot{}
 		r.Agents = &manager.AgentInfoSnapshot{}
