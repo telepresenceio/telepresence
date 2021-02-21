@@ -55,6 +55,21 @@ The following quick overview on creating an intercept assumes you have a deploym
   telepresence quit
   telepresence uninstall --everything
   ```
+## Specifying a namespace for an intercept
+
+The namespace of the intercepted deployment is specified using the `--namespace` option. When this option is used, and `--deployment` is not used, then the given name is interpreted as the name of the deployment and the name of the intercept will be constructed from that name and the namespace.
+
+  ```
+  telepresence intercept hello --namespace myns --port 9000
+  ```
+This will intercept a deployment named "hello" and name the intercept "hello-myns".
+
+The name of the intercept will be left unchanged if the deployment is specified.
+
+  ```
+  telepresence intercept myhello --namespace myns --deployment hello --port 9000
+  ```
+This will intercept a deployment named "hello" and name the intercept "myhello".
 
 ## Importing Environment Variables
 
