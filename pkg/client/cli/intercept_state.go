@@ -116,6 +116,9 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 	args = args[1:]
 	if ii.agentName == "" {
 		ii.agentName = ii.name
+		if ii.namespace != "" {
+			ii.name += "-" + ii.namespace
+		}
 	}
 	ii.cmd = cmd
 	if len(args) == 0 {

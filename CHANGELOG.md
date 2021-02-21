@@ -7,6 +7,7 @@
 - Change: Cluster connection timeout has been increased from 10s to 20s.
 - Bugfix: Fix a regression in the DNS resolver that prevented name resolution using NAME.NAMESPACE. Instead, NAME.NAMESPACE.svc.cluster.local was required.
 - Bugfix: Fixed race-condition in the agent causing attempts to dial to `:0:`.
+- Feature: An intercept of `NAME` that is made using `--namespace=NAMESPACE` but not using `--deployment` will use `NAME` as the name of the deployment and `NAME-NAMESPACE` as the name of the intercept.
 
 ### 2.0.2 (February 18, 2021)
 

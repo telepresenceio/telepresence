@@ -404,7 +404,7 @@ func (is *interceptedSuite) SetupSuite() {
 
 func (is *interceptedSuite) TearDownSuite() {
 	for _, svc := range is.intercepts {
-		stdout, stderr := telepresence(is.T(), "leave", svc)
+		stdout, stderr := telepresence(is.T(), "leave", svc+"-"+is.namespace)
 		is.Empty(stderr)
 		is.Empty(stdout)
 	}
