@@ -139,36 +139,43 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 
 // addIntercept adds one intercept
 func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
-	ir.Spec.Namespace = tm.actualNamespace(ir.Spec.Namespace)
+	spec := ir.Spec
+	spec.Namespace = tm.actualNamespace(spec.Namespace)
+
+	if _, inUse := tm.localIntercepts[spec.Name]; inUse {
+		return &rpc.InterceptResult{
+			Error:     rpc.InterceptError_ALREADY_EXISTS,
+			ErrorText: spec.Name,
+		}, nil
+	}
 
 	intercepts, err := actions.ListMyIntercepts(c, tm.managerClient, tm.session().SessionId)
 	if err != nil {
 		return nil, err
 	}
 	for _, iCept := range intercepts {
-		if iCept.Spec.Name == ir.Spec.Name {
+		if iCept.Spec.Name == spec.Name {
 			return &rpc.InterceptResult{
 				Error:     rpc.InterceptError_ALREADY_EXISTS,
-				ErrorText: iCept.Spec.Name,
+				ErrorText: spec.Name,
 			}, nil
 		}
-		if iCept.Spec.TargetPort == ir.Spec.TargetPort && iCept.Spec.TargetHost == ir.Spec.TargetHost {
+		if iCept.Spec.TargetPort == spec.TargetPort && iCept.Spec.TargetHost == spec.TargetHost {
 			return &rpc.InterceptResult{
-				InterceptInfo: &manager.InterceptInfo{Spec: ir.Spec},
+				InterceptInfo: &manager.InterceptInfo{Spec: spec},
 				Error:         rpc.InterceptError_LOCAL_TARGET_IN_USE,
 				ErrorText:     iCept.Spec.Name,
 			}, nil
 		}
 	}
 
-	spec := ir.Spec
+	if spec.Agent == "" {
+		return tm.addLocalOnlyIntercept(c, spec)
+	}
+
 	spec.Client = tm.userAndHost
 	if spec.Mechanism == "" {
 		spec.Mechanism = "tcp"
-	}
-
-	if spec.Name == "" {
-		spec.Name = spec.Agent
 	}
 
 	hasSpecMechanism := func(a *manager.AgentInfo) bool {
@@ -263,6 +270,31 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 		deleteMount = false // Mount-point is busy until intercept ends
 	}
 	return result, nil
+}
+
+// addLocalOnlyIntercept adds a local-only intercept
+func (tm *trafficManager) addLocalOnlyIntercept(c context.Context, spec *manager.InterceptSpec) (*rpc.InterceptResult, error) {
+	tm.accLock.Lock()
+	if tm.localInterceptedNamespaces == nil {
+		tm.localInterceptedNamespaces = map[string]struct{}{}
+	}
+	tm.localIntercepts[spec.Name] = spec.Namespace
+	_, found := tm.interceptedNamespaces[spec.Namespace]
+	if !found {
+		_, found = tm.localInterceptedNamespaces[spec.Namespace]
+	}
+	tm.localInterceptedNamespaces[spec.Namespace] = struct{}{}
+	tm.accLock.Unlock()
+	if !found {
+		tm.updateDaemonNamespaces(c)
+	}
+	return &rpc.InterceptResult{
+		InterceptInfo: &manager.InterceptInfo{
+			Spec:              spec,
+			Disposition:       manager.InterceptDispositionType_ACTIVE,
+			MechanismArgsDesc: "as local-only",
+		},
+	}, nil
 }
 
 func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, agentImageName string) *rpc.InterceptResult {
@@ -503,12 +535,33 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 
 // removeIntercept removes one intercept by name
 func (tm *trafficManager) removeIntercept(c context.Context, name string) error {
+	if ns, ok := tm.localIntercepts[name]; ok {
+		return tm.removeLocalOnlyIntercept(c, name, ns)
+	}
 	dlog.Debugf(c, "telling manager to remove intercept %s", name)
 	_, err := tm.managerClient.RemoveIntercept(c, &manager.RemoveInterceptRequest2{
 		Session: tm.session(),
 		Name:    name,
 	})
 	return err
+}
+
+func (tm *trafficManager) removeLocalOnlyIntercept(c context.Context, name, namespace string) error {
+	dlog.Debugf(c, "removing local-only intercept %s", name)
+	delete(tm.localIntercepts, name)
+	for _, otherNs := range tm.localIntercepts {
+		if otherNs == namespace {
+			return nil
+		}
+	}
+
+	// Ensure that namespace is removed from localInterceptedNamespaces if this was the last local intercept
+	// for the given namespace.
+	tm.accLock.Lock()
+	delete(tm.localInterceptedNamespaces, namespace)
+	tm.accLock.Unlock()
+	tm.updateDaemonNamespaces(c)
+	return nil
 }
 
 // clearIntercepts removes all intercepts

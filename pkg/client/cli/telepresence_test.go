@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -332,12 +333,49 @@ func (cs *connectedSuite) TestD_Intercepted() {
 }
 
 func (cs *connectedSuite) TestE_SuccessfullyInterceptsDeploymentWithProbes() {
+	defer telepresence(cs.T(), "leave", "with-probes-"+cs.namespace)
+
 	stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.namespace, "--mount", "false", "with-probes", "--port", "9090")
 	cs.Empty(stderr)
 	cs.Contains(stdout, "Using deployment with-probes")
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.namespace, "--intercepts")
 	cs.Empty(stderr)
 	cs.Contains(stdout, "with-probes: intercepted")
+}
+
+func (cs *connectedSuite) TestF_LocalOnlyIntercept() {
+	cs.Run("intercept can be established", func() {
+		stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.namespace, "--local-only", "mylocal")
+		cs.Empty(stdout)
+		cs.Empty(stderr)
+	})
+
+	cs.Run("is included in list output", func() {
+		// list includes local intercept
+		stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.namespace, "--intercepts")
+		cs.Empty(stderr)
+		cs.Contains(stdout, "mylocal: local-only intercept")
+	})
+
+	cs.Run("makes services reachable using unqualified name", func() {
+		ctx := dlog.NewTestContext(cs.T(), false)
+
+		// service can be resolve with unqualified name
+		ip, err := net.DefaultResolver.LookupHost(ctx, "hello-0")
+		cs.NoError(err)
+		cs.True(len(ip) == 1)
+	})
+
+	cs.Run("leaving renders services unavailable using unqualified name", func() {
+		stdout, stderr := telepresence(cs.T(), "leave", "mylocal")
+		cs.Empty(stdout)
+		cs.Empty(stderr)
+		ctx := dlog.NewTestContext(cs.T(), false)
+		cs.Eventually(func() bool {
+			_, err := net.DefaultResolver.LookupHost(ctx, "hello-0")
+			return err != nil
+		}, 3*time.Second, 300*time.Millisecond)
+	})
 }
 
 type interceptedSuite struct {

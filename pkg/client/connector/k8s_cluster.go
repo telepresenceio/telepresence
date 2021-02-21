@@ -40,11 +40,15 @@ type k8sCluster struct {
 
 	lastNamespaces []string
 
-	// Currently intercepted namespaces
+	// Currently intercepted namespaces by remote intercepts
 	interceptedNamespaces map[string]struct{}
 
-	accLock  sync.Mutex
-	watchers map[string]*k8sWatcher
+	// Currently intercepted namespaces by local intercepts
+	localInterceptedNamespaces map[string]struct{}
+
+	accLock         sync.Mutex
+	watchers        map[string]*k8sWatcher
+	localIntercepts map[string]string
 
 	// watcherChanged is a channel that accumulates the channels of all watchers.
 	watcherChanged chan struct{}
@@ -247,10 +251,11 @@ func newKCluster(c context.Context, kubeFlags *k8sConfig, daemon daemon.DaemonCl
 	}
 
 	ret := &k8sCluster{
-		k8sConfig:      kubeFlags,
-		client:         kc,
-		daemon:         daemon,
-		watcherChanged: make(chan struct{}),
+		k8sConfig:       kubeFlags,
+		client:          kc,
+		daemon:          daemon,
+		localIntercepts: map[string]string{},
+		watcherChanged:  make(chan struct{}),
 	}
 
 	if err := ret.check(c); err != nil {

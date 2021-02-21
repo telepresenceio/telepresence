@@ -68,7 +68,12 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 
 	nameLen := 0
 	for _, dep := range r.Deployments {
-		if nl := len(dep.Name); nl > nameLen {
+		n := dep.Name
+		if n == "" {
+			// Local-only, so use name of intercept
+			n = dep.InterceptInfo.Spec.Name
+		}
+		if nl := len(n); nl > nameLen {
 			nameLen = nl
 		}
 	}
@@ -89,7 +94,12 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 	}
 
 	for _, dep := range r.Deployments {
-		fmt.Fprintf(stdout, "%-*s: %s\n", nameLen, dep.Name, state(dep))
+		if dep.Name == "" {
+			// Local-only, so use name of intercept
+			fmt.Fprintf(stdout, "%-*s: local-only intercept\n", nameLen, dep.InterceptInfo.Spec.Name)
+		} else {
+			fmt.Fprintf(stdout, "%-*s: %s\n", nameLen, dep.Name, state(dep))
+		}
 	}
 	return nil
 }
