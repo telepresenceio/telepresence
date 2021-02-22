@@ -32,7 +32,7 @@ export default function CenteredGrid() {
         <Grid item xs={4}>
           <Paper variant="outlined" className={classes.paper}>
             <Typography variant="h6" component="h2">
-              <a href="../howtos/preview-urls/"><b>Collaborating</b></a>
+              <a href="../../howtos/preview-urls/"><b>Collaborating</b></a>
             </Typography>
             <Typography variant="body2" component="p">
               Use preview URLS to collaborate with your colleagues and others outside of your organization.
@@ -42,7 +42,7 @@ export default function CenteredGrid() {
         <Grid item xs={4}>
           <Paper variant="outlined" className={classes.paper}>
             <Typography variant="h6" component="h2">
-              <a href="../howtos/outbound/"><b>Outbound Sessions</b></a>
+              <a href="../../howtos/outbound/"><b>Outbound Sessions</b></a>
             </Typography>
             <Typography variant="body2" component="p">
               While connected to the cluster, your laptop can interact with services as if it was another pod in the cluster.
@@ -52,7 +52,7 @@ export default function CenteredGrid() {
         <Grid item xs={4}>
           <Paper variant="outlined" className={classes.paper}>
             <Typography variant="h6" component="h2">
-              <a href="../faqs/"><b>FAQs</b></a>
+              <a href="../../faqs/"><b>FAQs</b></a>
             </Typography>
             <Typography variant="body2" component="p">
               Learn more about uses cases and the technical implementation of Telepresence.
