@@ -33,7 +33,13 @@ The following quick overview on creating an intercept assumes you have a deploym
   The intercept requires you specify the name of the deployment to be intercepted and the port to proxy. 
 
   ```
-  telepresence intercept [name of deployment] --port [TCP port]
+  telepresence intercept [name of intercept] --port [TCP port]
+  ```
+
+  The name of the deployment will default to the name of the intercept, but you can specify a different deployment name.
+
+  ```
+  telepresence intercept [name of intercept] --deployment [name of deployment] --port [TCP port]
   ```
 
   You will be prompted with three options. For the first, `Ingress`, Telepresence tries to intelligently determine the ingress controller deployment and namespace for you.  If they are correct, you can hit `enter` to accept the defaults.  Set the next two options, `TLS` and `Port`, appropriately based on your service.
@@ -45,10 +51,25 @@ The following quick overview on creating an intercept assumes you have a deploym
 7. Clean up your environment by first typing `Ctrl+C` in the terminal running Node. Then stop the intercept with the `leave` command and `quit` to stop the daemon.  Finally, use `uninstall --everything` to remove the Traffic Manager and Agents from your cluster.
 
   ```
-  telepresence leave [name of deployment]
+  telepresence leave [name of intercept]
   telepresence quit
   telepresence uninstall --everything
   ```
+## Specifying a namespace for an intercept
+
+The namespace of the intercepted deployment is specified using the `--namespace` option. When this option is used, and `--deployment` is not used, then the given name is interpreted as the name of the deployment and the name of the intercept will be constructed from that name and the namespace.
+
+  ```
+  telepresence intercept hello --namespace myns --port 9000
+  ```
+This will intercept a deployment named "hello" and name the intercept "hello-myns".
+
+The name of the intercept will be left unchanged if the deployment is specified.
+
+  ```
+  telepresence intercept myhello --namespace myns --deployment hello --port 9000
+  ```
+This will intercept a deployment named "hello" and name the intercept "myhello".
 
 ## Importing Environment Variables
 
@@ -59,19 +80,19 @@ Telepresence can import the environment variables from the pod that is being int
 If you *are not* logged into Ambassador Cloud, the following command will intercept all traffic bound to the service and proxy it to your laptop. This includes traffic coming through your  ingress controller, so use this option carefully as to not disrupt production environments.
 
 ```
-telepresence intercept [name of deployment] --port [TCP port] 
+telepresence intercept [name of intercept] --port [TCP port] 
 ```
 
 If you *are* logged into Ambassador Cloud, setting the `preview-url` flag to `false` is necessary.
 
 ```
-telepresence intercept [name of deployment] --port [TCP port] --preview-url=false
+telepresence intercept [name of intercept] --port [TCP port] --preview-url=false
 ```
 
 This will output a header that you can set on your request for that traffic to be intercepted:
 
 ```
-$ telepresence intercept [name of deployment] --port [TCP port] --preview-url=false
+$ telepresence intercept [name of intercept] --port [TCP port] --preview-url=false
 Using deployment [name of deployment]
 intercepted
     State       : ACTIVE
@@ -91,4 +112,4 @@ Connected
     dataprocessingnodeservice: <your-laptop-name>
 ```
 
-Finally, run `telepresence leave [name of deployment]` to stop the intercept.
+Finally, run `telepresence leave [name of intercept]` to stop the intercept.
