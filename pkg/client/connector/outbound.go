@@ -249,11 +249,14 @@ func (kc *k8sCluster) updateDaemonNamespaces(c context.Context) {
 	}
 
 	kc.accLock.Lock()
-	namespaces := make([]string, len(kc.interceptedNamespaces))
-	i := 0
+	namespaces := make([]string, 0, len(kc.interceptedNamespaces)+len(kc.localIntercepts))
 	for ns := range kc.interceptedNamespaces {
-		namespaces[i] = ns
-		i++
+		namespaces = append(namespaces, ns)
+	}
+	for ns := range kc.localInterceptedNamespaces {
+		if _, found := kc.interceptedNamespaces[ns]; !found {
+			namespaces = append(namespaces, ns)
+		}
 	}
 
 	// Pass current mapped namespaces as plain names (no ending dot). The DNS-resolver will

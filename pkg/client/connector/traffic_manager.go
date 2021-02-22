@@ -262,10 +262,21 @@ func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, rq *rpc.Li
 		depInfos = append(depInfos, &rpc.DeploymentInfo{
 			Name:                   depName,
 			NotInterceptableReason: reason,
-			AgentInfo:              aMap[depName],
-			InterceptInfo:          iMap[depName],
+			AgentInfo:              agent,
+			InterceptInfo:          iCept,
 		})
 	}
+
+	for localIntercept, localNs := range tm.localIntercepts {
+		if localNs == namespace {
+			depInfos = append(depInfos, &rpc.DeploymentInfo{InterceptInfo: &manager.InterceptInfo{
+				Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: localNs},
+				Disposition:       manager.InterceptDispositionType_ACTIVE,
+				MechanismArgsDesc: "as local-only",
+			}})
+		}
+	}
+
 	return &rpc.DeploymentInfoSnapshot{Deployments: depInfos}
 }
 

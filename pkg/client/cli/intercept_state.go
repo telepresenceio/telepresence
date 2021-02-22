@@ -32,6 +32,7 @@ type interceptInfo struct {
 	agentName string
 	namespace string
 	port      int
+	localOnly bool
 
 	previewEnabled bool
 	previewSpec    manager.PreviewSpec
@@ -64,6 +65,9 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 
 	flags.StringVarP(&ii.agentName, "deployment", "d", "", "Name of deployment to intercept, if different from <name>")
 	flags.IntVarP(&ii.port, "port", "p", 8080, "Local port to forward to")
+
+	flags.BoolVarP(&ii.localOnly, "local-only", "l", false, ``+
+		`Declare a local-only intercept for the purpose of getting direct outbound access to the intercept's namespace`)
 
 	flags.BoolVarP(&ii.previewEnabled, "preview-url", "u", isLoggedIn(ctx), ``+
 		`Generate an edgestack.me preview domain for this intercept. `+
@@ -102,6 +106,22 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 		return ii.extErr
 	}
 
+	if ii.localOnly {
+		// Sanity check for local-only intercept
+		if ii.agentName != "" {
+			return errors.New("a local-only intercept cannot have a deployment")
+		}
+		if cmd.Flag("port").Changed {
+			return errors.New("a local-only intercept cannot have a port")
+		}
+		if cmd.Flag("mount").Changed {
+			return errors.New("a local-only intercept cannot have mounts")
+		}
+		if cmd.Flag("preview-url").Changed && ii.previewEnabled {
+			return errors.New("a local-only intercept cannot be previewed")
+		}
+	}
+
 	extRequiresLogin, err := ii.extState.RequiresAPIKey()
 	if err != nil {
 		return err
@@ -114,7 +134,7 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 
 	ii.name = args[0]
 	args = args[1:]
-	if ii.agentName == "" {
+	if ii.agentName == "" && !ii.localOnly {
 		ii.agentName = ii.name
 		if ii.namespace != "" {
 			ii.name += "-" + ii.namespace
@@ -209,21 +229,21 @@ func isLoggedIn(ctx context.Context) bool {
 	return token != nil
 }
 
-func (is *interceptState) EnsureState() (acquired bool, err error) {
-	// Fill defaults
-	if is.name == "" {
-		is.name = is.agentName
+func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, error) {
+	spec := &manager.InterceptSpec{
+		Name:      is.name,
+		Namespace: is.namespace,
+	}
+	ir := &connector.CreateInterceptRequest{Spec: spec}
+
+	if is.agentName == "" {
+		// local-only
+		return ir, nil
 	}
 
-	if is.previewEnabled && is.previewSpec.Ingress == nil {
-		ingress, err := is.cs.selectIngress(is.cmd.Context(), is.cmd.InOrStdin(), is.cmd.OutOrStdout())
-		if err != nil {
-			return false, err
-		}
-		is.previewSpec.Ingress = ingress
-	}
-
-	// Parse inputs
+	spec.Agent = is.agentName
+	spec.TargetHost = "127.0.0.1"
+	spec.TargetPort = int32(is.port)
 
 	mountPoint := ""
 	doMount, err := strconv.ParseBool(is.mount)
@@ -242,57 +262,64 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 			return nil
 		}
 		if err = needBinary("sshfs"); err != nil {
-			return false, err
+			return nil, err
 		}
 
 		if mountPoint == "" {
 			if mountPoint, err = ioutil.TempDir("", "telfs-"); err != nil {
-				return false, err
+				return nil, err
 			}
 		} else {
 			if err = os.MkdirAll(mountPoint, 0700); err != nil {
-				return false, err
+				return nil, err
 			}
 		}
+		ir.MountPoint = mountPoint
+	}
 
+	spec.Mechanism, err = is.extState.Mechanism()
+	if err != nil {
+		return nil, err
+	}
+	spec.MechanismArgs, err = is.extState.MechanismArgs()
+	if err != nil {
+		return nil, err
+	}
+
+	var env client.Env
+	env, err = client.LoadEnv(is.cmd.Context())
+	if err != nil {
+		return nil, err
+	}
+	ir.AgentImage, err = is.extState.AgentImage(is.cmd.Context(), env)
+	if err != nil {
+		return nil, err
+	}
+	return ir, nil
+}
+
+func (is *interceptState) EnsureState() (acquired bool, err error) {
+	// Fill defaults
+	if is.previewEnabled && is.previewSpec.Ingress == nil {
+		ingress, err := is.cs.selectIngress(is.cmd.Context(), is.cmd.InOrStdin(), is.cmd.OutOrStdout())
+		if err != nil {
+			return false, err
+		}
+		is.previewSpec.Ingress = ingress
+	}
+
+	ir, err := is.createRequest()
+	if err != nil {
+		return false, err
+	}
+
+	if ir.MountPoint != "" {
 		defer func() {
 			if !acquired {
 				// remove if empty
-				_ = os.Remove(mountPoint)
+				_ = os.Remove(ir.MountPoint)
 			}
 		}()
-	}
-
-	mechname, err := is.extState.Mechanism()
-	if err != nil {
-		return false, err
-	}
-	mechargs, err := is.extState.MechanismArgs()
-	if err != nil {
-		return false, err
-	}
-	env, err := client.LoadEnv(is.cmd.Context())
-	if err != nil {
-		return false, err
-	}
-	agentImage, err := is.extState.AgentImage(is.cmd.Context(), env)
-	if err != nil {
-		return false, err
-	}
-
-	// Turn that in to a create request
-	ir := &connector.CreateInterceptRequest{
-		Spec: &manager.InterceptSpec{
-			Name:          is.name,
-			Agent:         is.agentName,
-			Namespace:     is.namespace,
-			Mechanism:     mechname,
-			MechanismArgs: mechargs,
-			TargetHost:    "127.0.0.1",
-			TargetPort:    int32(is.port),
-		},
-		MountPoint: mountPoint,
-		AgentImage: agentImage,
 	}
 
 	// Submit the request
@@ -303,6 +330,10 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 
 	switch r.Error {
 	case connector.InterceptError_UNSPECIFIED:
+		if is.agentName == "" {
+			// local-only
+			return true, nil
+		}
 		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", is.agentName)
 		var intercept *manager.InterceptInfo
 
