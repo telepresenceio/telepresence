@@ -19,7 +19,8 @@ import (
 	"github.com/datawire/telepresence2/v2/pkg/client"
 )
 
-const connectTimeout = 10 * time.Second
+// Consider making this configurable at some point
+const connectTimeout = 20 * time.Second
 
 type nameMeta struct {
 	Name string `json:"name"`

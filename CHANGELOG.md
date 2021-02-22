@@ -4,9 +4,10 @@
 
 - Feature: There is now an extension mechanism where you can tell Telepresence about different agents and what arguments they support.  The new `--mechanism` flag can explicitly identify which extension to use.
 - Change: Related to things now being in extensions, the `--match` flag has been renamed to `--http-match`.
+- Change: Cluster connection timeout has been increased from 10s to 20s.
 - Bugfix: Fix a regression in the DNS resolver that prevented name resolution using NAME.NAMESPACE. Instead, NAME.NAMESPACE.svc.cluster.local was required.
 
-### 2.0.2 (TBD)
+### 2.0.2 (February 18, 2021)
 
 - Feature: Telepresence is now capable of forwarding the intercepted Pod's volume mounts (as Telepresence 0.x did) via the `--mount` flag to `telepresence intercept`.
 - Feature: Telepresence will now allow simultaneous intercepts in different namespaces.
