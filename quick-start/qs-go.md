@@ -35,7 +35,7 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
   <Alert severity="info"> macOS users: If you receive an error when running Telepresence that the developer cannot be verified, open <b>System Preferences → Security & Privacy → General</b>. Click <b>Open Anyway</b> at the bottom to bypass the security block. Then retry the <code>telepresence connect</code> command.</Alert>
 
 2. Test that Telepresence is working properly by connecting to the Kubernetes API server:  
-`curl -ik https://kubernetes.default.svc.cluster.local
+`curl -ik https://kubernetes.default.svc.cluster.local`
 
   ```
   $ curl -ik https://kubernetes.default.svc.cluster.local
@@ -90,7 +90,6 @@ Your local workstation may not have the compute or memory resources necessary to
   $ kubectl get pods --watch
     
     NAME                                         READY   STATUS    RESTARTS   AGE
-    traffic-manager-f8c64686-8f4jn               1/1     Running   0          2m47s
     verylargedatastore-855c8b8789-z8nhs          1/1     Running   0          78s
     verylargejavaservice-7dfddbc95c-696br        1/1     Running   0          78s
     dataprocessingservice-5f6bfdcf7b-qvd27       1/1     Running   0          79s
