@@ -1,5 +1,8 @@
 # Changelog
 
+### 2.0.4 (TBD)
+- Feature: Support headless services (including ExternalName), which you can use if you used "Also Proxy" in telepresence 1.
+
 ### 2.0.3 (TBD)
 
 - Feature: There is now an extension mechanism where you can tell Telepresence about different agents and what arguments they support.  The new `--mechanism` flag can explicitly identify which extension to use.
