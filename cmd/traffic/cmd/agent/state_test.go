@@ -23,9 +23,9 @@ func makeFS(t *testing.T) (*agent.Forwarder, agent.State) {
 	lAddr, err := net.ResolveTCPAddr("tcp", ":1111")
 	assert.NoError(t, err)
 
-	f := agent.NewForwarder(lAddr)
+	f := agent.NewForwarder(lAddr, appHost, appPort)
 	go func() {
-		if err := f.Serve(context.Background(), appHost, appPort); err != nil {
+		if err := f.Serve(context.Background()); err != nil {
 			panic(err)
 		}
 	}()

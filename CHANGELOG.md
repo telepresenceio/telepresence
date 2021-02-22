@@ -6,6 +6,7 @@
 - Change: Related to things now being in extensions, the `--match` flag has been renamed to `--http-match`.
 - Change: Cluster connection timeout has been increased from 10s to 20s.
 - Bugfix: Fix a regression in the DNS resolver that prevented name resolution using NAME.NAMESPACE. Instead, NAME.NAMESPACE.svc.cluster.local was required.
+- Bugfix: Fixed race-condition in the agent causing attempts to dial to `:0:`.
 
 ### 2.0.2 (February 18, 2021)
 
