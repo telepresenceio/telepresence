@@ -9,6 +9,9 @@ import QSCards from './qs-cards'
 ## Prerequisites
 You’ll need `kubectl` installed and configured to use a Kubernetes cluster, preferably an empty test cluster.  You must have RBAC permissions in the cluster to create and update deployments and services.
 
+If you have used Telepresence previously, please first reset your Telepresence deployment with:
+`telepresence uninstall --everything`.
+
 ## 1. Install the Telepresence CLI
 
 <QSTabs/>
@@ -99,6 +102,8 @@ Your local workstation may not have the compute or memory resources necessary to
 
 ## 4. Set up a local development environment
 You will now download the repo containing the services' code and run the DataProcessingService service locally. This version of the code has the UI color set to <span style="color:blue" class="bold">blue</span> instead of <span style="color:green" class="bold">green</span>.
+
+<Alert severity="info">Confirm first that nothing is running locally on port 3000! If <code>curl localhost:3000</code> returns <code>Connection refused</code> then you should be good to go.</Alert>
 
 1. Clone the web app’s GitHub repo:  
 `git clone https://github.com/datawire/edgey-corp-python.git`

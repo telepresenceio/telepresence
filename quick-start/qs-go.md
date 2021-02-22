@@ -13,6 +13,9 @@ import QSCards from './qs-cards'
 ## Prerequisites
 You’ll need `kubectl` installed and configured to use a Kubernetes cluster, preferably an empty test cluster.  You must have RBAC permissions in the cluster to create and update deployments and services.
 
+If you have used Telepresence previously, please first reset your Telepresence deployment with:
+`telepresence uninstall --everything`.
+
 ## 1. Install the Telepresence CLI
 
 <QSTabs/>
@@ -104,6 +107,8 @@ Your local workstation may not have the compute or memory resources necessary to
 ## 4. Set up a local development environment
 You will now download the repo containing the services' code and run the DataProcessingService service locally. This version of the code has the UI color set to <span style="color:blue" class="bold">blue</span> instead of <span style="color:green" class="bold">green</span>.
 
+<Alert severity="info">Confirm first that nothing is running locally on port 3000! If <code>curl localhost:3000</code> returns <code>Connection refused</code> then you should be good to go.</Alert>
+
 1. Clone the web app’s GitHub repo:  
 `git clone https://github.com/datawire/edgey-corp-go.git`
 
@@ -118,18 +123,20 @@ You will now download the repo containing the services' code and run the DataPro
 2. Change into the repo directory, then into DataProcessingService:  
 `cd edgey-corp-go/DataProcessingService/`
 
-3. Start the Go server:  
-`$GOPATH/bin/fresh`
+3. You will use [Fresh](https://pkg.go.dev/github.com/BUGLAN/fresh) to support auto reloading of the Go server, which we'll use later.  Confirm it is installed by running:  
+  `go get github.com/pilu/fresh`  
+  Then start the Go server:  
+  `$GOPATH/bin/fresh`
 
   ```
+  $ go get github.com/pilu/fresh
+
   $ $GOPATH/bin/fresh
     
     ...
     10:23:41 app | Welcome to the DataProcessingGoService!
   ```
 
-  <Alert severity="info"><a href="https://pkg.go.dev/github.com/BUGLAN/fresh">Fresh</a> is used to execute the app to support live reload later, install Fresh with <code>go get github.com/pilu/fresh</code> if needed.</Alert>
-  <hr style="height:0px; visibility:hidden;" />
   <Alert severity="info"><a href="https://golang.org/doc/install">Install Go from here</a> and <a href="https://www.digitalocean.com/community/tutorials/understanding-the-gopath">set your GOPATH</a> if needed.</Alert>
 
 4. In a **new terminal window**, curl the service running locally to confirm it’s set to <span style="color:blue" class="bold">blue</span>:  
