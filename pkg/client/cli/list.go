@@ -104,6 +104,7 @@ func DescribeIntercept(ii *manager.InterceptInfo, debug bool) string {
 
 	var fields []kv
 
+	fields = append(fields, kv{"Intercept name", ii.Spec.Name})
 	fields = append(fields, kv{"State", func() string {
 		msg := ""
 		if ii.Disposition > manager.InterceptDispositionType_WAITING {
