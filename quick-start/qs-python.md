@@ -32,7 +32,7 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
   <Alert severity="info"> macOS users: If you receive an error when running Telepresence that the developer cannot be verified, open <b>System Preferences → Security & Privacy → General</b>. Click <b>Open Anyway</b> at the bottom to bypass the security block. Then retry the <code>telepresence connect</code> command.</Alert>
 
 2. Test that Telepresence is working properly by connecting to the Kubernetes API server:  
-`curl -ik https://kubernetes.default.svc.cluster.local
+`curl -ik https://kubernetes.default.svc.cluster.local`
 
   ```
   $ curl -ik https://kubernetes.default.svc.cluster.local
@@ -87,7 +87,6 @@ Your local workstation may not have the compute or memory resources necessary to
   $ kubectl get pods --watch
     
     NAME                                         READY   STATUS    RESTARTS   AGE
-    traffic-manager-f8c64686-8f4jn               1/1     Running   0          2m47s
     verylargedatastore-855c8b8789-z8nhs          1/1     Running   0          78s
     verylargejavaservice-7dfddbc95c-696br        1/1     Running   0          78s
     dataprocessingservice-5f6bfdcf7b-qvd27       1/1     Running   0          79s
@@ -116,12 +115,14 @@ You will now download the repo containing the services' code and run the DataPro
 2. Change into the repo directory, then into DataProcessingService:  
 `cd edgey-corp-python/DataProcessingService/`
 
-3. Install the dependencies and start the Python server:  
+3. Install the dependencies and start the Python server.  You may need to use `pip3` and `python3` if you have Python 3 installed. 
 `pip install flask requests && python app.py`
 
   ```
-  $ $GOPATH/bin/fresh
+  $ pip install flask requests && python app.py
     
+    Collecting flask
+    ...
     Welcome to the DataServiceProcessingPythonService!
     ...
 
