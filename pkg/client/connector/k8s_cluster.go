@@ -208,6 +208,25 @@ func (kc *k8sCluster) findAllSvcByType(svcType v1.ServiceType) []*kates.Service 
 	return svcCopies
 }
 
+// This returns a map of kubernetes object types and the
+// number of them that are being watched
+func (kc *k8sCluster) findNumK8sObjects() map[string]int {
+	objectMap := make(map[string]int)
+	var numServices, numPods int
+
+	kc.accLock.Lock()
+	objectMap["namespaces"] = len(kc.watchers)
+	for _, watcher := range kc.watchers {
+		numServices += len(watcher.Services)
+		numPods += len(watcher.Pods)
+	}
+	kc.accLock.Unlock()
+
+	objectMap["services"] = numServices
+	objectMap["pods"] = numPods
+	return objectMap
+}
+
 func (kc *k8sCluster) namespaceExists(namespace string) (exists bool) {
 	kc.accLock.Lock()
 	for _, n := range kc.lastNamespaces {

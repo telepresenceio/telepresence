@@ -259,6 +259,17 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	s.cluster = cluster
 	dlog.Infof(c, "Connected to context %s (%s)", s.cluster.Context, s.cluster.Server)
 
+	k8sObjectMap := cluster.findNumK8sObjects()
+	// Phone home with the information about the size of the cluster
+	scout := client.NewScout("cli")
+	scout.SetMetadatum("cluster_id", s.cluster.getClusterId(c))
+	for objectType, num := range k8sObjectMap {
+		scout.SetMetadatum(objectType, num)
+	}
+	scout.SetMetadatum("mapped_namespaces", len(cr.MappedNamespaces))
+	_ = scout.Report(c, "connecting_traffic_manager")
+
+	connectStart := time.Now()
 	tmgr, err := newTrafficManager(s.ctx, s.env, s.cluster, cr.InstallId)
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
@@ -296,6 +307,11 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 
 	s.bridge = br
 	setStatus()
+
+	// Collect data on how long connection time took
+	connectDuration := time.Since(connectStart)
+	scout.SetMetadatum("connect_duration", connectDuration.Seconds())
+	_ = scout.Report(c, "finished_connecting_traffic_manager")
 	return r
 }
 
