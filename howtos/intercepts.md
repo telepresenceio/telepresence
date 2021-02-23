@@ -30,10 +30,11 @@ The following quick overview on creating an intercept assumes you have a deploym
 
 4. In a new terminal window start the intercept. This will proxy requests to the cluster service to your laptop.  It will also generate a preview URL, which will let you access your service from the ingress but with requests to the intercepted service proxied to your laptop.
 
-  The intercept requires you specify the name of the deployment to be intercepted and the port to proxy. 
+   The intercept requires you specify the name of the deployment to be
+   intercepted and the port on your laptop to proxy to.
 
    ```
-   telepresence intercept ${base_name_of_intercept} --port=${TCP_port}
+   telepresence intercept ${base_name_of_intercept} --port=${local_TCP_port}
    ```
 
    The name of the Deployment to be intercepted will default to the
@@ -41,7 +42,7 @@ The following quick overview on creating an intercept assumes you have a deploym
    different deployment name using the `--deployment` flag:
 
    ```
-   telepresence intercept ${base_name_of_intercept} --deployment=${name_of_deployment} --port=${TCP_port}
+   telepresence intercept ${base_name_of_intercept} --deployment=${name_of_deployment} --port=${local_TCP_port}
    ```
 
   You will be prompted with three options. For the first, `Ingress`, Telepresence tries to intelligently determine the ingress controller deployment and namespace for you.  If they are correct, you can hit `enter` to accept the defaults.  Set the next two options, `TLS` and `Port`, appropriately based on your service.
@@ -93,24 +94,24 @@ Telepresence can import the environment variables from the pod that is being int
 If you *are not* logged into Ambassador Cloud, the following command will intercept all traffic bound to the service and proxy it to your laptop. This includes traffic coming through your  ingress controller, so use this option carefully as to not disrupt production environments.
 
 ```
-telepresence intercept ${base_name_of_intercept} --port=${TCP_port}
+telepresence intercept ${base_name_of_intercept} --port=${local_TCP_port}
 ```
 
 If you *are* logged into Ambassador Cloud, setting the `preview-url` flag to `false` is necessary.
 
 ```
-telepresence intercept ${base_name_of_intercept} --port=${TCP_port} --preview-url=false
+telepresence intercept ${base_name_of_intercept} --port=${local_TCP_port} --preview-url=false
 ```
 
 This will output a header that you can set on your request for that traffic to be intercepted:
 
 ```
-$ telepresence intercept <base name of intercept> --port=<TCP port> --preview-url=false
+$ telepresence intercept <base name of intercept> --port=<local TCP port> --preview-url=false
 Using deployment <name of deployment>
 intercepted
     Intercept name: <full name of intercept>
     State         : ACTIVE
-    Destination   : 127.0.0.1:<TCP port>
+    Destination   : 127.0.0.1:<local TCP port>
     Intercepting  : HTTP requests that match all of:
       header("x-telepresence-intercept-id") ~= regexp("<uuid unique to you>:<full name of intercept>")
 ```
