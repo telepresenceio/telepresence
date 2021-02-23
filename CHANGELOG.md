@@ -6,6 +6,7 @@
 - Change: Related to things now being in extensions, the `--match` flag has been renamed to `--http-match`.
 - Change: Cluster connection timeout has been increased from 10s to 20s.
 - Change: On connect, if telepresence detects a large cluster, it will suggest the `--mapped-namespaces` flag to the user as a way to speed it up.
+- Change: The traffic-agent now has a readiness probe associated with its container
 - Bugfix: Fix a regression in the DNS resolver that prevented name resolution using NAME.NAMESPACE. Instead, NAME.NAMESPACE.svc.cluster.local was required.
 - Bugfix: Fixed race-condition in the agent causing attempts to dial to `:0:`.
 - Feature: An intercept of `NAME` that is made using `--namespace=NAMESPACE` but not using `--deployment` will use `NAME` as the name of the deployment and `NAME-NAMESPACE` as the name of the intercept.

@@ -266,6 +266,13 @@ func (ata *addTrafficAgentAction) do(obj kates.Object) error {
 		}},
 		Env:          ata.agentEnvironment(dep.GetName(), appContainer),
 		VolumeMounts: ata.agentVolumeMounts(appContainer.VolumeMounts),
+		ReadinessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/bin/stat", "/tmp/agent/ready"},
+				},
+			},
+		},
 	})
 	return nil
 }
