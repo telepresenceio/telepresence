@@ -104,16 +104,15 @@ You will now download the repo containing the services' code and run the DataPro
 2. Change into the repo directory, then into DataProcessingService:  
 `cd edgey-corp-python-fastapi/DataProcessingService/`
 
-3. Install the dependencies and start the Python server.  You may need to use `pip3` and `python3` if you have Python 3 installed. 
+3. Install the dependencies and start the Python server.  You may need to use `pip3` and `python3` if you have Python 3 installed.  
 `pip install fastapi uvicorn requests && python app.py`
 
   ```
   $ pip install fastapi uvicorn requests && python app.py
     
-    Collecting flask
+    Collecting fastapi
     ...
-    Welcome to the DataServiceProcessingPythonService!
-    ...
+    Application startup complete.
 
   ```
 
@@ -202,7 +201,7 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
 
 4. Wait a moment for the intercept to start; it will also output a preview URL.  Go to this URL in your browser, it will be the <span style="color:orange" class="bold">orange</span> version of the app.
 
-5. Now go again to [http://verylargejavaservice:8080](http://verylargejavaservice:8080), it’s the <span style="color:green" class="bold">green</span> version running on the cluster.
+5. Go again to [http://verylargejavaservice:8080](http://verylargejavaservice:8080) and it’s still <span style="color:green" class="bold">green</span>.
 
 Normal traffic coming to your app gets the <span style="color:green" class="bold">green</span> cluster service, but traffic coming from the preview URL goes to your laptop and gets the <span style="color:orange" class="bold">orange</span> local service!
 
