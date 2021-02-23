@@ -2,9 +2,9 @@ import Alert from '@material-ui/lab/Alert';
 import QSTabs from './qs-tabs'
 import QSCards from './qs-cards'
 
-# Telepresence Quick Start - Python
+# Telepresence Quick Start - Python using Flask
 
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Python. We have versions in <a href="../qs-go/">Go</a> and <a href="../">Node</a> if you prefer.</Alert>
+<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Python using Flask. We have versions in <a href="../qs-python-fastapi/">Python using FastAPI</a>, <a href="../qs-go/">Go</a>, and <a href="../">Node</a> if you prefer.</Alert>
 
 ## Prerequisites
 You’ll need `kubectl` installed and configured to use a Kubernetes cluster, preferably an empty test cluster.  You must have RBAC permissions in the cluster to create and update deployments and services.

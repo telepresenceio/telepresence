@@ -8,7 +8,7 @@ import QSCards from './qs-cards'
 
 # Telepresence Quick Start - Go
 
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Go. We have versions in <a href="../">Node</a> and <a href="../qs-python/">Python</a> if you prefer.</Alert>
+<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Go. We have versions in <a href="../">Node</a>, <a href="../qs-python/">Python using Flask</a>, and <a href="../qs-python-fastapi/">Python using FastAPI</a> if you prefer.</Alert>
 
 ## Prerequisites
 You’ll need `kubectl` installed and configured to use a Kubernetes cluster, preferably an empty test cluster.  You must have RBAC permissions in the cluster to create and update deployments and services.
