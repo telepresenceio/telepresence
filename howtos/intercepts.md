@@ -32,15 +32,17 @@ The following quick overview on creating an intercept assumes you have a deploym
 
   The intercept requires you specify the name of the deployment to be intercepted and the port to proxy. 
 
-  ```
-  telepresence intercept [name of intercept] --port [TCP port]
-  ```
+   ```
+   telepresence intercept ${base_name_of_intercept} --port=${TCP_port}
+   ```
 
-  The name of the deployment will default to the name of the intercept, but you can specify a different deployment name.
+   The name of the Deployment to be intercepted will default to the
+   base name of the intercept that you give, but you can specify a
+   different deployment name using the `--deployment` flag:
 
-  ```
-  telepresence intercept [name of intercept] --deployment [name of deployment] --port [TCP port]
-  ```
+   ```
+   telepresence intercept ${base_name_of_intercept} --deployment=${name_of_deployment} --port=${TCP_port}
+   ```
 
   You will be prompted with three options. For the first, `Ingress`, Telepresence tries to intelligently determine the ingress controller deployment and namespace for you.  If they are correct, you can hit `enter` to accept the defaults.  Set the next two options, `TLS` and `Port`, appropriately based on your service.
 
@@ -50,11 +52,18 @@ The following quick overview on creating an intercept assumes you have a deploym
   
 7. Clean up your environment by first typing `Ctrl+C` in the terminal running Node. Then stop the intercept with the `leave` command and `quit` to stop the daemon.  Finally, use `uninstall --everything` to remove the Traffic Manager and Agents from your cluster.
 
-  ```
-  telepresence leave [name of intercept]
-  telepresence quit
-  telepresence uninstall --everything
-  ```
+   ```
+   telepresence leave ${full_name_of_intercept}
+   telepresence quit
+   telepresence uninstall --everything
+   ```
+
+   The resulting intercept might have a full name that is different
+   than the base name that you gave to `telepresence intercept` in
+   step 4; see the section [Specifing a namespace for an
+   intercept](#specifying-a-namespace-for-an-intercept) for more
+   information.
+
 ## Specifying a namespace for an intercept
 
 The namespace of the intercepted deployment is specified using the `--namespace` option. When this option is used, and `--deployment` is not used, then the given name is interpreted as the name of the deployment and the name of the intercept will be constructed from that name and the namespace.
@@ -62,7 +71,11 @@ The namespace of the intercepted deployment is specified using the `--namespace`
   ```
   telepresence intercept hello --namespace myns --port 9000
   ```
-This will intercept a deployment named "hello" and name the intercept "hello-myns".
+
+This will intercept a Deployment named "hello" and name the intercept
+"hello-myns".  In order to remove the intercept, you will need to run
+`telepresence leave hello-mydns` instead of just `telepresence leave
+hello`.
 
 The name of the intercept will be left unchanged if the deployment is specified.
 
@@ -80,25 +93,26 @@ Telepresence can import the environment variables from the pod that is being int
 If you *are not* logged into Ambassador Cloud, the following command will intercept all traffic bound to the service and proxy it to your laptop. This includes traffic coming through your  ingress controller, so use this option carefully as to not disrupt production environments.
 
 ```
-telepresence intercept [name of intercept] --port [TCP port] 
+telepresence intercept ${base_name_of_intercept} --port=${TCP_port}
 ```
 
 If you *are* logged into Ambassador Cloud, setting the `preview-url` flag to `false` is necessary.
 
 ```
-telepresence intercept [name of intercept] --port [TCP port] --preview-url=false
+telepresence intercept ${base_name_of_intercept} --port=${TCP_port} --preview-url=false
 ```
 
 This will output a header that you can set on your request for that traffic to be intercepted:
 
 ```
-$ telepresence intercept [name of intercept] --port [TCP port] --preview-url=false
-Using deployment [name of deployment]
+$ telepresence intercept <base name of intercept> --port=<TCP port> --preview-url=false
+Using deployment <name of deployment>
 intercepted
-    State       : ACTIVE
-    Destination : 127.0.0.1:[TCP port]
-    Intercepting: HTTP requests that match all of:
-      header("x-telepresence-intercept-id") ~= regexp("71d5e134-1163-4d17-1138-e35624c1e9419:[name of deployment]")
+    Intercept name: <full name of intercept>
+    State         : ACTIVE
+    Destination   : 127.0.0.1:<TCP port>
+    Intercepting  : HTTP requests that match all of:
+      header("x-telepresence-intercept-id") ~= regexp("<uuid unique to you>:<full name of intercept>")
 ```
 
 Run `telepresence status` to see the list of active intercepts.
