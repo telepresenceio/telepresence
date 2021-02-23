@@ -45,7 +45,27 @@ The following quick overview on creating an intercept assumes you have a deploym
    telepresence intercept ${base_name_of_intercept} --deployment=${name_of_deployment} --port=${local_TCP_port}
    ```
 
-  You will be prompted with three options. For the first, `Ingress`, Telepresence tries to intelligently determine the ingress controller deployment and namespace for you.  If they are correct, you can hit `enter` to accept the defaults.  Set the next two options, `TLS` and `Port`, appropriately based on your service.
+   Because you're logged in (from `telepresence login` in step 2), it
+   will default to `--preview-url=true`, which will use Ambassador
+   Cloud to create a sharable preview URL for this intercept; if you
+   hadn't been logged in it would have defaulted to
+   `--preview-url=false`.  In order to do this, it will prompt you for
+   three options.  For the first, `Ingress`, Telepresence tries to
+   intelligently determine the ingress controller deployment and
+   namespace for you.  If they are correct, you can hit `enter` to
+   accept the defaults.  Set the next two options, `TLS` and `Port`,
+   appropriately based on your ingress service.
+
+   Also because you're logged in, it will default to `--mechanism=http
+   --http-match=auto` (or just `--http-match=auto`; `--http-match`
+   implies `--mechanism=http`); if you hadn't been logged in it would
+   have defaulted to `--mechanism=tcp`.  This tells it to do smart
+   intercepts and only intercept a subset of HTTP requests, rather
+   than just intercepting the entirety of all TCP connections.  This
+   is important for working in a shared cluster with teammates, and is
+   important for the preview URL functionality.  See `telepresence
+   intercept --help` for information on using `--http-match` to
+   customize which requests it intercepts.
 
 5. Open the preview URL in your browser. The page that loads will proxy requests to the intercepted service to your laptop. You will also see a banner at the bottom on the page informing that you are viewing a preview URL with your name and org name.
 
