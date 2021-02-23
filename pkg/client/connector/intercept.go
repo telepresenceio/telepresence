@@ -3,7 +3,6 @@ package connector
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
@@ -178,47 +177,11 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 		spec.Mechanism = "tcp"
 	}
 
-	hasSpecMechanism := func(a *manager.AgentInfo) bool {
-		for _, mech := range a.Mechanisms {
-			if spec.Mechanism == mech.Name {
-				return true
-			}
-		}
-		return false
-	}
-
-	var found *manager.AgentInfo
-	if ags, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId); ags != nil {
-		for _, ag := range ags {
-			if !(ag.Namespace == spec.Namespace && ag.Name == spec.Agent && hasSpecMechanism(ag)) {
-				continue
-			}
-			if found == nil {
-				found = ag
-				continue
-			}
-			if ag.Version == found.Version && ag.Product == found.Product {
-				// Just hostname that differs, this is a replica
-				continue
-			}
-			txt, _ := json.Marshal([]*manager.AgentInfo{ag, found})
-			return &rpc.InterceptResult{
-				InterceptInfo: nil,
-				Error:         rpc.InterceptError_AMBIGUOUS_MATCH,
-				ErrorText:     string(txt),
-			}, nil
-		}
-	}
-
+	// It's OK to just call addAgent every time; if the agent is already installed then it's a
+	// no-op.
 	var result *rpc.InterceptResult
-	if found == nil {
-		if result = tm.addAgent(c, spec.Namespace, spec.Agent, ir.AgentImage); result.Error != rpc.InterceptError_UNSPECIFIED {
-			return result, nil
-		}
-	} else {
-		result = &rpc.InterceptResult{
-			Environment: found.Environment,
-		}
+	if result = tm.addAgent(c, spec.Namespace, spec.Agent, ir.AgentImage); result.Error != rpc.InterceptError_UNSPECIFIED {
+		return result, nil
 	}
 
 	deleteMount := false
