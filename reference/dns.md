@@ -4,7 +4,7 @@ The Telepresence DNS resolver is dynamically configured to resolve names using t
 
 All intercepts contribute to the DNS resolver, even those that do not use the `--namespace=<value>` option. This is because `--namespace default` is implied, and in this context, `default` is treated just like any other namespace.
 
-No namespaces are used by the DNS resolver (not even `default`) when no intercepts are active, which means that no service is available by `<svc-name>` only. Without an active intercept, the full DNS name must be used (in the form `<svc-name>.<namespace>.svc.cluster.local`).
+No namespaces are used by the DNS resolver (not even `default`) when no intercepts are active, which means that no service is available by `<svc-name>` only. Without an active intercept, the namespace qualified DNS name must be used (in the form `<svc-name>.<namespace>`).
 
 See this demonstrated below, using the [quick start's](../../quick-start/) sample app services.
 
@@ -31,7 +31,7 @@ $ curl verylargejavaservice:8080
 This is expected as Telepresence cannot reach the service yet by short name without an active intercept in that namespace.
   
 ```
-$ curl verylargejavaservice.default.svc.cluster.local:8080
+$ curl verylargejavaservice.default:8080
   
   <!DOCTYPE HTML>
   <html>
@@ -40,7 +40,7 @@ $ curl verylargejavaservice.default.svc.cluster.local:8080
   ...
 ```
 
-Using the full DNS name though does work.  
+Using the namespaced qualified DNS name though does work.  
 Now we'll start an intercept against another service in the same namespace. Remember, `--namespace default` is implied since it is not specified.
 
 ```
@@ -63,4 +63,4 @@ $ curl verylargejavaservice:8080
 
 Now curling that service by its short name works and will as long as the intercept is active.
 
-The DNS resolver will always be able to resolve services using `<service-name>.<namespace>.svc.cluster.local` regardless of intercepts.
+The DNS resolver will always be able to resolve services using `<service-name>.<namespace>` regardless of intercepts.
