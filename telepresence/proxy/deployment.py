@@ -392,7 +392,8 @@ def new_swapped_deployment(
     Makes the following changes:
 
     1. Changes to single replica.
-    2. Disables command, args, livenessProbe, readinessProbe, workingDir.
+    2. Disables command, args, livenessProbe, readinessProbe,
+       startupProbe, workingDir.
     3. Adds labels.
     4. Adds environment variables.
     5. Runs as root, if requested.
@@ -428,7 +429,7 @@ def new_swapped_deployment(
             # Drop unneeded fields:
             for unneeded in [
                 "args", "startupProbe", "livenessProbe", "readinessProbe",
-                "workingDir", "lifecycle"
+                "startupProbe", "workingDir", "lifecycle"
             ]:
                 try:
                     container.pop(unneeded)
