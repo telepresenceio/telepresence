@@ -12,7 +12,7 @@ It is assumed that you have the demo web app from the [tutorial](../../tutorial/
 
 ## Proxying Outbound Traffic
 
-Connecting to the cluster instead of running an intercept will allow you to access cluster deployments as if your laptop was another pod in the cluster. You will be able to access other Kubernetes services using `<servicename>.<namespace>`, for example by curling a service from your terminal. A service running on your laptop will also be able to interact with other services on the cluster by name.
+Connecting to the cluster instead of running an intercept will allow you to access cluster deployments as if your laptop was another pod in the cluster. You will be able to access other Kubernetes services by their [full cluster DNS name](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#services) (`<servicename>.<namespace>.svc.cluster.local`), for example by curling a service from your terminal. A service running on your laptop will also be able to interact with other services on the cluster by name.
 
 Connecting to the cluster starts the background daemon on your machine and installs the [Traffic Manager pod](../../reference/) into the cluster of your current `kubectl` context.  The Traffic Manager handles the service proxying.
 
@@ -37,10 +37,10 @@ Connecting to the cluster starts the background daemon on your machine and insta
     Intercepts:    0 total
   ```
 
-1. Now try to access your service by name with `curl verylargejavaservice.default:8080`. Telepresence will route the request to the cluster, as if your laptop is actually running in the cluster.
+1. Now try to access your service by name with `curl verylargejavaservice.default.svc.cluster.local:8080`. Telepresence will route the request to the cluster, as if your laptop is actually running in the cluster.
 
   ```
-  $ curl verylargejavaservice.default:8080
+  $ curl verylargejavaservice.default.svc.cluster.local:8080
   <!DOCTYPE HTML>
   <html>
   <head>
