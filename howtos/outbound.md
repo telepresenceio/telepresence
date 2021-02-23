@@ -76,3 +76,12 @@ The resources in the given namespace can now be accessed using unqualified names
   $ telepresence leave [name of intercept]
   ```
 The unqualified name access is now removed provided that no other intercept is active and using the same namespace.
+
+### External dependencies (formerly --also-proxy)
+If you have a resource outside of the cluster that you need access to, you can leverage Headless Services to provide access. This will give you a kubernetes service formatted like all other services (`my-service.prod.svc.cluster.local`), that resolves to your resource.
+
+If the outside service has a DNS name, you can use the [ExternalName](https://kubernetes.io/docs/concepts/services-networking/service/#externalname) service type, which will create a service that can be used from within your cluster and from your local machine when connected with telepresence.
+
+If the outside service is an ip, create a [service without selectors](https://kubernetes.io/docs/concepts/services-networking/service/#services-without-selectors) and then create an endpoint of the same name.
+
+In both scenarios, kubernetes will create a service that can be used from within your cluster and from your local machine when connected with telepresence.
