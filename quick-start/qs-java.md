@@ -1,15 +1,10 @@
----
-description: "Install Telepresence and learn to use it to intercept services running in your Kubernetes cluster, speeding up local development and debugging."
----
-
 import Alert from '@material-ui/lab/Alert';
 import QSTabs from './qs-tabs'
 import QSCards from './qs-cards'
 
+# Telepresence Quick Start - Java
 
-# Telepresence Quick Start - NodeJS
-
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in NodeJS. We have versions in <a href="qs-go/">Go</a>, <a href="qs-java/">Java</a>, <a href="qs-python/">Python (Flask)</a>, and <a href="qs-python-fastapi/">Python (FastAPI)</a> if you prefer.</Alert>
+<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Java. We have versions in <a href="../qs-python-fastapi/">Python (FastAPI)</a>, <a href="../qs-python/">Python (Flask)</a>, <a href="../qs-go/">Go</a>, and <a href="../">Node</a> if you prefer.</Alert>
 
 ## Prerequisites
 You’ll need `kubectl` installed and configured to use a Kubernetes cluster, preferably an empty test cluster.  You must have RBAC permissions in the cluster to create and update deployments and services.
@@ -70,17 +65,17 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
 
 <Alert severity="success"><b>Congratulations! You’ve just accessed your remote Kubernetes API server, as if you were on the same network!</b> With Telepresence, you’re able to use any tool that you have locally to connect to any service in the cluster.</Alert>
 
-## 3. Install a sample Node.js application
+## 3. Install a sample Java application
 
 Your local workstation may not have the compute or memory resources necessary to run all the services in a multi-service application. In this example, we’ll show you how Telepresence can give you a fast development loop, even in this situation.
 
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in NodeJS. We have versions in <a href="qs-go/">Go</a>, <a href="qs-java/">Java</a>, <a href="qs-python/">Python (Flask)</a>, and <a href="qs-python-fastapi/">Python (FastAPI)</a> if you prefer.</Alert>
+<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Java. We have versions in <a href="../qs-python-fastapi/">Python (FastAPI)</a>, <a href="../qs-python/">Python (Flask)</a>, <a href="../qs-go/">Go</a>, and <a href="../">Node</a> if you prefer.</Alert>
 
 1. Start by installing a sample application that consists of multiple services:  
-`kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-nodejs/main/k8s-config/edgey-corp-web-app-no-mapping.yaml`
+`kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-java/main/k8s-config/edgey-corp-web-app-no-mapping.yaml`
 
   ```
-  $ kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-nodejs/main/k8s-config/edgey-corp-web-app-no-mapping.yaml
+  $ kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-java/main/k8s-config/edgey-corp-web-app-no-mapping.yaml
     
     deployment.apps/dataprocessingservice created
     service/dataprocessingservice created
@@ -113,32 +108,30 @@ You will now download the repo containing the services' code and run the DataPro
 <Alert severity="info">Confirm first that nothing is running locally on port 3000! If <code>curl localhost:3000</code> returns <code>Connection refused</code> then you should be good to go.</Alert>
 
 1. Clone the web app’s GitHub repo:  
-`git clone https://github.com/datawire/edgey-corp-nodejs.git`
+`git clone https://github.com/datawire/edgey-corp-java.git`
 
   ```
-  $ git clone https://github.com/datawire/edgey-corp-nodejs.git
+  $ git clone https://github.com/datawire/edgey-corp-java.git
     
-    Cloning into 'edgey-corp-nodejs'...
-    remote: Enumerating objects: 441, done.
+    Cloning into 'edgey-corp-java'...
     ...
   ```
 
 2. Change into the repo directory, then into DataProcessingService:  
-`cd edgey-corp-nodejs/DataProcessingService/`
+`cd edgey-corp-java/DataProcessingService/`
 
-3. Install the dependencies and start the Node server:  
-`npm install && npm start`
+3. Start the Maven server.  
+  `mvn spring-boot:run`
+
+  <Alert severity="info">Install <a href="https://java.com/en/download/">Java</a> and <a href="https://maven.apache.org/install.html">Maven</a> first if needed.</Alert>
 
   ```
-  $ npm install && npm start
+  $ mvn spring-boot:run
     
     ...
-    Welcome to the DataProcessingService!
-    { _: [] }
-    Server running on port 3000
-  ```
+    g.d.DataProcessingServiceJavaApplication : Started DataProcessingServiceJavaApplication in 1.408 seconds (JVM running for 1.684)
 
-  <Alert severity="info"><a href="https://nodejs.org/en/download/package-manager/">Install Node.js from here</a> if needed.</Alert>
+  ```
 
 4. In a **new terminal window**, curl the service running locally to confirm it’s set to <span style="color:blue" class="bold">blue</span>:  
 `curl localhost:3000/color`
@@ -149,7 +142,7 @@ You will now download the repo containing the services' code and run the DataPro
     “blue”
   ```
 
-<Alert severity="success"><b>Victory, your local Node server is running a-ok!</b></Alert>
+<Alert severity="success"><b>Victory, your local Java server is running a-ok!</b></Alert>
 
 ## 5. Intercept all traffic to the service
 Next, we’ll create an intercept. An intercept is a rule that tells Telepresence where to send traffic. In this example, we will send all traffic destined for the DataProcessingService to the version of the DataProcessingService running locally instead: 
@@ -167,18 +160,14 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
         Intercepting: all connections
   ```
 
-2. Go to the frontend service again in your browser. Since the service is now intercepted it can be reached directly by its service name at [http://verylargejavaservice:8080](http://verylargejavaservice:8080). You will now see the <span style="color:blue" class="bold">blue</span> elements in the app.  
+2. Go to the frontend service again in your browser. Since the service is now intercepted it can be reached directly by its service name at [http://verylargejavaservice:8080](http://verylargejavaservice:8080). You will now see the <span style="color:blue" class="bold">blue</span> elements in the app.
 
-<Alert severity="info">See <a href="../reference/dns">this doc</a> for more information on how Telepresence resolves DNS.</Alert>
-
-<hr style="height:0px; visibility:hidden;" />
-
-<Alert severity="success"><b>The frontend’s request to DataProcessingService is being intercepted and rerouted to the Node server on your laptop!</b></Alert>
+<Alert severity="success"><b>The frontend’s request to DataProcessingService is being intercepted and rerouted to the Java server on your laptop!</b></Alert>
 
 ## 6. Make a code change
 We’ve now set up a local development environment for the DataProcessingService, and we’ve created an intercept that sends traffic in the cluster to our local environment. We can now combine these two concepts to show how we can quickly make and test changes.
 
-1. Open `edgey-corp-nodejs/DataProcessingService/app.js` in your editor and change line 6 from `blue` to `orange`. Save the file and the Node server will auto reload.
+1. Open `edgey-corp-java/DataProcessingService/src/main/resources/application.properties` in your editor and change `app.default.color` on line 2 from `blue` to `orange`. Save the file then stop and restart your Java server.
 
 2. Now, visit [http://verylargejavaservice:8080](http://verylargejavaservice:8080) again in your browser. You will now see the orange elements in the application.
 
