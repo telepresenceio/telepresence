@@ -107,7 +107,7 @@ This will intercept a deployment named "hello" and name the intercept "myhello".
 
 ## Importing Environment Variables
 
-Telepresence can import the environment variables from the pod that is being intercepted, see [this doc](../../reference/environment.md) for more details.
+Telepresence can import the environment variables from the pod that is being intercepted, see [this doc](../../reference/environment/) for more details.
 
 ## Creating an Intercept Without a Preview URL
 
