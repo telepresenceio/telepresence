@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.0.3 (TBD)
+### 2.0.3 (February 24, 2021)
 
 - Feature: There is now an extension mechanism where you can tell Telepresence about different agents and what arguments they support.  The new `--mechanism` flag can explicitly identify which extension to use.
 - Change: Related to things now being in extensions, the `--match` flag has been renamed to `--http-match`.
