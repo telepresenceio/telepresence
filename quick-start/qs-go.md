@@ -8,10 +8,13 @@ import QSCards from './qs-cards'
 
 # Telepresence Quick Start - Go
 
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Go. We have versions in <a href="../">Node</a> and <a href="../qs-python/">Python</a> if you prefer.</Alert>
+<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Go. We have versions in <a href="../">Node</a>, <a href="../qs-python/">Python using Flask</a>, and <a href="../qs-python-fastapi/">Python using FastAPI</a> if you prefer.</Alert>
 
 ## Prerequisites
 You’ll need `kubectl` installed and configured to use a Kubernetes cluster, preferably an empty test cluster.  You must have RBAC permissions in the cluster to create and update deployments and services.
+
+If you have used Telepresence previously, please first reset your Telepresence deployment with:
+`telepresence uninstall --everything`.
 
 ## 1. Install the Telepresence CLI
 
@@ -68,7 +71,7 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
 
 Your local workstation may not have the compute or memory resources necessary to run all the services in a multi-service application. In this example, we’ll show you how Telepresence can give you a fast development loop, even in this situation.
 
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Go. We have versions in <a href="../">Node</a> and <a href="../qs-python/">Python</a> if you prefer.</Alert>
+<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Go. We have versions in <a href="../">Node</a>, <a href="../qs-python/">Python using Flask</a>, and <a href="../qs-python-fastapi/">Python using FastAPI</a> if you prefer.</Alert>
 
 1. Start by installing a sample application that consists of multiple services:  
 `kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-go/main/k8s-config/edgey-corp-web-app-no-mapping.yaml`
@@ -84,10 +87,10 @@ Your local workstation may not have the compute or memory resources necessary to
 
 2. Give your cluster a few moments to deploy the sample application.
 
-  Use `kubectl get pods --watch` to watch your pods:  
+  Use `kubectl get pods` to check the status of your pods:  
 
   ```
-  $ kubectl get pods --watch
+  $ kubectl get pods
     
     NAME                                         READY   STATUS    RESTARTS   AGE
     verylargedatastore-855c8b8789-z8nhs          1/1     Running   0          78s
@@ -95,7 +98,7 @@ Your local workstation may not have the compute or memory resources necessary to
     dataprocessingservice-5f6bfdcf7b-qvd27       1/1     Running   0          79s
   ```
 
-3. Once all the pods are in a `Running` status, stop the `watch` command with `Ctrl+C`.  Then go to the frontend service in your browser at [http://verylargejavaservice.default:8080](http://verylargejavaservice.default:8080).
+3. Once all the pods are in a `Running` state, go to the frontend service in your browser at [http://verylargejavaservice.default:8080](http://verylargejavaservice.default:8080).
 
 4. You should see the EdgyCorp WebApp with a <span style="color:green" class="bold">green</span> title and <span style="color:green" class="bold">green</span> pod in the diagram.
 
@@ -103,6 +106,8 @@ Your local workstation may not have the compute or memory resources necessary to
 
 ## 4. Set up a local development environment
 You will now download the repo containing the services' code and run the DataProcessingService service locally. This version of the code has the UI color set to <span style="color:blue" class="bold">blue</span> instead of <span style="color:green" class="bold">green</span>.
+
+<Alert severity="info">Confirm first that nothing is running locally on port 3000! If <code>curl localhost:3000</code> returns <code>Connection refused</code> then you should be good to go.</Alert>
 
 1. Clone the web app’s GitHub repo:  
 `git clone https://github.com/datawire/edgey-corp-go.git`
@@ -118,18 +123,20 @@ You will now download the repo containing the services' code and run the DataPro
 2. Change into the repo directory, then into DataProcessingService:  
 `cd edgey-corp-go/DataProcessingService/`
 
-3. Start the Go server:  
-`$GOPATH/bin/fresh`
+3. You will use [Fresh](https://pkg.go.dev/github.com/BUGLAN/fresh) to support auto reloading of the Go server, which we'll use later.  Confirm it is installed by running:  
+  `go get github.com/pilu/fresh`  
+  Then start the Go server:  
+  `$GOPATH/bin/fresh`
 
   ```
+  $ go get github.com/pilu/fresh
+
   $ $GOPATH/bin/fresh
     
     ...
     10:23:41 app | Welcome to the DataProcessingGoService!
   ```
 
-  <Alert severity="info"><a href="https://pkg.go.dev/github.com/BUGLAN/fresh">Fresh</a> is used to execute the app to support live reload later, install Fresh with <code>go get github.com/pilu/fresh</code> if needed.</Alert>
-  <hr style="height:0px; visibility:hidden;" />
   <Alert severity="info"><a href="https://golang.org/doc/install">Install Go from here</a> and <a href="https://www.digitalocean.com/community/tutorials/understanding-the-gopath">set your GOPATH</a> if needed.</Alert>
 
 4. In a **new terminal window**, curl the service running locally to confirm it’s set to <span style="color:blue" class="bold">blue</span>:  
