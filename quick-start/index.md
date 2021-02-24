@@ -9,7 +9,7 @@ import QSCards from './qs-cards'
 
 # Telepresence Quick Start - NodeJS
 
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Node.js. We have versions in <a href="qs-go/">Go</a>, <a href="qs-python/">Python using Flask</a>, and <a href="qs-python-fastapi/">Python using FastAPI</a> if you prefer.</Alert>
+<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in NodeJS. We have versions in <a href="qs-python/">Python</a>, <a href="qs-go/">Go</a>, <a href="qs-python-flask/">Flask</a>, and <a href="qs-python-fastapi/">FastAPI</a> if you prefer.</Alert>
 
 ## Prerequisites
 You’ll need `kubectl` installed and configured to use a Kubernetes cluster, preferably an empty test cluster.  You must have RBAC permissions in the cluster to create and update deployments and services.
@@ -69,7 +69,7 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
 
 Your local workstation may not have the compute or memory resources necessary to run all the services in a multi-service application. In this example, we’ll show you how Telepresence can give you a fast development loop, even in this situation.
 
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Node.js. We have versions in <a href="qs-go/">Go</a>, <a href="qs-python/">Python using Flask</a>, and <a href="qs-python-fastapi/">Python using FastAPI</a> if you prefer.</Alert>
+<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in NodeJS. We have versions in <a href="qs-python/">Python</a>, <a href="qs-go/">Go</a>, <a href="qs-python-flask/">Flask</a>, and <a href="qs-python-fastapi/">FastAPI</a> if you prefer.</Alert>
 
 1. Start by installing a sample application that consists of multiple services:  
 `kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-nodejs/main/k8s-config/edgey-corp-web-app-no-mapping.yaml`
