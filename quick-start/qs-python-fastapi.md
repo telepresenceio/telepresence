@@ -112,7 +112,9 @@ You will now download the repo containing the services' code and run the DataPro
 `cd edgey-corp-python-fastapi/DataProcessingService/`
 
 3. Install the dependencies and start the Python server.  You may need to use `pip3` and `python3` if you have Python 3 installed.  
-`pip install fastapi uvicorn requests && python app.py`
+`pip install fastapi uvicorn requests && python app.py`  
+OR  
+`pip3 install fastapi uvicorn requests && python3 app.py`
 
   ```
   $ pip install fastapi uvicorn requests && python app.py
