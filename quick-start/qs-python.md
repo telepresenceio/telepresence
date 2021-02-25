@@ -121,10 +121,9 @@ You will now download the repo containing the services' code and run the DataPro
 2. Change into the repo directory, then into DataProcessingService:  
 `cd edgey-corp-python/DataProcessingService/`
 
-3. Install the dependencies and start the Python server.  You may need to use `pip3` and `python3` if you have Python 3 installed.   
-`pip install fastapi uvicorn requests && python app.py`  
-OR  
-`pip3 install fastapi uvicorn requests && python3 app.py`
+3. Install the dependencies and start the Python server.   
+Python 2.x: `pip install fastapi uvicorn requests && python app.py`  
+Python 3.x: `pip3 install fastapi uvicorn requests && python3 app.py`
 
   ```
   $ pip install flask requests && python app.py
