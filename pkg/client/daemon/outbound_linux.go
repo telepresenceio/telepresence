@@ -14,8 +14,8 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	rpc "github.com/datawire/telepresence2/rpc/v2/daemon"
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
+	"github.com/datawire/telepresence2/v2/pkg/client/daemon/nat"
 )
 
 var errResolveDNotConfigured = errors.New("resolved not configured")
@@ -94,12 +94,12 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 // all the suffixes in the search path, and returns a Route on success
 // or nil on failure. This implementation does not count the number of
 // dots in the query.
-func (o *outbound) resolve(query string) *rpc.Route {
+func (o *outbound) resolve(query string) *nat.Route {
 	if !strings.HasSuffix(query, ".") {
 		query += "."
 	}
 
-	var route *rpc.Route
+	var route *nat.Route
 	o.searchLock.RLock()
 	o.domainsLock.RLock()
 	for _, suffix := range o.search {

@@ -8,8 +8,6 @@ message Route {
   string ip = 2;
   string proto = 3;
   string port = 4;
-  string target = 5;
-  string action = 6;
 }
 
 message Table {
