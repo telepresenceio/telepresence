@@ -37,7 +37,7 @@ class TelepresenceQuickStartLanding extends Component {
                         <li>Connect to the demo cluster</li>
                         <li>Intercept a service</li>
                     </ol>
-                    <a href="qs-node" className="get-started-button">
+                    <a id="tp-demo-option-a" href="qs-node" className="get-started-button">
                         Get Started
                         <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path d="M13.3579 4.4545C12.9186 4.01517 12.2063 4.01517 11.7669 4.4545C11.3276 4.89384 11.3276 5.60615 11.7669 6.04549L16.5969 10.8755H4.68768C4.06636 10.8755 3.56268 11.3792 3.56268 12.0005C3.56268 12.6218 4.06636 13.1255 4.68768 13.1255H16.596L11.7669 17.9545C11.3276 18.3938 11.3276 19.1061 11.7669 19.5455C12.2063 19.9848 12.9186 19.9848 13.3579 19.5455L20.1079 12.7955C20.5473 12.3562 20.5473 11.6438 20.1079 11.2045L13.3579 4.4545Z"  />
@@ -61,7 +61,7 @@ class TelepresenceQuickStartLanding extends Component {
                         <li>Intercept your service</li>
                         <li>Create a preview URL</li>
                     </ol>
-                    <a href="../howtos/intercepts/" className="get-started-button">
+                    <a id="tp-intercepts-option-b" href="../howtos/intercepts/" className="get-started-button">
                         Get Started
                         <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path d="M13.3579 4.4545C12.9186 4.01517 12.2063 4.01517 11.7669 4.4545C11.3276 4.89384 11.3276 5.60615 11.7669 6.04549L16.5969 10.8755H4.68768C4.06636 10.8755 3.56268 11.3792 3.56268 12.0005C3.56268 12.6218 4.06636 13.1255 4.68768 13.1255H16.596L11.7669 17.9545C11.3276 18.3938 11.3276 19.1061 11.7669 19.5455C12.2063 19.9848 12.9186 19.9848 13.3579 19.5455L20.1079 12.7955C20.5473 12.3562 20.5473 11.6438 20.1079 11.2045L13.3579 4.4545Z"  />
