@@ -29,7 +29,7 @@ class TelepresenceQuickStartLanding extends Component {
                         to Kubernetes?
                     </h2>
                     <p>
-                        Use <strong>our cluster</strong> to intercept a demo servicefrom <strong>our sample app</strong> .
+                        Use <strong>our cluster</strong> to intercept a demo service from <strong>our sample app</strong>.
                         See Telepresence in action without committing any of your own resources.
                     </p>
                     <ol>
