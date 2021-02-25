@@ -23,9 +23,10 @@ type listInfo struct {
 func listCommand() *cobra.Command {
 	s := &listInfo{}
 	cmd := &cobra.Command{
-		Use:   "list",
+		Use:  "list",
+		Args: cobra.NoArgs,
+
 		Short: "List current intercepts",
-		Args:  cobra.NoArgs,
 		RunE:  s.list,
 	}
 	flags := cmd.Flags()

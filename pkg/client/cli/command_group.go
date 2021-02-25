@@ -78,7 +78,7 @@ func AddCommandGroups(cmd *cobra.Command, groups []CommandGroup) {
 
 	// Set a usage template that is derived from the default but replaces the "Available Commands"
 	// section with the commandGroups() from the given command
-	cmd.SetUsageTemplate(`Usage:{{if .Runnable}}
+	cmd.SetUsageTemplate(`Usage:{{if and (.Runnable) (not .HasAvailableSubCommands)}}
   {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
   {{.CommandPath}} [command]{{end}}{{if gt (len .Aliases) 0}}
 

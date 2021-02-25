@@ -208,7 +208,7 @@ func TestLoginFlow(t *testing.T) {
 		errs := make(chan error)
 		go func() {
 			cmd := &cobra.Command{
-				RunE: f.Runner.LoginFlow,
+				RunE: func(cmd *cobra.Command, _ []string) error { return f.Runner.LoginFlow(cmd) },
 			}
 			cmd.SetArgs([]string{})
 			errs <- cmd.ExecuteContext(dlog.NewTestContext(t, false))
@@ -390,7 +390,7 @@ func TestLoginFlow(t *testing.T) {
 		// when
 		go func() {
 			cmd := &cobra.Command{
-				RunE: f.Runner.LoginFlow,
+				RunE: func(cmd *cobra.Command, _ []string) error { return f.Runner.LoginFlow(cmd) },
 			}
 			cmd.SetArgs([]string{})
 			errs <- cmd.ExecuteContext(ctx)

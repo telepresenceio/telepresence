@@ -57,9 +57,10 @@ type interceptState struct {
 func interceptCommand(ctx context.Context) *cobra.Command {
 	ii := &interceptInfo{}
 	cmd := &cobra.Command{
-		Use:     "intercept [flags] <name> [-- command with arguments...]",
+		Use:  "intercept [flags] <intercept_base_name> [-- <command with arguments...>]",
+		Args: cobra.MinimumNArgs(1),
+
 		Short:   "Intercept a service",
-		Args:    cobra.MinimumNArgs(1),
 		RunE:    ii.intercept,
 		PreRunE: updateCheckIfDue,
 	}
@@ -96,9 +97,10 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 
 func leaveCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "leave <name of intercept>",
+		Use:  "leave [flags] <intercept_name>",
+		Args: cobra.ExactArgs(1),
+
 		Short: "Remove existing intercept",
-		Args:  cobra.ExactArgs(1),
 		RunE:  removeIntercept,
 	}
 }

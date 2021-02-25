@@ -47,7 +47,7 @@ type loginExecutor struct {
 
 // LoginExecutor controls the execution of a login flow
 type LoginExecutor interface {
-	LoginFlow(cmd *cobra.Command, args []string) error
+	LoginFlow(cmd *cobra.Command) error
 }
 
 // NewLoginExecutor returns an instance of LoginExecutor
@@ -95,7 +95,7 @@ func EnsureLoggedIn(cmd *cobra.Command) error {
 		browser.OpenURL,
 		client.NewScout("cli"),
 	)
-	return l.LoginFlow(cmd, nil)
+	return l.LoginFlow(cmd)
 }
 
 // LoginFlow tries logging the user by opening a browser window and authenticating against the
@@ -105,7 +105,7 @@ func EnsureLoggedIn(cmd *cobra.Command) error {
 // SaveTokenFunc (which would usually write to user cache).
 // If login succeeds, the login flow will then try invoking the userinfo endpoint and persisting it
 // using SaveUserInfoFunc (which would usually write to user cache).
-func (l *loginExecutor) LoginFlow(cmd *cobra.Command, _ []string) error {
+func (l *loginExecutor) LoginFlow(cmd *cobra.Command) error {
 	// oauth2Callback chan that will receive the callback info
 	callbacks := make(chan oauth2Callback)
 	// also listen for interruption to cancel the flow
