@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -24,9 +25,9 @@ type Proxy struct {
 }
 
 // NewProxy returns a new Proxy instance that is listening to the given tcp address
-func NewProxy(c context.Context, address string, router func(*net.TCPConn) (string, error)) (proxy *Proxy, err error) {
+func NewProxy(c context.Context, router func(*net.TCPConn) (string, error)) (proxy *Proxy, err error) {
 	setRlimit(c)
-	ln, err := net.Listen("tcp", address)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err == nil {
 		proxy = &Proxy{listener: ln, connHandler: (*Proxy).handleConnection, router: router}
 	}
@@ -55,6 +56,15 @@ func setRlimit(c context.Context) {
 	} else {
 		dlog.Debugf(c, "Final rlimit: %d", rLimit)
 	}
+}
+
+// ListenerPort returns the port that this proxy listens to
+func (pxy *Proxy) ListenerPort() (int, error) {
+	_, portString, err := net.SplitHostPort(pxy.listener.Addr().String())
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(portString)
 }
 
 // Run starts the proxy accept loop and runs it until the context is cancelled. The limit argument

@@ -19,17 +19,6 @@ import (
 	"github.com/datawire/telepresence2/rpc/v2/daemon"
 )
 
-// worker names
-const (
-	K8sBridgeWorker = "K8S"
-	K8sSSHWorker    = "SSH"
-)
-
-// ProxyRedirPort is the port to which we redirect proxied IPs. It
-// should probably eventually be configurable and/or dynamically
-// chosen.
-const ProxyRedirPort = "1234"
-
 // bridge holds the configuration for a Teleproxy
 type bridge struct {
 	sshPort int32

@@ -18,13 +18,6 @@ import (
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/proxy"
 )
 
-const (
-	// proxyRedirPort is the port to which we redirect proxied IPs. It
-	// should probably eventually be configurable and/or dynamically
-	// chosen.
-	proxyRedirPort = "1234"
-)
-
 // outbound does stuff, idk, I didn't write it.
 //
 // A zero outbound is invalid; you must use newOutbound.
@@ -34,12 +27,12 @@ type outbound struct {
 	fallbackIP  string
 	noSearch    bool
 	translator  nat.FirewallRouter
-	tables      map[string]*rpc.Table
+	tables      map[string]*nat.Table
 	tablesLock  sync.RWMutex
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces        map[string]struct{}
-	domains           map[string]*rpc.Route
+	domains           map[string]*nat.Route
 	domainsLock       sync.RWMutex
 	setSearchPathFunc func(c context.Context, paths []string)
 
@@ -47,6 +40,9 @@ type outbound struct {
 	searchLock sync.RWMutex
 
 	overridePrimaryDNS bool
+
+	// proxyRedirPort is the port to which we redirect translated IP requests intended for the cluster
+	proxyRedirPort int
 
 	// dnsRedirPort is the port to which we redirect dns requests.
 	dnsRedirPort int
@@ -90,10 +86,10 @@ func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSea
 		dnsIP:       dnsIP,
 		fallbackIP:  fallbackIP,
 		noSearch:    noSearch,
-		tables:      make(map[string]*rpc.Table),
+		tables:      make(map[string]*nat.Table),
 		translator:  nat.NewRouter(name, net.IPv4(127, 0, 0, 1)),
 		namespaces:  make(map[string]struct{}),
-		domains:     make(map[string]*rpc.Route),
+		domains:     make(map[string]*nat.Route),
 		search:      []string{""},
 		work:        make(chan func(context.Context) error),
 	}
@@ -101,7 +97,7 @@ func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSea
 	return ret, nil
 }
 
-// firewall2socksWorker listens on localhost:1234 and forwards those connections to the connector's
+// firewall2socksWorker listens on localhost:<proxyRedirPort> and forwards those connections to the connector's
 // SOCKS server, for them to be forwarded to the cluster.  We count on firewallConfiguratorWorker
 // having configured the host firewall to send all cluster-bound TCP connections to this port, and
 // we make special syscalls/ioctls to determine where each connection was originally bound for, so
@@ -110,7 +106,11 @@ func (o *outbound) firewall2socksWorker(c context.Context, onReady func()) error
 	// hmm, we may not actually need to get the original
 	// destination, we could just forward each ip to a unique port
 	// and either listen on that port or run port-forward
-	pr, err := proxy.NewProxy(c, ":"+proxyRedirPort, o.destination)
+	pr, err := proxy.NewProxy(c, o.destination)
+	if err != nil {
+		return errors.Wrap(err, "Proxy")
+	}
+	o.proxyRedirPort, err = pr.ListenerPort()
 	if err != nil {
 		return errors.Wrap(err, "Proxy")
 	}
@@ -150,13 +150,15 @@ func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
 
 	if o.overridePrimaryDNS {
 		dlog.Debugf(c, "Bootstrapping local DNS server on port %d", o.dnsRedirPort)
-		err := o.doUpdate(c, &rpc.Table{
+		err := o.doUpdate(c, &nat.Table{
 			Name: "bootstrap",
-			Routes: []*rpc.Route{
+			Routes: []*nat.Route{
 				{
-					Ip:     o.dnsIP,
+					Route: &rpc.Route{
+						Ip:    o.dnsIP,
+						Proto: "udp",
+					},
 					Target: strconv.Itoa(o.dnsRedirPort),
-					Proto:  "udp",
 				},
 			},
 		})
@@ -181,7 +183,7 @@ func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
 	return nil
 }
 
-func (o *outbound) resolveNoSearch(query string) *rpc.Route {
+func (o *outbound) resolveNoSearch(query string) *nat.Route {
 	o.domainsLock.RLock()
 
 	// Check if this is a NAME.NAMESPACE. query
@@ -202,8 +204,19 @@ func (o *outbound) destination(conn *net.TCPConn) (string, error) {
 }
 
 func (o *outbound) update(table *rpc.Table) {
+	// Update stems from the connector so the destination target must be set on all routes
+	routes := make([]*nat.Route, len(table.Routes))
+	for i, route := range table.Routes {
+		routes[i] = &nat.Route{
+			Route:  route,
+			Target: strconv.Itoa(o.proxyRedirPort),
+		}
+	}
 	o.work <- func(c context.Context) error {
-		return o.doUpdate(c, table)
+		return o.doUpdate(c, &nat.Table{
+			Name:   table.Name,
+			Routes: routes,
+		})
 	}
 }
 
@@ -211,25 +224,25 @@ func (o *outbound) noMoreUpdates() {
 	close(o.work)
 }
 
-func routesEqual(a, b *rpc.Route) bool {
+func routesEqual(a, b *nat.Route) bool {
 	if a == b {
 		return true
 	}
 	if a == nil || b == nil {
 		return false
 	}
-	return a.Name == b.Name && a.Action == b.Action && a.Ip == b.Ip && a.Port == b.Port && a.Target == b.Target
+	return a.Name == b.Name && a.Ip == b.Ip && a.Port == b.Port && a.Target == b.Target
 }
 
-func domain(r *rpc.Route) string {
+func domain(r *nat.Route) string {
 	return strings.ToLower(r.Name + ".")
 }
 
-func (o *outbound) doUpdate(c context.Context, table *rpc.Table) error {
+func (o *outbound) doUpdate(c context.Context, table *nat.Table) error {
 	// Make a copy of the current table
 	o.tablesLock.RLock()
 	oldTable, ok := o.tables[table.Name]
-	oldRoutes := make(map[string]*rpc.Route)
+	oldRoutes := make(map[string]*nat.Route)
 	if ok {
 		for _, route := range oldTable.Routes {
 			oldRoutes[route.Name] = route

@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.0.4 (TBD)
+
+- Change: The telepresence daemon will no longer use port 1234 for the firewall-to-SOCKS server, but will instead choose an available port dynamically.
+
 ### 2.0.3 (February 24, 2021)
 
 - Feature: There is now an extension mechanism where you can tell Telepresence about different agents and what arguments they support.  The new `--mechanism` flag can explicitly identify which extension to use.
