@@ -329,21 +329,19 @@ func updateTableFromService(svc *kates.Service, table *daemon.Table) {
 		if port.Name != "" {
 			proto := strings.ToLower(string(port.Protocol))
 			table.Routes = append(table.Routes, &daemon.Route{
-				Name:   fmt.Sprintf("_%v._%v.%v", port.Name, proto, qName),
-				Ip:     ip,
-				Port:   ports,
-				Proto:  proto,
-				Target: ProxyRedirPort,
+				Name:  fmt.Sprintf("_%v._%v.%v", port.Name, proto, qName),
+				Ip:    ip,
+				Port:  ports,
+				Proto: proto,
 			})
 		}
 	}
 
 	table.Routes = append(table.Routes, &daemon.Route{
-		Name:   qName,
-		Ip:     ip,
-		Port:   ports,
-		Proto:  "tcp",
-		Target: ProxyRedirPort,
+		Name:  qName,
+		Ip:    ip,
+		Port:  ports,
+		Proto: "tcp",
 	})
 }
 
@@ -371,10 +369,9 @@ func updateTableFromPod(pod *kates.Pod, table *daemon.Table) {
 	ip := pod.Status.PodIP
 	if ip != "" {
 		table.Routes = append(table.Routes, &daemon.Route{
-			Name:   qname,
-			Ip:     ip,
-			Proto:  "tcp",
-			Target: ProxyRedirPort,
+			Name:  qname,
+			Ip:    ip,
+			Proto: "tcp",
 		})
 	}
 }

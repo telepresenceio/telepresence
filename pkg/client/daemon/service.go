@@ -173,7 +173,7 @@ func run(c context.Context, loggingDir, dns, fallback string) error {
 		return d.outbound.dnsServerWorker(ctx, readyForFirewall.Done)
 	})
 
-	// tunnel-firewall-to-socks listens on TCP localhost:1234 and forwards those connections to
+	// tunnel-firewall-to-socks listens on TCP localhost:<proxyRedirPort> and forwards those connections to
 	// the connector's SOCKS server, which then forwards them to the cluster.  It counts on
 	// tunnel-firewall-configurator (below) having configured the host firewall to send all
 	// cluster-bound TCP connections to this port, and we make special syscalls/ioctls to

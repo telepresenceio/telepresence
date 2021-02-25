@@ -18,13 +18,6 @@ import (
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/proxy"
 )
 
-const (
-	// proxyRedirPort is the port to which we redirect proxied IPs. It
-	// should probably eventually be configurable and/or dynamically
-	// chosen.
-	proxyRedirPort = "1234"
-)
-
 // outbound does stuff, idk, I didn't write it.
 //
 // A zero outbound is invalid; you must use newOutbound.
@@ -47,6 +40,9 @@ type outbound struct {
 	searchLock sync.RWMutex
 
 	overridePrimaryDNS bool
+
+	// proxyRedirPort is the port to which we redirect translated IP requests intended for the cluster
+	proxyRedirPort int
 
 	// dnsRedirPort is the port to which we redirect dns requests.
 	dnsRedirPort int
@@ -101,7 +97,7 @@ func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSea
 	return ret, nil
 }
 
-// firewall2socksWorker listens on localhost:1234 and forwards those connections to the connector's
+// firewall2socksWorker listens on localhost:<proxyRedirPort> and forwards those connections to the connector's
 // SOCKS server, for them to be forwarded to the cluster.  We count on firewallConfiguratorWorker
 // having configured the host firewall to send all cluster-bound TCP connections to this port, and
 // we make special syscalls/ioctls to determine where each connection was originally bound for, so
@@ -110,7 +106,11 @@ func (o *outbound) firewall2socksWorker(c context.Context, onReady func()) error
 	// hmm, we may not actually need to get the original
 	// destination, we could just forward each ip to a unique port
 	// and either listen on that port or run port-forward
-	pr, err := proxy.NewProxy(c, ":"+proxyRedirPort, o.destination)
+	pr, err := proxy.NewProxy(c, o.destination)
+	if err != nil {
+		return errors.Wrap(err, "Proxy")
+	}
+	o.proxyRedirPort, err = pr.ListenerPort()
 	if err != nil {
 		return errors.Wrap(err, "Proxy")
 	}
@@ -202,6 +202,10 @@ func (o *outbound) destination(conn *net.TCPConn) (string, error) {
 }
 
 func (o *outbound) update(table *rpc.Table) {
+	// Update stems from the connector so the destination target must be set on all routes
+	for _, route := range table.Routes {
+		route.Target = strconv.Itoa(o.proxyRedirPort)
+	}
 	o.work <- func(c context.Context) error {
 		return o.doUpdate(c, table)
 	}
