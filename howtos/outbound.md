@@ -12,7 +12,7 @@ It is assumed that you have the demo web app from the [tutorial](../../tutorial/
 
 ## Proxying Outbound Traffic
 
-Connecting to the cluster instead of running an intercept will allow you to access cluster deployments as if your laptop was another pod in the cluster. You will be able to access other Kubernetes services by their [full cluster DNS name](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#services) (`<servicename>.<namespace>.svc.cluster.local`), for example by curling a service from your terminal. A service running on your laptop will also be able to interact with other services on the cluster by name.
+Connecting to the cluster instead of running an intercept will allow you to access cluster deployments as if your laptop was another pod in the cluster. You will be able to access other Kubernetes services using `<servicename>.<namespace>`, for example by curling a service from your terminal. A service running on your laptop will also be able to interact with other services on the cluster by name.
 
 Connecting to the cluster starts the background daemon on your machine and installs the [Traffic Manager pod](../../reference/) into the cluster of your current `kubectl` context.  The Traffic Manager handles the service proxying.
 
@@ -37,10 +37,10 @@ Connecting to the cluster starts the background daemon on your machine and insta
     Intercepts:    0 total
   ```
 
-1. Now try to access your service by name with `curl verylargejavaservice.default.svc.cluster.local:8080`. Telepresence will route the request to the cluster, as if your laptop is actually running in the cluster.
+1. Now try to access your service by name with `curl verylargejavaservice.default:8080`. Telepresence will route the request to the cluster, as if your laptop is actually running in the cluster.
 
   ```
-  $ curl verylargejavaservice.default.svc.cluster.local:8080
+  $ curl verylargejavaservice.default:8080
   <!DOCTYPE HTML>
   <html>
   <head>
@@ -60,3 +60,19 @@ Connecting to the cluster starts the background daemon on your machine and insta
 By default, Telepresence will provide access to all Services found in all namespaces in the connected cluster. This might lead to problems if the user does not have access permissions to all namespaces via RBAC. The `--mapped-namespaces <comma separated list of namespaces>` flag was added to give the user control over exactly which namespaces will be accessible.
 
 When using this option, it is important to include all namespaces containing services to be accessed and also all namespaces that contain services that those intercepted services might use.
+
+### Using local-only intercepts
+
+An intercept with the flag`--local-only` can be used to control outbound connectivity to specific namespaces.
+
+When developing services that have not yet been deployed to the cluster, it can be necessary to provide outbound connectivity to the namespace where the service is intended to be deployed so that it can access other services in that namespace without using qualified names. 
+
+  ```
+  $ telepresence intercept [name of intercept] --namespace [name of namespace] --local-only
+  ```
+The resources in the given namespace can now be accessed using unqualified names as long as the intercept is active. The intercept is deactivated just like any other intercept.
+
+  ```
+  $ telepresence leave [name of intercept]
+  ```
+The unqualified name access is now removed provided that no other intercept is active and using the same namespace.
