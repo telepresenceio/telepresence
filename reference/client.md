@@ -4,7 +4,7 @@ description: "CLI options for Telepresence to intercept traffic from your Kubern
 
 # Client Reference
 
-The [Telepresence CLI client](../quick-start) is used to connect Telepresence to your cluster, start and stop intercepts, and create preview URLs. All commands are run in the form of `telepresence <command>`.
+The [Telepresence CLI client](../../quick-start) is used to connect Telepresence to your cluster, start and stop intercepts, and create preview URLs. All commands are run in the form of `telepresence <command>`.
 
 ## Commands
 
@@ -13,7 +13,7 @@ A list of all CLI commands and flags is available by running `telepresence help`
 | Command | Description |
 | --- | --- |
 | `connect` | Starts the local daemon and connects Telepresence to your cluster and installs the Traffic Manager if it is missing.  After connecting, outbound traffic is routed to the cluster so that you can interact with services as if your laptop was another pod (for example, curling a service by it's name) |
-| `login` | Authenticates you to Ambassador Cloud to create, manage, and share [preview URLs](../howtos/preview-urls/)
+| `login` | Authenticates you to Ambassador Cloud to create, manage, and share [preview URLs](../../howtos/preview-urls/)
 | `logout` | Logs out out of Ambassador Cloud |
 | `dashboard` | Reopens the Ambassador Cloud dashboard in your browser |
 | `preview` | Create or remove preview domains for existing intercepts |
