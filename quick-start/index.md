@@ -1,4 +1,4 @@
 # Telepresence Quick Start
 
 
-![landing page](../../images/qs.png)
+![landing page](../../images/tp-qs-landing-page.png)
