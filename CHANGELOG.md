@@ -3,6 +3,7 @@
 ### 2.0.4 (TBD)
 
 - Change: The telepresence daemon will no longer use port 1234 for the firewall-to-SOCKS server, but will instead choose an available port dynamically.
+- Bugfix: The description of the `--everything` flag for the `uninstall` command was corrected.
 
 ### 2.0.3 (February 24, 2021)
 
