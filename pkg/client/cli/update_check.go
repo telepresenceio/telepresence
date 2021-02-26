@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"runtime"
@@ -90,7 +89,7 @@ func (uc *updateChecker) updateAvailable(currentVersion *semver.Version, errOut 
 		return nil, false
 	}
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		// silently ignore failure to read response body
 		return nil, false

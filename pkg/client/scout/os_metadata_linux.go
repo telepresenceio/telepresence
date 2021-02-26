@@ -3,7 +3,6 @@ package scout
 import (
 	"bufio"
 	"context"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -11,7 +10,7 @@ import (
 )
 
 func isDocker(ctx context.Context) bool {
-	cgroups, err := ioutil.ReadFile("/proc/1/cgroup")
+	cgroups, err := os.ReadFile("/proc/1/cgroup")
 	if err != nil {
 		dlog.Warnf(ctx, "Unable to read /proc/1/cgroup: %v", err)
 		return false
@@ -20,7 +19,7 @@ func isDocker(ctx context.Context) bool {
 }
 
 func isWSL(ctx context.Context) bool {
-	version, err := ioutil.ReadFile("/proc/version")
+	version, err := os.ReadFile("/proc/version")
 	if err != nil {
 		dlog.Warnf(ctx, "Unable to read /proc/version: %v", err)
 		return false

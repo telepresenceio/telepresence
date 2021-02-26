@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net"
 	"os"
@@ -95,7 +94,7 @@ func (o *outbound) resolveInSearch(c context.Context, qType uint16, query string
 
 func (o *outbound) runOverridingServer(c context.Context) error {
 	if o.dnsConfig.LocalIp == nil {
-		dat, err := ioutil.ReadFile("/etc/resolv.conf")
+		dat, err := os.ReadFile("/etc/resolv.conf")
 		if err != nil {
 			return err
 		}

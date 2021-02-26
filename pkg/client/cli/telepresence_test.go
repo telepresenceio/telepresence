@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -66,7 +65,7 @@ func (ts *telepresenceSuite) SetupSuite() {
 	_ = os.Chdir("../../..")
 
 	// Remove very verbose output from DTEST initialization
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(io.Discard)
 
 	suffix, isCi := os.LookupEnv("CIRCLE_SHA1")
 	if !isCi {
@@ -557,7 +556,7 @@ func (cs *connectedSuite) TestC_ProxiesOutboundTraffic() {
 					return false
 				}
 				defer resp.Body.Close()
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := io.ReadAll(resp.Body)
 				if err != nil {
 					dlog.Error(ctx, err)
 					return false
@@ -1071,7 +1070,7 @@ func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
 					}
 					defer resp.Body.Close()
 					dlog.Infof(ctx, "status code: %v", resp.StatusCode)
-					body, err := ioutil.ReadAll(resp.Body)
+					body, err := io.ReadAll(resp.Body)
 					if err != nil {
 						dlog.Infof(ctx, "%v", err)
 						return false
@@ -1221,7 +1220,7 @@ func (is *interceptedSuite) TestE_StopInterceptedPodOfMany() {
 			return false
 		}
 		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return false
 		}
@@ -1306,7 +1305,7 @@ func (hs *helmSuite) TestA_CanConnect() {
 					return false
 				}
 				defer resp.Body.Close()
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := io.ReadAll(resp.Body)
 				if err != nil {
 					dlog.Error(ctx, err)
 					return false

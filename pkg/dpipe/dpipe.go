@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"sync/atomic"
 	"time"
 
@@ -17,8 +16,8 @@ func DPipe(ctx context.Context, peer io.ReadWriteCloser, cmdName string, cmdArgs
 	cmd := dexec.CommandContext(ctx, cmdName, cmdArgs...)
 	cmd.Stdin = peer
 	cmd.Stdout = peer
-	cmd.Stderr = ioutil.Discard // Ensure error logging by passing a non nil, non *os.File here
-	cmd.DisableLogging = true   // Avoid data logging (peer is not a *os.File)
+	cmd.Stderr = io.Discard   // Ensure error logging by passing a non nil, non *os.File here
+	cmd.DisableLogging = true // Avoid data logging (peer is not a *os.File)
 
 	cmdLine := shellquote.ShellString(cmd.Path, cmd.Args)
 	if err := cmd.Start(); err != nil {

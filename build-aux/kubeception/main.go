@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -29,7 +29,7 @@ func kubeceptionRequest(ctx context.Context, client *http.Client, httpVerb, toke
 		return "", fmt.Errorf("Error in request: %w", err)
 	}
 	defer resp.Body.Close()
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("Unable to read response body: %w", err)
 	}

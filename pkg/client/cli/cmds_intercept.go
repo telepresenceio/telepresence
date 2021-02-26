@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"regexp"
@@ -643,7 +642,7 @@ func validateDockerArgs(args []string) error {
 func (is *interceptState) runInDocker(ctx context.Context, cmd safeCobraCommand, args []string) error {
 	envFile := is.args.envFile
 	if envFile == "" {
-		file, err := ioutil.TempFile("", "tel-*.env")
+		file, err := os.CreateTemp("", "tel-*.env")
 		if err != nil {
 			return fmt.Errorf("failed to create temporary environment file. %w", err)
 		}
@@ -731,7 +730,7 @@ func (is *interceptState) writeEnvJSON() error {
 		// Creating JSON from a map[string]string should never fail
 		panic(err)
 	}
-	return ioutil.WriteFile(is.args.envJSON, data, 0644)
+	return os.WriteFile(is.args.envJSON, data, 0644)
 }
 
 var hostRx = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$`)

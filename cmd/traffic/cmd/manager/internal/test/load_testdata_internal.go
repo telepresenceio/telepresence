@@ -1,7 +1,7 @@
 package test
 
 import (
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -31,7 +31,7 @@ func GetTestMechanisms(t *testing.T) map[string]*rpc.AgentInfo_Mechanism {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := ioutil.ReadFile(filepath.Join(basedir, "testdata", "mechanisms.yaml"))
+	data, err := os.ReadFile(filepath.Join(basedir, "testdata", "mechanisms.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func GetTestAgents(t *testing.T) map[string]*rpc.AgentInfo {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := ioutil.ReadFile(filepath.Join(basedir, "testdata", "agents.yaml"))
+	data, err := os.ReadFile(filepath.Join(basedir, "testdata", "agents.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func GetTestClients(t *testing.T) map[string]*rpc.ClientInfo {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := ioutil.ReadFile(filepath.Join(basedir, "testdata", "clients.yaml"))
+	data, err := os.ReadFile(filepath.Join(basedir, "testdata", "clients.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}

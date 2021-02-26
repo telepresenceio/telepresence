@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -18,7 +17,7 @@ import (
 // license from a file and returning the string
 // representation of that value
 func getLicenseString(licenseFile string) (string, error) {
-	license, err := ioutil.ReadFile(licenseFile)
+	license, err := os.ReadFile(licenseFile)
 	if err != nil {
 		return "", err
 	}

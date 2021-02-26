@@ -3,8 +3,8 @@ package manager
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
+	"os"
 	"sort"
 	"time"
 
@@ -70,13 +70,13 @@ func (*Manager) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error
 // via the connector if it detects the presence of a systema license secret
 // when installing the traffic-manager
 func (m *Manager) GetLicense(ctx context.Context, _ *empty.Empty) (*rpc.License, error) {
-	licenseData, err := ioutil.ReadFile("/home/telepresence/license")
+	licenseData, err := os.ReadFile("/home/telepresence/license")
 	if err != nil {
 		return &rpc.License{}, err
 	}
 	license := string(licenseData)
 
-	hostDomainData, err := ioutil.ReadFile("/home/telepresence/hostDomain")
+	hostDomainData, err := os.ReadFile("/home/telepresence/hostDomain")
 	if err != nil {
 		return &rpc.License{}, err
 	}

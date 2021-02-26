@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -77,7 +77,7 @@ func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (*Extensi
 	}
 	// Iterate over the directories from highest-precedence to lowest-precedence.
 	for _, dir := range append([]string{userDir}, systemDirs...) {
-		fileinfos, err := ioutil.ReadDir(filepath.Join(dir, "extensions"))
+		fileinfos, err := os.ReadDir(filepath.Join(dir, "extensions"))
 		if err != nil {
 			continue
 		}
@@ -113,7 +113,7 @@ func LoadExtensions(ctx context.Context, existingFlags *pflag.FlagSet) (*Extensi
 		}
 		filename := es.ext2file[extname]
 
-		bs, err := ioutil.ReadFile(filename)
+		bs, err := os.ReadFile(filename)
 		if err != nil {
 			return nil, err
 		}
@@ -340,7 +340,7 @@ func (es *ExtensionsState) AgentImage(ctx context.Context) (string, error) {
 				if resp.StatusCode != http.StatusOK {
 					return "", fmt.Errorf("image URL %q returned HTTP %v", image, resp.StatusCode)
 				}
-				body, err := ioutil.ReadAll(resp.Body)
+				body, err := io.ReadAll(resp.Body)
 				if err != nil {
 					return "", err
 				}
