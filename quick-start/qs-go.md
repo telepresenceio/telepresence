@@ -26,11 +26,10 @@ import QSCards from './qs-cards'
 ## Prerequisites
 You’ll need [`kubectl` installed](https://kubernetes.io/docs/tasks/tools/install-kubectl/) and [setup](https://kubernetes.io/docs/tasks/tools/install-kubectl/#verifying-kubectl-configuration) to use a Kubernetes cluster, preferably an empty test cluster.  
 
+<Alert severity="info"><b>Need a cluster?</b> We provide free demo clusters to use with this quick start, <a href="../../howtos/democluster/">quickly set up one here</a>.
+
 If you have used Telepresence previously, please first reset your Telepresence deployment with:
 `telepresence uninstall --everything`.
-
-## Need a cluster? 
-We provide free demo clusters to use with this quick start, [quickly set up one here](../../howtos/democluster/).
 
 ## 1. Install the Telepresence CLI
 
