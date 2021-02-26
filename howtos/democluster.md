@@ -14,4 +14,4 @@ After creation, the cluster will remain available for three hours, plenty of tim
 
 1. Click **Generate Demo Cluster** in step 1 and follow the instructions to configure your `kubectl`.
 
-1. Start the [quick start guide](../../quick-start/qs-node/).
+1. Begin the [quick start guide](../../quick-start/qs-node/).

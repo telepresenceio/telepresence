@@ -2,15 +2,31 @@ import Alert from '@material-ui/lab/Alert';
 import QSTabs from './qs-tabs'
 import QSCards from './qs-cards'
 
-# Telepresence Quick Start - Java
+# Telepresence Quick Start - NodeJS
 
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Java. We have versions in <a href="../qs-python-fastapi/">Python (FastAPI)</a>, <a href="../qs-python/">Python (Flask)</a>, <a href="../qs-go/">Go</a>, and <a href="../qs-node/">NodeJS</a> if you prefer.</Alert>
+<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Node.js. We have versions in <a href="qs-go/">Go</a>, <a href="qs-python/">Python using Flask</a>, and <a href="qs-python-fastapi/">Python using FastAPI</a> if you prefer.</Alert>
+
+<h3>Contents</h3>
+
+[Prerequisites](#prerequisites)  
+[1. Install the Telepresence CLI](#1-install-the-telepresence-cli)  
+[2. Test Telepresence](#2-test-telepresence)  
+[3. Install a sample Java application](#3-install-a-sample-java-application)  
+[4. Set up a local development environment](#4-set-up-a-local-development-environment)  
+[5. Intercept all traffic to the service](#5-intercept-all-traffic-to-the-service)  
+[6. Make a code change](#6-make-a-code-change)  
+[7. Create a Preview URL](#7-create-a-preview-url)  
+[What's next?](#img-classos-logo-srcimageslogopng-whats-next)
+
 
 ## Prerequisites
-You’ll need `kubectl` installed and configured to use a Kubernetes cluster, preferably an empty test cluster.  You must have RBAC permissions in the cluster to create and update deployments and services.
+You’ll need [`kubectl` installed](https://kubernetes.io/docs/tasks/tools/install-kubectl/) and [setup](https://kubernetes.io/docs/tasks/tools/install-kubectl/#verifying-kubectl-configuration) to use a Kubernetes cluster, preferably an empty test cluster.  
 
 If you have used Telepresence previously, please first reset your Telepresence deployment with:
 `telepresence uninstall --everything`.
+
+## Need a cluster? 
+We provide free demo clusters to use with this quick start, [quickly set up one here](../../howtos/democluster/).
 
 ## 1. Install the Telepresence CLI
 
