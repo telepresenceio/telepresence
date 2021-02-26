@@ -32,9 +32,6 @@ You’ll need [`kubectl` installed](https://kubernetes.io/docs/tasks/tools/insta
 If you have used Telepresence previously, please first reset your Telepresence deployment with:
 `telepresence uninstall --everything`.
 
-## Need a cluster? 
-We provide free demo clusters to use with this quick start, [quickly set up one here](../../howtos/democluster/).
-
 ## 1. Install the Telepresence CLI
 
 <QSTabs/>
