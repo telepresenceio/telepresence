@@ -243,11 +243,11 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
 		defer o.dnsListener.Close()
-		v := dns.NewServer(c, []net.PacketConn{o.dnsListener}, "", func(domain string) string {
+		v := dns.NewServer(c, []net.PacketConn{o.dnsListener}, "", func(domain string) []string {
 			if r := o.resolveNoSearch(domain); r != nil {
-				return r.Ip
+				return o.getIPs(r.Ips)
 			}
-			return ""
+			return []string{}
 		})
 		return v.Run(c)
 	})

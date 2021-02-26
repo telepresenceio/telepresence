@@ -281,11 +281,11 @@ Telepresence will launch your command, or a shell, when you start a session. Whe
 - Namespaces: You can intercept multiple deployments in different namespaces simultaneously.
 - Environment variables: The environment variables of the intercepted pod can be captured in a file or propagated to a command.
 - Filesystem forwarding for volume mounts: If the intercepted service has mounted volumes, those are made available as remote mounts on the desktop during an intercept.
+- Also Proxy: If you have a resource that is external to the cluster that is needed for your intercept, you can create a Headless Service (including ExternalName) that points to your resource to access it from your local machine.
 
 ### What doesn't work yet
 
 - Container method
-- The `--also-proxy` feature
 
 ### What behaves differently
 

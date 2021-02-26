@@ -216,17 +216,19 @@ func (kc *k8sCluster) findAllSvcByType(svcType v1.ServiceType) []*kates.Service 
 // number of them that are being watched
 func (kc *k8sCluster) findNumK8sObjects() map[string]int {
 	objectMap := make(map[string]int)
-	var numServices, numPods int
+	var numServices, numEndpoints, numPods int
 
 	kc.accLock.Lock()
 	objectMap["namespaces"] = len(kc.watchers)
 	for _, watcher := range kc.watchers {
 		numServices += len(watcher.Services)
+		numEndpoints += len(watcher.Endpoints)
 		numPods += len(watcher.Pods)
 	}
 	kc.accLock.Unlock()
 
 	objectMap["services"] = numServices
+	objectMap["endpoints"] = numEndpoints
 	objectMap["pods"] = numPods
 	return objectMap
 }
