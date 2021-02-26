@@ -2,9 +2,9 @@ import Alert from '@material-ui/lab/Alert';
 import QSTabs from './qs-tabs'
 import QSCards from './qs-cards'
 
-# Telepresence Quick Start - NodeJS
+# Telepresence Quick Start - Python (Flask)
 
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Node.js. We have versions in <a href="qs-go/">Go</a>, <a href="qs-python/">Python using Flask</a>, and <a href="qs-python-fastapi/">Python using FastAPI</a> if you prefer.</Alert>
+<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Python using the Flask framework. We have versions in <a href="../qs-python-fastapi/">Python (FastAPI)</a>, <a href="../qs-go/">Go</a>, <a href="../qs-java/">Java</a>, and <a href="../qs-node/">NodeJS</a> if you prefer.</Alert>
 
 <h3>Contents</h3>
 
