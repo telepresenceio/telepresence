@@ -9,7 +9,7 @@ import QSCards from './qs-cards'
 
 # Telepresence Quick Start - NodeJS
 
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Node.js. We have versions in <a href="qs-go/">Go</a>, <a href="qs-python/">Python using Flask</a>, and <a href="qs-python-fastapi/">Python using FastAPI</a> if you prefer.</Alert>
+<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Node.js. We have versions in <a href="../qs-go/">Go</a>, <a href="../qs-java/">Java</a>,<a href="../qs-python/">Python using Flask</a>, and <a href="../qs-python-fastapi/">Python using FastAPI</a> if you prefer.</Alert>
 
 <h3>Contents</h3>
 
@@ -90,7 +90,7 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
 
 Your local workstation may not have the compute or memory resources necessary to run all the services in a multi-service application. In this example, we’ll show you how Telepresence can give you a fast development loop, even in this situation.
 
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Node.js. We have versions in <a href="qs-go/">Go</a>, <a href="qs-python/">Python using Flask</a>, and <a href="qs-python-fastapi/">Python using FastAPI</a> if you prefer.</Alert>
+<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Node.js. We have versions in <a href="../qs-go/">Go</a>, <a href="../qs-java/">Java</a>,<a href="../qs-python/">Python using Flask</a>, and <a href="../qs-python-fastapi/">Python using FastAPI</a> if you prefer.</Alert>
 
 1. Start by installing a sample application that consists of multiple services:  
 `kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-nodejs/main/k8s-config/edgey-corp-web-app-no-mapping.yaml`
@@ -248,6 +248,6 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
 Normal traffic coming to your app gets the <span style="color:green" class="bold">green</span> cluster service, but traffic coming from the preview URL goes to your laptop and gets the <span style="color:orange" class="bold">orange</span> local service!
 <Alert severity="success"><b>The Preview URL now shows exactly what is running on your local laptop -- in a way that can be securely shared with anyone you work with.</b></Alert>
 
-## <img class="os-logo" src="../../images/logo.png"/> What's Next?
+## <img class="os-logo" src="../../../images/logo.png"/> What's Next?
 
 <QSCards/>
