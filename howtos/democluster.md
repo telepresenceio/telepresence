@@ -1,0 +1,17 @@
+# Create a Demo Cluster
+
+Ambassador has free demo Kubernetes clusters for you to use to test out Telepresence.
+
+The cluster creation process with provide you with a `config` file to use with `kubectl`.  If you need to install `kubectl`, please see [the Kubernetes documentation](https://kubernetes.io/docs/tasks/tools/install-kubectl/).
+
+After creation, the cluster will remain available for three hours, plenty of time for you to finish one of our Telepresence [quick start guides](../../quick-start/).
+
+## Creating a Cluster
+
+1. Login to [Ambassador Cloud](http://app.getambassador.io/cloud/) using your GitHub account.
+
+1. Click the option for **Use Our Demo Cluster**.
+
+1. Click **Generate Demo Cluster** in step 1 and follow the instructions to configure your `kubectl`.
+
+1. Continue with step 2 or go straight into our [quick start guide](../../quick-start/qs-node/).
