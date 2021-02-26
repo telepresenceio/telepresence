@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -199,18 +200,22 @@ func (o *outbound) resolveNoSearch(query string) *nat.Route {
 	return route
 }
 
-// Since headless and externalName services can have multiple IPs, we randomly
-// pick an IP here. I (donnyyung) admit this is not sophisticated + could be
-// improved, but for now I think it's sufficient.
-func (o *outbound) getIP(ips []string) string {
-	if len(ips) == 0 {
-		return ""
+// Since headless and externalName services can have multiple IPs,
+// we return a shuffled list of the IPs if there are more than one.
+func (o *outbound) getIPs(ips []string) []string {
+	switch lenIPs := len(ips); lenIPs {
+	case 0:
+		return []string{}
+	case 1:
+	default:
+		// If there are multiple elements in the slice, we shuffle the
+		// order so it's not the same each time
+		rand.Seed(time.Now().UnixNano())
+		rand.Shuffle(lenIPs, func(i, j int) {
+			ips[i], ips[j] = ips[j], ips[i]
+		})
 	}
-	if len(ips) == 1 {
-		return ips[0]
-	}
-	randomIndex := rand.Intn(len(ips))
-	return ips[randomIndex]
+	return ips
 }
 
 func (o *outbound) destination(conn *net.TCPConn) (string, error) {
@@ -242,26 +247,42 @@ func (o *outbound) noMoreUpdates() {
 // Helper function for seeing if two unordered
 // slices of IPs are equal.
 func ipsEqual(a, b []string) bool {
-	if len(a) != len(b) {
+	// Since the slices could have duplicates, we need to
+	// create a slice of unique elements so we can compare them.
+	uniq := func(strSlice []string) []string {
+		uniqStrs := []string{}
+		uniqElms := make(map[string]bool, len(a))
+
+		for _, elm := range strSlice {
+			if _, ok := uniqElms[elm]; !ok {
+				uniqStrs = append(uniqStrs, elm)
+				uniqElms[elm] = true
+			}
+		}
+		return uniqStrs
+	}
+
+	uniqA := uniq(a)
+	uniqB := uniq(b)
+
+	if len(uniqA) != len(uniqB) {
 		return false
 	}
 
 	// Instead of comparing the slices directly, we make a
 	// map of the first slice, and then remove elements if
 	// they are in the second slice.
-	diff := make(map[string]int, len(a))
-	for _, aIP := range a {
-		diff[aIP]++
+	diff := make(map[string]bool, len(uniqA))
+	for _, aIP := range uniqA {
+		diff[aIP] = true
 	}
-	for _, bIP := range b {
-		// ip was in a, but not in b, so we quit early
+	for _, bIP := range uniqB {
+		// ip was in uniqB but not uniqA, then they aren't equal
+		// and we can return early
 		if _, ok := diff[bIP]; !ok {
 			return false
 		}
-		diff[bIP]--
-		if diff[bIP] == 0 {
-			delete(diff, bIP)
-		}
+		delete(diff, bIP)
 	}
 	// If the diff map is empty at the end, then the ips are the same
 	return len(diff) == 0
