@@ -3,6 +3,7 @@
 ### 2.0.4 (TBD)
 
 - Change: The telepresence daemon will no longer use port 1234 for the firewall-to-SOCKS server, but will instead choose an available port dynamically.
+- Feature: Support headless services (including ExternalName), which you can use if you used "Also Proxy" in telepresence 1.
 
 ### 2.0.3 (February 24, 2021)
 

@@ -78,11 +78,11 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 	o.overridePrimaryDNS = true
 	onReady()
 
-	srv := dns.NewServer(c, listeners, o.fallbackIP+":53", func(domain string) string {
+	srv := dns.NewServer(c, listeners, o.fallbackIP+":53", func(domain string) []string {
 		if r := o.resolve(domain); r != nil {
-			return r.Ip
+			return o.getIPs(r.Ips)
 		}
-		return ""
+		return []string{}
 	})
 	dlog.Debug(c, "Starting server")
 	err = srv.Run(c)
