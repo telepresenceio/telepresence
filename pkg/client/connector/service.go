@@ -24,6 +24,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/broadcastqueue"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -63,6 +64,8 @@ type service struct {
 
 	managerProxy mgrProxy
 	cancel       func()
+
+	userNotifications broadcastqueue.BroadcastQueue
 
 	connectMu sync.Mutex
 	// These get set by .connect() and are protected by connectMu.
@@ -215,6 +218,18 @@ func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result
 	c = s.callCtx(c, "Uninstall")
 	defer func() { err = callRecovery(c, recover(), err) }()
 	return s.trafficMgr.uninstall(c, ur)
+}
+
+func (s *service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNotificationsServer) error {
+	ctx := s.callCtx(stream.Context(), "UserNotifications")
+
+	for msg := range s.userNotifications.Subscribe(ctx) {
+		if err := stream.Send(&rpc.Notification{Message: msg}); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {

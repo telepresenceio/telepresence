@@ -44,6 +44,9 @@ type ConnectorClient interface {
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
+	// Returns a stream of messages to display to the user.  Does NOT
+	// require having called anything else first.
+	UserNotifications(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (Connector_UserNotificationsClient, error)
 	// Quits (terminates) the connector process.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 }
@@ -119,6 +122,38 @@ func (c *connectorClient) List(ctx context.Context, in *ListRequest, opts ...grp
 	return out, nil
 }
 
+func (c *connectorClient) UserNotifications(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (Connector_UserNotificationsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Connector_serviceDesc.Streams[0], "/telepresence.connector.Connector/UserNotifications", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &connectorUserNotificationsClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Connector_UserNotificationsClient interface {
+	Recv() (*Notification, error)
+	grpc.ClientStream
+}
+
+type connectorUserNotificationsClient struct {
+	grpc.ClientStream
+}
+
+func (x *connectorUserNotificationsClient) Recv() (*Notification, error) {
+	m := new(Notification)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *connectorClient) Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error) {
 	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Quit", in, out, opts...)
@@ -156,6 +191,9 @@ type ConnectorServer interface {
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
+	// Returns a stream of messages to display to the user.  Does NOT
+	// require having called anything else first.
+	UserNotifications(*empty.Empty, Connector_UserNotificationsServer) error
 	// Quits (terminates) the connector process.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	mustEmbedUnimplementedConnectorServer()
@@ -185,6 +223,9 @@ func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest
 }
 func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method List not implemented")
+}
+func (UnimplementedConnectorServer) UserNotifications(*empty.Empty, Connector_UserNotificationsServer) error {
+	return status.Errorf(codes.Unimplemented, "method UserNotifications not implemented")
 }
 func (UnimplementedConnectorServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Quit not implemented")
@@ -328,6 +369,27 @@ func _Connector_List_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_UserNotifications_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(empty.Empty)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ConnectorServer).UserNotifications(m, &connectorUserNotificationsServer{stream})
+}
+
+type Connector_UserNotificationsServer interface {
+	Send(*Notification) error
+	grpc.ServerStream
+}
+
+type connectorUserNotificationsServer struct {
+	grpc.ServerStream
+}
+
+func (x *connectorUserNotificationsServer) Send(m *Notification) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 func _Connector_Quit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(empty.Empty)
 	if err := dec(in); err != nil {
@@ -383,6 +445,12 @@ var _Connector_serviceDesc = grpc.ServiceDesc{
 			Handler:    _Connector_Quit_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "UserNotifications",
+			Handler:       _Connector_UserNotifications_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "rpc/connector/connector.proto",
 }
