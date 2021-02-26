@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -26,11 +27,15 @@ func TestProxy_Run(t *testing.T) {
 	c, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	ln, err := net.Listen("tcp", ":1234")
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	pxy := &Proxy{listener: ln, connHandler: connHandler}
+	port, err := pxy.ListenerPort()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	connLimit := 10
 	go pxy.Run(c, int64(connLimit))
@@ -39,7 +44,7 @@ func TestProxy_Run(t *testing.T) {
 	wg.Add(connLimit * 2)
 	for i := 0; i < connLimit*2; i++ {
 		go func() {
-			conn, err := net.Dial("tcp", ":1234")
+			conn, err := net.Dial("tcp", fmt.Sprintf(":%d", port))
 			if err != nil {
 				wg.Done()
 				t.Error(err)

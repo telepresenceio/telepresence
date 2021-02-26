@@ -62,6 +62,11 @@ deployment:
               value: "3000"
             - name: MANAGER_HOST
               value: "traffic-manager.ambassador"
+            readinessProbe:
+              exec:
+                command:
+                - "/bin/stat"
+                - "/tmp/agent/ready"
             image: localhost:5000/tel2:0.1.2-test
             imagePullPolicy: IfNotPresent
             ports:

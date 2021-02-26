@@ -78,28 +78,60 @@ func (cs *connectorState) EnsureState() (bool, error) {
 }
 
 func (cs *connectorState) setConnectInfo() error {
-	r, err := cs.connectorClient.Connect(cs.cmd.Context(), &connector.ConnectRequest{
+	installID := client.NewScout("unused").Reporter.InstallID()
+	cr := &connector.ConnectRequest{
 		KubeFlags:        cs.kubeFlagMap(),
-		InstallId:        client.NewScout("unused").Reporter.InstallID(),
+		InstallId:        installID,
 		MappedNamespaces: mappedNamespaces,
-	})
+	}
+
+	// We first connect to the kubernetes cluster
+	rClusterInfo, err := cs.connectorClient.ConnectCluster(cs.cmd.Context(), cr)
+	if err != nil {
+		return err
+	}
+
+	var msg string
+	switch rClusterInfo.Error {
+	case connector.ClusterInfo_UNSPECIFIED:
+		// If the cluster seems large on the initial connect, then we alert the
+		// user to a flag that should help speed things up if the connect is
+		// slow for them.
+		sumClusterObjects := rClusterInfo.Pods + rClusterInfo.Services
+		// These thresholds likely needs some tuning
+		if sumClusterObjects > 50 || rClusterInfo.Namespaces > 10 {
+			msg := "Your cluster seems pretty big, so this could take some time. " +
+				"We recommend connecting with the --mapped-namespaces flag and a " +
+				"list of namespaces you want to be able to intercept in to speed " +
+				"it up!\n"
+			fmt.Fprint(cs.cmd.OutOrStdout(), msg)
+		}
+	case connector.ClusterInfo_DISCONNECTING:
+		msg = "Unable to connect while disconnecting"
+	case connector.ClusterInfo_MUST_RESTART:
+		msg = "Cluster configuration changed, please quit telepresence and reconnect"
+	case connector.ClusterInfo_CLUSTER_FAILED:
+		msg = rClusterInfo.ErrorText
+	case connector.ClusterInfo_ALREADY_CONNECTED:
+	}
+	if msg != "" {
+		return errors.New(msg) // Return true to ensure disconnect
+	}
+
+	// Now we connect to the traffic manager
+	r, err := cs.connectorClient.Connect(cs.cmd.Context(), cr)
 	if err != nil {
 		return err
 	}
 	cs.info = r
 
-	var msg string
 	switch r.Error {
 	case connector.ConnectInfo_UNSPECIFIED:
 		fmt.Fprintf(cs.cmd.OutOrStdout(), "Connected to context %s (%s)\n", r.ClusterContext, r.ClusterServer)
 		return nil
 	case connector.ConnectInfo_ALREADY_CONNECTED:
 		return nil
-	case connector.ConnectInfo_DISCONNECTING:
-		msg = "Unable to connect while disconnecting"
-	case connector.ConnectInfo_MUST_RESTART:
-		msg = "Cluster configuration changed, please quit telepresence and reconnect"
-	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_CLUSTER_FAILED, connector.ConnectInfo_BRIDGE_FAILED:
+	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_BRIDGE_FAILED:
 		msg = r.ErrorText
 	}
 	return errors.New(msg) // Return true to ensure disconnect

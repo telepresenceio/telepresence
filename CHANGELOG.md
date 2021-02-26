@@ -1,17 +1,22 @@
 # Changelog
 
 ### 2.0.4 (TBD)
+
+- Change: The telepresence daemon will no longer use port 1234 for the firewall-to-SOCKS server, but will instead choose an available port dynamically.
 - Feature: Support headless services (including ExternalName), which you can use if you used "Also Proxy" in telepresence 1.
 
-### 2.0.3 (TBD)
+### 2.0.3 (February 24, 2021)
 
 - Feature: There is now an extension mechanism where you can tell Telepresence about different agents and what arguments they support.  The new `--mechanism` flag can explicitly identify which extension to use.
 - Change: Related to things now being in extensions, the `--match` flag has been renamed to `--http-match`.
 - Change: Cluster connection timeout has been increased from 10s to 20s.
+- Change: On connect, if telepresence detects a large cluster, it will suggest the `--mapped-namespaces` flag to the user as a way to speed it up.
+- Change: The traffic-agent now has a readiness probe associated with its container
 - Bugfix: Fix a regression in the DNS resolver that prevented name resolution using NAME.NAMESPACE. Instead, NAME.NAMESPACE.svc.cluster.local was required.
 - Bugfix: Fixed race-condition in the agent causing attempts to dial to `:0:`.
 - Feature: An intercept of `NAME` that is made using `--namespace=NAMESPACE` but not using `--deployment` will use `NAME` as the name of the deployment and `NAME-NAMESPACE` as the name of the intercept.
 - Feature: Declare a local-only intercept for the purpose of getting direct outbound access to the intercept's namespace using boolean flag `--local-only`
+- Bugfix: It is now more strict about which agent versions are acceptable and will be more eager to apply upgrades.
 
 ### 2.0.2 (February 18, 2021)
 

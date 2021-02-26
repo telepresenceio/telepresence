@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+
+	"github.com/datawire/telepresence2/rpc/v2/daemon"
 )
 
 // FirewallRouter is an interface to what is essentially a routing table, but implemented in the
@@ -24,6 +26,16 @@ type FirewallRouter interface {
 func NewRouter(name string, localIP net.IP) FirewallRouter {
 	// newRouter is implemented in platform-specific files.
 	return newRouter(name, localIP)
+}
+
+type Route struct {
+	*daemon.Route
+	Target string
+}
+
+type Table struct {
+	Name   string
+	Routes []*Route
 }
 
 type Address struct {

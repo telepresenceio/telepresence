@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"google.golang.org/grpc"
@@ -34,6 +35,21 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	if err != nil {
 		return err
 	}
+
+	// Create the /tmp/agent directory if it doesn't exist
+	// We use this to place a file which conveys 'readiness'
+	// The presence of this file is used in the readiness check.
+	dir := "/tmp/agent"
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.Mkdir("/tmp/agent", 0777); err != nil {
+			return err
+		}
+	}
+	file, err := os.OpenFile("/tmp/agent/ready", os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
 
 	defer func() {
 		if _, err := manager.Depart(ctx, session); err != nil {
