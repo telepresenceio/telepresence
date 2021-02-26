@@ -3,8 +3,9 @@ description: "Telepresence help you develop Kubernetes services locally without 
 ---
 
 import Alert from '@material-ui/lab/Alert';
+import QSTabs from '../../quick-start/qs-tabs'
 
-# Intercepts
+# Intercept a Service
 
 Intercepts enable you to test and debug services locally without needing to run dependent services or redeploy code updates to your cluster on every change.  A typical workflow would be to run the service you wish to develop on locally, then start an intercept. Changes to the local code can then be tested immediately along side other services running in the cluster.
 
@@ -14,11 +15,15 @@ Preview URLs are all managed through Ambassador Cloud.  You must run `telepresen
 
 While preview URLs selectively proxy traffic to your laptop, you can also run an [intercept without creating a preview URL](#creating-an-intercept-without-a-preview-url), which will proxy all traffic to the service.
 
-<Alert severity="info">For a detailed walk though on creating intercepts, follow the <a href="../../tutorial/">Telepresence tutorial</a>.</Alert>
+<Alert severity="info">For a detailed walk though on creating intercepts using our sample app, follow the <a href="../../quick-start/qs-node/">quick start guide</a>.</Alert>
 
 ## Creating an Intercept
 
 The following quick overview on creating an intercept assumes you have a deployment and service accessible publicly by an ingress controller and that you can run a copy of that service on your laptop.  
+
+1. Install Telepresence if needed.
+
+<QSTabs/>
 
 1. In your terminal run `telepresence login`. This logs you into the Ambassador Cloud, which will track your intercepts and let you share them with colleagues. 
 
@@ -71,7 +76,7 @@ The following quick overview on creating an intercept assumes you have a deploym
 
 6. Switch back in your browser to the Ambassador Cloud dashboard page and refresh it to see your preview URL listed. Click the box to expand out options where you can disable authentication or remove the preview.
   
-7. Clean up your environment by first typing `Ctrl+C` in the terminal running Node. Then stop the intercept with the `leave` command and `quit` to stop the daemon.  Finally, use `uninstall --everything` to remove the Traffic Manager and Agents from your cluster.
+7. Stop the intercept with the `leave` command and `quit` to stop the daemon.  Finally, use `uninstall --everything` to remove the Traffic Manager and Agents from your cluster.
 
    ```
    telepresence leave ${full_name_of_intercept}
