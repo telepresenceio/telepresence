@@ -14,7 +14,6 @@ import QSCards from './qs-cards'
 <h3>Contents</h3>
 
 [Prerequisites](#prerequisites)  
-[Need a cluster?](#need-a-cluster)  
 [1. Install the Telepresence CLI](#1-install-the-telepresence-cli)  
 [2. Test Telepresence](#2-test-telepresence)  
 [3. Install a sample Node.js application](#3-install-a-sample-nodejs-application)  

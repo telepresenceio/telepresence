@@ -3,7 +3,7 @@ description: "Telepresence help you develop Kubernetes services locally without 
 ---
 
 import Alert from '@material-ui/lab/Alert';
-import QSTabs from '../../quick-start/qs-tabs'
+import QSTabs from '../quick-start/qs-tabs'
 
 # Intercept a Service
 
