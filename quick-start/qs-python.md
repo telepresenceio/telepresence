@@ -4,10 +4,25 @@ import QSCards from './qs-cards'
 
 # Telepresence Quick Start - Python (Flask)
 
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Python using the Flask framework. We have versions in <a href="../qs-python-fastapi/">Python (FastAPI)</a>, <a href="../qs-go/">Go</a>, <a href="../qs-java/">Java</a>, and <a href="../">Node</a> if you prefer.</Alert>
+<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Python using the Flask framework. We have versions in <a href="../qs-python-fastapi/">Python (FastAPI)</a>, <a href="../qs-go/">Go</a>, <a href="../qs-java/">Java</a>, and <a href="../qs-node/">NodeJS</a> if you prefer.</Alert>
+
+<h3>Contents</h3>
+
+[Prerequisites](#prerequisites)  
+[1. Install the Telepresence CLI](#1-install-the-telepresence-cli)  
+[2. Test Telepresence](#2-test-telepresence)  
+[3. Install a sample Python application](#3-install-a-sample-python-application)  
+[4. Set up a local development environment](#4-set-up-a-local-development-environment)  
+[5. Intercept all traffic to the service](#5-intercept-all-traffic-to-the-service)  
+[6. Make a code change](#6-make-a-code-change)  
+[7. Create a Preview URL](#7-create-a-preview-url)  
+[What's next?](#img-classos-logo-srcimageslogopng-whats-next)
+
 
 ## Prerequisites
-You’ll need `kubectl` installed and configured to use a Kubernetes cluster, preferably an empty test cluster.  You must have RBAC permissions in the cluster to create and update deployments and services.
+You’ll need [`kubectl` installed](https://kubernetes.io/docs/tasks/tools/install-kubectl/) and [setup](https://kubernetes.io/docs/tasks/tools/install-kubectl/#verifying-kubectl-configuration) to use a Kubernetes cluster, preferably an empty test cluster.  
+
+<Alert severity="info"><b>Need a cluster?</b> We provide free demo clusters to use with this quick start, <a href="../../howtos/democluster/">quickly set up one here</a>.</Alert>
 
 If you have used Telepresence previously, please first reset your Telepresence deployment with:
 `telepresence uninstall --everything`.
@@ -69,7 +84,7 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
 
 Your local workstation may not have the compute or memory resources necessary to run all the services in a multi-service application. In this example, we’ll show you how Telepresence can give you a fast development loop, even in this situation.
 
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Python using the Flask framework. We have versions in <a href="../qs-python-fastapi/">Python (FastAPI)</a>, <a href="../qs-go/">Go</a>, <a href="../qs-java/">Java</a>, and <a href="../">Node</a> if you prefer.</Alert>
+<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Python using the Flask framework. We have versions in <a href="../qs-python-fastapi/">Python (FastAPI)</a>, <a href="../qs-go/">Go</a>, <a href="../qs-java/">Java</a>, and <a href="../qs-node/">NodeJS</a> if you prefer.</Alert>
 
 1. Start by installing a sample application that consists of multiple services:  
 `kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-python/master/k8s-config/edgey-corp-web-app-no-mapping.yaml`
