@@ -1,26 +1,40 @@
+---
+description: "Install Telepresence and learn to use it to intercept services running in your Kubernetes cluster, speeding up local development and debugging."
+---
+
 import Alert from '@material-ui/lab/Alert';
 import QSTabs from './qs-tabs'
 import QSCards from './qs-cards'
 
-# Telepresence Quick Start - Python (Flask)
+<div class="docs-language-toc">
 
-<Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Python using the Flask framework. We have versions in <a href="../qs-python-fastapi/">Python (FastAPI)</a>, <a href="../qs-go/">Go</a>, <a href="../qs-java/">Java</a>, and <a href="../qs-node/">NodeJS</a> if you prefer.</Alert>
+* [Node.js](qs-node)
+* [Go](qs-go)
+* [Java](qs-java)
+* *[Python (Flask)](qs-python)*
+* [Python (FastAPI)](qs-python-fastapi)
 
+</div>
+
+# Telepresence Quick Start - **Python (Flask)**
+
+<div class="docs-article-toc">
 <h3>Contents</h3>
 
-[Prerequisites](#prerequisites)  
-[1. Install the Telepresence CLI](#1-install-the-telepresence-cli)  
-[2. Test Telepresence](#2-test-telepresence)  
-[3. Install a sample Python application](#3-install-a-sample-python-application)  
-[4. Set up a local development environment](#4-set-up-a-local-development-environment)  
-[5. Intercept all traffic to the service](#5-intercept-all-traffic-to-the-service)  
-[6. Make a code change](#6-make-a-code-change)  
-[7. Create a Preview URL](#7-create-a-preview-url)  
-[What's next?](#img-classos-logo-srcimageslogopng-whats-next)
+* [Prerequisites](#prerequisites)
+* [1. Install the Telepresence CLI](#1-install-the-telepresence-cli)
+* [2. Test Telepresence](#2-test-telepresence)
+* [3. Install a sample Python application](#3-install-a-sample-python-application)
+* [4. Set up a local development environment](#4-set-up-a-local-development-environment)
+* [5. Intercept all traffic to the service](#5-intercept-all-traffic-to-the-service)
+* [6. Make a code change](#6-make-a-code-change)
+* [7. Create a Preview URL](#7-create-a-preview-url)
+* [What's next?](#img-classos-logo-srcimageslogopng-whats-next)
 
+</div>
 
 ## Prerequisites
-You’ll need [`kubectl` installed](https://kubernetes.io/docs/tasks/tools/install-kubectl/) and [setup](https://kubernetes.io/docs/tasks/tools/install-kubectl/#verifying-kubectl-configuration) to use a Kubernetes cluster, preferably an empty test cluster.  
+You’ll need [`kubectl` installed](https://kubernetes.io/docs/tasks/tools/install-kubectl/) and [setup](https://kubernetes.io/docs/tasks/tools/install-kubectl/#verifying-kubectl-configuration) to use a Kubernetes cluster, preferably an empty test cluster.
 
 <Alert severity="info"><b>Need a cluster?</b> We provide free demo clusters to use with this quick start, <a href="../../howtos/democluster/">quickly set up one here</a>.</Alert>
 
@@ -33,14 +47,14 @@ If you have used Telepresence previously, please first reset your Telepresence d
 
 ## 2. Test Telepresence
 
-Telepresence connects your local workstation to a remote Kubernetes cluster. 
+Telepresence connects your local workstation to a remote Kubernetes cluster.
 
-1. Connect to the cluster:  
+1. Connect to the cluster:
 `telepresence connect`
 
   ```
   $ telepresence connect
-    
+
     Launching Telepresence Daemon
     ...
     Connected to context default (https://<cluster-public-IP>)
@@ -48,32 +62,32 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
 
   <Alert severity="info"> macOS users: If you receive an error when running Telepresence that the developer cannot be verified, open <b>System Preferences → Security & Privacy → General</b>. Click <b>Open Anyway</b> at the bottom to bypass the security block. Then retry the <code>telepresence connect</code> command.</Alert>
 
-2. Test that Telepresence is working properly by connecting to the Kubernetes API server:  
+2. Test that Telepresence is working properly by connecting to the Kubernetes API server:
 `curl -ik https://kubernetes.default`
 
   <Alert severity="info"><b>Didn't work?</b> Make sure you are using Telepresence 2.0.3 or greater, check with <code>telepresence version</code> and upgrade <a href="../../howtos/upgrading/">here</a> if needed.</Alert>
 
   ```
   $ curl -ik https://kubernetes.default
-    
+
     HTTP/1.1 401 Unauthorized
     Cache-Control: no-cache, private
     Content-Type: application/json
     Www-Authenticate: Basic realm="kubernetes-master"
     Date: Tue, 09 Feb 2021 23:21:51 GMT
-    Content-Length: 165  
-    
+    Content-Length: 165
+
     {
       "kind": "Status",
       "apiVersion": "v1",
-      "metadata": {  
-    
+      "metadata": {
+
       },
       "status": "Failure",
       "message": "Unauthorized",
       "reason": "Unauthorized",
       "code": 401
-    }%  
+    }%
 
   ```
 <Alert severity="info">The 401 response is expected.  What's important is that you were able to contact the API.</Alert>
@@ -86,25 +100,25 @@ Your local workstation may not have the compute or memory resources necessary to
 
 <Alert severity="info">While Telepresence works with any language, this guide uses a sample app written in Python using the Flask framework. We have versions in <a href="../qs-python-fastapi/">Python (FastAPI)</a>, <a href="../qs-go/">Go</a>, <a href="../qs-java/">Java</a>, and <a href="../qs-node/">NodeJS</a> if you prefer.</Alert>
 
-1. Start by installing a sample application that consists of multiple services:  
+1. Start by installing a sample application that consists of multiple services:
 `kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-python/master/k8s-config/edgey-corp-web-app-no-mapping.yaml`
 
   ```
   $ kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-python/master/k8s-config/edgey-corp-web-app-no-mapping.yaml
-    
+
     deployment.apps/dataprocessingservice created
     service/dataprocessingservice created
-    ...  
+    ...
 
   ```
 
 2. Give your cluster a few moments to deploy the sample application.
 
-  Use `kubectl get pods` to check the status of your pods:  
+  Use `kubectl get pods` to check the status of your pods:
 
   ```
   $ kubectl get pods
-    
+
     NAME                                         READY   STATUS    RESTARTS   AGE
     verylargedatastore-855c8b8789-z8nhs          1/1     Running   0          78s
     verylargejavaservice-7dfddbc95c-696br        1/1     Running   0          78s
@@ -122,27 +136,27 @@ You will now download the repo containing the services' code and run the DataPro
 
 <Alert severity="info">Confirm first that nothing is running locally on port 3000! If <code>curl localhost:3000</code> returns <code>Connection refused</code> then you should be good to go.</Alert>
 
-1. Clone the web app’s GitHub repo:  
+1. Clone the web app’s GitHub repo:
 `git clone https://github.com/datawire/edgey-corp-python.git`
 
   ```
   $ git clone https://github.com/datawire/edgey-corp-python.git
-    
+
     Cloning into 'edgey-corp-python'...
     remote: Enumerating objects: 441, done.
     ...
   ```
 
-2. Change into the repo directory, then into DataProcessingService:  
+2. Change into the repo directory, then into DataProcessingService:
 `cd edgey-corp-python/DataProcessingService/`
 
-3. Install the dependencies and start the Python server.   
-Python 2.x: `pip install fastapi uvicorn requests && python app.py`  
+3. Install the dependencies and start the Python server.
+Python 2.x: `pip install fastapi uvicorn requests && python app.py`
 Python 3.x: `pip3 install fastapi uvicorn requests && python3 app.py`
 
   ```
   $ pip install flask requests && python app.py
-    
+
     Collecting flask
     ...
     Welcome to the DataServiceProcessingPythonService!
@@ -152,26 +166,26 @@ Python 3.x: `pip3 install fastapi uvicorn requests && python3 app.py`
 
   <Alert severity="info"><a href="https://www.python.org/downloads/">Install Python from here</a> if needed.</Alert>
 
-4. In a **new terminal window**, curl the service running locally to confirm it’s set to <span style="color:blue" class="bold">blue</span>:  
+4. In a **new terminal window**, curl the service running locally to confirm it’s set to <span style="color:blue" class="bold">blue</span>:
 `curl localhost:3000/color`
 
   ```
   $ curl localhost:3000/color
-    
+
     “blue”
   ```
 
 <Alert severity="success"><b>Victory, your local Python server is running a-ok!</b></Alert>
 
 ## 5. Intercept all traffic to the service
-Next, we’ll create an intercept. An intercept is a rule that tells Telepresence where to send traffic. In this example, we will send all traffic destined for the DataProcessingService to the version of the DataProcessingService running locally instead: 
+Next, we’ll create an intercept. An intercept is a rule that tells Telepresence where to send traffic. In this example, we will send all traffic destined for the DataProcessingService to the version of the DataProcessingService running locally instead:
 
-1. Start the intercept with the `intercept` command, setting the service name and port:  
+1. Start the intercept with the `intercept` command, setting the service name and port:
 `telepresence intercept dataprocessingservice --port 3000`
 
   ```
   $ telepresence intercept dataprocessingservice --port 3000
-    
+
     Using deployment dataprocessingservice
     intercepted
         State       : ACTIVE
@@ -195,31 +209,31 @@ We’ve now set up a local development environment for the DataProcessingService
 ## 7. Create a Preview URL
 Create preview URLs to do selective intercepts, meaning only traffic coming from the preview URL will be intercepted, so you can easily share the services you’re working on with your teammates.
 
-1. Clean up your previous intercept by removing it:  
+1. Clean up your previous intercept by removing it:
 `telepresence leave dataprocessingservice`
 
-2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:  
-`telepresence login`  
+2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:
+`telepresence login`
 
-  This opens your browser; login with your GitHub account and choose your org.  
+  This opens your browser; login with your GitHub account and choose your org.
 
   ```
   $ telepresence login
-    
+
     Launching browser authentication flow...
     <browser opens, login with GitHub>
     Login successful.
   ```
 
-3. Start the intercept again:  
-`telepresence intercept dataprocessingservice --port 3000`  
-  You will be asked for your ingress; specify the front end service: `verylargejavaservice.default`  
-  Then when asked for the port, type `8080`.  
+3. Start the intercept again:
+`telepresence intercept dataprocessingservice --port 3000`
+  You will be asked for your ingress; specify the front end service: `verylargejavaservice.default`
+  Then when asked for the port, type `8080`.
   Finally, type `n` for “Use TLS”.
 
   ```
     $ telepresence intercept dataprocessingservice --port 3000
-      
+
       Confirm the ingress to use for preview URL access
       Ingress service.namespace ? verylargejavaservice.default
       Port ? 8080
@@ -230,7 +244,7 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
           Destination : 127.0.0.1:3000
           Intercepting: HTTP requests that match all of:
             header("x-telepresence-intercept-id") ~= regexp("86cb4a70-c7e1-1138-89c2-d8fed7a46cae:dataprocessingservice")
-          Preview URL : https://<random-subdomain>.preview.edgestack.me  
+          Preview URL : https://<random-subdomain>.preview.edgestack.me
   ```
 
 4. Wait a moment for the intercept to start; it will also output a preview URL.  Go to this URL in your browser, it will be the <span style="color:orange" class="bold">orange</span> version of the app.
