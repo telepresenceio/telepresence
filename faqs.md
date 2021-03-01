@@ -43,9 +43,13 @@ For the moment you can `kubectl exec` into a container running on the pod in ord
 
 ** When connected to a Kubernetes cluster via Telepresence, can I access cluster-based services via their DNS name?**
 
- Yes. After you have successfully connected to your cluster via `telepresence connect` you have full access to the cluster namespace.
+Yes. After you have successfully connected to your cluster via `telepresence connect` you will be able to access any service in your cluster via their namespace qualified DNS name.
 
-This means you can issue commands, such as `nslookup <my_service_name>`, and curl endpoints directly e.g. `curl <my_service_name>:8080/mypath`. 
+This means you can issue commands, such as `nslookup <my_service_name>.<my_service_namespace>`, and curl endpoints directly e.g. `curl <my_service_name>.<my_service_namespace>:8080/mypath`.
+
+If you create an intercept for a service in a namespace, you will be able to use the service name directly. 
+
+This means if you `telepresence intercept <my_service_name> -n <my_service_namespace>`, you will be able to resolve just the `<my_service_name>` DNS record.
 
 You can connect to databases or middleware running in the cluster, such as MySQL, PostgreSQL and RabbitMQ, via their service name.
 
