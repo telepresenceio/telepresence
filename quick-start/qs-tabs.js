@@ -96,17 +96,19 @@ export default function SimpleTabs() {
         </CodeBlock>
       </TabPanel>
       <TabPanel value={value} index={2}>
-        <div class="brian">
+        <div class="docs-hubspot-formwrapper">
           <p>
             Telepresence for Windows is coming soon! Sign up here to notified when it is available.
           </p>
-          <HubspotForm
-            portalId='485087'
-            formId='2f542f1b-3da8-4319-8057-96fed78e4c26'
-            onSubmit={() => console.log('Submit!')}
-            onReady={(form) => console.log('Form ready!')}
-            loading={<div>Loading...</div>}
-          />
+          <div class="docs-hubspot-form">
+            <HubspotForm
+              portalId='485087'
+              formId='2f542f1b-3da8-4319-8057-96fed78e4c26'
+              onSubmit={() => console.log('Submit!')}
+              onReady={(form) => console.log('Form ready!')}
+              loading={<div>Loading...</div>}
+            />
+          </div>
         </div>
       </TabPanel>
     </div >
