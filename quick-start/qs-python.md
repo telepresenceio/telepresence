@@ -8,11 +8,11 @@ import QSCards from './qs-cards'
 
 <div class="docs-language-toc">
 
-* [Node.js](qs-node)
-* [Go](qs-go)
-* [Java](qs-java)
-* *[Python (Flask)](qs-python)*
-* [Python (FastAPI)](qs-python-fastapi)
+* <a href="../qs-node/" title="Node.js">Node.js</a>
+* <a href="../qs-go/" title="Go">Go</a>
+* <a href="../qs-java/" title="Java">Java</a>
+* <a href="../qs-python/" title="Python (Flask)" class="active">Python (Flask)</a>
+* <a href="../qs-python-fastapi/" title="Python (FastAPI)">Python (FastAPI)</a>
 
 </div>
 
