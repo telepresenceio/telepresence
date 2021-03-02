@@ -234,22 +234,12 @@ func (t *pfRouter) Disable(c context.Context) error {
 	return nil
 }
 
-func (t *pfRouter) ForwardTCP(c context.Context, ips []string, port, toPort string) error {
-	for _, ip := range ips {
-		if err := t.forward(c, "tcp", ip, port, toPort); err != nil {
-			dlog.Errorf(c, "forward tcp")
-		}
-	}
-	return nil
+func (t *pfRouter) ForwardTCP(c context.Context, ip, port, toPort string) error {
+	return t.forward(c, "tcp", ip, port, toPort)
 }
 
-func (t *pfRouter) ForwardUDP(c context.Context, ips []string, port, toPort string) error {
-	for _, ip := range ips {
-		if err := t.forward(c, "udp", ip, port, toPort); err != nil {
-			dlog.Errorf(c, "forward udp")
-		}
-	}
-	return nil
+func (t *pfRouter) ForwardUDP(c context.Context, ip, port, toPort string) error {
+	return t.forward(c, "udp", ip, port, toPort)
 }
 
 func (t *pfRouter) forward(c context.Context, protocol, ip, port, toPort string) error {
@@ -268,11 +258,9 @@ func (t *pfRouter) forward(c context.Context, protocol, ip, port, toPort string)
 	return nil
 }
 
-func (t *pfRouter) ClearTCP(c context.Context, ips []string, port string) error {
-	for _, ip := range ips {
-		if err := t.clear(c, "tcp", ip, port); err != nil {
-			dlog.Errorf(c, "clear tcp")
-		}
+func (t *pfRouter) ClearTCP(c context.Context, ip, port string) error {
+	if err := t.clear(c, "tcp", ip, port); err != nil {
+		return err
 	}
 	if err := t.updateAnchor(c); err != nil {
 		return err
@@ -280,11 +268,9 @@ func (t *pfRouter) ClearTCP(c context.Context, ips []string, port string) error 
 	return nil
 }
 
-func (t *pfRouter) ClearUDP(c context.Context, ips []string, port string) error {
-	for _, ip := range ips {
-		if err := t.clear(c, "udp", ip, port); err != nil {
-			dlog.Errorf(c, "clear udp")
-		}
+func (t *pfRouter) ClearUDP(c context.Context, ip, port string) error {
+	if err := t.clear(c, "udp", ip, port); err != nil {
+		return err
 	}
 	if err := t.updateAnchor(c); err != nil {
 		return err

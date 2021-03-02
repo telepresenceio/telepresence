@@ -15,7 +15,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
-	"github.com/datawire/telepresence2/v2/pkg/client/daemon/nat"
 )
 
 var errResolveDNotConfigured = errors.New("resolved not configured")
@@ -78,12 +77,7 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 	o.overridePrimaryDNS = true
 	onReady()
 
-	srv := dns.NewServer(c, listeners, o.fallbackIP+":53", func(domain string) []string {
-		if r := o.resolve(domain); r != nil {
-			return o.getIPs(r.Ips)
-		}
-		return []string{}
-	})
+	srv := dns.NewServer(c, listeners, o.fallbackIP+":53", o.resolve)
 	dlog.Debug(c, "Starting server")
 	err = srv.Run(c)
 	dlog.Debug(c, "Server done")
@@ -94,23 +88,23 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 // all the suffixes in the search path, and returns a Route on success
 // or nil on failure. This implementation does not count the number of
 // dots in the query.
-func (o *outbound) resolve(query string) *nat.Route {
+func (o *outbound) resolve(query string) []string {
 	if !strings.HasSuffix(query, ".") {
 		query += "."
 	}
 
-	var route *nat.Route
+	var ips []string
 	o.searchLock.RLock()
 	o.domainsLock.RLock()
 	for _, suffix := range o.search {
 		name := query + suffix
-		if route = o.domains[strings.ToLower(name)]; route != nil {
+		if ips = o.domains[strings.ToLower(name)]; ips != nil {
 			break
 		}
 	}
 	o.searchLock.RUnlock()
 	o.domainsLock.RUnlock()
-	return route
+	return shuffleIPs(ips)
 }
 
 func (o *outbound) dnsListeners(c context.Context) ([]net.PacketConn, error) {

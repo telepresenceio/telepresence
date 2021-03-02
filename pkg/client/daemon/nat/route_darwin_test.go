@@ -76,16 +76,16 @@ func TestSorted(t *testing.T) {
 		defer func() {
 			_ = tr.Disable(c)
 		}()
-		if err = tr.ForwardTCP(c, []string{"192.0.2.1"}, "", "4321"); err != nil {
+		if err = tr.ForwardTCP(c, "192.0.2.1", "", "4321"); err != nil {
 			return err
 		}
-		if err = tr.ForwardTCP(c, []string{"192.0.2.3"}, "", "4323"); err != nil {
+		if err = tr.ForwardTCP(c, "192.0.2.3", "", "4323"); err != nil {
 			return err
 		}
-		if err = tr.ForwardTCP(c, []string{"192.0.2.2"}, "", "4322"); err != nil {
+		if err = tr.ForwardTCP(c, "192.0.2.2", "", "4322"); err != nil {
 			return err
 		}
-		if err = tr.ForwardUDP(c, []string{"192.0.2.4"}, "", "2134"); err != nil {
+		if err = tr.ForwardUDP(c, "192.0.2.4", "", "2134"); err != nil {
 			return err
 		}
 		entries := tr.sorted()

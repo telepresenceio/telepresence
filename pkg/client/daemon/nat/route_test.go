@@ -227,7 +227,7 @@ func TestTranslator(t *testing.T) {
 					from := fmt.Sprintf("%s.%s", network, mapping.from)
 
 					checkNoForwardTCP(t, from, mapping.forwarded)
-					if err = tr.ForwardTCP(c, []string{from}, mapping.port, mapping.to); err != nil {
+					if err = tr.ForwardTCP(c, from, mapping.port, mapping.to); err != nil {
 						t.Fatal(err)
 					}
 					checkForwardTCP(t, from, mapping.forwarded, mapping.to)
@@ -236,7 +236,7 @@ func TestTranslator(t *testing.T) {
 
 				for _, mapping := range mappings {
 					from := fmt.Sprintf("%s.%s", network, mapping.from)
-					if err = tr.ClearTCP(c, []string{from}, mapping.port); err != nil {
+					if err = tr.ClearTCP(c, from, mapping.port); err != nil {
 						t.Fatal(err)
 					}
 					checkNoForwardTCP(t, from, mapping.forwarded)

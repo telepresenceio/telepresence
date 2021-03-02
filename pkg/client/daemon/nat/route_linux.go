@@ -70,22 +70,12 @@ func (t *iptablesRouter) Disable(c context.Context) (err error) {
 	return t.ipt(c, "-X", t.Name)
 }
 
-func (t *iptablesRouter) ForwardTCP(c context.Context, ips []string, port, toPort string) error {
-	for _, ip := range ips {
-		if err := t.forward(c, "tcp", ip, port, toPort); err != nil {
-			dlog.Errorf(c, "forward tcp: %v", err)
-		}
-	}
-	return nil
+func (t *iptablesRouter) ForwardTCP(c context.Context, ip, port, toPort string) error {
+	return t.forward(c, "tcp", ip, port, toPort)
 }
 
-func (t *iptablesRouter) ForwardUDP(c context.Context, ips []string, port, toPort string) error {
-	for _, ip := range ips {
-		if err := t.forward(c, "udp", ip, port, toPort); err != nil {
-			dlog.Errorf(c, "forward udp: %v", err)
-		}
-	}
-	return nil
+func (t *iptablesRouter) ForwardUDP(c context.Context, ip, port, toPort string) error {
+	return t.forward(c, "udp", ip, port, toPort)
 }
 
 func (t *iptablesRouter) forward(c context.Context, protocol, ip, port, toPort string) error {
@@ -106,22 +96,12 @@ func (t *iptablesRouter) forward(c context.Context, protocol, ip, port, toPort s
 	return nil
 }
 
-func (t *iptablesRouter) ClearTCP(c context.Context, ips []string, port string) error {
-	for _, ip := range ips {
-		if err := t.clear(c, "tcp", ip, port); err != nil {
-			dlog.Errorf(c, "clear tcp: %v", err)
-		}
-	}
-	return nil
+func (t *iptablesRouter) ClearTCP(c context.Context, ip, port string) error {
+	return t.clear(c, "tcp", ip, port)
 }
 
-func (t *iptablesRouter) ClearUDP(c context.Context, ips []string, port string) error {
-	for _, ip := range ips {
-		if err := t.clear(c, "udp", ip, port); err != nil {
-			dlog.Errorf(c, "clear upd: %v", err)
-		}
-	}
-	return nil
+func (t *iptablesRouter) ClearUDP(c context.Context, ip, port string) error {
+	return t.clear(c, "udp", ip, port)
 }
 
 func (t *iptablesRouter) clear(c context.Context, protocol, ip, port string) error {
