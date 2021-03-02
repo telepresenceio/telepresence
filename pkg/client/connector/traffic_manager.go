@@ -26,7 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
 // trafficManager is a handle to access the Traffic Manager in a
@@ -137,14 +137,6 @@ func (tm *trafficManager) run(c context.Context) error {
 	}, 2*time.Second, 6*time.Second)
 }
 
-func (tm *trafficManager) bearerToken(ctx context.Context) string {
-	token, err := authdata.LoadTokenFromUserCache(ctx)
-	if err != nil {
-		return ""
-	}
-	return token.AccessToken
-}
-
 func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err error) {
 	ports := portsIf.([]string)
 	sshPort, _ := strconv.Atoi(ports[0])
@@ -173,7 +165,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 		InstallId:   tm.installID,
 		Product:     "telepresence",
 		Version:     client.Version(),
-		BearerToken: tm.bearerToken(c),
+		BearerToken: func() string { tok, _ := cliutil.GetCloudToken(c); return tok }(),
 	})
 
 	if err != nil {
@@ -375,7 +367,7 @@ func (tm *trafficManager) remain(c context.Context) error {
 		case <-ticker.C:
 			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
 				Session:     tm.session(),
-				BearerToken: tm.bearerToken(c),
+				BearerToken: func() string { tok, _ := cliutil.GetCloudToken(c); return tok }(),
 			})
 			if err != nil {
 				if c.Err() != nil {

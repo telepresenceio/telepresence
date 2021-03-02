@@ -22,9 +22,8 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/auth"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 )
 
@@ -76,7 +75,7 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 	flags.BoolVarP(&ii.localOnly, "local-only", "l", false, ``+
 		`Declare a local-only intercept for the purpose of getting direct outbound access to the intercept's namespace`)
 
-	flags.BoolVarP(&ii.previewEnabled, "preview-url", "u", isLoggedIn(ctx), ``+
+	flags.BoolVarP(&ii.previewEnabled, "preview-url", "u", cliutil.HasLoggedIn(ctx), ``+
 		`Generate an edgestack.me preview domain for this intercept. `+
 		`(default "true" if you are logged in with 'telepresence login', default "false" otherwise)`,
 	)
@@ -138,7 +137,7 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if ii.previewEnabled || extRequiresLogin {
-		if err := auth.EnsureLoggedIn(cmd.Context(), cmd.OutOrStdout()); err != nil {
+		if _, err := cliutil.EnsureLoggedIn(cmd.Context()); err != nil {
 			return err
 		}
 	}
@@ -233,11 +232,6 @@ Please specify one or more header matches using --match.`
 	} else {
 		return fmt.Sprintf("Intercept: %s", msg)
 	}
-}
-
-func isLoggedIn(ctx context.Context) bool {
-	token, _ := authdata.LoadTokenFromUserCache(ctx)
-	return token != nil
 }
 
 func checkMountCapability(ctx context.Context) error {
