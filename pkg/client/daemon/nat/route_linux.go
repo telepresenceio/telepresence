@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -20,7 +21,7 @@ func newRouter(name string, _ net.IP) FirewallRouter {
 	return &iptablesRouter{
 		routingTableCommon: routingTableCommon{
 			Name:     name,
-			Mappings: make(map[Address]string),
+			mappings: make(map[Destination]*Route),
 		},
 	}
 }
@@ -70,63 +71,72 @@ func (t *iptablesRouter) Disable(c context.Context) (err error) {
 	return t.ipt(c, "-X", t.Name)
 }
 
-func (t *iptablesRouter) ForwardTCP(c context.Context, ip, port, toPort string) error {
-	return t.forward(c, "tcp", ip, port, toPort)
+func portsString(ports []int) string {
+	w := strings.Builder{}
+	for i, p := range ports {
+		if i > 0 {
+			w.WriteByte(',')
+		}
+		w.WriteString(strconv.Itoa(p))
+	}
+	return w.String()
 }
 
-func (t *iptablesRouter) ForwardUDP(c context.Context, ip, port, toPort string) error {
-	return t.forward(c, "udp", ip, port, toPort)
+// Flush is a no-op on a linux router since all rules are applied immediately
+func (t *iptablesRouter) Flush(_ context.Context) error {
+	return nil
 }
 
-func (t *iptablesRouter) forward(c context.Context, protocol, ip, port, toPort string) error {
-	_ = t.clear(c, protocol, ip, port)
-	args := []string{"-A", t.Name, "-j", "REDIRECT", "-p", protocol, "--dest", ip + "/32"}
-	if port != "" {
-		if strings.Contains(port, ",") {
-			args = append(args, "-m", "multiport", "--dports", port)
-		} else {
-			args = append(args, "--dport", port)
+func (t *iptablesRouter) Add(c context.Context, r *Route) (bool, error) {
+	if previous, exists := t.mappings[r.Destination]; exists {
+		if r.ToPort == previous.ToPort {
+			// source already forwards to the correct port
+			return false, nil
+		}
+		_, err := t.Clear(c, r)
+		if err != nil {
+			return false, err
 		}
 	}
-	args = append(args, "--to-ports", toPort)
+	args := []string{"-A", t.Name, "-j", "REDIRECT", "-p", r.Proto(), "--dest", r.IP().String() + "/32"}
+	ports := r.Ports()
+	switch len(ports) {
+	case 0:
+	case 1:
+		args = append(args, "--dport", strconv.Itoa(ports[0]))
+	default:
+		args = append(args, "-m", "multiport", "--dports", portsString(ports))
+	}
+	args = append(args, "--to-ports", strconv.Itoa(r.ToPort))
 	if err := t.ipt(c, args...); err != nil {
-		return err
+		return false, err
 	}
-	t.Mappings[Address{protocol, ip, port}] = toPort
-	return nil
+	t.mappings[r.Destination] = r
+	return true, nil
 }
 
-func (t *iptablesRouter) ClearTCP(c context.Context, ip, port string) error {
-	return t.clear(c, "tcp", ip, port)
-}
-
-func (t *iptablesRouter) ClearUDP(c context.Context, ip, port string) error {
-	return t.clear(c, "udp", ip, port)
-}
-
-func (t *iptablesRouter) clear(c context.Context, protocol, ip, port string) error {
-	if previous, exists := t.Mappings[Address{protocol, ip, port}]; exists {
-		args := []string{"-D", t.Name, "-j", "REDIRECT", "-p", protocol, "--dest", ip + "/32"}
-		if port != "" {
-			if strings.Contains(port, ",") {
-				args = append(args, "-m", "multiport", "--dports", port)
-			} else {
-				args = append(args, "--dport", port)
-			}
+func (t *iptablesRouter) Clear(c context.Context, r *Route) (bool, error) {
+	if previous, exists := t.mappings[r.Destination]; exists {
+		args := []string{"-D", t.Name, "-j", "REDIRECT", "-p", r.Proto(), "--dest", r.IP().String() + "/32"}
+		ports := r.Ports()
+		switch len(ports) {
+		case 0:
+		case 1:
+			args = append(args, "--dport", strconv.Itoa(ports[0]))
+		default:
+			args = append(args, "-m", "multiport", "--dports", portsString(ports))
 		}
-		args = append(args, "--to-ports", previous)
+		args = append(args, "--to-ports", strconv.Itoa(previous.ToPort))
 		if err := t.ipt(c, args...); err != nil {
-			return err
+			return false, err
 		}
-		delete(t.Mappings, Address{protocol, ip, port})
+		delete(t.mappings, r.Destination)
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
-const (
-	SO_ORIGINAL_DST      = 80
-	IP6T_SO_ORIGINAL_DST = 80
-)
+const SO_ORIGINAL_DST = 80
 
 // GetOriginalDst gets the original destination for the socket when redirect by linux iptables
 // refer to https://raw.githubusercontent.com/missdeer/avege/master/src/inbound/redir/redir_iptables.go

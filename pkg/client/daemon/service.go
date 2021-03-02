@@ -92,9 +92,9 @@ func (d *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) 
 }
 
 func (d *service) Update(_ context.Context, table *rpc.Table) (*empty.Empty, error) {
-	d.outbound.update(table)
+	err := d.outbound.update(table)
 	dns.Flush()
-	return &empty.Empty{}, nil
+	return &empty.Empty{}, err
 }
 
 func (d *service) SetDnsSearchPath(_ context.Context, paths *rpc.Paths) (*empty.Empty, error) {

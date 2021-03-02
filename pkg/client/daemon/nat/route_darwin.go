@@ -16,10 +16,9 @@ import (
 
 type pfRouter struct {
 	routingTableCommon
-	localIP  net.IP
-	dev      *ppf.Handle
-	token    string
-	curRules string
+	localIP net.IP
+	dev     *ppf.Handle
+	token   string
 }
 
 var _ FirewallRouter = (*pfRouter)(nil)
@@ -28,7 +27,7 @@ func newRouter(name string, localIP net.IP) *pfRouter {
 	return &pfRouter{
 		routingTableCommon: routingTableCommon{
 			Name:     name,
-			Mappings: make(map[Address]string),
+			mappings: make(map[Destination]*Route),
 		},
 		localIP: localIP,
 	}
@@ -59,89 +58,75 @@ func pfo(ctx context.Context, args ...string) ([]byte, error) {
 	return dexec.CommandContext(withoutCancel{ctx}, "pfctl", args...).CombinedOutput()
 }
 
-func splitPorts(portspec string) (result []string) {
-	for _, part := range strings.Split(portspec, ",") {
-		result = append(result, strings.TrimSpace(part))
-	}
-	return
-}
-
-func fmtDest(a Address) (result []string) {
-	ports := splitPorts(a.Port)
-
-	if len(ports) == 0 {
-		result = append(result, fmt.Sprintf("proto %s to %s", a.Proto, a.IP))
-	} else {
-		for _, port := range ports {
-			addr := fmt.Sprintf("proto %s to %s", a.Proto, a.IP)
-			if port != "" {
-				addr += fmt.Sprintf(" port %s", port)
-			}
-
-			result = append(result, addr)
-		}
-	}
-
-	return
-}
-
-func (t *pfRouter) hasRuleForIP(ip string) bool {
-	for addr := range t.Mappings {
-		if addr.IP == ip {
+func (t *pfRouter) hasRuleForIP(ip net.IP) bool {
+	for k := range t.mappings {
+		if k.IP().Equal(ip) {
 			return true
 		}
 	}
 	return false
 }
 
-func (t *pfRouter) sorted() []Entry {
-	entries := make([]Entry, len(t.Mappings))
+func (e *Route) less(o *Route) bool {
+	return e.Destination < o.Destination || e.Destination == o.Destination && e.ToPort < o.ToPort
+}
+
+func (t *pfRouter) sorted() []*Route {
+	routes := make([]*Route, len(t.mappings))
 
 	index := 0
-	for k, v := range t.Mappings {
-		entries[index] = Entry{k, v}
+	for _, v := range t.mappings {
+		routes[index] = v
 		index++
 	}
-
-	sort.Slice(entries, func(i, j int) bool {
-		return strings.Compare(entries[i].String(), entries[j].String()) < 0
-	})
-
-	return entries
+	sort.Slice(routes, func(i, j int) bool { return routes[i].less(routes[j]) })
+	return routes
 }
 
-func (t *pfRouter) rules() (rulesStr string, changed bool) {
-	var result string
-	if t.dev != nil {
-		entries := t.sorted()
-
-		for _, entry := range entries {
-			dst := entry.Destination
-			for _, addr := range fmtDest(dst) {
-				result += "rdr pass on lo0 inet " + addr + " -> 127.0.0.1 port " + entry.Port + "\n"
+// rules writes the current port forward mapping rules to the given writer
+func (t *pfRouter) rules() (string, error) {
+	var err error
+	w := &strings.Builder{}
+	rules := t.sorted()
+	for _, r := range rules {
+		ports := r.Ports()
+		if len(ports) == 0 {
+			if _, err = fmt.Fprintf(w, "rdr pass on lo0 inet proto %s to %s -> 127.0.0.1 port %d\n", r.Proto(), r.IP(), r.ToPort); err != nil {
+				return "", err
 			}
+			continue
 		}
-
-		result += "pass out quick inet proto tcp to 127.0.0.1/32\n"
-
-		for _, entry := range entries {
-			dst := entry.Destination
-			for _, addr := range fmtDest(dst) {
-				result += "pass out route-to lo0 inet " + addr + " keep state\n"
+		for _, port := range ports {
+			_, err = fmt.Fprintf(w, "rdr pass on lo0 inet proto %s to %s port %d -> 127.0.0.1 port %d\n", r.Proto(), r.IP(), port, r.ToPort)
+			if err != nil {
+				return "", err
 			}
 		}
 	}
-	changed = result != t.curRules
-	if changed {
-		t.curRules = result
+	if _, err = fmt.Fprintln(w, "pass out quick inet proto tcp to 127.0.0.1/32"); err != nil {
+		return "", err
 	}
-	return result, changed
+	for _, r := range rules {
+		ports := r.Ports()
+		if len(ports) == 0 {
+			if _, err = fmt.Fprintf(w, "pass out route-to lo0 inet proto %s to %s keep state\n", r.Proto(), r.IP()); err != nil {
+				return "", err
+			}
+			continue
+		}
+		for _, port := range ports {
+			if _, err = fmt.Fprintf(w, "pass out route-to lo0 inet proto %s to %s port %d keep state\n", r.Proto(), r.IP(), port); err != nil {
+				return "", err
+			}
+		}
+	}
+	return w.String(), nil
 }
 
-func (t *pfRouter) updateAnchor(ctx context.Context) error {
-	rules, changed := t.rules()
-	if !changed {
-		return nil
+func (t *pfRouter) Flush(ctx context.Context) error {
+	rules, err := t.rules()
+	if err != nil {
+		return err
 	}
 	return pf(ctx, []string{"-a", t.Name, "-f", "/dev/stdin"}, rules)
 }
@@ -150,8 +135,7 @@ var actions = []ppf.Action{ppf.ActionPass, ppf.ActionRDR}
 
 func (t *pfRouter) Enable(c context.Context) error {
 	var err error
-	t.dev, err = ppf.Open()
-	if err != nil {
+	if t.dev, err = ppf.Open(); err != nil {
 		return err
 	}
 
@@ -179,9 +163,20 @@ func (t *pfRouter) Enable(c context.Context) error {
 	// kind.
 	_ = pf(c, []string{"-f", "/dev/stdin"}, "pass on lo0")
 
-	_ = t.updateAnchor(c)
-	for k, v := range t.Mappings {
-		_ = t.forward(c, k.Proto, k.IP, k.Port, v)
+	routesChanged := false
+	for _, v := range t.mappings {
+		changed, err := t.Add(c, v)
+		if err != nil {
+			return err
+		}
+		if changed {
+			routesChanged = true
+		}
+	}
+	if routesChanged {
+		if err = t.Flush(c); err != nil {
+			return err
+		}
 	}
 
 	output, err := pfo(c, "-E")
@@ -208,84 +203,59 @@ func (t *pfRouter) Disable(c context.Context) error {
 	}()
 	_ = pf(c, []string{"-X", t.token}, "")
 
-	if t.dev != nil {
-		for _, action := range actions {
-		OUTER:
-			for {
-				rules, err := t.dev.Rules(action)
-				if err != nil {
-					return err
-				}
-
-				for _, rule := range rules {
-					if rule.AnchorCall() == t.Name {
-						dlog.Debugf(c, "removing rule: %v", rule)
-						err = t.dev.RemoveRule(rule)
-						if err != nil {
-							return err
-						}
-						continue OUTER
-					}
-				}
-				break
+	for _, action := range actions {
+	OUTER:
+		for {
+			rules, err := t.dev.Rules(action)
+			if err != nil {
+				dlog.Error(c, err)
+				continue
 			}
+
+			for _, rule := range rules {
+				if rule.AnchorCall() == t.Name {
+					dlog.Debugf(c, "removing rule: %v", rule)
+					if err = t.dev.RemoveRule(rule); err != nil {
+						dlog.Error(c, err)
+					}
+					continue OUTER
+				}
+			}
+			break
 		}
 	}
 	return nil
 }
 
-func (t *pfRouter) ForwardTCP(c context.Context, ip, port, toPort string) error {
-	return t.forward(c, "tcp", ip, port, toPort)
-}
-
-func (t *pfRouter) ForwardUDP(c context.Context, ip, port, toPort string) error {
-	return t.forward(c, "udp", ip, port, toPort)
-}
-
-func (t *pfRouter) forward(c context.Context, protocol, ip, port, toPort string) error {
-	if err := t.clear(c, protocol, ip, port); err != nil {
-		return err
+func (t *pfRouter) Add(c context.Context, route *Route) (bool, error) {
+	if old, ok := t.mappings[route.Destination]; ok {
+		if route.ToPort == old.ToPort {
+			return false, nil
+		}
+		if _, err := t.Clear(c, route); err != nil {
+			return false, err
+		}
 	}
-	t.Mappings[Address{protocol, ip, port}] = toPort
+	t.mappings[route.Destination] = route
 	// Add an entry to the routing table to make sure the firewall-to-socks worker's response
 	// packets get written to the correct interface.
-	if err := dexec.CommandContext(c, "route", "add", ip+"/32", t.localIP.String()).Run(); err != nil {
-		return err
+	if err := dexec.CommandContext(c, "route", "add", route.IP().String()+"/32", t.localIP.String()).Run(); err != nil {
+		return false, err
 	}
-	if err := t.updateAnchor(c); err != nil {
-		return err
-	}
-	return nil
+	return true, nil
 }
 
-func (t *pfRouter) ClearTCP(c context.Context, ip, port string) error {
-	if err := t.clear(c, "tcp", ip, port); err != nil {
-		return err
-	}
-	if err := t.updateAnchor(c); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (t *pfRouter) ClearUDP(c context.Context, ip, port string) error {
-	if err := t.clear(c, "udp", ip, port); err != nil {
-		return err
-	}
-	if err := t.updateAnchor(c); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (t *pfRouter) clear(ctx context.Context, protocol, ip, port string) error {
-	delete(t.Mappings, Address{protocol, ip, port})
-	if !t.hasRuleForIP(ip) {
-		if err := dexec.CommandContext(ctx, "route", "delete", ip+"/32", t.localIP.String()).Run(); err != nil {
-			return err
+func (t *pfRouter) Clear(ctx context.Context, route *Route) (bool, error) {
+	if _, ok := t.mappings[route.Destination]; ok {
+		delete(t.mappings, route.Destination)
+		if !t.hasRuleForIP(route.IP()) {
+			if err := dexec.CommandContext(ctx, "route", "delete", route.IP().String()+"/32", t.localIP.String()).Run(); err != nil {
+				return false, err
+			}
 		}
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 func (t *pfRouter) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host string, err error) {

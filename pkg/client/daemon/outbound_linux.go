@@ -102,8 +102,8 @@ func (o *outbound) resolve(query string) []string {
 			break
 		}
 	}
-	o.searchLock.RUnlock()
 	o.domainsLock.RUnlock()
+	o.searchLock.RUnlock()
 	return shuffleIPs(ips)
 }
 

@@ -30,7 +30,7 @@ type outbound struct {
 	noSearch    bool
 	translator  nat.FirewallRouter
 	tables      map[string]*nat.Table
-	tablesLock  sync.RWMutex
+	tablesLock  sync.Mutex
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces        map[string]struct{}
@@ -89,7 +89,7 @@ func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSea
 		fallbackIP:  fallbackIP,
 		noSearch:    noSearch,
 		tables:      make(map[string]*nat.Table),
-		translator:  nat.NewRouter(name, net.IPv4(127, 0, 0, 1)),
+		translator:  nat.NewRouter(name, net.IP{127, 0, 0, 1}),
 		namespaces:  make(map[string]struct{}),
 		domains:     make(map[string][]string),
 		search:      []string{""},
@@ -152,17 +152,13 @@ func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
 
 	if o.overridePrimaryDNS {
 		dlog.Debugf(c, "Bootstrapping local DNS server on port %d", o.dnsRedirPort)
-		err := o.doUpdate(c, nil, &nat.Table{
-			Name: "bootstrap",
-			Routes: []*nat.Route{
-				{
-					Address: nat.Address{
-						IP:    o.dnsIP,
-						Proto: "udp",
-					},
-					Target: strconv.Itoa(o.dnsRedirPort),
-				},
-			},
+		route, err := nat.NewRoute("udp", net.ParseIP(o.dnsIP), nil, o.dnsRedirPort)
+		if err != nil {
+			return err
+		}
+		err = o.doUpdate(c, nil, &nat.Table{
+			Name:   "bootstrap",
+			Routes: []*nat.Route{route},
 		})
 		if err != nil {
 			dlog.Error(c, err)
@@ -223,22 +219,25 @@ func (o *outbound) destination(conn *net.TCPConn) (string, error) {
 	return host, err
 }
 
-func (o *outbound) update(table *rpc.Table) {
+func (o *outbound) update(table *rpc.Table) (err error) {
 	// Update stems from the connector so the destination target must be set on all routes
 	routes := make([]*nat.Route, 0, len(table.Routes))
 	domains := make(map[string][]string)
 	for _, route := range table.Routes {
-		dn := domain(route)
-		domains[dn] = append(domains[dn], route.Ips...)
+		ports, err := nat.ParsePorts(route.Port)
+		if err != nil {
+			return err
+		}
 		for _, ip := range route.Ips {
-			routes = append(routes, &nat.Route{
-				Address: nat.Address{
-					Proto: route.Proto,
-					Port:  route.Port,
-					IP:    ip,
-				},
-				Target: strconv.Itoa(o.proxyRedirPort),
-			})
+			r, err := nat.NewRoute(route.Proto, net.ParseIP(ip), ports, o.proxyRedirPort)
+			if err != nil {
+				return err
+			}
+			routes = append(routes, r)
+		}
+		if dn := route.Name; dn != "" {
+			dn = strings.ToLower(dn) + "."
+			domains[dn] = append(domains[dn], route.Ips...)
 		}
 	}
 	o.work <- func(c context.Context) error {
@@ -247,112 +246,67 @@ func (o *outbound) update(table *rpc.Table) {
 			Routes: routes,
 		})
 	}
+	return nil
 }
 
 func (o *outbound) noMoreUpdates() {
 	close(o.work)
 }
 
-func routesEqual(a, b *nat.Route) bool {
-	if a == b {
-		return true
-	}
-	if a == nil || b == nil {
-		return false
-	}
-	return a.IP == b.IP && a.Port == b.Port && a.Target == b.Target
-}
-
-func domain(r *rpc.Route) string {
-	return strings.ToLower(r.Name + ".")
-}
-
 func (o *outbound) doUpdate(c context.Context, domains map[string][]string, table *nat.Table) error {
 	// Make a copy of the current table
-	o.tablesLock.RLock()
+	o.tablesLock.Lock()
+	defer o.tablesLock.Unlock()
 	oldTable, ok := o.tables[table.Name]
-	oldRoutes := make(map[nat.Address]*nat.Route)
+	oldRoutes := make(map[nat.Destination]*nat.Route)
 	if ok {
 		for _, route := range oldTable.Routes {
-			oldRoutes[route.Address] = route
+			oldRoutes[route.Destination] = route
 		}
 	}
-	o.tablesLock.RUnlock()
 
 	// We're updating routes. Make sure DNS waits until the new answer
 	// is ready, i.e. don't serve old answers.
 	o.domainsLock.Lock()
+	defer o.domainsLock.Unlock()
 	o.domains = domains
 
 	// Operate on the copy of the current table and the new table
+	routesChanged := false
 	for _, newRoute := range table.Routes {
-		oldRoute, oldRouteOk := oldRoutes[newRoute.Address]
-		// A nil Route (when oldRouteOk != true) will compare
-		// inequal to any valid new Route.
-		if !routesEqual(newRoute, oldRoute) {
-			// delete the old version
-			if oldRouteOk {
-				switch newRoute.Proto {
-				case "tcp":
-					if err := o.translator.ClearTCP(c, oldRoute.IP, oldRoute.Port); err != nil {
-						dlog.Errorf(c, "clear tpc: %v", err)
-					}
-				case "udp":
-					if err := o.translator.ClearUDP(c, oldRoute.IP, oldRoute.Port); err != nil {
-						dlog.Errorf(c, "clear udp: %v", err)
-					}
-				default:
-					dlog.Warnf(c, "unrecognized protocol: %v", newRoute)
-				}
-			}
-			// and add the new version
-			if newRoute.Target != "" {
-				switch newRoute.Proto {
-				case "tcp":
-					if err := o.translator.ForwardTCP(c, newRoute.IP, newRoute.Port, newRoute.Target); err != nil {
-						dlog.Errorf(c, "forward tcp: %v", err)
-					}
-				case "udp":
-					if err := o.translator.ForwardUDP(c, newRoute.IP, newRoute.Port, newRoute.Target); err != nil {
-						dlog.Errorf(c, "forward udp: %v", err)
-					}
-				default:
-					dlog.Warnf(c, "unrecognized protocol: %v", newRoute)
-				}
-			}
+		// Add the new version. This will clear out the old one if it exists
+		changed, err := o.translator.Add(c, newRoute)
+		if err != nil {
+			dlog.Errorf(c, "forward %s: %v", newRoute, err)
+		} else if changed {
+			routesChanged = true
 		}
 
 		// remove the route from our map of old routes so we
 		// don't end up deleting it below
-		delete(oldRoutes, newRoute.Address)
+		delete(oldRoutes, newRoute.Destination)
 	}
 
-	// Clear out stale routes and DNS names
 	for _, route := range oldRoutes {
-		switch route.Proto {
-		case "tcp":
-			if err := o.translator.ClearTCP(c, route.IP, route.Port); err != nil {
-				dlog.Errorf(c, "clear tpc: %v", err)
-			}
-		case "udp":
-			if err := o.translator.ClearUDP(c, route.IP, route.Port); err != nil {
-				dlog.Errorf(c, "clear udp: %v", err)
-			}
-		default:
-			dlog.Warnf(c, "unrecognized protocol: %v", route)
+		changed, err := o.translator.Clear(c, route)
+		if err != nil {
+			dlog.Errorf(c, "clear %s: %v", route, err)
+		} else if changed {
+			routesChanged = true
 		}
 	}
-	o.domainsLock.Unlock()
 
-	// Update the externally-visible table
-	o.tablesLock.Lock()
+	if routesChanged {
+		if err := o.translator.Flush(c); err != nil {
+			dlog.Errorf(c, "flush: %v", err)
+		}
+	}
+
 	if table.Routes == nil || len(table.Routes) == 0 {
 		delete(o.tables, table.Name)
 	} else {
 		o.tables[table.Name] = table
 	}
-	o.tablesLock.Unlock()
-
 	return nil
 }
 

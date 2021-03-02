@@ -10,6 +10,8 @@ var environments = []env{
 	{},
 }
 
+func (e *env) testName() string { return "" }
+
 func (e *env) setup(_ context.Context) error { return nil }
 
 func (e *env) teardown(_ context.Context) error { return nil }

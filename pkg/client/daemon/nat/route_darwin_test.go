@@ -8,10 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/datawire/dlib/dexec"
+	"github.com/datawire/dlib/dgroup"
+	"github.com/datawire/dlib/dlog"
 )
 
 type env struct {
+	name   string
 	pfconf string
 	before string
 }
@@ -23,18 +25,21 @@ type env struct {
  */
 
 var environments = []env{
-	{pfconf: ""},
-	{pfconf: "set skip on lo\n"},
-	{pfconf: "block return quick proto tcp from any to 192.0.2.0/24\n"},
-	{pfconf: "anchor {\n    block return quick proto tcp from any to 192.0.2.0/24\n}\n"},
+	{name: "empty", pfconf: ""},
+	{name: "skip on lo", pfconf: "set skip on lo\n"},
+	{name: "block return", pfconf: "block return quick proto tcp from any to 192.0.2.0/24\n"},
+	{name: "anchor block return", pfconf: "anchor {\n    block return quick proto tcp from any to 192.0.2.0/24\n}\n"},
 }
 
+func (e *env) testName() string {
+	return e.name
+}
 func (e *env) setup(c context.Context) error {
-	o1, err := dexec.CommandContext(c, "pfctl", "-sr").CombinedOutput()
+	o1, err := pfo(c, "-sr")
 	if err != nil {
 		return err
 	}
-	o2, err := dexec.CommandContext(c, "pfctl", "-sn").CombinedOutput()
+	o2, err := pfo(c, "-sn")
 	if err != nil {
 		return err
 	}
@@ -54,20 +59,34 @@ func (e *env) setup(c context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = pf(c, []string{"-f", "/dev/stdin"}, e.pfconf)
-	if err != nil {
-		return err
-	}
-	return nil
+	return pf(c, []string{"-f-"}, e.pfconf)
 }
 
 func (e *env) teardown(c context.Context) error {
 	_ = pf(c, []string{"-F", "all"}, "")
-	return pf(c, []string{"-f", "/dev/stdin"}, e.before)
+	return pf(c, []string{"-f-"}, e.before)
+}
+
+func makeRoute(t *testing.T, proto string, ip net.IP, ports []int, toPort int) *Route {
+	route, err := NewRoute(proto, ip, ports, toPort)
+	if err != nil {
+		t.Helper()
+		t.Fatal(err)
+	}
+	return route
 }
 
 func TestSorted(t *testing.T) {
-	g, _ := testGroup()
+	routes := []*Route{
+		makeRoute(t, "tcp", net.IPv4(192, 0, 2, 1), []int{80}, 4321),
+		makeRoute(t, "tcp", net.IPv4(192, 0, 2, 1), []int{8080}, 12345),
+		makeRoute(t, "tcp", net.IPv4(192, 0, 2, 2), nil, 15022),
+		makeRoute(t, "tcp", net.IPv4(192, 0, 2, 11), nil, 4323),
+		makeRoute(t, "udp", net.IPv4(192, 0, 2, 1), nil, 2134),
+	}
+
+	c := dlog.NewTestContext(t, false)
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{DisableLogging: true})
 	g.Go("sorted-test", func(c context.Context) (err error) {
 		tr := newRouter("test-table", net.IP{127, 0, 1, 2})
 		if err = tr.Enable(c); err != nil {
@@ -76,25 +95,14 @@ func TestSorted(t *testing.T) {
 		defer func() {
 			_ = tr.Disable(c)
 		}()
-		if err = tr.ForwardTCP(c, "192.0.2.1", "", "4321"); err != nil {
-			return err
-		}
-		if err = tr.ForwardTCP(c, "192.0.2.3", "", "4323"); err != nil {
-			return err
-		}
-		if err = tr.ForwardTCP(c, "192.0.2.2", "", "4322"); err != nil {
-			return err
-		}
-		if err = tr.ForwardUDP(c, "192.0.2.4", "", "2134"); err != nil {
-			return err
+		// Forward routes in reverse order
+		for i := len(routes) - 1; i >= 0; i-- {
+			if _, err = tr.Add(c, routes[i]); err != nil {
+				return err
+			}
 		}
 		entries := tr.sorted()
-		if !reflect.DeepEqual(entries, []Entry{
-			{Address{"tcp", "192.0.2.1", ""}, "4321"},
-			{Address{"tcp", "192.0.2.2", ""}, "4322"},
-			{Address{"tcp", "192.0.2.3", ""}, "4323"},
-			{Address{"udp", "192.0.2.4", ""}, "2134"},
-		}) {
+		if !reflect.DeepEqual(entries, routes) {
 			return fmt.Errorf("not sorted: %s", entries)
 		}
 		return nil
