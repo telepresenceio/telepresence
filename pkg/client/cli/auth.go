@@ -3,7 +3,7 @@ package cli
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client/auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
 // Command returns the telepresence sub-command "auth"
@@ -14,8 +14,9 @@ func LoginCommand() *cobra.Command {
 
 		Short: "Authenticate to Ambassador Cloud",
 		Long:  "Authenticate to Ambassador Cloud",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return auth.Login(cmd.Context(), cmd.OutOrStdout())
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_, err := cliutil.EnsureLoggedIn(cmd.Context())
+			return err
 		},
 	}
 }
@@ -28,7 +29,7 @@ func LogoutCommand() *cobra.Command {
 		Short: "Logout from Ambassador Cloud",
 		Long:  "Logout from Ambassador Cloud",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return auth.Logout(cmd.Context())
+			return cliutil.Logout(cmd.Context())
 		},
 	}
 }

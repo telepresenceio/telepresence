@@ -19,6 +19,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
 )
@@ -63,12 +64,16 @@ func NewLoginExecutor(
 }
 
 // EnsureLoggedIn will check if the user is logged in and if not initiate the login flow.
-func EnsureLoggedIn(ctx context.Context, stdout io.Writer) error {
+func EnsureLoggedIn(ctx context.Context, stdout io.Writer) (connector.LoginResult_Code, error) {
 	if token, _ := authdata.LoadTokenFromUserCache(ctx); token != nil {
-		return nil
+		return connector.LoginResult_OLD_LOGIN_REUSED, nil
 	}
 
-	return Login(ctx, stdout)
+	if err := Login(ctx, stdout); err != nil {
+		return connector.LoginResult_UNSPECIFIED, err
+	}
+
+	return connector.LoginResult_NEW_LOGIN_SUCCEEDED, nil
 }
 
 func Login(ctx context.Context, stdout io.Writer) error {

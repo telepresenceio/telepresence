@@ -8,10 +8,12 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
 )
 
+var ErrNotLoggedIn = errors.New("not logged in")
+
 func Logout(ctx context.Context) error {
 	_, err := authdata.LoadTokenFromUserCache(ctx)
 	if err != nil && os.IsNotExist(err) {
-		return errors.New("not logged in")
+		return ErrNotLoggedIn
 	}
 	_ = authdata.DeleteTokenFromUserCache(ctx)
 	_ = authdata.DeleteUserInfoFromUserCache(ctx)

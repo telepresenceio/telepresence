@@ -194,3 +194,13 @@ message InterceptResult {
 message Notification {
   string message = 1;
 }
+
+message LoginResult {
+  enum Code {
+    UNSPECIFIED = 0;
+    OLD_LOGIN_REUSED = 1; // success; already logged in
+    NEW_LOGIN_SUCCEEDED = 2; // success
+    // There is no failure code; a gRPC error code is returned instead.
+  }
+  Code code = 1;
+}

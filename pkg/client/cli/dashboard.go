@@ -6,9 +6,9 @@ import (
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/auth"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 )
 
 func dashboardCommand() *cobra.Command {
@@ -23,13 +23,21 @@ func dashboardCommand() *cobra.Command {
 				return err
 			}
 
-			// Login unless already logged in.
-			if token, _ := authdata.LoadTokenFromUserCache(cmd.Context()); token == nil {
-				err = auth.Login(cmd.Context(), cmd.OutOrStdout())
-			} else {
-				// The LoginFlow actually takes the user to the dashboard. Hence the else here.
-				err = browser.OpenURL(fmt.Sprintf("https://%s/cloud/preview", env.SystemAHost))
+			// Ensure we're logged in
+			resultCode, err := cliutil.EnsureLoggedIn(cmd.Context())
+			if err != nil {
+				return err
 			}
-			return err
+
+			if resultCode == connector.LoginResult_OLD_LOGIN_REUSED {
+				// The LoginFlow takes the user to the dashboard, so we only need to
+				// explicitly take the user to the dashboard if they were already
+				// logged in.
+				if err := browser.OpenURL(fmt.Sprintf("https://%s/cloud/preview", env.SystemAHost)); err != nil {
+					return err
+				}
+			}
+
+			return nil
 		}}
 }

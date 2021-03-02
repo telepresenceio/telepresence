@@ -16,14 +16,9 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cliutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
-
-func isLoggedIn(ctx context.Context) bool {
-	token, _ := authdata.LoadTokenFromUserCache(ctx)
-	return token != nil
-}
 
 type ExtensionsState struct {
 	// Data that is static after initialization
@@ -213,7 +208,7 @@ func (es *ExtensionsState) defaultMechanism(ctx context.Context) string {
 		preference int
 		name       string
 	}
-	canAPIKey := isLoggedIn(ctx)
+	canAPIKey := cliutil.HasLoggedIn(ctx)
 	var preferences []prefData
 	for _, extdata := range es.exts {
 		if extdata.RequiresAPIKey && !canAPIKey {
