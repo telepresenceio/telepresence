@@ -10,7 +10,11 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
+
+	"golang.org/x/net/route"
+	"golang.org/x/sys/unix"
 
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
@@ -22,6 +26,10 @@ type pfRouter struct {
 	localIP net.IP
 	dev     *ppf.Handle
 	token   string
+
+	// OS routing table routes to add and clear on Flush
+	routesToClear []*Route
+	routesToAdd   []*Route
 }
 
 var _ FirewallRouter = (*pfRouter)(nil)
@@ -169,7 +177,122 @@ func (t *pfRouter) rules(w io.Writer) (err error) {
 // Flush will messages to clear and add pending OS routes and send the rules corresponding to
 // the current mappings using pf -f-
 func (t *pfRouter) Flush(ctx context.Context) error {
+	if len(t.routesToAdd) > 0 || len(t.routesToClear) > 0 {
+		err := withRouteSocket(func(routeSocket int) error {
+			seq := 0
+			for _, r := range t.routesToClear {
+				seq++
+				if err := t.routeClear(routeSocket, seq, r); err != nil {
+					return err
+				}
+			}
+			t.routesToClear = nil
+			for _, r := range t.routesToAdd {
+				seq++
+				if err := t.routeAdd(routeSocket, seq, r); err != nil {
+					return err
+				}
+			}
+			t.routesToAdd = nil
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
 	return pff(ctx, t.Name, t.rules)
+}
+
+// withRouteSocket will open the socket to where RouteMessages should be sent
+// and call the given function with that socket. The socket is closed when the
+// function returns
+func withRouteSocket(f func(routeSocket int) error) error {
+	routeSocket, err := syscall.Socket(syscall.AF_ROUTE, syscall.SOCK_RAW, syscall.AF_UNSPEC)
+	if err != nil {
+		return err
+	}
+
+	// Avoid the overhead of echoing messages back to sender
+	if err = syscall.SetsockoptInt(routeSocket, syscall.SOL_SOCKET, syscall.SO_USELOOPBACK, 0); err != nil {
+		return err
+	}
+	defer syscall.Close(routeSocket)
+	return f(routeSocket)
+}
+
+// toRouteAddr converts an net.IP to its corresponding route.Addr
+func toRouteAddr(ip net.IP) (addr route.Addr) {
+	if ip4 := ip.To4(); ip4 != nil {
+		dst := route.Inet4Addr{}
+		copy(dst.IP[:], ip4)
+		addr = &dst
+	} else {
+		dst := route.Inet6Addr{}
+		copy(dst.IP[:], ip)
+		addr = &dst
+	}
+	return addr
+}
+
+func fullMask(ip net.IP) (addr route.Addr) {
+	if ip4 := ip.To4(); ip4 != nil {
+		dst := route.Inet4Addr{}
+		for i := 0; i < 4; i++ {
+			dst.IP[i] = 0xff
+		}
+		addr = &dst
+	} else {
+		dst := route.Inet6Addr{}
+		for i := 0; i < 16; i++ {
+			dst.IP[i] = 0xff
+		}
+		addr = &dst
+	}
+	return addr
+}
+
+func (t *pfRouter) newRouteMessage(rtm, seq int, r *Route) *route.RouteMessage {
+	ip := r.IP()
+	return &route.RouteMessage{
+		Version: syscall.RTM_VERSION,
+		ID:      uintptr(os.Getpid()),
+		Seq:     seq,
+		Type:    rtm,
+		Flags:   syscall.RTF_UP | syscall.RTF_GATEWAY | syscall.RTF_STATIC | syscall.RTF_PRCLONING,
+		Addrs: []route.Addr{
+			syscall.RTAX_DST:     toRouteAddr(ip),
+			syscall.RTAX_GATEWAY: toRouteAddr(t.localIP),
+			syscall.RTAX_NETMASK: fullMask(ip),
+		},
+	}
+}
+
+func (t *pfRouter) routeAdd(routeSocket, seq int, r *Route) error {
+	m := t.newRouteMessage(syscall.RTM_ADD, seq, r)
+	wb, err := m.Marshal()
+	if err != nil {
+		return err
+	}
+	_, err = syscall.Write(routeSocket, wb)
+	if err == unix.EEXIST {
+		// route exists, that's OK
+		err = nil
+	}
+	return err
+}
+
+func (t *pfRouter) routeClear(routeSocket, seq int, r *Route) error {
+	m := t.newRouteMessage(syscall.RTM_DELETE, seq, r)
+	wb, err := m.Marshal()
+	if err != nil {
+		return err
+	}
+	_, err = syscall.Write(routeSocket, wb)
+	if err == unix.ESRCH {
+		// route doesn't exist, that's OK
+		err = nil
+	}
+	return err
 }
 
 var actions = []ppf.Action{ppf.ActionPass, ppf.ActionRDR}
@@ -244,9 +367,15 @@ func (t *pfRouter) Disable(c context.Context) error {
 	}()
 	_ = pf(c, "-X", t.token)
 
-	for _, r := range t.mappings {
-		_ = dexec.CommandContext(c, "route", "delete", r.IP().String()+"/32", t.localIP.String()).Run()
-	}
+	// remove all added routes from the OS routing table
+	_ = withRouteSocket(func(routeSocket int) error {
+		seq := 0
+		for _, r := range t.mappings {
+			seq++
+			_ = t.routeClear(routeSocket, seq, r)
+		}
+		return nil
+	})
 
 	for _, action := range actions {
 	OUTER:
@@ -284,19 +413,15 @@ func (t *pfRouter) Add(c context.Context, route *Route) (bool, error) {
 	t.mappings[route.Destination] = route
 	// Add an entry to the routing table to make sure the firewall-to-socks worker's response
 	// packets get written to the correct interface.
-	if err := dexec.CommandContext(c, "route", "add", route.IP().String()+"/32", t.localIP.String()).Run(); err != nil {
-		return false, err
-	}
+	t.routesToAdd = append(t.routesToAdd, route)
 	return true, nil
 }
 
-func (t *pfRouter) Clear(ctx context.Context, route *Route) (bool, error) {
+func (t *pfRouter) Clear(_ context.Context, route *Route) (bool, error) {
 	if _, ok := t.mappings[route.Destination]; ok {
 		delete(t.mappings, route.Destination)
 		if !t.hasRuleForIP(route.IP()) {
-			if err := dexec.CommandContext(ctx, "route", "delete", route.IP().String()+"/32", t.localIP.String()).Run(); err != nil {
-				return false, err
-			}
+			t.routesToClear = append(t.routesToClear, route)
 		}
 		return true, nil
 	}
