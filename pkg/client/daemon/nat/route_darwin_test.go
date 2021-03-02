@@ -55,16 +55,16 @@ func (e *env) setup(c context.Context) error {
 		}
 	}
 
-	err = pf(c, []string{"-F", "all"}, "")
+	err = pf(c, "-F", "all")
 	if err != nil {
 		return err
 	}
-	return pf(c, []string{"-f-"}, e.pfconf)
+	return pffs(c, "", e.pfconf)
 }
 
 func (e *env) teardown(c context.Context) error {
-	_ = pf(c, []string{"-F", "all"}, "")
-	return pf(c, []string{"-f-"}, e.before)
+	_ = pf(c, "-F", "all")
+	return pffs(c, "", e.before)
 }
 
 func makeRoute(t *testing.T, proto string, ip net.IP, ports []int, toPort int) *Route {

@@ -1,10 +1,13 @@
 package nat
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -42,20 +45,62 @@ func (withoutCancel) Done() <-chan struct{}                   { return nil }
 func (withoutCancel) Err() error                              { return nil }
 func (c withoutCancel) String() string                        { return fmt.Sprintf("%v.WithoutCancel", c.Context) }
 
-func pf(ctx context.Context, args []string, stdin string) error {
+func pfCmd(ctx context.Context, args []string) *dexec.Cmd {
 	// We specifically don't want to use the cancellation of 'ctx' for pfctl, because
 	// interrupting pfctl may result in instabilities in macOS packet filtering.  But we still
 	// want to use dexec instead of os/exec because we want dexec's logging.
-	cmd := dexec.CommandContext(withoutCancel{ctx}, "pfctl", args...)
-	cmd.Stdin = strings.NewReader(stdin)
-	return cmd.Run()
+	return dexec.CommandContext(withoutCancel{ctx}, "pfctl", args...)
+}
+
+func pf(ctx context.Context, args ...string) error {
+	return pfCmd(ctx, append([]string{"-q"}, args...)).Run()
 }
 
 func pfo(ctx context.Context, args ...string) ([]byte, error) {
-	// We specifically don't want to use the cancellation of 'ctx' for pfctl, because
-	// interrupting pfctl may result in instabilities in macOS packet filtering.  But we still
-	// want to use dexec instead of os/exec because we want dexec's logging.
-	return dexec.CommandContext(withoutCancel{ctx}, "pfctl", args...).CombinedOutput()
+	return pfCmd(ctx, args).CombinedOutput()
+}
+
+func pffs(ctx context.Context, table, stdout string) error {
+	return pff(ctx, table, func(w io.Writer) error {
+		_, err := io.WriteString(w, stdout)
+		return err
+	})
+}
+
+func pff(ctx context.Context, table string, producer func(writer io.Writer) error) error {
+	args := make([]string, 0, 4)
+	args = append(args, "-q")
+	if table != "" {
+		args = append(args, "-a", table)
+	}
+	args = append(args, "-f-")
+	cmd := pfCmd(ctx, args)
+
+	// Avoid logging "Use of option -f" warnings on stderr
+	devNul, err := os.Open("/dev/null")
+	if err != nil {
+		return err
+	}
+	defer devNul.Close()
+	cmd.Stderr = devNul
+
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		defer stdin.Close()
+		bw := bufio.NewWriter(stdin)
+		if err = producer(bw); err == nil {
+			err = bw.Flush()
+		}
+		if err != nil {
+			dlog.Error(ctx, err)
+		}
+	}()
+
+	return cmd.Run()
 }
 
 func (t *pfRouter) hasRuleForIP(ip net.IP) bool {
@@ -84,51 +129,47 @@ func (t *pfRouter) sorted() []*Route {
 }
 
 // rules writes the current port forward mapping rules to the given writer
-func (t *pfRouter) rules() (string, error) {
-	var err error
-	w := &strings.Builder{}
+func (t *pfRouter) rules(w io.Writer) (err error) {
 	rules := t.sorted()
 	for _, r := range rules {
 		ports := r.Ports()
 		if len(ports) == 0 {
 			if _, err = fmt.Fprintf(w, "rdr pass on lo0 inet proto %s to %s -> 127.0.0.1 port %d\n", r.Proto(), r.IP(), r.ToPort); err != nil {
-				return "", err
+				return err
 			}
 			continue
 		}
 		for _, port := range ports {
 			_, err = fmt.Fprintf(w, "rdr pass on lo0 inet proto %s to %s port %d -> 127.0.0.1 port %d\n", r.Proto(), r.IP(), port, r.ToPort)
 			if err != nil {
-				return "", err
+				return err
 			}
 		}
 	}
 	if _, err = fmt.Fprintln(w, "pass out quick inet proto tcp to 127.0.0.1/32"); err != nil {
-		return "", err
+		return err
 	}
 	for _, r := range rules {
 		ports := r.Ports()
 		if len(ports) == 0 {
 			if _, err = fmt.Fprintf(w, "pass out route-to lo0 inet proto %s to %s keep state\n", r.Proto(), r.IP()); err != nil {
-				return "", err
+				return err
 			}
 			continue
 		}
 		for _, port := range ports {
 			if _, err = fmt.Fprintf(w, "pass out route-to lo0 inet proto %s to %s port %d keep state\n", r.Proto(), r.IP(), port); err != nil {
-				return "", err
+				return err
 			}
 		}
 	}
-	return w.String(), nil
+	return nil
 }
 
+// Flush will messages to clear and add pending OS routes and send the rules corresponding to
+// the current mappings using pf -f-
 func (t *pfRouter) Flush(ctx context.Context) error {
-	rules, err := t.rules()
-	if err != nil {
-		return err
-	}
-	return pf(ctx, []string{"-a", t.Name, "-f", "/dev/stdin"}, rules)
+	return pff(ctx, t.Name, t.rules)
 }
 
 var actions = []ppf.Action{ppf.ActionPass, ppf.ActionRDR}
@@ -153,7 +194,7 @@ func (t *pfRouter) Enable(c context.Context) error {
 		}
 	}
 
-	_ = pf(c, []string{"-a", t.Name, "-F", "all"}, "")
+	_ = pf(c, "-a", t.Name, "-F", "all")
 
 	// XXX: blah, this generates a syntax error, but also appears
 	// necessary to make anything work. I'm guessing there is some
@@ -161,7 +202,7 @@ func (t *pfRouter) Enable(c context.Context) error {
 	// something, although notably loading an empty ruleset
 	// doesn't seem to work, it has to be a syntax error of some
 	// kind.
-	_ = pf(c, []string{"-f", "/dev/stdin"}, "pass on lo0")
+	_ = pffs(c, "", "pass on lo0")
 
 	routesChanged := false
 	for _, v := range t.mappings {
@@ -199,9 +240,9 @@ func (t *pfRouter) Enable(c context.Context) error {
 
 func (t *pfRouter) Disable(c context.Context) error {
 	defer func() {
-		_ = pf(c, []string{"-a", t.Name, "-F", "all"}, "")
+		_ = pf(c, "-a", t.Name, "-F", "all")
 	}()
-	_ = pf(c, []string{"-X", t.token}, "")
+	_ = pf(c, "-X", t.token)
 
 	for _, r := range t.mappings {
 		_ = dexec.CommandContext(c, "route", "delete", r.IP().String()+"/32", t.localIP.String()).Run()
