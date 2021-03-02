@@ -43,6 +43,12 @@ deployment:
               configMapKeyRef:
                 name: some-map
                 key: some-key
+          envFrom:
+          - secretRef:
+              name: test-secret
+          - secretRef:
+              name: test-secret2
+            prefix: SC_
           image: jmalloc/echo-server:0.1.0
           imagePullPolicy: IfNotPresent
           name: echo-server
@@ -79,6 +85,13 @@ deployment:
             value: "8080"
           - name: MANAGER_HOST
             value: "traffic-manager.ambassador"
+          envFrom:
+          - secretRef:
+              name: test-secret
+            prefix: TEL_APP_
+          - secretRef:
+              name: test-secret2
+            prefix: TEL_APP_SC_
           readinessProbe:
             exec:
               command:

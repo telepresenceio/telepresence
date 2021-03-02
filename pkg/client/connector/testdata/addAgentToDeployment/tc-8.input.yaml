@@ -42,6 +42,12 @@ deployment:
               configMapKeyRef:
                 name: some-map
                 key: some-key
+          envFrom:
+          - secretRef:
+              name: test-secret
+          - secretRef:
+              name: test-secret2
+            prefix: SC_
           image: jmalloc/echo-server:0.1.0
           imagePullPolicy: IfNotPresent
           name: echo-server
