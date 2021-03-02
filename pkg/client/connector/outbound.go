@@ -337,9 +337,13 @@ func updateTableFromService(c context.Context, svc *kates.Service, endpoints []*
 		ips, err = getIPsFromHeadlessService(svc, spec.ExternalName, endpoints)
 		if err != nil {
 			dlog.Errorf(c, "Error finding IPs for service %s: %s", svc.Name, err)
+			return
 		}
 		if len(ips) == 0 {
-			dlog.Errorf(c, "Found no IPs for service %s", svc.Name)
+			if svc.Name != "traffic-manager" {
+				dlog.Errorf(c, "Found no IPs for service %s", svc.Name)
+			}
+			return
 		}
 	} else {
 		ips = append(ips, clusterIP)
