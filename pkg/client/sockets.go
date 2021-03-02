@@ -56,7 +56,7 @@ func WaitUntilSocketAppears(name, path string, ttw time.Duration) (err error) {
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
-	return fmt.Errorf("timeout while waiting for %s to exit", name)
+	return fmt.Errorf("timeout while waiting for %s to start", name)
 }
 
 // SocketURL returns the URL that corresponds to the given unix socket filesystem path.
