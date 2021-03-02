@@ -30,7 +30,7 @@ type outbound struct {
 	noSearch    bool
 	translator  nat.FirewallRouter
 	tables      map[string]*nat.Table
-	tablesLock  sync.Mutex
+	tablesLock  sync.RWMutex
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
 	namespaces        map[string]struct{}
