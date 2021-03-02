@@ -83,6 +83,9 @@ func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSea
 		return nil, err
 	}
 
+	// seed random generator (used when shuffling IPs)
+	rand.Seed(time.Now().UnixNano())
+
 	ret := &outbound{
 		dnsListener: listener,
 		dnsIP:       dnsIP,
@@ -206,7 +209,6 @@ func shuffleIPs(ips []string) []string {
 	default:
 		// If there are multiple elements in the slice, we shuffle the
 		// order so it's not the same each time
-		rand.Seed(time.Now().UnixNano())
 		rand.Shuffle(lenIPs, func(i, j int) {
 			ips[i], ips[j] = ips[j], ips[i]
 		})
