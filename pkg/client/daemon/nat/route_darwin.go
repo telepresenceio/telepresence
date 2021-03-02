@@ -203,6 +203,10 @@ func (t *pfRouter) Disable(c context.Context) error {
 	}()
 	_ = pf(c, []string{"-X", t.token}, "")
 
+	for _, r := range t.mappings {
+		_ = dexec.CommandContext(c, "route", "delete", r.IP().String()+"/32", t.localIP.String()).Run()
+	}
+
 	for _, action := range actions {
 	OUTER:
 		for {
