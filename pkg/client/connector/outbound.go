@@ -6,6 +6,7 @@ import (
 	"net"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dgroup"
@@ -285,29 +286,45 @@ func (kc *k8sCluster) updateDaemonNamespaces(c context.Context) {
 	}
 }
 
+const coalesceDelay = time.Second
+
 // updateDaemonTable will create IP-tables based on the current snapshots of services and pods
 // that the watchers have produced.
 func (kc *k8sCluster) updateDaemonTable(c context.Context) {
 	if kc.daemon == nil {
-		// NOTE! Some tests dont't set the daemon
+		// NOTE! Some tests don't set the daemon
 		return
 	}
-	table := &daemon.Table{Name: "kubernetes"}
+
+	doUpdate := func() {
+		kc.accLock.Lock()
+		table := &daemon.Table{Name: "kubernetes"}
+		for _, watcher := range kc.watchers {
+			for _, svc := range watcher.Services {
+				updateTableFromService(c, svc, watcher.Endpoints, table)
+			}
+			for _, pod := range watcher.Pods {
+				updateTableFromPod(pod, table)
+			}
+		}
+		kc.accLock.Unlock()
+
+		// Send updated table to daemon
+		dlog.Debugf(c, "posting update to IP-table %s with %d routes", table.Name, len(table.Routes))
+		if _, err := kc.daemon.Update(c, table); err != nil {
+			dlog.Errorf(c, "error posting update to %s: %v", table.Name, err)
+		}
+	}
+
+	// No update is sent to the daemon until it has been quiet with updates from the watchers for
+	// at least one second.
 	kc.accLock.Lock()
-	for _, watcher := range kc.watchers {
-		for _, svc := range watcher.Services {
-			updateTableFromService(c, svc, watcher.Endpoints, table)
-		}
-		for _, pod := range watcher.Pods {
-			updateTableFromPod(pod, table)
-		}
+	if kc.svcPodTimer == nil {
+		kc.svcPodTimer = time.AfterFunc(coalesceDelay, doUpdate)
+	} else {
+		kc.svcPodTimer.Reset(coalesceDelay)
 	}
 	kc.accLock.Unlock()
-
-	// Send updated table to daemon
-	if _, err := kc.daemon.Update(c, table); err != nil {
-		dlog.Errorf(c, "error posting update to %s: %v", table.Name, err)
-	}
 }
 
 func updateTableFromService(c context.Context, svc *kates.Service, endpoints []*kates.Endpoints, table *daemon.Table) {
