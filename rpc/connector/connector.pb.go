@@ -1064,6 +1064,53 @@ func (x *LoginResult) GetCode() LoginResult_Code {
 	return LoginResult_UNSPECIFIED
 }
 
+type TokenData struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	AccessToken string `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+}
+
+func (x *TokenData) Reset() {
+	*x = TokenData{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_rpc_connector_connector_proto_msgTypes[11]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *TokenData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TokenData) ProtoMessage() {}
+
+func (x *TokenData) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_connector_connector_proto_msgTypes[11]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TokenData.ProtoReflect.Descriptor instead.
+func (*TokenData) Descriptor() ([]byte, []int) {
+	return file_rpc_connector_connector_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *TokenData) GetAccessToken() string {
+	if x != nil {
+		return x.AccessToken
+	}
+	return ""
+}
+
 var File_rpc_connector_connector_proto protoreflect.FileDescriptor
 
 var file_rpc_connector_connector_proto_rawDesc = []byte{
@@ -1238,7 +1285,10 @@ var file_rpc_connector_connector_proto_rawDesc = []byte{
 	0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x14, 0x0a, 0x10, 0x4f, 0x4c, 0x44, 0x5f, 0x4c, 0x4f, 0x47,
 	0x49, 0x4e, 0x5f, 0x52, 0x45, 0x55, 0x53, 0x45, 0x44, 0x10, 0x01, 0x12, 0x17, 0x0a, 0x13, 0x4e,
 	0x45, 0x57, 0x5f, 0x4c, 0x4f, 0x47, 0x49, 0x4e, 0x5f, 0x53, 0x55, 0x43, 0x43, 0x45, 0x45, 0x44,
-	0x45, 0x44, 0x10, 0x02, 0x2a, 0xce, 0x02, 0x0a, 0x0e, 0x49, 0x6e, 0x74, 0x65, 0x72, 0x63, 0x65,
+	0x45, 0x44, 0x10, 0x02, 0x22, 0x2e, 0x0a, 0x09, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x44, 0x61, 0x74,
+	0x61, 0x12, 0x21, 0x0a, 0x0c, 0x61, 0x63, 0x63, 0x65, 0x73, 0x73, 0x5f, 0x74, 0x6f, 0x6b, 0x65,
+	0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x61, 0x63, 0x63, 0x65, 0x73, 0x73, 0x54,
+	0x6f, 0x6b, 0x65, 0x6e, 0x2a, 0xce, 0x02, 0x0a, 0x0e, 0x49, 0x6e, 0x74, 0x65, 0x72, 0x63, 0x65,
 	0x70, 0x74, 0x45, 0x72, 0x72, 0x6f, 0x72, 0x12, 0x0f, 0x0a, 0x0b, 0x55, 0x4e, 0x53, 0x50, 0x45,
 	0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x13, 0x0a, 0x0f, 0x4e, 0x4f, 0x5f, 0x50,
 	0x52, 0x45, 0x56, 0x49, 0x45, 0x57, 0x5f, 0x48, 0x4f, 0x53, 0x54, 0x10, 0x01, 0x12, 0x11, 0x0a,
@@ -1259,7 +1309,7 @@ var file_rpc_connector_connector_proto_rawDesc = []byte{
 	0x49, 0x4c, 0x45, 0x44, 0x5f, 0x54, 0x4f, 0x5f, 0x52, 0x45, 0x4d, 0x4f, 0x56, 0x45, 0x10, 0x0b,
 	0x12, 0x0d, 0x0a, 0x09, 0x4e, 0x4f, 0x54, 0x5f, 0x46, 0x4f, 0x55, 0x4e, 0x44, 0x10, 0x0c, 0x12,
 	0x14, 0x0a, 0x10, 0x4d, 0x4f, 0x55, 0x4e, 0x54, 0x5f, 0x50, 0x4f, 0x49, 0x4e, 0x54, 0x5f, 0x42,
-	0x55, 0x53, 0x59, 0x10, 0x0d, 0x32, 0xc7, 0x05, 0x0a, 0x09, 0x43, 0x6f, 0x6e, 0x6e, 0x65, 0x63,
+	0x55, 0x53, 0x59, 0x10, 0x0d, 0x32, 0x93, 0x07, 0x0a, 0x09, 0x43, 0x6f, 0x6e, 0x6e, 0x65, 0x63,
 	0x74, 0x6f, 0x72, 0x12, 0x43, 0x0a, 0x07, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x16,
 	0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66,
 	0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a, 0x20, 0x2e, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65,
@@ -1300,15 +1350,27 @@ var file_rpc_connector_connector_proto_rawDesc = []byte{
 	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a,
 	0x24, 0x2e, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x63,
 	0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x2e, 0x4e, 0x6f, 0x74, 0x69, 0x66, 0x69, 0x63,
-	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x30, 0x01, 0x12, 0x36, 0x0a, 0x04, 0x51, 0x75, 0x69, 0x74, 0x12,
+	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x30, 0x01, 0x12, 0x44, 0x0a, 0x05, 0x4c, 0x6f, 0x67, 0x69, 0x6e,
+	0x12, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62,
+	0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a, 0x23, 0x2e, 0x74, 0x65, 0x6c, 0x65, 0x70,
+	0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x6f,
+	0x72, 0x2e, 0x4c, 0x6f, 0x67, 0x69, 0x6e, 0x52, 0x65, 0x73, 0x75, 0x6c, 0x74, 0x12, 0x38, 0x0a,
+	0x06, 0x4c, 0x6f, 0x67, 0x6f, 0x75, 0x74, 0x12, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
+	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a,
 	0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75,
-	0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
-	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x42,
-	0x39, 0x5a, 0x37, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x74, 0x65,
-	0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x69, 0x6f, 0x2f, 0x74, 0x65, 0x6c,
-	0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2f, 0x72, 0x70, 0x63, 0x2f, 0x76, 0x32,
-	0x2f, 0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x33,
+	0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x12, 0x4a, 0x0a, 0x0d, 0x47, 0x65, 0x74, 0x43, 0x6c,
+	0x6f, 0x75, 0x64, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x12, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c,
+	0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79,
+	0x1a, 0x21, 0x2e, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x2e,
+	0x63, 0x6f, 0x6e, 0x6e, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x2e, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x44,
+	0x61, 0x74, 0x61, 0x12, 0x36, 0x0a, 0x04, 0x51, 0x75, 0x69, 0x74, 0x12, 0x16, 0x2e, 0x67, 0x6f,
+	0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d,
+	0x70, 0x74, 0x79, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x42, 0x39, 0x5a, 0x37, 0x67,
+	0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72,
+	0x65, 0x73, 0x65, 0x6e, 0x63, 0x65, 0x69, 0x6f, 0x2f, 0x74, 0x65, 0x6c, 0x65, 0x70, 0x72, 0x65,
+	0x73, 0x65, 0x6e, 0x63, 0x65, 0x2f, 0x72, 0x70, 0x63, 0x2f, 0x76, 0x32, 0x2f, 0x63, 0x6f, 0x6e,
+	0x6e, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -1324,7 +1386,7 @@ func file_rpc_connector_connector_proto_rawDescGZIP() []byte {
 }
 
 var file_rpc_connector_connector_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_rpc_connector_connector_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_rpc_connector_connector_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_rpc_connector_connector_proto_goTypes = []interface{}{
 	(InterceptError)(0),                     // 0: telepresence.connector.InterceptError
 	(ConnectInfo_ErrType)(0),                // 1: telepresence.connector.ConnectInfo.ErrType
@@ -1342,54 +1404,61 @@ var file_rpc_connector_connector_proto_goTypes = []interface{}{
 	(*InterceptResult)(nil),                 // 13: telepresence.connector.InterceptResult
 	(*Notification)(nil),                    // 14: telepresence.connector.Notification
 	(*LoginResult)(nil),                     // 15: telepresence.connector.LoginResult
-	nil,                                     // 16: telepresence.connector.ConnectRequest.KubeFlagsEntry
-	nil,                                     // 17: telepresence.connector.InterceptResult.EnvironmentEntry
-	(*manager.AgentInfoSnapshot)(nil),       // 18: telepresence.manager.AgentInfoSnapshot
-	(*manager.InterceptInfoSnapshot)(nil),   // 19: telepresence.manager.InterceptInfoSnapshot
-	(*manager.IngressInfo)(nil),             // 20: telepresence.manager.IngressInfo
-	(*manager.SessionInfo)(nil),             // 21: telepresence.manager.SessionInfo
-	(*manager.InterceptSpec)(nil),           // 22: telepresence.manager.InterceptSpec
-	(*manager.AgentInfo)(nil),               // 23: telepresence.manager.AgentInfo
-	(*manager.InterceptInfo)(nil),           // 24: telepresence.manager.InterceptInfo
-	(*empty.Empty)(nil),                     // 25: google.protobuf.Empty
-	(*manager.RemoveInterceptRequest2)(nil), // 26: telepresence.manager.RemoveInterceptRequest2
-	(*common.VersionInfo)(nil),              // 27: telepresence.common.VersionInfo
+	(*TokenData)(nil),                       // 16: telepresence.connector.TokenData
+	nil,                                     // 17: telepresence.connector.ConnectRequest.KubeFlagsEntry
+	nil,                                     // 18: telepresence.connector.InterceptResult.EnvironmentEntry
+	(*manager.AgentInfoSnapshot)(nil),       // 19: telepresence.manager.AgentInfoSnapshot
+	(*manager.InterceptInfoSnapshot)(nil),   // 20: telepresence.manager.InterceptInfoSnapshot
+	(*manager.IngressInfo)(nil),             // 21: telepresence.manager.IngressInfo
+	(*manager.SessionInfo)(nil),             // 22: telepresence.manager.SessionInfo
+	(*manager.InterceptSpec)(nil),           // 23: telepresence.manager.InterceptSpec
+	(*manager.AgentInfo)(nil),               // 24: telepresence.manager.AgentInfo
+	(*manager.InterceptInfo)(nil),           // 25: telepresence.manager.InterceptInfo
+	(*empty.Empty)(nil),                     // 26: google.protobuf.Empty
+	(*manager.RemoveInterceptRequest2)(nil), // 27: telepresence.manager.RemoveInterceptRequest2
+	(*common.VersionInfo)(nil),              // 28: telepresence.common.VersionInfo
 }
 var file_rpc_connector_connector_proto_depIdxs = []int32{
-	16, // 0: telepresence.connector.ConnectRequest.kube_flags:type_name -> telepresence.connector.ConnectRequest.KubeFlagsEntry
+	17, // 0: telepresence.connector.ConnectRequest.kube_flags:type_name -> telepresence.connector.ConnectRequest.KubeFlagsEntry
 	1,  // 1: telepresence.connector.ConnectInfo.error:type_name -> telepresence.connector.ConnectInfo.ErrType
-	18, // 2: telepresence.connector.ConnectInfo.agents:type_name -> telepresence.manager.AgentInfoSnapshot
-	19, // 3: telepresence.connector.ConnectInfo.intercepts:type_name -> telepresence.manager.InterceptInfoSnapshot
-	20, // 4: telepresence.connector.ConnectInfo.ingress_infos:type_name -> telepresence.manager.IngressInfo
-	21, // 5: telepresence.connector.ConnectInfo.session_info:type_name -> telepresence.manager.SessionInfo
+	19, // 2: telepresence.connector.ConnectInfo.agents:type_name -> telepresence.manager.AgentInfoSnapshot
+	20, // 3: telepresence.connector.ConnectInfo.intercepts:type_name -> telepresence.manager.InterceptInfoSnapshot
+	21, // 4: telepresence.connector.ConnectInfo.ingress_infos:type_name -> telepresence.manager.IngressInfo
+	22, // 5: telepresence.connector.ConnectInfo.session_info:type_name -> telepresence.manager.SessionInfo
 	2,  // 6: telepresence.connector.UninstallRequest.uninstall_type:type_name -> telepresence.connector.UninstallRequest.UninstallType
-	22, // 7: telepresence.connector.CreateInterceptRequest.spec:type_name -> telepresence.manager.InterceptSpec
+	23, // 7: telepresence.connector.CreateInterceptRequest.spec:type_name -> telepresence.manager.InterceptSpec
 	3,  // 8: telepresence.connector.ListRequest.filter:type_name -> telepresence.connector.ListRequest.Filter
-	23, // 9: telepresence.connector.WorkloadInfo.agent_info:type_name -> telepresence.manager.AgentInfo
-	24, // 10: telepresence.connector.WorkloadInfo.intercept_info:type_name -> telepresence.manager.InterceptInfo
+	24, // 9: telepresence.connector.WorkloadInfo.agent_info:type_name -> telepresence.manager.AgentInfo
+	25, // 10: telepresence.connector.WorkloadInfo.intercept_info:type_name -> telepresence.manager.InterceptInfo
 	11, // 11: telepresence.connector.WorkloadInfoSnapshot.workloads:type_name -> telepresence.connector.WorkloadInfo
-	24, // 12: telepresence.connector.InterceptResult.intercept_info:type_name -> telepresence.manager.InterceptInfo
+	25, // 12: telepresence.connector.InterceptResult.intercept_info:type_name -> telepresence.manager.InterceptInfo
 	0,  // 13: telepresence.connector.InterceptResult.error:type_name -> telepresence.connector.InterceptError
-	17, // 14: telepresence.connector.InterceptResult.environment:type_name -> telepresence.connector.InterceptResult.EnvironmentEntry
+	18, // 14: telepresence.connector.InterceptResult.environment:type_name -> telepresence.connector.InterceptResult.EnvironmentEntry
 	4,  // 15: telepresence.connector.LoginResult.code:type_name -> telepresence.connector.LoginResult.Code
-	25, // 16: telepresence.connector.Connector.Version:input_type -> google.protobuf.Empty
+	26, // 16: telepresence.connector.Connector.Version:input_type -> google.protobuf.Empty
 	5,  // 17: telepresence.connector.Connector.Connect:input_type -> telepresence.connector.ConnectRequest
 	9,  // 18: telepresence.connector.Connector.CreateIntercept:input_type -> telepresence.connector.CreateInterceptRequest
-	26, // 19: telepresence.connector.Connector.RemoveIntercept:input_type -> telepresence.manager.RemoveInterceptRequest2
+	27, // 19: telepresence.connector.Connector.RemoveIntercept:input_type -> telepresence.manager.RemoveInterceptRequest2
 	7,  // 20: telepresence.connector.Connector.Uninstall:input_type -> telepresence.connector.UninstallRequest
 	10, // 21: telepresence.connector.Connector.List:input_type -> telepresence.connector.ListRequest
-	25, // 22: telepresence.connector.Connector.UserNotifications:input_type -> google.protobuf.Empty
-	25, // 23: telepresence.connector.Connector.Quit:input_type -> google.protobuf.Empty
-	27, // 24: telepresence.connector.Connector.Version:output_type -> telepresence.common.VersionInfo
-	6,  // 25: telepresence.connector.Connector.Connect:output_type -> telepresence.connector.ConnectInfo
-	13, // 26: telepresence.connector.Connector.CreateIntercept:output_type -> telepresence.connector.InterceptResult
-	13, // 27: telepresence.connector.Connector.RemoveIntercept:output_type -> telepresence.connector.InterceptResult
-	8,  // 28: telepresence.connector.Connector.Uninstall:output_type -> telepresence.connector.UninstallResult
-	12, // 29: telepresence.connector.Connector.List:output_type -> telepresence.connector.WorkloadInfoSnapshot
-	14, // 30: telepresence.connector.Connector.UserNotifications:output_type -> telepresence.connector.Notification
-	25, // 31: telepresence.connector.Connector.Quit:output_type -> google.protobuf.Empty
-	24, // [24:32] is the sub-list for method output_type
-	16, // [16:24] is the sub-list for method input_type
+	26, // 22: telepresence.connector.Connector.UserNotifications:input_type -> google.protobuf.Empty
+	26, // 23: telepresence.connector.Connector.Login:input_type -> google.protobuf.Empty
+	26, // 24: telepresence.connector.Connector.Logout:input_type -> google.protobuf.Empty
+	26, // 25: telepresence.connector.Connector.GetCloudToken:input_type -> google.protobuf.Empty
+	26, // 26: telepresence.connector.Connector.Quit:input_type -> google.protobuf.Empty
+	28, // 27: telepresence.connector.Connector.Version:output_type -> telepresence.common.VersionInfo
+	6,  // 28: telepresence.connector.Connector.Connect:output_type -> telepresence.connector.ConnectInfo
+	13, // 29: telepresence.connector.Connector.CreateIntercept:output_type -> telepresence.connector.InterceptResult
+	13, // 30: telepresence.connector.Connector.RemoveIntercept:output_type -> telepresence.connector.InterceptResult
+	8,  // 31: telepresence.connector.Connector.Uninstall:output_type -> telepresence.connector.UninstallResult
+	12, // 32: telepresence.connector.Connector.List:output_type -> telepresence.connector.WorkloadInfoSnapshot
+	14, // 33: telepresence.connector.Connector.UserNotifications:output_type -> telepresence.connector.Notification
+	15, // 34: telepresence.connector.Connector.Login:output_type -> telepresence.connector.LoginResult
+	26, // 35: telepresence.connector.Connector.Logout:output_type -> google.protobuf.Empty
+	16, // 36: telepresence.connector.Connector.GetCloudToken:output_type -> telepresence.connector.TokenData
+	26, // 37: telepresence.connector.Connector.Quit:output_type -> google.protobuf.Empty
+	27, // [27:38] is the sub-list for method output_type
+	16, // [16:27] is the sub-list for method input_type
 	16, // [16:16] is the sub-list for extension type_name
 	16, // [16:16] is the sub-list for extension extendee
 	0,  // [0:16] is the sub-list for field type_name
@@ -1533,6 +1602,18 @@ func file_rpc_connector_connector_proto_init() {
 				return nil
 			}
 		}
+		file_rpc_connector_connector_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*TokenData); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1540,7 +1621,7 @@ func file_rpc_connector_connector_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_rpc_connector_connector_proto_rawDesc,
 			NumEnums:      5,
-			NumMessages:   13,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

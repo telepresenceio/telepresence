@@ -13,6 +13,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
+	grpcCodes "google.golang.org/grpc/codes"
+	grpcStatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/derror"
@@ -23,6 +25,8 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/broadcastqueue"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -225,6 +229,43 @@ func (s *service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNot
 	return nil
 }
 
+func (s *service) Login(ctx context.Context, _ *empty.Empty) (*rpc.LoginResult, error) {
+	ctx = s.callCtx(ctx, "Login")
+	resultCode, err := auth.EnsureLoggedIn(ctx, &s.userNotifications)
+	if err != nil {
+		return nil, err
+	}
+	return &rpc.LoginResult{Code: resultCode}, nil
+}
+
+func (s *service) Logout(ctx context.Context, _ *empty.Empty) (*empty.Empty, error) {
+	ctx = s.callCtx(ctx, "Logout")
+	if err := auth.Logout(ctx); err != nil {
+		if err == auth.ErrNotLoggedIn {
+			return nil, grpcStatus.Error(grpcCodes.NotFound, err.Error())
+		}
+		return nil, err
+	}
+	return &empty.Empty{}, nil
+}
+
+func (s *service) getCloudToken(ctx context.Context) (string, error) {
+	tokenData, err := authdata.LoadTokenFromUserCache(ctx)
+	if err != nil {
+		return "", err
+	}
+	return tokenData.AccessToken, nil
+}
+
+func (s *service) GetCloudToken(ctx context.Context, _ *empty.Empty) (*rpc.TokenData, error) {
+	ctx = s.callCtx(ctx, "GetCloudToken")
+	token, err := s.getCloudToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &rpc.TokenData{AccessToken: token}, nil
+}
+
 func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) {
 	s.cancel()
 	return &empty.Empty{}, nil
@@ -345,7 +386,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	}
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	tmgr, err := newTrafficManager(c, s.env, s.cluster, s.scoutClient.Reporter.InstallID())
+	tmgr, err := newTrafficManager(c, s.env, s.cluster, s.scoutClient.Reporter.InstallID(), s.getCloudToken)
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		// No point in continuing without a traffic manager
