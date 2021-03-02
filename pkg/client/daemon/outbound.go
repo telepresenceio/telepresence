@@ -215,8 +215,7 @@ func shuffleIPs(ips []string) []string {
 }
 
 func (o *outbound) destination(conn *net.TCPConn) (string, error) {
-	_, host, err := o.translator.GetOriginalDst(conn)
-	return host, err
+	return o.translator.GetOriginalDst(conn)
 }
 
 func (o *outbound) update(table *rpc.Table) (err error) {

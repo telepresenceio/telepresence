@@ -31,7 +31,7 @@ type FirewallRouter interface {
 	Enable(ctx context.Context) error
 
 	// Get the original destination for a connection that has been routed.
-	GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host string, err error)
+	GetOriginalDst(conn *net.TCPConn) (host string, err error)
 }
 
 func NewRouter(name string, localIP net.IP) FirewallRouter {

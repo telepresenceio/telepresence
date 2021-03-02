@@ -141,7 +141,7 @@ const SO_ORIGINAL_DST = 80
 // GetOriginalDst gets the original destination for the socket when redirect by linux iptables
 // refer to https://raw.githubusercontent.com/missdeer/avege/master/src/inbound/redir/redir_iptables.go
 //
-func (t *iptablesRouter) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host string, err error) {
+func (t *iptablesRouter) GetOriginalDst(conn *net.TCPConn) (host string, err error) {
 	var addr *syscall.IPv6Mreq
 
 	// Get original destination
@@ -153,27 +153,15 @@ func (t *iptablesRouter) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host
 	// IPv4 address starts at the 5th byte, 4 bytes long (206 190 36 45)
 	rawConn, err := conn.SyscallConn()
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 
 	err = rawConn.Control(func(fd uintptr) {
 		addr, err = syscall.GetsockoptIPv6Mreq(int(fd), syscall.IPPROTO_IP, SO_ORIGINAL_DST)
 	})
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
-
-	// \attention: IPv4 only!!!
-	// address type, 1 - IPv4, 4 - IPv6, 3 - hostname, only IPv4 is supported now
-	rawaddr = append(rawaddr, byte(1))
-	// raw IP address, 4 bytes for IPv4 or 16 bytes for IPv6, only IPv4 is supported now
-	rawaddr = append(rawaddr, addr.Multiaddr[4])
-	rawaddr = append(rawaddr, addr.Multiaddr[5])
-	rawaddr = append(rawaddr, addr.Multiaddr[6])
-	rawaddr = append(rawaddr, addr.Multiaddr[7])
-	// port
-	rawaddr = append(rawaddr, addr.Multiaddr[2])
-	rawaddr = append(rawaddr, addr.Multiaddr[3])
 
 	host = fmt.Sprintf("%d.%d.%d.%d:%d",
 		addr.Multiaddr[4],
@@ -182,5 +170,5 @@ func (t *iptablesRouter) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host
 		addr.Multiaddr[7],
 		uint16(addr.Multiaddr[2])<<8+uint16(addr.Multiaddr[3]))
 
-	return rawaddr, host, nil
+	return host, nil
 }

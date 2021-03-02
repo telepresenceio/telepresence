@@ -258,7 +258,7 @@ func (t *pfRouter) Clear(ctx context.Context, route *Route) (bool, error) {
 	return false, nil
 }
 
-func (t *pfRouter) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host string, err error) {
+func (t *pfRouter) GetOriginalDst(conn *net.TCPConn) (host string, err error) {
 	remote := conn.RemoteAddr().(*net.TCPAddr)
 	local := conn.LocalAddr().(*net.TCPAddr)
 	addr, port, err := t.dev.NatLook(remote.IP.String(), remote.Port, local.IP.String(), local.Port)
@@ -266,5 +266,5 @@ func (t *pfRouter) GetOriginalDst(conn *net.TCPConn) (rawaddr []byte, host strin
 		return
 	}
 
-	return nil, fmt.Sprintf("%s:%d", addr, port), nil
+	return fmt.Sprintf("%s:%d", addr, port), nil
 }
