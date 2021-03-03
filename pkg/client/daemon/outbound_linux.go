@@ -60,8 +60,16 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 	}
 
 	o.setSearchPathFunc = func(c context.Context, paths []string) {
-		paths = append(paths, "svc.cluster.local.", "cluster.local.", "")
-		o.search = paths
+		search := make([]string, 0)
+		for _, path := range paths {
+			if strings.ContainsRune(path, '.') {
+				search = append(search, path)
+			}
+		}
+		search = append(search, "svc.cluster.local.", "cluster.local.", "")
+		o.domainsLock.Lock()
+		o.search = search
+		o.domainsLock.Unlock()
 	}
 
 	listeners, err := o.dnsListeners(c)
@@ -84,17 +92,14 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 	return err
 }
 
-// resolve looks up the given query in the (FIXME: somewhere), trying
-// all the suffixes in the search path, and returns a Route on success
-// or nil on failure. This implementation does not count the number of
-// dots in the query.
+// resolve looks up the given query, trying all the suffixes in the search path, and returns the
+// matching IPs
 func (o *outbound) resolve(query string) []string {
 	if !strings.HasSuffix(query, ".") {
 		query += "."
 	}
 
 	var ips []string
-	o.searchLock.RLock()
 	o.domainsLock.RLock()
 	for _, suffix := range o.search {
 		name := query + suffix
@@ -102,7 +107,6 @@ func (o *outbound) resolve(query string) []string {
 			break
 		}
 	}
-	o.searchLock.RUnlock()
 	o.domainsLock.RUnlock()
 	return shuffleIPs(ips)
 }

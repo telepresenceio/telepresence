@@ -23,7 +23,6 @@ import (
 	"github.com/datawire/telepresence2/rpc/v2/connector"
 	rpc "github.com/datawire/telepresence2/rpc/v2/daemon"
 	"github.com/datawire/telepresence2/v2/pkg/client"
-	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
 	"github.com/datawire/telepresence2/v2/pkg/client/logging"
 	"github.com/datawire/telepresence2/v2/pkg/filelocation"
 )
@@ -91,9 +90,8 @@ func (d *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) 
 	return &empty.Empty{}, nil
 }
 
-func (d *service) Update(_ context.Context, table *rpc.Table) (*empty.Empty, error) {
+func (d *service) Update(c context.Context, table *rpc.Table) (*empty.Empty, error) {
 	err := d.outbound.update(table)
-	dns.Flush()
 	return &empty.Empty{}, err
 }
 

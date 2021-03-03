@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,13 +34,14 @@ type outbound struct {
 	tablesLock  sync.RWMutex
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
-	namespaces        map[string]struct{}
-	domains           map[string][]string
-	domainsLock       sync.RWMutex
-	setSearchPathFunc func(c context.Context, paths []string)
-
+	namespaces map[string]struct{}
+	domains    map[string][]string
 	search     []string
-	searchLock sync.RWMutex
+
+	// The domainsLock locks usage of namespaces, domains, and search
+	domainsLock sync.RWMutex
+
+	setSearchPathFunc func(c context.Context, paths []string)
 
 	overridePrimaryDNS bool
 
@@ -166,7 +168,7 @@ func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
 		if err != nil {
 			dlog.Error(c, err)
 		}
-		dns.Flush()
+		dns.Flush(c)
 	}
 
 	dlog.Debug(c, "Starting server")
@@ -254,6 +256,23 @@ func (o *outbound) noMoreUpdates() {
 	close(o.work)
 }
 
+func uniqueSortedAndNotEmpty(ss []string) []string {
+	sort.Strings(ss)
+	prev := ""
+	last := len(ss) - 1
+	for i := 0; i <= last; i++ {
+		s := ss[i]
+		if s == prev {
+			copy(ss[i:], ss[i+1:])
+			last--
+			i--
+		} else {
+			prev = s
+		}
+	}
+	return ss[:last+1]
+}
+
 func (o *outbound) doUpdate(c context.Context, domains map[string][]string, table *nat.Table) error {
 	// Make a copy of the current table
 	o.tablesLock.Lock()
@@ -270,7 +289,41 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 	// is ready, i.e. don't serve old answers.
 	o.domainsLock.Lock()
 	defer o.domainsLock.Unlock()
-	o.domains = domains
+
+	dnsChanged := false
+	for k, ips := range o.domains {
+		if _, ok := domains[k]; !ok {
+			dnsChanged = true
+			dlog.Debugf(c, "CLEAR %s -> %s", k, strings.Join(ips, ","))
+			delete(o.domains, k)
+		}
+	}
+
+	for k, nIps := range domains {
+		// Ensure that all added entries contain unique, sorted, and non-empty IPs
+		nIps = uniqueSortedAndNotEmpty(nIps)
+		if len(nIps) == 0 {
+			delete(domains, k)
+			continue
+		}
+		domains[k] = nIps
+		if oIps, ok := o.domains[k]; ok {
+			if ok = len(nIps) == len(oIps); ok {
+				for i, ip := range nIps {
+					if ok = ip == oIps[i]; !ok {
+						break
+					}
+				}
+			}
+			if !ok {
+				dnsChanged = true
+				dlog.Debugf(c, "REPLACE %s -> %s with %s", strings.Join(oIps, ","), k, strings.Join(nIps, ","))
+			}
+		} else {
+			dnsChanged = true
+			dlog.Debugf(c, "STORE %s -> %s", k, strings.Join(nIps, ","))
+		}
+	}
 
 	// Operate on the copy of the current table and the new table
 	routesChanged := false
@@ -303,6 +356,11 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 		}
 	}
 
+	if dnsChanged {
+		o.domains = domains
+		dns.Flush(c)
+	}
+
 	if table.Routes == nil || len(table.Routes) == 0 {
 		delete(o.tables, table.Name)
 	} else {
@@ -313,7 +371,6 @@ func (o *outbound) doUpdate(c context.Context, domains map[string][]string, tabl
 
 // SetSearchPath updates the DNS search path used by the resolver
 func (o *outbound) setSearchPath(c context.Context, paths []string) {
-	o.searchLock.Lock()
-	defer o.searchLock.Unlock()
 	o.setSearchPathFunc(c, paths)
+	dns.Flush(c)
 }
