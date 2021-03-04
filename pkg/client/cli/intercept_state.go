@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -475,19 +476,29 @@ func (is *interceptState) writeEnvJSON() error {
 
 var hostRx = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$`)
 
-const ingressDesc = "To do a preview URL, telepresence needs to know how cluster ingress works for this service. Please %s the ingress to use.\n"
-const ingressQ1 = `1/4: What's your ingress' layer 3 (IP) address?  You may use an IP address or a DNS name (this is usually a "service.namespace" DNS name)`
-const ingressQ2 = `2/4: What's your ingress' layer 4 address (TCP port number)`
-const ingressQ3 = `3/4: Does that TCP port on your ingress use cleartext or TLS`
-const ingressQ4 = `4/4: Specify a different layer 5 hostname (TLS-SNI, HTTP "Host" header) to access this service if required`
+const (
+	ingressDesc = `To create a preview URL, telepresence needs to know how cluster
+ingress works for this service.  Please %s the ingress to use.`
+	ingressQ1 = `1/4: What's your ingress' layer 3 (IP) address?
+     You may use an IP address or a DNS name (this is usually a
+     "service.namespace" DNS name).`
+	ingressQ2 = `2/4: What's your ingress' layer 4 address (TCP port number)?`
+	ingressQ3 = `3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?`
+	ingressQ4 = `4/4: If required by your ingress, specify a different layer 5 hostname
+     (TLS-SNI, HTTP "Host" header) to access this service.`
+)
+
+func showPrompt(out io.Writer, question string, defaultValue interface{}) {
+	if reflect.ValueOf(defaultValue).IsZero() {
+		fmt.Fprintf(out, "\n%s\n\n       [no default]: ", question)
+	} else {
+		fmt.Fprintf(out, "\n%s\n\n       [default: %v]: ", question, defaultValue)
+	}
+}
 
 func askForHost(question, cachedHost string, reader *bufio.Reader, out io.Writer) (string, error) {
 	for {
-		if cachedHost != "" {
-			fmt.Fprintf(out, "%s [%s] ? ", question, cachedHost)
-		} else {
-			fmt.Fprintf(out, "%s ? ", question)
-		}
+		showPrompt(out, question, cachedHost)
 		reply, err := reader.ReadString('\n')
 		if err != nil {
 			return "", err
@@ -510,11 +521,7 @@ func askForHost(question, cachedHost string, reader *bufio.Reader, out io.Writer
 
 func askForPortNumber(cachedPort int32, reader *bufio.Reader, out io.Writer) (int32, error) {
 	for {
-		if cachedPort != 0 {
-			fmt.Fprintf(out, "%s [%d] ? ", ingressQ2, cachedPort)
-		} else {
-			fmt.Fprintf(out, "%s ? ", ingressQ2)
-		}
+		showPrompt(out, ingressQ2, cachedPort)
 		reply, err := reader.ReadString('\n')
 		if err != nil {
 			return 0, err
@@ -535,12 +542,12 @@ func askForPortNumber(cachedPort int32, reader *bufio.Reader, out io.Writer) (in
 }
 
 func askForUseTLS(cachedUseTLS bool, reader *bufio.Reader, out io.Writer) (bool, error) {
+	yn := "n"
+	if cachedUseTLS {
+		yn = "y"
+	}
+	showPrompt(out, ingressQ3, yn)
 	for {
-		yn := "n"
-		if cachedUseTLS {
-			yn = "y"
-		}
-		fmt.Fprintf(out, "%s y/n [%s] ? ", ingressQ3, yn)
 		reply, err := reader.ReadString('\n')
 		if err != nil {
 			return false, err
@@ -553,7 +560,7 @@ func askForUseTLS(cachedUseTLS bool, reader *bufio.Reader, out io.Writer) (bool,
 		case "y", "Y":
 			return true, nil
 		}
-		fmt.Fprintln(out, "please answer y or n")
+		fmt.Fprintf(out, "       please answer 'y' or 'n'\n       [default: %v]: ", yn)
 	}
 }
 
@@ -577,7 +584,7 @@ func (cs *connectorState) selectIngress(ctx context.Context, in io.Reader, out i
 
 	reader := bufio.NewReader(in)
 
-	fmt.Fprintf(out, ingressDesc, selectOrConfirm)
+	fmt.Fprintf(out, "\n"+ingressDesc+"\n", selectOrConfirm)
 	reply := &manager.IngressInfo{}
 	if reply.Host, err = askForHost(ingressQ1, cachedIngressInfo.Host, reader, out); err != nil {
 		return nil, err
@@ -594,6 +601,7 @@ func (cs *connectorState) selectIngress(ctx context.Context, in io.Reader, out i
 	if reply.L5Host, err = askForHost(ingressQ4, cachedIngressInfo.L5Host, reader, out); err != nil {
 		return nil, err
 	}
+	fmt.Fprintln(out)
 
 	if !ingressInfoEqual(cachedIngressInfo, reply) {
 		infos[key] = reply
