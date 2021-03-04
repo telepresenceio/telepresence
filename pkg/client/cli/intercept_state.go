@@ -249,13 +249,13 @@ func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, er
 	case 1:
 		port, err := strconv.Atoi(is.port)
 		if err != nil {
-			return nil, err
+			return nil, errors.New("Port numbers must be an int, you gave: " + is.port)
 		}
 		spec.TargetPort = int32(port)
 	case 2:
 		port, err := strconv.Atoi(portMapping[0])
 		if err != nil {
-			return nil, err
+			return nil, errors.New("Port numbers must be an int, you gave: " + is.port)
 		}
 		spec.TargetPort = int32(port)
 		spec.ServicePortName = portMapping[1]

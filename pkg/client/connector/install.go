@@ -237,12 +237,9 @@ func svcPortByName(svc *kates.Service, name string) []*kates.ServicePort {
 	ports := svc.Spec.Ports
 	for i := range ports {
 		port := &ports[i]
-		if name != "" {
-			if port.Name != name {
-				continue
-			}
+		if name == "" || name == port.Name {
+			svcPorts = append(svcPorts, port)
 		}
-		svcPorts = append(svcPorts, port)
 	}
 	return svcPorts
 }
@@ -441,14 +438,14 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, a
 		fallthrough
 	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for deployment %s.%s", name, namespace)
-		dlog.Infof(c, "Using port name %s", portName)
+		dlog.Infof(c, "Using port name %q", portName)
 		matchingSvcs := ki.findMatchingServices(portName, dep)
 		if len(matchingSvcs) == 0 {
 			errMsg := fmt.Sprintf("Found no services with a selector matching labels %v", dep.Spec.Template.Labels)
 			if portName != "" {
 				errMsg += fmt.Sprintf(" and a port named %s", portName)
 			}
-			return fmt.Errorf(errMsg)
+			return errors.New(errMsg)
 		}
 		var err error
 		dep, svc, err = addAgentToDeployment(c, portName, agentImageName, dep, matchingSvcs)
