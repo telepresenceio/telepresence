@@ -9,6 +9,10 @@ import (
 )
 
 // A Destination is an immutable value that is used as a key in the routing table and when sorting routes.
+// The choice to use a single string was motivated by a desire to have a value that:
+//  - can be ordered correctly (IPs or ports represented as a strings cannot)
+//  - is compact and hence very efficient when lexically compared or when used as a hash key
+//  - is immutable
 type Destination string
 
 // NewDestination creates a new Destination. Valid protocols are "tcp" and "udp"
