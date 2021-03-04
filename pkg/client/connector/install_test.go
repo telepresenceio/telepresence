@@ -1,7 +1,6 @@
 package connector
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/datawire/ambassador/pkg/dtest"
 	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/v2/pkg/client"
@@ -29,12 +29,13 @@ import (
 var kubeconfig string
 var namespace string
 var registry string
-var testVersion = "v0.1.2-test"
+var testVersion string
 var managerTestNamespace string
 
 func TestMain(m *testing.M) {
 	log.SetOutput(ioutil.Discard) // We want success or failure, not an abundance of output
 	kubeconfig = dtest.Kubeconfig()
+	testVersion = fmt.Sprintf("0.1.%d", os.Getpid())
 	namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
 	managerTestNamespace = fmt.Sprintf("ambassador-%d", os.Getpid())
 
@@ -81,46 +82,30 @@ func capture(t *testing.T, exe string, args ...string) string {
 
 var imageName string
 
-func publishManager(t *testing.T) {
+func publishManager(ctx context.Context, t *testing.T) {
 	t.Helper()
 	if imageName != "" {
 		return
 	}
 
-	// Check that the "ko" program exists, and adjust PATH as necessary.
-	if info, err := os.Stat("../../../tools/bin/ko"); err != nil || !info.Mode().IsRegular() || (info.Mode().Perm()&0100) == 0 {
-		t.Fatal("it looks like the ./tools/bin/ko executable wasn't built; be sure to build it with `make` before running `go test`!")
+	cmd := dexec.CommandContext(ctx, "make", "-C", "../../..", "push-image")
+	cmd.Env = append(os.Environ(),
+		"TELEPRESENCE_VERSION="+testVersion,
+		"TELEPRESENCE_REGISTRY="+dtest.DockerRegistry())
+	if err := cmd.Run(); err != nil {
+		t.Fatal(client.RunError(err))
 	}
-	toolbindir, err := filepath.Abs("../../../tools/bin")
-	if !assert.NoError(t, err) {
-		t.FailNow()
-	}
-	os.Setenv("PATH", toolbindir+":"+os.Getenv("PATH"))
-
-	// OK, now run "ko" and friends.
-	cmd := exec.Command("ko", "publish", "--local", "./cmd/traffic")
-	cmd.Dir = "../../.." // ko must be executed from root to find the .ko.yaml config
-	errCapture := bytes.Buffer{}
-	cmd.Stderr = &errCapture
-	stdout, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("%s\n%v", errCapture.String(), err)
-	}
-	imageName = strings.TrimSpace(string(stdout))
-	tag := fmt.Sprintf("%s/tel2:%s", registry, strings.TrimPrefix(client.Version(), "v"))
-	capture(t, "docker", "tag", imageName, tag)
-	capture(t, "docker", "push", tag)
 }
 
-func removeManager(t *testing.T) {
+func removeManager(ctx context.Context, t *testing.T) {
 	// Remove service and deployment
-	cmd := exec.Command("kubectl", "--kubeconfig", kubeconfig, "--namespace", managerNamespace, "delete", "svc,deployment", "traffic-manager")
+	cmd := dexec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfig, "--namespace", managerNamespace, "delete", "svc,deployment", "traffic-manager")
 	_, _ = cmd.Output()
 
 	// Wait until getting them fails
 	gone := false
 	for cnt := 0; cnt < 10; cnt++ {
-		cmd = exec.Command("kubectl", "--kubeconfig", kubeconfig, "--namespace", managerNamespace, "get", "deployment", "traffic-manager")
+		cmd = dexec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfig, "--namespace", managerNamespace, "get", "deployment", "traffic-manager")
 		if err := cmd.Run(); err != nil {
 			gone = true
 			break
@@ -132,7 +117,7 @@ func removeManager(t *testing.T) {
 	}
 	gone = false
 	for cnt := 0; cnt < 10; cnt++ {
-		cmd = exec.Command("kubectl", "--kubeconfig", kubeconfig, "--namespace", managerNamespace, "get", "svc", "traffic-manager")
+		cmd = dexec.CommandContext(ctx, "kubectl", "--kubeconfig", kubeconfig, "--namespace", managerNamespace, "get", "svc", "traffic-manager")
 		if err := cmd.Run(); err != nil {
 			gone = true
 			break
@@ -180,8 +165,8 @@ func Test_findTrafficManager_present(t *testing.T) {
 	managerNamespace = managerTestNamespace
 
 	c := dlog.NewTestContext(t, false)
-	publishManager(t)
-	defer removeManager(t)
+	publishManager(c, t)
+	defer removeManager(c, t)
 
 	env, err := client.LoadEnv(c)
 	if err != nil {
@@ -240,8 +225,8 @@ func Test_ensureTrafficManager_notPresent(t *testing.T) {
 	}()
 	managerNamespace = managerTestNamespace
 	c := dlog.NewTestContext(t, false)
-	publishManager(t)
-	defer removeManager(t)
+	publishManager(c, t)
+	defer removeManager(c, t)
 	env, err := client.LoadEnv(c)
 	if err != nil {
 		t.Fatal(err)
@@ -295,7 +280,8 @@ func TestAddAgentToDeployment(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s.input.yaml: %v", tcName, err)
 		}
-		if err := yaml.Unmarshal(inBody, &tmp); err != nil {
+		inStr := strings.ReplaceAll(string(inBody), "${TELEPRESENCE_VERSION}", testVersion)
+		if err = yaml.Unmarshal([]byte(inStr), &tmp); err != nil {
 			t.Fatalf("%s.input.yaml: %v", tcName, err)
 		}
 		tc.InputDeployment = tmp.Deployment
@@ -307,7 +293,8 @@ func TestAddAgentToDeployment(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s.output.yaml: %v", tcName, err)
 		}
-		if err := yaml.Unmarshal(outBody, &tmp); err != nil {
+		outStr := strings.ReplaceAll(string(outBody), "${TELEPRESENCE_VERSION}", testVersion)
+		if err = yaml.Unmarshal([]byte(outStr), &tmp); err != nil {
 			t.Fatalf("%s.output.yaml: %v", tcName, err)
 		}
 		tc.OutputDeployment = tmp.Deployment
