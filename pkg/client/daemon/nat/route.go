@@ -12,7 +12,7 @@ import (
 // firewall.
 //
 // TODO(lukeshu): Why have we implemented the routing table in the firewall?  Mostly historical
-//  reasons, and we should consider using the real routing table.
+// reasons, and we should consider using the real routing table.
 type FirewallRouter interface {
 	// Flush will flush any pending rule changes that needs to be committed
 	Flush(ctx context.Context) error
