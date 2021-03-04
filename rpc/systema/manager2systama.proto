@@ -50,6 +50,7 @@ message CreateDomainRequest {
   string intercept_id = 1;
   bool display_banner = 2;
   manager.InterceptSpec intercept_spec = 3;
+  string host = 4;
 }
 
 message CreateDomainResponse {
