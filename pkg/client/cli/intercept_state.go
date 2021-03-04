@@ -247,15 +247,15 @@ func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, er
 	portMapping := strings.Split(is.port, ":")
 	switch len(portMapping) {
 	case 1:
-		port, err := strconv.Atoi(is.port)
+		port, err := strconv.ParseUint(is.port, 10, 16)
 		if err != nil {
-			return nil, errors.New("Port numbers must be an int, you gave: " + is.port)
+			return nil, errors.Errorf("Port numbers must be a valid, positive int, you gave: %q", is.port)
 		}
 		spec.TargetPort = int32(port)
 	case 2:
-		port, err := strconv.Atoi(portMapping[0])
+		port, err := strconv.ParseUint(portMapping[0], 10, 16)
 		if err != nil {
-			return nil, errors.New("Port numbers must be an int, you gave: " + is.port)
+			return nil, errors.Errorf("Port numbers must be a valid, positive int, you gave: %q", portMapping[0])
 		}
 		spec.TargetPort = int32(port)
 		spec.ServicePortName = portMapping[1]
