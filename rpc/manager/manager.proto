@@ -84,6 +84,7 @@ message InterceptSpec {
 
   string target_host = 6;
   int32 target_port = 7;
+  string service_port_name = 10;
 }
 
 enum InterceptDispositionType {
