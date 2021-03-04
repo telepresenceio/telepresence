@@ -15,12 +15,11 @@
 TELEPRESENCE_REGISTRY ?= docker.io/datawire
 DOCKER_PUSH           ?= docker-push
 
-# When building a release, or if you don't want constant rebuilds, use
-#   export VERSION_SUFFIX=
-VERSION_SUFFIX        ?= -$(TIME)
-
-_TIME := $(shell date +%s)
-TELEPRESENCE_VERSION ?= $(shell git describe --tags --match='v*')$(foreach TIME,$(_TIME),$(VERSION_SUFFIX))
+_TELEPRESENCE_VERSION := $(shell go run ./build/genversion.go)
+TELEPRESENCE_VERSION ?= $(_TELEPRESENCE_VERSION)
+$(if $(filter v2.%,$(TELEPRESENCE_VERSION)),\
+  $(info Building TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)),\
+  $(error TELEPRESENCE_VERSION variable is invalid: It must be a v2.* string, but is '$(TELEPRESENCE_VERSION)'))
 
 default: help
 .PHONY: default
