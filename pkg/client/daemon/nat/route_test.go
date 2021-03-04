@@ -8,7 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/datawire/ambassador/pkg/dtest"
 	"github.com/datawire/dlib/dgroup"
@@ -17,9 +18,11 @@ import (
 
 func TestMain(m *testing.M) {
 	dtest.Sudo()
+	var exitCode int
 	dtest.WithMachineLock(func() {
-		os.Exit(m.Run())
+		exitCode = m.Run()
 	})
+	os.Exit(exitCode)
 }
 
 func udpListener(c context.Context, port int) error {
@@ -125,7 +128,7 @@ func listeners(c context.Context, ports []int) (err error) {
 	return nil
 }
 
-func checkForwardTCP(t *testing.T, fromIP string, ports []string, toPort string) {
+func checkForwardTCP(fromIP string, ports []string, toPort int) error {
 	for _, port := range ports {
 		from := fmt.Sprintf("%s:%s", fromIP, port)
 
@@ -133,37 +136,43 @@ func checkForwardTCP(t *testing.T, fromIP string, ports []string, toPort string)
 
 		c, err := net.DialTimeout("tcp", from, 3*time.Second)
 		if err != nil {
-			t.Errorf("unable to connect: %v", err)
-			continue
+			return fmt.Errorf("unable to connect tcp %s: %v", from, err)
 		}
-		defer c.Close()
-		_ = c.(*net.TCPConn).SetDeadline(deadline)
+		var actual string
+		err = func() error {
+			defer c.Close()
+			_ = c.(*net.TCPConn).SetDeadline(deadline)
 
-		var buf [1024]byte
-		n, err := c.Read(buf[:1024])
+			var buf [1024]byte
+			n, err := c.Read(buf[:1024])
+			if err != nil {
+				return fmt.Errorf("unable to read tcp %s: %v", from, err)
+			}
+			actual = string(buf[:n])
+			return nil
+		}()
 		if err != nil {
-			t.Errorf("unable to read: %v", err)
-			continue
+			return err
 		}
 
-		expected := fmt.Sprintf("TCP %s", toPort)
-		actual := string(buf[:n])
-
+		expected := fmt.Sprintf("TCP %d", toPort)
 		if actual != expected {
-			t.Errorf("connected to %s and got back %s instead of %s", from, actual, expected)
+			return fmt.Errorf("connected to %s and got back %s instead of %s", from, actual, expected)
 		}
 	}
+	return nil
 }
 
-func checkNoForwardTCP(t *testing.T, fromIP string, ports []string) {
+func checkNoForwardTCP(fromIP string, ports []string) error {
 	for _, port := range ports {
 		c, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%s", fromIP, port), 50*time.Millisecond)
 		if err != nil {
 			continue
 		}
-		defer c.Close()
-		t.Errorf("connected to %s:%s, expecting no connection", fromIP, port)
+		c.Close()
+		return fmt.Errorf("connected to %s:%s, expecting no connection", fromIP, port)
 	}
+	return nil
 }
 
 /*
@@ -171,90 +180,88 @@ func checkNoForwardTCP(t *testing.T, fromIP string, ports []string) {
  *  198.51.100.0/24 (TEST-NET-2)
  *  203.0.113.0/24 (TEST-NET-3)
  */
-
 var networks = []string{
 	"192.0.2",
 	"198.51.100",
 	"203.0.113",
 }
 
-var mappings = []struct {
+type mapping struct {
 	from         string
 	port         string
-	to           string
+	to           int
 	forwarded    []string
 	notForwarded []string
-}{
-	{"1", "", "4321", []string{"80", "8080"}, nil},
-	{"2", "", "2134", []string{"80", "8080"}, nil},
-	{"3", "", "2134", []string{"80", "8080"}, nil},
-	{"4", "443", "2134", []string{"443"}, []string{"80", "8080"}},
 }
 
-func testGroup() (*dgroup.Group, func()) {
-	c, cancel := context.WithCancel(context.Background())
-	logger := logrus.StandardLogger()
-	logger.Level = logrus.WarnLevel
-	c = dlog.WithLogger(c, dlog.WrapLogrus(logger))
-	return dgroup.NewGroup(c, dgroup.GroupConfig{DisableLogging: true}), cancel
+var mappings = []*mapping{
+	{"1", "", 4321, []string{"80", "8080"}, nil},
+	{"2", "", 2134, []string{"80", "8080"}, nil},
+	{"3", "", 2134, []string{"80", "8080"}, nil},
+	{"4", "443", 2134, []string{"443"}, []string{"80", "8080"}},
+}
+
+func testMapping(c context.Context, network string, mappings []*mapping, t *testing.T) {
+	for _, mapping := range mappings {
+		require.NoError(t, checkNoForwardTCP(fmt.Sprintf("%s.%s", network, mapping.from), mapping.forwarded))
+	}
+
+	tr := NewRouter("test-table", net.IP{127, 0, 1, 2})
+	require.NoError(t, tr.Enable(c))
+	defer func() {
+		_ = tr.Disable(c)
+	}()
+
+	for _, mapping := range mappings {
+		from := fmt.Sprintf("%s.%s", network, mapping.from)
+
+		require.NoError(t, checkNoForwardTCP(from, mapping.forwarded))
+		ports, err := ParsePorts(mapping.port)
+		require.NoError(t, err)
+		route, err := NewRoute("tcp", net.ParseIP(from), ports, mapping.to)
+		require.NoError(t, err)
+		changed, err := tr.Add(c, route)
+		require.NoError(t, err)
+		assert.True(t, changed, "route wasn't added")
+		require.NoError(t, tr.Flush(c))
+		require.NoError(t, checkForwardTCP(from, mapping.forwarded, mapping.to))
+		require.NoError(t, checkNoForwardTCP(from, mapping.notForwarded))
+	}
+
+	for _, mapping := range mappings {
+		from := fmt.Sprintf("%s.%s", network, mapping.from)
+		ports, err := ParsePorts(mapping.port)
+		require.NoError(t, err)
+		route, err := NewRoute("tcp", net.ParseIP(from), ports, mapping.to)
+		require.NoError(t, err)
+		changed, err := tr.Clear(c, route)
+		require.NoError(t, err)
+		assert.True(t, changed, "route didn't clear")
+		require.NoError(t, tr.Flush(c))
+		require.NoError(t, checkNoForwardTCP(from, mapping.forwarded))
+	}
 }
 
 func TestTranslator(t *testing.T) {
-	g, cancel := testGroup()
+	c, cancel := context.WithCancel(dlog.NewTestContext(t, false))
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{DisableLogging: true})
 	g.Go("translator-test", func(c context.Context) error {
-		err := listeners(c, []int{2134, 4321})
-		if err != nil {
-			t.Fatal(err)
-		}
+		defer cancel()
+		require.NoError(t, listeners(c, []int{2134, 4321}))
 		for _, env := range environments {
-			err = env.setup(c)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, network := range networks {
-				tr := NewRouter("test-table", net.IP{127, 0, 1, 2})
-
-				for _, mapping := range mappings {
-					checkNoForwardTCP(t, fmt.Sprintf("%s.%s", network, mapping.from), mapping.forwarded)
+			env := env
+			t.Run(env.testName(), func(t *testing.T) {
+				require.NoError(t, env.setup(c))
+				defer func() {
+					require.NoError(t, env.teardown(c))
+				}()
+				for _, network := range networks {
+					network := network
+					t.Run(network, func(t *testing.T) { testMapping(c, network, mappings, t) })
 				}
-
-				err = tr.Enable(c)
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				for _, mapping := range mappings {
-					from := fmt.Sprintf("%s.%s", network, mapping.from)
-
-					checkNoForwardTCP(t, from, mapping.forwarded)
-					if err = tr.ForwardTCP(c, []string{from}, mapping.port, mapping.to); err != nil {
-						t.Fatal(err)
-					}
-					checkForwardTCP(t, from, mapping.forwarded, mapping.to)
-					checkNoForwardTCP(t, from, mapping.notForwarded)
-				}
-
-				for _, mapping := range mappings {
-					from := fmt.Sprintf("%s.%s", network, mapping.from)
-					if err = tr.ClearTCP(c, []string{from}, mapping.port); err != nil {
-						t.Fatal(err)
-					}
-					checkNoForwardTCP(t, from, mapping.forwarded)
-				}
-
-				if err = tr.Disable(c); err != nil {
-					t.Fatal(err)
-				}
-			}
-			err = env.teardown(c)
-			if err != nil {
-				t.Fatal(err)
-			}
+			})
 		}
-		cancel()
 		return nil
 	})
-	if err := g.Wait(); err != nil {
-		t.Fatal(err)
-	}
+	_ = g.Wait()
 }

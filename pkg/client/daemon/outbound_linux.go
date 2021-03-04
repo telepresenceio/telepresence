@@ -15,7 +15,6 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
-	"github.com/datawire/telepresence2/v2/pkg/client/daemon/nat"
 )
 
 var errResolveDNotConfigured = errors.New("resolved not configured")
@@ -61,8 +60,16 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 	}
 
 	o.setSearchPathFunc = func(c context.Context, paths []string) {
-		paths = append(paths, "svc.cluster.local.", "cluster.local.", "")
-		o.search = paths
+		search := make([]string, 0)
+		for _, path := range paths {
+			if strings.ContainsRune(path, '.') {
+				search = append(search, path)
+			}
+		}
+		search = append(search, "svc.cluster.local.", "cluster.local.", "")
+		o.domainsLock.Lock()
+		o.search = search
+		o.domainsLock.Unlock()
 	}
 
 	listeners, err := o.dnsListeners(c)
@@ -78,39 +85,30 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 	o.overridePrimaryDNS = true
 	onReady()
 
-	srv := dns.NewServer(c, listeners, o.fallbackIP+":53", func(domain string) []string {
-		if r := o.resolve(domain); r != nil {
-			return o.getIPs(r.Ips)
-		}
-		return []string{}
-	})
+	srv := dns.NewServer(c, listeners, o.fallbackIP+":53", o.resolve)
 	dlog.Debug(c, "Starting server")
 	err = srv.Run(c)
 	dlog.Debug(c, "Server done")
 	return err
 }
 
-// resolve looks up the given query in the (FIXME: somewhere), trying
-// all the suffixes in the search path, and returns a Route on success
-// or nil on failure. This implementation does not count the number of
-// dots in the query.
-func (o *outbound) resolve(query string) *nat.Route {
+// resolve looks up the given query, trying all the suffixes in the search path, and returns the
+// matching IPs
+func (o *outbound) resolve(query string) []string {
 	if !strings.HasSuffix(query, ".") {
 		query += "."
 	}
 
-	var route *nat.Route
-	o.searchLock.RLock()
+	var ips []string
 	o.domainsLock.RLock()
 	for _, suffix := range o.search {
 		name := query + suffix
-		if route = o.domains[strings.ToLower(name)]; route != nil {
+		if ips = o.domains[strings.ToLower(name)]; ips != nil {
 			break
 		}
 	}
-	o.searchLock.RUnlock()
 	o.domainsLock.RUnlock()
-	return route
+	return shuffleIPs(ips)
 }
 
 func (o *outbound) dnsListeners(c context.Context) ([]net.PacketConn, error) {

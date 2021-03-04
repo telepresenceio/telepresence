@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,16 +31,17 @@ type outbound struct {
 	noSearch    bool
 	translator  nat.FirewallRouter
 	tables      map[string]*nat.Table
-	tablesLock  sync.RWMutex
+	tablesLock  sync.Mutex
 
 	// Namespaces, accessible using <service-name>.<namespace-name>
-	namespaces        map[string]struct{}
-	domains           map[string]*nat.Route
-	domainsLock       sync.RWMutex
-	setSearchPathFunc func(c context.Context, paths []string)
-
+	namespaces map[string]struct{}
+	domains    map[string][]string
 	search     []string
-	searchLock sync.RWMutex
+
+	// The domainsLock locks usage of namespaces, domains, and search
+	domainsLock sync.RWMutex
+
+	setSearchPathFunc func(c context.Context, paths []string)
 
 	overridePrimaryDNS bool
 
@@ -83,15 +85,18 @@ func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSea
 		return nil, err
 	}
 
+	// seed random generator (used when shuffling IPs)
+	rand.Seed(time.Now().UnixNano())
+
 	ret := &outbound{
 		dnsListener: listener,
 		dnsIP:       dnsIP,
 		fallbackIP:  fallbackIP,
 		noSearch:    noSearch,
 		tables:      make(map[string]*nat.Table),
-		translator:  nat.NewRouter(name, net.IPv4(127, 0, 0, 1)),
+		translator:  nat.NewRouter(name, net.IP{127, 0, 0, 1}),
 		namespaces:  make(map[string]struct{}),
-		domains:     make(map[string]*nat.Route),
+		domains:     make(map[string][]string),
 		search:      []string{""},
 		work:        make(chan func(context.Context) error),
 	}
@@ -152,22 +157,18 @@ func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
 
 	if o.overridePrimaryDNS {
 		dlog.Debugf(c, "Bootstrapping local DNS server on port %d", o.dnsRedirPort)
-		err := o.doUpdate(c, &nat.Table{
-			Name: "bootstrap",
-			Routes: []*nat.Route{
-				{
-					Route: &rpc.Route{
-						Ips:   []string{o.dnsIP},
-						Proto: "udp",
-					},
-					Target: strconv.Itoa(o.dnsRedirPort),
-				},
-			},
+		route, err := nat.NewRoute("udp", net.ParseIP(o.dnsIP), nil, o.dnsRedirPort)
+		if err != nil {
+			return err
+		}
+		err = o.doUpdate(c, nil, &nat.Table{
+			Name:   "bootstrap",
+			Routes: []*nat.Route{route},
 		})
 		if err != nil {
 			dlog.Error(c, err)
 		}
-		dns.Flush()
+		dns.Flush(c)
 	}
 
 	dlog.Debug(c, "Starting server")
@@ -185,7 +186,7 @@ func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
 	return nil
 }
 
-func (o *outbound) resolveNoSearch(query string) *nat.Route {
+func (o *outbound) resolveNoSearch(query string) []string {
 	o.domainsLock.RLock()
 
 	// Check if this is a NAME.NAMESPACE. query
@@ -195,14 +196,14 @@ func (o *outbound) resolveNoSearch(query string) *nat.Route {
 			query += "svc.cluster.local."
 		}
 	}
-	route := o.domains[strings.ToLower(query)]
+	ips := o.domains[strings.ToLower(query)]
 	o.domainsLock.RUnlock()
-	return route
+	return shuffleIPs(ips)
 }
 
 // Since headless and externalName services can have multiple IPs,
 // we return a shuffled list of the IPs if there are more than one.
-func (o *outbound) getIPs(ips []string) []string {
+func shuffleIPs(ips []string) []string {
 	switch lenIPs := len(ips); lenIPs {
 	case 0:
 		return []string{}
@@ -210,7 +211,6 @@ func (o *outbound) getIPs(ips []string) []string {
 	default:
 		// If there are multiple elements in the slice, we shuffle the
 		// order so it's not the same each time
-		rand.Seed(time.Now().UnixNano())
 		rand.Shuffle(lenIPs, func(i, j int) {
 			ips[i], ips[j] = ips[j], ips[i]
 		})
@@ -219,196 +219,158 @@ func (o *outbound) getIPs(ips []string) []string {
 }
 
 func (o *outbound) destination(conn *net.TCPConn) (string, error) {
-	_, host, err := o.translator.GetOriginalDst(conn)
-	return host, err
+	return o.translator.GetOriginalDst(conn)
 }
 
-func (o *outbound) update(table *rpc.Table) {
+func (o *outbound) update(table *rpc.Table) (err error) {
 	// Update stems from the connector so the destination target must be set on all routes
-	routes := make([]*nat.Route, len(table.Routes))
-	for i, route := range table.Routes {
-		routes[i] = &nat.Route{
-			Route:  route,
-			Target: strconv.Itoa(o.proxyRedirPort),
+	routes := make([]*nat.Route, 0, len(table.Routes))
+	domains := make(map[string][]string)
+	for _, route := range table.Routes {
+		ports, err := nat.ParsePorts(route.Port)
+		if err != nil {
+			return err
+		}
+		for _, ip := range route.Ips {
+			r, err := nat.NewRoute(route.Proto, net.ParseIP(ip), ports, o.proxyRedirPort)
+			if err != nil {
+				return err
+			}
+			routes = append(routes, r)
+		}
+		if dn := route.Name; dn != "" {
+			dn = strings.ToLower(dn) + "."
+			domains[dn] = append(domains[dn], route.Ips...)
 		}
 	}
 	o.work <- func(c context.Context) error {
-		return o.doUpdate(c, &nat.Table{
+		return o.doUpdate(c, domains, &nat.Table{
 			Name:   table.Name,
 			Routes: routes,
 		})
 	}
+	return nil
 }
 
 func (o *outbound) noMoreUpdates() {
 	close(o.work)
 }
 
-// Helper function for seeing if two unordered
-// slices of IPs are equal.
-func ipsEqual(a, b []string) bool {
-	// Since the slices could have duplicates, we need to
-	// create a slice of unique elements so we can compare them.
-	uniq := func(strSlice []string) []string {
-		uniqStrs := []string{}
-		uniqElms := make(map[string]bool, len(a))
-
-		for _, elm := range strSlice {
-			if _, ok := uniqElms[elm]; !ok {
-				uniqStrs = append(uniqStrs, elm)
-				uniqElms[elm] = true
-			}
+func uniqueSortedAndNotEmpty(ss []string) []string {
+	sort.Strings(ss)
+	prev := ""
+	last := len(ss) - 1
+	for i := 0; i <= last; i++ {
+		s := ss[i]
+		if s == prev {
+			copy(ss[i:], ss[i+1:])
+			last--
+			i--
+		} else {
+			prev = s
 		}
-		return uniqStrs
 	}
-
-	uniqA := uniq(a)
-	uniqB := uniq(b)
-
-	if len(uniqA) != len(uniqB) {
-		return false
-	}
-
-	// Instead of comparing the slices directly, we make a
-	// map of the first slice, and then remove elements if
-	// they are in the second slice.
-	diff := make(map[string]bool, len(uniqA))
-	for _, aIP := range uniqA {
-		diff[aIP] = true
-	}
-	for _, bIP := range uniqB {
-		// ip was in uniqB but not uniqA, then they aren't equal
-		// and we can return early
-		if _, ok := diff[bIP]; !ok {
-			return false
-		}
-		delete(diff, bIP)
-	}
-	// If the diff map is empty at the end, then the ips are the same
-	return len(diff) == 0
+	return ss[:last+1]
 }
 
-func routesEqual(a, b *nat.Route) bool {
-	if a == b {
-		return true
-	}
-	if a == nil || b == nil {
-		return false
-	}
-	if !ipsEqual(a.Ips, b.Ips) {
-		return false
-	}
-	return a.Name == b.Name && a.Port == b.Port && a.Target == b.Target
-}
-
-func domain(r *nat.Route) string {
-	return strings.ToLower(r.Name + ".")
-}
-
-func (o *outbound) doUpdate(c context.Context, table *nat.Table) error {
+func (o *outbound) doUpdate(c context.Context, domains map[string][]string, table *nat.Table) error {
 	// Make a copy of the current table
-	o.tablesLock.RLock()
+	o.tablesLock.Lock()
+	defer o.tablesLock.Unlock()
 	oldTable, ok := o.tables[table.Name]
-	oldRoutes := make(map[string]*nat.Route)
+	oldRoutes := make(map[nat.Destination]*nat.Route)
 	if ok {
 		for _, route := range oldTable.Routes {
-			oldRoutes[route.Name] = route
+			oldRoutes[route.Destination] = route
 		}
 	}
-	o.tablesLock.RUnlock()
+
+	// We're updating routes. Make sure DNS waits until the new answer
+	// is ready, i.e. don't serve old answers.
+	o.domainsLock.Lock()
+	defer o.domainsLock.Unlock()
+
+	dnsChanged := false
+	for k, ips := range o.domains {
+		if _, ok := domains[k]; !ok {
+			dnsChanged = true
+			dlog.Debugf(c, "CLEAR %s -> %s", k, strings.Join(ips, ","))
+			delete(o.domains, k)
+		}
+	}
+
+	for k, nIps := range domains {
+		// Ensure that all added entries contain unique, sorted, and non-empty IPs
+		nIps = uniqueSortedAndNotEmpty(nIps)
+		if len(nIps) == 0 {
+			delete(domains, k)
+			continue
+		}
+		domains[k] = nIps
+		if oIps, ok := o.domains[k]; ok {
+			if ok = len(nIps) == len(oIps); ok {
+				for i, ip := range nIps {
+					if ok = ip == oIps[i]; !ok {
+						break
+					}
+				}
+			}
+			if !ok {
+				dnsChanged = true
+				dlog.Debugf(c, "REPLACE %s -> %s with %s", strings.Join(oIps, ","), k, strings.Join(nIps, ","))
+			}
+		} else {
+			dnsChanged = true
+			dlog.Debugf(c, "STORE %s -> %s", k, strings.Join(nIps, ","))
+		}
+	}
 
 	// Operate on the copy of the current table and the new table
+	routesChanged := false
 	for _, newRoute := range table.Routes {
-		oldRoute, oldRouteOk := oldRoutes[newRoute.Name]
-		// A nil Route (when oldRouteOk != true) will compare
-		// inequal to any valid new Route.
-		if !routesEqual(newRoute, oldRoute) {
-			// We're updating a route. Make sure DNS waits until the new answer
-			// is ready, i.e. don't serve the old answer.
-			o.domainsLock.Lock()
-
-			// delete the old version
-			if oldRouteOk {
-				switch newRoute.Proto {
-				case "tcp":
-					if err := o.translator.ClearTCP(c, oldRoute.Ips, oldRoute.Port); err != nil {
-						dlog.Errorf(c, "clear tpc: %v", err)
-					}
-				case "udp":
-					if err := o.translator.ClearUDP(c, oldRoute.Ips, oldRoute.Port); err != nil {
-						dlog.Errorf(c, "clear udp: %v", err)
-					}
-				default:
-					dlog.Warnf(c, "unrecognized protocol: %v", newRoute)
-				}
-			}
-			// and add the new version
-			if newRoute.Target != "" {
-				switch newRoute.Proto {
-				case "tcp":
-					if err := o.translator.ForwardTCP(c, newRoute.Ips, newRoute.Port, newRoute.Target); err != nil {
-						dlog.Errorf(c, "forward tcp: %v", err)
-					}
-				case "udp":
-					if err := o.translator.ForwardUDP(c, newRoute.Ips, newRoute.Port, newRoute.Target); err != nil {
-						dlog.Errorf(c, "forward udp: %v", err)
-					}
-				default:
-					dlog.Warnf(c, "unrecognized protocol: %v", newRoute)
-				}
-			}
-
-			if newRoute.Name != "" {
-				domain := domain(newRoute)
-				dlog.Debugf(c, "STORE %v->%v", domain, newRoute)
-				o.domains[domain] = newRoute
-			}
-
-			o.domainsLock.Unlock()
+		// Add the new version. This will clear out the old one if it exists
+		changed, err := o.translator.Add(c, newRoute)
+		if err != nil {
+			dlog.Errorf(c, "forward %s: %v", newRoute, err)
+		} else if changed {
+			routesChanged = true
 		}
 
 		// remove the route from our map of old routes so we
 		// don't end up deleting it below
-		delete(oldRoutes, newRoute.Name)
+		delete(oldRoutes, newRoute.Destination)
 	}
 
-	// Clear out stale routes and DNS names
-	o.domainsLock.Lock()
 	for _, route := range oldRoutes {
-		domain := domain(route)
-		dlog.Debugf(c, "CLEAR %v->%v", domain, route)
-		delete(o.domains, domain)
-
-		switch route.Proto {
-		case "tcp":
-			if err := o.translator.ClearTCP(c, route.Ips, route.Port); err != nil {
-				dlog.Errorf(c, "clear tpc: %v", err)
-			}
-		case "udp":
-			if err := o.translator.ClearUDP(c, route.Ips, route.Port); err != nil {
-				dlog.Errorf(c, "clear udp: %v", err)
-			}
-		default:
-			dlog.Warnf(c, "unrecognized protocol: %v", route)
+		changed, err := o.translator.Clear(c, route)
+		if err != nil {
+			dlog.Errorf(c, "clear %s: %v", route, err)
+		} else if changed {
+			routesChanged = true
 		}
 	}
-	o.domainsLock.Unlock()
 
-	// Update the externally-visible table
-	o.tablesLock.Lock()
+	if routesChanged {
+		if err := o.translator.Flush(c); err != nil {
+			dlog.Errorf(c, "flush: %v", err)
+		}
+	}
+
+	if dnsChanged {
+		o.domains = domains
+		dns.Flush(c)
+	}
+
 	if table.Routes == nil || len(table.Routes) == 0 {
 		delete(o.tables, table.Name)
 	} else {
 		o.tables[table.Name] = table
 	}
-	o.tablesLock.Unlock()
-
 	return nil
 }
 
 // SetSearchPath updates the DNS search path used by the resolver
 func (o *outbound) setSearchPath(c context.Context, paths []string) {
-	o.searchLock.Lock()
-	defer o.searchLock.Unlock()
 	o.setSearchPathFunc(c, paths)
+	dns.Flush(c)
 }

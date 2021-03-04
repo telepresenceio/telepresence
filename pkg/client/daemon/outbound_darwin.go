@@ -194,6 +194,7 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 				additions = append(additions, ns)
 			}
 		}
+		o.search = search
 		o.namespaces = namespaces
 		o.domainsLock.Unlock()
 
@@ -236,22 +237,17 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 		for namespace := range o.namespaces {
 			_ = os.Remove(namespaceResolverFile(namespace))
 		}
-		dns.Flush()
+		dns.Flush(c)
 	}()
 
 	// Start local DNS server
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
 	g.Go("Server", func(c context.Context) error {
 		defer o.dnsListener.Close()
-		v := dns.NewServer(c, []net.PacketConn{o.dnsListener}, "", func(domain string) []string {
-			if r := o.resolveNoSearch(domain); r != nil {
-				return o.getIPs(r.Ips)
-			}
-			return []string{}
-		})
+		v := dns.NewServer(c, []net.PacketConn{o.dnsListener}, "", o.resolveNoSearch)
 		return v.Run(c)
 	})
-	dns.Flush()
+	dns.Flush(c)
 
 	onReady()
 	return g.Wait()
