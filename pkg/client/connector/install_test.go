@@ -313,6 +313,11 @@ func TestAddAgentToDeployment(t *testing.T) {
 		tc.OutputDeployment = tmp.Deployment
 		tc.OutputService = tmp.Service
 
+		// If it is a test case for a service with multiple ports,
+		// we need to specify the name of the port we want to intercept
+		if strings.Contains(tcName, "mp-tc") {
+			tc.InputPortName = "https"
+		}
 		testcases[tcName] = tc
 	}
 
