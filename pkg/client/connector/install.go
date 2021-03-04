@@ -569,9 +569,13 @@ func addAgentToDeployment(
 	containerPort.Number = uint16(servicePort.TargetPort.IntVal)
 	containerPort.Protocol = servicePort.Protocol
 	// Now fill from the Deployment's containerPort.
+	usedContainerName := false
 	if containerPortIndex >= 0 {
 		if containerPort.Name == "" {
 			containerPort.Name = container.Ports[containerPortIndex].Name
+			if containerPort.Name != "" {
+				usedContainerName = true
+			}
 		}
 		if containerPort.Number == 0 {
 			containerPort.Number = uint16(container.Ports[containerPortIndex].ContainerPort)
@@ -611,6 +615,15 @@ func addAgentToDeployment(
 				TargetPort:   containerPort.Number,
 				SymbolicName: containerPort.Name,
 			},
+		}
+		// Since we are updating the service to use the containerPort.Name
+		// if that value came from the container, then we need to hide it
+		// since the service is using the targetPort's int.
+		if usedContainerName {
+			deploymentMod.HideContainerPort = &hideContainerPortAction{
+				ContainerName: container.Name,
+				PortName:      containerPort.Name,
+			}
 		}
 	} else {
 		// Hijack the port name in the Deployment.
