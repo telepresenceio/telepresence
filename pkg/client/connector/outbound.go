@@ -47,6 +47,8 @@ func (kc *k8sCluster) startWatchers(c context.Context, accWait chan struct{}) (e
 		}
 	}()
 
+	_accWait := accWait
+
 	acc := kc.client.Watch(c,
 		kates.Query{
 			Name: "Namespaces",
@@ -68,6 +70,23 @@ func (kc *k8sCluster) startWatchers(c context.Context, accWait chan struct{}) (e
 	})
 
 	g.Go("watch-k8s", func(c context.Context) error {
+		// Don't call kc.updateDaemonTable until we have a complete snapshot, signaled by accWait getting closed.
+		needsUpdate := false
+		for {
+			select {
+			case <-c.Done():
+				return nil
+			case <-kc.watcherChanged:
+				needsUpdate = true
+				continue
+			case <-_accWait:
+				if needsUpdate {
+					kc.updateDaemonTable(c)
+				}
+			}
+			break
+		}
+		// OK, accWait is closed, we can loop normally now.
 		for {
 			select {
 			case <-c.Done():
