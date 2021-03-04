@@ -232,19 +232,16 @@ func (ki *installer) updateDeployment(c context.Context, env client.Env, current
 	return dep, err
 }
 
-func svcPortByName(svc *kates.Service, name string) *kates.ServicePort {
+func svcPortByName(svc *kates.Service, name string) []*kates.ServicePort {
+	svcPorts := make([]*kates.ServicePort, 0)
 	ports := svc.Spec.Ports
-	if name != "" {
-		for i := range ports {
-			port := &ports[i]
-			if port.Name == name {
-				return port
-			}
+	for i := range ports {
+		port := &ports[i]
+		if name == "" || name == port.Name {
+			svcPorts = append(svcPorts, port)
 		}
-	} else if len(svc.Spec.Ports) == 1 {
-		return &ports[0]
 	}
-	return nil
+	return svcPorts
 }
 
 func (ki *installer) findMatchingServices(portName string, dep *kates.Deployment) []*kates.Service {
@@ -264,7 +261,7 @@ func (ki *installer) findMatchingServices(portName string, dep *kates.Deployment
 					continue nextSvc
 				}
 			}
-			if svcPortByName(svc, portName) != nil {
+			if len(svcPortByName(svc, portName)) > 0 {
 				matching = append(matching, svc)
 			}
 		}
@@ -298,7 +295,13 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 
 	cns := dep.Spec.Template.Spec.Containers
 	for _, svc := range svcs {
-		port := svcPortByName(svc, portName)
+		// For now, we only support intercepting one port on a given service.
+		ports := svcPortByName(svc, portName)
+		if len(ports) > 1 {
+			return nil, nil, nil, 0, fmt.Errorf(
+				"found matching service with multiple ports for deployment %s. Please specify the service port you want to intercept like so --port local:svcPortName", dep.Name)
+		}
+		port := ports[0]
 		var msp *corev1.ServicePort
 		var ccn *corev1.Container
 		var cpi int
@@ -370,6 +373,26 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 
 var agentNotFound = errors.New("no such agent")
 
+// Determines if the port associated with a past-intercepted deployment has
+// changed
+func portChanged(c context.Context, dep *kates.Deployment, portName string) (bool, error) {
+	var actions deploymentActions
+	annotationsFound, err := getAnnotation(dep, &actions)
+	if err != nil {
+		return false, err
+	}
+	if annotationsFound {
+		// If the portName in the annotation doesn't match the portName passed in
+		// then the ports have changed.
+		curSvcPort := actions.ReferencedServicePortName
+		if curSvcPort != portName {
+			dlog.Infof(c, "Port for %s changed from %s -> %s", dep.Name, curSvcPort, portName)
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, agentImageName string) error {
 	dep, err := ki.findDeployment(c, namespace, name)
 	if err != nil {
@@ -387,14 +410,42 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, a
 		}
 	}
 
+	svcPortChanged, err := portChanged(c, dep, portName)
+	if err != nil {
+		return err
+	}
 	var svc *kates.Service
 
 	switch {
+	case svcPortChanged:
+		dlog.Infof(c, "Port to be intercepted changed for deployment %s.%s", name, namespace)
+		dlog.Info(c, "Undoing dep+svc modifications and removing agent")
+		// Remove deployment+svc modifications, as well as traffic-agent since
+		// the port is vital in configuring all of those
+		if err = ki.undoDeploymentMods(c, dep); err != nil {
+			return err
+		}
+
+		if err = ki.waitForApply(c, namespace, name, dep); err != nil {
+			return err
+		}
+		// Since the agent has been removed, we find the updated version of
+		// the deployment and fallthrough to the no agent case
+		dep, err = ki.findDeployment(c, namespace, name)
+		if err != nil {
+			return nil
+		}
+		fallthrough
 	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for deployment %s.%s", name, namespace)
+		dlog.Infof(c, "Using port name %q", portName)
 		matchingSvcs := ki.findMatchingServices(portName, dep)
 		if len(matchingSvcs) == 0 {
-			return fmt.Errorf("found no services with just one port and a selector matching labels %v", dep.Spec.Template.Labels)
+			errMsg := fmt.Sprintf("Found no services with a selector matching labels %v", dep.Spec.Template.Labels)
+			if portName != "" {
+				errMsg += fmt.Sprintf(" and a port named %s", portName)
+			}
+			return errors.New(errMsg)
 		}
 		var err error
 		dep, svc, err = addAgentToDeployment(c, portName, agentImageName, dep, matchingSvcs)
@@ -569,9 +620,13 @@ func addAgentToDeployment(
 	containerPort.Number = uint16(servicePort.TargetPort.IntVal)
 	containerPort.Protocol = servicePort.Protocol
 	// Now fill from the Deployment's containerPort.
+	usedContainerName := false
 	if containerPortIndex >= 0 {
 		if containerPort.Name == "" {
 			containerPort.Name = container.Ports[containerPortIndex].Name
+			if containerPort.Name != "" {
+				usedContainerName = true
+			}
 		}
 		if containerPort.Number == 0 {
 			containerPort.Number = uint16(container.Ports[containerPortIndex].ContainerPort)
@@ -589,8 +644,9 @@ func addAgentToDeployment(
 
 	// Figure what modifications we need to make.
 	deploymentMod := &deploymentActions{
-		Version:           version,
-		ReferencedService: service.Name,
+		Version:                   version,
+		ReferencedService:         service.Name,
+		ReferencedServicePortName: portName,
 		AddTrafficAgent: &addTrafficAgentAction{
 			containerName:       container.Name,
 			ContainerPortName:   containerPort.Name,
@@ -611,6 +667,15 @@ func addAgentToDeployment(
 				TargetPort:   containerPort.Number,
 				SymbolicName: containerPort.Name,
 			},
+		}
+		// Since we are updating the service to use the containerPort.Name
+		// if that value came from the container, then we need to hide it
+		// since the service is using the targetPort's int.
+		if usedContainerName {
+			deploymentMod.HideContainerPort = &hideContainerPortAction{
+				ContainerName: container.Name,
+				PortName:      containerPort.Name,
+			}
 		}
 	} else {
 		// Hijack the port name in the Deployment.

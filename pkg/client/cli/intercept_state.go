@@ -31,7 +31,7 @@ type interceptInfo struct {
 	name      string
 	agentName string
 	namespace string
-	port      int
+	port      string
 	localOnly bool
 
 	previewEnabled bool
@@ -64,7 +64,7 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 	flags := cmd.Flags()
 
 	flags.StringVarP(&ii.agentName, "deployment", "d", "", "Name of deployment to intercept, if different from <name>")
-	flags.IntVarP(&ii.port, "port", "p", 8080, "Local port to forward to")
+	flags.StringVarP(&ii.port, "port", "p", "8080", "Local port to forward to. If intercepting a service with multiple ports, use <local port>:<service port name> format")
 
 	flags.BoolVarP(&ii.localOnly, "local-only", "l", false, ``+
 		`Declare a local-only intercept for the purpose of getting direct outbound access to the intercept's namespace`)
@@ -243,7 +243,25 @@ func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, er
 
 	spec.Agent = is.agentName
 	spec.TargetHost = "127.0.0.1"
-	spec.TargetPort = int32(is.port)
+	// Parse port into spec based on how it's formatted
+	portMapping := strings.Split(is.port, ":")
+	switch len(portMapping) {
+	case 1:
+		port, err := strconv.ParseUint(is.port, 10, 16)
+		if err != nil {
+			return nil, errors.Errorf("Port numbers must be a valid, positive int, you gave: %q", is.port)
+		}
+		spec.TargetPort = int32(port)
+	case 2:
+		port, err := strconv.ParseUint(portMapping[0], 10, 16)
+		if err != nil {
+			return nil, errors.Errorf("Port numbers must be a valid, positive int, you gave: %q", portMapping[0])
+		}
+		spec.TargetPort = int32(port)
+		spec.ServicePortName = portMapping[1]
+	default:
+		return nil, errors.New("Ports must be of the format --ports local[:svcPortName]")
+	}
 
 	mountPoint := ""
 	doMount, err := strconv.ParseBool(is.mount)

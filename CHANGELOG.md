@@ -7,6 +7,7 @@
 - Bugfix: The description of the `--everything` flag for the `uninstall` command was corrected.
 - Feature: Support headless services (including ExternalName), which you can use if you used "Also Proxy" in telepresence 1.
 - Bugfix: Connecting to a large cluster could take a very long time and even make the process hang. This is no longer the case.
+- Feature: Users can choose which port to intercept when intercepting a service with multiple ports.
 
 ### 2.0.3 (February 24, 2021)
 

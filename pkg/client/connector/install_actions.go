@@ -490,10 +490,11 @@ func (hcp *hideContainerPortAction) undo(dep kates.Object) error {
 }
 
 type deploymentActions struct {
-	Version           string `json:"version"`
-	ReferencedService string
-	HideContainerPort *hideContainerPortAction `json:"hide_container_port,omitempty"`
-	AddTrafficAgent   *addTrafficAgentAction   `json:"add_traffic_agent,omitempty"`
+	Version                   string `json:"version"`
+	ReferencedService         string
+	ReferencedServicePortName string                   `json:"referenced_service_port_name,omitempty"`
+	HideContainerPort         *hideContainerPortAction `json:"hide_container_port,omitempty"`
+	AddTrafficAgent           *addTrafficAgentAction   `json:"add_traffic_agent,omitempty"`
 }
 
 func (d *deploymentActions) actions() (actions []action) {

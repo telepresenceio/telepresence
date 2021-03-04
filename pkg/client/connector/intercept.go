@@ -180,7 +180,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	// It's OK to just call addAgent every time; if the agent is already installed then it's a
 	// no-op.
 	var result *rpc.InterceptResult
-	if result = tm.addAgent(c, spec.Namespace, spec.Agent, ir.AgentImage); result.Error != rpc.InterceptError_UNSPECIFIED {
+	if result = tm.addAgent(c, spec.Namespace, spec.Agent, spec.ServicePortName, ir.AgentImage); result.Error != rpc.InterceptError_UNSPECIFIED {
 		return result, nil
 	}
 
@@ -260,8 +260,8 @@ func (tm *trafficManager) addLocalOnlyIntercept(c context.Context, spec *manager
 	}, nil
 }
 
-func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, agentImageName string) *rpc.InterceptResult {
-	if err := tm.ensureAgent(c, namespace, agentName, "", agentImageName); err != nil {
+func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcPort, agentImageName string) *rpc.InterceptResult {
+	if err := tm.ensureAgent(c, namespace, agentName, svcPort, agentImageName); err != nil {
 		if err == agentNotFound {
 			return &rpc.InterceptResult{
 				Error:     rpc.InterceptError_NOT_FOUND,
