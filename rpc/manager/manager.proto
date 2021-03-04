@@ -128,9 +128,17 @@ enum InterceptDispositionType {
 }
 
 message IngressInfo {
+  // The layer-3 host
   string host = 1;
+
+  // The layer-4 port
   int32 port = 2;
+
+  // Whether or not to use TLS on the port
   bool use_tls = 3;
+
+  // The layer-5 host
+  string l5host = 4;
 }
 
 message PreviewSpec {

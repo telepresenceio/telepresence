@@ -67,6 +67,7 @@ func (m *Manager) DialIntercept(ctx context.Context, interceptID string) (net.Co
 		dialer := &tls.Dialer{
 			Config: &tls.Config{
 				InsecureSkipVerify: true,
+				ServerName:         ingressInfo.L5Host,
 			},
 		}
 		dlog.Debugf(ctx, "HandleConnection: dialing intercept %s using TLS on %s", interceptID, dialAddr)
