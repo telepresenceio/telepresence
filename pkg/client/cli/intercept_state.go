@@ -475,12 +475,18 @@ func (is *interceptState) writeEnvJSON() error {
 
 var hostRx = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$`)
 
-func askForHostname(cachedHost string, reader *bufio.Reader, out io.Writer) (string, error) {
+const ingressDesc = "To do a preview URL, telepresence needs to know how cluster ingress works for this service. Please %s the ingress to use.\n"
+const ingressQ1 = `1/4: What's your ingress' layer 3 (IP) address?  You may use an IP address or a DNS name (this is usually a "service.namespace" DNS name)`
+const ingressQ2 = `2/4: What's your ingress' layer 4 address (TCP port number)`
+const ingressQ3 = `3/4: Does that TCP port on your ingress use cleartext or TLS`
+const ingressQ4 = `4/4: Specify a different layer 5 hostname (TLS-SNI, HTTP "Host" header) to access this service if required`
+
+func askForHost(question, cachedHost string, reader *bufio.Reader, out io.Writer) (string, error) {
 	for {
 		if cachedHost != "" {
-			fmt.Fprintf(out, "Ingress service.namespace [%s] ? ", cachedHost)
+			fmt.Fprintf(out, "%s [%s] ? ", question, cachedHost)
 		} else {
-			fmt.Fprint(out, "Ingress service.namespace ? ")
+			fmt.Fprintf(out, "%s ? ", question)
 		}
 		reply, err := reader.ReadString('\n')
 		if err != nil {
@@ -497,7 +503,7 @@ func askForHostname(cachedHost string, reader *bufio.Reader, out io.Writer) (str
 			return reply, nil
 		}
 		fmt.Fprintf(out,
-			"Ingress %q must match the regex [a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)* (e.g. 'myingress.mynamespace')\n",
+			"Address %q must match the regex [a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)* (e.g. 'myingress.mynamespace')\n",
 			reply)
 	}
 }
@@ -505,9 +511,9 @@ func askForHostname(cachedHost string, reader *bufio.Reader, out io.Writer) (str
 func askForPortNumber(cachedPort int32, reader *bufio.Reader, out io.Writer) (int32, error) {
 	for {
 		if cachedPort != 0 {
-			fmt.Fprintf(out, "Port [%d] ? ", cachedPort)
+			fmt.Fprintf(out, "%s [%d] ? ", ingressQ2, cachedPort)
 		} else {
-			fmt.Fprint(out, "Port ? ")
+			fmt.Fprintf(out, "%s ? ", ingressQ2)
 		}
 		reply, err := reader.ReadString('\n')
 		if err != nil {
@@ -534,7 +540,7 @@ func askForUseTLS(cachedUseTLS bool, reader *bufio.Reader, out io.Writer) (bool,
 		if cachedUseTLS {
 			yn = "y"
 		}
-		fmt.Fprintf(out, "Use TLS y/n [%s] ? ", yn)
+		fmt.Fprintf(out, "%s y/n [%s] ? ", ingressQ3, yn)
 		reply, err := reader.ReadString('\n')
 		if err != nil {
 			return false, err
@@ -571,15 +577,21 @@ func (cs *connectorState) selectIngress(ctx context.Context, in io.Reader, out i
 
 	reader := bufio.NewReader(in)
 
-	fmt.Fprintf(out, "%s the ingress to use for preview URL access\n", selectOrConfirm)
+	fmt.Fprintf(out, ingressDesc, selectOrConfirm)
 	reply := &manager.IngressInfo{}
-	if reply.Host, err = askForHostname(cachedIngressInfo.Host, reader, out); err != nil {
+	if reply.Host, err = askForHost(ingressQ1, cachedIngressInfo.Host, reader, out); err != nil {
 		return nil, err
 	}
 	if reply.Port, err = askForPortNumber(cachedIngressInfo.Port, reader, out); err != nil {
 		return nil, err
 	}
 	if reply.UseTls, err = askForUseTLS(cachedIngressInfo.UseTls, reader, out); err != nil {
+		return nil, err
+	}
+	if cachedIngressInfo.L5Host == "" {
+		cachedIngressInfo.L5Host = reply.Host
+	}
+	if reply.L5Host, err = askForHost(ingressQ4, cachedIngressInfo.L5Host, reader, out); err != nil {
 		return nil, err
 	}
 
@@ -593,5 +605,5 @@ func (cs *connectorState) selectIngress(ctx context.Context, in io.Reader, out i
 }
 
 func ingressInfoEqual(a, b *manager.IngressInfo) bool {
-	return a.Host == b.Host && a.Port == b.Port && a.UseTls == b.UseTls
+	return a.Host == b.Host && a.L5Host == b.L5Host && a.Port == b.Port && a.UseTls == b.UseTls
 }
