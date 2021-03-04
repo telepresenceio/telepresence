@@ -46,9 +46,6 @@ type k8sCluster struct {
 	// Currently intercepted namespaces by local intercepts
 	localInterceptedNamespaces map[string]struct{}
 
-	// Timer used for coalescing of service and pod updates.
-	svcPodTimer *time.Timer
-
 	accLock         sync.Mutex
 	watchers        map[string]*k8sWatcher
 	localIntercepts map[string]string
