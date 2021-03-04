@@ -431,7 +431,7 @@ type IngressInfo struct {
 
 	// The layer-3 host
 	Host string `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
-	// The layer 4 port
+	// The layer-4 port
 	Port int32 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
 	// Whether or not to use TLS on the port
 	UseTls bool `protobuf:"varint,3,opt,name=use_tls,json=useTls,proto3" json:"use_tls,omitempty"`

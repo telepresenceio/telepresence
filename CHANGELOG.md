@@ -6,6 +6,7 @@
 - Change: The telepresence daemon will no longer use port 1234 for the firewall-to-SOCKS server, but will instead choose an available port dynamically.
 - Bugfix: The description of the `--everything` flag for the `uninstall` command was corrected.
 - Feature: Support headless services (including ExternalName), which you can use if you used "Also Proxy" in telepresence 1.
+- Feature: Preview URLs can now set a layer-5 hostname (TLS-SNI and HTTP "Host" header) that is different than the layer-3 hostname (IP-address/DNS-name) that is used to dial to the ingress.
 - Feature: The Ingress info will now contain a layer-5 hostname that can be used for TLS-SLI and HTTP "Host" header when accessing a service.
 - Bugfix: Connecting to a large cluster could take a very long time and even make the process hang. This is no longer the case.
 - Feature: Users can choose which port to intercept when intercepting a service with multiple ports.
