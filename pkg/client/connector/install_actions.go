@@ -265,6 +265,7 @@ func (ata *addTrafficAgentAction) do(obj kates.Object) error {
 			ContainerPort: 9900,
 		}},
 		Env:          ata.agentEnvironment(dep.GetName(), appContainer),
+		EnvFrom:      ata.agentEnvFrom(appContainer.EnvFrom),
 		VolumeMounts: ata.agentVolumeMounts(appContainer.VolumeMounts),
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
@@ -275,6 +276,20 @@ func (ata *addTrafficAgentAction) do(obj kates.Object) error {
 		},
 	})
 	return nil
+}
+
+const envPrefix = "TEL_APP_"
+
+func (ata *addTrafficAgentAction) agentEnvFrom(appEF []corev1.EnvFromSource) []corev1.EnvFromSource {
+	if ln := len(appEF); ln > 0 {
+		agentEF := make([]corev1.EnvFromSource, ln)
+		for i, appE := range appEF {
+			appE.Prefix = envPrefix + appE.Prefix
+			agentEF[i] = appE
+		}
+		return agentEF
+	}
+	return appEF
 }
 
 func (ata *addTrafficAgentAction) agentEnvironment(agentName string, appContainer *kates.Container) []corev1.EnvVar {
@@ -323,7 +338,7 @@ func (ata *addTrafficAgentAction) agentEnvironment(agentName string, appContaine
 			mounts[i] = appContainer.VolumeMounts[i].MountPath
 		}
 		env = append(env, corev1.EnvVar{
-			Name:  "TEL_APP_TELEPRESENCE_MOUNTS",
+			Name:  envPrefix + "TELEPRESENCE_MOUNTS",
 			Value: strings.Join(mounts, ":"),
 		})
 	}
@@ -349,7 +364,7 @@ func (ata *addTrafficAgentAction) agentVolumeMounts(mounts []corev1.VolumeMount)
 func (ata *addTrafficAgentAction) appEnvironment(appContainer *kates.Container) []corev1.EnvVar {
 	envCopy := make([]corev1.EnvVar, len(appContainer.Env)+1)
 	for i, ev := range appContainer.Env {
-		ev.Name = "TEL_APP_" + ev.Name
+		ev.Name = envPrefix + ev.Name
 		envCopy[i] = ev
 	}
 	envCopy[len(appContainer.Env)] = corev1.EnvVar{
