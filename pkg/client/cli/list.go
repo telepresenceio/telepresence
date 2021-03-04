@@ -135,6 +135,9 @@ func DescribeIntercept(ii *manager.InterceptInfo, debug bool) string {
 	fields = append(fields, kv{"Destination",
 		net.JoinHostPort(ii.Spec.TargetHost, fmt.Sprintf("%d", ii.Spec.TargetPort))})
 
+	if ii.Spec.ServicePortName != "" {
+		fields = append(fields, kv{"Service Port Name", ii.Spec.ServicePortName})
+	}
 	if debug {
 		fields = append(fields, kv{"Mechanism", ii.Spec.Mechanism})
 		fields = append(fields, kv{"Mechanism Args", fmt.Sprintf("%q", ii.Spec.MechanismArgs)})
