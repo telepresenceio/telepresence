@@ -145,12 +145,12 @@ Alternatively, you can use Telepresence's `intercept` command to proxy traffic b
 
   Using deployment dataprocessingservice
   intercepted
-      Intercept name: dataprocessingservice
-      State         : ACTIVE
-      Destination   : 127.0.0.1:3000
-      Intercepting  : HTTP requests that match all of:
+      Intercept name  : dataprocessingservice
+      State           : ACTIVE
+      Destination     : 127.0.0.1:3000
+      Intercepting    : HTTP requests that match all of:
         header("x-telepresence-intercept-id") ~= regexp("86cb4a70-c7e1-1138-89c2-d8fed7a46cae:dataprocessingservice")
-      Preview URL   : https://<random-subdomain>.preview.edgestack.me
+      Preview URL     : https://<random-subdomain>.preview.edgestack.me
       Layer 5 Hostname: verylargejavaservice.default
   ```
 
