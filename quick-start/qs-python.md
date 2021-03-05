@@ -190,7 +190,7 @@ Python 3.x: `pip3 install fastapi uvicorn requests && python3 app.py`
   ```
   $ curl localhost:3000/color
 
-    “blue”
+    "blue"
   ```
 
 <Alert severity="success">
@@ -209,9 +209,9 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
     Using deployment dataprocessingservice
     intercepted
         Intercept name: dataprocessingservice
-        State       : ACTIVE
-        Destination : 127.0.0.1:3000
-        Intercepting: all TCP connections
+        State         : ACTIVE
+        Destination   : 127.0.0.1:3000
+        Intercepting  : all TCP connections
   ```
 
 2. Go to the frontend service again in your browser. Since the service is now intercepted it can be reached directly by its service name at [http://verylargejavaservice:8080](http://verylargejavaservice:8080). You will now see the <strong style="color:blue">blue</strong> elements in the app.
