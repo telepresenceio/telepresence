@@ -48,9 +48,10 @@ $ telepresence intercept dataprocessingservice --port 3000
   
   Using deployment dataprocessingservice
   intercepted
-      State       : ACTIVE
-      Destination : 127.0.0.1:3000
-      Intercepting: all connections
+      Intercept name: dataprocessingservice
+      State         : ACTIVE
+      Destination   : 127.0.0.1:3000
+      Intercepting  : all TCP connections
   
 $ curl verylargejavaservice:8080
 

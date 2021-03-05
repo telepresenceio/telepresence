@@ -10,18 +10,20 @@ telepresence intercept <mysvc> --port <port> --mount=/tmp/ -- /bin/bash
 
 In this case, Telepresence creates the intercept, mounts the Pod's volumes to locally to `/tmp`, and starts a Bash subshell.
 
-Telepresence can set a random mount point for you by using `--mount=true` instead, you can then find the mount point using the `$TELEPRESENCE_ROOT` variable.
+Telepresence can set a random mount point for you by using `--mount=true` instead, you can then find the mount point in the output of `telepresence list` or using the `$TELEPRESENCE_ROOT` variable.
 
 ```
 $ telepresence intercept <mysvc> --port <port> --mount=true -- /bin/bash
 Using deployment <mysvc>
 intercepted
-    State       : ACTIVE
-    Destination : 127.0.0.1:<port>
-    Intercepting: all connections
+    Intercept name    : <mysvc>
+    State             : ACTIVE
+    Destination       : 127.0.0.1:<port>
+    Volume Mount Point: /var/folders/cp/2r22shfd50d9ymgrw14fd23r0000gp/T/telfs-988349784
+    Intercepting      : all TCP connections
 
 bash-3.2$ echo $TELEPRESENCE_ROOT
-/var/folders/yh/42y5h_7s5992f80sjlv3wlgc0000gn/T/telfs-427288831
+/var/folders/cp/2r22shfd50d9ymgrw14fd23r0000gp/T/telfs-988349784
 ```
 
 <Alert severity="info"><code>--mount=true</code> is the default if a <code>mount</code> option is not specified, use <code>--mount=false</code> to disable mounting volumes.</Alert>

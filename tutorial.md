@@ -121,17 +121,37 @@ Alternatively, you can use Telepresence's `intercept` command to proxy traffic b
   
   ```
   $ telepresence intercept dataprocessingnodeservice --port 3000
-  Confirm the ingress to use for preview URL access
-  Ingress service.namespace [ambassador.ambassador] ?
-  Port [443] ? 80
-  Use TLS y/n [y] ? n
-  Using deployment dataprocessingnodeservice
+  To create a preview URL, telepresence needs to know how cluster
+  ingress works for this service.  Please Select the ingress to use.
+
+  1/4: What's your ingress' layer 3 (IP) address?
+       You may use an IP address or a DNS name (this is usually a
+       "service.namespace" DNS name).
+
+         [no default]: verylargejavaservice.default
+
+  2/4: What's your ingress' layer 4 address (TCP port number)?
+
+         [no default]: 8080
+
+  3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
+
+         [default: n]:
+
+  4/4: If required by your ingress, specify a different layer 5 hostname
+       (TLS-SNI, HTTP "Host" header) to access this service.
+
+         [default: verylargejavaservice.default]:
+
+  Using deployment dataprocessingservice
   intercepted
-      State       : ACTIVE
-      Destination : 127.0.0.1:3000
-      Intercepting: HTTP requests that match all of:
-        header("x-telepresence-intercept-id") ~= regexp  ("76a1e848-1829-74x-1138-e3294c1e9119:dataprocessingnodeservice")
-      Preview URL : https://[random-subdomain].preview.edgestack.me
+      Intercept name: dataprocessingservice
+      State         : ACTIVE
+      Destination   : 127.0.0.1:3000
+      Intercepting  : HTTP requests that match all of:
+        header("x-telepresence-intercept-id") ~= regexp("86cb4a70-c7e1-1138-89c2-d8fed7a46cae:dataprocessingservice")
+      Preview URL   : https://<random-subdomain>.preview.edgestack.me
+      Layer 5 Hostname: verylargejavaservice.default
   ```
 
 <table style="border-collapse: collapse; border: none; padding: 5px; line-height: 29px">
