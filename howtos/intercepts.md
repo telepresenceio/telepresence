@@ -50,11 +50,12 @@ The following quick overview on creating an intercept assumes you have a deploym
    Cloud to create a sharable preview URL for this intercept; if you
    hadn't been logged in it would have defaulted to
    `--preview-url=false`.  In order to do this, it will prompt you for
-   three options.  For the first, `Ingress`, Telepresence tries to
+   four options.  For the first, `ingress layer 3 (IP) address`, Telepresence tries to
    intelligently determine the ingress controller deployment and
    namespace for you.  If they are correct, you can hit `enter` to
    accept the defaults.  Set the next two options, `TLS` and `Port`,
-   appropriately based on your ingress service.
+   appropriately based on your ingress service, and optionally change the last
+   `layer 5 hostname` if different from the ingress address.
 
    Also because you're logged in, it will default to `--mechanism=http
    --http-match=auto` (or just `--http-match=auto`; `--http-match`
