@@ -142,6 +142,11 @@ func DescribeIntercept(ii *manager.InterceptInfo, debug bool) string {
 		fields = append(fields, kv{"Mechanism", ii.Spec.Mechanism})
 		fields = append(fields, kv{"Mechanism Args", fmt.Sprintf("%q", ii.Spec.MechanismArgs)})
 	}
+
+	if ii.Spec.MountPoint != "" {
+		fields = append(fields, kv{"Volume Mount Point", ii.Spec.MountPoint})
+	}
+
 	fields = append(fields, kv{"Intercepting", func() string {
 		if ii.MechanismArgsDesc == "" {
 			return fmt.Sprintf("using mechanism=%q with args=%q", ii.Spec.Mechanism, ii.Spec.MechanismArgs)
@@ -157,6 +162,9 @@ func DescribeIntercept(ii *manager.InterceptInfo, debug bool) string {
 			previewURL = "https://" + previewURL
 		}
 		fields = append(fields, kv{"Preview URL", previewURL})
+	}
+	if l5Hostname := ii.GetPreviewSpec().GetIngress().GetL5Host(); l5Hostname != "" {
+		fields = append(fields, kv{"Layer 5 Hostname", l5Hostname})
 	}
 
 	klen := 0

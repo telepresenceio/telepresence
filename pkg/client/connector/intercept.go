@@ -231,6 +231,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	if ir.MountPoint != "" && ii.SshPort > 0 {
 		result.Environment["TELEPRESENCE_ROOT"] = ir.MountPoint
 		deleteMount = false // Mount-point is busy until intercept ends
+		ii.Spec.MountPoint = ir.MountPoint
 	}
 	return result, nil
 }
