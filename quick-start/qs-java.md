@@ -257,36 +257,38 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
    Then when asked for the port, type `8080`, for "use TLS", type `n` and finally confirm the layer 5 hostname.
 
   ```
-To create a preview URL, telepresence needs to know how cluster
-ingress works for this service.  Please Select the ingress to use.
+    $ telepresence intercept dataprocessingservice --port 3000
 
-1/4: What's your ingress' layer 3 (IP) address?
-     You may use an IP address or a DNS name (this is usually a
-     "service.namespace" DNS name).
-
-       [no default]: verylargejavaservice.default
-
-2/4: What's your ingress' layer 4 address (TCP port number)?
-
-       [no default]: 8080
-
-3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
-
-       [default: n]:
-
-4/4: If required by your ingress, specify a different layer 5 hostname
-     (TLS-SNI, HTTP "Host" header) to access this service.
-
-       [default: verylargejavaservice.default]:
-
-Using deployment dataprocessingservice
-intercepted
-    Intercept name: dataprocessingservice
-    State         : ACTIVE
-    Destination   : 127.0.0.1:3000
-    Intercepting  : HTTP requests that match all of:
-      header("x-telepresence-intercept-id") ~= regexp("86cb4a70-c7e1-1138-89c2-d8fed7a46cae:dataprocessingservice")
-    Preview URL   : https://<random-subdomain>.preview.edgestack.me
+      To create a preview URL, telepresence needs to know how cluster
+      ingress works for this service.  Please Select the ingress to use.
+      
+      1/4: What's your ingress' layer 3 (IP) address?
+           You may use an IP address or a DNS name (this is usually a
+           "service.namespace" DNS name).
+      
+             [no default]: verylargejavaservice.default
+      
+      2/4: What's your ingress' layer 4 address (TCP port number)?
+      
+             [no default]: 8080
+      
+      3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
+      
+             [default: n]:
+      
+      4/4: If required by your ingress, specify a different layer 5 hostname
+           (TLS-SNI, HTTP "Host" header) to access this service.
+      
+             [default: verylargejavaservice.default]:
+      
+      Using deployment dataprocessingservice
+      intercepted
+          Intercept name: dataprocessingservice
+          State         : ACTIVE
+          Destination   : 127.0.0.1:3000
+          Intercepting  : HTTP requests that match all of:
+            header("x-telepresence-intercept-id") ~= regexp("86cb4a70-c7e1-1138-89c2-d8fed7a46cae:dataprocessingservice")
+          Preview URL   : https://<random-subdomain>.preview.edgestack.me
   ```
 
 4. Wait a moment for the intercept to start; it will also output a preview URL.  Go to this URL in your browser, it will be the <strong style="color:orange">orange</strong> version of the app.
