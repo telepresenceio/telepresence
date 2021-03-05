@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -272,16 +273,33 @@ func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, er
 	}
 
 	if doMount {
-		needBinary := func(prog string) error {
-			if exec.Command(prog, "-V").Run() != nil {
-				return errors.New(prog +
+		needBinary := func(prog string) ([]byte, error) {
+			// We use this for sshfs below but only version information for sshfs
+			// is included in stdout. So we use CombinedOutput to include stderr
+			// which has information about whether they need to upgrade to a newer
+			// version of macFUSE or not
+			out, err := exec.Command(prog, "-V").CombinedOutput()
+			if err != nil {
+				return nil, errors.New(prog +
 					` is required in order to mount remote filesystems. ` +
 					`Please install it or use intercept with --mount=false to intercept without mounting`)
 			}
-			return nil
+			return out, nil
 		}
-		if err = needBinary("sshfs"); err != nil {
+		out, err := needBinary("sshfs")
+		if err != nil {
 			return nil, err
+		}
+
+		// OSXFUSE changed to macFUSE and we've noticed that older versions of OSXFUSE
+		// can cause browsers to hang + kernel crashes, so we add an error to prevent
+		// our users from running into this problem.
+		// OSXFUSE isn't included in the output of sshfs -V in versions of 4.0.0 so
+		// we check for that as a proxy for if they have the right version or not.
+		if bytes.Contains(out, []byte("OSXFUSE")) {
+			return nil, errors.New(`macFUSE 4.0.5 or higher is required in order ` +
+				`to mount remote file systems. Please install it or use intercept ` +
+				`with --mount=false to intercept without mounting`)
 		}
 
 		if mountPoint == "" {

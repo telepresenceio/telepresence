@@ -11,6 +11,7 @@
 - Bugfix: Connecting to a large cluster could take a very long time and even make the process hang. This is no longer the case.
 - Feature: Users can choose which port to intercept when intercepting a service with multiple ports.
 - Change: On connect, telepresence will no longer suggest the `--mapped-namespaces` flag when the user connects to a large cluster.
+- Bugfix: Telepresence now explicitly requires macFUSE version 4.0.5 or higher for macOS.
 
 ### 2.0.3 (February 24, 2021)
 
