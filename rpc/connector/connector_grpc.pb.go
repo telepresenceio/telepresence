@@ -22,8 +22,6 @@ const _ = grpc.SupportPackageIsVersion7
 type ConnectorClient interface {
 	// Returns version information from the Connector
 	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
-	// Get cluster info
-	ConnectCluster(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ClusterInfo, error)
 	// Connects the daemon to a cluster and returns status
 	Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error)
 	// Adds a deployment intercept
@@ -49,15 +47,6 @@ func NewConnectorClient(cc grpc.ClientConnInterface) ConnectorClient {
 func (c *connectorClient) Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error) {
 	out := new(common.VersionInfo)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/Version", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectorClient) ConnectCluster(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ClusterInfo, error) {
-	out := new(ClusterInfo)
-	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/ConnectCluster", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -124,8 +113,6 @@ func (c *connectorClient) Quit(ctx context.Context, in *empty.Empty, opts ...grp
 type ConnectorServer interface {
 	// Returns version information from the Connector
 	Version(context.Context, *empty.Empty) (*common.VersionInfo, error)
-	// Get cluster info
-	ConnectCluster(context.Context, *ConnectRequest) (*ClusterInfo, error)
 	// Connects the daemon to a cluster and returns status
 	Connect(context.Context, *ConnectRequest) (*ConnectInfo, error)
 	// Adds a deployment intercept
@@ -147,9 +134,6 @@ type UnimplementedConnectorServer struct {
 
 func (UnimplementedConnectorServer) Version(context.Context, *empty.Empty) (*common.VersionInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
-}
-func (UnimplementedConnectorServer) ConnectCluster(context.Context, *ConnectRequest) (*ClusterInfo, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ConnectCluster not implemented")
 }
 func (UnimplementedConnectorServer) Connect(context.Context, *ConnectRequest) (*ConnectInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Connect not implemented")
@@ -196,24 +180,6 @@ func _Connector_Version_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).Version(ctx, req.(*empty.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Connector_ConnectCluster_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ConnectRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).ConnectCluster(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/telepresence.connector.Connector/ConnectCluster",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).ConnectCluster(ctx, req.(*ConnectRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -333,10 +299,6 @@ var _Connector_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Version",
 			Handler:    _Connector_Version_Handler,
-		},
-		{
-			MethodName: "ConnectCluster",
-			Handler:    _Connector_ConnectCluster_Handler,
 		},
 		{
 			MethodName: "Connect",

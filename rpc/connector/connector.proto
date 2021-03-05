@@ -13,9 +13,6 @@ service Connector {
   // Returns version information from the Connector
   rpc Version(google.protobuf.Empty) returns (telepresence.common.VersionInfo);
 
-  // Get cluster info
-  rpc ConnectCluster(ConnectRequest) returns (ClusterInfo);
-  
   // Connects the daemon to a cluster and returns status
   rpc Connect(ConnectRequest) returns (ConnectInfo);
 
@@ -35,26 +32,11 @@ service Connector {
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
-// ConnectRequest contains the information needed to connect to a cluster.
+// ConnectRequest contains the information needed to connect ot a cluster.
 message ConnectRequest {
   map<string, string> kube_flags = 1;
   repeated string mapped_namespaces = 2;
   string install_id = 3;
-}
-
-message ClusterInfo {
-  enum ErrType {
-    UNSPECIFIED = 0;
-    DISCONNECTING = 1;
-    CLUSTER_FAILED = 2;
-    ALREADY_CONNECTED = 3;
-    MUST_RESTART = 4;
-  }
-  ErrType error = 1;
-  string error_text = 2;
-  int32 pods = 3;
-  int32 services = 4;
-  int32 namespaces = 5;
 }
 
 message ConnectInfo {
@@ -63,8 +45,10 @@ message ConnectInfo {
     NOT_STARTED = 1;
     ALREADY_CONNECTED = 2;
     DISCONNECTING = 3;
-    BRIDGE_FAILED = 4;
-    TRAFFIC_MANAGER_FAILED = 5;
+    CLUSTER_FAILED = 4;
+    BRIDGE_FAILED = 5;
+    TRAFFIC_MANAGER_FAILED = 6;
+    MUST_RESTART = 7;
   }
   ErrType error = 1;
   string error_text = 2;

@@ -141,12 +141,6 @@ func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 	}, nil
 }
 
-func (s *service) ConnectCluster(c context.Context, cr *rpc.ConnectRequest) (clusterInfo *rpc.ClusterInfo, err error) {
-	c = s.callCtx(c, "ConnectCluster")
-	defer func() { err = callRecovery(c, recover(), err) }()
-	return s.connectCluster(c, cr), nil
-}
-
 func (s *service) Connect(c context.Context, cr *rpc.ConnectRequest) (ci *rpc.ConnectInfo, err error) {
 	c = s.callCtx(c, "Connect")
 	defer func() { err = callRecovery(c, recover(), err) }()
@@ -192,20 +186,33 @@ func (s *service) Quit(_ context.Context, _ *empty.Empty) (*empty.Empty, error) 
 	return &empty.Empty{}, nil
 }
 
-// Most of this used to be part of the connect function. But since we want to
-// let the user know connecting to the traffic manager might be slow if they
-// have many services, we separate this chunk out.
-func (s *service) connectCluster(c context.Context, cr *rpc.ConnectRequest) *rpc.ClusterInfo {
-	r := &rpc.ClusterInfo{}
+// connect the connector to a cluster
+func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
+	r := &rpc.ConnectInfo{}
+	setStatus := func() {
+		r.ClusterOk = true
+		r.ClusterContext = s.cluster.Context
+		r.ClusterServer = s.cluster.Server
+		r.ClusterId = s.cluster.getClusterId(c)
+		if s.bridge != nil {
+			r.BridgeOk = s.bridge.check(c)
+		}
+		if s.trafficMgr != nil {
+			s.trafficMgr.setStatus(c, r)
+		}
+		r.IngressInfos = s.cluster.detectIngressBehavior()
+	}
+
 	configAndFlags, err := newConfigAndFlags(cr.KubeFlags, cr.MappedNamespaces)
 	if err != nil {
-		r.Error = rpc.ClusterInfo_CLUSTER_FAILED
+		r.Error = rpc.ConnectInfo_CLUSTER_FAILED
 		r.ErrorText = err.Error()
 		return r
 	}
 
 	// Sanity checks
 	if s.cluster != nil {
+		setStatus()
 		if s.cluster.equals(configAndFlags) {
 			mns := configAndFlags.mappedNamespaces
 			if len(mns) > 0 {
@@ -214,17 +221,15 @@ func (s *service) connectCluster(c context.Context, cr *rpc.ConnectRequest) *rpc
 				}
 				s.cluster.setMappedNamespaces(c, mns)
 			}
-			r.Error = rpc.ClusterInfo_ALREADY_CONNECTED
+			r.Error = rpc.ConnectInfo_ALREADY_CONNECTED
 		} else {
-			r.Error = rpc.ClusterInfo_MUST_RESTART
+			r.Error = rpc.ConnectInfo_MUST_RESTART
 		}
 		return r
 	}
 
-	// If the cluster is nil but the bridge isn't, then we
-	// are disconnecting.
 	if s.bridge != nil {
-		r.Error = rpc.ClusterInfo_DISCONNECTING
+		r.Error = rpc.ConnectInfo_DISCONNECTING
 		return r
 	}
 
@@ -246,7 +251,7 @@ func (s *service) connectCluster(c context.Context, cr *rpc.ConnectRequest) *rpc
 	cluster, err := trackKCluster(s.ctx, configAndFlags, s.daemon)
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
-		r.Error = rpc.ClusterInfo_CLUSTER_FAILED
+		r.Error = rpc.ConnectInfo_CLUSTER_FAILED
 		r.ErrorText = err.Error()
 		s.cancel()
 		return r
@@ -255,38 +260,7 @@ func (s *service) connectCluster(c context.Context, cr *rpc.ConnectRequest) *rpc
 	dlog.Infof(c, "Connected to context %s (%s)", s.cluster.Context, s.cluster.Server)
 
 	k8sObjectMap := cluster.findNumK8sObjects()
-	r.Services = int32(k8sObjectMap["services"])
-	r.Pods = int32(k8sObjectMap["pods"])
-	r.Namespaces = int32(k8sObjectMap["namespaces"])
-	return r
-}
-
-// connect the connector to a cluster
-func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
-	r := &rpc.ConnectInfo{}
-	setStatus := func() {
-		r.ClusterOk = true
-		r.ClusterContext = s.cluster.Context
-		r.ClusterServer = s.cluster.Server
-		r.ClusterId = s.cluster.getClusterId(c)
-		if s.bridge != nil {
-			r.BridgeOk = s.bridge.check(c)
-		}
-		if s.trafficMgr != nil {
-			s.trafficMgr.setStatus(c, r)
-		}
-		r.IngressInfos = s.cluster.detectIngressBehavior()
-	}
-
-	// If the bridge isn't nil, then we've already connected to the
-	// traffic manager, so update the status and return early
-	if s.bridge != nil {
-		setStatus()
-		r.Error = rpc.ConnectInfo_ALREADY_CONNECTED
-		return r
-	}
 	// Phone home with the information about the size of the cluster
-	k8sObjectMap := s.cluster.findNumK8sObjects()
 	scout := client.NewScout("cli")
 	scout.SetMetadatum("cluster_id", s.cluster.getClusterId(c))
 	for objectType, num := range k8sObjectMap {
@@ -319,7 +293,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	}
 	s.managerProxy.SetClient(tmgr.managerClient)
 
-	dlog.Infof(c, "Starting traffic-manager bridge in context %s", s.cluster.Context)
+	dlog.Infof(c, "Starting traffic-manager bridge in context %s", cluster.Context)
 	br := newBridge(s.daemon, tmgr.sshPort)
 	err = br.start(s.ctx)
 	if err != nil {
