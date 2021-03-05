@@ -258,13 +258,13 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
   ```
 
 3. Start the intercept again:
-`telepresence intercept dataprocessingservice --port 3000`
+`telepresence intercept dataprocessingservice --port 3000 --mount=false`
   You will be asked for your ingress; specify the front end service: `verylargejavaservice.default`
   Then when asked for the port, type `8080`.
   Finally, type `n` for “Use TLS”.
 
   ```
-    $ telepresence intercept dataprocessingservice --port 3000
+    $ telepresence intercept dataprocessingservice --port 3000 --mount=false
 
       Confirm the ingress to use for preview URL access
       Ingress service.namespace ? verylargejavaservice.default

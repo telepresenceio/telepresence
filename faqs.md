@@ -39,7 +39,7 @@ Yes, please see [this doc on using volume mounts](../reference/volume/).
 
 Yes. After you have successfully connected to your cluster via `telepresence connect` you will be able to access any service in your cluster via their namespace qualified DNS name.
 
-This means you can issue commands, such as `nslookup <my_service_name>.<my_service_namespace>`, and curl endpoints directly e.g. `curl <my_service_name>.<my_service_namespace>:8080/mypath`.
+This means you can curl endpoints directly e.g. `curl <my_service_name>.<my_service_namespace>:8080/mypath`.
 
 If you create an intercept for a service in a namespace, you will be able to use the service name directly. 
 
