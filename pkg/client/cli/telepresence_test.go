@@ -63,7 +63,7 @@ func (ts *telepresenceSuite) SetupSuite() {
 	// Remove very verbose output from DTEST initialization
 	log.SetOutput(ioutil.Discard)
 
-	ts.testVersion = fmt.Sprintf("v0.1.%d", os.Getpid())
+	ts.testVersion = fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
 	ts.namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
 	ts.managerTestNamespace = fmt.Sprintf("ambassador-%d", os.Getpid())
 

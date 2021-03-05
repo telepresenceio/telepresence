@@ -35,7 +35,7 @@ var managerTestNamespace string
 func TestMain(m *testing.M) {
 	log.SetOutput(ioutil.Discard) // We want success or failure, not an abundance of output
 	kubeconfig = dtest.Kubeconfig()
-	testVersion = fmt.Sprintf("0.1.%d", os.Getpid())
+	testVersion = fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
 	namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
 	managerTestNamespace = fmt.Sprintf("ambassador-%d", os.Getpid())
 
@@ -280,7 +280,7 @@ func TestAddAgentToDeployment(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s.input.yaml: %v", tcName, err)
 		}
-		inStr := strings.ReplaceAll(string(inBody), "${TELEPRESENCE_VERSION}", testVersion)
+		inStr := strings.ReplaceAll(string(inBody), "${TELEPRESENCE_VERSION#v}", strings.TrimPrefix(testVersion, "v"))
 		if err = yaml.Unmarshal([]byte(inStr), &tmp); err != nil {
 			t.Fatalf("%s.input.yaml: %v", tcName, err)
 		}
@@ -293,7 +293,7 @@ func TestAddAgentToDeployment(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s.output.yaml: %v", tcName, err)
 		}
-		outStr := strings.ReplaceAll(string(outBody), "${TELEPRESENCE_VERSION}", testVersion)
+		outStr := strings.ReplaceAll(string(outBody), "${TELEPRESENCE_VERSION#v}", strings.TrimPrefix(testVersion, "v"))
 		if err = yaml.Unmarshal([]byte(outStr), &tmp); err != nil {
 			t.Fatalf("%s.output.yaml: %v", tcName, err)
 		}

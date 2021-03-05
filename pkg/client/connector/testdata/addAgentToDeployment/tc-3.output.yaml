@@ -4,7 +4,7 @@ deployment:
   metadata:
     annotations:
       deployment.kubernetes.io/revision: "1"
-      telepresence.getambassador.io/actions: '{"version":"${TELEPRESENCE_VERSION}","ReferencedService":"hello-3","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:${TELEPRESENCE_VERSION}"}}'
+      telepresence.getambassador.io/actions: '{"version":"${TELEPRESENCE_VERSION#v}","ReferencedService":"hello-3","add_traffic_agent":{"container_port_name":"tel2px-8080","container_port_proto":"TCP","app_port":8080,"image_name":"localhost:5000/tel2:${TELEPRESENCE_VERSION#v}"}}'
     creationTimestamp: "2020-12-19T07:17:54Z"
     generation: 2
     labels:
@@ -65,7 +65,7 @@ deployment:
               command:
               - "/bin/stat"
               - "/tmp/agent/ready"
-          image: localhost:5000/tel2:${TELEPRESENCE_VERSION}
+          image: localhost:5000/tel2:${TELEPRESENCE_VERSION#v}
           imagePullPolicy: IfNotPresent
           name: traffic-agent
           ports:
@@ -104,7 +104,7 @@ service:
   kind: Service
   metadata:
     annotations:
-      telepresence.getambassador.io/actions: '{"version":"${TELEPRESENCE_VERSION}","make_port_symbolic":{"PortName":"","TargetPort":8080,"SymbolicName":"tel2px-8080"}}'
+      telepresence.getambassador.io/actions: '{"version":"${TELEPRESENCE_VERSION#v}","make_port_symbolic":{"PortName":"","TargetPort":8080,"SymbolicName":"tel2px-8080"}}'
     creationTimestamp: "2020-12-19T07:17:54Z"
     labels:
       app: hello-3
