@@ -158,8 +158,7 @@ func DescribeIntercept(ii *manager.InterceptInfo, debug bool) string {
 		}
 		fields = append(fields, kv{"Preview URL", previewURL})
 	}
-	if ii.PreviewSpec != nil && ii.PreviewSpec.Ingress != nil {
-		l5Hostname := ii.PreviewSpec.Ingress.L5Host
+	if l5Hostname := ii.GetPreviewSpec().GetIngress().GetL5Host(); l5Hostname != "" {
 		fields = append(fields, kv{"Layer 5 Hostname", l5Hostname})
 	}
 
