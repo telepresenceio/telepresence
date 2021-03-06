@@ -3,12 +3,16 @@ package client
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 
 	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/datawire/telepresence2/v2/pkg/client/cache"
+	"github.com/datawire/telepresence2/v2/pkg/filelocation"
 )
 
 // Scout is a Metriton reported
@@ -23,15 +27,122 @@ type ScoutMeta struct {
 	Value interface{}
 }
 
+// getInstallIDFromFilesystem returns the telepresence2 install ID, and also sets the reporter base
+// metadata to include any conflicting install IDs written by old versions of the product.
+func getInstallIDFromFilesystem(ctx context.Context, reporter *metriton.Reporter) (string, error) {
+	type filecacheEntry struct {
+		Body string
+		Err  error
+	}
+	filecache := make(map[string]filecacheEntry)
+	readFile := func(filename string) (string, error) {
+		if _, isCached := filecache[filename]; !isCached {
+			bs, err := ioutil.ReadFile(filename)
+			filecache[filename] = filecacheEntry{
+				Body: string(bs),
+				Err:  err,
+			}
+		}
+		return filecache[filename].Body, filecache[filename].Err
+	}
+
+	// We'll use this (and justify overriding GOOS=linux) below.
+	xdgConfigHome, err := filelocation.UserConfigDir(filelocation.WithGOOS(ctx, "linux"))
+	if err != nil {
+		return "", err
+	}
+
+	// Do these in order of precedence when there are multiple install IDs.
+	var retID string
+	allIDs := make(map[string]string)
+
+	// Similarly to Telepresence-1 (below), edgectl always used the XDG filepath, but unlike
+	// Telepresence-1 it did obey $XDG_CONFIG_HOME.
+	if id, err := readFile(filepath.Join(xdgConfigHome, "edgectl", "id")); err != nil {
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+	} else {
+		allIDs["edgectl"] = id
+		retID = id
+	}
+
+	// Telepresence-1 used "$HOME/.config/telepresence/id" always, even on macOS (where ~/.config
+	// isn't a thing) or when $XDG_CONFIG_HOME is something different than "$HOME/.config".
+	homeDir, err := filelocation.UserHomeDir(ctx)
+	if err != nil {
+		return "", err
+	}
+	if id, err := readFile(filepath.Join(homeDir, ".config", "telepresence", "id")); err != nil {
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+	} else {
+		allIDs["telepresence-1"] = id
+		retID = id
+	}
+
+	// Telepresence-2 prior to 2.1.0 did the exact same thing as edgectl, but with
+	// "telepresence2" in the path instead of "edgectl".
+	if id, err := readFile(filepath.Join(xdgConfigHome, "telepresence2", "id")); err != nil {
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+	} else {
+		allIDs["telepresence-2<2.1"] = id
+		retID = id
+	}
+
+	// Current.  Telepresence-2 now uses the most appropriate directory for the platform, and
+	// uses "telepresence" instead of "telepresence2".  On GOOS=linux this is probably
+	// (depending on how $XDG_CONFIG_HOME is set) the same as the Telepresence 1 location.
+	telConfigDir, err := filelocation.AppUserConfigDir(ctx)
+	if err != nil {
+		return "", err
+	}
+	idFilename := filepath.Join(telConfigDir, "id")
+	if id, err := readFile(idFilename); err != nil {
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+	} else {
+		allIDs["telepresence-2"] = id
+		retID = id
+	}
+
+	// OK, now process all of that.
+
+	if len(allIDs) == 0 {
+		retID = uuid.New().String()
+	}
+
+	if allIDs["telepresence-2"] != retID {
+		if err := os.MkdirAll(filepath.Dir(idFilename), 0755); err != nil {
+			return "", err
+		}
+		if err := ioutil.WriteFile(idFilename, []byte(retID), 0644); err != nil {
+			return "", err
+		}
+	}
+
+	reporter.BaseMetadata["new_install"] = len(allIDs) == 0
+	for product, id := range allIDs {
+		if id != retID {
+			reporter.BaseMetadata["install_id_"+product] = id
+		}
+	}
+	return retID, nil
+}
+
 // NewScout creates a new initialized Scout instance that can be used to
 // send telepresence reports to Metriton
-func NewScout(_ context.Context, mode string) (s *Scout) {
+func NewScout(ctx context.Context, mode string) (s *Scout) {
 	return &Scout{
 		Reporter: &metriton.Reporter{
 			Application: "telepresence2",
 			Version:     Version(),
 			GetInstallID: func(r *metriton.Reporter) (string, error) {
-				id, err := metriton.InstallIDFromFilesystem(r)
+				id, err := getInstallIDFromFilesystem(ctx, r)
 				if err != nil {
 					id = "00000000-0000-0000-0000-000000000000"
 					r.BaseMetadata["new_install"] = true
