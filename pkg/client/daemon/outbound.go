@@ -231,7 +231,7 @@ func (o *outbound) update(table *rpc.Table) (err error) {
 		if err != nil {
 			return err
 		}
-		for _, ip := range route.Ips {
+		for _, ip := range uniqueSortedAndNotEmpty(route.Ips) {
 			r, err := nat.NewRoute(route.Proto, net.ParseIP(ip), ports, o.proxyRedirPort)
 			if err != nil {
 				return err
