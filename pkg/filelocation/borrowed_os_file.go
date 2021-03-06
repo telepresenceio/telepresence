@@ -27,7 +27,7 @@ import (
 //
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.
-func userHomeDir(ctx context.Context) (string, error) {
+func UserHomeDir(ctx context.Context) (string, error) {
 	if untyped := ctx.Value(homeCtxKey{}); untyped != nil {
 		return untyped.(string), nil
 	}
@@ -86,14 +86,14 @@ func userCacheDir(ctx context.Context) (string, error) {
 		}
 
 	case "darwin":
-		home, err := userHomeDir(ctx)
+		home, err := UserHomeDir(ctx)
 		if err != nil {
 			return "", err
 		}
 		dir = home + "/Library/Caches"
 
 	case "plan9":
-		home, err := userHomeDir(ctx)
+		home, err := UserHomeDir(ctx)
 		if err != nil {
 			return "", err
 		}
@@ -102,7 +102,7 @@ func userCacheDir(ctx context.Context) (string, error) {
 	default: // Unix
 		dir = os.Getenv("XDG_CACHE_HOME")
 		if dir == "" {
-			home, _ := userHomeDir(ctx)
+			home, _ := UserHomeDir(ctx)
 			if home == "" {
 				return "", errors.New("neither $XDG_CACHE_HOME nor $HOME are defined")
 			}
@@ -132,7 +132,7 @@ func userCacheDir(ctx context.Context) (string, error) {
 //
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.
-func userConfigDir(ctx context.Context) (string, error) {
+func UserConfigDir(ctx context.Context) (string, error) {
 	var dir string
 
 	switch goos(ctx) {
@@ -146,14 +146,14 @@ func userConfigDir(ctx context.Context) (string, error) {
 		}
 
 	case "darwin":
-		home, err := userHomeDir(ctx)
+		home, err := UserHomeDir(ctx)
 		if err != nil {
 			return "", err
 		}
 		dir = home + "/Library/Application Support"
 
 	case "plan9":
-		home, err := userHomeDir(ctx)
+		home, err := UserHomeDir(ctx)
 		if err != nil {
 			return "", err
 		}
@@ -162,7 +162,7 @@ func userConfigDir(ctx context.Context) (string, error) {
 	default: // Unix
 		dir = os.Getenv("XDG_CONFIG_HOME")
 		if dir == "" {
-			home, _ := userHomeDir(ctx)
+			home, _ := UserHomeDir(ctx)
 			if home == "" {
 				return "", errors.New("neither $XDG_CONFIG_HOME nor $HOME are defined")
 			}
