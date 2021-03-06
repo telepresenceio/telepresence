@@ -259,7 +259,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	_ = s.scout.Report(s.ctx, "connecting_traffic_manager")
 
 	connectStart := time.Now()
-	tmgr, err := newTrafficManager(s.ctx, s.env, s.cluster, cr.InstallId)
+	tmgr, err := newTrafficManager(s.ctx, s.env, s.cluster, s.scout.Reporter.InstallID())
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		r.Error = rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED
