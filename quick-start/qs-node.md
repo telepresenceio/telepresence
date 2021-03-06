@@ -219,7 +219,7 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
 2. Go to the frontend service again in your browser. Since the service is now intercepted it can be reached directly by its service name at [http://verylargejavaservice:8080](http://verylargejavaservice:8080). You will now see the <strong style="color:blue">blue</strong> elements in the app.
 
   <Alert severity="info">
-    See <a href="../reference/dns">this doc</a> for more information on how Telepresence resolves DNS.
+    See <a href="../../reference/dns">this doc</a> for more information on how Telepresence resolves DNS.
   </Alert>
 
 <Alert severity="success">
