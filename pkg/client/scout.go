@@ -25,7 +25,7 @@ type ScoutMeta struct {
 
 // NewScout creates a new initialized Scout instance that can be used to
 // send telepresence reports to Metriton
-func NewScout(mode string) (s *Scout) {
+func NewScout(_ context.Context, mode string) (s *Scout) {
 	return &Scout{
 		Reporter: &metriton.Reporter{
 			Application: "telepresence2",

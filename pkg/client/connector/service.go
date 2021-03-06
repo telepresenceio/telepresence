@@ -261,7 +261,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 
 	k8sObjectMap := cluster.findNumK8sObjects()
 	// Phone home with the information about the size of the cluster
-	scout := client.NewScout("cli")
+	scout := client.NewScout(s.ctx, "cli")
 	scout.SetMetadatum("cluster_id", s.cluster.getClusterId(c))
 	for objectType, num := range k8sObjectMap {
 		scout.SetMetadatum(objectType, num)
