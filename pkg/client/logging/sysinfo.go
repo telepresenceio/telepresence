@@ -13,5 +13,7 @@ import "time"
 type sysinfo interface {
 	birthtime() time.Time
 
-	ensureOwnerAndGroup(name string) error
+	setOwnerAndGroup(name string) error
+
+	haveSameOwnerAndGroup(sysinfo) bool
 }
