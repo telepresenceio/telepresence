@@ -238,7 +238,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 			Application:  "telepresence2",
 			Version:      client.Version(),
 			GetInstallID: func(_ *metriton.Reporter) (string, error) { return cr.InstallId, nil },
-			BaseMetadata: map[string]interface{}{"mode": "daemon"},
+			BaseMetadata: map[string]interface{}{"mode": "connector"},
 		}
 
 		if _, err := reporter.Report(c, map[string]interface{}{"action": "connect"}); err != nil {
@@ -261,7 +261,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 
 	k8sObjectMap := cluster.findNumK8sObjects()
 	// Phone home with the information about the size of the cluster
-	scout := client.NewScout(s.ctx, "cli")
+	scout := client.NewScout(s.ctx, "connector")
 	scout.SetMetadatum("cluster_id", s.cluster.getClusterId(c))
 	for objectType, num := range k8sObjectMap {
 		scout.SetMetadatum(objectType, num)
