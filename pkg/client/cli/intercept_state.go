@@ -169,7 +169,7 @@ func removeIntercept(cmd *cobra.Command, args []string) error {
 }
 
 func (ii *interceptInfo) newInterceptState(cs *connectorState) *interceptState {
-	return &interceptState{interceptInfo: ii, cs: cs, Scout: client.NewScout("cli")}
+	return &interceptState{interceptInfo: ii, cs: cs, Scout: client.NewScout(cs.cmd.Context(), "cli")}
 }
 
 func interceptMessage(r *connector.InterceptResult) string {
