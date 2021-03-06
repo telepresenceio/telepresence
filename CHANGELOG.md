@@ -12,6 +12,7 @@
 - Feature: Users can choose which port to intercept when intercepting a service with multiple ports.
 - Change: On connect, telepresence will no longer suggest the `--mapped-namespaces` flag when the user connects to a large cluster.
 - Bugfix: Telepresence now explicitly requires macFUSE version 4.0.5 or higher for macOS.
+- Bugfix: A `tail -F <daemon log file>` no longer results in a "Permission denied" when reconnecting to the cluster.
 
 ### 2.0.3 (February 24, 2021)
 
