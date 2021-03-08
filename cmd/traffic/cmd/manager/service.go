@@ -12,10 +12,10 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dlog"
-	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
-	"github.com/datawire/telepresence2/rpc/v2/systema"
-	"github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/internal/state"
-	"github.com/datawire/telepresence2/v2/pkg/version"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/systema"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 // Clock is the mechanism used by the Manager state to get the current time.

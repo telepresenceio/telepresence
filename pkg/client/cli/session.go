@@ -4,8 +4,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/datawire/telepresence2/rpc/v2/daemon"
-	"github.com/datawire/telepresence2/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 type sessionInfo struct {

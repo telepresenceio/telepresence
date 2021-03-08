@@ -12,8 +12,8 @@
 package systema
 
 import (
-	common "github.com/datawire/telepresence2/rpc/v2/common"
-	manager "github.com/datawire/telepresence2/rpc/v2/manager"
+	common "github.com/telepresenceio/telepresence/rpc/v2/common"
+	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	proto "github.com/golang/protobuf/proto"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"

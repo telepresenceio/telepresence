@@ -320,7 +320,7 @@ type InterceptSpec struct {
 	Mechanism string `protobuf:"bytes,4,opt,name=mechanism,proto3" json:"mechanism,omitempty"`
 	// Additional mechanism-specific arguments.  This is passed as list
 	// of CLI-style --flags.  See the documentation for
-	// github.com/datawire/telepresence2/v2/pkg/client/cli/extensions
+	// github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions
 	// for more information about writing an extension descriptor file
 	// to control what these values are.
 	MechanismArgs []string `protobuf:"bytes,9,rep,name=mechanism_args,json=mechanismArgs,proto3" json:"mechanism_args,omitempty"`

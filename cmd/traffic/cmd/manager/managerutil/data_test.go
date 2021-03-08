@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
-	testdata "github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/internal/test"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/test"
 )
 
 func TestMechanismsAreTheSame(t *testing.T) {

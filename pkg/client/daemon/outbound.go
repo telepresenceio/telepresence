@@ -15,10 +15,10 @@ import (
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
-	rpc "github.com/datawire/telepresence2/rpc/v2/daemon"
-	"github.com/datawire/telepresence2/v2/pkg/client/daemon/dns"
-	"github.com/datawire/telepresence2/v2/pkg/client/daemon/nat"
-	"github.com/datawire/telepresence2/v2/pkg/client/daemon/proxy"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/dns"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/nat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/proxy"
 )
 
 // outbound does stuff, idk, I didn't write it.

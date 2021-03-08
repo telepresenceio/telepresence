@@ -1,7 +1,7 @@
 package managerutil
 
 import (
-	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 // AgentsAreCompatible returns whether all the specified agents have the same

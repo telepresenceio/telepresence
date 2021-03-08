@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/datawire/telepresence2/rpc/v2/connector"
-	"github.com/datawire/telepresence2/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 type listInfo struct {

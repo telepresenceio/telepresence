@@ -12,7 +12,7 @@ import (
 
 	"VALPKG"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/internal/watchable"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 )
 
 func assertMAPTYPESnapshotEqual(t *testing.T, expected, actual watchable.MAPTYPESnapshot, msgAndArgs ...interface{}) bool {

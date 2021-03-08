@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/datawire/telepresence2/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 // builtinExtensions is a function instead of a would-be-const var because its result includes the

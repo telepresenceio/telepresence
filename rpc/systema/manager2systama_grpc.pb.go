@@ -4,7 +4,7 @@ package systema
 
 import (
 	context "context"
-	common "github.com/datawire/telepresence2/rpc/v2/common"
+	common "github.com/telepresenceio/telepresence/rpc/v2/common"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"

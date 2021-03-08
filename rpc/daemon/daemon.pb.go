@@ -7,7 +7,7 @@
 package daemon
 
 import (
-	common "github.com/datawire/telepresence2/rpc/v2/common"
+	common "github.com/telepresenceio/telepresence/rpc/v2/common"
 	proto "github.com/golang/protobuf/proto"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"

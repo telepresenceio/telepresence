@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 )
 
 type iptablesRouter struct {

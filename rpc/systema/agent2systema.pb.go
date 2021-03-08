@@ -7,7 +7,7 @@
 package systema
 
 import (
-	manager "github.com/datawire/telepresence2/rpc/v2/manager"
+	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	proto "github.com/golang/protobuf/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
