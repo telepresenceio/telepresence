@@ -7,7 +7,6 @@ require (
 	github.com/datawire/ambassador v1.11.1
 	github.com/datawire/dlib v1.2.0
 	github.com/datawire/pf v0.0.0-20180510150411-31a823f9495a
-	github.com/telepresenceio/telepresence/rpc/v2 v2.1.0
 	github.com/docker/docker v1.4.2-0.20200203170920-46ec8731fbce
 	github.com/godbus/dbus/v5 v5.0.4-0.20201218172701-b3768b321399
 	github.com/golang/protobuf v1.4.3
@@ -21,6 +20,7 @@ require (
 	github.com/spf13/cobra v1.1.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.6.1
+	github.com/telepresenceio/telepresence/rpc/v2 v2.1.1-rename.0
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
 	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
