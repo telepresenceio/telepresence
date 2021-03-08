@@ -46,13 +46,19 @@ type parsedConnectRequest struct {
 	*k8sConfig
 }
 
+type ScoutReport struct {
+	Action             string
+	Metadata           map[string]interface{}
+	PersistentMetadata map[string]interface{}
+}
+
 // service represents the state of the Telepresence Connector
 type service struct {
 	rpc.UnsafeConnectorServer
 
-	env    client.Env
-	daemon daemon.DaemonClient
-	scout  *client.Scout
+	env         client.Env
+	daemon      daemon.DaemonClient
+	scoutClient *client.Scout // don't use this directly; use the 'scout' chan instead
 
 	managerProxy mgrProxy
 	cancel       func()
@@ -64,6 +70,7 @@ type service struct {
 	trafficMgr *trafficManager
 
 	// These are used to communicate between the various goroutines.
+	scout           chan ScoutReport          // any-of-scoutUsers -> background-metriton
 	connectRequest  chan parsedConnectRequest // server-grpc.connect() -> connectWorker
 	connectResponse chan *rpc.ConnectInfo     // connectWorker -> server-grpc.connect()
 	clusterRequest  chan *k8sCluster          // connectWorker -> background-k8swatch
@@ -277,7 +284,9 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	}
 	sort.Strings(mappedNamespaces)
 
-	_ = s.scout.Report(c, "connect")
+	s.scout <- ScoutReport{
+		Action: "connect",
+	}
 
 	dlog.Info(c, "Connecting to k8s cluster...")
 	cluster, err := func() (*k8sCluster, error) {
@@ -304,19 +313,25 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	s.cluster = cluster
 	dlog.Infof(c, "Connected to context %s (%s)", s.cluster.Context, s.cluster.Server)
 
-	k8sObjectMap := cluster.findNumK8sObjects()
 	// Phone home with the information about the size of the cluster
-	s.scout.SetMetadatum("cluster_id", s.cluster.getClusterId(c))
-	for objectType, num := range k8sObjectMap {
-		s.scout.SetMetadatum(objectType, num)
-	}
-	s.scout.SetMetadatum("mapped_namespaces", len(cr.MappedNamespaces))
-	_ = s.scout.Report(c, "connecting_traffic_manager")
+	s.scout <- func() ScoutReport {
+		report := ScoutReport{
+			Action: "connecting_traffic_manager",
+			PersistentMetadata: map[string]interface{}{
+				"cluster_id":        s.cluster.getClusterId(c),
+				"mapped_namespaces": len(cr.MappedNamespaces),
+			},
+		}
+		for objectType, num := range s.cluster.findNumK8sObjects() {
+			report.PersistentMetadata[objectType] = num
+		}
+		return report
+	}()
 
 	connectStart := time.Now()
 
 	dlog.Info(c, "Connecting to traffic manager...")
-	tmgr, err := newTrafficManager(c, s.env, s.cluster, s.scout.Reporter.InstallID())
+	tmgr, err := newTrafficManager(c, s.env, s.cluster, s.scoutClient.Reporter.InstallID())
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		// No point in continuing without a traffic manager
@@ -357,8 +372,12 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	s.bridge = br
 
 	// Collect data on how long connection time took
-	_ = s.scout.Report(c, "finished_connecting_traffic_manager",
-		client.ScoutMeta{Key: "connect_duration", Value: time.Since(connectStart).Seconds()})
+	s.scout <- ScoutReport{
+		Action: "finished_connecting_traffic_manager",
+		Metadata: map[string]interface{}{
+			"connect_duration": time.Since(connectStart).Seconds(),
+		},
+	}
 
 	ret := &rpc.ConnectInfo{
 		Error:          rpc.ConnectInfo_UNSPECIFIED,
@@ -394,10 +413,11 @@ func run(c context.Context) error {
 	defer conn.Close()
 
 	s := &service{
-		env:    env,
-		daemon: daemon.NewDaemonClient(conn),
-		scout:  client.NewScout(c, "connector"),
+		env:         env,
+		daemon:      daemon.NewDaemonClient(conn),
+		scoutClient: client.NewScout(c, "connector"),
 
+		scout:           make(chan ScoutReport, 10),
 		connectRequest:  make(chan parsedConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
 		clusterRequest:  make(chan *k8sCluster),
@@ -410,6 +430,12 @@ func run(c context.Context) error {
 		ShutdownOnNonError:   true,
 	})
 	s.cancel = func() { g.Go("quit", func(_ context.Context) error { return nil }) }
+	var scoutUsers sync.WaitGroup
+	scoutUsers.Add(1) // how many of the goroutines might write to s.scout
+	go func() {
+		scoutUsers.Wait()
+		close(s.scout)
+	}()
 
 	dlog.Info(c, "---")
 	dlog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
@@ -490,6 +516,7 @@ func run(c context.Context) error {
 			close(s.managerRequest)  // -> background-manager
 			close(s.bridgeRequest)   // -> server-socks
 			<-c.Done()               // Don't trip ShutdownOnNonError in the parent group.
+			scoutUsers.Done()
 		}()
 
 		pcr, ok := <-s.connectRequest
@@ -515,6 +542,27 @@ func run(c context.Context) error {
 			return nil
 		}
 		return tm.run(c)
+	})
+
+	g.Go("background-metriton", func(c context.Context) error {
+		for report := range s.scout {
+			for k, v := range report.PersistentMetadata {
+				s.scoutClient.SetMetadatum(k, v)
+			}
+
+			var metadata []client.ScoutMeta
+			for k, v := range report.Metadata {
+				metadata = append(metadata, client.ScoutMeta{
+					Key:   k,
+					Value: v,
+				})
+			}
+			if err := s.scoutClient.Report(c, report.Action, metadata...); err != nil {
+				// error is logged and is not fatal
+				dlog.Errorf(c, "report failed: %+v", err)
+			}
+		}
+		return nil
 	})
 
 	err = g.Wait()
