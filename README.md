@@ -4,6 +4,8 @@
 [![Join the chat at https://d6e.co/slack](https://img.shields.io/badge/chat-on%20Slack-blue.svg)](https://d6e.co/slack)
 [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/1863/badge)](https://bestpractices.coreinfrastructure.org/projects/1863)
 
+** Note: Telepresence 1 is being replaced by our even better [Telepresence 2](https://github.com/telepresenceio/telepresence/tree/release/v2). Please try Telepresence 2 first and report any issues as we expect this will be the default by Q2 2021. **
+
 ## Demo
 
 [![asciicast](https://asciinema.org/a/117761.png)](https://asciinema.org/a/117761)
