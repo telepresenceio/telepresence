@@ -45,7 +45,7 @@ service Connector {
 message ConnectRequest {
   map<string, string> kube_flags = 1;
   repeated string mapped_namespaces = 2;
-  string install_id = 3;
+  reserved 3;
 }
 
 message ConnectInfo {

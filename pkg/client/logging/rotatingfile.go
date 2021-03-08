@@ -136,7 +136,7 @@ func OpenRotatingFile(
 	var info os.FileInfo
 	if info, err = os.Stat(fullPath); err != nil {
 		if os.IsNotExist(err) {
-			if err = rf.openNew(nil); err == nil {
+			if err = rf.openNew(); err == nil {
 				return rf, nil
 			}
 		}
@@ -231,16 +231,58 @@ func (rf *RotatingFile) fileTime(t time.Time) time.Time {
 	return t
 }
 
-func (rf *RotatingFile) openNew(prevInfo os.FileInfo) (err error) {
+func (rf *RotatingFile) openNew() (err error) {
 	fullPath := filepath.Join(rf.dirName, rf.fileName)
-	if rf.file, err = os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, rf.fileMode); err != nil {
-		return err
-	}
-	if prevInfo != nil {
-		if err = getSysInfo(prevInfo).ensureOwnerAndGroup(fullPath); err != nil {
+	var newFile *os.File
+	if rf.file == nil {
+		if newFile, err = os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, rf.fileMode); err != nil {
+			return err
+		}
+	} else {
+		var prevStat, stat os.FileInfo
+		if prevStat, err = rf.file.Stat(); err != nil {
+			return err
+		}
+		prevInfo := getSysInfo(prevStat)
+
+		// Open file with a different name so that a tail -F on the original doesn't fail with a permission denied
+		tmp := fullPath + ".tmp"
+		var tmpFile *os.File
+		if tmpFile, err = os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, rf.fileMode); err != nil {
+			return err
+		}
+
+		stat, err = tmpFile.Stat()
+		_ = tmpFile.Close()
+		if err != nil {
+			return err
+		}
+
+		if !prevInfo.haveSameOwnerAndGroup(getSysInfo(stat)) {
+			if err = prevInfo.setOwnerAndGroup(tmp); err != nil {
+				_ = os.Remove(tmp)
+				return err
+			}
+		}
+
+		if err = os.Rename(tmp, fullPath); err != nil {
+			_ = os.Remove(tmp)
+			return err
+		}
+		if newFile, err = os.OpenFile(fullPath, os.O_WRONLY, rf.fileMode); err != nil {
+			_ = os.Remove(fullPath)
 			return err
 		}
 	}
+
+	oldFile := rf.file
+	rf.file = newFile
+	if oldFile != nil {
+		if err = oldFile.Close(); err != nil {
+			return err
+		}
+	}
+
 	rf.birthTime = rf.fileTime(dtime.Now())
 	rf.size = 0
 	rf.afterOpen()
@@ -296,14 +338,6 @@ func (rf *RotatingFile) removeOldFiles() {
 }
 
 func (rf *RotatingFile) rotate() (err error) {
-	info, err := rf.file.Stat()
-	if err != nil {
-		return err
-	}
-	if err = rf.file.Close(); err != nil {
-		return err
-	}
-
 	if rf.maxFiles == 0 || rf.maxFiles > 1 {
 		fullPath := filepath.Join(rf.dirName, rf.fileName)
 		ex := filepath.Ext(rf.fileName)
@@ -313,9 +347,5 @@ func (rf *RotatingFile) rotate() (err error) {
 			return err
 		}
 	}
-
-	if rf.maxFiles > 0 {
-		go rf.removeOldFiles()
-	}
-	return rf.openNew(info)
+	return rf.openNew()
 }

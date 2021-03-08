@@ -152,3 +152,15 @@ In the long run we'll improve this to work more like classic Telepresence, but e
 1. Add a `vSEMVER` tag for the new version: `git tag -a v0.x.y -m "Release 0.x.y"`
 2. Push the tag to GitHub: `git push origin v0.x.y`
 3. Wait for CI to run
+
+## Log output
+
+There are two logs. The `connector.log` which contains output from the interaction with the traffic-manager and the cluster (traffic-manager and traffic-agent installs, intercepts, port forwards, etc.), and the `daemon.log` which contains output from the DNS resolver and the NAT service. The location of both logs is:
+
+- on MacOS: ~/Library/Logs/telepresence
+- on Linux: ~/.cache/telepresence/logs
+
+The logs are rotating and a new log is created every time telepresence creates a new connection to the cluster, e.g. on `telepresence connect` after a `telepresence quit` that terminated the last session.
+
+### Watching the logs
+A convenient way to watch rotating logs is to use `tail -F <filename>`. It will automatically and seamlessly follow the rotation.

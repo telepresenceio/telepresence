@@ -34,7 +34,7 @@ func dashboardCommand() *cobra.Command {
 					cache.SaveTokenToUserCache,
 					cache.SaveUserInfoToUserCache,
 					browser.OpenURL,
-					client.NewScout("cli"),
+					client.NewScout(cmd.Context(), "cli"),
 				)
 				err = l.LoginFlow(cmd)
 			} else {

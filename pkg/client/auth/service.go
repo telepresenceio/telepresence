@@ -33,7 +33,7 @@ func LoginCommand() *cobra.Command {
 				cache.SaveTokenToUserCache,
 				cache.SaveUserInfoToUserCache,
 				browser.OpenURL,
-				client.NewScout("cli"),
+				client.NewScout(cmd.Context(), "cli"),
 			)
 			return l.LoginFlow(cmd)
 		},

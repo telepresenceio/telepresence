@@ -15,7 +15,6 @@ import (
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -45,8 +44,11 @@ to troubleshoot problems.
 // service represents the state of the Telepresence Connector
 type service struct {
 	rpc.UnsafeConnectorServer
-	env          client.Env
-	daemon       daemon.DaemonClient
+
+	env    client.Env
+	daemon daemon.DaemonClient
+	scout  *client.Scout
+
 	managerProxy mgrProxy
 	ctx          context.Context
 	cancel       func()
@@ -251,19 +253,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	}
 	sort.Strings(mappedNamespaces)
 
-	dgroup.ParentGroup(s.ctx).Go(callName("metriton"), func(c context.Context) error {
-		reporter := &metriton.Reporter{
-			Application:  "telepresence2",
-			Version:      client.Version(),
-			GetInstallID: func(_ *metriton.Reporter) (string, error) { return cr.InstallId, nil },
-			BaseMetadata: map[string]interface{}{"mode": "daemon"},
-		}
-
-		if _, err := reporter.Report(c, map[string]interface{}{"action": "connect"}); err != nil {
-			dlog.Errorf(c, "report failed: %+v", err)
-		}
-		return nil // error is logged and is not fatal
-	})
+	_ = s.scout.Report(s.ctx, "connect")
 
 	dlog.Info(c, "Connecting to traffic manager...")
 	cluster, err := trackKCluster(s.ctx, k8sConfig, mappedNamespaces, s.daemon)
@@ -280,16 +270,15 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 
 	k8sObjectMap := cluster.findNumK8sObjects()
 	// Phone home with the information about the size of the cluster
-	scout := client.NewScout("cli")
-	scout.SetMetadatum("cluster_id", s.cluster.getClusterId(c))
+	s.scout.SetMetadatum("cluster_id", s.cluster.getClusterId(c))
 	for objectType, num := range k8sObjectMap {
-		scout.SetMetadatum(objectType, num)
+		s.scout.SetMetadatum(objectType, num)
 	}
-	scout.SetMetadatum("mapped_namespaces", len(cr.MappedNamespaces))
-	_ = scout.Report(c, "connecting_traffic_manager")
+	s.scout.SetMetadatum("mapped_namespaces", len(cr.MappedNamespaces))
+	_ = s.scout.Report(s.ctx, "connecting_traffic_manager")
 
 	connectStart := time.Now()
-	tmgr, err := newTrafficManager(s.ctx, s.env, s.cluster, cr.InstallId)
+	tmgr, err := newTrafficManager(s.ctx, s.env, s.cluster, s.scout.Reporter.InstallID())
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		// No point in continuing without a traffic manager
@@ -330,9 +319,8 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	s.bridge = br
 
 	// Collect data on how long connection time took
-	connectDuration := time.Since(connectStart)
-	scout.SetMetadatum("connect_duration", connectDuration.Seconds())
-	_ = scout.Report(c, "finished_connecting_traffic_manager")
+	_ = s.scout.Report(s.ctx, "finished_connecting_traffic_manager",
+		client.ScoutMeta{Key: "connect_duration", Value: time.Since(connectStart).Seconds()})
 
 	ret := &rpc.ConnectInfo{
 		Error:          rpc.ConnectInfo_UNSPECIFIED,
@@ -369,6 +357,7 @@ func run(c context.Context) error {
 	s := &service{
 		env:    env,
 		daemon: daemon.NewDaemonClient(conn),
+		scout:  client.NewScout(c, "connector"),
 	}
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{

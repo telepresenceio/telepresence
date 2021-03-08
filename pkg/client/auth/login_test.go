@@ -177,7 +177,7 @@ func TestLoginFlow(t *testing.T) {
 		mockOpenURLWrapper := &MockOpenURLWrapper{}
 		openUrlChan := make(chan string)
 		mockOauth2Server := newMockOauth2Server(t)
-		scout := client.NewScout("go-test")
+		scout := client.NewScout(dlog.NewTestContext(t, false), "go-test")
 		scout.Reporter.Endpoint = metriton.BetaEndpoint
 		return &fixture{
 			MockSaveTokenWrapper:    mockSaveTokenWrapper,
