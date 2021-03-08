@@ -3,168 +3,255 @@ description: "Telepresence help you develop Kubernetes services locally without 
 ---
 
 import Alert from '@material-ui/lab/Alert';
+import QSTabs from '../quick-start/qs-tabs'
+import QSCards from '../quick-start/qs-cards'
 
-# Intercepts
+# Intercept a Service in Your Own Environment
 
-Intercepts enable you to test and debug services locally without needing to run dependent services or redeploy code updates to your cluster on every change.  A typical workflow would be to run the service you wish to develop on locally, then start an intercept. Changes to the local code can then be tested immediately along side other services running in the cluster.
+<div class="docs-article-toc">
+<h3>Contents</h3>
 
+* [Prerequisites](#prerequisites)
+* [1. Install the Telepresence CLI](#1-install-the-telepresence-cli)
+* [2. Test Telepresence](#2-test-telepresence)
+* [3. Intercept all traffic](#3-intercept-all-traffic)
+* [4. Intercept traffic coming from a Preview URL](#4-intercept-traffic-coming-from-a-preview-url)
+* [What's next?](#img-classos-logo-srcimageslogopng-whats-next)
+
+</div>
+
+Intercepts let you test and debug services locally without also needing to run dependent services.  A typical workflow would be to start the service you wish to develop on locally, then start an intercept. Changes to the local code can then be tested immediately as traffic is proxied to and from the dependent services still running in the cluster.
+
+<!--
 When starting an intercept, Telepresence will create a preview URLs. When visiting the preview URL, your request is proxied to your ingress with a special header set.  When the traffic within the cluster requests the service you are intercepting, the [Traffic Manager](../../reference) will proxy that traffic to your laptop.  Other traffic  entering your ingress will use the service running in the cluster as normal.
 
 Preview URLs are all managed through Ambassador Cloud.  You must run `telepresence login` to access Ambassador Cloud and access the preview URL dashboard. From the dashboard you can see all your active intercepts, delete active intercepts, and change them between private and public for collaboration. Private preview URLs can be accessed by anyone else in the GitHub organization you select when logging in. Public URLs can be accessed by anyone who has the link.
+-->
 
-While preview URLs selectively proxy traffic to your laptop, you can also run an [intercept without creating a preview URL](#creating-an-intercept-without-a-preview-url), which will proxy all traffic to the service.
+<Alert severity="info">For a detailed walk though on creating intercepts using our sample app, follow the <a href="../../quick-start/qs-node/">quick start guide</a>.</Alert>
 
-<Alert severity="info">For a detailed walk though on creating intercepts, follow the <a href="../../tutorial/">Telepresence tutorial</a>.</Alert>
+## Prerequisites
+You’ll need [`kubectl` installed](https://kubernetes.io/docs/tasks/tools/install-kubectl/) and [setup](https://kubernetes.io/docs/tasks/tools/install-kubectl/#verifying-kubectl-configuration) to use a Kubernetes cluster, preferably an empty test cluster.
 
-## Creating an Intercept
+If you have used Telepresence previously, please first reset your Telepresence deployment with:
+`telepresence uninstall --everything`.
 
-The following quick overview on creating an intercept assumes you have a deployment and service accessible publicly by an ingress controller and that you can run a copy of that service on your laptop.  
+This guide assumes you have a Kubernetes deployment and service accessible publicly by an ingress controller and that you can run a copy of that service on your laptop.  
 
-1. In your terminal run `telepresence login`. This logs you into the Ambassador Cloud, which will track your intercepts and let you share them with colleagues. 
+## 1. Install the Telepresence CLI
 
-  <Alert severity="info">If you are logged in and close the dashboard browser tab, you can quickly reopen it by running <code>telepresence dashboard</code>.</Alert>
+<QSTabs/>
 
-2. Return to your terminal and run `telepresence list`.  This will connect to your cluster, install the [Traffic Manager](../../reference/) to proxy the traffic, and return a list of services that Telepresence is able to intercept.
+## 2. Test Telepresence
 
-3. Start the service on your laptop and make a change to the code that will be apparent in the browser when the service runs, such as a text or other UI change.
+Telepresence connects your local workstation to a remote Kubernetes cluster.
 
-4. In a new terminal window start the intercept. This will proxy requests to the cluster service to your laptop.  It will also generate a preview URL, which will let you access your service from the ingress but with requests to the intercepted service proxied to your laptop.
-
-   The intercept requires you specify the name of the deployment to be
-   intercepted and the port on your laptop to proxy to.
-
-   ```
-   telepresence intercept ${base_name_of_intercept} --port=${local_TCP_port}
-   ```
-
-   The name of the Deployment to be intercepted will default to the
-   base name of the intercept that you give, but you can specify a
-   different deployment name using the `--deployment` flag:
-
-   ```
-   telepresence intercept ${base_name_of_intercept} --deployment=${name_of_deployment} --port=${local_TCP_port}
-   ```
-
-   Because you're logged in (from `telepresence login` in step 2), it
-   will default to `--preview-url=true`, which will use Ambassador
-   Cloud to create a sharable preview URL for this intercept; if you
-   hadn't been logged in it would have defaulted to
-   `--preview-url=false`.  In order to do this, it will prompt you for
-   four options.  For the first, `ingress layer 3 (IP) address`, Telepresence tries to
-   intelligently determine the ingress controller deployment and
-   namespace for you.  If they are correct, you can hit `enter` to
-   accept the defaults.  Set the next two options, `TLS` and `Port`,
-   appropriately based on your ingress service, and optionally change the last
-   `layer 5 hostname` if different from the ingress address.
-
-   Also because you're logged in, it will default to `--mechanism=http
-   --http-match=auto` (or just `--http-match=auto`; `--http-match`
-   implies `--mechanism=http`); if you hadn't been logged in it would
-   have defaulted to `--mechanism=tcp`.  This tells it to do smart
-   intercepts and only intercept a subset of HTTP requests, rather
-   than just intercepting the entirety of all TCP connections.  This
-   is important for working in a shared cluster with teammates, and is
-   important for the preview URL functionality.  See `telepresence
-   intercept --help` for information on using `--http-match` to
-   customize which requests it intercepts.
-
-5. Open the preview URL in your browser. The page that loads will proxy requests to the intercepted service to your laptop. You will also see a banner at the bottom on the page informing that you are viewing a preview URL with your name and org name.
-
-6. Switch back in your browser to the Ambassador Cloud dashboard page and refresh it to see your preview URL listed. Click the box to expand out options where you can disable authentication or remove the preview.
-  
-7. Clean up your environment by first typing `Ctrl+C` in the terminal running Node. Then stop the intercept with the `leave` command and `quit` to stop the daemon.  Finally, use `uninstall --everything` to remove the Traffic Manager and Agents from your cluster.
-
-   ```
-   telepresence leave ${full_name_of_intercept}
-   telepresence quit
-   telepresence uninstall --everything
-   ```
-
-   The resulting intercept might have a full name that is different
-   than the base name that you gave to `telepresence intercept` in
-   step 4; see the section [Specifing a namespace for an
-   intercept](#specifying-a-namespace-for-an-intercept) for more
-   information.
-
-## Specifying a namespace for an intercept
-
-The namespace of the intercepted deployment is specified using the `--namespace` option. When this option is used, and `--deployment` is not used, then the given name is interpreted as the name of the deployment and the name of the intercept will be constructed from that name and the namespace.
+1. Connect to the cluster:
+   `telepresence connect`
 
   ```
-  telepresence intercept hello --namespace myns --port 9000
+  $ telepresence connect
+
+    Launching Telepresence Daemon
+    ...
+    Connected to context default (https://<cluster public IP>)
   ```
 
-This will intercept a Deployment named "hello" and name the intercept
-"hello-myns".  In order to remove the intercept, you will need to run
-`telepresence leave hello-mydns` instead of just `telepresence leave
-hello`.
+  <Alert severity="info">
+    macOS users: If you receive an error when running Telepresence that the developer cannot be verified, open
+    <br />
+    <strong>System Preferences → Security & Privacy → General</strong>.
+    <br />
+    Click <strong>Open Anyway</strong> at the bottom to bypass the security block. Then retry the <code>telepresence connect</code> command.
+  </Alert>
 
-The name of the intercept will be left unchanged if the deployment is specified.
+2. Test that Telepresence is working properly by connecting to the Kubernetes API server:
+   `curl -ik https://kubernetes.default.svc.cluster.local`
+
+  <Alert severity="info">
+    <strong>Didn't work?</strong> Make sure you are using Telepresence 2.0.3 or greater, check with <code>telepresence version</code> and upgrade <a href="../../howtos/upgrading/">here</a> if needed.
+  </Alert>
 
   ```
-  telepresence intercept myhello --namespace myns --deployment hello --port 9000
+  $ curl -ik https://kubernetes.default.svc.cluster.local
+
+    HTTP/1.1 401 Unauthorized
+    Cache-Control: no-cache, private
+    Content-Type: application/json
+    Www-Authenticate: Basic realm="kubernetes-master"
+    Date: Tue, 09 Feb 2021 23:21:51 GMT
+    Content-Length: 165
+
+    {
+      "kind": "Status",
+      "apiVersion": "v1",
+      "metadata": {
+
+      },
+      "status": "Failure",
+      "message": "Unauthorized",
+      "reason": "Unauthorized",
+      "code": 401
+    }%
+
   ```
-This will intercept a deployment named "hello" and name the intercept "myhello".
+<Alert severity="info">
+    The 401 response is expected.  What's important is that you were able to contact the API.
+</Alert>
 
-## Importing Environment Variables
+<Alert severity="success">
+    <strong>Congratulations!</strong> You’ve just accessed your remote Kubernetes API server, as if you were on the same network! With Telepresence, you’re able to use any tool that you have locally to connect to any service in the cluster.
+</Alert>
 
-Telepresence can import the environment variables from the pod that is being intercepted, see [this doc](../../reference/environment/) for more details.
+## 3. Intercept all traffic
 
-## Creating an Intercept Without a Preview URL
+1. List the services that you can intercept with `telepresence list` and make sure the one you want to intercept is listed.
 
-If you *are not* logged into Ambassador Cloud, the following command will intercept all traffic bound to the service and proxy it to your laptop. This includes traffic coming through your  ingress controller, so use this option carefully as to not disrupt production environments.
+    For the example below, this would confirm that `example-service` can be intercepted by Telepresence:
+    ```
+    $ telepresence list
+    
+    ...
+    <service name>: ready to intercept (traffic-agent not yet installed)
+    ...
+    ```
 
-```
-telepresence intercept ${base_name_of_intercept} --port=${local_TCP_port}
-```
+2. Get the name of the port you want to intercept on your service:  
+`kubectl get service <service name> --output yaml`.
 
-If you *are* logged into Ambassador Cloud, setting the `preview-url` flag to `false` is necessary.
+   For the example below, port `80` is named `http` in the `example-service`:
+    
+    ```
+    $ kubectl get service example-service --output yaml
+    
+    ...
+      ports:
+      - name: http
+        port: 80
+        protocol: TCP
+        targetPort: http
+    ...
+    ```
 
-```
-telepresence intercept ${base_name_of_intercept} --port=${local_TCP_port} --preview-url=false
-```
+3. Intercept all traffic for the service you want to use:  
+`telepresence intercept <service name> --port <local port>[:<remote port>] --env-file <path to env file>`
 
-This will output a header that you can set on your request for that traffic to be intercepted:
+   - For the `--port` argument, specify the port on which your local instance of your service will be running.
+     - If the service you are intercepting exposes more than one port, specify the one you want to intercept after a colon.
+   - For the `--env-file` argument, specify the path to a file on which Telepresence should write the environment variables that your service is currently running with. This is going to be useful as we start our service.
+    
+   For the example below, Telepresence will intercept traffic going to service `example-service` so that requests reaching it on port `http` in the cluster get routed to `8080` on the workstation and write the environment variables of the service to `~/example-service-intercept.env`. 
 
-```
-$ telepresence intercept <base name of intercept> --port=<local TCP port> --preview-url=false
-Using deployment <name of deployment>
-intercepted
-    Intercept name: <full name of intercept>
-    State         : ACTIVE
-    Destination   : 127.0.0.1:<local TCP port>
-    Intercepting  : HTTP requests that match all of:
-      header("x-telepresence-intercept-id") ~= regexp("<uuid unique to you>:<full name of intercept>")
-```
+   ```
+   $ telepresence intercept example-service --port 8080:http --env-file ~/example-service-intercept.env
+     
+     Using deployment example-service
+     intercepted
+         Intercept name: example-service
+         State         : ACTIVE
+         Destination   : 127.0.0.1:8080
+         Intercepting  : all TCP connections
+   ```
 
-Run `telepresence status` to see the list of active intercepts.
+4. Start your local instance of the service on the previously specified port, passing the
+environment variables retrieved in the previous step.<a name="start-local-instance"></a>
 
-```
-$ telepresence status
-Connected
-  Context:       default (https://<cluster-public-ip>)
-  Proxy:         ON (networking to the cluster is enabled)
-  Intercepts:    1 total
-    dataprocessingnodeservice: <your-laptop-name>
-```
+  Here are a few options to pass the environment variables to your local process:
+   - with `docker run`, provide the path to the file using the [`--env-file` argument](https://docs.docker.com/engine/reference/commandline/run/#set-environment-variables--e---env---env-file)
+   - with JetBrains IDE (IntelliJ, WebStorm, PyCharm, GoLand, etc.) use the [EnvFile plugin](https://plugins.jetbrains.com/plugin/7861-envfile)
+   - with Visual Studio Code, specify the path to the environment variables file in the `envFile` field of your configuration
 
-Finally, run `telepresence leave [name of intercept]` to stop the intercept.
+5. Query the environment in which you intercepted a service the way you usually would and see your local instance being invoked. You can also add breakpoints to debug what is going on in your code!
 
-## Creating an Intercept When a Service has Multiple Ports
+<Alert severity="success">
+    <strong>Crongatulations!</strong> You can now intercept traffic usually going to your Kuberenetes Service to your workstation instead! 
+</Alert>
 
-If you are trying to intercept a service that has multiple ports, you need to tell telepresence which service port you are trying to intercept. You can see the name of the service ports available to be intercepted by using kubectl to describe your service or look in the yaml for the service. For more information on multiple ports, see the [Kubernetes documentation](https://kubernetes.io/docs/concepts/services-networking/service/#multi-port-services).
+## 4. Intercept traffic coming from a Preview URL
 
-```
-telepresence intercept <base name of intercept> --port=<local TCP port>:<servicePortName>
-Using deployment <name of deployment>
-intercepted
-    Intercept name   : <full name of intercept>
-    State            : ACTIVE
-    Destination      : 127.0.0.1:<local TCP port>
-    Service Port Name: <servicePortName>
-    Intercepting     : all TCP connections
-```
+When working on a development environment with multiple engineers, impacting others' workflows is problematic. By using a preview URL with your intercept, Telepresence can route to your workstation only requests coming from that preview URL and route the other ones to the usual container in your cluster.
 
-When intercepting a service that has multiple ports, the name of the service port that has been intercepted is also listed.
+1. Clean up your previous intercept by removing it:  
+`telepresence leave <service name>`
 
-If you want to change which port has been intercepted, you can create a new intercept the same way you did above and it will change which service port is being intercepted.
+2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:  
+`telepresence login`
+
+  This opens your browser; login with your GitHub account and choose your org.
+    
+  ```
+  $ telepresence login
+    
+     Launching browser authentication flow...
+     <browser opens, login with GitHub>
+     Login successful.
+   ```
+
+3. Start the intercept again:  
+`telepresence intercept <service name> --port <local port>[:<remote port>] --env-file <path to env file>`
+
+   You will be asked for the following information:
+   1. **Ingress layer 3 address**: this would usually be the internal address of your ingress controller in the format `<service name>.namespace`. Per example, if you have a service `ambassador-edge-stack` in the `ambassador` namespace, you would enter `ambassador-edge-stack.ambassador`;
+   2. **Ingress port**: the port on which your ingress controller is listening (often 80 for non-TLS and 443 for TLS);
+   3. **Ingress TLS encryption**: whether the ingress controller is expecting TLS communication on the specified port;
+   4. **Ingress layer 5 hostname**: if your ingress controller routes traffic based on a domain name (often using the `Host` HTTP header), this is the value you would need to enter here.
+   
+   For the example below, this is going to create a preview URL that will send traffic to the `ambassador` service in the `ambassador` namespace on port `443` using TLS encryption and setting the `Host` HTTP header to `dev-environment.edgestack.me`:
+   
+   ```
+   $ telepresence intercept example-service --port 8080:http --env-file ~/example-service-intercept.env
+     
+     To create a preview URL, telepresence needs to know how cluster
+     ingress works for this service.  Please Confirm the ingress to use.
+       
+     1/4: What's your ingress' layer 3 (IP) address?
+          You may use an IP address or a DNS name (this is usually a
+          "service.namespace" DNS name).
+       
+            [default: -]: ambassador.ambassador
+       
+     2/4: What's your ingress' layer 4 address (TCP port number)?
+       
+            [default: -]: 443
+       
+     3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
+       
+            [default: n]: y
+       
+     4/4: If required by your ingress, specify a different layer 5 hostname
+          (TLS-SNI, HTTP "Host" header) to access this service.
+       
+            [default: ambassador.ambassador]: dev-environment.edgestack.me
+       
+     Using deployment example-service
+     intercepted
+         Intercept name   : example-service
+         State            : ACTIVE
+         Destination      : 127.0.0.1:8080
+         Service Port Name: http
+         Intercepting     : HTTP requests that match all of:
+           header("x-telepresence-intercept-id") ~= regexp("<intercept id>:example-service")
+         Preview URL      : https://<random domain name>.preview.edgestack.me
+         Layer 5 Hostname : dev-environment.edgestack.me
+   ```
+
+4. Start your local service as <a href="#start-local-instance">in the previous step</a>.
+
+5. Go to the preview URL printed after doing the intercept and see that your local service is processing the request.
+
+    <Alert severity="info">
+    <strong>Didn't work?</strong> It might be because you have services in between your ingress controller and the service 
+    you are intercepting that do not propagate the <code>x-telepresence-intercept-id</code> HTTP Header. Read more on <a href="../concepts/context-prop">context propagation</a>.
+    </Alert>
+
+6. Make a request on the URL you would usually query for that environment.  The request should not be routed to your laptop.
+
+   Normal traffic coming into the cluster through the Ingress and not coming from this preview URL will go to deployments in the cluster like normal.
+
+<Alert severity="success">
+    <strong>Congratulations!</strong> You can now intercept traffic for your Kubernetes Service without impacting the rest of your team!
+</Alert>
+
+## <img class="os-logo" src="../../../images/logo.png"/> What's Next?
+
+<QSCards/>
