@@ -13,8 +13,10 @@ import (
 
 // Command returns the telepresence sub-command "auth"
 func LoginCommand() *cobra.Command {
-	command := cobra.Command{
-		Use:   "login",
+	return &cobra.Command{
+		Use:  "login",
+		Args: cobra.NoArgs,
+
 		Short: "Authenticate to Ambassador Cloud",
 		Long:  "Authenticate to Ambassador Cloud",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -33,18 +35,19 @@ func LoginCommand() *cobra.Command {
 				browser.OpenURL,
 				client.NewScout(cmd.Context(), "cli"),
 			)
-			return l.LoginFlow(cmd, args)
+			return l.LoginFlow(cmd)
 		},
 	}
-	return &command
 }
 
 func LogoutCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "logout",
+		Use:  "logout",
+		Args: cobra.NoArgs,
+
 		Short: "Logout from Ambassador Cloud",
 		Long:  "Logout from Ambassador Cloud",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			_, err := cache.LoadTokenFromUserCache(cmd.Context())
 			if err != nil && os.IsNotExist(err) {
 				return errors.New("not logged in")

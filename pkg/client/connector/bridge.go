@@ -108,6 +108,9 @@ func checkKubectl(c context.Context) error {
 // Note there is no namespace specified, as we are checking for bridge status in the
 // current namespace.
 func (br *bridge) check(c context.Context) bool {
+	if br == nil {
+		return false
+	}
 	address := fmt.Sprintf("localhost:%d", br.sshPort)
 	conn, err := net.DialTimeout("tcp", address, 15*time.Second)
 	if err != nil {

@@ -12,17 +12,16 @@ import (
 )
 
 type k8sConfig struct {
-	Namespace        string // default cluster namespace.
-	Context          string
-	Server           string
-	mappedNamespaces []string
-	flagMap          map[string]string
-	flagArgs         []string
-	configFlags      *kates.ConfigFlags
-	config           *rest.Config
+	Namespace   string // default cluster namespace.
+	Context     string
+	Server      string
+	flagMap     map[string]string
+	flagArgs    []string
+	configFlags *kates.ConfigFlags
+	config      *rest.Config
 }
 
-func newConfigAndFlags(flagMap map[string]string, mappedNamespaces []string) (*k8sConfig, error) {
+func newK8sConfig(flagMap map[string]string) (*k8sConfig, error) {
 	// Namespace option will be passed only when explicitly needed. The k8Cluster is namespace agnostic with
 	// respect to this option.
 	delete(flagMap, "namespace")
@@ -75,17 +74,15 @@ func newConfigAndFlags(flagMap map[string]string, mappedNamespaces []string) (*k
 
 	// Sort for easy comparison
 	sort.Strings(flagArgs)
-	sort.Strings(mappedNamespaces)
 
 	return &k8sConfig{
-		Context:          ctxName,
-		Server:           cluster.Server,
-		Namespace:        namespace,
-		mappedNamespaces: mappedNamespaces,
-		flagMap:          flagMap,
-		flagArgs:         flagArgs,
-		configFlags:      configFlags,
-		config:           restConfig,
+		Context:     ctxName,
+		Server:      cluster.Server,
+		Namespace:   namespace,
+		flagMap:     flagMap,
+		flagArgs:    flagArgs,
+		configFlags: configFlags,
+		config:      restConfig,
 	}, nil
 }
 
@@ -99,13 +96,18 @@ func (kc *k8sConfig) actualNamespace(namespace string) string {
 // equals determines if this instance is equal to the given instance with respect to everything but
 // Namespace.
 func (kf *k8sConfig) equals(okf *k8sConfig) bool {
-	if kf.Context != okf.Context ||
-		kf.Server != okf.Server ||
-		len(kf.flagArgs) != len(okf.flagArgs) {
+	return kf != nil && okf != nil &&
+		kf.Context == okf.Context &&
+		kf.Server == okf.Server &&
+		sliceEqual(kf.flagArgs, okf.flagArgs)
+}
+
+func sliceEqual(a, b []string) bool {
+	if len(a) != len(b) {
 		return false
 	}
-	for i, arg := range kf.flagArgs {
-		if arg != okf.flagArgs[i] {
+	for i := range a {
+		if a[i] != b[i] {
 			return false
 		}
 	}

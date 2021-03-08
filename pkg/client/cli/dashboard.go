@@ -13,9 +13,10 @@ import (
 
 func dashboardCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "dashboard",
+		Use:  "dashboard",
+		Args: cobra.NoArgs,
+
 		Short: "Open the dashboard in a web page",
-		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			env, err := client.LoadEnv(cmd.Context())
 			if err != nil {
@@ -35,7 +36,7 @@ func dashboardCommand() *cobra.Command {
 					browser.OpenURL,
 					client.NewScout(cmd.Context(), "cli"),
 				)
-				err = l.LoginFlow(cmd, args)
+				err = l.LoginFlow(cmd)
 			} else {
 				// The LoginFlow actually takes the user to the dashboard. Hence the else here.
 				err = browser.OpenURL(fmt.Sprintf("https://%s/cloud/preview", env.SystemAHost))

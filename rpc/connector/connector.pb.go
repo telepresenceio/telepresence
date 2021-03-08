@@ -115,9 +115,9 @@ func (InterceptError) EnumDescriptor() ([]byte, []int) {
 type ConnectInfo_ErrType int32
 
 const (
-	ConnectInfo_UNSPECIFIED            ConnectInfo_ErrType = 0
+	ConnectInfo_UNSPECIFIED            ConnectInfo_ErrType = 0 // success
 	ConnectInfo_NOT_STARTED            ConnectInfo_ErrType = 1
-	ConnectInfo_ALREADY_CONNECTED      ConnectInfo_ErrType = 2
+	ConnectInfo_ALREADY_CONNECTED      ConnectInfo_ErrType = 2 // success
 	ConnectInfo_DISCONNECTING          ConnectInfo_ErrType = 3
 	ConnectInfo_CLUSTER_FAILED         ConnectInfo_ErrType = 4
 	ConnectInfo_BRIDGE_FAILED          ConnectInfo_ErrType = 5

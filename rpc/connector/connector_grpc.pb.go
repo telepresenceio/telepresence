@@ -22,17 +22,26 @@ const _ = grpc.SupportPackageIsVersion7
 type ConnectorClient interface {
 	// Returns version information from the Connector
 	Version(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*common.VersionInfo, error)
-	// Connects the daemon to a cluster and returns status
+	// Connects to the cluster and connects the laptop's network (via
+	// the daemon process) to the cluster's network.  A result code of
+	// UNSPECIFIED indicates that the connection was successfully
+	// initiated; if already connected, then either ALREADY_CONNECTED or
+	// MUST_RESTART is returned, based on whether the current connection
+	// is in agreement with the ConnectionRequest.
 	Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error)
-	// Adds a deployment intercept
+	// Adds a deployment intercept.  Requires having already called
+	// Connect.
 	CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error)
 	// Deactivates and removes an existent deployment intercept.
+	// Requires having already called Connect.
 	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error)
 	// Uninstalls traffic-agents and traffic-manager from the cluster.
+	// Requires having already called Connect.
 	Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*UninstallResult, error)
 	// Returns a list of deployments and their current intercept status.
+	// Requires having already called Connect.
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*DeploymentInfoSnapshot, error)
-	// Quits (terminates) the service.
+	// Quits (terminates) the connector process.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
@@ -113,17 +122,26 @@ func (c *connectorClient) Quit(ctx context.Context, in *empty.Empty, opts ...grp
 type ConnectorServer interface {
 	// Returns version information from the Connector
 	Version(context.Context, *empty.Empty) (*common.VersionInfo, error)
-	// Connects the daemon to a cluster and returns status
+	// Connects to the cluster and connects the laptop's network (via
+	// the daemon process) to the cluster's network.  A result code of
+	// UNSPECIFIED indicates that the connection was successfully
+	// initiated; if already connected, then either ALREADY_CONNECTED or
+	// MUST_RESTART is returned, based on whether the current connection
+	// is in agreement with the ConnectionRequest.
 	Connect(context.Context, *ConnectRequest) (*ConnectInfo, error)
-	// Adds a deployment intercept
+	// Adds a deployment intercept.  Requires having already called
+	// Connect.
 	CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error)
 	// Deactivates and removes an existent deployment intercept.
+	// Requires having already called Connect.
 	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error)
 	// Uninstalls traffic-agents and traffic-manager from the cluster.
+	// Requires having already called Connect.
 	Uninstall(context.Context, *UninstallRequest) (*UninstallResult, error)
 	// Returns a list of deployments and their current intercept status.
+	// Requires having already called Connect.
 	List(context.Context, *ListRequest) (*DeploymentInfoSnapshot, error)
-	// Quits (terminates) the service.
+	// Quits (terminates) the connector process.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	mustEmbedUnimplementedConnectorServer()
 }

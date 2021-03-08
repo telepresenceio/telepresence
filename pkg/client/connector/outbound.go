@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/datawire/ambassador/pkg/kates"
+	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dutil"
 	"github.com/datawire/telepresence2/rpc/v2/daemon"
 )
 
@@ -42,7 +42,7 @@ type k8sWatcher struct {
 // If a pods and services watcher receives an update, it will send an updated IP-table to the daemon.
 func (kc *k8sCluster) startWatchers(c context.Context, accWait chan struct{}) (err error) {
 	defer func() {
-		if r := dutil.PanicToError(recover()); r != nil {
+		if r := derror.PanicToError(recover()); r != nil {
 			err = r
 		}
 	}()

@@ -18,17 +18,19 @@ func addPreviewFlags(prefix string, flags *pflag.FlagSet, spec *manager.PreviewS
 
 func previewCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "preview",
+		Use:  "preview",
+		Args: OnlySubcommands,
+
 		Short: "Create or remove preview domains for existing intercepts",
-		Args:  OnlySubcommands,
 		RunE:  RunSubcommands,
 	}
 
 	var createSpec manager.PreviewSpec
 	createCmd := &cobra.Command{
-		Use:   "create INTERCEPT_NAME",
+		Use:  "create [flags] <intercept_name>",
+		Args: cobra.ExactArgs(1),
+
 		Short: "Create a preview domain for an existing intercept",
-		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := auth.EnsureLoggedIn(cmd); err != nil {
 				return err
@@ -60,9 +62,10 @@ func previewCommand() *cobra.Command {
 	addPreviewFlags("", createCmd.Flags(), &createSpec)
 
 	removeCmd := &cobra.Command{
-		Use:   "remove INTERCEPT_NAME",
+		Use:  "remove <intercept_name>",
+		Args: cobra.ExactArgs(1),
+
 		Short: "Remove a preview domain from an intercept",
-		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			si := &sessionInfo{cmd: cmd}
 			return si.withConnector(true, func(cs *connectorState) error {
