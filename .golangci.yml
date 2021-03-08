@@ -38,7 +38,7 @@ linters-settings:
 
   goimports:
     # A comma-separated list
-    local-prefixes: github.com/datawire
+    local-prefixes: github.com/telepresenceio,github.com/datawire
 
   lll:
     line-length: 180
@@ -56,7 +56,7 @@ linters:
     - depguard
     - dogsled
     - errcheck
-    - gci
+    - goimports # temporarily use 'goimports' instead of 'gci' https://github.com/daixiang0/gci/pull/33
     - gocognit
     - gocritic
     - gocyclo
