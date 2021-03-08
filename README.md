@@ -1,6 +1,19 @@
-# Telepresence 2
+# Telepresence 2: fast, efficient local development for Kubernetes microservices
 
-This is internal to Ambassador Labs.
+Telepresence gives developers infinite scale development environments for Kubernetes. With Telepresence:
+
+* You run one service locally, using your favorite IDE and other tools
+* You run the rest of your application in the cloud, where there is unlimited memory and compute
+
+This gives developers:
+
+* a fast local dev loop, with no waiting for a container build / push / deploy
+* ability to use their favorite local tools (IDE, debugger, etc.)
+* ability to run large-scale applications that can't run locally
+
+## Telepresence 2
+
+Telepresence 2 is based on learnings from the original Telepresence architecture. Rewritten in Go, Telepresence 2 provides a simpler and more powerful user experience, improved performance, and better reliability than Telepresence 1. More details on Telepresence 2 are below.
 
 ## Walkthrough
 
