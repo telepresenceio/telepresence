@@ -15,6 +15,7 @@ This gives developers:
 
 Telepresence 2 is based on learnings from the original Telepresence architecture. Rewritten in Go, Telepresence 2 provides a simpler and more powerful user experience, improved performance, and better reliability than Telepresence 1. More details on Telepresence 2 are below.
 
+
 ## Walkthrough
 
 ### Install an interceptable service:
@@ -281,7 +282,7 @@ will remove everything that was automatically installed by telepresence from the
 The telepresence background processes `daemon` and `commector`both produces log files that can be very helpful when problems are encountered. The files are named `daemon.log` and `connector.log`. The location of the logs differ depending on what platform that is used:
 
 - MacOS `~/Library/Logs/telepresence`
-- Linux `~/.cache/telepresence/logs` 
+- Linux `~/.cache/telepresence/logs`
 
 ## Comparison to classic Telepresence
 
