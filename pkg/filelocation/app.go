@@ -24,7 +24,7 @@ func AppUserLogDir(ctx context.Context) (string, error) {
 	}
 	switch goos(ctx) {
 	case "darwin":
-		home, err := userHomeDir(ctx)
+		home, err := UserHomeDir(ctx)
 		if err != nil {
 			return "", err
 		}
@@ -63,7 +63,7 @@ func AppUserCacheDir(ctx context.Context) (string, error) {
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.
 func AppUserConfigDir(ctx context.Context) (string, error) {
-	userDir, err := userConfigDir(ctx)
+	userDir, err := UserConfigDir(ctx)
 	if err != nil {
 		return "", err
 	}

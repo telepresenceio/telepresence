@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.0.4 (TBD)
+### 2.1.0 (March 8, 2021)
 
 - Bugfix: Environment variables declared with `envFrom` in the app-container are now propagated correctly to the client during intercept.
 - Change: The telepresence daemon will no longer use port 1234 for the firewall-to-SOCKS server, but will instead choose an available port dynamically.
@@ -12,6 +12,7 @@
 - Feature: Users can choose which port to intercept when intercepting a service with multiple ports.
 - Change: On connect, telepresence will no longer suggest the `--mapped-namespaces` flag when the user connects to a large cluster.
 - Bugfix: Telepresence now explicitly requires macFUSE version 4.0.5 or higher for macOS.
+- Bugfix: A `tail -F <daemon log file>` no longer results in a "Permission denied" when reconnecting to the cluster.
 
 ### 2.0.3 (February 24, 2021)
 
