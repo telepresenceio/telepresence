@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.0.4 (TBD)
+### 2.1.0 (March 8, 2021)
 
 - Bugfix: Environment variables declared with `envFrom` in the app-container are now propagated correctly to the client during intercept.
 - Change: The telepresence daemon will no longer use port 1234 for the firewall-to-SOCKS server, but will instead choose an available port dynamically.
