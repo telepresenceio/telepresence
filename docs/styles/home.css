@@ -921,3 +921,36 @@ footer {
     max-width: 100%;
     overflow: hidden;
 }
+
+.banner {
+    width: 100%;
+    background-color: #f9634e;
+}
+
+.banner__text {
+    color: white;
+    text-align: center;
+    padding: 10px 0;
+}
+
+.banner__text--docs {
+    font-size: 22px !important;
+}
+
+.banner__link {
+	cursor: pointer;
+	color: white;
+    text-decoration: none;
+}
+
+.banner__link--docs {
+	color: white !important;
+}
+
+.banner__link:hover {
+    text-decoration: underline;
+}
+
+.banner__icon {
+    vertical-align: middle;
+}
