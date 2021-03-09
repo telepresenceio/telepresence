@@ -108,25 +108,28 @@ get_intercept_id() {
     fi
 }
 
-# Checks to see if traffic manager is present + proprietary or dummy based on inputs 
-is_prop_traffic_manager() {
+# Checks to see if traffic agent is present + proprietary or dummy based on inputs
+is_prop_traffic_agent() {
     local present=${1}
     local image=`kubectl get deployment dataprocessingnodeservice -o "jsonpath={.spec.template.spec.containers[?(@.name=='traffic-agent')].image}"`
     if [[ -z $image ]]; then
-        echo "There is no traffic-manager sidecar and there should be"
+        echo "There is no traffic-agent sidecar and there should be"
         exit 1
     fi 
 
     if $present; then
         local image_present=`echo $image | grep 'ambassador-telepresence-agent:'`
         if [[ -z $image_present ]]; then 
-            echo "Proprietary traffic manager image wasn't used and it should be"
+            echo "Proprietary traffic agent image wasn't used and it should be"
+            exit 1
+        elif [[ ! -z $TELEPRESENCE_AGENT_IMAGE && $image_present != *$TELEPRESENCE_AGENT_IMAGE ]]; then
+            echo "Propietary traffic agent was supposed to have been overridden but it wasn't"
             exit 1
         fi
     else
         local image_present=`echo $image | grep 'tel2:'`
         if [[ -z $image_present ]]; then
-            echo "Non-proprietary traffic manager image wasn't used and it should be"
+            echo "Non-proprietary traffic agent image wasn't used and it should be"
             exit 1
         fi
     fi
@@ -194,6 +197,18 @@ echo "Using telepresence: "
 echo $TELEPRESENCE
 $TELEPRESENCE version
 echo
+
+# If this environment variable is set, we want to run the smoke tests with that
+# agent. But this agent isn't used unless we are logged in, so we unset the
+# var here, and will re-set it after we log in.
+if [ ! -z $TELEPRESENCE_AGENT_IMAGE ]; then
+    TELEPRESENCE_AGENT_OVERRIDE=$TELEPRESENCE_AGENT_IMAGE
+    echo "Using Agent Image for tests where you are logged in:"
+    echo $TELEPRESENCE_AGENT_IMAGE
+    echo
+    unset TELEPRESENCE_AGENT_IMAGE
+fi
+
 echo "Using kubectl: "
 which kubectl
 kubectl version
@@ -270,16 +285,16 @@ fi
 $TELEPRESENCE intercept dataprocessingnodeservice -p 3000 > $output_location
 sleep 1
 
-is_prop_traffic_manager False
+is_prop_traffic_agent False
 
 output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
 verify_output_empty "${output}" False
 
 $TELEPRESENCE leave dataprocessingnodeservice > $output_location
-$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --preview-url=false --match=all > $output_location
+$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --preview-url=false --mechanism=tcp > $output_location
 sleep 1
 
-is_prop_traffic_manager False
+is_prop_traffic_agent False
 
 output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
 verify_output_empty "${output}" False
@@ -307,19 +322,31 @@ verify_output_empty "${output}" True
 finish_step
 
 ###############################################
-#### Step 5 - Verify login prompted        ####
+#### Step 5 - Verify can access svc        ####
 ###############################################
 
+curl "${curl_opts[@]}" dataprocessingnodeservice.default:3000 > $output_location
+if [[ "$?" != 0 ]]; then
+    echo "Unable to access service after leaving intercept"
+    exit
+fi
+finish_step
 
-# TODO: this is a HACK so we have the login, but don't actually try to make an intercept
-# For some reason, if we aren't logged in and pipe in these inputs, the intercept doesn't have a 
-# token despite logging in. I think it's likely bc of how I'm piping input into these commands 
-# since there isn't a way via the cli: https://github.com/datawire/telepresence2/issues/118
-$TELEPRESENCE intercept notrealservice --port 3000 --preview-url=true --match=all <<<$'ambassador.ambassador\n80\nN\n' > $output_location 2>&1
-sleep 3
-$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --preview-url=true --match=all <<<$'ambassador.ambassador\n80\nN\n' > $output_location
+
+###############################################
+#### Step 6 - Verify login prompted        ####
+###############################################
+
+if [[ ! -z $TELEPRESENCE_AGENT_OVERRIDE ]]; then
+    export TELEPRESENCE_AGENT_IMAGE=$TELEPRESENCE_AGENT_OVERRIDE
+    echo "Using $TELEPRESENCE_AGENT_IMAGE as the agent for remainder of tests"
+    $TELEPRESENCE quit > $output_location
+    $TELEPRESENCE connect > $output_location
+fi
+
+$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --preview-url=true --http-match=all <<<$'ambassador.ambassador\n80\nN\n' > $output_location
 sleep 1
-is_prop_traffic_manager False
+is_prop_traffic_agent True
 
 # Verify intercept works
 output=`$TELEPRESENCE list | grep 'dataprocessingnodeservice: intercepted'`
@@ -334,19 +361,19 @@ verify_output_empty "${output}" True
 finish_step
 
 ###############################################
-#### Step 6 - Verify login on own works    ####
+#### Step 7 - Verify login on own works    ####
 ###############################################
 
 login
 output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 <<<$'ambassador.ambassador\n80\nN\n'`
 sleep 1
 has_preview_url True
-is_prop_traffic_manager True
+is_prop_traffic_agent True
 
 finish_step
 
 #####################################################
-#### Step 7 - Verify selective preview url works ####
+#### Step 8 - Verify selective preview url works ####
 #####################################################
 
 has_intercept_id True
@@ -365,7 +392,7 @@ $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 finish_step
 
 ###############################################################
-#### Step 8 - licensed selective intercept w/o preview url ####
+#### Step 9 - licensed selective intercept w/o preview url ####
 ###############################################################
 
 output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --preview-url=false`
@@ -379,10 +406,10 @@ $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 finish_step
 
 ###############################################
-#### Step 9 - licensed intercept all       ####
+#### Step 10 - licensed intercept all      ####
 ###############################################
 
-output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --match=all <<<$'ambassador.ambassador\n80\nN\n'`
+output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --http-match=all <<<$'ambassador.ambassador\n80\nN\n'`
 sleep 1
 has_intercept_id False
 has_preview_url True
@@ -393,10 +420,10 @@ $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 finish_step
 
 ##########################################################
-#### Step 10 - licensed intercept all w/o preview url ####
+#### Step 11 - licensed intercept all w/o preview url ####
 ##########################################################
 
-output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --match=all --preview-url=false`
+output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --http-match=all --preview-url=false`
 sleep 1
 has_intercept_id False
 has_preview_url False
@@ -408,7 +435,7 @@ finish_step
 
 
 ##########################################################
-#### Step 11 - licensed uninstall everything          ####
+#### Step 12 - licensed uninstall everything          ####
 ##########################################################
 
 $TELEPRESENCE uninstall --everything > $output_location
@@ -417,7 +444,7 @@ verify_logout
 finish_step
 
 ##########################################################
-#### Step 12 - Verfiy version prompts new version     ####
+#### Step 13 - Verfiy version prompts new version     ####
 ##########################################################
 os=`uname -s | awk '{print tolower($0)}'`
 echo "Installing an old version of telepresence to /tmp/old_telepresence to verify it prompts for update"
