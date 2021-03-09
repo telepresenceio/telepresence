@@ -251,7 +251,7 @@ be routed to your cluster as usual.
 
     <Alert severity="info">
     <strong>Didn't work?</strong> It might be because you have services in between your ingress controller and the service 
-    you are intercepting that do not propagate the <code>x-telepresence-intercept-id</code> HTTP Header. Read more on <a href="../concepts/context-prop">context propagation</a>.
+    you are intercepting that do not propagate the <code>x-telepresence-intercept-id</code> HTTP Header. Read more on <a href="../../concepts/context-prop">context propagation</a>.
     </Alert>
 
 6. Make a request on the URL you would usually query for that environment.  The request should not be routed to your laptop.
