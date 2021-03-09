@@ -60,14 +60,17 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 	}
 
 	o.setSearchPathFunc = func(c context.Context, paths []string) {
+		namespaces := make(map[string]struct{})
 		search := make([]string, 0)
 		for _, path := range paths {
 			if strings.ContainsRune(path, '.') {
 				search = append(search, path)
+			} else if path != "" {
+				namespaces[path] = struct{}{}
 			}
 		}
-		search = append(search, "svc.cluster.local.", "cluster.local.", "")
 		o.domainsLock.Lock()
+		o.namespaces = namespaces
 		o.search = search
 		o.domainsLock.Unlock()
 	}
@@ -92,18 +95,24 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 	return err
 }
 
-// resolve looks up the given query, trying all the suffixes in the search path, and returns the
-// matching IPs
+// resolve looks up the given query. Queries using qualified names will be dispatched to the
+// resolveNoNs() function. An unqualified name query will be tried with all the suffixes in
+// the search path and the IPs of the first match will be returned.
 func (o *outbound) resolve(query string) []string {
 	if !strings.HasSuffix(query, ".") {
-		query += "."
+		// Query must end with dot.
+		return nil
+	}
+	if strings.Count(query, ".") > 1 {
+		// More than just the ending dot, so don't use search-path
+		return o.resolveNoSearch(query)
 	}
 
+	query = strings.ToLower(query)
 	var ips []string
 	o.domainsLock.RLock()
 	for _, suffix := range o.search {
-		name := query + suffix
-		if ips = o.domains[strings.ToLower(name)]; ips != nil {
+		if ips = o.domains[query+suffix]; ips != nil {
 			break
 		}
 	}
