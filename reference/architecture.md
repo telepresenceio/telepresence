@@ -2,9 +2,13 @@
 description: "How Telepresence works to intercept traffic from your Kubernetes cluster to code running on your laptop."
 ---
 
-# Architecture
+# Telepresence Architecture
 
-<img src="../../../images/tp-architecture.png" alt="" />
+<div class="docs-diagram-wrapper">
+
+![Telepresence Architecture](../../../../../images/documentation/telepresence-architecture.inline.svg)
+
+</div>
 
 ## Telepresence CLI
 
@@ -14,14 +18,14 @@ another.
 
 ## Telepresence Daemon
 
-The Telepresence Daemon runs on a developer's workstation and is its main point of communication with the cluster's 
+The Telepresence Daemon runs on a developer's workstation and is its main point of communication with the cluster's
 network. All requests from and to the cluster go through the Daemon, which communicates with the Traffic Manager.
 
 ## Traffic Manager
 
 The Traffic Manager is the central point of communication between Traffic Agents in the cluster and Telepresence Daemons
 on developer workstations, proxying all relevant inbound and outbound traffic and tracking active intercepts. When
-Telepresence is run with either the `connect`, `intercept`, or `list` commands, the Telepresence CLI first checks the 
+Telepresence is run with either the `connect`, `intercept`, or `list` commands, the Telepresence CLI first checks the
 cluster for the Traffic Manager deployment, and if missing it creates it.
 
 When an intercept gets created with a Preview URL, the Traffic Manager will establish a connection with Ambassador Cloud
@@ -36,7 +40,7 @@ container is injected into the deployment's pod(s). You can see the Traffic Agen
 pod <pod-name>`.
 
 Depending on the type of intercept that gets created, the Traffic Agent will either route the incoming request to the
-Traffic Manager so that it gets routed to a developer's workstation, or it will pass it along to the container in the 
+Traffic Manager so that it gets routed to a developer's workstation, or it will pass it along to the container in the
 pod usually handling requests on that port.
 
 ## Ambassador Cloud
@@ -44,7 +48,7 @@ pod usually handling requests on that port.
 Ambassador Cloud enables Preview URLs by generating random ephemeral domain names and routing requests received on those
 domains from authorized users to the appropriate Traffic Manager.
 
-Ambassador Cloud also lets users manage their Preview URLs: making them publicly accessible, seeing users who have 
+Ambassador Cloud also lets users manage their Preview URLs: making them publicly accessible, seeing users who have
 accessed them and deleting them.
 
 # Changes from Service Preview
