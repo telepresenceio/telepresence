@@ -4,7 +4,9 @@ description: "How Telepresence works to intercept traffic from your Kubernetes c
 
 # Architecture
 
-<img src="../../../images/tp-architecture.png" alt="" />
+<br />
+
+![Telepresence Architecture](../../../images/tp-architecture.svg)
 
 ## Telepresence CLI
 
