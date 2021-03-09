@@ -2,11 +2,13 @@
 description: "How Telepresence works to intercept traffic from your Kubernetes cluster to code running on your laptop."
 ---
 
-# Architecture
+# Telepresence Architecture
 
-<br />
+<div class="docs-diagram-wrapper">
 
-![Telepresence Architecture](../../../images/tp-architecture.svg)
+![Telepresence Architecture](../../../../../images/documentation/telepresence-architecture.inline.svg)
+
+</div>
 
 ## Telepresence CLI
 
