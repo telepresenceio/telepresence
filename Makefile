@@ -37,6 +37,6 @@ prepare-release: ## (Release) Update nescessary files and tag the release (does 
 	rm -f CHANGELOG.md.bak
 	go mod edit -require=github.com/telepresenceio/telepresence/rpc/v2@$(TELEPRESENCE_VERSION)
 	git add CHANGELOG.md go.mod
-	git commit --message='Prepare $(TELEPRESENCE_VERSION)'
+	git commit --signoff --message='Prepare $(TELEPRESENCE_VERSION)'
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' rpc/$(TELEPRESENCE_VERSION)
