@@ -88,17 +88,19 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 	o.overridePrimaryDNS = true
 	onReady()
 
-	srv := dns.NewServer(c, listeners, o.fallbackIP+":53", o.resolve)
+	srv := dns.NewServer(c, listeners, o.fallbackIP+":53", o.resolveWithSearch)
 	dlog.Debug(c, "Starting server")
 	err = srv.Run(c)
 	dlog.Debug(c, "Server done")
 	return err
 }
 
-// resolve looks up the given query. Queries using qualified names will be dispatched to the
-// resolveNoNs() function. An unqualified name query will be tried with all the suffixes in
-// the search path and the IPs of the first match will be returned.
-func (o *outbound) resolve(query string) []string {
+// resolveWithSearch looks up the given query and returns the matching IPs.
+//
+// Queries using qualified names will be dispatched to the resolveNoSearch() function.
+// An unqualified name query will be tried with all the suffixes in the search path
+// and the IPs of the first match will be returned.
+func (o *outbound) resolveWithSearch(query string) []string {
 	if !strings.HasSuffix(query, ".") {
 		// Query must end with dot.
 		return nil
