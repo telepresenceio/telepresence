@@ -1,6 +1,7 @@
 package connector
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"text/template"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -33,7 +35,7 @@ var managerTestNamespace string
 func TestMain(m *testing.M) {
 	log.SetOutput(ioutil.Discard) // We want success or failure, not an abundance of output
 	kubeconfig = dtest.Kubeconfig()
-	testVersion = fmt.Sprintf("0.1.%d", os.Getpid())
+	testVersion = fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
 	namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
 	managerTestNamespace = fmt.Sprintf("ambassador-%d", os.Getpid())
 
@@ -268,42 +270,50 @@ func TestAddAgentToDeployment(t *testing.T) {
 		}
 		tcName := strings.TrimSuffix(fi.Name(), ".input.yaml")
 
-		var tmp struct {
-			Deployment *kates.Deployment `json:"deployment"`
-			Service    *kates.Service    `json:"service"`
+		loadFile := func(filename string) (*kates.Deployment, *kates.Service, error) {
+			tmpl, err := template.ParseFiles(filepath.Join("testdata/addAgentToDeployment", filename))
+			if err != nil {
+				return nil, nil, fmt.Errorf("read template: %s: %w", filename, err)
+			}
+
+			var buff bytes.Buffer
+			err = tmpl.Execute(&buff, map[string]interface{}{
+				"Version": strings.TrimPrefix(testVersion, "v"),
+			})
+			if err != nil {
+				return nil, nil, fmt.Errorf("execute template: %s: %w", filename, err)
+			}
+
+			var dat struct {
+				Deployment *kates.Deployment `json:"deployment"`
+				Service    *kates.Service    `json:"service"`
+			}
+			if err := yaml.Unmarshal(buff.Bytes(), &dat); err != nil {
+				return nil, nil, fmt.Errorf("parse yaml: %s: %w", filename, err)
+			}
+
+			return dat.Deployment, dat.Service, nil
 		}
 
 		var tc testcase
+		var err error
 
-		inBody, err := ioutil.ReadFile(filepath.Join("testdata/addAgentToDeployment", fi.Name()))
+		tc.InputDeployment, tc.InputService, err = loadFile(tcName + ".input.yaml")
 		if err != nil {
-			t.Fatalf("%s.input.yaml: %v", tcName, err)
+			t.Fatal(err)
 		}
-		inStr := strings.ReplaceAll(string(inBody), "${TELEPRESENCE_VERSION}", testVersion)
-		if err = yaml.Unmarshal([]byte(inStr), &tmp); err != nil {
-			t.Fatalf("%s.input.yaml: %v", tcName, err)
-		}
-		tc.InputDeployment = tmp.Deployment
-		tc.InputService = tmp.Service
-		tmp.Deployment = nil
-		tmp.Service = nil
 
-		outBody, err := ioutil.ReadFile(filepath.Join("testdata/addAgentToDeployment", tcName+".output.yaml"))
+		tc.OutputDeployment, tc.OutputService, err = loadFile(tcName + ".output.yaml")
 		if err != nil {
-			t.Fatalf("%s.output.yaml: %v", tcName, err)
+			t.Fatal(err)
 		}
-		outStr := strings.ReplaceAll(string(outBody), "${TELEPRESENCE_VERSION}", testVersion)
-		if err = yaml.Unmarshal([]byte(outStr), &tmp); err != nil {
-			t.Fatalf("%s.output.yaml: %v", tcName, err)
-		}
-		tc.OutputDeployment = tmp.Deployment
-		tc.OutputService = tmp.Service
 
 		// If it is a test case for a service with multiple ports,
 		// we need to specify the name of the port we want to intercept
 		if strings.Contains(tcName, "mp-tc") {
 			tc.InputPortName = "https"
 		}
+
 		testcases[tcName] = tc
 	}
 

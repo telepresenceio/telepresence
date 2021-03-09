@@ -8,7 +8,6 @@
   - `DEV_REGISTRY` sets things up for the tests
   - `TELEPRESENCE_REGISTRY` is used by the Tel binary to set the image it uses when adding or modifying the cluster
   - `KO_DOCKER_REPO` is used by the image build -- this may already be unnecessary
-- `VERSION_SUFFIX` defaults to a value that includes a timestamp at the end of the version number at build. You can set it to the empty string to remove that suffix if you're comfortable that your cluster will pull the latest image when appropriate.
 
 The output of `make help` shows some of this information, but not all of it, and it is not quite correct at the moment. We will improve all of this soon.
 
@@ -138,8 +137,7 @@ v0.2.0-1605794277: digest: sha256:f9b26f48659748fea4977cf4664233eb4b98bf6861bfd4
 
 During your dev loop you can work around this using any of these methods:
 - Set `TELEPRESENCE_VERSION` manually to the image's version number. Update that value only when you rebuild the image.
-- Set `VERSION_SUFFIX` to a fixed string so that there is no constantly-changing timestamp.
-- Always run `make build image` so that everything has the same version number, and then `docker push` the image every time. This is not as slow as you might think; both `go` and `ko` are very good about reusing existing builds and avoiding unnecessary work.
+- Always run `make build push-image` so that everything has the same version number, and it pushes the image every time. This is not as slow as you might think; both `go` and `ko` are very good about reusing existing builds and avoiding unnecessary work.
 - Have your dev loop revolve around `make check`, which does the correct building, tagging, etc. automatically.
 
 In practice, this is not a big deal. If you get the version numbers correct once and deploy things to the cluster, you can then use Telepresence with a diverging version number against the existing cluster components and they will work fine. This will be most problematic when you need to update the image itself frequently.
