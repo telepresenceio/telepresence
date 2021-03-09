@@ -23,8 +23,8 @@ type k8sWatcher struct {
 	namespace string
 }
 
-// startWatchers initializes a set of Kubernetes watchers that provide information from the cluster
-// which is then used for controlling the outbound connectivity of the cluster.
+// runWatchers runs a set of Kubernetes watchers that provide information from the cluster which is
+// then used for controlling the outbound connectivity of the cluster.
 //
 // Initially, a watcher that watches the namespaces is created. Once it produces its first
 // snapshot, some filtering is done on the list in that snapshot and then one watcher for each
@@ -40,14 +40,12 @@ type k8sWatcher struct {
 // have been will be cancelled.
 //
 // If a pods and services watcher receives an update, it will send an updated IP-table to the daemon.
-func (kc *k8sCluster) startWatchers(c context.Context, accWait chan struct{}) (err error) {
+func (kc *k8sCluster) runWatchers(c context.Context) (err error) {
 	defer func() {
 		if r := derror.PanicToError(recover()); r != nil {
 			err = r
 		}
 	}()
-
-	_accWait := accWait
 
 	acc := kc.client.Watch(c,
 		kates.Query{
@@ -55,8 +53,10 @@ func (kc *k8sCluster) startWatchers(c context.Context, accWait chan struct{}) (e
 			Kind: "namespace",
 		})
 
-	g := dgroup.ParentGroup(c)
-	g.Go("watch-k8s-namespaces", func(c context.Context) error {
+	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+
+	g.Go("namespaces", func(c context.Context) error {
+		accWait := kc.accWait
 		for {
 			select {
 			case <-c.Done():
@@ -69,8 +69,9 @@ func (kc *k8sCluster) startWatchers(c context.Context, accWait chan struct{}) (e
 		}
 	})
 
-	g.Go("watch-k8s", func(c context.Context) error {
-		// Don't call kc.updateDaemonTable until we have a complete snapshot, signaled by accWait getting closed.
+	g.Go("services-and-pods", func(c context.Context) error {
+		// Don't call kc.updateDaemonTable until we have a complete snapshot, signaled by
+		// accWait getting closed.
 		needsUpdate := false
 		for {
 			select {
@@ -79,7 +80,7 @@ func (kc *k8sCluster) startWatchers(c context.Context, accWait chan struct{}) (e
 			case <-kc.watcherChanged:
 				needsUpdate = true
 				continue
-			case <-_accWait:
+			case <-kc.accWait:
 				if needsUpdate {
 					kc.updateDaemonTable(c)
 				}
@@ -96,7 +97,8 @@ func (kc *k8sCluster) startWatchers(c context.Context, accWait chan struct{}) (e
 			}
 		}
 	})
-	return nil
+
+	return g.Wait()
 }
 
 func (kc *k8sCluster) onNamespacesChange(c context.Context, acc *kates.Accumulator, accWait chan<- struct{}) bool {

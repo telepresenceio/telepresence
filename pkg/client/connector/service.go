@@ -41,16 +41,26 @@ Examine the ` + titleName + `'s log output in
 to troubleshoot problems.
 `
 
+type parsedConnectRequest struct {
+	*rpc.ConnectRequest
+	*k8sConfig
+}
+
+type ScoutReport struct {
+	Action             string
+	Metadata           map[string]interface{}
+	PersistentMetadata map[string]interface{}
+}
+
 // service represents the state of the Telepresence Connector
 type service struct {
 	rpc.UnsafeConnectorServer
 
-	env    client.Env
-	daemon daemon.DaemonClient
-	scout  *client.Scout
+	env         client.Env
+	daemon      daemon.DaemonClient
+	scoutClient *client.Scout // don't use this directly; use the 'scout' chan instead
 
 	managerProxy mgrProxy
-	ctx          context.Context
 	cancel       func()
 
 	connectMu sync.Mutex
@@ -58,6 +68,19 @@ type service struct {
 	cluster    *k8sCluster
 	bridge     *bridge
 	trafficMgr *trafficManager
+
+	// These are used to communicate between the various goroutines.
+	scout           chan ScoutReport          // any-of-scoutUsers -> background-metriton
+	connectRequest  chan parsedConnectRequest // server-grpc.connect() -> connectWorker
+	connectResponse chan *rpc.ConnectInfo     // connectWorker -> server-grpc.connect()
+	clusterRequest  chan *k8sCluster          // connectWorker -> background-k8swatch
+	managerRequest  chan *trafficManager      // connectWorker -> background-manager
+	bridgeRequest   chan *bridge              // connectWorker -> server-socks
+
+	// ctx is part of the "callCtx hack", to hack around an issue in the gRPC server, since it
+	// doesn't let us pass it a Context.  It should go away when we migrate to dhttp and
+	// Contexts can get passed around properly for HTTP/2 requests.
+	ctx context.Context
 }
 
 // Command returns the CLI sub-command for "connector-foreground"
@@ -205,7 +228,6 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 			ErrorText: err.Error(),
 		}
 	}
-	// Check for the various "this is not the first call to Connect" states:
 	switch {
 	case s.cluster != nil && s.cluster.k8sConfig.equals(k8sConfig):
 		if mns := cr.MappedNamespaces; len(mns) > 0 {
@@ -244,19 +266,42 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 			Error: rpc.ConnectInfo_DISCONNECTING,
 		}
 	default:
-		// Proceed; this is the first call to Connect.
+		// This is the first call to Connect; we have to tell the background connect
+		// goroutine to actually do the work.
+		s.connectRequest <- parsedConnectRequest{
+			ConnectRequest: cr,
+			k8sConfig:      k8sConfig,
+		}
+		close(s.connectRequest)
+		return <-s.connectResponse
 	}
+}
 
+func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sConfig *k8sConfig) *rpc.ConnectInfo {
 	mappedNamespaces := cr.MappedNamespaces
 	if len(mappedNamespaces) == 1 && mappedNamespaces[0] == "all" {
 		mappedNamespaces = nil
 	}
 	sort.Strings(mappedNamespaces)
 
-	_ = s.scout.Report(s.ctx, "connect")
+	s.scout <- ScoutReport{
+		Action: "connect",
+	}
 
-	dlog.Info(c, "Connecting to traffic manager...")
-	cluster, err := trackKCluster(s.ctx, k8sConfig, mappedNamespaces, s.daemon)
+	dlog.Info(c, "Connecting to k8s cluster...")
+	cluster, err := func() (*k8sCluster, error) {
+		cluster, err := newKCluster(c, k8sConfig, mappedNamespaces, s.daemon)
+		if err != nil {
+			return nil, err
+		}
+		s.clusterRequest <- cluster
+		c, cancel := context.WithTimeout(c, 10*time.Second)
+		defer cancel()
+		if err := cluster.waitUntilReady(c); err != nil {
+			return nil, err
+		}
+		return cluster, nil
+	}()
 	if err != nil {
 		dlog.Errorf(c, "unable to track k8s cluster: %+v", err)
 		s.cancel()
@@ -268,17 +313,25 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 	s.cluster = cluster
 	dlog.Infof(c, "Connected to context %s (%s)", s.cluster.Context, s.cluster.Server)
 
-	k8sObjectMap := cluster.findNumK8sObjects()
 	// Phone home with the information about the size of the cluster
-	s.scout.SetMetadatum("cluster_id", s.cluster.getClusterId(c))
-	for objectType, num := range k8sObjectMap {
-		s.scout.SetMetadatum(objectType, num)
-	}
-	s.scout.SetMetadatum("mapped_namespaces", len(cr.MappedNamespaces))
-	_ = s.scout.Report(s.ctx, "connecting_traffic_manager")
+	s.scout <- func() ScoutReport {
+		report := ScoutReport{
+			Action: "connecting_traffic_manager",
+			PersistentMetadata: map[string]interface{}{
+				"cluster_id":        s.cluster.getClusterId(c),
+				"mapped_namespaces": len(cr.MappedNamespaces),
+			},
+		}
+		for objectType, num := range s.cluster.findNumK8sObjects() {
+			report.PersistentMetadata[objectType] = num
+		}
+		return report
+	}()
 
 	connectStart := time.Now()
-	tmgr, err := newTrafficManager(s.ctx, s.env, s.cluster, s.scout.Reporter.InstallID())
+
+	dlog.Info(c, "Connecting to traffic manager...")
+	tmgr, err := newTrafficManager(c, s.env, s.cluster, s.scoutClient.Reporter.InstallID())
 	if err != nil {
 		dlog.Errorf(c, "Unable to connect to TrafficManager: %s", err)
 		// No point in continuing without a traffic manager
@@ -288,8 +341,9 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 			ErrorText: err.Error(),
 		}
 	}
-
+	s.managerRequest <- tmgr
 	s.trafficMgr = tmgr
+
 	// Wait for traffic manager to connect
 	dlog.Info(c, "Waiting for TrafficManager to connect")
 	if err := tmgr.waitUntilStarted(c); err != nil {
@@ -305,8 +359,7 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 
 	dlog.Infof(c, "Starting traffic-manager bridge in context %s", cluster.Context)
 	br := newBridge(s.daemon, tmgr.sshPort)
-	err = br.start(s.ctx)
-	if err != nil {
+	if err := checkKubectl(c); err != nil {
 		dlog.Errorf(c, "Failed to start traffic-manager bridge: %v", err)
 		// No point in continuing without a bridge
 		s.cancel()
@@ -315,12 +368,16 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 			ErrorText: err.Error(),
 		}
 	}
-
+	s.bridgeRequest <- br
 	s.bridge = br
 
 	// Collect data on how long connection time took
-	_ = s.scout.Report(s.ctx, "finished_connecting_traffic_manager",
-		client.ScoutMeta{Key: "connect_duration", Value: time.Since(connectStart).Seconds()})
+	s.scout <- ScoutReport{
+		Action: "finished_connecting_traffic_manager",
+		Metadata: map[string]interface{}{
+			"connect_duration": time.Since(connectStart).Seconds(),
+		},
+	}
 
 	ret := &rpc.ConnectInfo{
 		Error:          rpc.ConnectInfo_UNSPECIFIED,
@@ -354,18 +411,31 @@ func run(c context.Context) error {
 		return err
 	}
 	defer conn.Close()
-	s := &service{
-		env:    env,
-		daemon: daemon.NewDaemonClient(conn),
-		scout:  client.NewScout(c, "connector"),
-	}
 
+	s := &service{
+		env:         env,
+		daemon:      daemon.NewDaemonClient(conn),
+		scoutClient: client.NewScout(c, "connector"),
+
+		scout:           make(chan ScoutReport, 10),
+		connectRequest:  make(chan parsedConnectRequest),
+		connectResponse: make(chan *rpc.ConnectInfo),
+		clusterRequest:  make(chan *k8sCluster),
+		managerRequest:  make(chan *trafficManager),
+		bridgeRequest:   make(chan *bridge),
+	}
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true,
 		ShutdownOnNonError:   true,
 	})
 	s.cancel = func() { g.Go("quit", func(_ context.Context) error { return nil }) }
+	var scoutUsers sync.WaitGroup
+	scoutUsers.Add(1) // how many of the goroutines might write to s.scout
+	go func() {
+		scoutUsers.Wait()
+		close(s.scout)
+	}()
 
 	dlog.Info(c, "---")
 	dlog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
@@ -382,6 +452,13 @@ func run(c context.Context) error {
 				dlog.Error(c, perr)
 			}
 			_ = os.Remove(client.ConnectorSocketName)
+
+			// Close s.connectRequest if it hasn't already been closed.
+			select {
+			case <-s.connectRequest:
+			default:
+				close(s.connectRequest)
+			}
 		}()
 
 		// Listen on unix domain socket
@@ -406,9 +483,6 @@ func run(c context.Context) error {
 		rpc.RegisterConnectorServer(svc, s)
 		manager.RegisterManagerServer(svc, &s.managerProxy)
 
-		// Need a subgroup here because several services started by incoming gRPC calls run
-		// using dgroup.ParentGroup().Go(), and we don't want them to trip
-		// ShutdownOnNonError.
 		subg := dgroup.NewGroup(c, dgroup.GroupConfig{})
 
 		subg.Go("GracefulStop", func(c context.Context) error {
@@ -425,6 +499,70 @@ func run(c context.Context) error {
 		})
 
 		return subg.Wait()
+	})
+
+	g.Go("server-socks", func(c context.Context) error {
+		br, ok := <-s.bridgeRequest
+		if !ok {
+			return nil
+		}
+		return br.sshWorker(c)
+	})
+
+	g.Go("background-init", func(c context.Context) error {
+		defer func() {
+			close(s.connectResponse) // -> server-grpc.connect()
+			close(s.clusterRequest)  // -> background-k8swatch
+			close(s.managerRequest)  // -> background-manager
+			close(s.bridgeRequest)   // -> server-socks
+			<-c.Done()               // Don't trip ShutdownOnNonError in the parent group.
+			scoutUsers.Done()
+		}()
+
+		pcr, ok := <-s.connectRequest
+		if !ok {
+			return nil
+		}
+		s.connectResponse <- s.connectWorker(c, pcr.ConnectRequest, pcr.k8sConfig)
+
+		return nil
+	})
+
+	g.Go("background-k8swatch", func(c context.Context) error {
+		cluster, ok := <-s.clusterRequest
+		if !ok {
+			return nil
+		}
+		return cluster.runWatchers(c)
+	})
+
+	g.Go("background-manager", func(c context.Context) error {
+		tm, ok := <-s.managerRequest
+		if !ok {
+			return nil
+		}
+		return tm.run(c)
+	})
+
+	g.Go("background-metriton", func(c context.Context) error {
+		for report := range s.scout {
+			for k, v := range report.PersistentMetadata {
+				s.scoutClient.SetMetadatum(k, v)
+			}
+
+			var metadata []client.ScoutMeta
+			for k, v := range report.Metadata {
+				metadata = append(metadata, client.ScoutMeta{
+					Key:   k,
+					Value: v,
+				})
+			}
+			if err := s.scoutClient.Report(c, report.Action, metadata...); err != nil {
+				// error is logged and is not fatal
+				dlog.Errorf(c, "report failed: %+v", err)
+			}
+		}
+		return nil
 	})
 
 	err = g.Wait()

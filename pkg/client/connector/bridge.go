@@ -14,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/datawire/dlib/dexec"
-	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/telepresence2/rpc/v2/daemon"
 )
@@ -31,15 +30,6 @@ func newBridge(daemon daemon.DaemonClient, sshPort int32) *bridge {
 		daemon:  daemon,
 		sshPort: sshPort,
 	}
-}
-
-func (br *bridge) start(c context.Context) error {
-	if err := checkKubectl(c); err != nil {
-		return err
-	}
-	g := dgroup.ParentGroup(c)
-	g.Go("bridge ssh tunnel", br.sshWorker)
-	return nil
 }
 
 func (br *bridge) sshWorker(c context.Context) error {

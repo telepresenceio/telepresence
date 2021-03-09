@@ -78,7 +78,6 @@ func newTrafficManager(c context.Context, env client.Env, cluster *k8sCluster, i
 		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host),
 	}
 
-	dgroup.ParentGroup(c).Go("traffic-manager", tm.run)
 	return tm, nil
 }
 
