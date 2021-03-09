@@ -49,15 +49,21 @@ func (o *outbound) tryResolveD(c context.Context, onReady func()) error {
 		// When using systemd.resolved, we provide resolution of NAME.NAMESPACE by adding each
 		// namespace as a route (a search entry prefixed with ~)
 		namespaces := make(map[string]struct{})
+		search := make([]string, 0)
 		for i, path := range paths {
-			if !strings.ContainsRune(path, '.') {
+			if strings.ContainsRune(path, '.') {
+				search = append(search, path)
+			} else {
 				namespaces[path] = struct{}{}
 				// Turn namespace into a route
 				paths[i] = "~" + path
 			}
 		}
+		namespaces[tel2SubDomain] = struct{}{}
+
 		o.domainsLock.Lock()
 		o.namespaces = namespaces
+		o.search = search
 		o.domainsLock.Unlock()
 		err := dConn.SetLinkDomains(t.InterfaceIndex(), paths...)
 		if err != nil {
