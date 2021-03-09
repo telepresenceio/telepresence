@@ -4,9 +4,9 @@ package connector
 
 import (
 	context "context"
+	empty "github.com/golang/protobuf/ptypes/empty"
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
 	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
