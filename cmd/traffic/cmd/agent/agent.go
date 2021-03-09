@@ -14,8 +14,8 @@ import (
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
-	"github.com/datawire/telepresence2/v2/pkg/version"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 type Config struct {

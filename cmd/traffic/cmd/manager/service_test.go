@@ -17,10 +17,10 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dutil"
-	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
-	"github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager"
-	testdata "github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/internal/test"
-	"github.com/datawire/telepresence2/v2/pkg/version"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
+	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/test"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 func dumps(o interface{}) string {

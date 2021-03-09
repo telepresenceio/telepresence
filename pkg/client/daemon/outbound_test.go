@@ -17,7 +17,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/v2/pkg/client/daemon/nat"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon/nat"
 )
 
 type outboundSuite struct {

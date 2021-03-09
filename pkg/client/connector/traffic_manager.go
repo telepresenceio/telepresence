@@ -17,11 +17,11 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	rpc "github.com/datawire/telepresence2/rpc/v2/connector"
-	"github.com/datawire/telepresence2/rpc/v2/manager"
-	"github.com/datawire/telepresence2/v2/pkg/client"
-	"github.com/datawire/telepresence2/v2/pkg/client/actions"
-	"github.com/datawire/telepresence2/v2/pkg/client/cache"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 )
 
 // trafficManager is a handle to access the Traffic Manager in a

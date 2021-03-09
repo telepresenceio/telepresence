@@ -12,7 +12,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/datawire/telepresence2/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 type handledConnectionImpl interface {

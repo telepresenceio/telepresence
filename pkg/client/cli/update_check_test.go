@@ -12,7 +12,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/datawire/telepresence2/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
 func newHttpServer(t *testing.T) *http.Server {

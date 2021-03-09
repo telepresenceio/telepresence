@@ -1,7 +1,7 @@
 syntax = "proto3";
 package telepresence.daemon;
 
-option go_package = "github.com/datawire/telepresence2/rpc/v2/daemon";
+option go_package = "github.com/telepresenceio/telepresence/rpc/v2/daemon";
 
 message Route {
   string name = 1;

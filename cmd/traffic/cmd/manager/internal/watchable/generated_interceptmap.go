@@ -8,7 +8,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 
-	"github.com/datawire/telepresence2/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 // InterceptMapUpdate describes a mutation made to a InterceptMap.

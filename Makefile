@@ -35,7 +35,7 @@ include build/support.mk
 prepare-release: ## (Release) Update nescessary files and tag the release (does not push)
 	sed -i.bak "/^### $(patsubst v%,%,$(TELEPRESENCE_VERSION)) (TBD)\$$/s/TBD/$$(date +'%B %-d, %Y')/" CHANGELOG.md
 	rm -f CHANGELOG.md.bak
-	go mod edit -require=github.com/datawire/telepresence2/rpc/v2@$(TELEPRESENCE_VERSION)
+	go mod edit -require=github.com/telepresenceio/telepresence/rpc/v2@$(TELEPRESENCE_VERSION)
 	git add CHANGELOG.md go.mod
 	git commit --message='Prepare $(TELEPRESENCE_VERSION)'
 	git tag --annotate --message='$(TELEPRESENCE_VERSION)' $(TELEPRESENCE_VERSION)

@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/rpc/v2/manager"
-	"github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/internal/watchable"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/watchable"
 )
 
 func assertAgentMapSnapshotEqual(t *testing.T, expected, actual watchable.AgentMapSnapshot, msgAndArgs ...interface{}) bool {

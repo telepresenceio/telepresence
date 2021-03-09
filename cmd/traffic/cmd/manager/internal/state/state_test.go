@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	manager "github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/internal/state"
-	testdata "github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/internal/test"
+	manager "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
+	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/test"
 )
 
 type FakeClock struct {

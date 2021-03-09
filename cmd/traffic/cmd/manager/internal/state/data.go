@@ -1,7 +1,7 @@
 package state
 
 import (
-	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 func agentHasMechanism(agent *rpc.AgentInfo, mechName string) bool {
