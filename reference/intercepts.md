@@ -74,6 +74,7 @@ $ telepresence status
 ```
 
 Finally, run `telepresence leave <name of intercept>` to stop the intercept.
+
 ## Creating an Intercept When a Service has Multiple Ports
 
 If you are trying to intercept a service that has multiple ports, you need to tell telepresence which service port you are trying to intercept. You can see the name of the service ports available to be intercepted by using kubectl to describe your service or look in the yaml for the service. For more information on multiple ports, see the [Kubernetes documentation](https://kubernetes.io/docs/concepts/services-networking/service/#multi-port-services).
