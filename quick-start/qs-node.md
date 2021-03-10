@@ -51,7 +51,7 @@ If you have used Telepresence previously, please first reset your Telepresence d
 
 Telepresence connects your local workstation to a remote Kubernetes cluster.
 
-1. Connect to the cluster:
+1. Connect to the cluster:  
 `telepresence connect`
 
   ```
@@ -70,7 +70,7 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
     Click <strong>Open Anyway</strong> at the bottom to bypass the security block. Then retry the <code>telepresence connect</code> command.
   </Alert>
 
-2. Test that Telepresence is working properly by connecting to the Kubernetes API server:
+2. Test that Telepresence is working properly by connecting to the Kubernetes API server:  
 `curl -ik https://kubernetes.default`
 
   <Alert severity="info">
@@ -102,7 +102,7 @@ Your local workstation may not have the compute or memory resources necessary to
     While Telepresence works with any language, this guide uses a sample app written in Node.js. We have versions in <a href="../qs-go/">Go</a>, <a href="../qs-java/">Java</a>,<a href="../qs-python/">Python using Flask</a>, and <a href="../qs-python-fastapi/">Python using FastAPI</a> if you prefer.
 </Alert>
 
-1. Start by installing a sample application that consists of multiple services:
+1. Start by installing a sample application that consists of multiple services:  
 `kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-nodejs/main/k8s-config/edgey-corp-web-app-no-mapping.yaml`
 
   ```
@@ -142,7 +142,7 @@ You will now download the repo containing the services' code and run the DataPro
     Confirm first that nothing is running locally on port 3000! If <code>curl localhost:3000</code> returns <code>Connection refused</code> then you should be good to go.
 </Alert>
 
-1. Clone the web app’s GitHub repo:
+1. Clone the web app’s GitHub repo:  
 `git clone https://github.com/datawire/edgey-corp-nodejs.git`
 
   ```
@@ -153,10 +153,10 @@ You will now download the repo containing the services' code and run the DataPro
     ...
   ```
 
-2. Change into the repo directory, then into DataProcessingService:
+2. Change into the repo directory, then into DataProcessingService:  
 `cd edgey-corp-nodejs/DataProcessingService/`
 
-3. Install the dependencies and start the Node server:
+3. Install the dependencies and start the Node server:  
 `npm install && npm start`
 
   ```
@@ -172,7 +172,7 @@ You will now download the repo containing the services' code and run the DataPro
     <a href="https://nodejs.org/en/download/package-manager/">Install Node.js from here</a> if needed.
   </Alert>
 
-4. In a **new terminal window**, curl the service running locally to confirm it’s set to <strong style="color:blue">blue</strong>:
+4. In a **new terminal window**, curl the service running locally to confirm it’s set to <strong style="color:blue">blue</strong>:  
 `curl localhost:3000/color`
 
   ```
@@ -188,7 +188,7 @@ You will now download the repo containing the services' code and run the DataPro
 ## 5. Intercept all traffic to the service
 Next, we’ll create an intercept. An intercept is a rule that tells Telepresence where to send traffic. In this example, we will send all traffic destined for the DataProcessingService to the version of the DataProcessingService running locally instead:
 
-1. Start the intercept with the `intercept` command, setting the service name and port:
+1. Start the intercept with the `intercept` command, setting the service name and port:  
 `telepresence intercept dataprocessingservice --port 3000`
 
   ```
@@ -230,10 +230,10 @@ We’ve now set up a local development environment for the DataProcessingService
 ## 7. Create a Preview URL
 Create preview URLs to do selective intercepts, meaning only traffic coming from the preview URL will be intercepted, so you can easily share the services you’re working on with your teammates.
 
-1. Clean up your previous intercept by removing it:
+1. Clean up your previous intercept by removing it:  
 `telepresence leave dataprocessingservice`
 
-2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:
+2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:  
 `telepresence login`
 
   This opens your browser; login with your GitHub account and choose your org.
@@ -246,7 +246,7 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
     Login successful.
   ```
 
-3. Start the intercept again:
+3. Start the intercept again:  
 `telepresence intercept dataprocessingservice --port 3000`
    You will be asked for your ingress layer 3 address; specify the front end service: `verylargejavaservice.default`
    Then when asked for the port, type `8080`, for "use TLS", type `n` and finally confirm the layer 5 hostname.
