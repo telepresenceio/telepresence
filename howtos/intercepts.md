@@ -14,7 +14,7 @@ import QSCards from '../quick-start/qs-cards'
 * [Prerequisites](#prerequisites)
 * [1. Install the Telepresence CLI](#1-install-the-telepresence-cli)
 * [2. Test Telepresence](#2-test-telepresence)
-* [3. Intercept sour service](#3-intercept-your-service)
+* [3. Intercept your service](#3-intercept-your-service)
 * [4. Create a Preview URL to only intercept certain requests to your service](#4-create-a-preview-url-to-only-intercept-certain-requests-to-your-service)
 * [What's next?](#img-classos-logo-srcimageslogopng-whats-next)
 
