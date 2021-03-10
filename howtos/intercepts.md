@@ -70,7 +70,7 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
    `curl -ik https://kubernetes.default.svc.cluster.local`
 
   <Alert severity="info">
-    <strong>Didn't work?</strong> Make sure you are using Telepresence 2.0.3 or greater, check with <code>telepresence version</code> and upgrade <a href="../../howtos/upgrading/">here</a> if needed.
+    <strong>Didn't work?</strong> Make sure you are using Telepresence 2.0.3 or greater, check with <code>telepresence version</code> and upgrade <a href="../../install/upgrade/">here</a> if needed.
   </Alert>
 
   ```
