@@ -19,12 +19,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/datawire/telepresence2/rpc/v2/connector"
-	"github.com/datawire/telepresence2/rpc/v2/manager"
-	"github.com/datawire/telepresence2/v2/pkg/client"
-	"github.com/datawire/telepresence2/v2/pkg/client/auth"
-	"github.com/datawire/telepresence2/v2/pkg/client/cache"
-	"github.com/datawire/telepresence2/v2/pkg/client/cli/extensions"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 )
 
 type interceptInfo struct {

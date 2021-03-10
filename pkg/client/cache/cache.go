@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/datawire/telepresence2/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
 // ensureCacheDir returns the full path to the directory "telepresence", parented by the directory

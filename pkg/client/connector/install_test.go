@@ -22,8 +22,8 @@ import (
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/v2/pkg/client"
-	"github.com/datawire/telepresence2/v2/pkg/version"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 var kubeconfig string

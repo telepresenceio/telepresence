@@ -14,9 +14,9 @@ import (
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/telepresence2/rpc/v2/daemon"
-	"github.com/datawire/telepresence2/v2/pkg/client"
-	"github.com/datawire/telepresence2/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
 type daemonState struct {

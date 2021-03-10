@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/datawire/telepresence2/v2/pkg/client/cli"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 )
 
 func main() {

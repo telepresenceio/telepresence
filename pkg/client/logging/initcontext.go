@@ -8,7 +8,7 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
 // IsTerminal returns whether the given file descriptor is a terminal

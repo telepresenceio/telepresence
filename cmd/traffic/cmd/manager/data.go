@@ -3,7 +3,7 @@ package manager
 import (
 	"fmt"
 
-	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 func validateClient(client *rpc.ClientInfo) string {

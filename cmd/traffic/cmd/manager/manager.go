@@ -17,9 +17,9 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dutil"
-	rpc "github.com/datawire/telepresence2/rpc/v2/manager"
-	"github.com/datawire/telepresence2/rpc/v2/systema"
-	"github.com/datawire/telepresence2/v2/pkg/version"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/systema"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 func Main(ctx context.Context, args ...string) error {

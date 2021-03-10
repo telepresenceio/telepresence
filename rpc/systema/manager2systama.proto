@@ -10,7 +10,7 @@ import "google/protobuf/empty.proto";
 import "rpc/common/version.proto";
 import "rpc/manager/manager.proto";
 
-option go_package = "github.com/datawire/telepresence2/rpc/v2/systema";
+option go_package = "github.com/telepresenceio/telepresence/rpc/v2/systema";
 
 message Chunk {
   bytes content = 1;

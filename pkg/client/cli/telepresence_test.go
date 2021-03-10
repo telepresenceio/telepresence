@@ -24,9 +24,9 @@ import (
 	"github.com/datawire/ambassador/pkg/dtest"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/v2/pkg/client"
-	"github.com/datawire/telepresence2/v2/pkg/client/cli"
-	"github.com/datawire/telepresence2/v2/pkg/version"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 // serviceCount is the number of interceptable services that gets installed
@@ -548,7 +548,7 @@ func (ts *telepresenceSuite) publishManager() error {
 func (ts *telepresenceSuite) buildExecutable() (string, error) {
 	executable := filepath.Join("build-output", "bin", "/telepresence")
 	return executable, run("go", "build", "-ldflags",
-		fmt.Sprintf("-X=github.com/datawire/telepresence2/v2/pkg/version.Version=%s", ts.testVersion),
+		fmt.Sprintf("-X=github.com/telepresenceio/telepresence/v2/pkg/version.Version=%s", ts.testVersion),
 		"-o", executable, "./cmd/telepresence")
 }
 

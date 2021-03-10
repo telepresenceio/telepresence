@@ -20,10 +20,10 @@ import (
 
 	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/v2/pkg/client"
-	"github.com/datawire/telepresence2/v2/pkg/client/auth"
-	"github.com/datawire/telepresence2/v2/pkg/client/cache"
-	"github.com/datawire/telepresence2/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
 type MockSaveTokenWrapper struct {

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/telepresence2/v2/cmd/traffic/cmd/manager/internal/state"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/internal/state"
 )
 
 func TestPresence(t *testing.T) {

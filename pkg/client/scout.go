@@ -11,8 +11,8 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/datawire/ambassador/pkg/metriton"
-	"github.com/datawire/telepresence2/v2/pkg/client/cache"
-	"github.com/datawire/telepresence2/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
 // Scout is a Metriton reported

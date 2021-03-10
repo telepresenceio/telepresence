@@ -11,7 +11,7 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	managerrpc "github.com/datawire/telepresence2/rpc/v2/manager"
+	managerrpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 // mgrProxy implements rpc.ManagerServer, but just proxies all requests through a rpc.ManagerClient.
