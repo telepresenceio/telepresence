@@ -14,7 +14,7 @@ While preview URLs are a powerful feature, there are other options to use Telepr
 
 Connecting to the cluster instead of running an intercept will allow you to access cluster deployments as if your laptop was another pod in the cluster. You will be able to access other Kubernetes services using `<service name>.<namespace>`, for example by curling a service from your terminal. A service running on your laptop will also be able to interact with other services on the cluster by name.
 
-Connecting to the cluster starts the background daemon on your machine and installs the [Traffic Manager pod](../../reference/) into the cluster of your current `kubectl` context.  The Traffic Manager handles the service proxying.
+Connecting to the cluster starts the background daemon on your machine and installs the [Traffic Manager pod](../../reference/architecture/) into the cluster of your current `kubectl` context.  The Traffic Manager handles the service proxying.
 
 1. Run `telepresence connect`, you will be prompted for your password to run the daemon.
 
