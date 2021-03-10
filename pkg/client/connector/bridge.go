@@ -14,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/datawire/dlib/dexec"
-	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 )
@@ -31,15 +30,6 @@ func newBridge(daemon daemon.DaemonClient, sshPort int32) *bridge {
 		daemon:  daemon,
 		sshPort: sshPort,
 	}
-}
-
-func (br *bridge) start(c context.Context) error {
-	if err := checkKubectl(c); err != nil {
-		return err
-	}
-	g := dgroup.ParentGroup(c)
-	g.Go("bridge ssh tunnel", br.sshWorker)
-	return nil
 }
 
 func (br *bridge) sshWorker(c context.Context) error {
@@ -108,6 +98,9 @@ func checkKubectl(c context.Context) error {
 // Note there is no namespace specified, as we are checking for bridge status in the
 // current namespace.
 func (br *bridge) check(c context.Context) bool {
+	if br == nil {
+		return false
+	}
 	address := fmt.Sprintf("localhost:%d", br.sshPort)
 	conn, err := net.DialTimeout("tcp", address, 15*time.Second)
 	if err != nil {

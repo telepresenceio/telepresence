@@ -1,6 +1,7 @@
 package connector
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -10,9 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"text/template"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
@@ -20,7 +21,6 @@ import (
 	"github.com/datawire/ambassador/pkg/dtest"
 	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dexec"
-	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -35,7 +35,7 @@ var managerTestNamespace string
 func TestMain(m *testing.M) {
 	log.SetOutput(ioutil.Discard) // We want success or failure, not an abundance of output
 	kubeconfig = dtest.Kubeconfig()
-	testVersion = fmt.Sprintf("0.1.%d", os.Getpid())
+	testVersion = fmt.Sprintf("v2.0.0-gotest.%d", os.Getpid())
 	namespace = fmt.Sprintf("telepresence-%d", os.Getpid())
 	managerTestNamespace = fmt.Sprintf("ambassador-%d", os.Getpid())
 
@@ -137,11 +137,11 @@ func Test_findTrafficManager_notPresent(t *testing.T) {
 	managerNamespace = managerTestNamespace
 
 	ctx := dlog.NewTestContext(t, false)
-	cfgAndFlags, err := newConfigAndFlags(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, nil)
+	cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
 	if err != nil {
 		t.Fatal(err)
 	}
-	kc, err := newKCluster(ctx, cfgAndFlags, nil)
+	kc, err := newKCluster(ctx, cfgAndFlags, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,49 +173,50 @@ func Test_findTrafficManager_present(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c, cancel := context.WithCancel(c)
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-	g.Go("test-present", func(c context.Context) (err error) {
-		// Kill sibling go-routines
-		defer cancel()
-
-		cfgAndFlags, err := newConfigAndFlags(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, nil)
-		if err != nil {
-			return err
-		}
-		kc, err := newKCluster(c, cfgAndFlags, nil)
-		if err != nil {
-			return err
-		}
-		accWait := make(chan struct{})
-		err = kc.startWatchers(c, accWait)
-		if err != nil {
-			return err
-		}
-		<-accWait
-		ti, err := newTrafficManagerInstaller(kc)
-		if err != nil {
-			return err
-		}
-		_, err = ti.createManagerSvc(c)
-		if err != nil {
-			return err
-		}
-		err = ti.createManagerDeployment(c, env)
-		if err != nil {
-			return err
-		}
-		for i := 0; i < 50; i++ {
-			if _, err := ti.findDeployment(c, managerNamespace, managerAppName); err == nil {
-				return nil
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-		return errors.New("traffic-manager deployment not found")
-	})
-	if err := g.Wait(); err != nil {
+	cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
+	if err != nil {
 		t.Fatal(err)
 	}
+	kc, err := newKCluster(c, cfgAndFlags, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	watcherErr := make(chan error)
+	watchCtx, watchCancel := context.WithCancel(c)
+	defer func() {
+		watchCancel()
+		if err := <-watcherErr; err != nil {
+			t.Error(err)
+		}
+	}()
+	go func() {
+		watcherErr <- kc.runWatchers(watchCtx)
+	}()
+	waitCtx, waitCancel := context.WithTimeout(c, 10*time.Second)
+	defer waitCancel()
+	if err := kc.waitUntilReady(waitCtx); err != nil {
+		t.Fatal(err)
+	}
+
+	ti, err := newTrafficManagerInstaller(kc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = ti.createManagerSvc(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = ti.createManagerDeployment(c, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 50; i++ {
+		if _, err := ti.findDeployment(c, managerNamespace, managerAppName); err == nil {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatal("traffic-manager deployment not found")
 }
 
 func Test_ensureTrafficManager_notPresent(t *testing.T) {
@@ -231,11 +232,11 @@ func Test_ensureTrafficManager_notPresent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfgAndFlags, err := newConfigAndFlags(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace}, nil)
+	cfgAndFlags, err := newK8sConfig(map[string]string{"kubeconfig": kubeconfig, "namespace": namespace})
 	if err != nil {
 		t.Fatal(err)
 	}
-	kc, err := newKCluster(c, cfgAndFlags, nil)
+	kc, err := newKCluster(c, cfgAndFlags, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,42 +270,50 @@ func TestAddAgentToDeployment(t *testing.T) {
 		}
 		tcName := strings.TrimSuffix(fi.Name(), ".input.yaml")
 
-		var tmp struct {
-			Deployment *kates.Deployment `json:"deployment"`
-			Service    *kates.Service    `json:"service"`
+		loadFile := func(filename string) (*kates.Deployment, *kates.Service, error) {
+			tmpl, err := template.ParseFiles(filepath.Join("testdata/addAgentToDeployment", filename))
+			if err != nil {
+				return nil, nil, fmt.Errorf("read template: %s: %w", filename, err)
+			}
+
+			var buff bytes.Buffer
+			err = tmpl.Execute(&buff, map[string]interface{}{
+				"Version": strings.TrimPrefix(testVersion, "v"),
+			})
+			if err != nil {
+				return nil, nil, fmt.Errorf("execute template: %s: %w", filename, err)
+			}
+
+			var dat struct {
+				Deployment *kates.Deployment `json:"deployment"`
+				Service    *kates.Service    `json:"service"`
+			}
+			if err := yaml.Unmarshal(buff.Bytes(), &dat); err != nil {
+				return nil, nil, fmt.Errorf("parse yaml: %s: %w", filename, err)
+			}
+
+			return dat.Deployment, dat.Service, nil
 		}
 
 		var tc testcase
+		var err error
 
-		inBody, err := ioutil.ReadFile(filepath.Join("testdata/addAgentToDeployment", fi.Name()))
+		tc.InputDeployment, tc.InputService, err = loadFile(tcName + ".input.yaml")
 		if err != nil {
-			t.Fatalf("%s.input.yaml: %v", tcName, err)
+			t.Fatal(err)
 		}
-		inStr := strings.ReplaceAll(string(inBody), "${TELEPRESENCE_VERSION}", testVersion)
-		if err = yaml.Unmarshal([]byte(inStr), &tmp); err != nil {
-			t.Fatalf("%s.input.yaml: %v", tcName, err)
-		}
-		tc.InputDeployment = tmp.Deployment
-		tc.InputService = tmp.Service
-		tmp.Deployment = nil
-		tmp.Service = nil
 
-		outBody, err := ioutil.ReadFile(filepath.Join("testdata/addAgentToDeployment", tcName+".output.yaml"))
+		tc.OutputDeployment, tc.OutputService, err = loadFile(tcName + ".output.yaml")
 		if err != nil {
-			t.Fatalf("%s.output.yaml: %v", tcName, err)
+			t.Fatal(err)
 		}
-		outStr := strings.ReplaceAll(string(outBody), "${TELEPRESENCE_VERSION}", testVersion)
-		if err = yaml.Unmarshal([]byte(outStr), &tmp); err != nil {
-			t.Fatalf("%s.output.yaml: %v", tcName, err)
-		}
-		tc.OutputDeployment = tmp.Deployment
-		tc.OutputService = tmp.Service
 
 		// If it is a test case for a service with multiple ports,
 		// we need to specify the name of the port we want to intercept
 		if strings.Contains(tcName, "mp-tc") {
 			tc.InputPortName = "https"
 		}
+
 		testcases[tcName] = tc
 	}
 

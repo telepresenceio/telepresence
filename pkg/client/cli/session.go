@@ -97,7 +97,9 @@ func (si *sessionInfo) newConnectorState(daemon daemon.DaemonClient) (*connector
 func connectCommand() *cobra.Command {
 	si := &sessionInfo{}
 	cmd := &cobra.Command{
-		Use:   "connect [flags] [-- additional kubectl arguments...]",
+		Use:  "connect [flags] [-- <additional kubectl arguments...>]",
+		Args: cobra.ArbitraryArgs,
+
 		Short: "Connect to a cluster",
 		RunE:  si.connect,
 	}

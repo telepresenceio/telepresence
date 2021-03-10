@@ -21,9 +21,11 @@ type uninstallInfo struct {
 func uninstallCommand() *cobra.Command {
 	ui := &uninstallInfo{}
 	cmd := &cobra.Command{
-		Use:   "uninstall",
+		Use:  "uninstall [flags] { --agent <agents...> |--all-agents | --everything }",
+		Args: ui.args,
+
 		Short: "Uninstall telepresence agents and manager",
-		RunE:  ui.uninstall,
+		RunE:  ui.run,
 	}
 	flags := cmd.Flags()
 
@@ -35,15 +37,24 @@ func uninstallCommand() *cobra.Command {
 	return cmd
 }
 
-// uninstall
-func (u *uninstallInfo) uninstall(cmd *cobra.Command, args []string) error {
+func (u *uninstallInfo) args(cmd *cobra.Command, args []string) error {
 	if u.agent && u.allAgents || u.agent && u.everything || u.allAgents && u.everything {
 		return errors.New("--agent, --all-agents, or --everything are mutually exclusive")
 	}
 	if !(u.agent || u.allAgents || u.everything) {
 		return errors.New("please specify --agent, --all-agents, or --everything")
 	}
+	switch {
+	case u.agent && len(args) == 0:
+		return errors.New("at least one argument (the name of an agent) is expected")
+	case !u.agent && len(args) != 0:
+		return errors.New("unexpected argument(s)")
+	}
+	return nil
+}
 
+// uninstall
+func (u *uninstallInfo) run(cmd *cobra.Command, args []string) error {
 	u.cmd = cmd
 	doQuit := false
 	err := u.withConnector(true, func(cs *connectorState) error {
@@ -54,19 +65,10 @@ func (u *uninstallInfo) uninstall(cmd *cobra.Command, args []string) error {
 		switch {
 		case u.agent:
 			ur.UninstallType = connector.UninstallRequest_NAMED_AGENTS
-			if len(args) == 0 {
-				return errors.New("at least one argument (the name of an agent) is expected")
-			}
 			ur.Agents = args
 		case u.allAgents:
 			ur.UninstallType = connector.UninstallRequest_ALL_AGENTS
-			if len(args) != 0 {
-				return errors.New("unexpected argument(s)")
-			}
 		default:
-			if len(args) != 0 {
-				return errors.New("unexpected argument(s)")
-			}
 			ur.UninstallType = connector.UninstallRequest_EVERYTHING
 		}
 		r, err := cs.connectorClient.Uninstall(cmd.Context(), ur)

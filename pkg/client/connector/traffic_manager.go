@@ -78,7 +78,6 @@ func newTrafficManager(c context.Context, env client.Env, cluster *k8sCluster, i
 		userAndHost: fmt.Sprintf("%s@%s", userinfo.Username, host),
 	}
 
-	dgroup.ParentGroup(c).Go("traffic-manager", tm.run)
 	return tm, nil
 }
 
@@ -305,6 +304,9 @@ func (tm *trafficManager) remain(c context.Context) error {
 }
 
 func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
+	if tm == nil {
+		return
+	}
 	if tm.managerClient == nil {
 		r.Intercepts = &manager.InterceptInfoSnapshot{}
 		r.Agents = &manager.AgentInfoSnapshot{}

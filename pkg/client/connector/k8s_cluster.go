@@ -33,6 +33,7 @@ type objName struct {
 // k8sCluster is a Kubernetes cluster reference
 type k8sCluster struct {
 	*k8sConfig
+	mappedNamespaces []string
 
 	// Main
 	client *kates.Client
@@ -47,6 +48,7 @@ type k8sCluster struct {
 	localInterceptedNamespaces map[string]struct{}
 
 	accLock         sync.Mutex
+	accWait         chan struct{}
 	watchers        map[string]*k8sWatcher
 	localIntercepts map[string]string
 
@@ -245,53 +247,39 @@ func (kc *k8sCluster) namespaceExists(namespace string) (exists bool) {
 	return exists
 }
 
-func newKCluster(c context.Context, kubeFlags *k8sConfig, daemon daemon.DaemonClient) (*k8sCluster, error) {
+func newKCluster(c context.Context, kubeFlags *k8sConfig, mappedNamespaces []string, daemon daemon.DaemonClient) (*k8sCluster, error) {
 	// TODO: Add constructor to kates that takes an additional restConfig argument to prevent that kates recreates it.
 	kc, err := kates.NewClientFromConfigFlags(kubeFlags.configFlags)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("k8s client create failed: %v", err)
 	}
 
 	ret := &k8sCluster{
-		k8sConfig:       kubeFlags,
-		client:          kc,
-		daemon:          daemon,
-		localIntercepts: map[string]string{},
-		watcherChanged:  make(chan struct{}),
+		k8sConfig:        kubeFlags,
+		mappedNamespaces: mappedNamespaces,
+		client:           kc,
+		daemon:           daemon,
+		localIntercepts:  map[string]string{},
+		watcherChanged:   make(chan struct{}),
+		accWait:          make(chan struct{}),
 	}
 
 	if err := ret.check(c); err != nil {
 		return nil, fmt.Errorf("initial cluster check failed: %v", client.RunError(err))
 	}
+
+	dlog.Infof(c, "Context: %s", ret.Context)
+	dlog.Infof(c, "Server: %s", ret.Server)
+
 	return ret, nil
 }
 
-// trackKCluster tracks connectivity to a cluster
-func trackKCluster(c context.Context, kubeFlags *k8sConfig, daemon daemon.DaemonClient) (*k8sCluster, error) {
-	kc, err := newKCluster(c, kubeFlags, daemon)
-	if err != nil {
-		return nil, fmt.Errorf("k8s client create failed: %v", err)
-	}
-
-	dlog.Infof(c, "Context: %s", kc.Context)
-	dlog.Infof(c, "Server: %s", kc.Server)
-
-	// accWait is closed when the watcher produces its first snapshot
-	accWait := make(chan struct{})
-	if err := kc.startWatchers(c, accWait); err != nil {
-		dlog.Errorf(c, "watcher cluster resources: %+v", err)
-		close(accWait)
-		return nil, err
-	}
-	// wait until accumulator has produced its first snapshot.
+func (kc *k8sCluster) waitUntilReady(ctx context.Context) error {
 	select {
-	case <-accWait:
-		return kc, nil
-	case <-time.After(10 * time.Second):
-		// if first snapshot hasn't arrived within 10 seconds, then something is wrong.
-		return nil, errors.New("timeout waiting for information from cluster")
-	case <-c.Done():
-		return nil, c.Err()
+	case <-kc.accWait:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 

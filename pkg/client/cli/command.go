@@ -38,18 +38,20 @@ recommended) which in turn may result in a password prompt.`
 
 func statusCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "status",
+		Use:  "status",
+		Args: cobra.NoArgs,
+
 		Short: "Show connectivity status",
-		Args:  cobra.NoArgs,
 		RunE:  status,
 	}
 }
 
 func versionCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:     "version",
+		Use:  "version",
+		Args: cobra.NoArgs,
+
 		Short:   "Show version",
-		Args:    cobra.NoArgs,
 		PreRunE: forcedUpdateCheck,
 		RunE:    printVersion,
 	}
@@ -57,9 +59,10 @@ func versionCommand() *cobra.Command {
 
 func quitCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "quit",
+		Use:  "quit",
+		Args: cobra.NoArgs,
+
 		Short: "Tell telepresence daemon to quit",
-		Args:  cobra.NoArgs,
 		RunE:  quit,
 	}
 }
@@ -106,10 +109,11 @@ func Command(ctx context.Context) *cobra.Command {
 	}
 
 	rootCmd := &cobra.Command{
-		Use:           "telepresence",
+		Use:  "telepresence",
+		Args: OnlySubcommands,
+
 		Short:         myName,
 		Long:          help,
-		Args:          OnlySubcommands,
 		RunE:          RunSubcommands,
 		SilenceErrors: true, // main() will handle it after .ExecuteContext() returns
 		SilenceUsage:  true, // our FlagErrorFunc will handle it

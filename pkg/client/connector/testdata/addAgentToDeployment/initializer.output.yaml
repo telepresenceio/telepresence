@@ -5,7 +5,7 @@ deployment:
     name: sample-app
     namespace: default
     annotations:
-      telepresence.getambassador.io/actions: '{"version":"${TELEPRESENCE_VERSION}","ReferencedService":"sample-app","hide_container_port":{"container_name":"sample-app","port_name":"http","hidden_name":"tel2mv-http"},"add_traffic_agent":{"container_port_name":"http","container_port_proto":"","app_port":3000,"image_name":"localhost:5000/tel2:${TELEPRESENCE_VERSION}"}}'
+      telepresence.getambassador.io/actions: '{"version":"{{.Version}}","ReferencedService":"sample-app","hide_container_port":{"container_name":"sample-app","port_name":"http","hidden_name":"tel2mv-http"},"add_traffic_agent":{"container_port_name":"http","container_port_proto":"","app_port":3000,"image_name":"localhost:5000/tel2:{{.Version}}"}}'
   spec:
     replicas: 2
     selector:
@@ -67,7 +67,7 @@ deployment:
                 command:
                 - "/bin/stat"
                 - "/tmp/agent/ready"
-            image: localhost:5000/tel2:${TELEPRESENCE_VERSION}
+            image: localhost:5000/tel2:{{.Version}}
             imagePullPolicy: IfNotPresent
             ports:
             - containerPort: 9900

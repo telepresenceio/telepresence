@@ -16,9 +16,9 @@ import (
 	"google.golang.org/grpc"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/datawire/dlib/derror"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dutil"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
@@ -201,7 +201,7 @@ func run(c context.Context, loggingDir, dns, fallback string) error {
 			d.outbound.noMoreUpdates()
 
 			// Error recovery.
-			if perr := dutil.PanicToError(recover()); perr != nil {
+			if perr := derror.PanicToError(recover()); perr != nil {
 				dlog.Error(c, perr)
 				if listener != nil {
 					_ = listener.Close()
