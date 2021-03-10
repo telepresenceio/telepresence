@@ -177,6 +177,7 @@ func (o *outbound) dnsServerWorker(c context.Context, onReady func()) error {
 				namespaces[path] = struct{}{}
 			}
 		}
+		namespaces[tel2SubDomain] = struct{}{}
 
 		// On Darwin, we provide resolution of NAME.NAMESPACE by adding one domain
 		// for each namespace in its own domain file under /etc/resolver. Each file

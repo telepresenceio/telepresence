@@ -69,6 +69,7 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 				namespaces[path] = struct{}{}
 			}
 		}
+		namespaces[tel2SubDomain] = struct{}{}
 		o.domainsLock.Lock()
 		o.namespaces = namespaces
 		o.search = search
@@ -109,17 +110,10 @@ func (o *outbound) resolveWithSearch(query string) []string {
 		// More than just the ending dot, so don't use search-path
 		return o.resolveNoSearch(query)
 	}
-
-	query = strings.ToLower(query)
-	var ips []string
 	o.domainsLock.RLock()
-	for _, suffix := range o.search {
-		if ips = o.domains[query+suffix]; ips != nil {
-			break
-		}
-	}
+	ips := o.resolveWithSearchLocked(query)
 	o.domainsLock.RUnlock()
-	return shuffleIPs(ips)
+	return ips
 }
 
 func (o *outbound) dnsListeners(c context.Context) ([]net.PacketConn, error) {

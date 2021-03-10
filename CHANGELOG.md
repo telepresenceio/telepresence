@@ -1,5 +1,9 @@
 # Changelog
 
+### 2.2.0 (TBD)
+
+- Feature: Introduce a fake "tel2-search" domain that gets replaced with a dynamic DNS search when queried (for Docker with no -net host).
+
 ### 2.1.0 (March 8, 2021)
 
 - Bugfix: Environment variables declared with `envFrom` in the app-container are now propagated correctly to the client during intercept.

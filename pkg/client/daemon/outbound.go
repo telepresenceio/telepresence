@@ -186,19 +186,45 @@ func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
 	return nil
 }
 
-func (o *outbound) resolveNoSearch(query string) []string {
-	o.domainsLock.RLock()
+// On a MacOS, Docker uses its own search-path for single label names. This means that the search path that is declared
+// in the MacOS resolver is ignored although the rest of the DNS-resolution works OK. Since the search-path is likely to
+// change during a session, a stable fake domain is needed to emulate the search-path. That fake-domain can then be used
+// in the search path declared in the Docker config. The "tel2-search" domain fills this purpose and a request for
+// "<single label name>.tel2-search." will be resolved as "<single label name>." using the search path of this resolver.
+const tel2SubDomain = "tel2-search"
 
-	// Check if this is a NAME.NAMESPACE. query
-	ds := strings.Split(query, ".")
-	if len(ds) == 3 && ds[2] == "" {
-		if _, ok := o.namespaces[ds[1]]; ok {
+func (o *outbound) resolveNoSearch(query string) []string {
+	ds := strings.Split(strings.ToLower(query), ".")
+	dl := len(ds) - 1
+	if ds[dl] != "" {
+		// query didn't end with a dot. Give up.
+		return nil
+	}
+
+	o.domainsLock.RLock()
+	defer o.domainsLock.RUnlock()
+	if dl == 2 {
+		domain := ds[1]
+		if domain == tel2SubDomain {
+			return o.resolveWithSearchLocked(strings.ToLower(ds[0] + "."))
+		}
+		if _, ok := o.namespaces[domain]; ok {
+			// This is a <name>.<namespace> query
 			query += "svc.cluster.local."
 		}
 	}
 	ips := o.domains[strings.ToLower(query)]
-	o.domainsLock.RUnlock()
 	return shuffleIPs(ips)
+}
+
+func (o *outbound) resolveWithSearchLocked(query string) []string {
+	n := strings.ToLower(query)
+	for _, p := range o.search {
+		if ips, ok := o.domains[n+p]; ok {
+			return shuffleIPs(ips)
+		}
+	}
+	return nil
 }
 
 // Since headless and externalName services can have multiple IPs,
