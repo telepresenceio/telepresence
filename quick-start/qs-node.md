@@ -56,7 +56,7 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
 
   ```
   $ telepresence connect
-
+    
     Launching Telepresence Daemon
     ...
     Connected to context default (https://<cluster-public-IP>)
@@ -79,7 +79,7 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
 
   ```
   $ curl -ik https://kubernetes.default
-
+    
     HTTP/1.1 401 Unauthorized
     Cache-Control: no-cache, private
     Content-Type: application/json
@@ -107,7 +107,7 @@ Your local workstation may not have the compute or memory resources necessary to
 
   ```
   $ kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-nodejs/main/k8s-config/edgey-corp-web-app-no-mapping.yaml
-
+    
     deployment.apps/dataprocessingservice created
     service/dataprocessingservice created
     ...
@@ -120,7 +120,7 @@ Your local workstation may not have the compute or memory resources necessary to
 
   ```
   $ kubectl get pods
-
+    
     NAME                                         READY   STATUS    RESTARTS   AGE
     verylargedatastore-855c8b8789-z8nhs          1/1     Running   0          78s
     verylargejavaservice-7dfddbc95c-696br        1/1     Running   0          78s
@@ -147,7 +147,7 @@ You will now download the repo containing the services' code and run the DataPro
 
   ```
   $ git clone https://github.com/datawire/edgey-corp-nodejs.git
-
+    
     Cloning into 'edgey-corp-nodejs'...
     remote: Enumerating objects: 441, done.
     ...
@@ -161,7 +161,7 @@ You will now download the repo containing the services' code and run the DataPro
 
   ```
   $ npm install && npm start
-
+    
     ...
     Welcome to the DataProcessingService!
     { _: [] }
@@ -177,7 +177,7 @@ You will now download the repo containing the services' code and run the DataPro
 
   ```
   $ curl localhost:3000/color
-
+    
     "blue"
   ```
 
@@ -193,7 +193,7 @@ Next, we’ll create an intercept. An intercept is a rule that tells Telepresenc
 
   ```
   $ telepresence intercept dataprocessingservice --port 3000
-
+    
     Using deployment dataprocessingservice
     intercepted
         Intercept name: dataprocessingservice
@@ -240,6 +240,7 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
 
   ```
   $ telepresence login
+    
     Launching browser authentication flow...
     <browser opens, login with GitHub>
     Login successful.
@@ -251,39 +252,39 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
    Then when asked for the port, type `8080`, for "use TLS", type `n` and finally confirm the layer 5 hostname.
 
   ```
-    $ telepresence intercept dataprocessingservice --port 3000
-
-      To create a preview URL, telepresence needs to know how cluster
-      ingress works for this service.  Please Select the ingress to use.
-      
-      1/4: What's your ingress' layer 3 (IP) address?
-           You may use an IP address or a DNS name (this is usually a
-           "service.namespace" DNS name).
-      
-             [no default]: verylargejavaservice.default
-      
-      2/4: What's your ingress' layer 4 address (TCP port number)?
-      
-             [no default]: 8080
-      
-      3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
-      
-             [default: n]:
-      
-      4/4: If required by your ingress, specify a different layer 5 hostname
-           (TLS-SNI, HTTP "Host" header) to access this service.
-      
-             [default: verylargejavaservice.default]:
-      
-      Using deployment dataprocessingservice
-      intercepted
-          Intercept name  : dataprocessingservice
-          State           : ACTIVE
-          Destination     : 127.0.0.1:3000
-          Intercepting    : HTTP requests that match all of:
-            header("x-telepresence-intercept-id") ~= regexp("86cb4a70-c7e1-1138-89c2-d8fed7a46cae:dataprocessingservice")
-          Preview URL     : https://<random-subdomain>.preview.edgestack.me
-          Layer 5 Hostname: verylargejavaservice.default
+  $ telepresence intercept dataprocessingservice --port 3000
+    
+    To create a preview URL, telepresence needs to know how cluster
+    ingress works for this service.  Please Select the ingress to use.
+    
+    1/4: What's your ingress' layer 3 (IP) address?
+         You may use an IP address or a DNS name (this is usually a
+         "service.namespace" DNS name).
+    
+           [no default]: verylargejavaservice.default
+    
+    2/4: What's your ingress' layer 4 address (TCP port number)?
+    
+           [no default]: 8080
+    
+    3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
+    
+           [default: n]:
+    
+    4/4: If required by your ingress, specify a different layer 5 hostname
+         (TLS-SNI, HTTP "Host" header) to access this service.
+    
+           [default: verylargejavaservice.default]:
+    
+    Using deployment dataprocessingservice
+    intercepted
+        Intercept name  : dataprocessingservice
+        State           : ACTIVE
+        Destination     : 127.0.0.1:3000
+        Intercepting    : HTTP requests that match all of:
+          header("x-telepresence-intercept-id") ~= regexp("86cb4a70-c7e1-1138-89c2-d8fed7a46cae:dataprocessingservice")
+        Preview URL     : https://<random-subdomain>.preview.edgestack.me
+        Layer 5 Hostname: verylargejavaservice.default
   ```
 
 4. Wait a moment for the intercept to start; it will also output a preview URL.  Go to this URL in your browser, it will be the <strong style="color:orange">orange</strong> version of the app.
