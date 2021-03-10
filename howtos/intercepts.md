@@ -243,7 +243,7 @@ be routed to your cluster as usual.
    Normal traffic coming into the cluster through the Ingress (i.e. not coming from the preview URL) will route to services in the cluster like normal.
 
 <Alert severity="success">
-    <strong>Congratulations!</strong> You can now intercept traffic for your Kubernetes Service without impacting your teammates!
+    <strong>Congratulations!</strong> You have now only intercepted traffic coming from your Preview URL, without impacting your teammates.
 </Alert>
 
 You can now:
