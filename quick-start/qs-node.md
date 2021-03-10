@@ -16,7 +16,7 @@ import QSCards from './qs-cards'
 
 </div>
 
-# Telepresence Quick Start - **NodeJS**
+# Telepresence Quick Start - **Node.js**
 
 <div class="docs-article-toc">
 <h3>Contents</h3>
@@ -71,33 +71,19 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
   </Alert>
 
 2. Test that Telepresence is working properly by connecting to the Kubernetes API server:
-`curl -ik https://kubernetes.default.svc.cluster.local`
+`curl -ik https://kubernetes.default`
 
   <Alert severity="info">
     <strong>Didn't work?</strong> Make sure you are using Telepresence 2.0.3 or greater, check with <code>telepresence version</code> and upgrade <a href="../../howtos/upgrading/">here</a> if needed.
   </Alert>
 
   ```
-  $ curl -ik https://kubernetes.default.svc.cluster.local
+  $ curl -ik https://kubernetes.default
 
     HTTP/1.1 401 Unauthorized
     Cache-Control: no-cache, private
     Content-Type: application/json
-    Www-Authenticate: Basic realm="kubernetes-master"
-    Date: Tue, 09 Feb 2021 23:21:51 GMT
-    Content-Length: 165
-
-    {
-      "kind": "Status",
-      "apiVersion": "v1",
-      "metadata": {
-
-      },
-      "status": "Failure",
-      "message": "Unauthorized",
-      "reason": "Unauthorized",
-      "code": 401
-    }%
+    ...
 
   ```
 <Alert severity="info">
@@ -141,7 +127,7 @@ Your local workstation may not have the compute or memory resources necessary to
     dataprocessingservice-5f6bfdcf7b-qvd27       1/1     Running   0          79s
   ```
 
-3. Once all the pods are in a `Running` state, go to the frontend service in your browser at [http://verylargejavaservice.default.svc.cluster.local:8080](http://verylargejavaservice.default.svc.cluster.local:8080).
+3. Once all the pods are in a `Running` state, go to the frontend service in your browser at [http://verylargejavaservice.default:8080](http://verylargejavaservice.default:8080).
 
 4. You should see the EdgyCorp WebApp with a <strong style="color:green">green</strong> title and <strong style="color:green">green</strong> pod in the diagram.
 
@@ -186,7 +172,7 @@ You will now download the repo containing the services' code and run the DataPro
     <a href="https://nodejs.org/en/download/package-manager/">Install Node.js from here</a> if needed.
   </Alert>
 
-4. In a **new terminal window**, curl the service running locally to confirm it’s set to strong:
+4. In a **new terminal window**, curl the service running locally to confirm it’s set to <strong style="color:blue">blue</strong>:
 `curl localhost:3000/color`
 
   ```
@@ -231,7 +217,7 @@ We’ve now set up a local development environment for the DataProcessingService
 
 1. Open `edgey-corp-nodejs/DataProcessingService/app.js` in your editor and change line 6 from `blue` to `orange`. Save the file and the Node server will auto reload.
 
-2. Now, visit [http://verylargejavaservice:8080](http://verylargejavaservice:8080) again in your browser. You will now see the orange elements in the application.
+2. Now, visit [http://verylargejavaservice:8080](http://verylargejavaservice:8080) again in your browser. You will now see the <strong style="color:orange">orange</strong> elements in the application.
 
 <Alert severity="success">
   We’ve just shown how we can edit code locally, and <strong>immediately</strong> see these changes in the cluster.
