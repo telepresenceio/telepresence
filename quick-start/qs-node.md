@@ -16,7 +16,7 @@ import QSCards from './qs-cards'
 
 </div>
 
-# Telepresence Quick Start - **NodeJS**
+# Telepresence Quick Start - **Node.js**
 
 <div class="docs-article-toc">
 <h3>Contents</h3>
@@ -51,12 +51,12 @@ If you have used Telepresence previously, please first reset your Telepresence d
 
 Telepresence connects your local workstation to a remote Kubernetes cluster.
 
-1. Connect to the cluster:
+1. Connect to the cluster:  
 `telepresence connect`
 
   ```
   $ telepresence connect
-
+    
     Launching Telepresence Daemon
     ...
     Connected to context default (https://<cluster-public-IP>)
@@ -70,34 +70,20 @@ Telepresence connects your local workstation to a remote Kubernetes cluster.
     Click <strong>Open Anyway</strong> at the bottom to bypass the security block. Then retry the <code>telepresence connect</code> command.
   </Alert>
 
-2. Test that Telepresence is working properly by connecting to the Kubernetes API server:
-`curl -ik https://kubernetes.default.svc.cluster.local`
+2. Test that Telepresence is working properly by connecting to the Kubernetes API server:  
+`curl -ik https://kubernetes.default`
 
   <Alert severity="info">
     <strong>Didn't work?</strong> Make sure you are using Telepresence 2.0.3 or greater, check with <code>telepresence version</code> and upgrade <a href="../../install/upgrade/">here</a> if needed.
   </Alert>
 
   ```
-  $ curl -ik https://kubernetes.default.svc.cluster.local
-
+  $ curl -ik https://kubernetes.default
+    
     HTTP/1.1 401 Unauthorized
     Cache-Control: no-cache, private
     Content-Type: application/json
-    Www-Authenticate: Basic realm="kubernetes-master"
-    Date: Tue, 09 Feb 2021 23:21:51 GMT
-    Content-Length: 165
-
-    {
-      "kind": "Status",
-      "apiVersion": "v1",
-      "metadata": {
-
-      },
-      "status": "Failure",
-      "message": "Unauthorized",
-      "reason": "Unauthorized",
-      "code": 401
-    }%
+    ...
 
   ```
 <Alert severity="info">
@@ -116,12 +102,12 @@ Your local workstation may not have the compute or memory resources necessary to
     While Telepresence works with any language, this guide uses a sample app written in Node.js. We have versions in <a href="../qs-go/">Go</a>, <a href="../qs-java/">Java</a>,<a href="../qs-python/">Python using Flask</a>, and <a href="../qs-python-fastapi/">Python using FastAPI</a> if you prefer.
 </Alert>
 
-1. Start by installing a sample application that consists of multiple services:
+1. Start by installing a sample application that consists of multiple services:  
 `kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-nodejs/main/k8s-config/edgey-corp-web-app-no-mapping.yaml`
 
   ```
   $ kubectl apply -f https://raw.githubusercontent.com/datawire/edgey-corp-nodejs/main/k8s-config/edgey-corp-web-app-no-mapping.yaml
-
+    
     deployment.apps/dataprocessingservice created
     service/dataprocessingservice created
     ...
@@ -134,14 +120,14 @@ Your local workstation may not have the compute or memory resources necessary to
 
   ```
   $ kubectl get pods
-
+    
     NAME                                         READY   STATUS    RESTARTS   AGE
     verylargedatastore-855c8b8789-z8nhs          1/1     Running   0          78s
     verylargejavaservice-7dfddbc95c-696br        1/1     Running   0          78s
     dataprocessingservice-5f6bfdcf7b-qvd27       1/1     Running   0          79s
   ```
 
-3. Once all the pods are in a `Running` state, go to the frontend service in your browser at [http://verylargejavaservice.default.svc.cluster.local:8080](http://verylargejavaservice.default.svc.cluster.local:8080).
+3. Once all the pods are in a `Running` state, go to the frontend service in your browser at [http://verylargejavaservice.default:8080](http://verylargejavaservice.default:8080).
 
 4. You should see the EdgyCorp WebApp with a <strong style="color:green">green</strong> title and <strong style="color:green">green</strong> pod in the diagram.
 
@@ -156,26 +142,26 @@ You will now download the repo containing the services' code and run the DataPro
     Confirm first that nothing is running locally on port 3000! If <code>curl localhost:3000</code> returns <code>Connection refused</code> then you should be good to go.
 </Alert>
 
-1. Clone the web app’s GitHub repo:
+1. Clone the web app’s GitHub repo:  
 `git clone https://github.com/datawire/edgey-corp-nodejs.git`
 
   ```
   $ git clone https://github.com/datawire/edgey-corp-nodejs.git
-
+    
     Cloning into 'edgey-corp-nodejs'...
     remote: Enumerating objects: 441, done.
     ...
   ```
 
-2. Change into the repo directory, then into DataProcessingService:
+2. Change into the repo directory, then into DataProcessingService:  
 `cd edgey-corp-nodejs/DataProcessingService/`
 
-3. Install the dependencies and start the Node server:
+3. Install the dependencies and start the Node server:  
 `npm install && npm start`
 
   ```
   $ npm install && npm start
-
+    
     ...
     Welcome to the DataProcessingService!
     { _: [] }
@@ -186,12 +172,12 @@ You will now download the repo containing the services' code and run the DataPro
     <a href="https://nodejs.org/en/download/package-manager/">Install Node.js from here</a> if needed.
   </Alert>
 
-4. In a **new terminal window**, curl the service running locally to confirm it’s set to strong:
+4. In a **new terminal window**, curl the service running locally to confirm it’s set to <strong style="color:blue">blue</strong>:  
 `curl localhost:3000/color`
 
   ```
   $ curl localhost:3000/color
-
+    
     "blue"
   ```
 
@@ -202,12 +188,12 @@ You will now download the repo containing the services' code and run the DataPro
 ## 5. Intercept all traffic to the service
 Next, we’ll create an intercept. An intercept is a rule that tells Telepresence where to send traffic. In this example, we will send all traffic destined for the DataProcessingService to the version of the DataProcessingService running locally instead:
 
-1. Start the intercept with the `intercept` command, setting the service name and port:
+1. Start the intercept with the `intercept` command, setting the service name and port:  
 `telepresence intercept dataprocessingservice --port 3000`
 
   ```
   $ telepresence intercept dataprocessingservice --port 3000
-
+    
     Using deployment dataprocessingservice
     intercepted
         Intercept name: dataprocessingservice
@@ -231,7 +217,7 @@ We’ve now set up a local development environment for the DataProcessingService
 
 1. Open `edgey-corp-nodejs/DataProcessingService/app.js` in your editor and change line 6 from `blue` to `orange`. Save the file and the Node server will auto reload.
 
-2. Now, visit [http://verylargejavaservice:8080](http://verylargejavaservice:8080) again in your browser. You will now see the orange elements in the application.
+2. Now, visit [http://verylargejavaservice:8080](http://verylargejavaservice:8080) again in your browser. You will now see the <strong style="color:orange">orange</strong> elements in the application.
 
 <Alert severity="success">
   We’ve just shown how we can edit code locally, and <strong>immediately</strong> see these changes in the cluster.
@@ -244,60 +230,61 @@ We’ve now set up a local development environment for the DataProcessingService
 ## 7. Create a Preview URL
 Create preview URLs to do selective intercepts, meaning only traffic coming from the preview URL will be intercepted, so you can easily share the services you’re working on with your teammates.
 
-1. Clean up your previous intercept by removing it:
+1. Clean up your previous intercept by removing it:  
 `telepresence leave dataprocessingservice`
 
-2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:
+2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:  
 `telepresence login`
 
   This opens your browser; login with your GitHub account and choose your org.
 
   ```
   $ telepresence login
+    
     Launching browser authentication flow...
     <browser opens, login with GitHub>
     Login successful.
   ```
 
-3. Start the intercept again:
+3. Start the intercept again:  
 `telepresence intercept dataprocessingservice --port 3000`
    You will be asked for your ingress layer 3 address; specify the front end service: `verylargejavaservice.default`
    Then when asked for the port, type `8080`, for "use TLS", type `n` and finally confirm the layer 5 hostname.
 
   ```
-    $ telepresence intercept dataprocessingservice --port 3000
-
-      To create a preview URL, telepresence needs to know how cluster
-      ingress works for this service.  Please Select the ingress to use.
-      
-      1/4: What's your ingress' layer 3 (IP) address?
-           You may use an IP address or a DNS name (this is usually a
-           "service.namespace" DNS name).
-      
-             [no default]: verylargejavaservice.default
-      
-      2/4: What's your ingress' layer 4 address (TCP port number)?
-      
-             [no default]: 8080
-      
-      3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
-      
-             [default: n]:
-      
-      4/4: If required by your ingress, specify a different layer 5 hostname
-           (TLS-SNI, HTTP "Host" header) to access this service.
-      
-             [default: verylargejavaservice.default]:
-      
-      Using deployment dataprocessingservice
-      intercepted
-          Intercept name  : dataprocessingservice
-          State           : ACTIVE
-          Destination     : 127.0.0.1:3000
-          Intercepting    : HTTP requests that match all of:
-            header("x-telepresence-intercept-id") ~= regexp("86cb4a70-c7e1-1138-89c2-d8fed7a46cae:dataprocessingservice")
-          Preview URL     : https://<random-subdomain>.preview.edgestack.me
-          Layer 5 Hostname: verylargejavaservice.default
+  $ telepresence intercept dataprocessingservice --port 3000
+    
+    To create a preview URL, telepresence needs to know how cluster
+    ingress works for this service.  Please Select the ingress to use.
+    
+    1/4: What's your ingress' layer 3 (IP) address?
+         You may use an IP address or a DNS name (this is usually a
+         "service.namespace" DNS name).
+    
+           [no default]: verylargejavaservice.default
+    
+    2/4: What's your ingress' layer 4 address (TCP port number)?
+    
+           [no default]: 8080
+    
+    3/4: Does that TCP port on your ingress use TLS (as opposed to cleartext)?
+    
+           [default: n]:
+    
+    4/4: If required by your ingress, specify a different layer 5 hostname
+         (TLS-SNI, HTTP "Host" header) to access this service.
+    
+           [default: verylargejavaservice.default]:
+    
+    Using deployment dataprocessingservice
+    intercepted
+        Intercept name  : dataprocessingservice
+        State           : ACTIVE
+        Destination     : 127.0.0.1:3000
+        Intercepting    : HTTP requests that match all of:
+          header("x-telepresence-intercept-id") ~= regexp("86cb4a70-c7e1-1138-89c2-d8fed7a46cae:dataprocessingservice")
+        Preview URL     : https://<random-subdomain>.preview.edgestack.me
+        Layer 5 Hostname: verylargejavaservice.default
   ```
 
 4. Wait a moment for the intercept to start; it will also output a preview URL.  Go to this URL in your browser, it will be the <strong style="color:orange">orange</strong> version of the app.
