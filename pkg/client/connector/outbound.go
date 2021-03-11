@@ -154,7 +154,7 @@ func (kc *k8sCluster) refreshNamespaces(c context.Context, accWait chan<- struct
 
 func (kc *k8sCluster) shouldBeWatched(namespace string) bool {
 	if len(kc.mappedNamespaces) == 0 {
-		return !(namespace == managerNamespace || strings.HasPrefix(namespace, "kube-"))
+		return true
 	}
 	for _, n := range kc.mappedNamespaces {
 		if n == namespace {
