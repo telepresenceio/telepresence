@@ -33,8 +33,30 @@ type VersionInfo struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	ApiVersion int32  `protobuf:"varint,1,opt,name=api_version,json=apiVersion,proto3" json:"api_version,omitempty"`
-	Version    string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	// ApiVersion is probably unescessary, as it only gets bumped for
+	// things that are detectable other ways, but it's here anyway.
+	//
+	//  - api_version=1 was edgectl's original JSON-based API that was
+	//    served on `/var/run/edgectl.socket`.
+	//
+	//  - api_version=2 was edgectl's gRPC-based (`package edgectl`) API
+	//    that was served on `/var/run/edgectl-daemon.socket`.
+	//
+	//  - api_version=3 is the current Telepresence 2 gRPC-based
+	//    (`package telepresence.{sub}`) API:
+	//
+	//     + `telepresence.connector` is served on `/tmp/telepresence-connector.socket`.
+	//     + `telepresence.daemon` is served on `/var/run/telepresence-daemon.socket`.
+	//     + `telepresence.manager` is served on TCP `:8081` (by default) on the traffic-manager Pod.
+	//     + `telepresence.systema` is served on TCP+TLS `app.getambassador.io:443` (by default).
+	//
+	//    This is largely just a rename and split of api_version=2,
+	//    since the product is called "telepresence" now instead of
+	//    "edgectl" and the "connector" and the "daemon" are now two
+	//    separate things.
+	ApiVersion int32 `protobuf:"varint,1,opt,name=api_version,json=apiVersion,proto3" json:"api_version,omitempty"`
+	// Version is a "vSEMVER" string of the product version number.
+	Version string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
 }
 
 func (x *VersionInfo) Reset() {
