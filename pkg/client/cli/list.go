@@ -81,7 +81,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 
 	state := func(dep *connector.DeploymentInfo) string {
 		if ii := dep.InterceptInfo; ii != nil {
-			return DescribeIntercept(ii, s.debug)
+			return DescribeIntercept(ii, nil, s.debug)
 		}
 		ai := dep.AgentInfo
 		if ai != nil {
@@ -105,7 +105,7 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func DescribeIntercept(ii *manager.InterceptInfo, debug bool) string {
+func DescribeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, debug bool) string {
 	msg := "intercepted"
 
 	type kv struct {
@@ -146,6 +146,8 @@ func DescribeIntercept(ii *manager.InterceptInfo, debug bool) string {
 
 	if ii.Spec.MountPoint != "" {
 		fields = append(fields, kv{"Volume Mount Point", ii.Spec.MountPoint})
+	} else if volumeMountsPrevented != nil {
+		fields = append(fields, kv{"Volume Mount Error", volumeMountsPrevented.Error()})
 	}
 
 	fields = append(fields, kv{"Intercepting", func() string {
