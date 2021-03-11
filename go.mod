@@ -42,7 +42,4 @@ require (
 
 replace github.com/Azure/go-autorest v10.8.1+incompatible => github.com/Azure/go-autorest v13.3.2+incompatible
 
-// Pin down golang.org/x/sys to a version that contains unix.SYS_IOCTL on darwin
-replace golang.org/x/sys => golang.org/x/sys v0.0.0-20200826173525-f9321e4c35a6
-
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
