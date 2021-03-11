@@ -321,13 +321,17 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 			}
 		} else {
 			portNum := port.TargetPort.IntVal
-			for ci := 0; ci < len(cns) && ccn == nil; ci++ {
+			// Here we are using cpi <=0 instead of ccn == nil because if a
+			// container has no ports, we want to use it but we don't want
+			// to break out of the loop looking at containers in case there
+			// is a better fit.  Currently, that is a container where the
+			// ContainerPort matches the targetPort in the service.
+			for ci := 0; ci < len(cns) && cpi <= 0; ci++ {
 				cn := &cns[ci]
 				if len(cn.Ports) == 0 {
 					msp = port
 					ccn = cn
 					cpi = -1
-					break
 				}
 				for pi := range cn.Ports {
 					if cn.Ports[pi].ContainerPort == portNum {
