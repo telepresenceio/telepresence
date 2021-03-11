@@ -7,6 +7,29 @@ option go_package = "github.com/telepresenceio/telepresence/rpc/v2/common";
 // daemon) and `telepresence conector` (the normal-user daemon) use
 // when reporting their version to the user-facing CLI.
 message VersionInfo {
+  // ApiVersion is probably unescessary, as it only gets bumped for
+  // things that are detectable other ways, but it's here anyway.
+  //
+  //  - api_version=1 was edgectl's original JSON-based API that was
+  //    served on `/var/run/edgectl.socket`.
+  //
+  //  - api_version=2 was edgectl's gRPC-based (`package edgectl`) API
+  //    that was served on `/var/run/edgectl-daemon.socket`.
+  //
+  //  - api_version=3 is the current Telepresence 2 gRPC-based
+  //    (`package telepresence.{sub}`) API:
+  //
+  //     + `telepresence.connector` is served on `/tmp/telepresence-connector.socket`.
+  //     + `telepresence.daemon` is served on `/var/run/telepresence-daemon.socket`.
+  //     + `telepresence.manager` is served on TCP `:8081` (by default) on the traffic-manager Pod.
+  //     + `telepresence.systema` is served on TCP+TLS `app.getambassador.io:443` (by default).
+  //
+  //    This is largely just a rename and split of api_version=2,
+  //    since the product is called "telepresence" now instead of
+  //    "edgectl" and the "connector" and the "daemon" are now two
+  //    separate things.
   int32 api_version = 1;
+
+  // Version is a "vSEMVER" string of the product version number.
   string version = 2;
 }
