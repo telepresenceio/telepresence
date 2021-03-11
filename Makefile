@@ -15,7 +15,7 @@
 TELEPRESENCE_REGISTRY ?= docker.io/datawire
 DOCKER_PUSH           ?= docker-push
 
-_TELEPRESENCE_VERSION := $(shell go run ./build/genversion.go)
+_TELEPRESENCE_VERSION := $(shell unset GOOS GOARCH; go run ./build/genversion.go)
 TELEPRESENCE_VERSION ?= $(_TELEPRESENCE_VERSION)
 $(if $(filter v2.%,$(TELEPRESENCE_VERSION)),\
   $(info Building TELEPRESENCE_VERSION=$(TELEPRESENCE_VERSION)),\
