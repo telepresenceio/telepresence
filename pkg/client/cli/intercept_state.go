@@ -233,6 +233,25 @@ func isLoggedIn(ctx context.Context) bool {
 	return token != nil
 }
 
+func checkMountCapability() error {
+	// Use CombinedOutput to include stderr which has information about whether they
+	// need to upgrade to a newer version of macFUSE or not
+	out, err := exec.Command("sshfs", "-V").CombinedOutput()
+	if err != nil {
+		return errors.New("sshfs is not installed on your local machine")
+	}
+
+	// OSXFUSE changed to macFUSE and we've noticed that older versions of OSXFUSE
+	// can cause browsers to hang + kernel crashes, so we add an error to prevent
+	// our users from running into this problem.
+	// OSXFUSE isn't included in the output of sshfs -V in versions of 4.0.0 so
+	// we check for that as a proxy for if they have the right version or not.
+	if bytes.Contains(out, []byte("OSXFUSE")) {
+		return errors.New(`macFUSE 4.0.5 or higher is required on your local machine`)
+	}
+	return nil
+}
+
 func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, error) {
 	spec := &manager.InterceptSpec{
 		Name:      is.name,
@@ -267,53 +286,33 @@ func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, er
 		return nil, errors.New("Ports must be of the format --ports local[:svcPortName]")
 	}
 
-	mountPoint := ""
-	doMount, err := strconv.ParseBool(is.mount)
-	if err != nil {
-		mountPoint = is.mount
-		doMount = len(mountPoint) > 0
-	}
-
-	if doMount {
-		needBinary := func(prog string) ([]byte, error) {
-			// We use this for sshfs below but only version information for sshfs
-			// is included in stdout. So we use CombinedOutput to include stderr
-			// which has information about whether they need to upgrade to a newer
-			// version of macFUSE or not
-			out, err := exec.Command(prog, "-V").CombinedOutput()
-			if err != nil {
-				return nil, errors.New(prog +
-					` is required in order to mount remote filesystems. ` +
-					`Please install it or use intercept with --mount=false to intercept without mounting`)
-			}
-			return out, nil
-		}
-		out, err := needBinary("sshfs")
+	err := checkMountCapability()
+	if err == nil {
+		mountPoint := ""
+		doMount, err := strconv.ParseBool(is.mount)
 		if err != nil {
-			return nil, err
+			mountPoint = is.mount
+			doMount = len(mountPoint) > 0
 		}
 
-		// OSXFUSE changed to macFUSE and we've noticed that older versions of OSXFUSE
-		// can cause browsers to hang + kernel crashes, so we add an error to prevent
-		// our users from running into this problem.
-		// OSXFUSE isn't included in the output of sshfs -V in versions of 4.0.0 so
-		// we check for that as a proxy for if they have the right version or not.
-		if bytes.Contains(out, []byte("OSXFUSE")) {
-			return nil, errors.New(`macFUSE 4.0.5 or higher is required in order ` +
-				`to mount remote file systems. Please install it or use intercept ` +
-				`with --mount=false to intercept without mounting`)
-		}
-
-		if mountPoint == "" {
-			if mountPoint, err = ioutil.TempDir("", "telfs-"); err != nil {
-				return nil, err
+		if doMount {
+			if mountPoint == "" {
+				if mountPoint, err = ioutil.TempDir("", "telfs-"); err != nil {
+					return nil, err
+				}
+			} else {
+				if err = os.MkdirAll(mountPoint, 0700); err != nil {
+					return nil, err
+				}
 			}
-		} else {
-			if err = os.MkdirAll(mountPoint, 0700); err != nil {
-				return nil, err
-			}
+			ir.MountPoint = mountPoint
 		}
-		ir.MountPoint = mountPoint
+	} else if is.cmd.Flag("mount").Changed {
+		doMount, boolErr := strconv.ParseBool(is.mount)
+		if boolErr != nil || doMount {
+			// not --mount=false, so refuse.
+			return nil, fmt.Errorf("Remote volume mounts are disabled: %s", err.Error())
+		}
 	}
 
 	spec.Mechanism, err = is.extState.Mechanism()
@@ -420,7 +419,13 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 				return true, err
 			}
 		}
-		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, false))
+
+		var volumeMountProblem error
+		doMount, err := strconv.ParseBool(is.mount)
+		if doMount || err != nil {
+			volumeMountProblem = checkMountCapability()
+		}
+		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, volumeMountProblem, false))
 		_ = is.Scout.Report(is.cmd.Context(), "intercept_success")
 		return true, nil
 	case connector.InterceptError_ALREADY_EXISTS:
