@@ -1,6 +1,7 @@
 # Changelog
 ### 2.1.1 (TBD)
 - Bugfix: When looking at the container to intercept, it will check if there's a better match before using a container without containerPorts
+- Bugfix: Telepresence will now map `kube-*` and `ambassador` namespaces by default.
 
 ### 2.2.0 (TBD)
 
