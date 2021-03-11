@@ -1,10 +1,13 @@
 package subnet
 
 import (
+	"bufio"
 	"net"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func Test_covers(t *testing.T) {
@@ -143,4 +146,43 @@ func Test_findAvailableIPV4CIDR_all_busy(t *testing.T) {
 	}
 	_, err := FindAvailableClassC()
 	assert.Error(t, err)
+}
+
+func TestAnalyzeIPs(t *testing.T) {
+	ips := loadIPs(t)
+	ipNets := AnalyzeIPs(ips)
+	require.Equal(t, 4, len(ipNets))
+	require.Equal(t, &net.IPNet{
+		IP:   net.IP{10, 101, 128, 0},
+		Mask: net.CIDRMask(18, 32),
+	}, ipNets[0])
+	require.Equal(t, &net.IPNet{
+		IP:   net.IP{172, 20, 0, 0},
+		Mask: net.CIDRMask(16, 32),
+	}, ipNets[1])
+	require.Equal(t, &net.IPNet{
+		IP:   net.IP{0x20, 0x01, 0x0d, 0xb8, 0x33, 0x33, 0x44, 0x44, 0x55, 0x55, 0x66, 0x66, 0x77, 0x00, 0x00, 0x00},
+		Mask: net.CIDRMask(104, 128),
+	}, ipNets[2])
+	require.Equal(t, &net.IPNet{
+		IP:   net.IP{0x20, 0x01, 0x0d, 0xb8, 0x33, 0x33, 0xab, 0x32, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
+		Mask: net.CIDRMask(79, 128),
+	}, ipNets[3])
+}
+
+func loadIPs(t *testing.T) []net.IP {
+	ipf, err := os.Open("testdata/ips.txt")
+	require.NoError(t, err)
+	defer ipf.Close()
+
+	ips := make([]net.IP, 0, 1500)
+	rd := bufio.NewScanner(ipf)
+	for rd.Scan() {
+		ip := net.ParseIP(rd.Text())
+		if ip == nil {
+			t.Fatal("bad ip")
+		}
+		ips = append(ips, ip)
+	}
+	return ips
 }
