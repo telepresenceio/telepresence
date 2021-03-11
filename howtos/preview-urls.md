@@ -2,7 +2,7 @@
 description: "Telepresence uses Preview URLs to help you collaborate on developing Kubernetes services with teammates."
 ---
 
-# Collaboration with Preview URLs
+# Collaborate using Preview URLs
 
 For collaborating on development work, Telepresence generates preview URLs that you can share with your teammate or collaborators outside of our organization. This opens up new possibilities for real time development, debugging, and pair programming among increasingly distributed teams.
 
