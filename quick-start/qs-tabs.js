@@ -5,7 +5,6 @@ import AppBar from '@material-ui/core/AppBar';
 import Tabs from '@material-ui/core/Tabs';
 import Tab from '@material-ui/core/Tab';
 import Box from '@material-ui/core/Box';
-import Button from '@material-ui/core/Button';
 import HubspotForm from 'react-hubspot-form';
 import CodeBlock from '../../../../../src/components/CodeBlock';
 import LinuxIcon from '../../../../../src/assets/icons/linux.inline.svg';
