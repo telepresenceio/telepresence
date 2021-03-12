@@ -557,27 +557,44 @@ func getAnnotation(obj kates.Object, data interface{}) (bool, error) {
 }
 
 func (ki *installer) undoDeploymentMods(c context.Context, dep *kates.Deployment) error {
-	var actions deploymentActions
-	ok, err := getAnnotation(dep, &actions)
-	if !ok {
+	referencedService, err := undoDeploymentMods(c, dep)
+	if err != nil {
 		return err
 	}
-
-	if svc := ki.findSvc(dep.Namespace, actions.ReferencedService); svc != nil {
+	if svc := ki.findSvc(dep.Namespace, referencedService); svc != nil {
 		if err = ki.undoServiceMods(c, svc); err != nil {
 			return err
 		}
 	}
-
-	if err = actions.undo(dep); err != nil {
-		return err
-	}
-	delete(dep.Annotations, annTelepresenceActions)
-	explainUndo(c, &actions, dep)
 	return ki.client.Update(c, dep, dep)
 }
 
+func undoDeploymentMods(c context.Context, dep *kates.Deployment) (string, error) {
+	var actions deploymentActions
+	ok, err := getAnnotation(dep, &actions)
+	if !ok {
+		return "", err
+	}
+
+	if err = actions.undo(dep); err != nil {
+		return "", err
+	}
+	delete(dep.Annotations, annTelepresenceActions)
+	if len(dep.Annotations) == 0 {
+		dep.Annotations = nil
+	}
+	explainUndo(c, &actions, dep)
+	return actions.ReferencedService, nil
+}
+
 func (ki *installer) undoServiceMods(c context.Context, svc *kates.Service) error {
+	if err := undoServiceMods(c, svc); err != nil {
+		return err
+	}
+	return ki.client.Update(c, svc, svc)
+}
+
+func undoServiceMods(c context.Context, svc *kates.Service) error {
 	var actions svcActions
 	ok, err := getAnnotation(svc, &actions)
 	if !ok {
@@ -587,8 +604,11 @@ func (ki *installer) undoServiceMods(c context.Context, svc *kates.Service) erro
 		return err
 	}
 	delete(svc.Annotations, annTelepresenceActions)
+	if len(svc.Annotations) == 0 {
+		svc.Annotations = nil
+	}
 	explainUndo(c, &actions, svc)
-	return ki.client.Update(c, svc, svc)
+	return nil
 }
 
 func addAgentToDeployment(
