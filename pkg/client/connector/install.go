@@ -643,10 +643,21 @@ func addAgentToDeployment(
 		Number   uint16
 		Protocol corev1.Protocol
 	}
+
 	// Start by filling from the servicePort; if these are the zero values, that's OK.
-	containerPort.Name = servicePort.TargetPort.StrVal
-	containerPort.Number = uint16(servicePort.TargetPort.IntVal)
+	svcHasTargetPort := true
+	if servicePort.TargetPort.Type == intstr.Int {
+		if servicePort.TargetPort.IntVal == 0 {
+			containerPort.Number = uint16(servicePort.Port)
+			svcHasTargetPort = false
+		} else {
+			containerPort.Number = uint16(servicePort.TargetPort.IntVal)
+		}
+	} else {
+		containerPort.Name = servicePort.TargetPort.StrVal
+	}
 	containerPort.Protocol = servicePort.Protocol
+
 	// Now fill from the Deployment's containerPort.
 	usedContainerName := false
 	if containerPortIndex >= 0 {
@@ -688,13 +699,21 @@ func addAgentToDeployment(
 	var serviceMod *svcActions
 	if servicePort.TargetPort.Type == intstr.Int {
 		// Change the port number that the Service refers to.
-		serviceMod = &svcActions{
-			Version: version,
-			MakePortSymbolic: &makePortSymbolicAction{
+		serviceMod = &svcActions{Version: version}
+		if svcHasTargetPort {
+			serviceMod.MakePortSymbolic = &makePortSymbolicAction{
 				PortName:     servicePort.Name,
 				TargetPort:   containerPort.Number,
 				SymbolicName: containerPort.Name,
-			},
+			}
+		} else {
+			serviceMod.AddSymbolicPort = &addSymbolicPortAction{
+				makePortSymbolicAction{
+					PortName:     servicePort.Name,
+					TargetPort:   containerPort.Number,
+					SymbolicName: containerPort.Name,
+				},
+			}
 		}
 		// Since we are updating the service to use the containerPort.Name
 		// if that value came from the container, then we need to hide it
