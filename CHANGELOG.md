@@ -4,6 +4,7 @@
 
 - Bugfix: When looking at the container to intercept, it will check if there's a better match before using a container without containerPorts.
 - Bugfix: Telepresence will now map `kube-*` and `ambassador` namespaces by default.
+- Bugfix: Service port declarations that lack a TargetPort field will now correctly default to using the Port field instead.
 - Bugfix: Several DNS fixes.  Notably, introduce a fake "tel2-search" domain that gets replaced with a dynamic DNS search when queried, which fixes DNS for Docker with no `-net host`.
 - Change: Improvements to how we report the requirements for volume mounts; notably, if the requirements are not met then it defaults to `--mount=false`.
 - Change: There has been substantial code cleanup in the "connector" process.
