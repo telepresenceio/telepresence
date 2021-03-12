@@ -17,7 +17,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 )
 
-const telAppMountPoint = "/tel_app_mounts"
+// Public interface-y pieces ///////////////////////////////////////////////////
 
 type action interface {
 	do(obj kates.Object) error
@@ -34,8 +34,6 @@ type multiAction interface {
 	objectType() string
 }
 
-type explainFunc func(action action, obj kates.Object, out io.Writer)
-
 func explainDo(c context.Context, a action, obj kates.Object) {
 	explainAction(c, a, obj, action.explainDo)
 }
@@ -43,6 +41,10 @@ func explainDo(c context.Context, a action, obj kates.Object) {
 func explainUndo(c context.Context, a action, obj kates.Object) {
 	explainAction(c, a, obj, action.explainUndo)
 }
+
+// Internal implementation pieces //////////////////////////////////////////////
+
+type explainFunc func(action action, obj kates.Object, out io.Writer)
 
 func explainAction(c context.Context, a action, obj kates.Object, ef explainFunc) {
 	buf := bytes.Buffer{}
@@ -116,6 +118,8 @@ func mustMarshal(data interface{}) string {
 	return string(js)
 }
 
+// makePortSymbolicAction //////////////////////////////////////////////////////
+
 // A makePortSymbolicAction replaces the numeric TargetPort of a ServicePort with a generated
 // symbolic name so that an traffic-agent in a designated Deployment can reference the symbol
 // and then use the original port number as the port to forward to when it is not intercepting.
@@ -123,13 +127,6 @@ type makePortSymbolicAction struct {
 	PortName     string
 	TargetPort   uint16
 	SymbolicName string
-}
-
-// An addSymbolicPortAction is like makeSymbolicPortAction but instead of replacing a TargetPort, it adds one.
-// This is for the case where the service doesn't declare a TargetPort but instead relies on that
-// it defaults to the Port.
-type addSymbolicPortAction struct {
-	makePortSymbolicAction
 }
 
 func (m *makePortSymbolicAction) portName(port string) string {
@@ -184,6 +181,15 @@ func (m *makePortSymbolicAction) undo(svc kates.Object) error {
 	return nil
 }
 
+// addSymbolicPortAction ///////////////////////////////////////////////////////
+
+// An addSymbolicPortAction is like makeSymbolicPortAction but instead of replacing a TargetPort, it adds one.
+// This is for the case where the service doesn't declare a TargetPort but instead relies on that
+// it defaults to the Port.
+type addSymbolicPortAction struct {
+	makePortSymbolicAction
+}
+
 func (m *addSymbolicPortAction) getPort(svc kates.Object, targetPort int32) (*kates.ServicePort, error) {
 	ports := svc.(*kates.Service).Spec.Ports
 	for i := range ports {
@@ -222,6 +228,8 @@ func (m *addSymbolicPortAction) undo(svc kates.Object) error {
 	p.TargetPort = intstr.IntOrString{}
 	return nil
 }
+
+// svcActions //////////////////////////////////////////////////////////////////
 
 type svcActions struct {
 	Version          string                  `json:"version"`
@@ -270,6 +278,13 @@ func (s *svcActions) String() string {
 func (s *svcActions) version() string {
 	return s.Version
 }
+
+// addTrafficAgentAction ///////////////////////////////////////////////////////
+
+const (
+	envPrefix        = "TEL_APP_"
+	telAppMountPoint = "/tel_app_mounts"
+)
 
 // addTrafficAgentAction is an action that adds a traffic-agent to the set of
 // containers in a pod template spec.
@@ -327,8 +342,6 @@ func (ata *addTrafficAgentAction) do(obj kates.Object) error {
 	})
 	return nil
 }
-
-const envPrefix = "TEL_APP_"
 
 func (ata *addTrafficAgentAction) agentEnvFrom(appEF []corev1.EnvFromSource) []corev1.EnvFromSource {
 	if ln := len(appEF); ln > 0 {
@@ -462,6 +475,8 @@ func (ata *addTrafficAgentAction) undo(dep kates.Object) error {
 	return nil
 }
 
+// hideContainerPortAction /////////////////////////////////////////////////////
+
 // A hideContainerPortAction will replace the symbolic name of a container port
 // with a generated name. It will perform the same replacement on all references
 // to that port from the probes of the container
@@ -538,6 +553,8 @@ func (hcp *hideContainerPortAction) undo(dep kates.Object) error {
 	swapPortName(cn, p, hcp.HiddenName, hcp.PortName)
 	return nil
 }
+
+// deploymentActions ///////////////////////////////////////////////////////////
 
 type deploymentActions struct {
 	Version                   string `json:"version"`
