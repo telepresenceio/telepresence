@@ -297,6 +297,10 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 	for _, svc := range svcs {
 		// For now, we only support intercepting one port on a given service.
 		ports := svcPortByName(svc, portName)
+		if len(ports) == 0 {
+			// this may happen when portName is specified but non of the ports match
+			continue
+		}
 		if len(ports) > 1 {
 			return nil, nil, nil, 0, fmt.Errorf(
 				"found matching service with multiple ports for deployment %s. Please specify the service port you want to intercept like so --port local:svcPortName", dep.Name)
@@ -553,27 +557,44 @@ func getAnnotation(obj kates.Object, data interface{}) (bool, error) {
 }
 
 func (ki *installer) undoDeploymentMods(c context.Context, dep *kates.Deployment) error {
-	var actions deploymentActions
-	ok, err := getAnnotation(dep, &actions)
-	if !ok {
+	referencedService, err := undoDeploymentMods(c, dep)
+	if err != nil {
 		return err
 	}
-
-	if svc := ki.findSvc(dep.Namespace, actions.ReferencedService); svc != nil {
+	if svc := ki.findSvc(dep.Namespace, referencedService); svc != nil {
 		if err = ki.undoServiceMods(c, svc); err != nil {
 			return err
 		}
 	}
-
-	if err = actions.undo(dep); err != nil {
-		return err
-	}
-	delete(dep.Annotations, annTelepresenceActions)
-	explainUndo(c, &actions, dep)
 	return ki.client.Update(c, dep, dep)
 }
 
+func undoDeploymentMods(c context.Context, dep *kates.Deployment) (string, error) {
+	var actions deploymentActions
+	ok, err := getAnnotation(dep, &actions)
+	if !ok {
+		return "", err
+	}
+
+	if err = actions.undo(dep); err != nil {
+		return "", err
+	}
+	delete(dep.Annotations, annTelepresenceActions)
+	if len(dep.Annotations) == 0 {
+		dep.Annotations = nil
+	}
+	explainUndo(c, &actions, dep)
+	return actions.ReferencedService, nil
+}
+
 func (ki *installer) undoServiceMods(c context.Context, svc *kates.Service) error {
+	if err := undoServiceMods(c, svc); err != nil {
+		return err
+	}
+	return ki.client.Update(c, svc, svc)
+}
+
+func undoServiceMods(c context.Context, svc *kates.Service) error {
 	var actions svcActions
 	ok, err := getAnnotation(svc, &actions)
 	if !ok {
@@ -583,8 +604,11 @@ func (ki *installer) undoServiceMods(c context.Context, svc *kates.Service) erro
 		return err
 	}
 	delete(svc.Annotations, annTelepresenceActions)
+	if len(svc.Annotations) == 0 {
+		svc.Annotations = nil
+	}
 	explainUndo(c, &actions, svc)
-	return ki.client.Update(c, svc, svc)
+	return nil
 }
 
 func addAgentToDeployment(
@@ -619,10 +643,21 @@ func addAgentToDeployment(
 		Number   uint16
 		Protocol corev1.Protocol
 	}
+
 	// Start by filling from the servicePort; if these are the zero values, that's OK.
-	containerPort.Name = servicePort.TargetPort.StrVal
-	containerPort.Number = uint16(servicePort.TargetPort.IntVal)
+	svcHasTargetPort := true
+	if servicePort.TargetPort.Type == intstr.Int {
+		if servicePort.TargetPort.IntVal == 0 {
+			containerPort.Number = uint16(servicePort.Port)
+			svcHasTargetPort = false
+		} else {
+			containerPort.Number = uint16(servicePort.TargetPort.IntVal)
+		}
+	} else {
+		containerPort.Name = servicePort.TargetPort.StrVal
+	}
 	containerPort.Protocol = servicePort.Protocol
+
 	// Now fill from the Deployment's containerPort.
 	usedContainerName := false
 	if containerPortIndex >= 0 {
@@ -664,13 +699,21 @@ func addAgentToDeployment(
 	var serviceMod *svcActions
 	if servicePort.TargetPort.Type == intstr.Int {
 		// Change the port number that the Service refers to.
-		serviceMod = &svcActions{
-			Version: version,
-			MakePortSymbolic: &makePortSymbolicAction{
+		serviceMod = &svcActions{Version: version}
+		if svcHasTargetPort {
+			serviceMod.MakePortSymbolic = &makePortSymbolicAction{
 				PortName:     servicePort.Name,
 				TargetPort:   containerPort.Number,
 				SymbolicName: containerPort.Name,
-			},
+			}
+		} else {
+			serviceMod.AddSymbolicPort = &addSymbolicPortAction{
+				makePortSymbolicAction{
+					PortName:     servicePort.Name,
+					TargetPort:   containerPort.Number,
+					SymbolicName: containerPort.Name,
+				},
+			}
 		}
 		// Since we are updating the service to use the containerPort.Name
 		// if that value came from the container, then we need to hide it

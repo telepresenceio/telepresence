@@ -125,6 +125,13 @@ type makePortSymbolicAction struct {
 	SymbolicName string
 }
 
+// An addSymbolicPortAction is like makeSymbolicPortAction but instead of replacing a TargetPort, it adds one.
+// This is for the case where the service doesn't declare a TargetPort but instead relies on that
+// it defaults to the Port.
+type addSymbolicPortAction struct {
+	makePortSymbolicAction
+}
+
 func (m *makePortSymbolicAction) portName(port string) string {
 	if m.PortName == "" {
 		return port
@@ -177,14 +184,57 @@ func (m *makePortSymbolicAction) undo(svc kates.Object) error {
 	return nil
 }
 
+func (m *addSymbolicPortAction) getPort(svc kates.Object, targetPort int32) (*kates.ServicePort, error) {
+	ports := svc.(*kates.Service).Spec.Ports
+	for i := range ports {
+		p := &ports[i]
+		if p.TargetPort.Type == intstr.Int && p.TargetPort.IntVal == 0 && p.Port == targetPort {
+			// p.TargetPort is not set, so default to p.Port
+			return p, nil
+		}
+	}
+	return nil, fmt.Errorf("unable to find port %d in Service %s", targetPort, svc.GetName())
+}
+
+func (m *addSymbolicPortAction) explainDo(_ kates.Object, out io.Writer) {
+	fmt.Fprintf(out, "add targetPort to service port %s symbolic with name %q",
+		m.portName(strconv.Itoa(int(m.TargetPort))), m.SymbolicName)
+}
+
+func (m *addSymbolicPortAction) do(svc kates.Object) error {
+	p, err := m.getPort(svc, int32(m.TargetPort))
+	if err != nil {
+		return err
+	}
+	p.TargetPort = intstr.FromString(m.SymbolicName)
+	return nil
+}
+
+func (m *addSymbolicPortAction) explainUndo(_ kates.Object, out io.Writer) {
+	fmt.Fprintf(out, "remove symbolic service port %s", m.portName(m.SymbolicName))
+}
+
+func (m *addSymbolicPortAction) undo(svc kates.Object) error {
+	p, err := m.makePortSymbolicAction.getPort(svc, intstr.FromString(m.SymbolicName))
+	if err != nil {
+		return err
+	}
+	p.TargetPort = intstr.IntOrString{}
+	return nil
+}
+
 type svcActions struct {
 	Version          string                  `json:"version"`
 	MakePortSymbolic *makePortSymbolicAction `json:"make_port_symbolic,omitempty"`
+	AddSymbolicPort  *addSymbolicPortAction  `json:"add_symbolic_port,omitempty"`
 }
 
 func (s *svcActions) actions() (actions []action) {
 	if s.MakePortSymbolic != nil {
 		actions = append(actions, s.MakePortSymbolic)
+	}
+	if s.AddSymbolicPort != nil {
+		actions = append(actions, s.AddSymbolicPort)
 	}
 	return actions
 }

@@ -351,6 +351,27 @@ func TestAddAgentToDeployment(t *testing.T) {
 
 			assert.Equal(t, expectedDep, actualDep)
 			assert.Equal(t, expectedSvc, actualSvc)
+
+			expectedDep = tc.InputDeployment.DeepCopy()
+			sanitizeDeployment(expectedDep)
+
+			expectedSvc = tc.InputService.DeepCopy()
+			sanitizeService(expectedSvc)
+
+			_, actualErr = undoDeploymentMods(ctx, actualDep)
+			if !assert.NoError(t, actualErr) {
+				return
+			}
+			sanitizeDeployment(actualDep)
+
+			actualErr = undoServiceMods(ctx, actualSvc)
+			if !assert.NoError(t, actualErr) {
+				return
+			}
+			sanitizeDeployment(actualDep)
+
+			assert.Equal(t, expectedDep, actualDep)
+			assert.Equal(t, expectedSvc, actualSvc)
 		})
 	}
 }
