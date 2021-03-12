@@ -42,7 +42,7 @@ login() {
 
 # Verify that the user logged out and was logged in prior.
 verify_logout() {
-    # We care about the error here, so we redirect stderr to stdout 
+    # We care about the error here, so we redirect stderr to stdout
     local output=`$TELEPRESENCE logout 2>&1`
     if [[ $output != *"not logged in"* ]]; then
         echo "Login Failed in step: ${STEP}"
@@ -58,7 +58,7 @@ has_preview_url() {
             echo "Preview URL wasn't present and it should be. Failed step: ${STEP}"
             exit 1
         fi
-    else 
+    else
         if [[ "$output" == *"Preview URL"* ]]; then
             echo "Preview URL was present and it shouldn't be. Failed step: ${STEP}"
             exit 1
@@ -74,7 +74,7 @@ has_intercept_id() {
             echo "Intercept id wasn't present and it should be. Failed step: ${STEP}"
             exit 1
         fi
-    else 
+    else
         if [[ "$output" == *"x-telepresence-intercept-id"* ]]; then
             echo "Intercept id was present and it shouldn't be. Failed step: ${STEP}"
             exit 1
@@ -115,11 +115,11 @@ is_prop_traffic_agent() {
     if [[ -z $image ]]; then
         echo "There is no traffic-agent sidecar and there should be"
         exit 1
-    fi 
+    fi
 
     if $present; then
         local image_present=`echo $image | grep 'ambassador-telepresence-agent:'`
-        if [[ -z $image_present ]]; then 
+        if [[ -z $image_present ]]; then
             echo "Proprietary traffic agent image wasn't used and it should be"
             exit 1
         elif [[ ! -z $TELEPRESENCE_AGENT_IMAGE && $image_present != *$TELEPRESENCE_AGENT_IMAGE ]]; then
@@ -150,20 +150,20 @@ wait_for_ambassador() {
 
 # Clones amb-code-quickstart-app and applies k8s manifests
 setup_demo_app() {
-    echo "Cloning amb-code-quickstart-app to /tmp/amb-code-quickstart-app" 
+    echo "Cloning amb-code-quickstart-app to /tmp/amb-code-quickstart-app"
     git clone git@github.com:datawire/amb-code-quickstart-app.git /tmp/amb-code-quickstart-app > $output_location 2>&1
     kubectl apply -f /tmp/amb-code-quickstart-app/k8s-config/1-aes-crds.yml > $output_location
     kubectl wait --for condition=established --timeout=90s crd -lproduct=aes > $output_location
-    kubectl apply -f /tmp/amb-code-quickstart-app/k8s-config/2-aes.yml > $output_location 
+    kubectl apply -f /tmp/amb-code-quickstart-app/k8s-config/2-aes.yml > $output_location
     kubectl wait -n ambassador deploy -lproduct=aes --for condition=available --timeout=90s > $output_location
     kubectl apply -f /tmp/amb-code-quickstart-app/k8s-config/edgy-corp-web-app.yaml > $output_location
     kubectl wait -n default deploy dataprocessingnodeservice --for condition=available --timeout=90s > $output_location
 }
 
-# Deletes amb-code-quickstart-app *only* if it was created by this script 
+# Deletes amb-code-quickstart-app *only* if it was created by this script
 cleanup_demo_app() {
     kubectl delete -f /tmp/amb-code-quickstart-app/k8s-config/edgy-corp-web-app.yaml > $output_location
-    kubectl delete -f /tmp/amb-code-quickstart-app/k8s-config/2-aes.yml > $output_location 
+    kubectl delete -f /tmp/amb-code-quickstart-app/k8s-config/2-aes.yml > $output_location
     kubectl delete -f /tmp/amb-code-quickstart-app/k8s-config/1-aes-crds.yml > $output_location
     rm -rf /tmp/amb-code-quickstart-app
 }
@@ -186,7 +186,7 @@ else
     output_location=( "/dev/null" )
 fi
 
-# DEBUG 2 provides all the same as 1 + curl ouput and prints out commands 
+# DEBUG 2 provides all the same as 1 + curl ouput and prints out commands
 # before they are ran
 if [ $DEBUG == 2 ]; then
     curl_opts=( )
@@ -212,24 +212,24 @@ fi
 echo "Using kubectl: "
 which kubectl
 kubectl version
-echo 
+echo
 
 echo "Using kubeconfig: "
 echo "${KUBECONFIG}"
-echo 
+echo
 
 echo "Using context: "
 kubectl config current-context
 echo
 
 kubectl get svc -n ambassador ambassador > $output_location 2>&1
-if [[ "$?" == 0 ]]; then 
+if [[ "$?" == 0 ]]; then
     echo "Ambassador is installed, so assuming demo apps are already present"
 else
     echo "Will setup Ambassador + demo app"
     INSTALL_DEMO=True
     read -p "Would you like it to be cleaned up if all tests pass? (y/n)?" choice
-    case "$choice" in 
+    case "$choice" in
         y|Y ) CLEANUP_DEMO=True;;
         * ) ;;
     esac
@@ -237,16 +237,16 @@ fi
 
 
 read -p "Is this configuration okay (y/n)?" choice
-case "$choice" in 
+case "$choice" in
     y|Y ) echo ":)";;
     n|N ) echo "Exiting..."; exit 1;;
     * ) echo "invalid"; exit 1;;
-esac 
+esac
 
 echo "Okay one more thing. Please login to System A in the window that pops up"
 $TELEPRESENCE login > $output_location
 
-# For now this is just telepresence, we should probably 
+# For now this is just telepresence, we should probably
 # get a new cluster eventually to really start from scratch
 $TELEPRESENCE uninstall --everything > $output_location
 if [[ -n "$INSTALL_DEMO" ]]; then
@@ -274,7 +274,7 @@ finish_step
 ###########################################################
 
 curl "${curl_opts[@]}" localhost:3000 > $output_location
-if [[ "$?" != 0 ]]; then 
+if [[ "$?" != 0 ]]; then
     echo "Ensure you have a local version of dataprocessingnodeservice running on port 3000"
     exit
 fi
