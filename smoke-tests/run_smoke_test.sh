@@ -27,6 +27,7 @@ verify_output_empty() {
     fi
     if [ $operator "$output" ]; then
         echo "Failed in step: ${STEP}"
+        echo "> $msg"
         exit 1
     fi
 }
