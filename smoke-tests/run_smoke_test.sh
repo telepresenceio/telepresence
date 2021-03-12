@@ -227,10 +227,10 @@ if [[ "$?" == 0 ]]; then
     echo "Ambassador is installed, so assuming demo apps are already present"
 else
     echo "Will setup Ambassador + demo app"
-    INSTALL_DEMO=True
+    INSTALL_DEMO=true
     read -p "Would you like it to be cleaned up if all tests pass? (y/n)?" choice
     case "$choice" in
-        y|Y ) CLEANUP_DEMO=True;;
+        y|Y ) CLEANUP_DEMO=true;;
         * ) ;;
     esac
 fi
@@ -257,7 +257,7 @@ wait_for_ambassador
 echo $AMBASSADOR_SERVICE_IP
 # Verify that service is running in the cluster
 output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'green'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 STEP=1
 ###########################################################
@@ -265,7 +265,7 @@ STEP=1
 ###########################################################
 
 output=`$TELEPRESENCE list | grep 'ready to intercept'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 finish_step
 
@@ -285,19 +285,19 @@ fi
 $TELEPRESENCE intercept dataprocessingnodeservice -p 3000 > $output_location
 sleep 1
 
-is_prop_traffic_agent False
+is_prop_traffic_agent false
 
 output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 $TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --preview-url=false --mechanism=tcp > $output_location
 sleep 1
 
-is_prop_traffic_agent False
+is_prop_traffic_agent false
 
 output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 verify_logout
 
 finish_step
@@ -307,7 +307,7 @@ finish_step
 ###############################################
 
 output=`$TELEPRESENCE list | grep 'dataprocessingnodeservice: intercepted'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 finish_step
 
@@ -317,7 +317,7 @@ finish_step
 
 $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 output=`$TELEPRESENCE list | grep 'dataprocessingnodeservice: intercepted'`
-verify_output_empty "${output}" True
+verify_output_empty "${output}" true
 
 finish_step
 
@@ -346,17 +346,17 @@ fi
 
 $TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --preview-url=true --http-match=all <<<$'ambassador.ambassador\n80\nN\n' > $output_location
 sleep 1
-is_prop_traffic_agent True
+is_prop_traffic_agent true
 
 # Verify intercept works
 output=`$TELEPRESENCE list | grep 'dataprocessingnodeservice: intercepted'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 # Verify user can logout without error
 # Find a better way to determine if a user is logged in
 output=`$TELEPRESENCE logout`
-verify_output_empty "${output}" True
+verify_output_empty "${output}" true
 
 finish_step
 
@@ -367,8 +367,8 @@ finish_step
 login
 output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 <<<$'ambassador.ambassador\n80\nN\n'`
 sleep 1
-has_preview_url True
-is_prop_traffic_agent True
+has_preview_url true
+is_prop_traffic_agent true
 
 finish_step
 
@@ -376,17 +376,17 @@ finish_step
 #### Step 8 - Verify selective preview url works ####
 #####################################################
 
-has_intercept_id True
-has_preview_url True
+has_intercept_id true
+has_preview_url true
 get_intercept_id
 output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
-verify_output_empty "${output}" True
+verify_output_empty "${output}" true
 
 # Gotta figure out how to get a cookie for this to work
 #output=`curl $previewurl | grep 'blue'`
-#verify_output_empty "${output}" False
+#verify_output_empty "${output}" false
 output=`curl "${curl_opts[@]}" -H "x-telepresence-intercept-id: ${interceptid}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 finish_step
@@ -397,10 +397,10 @@ finish_step
 
 output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --preview-url=false`
 sleep 1
-has_intercept_id True
-has_preview_url False
+has_intercept_id true
+has_preview_url false
 output=`curl "${curl_opts[@]}" -H "x-telepresence-intercept-id: ${interceptid}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 finish_step
@@ -411,10 +411,10 @@ finish_step
 
 output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --http-match=all <<<$'ambassador.ambassador\n80\nN\n'`
 sleep 1
-has_intercept_id False
-has_preview_url True
+has_intercept_id false
+has_preview_url true
 output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 finish_step
@@ -425,10 +425,10 @@ finish_step
 
 output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --http-match=all --preview-url=false`
 sleep 1
-has_intercept_id False
-has_preview_url False
+has_intercept_id false
+has_preview_url false
 output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 finish_step
@@ -451,7 +451,7 @@ echo "Installing an old version of telepresence to /tmp/old_telepresence to veri
 sudo curl "${curl_opts[@]}" -fL https://app.getambassador.io/download/tel2/$os/amd64/0.7.10/telepresence -o /tmp/old_telepresence
 sudo chmod +x /tmp/old_telepresence
 output=`/tmp/old_telepresence version | grep 'An update of telepresence from version'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 echo "Removing old version of telepresence: /tmp/old_telepresence"
 sudo rm /tmp/old_telepresence
 
