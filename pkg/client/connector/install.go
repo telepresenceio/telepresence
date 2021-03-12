@@ -298,7 +298,7 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 		// For now, we only support intercepting one port on a given service.
 		ports := svcPortByName(svc, portName)
 		if len(ports) == 0 {
-			// this may happen when portName is specified but non of the ports match
+			// this may happen when portName is specified but none of the ports match
 			continue
 		}
 		if len(ports) > 1 {
