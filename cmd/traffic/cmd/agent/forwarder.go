@@ -108,7 +108,7 @@ func (f *Forwarder) SetTarget(targetHost string, targetPort int32) {
 	}
 }
 
-func (f *Forwarder) ForwardConn(src *net.TCPConn) {
+func (f *Forwarder) ForwardConn(clientConn *net.TCPConn) {
 	f.mu.Lock()
 	ctx := f.tCtx
 	targetHost := f.targetHost
@@ -121,35 +121,35 @@ func (f *Forwarder) ForwardConn(src *net.TCPConn) {
 		return
 	}
 
-	ctx = dlog.WithField(ctx, "src", src.RemoteAddr().String())
-	ctx = dlog.WithField(ctx, "dst", targetAddr.String())
+	ctx = dlog.WithField(ctx, "client", clientConn.RemoteAddr().String())
+	ctx = dlog.WithField(ctx, "target", targetAddr.String())
 
 	dlog.Debugf(ctx, "Forwarding...")
 	defer dlog.Debugf(ctx, "Done forwarding")
 
-	defer src.Close()
+	defer clientConn.Close()
 
-	dst, err := net.DialTCP("tcp", nil, targetAddr)
+	targetConn, err := net.DialTCP("tcp", nil, targetAddr)
 	if err != nil {
 		dlog.Infof(ctx, "Error on dial: %+v", err)
 		return
 	}
-	defer dst.Close()
+	defer targetConn.Close()
 
 	done := make(chan struct{})
 
 	go func() {
-		if _, err := io.Copy(dst, src); err != nil {
-			dlog.Debugf(ctx, "Error src->dst: %+v", err)
+		if _, err := io.Copy(targetConn, clientConn); err != nil {
+			dlog.Debugf(ctx, "Error clientConn->targetConn: %+v", err)
 		}
-		_ = dst.CloseWrite()
+		_ = targetConn.CloseWrite()
 		done <- struct{}{}
 	}()
 	go func() {
-		if _, err := io.Copy(src, dst); err != nil {
-			dlog.Debugf(ctx, "Error dst->src: %+v", err)
+		if _, err := io.Copy(clientConn, targetConn); err != nil {
+			dlog.Debugf(ctx, "Error targetConn->clientConn: %+v", err)
 		}
-		_ = src.CloseWrite()
+		_ = clientConn.CloseWrite()
 		done <- struct{}{}
 	}()
 

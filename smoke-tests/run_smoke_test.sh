@@ -27,6 +27,7 @@ verify_output_empty() {
     fi
     if [ $operator "$output" ]; then
         echo "Failed in step: ${STEP}"
+        echo "> $msg"
         exit 1
     fi
 }
@@ -42,7 +43,7 @@ login() {
 
 # Verify that the user logged out and was logged in prior.
 verify_logout() {
-    # We care about the error here, so we redirect stderr to stdout 
+    # We care about the error here, so we redirect stderr to stdout
     local output=`$TELEPRESENCE logout 2>&1`
     if [[ $output != *"not logged in"* ]]; then
         echo "Login Failed in step: ${STEP}"
@@ -58,7 +59,7 @@ has_preview_url() {
             echo "Preview URL wasn't present and it should be. Failed step: ${STEP}"
             exit 1
         fi
-    else 
+    else
         if [[ "$output" == *"Preview URL"* ]]; then
             echo "Preview URL was present and it shouldn't be. Failed step: ${STEP}"
             exit 1
@@ -74,7 +75,7 @@ has_intercept_id() {
             echo "Intercept id wasn't present and it should be. Failed step: ${STEP}"
             exit 1
         fi
-    else 
+    else
         if [[ "$output" == *"x-telepresence-intercept-id"* ]]; then
             echo "Intercept id was present and it shouldn't be. Failed step: ${STEP}"
             exit 1
@@ -115,11 +116,11 @@ is_prop_traffic_agent() {
     if [[ -z $image ]]; then
         echo "There is no traffic-agent sidecar and there should be"
         exit 1
-    fi 
+    fi
 
     if $present; then
         local image_present=`echo $image | grep 'ambassador-telepresence-agent:'`
-        if [[ -z $image_present ]]; then 
+        if [[ -z $image_present ]]; then
             echo "Proprietary traffic agent image wasn't used and it should be"
             exit 1
         elif [[ ! -z $TELEPRESENCE_AGENT_IMAGE && $image_present != *$TELEPRESENCE_AGENT_IMAGE ]]; then
@@ -150,20 +151,20 @@ wait_for_ambassador() {
 
 # Clones amb-code-quickstart-app and applies k8s manifests
 setup_demo_app() {
-    echo "Cloning amb-code-quickstart-app to /tmp/amb-code-quickstart-app" 
+    echo "Cloning amb-code-quickstart-app to /tmp/amb-code-quickstart-app"
     git clone git@github.com:datawire/amb-code-quickstart-app.git /tmp/amb-code-quickstart-app > $output_location 2>&1
     kubectl apply -f /tmp/amb-code-quickstart-app/k8s-config/1-aes-crds.yml > $output_location
     kubectl wait --for condition=established --timeout=90s crd -lproduct=aes > $output_location
-    kubectl apply -f /tmp/amb-code-quickstart-app/k8s-config/2-aes.yml > $output_location 
+    kubectl apply -f /tmp/amb-code-quickstart-app/k8s-config/2-aes.yml > $output_location
     kubectl wait -n ambassador deploy -lproduct=aes --for condition=available --timeout=90s > $output_location
     kubectl apply -f /tmp/amb-code-quickstart-app/k8s-config/edgy-corp-web-app.yaml > $output_location
     kubectl wait -n default deploy dataprocessingnodeservice --for condition=available --timeout=90s > $output_location
 }
 
-# Deletes amb-code-quickstart-app *only* if it was created by this script 
+# Deletes amb-code-quickstart-app *only* if it was created by this script
 cleanup_demo_app() {
     kubectl delete -f /tmp/amb-code-quickstart-app/k8s-config/edgy-corp-web-app.yaml > $output_location
-    kubectl delete -f /tmp/amb-code-quickstart-app/k8s-config/2-aes.yml > $output_location 
+    kubectl delete -f /tmp/amb-code-quickstart-app/k8s-config/2-aes.yml > $output_location
     kubectl delete -f /tmp/amb-code-quickstart-app/k8s-config/1-aes-crds.yml > $output_location
     rm -rf /tmp/amb-code-quickstart-app
 }
@@ -186,7 +187,7 @@ else
     output_location=( "/dev/null" )
 fi
 
-# DEBUG 2 provides all the same as 1 + curl ouput and prints out commands 
+# DEBUG 2 provides all the same as 1 + curl ouput and prints out commands
 # before they are ran
 if [ $DEBUG == 2 ]; then
     curl_opts=( )
@@ -212,41 +213,41 @@ fi
 echo "Using kubectl: "
 which kubectl
 kubectl version
-echo 
+echo
 
 echo "Using kubeconfig: "
 echo "${KUBECONFIG}"
-echo 
+echo
 
 echo "Using context: "
 kubectl config current-context
 echo
 
 kubectl get svc -n ambassador ambassador > $output_location 2>&1
-if [[ "$?" == 0 ]]; then 
+if [[ "$?" == 0 ]]; then
     echo "Ambassador is installed, so assuming demo apps are already present"
 else
     echo "Will setup Ambassador + demo app"
-    INSTALL_DEMO=True
+    INSTALL_DEMO=true
     read -p "Would you like it to be cleaned up if all tests pass? (y/n)?" choice
-    case "$choice" in 
-        y|Y ) CLEANUP_DEMO=True;;
+    case "$choice" in
+        y|Y ) CLEANUP_DEMO=true;;
         * ) ;;
     esac
 fi
 
 
 read -p "Is this configuration okay (y/n)?" choice
-case "$choice" in 
+case "$choice" in
     y|Y ) echo ":)";;
     n|N ) echo "Exiting..."; exit 1;;
     * ) echo "invalid"; exit 1;;
-esac 
+esac
 
 echo "Okay one more thing. Please login to System A in the window that pops up"
 $TELEPRESENCE login > $output_location
 
-# For now this is just telepresence, we should probably 
+# For now this is just telepresence, we should probably
 # get a new cluster eventually to really start from scratch
 $TELEPRESENCE uninstall --everything > $output_location
 if [[ -n "$INSTALL_DEMO" ]]; then
@@ -257,7 +258,7 @@ wait_for_ambassador
 echo $AMBASSADOR_SERVICE_IP
 # Verify that service is running in the cluster
 output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'green'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 STEP=1
 ###########################################################
@@ -265,7 +266,7 @@ STEP=1
 ###########################################################
 
 output=`$TELEPRESENCE list | grep 'ready to intercept'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 finish_step
 
@@ -274,7 +275,7 @@ finish_step
 ###########################################################
 
 curl "${curl_opts[@]}" localhost:3000 > $output_location
-if [[ "$?" != 0 ]]; then 
+if [[ "$?" != 0 ]]; then
     echo "Ensure you have a local version of dataprocessingnodeservice running on port 3000"
     exit
 fi
@@ -285,19 +286,19 @@ fi
 $TELEPRESENCE intercept dataprocessingnodeservice -p 3000 > $output_location
 sleep 1
 
-is_prop_traffic_agent False
+is_prop_traffic_agent false
 
 output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 $TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --preview-url=false --mechanism=tcp > $output_location
 sleep 1
 
-is_prop_traffic_agent False
+is_prop_traffic_agent false
 
 output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 verify_logout
 
 finish_step
@@ -307,7 +308,7 @@ finish_step
 ###############################################
 
 output=`$TELEPRESENCE list | grep 'dataprocessingnodeservice: intercepted'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 finish_step
 
@@ -317,7 +318,7 @@ finish_step
 
 $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 output=`$TELEPRESENCE list | grep 'dataprocessingnodeservice: intercepted'`
-verify_output_empty "${output}" True
+verify_output_empty "${output}" true
 
 finish_step
 
@@ -346,17 +347,17 @@ fi
 
 $TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --preview-url=true --http-match=all <<<$'ambassador.ambassador\n80\nN\n' > $output_location
 sleep 1
-is_prop_traffic_agent True
+is_prop_traffic_agent true
 
 # Verify intercept works
 output=`$TELEPRESENCE list | grep 'dataprocessingnodeservice: intercepted'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 # Verify user can logout without error
 # Find a better way to determine if a user is logged in
 output=`$TELEPRESENCE logout`
-verify_output_empty "${output}" True
+verify_output_empty "${output}" true
 
 finish_step
 
@@ -367,8 +368,8 @@ finish_step
 login
 output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 <<<$'ambassador.ambassador\n80\nN\n'`
 sleep 1
-has_preview_url True
-is_prop_traffic_agent True
+has_preview_url true
+is_prop_traffic_agent true
 
 finish_step
 
@@ -376,17 +377,17 @@ finish_step
 #### Step 8 - Verify selective preview url works ####
 #####################################################
 
-has_intercept_id True
-has_preview_url True
+has_intercept_id true
+has_preview_url true
 get_intercept_id
 output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
-verify_output_empty "${output}" True
+verify_output_empty "${output}" true
 
 # Gotta figure out how to get a cookie for this to work
 #output=`curl $previewurl | grep 'blue'`
-#verify_output_empty "${output}" False
+#verify_output_empty "${output}" false
 output=`curl "${curl_opts[@]}" -H "x-telepresence-intercept-id: ${interceptid}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 finish_step
@@ -397,10 +398,10 @@ finish_step
 
 output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --preview-url=false`
 sleep 1
-has_intercept_id True
-has_preview_url False
+has_intercept_id true
+has_preview_url false
 output=`curl "${curl_opts[@]}" -H "x-telepresence-intercept-id: ${interceptid}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 finish_step
@@ -411,10 +412,10 @@ finish_step
 
 output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --http-match=all <<<$'ambassador.ambassador\n80\nN\n'`
 sleep 1
-has_intercept_id False
-has_preview_url True
+has_intercept_id false
+has_preview_url true
 output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 finish_step
@@ -425,10 +426,10 @@ finish_step
 
 output=`$TELEPRESENCE intercept dataprocessingnodeservice --port 3000 --http-match=all --preview-url=false`
 sleep 1
-has_intercept_id False
-has_preview_url False
+has_intercept_id false
+has_preview_url false
 output=`curl "${curl_opts[@]}" $AMBASSADOR_SERVICE_IP | grep 'blue'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 
 $TELEPRESENCE leave dataprocessingnodeservice > $output_location
 finish_step
@@ -451,7 +452,7 @@ echo "Installing an old version of telepresence to /tmp/old_telepresence to veri
 sudo curl "${curl_opts[@]}" -fL https://app.getambassador.io/download/tel2/$os/amd64/0.7.10/telepresence -o /tmp/old_telepresence
 sudo chmod +x /tmp/old_telepresence
 output=`/tmp/old_telepresence version | grep 'An update of telepresence from version'`
-verify_output_empty "${output}" False
+verify_output_empty "${output}" false
 echo "Removing old version of telepresence: /tmp/old_telepresence"
 sudo rm /tmp/old_telepresence
 
