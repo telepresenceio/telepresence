@@ -382,7 +382,31 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 	return service, sPort, cn, cPortIndex, nil
 }
 
-var agentNotFound = errors.New("no such agent")
+// Finds the Referenced Service in deployment's annotations
+func (ki *installer) getSvcFromDepAnnotation(c context.Context, namespace, name string) (*kates.Service, error) {
+	dep, err := ki.findDeployment(c, namespace, name)
+	if err != nil {
+		return nil, err
+	}
+	var actions deploymentActions
+	annotationsFound, err := getAnnotation(dep, &actions)
+	if err != nil {
+		return nil, err
+	}
+	if !annotationsFound {
+		return nil, fmt.Errorf("No annotations found on deployment: %s", dep.Name)
+	}
+	svcName := actions.ReferencedService
+	if svcName == "" {
+		return nil, fmt.Errorf("No ReferencedService found on deployment: %s", dep.Name)
+	}
+
+	svc := ki.findSvc(namespace, svcName)
+	if svc == nil {
+		return nil, fmt.Errorf("Deployment %s referenced unfound service: %s", dep.Name, svcName)
+	}
+	return svc, nil
+}
 
 // Determines if the port associated with a past-intercepted deployment has
 // changed
@@ -404,6 +428,11 @@ func portChanged(c context.Context, dep *kates.Deployment, portName string) (boo
 	return false, nil
 }
 
+var agentNotFound = errors.New("no such agent")
+
+// This does a lot of things but at a high level it ensures that the traffic agent
+// is installed alongside the proper deployment.  In doing that, it also ensures that
+// the deployment is referenced by a service.
 func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, agentImageName string) error {
 	dep, err := ki.findDeployment(c, namespace, name)
 	if err != nil {
@@ -444,7 +473,7 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, a
 		// the deployment and fallthrough to the no agent case
 		dep, err = ki.findDeployment(c, namespace, name)
 		if err != nil {
-			return nil
+			return err
 		}
 		fallthrough
 	case agentContainer == nil:

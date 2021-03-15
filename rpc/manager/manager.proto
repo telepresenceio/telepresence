@@ -90,6 +90,9 @@ message InterceptSpec {
 
   // Path to where the intercepted volumes were mounted locally
   string mount_point = 11;
+
+  // .uid.metadata of service associated with intercept
+  string service_uid = 12;
 }
 
 enum InterceptDispositionType {
