@@ -124,7 +124,6 @@ enum InterceptError {
   FAILED_TO_REMOVE = 11;
   NOT_FOUND = 12;
   MOUNT_POINT_BUSY = 13;
-  REFERENCED_SERVICE_NOT_FOUND = 14;
 }
 
 message ListRequest {
@@ -167,4 +166,7 @@ message InterceptResult {
 
   // The environment of the app
   map<string,string> environment = 4;
+
+  // The service uid associated with the deployment intercepted
+  string service_uid = 5;
 }

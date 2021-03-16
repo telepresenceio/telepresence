@@ -382,28 +382,24 @@ func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Serv
 	return service, sPort, cn, cPortIndex, nil
 }
 
-// Finds the Referenced Service in deployment's annotations
-func (ki *installer) getSvcFromDepAnnotation(c context.Context, namespace, name string) (*kates.Service, error) {
-	dep, err := ki.findDeployment(c, namespace, name)
-	if err != nil {
-		return nil, err
-	}
+// Finds the Referenced Service in a deployment's annotations
+func (ki *installer) getSvcFromDepAnnotation(c context.Context, dep *kates.Deployment) (*kates.Service, error) {
 	var actions deploymentActions
 	annotationsFound, err := getAnnotation(dep, &actions)
 	if err != nil {
 		return nil, err
 	}
 	if !annotationsFound {
-		return nil, fmt.Errorf("No annotations found on deployment: %s", dep.Name)
+		return nil, fmt.Errorf("No annotations found on deployment: %s.%s", dep.Name, dep.Namespace)
 	}
 	svcName := actions.ReferencedService
 	if svcName == "" {
-		return nil, fmt.Errorf("No ReferencedService found on deployment: %s", dep.Name)
+		return nil, fmt.Errorf("No ReferencedService found on deployment: %s.%s", dep.Name, dep.Namespace)
 	}
 
-	svc := ki.findSvc(namespace, svcName)
+	svc := ki.findSvc(dep.Namespace, svcName)
 	if svc == nil {
-		return nil, fmt.Errorf("Deployment %s referenced unfound service: %s", dep.Name, svcName)
+		return nil, fmt.Errorf("Deployment %s.%s referenced unfound service: %s", dep.Name, dep.Namespace, svcName)
 	}
 	return svc, nil
 }
@@ -432,14 +428,15 @@ var agentNotFound = errors.New("no such agent")
 
 // This does a lot of things but at a high level it ensures that the traffic agent
 // is installed alongside the proper deployment.  In doing that, it also ensures that
-// the deployment is referenced by a service.
-func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, agentImageName string) error {
+// the deployment is referenced by a service. Lastly, it returns the service UID
+// associated with the deployment since this is where that correlation is made.
+func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, agentImageName string) (string, error) {
 	dep, err := ki.findDeployment(c, namespace, name)
 	if err != nil {
 		if errors2.IsNotFound(err) {
 			err = agentNotFound
 		}
-		return err
+		return "", err
 	}
 	var agentContainer *kates.Container
 	for i := range dep.Spec.Template.Spec.Containers {
@@ -452,7 +449,7 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, a
 
 	svcPortChanged, err := portChanged(c, dep, portName)
 	if err != nil {
-		return err
+		return "", err
 	}
 	var svc *kates.Service
 
@@ -463,17 +460,17 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, a
 		// Remove deployment+svc modifications, as well as traffic-agent since
 		// the port is vital in configuring all of those
 		if err = ki.undoDeploymentMods(c, dep); err != nil {
-			return err
+			return "", err
 		}
 
 		if err = ki.waitForApply(c, namespace, name, dep); err != nil {
-			return err
+			return "", err
 		}
 		// Since the agent has been removed, we find the updated version of
 		// the deployment and fallthrough to the no agent case
 		dep, err = ki.findDeployment(c, namespace, name)
 		if err != nil {
-			return err
+			return "", err
 		}
 		fallthrough
 	case agentContainer == nil:
@@ -485,21 +482,21 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, a
 			if portName != "" {
 				errMsg += fmt.Sprintf(" and a port named %s", portName)
 			}
-			return errors.New(errMsg)
+			return "", errors.New(errMsg)
 		}
 		var err error
 		dep, svc, err = addAgentToDeployment(c, portName, agentImageName, dep, matchingSvcs)
 		if err != nil {
-			return err
+			return "", err
 		}
 	case agentContainer.Image != agentImageName:
 		var actions deploymentActions
 		ok, err := getAnnotation(dep, &actions)
 		if err != nil {
-			return err
+			return "", err
 		} else if !ok {
 			// This can only happen if someone manually tampered with the annTelepresenceActions annotation
-			return fmt.Errorf("expected %q annotation not found in %s.%s", annTelepresenceActions, name, namespace)
+			return "", fmt.Errorf("expected %q annotation not found in %s.%s", annTelepresenceActions, name, namespace)
 		}
 
 		dlog.Debugf(c, "Updating agent for deployment %s.%s", name, namespace)
@@ -513,14 +510,25 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, a
 	}
 
 	if err := ki.client.Update(c, dep, dep); err != nil {
-		return err
+		return "", err
 	}
 	if svc != nil {
 		if err := ki.client.Update(c, svc, svc); err != nil {
-			return err
+			return "", err
+		}
+	} else {
+		// If the service is still nil, that's because an agent already exists that we can reuse.
+		// So we get the service from the deployments annotation so that we can extract the UID.
+		svc, err = ki.getSvcFromDepAnnotation(c, dep)
+		if err != nil {
+			return "", err
 		}
 	}
-	return ki.waitForApply(c, namespace, name, dep)
+
+	if err := ki.waitForApply(c, namespace, name, dep); err != nil {
+		return "", err
+	}
+	return string(svc.GetUID()), nil
 }
 
 func (ki *installer) waitForApply(c context.Context, namespace, name string, dep *kates.Deployment) error {

@@ -191,17 +191,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 		return result, nil
 	}
 
-	// Once we know the agent has been added, we get the service from the
-	// deployment's annotation and add its UID to the InterceptSpec.
-	svc, err := tm.getSvcFromDepAnnotation(c, spec.Namespace, spec.Agent)
-	if err != nil {
-		return &rpc.InterceptResult{
-			InterceptInfo: &manager.InterceptInfo{Spec: spec},
-			Error:         rpc.InterceptError_REFERENCED_SERVICE_NOT_FOUND,
-			ErrorText:     err.Error(),
-		}, nil
-	}
-	spec.ServiceUid = string(svc.GetUID())
+	spec.ServiceUid = result.ServiceUid
 
 	deleteMount := false
 	if ir.MountPoint != "" {
@@ -281,7 +271,8 @@ func (tm *trafficManager) addLocalOnlyIntercept(c context.Context, spec *manager
 }
 
 func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcPort, agentImageName string) *rpc.InterceptResult {
-	if err := tm.ensureAgent(c, namespace, agentName, svcPort, agentImageName); err != nil {
+	svcUID, err := tm.ensureAgent(c, namespace, agentName, svcPort, agentImageName)
+	if err != nil {
 		if err == agentNotFound {
 			return &rpc.InterceptResult{
 				Error:     rpc.InterceptError_NOT_FOUND,
@@ -308,6 +299,7 @@ func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcP
 	return &rpc.InterceptResult{
 		Error:       rpc.InterceptError_UNSPECIFIED,
 		Environment: agent.Environment,
+		ServiceUid:  svcUID,
 	}
 }
 
