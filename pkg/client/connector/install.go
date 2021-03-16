@@ -158,6 +158,9 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 			if err = ki.undoDeploymentMods(c, agent); err != nil {
 				addError(err)
 			}
+			if err = ki.waitForApply(c, ai.Namespace, ai.Name, agent); err != nil {
+				addError(err)
+			}
 		}()
 	}
 	// wait for all agents to be removed
