@@ -59,6 +59,13 @@ type k8sCluster struct {
 	Namespaces []*objName
 }
 
+func (kc *k8sCluster) actualNamespace(namespace string) string {
+	if namespace == "" {
+		namespace = kc.Namespace
+	}
+	return namespace
+}
+
 // portForwardAndThen starts a kubectl port-forward command, passes its output to the given scanner, and waits for
 // the scanner to produce a result. The then function is started in a new goroutine if the scanner returns something
 // other than nil using returned value as an argument. The kubectl port-forward is cancelled when the then function
