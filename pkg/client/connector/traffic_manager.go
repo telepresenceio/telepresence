@@ -199,6 +199,10 @@ func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, rq *rpc.Li
 	var iMap map[string]*manager.InterceptInfo
 
 	namespace := tm.actualNamespace(rq.Namespace)
+	if namespace == "" {
+		// namespace is not currently mapped
+		return &rpc.DeploymentInfoSnapshot{}
+	}
 
 	if is, _ := actions.ListMyIntercepts(ctx, tm.managerClient, tm.session().SessionId); is != nil {
 		iMap = make(map[string]*manager.InterceptInfo, len(is))
@@ -341,7 +345,6 @@ func getRepresentativeAgents(c context.Context, agents []*manager.AgentInfo) []*
 }
 
 func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
-	namespace := tm.actualNamespace(ur.Namespace)
 	result := &rpc.UninstallResult{}
 	agents, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId)
 
@@ -359,15 +362,18 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 		var selectedAgents []*manager.AgentInfo
 		for _, di := range ur.Agents {
 			found := false
-			for _, ai := range agents {
-				if namespace == ai.Namespace && di == ai.Name {
-					found = true
-					selectedAgents = append(selectedAgents, ai)
-					break
+			namespace := tm.actualNamespace(ur.Namespace)
+			if namespace != "" {
+				for _, ai := range agents {
+					if namespace == ai.Namespace && di == ai.Name {
+						found = true
+						selectedAgents = append(selectedAgents, ai)
+						break
+					}
 				}
 			}
 			if !found {
-				result.ErrorText = fmt.Sprintf("unable to find a deployment named %q with an agent installed", di)
+				result.ErrorText = fmt.Sprintf("unable to find a deployment named %s.%s with an agent installed", di, namespace)
 			}
 		}
 		agents = selectedAgents

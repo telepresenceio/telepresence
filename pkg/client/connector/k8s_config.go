@@ -86,13 +86,6 @@ func newK8sConfig(flagMap map[string]string) (*k8sConfig, error) {
 	}, nil
 }
 
-func (kc *k8sConfig) actualNamespace(namespace string) string {
-	if namespace == "" {
-		namespace = kc.Namespace
-	}
-	return namespace
-}
-
 // equals determines if this instance is equal to the given instance with respect to everything but
 // Namespace.
 func (kf *k8sConfig) equals(okf *k8sConfig) bool {

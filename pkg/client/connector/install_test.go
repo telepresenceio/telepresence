@@ -89,9 +89,22 @@ func publishManager(ctx context.Context, t *testing.T) {
 	}
 
 	cmd := dexec.CommandContext(ctx, "make", "-C", "../../..", "push-image")
-	cmd.Env = append(os.Environ(),
-		"TELEPRESENCE_VERSION="+testVersion,
-		"TELEPRESENCE_REGISTRY="+dtest.DockerRegistry())
+
+	// Go sets a lot of variables that we don't want to pass on to the ko executable. If we do,
+	// then it builds for the platform indicated by those variables.
+	cmd.Env = []string{
+		"TELEPRESENCE_VERSION=" + testVersion,
+		"TELEPRESENCE_REGISTRY=" + dtest.DockerRegistry(),
+	}
+	includeEnv := []string{"KO_DOCKER_REPO=", "HOME=", "PATH=", "LOGNAME=", "TMPDIR=", "MAKELEVEL="}
+	for _, env := range os.Environ() {
+		for _, incl := range includeEnv {
+			if strings.HasPrefix(env, incl) {
+				cmd.Env = append(cmd.Env, env)
+				break
+			}
+		}
+	}
 	if err := cmd.Run(); err != nil {
 		t.Fatal(client.RunError(err))
 	}

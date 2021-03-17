@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/datawire/ambassador/pkg/dtest"
@@ -49,13 +48,11 @@ type telepresenceSuite struct {
 func (ts *telepresenceSuite) SetupSuite() {
 	// Check that the "ko" program exists, and adjust PATH as necessary.
 	if info, err := os.Stat("../../../tools/bin/ko"); err != nil || !info.Mode().IsRegular() || (info.Mode().Perm()&0100) == 0 {
-		ts.Fail("it looks like the ./tools/bin/ko executable wasn't built; be sure to build it with `make` before running `go test`!")
-		return
+		ts.FailNow("it looks like the ./tools/bin/ko executable wasn't built; be sure to build it with `make` before running `go test`!")
 	}
+	require := ts.Require()
 	toolbindir, err := filepath.Abs("../../../tools/bin")
-	if !ts.NoError(err) {
-		return
-	}
+	require.NoError(err)
 	_ = os.Chdir("../../..")
 
 	os.Setenv("PATH", toolbindir+":"+os.Getenv("PATH"))
@@ -80,7 +77,7 @@ func (ts *telepresenceSuite) SetupSuite() {
 
 	_ = os.Remove(client.ConnectorSocketName)
 	err = run("sudo", "true")
-	ts.NoError(err, "acquire privileges")
+	require.NoError(err, "acquire privileges")
 
 	registry := dtest.DockerRegistry()
 	os.Setenv("KO_DOCKER_REPO", registry)
@@ -171,12 +168,13 @@ func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
 	ts.Run("Connect with a command", func() {
 		ts.Run("Connects, executes the command, and then exits", func() {
 			stdout, stderr := telepresence(ts.T(), "connect", "--", client.GetExe(), "status")
-			ts.Empty(stderr)
-			ts.Contains(stdout, "Launching Telepresence Daemon")
-			ts.Contains(stdout, "Connected to context")
-			ts.Contains(stdout, "Context:")
-			ts.Regexp(`Proxy:\s+ON`, stdout)
-			ts.Contains(stdout, "Daemon quitting")
+			require := ts.Require()
+			require.Empty(stderr)
+			require.Contains(stdout, "Launching Telepresence Daemon")
+			require.Contains(stdout, "Connected to context")
+			require.Contains(stdout, "Context:")
+			require.Regexp(`Proxy:\s+ON`, stdout)
+			require.Contains(stdout, "Daemon quitting")
 		})
 	})
 }
@@ -187,17 +185,18 @@ func (ts *telepresenceSuite) TestB_Connected() {
 
 func (ts *telepresenceSuite) TestC_Uninstall() {
 	ts.Run("Uninstalls agent on given deployment", func() {
+		require := ts.Require()
 		agentName := func() (string, error) {
 			return ts.kubectlOut("get", "deploy", "with-probes", "-o",
 				`jsonpath={.spec.template.spec.containers[?(@.name=="traffic-agent")].name}`)
 		}
 		stdout, err := agentName()
-		ts.NoError(err)
-		ts.Equal("traffic-agent", stdout)
+		require.NoError(err)
+		require.Equal("traffic-agent", stdout)
 		_, stderr := telepresence(ts.T(), "uninstall", "--namespace", ts.namespace, "--agent", "with-probes")
-		ts.Empty(stderr)
+		require.Empty(stderr)
 		defer telepresence(ts.T(), "quit")
-		ts.Eventually(
+		require.Eventually(
 			// condition
 			func() bool {
 				stdout, _ := agentName()
@@ -209,17 +208,18 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 	})
 
 	ts.Run("Uninstalls all agents", func() {
+		require := ts.Require()
 		agentNames := func() (string, error) {
 			return ts.kubectlOut("get", "deploy", "-o",
 				`jsonpath={.items[*].spec.template.spec.containers[?(@.name=="traffic-agent")].name}`)
 		}
 		stdout, err := agentNames()
-		ts.NoError(err)
-		ts.Equal(serviceCount, len(strings.Split(stdout, " ")))
+		require.NoError(err)
+		require.Equal(serviceCount, len(strings.Split(stdout, " ")))
 		_, stderr := telepresence(ts.T(), "uninstall", "--namespace", ts.namespace, "--all-agents")
-		ts.Empty(stderr)
+		require.Empty(stderr)
 		defer telepresence(ts.T(), "quit")
-		ts.Eventually(
+		require.Eventually(
 			func() bool {
 				stdout, _ := agentNames()
 				return stdout == ""
@@ -230,6 +230,7 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 	})
 
 	ts.Run("Uninstalls the traffic manager and quits", func() {
+		require := ts.Require()
 		names := func() (string, error) {
 			return ts.kubectlOut("get",
 				"--namespace", ts.managerTestNamespace,
@@ -238,12 +239,12 @@ func (ts *telepresenceSuite) TestC_Uninstall() {
 				"-o", "jsonpath={.items[*].metadata.name}")
 		}
 		stdout, err := names()
-		ts.NoError(err)
-		ts.Equal(2, len(strings.Split(stdout, " "))) // The service and the deployment
+		require.NoError(err)
+		require.Equal(2, len(strings.Split(stdout, " "))) // The service and the deployment
 		stdout, stderr := telepresence(ts.T(), "uninstall", "--everything")
-		ts.Empty(stderr)
-		ts.Contains(stdout, "Daemon quitting")
-		ts.Eventually(
+		require.Empty(stderr)
+		require.Contains(stdout, "Daemon quitting")
+		require.Eventually(
 			func() bool {
 				stdout, _ := names()
 				return stdout == ""
@@ -260,12 +261,13 @@ type connectedSuite struct {
 }
 
 func (cs *connectedSuite) SetupSuite() {
+	require := cs.Require()
 	stdout, stderr := telepresence(cs.T(), "connect")
-	cs.Empty(stderr)
-	cs.Contains(stdout, "Connected to context")
+	require.Empty(stderr)
+	require.Contains(stdout, "Connected to context")
 
 	// Give outbound interceptor 15 seconds to kick in.
-	cs.Eventually(
+	require.Eventually(
 		// condition
 		func() bool {
 			stdout, _ := telepresence(cs.T(), "status")
@@ -302,7 +304,7 @@ func (cs *connectedSuite) TestC_ProxiesOutboundTraffic() {
 	for i := 0; i < serviceCount; i++ {
 		svc := fmt.Sprintf("hello-%d.%s", i, cs.namespace)
 		expectedOutput := fmt.Sprintf("Request served by hello-%d", i)
-		cs.Eventually(
+		cs.Require().Eventually(
 			// condition
 			func() bool {
 				cs.T().Logf("trying %q...", "http://"+svc)
@@ -335,12 +337,13 @@ func (cs *connectedSuite) TestD_Intercepted() {
 func (cs *connectedSuite) TestE_SuccessfullyInterceptsDeploymentWithProbes() {
 	defer telepresence(cs.T(), "leave", "with-probes-"+cs.namespace)
 
+	require := cs.Require()
 	stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.namespace, "--mount", "false", "with-probes", "--port", "9090")
-	cs.Empty(stderr)
-	cs.Contains(stdout, "Using deployment with-probes")
+	require.Empty(stderr)
+	require.Contains(stdout, "Using deployment with-probes")
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.namespace, "--intercepts")
-	cs.Empty(stderr)
-	cs.Contains(stdout, "with-probes: intercepted")
+	require.Empty(stderr)
+	require.Contains(stdout, "with-probes: intercepted")
 }
 
 func (cs *connectedSuite) TestF_LocalOnlyIntercept() {
@@ -378,6 +381,25 @@ func (cs *connectedSuite) TestF_LocalOnlyIntercept() {
 	})
 }
 
+func (cs *connectedSuite) TestG_ListOnlyMapped() {
+	require := cs.Require()
+	stdout, stderr := telepresence(cs.T(), "connect", "--mapped-namespaces", "default")
+	require.Empty(stderr)
+	require.Empty(stdout)
+
+	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.namespace)
+	require.Empty(stderr)
+	require.Contains(stdout, "No deployments")
+
+	stdout, stderr = telepresence(cs.T(), "connect", "--mapped-namespaces", "all")
+	require.Empty(stderr)
+	require.Empty(stdout)
+
+	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.namespace)
+	require.Empty(stderr)
+	require.NotContains(stdout, "No deployments")
+}
+
 type interceptedSuite struct {
 	suite.Suite
 	namespace  string
@@ -394,7 +416,7 @@ func (is *interceptedSuite) SetupSuite() {
 		for i := 0; i < serviceCount; i++ {
 			rxs[i] = regexp.MustCompile(fmt.Sprintf("hello-%d\\s*:\\s+ready to intercept", i))
 		}
-		require.Eventually(is.T(),
+		is.Require().Eventually(
 			// condition
 			func() bool {
 				stdout, _ := telepresence(is.T(), "list", "--namespace", is.namespace)
@@ -417,7 +439,7 @@ func (is *interceptedSuite) SetupSuite() {
 			svc := fmt.Sprintf("hello-%d", i)
 			port := strconv.Itoa(9000 + i)
 			stdout, stderr := telepresence(is.T(), "intercept", "--namespace", is.namespace, "--mount", "false", svc, "--port", port)
-			is.Empty(stderr)
+			is.Require().Empty(stderr)
 			is.intercepts = append(is.intercepts, svc)
 			is.Contains(stdout, "Using deployment "+svc)
 		}
@@ -456,7 +478,7 @@ func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
 	for i := 0; i < serviceCount; i++ {
 		svc := fmt.Sprintf("hello-%d", i)
 		expectedOutput := fmt.Sprintf("%s from intercept at /", svc)
-		is.Eventually(
+		is.Require().Eventually(
 			// condition
 			func() bool {
 				is.T().Logf("trying %q...", "http://"+svc)
@@ -483,10 +505,11 @@ func (is *interceptedSuite) TestA_VerifyingResponsesFromInterceptor() {
 }
 
 func (is *interceptedSuite) TestB_ListingActiveIntercepts() {
+	require := is.Require()
 	stdout, stderr := telepresence(is.T(), "--namespace", is.namespace, "list", "--intercepts")
-	is.Empty(stderr)
+	require.Empty(stderr)
 	for i := 0; i < serviceCount; i++ {
-		is.Contains(stdout, fmt.Sprintf("hello-%d: intercepted", i))
+		require.Contains(stdout, fmt.Sprintf("hello-%d: intercepted", i))
 	}
 }
 
@@ -536,9 +559,22 @@ func (ts *telepresenceSuite) kubectlOut(args ...string) (string, error) {
 func (ts *telepresenceSuite) publishManager() error {
 	ctx := dlog.NewTestContext(ts.T(), true)
 	cmd := dexec.CommandContext(ctx, "make", "push-image")
-	cmd.Env = append(os.Environ(),
-		"TELEPRESENCE_VERSION="+ts.testVersion,
-		"TELEPRESENCE_REGISTRY="+dtest.DockerRegistry())
+
+	// Go sets a lot of variables that we don't want to pass on to the ko executable. If we do,
+	// then it builds for the platform indicated by those variables.
+	cmd.Env = []string{
+		"TELEPRESENCE_VERSION=" + ts.testVersion,
+		"TELEPRESENCE_REGISTRY=" + dtest.DockerRegistry(),
+	}
+	includeEnv := []string{"KO_DOCKER_REPO=", "HOME=", "PATH=", "LOGNAME=", "TMPDIR=", "MAKELEVEL="}
+	for _, env := range os.Environ() {
+		for _, incl := range includeEnv {
+			if strings.HasPrefix(env, incl) {
+				cmd.Env = append(cmd.Env, env)
+				break
+			}
+		}
+	}
 	if err := cmd.Run(); err != nil {
 		return client.RunError(err)
 	}
