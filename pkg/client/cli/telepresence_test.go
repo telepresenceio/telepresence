@@ -381,6 +381,25 @@ func (cs *connectedSuite) TestF_LocalOnlyIntercept() {
 	})
 }
 
+func (cs *connectedSuite) TestG_ListOnlyMapped() {
+	require := cs.Require()
+	stdout, stderr := telepresence(cs.T(), "connect", "--mapped-namespaces", "default")
+	require.Empty(stderr)
+	require.Empty(stdout)
+
+	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.namespace)
+	require.Empty(stderr)
+	require.Contains(stdout, "No deployments")
+
+	stdout, stderr = telepresence(cs.T(), "connect", "--mapped-namespaces", "all")
+	require.Empty(stderr)
+	require.Empty(stdout)
+
+	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.namespace)
+	require.Empty(stderr)
+	require.NotContains(stdout, "No deployments")
+}
+
 type interceptedSuite struct {
 	suite.Suite
 	namespace  string
