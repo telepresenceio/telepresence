@@ -536,9 +536,22 @@ func (ts *telepresenceSuite) kubectlOut(args ...string) (string, error) {
 func (ts *telepresenceSuite) publishManager() error {
 	ctx := dlog.NewTestContext(ts.T(), true)
 	cmd := dexec.CommandContext(ctx, "make", "push-image")
-	cmd.Env = append(os.Environ(),
-		"TELEPRESENCE_VERSION="+ts.testVersion,
-		"TELEPRESENCE_REGISTRY="+dtest.DockerRegistry())
+
+	// Go sets a lot of variables that we don't want to pass on to the ko executable. If we do,
+	// then it builds for the platform indicated by those variables.
+	cmd.Env = []string{
+		"TELEPRESENCE_VERSION=" + ts.testVersion,
+		"TELEPRESENCE_REGISTRY=" + dtest.DockerRegistry(),
+	}
+	includeEnv := []string{"KO_DOCKER_REPO=", "HOME=", "PATH=", "LOGNAME=", "TMPDIR=", "MAKELEVEL="}
+	for _, env := range os.Environ() {
+		for _, incl := range includeEnv {
+			if strings.HasPrefix(env, incl) {
+				cmd.Env = append(cmd.Env, env)
+				break
+			}
+		}
+	}
 	if err := cmd.Run(); err != nil {
 		return client.RunError(err)
 	}
