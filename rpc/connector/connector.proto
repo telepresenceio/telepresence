@@ -166,4 +166,7 @@ message InterceptResult {
 
   // The environment of the app
   map<string,string> environment = 4;
+
+  // The service uid associated with the deployment intercepted
+  string service_uid = 5;
 }

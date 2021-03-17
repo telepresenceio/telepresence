@@ -3,6 +3,7 @@
 ### 2.1.2 (TBD)
 - Bugfix: Uninstalling agents now only happens once per deployment instead of once per agent.
 - Bugfix: The list command no longer shows agents from namespaces that aren't mapped.
+- Change: Service UID was added to InterceptSpec to better link intercepts and services.
 
 ### 2.1.1 (March 12, 2021)
 

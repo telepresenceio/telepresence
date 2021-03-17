@@ -191,6 +191,8 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 		return result, nil
 	}
 
+	spec.ServiceUid = result.ServiceUid
+
 	deleteMount := false
 	if ir.MountPoint != "" {
 		// Ensure that the mount-point is free to use
@@ -269,7 +271,8 @@ func (tm *trafficManager) addLocalOnlyIntercept(c context.Context, spec *manager
 }
 
 func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcPort, agentImageName string) *rpc.InterceptResult {
-	if err := tm.ensureAgent(c, namespace, agentName, svcPort, agentImageName); err != nil {
+	svcUID, err := tm.ensureAgent(c, namespace, agentName, svcPort, agentImageName)
+	if err != nil {
 		if err == agentNotFound {
 			return &rpc.InterceptResult{
 				Error:     rpc.InterceptError_NOT_FOUND,
@@ -296,6 +299,7 @@ func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcP
 	return &rpc.InterceptResult{
 		Error:       rpc.InterceptError_UNSPECIFIED,
 		Environment: agent.Environment,
+		ServiceUid:  svcUID,
 	}
 }
 
