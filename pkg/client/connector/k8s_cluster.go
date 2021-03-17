@@ -63,6 +63,9 @@ func (kc *k8sCluster) actualNamespace(namespace string) string {
 	if namespace == "" {
 		namespace = kc.Namespace
 	}
+	if !kc.namespaceExists(namespace) {
+		namespace = ""
+	}
 	return namespace
 }
 

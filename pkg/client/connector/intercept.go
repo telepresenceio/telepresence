@@ -140,6 +140,13 @@ func (tm *trafficManager) workerPortForwardIntercepts(ctx context.Context) error
 func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (*rpc.InterceptResult, error) {
 	spec := ir.Spec
 	spec.Namespace = tm.actualNamespace(spec.Namespace)
+	if spec.Namespace == "" {
+		// namespace is not currently mapped
+		return &rpc.InterceptResult{
+			Error:     rpc.InterceptError_NO_ACCEPTABLE_DEPLOYMENT,
+			ErrorText: spec.Name,
+		}, nil
+	}
 
 	if _, inUse := tm.localIntercepts[spec.Name]; inUse {
 		return &rpc.InterceptResult{
