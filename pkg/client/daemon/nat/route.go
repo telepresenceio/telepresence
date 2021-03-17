@@ -34,9 +34,9 @@ type FirewallRouter interface {
 	GetOriginalDst(conn *net.TCPConn) (host string, err error)
 }
 
-func NewRouter(name string, localIP net.IP) FirewallRouter {
+func NewRouter(name string, localIPv4, localIPv6 net.IP) FirewallRouter {
 	// newRouter is implemented in platform-specific files.
-	return newRouter(name, localIP)
+	return newRouter(name, localIPv4, localIPv6)
 }
 
 type Table struct {

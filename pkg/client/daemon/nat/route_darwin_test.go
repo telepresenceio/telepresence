@@ -88,7 +88,7 @@ func TestSorted(t *testing.T) {
 	c := dlog.NewTestContext(t, false)
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{DisableLogging: true})
 	g.Go("sorted-test", func(c context.Context) (err error) {
-		tr := newRouter("test-table", net.IP{127, 0, 1, 2})
+		tr := newRouter("test-table", net.IP{127, 0, 1, 2}, net.IPv6loopback)
 		if err = tr.Enable(c); err != nil {
 			return err
 		}
