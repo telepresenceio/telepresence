@@ -322,10 +322,34 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 	}
 }
 
+// Given a slice of AgentInfo, this returns another slice of agents with one
+// agent per namespace, name pair.
+func getRepresentativeAgents(c context.Context, agents []*manager.AgentInfo) []*manager.AgentInfo {
+	type deployment struct {
+		name, namespace string
+	}
+	deployments := map[deployment]bool{}
+	var representativeAgents []*manager.AgentInfo
+	for _, agent := range agents {
+		dep := deployment{name: agent.Name, namespace: agent.Namespace}
+		if !deployments[dep] {
+			deployments[dep] = true
+			representativeAgents = append(representativeAgents, agent)
+		}
+	}
+	return representativeAgents
+}
+
 func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest) (*rpc.UninstallResult, error) {
 	namespace := tm.actualNamespace(ur.Namespace)
 	result := &rpc.UninstallResult{}
 	agents, _ := actions.ListAllAgents(c, tm.managerClient, tm.session().SessionId)
+
+	// Since deployments can have more than one replica, we get a slice of agents
+	// where the agent to deployment mapping is 1-to-1.  This is important
+	// because in the ALL_AGENTS or default case, we could edit the same
+	// deployment n times for n replicas, which could cause race conditions
+	agents = getRepresentativeAgents(c, agents)
 
 	_ = tm.clearIntercepts(c)
 	switch ur.UninstallType {
