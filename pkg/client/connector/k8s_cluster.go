@@ -175,10 +175,10 @@ func (kc *k8sCluster) check(c context.Context) error {
 	return client.CheckTimeout(c, &client.GetConfig(c).Timeouts.ClusterConnect, nil)
 }
 
-// deploymentNames  returns the names of all deployments found in the given Namespace
-func (kc *k8sCluster) deploymentNames(c context.Context, namespace string) ([]string, error) {
+// kindNames returns the names of all objects of a specified Kind in a given Namespace
+func (kc *k8sCluster) kindNames(c context.Context, kind, namespace string) ([]string, error) {
 	var objNames []objName
-	if err := kc.client.List(c, kates.Query{Kind: "Deployment", Namespace: namespace}, &objNames); err != nil {
+	if err := kc.client.List(c, kates.Query{Kind: kind, Namespace: namespace}, &objNames); err != nil {
 		return nil, err
 	}
 	names := make([]string, len(objNames))
@@ -186,6 +186,17 @@ func (kc *k8sCluster) deploymentNames(c context.Context, namespace string) ([]st
 		names[i] = n.Name
 	}
 	return names, nil
+
+}
+
+// deploymentNames returns the names of all deployments found in the given Namespace
+func (kc *k8sCluster) deploymentNames(c context.Context, namespace string) ([]string, error) {
+	return kc.kindNames(c, "Deployment", namespace)
+}
+
+// replicaSetNames returns the names of all replica sets found in the given Namespace
+func (kc *k8sCluster) replicaSetNames(c context.Context, namespace string) ([]string, error) {
+	return kc.kindNames(c, "ReplicaSet", namespace)
 }
 
 // findDeployment returns a deployment with the given name in the given namespace or nil
@@ -199,6 +210,19 @@ func (kc *k8sCluster) findDeployment(c context.Context, namespace, name string) 
 		return nil, err
 	}
 	return dep, nil
+}
+
+// findReplicaSet returns a replica set with the given name in the given namespace or nil
+// if no such replica set could be found.
+func (kc *k8sCluster) findReplicaSet(c context.Context, namespace, name string) (*kates.ReplicaSet, error) {
+	rs := &kates.ReplicaSet{
+		TypeMeta:   kates.TypeMeta{Kind: "ReplicaSet"},
+		ObjectMeta: kates.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	if err := kc.client.Get(c, rs, rs); err != nil {
+		return nil, err
+	}
+	return rs, nil
 }
 
 // findSvc finds a service with the given name in the given Namespace and returns
