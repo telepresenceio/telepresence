@@ -23,9 +23,10 @@ import (
 
 type pfRouter struct {
 	routingTableCommon
-	localIP net.IP
-	dev     *ppf.Handle
-	token   string
+	localIPv4 net.IP
+	localIPv6 net.IP
+	dev       *ppf.Handle
+	token     string
 
 	// OS routing table routes to add and clear on Flush
 	routesToClear []*Route
@@ -34,13 +35,14 @@ type pfRouter struct {
 
 var _ FirewallRouter = (*pfRouter)(nil)
 
-func newRouter(name string, localIP net.IP) *pfRouter {
+func newRouter(name string, localIPv4, localIPv6 net.IP) *pfRouter {
 	return &pfRouter{
 		routingTableCommon: routingTableCommon{
 			Name:     name,
 			mappings: make(map[Destination]*Route),
 		},
-		localIP: localIP,
+		localIPv4: localIPv4,
+		localIPv6: localIPv6,
 	}
 }
 
@@ -138,17 +140,29 @@ func (t *pfRouter) sorted() []*Route {
 
 // rules writes the current port forward mapping rules to the given writer
 func (t *pfRouter) rules(w io.Writer) (err error) {
+	getLoopback := func(route *Route) (string, string) {
+		loopbackAdr := "127.0.0.1"
+		inet := "inet"
+		// This returns nil if it isn't an IPv4 address, so we override the
+		// value with the IPv6 values
+		if isV4 := route.IP().To4(); isV4 == nil {
+			loopbackAdr = "::1"
+			inet = "inet6"
+		}
+		return loopbackAdr, inet
+	}
 	rules := t.sorted()
 	for _, r := range rules {
+		loopbackAdr, inet := getLoopback(r)
 		ports := r.Ports()
 		if len(ports) == 0 {
-			if _, err = fmt.Fprintf(w, "rdr pass on lo0 inet proto %s to %s -> 127.0.0.1 port %d\n", r.Proto(), r.IP(), r.ToPort); err != nil {
+			if _, err = fmt.Fprintf(w, "rdr pass on lo0 %s proto %s to %s -> %s port %d\n", inet, r.Proto(), r.IP(), loopbackAdr, r.ToPort); err != nil {
 				return err
 			}
 			continue
 		}
 		for _, port := range ports {
-			_, err = fmt.Fprintf(w, "rdr pass on lo0 inet proto %s to %s port %d -> 127.0.0.1 port %d\n", r.Proto(), r.IP(), port, r.ToPort)
+			_, err = fmt.Fprintf(w, "rdr pass on lo0 %s proto %s to %s port %d -> %s port %d\n", inet, r.Proto(), r.IP(), port, loopbackAdr, r.ToPort)
 			if err != nil {
 				return err
 			}
@@ -157,16 +171,22 @@ func (t *pfRouter) rules(w io.Writer) (err error) {
 	if _, err = fmt.Fprintln(w, "pass out quick inet proto tcp to 127.0.0.1/32"); err != nil {
 		return err
 	}
+
+	if _, err = fmt.Fprintln(w, "pass out quick inet6 proto tcp to ::1/128"); err != nil {
+		return err
+	}
+
 	for _, r := range rules {
+		_, inet := getLoopback(r)
 		ports := r.Ports()
 		if len(ports) == 0 {
-			if _, err = fmt.Fprintf(w, "pass out route-to lo0 inet proto %s to %s keep state\n", r.Proto(), r.IP()); err != nil {
+			if _, err = fmt.Fprintf(w, "pass out route-to lo0 %s proto %s to %s keep state\n", inet, r.Proto(), r.IP()); err != nil {
 				return err
 			}
 			continue
 		}
 		for _, port := range ports {
-			if _, err = fmt.Fprintf(w, "pass out route-to lo0 inet proto %s to %s port %d keep state\n", r.Proto(), r.IP(), port); err != nil {
+			if _, err = fmt.Fprintf(w, "pass out route-to lo0 %s proto %s to %s port %d keep state\n", inet, r.Proto(), r.IP(), port); err != nil {
 				return err
 			}
 		}
@@ -253,6 +273,10 @@ func fullMask(ip net.IP) (addr route.Addr) {
 
 func (t *pfRouter) newRouteMessage(rtm, seq int, r *Route) *route.RouteMessage {
 	ip := r.IP()
+	localIP := t.localIPv4
+	if isV4 := ip.To4(); isV4 == nil {
+		localIP = t.localIPv6
+	}
 	return &route.RouteMessage{
 		Version: syscall.RTM_VERSION,
 		ID:      uintptr(os.Getpid()),
@@ -261,7 +285,7 @@ func (t *pfRouter) newRouteMessage(rtm, seq int, r *Route) *route.RouteMessage {
 		Flags:   syscall.RTF_UP | syscall.RTF_GATEWAY | syscall.RTF_STATIC | syscall.RTF_PRCLONING,
 		Addrs: []route.Addr{
 			syscall.RTAX_DST:     toRouteAddr(ip),
-			syscall.RTAX_GATEWAY: toRouteAddr(t.localIP),
+			syscall.RTAX_GATEWAY: toRouteAddr(localIP),
 			syscall.RTAX_NETMASK: fullMask(ip),
 		},
 	}

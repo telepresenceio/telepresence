@@ -206,7 +206,7 @@ func testMapping(c context.Context, network string, mappings []*mapping, t *test
 		require.NoError(t, checkNoForwardTCP(fmt.Sprintf("%s.%s", network, mapping.from), mapping.forwarded))
 	}
 
-	tr := NewRouter("test-table", net.IP{127, 0, 1, 2})
+	tr := NewRouter("test-table", net.IP{127, 0, 1, 2}, net.IPv6loopback)
 	require.NoError(t, tr.Enable(c))
 	defer func() {
 		_ = tr.Disable(c)

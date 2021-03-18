@@ -94,7 +94,7 @@ func newOutbound(c context.Context, name string, dnsIP, fallbackIP string, noSea
 		fallbackIP:  fallbackIP,
 		noSearch:    noSearch,
 		tables:      make(map[string]*nat.Table),
-		translator:  nat.NewRouter(name, net.IP{127, 0, 0, 1}),
+		translator:  nat.NewRouter(name, net.IP{127, 0, 0, 1}, net.IPv6loopback),
 		namespaces:  make(map[string]struct{}),
 		domains:     make(map[string][]string),
 		search:      []string{""},
