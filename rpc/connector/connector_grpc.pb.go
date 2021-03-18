@@ -40,7 +40,7 @@ type ConnectorClient interface {
 	Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*UninstallResult, error)
 	// Returns a list of deployments and their current intercept status.
 	// Requires having already called Connect.
-	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*DeploymentInfoSnapshot, error)
+	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
 	// Quits (terminates) the connector process.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 }
@@ -98,8 +98,8 @@ func (c *connectorClient) Uninstall(ctx context.Context, in *UninstallRequest, o
 	return out, nil
 }
 
-func (c *connectorClient) List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*DeploymentInfoSnapshot, error) {
-	out := new(DeploymentInfoSnapshot)
+func (c *connectorClient) List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error) {
+	out := new(WorkloadInfoSnapshot)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/List", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -140,7 +140,7 @@ type ConnectorServer interface {
 	Uninstall(context.Context, *UninstallRequest) (*UninstallResult, error)
 	// Returns a list of deployments and their current intercept status.
 	// Requires having already called Connect.
-	List(context.Context, *ListRequest) (*DeploymentInfoSnapshot, error)
+	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
 	// Quits (terminates) the connector process.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	mustEmbedUnimplementedConnectorServer()
@@ -165,7 +165,7 @@ func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.Re
 func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest) (*UninstallResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Uninstall not implemented")
 }
-func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*DeploymentInfoSnapshot, error) {
+func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method List not implemented")
 }
 func (UnimplementedConnectorServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {

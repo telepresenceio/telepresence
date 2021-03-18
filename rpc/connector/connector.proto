@@ -35,7 +35,7 @@ service Connector {
 
   // Returns a list of deployments and their current intercept status.
   // Requires having already called Connect.
-  rpc List(ListRequest) returns (DeploymentInfoSnapshot);
+  rpc List(ListRequest) returns (WorkloadInfoSnapshot);
 
   // Quits (terminates) the connector process.
   rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
@@ -140,23 +140,27 @@ message ListRequest {
   string namespace = 2;
 }
 
-// DeploymentInfo contains information about a deployment
-message DeploymentInfo {
-  // Name of deployment
+// WorkloadInfo contains information about a workload
+// https://kubernetes.io/docs/concepts/workloads/
+message WorkloadInfo {
+  // Name of workload
   string name = 1;
 
-  // Reason why deployment cannot be intercepted, or empty if it can.
+  // Reason why workload cannot be intercepted, or empty if it can.
   string not_interceptable_reason = 2;
 
-  // AgentInfo reported from the traffic manager in case the deployment has a traffic-agent installed
+  // AgentInfo reported from the traffic manager in case the workload has a traffic-agent installed
   telepresence.manager.AgentInfo agent_info = 3;
 
-  // InterceptInfo reported from the traffic manager in case the deployment is currently intercepted
+  // InterceptInfo reported from the traffic manager in case the workload is currently intercepted
   telepresence.manager.InterceptInfo intercept_info = 4;
+
+  // Workload Resource type (e.g. Deployment, ReplicaSet)
+  string workload_resource_type = 5;
 }
 
-message DeploymentInfoSnapshot {
-  repeated DeploymentInfo deployments = 1;
+message WorkloadInfoSnapshot {
+  repeated WorkloadInfo workloads = 1;
 }
 
 message InterceptResult {

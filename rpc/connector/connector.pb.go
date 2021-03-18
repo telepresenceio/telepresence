@@ -7,14 +7,15 @@
 package connector
 
 import (
+	reflect "reflect"
+	sync "sync"
+
 	proto "github.com/golang/protobuf/proto"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
 	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	reflect "reflect"
-	sync "sync"
 )
 
 const (
@@ -698,13 +699,13 @@ func (x *ListRequest) GetNamespace() string {
 	return ""
 }
 
-// DeploymentInfo contains information about a deployment
-type DeploymentInfo struct {
+// WorkloadInfo contains information about a workload
+type WorkloadInfo struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// Name of deployment
+	// Name of workload
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Reason why deployment cannot be intercepted, or empty if it can.
 	NotInterceptableReason string `protobuf:"bytes,2,opt,name=not_interceptable_reason,json=notInterceptableReason,proto3" json:"not_interceptable_reason,omitempty"`
@@ -712,10 +713,12 @@ type DeploymentInfo struct {
 	AgentInfo *manager.AgentInfo `protobuf:"bytes,3,opt,name=agent_info,json=agentInfo,proto3" json:"agent_info,omitempty"`
 	// InterceptInfo reported from the traffic manager in case the deployment is currently intercepted
 	InterceptInfo *manager.InterceptInfo `protobuf:"bytes,4,opt,name=intercept_info,json=interceptInfo,proto3" json:"intercept_info,omitempty"`
+	// Workload Resource type (e.g. Deployment, ReplicaSet)
+	WorkloadResourceType string `protobuf:"bytes,5,opt,name=workload_resource_type,json=workloadResourceType,proto3" json:"workload_resource_type,omitempty"`
 }
 
-func (x *DeploymentInfo) Reset() {
-	*x = DeploymentInfo{}
+func (x *WorkloadInfo) Reset() {
+	*x = WorkloadInfo{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_rpc_connector_connector_proto_msgTypes[6]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -723,13 +726,13 @@ func (x *DeploymentInfo) Reset() {
 	}
 }
 
-func (x *DeploymentInfo) String() string {
+func (x *WorkloadInfo) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DeploymentInfo) ProtoMessage() {}
+func (*WorkloadInfo) ProtoMessage() {}
 
-func (x *DeploymentInfo) ProtoReflect() protoreflect.Message {
+func (x *WorkloadInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_rpc_connector_connector_proto_msgTypes[6]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -741,49 +744,56 @@ func (x *DeploymentInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeploymentInfo.ProtoReflect.Descriptor instead.
-func (*DeploymentInfo) Descriptor() ([]byte, []int) {
+// Deprecated: Use WorkloadInfo.ProtoReflect.Descriptor instead.
+func (*WorkloadInfo) Descriptor() ([]byte, []int) {
 	return file_rpc_connector_connector_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *DeploymentInfo) GetName() string {
+func (x *WorkloadInfo) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *DeploymentInfo) GetNotInterceptableReason() string {
+func (x *WorkloadInfo) GetNotInterceptableReason() string {
 	if x != nil {
 		return x.NotInterceptableReason
 	}
 	return ""
 }
 
-func (x *DeploymentInfo) GetAgentInfo() *manager.AgentInfo {
+func (x *WorkloadInfo) GetAgentInfo() *manager.AgentInfo {
 	if x != nil {
 		return x.AgentInfo
 	}
 	return nil
 }
 
-func (x *DeploymentInfo) GetInterceptInfo() *manager.InterceptInfo {
+func (x *WorkloadInfo) GetInterceptInfo() *manager.InterceptInfo {
 	if x != nil {
 		return x.InterceptInfo
 	}
 	return nil
 }
 
-type DeploymentInfoSnapshot struct {
+func (x *WorkloadInfo) GetWorkloadResourceType() string {
+	if x != nil {
+		return x.WorkloadResourceType
+	}
+	return ""
+}
+
+type WorkloadInfoSnapshot struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Deployments []*DeploymentInfo `protobuf:"bytes,1,rep,name=deployments,proto3" json:"deployments,omitempty"`
+	Workloads []*WorkloadInfo `protobuf:"bytes,1,rep,name=workloads,proto3" json:"workloads,omitempty"`
 }
 
-func (x *DeploymentInfoSnapshot) Reset() {
-	*x = DeploymentInfoSnapshot{}
+func (x *WorkloadInfoSnapshot) Reset() {
+	*x = WorkloadInfoSnapshot{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_rpc_connector_connector_proto_msgTypes[7]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -791,13 +801,13 @@ func (x *DeploymentInfoSnapshot) Reset() {
 	}
 }
 
-func (x *DeploymentInfoSnapshot) String() string {
+func (x *WorkloadInfoSnapshot) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DeploymentInfoSnapshot) ProtoMessage() {}
+func (*WorkloadInfoSnapshot) ProtoMessage() {}
 
-func (x *DeploymentInfoSnapshot) ProtoReflect() protoreflect.Message {
+func (x *WorkloadInfoSnapshot) ProtoReflect() protoreflect.Message {
 	mi := &file_rpc_connector_connector_proto_msgTypes[7]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -809,14 +819,14 @@ func (x *DeploymentInfoSnapshot) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeploymentInfoSnapshot.ProtoReflect.Descriptor instead.
-func (*DeploymentInfoSnapshot) Descriptor() ([]byte, []int) {
+// Deprecated: Use WorkloadInfoSnapshot.ProtoReflect.Descriptor instead.
+func (*WorkloadInfoSnapshot) Descriptor() ([]byte, []int) {
 	return file_rpc_connector_connector_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *DeploymentInfoSnapshot) GetDeployments() []*DeploymentInfo {
+func (x *WorkloadInfoSnapshot) GetWorkloads() []*WorkloadInfo {
 	if x != nil {
-		return x.Deployments
+		return x.Workloads
 	}
 	return nil
 }
@@ -1151,8 +1161,8 @@ var file_rpc_connector_connector_proto_goTypes = []interface{}{
 	(*UninstallResult)(nil),                 // 7: telepresence.connector.UninstallResult
 	(*CreateInterceptRequest)(nil),          // 8: telepresence.connector.CreateInterceptRequest
 	(*ListRequest)(nil),                     // 9: telepresence.connector.ListRequest
-	(*DeploymentInfo)(nil),                  // 10: telepresence.connector.DeploymentInfo
-	(*DeploymentInfoSnapshot)(nil),          // 11: telepresence.connector.DeploymentInfoSnapshot
+	(*WorkloadInfo)(nil),                    // 10: telepresence.connector.WorkloadInfo
+	(*WorkloadInfoSnapshot)(nil),            // 11: telepresence.connector.WorkloadInfoSnapshot
 	(*InterceptResult)(nil),                 // 12: telepresence.connector.InterceptResult
 	nil,                                     // 13: telepresence.connector.ConnectRequest.KubeFlagsEntry
 	nil,                                     // 14: telepresence.connector.InterceptResult.EnvironmentEntry
@@ -1177,9 +1187,9 @@ var file_rpc_connector_connector_proto_depIdxs = []int32{
 	2,  // 6: telepresence.connector.UninstallRequest.uninstall_type:type_name -> telepresence.connector.UninstallRequest.UninstallType
 	19, // 7: telepresence.connector.CreateInterceptRequest.spec:type_name -> telepresence.manager.InterceptSpec
 	3,  // 8: telepresence.connector.ListRequest.filter:type_name -> telepresence.connector.ListRequest.Filter
-	20, // 9: telepresence.connector.DeploymentInfo.agent_info:type_name -> telepresence.manager.AgentInfo
-	21, // 10: telepresence.connector.DeploymentInfo.intercept_info:type_name -> telepresence.manager.InterceptInfo
-	10, // 11: telepresence.connector.DeploymentInfoSnapshot.deployments:type_name -> telepresence.connector.DeploymentInfo
+	20, // 9: telepresence.connector.WorkloadInfo.agent_info:type_name -> telepresence.manager.AgentInfo
+	21, // 10: telepresence.connector.WorkloadInfo.intercept_info:type_name -> telepresence.manager.InterceptInfo
+	10, // 11: telepresence.connector.WorkloadInfoSnapshot.workloads:type_name -> telepresence.connector.WorkloadInfo
 	21, // 12: telepresence.connector.InterceptResult.intercept_info:type_name -> telepresence.manager.InterceptInfo
 	0,  // 13: telepresence.connector.InterceptResult.error:type_name -> telepresence.connector.InterceptError
 	14, // 14: telepresence.connector.InterceptResult.environment:type_name -> telepresence.connector.InterceptResult.EnvironmentEntry
@@ -1195,7 +1205,7 @@ var file_rpc_connector_connector_proto_depIdxs = []int32{
 	12, // 24: telepresence.connector.Connector.CreateIntercept:output_type -> telepresence.connector.InterceptResult
 	12, // 25: telepresence.connector.Connector.RemoveIntercept:output_type -> telepresence.connector.InterceptResult
 	7,  // 26: telepresence.connector.Connector.Uninstall:output_type -> telepresence.connector.UninstallResult
-	11, // 27: telepresence.connector.Connector.List:output_type -> telepresence.connector.DeploymentInfoSnapshot
+	11, // 27: telepresence.connector.Connector.List:output_type -> telepresence.connector.WorkloadInfoSnapshot
 	22, // 28: telepresence.connector.Connector.Quit:output_type -> google.protobuf.Empty
 	22, // [22:29] is the sub-list for method output_type
 	15, // [15:22] is the sub-list for method input_type
@@ -1283,7 +1293,7 @@ func file_rpc_connector_connector_proto_init() {
 			}
 		}
 		file_rpc_connector_connector_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeploymentInfo); i {
+			switch v := v.(*WorkloadInfo); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1295,7 +1305,7 @@ func file_rpc_connector_connector_proto_init() {
 			}
 		}
 		file_rpc_connector_connector_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeploymentInfoSnapshot); i {
+			switch v := v.(*WorkloadInfoSnapshot); i {
 			case 0:
 				return &v.state
 			case 1:

@@ -32,7 +32,7 @@ func listCommand() *cobra.Command {
 	flags := cmd.Flags()
 	flags.BoolVarP(&s.onlyIntercepts, "intercepts", "i", false, "intercepts only")
 	flags.BoolVarP(&s.onlyAgents, "agents", "a", false, "with installed agents only")
-	flags.BoolVarP(&s.onlyInterceptable, "only-interceptable", "o", true, "interceptable deployments only")
+	flags.BoolVarP(&s.onlyInterceptable, "only-interceptable", "o", true, "interceptable workloads only")
 	flags.BoolVar(&s.debug, "debug", false, "include debugging information")
 	flags.StringVarP(&s.namespace, "namespace", "n", "", "If present, the namespace scope for this CLI request")
 	return cmd
@@ -40,7 +40,7 @@ func listCommand() *cobra.Command {
 
 // list requests a list current intercepts from the daemon
 func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
-	var r *connector.DeploymentInfoSnapshot
+	var r *connector.WorkloadInfoSnapshot
 	var err error
 	s.cmd = cmd
 	err = s.withConnector(true, func(cs *connectorState) error {
@@ -62,13 +62,13 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	stdout := cmd.OutOrStdout()
-	if len(r.Deployments) == 0 {
-		fmt.Fprintln(stdout, "No deployments")
+	if len(r.Workloads) == 0 {
+		fmt.Fprintln(stdout, "No Workloads (Deployments or ReplicaSets)")
 		return nil
 	}
 
 	nameLen := 0
-	for _, dep := range r.Deployments {
+	for _, dep := range r.Workloads {
 		n := dep.Name
 		if n == "" {
 			// Local-only, so use name of intercept
@@ -79,27 +79,27 @@ func (s *listInfo) list(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	state := func(dep *connector.DeploymentInfo) string {
-		if ii := dep.InterceptInfo; ii != nil {
+	state := func(workload *connector.WorkloadInfo) string {
+		if ii := workload.InterceptInfo; ii != nil {
 			return DescribeIntercept(ii, nil, s.debug)
 		}
-		ai := dep.AgentInfo
+		ai := workload.AgentInfo
 		if ai != nil {
 			return "ready to intercept (traffic-agent already installed)"
 		}
-		if dep.NotInterceptableReason != "" {
-			return "not interceptable (traffic-agent not installed): " + dep.NotInterceptableReason
+		if workload.NotInterceptableReason != "" {
+			return "not interceptable (traffic-agent not installed): " + workload.NotInterceptableReason
 		} else {
 			return "ready to intercept (traffic-agent not yet installed)"
 		}
 	}
 
-	for _, dep := range r.Deployments {
-		if dep.Name == "" {
+	for _, workload := range r.Workloads {
+		if workload.Name == "" {
 			// Local-only, so use name of intercept
-			fmt.Fprintf(stdout, "%-*s: local-only intercept\n", nameLen, dep.InterceptInfo.Spec.Name)
+			fmt.Fprintf(stdout, "%-*s: local-only intercept\n", nameLen, workload.InterceptInfo.Spec.Name)
 		} else {
-			fmt.Fprintf(stdout, "%-*s: %s\n", nameLen, dep.Name, state(dep))
+			fmt.Fprintf(stdout, "%-*s: %s\n", nameLen, workload.Name, state(workload))
 		}
 	}
 	return nil

@@ -197,11 +197,11 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 	return &rpc.InterceptResult{}, err
 }
 
-func (s *service) List(ctx context.Context, lr *rpc.ListRequest) (*rpc.DeploymentInfoSnapshot, error) {
+func (s *service) List(ctx context.Context, lr *rpc.ListRequest) (*rpc.WorkloadInfoSnapshot, error) {
 	if s.trafficMgr.managerClient == nil {
-		return &rpc.DeploymentInfoSnapshot{}, nil
+		return &rpc.WorkloadInfoSnapshot{}, nil
 	}
-	return s.trafficMgr.deploymentInfoSnapshot(ctx, lr), nil
+	return s.trafficMgr.workloadInfoSnapshot(ctx, lr), nil
 }
 
 func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *rpc.UninstallResult, err error) {

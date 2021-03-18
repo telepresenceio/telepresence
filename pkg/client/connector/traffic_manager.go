@@ -197,13 +197,13 @@ func (tm *trafficManager) session() *manager.SessionInfo {
 	return tm.sessionInfo
 }
 
-func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, rq *rpc.ListRequest) *rpc.DeploymentInfoSnapshot {
+func (tm *trafficManager) workloadInfoSnapshot(ctx context.Context, rq *rpc.ListRequest) *rpc.WorkloadInfoSnapshot {
 	var iMap map[string]*manager.InterceptInfo
 
 	namespace := tm.actualNamespace(rq.Namespace)
 	if namespace == "" {
 		// namespace is not currently mapped
-		return &rpc.DeploymentInfoSnapshot{}
+		return &rpc.WorkloadInfoSnapshot{}
 	}
 
 	if is, _ := actions.ListMyIntercepts(ctx, tm.managerClient, tm.session().SessionId); is != nil {
@@ -229,11 +229,11 @@ func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, rq *rpc.Li
 	}
 
 	filter := rq.Filter
-	depInfos := make([]*rpc.DeploymentInfo, 0)
+	workloadInfos := make([]*rpc.WorkloadInfo, 0)
 	depNames, err := tm.deploymentNames(ctx, namespace)
 	if err != nil {
 		dlog.Error(ctx, err)
-		return &rpc.DeploymentInfoSnapshot{}
+		return &rpc.WorkloadInfoSnapshot{}
 	}
 	for _, depName := range depNames {
 		iCept, ok := iMap[depName]
@@ -264,17 +264,18 @@ func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, rq *rpc.Li
 			}
 		}
 
-		depInfos = append(depInfos, &rpc.DeploymentInfo{
+		workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{
 			Name:                   depName,
 			NotInterceptableReason: reason,
 			AgentInfo:              agent,
 			InterceptInfo:          iCept,
+			WorkloadResourceType:   "Deployment",
 		})
 	}
 
 	for localIntercept, localNs := range tm.localIntercepts {
 		if localNs == namespace {
-			depInfos = append(depInfos, &rpc.DeploymentInfo{InterceptInfo: &manager.InterceptInfo{
+			workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfo: &manager.InterceptInfo{
 				Spec:              &manager.InterceptSpec{Name: localIntercept, Namespace: localNs},
 				Disposition:       manager.InterceptDispositionType_ACTIVE,
 				MechanismArgsDesc: "as local-only",
@@ -282,7 +283,7 @@ func (tm *trafficManager) deploymentInfoSnapshot(ctx context.Context, rq *rpc.Li
 		}
 	}
 
-	return &rpc.DeploymentInfoSnapshot{Deployments: depInfos}
+	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}
 }
 
 func (tm *trafficManager) remain(c context.Context) error {
