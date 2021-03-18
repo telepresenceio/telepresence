@@ -137,7 +137,6 @@ func (ts *telepresenceSuite) TearDownSuite() {
 }
 
 func (ts *telepresenceSuite) TestA_WithNoDaemonRunning() {
-
 	ts.Run("Version", func() {
 		stdout, stderr := telepresence(ts.T(), "version")
 		ts.Empty(stderr)
@@ -419,10 +418,10 @@ func (cs *connectedSuite) TestE_PodWithSubdomain() {
 
 	cc, cancel := context.WithTimeout(c, 3*time.Second)
 	defer cancel()
-	ip, err := net.DefaultResolver.LookupHost(cc, "echo.subsonic.default")
+	ip, err := net.DefaultResolver.LookupHost(cc, "echo.subsonic."+cs.ns())
 	cs.NoError(err)
 	cs.True(len(ip) == 1)
-	ip, err = net.DefaultResolver.LookupHost(cc, "echo.subsonic.default.svc.cluster.local")
+	ip, err = net.DefaultResolver.LookupHost(cc, "echo.subsonic."+cs.ns()+".svc.cluster.local")
 	cs.NoError(err)
 	cs.True(len(ip) == 1)
 }
