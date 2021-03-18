@@ -227,7 +227,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 
 	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
 	// should become active within a few seconds.
-	c, cancel := context.WithTimeout(c, 5*time.Second)
+	c, cancel := context.WithTimeout(c, client.GetConfig(c).Timeouts.Intercept)
 	defer cancel()
 	if ii, err = tm.waitForActiveIntercept(c, ii.Id); err != nil {
 		return &rpc.InterceptResult{
@@ -305,14 +305,18 @@ func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcP
 
 func (tm *trafficManager) waitForActiveIntercept(ctx context.Context, id string) (*manager.InterceptInfo, error) {
 	dlog.Debugf(ctx, "waiting for intercept id=%q to become active", id)
+	waitError := func(err error) error {
+		return client.CheckTimeout(ctx, &client.GetConfig(ctx).Timeouts.Intercept,
+			fmt.Errorf("waiting for intercept id=%q to become active: %w", id, err))
+	}
 	stream, err := tm.managerClient.WatchIntercepts(ctx, tm.session())
-	for err != nil {
-		return nil, fmt.Errorf("waiting for intercept id=%q to become active: %w", id, err)
+	if err != nil {
+		return nil, waitError(err)
 	}
 	for {
 		snapshot, err := stream.Recv()
 		if err != nil {
-			return nil, fmt.Errorf("waiting for intercept id=%q to become active: %w", id, err)
+			return nil, waitError(err)
 		}
 
 		var intercept *manager.InterceptInfo
@@ -339,17 +343,21 @@ func (tm *trafficManager) waitForActiveIntercept(ctx context.Context, id string)
 }
 
 func (tm *trafficManager) waitForAgent(ctx context.Context, name string) (*manager.AgentInfo, error) {
-	ctx, cancel := context.WithTimeout(ctx, 120*time.Second) // installing a new agent can take some time
+	ctx, cancel := context.WithTimeout(ctx, client.GetConfig(ctx).Timeouts.AgentInstall) // installing a new agent can take some time
 	defer cancel()
 
+	waitError := func(err error) error {
+		return client.CheckTimeout(ctx, &client.GetConfig(ctx).Timeouts.AgentInstall,
+			fmt.Errorf("waiting for agent %q to be present: %w", name, err))
+	}
 	stream, err := tm.managerClient.WatchAgents(ctx, tm.session())
 	if err != nil {
-		return nil, fmt.Errorf("waiting for agent %q to be present: %q", name, err)
+		return nil, waitError(err)
 	}
 	for {
 		snapshot, err := stream.Recv()
 		if err != nil {
-			return nil, fmt.Errorf("waiting for agent %q to be present: %q", name, err)
+			return nil, waitError(err)
 		}
 
 		var agentList []*manager.AgentInfo
