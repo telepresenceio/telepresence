@@ -4,6 +4,7 @@
 - Bugfix: Uninstalling agents now only happens once per deployment instead of once per agent.
 - Bugfix: The list command no longer shows agents from namespaces that aren't mapped.
 - Bugfix: IPv6 routes now work + don't prevent other pfctl rules being written in MacOS
+- Bugfix: Pods with `hostname` and/or `subdomain` are now get correct DNS-names and routes.
 - Change: Service UID was added to InterceptSpec to better link intercepts and services.
 
 ### 2.1.1 (March 12, 2021)

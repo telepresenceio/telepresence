@@ -102,16 +102,12 @@ func (o *outbound) runOverridingServer(c context.Context, onReady func()) error 
 // An unqualified name query will be tried with all the suffixes in the search path
 // and the IPs of the first match will be returned.
 func (o *outbound) resolveWithSearch(query string) []string {
-	if !strings.HasSuffix(query, ".") {
-		// Query must end with dot.
-		return nil
-	}
 	if strings.Count(query, ".") > 1 {
 		// More than just the ending dot, so don't use search-path
 		return o.resolveNoSearch(query)
 	}
 	o.domainsLock.RLock()
-	ips := o.resolveWithSearchLocked(query)
+	ips := o.resolveWithSearchLocked(strings.ToLower(query))
 	o.domainsLock.RUnlock()
 	return ips
 }

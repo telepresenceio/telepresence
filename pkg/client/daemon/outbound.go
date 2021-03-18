@@ -194,31 +194,29 @@ func (o *outbound) firewallConfiguratorWorker(c context.Context) (err error) {
 const tel2SubDomain = "tel2-search"
 
 func (o *outbound) resolveNoSearch(query string) []string {
-	ds := strings.Split(strings.ToLower(query), ".")
-	dl := len(ds) - 1
-	if ds[dl] != "" {
-		// query didn't end with a dot. Give up.
+	query = strings.ToLower(query)
+	ds := strings.Split(query, ".")
+	dl := len(ds) - 1 // -1 to encounter for ending dot.
+	if dl < 1 {
+		// bogus name, give up.
 		return nil
 	}
+	rhsDomain := ds[dl-1]
 
 	o.domainsLock.RLock()
 	defer o.domainsLock.RUnlock()
-	if dl == 2 {
-		domain := ds[1]
-		if domain == tel2SubDomain {
-			return o.resolveWithSearchLocked(strings.ToLower(ds[0] + "."))
-		}
-		if _, ok := o.namespaces[domain]; ok {
-			// This is a <name>.<namespace> query
-			query += "svc.cluster.local."
-		}
+	if dl == 2 && rhsDomain == tel2SubDomain { // only for single label names with namespace, hence dl == 2
+		return o.resolveWithSearchLocked(ds[0] + ".")
 	}
-	ips := o.domains[strings.ToLower(query)]
+	if _, ok := o.namespaces[rhsDomain]; ok {
+		// This is a <subdomain>.<namespace> query
+		query += "svc.cluster.local."
+	}
+	ips := o.domains[query]
 	return shuffleIPs(ips)
 }
 
-func (o *outbound) resolveWithSearchLocked(query string) []string {
-	n := strings.ToLower(query)
+func (o *outbound) resolveWithSearchLocked(n string) []string {
 	for _, p := range o.search {
 		if ips, ok := o.domains[n+p]; ok {
 			return shuffleIPs(ips)

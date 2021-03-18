@@ -430,15 +430,21 @@ func getIPsFromHeadlessService(svc *kates.Service, externalName string, endpoint
 }
 
 func updateTableFromPod(pod *kates.Pod, table *daemon.Table) {
+	ips := []string{pod.Status.PodIP}
+	if len(ips) == 0 {
+		return
+	}
 	qname := ""
 
-	hostname := pod.Spec.Hostname
-	if hostname != "" {
-		qname += hostname
+	if hostname := pod.Spec.Hostname; hostname != "" {
+		qname = hostname
 	}
 
-	subdomain := pod.Spec.Subdomain
-	if subdomain != "" {
+	if subdomain := pod.Spec.Subdomain; subdomain != "" {
+		if qname == "" {
+			// Can't have a subdomain without a hostname, so default to using pod's name as hostname
+			qname = pod.Name
+		}
 		qname += "." + subdomain
 	}
 
@@ -447,15 +453,12 @@ func updateTableFromPod(pod *kates.Pod, table *daemon.Table) {
 		// simply not publish a dns name in this case.
 		qname = pod.Name + "." + pod.Namespace + ".pod.cluster.local"
 	} else {
-		qname += clusterServerSuffix
+		qname += "." + pod.Namespace + clusterServerSuffix
 	}
 
-	ips := []string{pod.Status.PodIP}
-	if len(ips) > 0 {
-		table.Routes = append(table.Routes, &daemon.Route{
-			Name:  qname,
-			Ips:   ips,
-			Proto: "tcp",
-		})
-	}
+	table.Routes = append(table.Routes, &daemon.Route{
+		Name:  qname,
+		Ips:   ips,
+		Proto: "tcp",
+	})
 }
