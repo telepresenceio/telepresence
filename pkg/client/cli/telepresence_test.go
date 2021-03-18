@@ -408,6 +408,25 @@ func (cs *connectedSuite) TestG_ListOnlyMapped() {
 	require.NotContains(stdout, "No deployments")
 }
 
+func (cs *connectedSuite) TestE_PodWithSubdomain() {
+	require := cs.Require()
+	c := dlog.NewTestContext(cs.T(), false)
+	require.NoError(cs.tpSuite.applyApp(c, "echo-w-subdomain", "echo.subsonic", 8080))
+	defer func() {
+		cs.NoError(cs.tpSuite.kubectl(c, "delete", "svc", "subsonic"))
+		cs.NoError(cs.tpSuite.kubectl(c, "delete", "deploy", "echo-subsonic"))
+	}()
+
+	cc, cancel := context.WithTimeout(c, 3*time.Second)
+	defer cancel()
+	ip, err := net.DefaultResolver.LookupHost(cc, "echo.subsonic.default")
+	cs.NoError(err)
+	cs.True(len(ip) == 1)
+	ip, err = net.DefaultResolver.LookupHost(cc, "echo.subsonic.default.svc.cluster.local")
+	cs.NoError(err)
+	cs.True(len(ip) == 1)
+}
+
 type interceptedSuite struct {
 	suite.Suite
 	tpSuite    *telepresenceSuite
