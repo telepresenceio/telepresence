@@ -72,6 +72,8 @@ type Timeouts struct {
 	// ProxyDial is how long to wait for the proxy to establish an outbound connection
 	ProxyDial time.Duration `json:"proxyDial,omitempty"`
 	// TrafficManagerConnect is how long to wait for the traffic-manager API to connect
+	TrafficManagerAPI time.Duration `json:"trafficManagerApiConnect,omitempty"`
+	// TrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
 	TrafficManagerConnect time.Duration `json:"trafficManagerConnect,omitempty"`
 }
 
@@ -101,6 +103,9 @@ func CheckTimeout(c context.Context, which *time.Duration, err error) error {
 	case &timeouts.ProxyDial:
 		name = "proxyDial"
 		text = "proxy dial"
+	case &timeouts.TrafficManagerAPI:
+		name = "trafficManagerApi"
+		text = "traffic manager gRPC API"
 	case &timeouts.TrafficManagerConnect:
 		name = "trafficManagerConnect"
 		text = "port-forward connection to the traffic manager"
@@ -137,6 +142,8 @@ func (d *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
 			dp = &d.Intercept
 		case "proxyDial":
 			dp = &d.ProxyDial
+		case "trafficManagerAPI":
+			dp = &d.TrafficManagerAPI
 		case "trafficManagerConnect":
 			dp = &d.TrafficManagerConnect
 		default:
@@ -182,6 +189,9 @@ func (d *Timeouts) merge(o *Timeouts) {
 	if o.ProxyDial != 0 {
 		d.ProxyDial = o.ProxyDial
 	}
+	if o.TrafficManagerAPI != 0 {
+		d.TrafficManagerAPI = o.TrafficManagerAPI
+	}
 	if o.TrafficManagerConnect != 0 {
 		d.TrafficManagerConnect = o.TrafficManagerConnect
 	}
@@ -193,6 +203,8 @@ var defaultConfig = Config{Timeouts: Timeouts{
 	ClusterConnect:        20 * time.Second,
 	Intercept:             5 * time.Second,
 	ProxyDial:             5 * time.Second,
+	TrafficManagerAPI:     5 * time.Second,
+	TrafficManagerConnect: 20 * time.Second,
 }}
 
 var config *Config
