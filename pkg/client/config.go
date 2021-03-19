@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -9,8 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -23,6 +25,39 @@ type Config struct {
 // merge merges this instance with the non-zero values of the given argument. The argument values take priority.
 func (c *Config) merge(o *Config) {
 	c.Timeouts.merge(&o.Timeouts)
+}
+
+func stringKey(n *yaml.Node) (string, error) {
+	var s string
+	if err := n.Decode(&s); err != nil {
+		return "", errors.New(withLoc("key must be a string", n))
+	}
+	return s, nil
+}
+
+func (c *Config) UnmarshalYAML(node *yaml.Node) (err error) {
+	if node.Kind != yaml.MappingNode {
+		return errors.New(withLoc("config must be an object", node))
+	}
+	ms := node.Content
+	top := len(ms)
+	for i := 0; i < top; i += 2 {
+		kv, err := stringKey(ms[i])
+		if err != nil {
+			return err
+		}
+		if kv == "timeouts" {
+			err := ms[i+1].Decode(&c.Timeouts)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		if parseContext != nil {
+			dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
+		}
+	}
+	return nil
 }
 
 type Timeouts struct {
@@ -68,7 +103,7 @@ func CheckTimeout(c context.Context, which *time.Duration, err error) error {
 		text = "proxy dial"
 	case &timeouts.TrafficManagerConnect:
 		name = "trafficManagerConnect"
-		text = "traffic manager connect"
+		text = "port-forward connection to the traffic manager"
 	default:
 		name = "unknown timer"
 		text = "unknown timer"
@@ -79,45 +114,55 @@ func CheckTimeout(c context.Context, which *time.Duration, err error) error {
 }
 
 // UnmarshalYAML caters for the unfortunate fact that time.Duration doesn't do YAML or JSON at all.
-func (d *Timeouts) UnmarshalYAML(unmarshal func(interface{}) error) (err error) {
-	var fields map[string]interface{}
-	if err = unmarshal(&fields); err != nil {
-		return err
+func (d *Timeouts) UnmarshalYAML(node *yaml.Node) (err error) {
+	if node.Kind != yaml.MappingNode {
+		return errors.New(withLoc("timeouts must be an object", node))
 	}
-	get := func(key string) (value time.Duration, err error) {
-		if jv, ok := fields[key]; ok {
-			switch jv := jv.(type) {
-			case string:
-				if value, err = time.ParseDuration(jv); err != nil {
-					err = fmt.Errorf("timeouts.%s: %q is not a valid duration", key, jv)
-				}
-			case float64:
-				value = time.Duration(jv * float64(time.Second))
-			case int:
-				value = time.Duration(jv) * time.Second
-			default:
-				err = fmt.Errorf("timeouts.%s: %v is not a valid duration", key, jv)
+	ms := node.Content
+	top := len(ms)
+	for i := 0; i < top; i += 2 {
+		kv, err := stringKey(ms[i])
+		if err != nil {
+			return err
+		}
+		var dp *time.Duration
+		switch kv {
+		case "agentInstall":
+			dp = &d.AgentInstall
+		case "apply":
+			dp = &d.Apply
+		case "clusterConnect":
+			dp = &d.ClusterConnect
+		case "intercept":
+			dp = &d.Intercept
+		case "proxyDial":
+			dp = &d.ProxyDial
+		case "trafficManagerConnect":
+			dp = &d.TrafficManagerConnect
+		default:
+			if parseContext != nil {
+				dlog.Warn(parseContext, withLoc(fmt.Sprintf("unknown key %q", kv), ms[i]))
+			}
+			continue
+		}
+
+		v := ms[i+1]
+		var vv interface{}
+		if err = v.Decode(&vv); err != nil {
+			return errors.New(withLoc("unable to parse value", v))
+		}
+		switch vv := vv.(type) {
+		case int:
+			*dp = time.Duration(vv) * time.Second
+		case float64:
+			*dp = time.Duration(vv * float64(time.Second))
+		case string:
+			if *dp, err = time.ParseDuration(vv); err != nil {
+				return errors.New(withLoc(fmt.Sprintf("%q is not a valid duration", vv), v))
 			}
 		}
-		return value, err
 	}
-	if d.AgentInstall, err = get("agentInstall"); err != nil {
-		return err
-	}
-	if d.Apply, err = get("apply"); err != nil {
-		return err
-	}
-	if d.ClusterConnect, err = get("clusterConnect"); err != nil {
-		return err
-	}
-	if d.Intercept, err = get("intercept"); err != nil {
-		return err
-	}
-	if d.ProxyDial, err = get("proxyDial"); err != nil {
-		return err
-	}
-	d.TrafficManagerConnect, err = get("trafficManagerConnect")
-	return err
+	return nil
 }
 
 // merge merges this instance with the non-zero values of the given argument. The argument values take priority.
@@ -143,17 +188,29 @@ func (d *Timeouts) merge(o *Timeouts) {
 }
 
 var defaultConfig = Config{Timeouts: Timeouts{
-	ClusterConnect:        20 * time.Second,
-	TrafficManagerConnect: 20 * time.Second,
-	Apply:                 1 * time.Minute,
-	Intercept:             5 * time.Second,
 	AgentInstall:          120 * time.Second,
+	Apply:                 1 * time.Minute,
+	ClusterConnect:        20 * time.Second,
+	Intercept:             5 * time.Second,
 	ProxyDial:             5 * time.Second,
 }}
 
 var config *Config
 
 var configOnce = sync.Once{}
+
+var parseContext context.Context
+
+type parsedFile struct{}
+
+func withLoc(s string, n *yaml.Node) string {
+	if parseContext != nil {
+		if fileName, ok := parseContext.Value(parsedFile{}).(string); ok {
+			return fmt.Sprintf("file %s, line %d: %s", fileName, n.Line, s)
+		}
+	}
+	return fmt.Sprintf("line %d: %s", n.Line, s)
+}
 
 // GetConfig returns the Telepresence configuration as stored in filelocation.AppUserConfigDir
 // or filelocation.AppSystemConfigDirs
@@ -163,6 +220,7 @@ func GetConfig(c context.Context) *Config {
 		var err error
 		config, err = loadConfig(c)
 		if err != nil {
+			dlog.Error(c, err)
 			config = &defaultConfig
 		}
 	})
@@ -181,13 +239,18 @@ func loadConfig(c context.Context) (*Config, error) {
 		if stat, err := os.Stat(dir); err != nil || !stat.IsDir() { // skip unless directory
 			return nil
 		}
-		bs, err := ioutil.ReadFile(filepath.Join(dir, configFile))
+		fileName := filepath.Join(dir, configFile)
+		bs, err := ioutil.ReadFile(fileName)
 		if err != nil {
 			if err == os.ErrNotExist {
 				err = nil
 			}
 			return err
 		}
+		parseContext = context.WithValue(c, parsedFile{}, fileName)
+		defer func() {
+			parseContext = nil
+		}()
 		fileConfig := Config{}
 		if err = yaml.Unmarshal(bs, &fileConfig); err != nil {
 			return err
