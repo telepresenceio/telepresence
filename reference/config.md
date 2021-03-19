@@ -9,17 +9,17 @@ For Linux, the above paths are for a user-level configuration. For system-level 
 
 ## Values
 
-The config file currently only supports values for the `timeout` key, here is an example file:
+The config file currently only supports values for the `timeouts` key, here is an example file:
 
 ```yaml
-- timeout:
-    agentInstall: 1m
-    intercept: 10s
+timeouts:
+  agentInstall: 1m
+  intercept: 10s
 ```
 
 Values are all durations either as a number respresenting seconds or a string with a unit suffix of `ms`, `s`, `m`, or `h`.  Strings can be fractional (`1.5h`) or combined (`2h45m`).
 
-These are the valid fields for the `timeout` key:
+These are the valid fields for the `timeouts` key:
 
 |Field|Description|Default|
 |---|---|---|
