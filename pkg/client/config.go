@@ -72,7 +72,7 @@ type Timeouts struct {
 	// ProxyDial is how long to wait for the proxy to establish an outbound connection
 	ProxyDial time.Duration `json:"proxyDial,omitempty"`
 	// TrafficManagerConnect is how long to wait for the traffic-manager API to connect
-	TrafficManagerAPI time.Duration `json:"trafficManagerApiConnect,omitempty"`
+	TrafficManagerAPI time.Duration `json:"trafficManagerAPI,omitempty"`
 	// TrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
 	TrafficManagerConnect time.Duration `json:"trafficManagerConnect,omitempty"`
 }
@@ -104,7 +104,7 @@ func CheckTimeout(c context.Context, which *time.Duration, err error) error {
 		name = "proxyDial"
 		text = "proxy dial"
 	case &timeouts.TrafficManagerAPI:
-		name = "trafficManagerApi"
+		name = "trafficManagerAPI"
 		text = "traffic manager gRPC API"
 	case &timeouts.TrafficManagerConnect:
 		name = "trafficManagerConnect"
