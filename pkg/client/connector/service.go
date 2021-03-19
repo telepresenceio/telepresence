@@ -290,13 +290,13 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	dlog.Info(c, "Connecting to k8s cluster...")
 	cluster, err := func() (*k8sCluster, error) {
+		c, cancel := context.WithTimeout(c, client.GetConfig(c).Timeouts.ClusterConnect)
+		defer cancel()
 		cluster, err := newKCluster(c, k8sConfig, mappedNamespaces, s.daemon)
 		if err != nil {
 			return nil, err
 		}
 		s.clusterRequest <- cluster
-		c, cancel := context.WithTimeout(c, 10*time.Second)
-		defer cancel()
 		if err := cluster.waitUntilReady(c); err != nil {
 			return nil, err
 		}

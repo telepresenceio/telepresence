@@ -63,6 +63,9 @@ func AppUserCacheDir(ctx context.Context) (string, error) {
 // If the location cannot be determined (for example, $HOME is not defined),
 // then it will return an error.
 func AppUserConfigDir(ctx context.Context) (string, error) {
+	if untyped := ctx.Value(configCtxKey{}); untyped != nil {
+		return untyped.(string), nil
+	}
 	userDir, err := UserConfigDir(ctx)
 	if err != nil {
 		return "", err
@@ -79,6 +82,9 @@ func AppUserConfigDir(ctx context.Context) (string, error) {
 //
 // If the location cannot be determined, then it will return an error.
 func AppSystemConfigDirs(ctx context.Context) ([]string, error) {
+	if untyped := ctx.Value(sysConfigsCtxKey{}); untyped != nil {
+		return untyped.([]string), nil
+	}
 	dirs, err := systemConfigDirs(ctx)
 	if err != nil {
 		return nil, err

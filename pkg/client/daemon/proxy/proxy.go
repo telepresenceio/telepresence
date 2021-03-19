@@ -2,14 +2,14 @@ package proxy
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
-	"time"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 
 	"golang.org/x/net/proxy"
 	"golang.org/x/sync/semaphore"
@@ -135,13 +135,12 @@ func (pxy *Proxy) handleConnection(c context.Context, conn *net.TCPConn) {
 	}
 
 	dlog.Debugf(c, "SOCKS5 DialContext %s -> %s", "localhost:1080", host)
-	tc, cancel := context.WithTimeout(c, 5*time.Second)
+	tos := &client.GetConfig(c).Timeouts
+	tc, cancel := context.WithTimeout(c, tos.ProxyDial)
 	defer cancel()
 	px, err := dialer.(proxy.ContextDialer).DialContext(tc, "tcp", host)
 	if err != nil {
-		if tc.Err() == context.DeadlineExceeded {
-			err = fmt.Errorf("timeout when dialing tcp %s", host)
-		}
+		err = client.CheckTimeout(tc, &tos.ProxyDial, err)
 		dlog.Error(c, err)
 		conn.Close()
 		return

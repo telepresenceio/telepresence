@@ -532,7 +532,8 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, a
 }
 
 func (ki *installer) waitForApply(c context.Context, namespace, name string, dep *kates.Deployment) error {
-	c, cancel := context.WithTimeout(c, 1*time.Minute)
+	tos := &client.GetConfig(c).Timeouts
+	c, cancel := context.WithTimeout(c, tos.Apply)
 	defer cancel()
 
 	origGeneration := int64(0)
@@ -540,19 +541,15 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, dep
 		origGeneration = dep.ObjectMeta.Generation
 	}
 
-	timeout := fmt.Errorf("timeout while waiting for install/update of %s.%s", name, namespace)
 	for {
 		dtime.SleepWithContext(c, time.Second)
-		if c.Err() != nil {
-			return timeout
+		if err := client.CheckTimeout(c, &tos.Apply, nil); err != nil {
+			return err
 		}
 
 		dep, err := ki.findDeployment(c, namespace, name)
 		if err != nil {
-			if c.Err() != nil {
-				err = timeout
-			}
-			return err
+			return client.CheckTimeout(c, &tos.Apply, err)
 		}
 
 		deployed := dep.ObjectMeta.Generation >= origGeneration &&

@@ -6,6 +6,7 @@
 - Bugfix: IPv6 routes now work + don't prevent other pfctl rules being written in MacOS
 - Bugfix: Pods with `hostname` and/or `subdomain` are now get correct DNS-names and routes.
 - Change: Service UID was added to InterceptSpec to better link intercepts and services.
+- Feature: All timeouts can now be configured in a <user-config-dir>/telepresence/config.yml file
 
 ### 2.1.1 (March 12, 2021)
 

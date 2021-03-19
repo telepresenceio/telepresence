@@ -32,8 +32,22 @@ func WithUserHomeDir(ctx context.Context, home string) context.Context {
 
 type logCtxKey struct{}
 
-// WithAppUserLogdir spoofs the AppUserLogDir.  This is useful for testing, or for when logging to a
+// WithAppUserLogDir spoofs the AppUserLogDir.  This is useful for testing, or for when logging to a
 // normal user's logs as root.
 func WithAppUserLogDir(ctx context.Context, logdir string) context.Context {
 	return context.WithValue(ctx, logCtxKey{}, logdir)
+}
+
+type configCtxKey struct{}
+
+// WithAppUserConfigDir spoofs the AppUserConfigDir.  This is useful for testing
+func WithAppUserConfigDir(ctx context.Context, configDir string) context.Context {
+	return context.WithValue(ctx, configCtxKey{}, configDir)
+}
+
+type sysConfigsCtxKey struct{}
+
+// WithAppSystemConfigDirs spoofs the AppSystemConfigDirs.  This is useful for testing
+func WithAppSystemConfigDirs(ctx context.Context, configDirs []string) context.Context {
+	return context.WithValue(ctx, sysConfigsCtxKey{}, configDirs)
 }

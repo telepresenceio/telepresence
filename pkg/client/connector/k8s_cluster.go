@@ -19,9 +19,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
-// Consider making this configurable at some point
-const connectTimeout = 20 * time.Second
-
 type nameMeta struct {
 	Name string `json:"name"`
 }
@@ -147,18 +144,15 @@ func (kc *k8sCluster) portForwardAndThen(
 
 // check uses a non-caching DiscoveryClientConfig to retrieve the server version
 func (kc *k8sCluster) check(c context.Context) error {
-	c, cancel := context.WithTimeout(c, connectTimeout)
-	defer cancel()
+	// No timeout is needed here. The context that is passed in already has one.
 	dc, err := discovery.NewDiscoveryClientForConfig(kc.config)
 	if err != nil {
 		return err
 	}
 	info, err := dc.ServerVersion()
 	if err != nil {
-		if c.Err() == context.DeadlineExceeded {
-			err = errors.New("timeout when testing cluster connectivity")
-		}
-		return err
+		return client.CheckTimeout(c, &client.GetConfig(c).Timeouts.ClusterConnect,
+			fmt.Errorf("initial cluster check failed: %w", client.RunError(err)))
 	}
 	dlog.Infof(c, "Server version %s", info.GitVersion)
 	return nil
@@ -261,7 +255,7 @@ func newKCluster(c context.Context, kubeFlags *k8sConfig, mappedNamespaces []str
 	// TODO: Add constructor to kates that takes an additional restConfig argument to prevent that kates recreates it.
 	kc, err := kates.NewClientFromConfigFlags(kubeFlags.configFlags)
 	if err != nil {
-		return nil, fmt.Errorf("k8s client create failed: %v", err)
+		return nil, client.CheckTimeout(c, &client.GetConfig(c).Timeouts.ClusterConnect, fmt.Errorf("k8s client create failed: %v", err))
 	}
 
 	ret := &k8sCluster{
@@ -275,7 +269,7 @@ func newKCluster(c context.Context, kubeFlags *k8sConfig, mappedNamespaces []str
 	}
 
 	if err := ret.check(c); err != nil {
-		return nil, fmt.Errorf("initial cluster check failed: %v", client.RunError(err))
+		return nil, err
 	}
 
 	dlog.Infof(c, "Context: %s", ret.Context)
@@ -289,7 +283,7 @@ func (kc *k8sCluster) waitUntilReady(ctx context.Context) error {
 	case <-kc.accWait:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return client.CheckTimeout(ctx, &client.GetConfig(ctx).Timeouts.ClusterConnect, nil)
 	}
 }
 

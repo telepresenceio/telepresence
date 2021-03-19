@@ -55,7 +55,7 @@ type trafficManager struct {
 
 // newTrafficManager returns a TrafficManager resource for the given
 // cluster if it has a Traffic Manager service.
-func newTrafficManager(c context.Context, env client.Env, cluster *k8sCluster, installID string) (*trafficManager, error) {
+func newTrafficManager(_ context.Context, env client.Env, cluster *k8sCluster, installID string) (*trafficManager, error) {
 	userinfo, err := user.Current()
 	if err != nil {
 		return nil, errors.Wrap(err, "user.Current()")
@@ -148,7 +148,8 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 	tm.sshPort = int32(sshPort)
 
 	// First check. Establish connection
-	tc, cancel := context.WithTimeout(c, connectTimeout)
+	tos := client.GetConfig(c).Timeouts
+	tc, cancel := context.WithTimeout(c, tos.TrafficManagerConnect)
 	defer cancel()
 
 	var conn *grpc.ClientConn
@@ -157,9 +158,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 		grpc.WithNoProxy(),
 		grpc.WithBlock())
 	if err != nil {
-		if tc.Err() == context.DeadlineExceeded {
-			err = errors.New("timeout when connecting to traffic-manager")
-		}
+		err = client.CheckTimeout(tc, &tos.TrafficManagerConnect, err)
 		tm.managerErr = err
 		close(tm.startup)
 		return err
@@ -328,7 +327,7 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 
 // Given a slice of AgentInfo, this returns another slice of agents with one
 // agent per namespace, name pair.
-func getRepresentativeAgents(c context.Context, agents []*manager.AgentInfo) []*manager.AgentInfo {
+func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*manager.AgentInfo {
 	type deployment struct {
 		name, namespace string
 	}
