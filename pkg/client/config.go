@@ -114,7 +114,7 @@ func CheckTimeout(c context.Context, which *time.Duration, err error) error {
 		text = "unknown timer"
 	}
 	dir, _ := filelocation.AppUserConfigDir(c)
-	return fmt.Errorf("the %s timed out. The current timeout %s can be configured as timeout.%s in %s",
+	return fmt.Errorf("the %s timed out. The current timeout %s can be configured as timeouts.%s in %s",
 		text, *which, name, filepath.Join(dir, configFile))
 }
 
