@@ -84,11 +84,9 @@ func newTrafficManager(_ context.Context, env client.Env, cluster *k8sCluster, i
 func (tm *trafficManager) waitUntilStarted(c context.Context) error {
 	select {
 	case <-c.Done():
-		return c.Err()
+		return client.CheckTimeout(c, &client.GetConfig(c).Timeouts.TrafficManagerConnect, nil)
 	case <-tm.startup:
 		return tm.managerErr
-	case <-time.After(60 * time.Second):
-		return errors.New("timeout establishing connection to traffic-manager")
 	}
 }
 
@@ -148,8 +146,8 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 	tm.sshPort = int32(sshPort)
 
 	// First check. Establish connection
-	tos := client.GetConfig(c).Timeouts
-	tc, cancel := context.WithTimeout(c, tos.TrafficManagerConnect)
+	tos := &client.GetConfig(c).Timeouts
+	tc, cancel := context.WithTimeout(c, tos.TrafficManagerAPI)
 	defer cancel()
 
 	var conn *grpc.ClientConn
@@ -158,14 +156,14 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 		grpc.WithNoProxy(),
 		grpc.WithBlock())
 	if err != nil {
-		err = client.CheckTimeout(tc, &tos.TrafficManagerConnect, err)
+		err = client.CheckTimeout(tc, &tos.TrafficManagerAPI, err)
 		tm.managerErr = err
 		close(tm.startup)
 		return err
 	}
 
 	mClient := manager.NewManagerClient(conn)
-	si, err := mClient.ArriveAsClient(c, &manager.ClientInfo{
+	si, err := mClient.ArriveAsClient(tc, &manager.ClientInfo{
 		Name:        tm.userAndHost,
 		InstallId:   tm.installID,
 		Product:     "telepresence",
@@ -174,7 +172,8 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 	})
 
 	if err != nil {
-		dlog.Errorf(c, "ArriveAsClient: %v", err)
+		err = client.CheckTimeout(tc, &tos.TrafficManagerAPI, fmt.Errorf("ArriveAsClient: %w", err))
+		dlog.Error(c, err)
 		conn.Close()
 		tm.managerErr = err
 		close(tm.startup)
