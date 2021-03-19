@@ -28,4 +28,5 @@ These are the valid fields for the `timeout` key:
 |`clusterConnect`|Waiting for cluster to be connected|20 seconds|
 |`intercept`|Waiting for an intercept to become active|5 seconds|
 |`proxyDial`|Waiting for an outbound connection to be established|5 seconds|
-|`trafficManagerConnect`|Waiting for Traffic Manager API to be connected|20 seconds|
+|`trafficManagerConnect`|Waiting for the Traffic Manager API to connect for port fowards|20 seconds|
+|`trafficManagerAPI`|Waiting for connection to the gPRC API after `trafficManagerConnect` is successful|5 seconds|
