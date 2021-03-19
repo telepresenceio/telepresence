@@ -178,6 +178,9 @@ func loadConfig(c context.Context) (*Config, error) {
 	cfg := defaultConfig // start with a by value copy of the default
 
 	readMerge := func(dir string) error {
+		if stat, err := os.Stat(dir); err != nil || !stat.IsDir() { // skip unless directory
+			return nil
+		}
 		bs, err := ioutil.ReadFile(filepath.Join(dir, configFile))
 		if err != nil {
 			if err == os.ErrNotExist {
