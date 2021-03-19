@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.1.2 (TBD)
+### 2.1.2 (March 19, 2021)
 - Bugfix: Uninstalling agents now only happens once per deployment instead of once per agent.
 - Bugfix: The list command no longer shows agents from namespaces that aren't mapped.
 - Bugfix: IPv6 routes now work and don't prevent other pfctl rules being written in MacOS
