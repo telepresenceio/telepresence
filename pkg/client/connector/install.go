@@ -273,6 +273,31 @@ func (ki *installer) findMatchingServices(portName string, dep *kates.Deployment
 	return matching
 }
 
+func (ki *installer) findMatchingServicesByLabels(portName string, labels map[string]string) []*kates.Service {
+	matching := make([]*kates.Service, 0)
+
+	ki.accLock.Lock()
+	for _, watch := range ki.watchers {
+	nextSvc:
+		for _, svc := range watch.Services {
+			selector := svc.Spec.Selector
+			if len(selector) == 0 {
+				continue nextSvc
+			}
+			for k, v := range selector {
+				if labels[k] != v {
+					continue nextSvc
+				}
+			}
+			if len(svcPortByName(svc, portName)) > 0 {
+				matching = append(matching, svc)
+			}
+		}
+	}
+	ki.accLock.Unlock()
+	return matching
+}
+
 func findMatchingPort(dep *kates.Deployment, portName string, svcs []*kates.Service) (
 	service *kates.Service,
 	sPort *kates.ServicePort,

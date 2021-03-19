@@ -700,6 +700,7 @@ func (x *ListRequest) GetNamespace() string {
 }
 
 // WorkloadInfo contains information about a workload
+// https://kubernetes.io/docs/concepts/workloads/
 type WorkloadInfo struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -707,11 +708,11 @@ type WorkloadInfo struct {
 
 	// Name of workload
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// Reason why deployment cannot be intercepted, or empty if it can.
+	// Reason why workload cannot be intercepted, or empty if it can.
 	NotInterceptableReason string `protobuf:"bytes,2,opt,name=not_interceptable_reason,json=notInterceptableReason,proto3" json:"not_interceptable_reason,omitempty"`
-	// AgentInfo reported from the traffic manager in case the deployment has a traffic-agent installed
+	// AgentInfo reported from the traffic manager in case the workload has a traffic-agent installed
 	AgentInfo *manager.AgentInfo `protobuf:"bytes,3,opt,name=agent_info,json=agentInfo,proto3" json:"agent_info,omitempty"`
-	// InterceptInfo reported from the traffic manager in case the deployment is currently intercepted
+	// InterceptInfo reported from the traffic manager in case the workload is currently intercepted
 	InterceptInfo *manager.InterceptInfo `protobuf:"bytes,4,opt,name=intercept_info,json=interceptInfo,proto3" json:"intercept_info,omitempty"`
 	// Workload Resource type (e.g. Deployment, ReplicaSet)
 	WorkloadResourceType string `protobuf:"bytes,5,opt,name=workload_resource_type,json=workloadResourceType,proto3" json:"workload_resource_type,omitempty"`

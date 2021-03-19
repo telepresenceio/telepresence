@@ -85,6 +85,18 @@ func newTrafficManager(_ context.Context, env client.Env, cluster *k8sCluster, i
 	return tm, nil
 }
 
+type uniqueWorkload struct {
+	name      string
+	namespace string
+}
+
+func newUniqueWorkload(_ context.Context, name, namespace string) *uniqueWorkload {
+	return &uniqueWorkload{
+		name:      name,
+		namespace: namespace,
+	}
+}
+
 func (tm *trafficManager) waitUntilStarted(c context.Context) error {
 	select {
 	case <-c.Done():
@@ -197,6 +209,89 @@ func (tm *trafficManager) session() *manager.SessionInfo {
 	return tm.sessionInfo
 }
 
+func (tm *trafficManager) getInfosForWorkflow(ctx context.Context, names []string, objectKind, namespace string, iMap map[string]*manager.InterceptInfo, aMap map[string]*manager.AgentInfo, filter rpc.ListRequest_Filter) []*rpc.WorkloadInfo {
+	workloadInfos := make([]*rpc.WorkloadInfo, 0)
+	for _, name := range names {
+		iCept, ok := iMap[name]
+		if !ok && filter <= rpc.ListRequest_INTERCEPTS {
+			continue
+		}
+		agent, ok := aMap[name]
+		if !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
+			continue
+		}
+		reason := ""
+		if agent == nil && iCept == nil {
+			// Check if interceptable
+			switch objectKind {
+			case "Deployment":
+				dep, err := tm.findDeployment(ctx, namespace, name)
+				if err != nil {
+					// Removed from snapshot since the name slice was obtained
+					if !errors2.IsNotFound(err) {
+						dlog.Error(ctx, err)
+					}
+					continue
+				}
+				matchingSvcs := tm.findMatchingServices("", dep)
+				if len(matchingSvcs) == 0 {
+					if !ok && filter <= rpc.ListRequest_INTERCEPTABLE {
+						continue
+					}
+					reason = "No service with matching selector"
+				}
+
+			case "ReplicaSet":
+				rs, err := tm.findReplicaSet(ctx, namespace, name)
+				if err != nil {
+					// Removed from snapshot since the name slice was obtained
+					if !errors2.IsNotFound(err) {
+						dlog.Error(ctx, err)
+					}
+					dlog.Infof(ctx, "Error 1: %v", err)
+					continue
+				}
+
+				// If a replicaSet is owned by a higher level workload, then users should
+				// intercept that workload so we will not include it in our slice.
+				ownedByDeployment := false
+				for _, owner := range rs.ObjectMeta.OwnerReferences {
+					if owner.Kind == "Deployment" {
+						ownedByDeployment = true
+					}
+				}
+				if ownedByDeployment {
+					dlog.Infof(ctx, "Not including snapshot for Replica Set owned by deployment: %s", rs.Name)
+					continue
+				}
+
+				if rs.Status.Replicas == int32(0) {
+					dlog.Infof(ctx, "Not including snapshot for Replica Set with 0 replicas: %s", rs.Name)
+					continue
+				}
+				matchingSvcs := tm.findMatchingServicesByLabels("", rs.Spec.Template.Labels)
+				if len(matchingSvcs) == 0 {
+					if !ok && filter <= rpc.ListRequest_INTERCEPTABLE {
+						continue
+					}
+					reason = "No service with matching selector"
+				}
+			default:
+				reason = "No workload telepresence knows how to intercept"
+			}
+		}
+
+		workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{
+			Name:                   name,
+			NotInterceptableReason: reason,
+			AgentInfo:              agent,
+			InterceptInfo:          iCept,
+			WorkloadResourceType:   objectKind,
+		})
+	}
+	return workloadInfos
+}
+
 func (tm *trafficManager) workloadInfoSnapshot(ctx context.Context, rq *rpc.ListRequest) *rpc.WorkloadInfoSnapshot {
 	var iMap map[string]*manager.InterceptInfo
 
@@ -235,44 +330,16 @@ func (tm *trafficManager) workloadInfoSnapshot(ctx context.Context, rq *rpc.List
 		dlog.Error(ctx, err)
 		return &rpc.WorkloadInfoSnapshot{}
 	}
-	for _, depName := range depNames {
-		iCept, ok := iMap[depName]
-		if !ok && filter <= rpc.ListRequest_INTERCEPTS {
-			continue
-		}
-		agent, ok := aMap[depName]
-		if !ok && filter <= rpc.ListRequest_INSTALLED_AGENTS {
-			continue
-		}
-		reason := ""
-		if agent == nil && iCept == nil {
-			// Check if interceptable
-			dep, err := tm.findDeployment(ctx, namespace, depName)
-			if err != nil {
-				// Removed from snapshot since the name slice was obtained
-				if !errors2.IsNotFound(err) {
-					dlog.Error(ctx, err)
-				}
-				continue
-			}
-			matchingSvcs := tm.findMatchingServices("", dep)
-			if len(matchingSvcs) == 0 {
-				if !ok && filter <= rpc.ListRequest_INTERCEPTABLE {
-					continue
-				}
-				reason = "No service with matching selector"
-			}
-		}
+	depWorkloadInfos := tm.getInfosForWorkflow(ctx, depNames, "Deployment", namespace, iMap, aMap, filter)
+	workloadInfos = append(workloadInfos, depWorkloadInfos...)
 
-		workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{
-			Name:                   depName,
-			NotInterceptableReason: reason,
-			AgentInfo:              agent,
-			InterceptInfo:          iCept,
-			WorkloadResourceType:   "Deployment",
-		})
+	rsNames, err := tm.replicaSetNames(ctx, namespace)
+	if err != nil {
+		dlog.Error(ctx, err)
+		return &rpc.WorkloadInfoSnapshot{}
 	}
-
+	rsWorkloadInfos := tm.getInfosForWorkflow(ctx, rsNames, "ReplicaSet", namespace, iMap, aMap, filter)
+	workloadInfos = append(workloadInfos, rsWorkloadInfos...)
 	for localIntercept, localNs := range tm.localIntercepts {
 		if localNs == namespace {
 			workloadInfos = append(workloadInfos, &rpc.WorkloadInfo{InterceptInfo: &manager.InterceptInfo{
@@ -332,16 +399,13 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 
 // Given a slice of AgentInfo, this returns another slice of agents with one
 // agent per namespace, name pair.
-func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*manager.AgentInfo {
-	type deployment struct {
-		name, namespace string
-	}
-	deployments := map[deployment]bool{}
+func getRepresentativeAgents(c context.Context, agents []*manager.AgentInfo) []*manager.AgentInfo {
+	workloads := map[uniqueWorkload]bool{}
 	var representativeAgents []*manager.AgentInfo
 	for _, agent := range agents {
-		dep := deployment{name: agent.Name, namespace: agent.Namespace}
-		if !deployments[dep] {
-			deployments[dep] = true
+		wk := *newUniqueWorkload(c, agent.Name, agent.Namespace)
+		if !workloads[wk] {
+			workloads[wk] = true
 			representativeAgents = append(representativeAgents, agent)
 		}
 	}
