@@ -144,18 +144,35 @@ func (kc *k8sCluster) portForwardAndThen(
 
 // check uses a non-caching DiscoveryClientConfig to retrieve the server version
 func (kc *k8sCluster) check(c context.Context) error {
-	// No timeout is needed here. The context that is passed in already has one.
-	dc, err := discovery.NewDiscoveryClientForConfig(kc.config)
-	if err != nil {
-		return err
+	// The discover client is using context.TODO() so the timeout specified in our
+	// context has no effect.
+	errCh := make(chan error)
+	go func() {
+		dc, err := discovery.NewDiscoveryClientForConfig(kc.config)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		info, err := dc.ServerVersion()
+		if err != nil {
+			errCh <- err
+			return
+		}
+		dlog.Infof(c, "Server version %s", info.GitVersion)
+		close(errCh)
+	}()
+
+	select {
+	case <-c.Done():
+	case err := <-errCh:
+		if err == nil {
+			return nil
+		}
+		if c.Err() == nil {
+			return fmt.Errorf("initial cluster check failed: %w", client.RunError(err))
+		}
 	}
-	info, err := dc.ServerVersion()
-	if err != nil {
-		return client.CheckTimeout(c, &client.GetConfig(c).Timeouts.ClusterConnect,
-			fmt.Errorf("initial cluster check failed: %w", client.RunError(err)))
-	}
-	dlog.Infof(c, "Server version %s", info.GitVersion)
-	return nil
+	return client.CheckTimeout(c, &client.GetConfig(c).Timeouts.ClusterConnect, nil)
 }
 
 // deploymentNames  returns the names of all deployments found in the given Namespace
