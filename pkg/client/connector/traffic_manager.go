@@ -84,11 +84,9 @@ func newTrafficManager(_ context.Context, env client.Env, cluster *k8sCluster, i
 func (tm *trafficManager) waitUntilStarted(c context.Context) error {
 	select {
 	case <-c.Done():
-		return c.Err()
+		return client.CheckTimeout(c, &client.GetConfig(c).Timeouts.TrafficManagerConnect, nil)
 	case <-tm.startup:
 		return tm.managerErr
-	case <-time.After(60 * time.Second):
-		return errors.New("timeout establishing connection to traffic-manager")
 	}
 }
 
