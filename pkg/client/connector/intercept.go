@@ -215,20 +215,22 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	}
 
 	dlog.Debugf(c, "creating intercept %s", spec.Name)
+	tos := &client.GetConfig(c).Timeouts
+	c, cancel := context.WithTimeout(c, tos.Intercept)
+	defer cancel()
 	ii, err := tm.managerClient.CreateIntercept(c, &manager.CreateInterceptRequest{
 		Session:       tm.session(),
 		InterceptSpec: spec,
 	})
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
+		err = client.CheckTimeout(c, &tos.Intercept, err)
 		return &rpc.InterceptResult{Error: rpc.InterceptError_TRAFFIC_MANAGER_ERROR, ErrorText: err.Error()}, nil
 	}
 	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
 
 	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
 	// should become active within a few seconds.
-	c, cancel := context.WithTimeout(c, client.GetConfig(c).Timeouts.Intercept)
-	defer cancel()
 	if ii, err = tm.waitForActiveIntercept(c, ii.Id); err != nil {
 		return &rpc.InterceptResult{
 			InterceptInfo: ii,
