@@ -103,8 +103,8 @@ func (kc *k8sCluster) portForwardAndThen(
 
 	sc := bufio.NewScanner(out)
 
-	// Give port-forward 10 seconds to produce the correct output and spawn the next process
-	timer := time.AfterFunc(10*time.Second, func() {
+	// Give port-forward at least the port-forward timeout to produce the correct output and spawn the next process
+	timer := time.AfterFunc(client.GetConfig(c).Timeouts.TrafficManagerConnect, func() {
 		cancel()
 	})
 
