@@ -296,10 +296,6 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		if err != nil {
 			return nil, err
 		}
-		s.clusterRequest <- cluster
-		if err := cluster.waitUntilReady(c); err != nil {
-			return nil, err
-		}
 		return cluster, nil
 	}()
 	if err != nil {
@@ -358,6 +354,16 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		}
 	}
 	s.managerProxy.SetClient(tmgr.managerClient)
+
+	// Start k8s-watches
+	s.clusterRequest <- cluster
+	if err = cluster.waitUntilReady(c); err != nil {
+		s.cancel()
+		return &rpc.ConnectInfo{
+			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
+			ErrorText: err.Error(),
+		}
+	}
 
 	dlog.Infof(c, "Starting traffic-manager bridge in context %s", cluster.Context)
 	br := newBridge(s.daemon, tmgr.sshPort)
