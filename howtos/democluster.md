@@ -8,7 +8,7 @@ After creation, the cluster will remain available for three hours, plenty of tim
 
 ## Creating a Cluster
 
-1. Login to [Ambassador Cloud](http://app.getambassador.io/cloud/) using your GitHub account.
+1. Login to [Ambassador Cloud](http://app.getambassador.io/cloud/) using your preferred identity provider.
 
 1. Click the option for **Use Our Demo Cluster**.
 

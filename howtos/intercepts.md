@@ -167,14 +167,12 @@ be routed to your cluster as usual.
 
 2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:  
 `telepresence login`
-
-  This opens your browser; login with your GitHub account and choose your org.
     
   ```
   $ telepresence login
     
      Launching browser authentication flow...
-     <browser opens, login with GitHub>
+     <browser opens, login and choose your org>
      Login successful.
    ```
 
