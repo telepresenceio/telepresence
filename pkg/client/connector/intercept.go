@@ -497,10 +497,10 @@ func (tm *trafficManager) workerMountForwardIntercept(ctx context.Context, mf mo
 				"-oConnectTimeout=10",
 				"-oStrictHostKeyChecking=no",     // don't bother checking the host key...
 				"-oUserKnownHostsFile=/dev/null", // and since we're not checking it, don't bother remembering it either
-
-				"-p", localPort, // port to connect to
+				"-p", localPort,                  // port to connect to
 
 				// mount directives
+				"-o", "follow_symlinks",
 				"telepresence@localhost:" + telAppMountPoint, // remote user and what to mount
 				mountPoint, // where to mount it
 			}
