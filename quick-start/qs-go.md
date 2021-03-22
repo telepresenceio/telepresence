@@ -248,12 +248,12 @@ Create preview URLs to do selective intercepts, meaning only traffic coming from
 2. Login to Ambassador Cloud, a web interface for managing and sharing preview URLs:
 `telepresence login`
 
-  This opens your browser; login with your GitHub account and choose your org.
+  This opens your browser; login with your preferred identity provider and choose your org.
 
   ```
   $ telepresence login
     Launching browser authentication flow...
-    <browser opens, login with GitHub>
+    <browser opens, login>
     Login successful.
   ```
 

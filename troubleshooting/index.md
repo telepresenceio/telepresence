@@ -29,7 +29,7 @@ GitHub's documentation provides more detail about [managing access granted to th
 
 ### Granting or Requesting Access on Initial Login
 
-The first time you login to Ambassador Cloud, GitHub will ask to authorize Ambassador Labs to access your orgs and certain user data.
+When using GitHub as your identity provider, the first time you login to Ambassador Cloud GitHub will ask to authorize Ambassador Labs to access your orgs and certain user data.
 
 <img src="../../images/github-login.png" width="50%"/>
 

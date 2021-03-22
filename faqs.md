@@ -97,7 +97,7 @@ Running this command will also stop the local daemon running.
 
 ** What identity providers are supported for authenticating to view a preview URL?**
 
- Currently GitHub is used to authenticate a user of Telepresence (triggered via the `telepresence login` command) and any viewers of a preview URL.
+ Currently GitHub and GitLab are used to authenticate a user of Telepresence (triggered via the `telepresence login` command) and any viewers of a preview URL.
 
 More authentication mechanisms and identity provider support will be added soon. Please [let us know](../../../../feedback) which providers are the most important to you and your team in order for us to prioritize those.
 
