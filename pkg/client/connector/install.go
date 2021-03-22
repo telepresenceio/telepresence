@@ -157,6 +157,7 @@ func (ki *installer) removeManagerAndAgents(c context.Context, agentsOnly bool, 
 			}
 			if err = ki.undoDeploymentMods(c, agent); err != nil {
 				addError(err)
+				return
 			}
 			if err = ki.waitForApply(c, ai.Namespace, ai.Name, agent); err != nil {
 				addError(err)
@@ -609,8 +610,11 @@ func (ki *installer) undoDeploymentMods(c context.Context, dep *kates.Deployment
 func undoDeploymentMods(c context.Context, dep *kates.Deployment) (string, error) {
 	var actions deploymentActions
 	ok, err := getAnnotation(dep, &actions)
-	if !ok {
+	if err != nil {
 		return "", err
+	}
+	if !ok {
+		return "", fmt.Errorf("deployment %s.%s has no agent installed", dep.Name, dep.Namespace)
 	}
 
 	if err = actions.undo(dep); err != nil {
