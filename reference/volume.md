@@ -21,7 +21,7 @@ intercepted
     Destination       : 127.0.0.1:<port>
     Volume Mount Point: /var/folders/cp/2r22shfd50d9ymgrw14fd23r0000gp/T/telfs-988349784
     Intercepting      : all TCP connections
-
+  
 bash-3.2$ echo $TELEPRESENCE_ROOT
 /var/folders/cp/2r22shfd50d9ymgrw14fd23r0000gp/T/telfs-988349784
 ```
