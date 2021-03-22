@@ -3,7 +3,6 @@ package connector
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -500,9 +499,12 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, a
 		}
 
 		dlog.Debugf(c, "Updating agent for deployment %s.%s", name, namespace)
-		aaa := actions.AddTrafficAgent
+		aaa := &deploymentActions{
+			Version:         actions.Version,
+			AddTrafficAgent: actions.AddTrafficAgent,
+		}
 		explainUndo(c, aaa, dep)
-		aaa.ImageName = agentImageName
+		aaa.AddTrafficAgent.ImageName = agentImageName
 		agentContainer.Image = agentImageName
 		explainDo(c, aaa, dep)
 	default:
@@ -565,7 +567,7 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, dep
 	}
 }
 
-func getAnnotation(obj kates.Object, data interface{}) (bool, error) {
+func getAnnotation(obj kates.Object, data completeAction) (bool, error) {
 	ann := obj.GetAnnotations()
 	if ann == nil {
 		return false, nil
@@ -574,11 +576,11 @@ func getAnnotation(obj kates.Object, data interface{}) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	if err := json.Unmarshal([]byte(ajs), data); err != nil {
+	if err := data.UnmarshalAnnotation(ajs); err != nil {
 		return false, err
 	}
 
-	annV, err := semver.Parse(data.(multiAction).version())
+	annV, err := semver.Parse(data.TelVersion())
 	if err != nil {
 		return false, fmt.Errorf("unable to parse semantic version in annotation %s of %s %s", annTelepresenceActions,
 			obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
@@ -613,7 +615,7 @@ func undoDeploymentMods(c context.Context, dep *kates.Deployment) (string, error
 		return "", err
 	}
 
-	if err = actions.undo(dep); err != nil {
+	if err = actions.Undo(dep); err != nil {
 		return "", err
 	}
 	delete(dep.Annotations, annTelepresenceActions)
@@ -637,7 +639,7 @@ func undoServiceMods(c context.Context, svc *kates.Service) error {
 	if !ok {
 		return err
 	}
-	if err = actions.undo(svc); err != nil {
+	if err = actions.Undo(svc); err != nil {
 		return err
 	}
 	delete(svc.Annotations, annTelepresenceActions)
@@ -770,24 +772,30 @@ func addAgentToDeployment(
 	}
 
 	// Apply the actions on the Deployment.
-	if err = deploymentMod.do(deployment); err != nil {
+	if err = deploymentMod.Do(deployment); err != nil {
 		return nil, nil, err
 	}
 	if deployment.Annotations == nil {
 		deployment.Annotations = make(map[string]string)
 	}
-	deployment.Annotations[annTelepresenceActions] = deploymentMod.String()
+	deployment.Annotations[annTelepresenceActions], err = deploymentMod.MarshalAnnotation()
+	if err != nil {
+		return nil, nil, err
+	}
 	explainDo(c, deploymentMod, deployment)
 
 	// Apply the actions on the Service.
 	if serviceMod != nil {
-		if err = serviceMod.do(service); err != nil {
+		if err = serviceMod.Do(service); err != nil {
 			return nil, nil, err
 		}
 		if service.Annotations == nil {
 			service.Annotations = make(map[string]string)
 		}
-		service.Annotations[annTelepresenceActions] = serviceMod.String()
+		service.Annotations[annTelepresenceActions], err = serviceMod.MarshalAnnotation()
+		if err != nil {
+			return nil, nil, err
+		}
 		explainDo(c, serviceMod, service)
 	} else {
 		service = nil
