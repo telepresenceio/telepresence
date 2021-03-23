@@ -364,7 +364,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	}
 
 	dlog.Infof(c, "Starting traffic-manager bridge in context %s", cluster.Context)
-	br := newBridge(s.daemon, tmgr.sshPort)
+	br := newBridge(tmgr)
 	if err := checkKubectl(c); err != nil {
 		dlog.Errorf(c, "Failed to start traffic-manager bridge: %v", err)
 		// No point in continuing without a bridge
@@ -511,7 +511,8 @@ func run(c context.Context) error {
 		if !ok {
 			return nil
 		}
-		return br.sshWorker(c)
+		br.sshWorker(c)
+		return nil
 	})
 
 	g.Go("background-init", func(c context.Context) error {

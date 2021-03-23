@@ -428,6 +428,8 @@ func (br *trafficManager) check(c context.Context) bool {
 // for all errors; it only returns when the context is canceled.  For that reason, it doesn't return
 // an error; it just always retries.
 func (tm *trafficManager) sshPortForward(ctx context.Context, pfArgs ...string) {
+	// XXX: probably need some kind of keepalive check for ssh, first
+	// curl after wakeup seems to trigger detection of death
 	sshArgs := append(append([]string{"ssh"}, pfArgs...), []string{
 		"-F", "none", // don't load the user's config file
 
