@@ -62,6 +62,7 @@ func explainDo(c context.Context, a completeAction, obj kates.Object) {
 			obj.GetName(),
 			buf.String()))
 	}
+
 }
 
 func explainUndo(c context.Context, a completeAction, obj kates.Object) {
@@ -150,7 +151,22 @@ func unmarshalString(in string, out completeAction) error {
 	return json.Unmarshal([]byte(in), out)
 }
 
-// makePortSymbolicAction //////////////////////////////////////////////////////
+func GetPodTemplateFromObject(obj kates.Object) (*kates.PodTemplateSpec, string, error) {
+	var tplSpec *kates.PodTemplateSpec
+	kind := obj.GetObjectKind().GroupVersionKind().Kind
+	switch kind {
+	case "ReplicaSet":
+		rs := obj.(*kates.ReplicaSet)
+		tplSpec = &rs.Spec.Template
+	case "Deployment":
+		rs := obj.(*kates.Deployment)
+		tplSpec = &rs.Spec.Template
+	default:
+		return nil, "", fmt.Errorf("Unsupported workload kind: %s", kind)
+	}
+
+	return tplSpec, kind, nil
+}
 
 // A makePortSymbolicAction replaces the numeric TargetPort of a ServicePort with a generated
 // symbolic name so that an traffic-agent in a designated Deployment can reference the symbol
@@ -345,8 +361,7 @@ type addTrafficAgentAction struct {
 
 var _ partialAction = (*addTrafficAgentAction)(nil)
 
-func (ata *addTrafficAgentAction) appContainer(dep *kates.Deployment) *kates.Container {
-	cns := dep.Spec.Template.Spec.Containers
+func (ata *addTrafficAgentAction) appContainer(cns []kates.Container) *kates.Container {
 	for i := range cns {
 		cn := &cns[i]
 		if cn.Name == ata.containerName {
@@ -357,14 +372,17 @@ func (ata *addTrafficAgentAction) appContainer(dep *kates.Deployment) *kates.Con
 }
 
 func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
-	dep := obj.(*kates.Deployment)
-	appContainer := ata.appContainer(dep)
+	tplSpec, objKind, err := GetPodTemplateFromObject(obj)
+	if err != nil {
+		return err
+	}
+	cns := tplSpec.Spec.Containers
+	appContainer := ata.appContainer(cns)
 	if appContainer == nil {
-		return fmt.Errorf("unable to find app container %s in deployment %s", ata.containerName, dep.GetName())
+		return fmt.Errorf("unable to find app container %s in %s %s.%s", ata.containerName, objKind, obj.GetName(), obj.GetNamespace())
 	}
 
-	tplSpec := &dep.Spec.Template.Spec
-	tplSpec.Containers = append(tplSpec.Containers, corev1.Container{
+	tplSpec.Spec.Containers = append(tplSpec.Spec.Containers, corev1.Container{
 		Name:  agentContainerName,
 		Image: ata.ImageName,
 		Args:  []string{"agent"},
@@ -373,7 +391,7 @@ func (ata *addTrafficAgentAction) Do(obj kates.Object) error {
 			Protocol:      ata.ContainerPortProto,
 			ContainerPort: 9900,
 		}},
-		Env:          ata.agentEnvironment(dep.GetName(), appContainer),
+		Env:          ata.agentEnvironment(obj.GetName(), appContainer),
 		EnvFrom:      ata.agentEnvFrom(appContainer.EnvFrom),
 		VolumeMounts: ata.agentVolumeMounts(appContainer.VolumeMounts),
 		ReadinessProbe: &corev1.Probe{
@@ -489,8 +507,12 @@ func (ata *addTrafficAgentAction) ExplainUndo(_ kates.Object, out io.Writer) {
 	fmt.Fprintf(out, "remove traffic-agent container with image %s", ata.ImageName)
 }
 
-func (ata *addTrafficAgentAction) IsDone(dep kates.Object) bool {
-	cns := dep.(*kates.Deployment).Spec.Template.Spec.Containers
+func (ata *addTrafficAgentAction) IsDone(obj kates.Object) bool {
+	tplSpec, _, err := GetPodTemplateFromObject(obj)
+	if err != nil {
+		return false
+	}
+	cns := tplSpec.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
 		if cn.Name == agentContainerName {
@@ -500,9 +522,12 @@ func (ata *addTrafficAgentAction) IsDone(dep kates.Object) bool {
 	return false
 }
 
-func (ata *addTrafficAgentAction) Undo(dep kates.Object) error {
-	tplSpec := &dep.(*kates.Deployment).Spec.Template.Spec
-	cns := tplSpec.Containers
+func (ata *addTrafficAgentAction) Undo(obj kates.Object) error {
+	tplSpec, _, err := GetPodTemplateFromObject(obj)
+	if err != nil {
+		return err
+	}
+	cns := tplSpec.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
 		if cn.Name != agentContainerName {
@@ -513,7 +538,7 @@ func (ata *addTrafficAgentAction) Undo(dep kates.Object) error {
 		copy(cns[i:], cns[i+1:])
 		last := len(cns) - 1
 		cns[last] = kates.Container{}
-		tplSpec.Containers = cns[:last]
+		tplSpec.Spec.Containers = cns[:last]
 		break
 	}
 	return nil
@@ -533,8 +558,12 @@ type hideContainerPortAction struct {
 
 var _ partialAction = (*hideContainerPortAction)(nil)
 
-func (hcp *hideContainerPortAction) getPort(dep *kates.Deployment, name string) (*kates.Container, *corev1.ContainerPort, error) {
-	cns := dep.Spec.Template.Spec.Containers
+func (hcp *hideContainerPortAction) getPort(obj kates.Object, name string) (*kates.Container, *corev1.ContainerPort, error) {
+	tplSpec, objKind, err := GetPodTemplateFromObject(obj)
+	if err != nil {
+		return nil, nil, err
+	}
+	cns := tplSpec.Spec.Containers
 	for i := range cns {
 		cn := &cns[i]
 		if cn.Name != hcp.ContainerName {
@@ -548,7 +577,7 @@ func (hcp *hideContainerPortAction) getPort(dep *kates.Deployment, name string) 
 			}
 		}
 	}
-	return nil, nil, fmt.Errorf("unable to locate port %s in container %s in deployment %s", hcp.PortName, hcp.ContainerName, dep.GetName())
+	return nil, nil, fmt.Errorf("unable to locate port %s in container %s in %s %s.%s", hcp.PortName, hcp.ContainerName, objKind, obj.GetName(), obj.GetNamespace())
 }
 
 func swapPortName(cn *kates.Container, p *corev1.ContainerPort, from, to string) {

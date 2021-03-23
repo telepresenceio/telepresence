@@ -375,7 +375,7 @@ func TestAddAgentToDeployment(t *testing.T) {
 			expectedSvc = tc.InputService.DeepCopy()
 			sanitizeService(expectedSvc)
 
-			_, actualErr = undoDeploymentMods(ctx, actualDep)
+			_, actualErr = undoObjectMods(ctx, actualDep)
 			if !assert.NoError(t, actualErr) {
 				return
 			}
@@ -393,15 +393,16 @@ func TestAddAgentToDeployment(t *testing.T) {
 	}
 }
 
-func sanitizeDeployment(dep *kates.Deployment) {
-	dep.ObjectMeta.ResourceVersion = ""
-	dep.ObjectMeta.Generation = 0
-	dep.ObjectMeta.CreationTimestamp = metav1.Time{}
-	for i, c := range dep.Spec.Template.Spec.Containers {
+func sanitizeDeployment(obj kates.Object) {
+	obj.SetResourceVersion("")
+	obj.SetGeneration(int64(0))
+	obj.SetCreationTimestamp(metav1.Time{})
+	podSpec, _, _ := GetSpecFromObject(obj)
+	for i, c := range podSpec.Spec.Containers {
 		c.TerminationMessagePath = ""
 		c.TerminationMessagePolicy = ""
 		c.ImagePullPolicy = ""
-		dep.Spec.Template.Spec.Containers[i] = c
+		podSpec.Spec.Containers[i] = c
 	}
 }
 

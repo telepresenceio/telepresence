@@ -225,6 +225,36 @@ func (kc *k8sCluster) findReplicaSet(c context.Context, namespace, name string) 
 	return rs, nil
 }
 
+// findObjectKind returns a workload for the given name and namespace. We
+// search in a specific order based on how we prefer workload objects:
+// 1. Deployments
+// 2. ReplicaSets
+// And return the kind as soon as we find one that matches
+func (kc *k8sCluster) findObjectKind(c context.Context, namespace, name string) (string, error) {
+	depNames, err := kc.deploymentNames(c, namespace)
+	if err != nil {
+		return "", err
+	}
+	for _, depName := range depNames {
+		if depName == name {
+			return "Deployment", nil
+		}
+	}
+
+	// Since Deployments manage ReplicaSets, we only look for matching
+	// ReplicaSets if no Deployment was found
+	rsNames, err := kc.replicaSetNames(c, namespace)
+	if err != nil {
+		return "", err
+	}
+	for _, rsName := range rsNames {
+		if rsName == name {
+			return "ReplicaSet", nil
+		}
+	}
+	return "", errors.New("No supported Object Kind Found")
+}
+
 // findSvc finds a service with the given name in the given Namespace and returns
 // either a copy of that service or nil if no such service could be found.
 func (kc *k8sCluster) findSvc(namespace, name string) *kates.Service {
