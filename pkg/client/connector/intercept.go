@@ -400,6 +400,11 @@ func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf por
 		"telepresence@localhost",
 	}
 
+	// Do NOT use client.Retry; this has slightly more domain-specific knowledge regarding the
+	// backoff: We don't backoff if the process was "long-lived".  SSH connections just
+	// sometimes die; we should retry those immediately; we only want to back off when it looks
+	// like there's a problem *establishing* the connection.  So we use process-lifetime as a
+	// proxy for whether a connection was established or not.
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
 		start := time.Now()
