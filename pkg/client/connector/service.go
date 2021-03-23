@@ -318,6 +318,17 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 
 	connectStart := time.Now()
 
+	// Check the `kubectl` version; no point continuing if it's too old.
+	if err := checkKubectl(c); err != nil {
+		dlog.Errorln(c, err)
+		// No point in continuing without a bridge
+		s.cancel()
+		return &rpc.ConnectInfo{
+			Error:     rpc.ConnectInfo_CLUSTER_FAILED,
+			ErrorText: err.Error(),
+		}
+	}
+
 	dlog.Info(c, "Connecting to traffic manager...")
 	tmgr, err := newTrafficManager(c, s.env, s.cluster, s.scoutClient.Reporter.InstallID())
 	if err != nil {
@@ -357,16 +368,6 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		}
 	}
 
-	dlog.Infof(c, "Starting traffic-manager bridge in context %s", cluster.Context)
-	if err := checkKubectl(c); err != nil {
-		dlog.Errorf(c, "Failed to start traffic-manager bridge: %v", err)
-		// No point in continuing without a bridge
-		s.cancel()
-		return &rpc.ConnectInfo{
-			Error:     rpc.ConnectInfo_BRIDGE_FAILED,
-			ErrorText: err.Error(),
-		}
-	}
 	s.bridgeRequest <- tmgr
 
 	// Collect data on how long connection time took

@@ -55,7 +55,7 @@ message ConnectInfo {
     ALREADY_CONNECTED = 2; // success
     DISCONNECTING = 3;
     CLUSTER_FAILED = 4;
-    BRIDGE_FAILED = 5;
+    reserved 5;
     TRAFFIC_MANAGER_FAILED = 6;
     MUST_RESTART = 7;
   }
