@@ -17,8 +17,10 @@ import (
 	"google.golang.org/grpc"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
+	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
+	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -420,4 +422,56 @@ func (br *trafficManager) check(c context.Context) bool {
 		return false
 	}
 	return true
+}
+
+// sshPortForward synchronously runs an `ssh` process with the given port-forward args.  It retries
+// for all errors; it only returns when the context is canceled.  For that reason, it doesn't return
+// an error; it just always retries.
+func (tm *trafficManager) sshPortForward(ctx context.Context, pfArgs ...string) {
+	sshArgs := append(append([]string{"ssh"}, pfArgs...), []string{
+		"-F", "none", // don't load the user's config file
+
+		// connection settings
+		"-C", // compression
+		"-oConnectTimeout=10",
+		"-oStrictHostKeyChecking=no",     // don't bother checking the host key...
+		"-oUserKnownHostsFile=/dev/null", // and since we're not checking it, don't bother remembering it either
+
+		// port-forward settings
+		"-N", // no remote command; just connect and forward ports
+		"-oExitOnForwardFailure=yes",
+
+		// where to connect to
+		"-p", strconv.Itoa(int(tm.sshPort)),
+		"telepresence@localhost",
+	}...)
+
+	// Do NOT use client.Retry; this has slightly more domain-specific knowledge regarding the
+	// backoff: We don't backoff if the process was "long-lived".  SSH connections just
+	// sometimes die; we should retry those immediately; we only want to back off when it looks
+	// like there's a problem *establishing* the connection.  So we use process-lifetime as a
+	// proxy for whether a connection was established or not.
+	backoff := 100 * time.Millisecond
+	for ctx.Err() == nil {
+		start := time.Now()
+		err := dexec.CommandContext(ctx, sshArgs[0], sshArgs[1:]...).Run()
+		lifetime := time.Since(start)
+
+		if ctx.Err() == nil {
+			if err == nil {
+				err = errors.New("ssh process terminated successfully, but unexpectedly")
+			}
+			dlog.Errorf(ctx, "communicating with manager: %v", err)
+			if lifetime >= 20*time.Second {
+				backoff = 100 * time.Millisecond
+				dtime.SleepWithContext(ctx, backoff)
+			} else {
+				dtime.SleepWithContext(ctx, backoff)
+				backoff *= 2
+				if backoff > 3*time.Second {
+					backoff = 3 * time.Second
+				}
+			}
+		}
+	}
 }

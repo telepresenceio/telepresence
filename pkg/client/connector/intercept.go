@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"strconv"
 	"sync"
 	"time"
 
@@ -379,55 +378,9 @@ func (tm *trafficManager) workerPortForwardIntercept(ctx context.Context, pf por
 
 	dlog.Infof(ctx, "Initiating port-forward manager:%d -> %s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort)
 
-	sshArgs := []string{
-		"ssh",
-
-		"-F", "none", // don't load the user's config file
-
-		// connection settings
-		"-C", // compression
-		"-oConnectTimeout=10",
-		"-oStrictHostKeyChecking=no",     // don't bother checking the host key...
-		"-oUserKnownHostsFile=/dev/null", // and since we're not checking it, don't bother remembering it either
-
-		// port-forward settings
-		"-N", // no remote command; just connect and forward ports
-		"-oExitOnForwardFailure=yes",
+	tm.sshPortForward(ctx,
 		"-R", fmt.Sprintf("%d:%s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort), // port to forward
-
-		// where to connect to
-		"-p", strconv.Itoa(int(tm.sshPort)),
-		"telepresence@localhost",
-	}
-
-	// Do NOT use client.Retry; this has slightly more domain-specific knowledge regarding the
-	// backoff: We don't backoff if the process was "long-lived".  SSH connections just
-	// sometimes die; we should retry those immediately; we only want to back off when it looks
-	// like there's a problem *establishing* the connection.  So we use process-lifetime as a
-	// proxy for whether a connection was established or not.
-	backoff := 100 * time.Millisecond
-	for ctx.Err() == nil {
-		start := time.Now()
-		err := dexec.CommandContext(ctx, sshArgs[0], sshArgs[1:]...).Run()
-		lifetime := time.Since(start)
-
-		if ctx.Err() == nil {
-			if err == nil {
-				err = errors.New("process terminated unexpectedly")
-			}
-			dlog.Errorf(ctx, "communicating with manager: %v", err)
-			if lifetime >= 20*time.Second {
-				backoff = 100 * time.Millisecond
-				dtime.SleepWithContext(ctx, backoff)
-			} else {
-				dtime.SleepWithContext(ctx, backoff)
-				backoff *= 2
-				if backoff > 3*time.Second {
-					backoff = 3 * time.Second
-				}
-			}
-		}
-	}
+	)
 
 	dlog.Infof(ctx, "Terminated port-forward manager:%d -> %s:%d", pf.ManagerPort, pf.TargetHost, pf.TargetPort)
 }
