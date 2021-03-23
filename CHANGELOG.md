@@ -1,5 +1,8 @@
 # Changelog
 
+### 2.1.3 (TBD)
+- Bugfix: Connects to Minikube/Hyperkit no longer fails intermittently.
+
 ### 2.1.2 (March 19, 2021)
 - Bugfix: Uninstalling agents now only happens once per deployment instead of once per agent.
 - Bugfix: The list command no longer shows agents from namespaces that aren't mapped.
