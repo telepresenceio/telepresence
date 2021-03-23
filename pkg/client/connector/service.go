@@ -66,7 +66,6 @@ type service struct {
 	connectMu sync.Mutex
 	// These get set by .connect() and are protected by connectMu.
 	cluster    *k8sCluster
-	bridge     *bridge
 	trafficMgr *trafficManager
 
 	// These are used to communicate between the various goroutines.
@@ -75,7 +74,7 @@ type service struct {
 	connectResponse chan *rpc.ConnectInfo     // connectWorker -> server-grpc.connect()
 	clusterRequest  chan *k8sCluster          // connectWorker -> background-k8swatch
 	managerRequest  chan *trafficManager      // connectWorker -> background-manager
-	bridgeRequest   chan *bridge              // connectWorker -> server-socks
+	bridgeRequest   chan *trafficManager      // connectWorker -> server-socks
 
 	// ctx is part of the "callCtx hack", to hack around an issue in the gRPC server, since it
 	// doesn't let us pass it a Context.  It should go away when we migrate to dhttp and
@@ -258,11 +257,6 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 		}
 		s.trafficMgr.setStatus(c, ret)
 		return ret
-	case /* s.cluster == nil && */ s.bridge != nil:
-		// How can this ever happen?  What sets s.cluster = nil when Quit is initiated?
-		return &rpc.ConnectInfo{
-			Error: rpc.ConnectInfo_DISCONNECTING,
-		}
 	default:
 		// This is the first call to Connect; we have to tell the background connect
 		// goroutine to actually do the work.
@@ -364,7 +358,6 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 	}
 
 	dlog.Infof(c, "Starting traffic-manager bridge in context %s", cluster.Context)
-	br := newBridge(tmgr)
 	if err := checkKubectl(c); err != nil {
 		dlog.Errorf(c, "Failed to start traffic-manager bridge: %v", err)
 		// No point in continuing without a bridge
@@ -374,8 +367,7 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 			ErrorText: err.Error(),
 		}
 	}
-	s.bridgeRequest <- br
-	s.bridge = br
+	s.bridgeRequest <- tmgr
 
 	// Collect data on how long connection time took
 	s.scout <- ScoutReport{
@@ -427,7 +419,7 @@ func run(c context.Context) error {
 		connectResponse: make(chan *rpc.ConnectInfo),
 		clusterRequest:  make(chan *k8sCluster),
 		managerRequest:  make(chan *trafficManager),
-		bridgeRequest:   make(chan *bridge),
+		bridgeRequest:   make(chan *trafficManager),
 	}
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -507,11 +499,13 @@ func run(c context.Context) error {
 	})
 
 	g.Go("server-socks", func(c context.Context) error {
-		br, ok := <-s.bridgeRequest
+		tm, ok := <-s.bridgeRequest
 		if !ok {
 			return nil
 		}
-		br.sshWorker(c)
+		tm.sshPortForward(c,
+			"-D", "localhost:1080",
+		)
 		return nil
 	})
 

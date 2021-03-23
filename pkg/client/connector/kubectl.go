@@ -10,25 +10,6 @@ import (
 	"github.com/datawire/dlib/dexec"
 )
 
-// bridge holds the configuration for a Teleproxy
-type bridge struct {
-	tm *trafficManager
-}
-
-func newBridge(tm *trafficManager) *bridge {
-	return &bridge{
-		tm: tm,
-	}
-}
-
-// No return value because it always retries (until the Context is canceled) instead of returning an
-// error.
-func (br *bridge) sshWorker(ctx context.Context) {
-	br.tm.sshPortForward(ctx,
-		"-D", "localhost:1080",
-	)
-}
-
 const kubectlErr = "kubectl version 1.10 or greater is required"
 
 func checkKubectl(c context.Context) error {
