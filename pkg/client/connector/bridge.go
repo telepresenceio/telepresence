@@ -1,20 +1,14 @@
 package connector
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
-	"net"
 	"strconv"
-	"strings"
-	"time"
 
 	"github.com/blang/semver"
 	"github.com/pkg/errors"
 
 	"github.com/datawire/dlib/dexec"
-	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 )
 
@@ -91,32 +85,4 @@ func checkKubectl(c context.Context) error {
 		return errors.Errorf("%s (found %s)", kubectlErr, info.ClientVersion.GitVersion)
 	}
 	return nil
-}
-
-// check checks the status of teleproxy bridge by doing the equivalent of
-//  curl http://traffic-manager.svc:8022.
-// Note there is no namespace specified, as we are checking for bridge status in the
-// current namespace.
-func (br *bridge) check(c context.Context) bool {
-	if br == nil {
-		return false
-	}
-	address := fmt.Sprintf("localhost:%d", br.sshPort)
-	conn, err := net.DialTimeout("tcp", address, 15*time.Second)
-	if err != nil {
-		dlog.Errorf(c, "fail to establish tcp connection to %s: %v", address, err)
-		return false
-	}
-	defer conn.Close()
-
-	msg, _, err := bufio.NewReader(conn).ReadLine()
-	if err != nil {
-		dlog.Errorf(c, "tcp read: %v", err)
-		return false
-	}
-	if !strings.Contains(string(msg), "SSH") {
-		dlog.Errorf(c, "expected SSH prompt, got: %v", string(msg))
-		return false
-	}
-	return true
 }

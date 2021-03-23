@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/user"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -309,6 +311,7 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 	if tm == nil {
 		return
 	}
+	r.BridgeOk = tm.check(ctx)
 	if tm.managerClient == nil {
 		r.Intercepts = &manager.InterceptInfoSnapshot{}
 		r.Agents = &manager.AgentInfoSnapshot{}
@@ -389,4 +392,32 @@ func (tm *trafficManager) uninstall(c context.Context, ur *rpc.UninstallRequest)
 		}
 	}
 	return result, nil
+}
+
+// check checks the status of teleproxy bridge by doing the equivalent of
+//  curl http://traffic-manager.svc:8022.
+// Note there is no namespace specified, as we are checking for bridge status in the
+// current namespace.
+func (br *trafficManager) check(c context.Context) bool {
+	if br == nil {
+		return false
+	}
+	address := fmt.Sprintf("localhost:%d", br.sshPort)
+	conn, err := net.DialTimeout("tcp", address, 15*time.Second)
+	if err != nil {
+		dlog.Errorf(c, "fail to establish tcp connection to %s: %v", address, err)
+		return false
+	}
+	defer conn.Close()
+
+	msg, _, err := bufio.NewReader(conn).ReadLine()
+	if err != nil {
+		dlog.Errorf(c, "tcp read: %v", err)
+		return false
+	}
+	if !strings.Contains(string(msg), "SSH") {
+		dlog.Errorf(c, "expected SSH prompt, got: %v", string(msg))
+		return false
+	}
+	return true
 }

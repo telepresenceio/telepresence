@@ -243,7 +243,6 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 			ClusterContext: s.cluster.k8sConfig.Context,
 			ClusterServer:  s.cluster.k8sConfig.Server,
 			ClusterId:      s.cluster.getClusterId(c),
-			BridgeOk:       s.bridge.check(c),
 			IngressInfos:   s.cluster.detectIngressBehavior(),
 		}
 		s.trafficMgr.setStatus(c, ret)
@@ -255,7 +254,6 @@ func (s *service) connect(c context.Context, cr *rpc.ConnectRequest) *rpc.Connec
 			ClusterContext: s.cluster.k8sConfig.Context,
 			ClusterServer:  s.cluster.k8sConfig.Server,
 			ClusterId:      s.cluster.getClusterId(c),
-			BridgeOk:       s.bridge.check(c),
 			IngressInfos:   s.cluster.detectIngressBehavior(),
 		}
 		s.trafficMgr.setStatus(c, ret)
@@ -393,7 +391,6 @@ func (s *service) connectWorker(c context.Context, cr *rpc.ConnectRequest, k8sCo
 		ClusterContext: s.cluster.k8sConfig.Context,
 		ClusterServer:  s.cluster.k8sConfig.Server,
 		ClusterId:      s.cluster.getClusterId(c),
-		BridgeOk:       s.bridge.check(c),
 		IngressInfos:   s.cluster.detectIngressBehavior(),
 	}
 	s.trafficMgr.setStatus(c, ret)
