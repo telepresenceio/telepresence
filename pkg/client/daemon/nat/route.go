@@ -6,6 +6,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // FirewallRouter is an interface to what is essentially a routing table, but implemented in the
@@ -93,3 +94,12 @@ type routingTableCommon struct {
 	// an IP, we route to a localhost port number.
 	mappings map[Destination]*Route
 }
+
+type withoutCancel struct {
+	context.Context
+}
+
+func (withoutCancel) Deadline() (deadline time.Time, ok bool) { return }
+func (withoutCancel) Done() <-chan struct{}                   { return nil }
+func (withoutCancel) Err() error                              { return nil }
+func (c withoutCancel) String() string                        { return fmt.Sprintf("%v.WithoutCancel", c.Context) }

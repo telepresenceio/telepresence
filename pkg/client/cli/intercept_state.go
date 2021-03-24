@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"reflect"
 	"regexp"
 	"sort"
@@ -19,6 +18,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	"github.com/datawire/dlib/dexec"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -233,10 +233,12 @@ func isLoggedIn(ctx context.Context) bool {
 	return token != nil
 }
 
-func checkMountCapability() error {
+func checkMountCapability(ctx context.Context) error {
 	// Use CombinedOutput to include stderr which has information about whether they
 	// need to upgrade to a newer version of macFUSE or not
-	out, err := exec.Command("sshfs", "-V").CombinedOutput()
+	cmd := dexec.CommandContext(ctx, "sshfs", "-V")
+	cmd.DisableLogging = true
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return errors.New("sshfs is not installed on your local machine")
 	}
@@ -286,7 +288,7 @@ func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, er
 		return nil, errors.New("Ports must be of the format --ports local[:svcPortName]")
 	}
 
-	err := checkMountCapability()
+	err := checkMountCapability(is.cmd.Context())
 	if err == nil {
 		mountPoint := ""
 		doMount, err := strconv.ParseBool(is.mount)
@@ -423,7 +425,7 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 		var volumeMountProblem error
 		doMount, err := strconv.ParseBool(is.mount)
 		if doMount || err != nil {
-			volumeMountProblem = checkMountCapability()
+			volumeMountProblem = checkMountCapability(is.cmd.Context())
 		}
 		fmt.Fprintln(is.cmd.OutOrStdout(), DescribeIntercept(intercept, volumeMountProblem, false))
 		_ = is.Scout.Report(is.cmd.Context(), "intercept_success")

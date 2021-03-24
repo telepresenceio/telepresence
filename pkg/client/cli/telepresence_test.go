@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -189,8 +188,9 @@ func (ts *telepresenceSuite) TestB_Connected() {
 func (ts *telepresenceSuite) TestC_Uninstall() {
 	ts.Run("Uninstalls the traffic manager and quits", func() {
 		require := ts.Require()
+		ctx := dlog.NewTestContext(ts.T(), false)
 		names := func() (string, error) {
-			return ts.kubectlOut("get",
+			return ts.kubectlOut(ctx, "get",
 				"--namespace", ts.managerTestNamespace,
 				"svc,deploy", "traffic-manager",
 				"--ignore-not-found",
@@ -576,8 +576,8 @@ func (ts *telepresenceSuite) kubectl(c context.Context, args ...string) error {
 	return run(c, append([]string{"kubectl", "--namespace", ts.namespace}, args...)...)
 }
 
-func (ts *telepresenceSuite) kubectlOut(args ...string) (string, error) {
-	return output(append([]string{"kubectl", "--namespace", ts.namespace}, args...)...)
+func (ts *telepresenceSuite) kubectlOut(ctx context.Context, args ...string) (string, error) {
+	return output(ctx, append([]string{"kubectl", "--namespace", ts.namespace}, args...)...)
 }
 
 func (ts *telepresenceSuite) publishManager() error {
@@ -616,8 +616,10 @@ func run(c context.Context, args ...string) error {
 	return client.RunError(dexec.CommandContext(c, args[0], args[1:]...).Run())
 }
 
-func output(args ...string) (string, error) {
-	out, err := exec.Command(args[0], args[1:]...).Output()
+func output(ctx context.Context, args ...string) (string, error) {
+	cmd := dexec.CommandContext(ctx, args[0], args[1:]...)
+	cmd.DisableLogging = true
+	out, err := cmd.Output()
 	return string(out), client.RunError(err)
 }
 

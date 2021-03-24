@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os/exec"
 	"strconv"
 	"strings"
 	"syscall"
 
-	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/datawire/dlib/dexec"
 )
 
 type iptablesRouter struct {
@@ -26,10 +24,10 @@ func newRouter(name string, _, _ net.IP) FirewallRouter {
 	}
 }
 
-func (t *iptablesRouter) ipt(c context.Context, args ...string) error {
-	// Deliberately avoiding dexec here as this cannot be interrupted when cleaning up
-	dlog.Debugf(c, "running %s", logging.ShellString("iptables", args))
-	return exec.Command("iptables", append([]string{"-t", "nat"}, args...)...).Run()
+func (t *iptablesRouter) ipt(ctx context.Context, args ...string) error {
+	// We specifically don't want to use the cancellation of 'ctx' here, because we don't ever
+	// want to leave things in a half-cleaned-up state.
+	return dexec.CommandContext(withoutCancel{ctx}, "iptables", append([]string{"-t", "nat"}, args...)...).Run()
 }
 
 func (t *iptablesRouter) Enable(c context.Context) (err error) {

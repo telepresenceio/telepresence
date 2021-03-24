@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"syscall"
-	"time"
 
 	"golang.org/x/net/route"
 	"golang.org/x/sys/unix"
@@ -45,15 +44,6 @@ func newRouter(name string, localIPv4, localIPv6 net.IP) *pfRouter {
 		localIPv6: localIPv6,
 	}
 }
-
-type withoutCancel struct {
-	context.Context
-}
-
-func (withoutCancel) Deadline() (deadline time.Time, ok bool) { return }
-func (withoutCancel) Done() <-chan struct{}                   { return nil }
-func (withoutCancel) Err() error                              { return nil }
-func (c withoutCancel) String() string                        { return fmt.Sprintf("%v.WithoutCancel", c.Context) }
 
 func pfCmd(ctx context.Context, args []string) *dexec.Cmd {
 	// We specifically don't want to use the cancellation of 'ctx' for pfctl, because

@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
+
+	// nolint:depguard // TODO: switch this stuff over to dexec
+	"os/exec"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 )

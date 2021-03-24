@@ -2,14 +2,15 @@ package dns
 
 import (
 	"context"
-	"os/exec"
+
+	"github.com/datawire/dlib/dexec"
 )
 
 // Flush makes an attempt to flush the host's DNS cache
-func Flush(c context.Context) {
+func Flush(ctx context.Context) {
 	// GNU libc Name Service Cache Daemon
-	_ = exec.Command("nscd", "--invalidate=hosts").Run()
+	_ = dexec.CommandContext(ctx, "nscd", "--invalidate=hosts").Run()
 
 	// systemd-resolved
-	_ = exec.Command("resolvectl", "flush-caches").Run()
+	_ = dexec.CommandContext(ctx, "resolvectl", "flush-caches").Run()
 }
