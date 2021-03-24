@@ -206,8 +206,8 @@ type AgentInfo struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Name      string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`           // name of the Deployment
-	Namespace string `protobuf:"bytes,7,opt,name=namespace,proto3" json:"namespace,omitempty"` // namespace of the Deployment
+	Name      string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`           // name of the Workload
+	Namespace string `protobuf:"bytes,7,opt,name=namespace,proto3" json:"namespace,omitempty"` // namespace of the Workload
 	Hostname  string `protobuf:"bytes,2,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	Product   string `protobuf:"bytes,3,opt,name=product,proto3" json:"product,omitempty"` // distinguish open source, our closed source, someone else's thing
 	Version   string `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
@@ -306,15 +306,15 @@ type InterceptSpec struct {
 
 	// A human-friendly name for this intercept.  This is usally the
 	// same as the agent name below; the name/namespace of the
-	// Deployment, but it could be something else.  It is invalid for
+	// Workload, but it could be something else.  It is invalid for
 	// the same client to attempt to create multiple intercepts with the
 	// same name.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Same as ClientInfo.Name; "user@hostname".
 	Client string `protobuf:"bytes,2,opt,name=client,proto3" json:"client,omitempty"`
-	// Same as AgentInfo.Name of the Deployment.
+	// Same as AgentInfo.Name of the Workload.
 	Agent string `protobuf:"bytes,3,opt,name=agent,proto3" json:"agent,omitempty"`
-	// Same as AgentInfo.Namespace of the Deployment
+	// Same as AgentInfo.Namespace of the Workload
 	Namespace string `protobuf:"bytes,8,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// How to decide which subset of requests to that agent to intercept.
 	Mechanism string `protobuf:"bytes,4,opt,name=mechanism,proto3" json:"mechanism,omitempty"`

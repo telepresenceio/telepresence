@@ -142,7 +142,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	if spec.Namespace == "" {
 		// namespace is not currently mapped
 		return &rpc.InterceptResult{
-			Error:     rpc.InterceptError_NO_ACCEPTABLE_DEPLOYMENT,
+			Error:     rpc.InterceptError_NO_ACCEPTABLE_WORKLOAD,
 			ErrorText: spec.Name,
 		}, nil
 	}
@@ -272,7 +272,7 @@ func (tm *trafficManager) addLocalOnlyIntercept(c context.Context, spec *manager
 }
 
 func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcPort, agentImageName string) *rpc.InterceptResult {
-	svcUID, err := tm.ensureAgent(c, namespace, agentName, svcPort, agentImageName)
+	svcUID, kind, err := tm.ensureAgent(c, namespace, agentName, svcPort, agentImageName)
 	if err != nil {
 		if err == agentNotFound {
 			return &rpc.InterceptResult{
@@ -287,7 +287,7 @@ func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcP
 		}
 	}
 
-	dlog.Infof(c, "waiting for agent for deployment %q", agentName)
+	dlog.Infof(c, "waiting for agent for %s %q.%s", kind, agentName, namespace)
 	agent, err := tm.waitForAgent(c, agentName)
 	if err != nil {
 		dlog.Error(c, err)
@@ -296,11 +296,12 @@ func (tm *trafficManager) addAgent(c context.Context, namespace, agentName, svcP
 			ErrorText: err.Error(),
 		}
 	}
-	dlog.Infof(c, "agent created for deployment %q", agentName)
+	dlog.Infof(c, "agent created for %s %q.%s", kind, agentName, namespace)
 	return &rpc.InterceptResult{
-		Error:       rpc.InterceptError_UNSPECIFIED,
-		Environment: agent.Environment,
-		ServiceUid:  svcUID,
+		Error:        rpc.InterceptError_UNSPECIFIED,
+		Environment:  agent.Environment,
+		ServiceUid:   svcUID,
+		WorkloadKind: kind,
 	}
 }
 

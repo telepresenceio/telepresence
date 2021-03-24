@@ -194,8 +194,8 @@ Please specify one or more header matches using --match.`
 		spec := r.InterceptInfo.Spec
 		msg = fmt.Sprintf("Port %s:%d is already in use by intercept %s",
 			spec.TargetHost, spec.TargetPort, r.ErrorText)
-	case connector.InterceptError_NO_ACCEPTABLE_DEPLOYMENT:
-		msg = fmt.Sprintf("No interceptable deployment matching %s found", r.ErrorText)
+	case connector.InterceptError_NO_ACCEPTABLE_WORKLOAD:
+		msg = fmt.Sprintf("No interceptable deployment or replicaset matching %s found", r.ErrorText)
 	case connector.InterceptError_TRAFFIC_MANAGER_ERROR:
 		msg = r.ErrorText
 	case connector.InterceptError_AMBIGUOUS_MATCH:
@@ -374,7 +374,7 @@ func (is *interceptState) EnsureState() (acquired bool, err error) {
 			// local-only
 			return true, nil
 		}
-		fmt.Fprintf(is.cmd.OutOrStdout(), "Using deployment %s\n", is.agentName)
+		fmt.Fprintf(is.cmd.OutOrStdout(), "Using %s %s\n", r.WorkloadKind, is.agentName)
 		var intercept *manager.InterceptInfo
 
 		// Add metadata to scout

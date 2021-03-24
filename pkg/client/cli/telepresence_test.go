@@ -329,7 +329,7 @@ func (cs *connectedSuite) TestF_SuccessfullyInterceptsDeploymentWithProbes() {
 	require := cs.Require()
 	stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--mount", "false", "with-probes", "--port", "9090")
 	require.Empty(stderr)
-	require.Contains(stdout, "Using deployment with-probes")
+	require.Contains(stdout, "Using Deployment with-probes")
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
 	require.Empty(stderr)
 	require.Contains(stdout, "with-probes: intercepted")
@@ -341,7 +341,7 @@ func (cs *connectedSuite) TestG_SuccessfullyInterceptsReplicaSet() {
 	require := cs.Require()
 	stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--mount", "false", "rs-echo", "--port", "9091")
 	require.Empty(stderr)
-	require.Contains(stdout, "Using deployment rs-echo")
+	require.Contains(stdout, "Using ReplicaSet rs-echo")
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns(), "--intercepts")
 	require.Empty(stderr)
 	require.Contains(stdout, "rs-echo: intercepted")
@@ -501,7 +501,7 @@ func (is *interceptedSuite) SetupSuite() {
 			stdout, stderr := telepresence(is.T(), "intercept", "--namespace", is.ns(), "--mount", "false", svc, "--port", port)
 			is.Require().Empty(stderr)
 			is.intercepts = append(is.intercepts, svc)
-			is.Contains(stdout, "Using deployment "+svc)
+			is.Contains(stdout, "Using Deployment "+svc)
 		}
 	})
 

@@ -393,6 +393,9 @@ func TestAddAgentToDeployment(t *testing.T) {
 	}
 }
 
+// I (Donny) would like to unify this w/ the "TestAddAgentToDeployment
+// since this is a lot of copy pasta, I will likely do that when I move
+// onto adding StatefulSets
 func TestAddAgentToReplicaSet(t *testing.T) {
 	type testcase struct {
 		InputPortName   string
@@ -524,12 +527,12 @@ func sanitizeDeployment(obj kates.Object) {
 	obj.SetResourceVersion("")
 	obj.SetGeneration(int64(0))
 	obj.SetCreationTimestamp(metav1.Time{})
-	podSpec, _, _ := GetSpecFromObject(obj)
-	for i, c := range podSpec.Spec.Containers {
+	podTemplate, _, _ := GetPodTemplateFromObject(obj)
+	for i, c := range podTemplate.Spec.Containers {
 		c.TerminationMessagePath = ""
 		c.TerminationMessagePolicy = ""
 		c.ImagePullPolicy = ""
-		podSpec.Spec.Containers[i] = c
+		podTemplate.Spec.Containers[i] = c
 	}
 }
 

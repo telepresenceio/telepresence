@@ -455,30 +455,30 @@ var agentNotFound = errors.New("no such agent")
 // is installed alongside the proper deployment.  In doing that, it also ensures that
 // the deployment is referenced by a service. Lastly, it returns the service UID
 // associated with the deployment since this is where that correlation is made.
-func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, agentImageName string) (string, error) {
+func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, agentImageName string) (string, string, error) {
 	kind, err := ki.findObjectKind(c, namespace, name)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	var obj kates.Object
 	switch kind {
 	case "ReplicaSet":
 		obj, err = ki.findReplicaSet(c, namespace, name)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 	case "Deployment":
 		obj, err = ki.findDeployment(c, namespace, name)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 	default:
-		return "", errors.New("Tried to ensureAgent of unsupported object")
+		return "", "", errors.New("Tried to ensureAgent of unsupported object")
 	}
 
 	tplSpec, _, err := GetSpecFromObject(obj)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	var agentContainer *kates.Container
 	for i := range tplSpec.Spec.Containers {
@@ -491,7 +491,7 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, a
 
 	svcPortChanged, err := portChanged(c, obj, portName)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	var svc *kates.Service
 
@@ -502,17 +502,17 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, a
 		// Remove deployment+svc modifications, as well as traffic-agent since
 		// the port is vital in configuring all of those
 		if err = ki.undoObjectMods(c, obj); err != nil {
-			return "", err
+			return "", "", err
 		}
 
 		if err = ki.waitForApply(c, namespace, name, obj); err != nil {
-			return "", err
+			return "", "", err
 		}
 		// Since the agent has been removed, we find the updated version of
 		// the deployment and fallthrough to the no agent case
 		obj, err = ki.findDeployment(c, namespace, name)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		fallthrough
 	case agentContainer == nil:
@@ -524,21 +524,21 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, a
 			if portName != "" {
 				errMsg += fmt.Sprintf(" and a port named %s", portName)
 			}
-			return "", errors.New(errMsg)
+			return "", "", errors.New(errMsg)
 		}
 		var err error
 		obj, svc, err = addAgentToDeployment(c, portName, agentImageName, obj, matchingSvcs)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 	case agentContainer.Image != agentImageName:
 		var actions deploymentActions
 		ok, err := getAnnotation(obj, &actions)
 		if err != nil {
-			return "", err
+			return "", "", err
 		} else if !ok {
 			// This can only happen if someone manually tampered with the annTelepresenceActions annotation
-			return "", fmt.Errorf("expected %q annotation not found in %s.%s", annTelepresenceActions, name, namespace)
+			return "", "", fmt.Errorf("expected %q annotation not found in %s.%s", annTelepresenceActions, name, namespace)
 		}
 
 		dlog.Debugf(c, "Updating agent for deployment %s.%s", name, namespace)
@@ -555,25 +555,25 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, a
 	}
 
 	if err := ki.client.Update(c, obj, obj); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if svc != nil {
 		if err := ki.client.Update(c, svc, svc); err != nil {
-			return "", err
+			return "", "", err
 		}
 	} else {
 		// If the service is still nil, that's because an agent already exists that we can reuse.
 		// So we get the service from the deployments annotation so that we can extract the UID.
 		svc, err = ki.getSvcFromDepAnnotation(c, obj)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 	}
 
 	if err := ki.waitForApply(c, namespace, name, obj); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return string(svc.GetUID()), nil
+	return string(svc.GetUID()), kind, nil
 }
 
 func (ki *installer) waitForApply(c context.Context, namespace, name string, obj kates.Object) error {

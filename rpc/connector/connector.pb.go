@@ -42,7 +42,7 @@ const (
 	InterceptError_TRAFFIC_MANAGER_ERROR      InterceptError = 5
 	InterceptError_ALREADY_EXISTS             InterceptError = 6
 	InterceptError_LOCAL_TARGET_IN_USE        InterceptError = 7
-	InterceptError_NO_ACCEPTABLE_DEPLOYMENT   InterceptError = 8
+	InterceptError_NO_ACCEPTABLE_WORKLOAD     InterceptError = 8
 	InterceptError_AMBIGUOUS_MATCH            InterceptError = 9
 	InterceptError_FAILED_TO_ESTABLISH        InterceptError = 10
 	InterceptError_FAILED_TO_REMOVE           InterceptError = 11
@@ -61,7 +61,7 @@ var (
 		5:  "TRAFFIC_MANAGER_ERROR",
 		6:  "ALREADY_EXISTS",
 		7:  "LOCAL_TARGET_IN_USE",
-		8:  "NO_ACCEPTABLE_DEPLOYMENT",
+		8:  "NO_ACCEPTABLE_WORKLOAD",
 		9:  "AMBIGUOUS_MATCH",
 		10: "FAILED_TO_ESTABLISH",
 		11: "FAILED_TO_REMOVE",
@@ -77,7 +77,7 @@ var (
 		"TRAFFIC_MANAGER_ERROR":      5,
 		"ALREADY_EXISTS":             6,
 		"LOCAL_TARGET_IN_USE":        7,
-		"NO_ACCEPTABLE_DEPLOYMENT":   8,
+		"NO_ACCEPTABLE_WORKLOAD":     8,
 		"AMBIGUOUS_MATCH":            9,
 		"FAILED_TO_ESTABLISH":        10,
 		"FAILED_TO_REMOVE":           11,
@@ -178,7 +178,7 @@ type UninstallRequest_UninstallType int32
 
 const (
 	UninstallRequest_UNSPECIFIED UninstallRequest_UninstallType = 0
-	// Uninstalls an agent from the named deployments
+	// Uninstalls an agent from the named workloads
 	UninstallRequest_NAMED_AGENTS UninstallRequest_UninstallType = 1
 	// Uninstalls all agents
 	UninstallRequest_ALL_AGENTS UninstallRequest_UninstallType = 2
@@ -842,8 +842,10 @@ type InterceptResult struct {
 	ErrorText     string                 `protobuf:"bytes,3,opt,name=error_text,json=errorText,proto3" json:"error_text,omitempty"`
 	// The environment of the app
 	Environment map[string]string `protobuf:"bytes,4,rep,name=environment,proto3" json:"environment,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	// The service uid associated with the deployment intercepted
+	// The service uid associated with the workload intercepted
 	ServiceUid string `protobuf:"bytes,5,opt,name=service_uid,json=serviceUid,proto3" json:"service_uid,omitempty"`
+	// The kind of workload in this intercept
+	WorkloadKind string `protobuf:"bytes,6,opt,name=workload_kind,json=workloadKind,proto3" json:"workload_kind,omitempty"`
 }
 
 func (x *InterceptResult) Reset() {
@@ -909,6 +911,13 @@ func (x *InterceptResult) GetEnvironment() map[string]string {
 func (x *InterceptResult) GetServiceUid() string {
 	if x != nil {
 		return x.ServiceUid
+	}
+	return ""
+}
+
+func (x *InterceptResult) GetWorkloadKind() string {
+	if x != nil {
+		return x.WorkloadKind
 	}
 	return ""
 }

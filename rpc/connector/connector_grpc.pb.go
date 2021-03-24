@@ -29,16 +29,16 @@ type ConnectorClient interface {
 	// MUST_RESTART is returned, based on whether the current connection
 	// is in agreement with the ConnectionRequest.
 	Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error)
-	// Adds a deployment intercept.  Requires having already called
+	// Adds an intercept to a workload.  Requires having already called
 	// Connect.
 	CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error)
-	// Deactivates and removes an existent deployment intercept.
+	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error)
 	// Uninstalls traffic-agents and traffic-manager from the cluster.
 	// Requires having already called Connect.
 	Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*UninstallResult, error)
-	// Returns a list of deployments and their current intercept status.
+	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
 	// Quits (terminates) the connector process.
@@ -129,16 +129,16 @@ type ConnectorServer interface {
 	// MUST_RESTART is returned, based on whether the current connection
 	// is in agreement with the ConnectionRequest.
 	Connect(context.Context, *ConnectRequest) (*ConnectInfo, error)
-	// Adds a deployment intercept.  Requires having already called
+	// Adds an intercept to a workload.  Requires having already called
 	// Connect.
 	CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error)
-	// Deactivates and removes an existent deployment intercept.
+	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error)
 	// Uninstalls traffic-agents and traffic-manager from the cluster.
 	// Requires having already called Connect.
 	Uninstall(context.Context, *UninstallRequest) (*UninstallResult, error)
-	// Returns a list of deployments and their current intercept status.
+	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
 	// Quits (terminates) the connector process.
