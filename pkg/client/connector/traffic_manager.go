@@ -233,7 +233,7 @@ func (tm *trafficManager) getInfosForWorkflow(ctx context.Context, names []strin
 					}
 					continue
 				}
-				matchingSvcs := tm.findMatchingServices("", dep.Spec.Template.Labels)
+				matchingSvcs := tm.findMatchingServices("", "", dep.Spec.Template.Labels)
 				if len(matchingSvcs) == 0 {
 					if !ok && filter <= rpc.ListRequest_INTERCEPTABLE {
 						continue
@@ -269,7 +269,7 @@ func (tm *trafficManager) getInfosForWorkflow(ctx context.Context, names []strin
 					dlog.Infof(ctx, "Not including snapshot for Replica Set with 0 replicas: %s", rs.Name)
 					continue
 				}
-				matchingSvcs := tm.findMatchingServices("", rs.Spec.Template.Labels)
+				matchingSvcs := tm.findMatchingServices("", "", rs.Spec.Template.Labels)
 				if len(matchingSvcs) == 0 {
 					if !ok && filter <= rpc.ListRequest_INTERCEPTABLE {
 						continue

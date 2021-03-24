@@ -3,7 +3,6 @@ package connector
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/blang/semver"
+	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
@@ -266,7 +266,7 @@ func svcPortByName(svc *kates.Service, name string) []*kates.ServicePort {
 	return svcPorts
 }
 
-func (ki *installer) findMatchingServices(portName string, labels map[string]string) []*kates.Service {
+func (ki *installer) findMatchingServices(portName, svcName string, labels map[string]string) []*kates.Service {
 	matching := make([]*kates.Service, 0)
 
 	ki.accLock.Lock()
@@ -275,6 +275,9 @@ func (ki *installer) findMatchingServices(portName string, labels map[string]str
 		for _, svc := range watch.Services {
 			selector := svc.Spec.Selector
 			if len(selector) == 0 {
+				continue nextSvc
+			}
+			if svcName != "" && svc.Name != svcName {
 				continue nextSvc
 			}
 			for k, v := range selector {
@@ -429,24 +432,30 @@ func (ki *installer) getSvcFromDepAnnotation(c context.Context, obj kates.Object
 	return svc, nil
 }
 
-// Determines if the port associated with a past-intercepted deployment has
-// changed
-func portChanged(c context.Context, obj kates.Object, portName string) (bool, error) {
+// Determines if the service associated with a pre-existing intercept exists or if
+// the port to-be-intercepted has changed
+func checkSvcSame(c context.Context, obj kates.Object, svcName, portName string) error {
 	var actions deploymentActions
 	annotationsFound, err := getAnnotation(obj, &actions)
 	if err != nil {
-		return false, err
+		return err
 	}
 	if annotationsFound {
+		// If the Service in the annotation doesn't match the svcName passed in
+		// then the service to be used with the intercept has changed
+		curSvc := actions.ReferencedService
+		if svcName != "" && curSvc != svcName {
+			return fmt.Errorf("Service for %s changed from %s -> %s", obj.GetName(), curSvc, svcName)
+		}
+
 		// If the portName in the annotation doesn't match the portName passed in
 		// then the ports have changed.
 		curSvcPort := actions.ReferencedServicePortName
 		if curSvcPort != portName {
-			dlog.Infof(c, "Port for %s changed from %s -> %s", obj.GetName(), curSvcPort, portName)
-			return true, nil
+			return fmt.Errorf("Port for %s changed from %s -> %s", obj.GetName(), curSvcPort, portName)
 		}
 	}
-	return false, nil
+	return nil
 }
 
 var agentNotFound = errors.New("no such agent")
@@ -455,7 +464,7 @@ var agentNotFound = errors.New("no such agent")
 // is installed alongside the proper deployment.  In doing that, it also ensures that
 // the deployment is referenced by a service. Lastly, it returns the service UID
 // associated with the deployment since this is where that correlation is made.
-func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, agentImageName string) (string, string, error) {
+func (ki *installer) ensureAgent(c context.Context, namespace, name, svcName, portName, agentImageName string) (string, string, error) {
 	kind, err := ki.findObjectKind(c, namespace, name)
 	if err != nil {
 		return "", "", err
@@ -489,36 +498,16 @@ func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, a
 		}
 	}
 
-	svcPortChanged, err := portChanged(c, obj, portName)
-	if err != nil {
-		return "", "", err
+	if err := checkSvcSame(c, obj, svcName, portName); err != nil {
+		return "", "", errors.Wrap(err, "Workload already being used for intercept. To intercept this with your new configuration, please use telepresence uninstall --agent <nameOfWorkload> first. This will cancel any intercepts that already exist")
 	}
 	var svc *kates.Service
 
 	switch {
-	case svcPortChanged:
-		dlog.Infof(c, "Port to be intercepted changed for deployment %s.%s", name, namespace)
-		dlog.Info(c, "Undoing dep+svc modifications and removing agent")
-		// Remove deployment+svc modifications, as well as traffic-agent since
-		// the port is vital in configuring all of those
-		if err = ki.undoObjectMods(c, obj); err != nil {
-			return "", "", err
-		}
-
-		if err = ki.waitForApply(c, namespace, name, obj); err != nil {
-			return "", "", err
-		}
-		// Since the agent has been removed, we find the updated version of
-		// the deployment and fallthrough to the no agent case
-		obj, err = ki.findDeployment(c, namespace, name)
-		if err != nil {
-			return "", "", err
-		}
-		fallthrough
 	case agentContainer == nil:
 		dlog.Infof(c, "no agent found for deployment %s.%s", name, namespace)
 		dlog.Infof(c, "Using port name %q", portName)
-		matchingSvcs := ki.findMatchingServices(portName, tplSpec.Labels)
+		matchingSvcs := ki.findMatchingServices(portName, svcName, tplSpec.Labels)
 		if len(matchingSvcs) == 0 {
 			errMsg := fmt.Sprintf("Found no services with a selector matching labels %v", tplSpec.Labels)
 			if portName != "" {

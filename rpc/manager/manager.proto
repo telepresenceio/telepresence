@@ -96,6 +96,9 @@ message InterceptSpec {
 
   // .uid.metadata of service associated with intercept
   string service_uid = 12;
+
+  // name of the aforementioned service
+  string service_name = 14;
 }
 
 enum InterceptDispositionType {

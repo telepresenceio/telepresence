@@ -30,11 +30,12 @@ import (
 type interceptInfo struct {
 	sessionInfo
 
-	name      string
-	agentName string
-	namespace string
-	port      string
-	localOnly bool
+	name        string
+	agentName   string
+	namespace   string
+	port        string
+	serviceName string
+	localOnly   bool
 
 	previewEnabled bool
 	previewSpec    manager.PreviewSpec
@@ -66,8 +67,10 @@ func interceptCommand(ctx context.Context) *cobra.Command {
 	}
 	flags := cmd.Flags()
 
-	flags.StringVarP(&ii.agentName, "deployment", "d", "", "Name of deployment to intercept, if different from <name>")
+	flags.StringVarP(&ii.agentName, "workload", "w", "", "Name of workload (Deployment, ReplicaSet) to intercept, if different from <name>")
 	flags.StringVarP(&ii.port, "port", "p", "8080", "Local port to forward to. If intercepting a service with multiple ports, use <local port>:<service port name> format")
+
+	flags.StringVar(&ii.serviceName, "service", "", "Name of service to intercept. If not provided, we will try to auto-detect one")
 
 	flags.BoolVarP(&ii.localOnly, "local-only", "l", false, ``+
 		`Declare a local-only intercept for the purpose of getting direct outbound access to the intercept's namespace`)
@@ -113,7 +116,10 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 	if ii.localOnly {
 		// Sanity check for local-only intercept
 		if ii.agentName != "" {
-			return errors.New("a local-only intercept cannot have a deployment")
+			return errors.New("a local-only intercept cannot have a workload")
+		}
+		if ii.serviceName != "" {
+			return errors.New("a local-only intercept cannot have a service")
 		}
 		if cmd.Flag("port").Changed {
 			return errors.New("a local-only intercept cannot have a port")
@@ -264,6 +270,10 @@ func (is *interceptState) createRequest() (*connector.CreateInterceptRequest, er
 	if is.agentName == "" {
 		// local-only
 		return ir, nil
+	}
+
+	if is.serviceName != "" {
+		spec.ServiceName = is.serviceName
 	}
 
 	spec.Agent = is.agentName
