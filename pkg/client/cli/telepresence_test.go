@@ -187,51 +187,6 @@ func (ts *telepresenceSuite) TestB_Connected() {
 }
 
 func (ts *telepresenceSuite) TestC_Uninstall() {
-	ts.Run("Uninstalls agent on given deployment", func() {
-		require := ts.Require()
-		agentName := func() (string, error) {
-			return ts.kubectlOut("get", "deploy", "with-probes", "-o",
-				`jsonpath={.spec.template.spec.containers[?(@.name=="traffic-agent")].name}`)
-		}
-		stdout, err := agentName()
-		require.NoError(err)
-		require.Equal("traffic-agent", stdout)
-		_, stderr := telepresence(ts.T(), "uninstall", "--namespace", ts.namespace, "--agent", "with-probes")
-		require.Empty(stderr)
-		defer telepresence(ts.T(), "quit")
-		require.Eventually(
-			// condition
-			func() bool {
-				stdout, _ := agentName()
-				return stdout == ""
-			},
-			5*time.Second,        // waitFor
-			500*time.Millisecond, // polling interval
-		)
-	})
-
-	ts.Run("Uninstalls all agents", func() {
-		require := ts.Require()
-		agentNames := func() (string, error) {
-			return ts.kubectlOut("get", "deploy", "-o",
-				`jsonpath={.items[*].spec.template.spec.containers[?(@.name=="traffic-agent")].name}`)
-		}
-		stdout, err := agentNames()
-		require.NoError(err)
-		require.Equal(serviceCount, len(strings.Split(stdout, " ")))
-		_, stderr := telepresence(ts.T(), "uninstall", "--namespace", ts.namespace, "--all-agents")
-		require.Empty(stderr)
-		defer telepresence(ts.T(), "quit")
-		require.Eventually(
-			func() bool {
-				stdout, _ := agentNames()
-				return stdout == ""
-			},
-			5*time.Second,        // waitFor
-			500*time.Millisecond, // polling interval
-		)
-	})
-
 	ts.Run("Uninstalls the traffic manager and quits", func() {
 		require := ts.Require()
 		names := func() (string, error) {
@@ -341,7 +296,26 @@ func (cs *connectedSuite) TestD_Intercepted() {
 	suite.Run(cs.T(), &interceptedSuite{tpSuite: cs.tpSuite})
 }
 
-func (cs *connectedSuite) TestE_SuccessfullyInterceptsDeploymentWithProbes() {
+func (cs *connectedSuite) TestE_PodWithSubdomain() {
+	require := cs.Require()
+	c := dlog.NewTestContext(cs.T(), false)
+	require.NoError(cs.tpSuite.applyApp(c, "echo-w-subdomain", "echo.subsonic", 8080))
+	defer func() {
+		cs.NoError(cs.tpSuite.kubectl(c, "delete", "svc", "subsonic"))
+		cs.NoError(cs.tpSuite.kubectl(c, "delete", "deploy", "echo-subsonic"))
+	}()
+
+	cc, cancel := context.WithTimeout(c, 3*time.Second)
+	defer cancel()
+	ip, err := net.DefaultResolver.LookupHost(cc, "echo.subsonic."+cs.ns())
+	cs.NoError(err)
+	cs.True(len(ip) == 1)
+	ip, err = net.DefaultResolver.LookupHost(cc, "echo.subsonic."+cs.ns()+".svc.cluster.local")
+	cs.NoError(err)
+	cs.True(len(ip) == 1)
+}
+
+func (cs *connectedSuite) TestF_SuccessfullyInterceptsDeploymentWithProbes() {
 	defer telepresence(cs.T(), "leave", "with-probes-"+cs.ns())
 
 	require := cs.Require()
@@ -353,7 +327,7 @@ func (cs *connectedSuite) TestE_SuccessfullyInterceptsDeploymentWithProbes() {
 	require.Contains(stdout, "with-probes: intercepted")
 }
 
-func (cs *connectedSuite) TestF_LocalOnlyIntercept() {
+func (cs *connectedSuite) TestG_LocalOnlyIntercept() {
 	cs.Run("intercept can be established", func() {
 		stdout, stderr := telepresence(cs.T(), "intercept", "--namespace", cs.ns(), "--local-only", "mylocal")
 		cs.Empty(stdout)
@@ -388,7 +362,7 @@ func (cs *connectedSuite) TestF_LocalOnlyIntercept() {
 	})
 }
 
-func (cs *connectedSuite) TestG_ListOnlyMapped() {
+func (cs *connectedSuite) TestH_ListOnlyMapped() {
 	require := cs.Require()
 	stdout, stderr := telepresence(cs.T(), "connect", "--mapped-namespaces", "default")
 	require.Empty(stderr)
@@ -407,23 +381,41 @@ func (cs *connectedSuite) TestG_ListOnlyMapped() {
 	require.NotContains(stdout, "No deployments")
 }
 
-func (cs *connectedSuite) TestE_PodWithSubdomain() {
-	require := cs.Require()
-	c := dlog.NewTestContext(cs.T(), false)
-	require.NoError(cs.tpSuite.applyApp(c, "echo-w-subdomain", "echo.subsonic", 8080))
-	defer func() {
-		cs.NoError(cs.tpSuite.kubectl(c, "delete", "svc", "subsonic"))
-		cs.NoError(cs.tpSuite.kubectl(c, "delete", "deploy", "echo-subsonic"))
-	}()
+func (cs *connectedSuite) TestI_Uninstall() {
+	cs.Run("Uninstalls agent on given deployment", func() {
+		require := cs.Require()
+		stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
+		require.Empty(stderr)
+		require.Contains(stdout, "with-probes")
+		_, stderr = telepresence(cs.T(), "uninstall", "--namespace", cs.ns(), "--agent", "with-probes")
+		require.Empty(stderr)
+		require.Eventually(
+			// condition
+			func() bool {
+				stdout, _ := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
+				return !strings.Contains(stdout, "with-probes")
+			},
+			30*time.Second, // waitFor
+			2*time.Second,  // polling interval
+		)
+	})
 
-	cc, cancel := context.WithTimeout(c, 3*time.Second)
-	defer cancel()
-	ip, err := net.DefaultResolver.LookupHost(cc, "echo.subsonic."+cs.ns())
-	cs.NoError(err)
-	cs.True(len(ip) == 1)
-	ip, err = net.DefaultResolver.LookupHost(cc, "echo.subsonic."+cs.ns()+".svc.cluster.local")
-	cs.NoError(err)
-	cs.True(len(ip) == 1)
+	cs.Run("Uninstalls all agents", func() {
+		require := cs.Require()
+		stdout, stderr := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
+		require.Empty(stderr)
+		require.GreaterOrEqual(len(strings.Split(stdout, "\n")), serviceCount)
+		_, stderr = telepresence(cs.T(), "uninstall", "--namespace", cs.ns(), "--all-agents")
+		require.Empty(stderr)
+		require.Eventually(
+			func() bool {
+				stdout, _ := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
+				return stdout == "No deployments"
+			},
+			30*time.Second,     // waitFor
+			2*time.Millisecond, // polling interval
+		)
+	})
 }
 
 type interceptedSuite struct {

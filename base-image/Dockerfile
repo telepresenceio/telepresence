@@ -20,6 +20,8 @@ RUN \
   echo -e "ClientAliveInterval 1\nGatewayPorts yes\nPermitEmptyPasswords yes\nPort 8022\nClientAliveCountMax 10\nPermitRootLogin yes\n" >> /etc/ssh/sshd_config && \
   chmod -R g+r /etc/ssh && \
   mkdir /home/telepresence && \
+  mkdir /tel_app_mounts && \
+  chmod 0770 /tel_app_mounts && \
   chmod g+w /run && \
   echo "telepresence::1000:0:Telepresence User:/home/telepresence:/bin/ash" >> /etc/passwd
 
