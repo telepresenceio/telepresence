@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -23,7 +24,7 @@ type Config struct {
 	Namespace   string `env:"AGENT_NAMESPACE,default="`
 	PodName     string `env:"AGENT_POD_NAME,default="`
 	AgentPort   int32  `env:"AGENT_PORT,default=9900"`
-	AppMounts   string `env:"APP_MOUNTS,default="`
+	AppMounts   string `env:"APP_MOUNTS,default=/tel_app_mounts"`
 	AppPort     int32  `env:"APP_PORT,required"`
 	ManagerHost string `env:"MANAGER_HOST,default=traffic-manager"`
 	ManagerPort int32  `env:"MANAGER_PORT,default=8081"`
@@ -70,6 +71,39 @@ func AppEnvironment() map[string]string {
 		fullEnv[k] = v
 	}
 	return fullEnv
+}
+
+// svcAccPath is the path where the ServiceAccount Admission Controller automatically provides its secrets.
+const svcAccPath = "/var/run/secrets/kubernetes.io"
+const tpMountsEnv = "TELEPRESENCE_MOUNTS"
+
+func (cfg *Config) HasMounts(ctx context.Context, env map[string]string) (bool, error) {
+	tpMounts := env[tpMountsEnv]
+	stat, err := os.Stat(svcAccPath)
+	if err != nil || !stat.IsDir() {
+		return tpMounts != "", nil
+	}
+
+	// This must be included in the shared mounts unless it's already provided
+	svcAccLink := filepath.Join(cfg.AppMounts, svcAccPath)
+	if stat, err = os.Stat(svcAccLink); err == nil && stat.IsDir() {
+		return true, nil
+	}
+
+	// Add a link to the kubernetes.io directory under {{.AppMounts}}/var/run/secrets
+	if err = os.MkdirAll(filepath.Dir(svcAccLink), 0700); err != nil {
+		return false, err
+	}
+	if err = os.Symlink(svcAccPath, svcAccLink); err != nil {
+		return false, err
+	}
+	if tpMounts == "" {
+		tpMounts = svcAccPath
+	} else {
+		tpMounts += ":" + svcAccPath
+	}
+	env[tpMountsEnv] = tpMounts
+	return true, nil
 }
 
 func Main(ctx context.Context, args ...string) error {
@@ -123,8 +157,13 @@ func Main(ctx context.Context, args ...string) error {
 		EnableSignalHandling: true,
 	})
 
+	hasMounts, err := config.HasMounts(ctx, info.Environment)
+	if err != nil {
+		dlog.Errorf(ctx, "Unable to determine if agent has mounts: %v", err)
+	}
+
 	sshPort := 0
-	if config.AppMounts != "" && user == "" {
+	if hasMounts && user == "" {
 		// start an ssh daemon to server remote sshfs mounts
 		l, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
 		if err != nil {
