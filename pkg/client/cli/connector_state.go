@@ -98,7 +98,7 @@ func (cs *connectorState) setConnectInfo() error {
 		msg = "Unable to connect while disconnecting"
 	case connector.ConnectInfo_MUST_RESTART:
 		msg = "Cluster configuration changed, please quit telepresence and reconnect"
-	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_CLUSTER_FAILED, connector.ConnectInfo_BRIDGE_FAILED:
+	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED, connector.ConnectInfo_CLUSTER_FAILED:
 		msg = r.ErrorText
 	}
 	return errors.New(msg) // Return true to ensure disconnect

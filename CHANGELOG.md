@@ -1,8 +1,10 @@
 # Changelog
 
 ### 2.1.3 (TBD)
+
 - Bugfix: Connects to Minikube/Hyperkit no longer fails intermittently.
 - Bugfix: Telepresence will now make /var/run/secrets/kubernetes.io available when mounting remote volumes.
+- Bugfix: Hiccups in the connection to the cluster will no longer cause the connector to shut down; it now retries properly.
 
 ### 2.1.2 (March 19, 2021)
 - Bugfix: Uninstalling agents now only happens once per deployment instead of once per agent.
