@@ -191,6 +191,7 @@ func (tm *trafficManager) addIntercept(c context.Context, ir *rpc.CreateIntercep
 	}
 
 	spec.ServiceUid = result.ServiceUid
+	spec.WorkloadKind = result.WorkloadKind
 
 	deleteMount := false
 	if ir.MountPoint != "" {

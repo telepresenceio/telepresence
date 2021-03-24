@@ -127,6 +127,7 @@ func DescribeIntercept(ii *manager.InterceptInfo, volumeMountsPrevented error, d
 		}
 		return msg
 	}()})
+	fields = append(fields, kv{"Workload kind", ii.Spec.WorkloadKind})
 
 	if debug {
 		fields = append(fields, kv{"ID", ii.Id})
