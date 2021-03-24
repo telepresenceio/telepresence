@@ -456,19 +456,26 @@ var agentNotFound = errors.New("no such agent")
 // the deployment is referenced by a service. Lastly, it returns the service UID
 // associated with the deployment since this is where that correlation is made.
 func (ki *installer) ensureAgent(c context.Context, namespace, name, portName, agentImageName string) (string, error) {
-	dep, err := ki.findDeployment(c, namespace, name)
-	if err == nil {
-		return ki.ensureAgentDeployment(c, namespace, name, portName, agentImageName, dep)
+	kind, err := ki.findObjectKind(c, namespace, name)
+	if err != nil {
+		return "", err
 	}
-	rs, err := ki.findReplicaSet(c, namespace, name)
-	if err == nil {
-		dlog.Infof(c, "Found Replica Set w/ Name: %s", name)
-		return ki.ensureAgentDeployment(c, namespace, name, portName, agentImageName, rs)
+	var obj kates.Object
+	switch kind {
+	case "ReplicaSet":
+		obj, err = ki.findReplicaSet(c, namespace, name)
+		if err != nil {
+			return "", err
+		}
+	case "Deployment":
+		obj, err = ki.findDeployment(c, namespace, name)
+		if err != nil {
+			return "", err
+		}
+	default:
+		return "", errors.New("Tried to ensureAgent of unsupported object")
 	}
-	return "", agentNotFound
-}
 
-func (ki *installer) ensureAgentDeployment(c context.Context, namespace, name, portName, agentImageName string, obj kates.Object) (string, error) {
 	tplSpec, _, err := GetSpecFromObject(obj)
 	if err != nil {
 		return "", err
@@ -584,7 +591,7 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 	}
 	switch kind {
 	case "ReplicaSet":
-		ki.kickReplicaSet(c, name, namespace)
+		ki.refreshReplicaSet(c, name, namespace)
 		for {
 			dtime.SleepWithContext(c, time.Second)
 			if err := client.CheckTimeout(c, &tos.Apply, nil); err != nil {
@@ -636,7 +643,10 @@ func (ki *installer) waitForApply(c context.Context, namespace, name string, obj
 	}
 }
 
-func (ki *installer) kickReplicaSet(c context.Context, name, namespace string) error {
+// refreshReplicaSet rolls out a fresh set of pods for a replica set
+// We need this because updating a Replica Set does *not* generate new
+// pods if the desired amount already exists.
+func (ki *installer) refreshReplicaSet(c context.Context, name, namespace string) error {
 	f := func(s int32) *int32 {
 		return &s
 	}
@@ -904,153 +914,6 @@ func addAgentToDeployment(
 	}
 
 	return object, service, nil
-}
-
-func addAgentToReplicaSet(
-	c context.Context,
-	portName string,
-	agentImageName string,
-	rs *kates.ReplicaSet, matchingServices []*kates.Service,
-) (
-	*kates.ReplicaSet,
-	*kates.Service,
-	error,
-) {
-	service, servicePort, container, containerPortIndex, err := findMatchingPort(rs, portName, matchingServices)
-	if err != nil {
-		return nil, nil, err
-	}
-	dlog.Debugf(c, "using service %q port %q when intercepting deployment %q",
-		service.Name,
-		func() string {
-			if servicePort.Name != "" {
-				return servicePort.Name
-			}
-			return strconv.Itoa(int(servicePort.Port))
-		}(),
-		rs.Name)
-
-	version := client.Semver().String()
-
-	// Try to detect the container port we'll be taking over.
-	var containerPort struct {
-		Name     string // If the existing container port doesn't have a name, we'll make one up.
-		Number   uint16
-		Protocol corev1.Protocol
-	}
-
-	// Start by filling from the servicePort; if these are the zero values, that's OK.
-	svcHasTargetPort := true
-	if servicePort.TargetPort.Type == intstr.Int {
-		if servicePort.TargetPort.IntVal == 0 {
-			containerPort.Number = uint16(servicePort.Port)
-			svcHasTargetPort = false
-		} else {
-			containerPort.Number = uint16(servicePort.TargetPort.IntVal)
-		}
-	} else {
-		containerPort.Name = servicePort.TargetPort.StrVal
-	}
-	containerPort.Protocol = servicePort.Protocol
-
-	// Now fill from the Deployment's containerPort.
-	usedContainerName := false
-	if containerPortIndex >= 0 {
-		if containerPort.Name == "" {
-			containerPort.Name = container.Ports[containerPortIndex].Name
-			if containerPort.Name != "" {
-				usedContainerName = true
-			}
-		}
-		if containerPort.Number == 0 {
-			containerPort.Number = uint16(container.Ports[containerPortIndex].ContainerPort)
-		}
-		if containerPort.Protocol == "" {
-			containerPort.Protocol = container.Ports[containerPortIndex].Protocol
-		}
-	}
-	if containerPort.Number == 0 {
-		return nil, nil, fmt.Errorf("unable to add agent to Replica Set %s. The container port cannot be determined", rs.Name)
-	}
-	if containerPort.Name == "" {
-		containerPort.Name = fmt.Sprintf("tel2px-%d", containerPort.Number)
-	}
-
-	// Figure what modifications we need to make.
-	deploymentMod := &deploymentActions{
-		Version:                   version,
-		ReferencedService:         service.Name,
-		ReferencedServicePortName: portName,
-		AddTrafficAgent: &addTrafficAgentAction{
-			containerName:       container.Name,
-			ContainerPortName:   containerPort.Name,
-			ContainerPortProto:  containerPort.Protocol,
-			ContainerPortNumber: containerPort.Number,
-			ImageName:           agentImageName,
-		},
-	}
-	// Depending on whether the Service refers to the port by name or by number, we either need
-	// to patch the names in the deployment, or the number in the service.
-	var serviceMod *svcActions
-	if servicePort.TargetPort.Type == intstr.Int {
-		// Change the port number that the Service refers to.
-		serviceMod = &svcActions{Version: version}
-		if svcHasTargetPort {
-			serviceMod.MakePortSymbolic = &makePortSymbolicAction{
-				PortName:     servicePort.Name,
-				TargetPort:   containerPort.Number,
-				SymbolicName: containerPort.Name,
-			}
-		} else {
-			serviceMod.AddSymbolicPort = &addSymbolicPortAction{
-				makePortSymbolicAction{
-					PortName:     servicePort.Name,
-					TargetPort:   containerPort.Number,
-					SymbolicName: containerPort.Name,
-				},
-			}
-		}
-		// Since we are updating the service to use the containerPort.Name
-		// if that value came from the container, then we need to hide it
-		// since the service is using the targetPort's int.
-		if usedContainerName {
-			deploymentMod.HideContainerPort = &hideContainerPortAction{
-				ContainerName: container.Name,
-				PortName:      containerPort.Name,
-			}
-		}
-	} else {
-		// Hijack the port name in the Deployment.
-		deploymentMod.HideContainerPort = &hideContainerPortAction{
-			ContainerName: container.Name,
-			PortName:      containerPort.Name,
-		}
-	}
-
-	// Apply the actions on the Deployment.
-	if err = deploymentMod.do(rs); err != nil {
-		return nil, nil, err
-	}
-	if rs.Annotations == nil {
-		rs.Annotations = make(map[string]string)
-	}
-	rs.Annotations[annTelepresenceActions] = deploymentMod.String()
-	explainDo(c, deploymentMod, rs)
-
-	// Apply the actions on the Service.
-	if serviceMod != nil {
-		if err = serviceMod.do(service); err != nil {
-			return nil, nil, err
-		}
-		if service.Annotations == nil {
-			service.Annotations = make(map[string]string)
-		}
-		service.Annotations[annTelepresenceActions] = serviceMod.String()
-		explainDo(c, serviceMod, service)
-	} else {
-		service = nil
-	}
-	return rs, service, nil
 }
 
 func (ki *installer) managerDeployment(env client.Env) *kates.Deployment {

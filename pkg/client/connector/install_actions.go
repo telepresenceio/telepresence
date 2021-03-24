@@ -159,8 +159,8 @@ func GetPodTemplateFromObject(obj kates.Object) (*kates.PodTemplateSpec, string,
 		rs := obj.(*kates.ReplicaSet)
 		tplSpec = &rs.Spec.Template
 	case "Deployment":
-		rs := obj.(*kates.Deployment)
-		tplSpec = &rs.Spec.Template
+		dep := obj.(*kates.Deployment)
+		tplSpec = &dep.Spec.Template
 	default:
 		return nil, "", fmt.Errorf("Unsupported workload kind: %s", kind)
 	}
