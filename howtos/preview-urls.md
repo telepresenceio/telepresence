@@ -96,24 +96,29 @@ Need a sample app to try with preview URLs?  Check out the <a href="../../quick-
    - with JetBrains IDE (IntelliJ, WebStorm, PyCharm, GoLand, etc.) use the [EnvFile plugin](https://plugins.jetbrains.com/plugin/7861-envfile)
    - with Visual Studio Code, specify the path to the environment variables file in the `envFile` field of your configuration
 
-5. Go to the preview URL that was output after starting the intercept and see that your local service is processing the request.
+5. Go to the preview URL that was provided after starting the intercept (the next to last line in the terminal output above). Your local service will be processing the request.
 
-    <Alert severity="info">
+  <Alert severity="success">
+    <strong>Success!</strong> You have intercepted traffic coming from your preview URL without impacting other traffic from your Ingress.
+  </Alert>
+
+  <Alert severity="info">
     <strong>Didn't work?</strong> It might be because you have services in between your ingress controller and the service you are intercepting that do not propagate the <code>x-telepresence-intercept-id</code> HTTP Header. Read more on <a href="../../concepts/context-prop">context propagation</a>.
-    </Alert>
+  </Alert>
+
+
 
 6. Make a request on the URL you would usually query for that environment.  The request should **not** be routed to your laptop.
 
    Normal traffic coming into the cluster through the Ingress (i.e. not coming from the preview URL) will route to services in the cluster like normal.
 
-<Alert severity="success">
-    <strong>Congratulations!</strong> You have now only intercepted traffic coming from your preview URL, without impacting your teammates.
-</Alert>
-
 7. Share with a teammate.
 
   You can collaborate with teammates by sending your preview URL to them. They will be asked to log in to Ambassador Cloud if they are not already. Upon login they must select the same identity provider and org as you are using; that is how they are authorized to access the preview URL.  When they visit the preview URL, they will see the intercepted service running on your laptop.
   
+<Alert severity="success">
+  <strong>Congratulations!</strong> You have now created a dev environment and shared it with a teammate!  While you and your partner work together to debug your service, the production version remains unchanged to the rest of your team until you commit your changes.
+</Alert>
 
 ## Sharing a Preview URL Publicly
 
