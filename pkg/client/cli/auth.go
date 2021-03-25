@@ -33,7 +33,7 @@ func LoginCommand() *cobra.Command {
 				browser.OpenURL,
 				client.NewScout(cmd.Context(), "cli"),
 			)
-			return l.LoginFlow(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return l.LoginFlow(cmd.Context(), cmd.OutOrStdout())
 		},
 	}
 }

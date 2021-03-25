@@ -36,7 +36,7 @@ func dashboardCommand() *cobra.Command {
 					browser.OpenURL,
 					client.NewScout(cmd.Context(), "cli"),
 				)
-				err = l.LoginFlow(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+				err = l.LoginFlow(cmd.Context(), cmd.OutOrStdout())
 			} else {
 				// The LoginFlow actually takes the user to the dashboard. Hence the else here.
 				err = browser.OpenURL(fmt.Sprintf("https://%s/cloud/preview", env.SystemAHost))
