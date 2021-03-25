@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/datawire/ambassador/pkg/kates"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/daemon"
 )
@@ -194,7 +193,7 @@ func Command(ctx context.Context) *cobra.Command {
 	AddCommandGroups(rootCmd, []CommandGroup{
 		{
 			Name:     "Session Commands",
-			Commands: []*cobra.Command{connectCommand(), auth.LoginCommand(), auth.LogoutCommand(), statusCommand(), quitCommand()},
+			Commands: []*cobra.Command{connectCommand(), LoginCommand(), LogoutCommand(), statusCommand(), quitCommand()},
 		},
 		{
 			Name:     "Traffic Commands",

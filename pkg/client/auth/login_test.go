@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 	"gotest.tools/assert"
@@ -207,11 +206,10 @@ func TestLoginFlow(t *testing.T) {
 	executeLoginFlowWithErrorParam := func(t *testing.T, f *fixture, errorCode, errorDescription string) (*http.Response, string, error) {
 		errs := make(chan error)
 		go func() {
-			cmd := &cobra.Command{
-				RunE: func(cmd *cobra.Command, _ []string) error { return f.Runner.LoginFlow(cmd) },
-			}
-			cmd.SetArgs([]string{})
-			errs <- cmd.ExecuteContext(dlog.NewTestContext(t, false))
+			ctx := dlog.NewTestContext(t, false)
+			stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
+			stderr := dlog.StdLogger(ctx, dlog.LogLevelError).Writer()
+			errs <- f.Runner.LoginFlow(ctx, stdout, stderr)
 		}()
 		rawAuthUrl := <-f.OpenedUrls
 		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
@@ -389,11 +387,10 @@ func TestLoginFlow(t *testing.T) {
 
 		// when
 		go func() {
-			cmd := &cobra.Command{
-				RunE: func(cmd *cobra.Command, _ []string) error { return f.Runner.LoginFlow(cmd) },
-			}
-			cmd.SetArgs([]string{})
-			errs <- cmd.ExecuteContext(ctx)
+			ctx := dlog.NewTestContext(t, false)
+			stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
+			stderr := dlog.StdLogger(ctx, dlog.LogLevelError).Writer()
+			errs <- f.Runner.LoginFlow(ctx, stdout, stderr)
 		}()
 		rawAuthUrl := <-f.OpenedUrls
 		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
@@ -412,13 +409,13 @@ func TestLoginFlow(t *testing.T) {
 		userInfo, err := cache.LoadUserInfoFromUserCache(ctx)
 		require.NoError(t, err, "no error reading user info")
 		require.NotNil(t, userInfo)
-		err = auth.LogoutCommand().ExecuteContext(ctx)
+		err = auth.Logout(ctx)
 		require.NoError(t, err, "no error executing logout")
 		_, err = cache.LoadTokenFromUserCache(ctx)
 		require.Error(t, err, "error reading token")
 		_, err = cache.LoadUserInfoFromUserCache(ctx)
 		require.Error(t, err, "error reading user info")
-		err = auth.LogoutCommand().ExecuteContext(ctx)
+		err = auth.Logout(ctx)
 		require.Error(t, err, "error executing logout when not logged in")
 	})
 }

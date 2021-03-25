@@ -1,13 +1,11 @@
-package auth
+package cli
 
 import (
-	"errors"
-	"os"
-
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 )
 
@@ -24,7 +22,7 @@ func LoginCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			l := NewLoginExecutor(
+			l := auth.NewLoginExecutor(
 				env.LoginAuthURL,
 				env.LoginTokenURL,
 				env.LoginClientID,
@@ -35,7 +33,7 @@ func LoginCommand() *cobra.Command {
 				browser.OpenURL,
 				client.NewScout(cmd.Context(), "cli"),
 			)
-			return l.LoginFlow(cmd)
+			return l.LoginFlow(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 }
@@ -48,13 +46,7 @@ func LogoutCommand() *cobra.Command {
 		Short: "Logout from Ambassador Cloud",
 		Long:  "Logout from Ambassador Cloud",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			_, err := cache.LoadTokenFromUserCache(cmd.Context())
-			if err != nil && os.IsNotExist(err) {
-				return errors.New("not logged in")
-			}
-			_ = cache.DeleteTokenFromUserCache(cmd.Context())
-			_ = cache.DeleteUserInfoFromUserCache(cmd.Context())
-			return nil
+			return auth.Logout(cmd.Context())
 		},
 	}
 }
