@@ -62,7 +62,6 @@ func explainDo(c context.Context, a completeAction, obj kates.Object) {
 			obj.GetName(),
 			buf.String()))
 	}
-
 }
 
 func explainUndo(c context.Context, a completeAction, obj kates.Object) {

@@ -448,7 +448,7 @@ func (cs *connectedSuite) TestJ_Uninstall() {
 		require.Eventually(
 			func() bool {
 				stdout, _ := telepresence(cs.T(), "list", "--namespace", cs.ns(), "--agents")
-				return stdout == "No deployments"
+				return stdout == "No Workloads (Deployments or ReplicaSets)"
 			},
 			30*time.Second,     // waitFor
 			2*time.Millisecond, // polling interval
@@ -596,9 +596,17 @@ func (ts *telepresenceSuite) applyEchoService(c context.Context, name string) er
 func (ts *telepresenceSuite) waitForService(c context.Context, name string, port int) error {
 	c, cancel := context.WithTimeout(c, 30*time.Second)
 	defer cancel()
+
+	// Since this function can be called multiple times in parallel
+	// we add the name of the servie to the title of the pod so they
+	// can run at the same time. We strip out any characters that we
+	// can't use in a name in k8s.
+	reg := regexp.MustCompile("[^a-zA-Z0-9-]+")
+	k8sSafeName := reg.ReplaceAllString(name, "")
+	containerName := fmt.Sprintf("curl-%s-from-cluster", k8sSafeName)
 	for i := 0; i < 30; i++ {
 		time.Sleep(time.Second)
-		err := ts.kubectl(c, "run", "curl-from-cluster", "--rm", "-it",
+		err := ts.kubectl(c, "run", containerName, "--rm", "-it",
 			"--image=docker.io/pstauffer/curl", "--restart=Never", "--",
 			"curl", "--silent", "--output", "/dev/null",
 			fmt.Sprintf("http://%s.%s:%d", name, ts.namespace, port),

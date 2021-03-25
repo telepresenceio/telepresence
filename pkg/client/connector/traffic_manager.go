@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc"
 	errors2 "k8s.io/apimachinery/pkg/api/errors"
 
+	"github.com/datawire/ambassador/pkg/kates"
 	"github.com/datawire/dlib/dexec"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
@@ -83,18 +84,6 @@ func newTrafficManager(_ context.Context, env client.Env, cluster *k8sCluster, i
 	}
 
 	return tm, nil
-}
-
-type uniqueWorkload struct {
-	name      string
-	namespace string
-}
-
-func newUniqueWorkload(_ context.Context, name, namespace string) *uniqueWorkload {
-	return &uniqueWorkload{
-		name:      name,
-		namespace: namespace,
-	}
 }
 
 func (tm *trafficManager) waitUntilStarted(c context.Context) error {
@@ -209,7 +198,27 @@ func (tm *trafficManager) session() *manager.SessionInfo {
 	return tm.sessionInfo
 }
 
-func (tm *trafficManager) getInfosForWorkflow(ctx context.Context, names []string, objectKind, namespace string, iMap map[string]*manager.InterceptInfo, aMap map[string]*manager.AgentInfo, filter rpc.ListRequest_Filter) []*rpc.WorkloadInfo {
+// hasOwner parses an object and determines whether the object has an
+// owner that is of a kind we prefer. Currently the only owner that we
+// prefer is a Deployment, but this may grow in the future
+func (tm *trafficManager) hasOwner(obj kates.Object) bool {
+	for _, owner := range obj.GetOwnerReferences() {
+		if owner.Kind == "Deployment" {
+			return true
+		}
+	}
+	return false
+}
+
+func (tm *trafficManager) getInfosForWorkflow(
+	ctx context.Context,
+	names []string,
+	objectKind,
+	namespace string,
+	iMap map[string]*manager.InterceptInfo,
+	aMap map[string]*manager.AgentInfo,
+	filter rpc.ListRequest_Filter,
+) []*rpc.WorkloadInfo {
 	workloadInfos := make([]*rpc.WorkloadInfo, 0)
 	for _, name := range names {
 		iCept, ok := iMap[name]
@@ -223,6 +232,8 @@ func (tm *trafficManager) getInfosForWorkflow(ctx context.Context, names []strin
 		reason := ""
 		if agent == nil && iCept == nil {
 			// Check if interceptable
+			var object kates.Object
+			var labels map[string]string
 			switch objectKind {
 			case "Deployment":
 				dep, err := tm.findDeployment(ctx, namespace, name)
@@ -233,13 +244,12 @@ func (tm *trafficManager) getInfosForWorkflow(ctx context.Context, names []strin
 					}
 					continue
 				}
-				matchingSvcs := tm.findMatchingServices("", "", dep.Spec.Template.Labels)
-				if len(matchingSvcs) == 0 {
-					if !ok && filter <= rpc.ListRequest_INTERCEPTABLE {
-						continue
-					}
-					reason = "No service with matching selector"
+
+				if dep.Status.Replicas == int32(0) {
+					reason = "Has 0 replicas"
 				}
+				object = dep
+				labels = dep.Spec.Template.Labels
 
 			case "ReplicaSet":
 				rs, err := tm.findReplicaSet(ctx, namespace, name)
@@ -248,36 +258,36 @@ func (tm *trafficManager) getInfosForWorkflow(ctx context.Context, names []strin
 					if !errors2.IsNotFound(err) {
 						dlog.Error(ctx, err)
 					}
-					dlog.Infof(ctx, "Error 1: %v", err)
-					continue
-				}
-
-				// If a replicaSet is owned by a higher level workload, then users should
-				// intercept that workload so we will not include it in our slice.
-				ownedByDeployment := false
-				for _, owner := range rs.ObjectMeta.OwnerReferences {
-					if owner.Kind == "Deployment" {
-						ownedByDeployment = true
-					}
-				}
-				if ownedByDeployment {
-					dlog.Infof(ctx, "Not including snapshot for Replica Set owned by deployment: %s", rs.Name)
 					continue
 				}
 
 				if rs.Status.Replicas == int32(0) {
-					dlog.Infof(ctx, "Not including snapshot for Replica Set with 0 replicas: %s", rs.Name)
-					continue
+					reason = "Has 0 replicas"
 				}
-				matchingSvcs := tm.findMatchingServices("", "", rs.Spec.Template.Labels)
-				if len(matchingSvcs) == 0 {
-					if !ok && filter <= rpc.ListRequest_INTERCEPTABLE {
-						continue
-					}
-					reason = "No service with matching selector"
-				}
+				object = rs
+				labels = rs.Spec.Template.Labels
+
 			default:
 				reason = "No workload telepresence knows how to intercept"
+			}
+
+			// If an object is owned by a higher level workload, then users should
+			// intercept that workload so we will not include it in our slice.
+			if tm.hasOwner(object) {
+				dlog.Infof(ctx, "Not including snapshot for object as it has an owner: %s.%s", object.GetName(), object.GetNamespace())
+				continue
+			}
+
+			matchingSvcs := tm.findMatchingServices("", "", labels)
+			if len(matchingSvcs) == 0 {
+				reason = "No service with matching selector"
+			}
+
+			// If we have a reason, that means it's not interceptable, so we only
+			// pass the workload through if they want to see all workloads, not
+			// just the interceptable ones
+			if !ok && filter <= rpc.ListRequest_INTERCEPTABLE && reason != "" {
+				continue
 			}
 		}
 
@@ -399,11 +409,14 @@ func (tm *trafficManager) setStatus(ctx context.Context, r *rpc.ConnectInfo) {
 
 // Given a slice of AgentInfo, this returns another slice of agents with one
 // agent per namespace, name pair.
-func getRepresentativeAgents(c context.Context, agents []*manager.AgentInfo) []*manager.AgentInfo {
-	workloads := map[uniqueWorkload]bool{}
+func getRepresentativeAgents(_ context.Context, agents []*manager.AgentInfo) []*manager.AgentInfo {
+	type workload struct {
+		name, namespace string
+	}
+	workloads := map[workload]bool{}
 	var representativeAgents []*manager.AgentInfo
 	for _, agent := range agents {
-		wk := *newUniqueWorkload(c, agent.Name, agent.Namespace)
+		wk := workload{name: agent.Name, namespace: agent.Namespace}
 		if !workloads[wk] {
 			workloads[wk] = true
 			representativeAgents = append(representativeAgents, agent)

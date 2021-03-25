@@ -6,6 +6,10 @@
 - Bugfix: Telepresence will now make /var/run/secrets/kubernetes.io available when mounting remote volumes.
 - Bugfix: Hiccups in the connection to the cluster will no longer cause the connector to shut down; it now retries properly.
 - Bugfix: Fix a crash when binary dependencies are missing.
+- Feature: Telepresence now supports intercepting ReplicaSets (that aren't owned by a Deployment)
+- Bugfix: You can now specify a service when doing an intercept (--service), this is useful if you have two services that select on the same labels (e.g. If using Argo CD to do deployments)
+- Change: The --deployment (-d) flag is now --workload (-w), as we start supporting more workloads than just Deployments
+- Change: Telepresence necessary RBAC has changed and now requires "delete" for Pods and "get,list,update" for ReplicaSets
 - Security: Upgrade to a newer OpenSSL, to address OpenSSL CVE-2021-23840.
 
 ### 2.1.2 (March 19, 2021)
