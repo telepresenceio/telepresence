@@ -29,11 +29,7 @@ If you need another protocol supported, please [drop us a line](../../../../feed
 
 ** When using Telepresence to intercept a pod, are the Kubernetes cluster environment variables proxied to my local machine?**
 
- This feature is coming soon.
-
-For the moment you can `kubectl exec` into a container running on the pod in order to explore the environment variables that are available.
-
-If you are using Kubernetes 1.16+, you can also create an ephemeral container (an alpha feature) within a pod, and explore the volumes using this approach.
+Yes, you can either set the pod's environment variables on your machine or write the variables to a file to use with Docker or another build process. See [this doc](../reference/environment) for more information.
 
 ** When using Telepresence to intercept a pod, are the associated pod volume mounts also proxied and shared with my local machine?**
 
