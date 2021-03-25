@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"math/rand"
-	"strings"
 	"time"
 )
 
@@ -23,7 +22,7 @@ func CreateCodeVerifier() *CodeVerifier {
 	for i := 0; i < codeVerifierLength; i++ {
 		b[i] = byte(r.Intn(255))
 	}
-	return &CodeVerifier{encode(b)}
+	return &CodeVerifier{base64.RawURLEncoding.EncodeToString(b)}
 }
 
 func (v *CodeVerifier) String() string {
@@ -37,13 +36,5 @@ func (v *CodeVerifier) CodeChallengePlain() string {
 func (v *CodeVerifier) CodeChallengeS256() string {
 	h := sha256.New()
 	_, _ = h.Write([]byte(v.Value))
-	return encode(h.Sum(nil))
-}
-
-func encode(msg []byte) string {
-	encoded := base64.StdEncoding.EncodeToString(msg)
-	encoded = strings.ReplaceAll(encoded, "+", "-")
-	encoded = strings.ReplaceAll(encoded, "/", "_")
-	encoded = strings.ReplaceAll(encoded, "=", "")
-	return encoded
+	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }
