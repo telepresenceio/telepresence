@@ -210,8 +210,7 @@ func TestLoginFlow(t *testing.T) {
 		go func() {
 			ctx := dlog.NewTestContext(t, false)
 			stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
-			stderr := dlog.StdLogger(ctx, dlog.LogLevelError).Writer()
-			errs <- f.Runner.LoginFlow(ctx, stdout, stderr)
+			errs <- f.Runner.LoginFlow(ctx, stdout)
 		}()
 		rawAuthUrl := <-f.OpenedUrls
 		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
@@ -390,8 +389,7 @@ func TestLoginFlow(t *testing.T) {
 		// when
 		go func() {
 			stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
-			stderr := dlog.StdLogger(ctx, dlog.LogLevelError).Writer()
-			errs <- f.Runner.LoginFlow(ctx, stdout, stderr)
+			errs <- f.Runner.LoginFlow(ctx, stdout)
 		}()
 		rawAuthUrl := <-f.OpenedUrls
 		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)

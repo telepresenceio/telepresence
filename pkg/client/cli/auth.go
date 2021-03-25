@@ -15,7 +15,7 @@ func LoginCommand() *cobra.Command {
 		Short: "Authenticate to Ambassador Cloud",
 		Long:  "Authenticate to Ambassador Cloud",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return auth.Login(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return auth.Login(cmd.Context(), cmd.OutOrStdout())
 		},
 	}
 }

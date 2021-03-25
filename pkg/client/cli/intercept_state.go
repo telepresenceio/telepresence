@@ -138,7 +138,7 @@ func (ii *interceptInfo) intercept(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if ii.previewEnabled || extRequiresLogin {
-		if err := auth.EnsureLoggedIn(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr()); err != nil {
+		if err := auth.EnsureLoggedIn(cmd.Context(), cmd.OutOrStdout()); err != nil {
 			return err
 		}
 	}

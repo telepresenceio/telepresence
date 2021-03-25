@@ -18,6 +18,7 @@ import (
 	"github.com/pkg/browser"
 	"golang.org/x/oauth2"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
 )
@@ -42,7 +43,7 @@ type loginExecutor struct {
 
 // LoginExecutor controls the execution of a login flow
 type LoginExecutor interface {
-	LoginFlow(ctx context.Context, stdout, stderr io.Writer) error
+	LoginFlow(ctx context.Context, stdout io.Writer) error
 }
 
 // NewLoginExecutor returns an instance of LoginExecutor
@@ -62,15 +63,15 @@ func NewLoginExecutor(
 }
 
 // EnsureLoggedIn will check if the user is logged in and if not initiate the login flow.
-func EnsureLoggedIn(ctx context.Context, stdout, stderr io.Writer) error {
+func EnsureLoggedIn(ctx context.Context, stdout io.Writer) error {
 	if token, _ := authdata.LoadTokenFromUserCache(ctx); token != nil {
 		return nil
 	}
 
-	return Login(ctx, stdout, stderr)
+	return Login(ctx, stdout)
 }
 
-func Login(ctx context.Context, stdout, stderr io.Writer) error {
+func Login(ctx context.Context, stdout io.Writer) error {
 	env, err := client.LoadEnv(ctx)
 	if err != nil {
 		return err
@@ -83,7 +84,7 @@ func Login(ctx context.Context, stdout, stderr io.Writer) error {
 		browser.OpenURL,
 		client.NewScout(ctx, "cli"),
 	)
-	return l.LoginFlow(ctx, stdout, stderr)
+	return l.LoginFlow(ctx, stdout)
 }
 
 // LoginFlow tries logging the user by opening a browser window and authenticating against the
@@ -93,7 +94,7 @@ func Login(ctx context.Context, stdout, stderr io.Writer) error {
 // SaveTokenFunc (which would usually write to user cache).
 // If login succeeds, the login flow will then try invoking the userinfo endpoint and persisting it
 // using SaveUserInfoFunc (which would usually write to user cache).
-func (l *loginExecutor) LoginFlow(ctx context.Context, stdout, stderr io.Writer) error {
+func (l *loginExecutor) LoginFlow(ctx context.Context, stdout io.Writer) error {
 	// oauth2Callback chan that will receive the callback info
 	callbacks := make(chan oauth2Callback)
 	// also listen for interruption to cancel the flow
@@ -101,11 +102,11 @@ func (l *loginExecutor) LoginFlow(ctx context.Context, stdout, stderr io.Writer)
 	signal.Notify(interrupts, syscall.SIGINT, syscall.SIGTERM)
 
 	// start the background server on which we'll be listening for the OAuth2 callback
-	backgroundServer, err := startBackgroundServer(callbacks, stderr, l.env.LoginCompletionURL)
+	backgroundServer, err := startBackgroundServer(callbacks, l.env.LoginCompletionURL)
 	defer func() {
 		err := backgroundServer.Shutdown(context.Background())
 		if err != nil {
-			fmt.Fprintf(stderr, "error shutting down callback server: %v", err)
+			dlog.Errorf(ctx, "error shutting down callback server: %v", err)
 		}
 	}()
 	if err != nil {
@@ -209,7 +210,7 @@ func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Toke
 	return l.SaveUserInfoFunc(ctx, &userInfo)
 }
 
-func startBackgroundServer(callbacks chan oauth2Callback, stderr io.Writer, completionUrl string) (*http.Server, error) {
+func startBackgroundServer(callbacks chan oauth2Callback, completionUrl string) (*http.Server, error) {
 	// start listening on the next available port
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
@@ -217,7 +218,7 @@ func startBackgroundServer(callbacks chan oauth2Callback, stderr io.Writer, comp
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
 	handler := http.NewServeMux()
-	handler.HandleFunc(callbackPath, newCallbackHandlerFunc(callbacks, stderr, completionUrl))
+	handler.HandleFunc(callbackPath, newCallbackHandlerFunc(callbacks, completionUrl))
 	server := &http.Server{
 		Addr:    fmt.Sprintf("localhost:%v", port),
 		Handler: handler,
@@ -234,7 +235,7 @@ func startBackgroundServer(callbacks chan oauth2Callback, stderr io.Writer, comp
 	return server, nil
 }
 
-func newCallbackHandlerFunc(callbacks chan oauth2Callback, stderr io.Writer, completionUrl string) func(w http.ResponseWriter, r *http.Request) {
+func newCallbackHandlerFunc(callbacks chan oauth2Callback, completionUrl string) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query()
 		code := query.Get("code")
@@ -257,7 +258,7 @@ func newCallbackHandlerFunc(callbacks chan oauth2Callback, stderr io.Writer, com
 
 		w.Header().Set("Content-Type", "text/html")
 		if _, err := io.WriteString(w, sb.String()); err != nil {
-			fmt.Fprintf(stderr, "Error writing callback response body: %v", err)
+			dlog.Errorf(r.Context(), "Error writing callback response body: %v", err)
 		}
 
 		callbacks <- oauth2Callback{
