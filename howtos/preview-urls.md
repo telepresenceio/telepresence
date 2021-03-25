@@ -106,11 +106,9 @@ Need a sample app to try with preview URLs?  Check out the <a href="../../quick-
     <strong>Didn't work?</strong> It might be because you have services in between your ingress controller and the service you are intercepting that do not propagate the <code>x-telepresence-intercept-id</code> HTTP Header. Read more on <a href="../../concepts/context-prop">context propagation</a>.
   </Alert>
 
-
-
 6. Make a request on the URL you would usually query for that environment.  The request should **not** be routed to your laptop.
 
-   Normal traffic coming into the cluster through the Ingress (i.e. not coming from the preview URL) will route to services in the cluster like normal.
+  Normal traffic coming into the cluster through the Ingress (i.e. not coming from the preview URL) will route to services in the cluster like normal.
 
 7. Share with a teammate.
 
