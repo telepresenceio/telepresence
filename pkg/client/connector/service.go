@@ -28,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/broadcastqueue"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -51,11 +52,7 @@ type parsedConnectRequest struct {
 	*k8sConfig
 }
 
-type ScoutReport struct {
-	Action             string
-	Metadata           map[string]interface{}
-	PersistentMetadata map[string]interface{}
-}
+type ScoutReport = scout.ScoutReport
 
 // service represents the state of the Telepresence Connector
 type service struct {
@@ -231,7 +228,7 @@ func (s *service) UserNotifications(_ *empty.Empty, stream rpc.Connector_UserNot
 
 func (s *service) Login(ctx context.Context, _ *empty.Empty) (*rpc.LoginResult, error) {
 	ctx = s.callCtx(ctx, "Login")
-	resultCode, err := auth.EnsureLoggedIn(ctx, &s.userNotifications)
+	resultCode, err := auth.EnsureLoggedIn(ctx, &s.userNotifications, s.scout)
 	if err != nil {
 		return nil, err
 	}
