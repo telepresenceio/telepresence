@@ -26,7 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/actions"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
 )
 
 // trafficManager is a handle to access the Traffic Manager in a
@@ -138,7 +138,7 @@ func (tm *trafficManager) run(c context.Context) error {
 }
 
 func (tm *trafficManager) bearerToken(ctx context.Context) string {
-	token, err := cache.LoadTokenFromUserCache(ctx)
+	token, err := authdata.LoadTokenFromUserCache(ctx)
 	if err != nil {
 		return ""
 	}

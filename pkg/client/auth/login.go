@@ -20,7 +20,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
 )
 
 const (
@@ -40,7 +40,7 @@ type loginExecutor struct {
 	Oauth2ClientId   string
 	UserInfoUrl      string
 	SaveTokenFunc    func(context.Context, *oauth2.Token) error
-	SaveUserInfoFunc func(context.Context, *cache.UserInfo) error
+	SaveUserInfoFunc func(context.Context, *authdata.UserInfo) error
 	OpenURLFunc      func(string) error
 	Scout            *client.Scout
 }
@@ -57,7 +57,7 @@ func NewLoginExecutor(oauth2AuthUrl string,
 	completionUrl string,
 	userInfoUrl string,
 	saveTokenFunc func(context.Context, *oauth2.Token) error,
-	saveUserInfoFunc func(context.Context, *cache.UserInfo) error,
+	saveUserInfoFunc func(context.Context, *authdata.UserInfo) error,
 	openURLFunc func(string) error,
 	scout *client.Scout) LoginExecutor {
 	return &loginExecutor{
@@ -75,7 +75,7 @@ func NewLoginExecutor(oauth2AuthUrl string,
 
 // EnsureLoggedIn will check if the user is logged in and if not initiate the login flow.
 func EnsureLoggedIn(ctx context.Context, stdout io.Writer) error {
-	if token, _ := cache.LoadTokenFromUserCache(ctx); token != nil {
+	if token, _ := authdata.LoadTokenFromUserCache(ctx); token != nil {
 		return nil
 	}
 
@@ -94,8 +94,8 @@ func Login(ctx context.Context, stdout io.Writer) error {
 		env.LoginClientID,
 		env.LoginCompletionURL,
 		env.UserInfoURL,
-		cache.SaveTokenToUserCache,
-		cache.SaveUserInfoToUserCache,
+		authdata.SaveTokenToUserCache,
+		authdata.SaveUserInfoToUserCache,
 		browser.OpenURL,
 		client.NewScout(ctx, "cli"),
 	)
@@ -197,7 +197,7 @@ func (l *loginExecutor) handleCallback(
 }
 
 func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Token) error {
-	var userInfo cache.UserInfo
+	var userInfo authdata.UserInfo
 	req, err := http.NewRequest("GET", l.UserInfoUrl, nil)
 	if err != nil {
 		return err

@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/auth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions"
 )
@@ -235,7 +236,7 @@ Please specify one or more header matches using --match.`
 }
 
 func isLoggedIn(ctx context.Context) bool {
-	token, _ := cache.LoadTokenFromUserCache(ctx)
+	token, _ := authdata.LoadTokenFromUserCache(ctx)
 	return token != nil
 }
 
