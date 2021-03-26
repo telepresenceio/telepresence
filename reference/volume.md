@@ -14,10 +14,11 @@ Telepresence can set a random mount point for you by using `--mount=true` instea
 
 ```
 $ telepresence intercept <mysvc> --port <port> --mount=true -- /bin/bash
-Using deployment <mysvc>
+Using Deployment <mysvc>
 intercepted
     Intercept name    : <mysvc>
     State             : ACTIVE
+    Workload kind     : Deployment
     Destination       : 127.0.0.1:<port>
     Volume Mount Point: /var/folders/cp/2r22shfd50d9ymgrw14fd23r0000gp/T/telfs-988349784
     Intercepting      : all TCP connections
