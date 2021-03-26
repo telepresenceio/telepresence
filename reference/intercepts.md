@@ -97,3 +97,20 @@ telepresence intercept <base name of intercept> --port=<local TCP port>:<service
 When intercepting a service that has multiple ports, the name of the service port that has been intercepted is also listed.
 
 If you want to change which port has been intercepted, you can create a new intercept the same way you did above and it will change which service port is being intercepted.
+
+## Creating an Intercept When Multiple Services Match your Workload
+
+Oftentimes, there's a 1-to-1 relationship between a service and a workload, so telepresence is able to auto-detect which service it should intercept based on the workload you are trying to intercept.  But if you use something like [Argo](../../../argo), it uses two services (that use the same labels) to manage traffic between a canary and a stable service.
+
+Fortunately, if you know which service you want to use when intercepting a workload, you can use the --service flag.  So in the aforementioned demo, if you wanted to use the `echo-stable` service when intercepting your workload, your command would look like this:
+```
+telepresence intercept echo-rollout-<generatedHash> --port <local TCP port> --service echo-stable
+  Using ReplicaSet echo-rollout-<generatedHash>
+  intercepted
+      Intercept name    : echo-rollout-<generatedHash>
+      State             : ACTIVE
+      Workload kind     : ReplicaSet
+      Destination       : 127.0.0.1:3000
+      Volume Mount Point: /var/folders/cp/2r22shfd50d9ymgrw14fd23r0000gp/T/telfs-921196036
+      Intercepting      : all TCP connections
+```
