@@ -185,11 +185,13 @@ func TestLoginFlow(t *testing.T) {
 			MockOauth2Server:        mockOauth2Server,
 			OpenedUrls:              openUrlChan,
 			Runner: auth.NewLoginExecutor(
-				mockOauth2Server.AuthUrl(),
-				mockOauth2Server.TokenUrl(),
-				"",
-				mockCompletionUrl,
-				mockOauth2Server.UserInfoUrl(),
+				client.Env{
+					LoginAuthURL:       mockOauth2Server.AuthUrl(),
+					LoginTokenURL:      mockOauth2Server.TokenUrl(),
+					LoginClientID:      "",
+					LoginCompletionURL: mockCompletionUrl,
+					UserInfoURL:        mockOauth2Server.UserInfoUrl(),
+				},
 				saveToken,
 				saveUserInfo,
 				func(url string) error {

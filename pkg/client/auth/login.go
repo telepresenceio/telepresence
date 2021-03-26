@@ -33,11 +33,7 @@ type oauth2Callback struct {
 }
 
 type loginExecutor struct {
-	Oauth2AuthUrl    string
-	Oauth2TokenUrl   string
-	CompletionUrl    string
-	Oauth2ClientId   string
-	UserInfoUrl      string
+	env              client.Env
 	SaveTokenFunc    func(context.Context, *oauth2.Token) error
 	SaveUserInfoFunc func(context.Context, *cache.UserInfo) error
 	OpenURLFunc      func(string) error
@@ -50,21 +46,14 @@ type LoginExecutor interface {
 }
 
 // NewLoginExecutor returns an instance of LoginExecutor
-func NewLoginExecutor(oauth2AuthUrl string,
-	oauth2TokenUrl string,
-	oauth2ClientId string,
-	completionUrl string,
-	userInfoUrl string,
+func NewLoginExecutor(
+	env client.Env,
 	saveTokenFunc func(context.Context, *oauth2.Token) error,
 	saveUserInfoFunc func(context.Context, *cache.UserInfo) error,
 	openURLFunc func(string) error,
 	scout *client.Scout) LoginExecutor {
 	return &loginExecutor{
-		Oauth2AuthUrl:    oauth2AuthUrl,
-		Oauth2TokenUrl:   oauth2TokenUrl,
-		CompletionUrl:    completionUrl,
-		Oauth2ClientId:   oauth2ClientId,
-		UserInfoUrl:      userInfoUrl,
+		env:              env,
 		SaveTokenFunc:    saveTokenFunc,
 		SaveUserInfoFunc: saveUserInfoFunc,
 		OpenURLFunc:      openURLFunc,
@@ -88,11 +77,7 @@ func Login(ctx context.Context, stdout, stderr io.Writer) error {
 	}
 
 	l := NewLoginExecutor(
-		env.LoginAuthURL,
-		env.LoginTokenURL,
-		env.LoginClientID,
-		env.LoginCompletionURL,
-		env.UserInfoURL,
+		env,
 		cache.SaveTokenToUserCache,
 		cache.SaveUserInfoToUserCache,
 		browser.OpenURL,
@@ -116,7 +101,7 @@ func (l *loginExecutor) LoginFlow(ctx context.Context, stdout, stderr io.Writer)
 	signal.Notify(interrupts, syscall.SIGINT, syscall.SIGTERM)
 
 	// start the background server on which we'll be listening for the OAuth2 callback
-	backgroundServer, err := startBackgroundServer(callbacks, stderr, l.CompletionUrl)
+	backgroundServer, err := startBackgroundServer(callbacks, stderr, l.env.LoginCompletionURL)
 	defer func() {
 		err := backgroundServer.Shutdown(context.Background())
 		if err != nil {
@@ -127,11 +112,11 @@ func (l *loginExecutor) LoginFlow(ctx context.Context, stdout, stderr io.Writer)
 		return err
 	}
 	oauth2Config := oauth2.Config{
-		ClientID:    l.Oauth2ClientId,
+		ClientID:    l.env.LoginClientID,
 		RedirectURL: fmt.Sprintf("http://%v%v", backgroundServer.Addr, callbackPath),
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  l.Oauth2AuthUrl,
-			TokenURL: l.Oauth2TokenUrl,
+			AuthURL:  l.env.LoginAuthURL,
+			TokenURL: l.env.LoginTokenURL,
 		},
 		Scopes: []string{"openid", "profile", "email"},
 	}
@@ -200,7 +185,7 @@ func (l *loginExecutor) handleCallback(
 
 func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Token) error {
 	var userInfo cache.UserInfo
-	req, err := http.NewRequest("GET", l.UserInfoUrl, nil)
+	req, err := http.NewRequest("GET", l.env.UserInfoURL, nil)
 	if err != nil {
 		return err
 	}
