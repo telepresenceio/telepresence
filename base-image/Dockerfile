@@ -1,4 +1,4 @@
-# Copyright 2020 Datawire. All rights reserved.
+# Copyright 2020-2021 Datawire. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,11 +13,19 @@
 # limitations under the License.
 
 # Set up sshd. All this can go away once we stop using sshd.
-FROM alpine:3.6 as tel2-base
+FROM alpine:3.13 as tel2-base
 RUN \
   apk add --no-cache openssh ca-certificates && \
   ssh-keygen -A && \
-  echo -e "ClientAliveInterval 1\nGatewayPorts yes\nPermitEmptyPasswords yes\nPort 8022\nClientAliveCountMax 10\nPermitRootLogin yes\n" >> /etc/ssh/sshd_config && \
+  sed -i \
+    -e 's/^AllowTcpForwarding no/AllowTcpForwarding yes/' \
+    -e 's/^GatewayPorts no/GatewayPorts yes/' \
+    -e '$aClientAliveInterval 1' \
+    -e '$aPermitEmptyPasswords yes' \
+    -e '$aPort 8022' \
+    -e '$aClientAliveCountMax 10' \
+    -e '$aPermitRootLogin yes' \
+    /etc/ssh/sshd_config && \
   chmod -R g+r /etc/ssh && \
   mkdir /home/telepresence && \
   mkdir /tel_app_mounts && \
