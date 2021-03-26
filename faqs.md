@@ -95,9 +95,12 @@ Running this command will also stop the local daemon running.
 
  The connection between your laptop and cluster is established via the standard `kubectl` mechanisms and SSH tunnelling.
 
+<a name="idps"></a>
+
 ** What identity providers are supported for authenticating to view a preview URL?**
 
  Currently GitHub and GitLab are used to authenticate a user of Telepresence (triggered via the `telepresence login` command) and any viewers of a preview URL.
+
 
 More authentication mechanisms and identity provider support will be added soon. Please [let us know](../../../../feedback) which providers are the most important to you and your team in order for us to prioritize those.
 
