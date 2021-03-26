@@ -1,10 +1,9 @@
 package auth
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"math/rand"
-	"time"
 )
 
 const (
@@ -16,13 +15,12 @@ type CodeVerifier struct {
 	Value string
 }
 
-func CreateCodeVerifier() *CodeVerifier {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+func CreateCodeVerifier() (*CodeVerifier, error) {
 	b := make([]byte, codeVerifierLength)
-	for i := 0; i < codeVerifierLength; i++ {
-		b[i] = byte(r.Intn(255))
+	if _, err := rand.Read(b); err != nil {
+		return nil, err
 	}
-	return &CodeVerifier{base64.RawURLEncoding.EncodeToString(b)}
+	return &CodeVerifier{base64.RawURLEncoding.EncodeToString(b)}, nil
 }
 
 func (v *CodeVerifier) String() string {

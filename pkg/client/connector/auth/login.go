@@ -144,7 +144,10 @@ func (l *loginExecutor) LoginFlow(ctx context.Context, stdout io.Writer) error {
 
 	// create OAuth2 authentication code flow URL
 	state := uuid.New().String()
-	pkceVerifier := CreateCodeVerifier()
+	pkceVerifier, err := CreateCodeVerifier()
+	if err != nil {
+		return err
+	}
 	url := oauth2Config.AuthCodeURL(
 		state,
 		oauth2.SetAuthURLParam("code_challenge", pkceVerifier.CodeChallengeS256()),
