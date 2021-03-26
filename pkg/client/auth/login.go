@@ -143,9 +143,9 @@ func (l *loginExecutor) LoginFlow(ctx context.Context, stdout, stderr io.Writer)
 		oauth2.SetAuthURLParam("code_challenge", pkceVerifier.CodeChallengeS256()),
 		oauth2.SetAuthURLParam("code_challenge_method", PKCEChallengeMethodS256),
 	)
+
 	fmt.Fprintln(stdout, "Launching browser authentication flow...")
-	err = l.OpenURLFunc(url)
-	if err != nil {
+	if err := l.OpenURLFunc(url); err != nil {
 		fmt.Fprintf(stdout, "Could not open browser, please access this URL: %v\n", url)
 	}
 
@@ -267,8 +267,7 @@ func newCallbackHandlerFunc(callbacks chan oauth2Callback, stderr io.Writer, com
 		sb.WriteString("</body></html>")
 
 		w.Header().Set("Content-Type", "text/html")
-		_, err := w.Write([]byte(sb.String()))
-		if err != nil {
+		if _, err := io.WriteString(w, sb.String()); err != nil {
 			fmt.Fprintf(stderr, "Error writing callback response body: %v", err)
 		}
 
