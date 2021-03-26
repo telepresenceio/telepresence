@@ -27,8 +27,10 @@ issues:
 linters-settings:
   depguard:
     list-type: blacklist
+    include-go-root: true
     packages-with-error-message:
-      - github.com/golang/protobuf: "Use google.golang.org/protobuf instead of github.com/golang/protobuf"
+      - os/exec:                    "Use `github.com/datawire/dlib/dexec` instead of `os/exec`"
+      - github.com/golang/protobuf: "Use `google.golang.org/protobuf` instead of `github.com/golang/protobuf`"
 
   gocyclo:
     min-complexity: 35

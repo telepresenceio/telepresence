@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -67,7 +66,12 @@ func showArgs(exe string, args []string) {
 
 func capture(t *testing.T, exe string, args ...string) string {
 	showArgs(exe, args)
-	cmd := exec.Command(exe, args...)
+	ctx := context.Background()
+	if t != nil {
+		ctx = dlog.NewTestContext(t, false)
+	}
+	cmd := dexec.CommandContext(ctx, exe, args...)
+	cmd.DisableLogging = true
 	out, err := cmd.CombinedOutput()
 	sout := string(out)
 	if err != nil {
