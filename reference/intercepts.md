@@ -60,6 +60,7 @@ $ telepresence intercept <deployment name>  --port=<TCP port> --preview-url=fals
   intercepted
       Intercept name: <full name of intercept>
       State         : ACTIVE
+      Workload kind : Deployment
       Destination   : 127.0.0.1:<local TCP port>
       Intercepting  : HTTP requests that match all of:
         header("x-telepresence-intercept-id") ~= regexp("<uuid unique to you>:<full name of intercept>")
@@ -89,6 +90,7 @@ telepresence intercept <base name of intercept> --port=<local TCP port>:<service
   intercepted
       Intercept name   : <full name of intercept>
       State            : ACTIVE
+      Workload kind    : Deployment
       Destination      : 127.0.0.1:<local TCP port>
       Service Port Name: <servicePortName>
       Intercepting     : all TCP connections
