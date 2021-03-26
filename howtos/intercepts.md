@@ -125,10 +125,11 @@ In this section, we will go through the steps required for you to intercept all 
    ```
    $ telepresence intercept example-service --port 8080:http --env-file ~/example-service-intercept.env
      
-     Using deployment example-service
+     Using Deployment example-service
      intercepted
          Intercept name: example-service
          State         : ACTIVE
+         Workload kind : Deployment
          Destination   : 127.0.0.1:8080
          Intercepting  : all TCP connections
    ```
@@ -216,10 +217,11 @@ be routed to your cluster as usual.
        
             [default: ambassador.ambassador]: dev-environment.edgestack.me
        
-     Using deployment example-service
+     Using Deployment example-service
      intercepted
          Intercept name   : example-service
          State            : ACTIVE
+         Workload kind    : Deployment
          Destination      : 127.0.0.1:8080
          Service Port Name: http
          Intercepting     : HTTP requests that match all of:
