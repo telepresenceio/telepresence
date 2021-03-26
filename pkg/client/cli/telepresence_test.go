@@ -390,7 +390,7 @@ func (cs *connectedSuite) TestI_ListOnlyMapped() {
 
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns())
 	require.Empty(stderr)
-	require.Contains(stdout, "No Workloads (Deployments or ReplicaSets")
+	require.Contains(stdout, "No Workloads (Deployments or ReplicaSets)")
 
 	stdout, stderr = telepresence(cs.T(), "connect", "--mapped-namespaces", "all")
 	require.Empty(stderr)
@@ -398,7 +398,7 @@ func (cs *connectedSuite) TestI_ListOnlyMapped() {
 
 	stdout, stderr = telepresence(cs.T(), "list", "--namespace", cs.ns())
 	require.Empty(stderr)
-	require.NotContains(stdout, "No Workloads (Deployments or ReplicaSets")
+	require.NotContains(stdout, "No Workloads (Deployments or ReplicaSets)")
 }
 
 func (cs *connectedSuite) TestJ_Uninstall() {

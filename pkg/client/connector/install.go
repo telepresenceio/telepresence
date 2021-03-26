@@ -414,7 +414,7 @@ service port you want to intercept like so --port local:svcPortName`,
 
 // Finds the Referenced Service in an objects' annotations
 func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object) (*kates.Service, error) {
-	var actions deploymentActions
+	var actions workloadActions
 	annotationsFound, err := getAnnotation(obj, &actions)
 	if err != nil {
 		return nil, err
@@ -440,7 +440,7 @@ func (ki *installer) getSvcFromObjAnnotation(c context.Context, obj kates.Object
 // cases exist since to go forward with an intercept would require changing the
 // configuration of the agent.
 func checkSvcSame(c context.Context, obj kates.Object, svcName, portName string) error {
-	var actions deploymentActions
+	var actions workloadActions
 	annotationsFound, err := getAnnotation(obj, &actions)
 	if err != nil {
 		return err
@@ -515,23 +515,39 @@ already exist for this service`, kind, obj.GetName())
 
 	switch {
 	case agentContainer == nil:
-		dlog.Infof(c, "no agent found for deployment %s.%s", name, namespace)
+		dlog.Infof(c, "no agent found for %s %s.%s", kind, name, namespace)
 		dlog.Infof(c, "Using port name %q", portName)
 		matchingSvcs := ki.findMatchingServices(portName, svcName, podTemplate.Labels)
-		if len(matchingSvcs) == 0 {
+
+		switch numSvcs := len(matchingSvcs); {
+		case numSvcs == 0:
 			errMsg := fmt.Sprintf("Found no services with a selector matching labels %v", podTemplate.Labels)
 			if portName != "" {
 				errMsg += fmt.Sprintf(" and a port named %s", portName)
 			}
 			return "", "", errors.New(errMsg)
+		case numSvcs > 1:
+			svcNames := make([]string, 0, numSvcs)
+			for _, svc := range matchingSvcs {
+				svcNames = append(svcNames, svc.Name)
+			}
+
+			errMsg := fmt.Sprintf("Found multiple services with a selector matching labels %v: %s",
+				podTemplate.Labels, strings.Join(svcNames, ","))
+			if portName != "" {
+				errMsg += fmt.Sprintf(" and a port named %s", portName)
+			}
+			return "", "", errors.New(errMsg)
+		default:
 		}
+
 		var err error
 		obj, svc, err = addAgentToDeployment(c, portName, agentImageName, obj, matchingSvcs)
 		if err != nil {
 			return "", "", err
 		}
 	case agentContainer.Image != agentImageName:
-		var actions deploymentActions
+		var actions workloadActions
 		ok, err := getAnnotation(obj, &actions)
 		if err != nil {
 			return "", "", err
@@ -541,7 +557,7 @@ already exist for this service`, kind, obj.GetName())
 		}
 
 		dlog.Debugf(c, "Updating agent for %s %s.%s", kind, name, namespace)
-		aaa := &deploymentActions{
+		aaa := &workloadActions{
 			Version:         actions.Version,
 			AddTrafficAgent: actions.AddTrafficAgent,
 		}
@@ -728,7 +744,7 @@ func (ki *installer) undoObjectMods(c context.Context, obj kates.Object) error {
 }
 
 func undoObjectMods(c context.Context, obj kates.Object) (string, error) {
-	var actions deploymentActions
+	var actions workloadActions
 	ok, err := getAnnotation(obj, &actions)
 	if !ok {
 		return "", err
@@ -849,7 +865,7 @@ func addAgentToDeployment(
 	}
 
 	// Figure what modifications we need to make.
-	deploymentMod := &deploymentActions{
+	deploymentMod := &workloadActions{
 		Version:                   version,
 		ReferencedService:         service.Name,
 		ReferencedServicePortName: portName,

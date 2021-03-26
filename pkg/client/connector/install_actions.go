@@ -43,10 +43,6 @@ type completeAction interface {
 	MarshalAnnotation() (string, error)
 	UnmarshalAnnotation(string) error
 
-	// In the UI/logging, what resource type should we tell the user that this action operates
-	// on?
-	ObjectType() string
-
 	// For actions-that-we-well-do, this is the currently running Telepresence version.  For
 	// actions that we've read from in-cluster annotations, this is the Telepresence version
 	// that originally performed the action.
@@ -58,7 +54,7 @@ func explainDo(c context.Context, a completeAction, obj kates.Object) {
 	a.ExplainDo(obj, &buf)
 	if buf.Len() > 0 {
 		dlog.Info(c, fmt.Sprintf("In %s %s, %s.",
-			a.ObjectType(),
+			obj.GetObjectKind().GroupVersionKind().Kind,
 			obj.GetName(),
 			buf.String()))
 	}
@@ -69,7 +65,7 @@ func explainUndo(c context.Context, a completeAction, obj kates.Object) {
 	a.ExplainUndo(obj, &buf)
 	if buf.Len() > 0 {
 		dlog.Info(c, fmt.Sprintf("In %s %s, %s.",
-			a.ObjectType(),
+			obj.GetObjectKind().GroupVersionKind().Kind,
 			obj.GetName(),
 			buf.String()))
 	}
@@ -318,10 +314,6 @@ func (s *svcActions) IsDone(svc kates.Object) bool {
 
 func (s *svcActions) Undo(svc kates.Object) (err error) {
 	return s.actions().Undo(svc)
-}
-
-func (_ *svcActions) ObjectType() string {
-	return "service"
 }
 
 func (s *svcActions) MarshalAnnotation() (string, error) {
@@ -637,9 +629,9 @@ func (hcp *hideContainerPortAction) undo(dep *kates.Deployment) error {
 	return nil
 }
 
-// deploymentActions ///////////////////////////////////////////////////////////
+// workloadActions ///////////////////////////////////////////////////////////
 
-type deploymentActions struct {
+type workloadActions struct {
 	Version                   string `json:"version"`
 	ReferencedService         string
 	ReferencedServicePortName string                   `json:"referenced_service_port_name,omitempty"`
@@ -647,9 +639,9 @@ type deploymentActions struct {
 	AddTrafficAgent           *addTrafficAgentAction   `json:"add_traffic_agent,omitempty"`
 }
 
-var _ completeAction = (*deploymentActions)(nil)
+var _ completeAction = (*workloadActions)(nil)
 
-func (d *deploymentActions) actions() (actions multiAction) {
+func (d *workloadActions) actions() (actions multiAction) {
 	if d.HideContainerPort != nil {
 		actions = append(actions, d.HideContainerPort)
 	}
@@ -659,38 +651,34 @@ func (d *deploymentActions) actions() (actions multiAction) {
 	return actions
 }
 
-func (d *deploymentActions) ExplainDo(dep kates.Object, out io.Writer) {
+func (d *workloadActions) ExplainDo(dep kates.Object, out io.Writer) {
 	d.actions().ExplainDo(dep, out)
 }
 
-func (d *deploymentActions) Do(dep kates.Object) (err error) {
+func (d *workloadActions) Do(dep kates.Object) (err error) {
 	return d.actions().Do(dep)
 }
 
-func (d *deploymentActions) ExplainUndo(dep kates.Object, out io.Writer) {
+func (d *workloadActions) ExplainUndo(dep kates.Object, out io.Writer) {
 	d.actions().ExplainUndo(dep, out)
 }
 
-func (d *deploymentActions) IsDone(dep kates.Object) bool {
+func (d *workloadActions) IsDone(dep kates.Object) bool {
 	return d.actions().IsDone(dep)
 }
 
-func (d *deploymentActions) Undo(dep kates.Object) (err error) {
+func (d *workloadActions) Undo(dep kates.Object) (err error) {
 	return d.actions().Undo(dep)
 }
 
-func (_ *deploymentActions) ObjectType() string {
-	return "deployment"
-}
-
-func (d *deploymentActions) MarshalAnnotation() (string, error) {
+func (d *workloadActions) MarshalAnnotation() (string, error) {
 	return marshalString(d)
 }
 
-func (d *deploymentActions) UnmarshalAnnotation(str string) error {
+func (d *workloadActions) UnmarshalAnnotation(str string) error {
 	return unmarshalString(str, d)
 }
 
-func (d *deploymentActions) TelVersion() string {
+func (d *workloadActions) TelVersion() string {
 	return d.Version
 }
