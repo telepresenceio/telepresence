@@ -79,6 +79,10 @@ func EnsureLoggedIn(ctx context.Context, stdout io.Writer) error {
 		return nil
 	}
 
+	return Login(ctx, stdout)
+}
+
+func Login(ctx context.Context, stdout io.Writer) error {
 	env, err := client.LoadEnv(ctx)
 	if err != nil {
 		return err

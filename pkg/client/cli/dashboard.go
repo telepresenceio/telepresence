@@ -25,18 +25,7 @@ func dashboardCommand() *cobra.Command {
 
 			// Login unless already logged in.
 			if token, _ := cache.LoadTokenFromUserCache(cmd.Context()); token == nil {
-				l := auth.NewLoginExecutor(
-					env.LoginAuthURL,
-					env.LoginTokenURL,
-					env.LoginClientID,
-					env.LoginCompletionURL,
-					env.UserInfoURL,
-					cache.SaveTokenToUserCache,
-					cache.SaveUserInfoToUserCache,
-					browser.OpenURL,
-					client.NewScout(cmd.Context(), "cli"),
-				)
-				err = l.LoginFlow(cmd.Context(), cmd.OutOrStdout())
+				err = auth.Login(cmd.Context(), cmd.OutOrStdout())
 			} else {
 				// The LoginFlow actually takes the user to the dashboard. Hence the else here.
 				err = browser.OpenURL(fmt.Sprintf("https://%s/cloud/preview", env.SystemAHost))
