@@ -156,10 +156,11 @@ func (l *loginExecutor) LoginFlow(ctx context.Context, stdout, stderr io.Writer)
 	// wait for callback completion or interruption
 	select {
 	case callback := <-callbacks:
-		token, err := l.handleCallback(ctx, stdout, callback, oauth2Config, pkceVerifier)
+		token, err := l.handleCallback(ctx, callback, oauth2Config, pkceVerifier)
 		if err != nil {
 			_ = l.Scout.Report(ctx, "login_failure", client.ScoutMeta{Key: "error", Value: err.Error()})
 		} else {
+			fmt.Fprintln(stdout, "Login successful.")
 			_ = l.retrieveUserInfo(ctx, token)
 			_ = l.Scout.Report(ctx, "login_success")
 		}
@@ -172,7 +173,7 @@ func (l *loginExecutor) LoginFlow(ctx context.Context, stdout, stderr io.Writer)
 }
 
 func (l *loginExecutor) handleCallback(
-	ctx context.Context, stdout io.Writer,
+	ctx context.Context,
 	callback oauth2Callback, oauth2Config oauth2.Config, pkceVerifier CodeVerifier,
 ) (*oauth2.Token, error) {
 	if callback.Error != "" {
@@ -194,7 +195,6 @@ func (l *loginExecutor) handleCallback(
 		return nil, fmt.Errorf("could not save access token to user cache: %w", err)
 	}
 
-	fmt.Fprintln(stdout, "Login successful.")
 	return token, nil
 }
 
