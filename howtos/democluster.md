@@ -10,6 +10,8 @@ After creation, the cluster will remain available for three hours, plenty of tim
 
 1. Login to [Ambassador Cloud](http://app.getambassador.io/cloud/) using your preferred identity provider.
 
+1. Click **Get Started** under **Telepresence**.
+
 1. Click the option for **Use Our Demo Cluster**.
 
 1. Click **Generate Demo Cluster** in step 1 and follow the instructions to configure your `kubectl`.
