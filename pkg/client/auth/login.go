@@ -19,7 +19,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
 )
 
 const (
@@ -35,7 +35,7 @@ type oauth2Callback struct {
 type loginExecutor struct {
 	env              client.Env
 	SaveTokenFunc    func(context.Context, *oauth2.Token) error
-	SaveUserInfoFunc func(context.Context, *cache.UserInfo) error
+	SaveUserInfoFunc func(context.Context, *authdata.UserInfo) error
 	OpenURLFunc      func(string) error
 	Scout            *client.Scout
 }
@@ -49,7 +49,7 @@ type LoginExecutor interface {
 func NewLoginExecutor(
 	env client.Env,
 	saveTokenFunc func(context.Context, *oauth2.Token) error,
-	saveUserInfoFunc func(context.Context, *cache.UserInfo) error,
+	saveUserInfoFunc func(context.Context, *authdata.UserInfo) error,
 	openURLFunc func(string) error,
 	scout *client.Scout) LoginExecutor {
 	return &loginExecutor{
@@ -63,7 +63,7 @@ func NewLoginExecutor(
 
 // EnsureLoggedIn will check if the user is logged in and if not initiate the login flow.
 func EnsureLoggedIn(ctx context.Context, stdout, stderr io.Writer) error {
-	if token, _ := cache.LoadTokenFromUserCache(ctx); token != nil {
+	if token, _ := authdata.LoadTokenFromUserCache(ctx); token != nil {
 		return nil
 	}
 
@@ -78,8 +78,8 @@ func Login(ctx context.Context, stdout, stderr io.Writer) error {
 
 	l := NewLoginExecutor(
 		env,
-		cache.SaveTokenToUserCache,
-		cache.SaveUserInfoToUserCache,
+		authdata.SaveTokenToUserCache,
+		authdata.SaveUserInfoToUserCache,
 		browser.OpenURL,
 		client.NewScout(ctx, "cli"),
 	)
@@ -184,7 +184,7 @@ func (l *loginExecutor) handleCallback(
 }
 
 func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Token) error {
-	var userInfo cache.UserInfo
+	var userInfo authdata.UserInfo
 	req, err := http.NewRequest("GET", l.env.UserInfoURL, nil)
 	if err != nil {
 		return err

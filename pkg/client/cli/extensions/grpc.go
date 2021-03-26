@@ -12,7 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/systema"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
 )
 
 type systemaCredentials string
@@ -36,7 +36,7 @@ func systemaGetPreferredAgentImageName(ctx context.Context, urlStr string) (stri
 		return "", err
 	}
 
-	tokenData, err := cache.LoadTokenFromUserCache(ctx)
+	tokenData, err := authdata.LoadTokenFromUserCache(ctx)
 	if err != nil {
 		return "", fmt.Errorf("not logged in: %w", err)
 	}

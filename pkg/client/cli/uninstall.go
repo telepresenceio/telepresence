@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 )
 
@@ -96,10 +97,10 @@ func (cs *connectorState) removeClusterFromUserCache(ctx context.Context) (err e
 	// Login token is affined to the traffic-manager that just got removed. The user-info
 	// in turn, is info obtained using that token so both are removed here as a
 	// consequence of removing the manager.
-	if err = cache.DeleteTokenFromUserCache(ctx); err != nil {
+	if err = authdata.DeleteTokenFromUserCache(ctx); err != nil {
 		return err
 	}
-	if err = cache.DeleteUserInfoFromUserCache(ctx); err != nil {
+	if err = authdata.DeleteUserInfoFromUserCache(ctx); err != nil {
 		return err
 	}
 

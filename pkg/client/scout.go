@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/datawire/ambassador/pkg/metriton"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -180,7 +180,7 @@ func (s *Scout) Report(ctx context.Context, action string, meta ...ScoutMeta) er
 		"action": action,
 		"index":  s.index,
 	}
-	userInfo, err := cache.LoadUserInfoFromUserCache(ctx)
+	userInfo, err := authdata.LoadUserInfoFromUserCache(ctx)
 	if err == nil && userInfo.Id != "" {
 		metadata["user_id"] = userInfo.Id
 		metadata["account_id"] = userInfo.AccountId

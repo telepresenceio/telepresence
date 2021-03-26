@@ -8,7 +8,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/auth"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
 )
 
 func dashboardCommand() *cobra.Command {
@@ -24,7 +24,7 @@ func dashboardCommand() *cobra.Command {
 			}
 
 			// Login unless already logged in.
-			if token, _ := cache.LoadTokenFromUserCache(cmd.Context()); token == nil {
+			if token, _ := authdata.LoadTokenFromUserCache(cmd.Context()); token == nil {
 				err = auth.Login(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 			} else {
 				// The LoginFlow actually takes the user to the dashboard. Hence the else here.
