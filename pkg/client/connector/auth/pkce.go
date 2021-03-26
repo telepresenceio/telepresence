@@ -11,28 +11,26 @@ const (
 	PKCEChallengeMethodS256 = "S256"
 )
 
-type CodeVerifier struct {
-	Value string
-}
+type CodeVerifier string
 
-func CreateCodeVerifier() (*CodeVerifier, error) {
+func NewCodeVerifier() (CodeVerifier, error) {
 	b := make([]byte, codeVerifierLength)
 	if _, err := rand.Read(b); err != nil {
-		return nil, err
+		return "", err
 	}
-	return &CodeVerifier{base64.RawURLEncoding.EncodeToString(b)}, nil
+	return CodeVerifier(base64.RawURLEncoding.EncodeToString(b)), nil
 }
 
-func (v *CodeVerifier) String() string {
-	return v.Value
+func (v CodeVerifier) String() string {
+	return string(v)
 }
 
-func (v *CodeVerifier) CodeChallengePlain() string {
-	return v.Value
+func (v CodeVerifier) CodeChallengePlain() string {
+	return string(v)
 }
 
-func (v *CodeVerifier) CodeChallengeS256() string {
+func (v CodeVerifier) CodeChallengeS256() string {
 	h := sha256.New()
-	_, _ = h.Write([]byte(v.Value))
+	_, _ = h.Write([]byte(v))
 	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }
