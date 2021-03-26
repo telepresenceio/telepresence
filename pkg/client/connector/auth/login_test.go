@@ -17,11 +17,11 @@ import (
 	"gotest.tools/assert"
 	is "gotest.tools/assert/cmp"
 
-	"github.com/datawire/ambassador/pkg/metriton"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth/authdata"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -176,8 +176,12 @@ func TestLoginFlow(t *testing.T) {
 		mockOpenURLWrapper := &MockOpenURLWrapper{}
 		openUrlChan := make(chan string)
 		mockOauth2Server := newMockOauth2Server(t)
-		scout := client.NewScout(dlog.NewTestContext(t, false), "go-test")
-		scout.Reporter.Endpoint = metriton.BetaEndpoint
+		scout := make(chan scout.ScoutReport)
+		t.Cleanup(func() { close(scout) })
+		go func() {
+			for range scout {
+			}
+		}()
 		return &fixture{
 			MockSaveTokenWrapper:    mockSaveTokenWrapper,
 			MockSaveUserInfoWrapper: mockSaveUserInfoWrapper,

@@ -22,6 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth/authdata"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/internal/scout"
 )
 
 const (
@@ -35,11 +36,14 @@ type oauth2Callback struct {
 }
 
 type loginExecutor struct {
+	// static
 	env              client.Env
 	SaveTokenFunc    func(context.Context, *oauth2.Token) error
 	SaveUserInfoFunc func(context.Context, *authdata.UserInfo) error
 	OpenURLFunc      func(string) error
-	Scout            *client.Scout
+
+	// stateful
+	scout chan<- scout.ScoutReport
 }
 
 // LoginExecutor controls the execution of a login flow
@@ -53,30 +57,30 @@ func NewLoginExecutor(
 	saveTokenFunc func(context.Context, *oauth2.Token) error,
 	saveUserInfoFunc func(context.Context, *authdata.UserInfo) error,
 	openURLFunc func(string) error,
-	scout *client.Scout) LoginExecutor {
+	scout chan<- scout.ScoutReport) LoginExecutor {
 	return &loginExecutor{
 		env:              env,
 		SaveTokenFunc:    saveTokenFunc,
 		SaveUserInfoFunc: saveUserInfoFunc,
 		OpenURLFunc:      openURLFunc,
-		Scout:            scout,
+		scout:            scout,
 	}
 }
 
 // EnsureLoggedIn will check if the user is logged in and if not initiate the login flow.
-func EnsureLoggedIn(ctx context.Context, stdout io.Writer) (connector.LoginResult_Code, error) {
+func EnsureLoggedIn(ctx context.Context, stdout io.Writer, scout chan<- scout.ScoutReport) (connector.LoginResult_Code, error) {
 	if token, _ := authdata.LoadTokenFromUserCache(ctx); token != nil {
 		return connector.LoginResult_OLD_LOGIN_REUSED, nil
 	}
 
-	if err := Login(ctx, stdout); err != nil {
+	if err := Login(ctx, stdout, scout); err != nil {
 		return connector.LoginResult_UNSPECIFIED, err
 	}
 
 	return connector.LoginResult_NEW_LOGIN_SUCCEEDED, nil
 }
 
-func Login(ctx context.Context, stdout io.Writer) error {
+func Login(ctx context.Context, stdout io.Writer, scout chan<- scout.ScoutReport) error {
 	env, err := client.LoadEnv(ctx)
 	if err != nil {
 		return err
@@ -87,7 +91,7 @@ func Login(ctx context.Context, stdout io.Writer) error {
 		authdata.SaveTokenToUserCache,
 		authdata.SaveUserInfoToUserCache,
 		browser.OpenURL,
-		client.NewScout(ctx, "cli"),
+		scout,
 	)
 	return l.LoginFlow(ctx, stdout)
 }
@@ -149,16 +153,25 @@ func (l *loginExecutor) LoginFlow(ctx context.Context, stdout io.Writer) error {
 	case callback := <-callbacks:
 		token, err := l.handleCallback(ctx, callback, oauth2Config, pkceVerifier)
 		if err != nil {
-			_ = l.Scout.Report(ctx, "login_failure", client.ScoutMeta{Key: "error", Value: err.Error()})
+			l.scout <- scout.ScoutReport{
+				Action: "login_failure",
+				Metadata: map[string]interface{}{
+					"error": err.Error(),
+				},
+			}
 		} else {
 			fmt.Fprintln(stdout, "Login successful.")
 			_ = l.retrieveUserInfo(ctx, token)
-			_ = l.Scout.Report(ctx, "login_success")
+			l.scout <- scout.ScoutReport{
+				Action: "login_success",
+			}
 		}
 		return err
 	case <-interrupts:
 		fmt.Fprintln(stdout, "Login aborted.")
-		_ = l.Scout.Report(ctx, "login_interrupted")
+		l.scout <- scout.ScoutReport{
+			Action: "login_interrupted",
+		}
 		return nil
 	}
 }
