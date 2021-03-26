@@ -134,7 +134,7 @@ func (l *loginExecutor) LoginFlow(ctx context.Context, stdout, stderr io.Writer)
 
 	// create OAuth2 authentication code flow URL
 	state := uuid.New().String()
-	pkceVerifier, err := CreateCodeVerifier()
+	pkceVerifier, err := NewCodeVerifier()
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func (l *loginExecutor) LoginFlow(ctx context.Context, stdout, stderr io.Writer)
 
 func (l *loginExecutor) handleCallback(
 	ctx context.Context, stdout io.Writer,
-	callback oauth2Callback, oauth2Config oauth2.Config, pkceVerifier *CodeVerifier,
+	callback oauth2Callback, oauth2Config oauth2.Config, pkceVerifier CodeVerifier,
 ) (*oauth2.Token, error) {
 	if callback.Error != "" {
 		return nil, fmt.Errorf("%v error returned on OAuth2 callback: %v", callback.Error, callback.ErrorDescription)
