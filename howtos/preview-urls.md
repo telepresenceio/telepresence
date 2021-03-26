@@ -12,11 +12,11 @@ Preview URLs are protected behind authentication via Ambassador Cloud, ensuring 
 
 ## Prerequisites
 
-You should have the Telepresence CLI [installed](../../install/) on your laptop.
+* You should have the Telepresence CLI [installed](../../install/) on your laptop.
 
-If you have Telepresence already installed and have used it previously, please first reset it with `telepresence uninstall --everything`.
+* If you have Telepresence already installed and have used it previously, please first reset it with `telepresence uninstall --everything`.
 
-You will need a service running in your cluster that you would like to intercept.
+* You will need a service running in your cluster that you would like to intercept.
 
 <Alert severity="info">
 Need a sample app to try with preview URLs?  Check out the <a href="../../quick-start/qs-node/">quick start</a>. It has a multi-service app to install in your cluster with instructions to create a preview URL for that app.
@@ -24,7 +24,10 @@ Need a sample app to try with preview URLs?  Check out the <a href="../../quick-
 
 ## Creating a Preview URL
 
-1. List the services that you can intercept with `telepresence list` and make sure the one you want is listed.
+1. List the services that you can intercept with `telepresence list` and make sure the one you want is listed. 
+If it isn't:
+* Only Deployments with labels matching a Service are listed.
+* If the service is in a different namespace specify the name space with the `--namespace` flag.
 
 2. Login to Ambassador Cloud where you can manage and share preview URLs:  
 `telepresence login`
@@ -112,13 +115,13 @@ Need a sample app to try with preview URLs?  Check out the <a href="../../quick-
 
 7. Share with a teammate.
 
-  You can collaborate with teammates by sending your preview URL to them. They will be asked to log in to Ambassador Cloud if they are not already. Upon login they must select the same identity provider and org as you are using; that is how they are authorized to access the preview URL.  When they visit the preview URL, they will see the intercepted service running on your laptop.
+  You can collaborate with teammates by sending your preview URL to them. They will be asked to log in to Ambassador Cloud if they are not already. Upon log in they must select the same identity provider and org as you are using; that is how they are authorized to access the preview URL (see the [list of supported identity providers](../../faqs/#idps)). When they visit the preview URL, they will see the intercepted service running on your laptop.
   
 <Alert severity="success">
   <strong>Congratulations!</strong> You have now created a dev environment and shared it with a teammate!  While you and your partner work together to debug your service, the production version remains unchanged to the rest of your team until you commit your changes.
 </Alert>
 
-## Sharing a Preview URL Publicly
+## Sharing a Preview URL with People Outside Your Team
 
 To collaborate with someone outside of your identity provider's organization, you must go to [Ambassador Cloud](https://app.getambassador.io/cloud/preview/), select the preview URL, and click **Make Publicly Accessible**.  Now anyone with the link will have access to the preview URL. When they visit the preview URL, they will see the intercepted service running on your laptop. 
 
