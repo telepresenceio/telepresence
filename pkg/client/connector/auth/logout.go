@@ -5,7 +5,7 @@ import (
 	"errors"
 	"os"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth/authdata"
 )
 
 var ErrNotLoggedIn = errors.New("not logged in")

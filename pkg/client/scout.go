@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/datawire/ambassador/pkg/metriton"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/auth/authdata"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/connector/auth/authdata"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
