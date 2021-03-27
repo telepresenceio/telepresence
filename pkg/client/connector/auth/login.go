@@ -3,11 +3,13 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 
@@ -29,10 +31,22 @@ const (
 	callbackPath = "/callback"
 )
 
+var ErrNotLoggedIn = errors.New("not logged in")
+
 type oauth2Callback struct {
 	Code             string
 	Error            string
 	ErrorDescription string
+}
+
+type tokenResp struct {
+	token string
+	err   error
+}
+
+type userInfoResp struct {
+	userInfo *authdata.UserInfo
+	err      error
 }
 
 type loginExecutor struct {
@@ -48,15 +62,24 @@ type loginExecutor struct {
 	scout     chan<- scout.ScoutReport
 	callbacks chan oauth2Callback
 
-	loginMu   sync.Mutex
-	loginReq  chan context.Context
-	loginResp chan error
+	loginMu      sync.Mutex
+	loginReq     chan context.Context
+	loginResp    chan error
+	logoutReq    chan struct{}
+	logoutResp   chan error
+	tokenReq     chan struct{}
+	tokenResp    chan tokenResp
+	userInfoReq  chan struct{}
+	userInfoResp chan userInfoResp
 }
 
 // LoginExecutor controls the execution of a login flow
 type LoginExecutor interface {
 	Worker(ctx context.Context) error
 	Login(ctx context.Context) error
+	Logout(ctx context.Context) error
+	GetToken(ctx context.Context) (string, error)
+	GetUserInfo(ctx context.Context) (*authdata.UserInfo, error)
 }
 
 // NewLoginExecutor returns an instance of LoginExecutor
@@ -77,14 +100,21 @@ func NewLoginExecutor(
 		stdout:    stdout,
 		scout:     scout,
 		callbacks: make(chan oauth2Callback),
-		loginReq:  make(chan context.Context),
-		loginResp: make(chan error),
+
+		loginReq:     make(chan context.Context),
+		loginResp:    make(chan error),
+		logoutReq:    make(chan struct{}),
+		logoutResp:   make(chan error),
+		tokenReq:     make(chan struct{}),
+		tokenResp:    make(chan tokenResp),
+		userInfoReq:  make(chan struct{}),
+		userInfoResp: make(chan userInfoResp),
 	}
 }
 
 // EnsureLoggedIn will check if the user is logged in and if not initiate the login flow.
 func EnsureLoggedIn(ctx context.Context, executor LoginExecutor) (connector.LoginResult_Code, error) {
-	if token, _ := authdata.LoadTokenFromUserCache(ctx); token != nil {
+	if token, err := executor.GetToken(ctx); err == nil && token != "" {
 		return connector.LoginResult_OLD_LOGIN_REUSED, nil
 	}
 
@@ -106,6 +136,7 @@ func NewStandardLoginExecutor(env client.Env, stdout io.Writer, scout chan<- sco
 	)
 }
 
+// nolint:gocognit
 func (l *loginExecutor) Worker(ctx context.Context) error {
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
@@ -137,6 +168,15 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 	grp.Go("actor", func(ctx context.Context) error {
 		loginCtx := context.Background()
 		var pkceVerifier CodeVerifier
+		tokenInfo, err := authdata.LoadTokenFromUserCache(ctx)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		userInfo, err := authdata.LoadUserInfoFromUserCache(ctx)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+
 		for {
 			select {
 			case loginCtx = <-l.loginReq:
@@ -151,7 +191,12 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 				}
 			case callback := <-l.callbacks:
 				loginCtx = context.Background()
-				token, err := l.handleCallback(ctx, callback, oauth2Config, pkceVerifier)
+				tokenInfo, err = l.handleCallback(ctx, callback, oauth2Config, pkceVerifier)
+				if err == nil {
+					if err = l.SaveTokenFunc(ctx, tokenInfo); err != nil {
+						err = fmt.Errorf("could not save access token to user cache: %w", err)
+					}
+				}
 				if err != nil {
 					l.scout <- scout.ScoutReport{
 						Action: "login_failure",
@@ -161,9 +206,13 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 					}
 				} else {
 					fmt.Fprintln(l.stdout, "Login successful.")
-					_ = l.retrieveUserInfo(ctx, token)
 					l.scout <- scout.ScoutReport{
 						Action: "login_success",
+					}
+
+					userInfo, _ = l.retrieveUserInfo(ctx, tokenInfo)
+					if userInfo != nil {
+						_ = l.SaveUserInfoFunc(ctx, userInfo)
 					}
 				}
 				maybeSend(l.loginResp, err)
@@ -173,6 +222,37 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 				fmt.Fprintln(l.stdout, "Login aborted.")
 				l.scout <- scout.ScoutReport{
 					Action: "login_interrupted",
+				}
+			case <-l.logoutReq:
+				if !tokenInfo.Valid() {
+					maybeSend(l.logoutResp, ErrNotLoggedIn)
+				}
+				tokenInfo = nil
+				userInfo = nil
+				_ = authdata.DeleteTokenFromUserCache(ctx)
+				_ = authdata.DeleteUserInfoFromUserCache(ctx)
+				maybeSend(l.logoutResp, err)
+			case <-l.tokenReq:
+				var resp tokenResp
+				if tokenInfo.Valid() {
+					resp.token = tokenInfo.AccessToken
+				} else {
+					resp.err = ErrNotLoggedIn
+				}
+				select {
+				case l.tokenResp <- resp:
+				default:
+				}
+			case <-l.userInfoReq:
+				var resp userInfoResp
+				if userInfo != nil {
+					resp.userInfo = userInfo
+				} else {
+					resp.err = ErrNotLoggedIn
+				}
+				select {
+				case l.userInfoResp <- resp:
+				default:
 				}
 			case <-ctx.Done():
 				return nil
@@ -207,6 +287,43 @@ func (l *loginExecutor) Login(ctx context.Context) error {
 	return <-l.loginResp
 }
 
+func (l *loginExecutor) Logout(ctx context.Context) error {
+	l.loginMu.Lock()
+	defer l.loginMu.Unlock()
+	l.logoutReq <- struct{}{}
+	var err error
+	select {
+	case err = <-l.logoutResp:
+	case <-ctx.Done():
+		err = ctx.Err()
+	}
+	return err
+}
+
+func (l *loginExecutor) GetToken(ctx context.Context) (string, error) {
+	l.loginMu.Lock()
+	defer l.loginMu.Unlock()
+	l.tokenReq <- struct{}{}
+	select {
+	case resp := <-l.tokenResp:
+		return resp.token, resp.err
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+}
+
+func (l *loginExecutor) GetUserInfo(ctx context.Context) (*authdata.UserInfo, error) {
+	l.loginMu.Lock()
+	defer l.loginMu.Unlock()
+	l.userInfoReq <- struct{}{}
+	select {
+	case resp := <-l.userInfoResp:
+		return resp.userInfo, resp.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
 func maybeSend(ch chan<- error, err error) {
 	select {
 	case ch <- err:
@@ -232,38 +349,33 @@ func (l *loginExecutor) handleCallback(
 		return nil, fmt.Errorf("error while exchanging code for token: %w", err)
 	}
 
-	err = l.SaveTokenFunc(ctx, token)
-	if err != nil {
-		return nil, fmt.Errorf("could not save access token to user cache: %w", err)
-	}
-
 	return token, nil
 }
 
-func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Token) error {
+func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Token) (*authdata.UserInfo, error) {
 	var userInfo authdata.UserInfo
 	req, err := http.NewRequest("GET", l.env.UserInfoURL, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token.AccessToken))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status %v from user info endpoint", resp.StatusCode)
+		return nil, fmt.Errorf("unexpected status %v from user info endpoint", resp.StatusCode)
 	}
 	content, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	err = json.Unmarshal(content, &userInfo)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return l.SaveUserInfoFunc(ctx, &userInfo)
+	return &userInfo, nil
 }
 
 func (l *loginExecutor) httpHandler(w http.ResponseWriter, r *http.Request) {
