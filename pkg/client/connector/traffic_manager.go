@@ -32,7 +32,7 @@ import (
 // cluster.
 type trafficManager struct {
 	*installer     // installer is also a k8sCluster
-	getAccessToken func(context.Context) (string, error)
+	getAccessToken func(context.Context, bool) (string, error)
 
 	// local information
 	env         client.Env
@@ -60,7 +60,13 @@ type trafficManager struct {
 
 // newTrafficManager returns a TrafficManager resource for the given
 // cluster if it has a Traffic Manager service.
-func newTrafficManager(_ context.Context, env client.Env, cluster *k8sCluster, installID string, getAccessToken func(context.Context) (string, error)) (*trafficManager, error) {
+func newTrafficManager(
+	_ context.Context,
+	env client.Env,
+	cluster *k8sCluster,
+	installID string,
+	getAccessToken func(context.Context, bool) (string, error),
+) (*trafficManager, error) {
 	userinfo, err := user.Current()
 	if err != nil {
 		return nil, errors.Wrap(err, "user.Current()")
@@ -166,7 +172,7 @@ func (tm *trafficManager) initGrpc(c context.Context, portsIf interface{}) (err 
 		InstallId:   tm.installID,
 		Product:     "telepresence",
 		Version:     client.Version(),
-		BearerToken: func() string { tok, _ := tm.getAccessToken(c); return tok }(),
+		BearerToken: func() string { tok, _ := tm.getAccessToken(c, false); return tok }(),
 	})
 
 	if err != nil {
@@ -368,7 +374,7 @@ func (tm *trafficManager) remain(c context.Context) error {
 		case <-ticker.C:
 			_, err := tm.managerClient.Remain(c, &manager.RemainRequest{
 				Session:     tm.session(),
-				BearerToken: func() string { tok, _ := tm.getAccessToken(c); return tok }(),
+				BearerToken: func() string { tok, _ := tm.getAccessToken(c, false); return tok }(),
 			})
 			if err != nil {
 				if c.Err() != nil {

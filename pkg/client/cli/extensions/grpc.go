@@ -36,7 +36,7 @@ func systemaGetPreferredAgentImageName(ctx context.Context, urlStr string) (stri
 		return "", err
 	}
 
-	accessToken, err := cliutil.GetCloudAccessToken(ctx)
+	accessToken, err := cliutil.GetCloudAccessToken(ctx, true)
 	if err != nil {
 		return "", fmt.Errorf("not logged in: %w", err)
 	}

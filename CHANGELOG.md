@@ -8,6 +8,7 @@
 - Bugfix: Fix error when intercepting a ReplicaSet requires the containerPort to be hidden.
 - Bugfix: `telepresence quit` no longer starts the daemon process just to shut it down.
 - Bugfix: Telepresence no longer hangs the next time it's run after getting killed.
+- Bugfix: Telepresence now does a better job of automatically logging in as necessary, especially with regard to expired logins.
 
 ### 2.1.3 (March 29, 2021)
 

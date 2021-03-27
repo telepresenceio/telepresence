@@ -116,7 +116,7 @@ func connectorStatus(cmd *cobra.Command) error {
 
 		if !cliutil.HasLoggedIn(ctx) {
 			fields = append(fields, kv{"Ambassador Cloud", "Logged out"})
-		} else if _, err := cliutil.GetCloudAccessToken(ctx); err != nil {
+		} else if _, err := cliutil.GetCloudAccessToken(ctx, false); err != nil {
 			fields = append(fields, kv{"Ambassador Cloud", "Login expired"})
 		} else {
 			fields = append(fields, kv{"Ambassador Cloud", "Logged in"})

@@ -50,7 +50,7 @@ type ConnectorClient interface {
 	Login(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*LoginResult, error)
 	// Returns an error with code=NotFound if not currently logged in.
 	Logout(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
-	GetCloudAccessToken(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*TokenData, error)
+	GetCloudAccessToken(ctx context.Context, in *TokenReq, opts ...grpc.CallOption) (*TokenData, error)
 	// Quits (terminates) the connector process.
 	Quit(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*empty.Empty, error)
 }
@@ -176,7 +176,7 @@ func (c *connectorClient) Logout(ctx context.Context, in *empty.Empty, opts ...g
 	return out, nil
 }
 
-func (c *connectorClient) GetCloudAccessToken(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*TokenData, error) {
+func (c *connectorClient) GetCloudAccessToken(ctx context.Context, in *TokenReq, opts ...grpc.CallOption) (*TokenData, error) {
 	out := new(TokenData)
 	err := c.cc.Invoke(ctx, "/telepresence.connector.Connector/GetCloudAccessToken", in, out, opts...)
 	if err != nil {
@@ -228,7 +228,7 @@ type ConnectorServer interface {
 	Login(context.Context, *empty.Empty) (*LoginResult, error)
 	// Returns an error with code=NotFound if not currently logged in.
 	Logout(context.Context, *empty.Empty) (*empty.Empty, error)
-	GetCloudAccessToken(context.Context, *empty.Empty) (*TokenData, error)
+	GetCloudAccessToken(context.Context, *TokenReq) (*TokenData, error)
 	// Quits (terminates) the connector process.
 	Quit(context.Context, *empty.Empty) (*empty.Empty, error)
 	mustEmbedUnimplementedConnectorServer()
@@ -268,7 +268,7 @@ func (UnimplementedConnectorServer) Login(context.Context, *empty.Empty) (*Login
 func (UnimplementedConnectorServer) Logout(context.Context, *empty.Empty) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Logout not implemented")
 }
-func (UnimplementedConnectorServer) GetCloudAccessToken(context.Context, *empty.Empty) (*TokenData, error) {
+func (UnimplementedConnectorServer) GetCloudAccessToken(context.Context, *TokenReq) (*TokenData, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetCloudAccessToken not implemented")
 }
 func (UnimplementedConnectorServer) Quit(context.Context, *empty.Empty) (*empty.Empty, error) {
@@ -471,7 +471,7 @@ func _Connector_Logout_Handler(srv interface{}, ctx context.Context, dec func(in
 }
 
 func _Connector_GetCloudAccessToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(empty.Empty)
+	in := new(TokenReq)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -483,7 +483,7 @@ func _Connector_GetCloudAccessToken_Handler(srv interface{}, ctx context.Context
 		FullMethod: "/telepresence.connector.Connector/GetCloudAccessToken",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).GetCloudAccessToken(ctx, req.(*empty.Empty))
+		return srv.(ConnectorServer).GetCloudAccessToken(ctx, req.(*TokenReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
