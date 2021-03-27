@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 
@@ -27,6 +28,8 @@ import (
 const (
 	callbackPath = "/callback"
 )
+
+var ErrNotLoggedIn = errors.New("not logged in")
 
 type oauth2Callback struct {
 	Code             string
@@ -51,12 +54,17 @@ type loginExecutor struct {
 
 	loginMu   sync.Mutex
 	callbacks chan oauth2Callback
+	tokenInfo *oauth2.Token
+	userInfo  *authdata.UserInfo
 }
 
 // LoginExecutor controls the execution of a login flow
 type LoginExecutor interface {
 	Worker(ctx context.Context) error
 	Login(ctx context.Context) error
+	Logout(ctx context.Context) error
+	GetToken(ctx context.Context) (string, error)
+	GetUserInfo(ctx context.Context) (*authdata.UserInfo, error)
 }
 
 // NewLoginExecutor returns an instance of LoginExecutor
@@ -79,6 +87,7 @@ func NewLoginExecutor(
 		callbacks: make(chan oauth2Callback),
 	}
 	ret.oauth2ConfigMu.Lock()
+	ret.loginMu.Lock()
 	return ret
 }
 
@@ -120,8 +129,20 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 		},
 		Scopes: []string{"openid", "profile", "email"},
 	}
+
+	l.tokenInfo, err = authdata.LoadTokenFromUserCache(ctx)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	l.userInfo, err = authdata.LoadUserInfoFromUserCache(ctx)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
 	l.oauth2ConfigMu.Unlock()
 	defer l.oauth2ConfigMu.Lock()
+	l.loginMu.Unlock()
+	defer l.loginMu.Lock()
 
 	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableWithSoftness: ctx == dcontext.HardContext(ctx),
@@ -178,7 +199,7 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 	l.oauth2ConfigMu.RLock()
 	defer l.oauth2ConfigMu.RUnlock()
 
-	// Only one login attempt at a time
+	// Only one login action at a time
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()
 
@@ -219,6 +240,7 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 			return fmt.Errorf("error while exchanging code for token: %w", err)
 		}
 
+		l.tokenInfo = token
 		if err := l.SaveTokenFunc(ctx, token); err != nil {
 			return fmt.Errorf("could not save access token to user cache: %w", err)
 		}
@@ -227,6 +249,41 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (l *loginExecutor) Logout(ctx context.Context) error {
+	l.loginMu.Lock()
+	defer l.loginMu.Unlock()
+
+	if !l.tokenInfo.Valid() {
+		return ErrNotLoggedIn
+	}
+	l.tokenInfo = nil
+	l.userInfo = nil
+	_ = authdata.DeleteTokenFromUserCache(ctx)
+	_ = authdata.DeleteUserInfoFromUserCache(ctx)
+
+	return nil
+}
+
+func (l *loginExecutor) GetToken(ctx context.Context) (string, error) {
+	l.loginMu.Lock()
+	defer l.loginMu.Unlock()
+
+	if !l.tokenInfo.Valid() {
+		return "", ErrNotLoggedIn
+	}
+	return l.tokenInfo.AccessToken, nil
+}
+
+func (l *loginExecutor) GetUserInfo(ctx context.Context) (*authdata.UserInfo, error) {
+	l.loginMu.Lock()
+	defer l.loginMu.Unlock()
+
+	if l.userInfo == nil {
+		return nil, ErrNotLoggedIn
+	}
+	return l.userInfo, nil
 }
 
 func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Token) error {
@@ -252,6 +309,7 @@ func (l *loginExecutor) retrieveUserInfo(ctx context.Context, token *oauth2.Toke
 	if err != nil {
 		return err
 	}
+	l.userInfo = &userInfo
 	return l.SaveUserInfoFunc(ctx, &userInfo)
 }
 

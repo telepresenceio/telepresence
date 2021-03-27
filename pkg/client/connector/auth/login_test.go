@@ -17,6 +17,7 @@ import (
 	"gotest.tools/assert"
 	is "gotest.tools/assert/cmp"
 
+	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -393,12 +394,15 @@ func TestLoginFlow(t *testing.T) {
 		ctx = filelocation.WithUserHomeDir(ctx, t.TempDir())
 
 		// when
-		grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
-			EnableWithSoftness: true,
-			ShutdownOnNonError: true,
-		})
+		ctx, cancel := context.WithCancel(dcontext.WithSoftness(ctx))
+		grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 		grp.Go("worker", f.Runner.Worker)
-		grp.Go("login", f.Runner.Login)
+		loginErrCh := make(chan error)
+		grp.Go("login", func(ctx context.Context) error {
+			err := f.Runner.Login(ctx)
+			loginErrCh <- err
+			return err
+		})
 		rawAuthUrl := <-f.OpenedUrls
 		callbackUrl := extractRedirectUriFromAuthUrl(t, rawAuthUrl)
 		callbackQuery := callbackUrl.Query()
@@ -406,9 +410,10 @@ func TestLoginFlow(t *testing.T) {
 		callbackUrl.RawQuery = callbackQuery.Encode()
 		callbackResponse := sendCallbackRequest(t, callbackUrl)
 		defer callbackResponse.Body.Close()
-		err := grp.Wait()
+		err := <-loginErrCh
 
 		// then
+		t.Log("then")
 		require.NoError(t, err, "no error running login flow")
 		token, err := authdata.LoadTokenFromUserCache(ctx)
 		require.NoError(t, err, "no error reading token")
@@ -416,14 +421,17 @@ func TestLoginFlow(t *testing.T) {
 		userInfo, err := authdata.LoadUserInfoFromUserCache(ctx)
 		require.NoError(t, err, "no error reading user info")
 		require.NotNil(t, userInfo)
-		err = auth.Logout(ctx)
+		err = f.Runner.Logout(ctx)
 		require.NoError(t, err, "no error executing logout")
 		_, err = authdata.LoadTokenFromUserCache(ctx)
 		require.Error(t, err, "error reading token")
 		_, err = authdata.LoadUserInfoFromUserCache(ctx)
 		require.Error(t, err, "error reading user info")
-		err = auth.Logout(ctx)
+		err = f.Runner.Logout(ctx)
 		require.Error(t, err, "error executing logout when not logged in")
+		t.Log("cleaning up")
+		cancel()
+		require.NoError(t, grp.Wait())
 	})
 }
 
