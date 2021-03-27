@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"strconv"
@@ -19,9 +20,10 @@ import (
 
 // A Proxy listens to a port and forwards incoming connections to a router
 type Proxy struct {
-	listener    net.Listener
-	connHandler func(*Proxy, context.Context, *net.TCPConn)
-	router      func(*net.TCPConn) (string, error)
+	dynamicSshPort int32
+	listener       net.Listener
+	connHandler    func(*Proxy, context.Context, *net.TCPConn)
+	router         func(*net.TCPConn) (string, error)
 }
 
 // NewProxy returns a new Proxy instance that is listening to the given tcp address
@@ -32,6 +34,11 @@ func NewProxy(c context.Context, router func(*net.TCPConn) (string, error)) (pro
 		proxy = &Proxy{listener: ln, connHandler: (*Proxy).handleConnection, router: router}
 	}
 	return
+}
+
+// SetDynamicSshPort sets the port that the connector has assigned for dynamic ssh port forwarding
+func (pxy *Proxy) SetDynamicSshPort(dynamicSshPort int32) {
+	pxy.dynamicSshPort = dynamicSshPort
 }
 
 func setRlimit(c context.Context) {
@@ -116,6 +123,13 @@ func (pxy *Proxy) Run(c context.Context, limit int64) {
 }
 
 func (pxy *Proxy) handleConnection(c context.Context, conn *net.TCPConn) {
+	if pxy.dynamicSshPort == 0 {
+		// shouldn't happen really, since the traffic manager provides this when
+		// updating the ip-tables.
+		dlog.Error(c, "SOCKS port is not yet configured")
+		return
+	}
+
 	host, err := pxy.router(conn)
 	if err != nil {
 		dlog.Errorf(c, "router error: %v", err)
@@ -126,7 +140,8 @@ func (pxy *Proxy) handleConnection(c context.Context, conn *net.TCPConn) {
 
 	// setting up an ssh tunnel with dynamic socks proxy at this end
 	// seems faster than connecting directly to a socks proxy
-	dialer, err := proxy.SOCKS5("tcp", "localhost:1080", nil, proxy.Direct)
+	forwardAddress := fmt.Sprintf("localhost:%d", pxy.dynamicSshPort)
+	dialer, err := proxy.SOCKS5("tcp", forwardAddress, nil, proxy.Direct)
 	//	dialer, err := proxy.SOCKS5("tcp", "localhost:9050", nil, proxy.Direct)
 	if err != nil {
 		dlog.Error(c, err)
@@ -134,7 +149,7 @@ func (pxy *Proxy) handleConnection(c context.Context, conn *net.TCPConn) {
 		return
 	}
 
-	dlog.Debugf(c, "SOCKS5 DialContext %s -> %s", "localhost:1080", host)
+	dlog.Debugf(c, "SOCKS5 DialContext %s -> %s", forwardAddress, host)
 	tos := &client.GetConfig(c).Timeouts
 	tc, cancel := context.WithTimeout(c, tos.ProxyDial)
 	defer cancel()

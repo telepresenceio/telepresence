@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -504,9 +505,16 @@ func run(c context.Context) error {
 		if !ok {
 			return nil
 		}
-		tm.sshPortForward(c,
-			"-D", "localhost:1080",
-		)
+		ln, err := net.Listen("tcp4", "127.0.0.1:0")
+		if err != nil {
+			return err
+		}
+		dynamicAddr := ln.Addr().String()
+		_ = ln.Close()
+		_, portStr, _ := net.SplitHostPort(dynamicAddr)
+		dynamicPort, _ := strconv.Atoi(portStr)
+		tm.dynamicSshPort = int32(dynamicPort)
+		tm.sshPortForward(c, "-D", dynamicAddr)
 		return nil
 	})
 
