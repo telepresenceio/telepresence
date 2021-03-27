@@ -12,11 +12,14 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pkg/browser"
 	"golang.org/x/oauth2"
 
+	"github.com/datawire/dlib/dcontext"
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -52,10 +55,12 @@ type loginExecutor struct {
 	oauth2ConfigMu sync.RWMutex // locked unless a .Worker is running
 	oauth2Config   oauth2.Config
 
-	loginMu     sync.Mutex
-	callbacks   chan oauth2Callback
-	tokenSource oauth2.TokenSource
-	userInfo    *authdata.UserInfo
+	loginMu               sync.Mutex
+	callbacks             chan oauth2Callback
+	tokenSource           oauth2.TokenSource
+	userInfo              *authdata.UserInfo
+	refreshTimer          *time.Timer
+	refreshTimerIsStopped bool
 }
 
 // LoginExecutor controls the execution of a login flow
@@ -84,10 +89,12 @@ func NewLoginExecutor(
 		stdout:           stdout,
 		scout:            scout,
 
-		callbacks: make(chan oauth2Callback),
+		callbacks:    make(chan oauth2Callback),
+		refreshTimer: time.NewTimer(1 * time.Minute),
 	}
 	ret.oauth2ConfigMu.Lock()
 	ret.loginMu.Lock()
+	ret.resetRefreshTimer(0)
 	return ret
 }
 
@@ -119,7 +126,20 @@ func (l *loginExecutor) tokenCB(ctx context.Context, tokenInfo *oauth2.Token) er
 	if err := l.SaveTokenFunc(ctx, tokenInfo); err != nil {
 		return fmt.Errorf("could not save access token to user cache: %w", err)
 	}
+	l.resetRefreshTimer(time.Until(tokenInfo.Expiry))
 	return nil
+}
+
+func (l *loginExecutor) resetRefreshTimer(delta time.Duration) {
+	if !l.refreshTimerIsStopped {
+		if !l.refreshTimer.Stop() {
+			<-l.refreshTimer.C
+		}
+		l.refreshTimerIsStopped = true
+	}
+	if delta > 0 {
+		l.refreshTimer.Reset(delta)
+	}
 }
 
 func (l *loginExecutor) Worker(ctx context.Context) error {
@@ -138,15 +158,18 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 	}
 
 	l.tokenSource, err = func() (oauth2.TokenSource, error) {
+		l.resetRefreshTimer(0)
 		tokenInfo, err := authdata.LoadTokenFromUserCache(ctx)
 		if err != nil || tokenInfo == nil {
 			return nil, err
 		}
+		l.resetRefreshTimer(time.Until(tokenInfo.Expiry))
 		return newTokenSource(ctx, l.oauth2Config, tokenInfo, l.tokenCB), nil
 	}()
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
+	defer l.resetRefreshTimer(0)
 
 	l.userInfo, err = authdata.LoadUserInfoFromUserCache(ctx)
 	if err != nil && !os.IsNotExist(err) {
@@ -169,7 +192,21 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 		}
 		return sc.Serve(ctx, listener)
 	})
-
+	grp.Go("refresh", func(ctx context.Context) error {
+		for {
+			select {
+			case <-l.refreshTimer.C:
+				dlog.Infoln(ctx, "refreshing access token...")
+				if token, err := l.GetToken(ctx); err != nil {
+					dlog.Infof(ctx, "could not refresh assess token: %v", err)
+				} else if token != "" {
+					dlog.Infof(ctx, "got new access token")
+				}
+			case <-ctx.Done():
+				return nil
+			}
+		}
+	})
 	return grp.Wait()
 }
 
@@ -272,6 +309,7 @@ func (l *loginExecutor) Logout(ctx context.Context) error {
 	if l.tokenSource == nil {
 		return ErrNotLoggedIn
 	}
+	l.resetRefreshTimer(0)
 	l.tokenSource = nil
 	l.userInfo = nil
 	_ = authdata.DeleteTokenFromUserCache(ctx)
