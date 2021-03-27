@@ -168,7 +168,19 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 	grp.Go("actor", func(ctx context.Context) error {
 		loginCtx := context.Background()
 		var pkceVerifier CodeVerifier
-		tokenInfo, err := authdata.LoadTokenFromUserCache(ctx)
+		tokenCB := func(ctx context.Context, tokenInfo *oauth2.Token) error {
+			if err := l.SaveTokenFunc(ctx, tokenInfo); err != nil {
+				return fmt.Errorf("could not save access token to user cache: %w", err)
+			}
+			return nil
+		}
+		tokenSource, err := func() (oauth2.TokenSource, error) {
+			tokenInfo, err := authdata.LoadTokenFromUserCache(ctx)
+			if err != nil || tokenInfo == nil {
+				return nil, err
+			}
+			return newTokenSource(ctx, oauth2Config, tokenInfo, false, tokenCB)
+		}()
 		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
@@ -191,11 +203,9 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 				}
 			case callback := <-l.callbacks:
 				loginCtx = context.Background()
-				tokenInfo, err = l.handleCallback(ctx, callback, oauth2Config, pkceVerifier)
+				tokenInfo, err := l.handleCallback(ctx, callback, oauth2Config, pkceVerifier)
 				if err == nil {
-					if err = l.SaveTokenFunc(ctx, tokenInfo); err != nil {
-						err = fmt.Errorf("could not save access token to user cache: %w", err)
-					}
+					tokenSource, err = newTokenSource(ctx, oauth2Config, tokenInfo, true, tokenCB)
 				}
 				if err != nil {
 					l.scout <- scout.ScoutReport{
@@ -224,20 +234,23 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 					Action: "login_interrupted",
 				}
 			case <-l.logoutReq:
-				if !tokenInfo.Valid() {
+				if tokenSource == nil {
 					maybeSend(l.logoutResp, ErrNotLoggedIn)
+				} else {
+					tokenSource = nil
+					userInfo = nil
+					_ = authdata.DeleteTokenFromUserCache(ctx)
+					_ = authdata.DeleteUserInfoFromUserCache(ctx)
+					maybeSend(l.logoutResp, nil)
 				}
-				tokenInfo = nil
-				userInfo = nil
-				_ = authdata.DeleteTokenFromUserCache(ctx)
-				_ = authdata.DeleteUserInfoFromUserCache(ctx)
-				maybeSend(l.logoutResp, err)
 			case <-l.tokenReq:
 				var resp tokenResp
-				if tokenInfo.Valid() {
-					resp.token = tokenInfo.AccessToken
-				} else {
+				if tokenSource == nil {
 					resp.err = ErrNotLoggedIn
+				} else if tokenInfo, err := tokenSource.Token(); err != nil {
+					resp.err = err
+				} else {
+					resp.token = tokenInfo.AccessToken
 				}
 				select {
 				case l.tokenResp <- resp:
