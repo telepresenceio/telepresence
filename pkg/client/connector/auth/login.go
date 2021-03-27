@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pkg/browser"
@@ -136,7 +137,7 @@ func NewStandardLoginExecutor(env client.Env, stdout io.Writer, scout chan<- sco
 	)
 }
 
-// nolint:gocognit
+// nolint:gocognit,gocyclo
 func (l *loginExecutor) Worker(ctx context.Context) error {
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
@@ -166,12 +167,28 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 		return sc.Serve(ctx, listener)
 	})
 	grp.Go("actor", func(ctx context.Context) error {
+		timer := time.NewTimer(1 * time.Minute)
+		timerIsStopped := false
+		resetTimer := func(delta time.Duration) {
+			if !timerIsStopped {
+				if !timer.Stop() {
+					<-timer.C
+				}
+				timerIsStopped = true
+			}
+			if delta > 0 {
+				timer.Reset(delta)
+			}
+		}
+		resetTimer(0)
+
 		loginCtx := context.Background()
 		var pkceVerifier CodeVerifier
 		tokenCB := func(ctx context.Context, tokenInfo *oauth2.Token) error {
 			if err := l.SaveTokenFunc(ctx, tokenInfo); err != nil {
 				return fmt.Errorf("could not save access token to user cache: %w", err)
 			}
+			resetTimer(time.Until(tokenInfo.Expiry))
 			return nil
 		}
 		tokenSource, err := func() (oauth2.TokenSource, error) {
@@ -179,6 +196,7 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 			if err != nil || tokenInfo == nil {
 				return nil, err
 			}
+			resetTimer(time.Until(tokenInfo.Expiry))
 			return newTokenSource(ctx, oauth2Config, tokenInfo, false, tokenCB)
 		}()
 		if err != nil && !os.IsNotExist(err) {
@@ -237,6 +255,7 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 				if tokenSource == nil {
 					maybeSend(l.logoutResp, ErrNotLoggedIn)
 				} else {
+					resetTimer(0)
 					tokenSource = nil
 					userInfo = nil
 					_ = authdata.DeleteTokenFromUserCache(ctx)
@@ -267,7 +286,16 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 				case l.userInfoResp <- resp:
 				default:
 				}
+			case <-timer.C:
+				dlog.Infoln(ctx, "refreshing access token...")
+				tokenInfo, err := tokenSource.Token()
+				if err != nil {
+					dlog.Infof(ctx, "could not refresh assess token: %v", err)
+				} else if tokenInfo != nil {
+					dlog.Infof(ctx, "got new access token: %v", err)
+				}
 			case <-ctx.Done():
+				resetTimer(0)
 				return nil
 			}
 		}
