@@ -167,9 +167,9 @@ func (s *State) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
 
 	if sess, ok := s.sessions[sessionID]; ok {
 		sess.LastMarked = now
-		if req.BearerToken != "" {
+		if req.ApiKey != "" {
 			if client, ok := s.clients.Load(sessionID); ok {
-				client.BearerToken = req.BearerToken
+				client.ApiKey = req.ApiKey
 				s.clients.Store(sessionID, client)
 			}
 		}
