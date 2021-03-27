@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/pkg/browser"
@@ -42,14 +43,20 @@ type loginExecutor struct {
 	OpenURLFunc      func(string) error
 
 	// stateful
+
 	stdout    io.Writer
 	scout     chan<- scout.ScoutReport
 	callbacks chan oauth2Callback
+
+	loginMu   sync.Mutex
+	loginReq  chan context.Context
+	loginResp chan error
 }
 
 // LoginExecutor controls the execution of a login flow
 type LoginExecutor interface {
-	LoginFlow(ctx context.Context) error
+	Worker(ctx context.Context) error
+	Login(ctx context.Context) error
 }
 
 // NewLoginExecutor returns an instance of LoginExecutor
@@ -70,6 +77,8 @@ func NewLoginExecutor(
 		stdout:    stdout,
 		scout:     scout,
 		callbacks: make(chan oauth2Callback),
+		loginReq:  make(chan context.Context),
+		loginResp: make(chan error),
 	}
 }
 
@@ -100,17 +109,15 @@ func Login(ctx context.Context, stdout io.Writer, scout chan<- scout.ScoutReport
 		stdout,
 		scout,
 	)
-	return l.LoginFlow(ctx)
+	grp := dgroup.NewGroup(ctx, dgroup.GroupConfig{
+		ShutdownOnNonError: true,
+	})
+	grp.Go("worker", l.Worker)
+	grp.Go("fncall", l.Login)
+	return grp.Wait()
 }
 
-// LoginFlow tries logging the user by opening a browser window and authenticating against the
-// configured OAuth2 provider user a code flow. An HTTP server is started in the background during
-// authentication to handle the callback url. Once the callback url is invoked, the login flow will
-// invoke the token endpoint to get the user's access & refresh tokens and persist them with the
-// SaveTokenFunc (which would usually write to user cache).
-// If login succeeds, the login flow will then try invoking the userinfo endpoint and persisting it
-// using SaveUserInfoFunc (which would usually write to user cache).
-func (l *loginExecutor) LoginFlow(ctx context.Context) error {
+func (l *loginExecutor) Worker(ctx context.Context) error {
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
 		return err
@@ -139,19 +146,57 @@ func (l *loginExecutor) LoginFlow(ctx context.Context) error {
 		return sc.Serve(ctx, listener)
 	})
 	grp.Go("actor", func(ctx context.Context) error {
-		return l.login(ctx, oauth2Config)
+		loginCtx := context.Background()
+		var pkceVerifier CodeVerifier
+		for {
+			select {
+			case loginCtx = <-l.loginReq:
+				var err error
+				pkceVerifier, err = NewCodeVerifier()
+				if err != nil {
+					return err
+				}
+				if err := l.startLogin(ctx, oauth2Config, pkceVerifier); err != nil {
+					loginCtx = context.Background()
+					maybeSend(l.loginResp, err)
+				}
+			case callback := <-l.callbacks:
+				loginCtx = context.Background()
+				token, err := l.handleCallback(ctx, callback, oauth2Config, pkceVerifier)
+				if err != nil {
+					l.scout <- scout.ScoutReport{
+						Action: "login_failure",
+						Metadata: map[string]interface{}{
+							"error": err.Error(),
+						},
+					}
+				} else {
+					fmt.Fprintln(l.stdout, "Login successful.")
+					_ = l.retrieveUserInfo(ctx, token)
+					l.scout <- scout.ScoutReport{
+						Action: "login_success",
+					}
+				}
+				maybeSend(l.loginResp, err)
+			case <-loginCtx.Done():
+				maybeSend(l.loginResp, loginCtx.Err())
+				loginCtx = context.Background()
+				fmt.Fprintln(l.stdout, "Login aborted.")
+				l.scout <- scout.ScoutReport{
+					Action: "login_interrupted",
+				}
+			case <-ctx.Done():
+				return nil
+			}
+		}
 	})
 
 	return grp.Wait()
 }
 
-func (l *loginExecutor) login(ctx context.Context, oauth2Config oauth2.Config) error {
+func (l *loginExecutor) startLogin(ctx context.Context, oauth2Config oauth2.Config, pkceVerifier CodeVerifier) error {
 	// create OAuth2 authentication code flow URL
 	state := uuid.New().String()
-	pkceVerifier, err := NewCodeVerifier()
-	if err != nil {
-		return err
-	}
 	url := oauth2Config.AuthCodeURL(
 		state,
 		oauth2.SetAuthURLParam("code_challenge", pkceVerifier.CodeChallengeS256()),
@@ -163,31 +208,20 @@ func (l *loginExecutor) login(ctx context.Context, oauth2Config oauth2.Config) e
 		fmt.Fprintf(l.stdout, "Could not open browser, please access this URL: %v\n", url)
 	}
 
-	// wait for callback completion or interruption
+	return nil
+}
+
+func (l *loginExecutor) Login(ctx context.Context) error {
+	l.loginMu.Lock()
+	defer l.loginMu.Unlock()
+	l.loginReq <- ctx
+	return <-l.loginResp
+}
+
+func maybeSend(ch chan<- error, err error) {
 	select {
-	case callback := <-l.callbacks:
-		token, err := l.handleCallback(ctx, callback, oauth2Config, pkceVerifier)
-		if err != nil {
-			l.scout <- scout.ScoutReport{
-				Action: "login_failure",
-				Metadata: map[string]interface{}{
-					"error": err.Error(),
-				},
-			}
-		} else {
-			fmt.Fprintln(l.stdout, "Login successful.")
-			_ = l.retrieveUserInfo(ctx, token)
-			l.scout <- scout.ScoutReport{
-				Action: "login_success",
-			}
-		}
-		return err
-	case <-ctx.Done():
-		fmt.Fprintln(l.stdout, "Login aborted.")
-		l.scout <- scout.ScoutReport{
-			Action: "login_interrupted",
-		}
-		return nil
+	case ch <- err:
+	default:
 	}
 }
 
