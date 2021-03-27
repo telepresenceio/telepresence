@@ -52,10 +52,10 @@ type loginExecutor struct {
 	oauth2ConfigMu sync.RWMutex // locked unless a .Worker is running
 	oauth2Config   oauth2.Config
 
-	loginMu   sync.Mutex
-	callbacks chan oauth2Callback
-	tokenInfo *oauth2.Token
-	userInfo  *authdata.UserInfo
+	loginMu     sync.Mutex
+	callbacks   chan oauth2Callback
+	tokenSource oauth2.TokenSource
+	userInfo    *authdata.UserInfo
 }
 
 // LoginExecutor controls the execution of a login flow
@@ -115,6 +115,13 @@ func NewStandardLoginExecutor(env client.Env, stdout io.Writer, scout chan<- sco
 	)
 }
 
+func (l *loginExecutor) tokenCB(ctx context.Context, tokenInfo *oauth2.Token) error {
+	if err := l.SaveTokenFunc(ctx, tokenInfo); err != nil {
+		return fmt.Errorf("could not save access token to user cache: %w", err)
+	}
+	return nil
+}
+
 func (l *loginExecutor) Worker(ctx context.Context) error {
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
@@ -130,10 +137,17 @@ func (l *loginExecutor) Worker(ctx context.Context) error {
 		Scopes: []string{"openid", "profile", "email"},
 	}
 
-	l.tokenInfo, err = authdata.LoadTokenFromUserCache(ctx)
+	l.tokenSource, err = func() (oauth2.TokenSource, error) {
+		tokenInfo, err := authdata.LoadTokenFromUserCache(ctx)
+		if err != nil || tokenInfo == nil {
+			return nil, err
+		}
+		return newTokenSource(ctx, l.oauth2Config, tokenInfo, l.tokenCB), nil
+	}()
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
+
 	l.userInfo, err = authdata.LoadUserInfoFromUserCache(ctx)
 	if err != nil && !os.IsNotExist(err) {
 		return err
@@ -240,9 +254,9 @@ func (l *loginExecutor) Login(ctx context.Context) (err error) {
 			return fmt.Errorf("error while exchanging code for token: %w", err)
 		}
 
-		l.tokenInfo = token
-		if err := l.SaveTokenFunc(ctx, token); err != nil {
-			return fmt.Errorf("could not save access token to user cache: %w", err)
+		l.tokenSource = newTokenSource(ctx, l.oauth2Config, token, l.tokenCB)
+		if err := l.tokenCB(ctx, token); err != nil {
+			return err
 		}
 
 		return nil
@@ -255,10 +269,10 @@ func (l *loginExecutor) Logout(ctx context.Context) error {
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()
 
-	if !l.tokenInfo.Valid() {
+	if l.tokenSource == nil {
 		return ErrNotLoggedIn
 	}
-	l.tokenInfo = nil
+	l.tokenSource = nil
 	l.userInfo = nil
 	_ = authdata.DeleteTokenFromUserCache(ctx)
 	_ = authdata.DeleteUserInfoFromUserCache(ctx)
@@ -270,10 +284,13 @@ func (l *loginExecutor) GetToken(ctx context.Context) (string, error) {
 	l.loginMu.Lock()
 	defer l.loginMu.Unlock()
 
-	if !l.tokenInfo.Valid() {
+	if l.tokenSource == nil {
 		return "", ErrNotLoggedIn
+	} else if tokenInfo, err := l.tokenSource.Token(); err != nil {
+		return "", err
+	} else {
+		return tokenInfo.AccessToken, nil
 	}
-	return l.tokenInfo.AccessToken, nil
 }
 
 func (l *loginExecutor) GetUserInfo(ctx context.Context) (*authdata.UserInfo, error) {
